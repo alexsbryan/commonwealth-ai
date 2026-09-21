@@ -1,0 +1,1883 @@
+{
+  "bank_name": "raptor-proof-pilot-and-his-wife-v1",
+  "corpus": "raptor-pilot-and-his-wife",
+  "limit": 0,
+  "started_at_unix": 1789973633,
+  "results": [
+    {
+      "question_id": "nqa-pilot-and-his-wife-01",
+      "category": "k4_whole_story",
+      "question": "What profession is the main character of this story?",
+      "retrieved": [],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [],
+        "missing": [
+          "sailor"
+        ],
+        "total_expected": 1,
+        "ratio": 0.0
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "You haven't provided the story yet. Please share the text or a summary of the story, and I will tell you what profession the main character has!",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 568,
+        "total_latency_ms": null,
+        "intent": null,
+        "source_origins": [],
+        "retrieved_chunk_count": 0,
+        "chunks_fact_score": {
+          "matched": [],
+          "missing": [
+            "sailor"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_fact_score": {
+          "matched": [],
+          "missing": [
+            "sailor"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_evidence": [
+          {
+            "fact": "sailor",
+            "present": false,
+            "evidence": "(absent)"
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "nqa-pilot-and-his-wife-02",
+      "category": "k4_whole_story",
+      "question": "What is the main character's name?",
+      "retrieved": [],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [],
+        "missing": [
+          "salve",
+          "kristiansen"
+        ],
+        "total_expected": 2,
+        "ratio": 0.0
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "To help you find the main character's name, I need a bit more context. Could you please specify which book, movie, TV show, or story you are referring to?\n\nFor example:\n*   **Harry Potter** series → Harry Potter\n*   **The Great Gatsby** → Jay Gatsby (though Nick Carraway is often considered the narrator/focal point)\n*   **Breaking Bad** → Walter White\n*   **Dune** → Paul Atreides\n\nPlease let me know the title of the work!",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 755,
+        "total_latency_ms": null,
+        "intent": null,
+        "source_origins": [],
+        "retrieved_chunk_count": 0,
+        "chunks_fact_score": {
+          "matched": [],
+          "missing": [
+            "salve",
+            "kristiansen"
+          ],
+          "total_expected": 2,
+          "ratio": 0.0
+        },
+        "judge_fact_score": {
+          "matched": [],
+          "missing": [
+            "salve",
+            "kristiansen"
+          ],
+          "total_expected": 2,
+          "ratio": 0.0
+        },
+        "judge_evidence": [
+          {
+            "fact": "salve",
+            "present": false,
+            "evidence": "(absent)"
+          },
+          {
+            "fact": "kristiansen",
+            "present": false,
+            "evidence": "(absent)"
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "nqa-pilot-and-his-wife-03",
+      "category": "k4_whole_story",
+      "question": "Who is Salve in love with?",
+      "retrieved": [],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [],
+        "missing": [
+          "elisabeth"
+        ],
+        "total_expected": 1,
+        "ratio": 0.0
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "To answer this question accurately, I need a bit more context. \"Salve\" is not a widely recognized public figure or character in mainstream media with a known romantic storyline.\n\nHere are a few possibilities:\n\n1. **Typo for \"Sally\"?** If you meant *Sally* (e.g., Sally from *Peanuts*, who loves Charlie Brown; or Sally Draper from *Mad Men*), please specify which Sally.\n2. **Character in a specific book, movie, game, or show?** For example, is there a character named Salve in a recent novel, anime, video game, or TV series?\n3. **Personal reference?** Is this someone you know personally?\n\nCould you clarify the source material or context where \"Salve\" appears?",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 1134,
+        "total_latency_ms": null,
+        "intent": null,
+        "source_origins": [],
+        "retrieved_chunk_count": 0,
+        "chunks_fact_score": {
+          "matched": [],
+          "missing": [
+            "elisabeth"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_fact_score": {
+          "matched": [],
+          "missing": [
+            "elisabeth"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_evidence": [
+          {
+            "fact": "elisabeth",
+            "present": false,
+            "evidence": "(absent)"
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "nqa-pilot-and-his-wife-04",
+      "category": "k4_whole_story",
+      "question": "Why doesn't Elisabeth marry Salve early on in the story?",
+      "retrieved": [],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [],
+        "missing": [
+          "attracted",
+          "young",
+          "officer"
+        ],
+        "total_expected": 3,
+        "ratio": 0.0
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "It appears there may be a slight confusion regarding the names or the specific story you are referring to, as **\"Elisabeth\"** and **\"Salve\"** do not correspond to a widely known canonical pair in major literature, film, or mythology where this specific plot point is central.\n\nHowever, here are a few possibilities of what you might mean:\n\n1. **If you meant *The Phantom Tollbooth* by Norton Juster:**\n   - There is no character named Salve. The main characters are Milo, Tock, and Humbug. Princesses like Rhyme and Reason appear later. This doesn’t fit.\n\n2. **If you meant *Wicked* (by Gregory Maguire) or the musical *Wicked*:**\n   - Elphaba (often misspelled as Elisabeth?) has complex relationships with Fiyero, Glinda, etc. No \"Salve.\"\n\n3. **If you meant *Pride and Prejudice*:***\n   - Elizabeth Bennet marries Mr. Darcy late in the story due to misunderstandings, pride, prejudice, and social constraints—not because of a character named Salve.\n\n4. **If you are referring to an indie game, lesser-known novel, or fanfiction:**\n   - Please provide more context (e.g., book title, movie name).\n\n5. **\"Salve\" might be a typo for:**\n   - **Sebastian**? (e.g., from *Black Butler*? Or another series?)\n   - **Sylvie**? \n   - **Valerius** or similar names in fantasy settings?\n\n6. **In some religious/historical contexts:**\n   - St. Elisabeth of Hungary did not marry early; she was married at age 14 to Louis IV, Landgrave of Thuringia, but her life took a pious turn after his death. No \"Salve.\"\n\n� **Could you please clarify the title of the book, movie, show, or game?** That will help me give you an accurate answer about why Elisabeth doesn’t marry Salve (or whoever it is) earlier in the story.",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 3073,
+        "total_latency_ms": null,
+        "intent": null,
+        "source_origins": [],
+        "retrieved_chunk_count": 0,
+        "chunks_fact_score": {
+          "matched": [],
+          "missing": [
+            "attracted",
+            "young",
+            "officer"
+          ],
+          "total_expected": 3,
+          "ratio": 0.0
+        },
+        "judge_fact_score": {
+          "matched": [
+            "young"
+          ],
+          "missing": [
+            "attracted",
+            "officer"
+          ],
+          "total_expected": 3,
+          "ratio": 0.33333334
+        },
+        "judge_evidence": [
+          {
+            "fact": "attracted",
+            "present": false,
+            "evidence": "(absent)"
+          },
+          {
+            "fact": "young",
+            "present": true,
+            "evidence": "\"St. Elisabeth of Hungary did not marry early; she was married at age 14\""
+          },
+          {
+            "fact": "officer",
+            "present": false,
+            "evidence": "(absent)"
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "nqa-pilot-and-his-wife-05",
+      "category": "k4_whole_story",
+      "question": "Whom does Elisabeth choose to love?",
+      "retrieved": [],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [
+          "chooses"
+        ],
+        "missing": [
+          "salve",
+          "officer"
+        ],
+        "total_expected": 3,
+        "ratio": 0.33333334
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "The answer depends on which \"Elisabeth\" you are referring to, as there are several famous historical and fictional figures with this name. Here are the most likely possibilities:\n\n### 1. **Empress Elisabeth of Austria (\"Sisi\")**\nHistorically, Empress Elisabeth did not choose her husband; she was married by arrangement to **Emperor Franz Joseph I of Austria**. However, historically, it is well-documented that before meeting Franz Joseph, she had a close emotional bond (and possibly unrequited love) for his brother, **Archduke Maximilian** (later Emperor of Mexico). After marrying Franz Joseph, their relationship became strained over time due to political pressures and differing personalities, but she remained devoted to him in public until his assassination.\n\nIf you are referring to popular culture or musicals:\n- In the **musical *Elisabeth*** (by Michael Kunze/Sylvester Levay), Elisabeth’s life is dominated by her complex relationship with Death (*Der Tod*), who becomes a dark lover/companion figure after Franz Joseph dies. Her romantic choice is portrayed as tragic and constrained by duty rather than free will.\n\n### 2. **Elizabeth Bennet from *Pride and Prejudice* (Jane Austen)**\nThough spelled \"Elizabeth,\" this character is often confused due to similar names. She chooses to love **Mr. Darcy** (Fitzwilliam Darcy), overcoming initial prejudices against him.\n\n### 3. **Queen Elizabeth I of England**\nShe never married or chose a husband, famously remaining the \"Virgin Queen.\" However, she had several romantic interests throughout her life, including:\n- **Robert Dudley**, Earl of Leicester (a close confidant and possible secret marriage).\n- **Francis, Duke of Anjou**.\n- **Sir Walter Raleigh**.\nUltimately, she chose not to marry any of them for political reasons.\n\n### 4. **Princess Elisabeth of Bavaria (1876–1965)**\nShe married **Grand Duke Paul Alexandrovich of Russia**.\n\n---\n\nIf you can specify which *Elisabeth* you mean (e.g., from a specific book, movie, or historical period), I can give a more precise answer!",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 3042,
+        "total_latency_ms": null,
+        "intent": null,
+        "source_origins": [],
+        "retrieved_chunk_count": 0,
+        "chunks_fact_score": {
+          "matched": [],
+          "missing": [
+            "chooses",
+            "salve",
+            "officer"
+          ],
+          "total_expected": 3,
+          "ratio": 0.0
+        },
+        "judge_fact_score": {
+          "matched": [
+            "chooses"
+          ],
+          "missing": [
+            "salve",
+            "officer"
+          ],
+          "total_expected": 3,
+          "ratio": 0.33333334
+        },
+        "judge_evidence": [
+          {
+            "fact": "chooses",
+            "present": true,
+            "evidence": "...she remained devoted to him in public until his assassination."
+          },
+          {
+            "fact": "salve",
+            "present": false,
+            "evidence": "(absent)"
+          },
+          {
+            "fact": "officer",
+            "present": false,
+            "evidence": "(absent)"
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "nqa-pilot-and-his-wife-06",
+      "category": "k4_whole_story",
+      "question": "Why can't Elisabeth marry Slave right away?",
+      "retrieved": [],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [],
+        "missing": [
+          "sailed",
+          "without"
+        ],
+        "total_expected": 2,
+        "ratio": 0.0
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "In the context of the classic fairy tale **\"Snow White\"** (specifically in versions like the Grimm Brothers' or Disney's adaptation), there is no character named \"Elisabeth\" who marries a slave. It appears there may be some confusion with characters, names, or sources.\n\nHowever, if you are referring to **Queen Elizabeth II** and her marriage to **Prince Philip**, he was not a slave. Prince Philip was born into European royalty (Greek and Danish royal families) but had renounced his titles and lived as an exiled prince before marrying Princess Elizabeth. They married on February 20, 1947, after:\n- Philip changed his name from Mountbatten-Windsor to Windsor upon becoming a British subject.\n- He received permission from King George VI to marry the heir presumptive.\n- They waited until Elisabeth turned 21 (the legal age of majority for royals at the time required special provisions if under that age).\n\nIf you are referring to **Elisabeth** from another story (e.g., *The Hunchback of Notre Dame*, where Esmeralda is sometimes confused with other names; or perhaps a different literary work), please clarify the source material.\n\nAlternatively, if this is referencing **\"The Slave Dancer\"** by Paula Fox or another novel involving a character named Elisabeth and slavery, more context would be needed. But in most well-known stories featuring \"Elisabeth\" or similar names (like Elizabeth Bennet in *Pride and Prejudice*), there is no plot point about marrying someone who is enslaved as an immediate barrier—though social class, wealth, or family opposition often serve as obstacles.\n\nCould you please specify which story or historical figure you are referring to? This will help provide a precise answer.",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 2822,
+        "total_latency_ms": null,
+        "intent": null,
+        "source_origins": [],
+        "retrieved_chunk_count": 0,
+        "chunks_fact_score": {
+          "matched": [],
+          "missing": [
+            "sailed",
+            "without"
+          ],
+          "total_expected": 2,
+          "ratio": 0.0
+        },
+        "judge_fact_score": {
+          "matched": [
+            "without"
+          ],
+          "missing": [
+            "sailed"
+          ],
+          "total_expected": 2,
+          "ratio": 0.5
+        },
+        "judge_evidence": [
+          {
+            "fact": "sailed",
+            "present": false,
+            "evidence": "(absent)"
+          },
+          {
+            "fact": "without",
+            "present": true,
+            "evidence": "\"...though social class, wealth, or family opposition often serve as obstacles.\""
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "nqa-pilot-and-his-wife-07",
+      "category": "k4_whole_story",
+      "question": "What happens when Salve returns 10 years later?",
+      "retrieved": [],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [],
+        "missing": [
+          "marries",
+          "elisabeth"
+        ],
+        "total_expected": 2,
+        "ratio": 0.0
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "In the novel **\"Salve\" by C.J. Cherryh** (part of *The Morgaine Cycle*), when Salve returns 10 years later, several significant events unfold:\n\n### Context\n- **Salve** is a powerful and enigmatic figure in the world of *Morgaine*, often associated with magic, transformation, and political intrigue.\n- Her departure was tied to complex personal and political circumstances involving her partner **Hastur**, their daughter **Rennic**, and the broader conflicts on the planet **Kregen**.\n\n### What Happens Upon Her Return\n\n1. **Reunion with Hastur**:  \n   Salve’s return rekindles her relationship with Hastur, though it is fraught with tension due to past betrayals, misunderstandings, and the passage of time. Their dynamic remains intense and complicated by mutual love, resentment, and unresolved issues.\n\n2. **Impact on Rennic**:  \n   Rennic, now older, must navigate his feelings toward his mother, who has been absent for a decade. This reunion forces emotional reckoning for all three characters, especially as old wounds resurface.\n\n3. **Political Turmoil**:  \n   Salve’s reappearance stirs up political factions on Kregen. Her presence challenges existing power structures, particularly those aligned with or opposed to Hastur’s influence. Some see her return as an opportunity; others view it as a threat.\n\n4. **Uncovering Secrets**:  \n   During her absence, hidden truths about Morgaine’s society, magical practices, and personal histories come to light. Salve often plays a key role in revealing these secrets, which shift alliances and reshape the narrative landscape.\n\n5. **Thematic Resonance**:  \n   Her return underscores major themes of the novel: identity, transformation, forgiveness, and the cyclical nature of history and relationships. It also reinforces Cherryh’s exploration of how individuals are shaped by—and sometimes break free from—their pasts.\n\n### Overall Significance\nSalve’s return acts as a catalyst for both emotional resolution and plot advancement. It deepens character development, intensifies conflict, and moves the story toward its climax by forcing characters to confront long-avoided truths about themselves and each other.\n\nLet me know if you'd like more details on specific subplots or character arcs!",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 3379,
+        "total_latency_ms": null,
+        "intent": null,
+        "source_origins": [],
+        "retrieved_chunk_count": 0,
+        "chunks_fact_score": {
+          "matched": [],
+          "missing": [
+            "marries",
+            "elisabeth"
+          ],
+          "total_expected": 2,
+          "ratio": 0.0
+        },
+        "judge_fact_score": {
+          "matched": [
+            "marries"
+          ],
+          "missing": [
+            "elisabeth"
+          ],
+          "total_expected": 2,
+          "ratio": 0.5
+        },
+        "judge_evidence": [
+          {
+            "fact": "marries",
+            "present": true,
+            "evidence": "\"Her departure was tied to complex personal and political circumstances involving her partner Hastur...\""
+          },
+          {
+            "fact": "elisabeth",
+            "present": false,
+            "evidence": "(absent)"
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "nqa-pilot-and-his-wife-08",
+      "category": "k4_whole_story",
+      "question": "Why were Salve and Elisabeth miserable after they married?",
+      "retrieved": [],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [],
+        "missing": [
+          "forgive",
+          "hesitating",
+          "marry"
+        ],
+        "total_expected": 3,
+        "ratio": 0.0
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "Salve and Elisabeth were miserable after they married because of the **social status difference** between them.\n\nHere’s the context from the story *\"The Story of Salve and Elisabeth\"* (often found in reading comprehension tests or literature anthologies):\n\n*   **Elisabeth** came from a wealthy, noble family.\n*   **Salve** was poor but talented and hardworking.\n\nDespite their love for each other, their marriage faced significant challenges due to:\n\n1.  **Family Disapproval:** Elisabeth’s family opposed the match because Salve lacked wealth and social standing.\n2.  **Financial Strain:** They struggled with poverty, which caused stress and tension in their daily lives.\n3.  **Social Pressure:** Society looked down on their union, making them feel isolated and inadequate.\n\nThese external pressures and internal struggles led to unhappiness and misery in their married life, at least initially, until they eventually found a way to overcome these obstacles through perseverance and mutual support (depending on the specific version or ending of the story you are referencing).",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 1464,
+        "total_latency_ms": null,
+        "intent": null,
+        "source_origins": [],
+        "retrieved_chunk_count": 0,
+        "chunks_fact_score": {
+          "matched": [],
+          "missing": [
+            "forgive",
+            "hesitating",
+            "marry"
+          ],
+          "total_expected": 3,
+          "ratio": 0.0
+        },
+        "judge_fact_score": {
+          "matched": [
+            "marry"
+          ],
+          "missing": [
+            "forgive",
+            "hesitating"
+          ],
+          "total_expected": 3,
+          "ratio": 0.33333334
+        },
+        "judge_evidence": [
+          {
+            "fact": "forgive",
+            "present": false,
+            "evidence": "(absent)"
+          },
+          {
+            "fact": "hesitating",
+            "present": false,
+            "evidence": "(absent)"
+          },
+          {
+            "fact": "marry",
+            "present": true,
+            "evidence": "\"Salve and Elisabeth were miserable after they married because of the social status difference between them.\""
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "nqa-pilot-and-his-wife-09",
+      "category": "k4_whole_story",
+      "question": "How long did it take Salve and Elisabeth to forma a happy life together?",
+      "retrieved": [],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [
+          "years"
+        ],
+        "missing": [],
+        "total_expected": 1,
+        "ratio": 1.0
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "Based on historical records and common literary references, there is no widely known couple named \"Salve\" and **Elisabeth** who are famous for a specific timeline regarding how long it took them to form a happy life together.\n\nHowever, this question may be referring to one of the following possibilities due to potential name misspellings or confusion:\n\n1.  **King Charles III (then Prince Charles) and Diana, Princess of Wales**:  \n    - They married in 1981 but divorced in 1996. Their marriage was not considered \"happy,\" so this likely doesn't fit the description.\n   \n2.  **Queen Elizabeth II and Prince Philip**:  \n    - They met in 1934 when she was 8 and he was 13. They became engaged in 1947 and married in 1947. While their early years had challenges, they built a long-lasting partnership over decades. It would take several years for them to settle into their royal duties and build stability, but they remained together until Philip’s death in 2021 (over 70 years).\n\n3.  **Fictional Characters or Lesser-Known Historical Figures**:  \n   If \"Salve\" is a typo for **\"Steve\"** or another name, please clarify. For example:\n    - **Steve Jobs** and **Laurene Powell** (married in 1991) – no specific public timeline about \"forming a happy life.\"\n    - In literature, if you mean characters from a novel like *The Great Gatsby*, *Pride and Prejudice*, etc., the names don’t match exactly.\n\n4.  **Possible Confusion with \"Sylvia\" and \"Elisabeth\"?**  \n   Or perhaps **\"Salvador Dalí\"**? No known partner named Elisabeth fits this narrative prominently.\n\n5.  **Most Likely Scenario**: You may be referring to **King Gustaf VI Adolf of Sweden** or another European royal couple where names were misremembered. Alternatively, it could be a reference to a specific book, movie, or regional historical story not widely documented in global sources.\n\nIf you can provide more context (e.g., country, time period, whether they are fictional/historical), I can give a more accurate answer.",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 3363,
+        "total_latency_ms": null,
+        "intent": null,
+        "source_origins": [],
+        "retrieved_chunk_count": 0,
+        "chunks_fact_score": {
+          "matched": [],
+          "missing": [
+            "years"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_fact_score": {
+          "matched": [
+            "years"
+          ],
+          "missing": [],
+          "total_expected": 1,
+          "ratio": 1.0
+        },
+        "judge_evidence": [
+          {
+            "fact": "years",
+            "present": true,
+            "evidence": "They met in 1934 when she was 8 and he was 13. They became engaged in 1947 and married in 1947."
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "nqa-pilot-and-his-wife-10",
+      "category": "k4_whole_story",
+      "question": "What is the moral of this story?",
+      "retrieved": [],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [],
+        "missing": [
+          "confidence",
+          "trust",
+          "needed"
+        ],
+        "total_expected": 3,
+        "ratio": 0.0
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "You haven't provided a story for me to analyze. Please share the text of the story, and I will be happy to identify its moral or central theme for you.",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 301,
+        "total_latency_ms": null,
+        "intent": null,
+        "source_origins": [],
+        "retrieved_chunk_count": 0,
+        "chunks_fact_score": {
+          "matched": [],
+          "missing": [
+            "confidence",
+            "trust",
+            "needed"
+          ],
+          "total_expected": 3,
+          "ratio": 0.0
+        },
+        "judge_fact_score": {
+          "matched": [],
+          "missing": [
+            "confidence",
+            "trust",
+            "needed"
+          ],
+          "total_expected": 3,
+          "ratio": 0.0
+        },
+        "judge_evidence": [
+          {
+            "fact": "confidence",
+            "present": false,
+            "evidence": "(absent)"
+          },
+          {
+            "fact": "trust",
+            "present": false,
+            "evidence": "(absent)"
+          },
+          {
+            "fact": "needed",
+            "present": false,
+            "evidence": "(absent)"
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "nqa-pilot-and-his-wife-11",
+      "category": "k4_whole_story",
+      "question": "What is this story about?",
+      "retrieved": [],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [],
+        "missing": [
+          "married",
+          "life"
+        ],
+        "total_expected": 2,
+        "ratio": 0.0
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "You haven't provided a story for me to analyze yet! Please paste the text of the story here, and I’ll be happy to tell you what it’s about.",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 306,
+        "total_latency_ms": null,
+        "intent": null,
+        "source_origins": [],
+        "retrieved_chunk_count": 0,
+        "chunks_fact_score": {
+          "matched": [],
+          "missing": [
+            "married",
+            "life"
+          ],
+          "total_expected": 2,
+          "ratio": 0.0
+        },
+        "judge_fact_score": {
+          "matched": [],
+          "missing": [
+            "married",
+            "life"
+          ],
+          "total_expected": 2,
+          "ratio": 0.0
+        },
+        "judge_evidence": [
+          {
+            "fact": "married",
+            "present": false,
+            "evidence": "(absent)"
+          },
+          {
+            "fact": "life",
+            "present": false,
+            "evidence": "(absent)"
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "nqa-pilot-and-his-wife-12",
+      "category": "k4_whole_story",
+      "question": "Who is this story about?",
+      "retrieved": [],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [],
+        "missing": [
+          "pilot",
+          "wife"
+        ],
+        "total_expected": 2,
+        "ratio": 0.0
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "It seems like you haven't provided the story yet. Could you please share the text or summary of the story so I can identify who it is about?",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 256,
+        "total_latency_ms": null,
+        "intent": null,
+        "source_origins": [],
+        "retrieved_chunk_count": 0,
+        "chunks_fact_score": {
+          "matched": [],
+          "missing": [
+            "pilot",
+            "wife"
+          ],
+          "total_expected": 2,
+          "ratio": 0.0
+        },
+        "judge_fact_score": {
+          "matched": [],
+          "missing": [
+            "pilot",
+            "wife"
+          ],
+          "total_expected": 2,
+          "ratio": 0.0
+        },
+        "judge_evidence": [
+          {
+            "fact": "pilot",
+            "present": false,
+            "evidence": "(absent)"
+          },
+          {
+            "fact": "wife",
+            "present": false,
+            "evidence": "(absent)"
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "nqa-pilot-and-his-wife-13",
+      "category": "k4_whole_story",
+      "question": "What is the sailor describing in this story?",
+      "retrieved": [],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [],
+        "missing": [
+          "experiences",
+          "stormy",
+          "deep"
+        ],
+        "total_expected": 3,
+        "ratio": 0.0
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "You haven't provided the story or text yet! Please paste the excerpt or describe the scene where the sailor is speaking, and I’ll help you identify what they are describing.\n\nFor example, sailors often describe:\n*   **Weather conditions** (storms, fog, wind direction)\n*   **Navigation hazards** (reefs, shallow waters, other ships)\n*   **The sea itself** (currents, waves, marine life)\n*   **A specific event** (a battle, a sighting of land, an encounter with mythical creatures)\n\nShare the passage, and I’ll give you a detailed analysis!",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 822,
+        "total_latency_ms": null,
+        "intent": null,
+        "source_origins": [],
+        "retrieved_chunk_count": 0,
+        "chunks_fact_score": {
+          "matched": [],
+          "missing": [
+            "experiences",
+            "stormy",
+            "deep"
+          ],
+          "total_expected": 3,
+          "ratio": 0.0
+        },
+        "judge_fact_score": {
+          "matched": [
+            "stormy"
+          ],
+          "missing": [
+            "experiences",
+            "deep"
+          ],
+          "total_expected": 3,
+          "ratio": 0.33333334
+        },
+        "judge_evidence": [
+          {
+            "fact": "experiences",
+            "present": false,
+            "evidence": "(absent)"
+          },
+          {
+            "fact": "stormy",
+            "present": true,
+            "evidence": "\"Weather conditions (storms, fog, wind direction)\""
+          },
+          {
+            "fact": "deep",
+            "present": false,
+            "evidence": "(absent)"
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "nqa-pilot-and-his-wife-14",
+      "category": "k4_whole_story",
+      "question": "Who is loved in return?",
+      "retrieved": [],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [],
+        "missing": [
+          "elisabeth"
+        ],
+        "total_expected": 1,
+        "ratio": 0.0
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "To answer this question accurately, I need more context. \"Who is loved in return\" depends entirely on the specific situation or story you are referring to.\n\nHere are a few possibilities:\n\n1. **In a general sense:** Someone who expresses love openly and receives it back from their partner, friend, family member, etc., is loved in return.\n2. **In literature/film:** For example, in *Romeo and Juliet*, they are deeply loved by each other (though tragically unable to stay together). In *Pride and Prejudice*, Mr. Darcy and Elizabeth Bennet eventually recognize that they are loved in return after overcoming misunderstandings.\n3. **In your personal life:** If this is about someone specific you know or care about, only you can determine whether your feelings are reciprocated through communication and observation of their actions.\n\nCould you clarify who or what scenario you’re asking about?",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 1266,
+        "total_latency_ms": null,
+        "intent": null,
+        "source_origins": [],
+        "retrieved_chunk_count": 0,
+        "chunks_fact_score": {
+          "matched": [],
+          "missing": [
+            "elisabeth"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_fact_score": {
+          "matched": [
+            "elisabeth"
+          ],
+          "missing": [],
+          "total_expected": 1,
+          "ratio": 1.0
+        },
+        "judge_evidence": [
+          {
+            "fact": "elisabeth",
+            "present": true,
+            "evidence": "\"In *Pride and Prejudice*, Mr. Darcy and Elizabeth Bennet eventually recognize that they are loved in return\""
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "nqa-pilot-and-his-wife-15",
+      "category": "k4_whole_story",
+      "question": "Why did Salve leave his land?",
+      "retrieved": [],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [],
+        "missing": [
+          "leaves",
+          "desperation"
+        ],
+        "total_expected": 2,
+        "ratio": 0.0
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "To answer this question accurately, I need a bit more context. \"Salve\" is not the name of a widely recognized historical figure or character in mainstream global literature who left their land for a single famous reason.\n\nHowever, here are a few possibilities depending on what you might be referring to:\n\n1. **Typo for \"Saul\"?**  \n   If you meant **King Saul** from the Bible, he didn’t exactly “leave his land,” but he died in battle against the Philistines after being rejected by God and fleeing from King David’s jealousy.\n\n2. **Typo for \"Slavics/Slavs\"?**  \n   Unlikely phrasing, but Slavic peoples migrated extensively during early medieval times due to invasions (e.g., Huns, Avars) and territorial expansion.\n\n3. **Character named Salve?**  \n   There is no major literary or historical figure widely known as “Salve” who left their homeland for a famous reason. It’s possible you’re referring to:\n   - A character from a specific novel, movie, or game (e.g., *Assassin’s Creed*, *Final Fantasy*, etc.).\n   - A lesser-known historical person.\n   - A misspelling of **“Sulayman”** (Solomon), though he didn’t leave his land—he ruled it.\n   - Or perhaps **“Salvador Allende”**, the Chilean president who was overthrown and died in 1973; many exiles fled after that.\n\n4. **Typo for “Saleh”?**  \n   If you mean **Ali Abdullah Saleh**, former President of Yemen: He didn’t flee Yemen until late in life, going to Saudi Arabia for medical treatment, then briefly returning before being killed in 2017 during civil war turmoil.\n\n� Could you please clarify:\n- Is this from a book, movie, game, or real history?\n- Did you possibly mean a different name (e.g., Saul, Salih, Salvador)?\n\nThat way I can give you the precise answer!",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 2930,
+        "total_latency_ms": null,
+        "intent": null,
+        "source_origins": [],
+        "retrieved_chunk_count": 0,
+        "chunks_fact_score": {
+          "matched": [],
+          "missing": [
+            "leaves",
+            "desperation"
+          ],
+          "total_expected": 2,
+          "ratio": 0.0
+        },
+        "judge_fact_score": {
+          "matched": [
+            "leaves"
+          ],
+          "missing": [
+            "desperation"
+          ],
+          "total_expected": 2,
+          "ratio": 0.5
+        },
+        "judge_evidence": [
+          {
+            "fact": "leaves",
+            "present": true,
+            "evidence": "\"...who left their land for a single famous reason.\""
+          },
+          {
+            "fact": "desperation",
+            "present": false,
+            "evidence": "(absent)"
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "nqa-pilot-and-his-wife-16",
+      "category": "k4_whole_story",
+      "question": "Who does Elisabeth marry?",
+      "retrieved": [],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [],
+        "missing": [
+          "marries",
+          "salve"
+        ],
+        "total_expected": 2,
+        "ratio": 0.0
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "Elisabeth of Bavaria, commonly known as **Sisi** or Empress Elisabeth of Austria, married **Franz Joseph I**, the Emperor of Austria.\n\nThey were married on April 24, 1854, in Vienna.",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 390,
+        "total_latency_ms": null,
+        "intent": null,
+        "source_origins": [],
+        "retrieved_chunk_count": 0,
+        "chunks_fact_score": {
+          "matched": [],
+          "missing": [
+            "marries",
+            "salve"
+          ],
+          "total_expected": 2,
+          "ratio": 0.0
+        },
+        "judge_fact_score": {
+          "matched": [
+            "marries"
+          ],
+          "missing": [
+            "salve"
+          ],
+          "total_expected": 2,
+          "ratio": 0.5
+        },
+        "judge_evidence": [
+          {
+            "fact": "marries",
+            "present": true,
+            "evidence": "\"Elisabeth of Bavaria, commonly known as Sisi or Empress Elisabeth of Austria, married Franz Joseph I\""
+          },
+          {
+            "fact": "salve",
+            "present": false,
+            "evidence": "(absent)"
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "nqa-pilot-and-his-wife-17",
+      "category": "k4_whole_story",
+      "question": "How many years elapse before an understanding is made?",
+      "retrieved": [],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [
+          "years"
+        ],
+        "missing": [],
+        "total_expected": 1,
+        "ratio": 1.0
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "There is no fixed number of years that elapse before an understanding is made. The time it takes to reach an \"understanding\" depends entirely on the context, subject matter, and individuals involved.\n\nHere are a few perspectives:\n\n1. **Simple Facts**: You might understand something in seconds or minutes (e.g., learning what 2+2=4).\n2. **Complex Skills**: Mastering a language or instrument may take months or years.\n3. **Deep Relationships**: Understanding another person’s perspective can take years of shared experience and communication—or sometimes never fully happen.\n4. **Scientific/Philosophical Insights**: Some ideas took centuries for humanity as a whole to understand (e.g., heliocentrism, quantum mechanics).\n\nIn short: **It varies widely.** There is no universal timeline.",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 1114,
+        "total_latency_ms": null,
+        "intent": null,
+        "source_origins": [],
+        "retrieved_chunk_count": 0,
+        "chunks_fact_score": {
+          "matched": [],
+          "missing": [
+            "years"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_fact_score": {
+          "matched": [
+            "years"
+          ],
+          "missing": [],
+          "total_expected": 1,
+          "ratio": 1.0
+        },
+        "judge_evidence": [
+          {
+            "fact": "years",
+            "present": true,
+            "evidence": "\"Mastering a language or instrument may take months or years.\""
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "nqa-pilot-and-his-wife-18",
+      "category": "k4_whole_story",
+      "question": "What makes Salve decide to finally marry Elisabeth?",
+      "retrieved": [],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [],
+        "missing": [
+          "true"
+        ],
+        "total_expected": 1,
+        "ratio": 0.0
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "In the 2018 film *The Favourite*, Salve (Queen Anne) decides to marry Elisabeth (Abigail Masham, though her name is Abigail in history and the film; \"Salve\" seems to be a typo for **Anne** or perhaps you are referring to a different character? Let's assume you mean Queen **Anne** deciding to marry **Elisabeth/Sarah**? No, that doesn't happen.\n\nWait, let's re-read carefully: **\"What makes Salve decide to finally marry Elisabeth?\"**\n\nThere is no main character named \"Salve\" in *The Favourite*. It is highly likely you mean **Queen Anne**. And she does not marry Elisabeth/Abigail. She marries **Prince George of Denmark**.\n\nHowever, if this is from a different story, please clarify. But assuming this is about *The Favourite* (2018) and there are typos:\n- \"Salve\" -> Likely **Anne** (or perhaps **Sarah**?). Sarah Churchill never marries Abigail.\n- \"Elisabeth\" -> In the film, Abigail's full name is **Abigail Masham**, but her mother-in-law or others might refer to family members? No.\n- Actually, in the film, Queen Anne eventually turns against Sarah and favors Abigail. She does not marry Abigail.\n\nLet's look for another interpretation. Is there a character named **Salve**? Maybe you mean **Savage**? Or **Steve**?\n\nActually, looking at common queries about *The Favourite*, users often ask: **\"What makes Queen Anne decide to finally punish Sarah?\"** or **\"Why does Queen Anne turn away from Sarah?\"**\n\nBut if you strictly mean \"marry Elisabeth,\" this plot point doesn't exist in *The Favourite*.\n\nHowever, if this is about the 2013 film ***Saving Private Ryan***? No.\nIf it's about ***Pride and Prejudice***? Elizabeth Bennet marries Mr. Darcy.\n\nLet's consider that \"Salve\" might be a typo for **\"She\"** referring to **Elizabeth Bennet**? No, \"Salve decide\".\n\nLet's look at the movie ***The King's Speech***? No.\n\nIs it possible you are asking about the book/movie ***Bridgerton***? No character named Salve.\n\n**Hypothesis:** You are asking about the 2018 film *The Favourite*, but there is a significant confusion in names.\n- Queen Anne (Olivia Colman) does not marry Elisabeth/Abigail.\n- Sarah Churchill (Rachel Weisz) does not marry Abigail.\n- Abigail Masham (Emma Stone) marries Samuel Masham.\n\nPerhaps you mean: **What makes Queen Anne decide to finally turn against Sarah?**\nAnswer: The discovery that Sarah has been secretly corresponding with Tory politicians and plotting against her, combined with Abigail's manipulation of Anne's physical pain and emotional vulnerability.\n\n**Alternative Hypothesis:** You are asking about the movie ***Shakespeare in Love***? No.\n\nLet's assume you made typos for **\"Sarah\"** deciding something about **\"Elizabeth\"**? Unlikely.\n\nLet's try one more specific possibility: Is there a character named **Salve** in *The Favourite*? No.\n\nCould \"Salve\" be **Savage**? In *Game of Thrones*, no.\n\nOkay, let's look at the phrasing again. \"What makes Salve decide to finally marry Elisabeth?\"\nIf this is from a different story entirely, I need that context. But given the lack of other context, and the similarity of names in historical dramas...\n\nWait! Could it be ***Poldark***? No.\n\nLet's assume you are asking about **\"What makes Queen Anne decide to finally dismiss Sarah?\"** (since they don't marry). Or perhaps **\"What makes Abigail succeed?\"**\n\nHowever, if we must answer literally based on common misconceptions or specific plot points:\nIn *The Favourite*, **Queen Anne** does not marry anyone after Prince George dies (he died earlier). She lives with her companions.\n\nIf this is a trick question or from a different source, please provide more details. But if I have to guess the intent regarding *The Favourite*:\nThere is no marriage between Salve/Anne and Elisabeth/Abigail.\n\n**Correction:** Maybe you mean **\"What makes Sarah decide to finally leave London?\"**? No.\n\nLet's look at the names again. **Salve**. **Elisabeth**.\nCould it be ***Sense and Sensibility***? Elizabeth Marry... Edward Ferrars? Elinor marries...\n\nActually, there is a character named **Elizabeth** in many stories. And **Salve** sounds like **Sylvie** or **Steve**.\n\nIf this is about the 2017 film ***Beauty and the Beast***? No.\n\nI will assume you are asking about *The Favourite* but have confused the plot points significantly, OR you are asking about a different story entirely where a character named Salve (perhaps a typo for **Severus**? Snape marrying Elphias Doge? No.) marries Elisabeth.\n\nGiven the ambiguity, I cannot provide a correct answer without clarification on which movie/book/story \"Salve\" and \"Elisabeth\" belong to. However, if this is a reference to **\"What makes Queen Anne decide to finally punish Sarah?\"**, here is that answer:\n\nIn *The Favourite*, Queen Anne decides to turn against Sarah Churchill because Abigail Masham systematically manipulates her by exploiting her physical pain and insecurities, while simultaneously revealing Sarah's political disloyalty and contempt for Abigail. The final straw is often interpreted as Sarah's dismissive attitude towards Anne's children (who died young) and her alliance with the Tory opposition, which Abigail highlights.\n\nIf you meant a different story, please specify!",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 8518,
+        "total_latency_ms": null,
+        "intent": null,
+        "source_origins": [],
+        "retrieved_chunk_count": 0,
+        "chunks_fact_score": {
+          "matched": [],
+          "missing": [
+            "true"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_fact_score": {
+          "matched": [],
+          "missing": [
+            "true"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_evidence": [
+          {
+            "fact": "true",
+            "present": false,
+            "evidence": "(absent)"
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "nqa-pilot-and-his-wife-19",
+      "category": "k4_whole_story",
+      "question": "What creates their happy life together?",
+      "retrieved": [],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [
+          "foundation"
+        ],
+        "missing": [],
+        "total_expected": 1,
+        "ratio": 1.0
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "There is no single secret that creates a happy life for every couple, as relationships are unique. However, psychologists and relationship experts generally agree on several core pillars that contribute to long-term happiness and stability:\n\n1. **Effective Communication**: It’s not just about talking; it’s about listening actively, expressing needs clearly without blame, and understanding each other’s perspectives.\n2. **Trust and Respect**: Feeling safe with your partner and respecting their individuality, boundaries, and opinions is foundational.\n3. **Shared Values and Goals**: While interests can differ, alignment on major life values (e.g., family, finances, lifestyle) helps couples navigate challenges together.\n4. **Emotional Support and Intimacy**: Being each other’s primary source of comfort, encouragement, and affection—both emotionally and physically.\n5. **Conflict Resolution Skills**: Disagreements are inevitable. Happy couples focus on solving the problem rather than winning the argument, often using “repair attempts” to de-escalate tension.\n6. **Quality Time and Shared Experiences**: Making time for each other, whether through daily rituals or shared adventures, keeps the connection fresh.\n7. **Individual Growth**: Supporting each other’s personal goals and maintaining a sense of self outside the relationship prevents codependency and fosters mutual admiration.\n\nUltimately, a happy life together is built day by day through small acts of kindness, consistency, and commitment to nurturing the bond over time.",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 1898,
+        "total_latency_ms": null,
+        "intent": null,
+        "source_origins": [],
+        "retrieved_chunk_count": 0,
+        "chunks_fact_score": {
+          "matched": [],
+          "missing": [
+            "foundation"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_fact_score": {
+          "matched": [
+            "foundation"
+          ],
+          "missing": [],
+          "total_expected": 1,
+          "ratio": 1.0
+        },
+        "judge_evidence": [
+          {
+            "fact": "foundation",
+            "present": true,
+            "evidence": "\"Feeling safe with your partner and respecting their individuality, boundaries, and opinions is foundational.\""
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "nqa-pilot-and-his-wife-20",
+      "category": "k4_whole_story",
+      "question": "What is emphasized by this novel?",
+      "retrieved": [],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [],
+        "missing": [
+          "confidence",
+          "trust"
+        ],
+        "total_expected": 2,
+        "ratio": 0.0
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "To provide an accurate answer, I need to know **which novel** you are referring to. Please specify the title and author of the book.\n\nOnce you provide that information, I can analyze its themes, plot, characters, and literary devices to explain what is emphasized in the story (e.g., social justice, love, identity, power, morality, etc.).",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 493,
+        "total_latency_ms": null,
+        "intent": null,
+        "source_origins": [],
+        "retrieved_chunk_count": 0,
+        "chunks_fact_score": {
+          "matched": [],
+          "missing": [
+            "confidence",
+            "trust"
+          ],
+          "total_expected": 2,
+          "ratio": 0.0
+        },
+        "judge_fact_score": {
+          "matched": [],
+          "missing": [
+            "confidence",
+            "trust"
+          ],
+          "total_expected": 2,
+          "ratio": 0.0
+        },
+        "judge_evidence": [
+          {
+            "fact": "confidence",
+            "present": false,
+            "evidence": "(absent)"
+          },
+          {
+            "fact": "trust",
+            "present": false,
+            "evidence": "(absent)"
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "nqa-pilot-and-his-wife-21",
+      "category": "k4_whole_story",
+      "question": "What does a marriage need?",
+      "retrieved": [],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [
+          "trust"
+        ],
+        "missing": [
+          "implicit",
+          "confidence"
+        ],
+        "total_expected": 3,
+        "ratio": 0.33333334
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "A healthy, lasting marriage is rarely built on just one thing. Instead, it requires a combination of emotional connection, practical teamwork, and intentional effort from both partners. While every relationship is unique, most experts agree that the following elements are essential:\n\n### 1. **Trust**\nTrust is the foundation. It means believing your partner has your best interests at heart, being honest with them, and feeling secure in their commitment to you. Without trust, insecurity and jealousy can erode the relationship over time.\n\n### 2. **Communication**\nThis goes beyond just talking. It involves:\n*   **Active Listening:** Truly hearing what your partner says without immediately planning your response.\n*   **Openness:** Sharing feelings, fears, hopes, and frustrations honestly but respectfully.\n*   **Conflict Resolution:** Learning how to argue fairly—focusing on resolving the issue rather than \"winning\" the argument or attacking each other’s character.\n\n### 3. **Respect**\nValuing each other as individuals is crucial. This means honoring boundaries, appreciating differences in opinion, supporting each other’s goals, and never speaking down to one another—even during disagreements.\n\n### 4. **Commitment**\nMarriage requires a conscious choice to stay dedicated through difficult times. It’s not just about romantic love; it’s about choosing your partner day after day, even when things are hard. This includes fidelity (emotional and physical) unless otherwise agreed upon by both partners.\n\n### 5. **Intimacy & Affection**\nThis isn’t limited to sex (though sexual compatibility can be important). Emotional intimacy—feeling close, understood, and connected—is vital. Physical affection like holding hands, hugging, or cuddling also helps maintain that bond.\n\n### 6. **Shared Values & Goals**\nWhile you don’t need to agree on everything, having aligned core values (e.g., views on family, money, religion, lifestyle) provides a common direction for your life together. It helps prevent fundamental conflicts down the road.\n\n### 7. **Friendship**\nMany couples find that the strongest marriages are built on genuine friendship. Enjoying each other’s company, laughing together, and sharing interests makes the relationship resilient during stressful times.\n\n### 8. **Flexibility & Compromise**\nNo two people are exactly alike. A successful marriage requires giving and taking—willingness to adapt when plans change, to meet in the middle during disagreements, and to support each other through life transitions (career changes, parenting, aging, etc.).\n\n---\n\n**Remember:** Marriage is a living entity—it needs constant care, attention, and nurturing. It’s not something you \"achieve\" once; it’s something you build every day through small acts of kindness, understanding, and partnership.",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 3831,
+        "total_latency_ms": null,
+        "intent": null,
+        "source_origins": [],
+        "retrieved_chunk_count": 0,
+        "chunks_fact_score": {
+          "matched": [],
+          "missing": [
+            "implicit",
+            "confidence",
+            "trust"
+          ],
+          "total_expected": 3,
+          "ratio": 0.0
+        },
+        "judge_fact_score": {
+          "matched": [
+            "trust"
+          ],
+          "missing": [
+            "implicit",
+            "confidence"
+          ],
+          "total_expected": 3,
+          "ratio": 0.33333334
+        },
+        "judge_evidence": [
+          {
+            "fact": "implicit",
+            "present": false,
+            "evidence": "(absent)"
+          },
+          {
+            "fact": "confidence",
+            "present": false,
+            "evidence": "(absent)"
+          },
+          {
+            "fact": "trust",
+            "present": true,
+            "evidence": "\"### 1. **Trust** Trust is the foundation.\" (6 words)"
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "nqa-pilot-and-his-wife-22",
+      "category": "k4_whole_story",
+      "question": "Who does Salve Kristiansen love?",
+      "retrieved": [],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [],
+        "missing": [
+          "elisabeth"
+        ],
+        "total_expected": 1,
+        "ratio": 0.0
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "Based on publicly available information, Salve Kristiansen is a Norwegian politician associated with the Labour Party (Arbeiderpartiet). There are no widely known public records or credible sources detailing his personal romantic relationships or specifying who he \"loves.\"\n\nPoliticians' private lives are generally respected unless they choose to share details publicly. Therefore, this question cannot be answered from open-source data without infringing on privacy norms or speculating beyond verified facts.",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 741,
+        "total_latency_ms": null,
+        "intent": null,
+        "source_origins": [],
+        "retrieved_chunk_count": 0,
+        "chunks_fact_score": {
+          "matched": [],
+          "missing": [
+            "elisabeth"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_fact_score": {
+          "matched": [],
+          "missing": [
+            "elisabeth"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_evidence": [
+          {
+            "fact": "elisabeth",
+            "present": false,
+            "evidence": "(absent)"
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "nqa-pilot-and-his-wife-23",
+      "category": "k4_whole_story",
+      "question": "Who is Elisabeth initially attracted to?",
+      "retrieved": [],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [],
+        "missing": [
+          "young",
+          "officer"
+        ],
+        "total_expected": 2,
+        "ratio": 0.0
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "To answer this question accurately, I need to know which specific story, book, movie, or TV show you are referring to. \"Elisabeth\" is a common name in many works of fiction and history.\n\nFor example:\n*   In **Shakespeare's *King John*** or related adaptations, Elisabeth (often Lady Faulconbridge) has complex relationships, but the context varies.\n*   In the musical ***Evita***, Eva Perón (born María Eva Duarte) is initially attracted to Juan Perón, but there isn't a primary character named Elisabeth with a clear initial attraction in the main plot unless referring to a minor character.\n*   In **Netflix’s *The Crown***, Queen Elizabeth II marries Prince Philip, so he is her romantic interest from the start of their relationship arc.\n*   In **Hannah Kent’s novel *Badgerland*** or other historical fiction featuring an Elisabeth, the answer depends on that specific narrative.\n\nCould you please specify the title of the work you are asking about?",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 1579,
+        "total_latency_ms": null,
+        "intent": null,
+        "source_origins": [],
+        "retrieved_chunk_count": 0,
+        "chunks_fact_score": {
+          "matched": [],
+          "missing": [
+            "young",
+            "officer"
+          ],
+          "total_expected": 2,
+          "ratio": 0.0
+        },
+        "judge_fact_score": {
+          "matched": [],
+          "missing": [
+            "young",
+            "officer"
+          ],
+          "total_expected": 2,
+          "ratio": 0.0
+        },
+        "judge_evidence": [
+          {
+            "fact": "young",
+            "present": false,
+            "evidence": "(absent)"
+          },
+          {
+            "fact": "officer",
+            "present": false,
+            "evidence": "(absent)"
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "nqa-pilot-and-his-wife-24",
+      "category": "k4_whole_story",
+      "question": "How many years elapse before Salve and Elisabeth understand each other?",
+      "retrieved": [],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [
+          "ten"
+        ],
+        "missing": [],
+        "total_expected": 1,
+        "ratio": 1.0
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "In the novel *Salve* by Inger Christensen, it takes **10 years** for Salve and Elisabeth to understand each other.\n\nThe story is structured around this decade-long period during which their relationship develops from misunderstanding and conflict toward a deeper, albeit complex, mutual comprehension.",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 515,
+        "total_latency_ms": null,
+        "intent": null,
+        "source_origins": [],
+        "retrieved_chunk_count": 0,
+        "chunks_fact_score": {
+          "matched": [],
+          "missing": [
+            "ten"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_fact_score": {
+          "matched": [
+            "ten"
+          ],
+          "missing": [],
+          "total_expected": 1,
+          "ratio": 1.0
+        },
+        "judge_evidence": [
+          {
+            "fact": "ten",
+            "present": true,
+            "evidence": "**10 years**"
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "nqa-pilot-and-his-wife-25",
+      "category": "k4_whole_story",
+      "question": "Who was true to Salve?",
+      "retrieved": [],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [],
+        "missing": [
+          "elisabeth"
+        ],
+        "total_expected": 1,
+        "ratio": 0.0
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "It appears there might be a typo or misunderstanding in your question, as **\"Salve\"** is not widely recognized as the name of a specific historical figure associated with a famous \"true\" lover or companion.\n\nHowever, here are a few possibilities you might mean:\n\n1. **Salvator Rosa?** – An Italian painter and poet, but no famous “true” partner is commonly cited in general trivia.\n2. **Salome?** – A biblical/historical figure; again, no single person is famously known for being “true to Salome.”\n3. **“True to Love”** – Perhaps you meant *Who was true to love?* or referenced a song/poem title?\n4. **Typo for “Sylvia”?** – In literature (e.g., Shakespeare’s *The Two Gentlemen of Verona*), Sylvia is loved by multiple characters, with Proteus betraying Valentine for her.\n5. **Typo for “Selene”?** – Greek goddess of the moon, associated with Endymion in myth.\n\nIf you meant **\"Salve\"** as in the Latin word meaning *\"hello\"* or *\"greeting,\"* then it doesn’t refer to a person at all.\n\nCould you please clarify who \"Salve\" refers to? For example:\n- Is this from a book, movie, game, or historical context?\n- Did you mean a different name (e.g., Salome, Selena, Sylvie)?\n\nI’d be happy to help once I have more details!",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 2130,
+        "total_latency_ms": null,
+        "intent": null,
+        "source_origins": [],
+        "retrieved_chunk_count": 0,
+        "chunks_fact_score": {
+          "matched": [],
+          "missing": [
+            "elisabeth"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_fact_score": {
+          "matched": [],
+          "missing": [
+            "elisabeth"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_evidence": [
+          {
+            "fact": "elisabeth",
+            "present": false,
+            "evidence": "(absent)"
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "nqa-pilot-and-his-wife-26",
+      "category": "k4_whole_story",
+      "question": "Who is living a happy life?",
+      "retrieved": [],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [],
+        "missing": [
+          "salve",
+          "elisabeth"
+        ],
+        "total_expected": 2,
+        "ratio": 0.0
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "The question of \"who is living a happy life\" doesn't have a single, universal answer because happiness is subjective and varies from person to person. However, research in psychology (such as studies by the World Happiness Report) suggests that people who tend to report higher levels of well-being often share certain characteristics or habits:\n\n1. **Strong Social Connections**: People with close relationships with family, friends, and community members generally report greater happiness.\n2. **Purpose and Meaning**: Those engaged in meaningful work, hobbies, volunteerism, or personal goals often feel more fulfilled.\n3. **Gratitude and Mindfulness**: Individuals who practice gratitude, stay present, and focus on positive experiences tend to experience more joy.\n4. **Good Physical Health**: Regular exercise, adequate sleep, and proper nutrition significantly impact mental well-being.\n5. **Financial Stability (within limits)**: While money doesn’t guarantee happiness beyond a point where basic needs are met, financial security reduces stress and increases freedom.\n6. **Resilience and Optimism**: People who can cope with adversity and maintain a hopeful outlook often navigate life’s challenges with greater ease.\n\nUltimately, anyone—regardless of age, background, or circumstance—can live a happy life by cultivating these habits and focusing on what brings them personal fulfillment. Happiness is less about external achievements and more about internal contentment and connection.",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 1850,
+        "total_latency_ms": null,
+        "intent": null,
+        "source_origins": [],
+        "retrieved_chunk_count": 0,
+        "chunks_fact_score": {
+          "matched": [],
+          "missing": [
+            "salve",
+            "elisabeth"
+          ],
+          "total_expected": 2,
+          "ratio": 0.0
+        },
+        "judge_fact_score": {
+          "matched": [],
+          "missing": [
+            "salve",
+            "elisabeth"
+          ],
+          "total_expected": 2,
+          "ratio": 0.0
+        },
+        "judge_evidence": [
+          {
+            "fact": "salve",
+            "present": false,
+            "evidence": "(absent)"
+          },
+          {
+            "fact": "elisabeth",
+            "present": false,
+            "evidence": "(absent)"
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "nqa-pilot-and-his-wife-27",
+      "category": "k4_whole_story",
+      "question": "How many people are in wedlock?",
+      "retrieved": [],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [],
+        "missing": [
+          "two"
+        ],
+        "total_expected": 1,
+        "ratio": 0.0
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "It is impossible to provide a single, exact number of people currently \"in wedlock\" (married) because this figure changes every second due to births, deaths, new marriages, and divorces. Additionally, data collection methods vary significantly by country.\n\nHowever, we can look at estimates based on recent global demographic data:\n\n1. **Global Estimate**: As of the early 2020s, it is estimated that approximately **46% to 50%** of adults worldwide are married. With a global adult population of roughly 5–6 billion, this suggests that between **2.3 billion and 3 billion** people are currently in some form of legal marriage or wedlock globally.\n   \n2. **Variation by Region**: Marriage rates differ widely:\n   - In many developed countries (e.g., parts of Europe, North America), marriage rates have been declining, with lower percentages of adults being married compared to previous decades.\n   - In other regions (e.g., parts of Asia, Africa, the Middle East), higher proportions of adults may be married at younger ages.\n\n3. **Data Limitations**: Many countries do not track real-time marital status accurately, and informal unions (common-law marriages) are often excluded from official statistics.\n\nFor precise current figures, organizations like the **United Nations Department of Economic and Social Affairs** or national census bureaus provide periodic estimates rather than live counts.",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 1911,
+        "total_latency_ms": null,
+        "intent": null,
+        "source_origins": [],
+        "retrieved_chunk_count": 0,
+        "chunks_fact_score": {
+          "matched": [],
+          "missing": [
+            "two"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_fact_score": {
+          "matched": [
+            "two"
+          ],
+          "missing": [],
+          "total_expected": 1,
+          "ratio": 1.0
+        },
+        "judge_evidence": [
+          {
+            "fact": "two",
+            "present": true,
+            "evidence": "\"between **2.3 billion and 3 billion** people are currently in some form of legal marriage or wedlock globally\""
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "nqa-pilot-and-his-wife-28",
+      "category": "k4_whole_story",
+      "question": "What is The Pilot and His Wife?",
+      "retrieved": [],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [
+          "story"
+        ],
+        "missing": [],
+        "total_expected": 1,
+        "ratio": 1.0
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "**\"The Pilot and His Wife\"** (German: *Der Hauptmann und sein Held*, though often referred to by the English title in international contexts, or specifically as part of a collection) is not a single universally famous standalone work like \"Romeo and Juliet,\" but it most commonly refers to one of two things depending on context. However, the most likely reference is to a **short story or fable**, particularly within German literature or folklore collections, such as those found in works by **Heinrich von Kleist** or similar authors from that era who wrote about military life and domestic tragedy.\n\nHowever, there is a very specific and well-known short story titled **\"The Pilot and His Wife\"** (or sometimes *\"Der Steuermann und seine Frau\"*) often attributed to or associated with **German Romanticism** or **folklore**. It typically involves themes of duty, separation, and tragic misunderstanding at sea.\n\nBut if you are referring to a more modern or popular cultural reference, it might be confused with:\n\n1.  **\"The Captain's Daughter\"** (*Kapitanskaya Dochka*) by Alexander Pushkin – which features a pilot/captain figure but focuses on his daughter.\n2.  A plot from the movie **\"The Perfect Storm\"** or similar maritime dramas where the relationship between a seafarer and their spouse is central.\n3.  A specific episode of a TV series like *Star Trek* (e.g., \"The Captain's Hand\" or episodes focusing on Captains' spouses).\n\n**Most Likely Answer:**\nIf this is from a literature class or classic reading list, it likely refers to a **short story by Heinrich von Kleist** titled *\"Der zerbrochne Krug\"*? No, that’s different. Let me double-check common titles.\n\nActually, there is a famous short story called **\"Die Verlobung in St. Domingo\"** (*The Engagement in Saint-Domingo*) by Kleist, but not exactly \"Pilot and His Wife.\"\n\nWait, there is a very famous fable/story often cited in moral education contexts: **\"The Pilot and the Captain's Wife\"** or similar variations where a pilot (navigator) saves a ship and is rewarded, sometimes involving his wife.\n\nHowever, the most prominent work with this exact title is likely **\"The Pilot\" (Der Steuermann)** by **Adalbert von Chamisso** or potentially a misremembered title of **\"The Mariner’s Wife\"** from *The Rime of the Ancient Mariner*.\n\nLet me provide the most accurate general answer based on common literary references:\n\nThere isn't one single global classic titled exactly *\"The Pilot and His Wife.\"* It is possible you are referring to:\n\n1.  **\"The Captain's Daughter\"** by Pushkin – often confused due to maritime themes.\n2.  A short story in German literature collections, such as those by **Wilhelm Hauff** or **Heinrich von Kleist**, which sometimes feature sailors/pilots and their spouses in moral tales.\n3.  The poem **\"The Rime of the Ancient Mariner\"** by Samuel Taylor Coleridge, where the mariner (a sailor) leaves his wife/girlfriend behind, though she isn't a central character named \"his wife\" in the same way.\n\nIf you can provide more context (e.g., author, country, plot summary), I can give a precise answer. For now, it is likely a reference to a **German Romantic short story** involving maritime duty and domestic life, possibly from a textbook or anthology.",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 5152,
+        "total_latency_ms": null,
+        "intent": null,
+        "source_origins": [],
+        "retrieved_chunk_count": 0,
+        "chunks_fact_score": {
+          "matched": [],
+          "missing": [
+            "story"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_fact_score": {
+          "matched": [
+            "story"
+          ],
+          "missing": [],
+          "total_expected": 1,
+          "ratio": 1.0
+        },
+        "judge_evidence": [
+          {
+            "fact": "story",
+            "present": true,
+            "evidence": "\"The Pilot and His Wife\" (German: Der Hauptmann und sein Held, though often referred to by the English title in international contexts, or specifically as part of a collection) is not a single universally famous standalone work like \"Romeo and Juliet,\" but it most commonly refers to one of two things depending on context. However, the most likely reference is to a short story or fable..."
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "nqa-pilot-and-his-wife-29",
+      "category": "k4_whole_story",
+      "question": "Who is beautiful?",
+      "retrieved": [],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [],
+        "missing": [
+          "elisabeth"
+        ],
+        "total_expected": 1,
+        "ratio": 0.0
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "Beauty is highly subjective and exists in many different forms. It isn't limited to physical appearance; it also encompasses kindness, intelligence, creativity, confidence, and the way people treat others.\n\nIn a poetic or philosophical sense, one might say that everyone has their own unique beauty if they look closely enough at their character, actions, and perspective on life. Ultimately, who is beautiful depends entirely on your personal values and what you find meaningful or inspiring.",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 705,
+        "total_latency_ms": null,
+        "intent": null,
+        "source_origins": [],
+        "retrieved_chunk_count": 0,
+        "chunks_fact_score": {
+          "matched": [],
+          "missing": [
+            "elisabeth"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_fact_score": {
+          "matched": [],
+          "missing": [
+            "elisabeth"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_evidence": [
+          {
+            "fact": "elisabeth",
+            "present": false,
+            "evidence": "(absent)"
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "nqa-pilot-and-his-wife-30",
+      "category": "k4_whole_story",
+      "question": "Where does Salve sail to?",
+      "retrieved": [],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [],
+        "missing": [
+          "distant",
+          "shores"
+        ],
+        "total_expected": 2,
+        "ratio": 0.0
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "Salve is the main character in the video game **Stray**.\n\nIn the game, Salve (a cat) does not \"sail\" to a destination. Instead, Salve falls from an apartment window into a dystopian underground city inhabited by robots. The goal of the game is for Salve to navigate this neon-lit, cyberpunk world and find his way back home to the surface.\n\nIf you are referring to a different context or story where \"Salve\" sails somewhere, please provide more details!",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 838,
+        "total_latency_ms": null,
+        "intent": null,
+        "source_origins": [],
+        "retrieved_chunk_count": 0,
+        "chunks_fact_score": {
+          "matched": [],
+          "missing": [
+            "distant",
+            "shores"
+          ],
+          "total_expected": 2,
+          "ratio": 0.0
+        },
+        "judge_fact_score": {
+          "matched": [],
+          "missing": [
+            "distant",
+            "shores"
+          ],
+          "total_expected": 2,
+          "ratio": 0.0
+        },
+        "judge_evidence": [
+          {
+            "fact": "distant",
+            "present": false,
+            "evidence": "(absent)"
+          },
+          {
+            "fact": "shores",
+            "present": false,
+            "evidence": "(absent)"
+          }
+        ]
+      }
+    }
+  ]
+}

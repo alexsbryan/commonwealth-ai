@@ -642,14 +642,67 @@ primitive. These are the ones it has no row for.
 | iroh pkarr | adopt | already wired |
 | Delta Chat SecureJoin | adapt the shape | §16 |
 | RFC 8785 (JCS) | adapt | a dev-only oracle in a property test of the rail's canonicaliser |
-| Keyhive, Byzantine eventual consistency | read | behind the one membership function |
-| MLS (RFC 9420) | defer | trigger: the keeper node in §17 |
+| Keyhive / BeeKEM | **adopt the rules, not the code** | re-add must causally succeed the removal; revocation names a delegation by hash; the ephemeral group root key (a key that no longer exists cannot backdate). Pre-alpha, self-labelled not for production, no audit, and its seniority rule has no definition in its own design docs. BeeKEM's key-agreement half now has proofs (eprint 2026/1434); the access-control half does not. |
+| MLS (RFC 9420) | defer, and the trigger is sharper | The Delivery Service is NOT required as a server (RFC 9750 §2.2, §5.2.2) but IS required as a function: "the group must agree on a single Commit that ends each epoch". That is a total order on membership ops. Take instead §12.3's remove-absorbs-by-type-priority — Updates and Removes apply "in any order", Removes before Adds — which is a commutative merge rule with no sort in it. |
+| **p2panda-auth** | **adopt — read before writing the resolver** | The reference implementation of this design, shipped (Rust, v0.7.x). Causal-Length Set membership; pluggable resolver; strong-removal rules; no seniority, no timestamp, no hash tie-break. Their own caveat: mutual removal in a two-manager group freezes it permanently. |
+| Causal-Length Set (Yu & Rostad, PaPoC '20) | **adopt as the membership primitive** | One natural number per element merged by `max`; odd present, even absent. Unlimited add/remove/re-add, permutation-invariant by construction, no tombstone permanence. |
+| OpenSSH KRL serial ranges | **cite as prior art for the cut** | `PROTOCOL.krl` §2.2: a revocation range scoped to one CA key, merged by set union, so two cuts compose by minimum with no shared order. `Remove{key, through_seq}` is this shape. Shipped 2013. The commutativity ARGUMENT is still unclaimed and is ours. |
+| PKISN (arXiv 1601.03874) §3.3 | **adopt the rule** | A revoked issuer may not issue further revocations, "otherwise an adversary could cause collateral damage." Published structural block on the retaliatory-backdating attack. A cut party cannot cut back. |
+| Radicle / radicle-link | **adopt the shape** for the ring id | RID = hash of the INITIAL identity document, so "the document is able to change while the RID remains the same." Ring id = hash of the genesis seed: stable, nobody's key, derivable from the log, survives the founder leaving, renders as a hostname label. Keep their quorum-of-the-PREVIOUS-revision rule, which is what stops a captured majority rewriting history. |
+| CT witness cosigning / SUNDR / PeerReview / MINGLE | **adopt the mechanism CT abandoned** | Google's stated reasons for dropping client gossip — "it isn't clear how clients would find each other" and "client-to-client communication isn't scalable" — are facts about the web's topology, not the mechanism. At 25 named mutually-reachable members: 300 pairs, ~112-byte checkpoints, a full all-pairs round under 500 KB. PeerReview puts O(N²) as affordable to hundreds. SUNDR: fork consistency is "the strongest notion of integrity possible without on-line trusted parties." |
+| Matrix state resolution v2 / v2.1 | **reject** | Under flat authority Matrix cannot remove anyone: kick, ban and demote each require the target's power to be strictly LESS than the sender's, so the act is unissuable, not merely badly resolved. Room v12's answer to the same pressure was an un-demotable creator with infinite power. Take only PDU check 4 — an act is authorized against the acts it cites, a pure order-free predicate — and the 2.0→2.1 lesson that an agreed set is a final overwrite, never a replay base. |
+| SSB group exclusion | **cite the failure** | "Removing a peer is impossible under the assumptions we operate with"; the spec calls its own scheme an "illusion of group member removal", because membership there is possession of a shared symmetric secret. The rule: if you want revocation, authority must never be a shared secret. Our per-actor keys already satisfy it. |
+| Tahoe-LAFS | **cite the limit, in our own docs** | Their revocation section: deep-copy-and-re-delegate is "the strongest form of revocation that can be accomplished", and anyone still inside can proxy for the excluded party. A void can withdraw standing; it cannot withdraw knowledge. Say so rather than implying otherwise. |
+| `git replace` / `git notes` | **cite the failure** | A genuine void-without-erase primitive — original addressable, override is itself data, escape hatch to the raw truth — whose flaw is fatal here: `refs/replace/` is excluded from pack transfer, so the void does not replicate. A void outside the replicated set is not a void. Our `Correct` being a journal act is right for a reason git demonstrates the hard way. Note also that git's own argument for revert-over-rewrite is coordination cost, never auditability; that argument is ours to make. |
+| Datomic's transactor | **cite as why coordinator-free is sound here** | Halloway, on the record: "if we removed the code that manages HA, you could have N transactors. Semantics would be fine but perf would be terrible", and the storage CAS "is still the gatekeeper". The transactor exists for cross-entity invariants on the write path — uniqueness checks, transaction functions, CAS. A ring has none, which is why we need none. The day an app wants one, it wants a serializer, and §11 question 1 already says to refuse it. |
+| ERA (PaPoC '26) + CALM / Jacob & Hartenstein | **read — this is the impossibility** | ERA §3.2: genuine mutual removal and retaliatory backdating "are structurally identical. No peer can distinguish these cases from the DAG alone… external information is required." Safety P3: no user may influence a conflict they manufactured; add-wins and remove-wins both violate it. CALM gives the spine — revocation is what makes an authorized fold non-monotone, hence not order-invariant. The escape every shipped system takes is to stop asking "was the remover authorized at that moment": remove-wins set arithmetic commutes because it never asks. |
 
 ## 19. Order of work
 
+**Amended 2026-09-20 by the precedent review in §18. Two findings reorder it.**
+
+**A new step 0, and it is a prerequisite rather than an enhancement.** An act
+commits to nothing but itself: `ring_op_message` signs
+`(namespace, ts_unix, actor, seq, body_json)` and there is no `prev` and no
+heads (`rail-core/src/sig.rs:72-87`). Two consequences compound. Equivocation —
+one actor signing two different acts at one `seq` and showing each to half the
+ring — produces identical per-actor counters on both sides and is caught only
+where some node happens to hold both; nothing forces that. And Jacob &
+Hartenstein (PaPoC '24) show why that is not merely an integrity gap:
+"a Byzantine replica can equivocate by skipping the inflation of logical time
+to assign the same logical timestamp to different events", so a cut stated as
+`Remove{key, through_seq}` is **sound only on a chain known to be
+unequivocal**. Fork detection is a precondition for the removal semantics, not
+an adjacent feature. Make every act commit to its author's view — the ring's
+DAG heads, under 100 bytes regardless of journal size (Kleppmann, PaPoC '22
+§3.2) — before writing step 3.
+
+One thing already holds and should not be lost: `RingJournal::ingest` dedupes on
+`op.id`, which hashes the whole line including the signature, so two acts at one
+`seq` both land; `ops_missing_from` is author-blind and republishes what the node
+holds; and `admit` excludes both (`admit.rs:392`). That is Blocklace's rule —
+store it, exclude it, gossip it — already satisfied, and it must survive any
+change to ingest. Dropping the duplicate on arrival would make a node that saw
+only one act unable ever to reach the state that excludes both, and the
+divergence would be permanent.
+
+**Drop "the ring always has an admin" as an invariant.** Minimum-cardinality
+invariants are the canonical shape that cannot be held coordination-free, and
+p2panda is honest that a mutual removal in a two-manager group freezes it
+permanently. CoCoA (ASIACRYPT '22 §3.5) argues the destructiveness is the point:
+both removals taking effect is desirable "so users could not avoid being removed
+by issuing removals of other parties." State it as a consequence rather than
+discover it.
+
 1. CSP from `serve_file`; views as structure.
 2. The dial-by-key measurement; sync by roster; `member_check`.
-3. `Admit` and `Remove`.
+3. `Admit` and `Remove` — after step 0 above, and against `p2panda-auth` rather
+   than from scratch. The open question is not convergence, which a
+   Causal-Length Set gives for free; it is that ERA proves no DAG-computable
+   rule can stop a manufactured conflict, so the choice is seniority (permanent
+   concentration), an arbiter (not decentralised), or accepting mutual
+   destruction with PKISN's block — a cut party may not cut back — and
+   reporting the fork rather than resolving it.
 4. wasm signing against golden vectors; client-signed append; the one invite
    with a use count; `ring invite` and the desktop button.
 5. Compartments and the deterministic clock.

@@ -1,0 +1,717 @@
+{
+ "service": "Facebook",
+ "source": "ontology-retrieval/spikes/fineprint-data/ota-pga-versions/Facebook/Privacy Policy.md",
+ "verdict": "passed",
+ "reason": "44 published items under 9 matching heading(s) (77 prose items dropped)",
+ "headings_matched": [
+  {
+   "line": 37,
+   "level": 1,
+   "text": "What information do we collect?",
+   "span_ends_line": 461
+  },
+  {
+   "line": 55,
+   "level": 2,
+   "text": "Your activity and information you provide",
+   "span_ends_line": 74
+  },
+  {
+   "line": 83,
+   "level": 2,
+   "text": "Information we collect about your friends, followers and other connections",
+   "span_ends_line": 87
+  },
+  {
+   "line": 88,
+   "level": 2,
+   "text": "Information we collect about contacts and connections",
+   "span_ends_line": 96
+  },
+  {
+   "line": 97,
+   "level": 2,
+   "text": "Information we collect or infer about you based on others’ activity",
+   "span_ends_line": 106
+  },
+  {
+   "line": 169,
+   "level": 2,
+   "text": "What if the information we collect doesn’t identify individuals?",
+   "span_ends_line": 173
+  },
+  {
+   "line": 189,
+   "level": 2,
+   "text": "Information we collect and receive if you use or interact with our Products but don’t have an account",
+   "span_ends_line": 198
+  },
+  {
+   "line": 214,
+   "level": 2,
+   "text": "Information you provide",
+   "span_ends_line": 224
+  },
+  {
+   "line": 776,
+   "level": 2,
+   "text": "Information we provide about different types of people",
+   "span_ends_line": 780
+  }
+ ],
+ "items": [
+  {
+   "item": "content you create like posts comments or audio",
+   "line": 60,
+   "from": "list-item",
+   "raw": "Content you create, like posts, comments or audio."
+  },
+  {
+   "item": "hashtags you use",
+   "line": 68,
+   "from": "list-item",
+   "raw": "Hashtags you use."
+  },
+  {
+   "item": "signals from your device see examples 15",
+   "line": 117,
+   "from": "list-item",
+   "raw": "Signals from your device. [See examples\\[15\\]](https://mbasic.facebook.com/privacy/policy/printable/?entry_point=POLICY_SUBPAGE%3A1.subpage.3-AppBrowserAndDevice#annotation-15)."
+  },
+  {
+   "item": "your device 11 information",
+   "line": 134,
+   "from": "list-item",
+   "raw": "Your [device\\[11\\]](https://mbasic.facebook.com/privacy/policy/printable/?entry_point=POLICY_SUBPAGE%3A1.subpage.4-InformationFromPartnersVendors#annotation-11) information"
+  },
+  {
+   "item": "apps you use",
+   "line": 136,
+   "from": "list-item",
+   "raw": "Apps you use"
+  },
+  {
+   "item": "games you play",
+   "line": 137,
+   "from": "list-item",
+   "raw": "Games you play"
+  },
+  {
+   "item": "create your avatar",
+   "line": 221,
+   "from": "list-item",
+   "raw": "Create your avatar"
+  },
+  {
+   "item": "fill out a form",
+   "line": 222,
+   "from": "list-item",
+   "raw": "Fill out a form"
+  },
+  {
+   "item": "contact us",
+   "line": 223,
+   "from": "list-item",
+   "raw": "Contact us"
+  },
+  {
+   "item": "what features you access from our messaging products",
+   "line": 266,
+   "from": "list-item",
+   "raw": "What features you access from our messaging products"
+  },
+  {
+   "item": "purchases within an online game",
+   "line": 276,
+   "from": "list-item",
+   "raw": "Purchases within an online game"
+  },
+  {
+   "item": "donations to a friend s fundraiser",
+   "line": 277,
+   "from": "list-item",
+   "raw": "Donations to a friend’s fundraiser"
+  },
+  {
+   "item": "purchases of subscriptions on meta products",
+   "line": 278,
+   "from": "list-item",
+   "raw": "Purchases of subscriptions on Meta Products"
+  },
+  {
+   "item": "billing shipping and contact details",
+   "line": 287,
+   "from": "list-item",
+   "raw": "Billing, shipping and contact details"
+  },
+  {
+   "item": "items you bought and how many",
+   "line": 288,
+   "from": "list-item",
+   "raw": "Items you bought and how many"
+  },
+  {
+   "item": "other account and authentication information",
+   "line": 289,
+   "from": "list-item",
+   "raw": "Other account and authentication information"
+  },
+  {
+   "item": "send you a message",
+   "line": 311,
+   "from": "list-item",
+   "raw": "Send you a message"
+  },
+  {
+   "item": "invite you to join a conversation",
+   "line": 312,
+   "from": "list-item",
+   "raw": "Invite you to join a conversation"
+  },
+  {
+   "item": "invite you to play a game",
+   "line": 314,
+   "from": "list-item",
+   "raw": "Invite you to play a game"
+  },
+  {
+   "item": "block or report you",
+   "line": 316,
+   "from": "list-item",
+   "raw": "Block or report you"
+  },
+  {
+   "item": "the type of device",
+   "line": 324,
+   "from": "list-item",
+   "raw": "The type of device"
+  },
+  {
+   "item": "details about its operating system",
+   "line": 325,
+   "from": "list-item",
+   "raw": "Details about its operating system"
+  },
+  {
+   "item": "details about its hardware and software",
+   "line": 326,
+   "from": "list-item",
+   "raw": "Details about its hardware and software"
+  },
+  {
+   "item": "brand and model",
+   "line": 327,
+   "from": "list-item",
+   "raw": "Brand and model"
+  },
+  {
+   "item": "battery level",
+   "line": 328,
+   "from": "list-item",
+   "raw": "Battery level"
+  },
+  {
+   "item": "signal strength",
+   "line": 329,
+   "from": "list-item",
+   "raw": "Signal strength"
+  },
+  {
+   "item": "available storage",
+   "line": 330,
+   "from": "list-item",
+   "raw": "Available storage"
+  },
+  {
+   "item": "browser type",
+   "line": 331,
+   "from": "list-item",
+   "raw": "Browser type"
+  },
+  {
+   "item": "app and file names and types",
+   "line": 332,
+   "from": "list-item",
+   "raw": "App and file names and types"
+  },
+  {
+   "item": "plugins",
+   "line": 333,
+   "from": "list-item",
+   "raw": "Plugins"
+  },
+  {
+   "item": "language",
+   "line": 363,
+   "from": "list-item",
+   "raw": "Language"
+  },
+  {
+   "item": "time zone",
+   "line": 364,
+   "from": "list-item",
+   "raw": "Time zone"
+  },
+  {
+   "item": "mobile phone number",
+   "line": 365,
+   "from": "list-item",
+   "raw": "Mobile phone number"
+  },
+  {
+   "item": "ip address",
+   "line": 366,
+   "from": "list-item",
+   "raw": "IP address"
+  },
+  {
+   "item": "connection and download speed",
+   "line": 367,
+   "from": "list-item",
+   "raw": "Connection and download speed"
+  },
+  {
+   "item": "network capability",
+   "line": 368,
+   "from": "list-item",
+   "raw": "Network capability"
+  },
+  {
+   "item": "advertisers",
+   "line": 408,
+   "from": "list-item",
+   "raw": "Advertisers"
+  },
+  {
+   "item": "publishers and their vendors",
+   "line": 410,
+   "from": "list-item",
+   "raw": "Publishers (like a website or app) and their vendors"
+  },
+  {
+   "item": "app developers",
+   "line": 411,
+   "from": "list-item",
+   "raw": "App developers"
+  },
+  {
+   "item": "game developers",
+   "line": 412,
+   "from": "list-item",
+   "raw": "Game developers"
+  },
+  {
+   "item": "e commerce platforms",
+   "line": 414,
+   "from": "list-item",
+   "raw": "E-commerce platforms"
+  },
+  {
+   "item": "law enforcement",
+   "line": 425,
+   "from": "list-item",
+   "raw": "Law enforcement"
+  },
+  {
+   "item": "government authorities",
+   "line": 426,
+   "from": "list-item",
+   "raw": "Government authorities"
+  },
+  {
+   "item": "undertake analytics",
+   "line": 437,
+   "from": "list-item",
+   "raw": "Undertake analytics"
+  }
+ ],
+ "item_count": 44,
+ "prose_dropped": [
+  {
+   "item": "the information you give us when you sign up for our products and create a profile like your email address phone number or age",
+   "line": 45,
+   "from": "list-item"
+  },
+  {
+   "item": "what you do on our products this includes what you click on or like your posts and photos your chats with our features that are part of ai at meta and messages you send on some products you can use end to end encrypted messages learn more",
+   "line": 46,
+   "from": "list-item"
+  },
+  {
+   "item": "who your friends or followers are and what they do on our products",
+   "line": 47,
+   "from": "list-item"
+  },
+  {
+   "item": "information from the phone computer or tablet you use our products on like what kind it is and what version of our app you re using",
+   "line": 48,
+   "from": "list-item"
+  },
+  {
+   "item": "information from partners 2 about things you do both on and off of our products this could include other websites you visit apps you use or online games you play",
+   "line": 49,
+   "from": "list-item"
+  },
+  {
+   "item": "content you provide through our camera feature or your camera roll settings or through our voice enabled features learn more 6 about what we collect from these features and how we use information from the camera for masks filters avatars and effects",
+   "line": 61,
+   "from": "list-item"
+  },
+  {
+   "item": "messages you send and receive including their content subject to applicable law on some products you can use end to end encrypted messages learn more about how end to end encryption works",
+   "line": 62,
+   "from": "list-item"
+  },
+  {
+   "item": "metadata 7 about content and messages subject to applicable law",
+   "line": 63,
+   "from": "list-item"
+  },
+  {
+   "item": "interactions with our features that are part of ai at meta and related metadata for example information like content and messages you or others exchange with these features learn more 8",
+   "line": 64,
+   "from": "list-item"
+  },
+  {
+   "item": "types of content including ads you view or interact with and how you interact with it",
+   "line": 65,
+   "from": "list-item"
+  },
+  {
+   "item": "apps and features you use and what actions you take in them see examples 9",
+   "line": 66,
+   "from": "list-item"
+  },
+  {
+   "item": "purchases or other transactions you make such as through meta checkout experiences including credit card information learn more 10",
+   "line": 67,
+   "from": "list-item"
+  },
+  {
+   "item": "the time frequency and duration of your activities on our products",
+   "line": 69,
+   "from": "list-item"
+  },
+  {
+   "item": "views of and interactions with a facebook page and its content to provide the page admin with aggregated information about how people use their page and its content meta is jointly responsible with page admins learn more about the joint processing for page insights",
+   "line": 70,
+   "from": "list-item"
+  },
+  {
+   "item": "your photo or video selfie if you provide it when you contact us for account support",
+   "line": 71,
+   "from": "list-item"
+  },
+  {
+   "item": "we might suggest a friend to you through facebook s people you may know or instagram s discover people if you both appear on a list of contacts or connections that someone uploads",
+   "line": 104,
+   "from": "list-item"
+  },
+  {
+   "item": "we take into account whether your friends belong to a group when we suggest you join it",
+   "line": 105,
+   "from": "list-item"
+  },
+  {
+   "item": "the device and software you re using and other device characteristics see examples 13",
+   "line": 114,
+   "from": "list-item"
+  },
+  {
+   "item": "what you re doing on your device like whether our app is in the foreground or if your mouse is moving",
+   "line": 115,
+   "from": "list-item"
+  },
+  {
+   "item": "identifiers that tell your device apart from other users including family device ids see examples 14",
+   "line": 116,
+   "from": "list-item"
+  },
+  {
+   "item": "information you ve shared with us through device settings like gps location camera access photos and related metadata 16",
+   "line": 118,
+   "from": "list-item"
+  },
+  {
+   "item": "information about the network you connect your device to and your connection including your ip address 17 see more examples 18",
+   "line": 119,
+   "from": "list-item"
+  },
+  {
+   "item": "some location related information even if location services is turned off in your device settings this includes using ip addresses to estimate your general location",
+   "line": 120,
+   "from": "list-item"
+  },
+  {
+   "item": "information about our products performance on your device learn more 19",
+   "line": 121,
+   "from": "list-item"
+  },
+  {
+   "item": "information from cookies and similar technologies learn more 20",
+   "line": 122,
+   "from": "list-item"
+  },
+  {
+   "item": "websites you visit and cookie data like through social plugins or the meta pixel",
+   "line": 135,
+   "from": "list-item"
+  },
+  {
+   "item": "purchases and transactions you make off of our products using non meta checkout experiences",
+   "line": 138,
+   "from": "list-item"
+  },
+  {
+   "item": "the ads you see and how you interact with them",
+   "line": 139,
+   "from": "list-item"
+  },
+  {
+   "item": "how you use our partners and other third parties products and services online or in person",
+   "line": 140,
+   "from": "list-item"
+  },
+  {
+   "item": "browser and app logs of your visits to public content like facebook pages and videos",
+   "line": 194,
+   "from": "list-item"
+  },
+  {
+   "item": "basic information about devices 11 that downloaded our apps like device model and os",
+   "line": 195,
+   "from": "list-item"
+  },
+  {
+   "item": "information about the content itself like the location where a photo was taken or the date a file was created",
+   "line": 243,
+   "from": "list-item"
+  },
+  {
+   "item": "information about the message itself like the type of message or the date and time it was sent",
+   "line": 244,
+   "from": "list-item"
+  },
+  {
+   "item": "prompts that can include questions messages media and other information you or others share with or send to these features",
+   "line": 253,
+   "from": "list-item"
+  },
+  {
+   "item": "responses and other information you receive from these features sometimes these are provided with the help of our ai integrations",
+   "line": 254,
+   "from": "list-item"
+  },
+  {
+   "item": "information from third party apps and services you choose to connect to these features to do things like help manage your calendar and emails",
+   "line": 255,
+   "from": "list-item"
+  },
+  {
+   "item": "feedback you give to these features and responses to your feedback",
+   "line": 256,
+   "from": "list-item"
+  },
+  {
+   "item": "information we collect to personalize these features see examples",
+   "line": 257,
+   "from": "list-item"
+  },
+  {
+   "item": "information about you and others from third party apps and services that you connect to meta products to enhance your experience including our features that are part of ai at meta learn more",
+   "line": 258,
+   "from": "list-item"
+  },
+  {
+   "item": "what apps posts videos ads games shops and other content you view or interact with on our products",
+   "line": 265,
+   "from": "list-item"
+  },
+  {
+   "item": "when you use social plugins facebook login in app browser link history or autofill",
+   "line": 267,
+   "from": "list-item"
+  },
+  {
+   "item": "payments received for providing products or services on meta products",
+   "line": 279,
+   "from": "list-item"
+  },
+  {
+   "item": "payments or purchases made using meta pay or other meta checkout experiences",
+   "line": 280,
+   "from": "list-item"
+  },
+  {
+   "item": "credit or debit card number and other financial account information",
+   "line": 286,
+   "from": "list-item"
+  },
+  {
+   "item": "share or comment on a photo you re tagged in",
+   "line": 310,
+   "from": "list-item"
+  },
+  {
+   "item": "upload their contact or connection information such as an address book or follower list",
+   "line": 313,
+   "from": "list-item"
+  },
+  {
+   "item": "connect with you for example as a friend or follower",
+   "line": 315,
+   "from": "list-item"
+  },
+  {
+   "item": "provide information about you to ai at meta including messages and content you have shared see examples 8",
+   "line": 317,
+   "from": "list-item"
+  },
+  {
+   "item": "the name of your mobile operator or internet service provider",
+   "line": 362,
+   "from": "list-item"
+  },
+  {
+   "item": "information about other devices that are nearby or on your network",
+   "line": 369,
+   "from": "list-item"
+  },
+  {
+   "item": "wi fi hotspots you connect to using our products",
+   "line": 370,
+   "from": "list-item"
+  },
+  {
+   "item": "businesses and people that use our products to sell or offer goods and services",
+   "line": 409,
+   "from": "list-item"
+  },
+  {
+   "item": "device manufacturers internet service providers and mobile network operators",
+   "line": 413,
+   "from": "list-item"
+  },
+  {
+   "item": "publicly available sources like academic papers and public forums",
+   "line": 421,
+   "from": "list-item"
+  },
+  {
+   "item": "industry peers such as other online platforms and technology companies",
+   "line": 422,
+   "from": "list-item"
+  },
+  {
+   "item": "marketing and advertising vendors and data providers who have the rights to provide us with your information",
+   "line": 423,
+   "from": "list-item"
+  },
+  {
+   "item": "companies or organizations that provide content including videos photos and audio",
+   "line": 424,
+   "from": "list-item"
+  },
+  {
+   "item": "professional and non profit groups like ngos and charities",
+   "line": 427,
+   "from": "list-item"
+  },
+  {
+   "item": "academic and research institutions like universities non profit research groups and think tanks",
+   "line": 428,
+   "from": "list-item"
+  },
+  {
+   "item": "detect and stop scraping in violation of our terms",
+   "line": 434,
+   "from": "list-item"
+  },
+  {
+   "item": "take other actions to promote the safety security and integrity of our products our users the public and our personnel and property",
+   "line": 435,
+   "from": "list-item"
+  },
+  {
+   "item": "improve our ai technologies and support ai research and product development such as translations computer vision content understanding natural language processing and tools for people and businesses to create content",
+   "line": 436,
+   "from": "list-item"
+  },
+  {
+   "item": "engage with research survey respondents who choose to participate in additional conversations",
+   "line": 438,
+   "from": "list-item"
+  },
+  {
+   "item": "content you provide through our camera feature or your camera roll settings or through our voice enabled features learn more 6 about what we collect from these features and how we use information from the camera for masks filters avatars and effects",
+   "line": 61,
+   "from": "list-item"
+  },
+  {
+   "item": "messages you send and receive including their content subject to applicable law on some products you can use end to end encrypted messages learn more about how end to end encryption works",
+   "line": 62,
+   "from": "list-item"
+  },
+  {
+   "item": "metadata 7 about content and messages subject to applicable law",
+   "line": 63,
+   "from": "list-item"
+  },
+  {
+   "item": "interactions with our features that are part of ai at meta and related metadata for example information like content and messages you or others exchange with these features learn more 8",
+   "line": 64,
+   "from": "list-item"
+  },
+  {
+   "item": "types of content including ads you view or interact with and how you interact with it",
+   "line": 65,
+   "from": "list-item"
+  },
+  {
+   "item": "apps and features you use and what actions you take in them see examples 9",
+   "line": 66,
+   "from": "list-item"
+  },
+  {
+   "item": "purchases or other transactions you make such as through meta checkout experiences including credit card information learn more 10",
+   "line": 67,
+   "from": "list-item"
+  },
+  {
+   "item": "the time frequency and duration of your activities on our products",
+   "line": 69,
+   "from": "list-item"
+  },
+  {
+   "item": "views of and interactions with a facebook page and its content to provide the page admin with aggregated information about how people use their page and its content meta is jointly responsible with page admins learn more about the joint processing for page insights",
+   "line": 70,
+   "from": "list-item"
+  },
+  {
+   "item": "your photo or video selfie if you provide it when you contact us for account support",
+   "line": 71,
+   "from": "list-item"
+  },
+  {
+   "item": "we might suggest a friend to you through facebook s people you may know or instagram s discover people if you both appear on a list of contacts or connections that someone uploads",
+   "line": 104,
+   "from": "list-item"
+  },
+  {
+   "item": "we take into account whether your friends belong to a group when we suggest you join it",
+   "line": 105,
+   "from": "list-item"
+  },
+  {
+   "item": "browser and app logs of your visits to public content like facebook pages and videos",
+   "line": 194,
+   "from": "list-item"
+  },
+  {
+   "item": "basic information about devices 11 that downloaded our apps like device model and os",
+   "line": 195,
+   "from": "list-item"
+  }
+ ],
+ "min_items": 8
+}

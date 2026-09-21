@@ -1,23 +1,28 @@
 # Commonwealth AI — System Overview
 
-A navigation primer. Read this on day one to know what exists, how
-the pieces fit, and where to look for each subsystem. Read
-[`sovereign/ARCH_PRINCIPLES.md`](./ARCH_PRINCIPLES.md) on day two for
-the rules of engagement. (Brand new? Start with the ten-minute
-[`docs/ARCHITECTURE_TOUR.md`](../docs/ARCHITECTURE_TOUR.md) — a
-compressed rendering of this contract for newcomers. It summarizes;
-this file is the truth.)
+What exists, how it fits, and where to look. Read it whole — that is what its
+size is for. `ARCH_PRINCIPLES.md` is the rules of engagement;
+`docs/ARCHITECTURE_TOUR.md` is the ten-minute newcomer path.
 
-This file is a contract per `ARCH_PRINCIPLES.md §1.1`: every claim
-must be verifiable against the code on the commit it appears in. If
-you change a subsystem, update its entry in the same PR. It states
-what IS; how the system came to be this shape — the reversals,
-decompositions, and archaeology — lives in
-[`HISTORY.md`](./HISTORY.md), linked from the entries it explains.
-Capabilities that exist but ship default-off or dark are tracked in
-[`DEFAULTS_LEDGER.md`](./DEFAULTS_LEDGER.md) — each with the
-falsifiable condition that flips it and a review-by date; shipping
-dark without a ledger row is a contract violation.
+A contract per `ARCH_PRINCIPLES.md §1.1`: every claim verifiable against the
+code on the commit it appears in. Change a subsystem, update its entry in the
+same commit.
+
+**It states what IS.** How each shape was arrived at — the incidents, the
+measurements, the orders — is
+[`SYSTEM_OVERVIEW_DETAIL.md`](./SYSTEM_OVERVIEW_DETAIL.md), which keeps this
+numbering, so `§4` here is `§4` there. Open it before changing something, to
+learn what already went wrong. Also [`HISTORY.md`](./HISTORY.md) (how the
+shape came to be), [`DEFAULTS_LEDGER.md`](./DEFAULTS_LEDGER.md) (everything
+shipped default-off or dark, with its flip condition and review-by date), and
+[`../quality/SIZE_DEBT_LEDGER.md`](../quality/SIZE_DEBT_LEDGER.md) (the
+arch-gate acceptance record).
+
+**This file has a ceiling and it is deliberate.** It reached 10.4k lines by
+accreting an incident log inside a map — single table cells ran three thousand
+words — and at that size it was sampled, never read. Add a fact here only if a
+reader needs it to ORIENT. If they need it to ACT, it belongs in the detail
+file or the subsystem's own doc.
 
 ---
 
@@ -26,1117 +31,358 @@ dark without a ledger row is a contract violation.
 ```
 commonwealth-ai/
 ├── oicp-types/                # OICP wire types — no other deps
-├── kernel-types/              # The neutral kernel — identity + provenance (layer 0, no product domain owns it)
+├── kernel-types/              # The neutral kernel — identity, provenance, trust, the released turn
 ├── oicp-client/               # OICP pure-HTTP client (OpenAI-compat + manifest routing)
+├── oicp-conformance/          # Standalone OICP v0.4 host conformance tester
+├── oplog/                     # Op/Oplog/Journaled — the append-only JSONL journal (tier-0)
+├── serving-policy/            # Fair-share scheduling + pipeline aliases (tier-0)
 ├── corpus-engine/             # Knowledge layer (LanceDB + Tantivy)
+├── corpus-index/              # Retrieval read-port leaf — CorpusIndex, persisted settings, the engine Error
 ├── corpus-engine-scip/        # SCIP call graph + per-language exporter dispatch
-├── corpus-engine-notes/       # NoteStore + project_docs index (carved out of corpus-engine)
-├── code-next-edit/            # The code-intel package's next-edit crate (docs/CODE_TOOLING_BOUNDARY.md §2) — the pure rule/model/symbol/syntax lanes + the journal policy split out of sovereign-api's workbench cluster. A stub until dm-next-edit-move lands the modules
-├── code-facts/                # The code-intel package's deterministic tree-sitter fact base (docs/CODE_TOOLING_BOUNDARY.md §2, Phase 2) — the facts/facts_check/facts_store modules split out of corpus-engine at REVIEW-build-code-facts; corpus-engine re-exports them at their historical paths
-├── corpus-engine-atos/        # ATOS feature store + plan items + design signals (carved out) — opt-in behind `--features atos`
-├── corpus-engine-archaeology/ # Git archaeology + rough-edges + atom-provenance (carved out)
-├── corpus-engine-yield/       # YieldHook cooperative-yield contract (Tier-0 leaf shared by the data plane + watchers)
-├── corpus-engine-sections/    # Section detectors — corpus-engine's segmentation vocabulary as a regex-only leaf
-├── understanding-vocab/       # Atlas vocabulary — AtomsFile/AtomEnvelope, Edge, kind taxonomy, OntologyPolicies + declaration types, lookup_key, StableAtomKey (serde + kernel-types + blake3 leaf)
-├── corpus-engine-watchers/    # Lint/test/project-index watchers + result stores (carved out of corpus-engine)
-├── corpus-index/              # Retrieval read-port leaf — CorpusIndex, IndexInfo, the persisted settings (DisplayMeta/MutableMergePolicy/FilterConfig/StreamAxes), the search/evidence/provenance surface and the engine Error (carved out of corpus-engine)
-├── understanding-atlas/       # Understanding's pure tier — the arithmetic over the published language (analysis, resolution by name, classification, the ground walk, domains, ontology, reconciliation, pipeline types/schemas, meta-atlas and traversal logic); may name the language, kernel-types and the index leaf's row types, no async fn (DE Step 7, redrawn). REVIEW-build-understanding-crate-tree landed the module tree (path-preserving), the four engine-leaf shims (error/types/oplog/atlas_canonical), the `enrichment::atlas` / `enrichment::ontology` pure surfaces, and moved `ontology::{clock,type_index}` here; the batch move rows fill the rest
-├── understanding-host/        # Understanding's host tier — the ports and the knot (stores and the ANN, writers, the field engine, entity extraction, the phase runner); may name corpus-engine, the index leaf, the pure tier and the language (DE Step 7, redrawn). REVIEW-build-understanding-crate-tree wired its Cargo.toml, naming corpus-engine so the package's grandfathered `[[exception]]` is LIVE (boundary-gate green); the batch move rows fill it
-├── corpus-mcp/                # Thin knowledge host, three verbs — `recipe new` (scaffold from an ontology template), `ingest <recipe.toml>` (acquire→index→atlas enrichment) and `serve` (`ask`: cited passages + the map of ideas the atlas walk traversed; cited search; atlas atom lookup, over MCP/stdio; pulls a named corpus's prebuilt snapshot if absent), all against ANY OpenAI-compatible endpoint — DISCOVERED (Ollama, llama-server, the OICP daemon) when none is named; no llama.cpp/ort/iroh
-├── sovereign-recipes/         # Canonical recipe TOMLs + catalog + data lists (vendored into corpus-engine at build)
-├── sovereign/                 # Local AI assistant (CLI / desktop / server)
+├── corpus-engine-notes/       # NoteStore + project_docs index
+├── corpus-engine-atos/        # ATOS feature store + plan items (opt-in, `--features atos`)
+├── corpus-engine-archaeology/ # Git archaeology + rough-edges + atom-provenance
+├── corpus-engine-yield/       # YieldHook cooperative-yield contract (tier-0 leaf)
+├── corpus-engine-sections/    # Section detectors as a regex-only leaf
+├── corpus-engine-watchers/    # Lint/test/project-index watchers + result stores
+├── code-next-edit/            # Code-intel package's next-edit crate
+├── code-facts/                # Code-intel package's tree-sitter fact base
+├── understanding-vocab/       # Atlas vocabulary — AtomsFile/AtomEnvelope, Edge, kinds, OntologyPolicies
+├── understanding-atlas/       # Understanding's pure tier — arithmetic over the published language
+├── understanding-host/        # Understanding's host tier — the ports and the knot
+├── corpus-mcp/                # Thin knowledge host — recipe new · ingest · serve, any OpenAI-compatible endpoint
+├── sovereign-recipes/         # Canonical recipe TOMLs + catalog (vendored into corpus-engine at build)
+├── sovereign/                 # Local AI assistant (CLI / desktop / server / daemon)
 ├── commonwealth/              # Mesh coordination daemon
-├── studio/                    # Liftable authoring package — workflow engine + recipe-author + headless CLI (see studio/BOUNDARY.md)
-├── quality/                   # Quality program — ARCH_LAYERS.toml (layer map), gate baselines, arch-layers crate
+├── studio/                    # Liftable authoring package
+├── quality/                   # Quality program — layer map, gate baselines, arch-layers crate
 ├── packages/chat-ui/          # Shared Svelte chat render surface (desktop + mobile)
-├── packages/vscode-sovereign/ # First-party VSCode FIM extension (ghost text; zero-dep esbuild bundle)
-└── sovereign-mobile/          # Thin Tauri 2 mobile client (iOS + Android), tailnet or iroh dial-by-key
+├── packages/vscode-sovereign/ # First-party VSCode FIM extension
+└── sovereign-mobile/          # Thin Tauri 2 mobile client (iOS + Android)
 ```
 
-Supporting directories outside the project tree: `vendor/` (pinned
-`llama-cpp-4`), `scripts/` (CI bench + corpus setup), `docs/`,
-`landing/`, `gym/`, `baselines/`, and `corpus-engine/xtask` (the
-docs-gate / arch-gate CI binaries, plus the workspace-hygiene
-generators in `xtask/tests/` — the requirement registry and the
-`covers:` tag scanner, which live here because they read the repo root
-and so cannot sit in a liftable crate). `models/` holds downloaded GGUF
-weights (created by `svrn setup`, gitignored).
+Outside the map: `vendor/` (pinned `llama-cpp-4`), `scripts/`, `docs/`,
+`landing/`, `gym/`, `baselines/`, and `corpus-engine/xtask` — the gate
+binaries plus the workspace-hygiene generators in `xtask/tests/`, which live
+there because they read the repo root and so cannot sit in a liftable crate.
+`models/` holds downloaded GGUF weights, gitignored.
 
-| Project              | Role                                          | Depends on                                            |
-|----------------------|-----------------------------------------------|-------------------------------------------------------|
-| `oicp-types`         | OICP v0.3 wire types + scoring helpers        | —                                                     |
-| `kernel-types`       | **The neutral kernel** — identity and provenance owned by no product domain: `ContentHash`, `CorpusId`, `NodeId`, `Origin` (+ its closed `Source` sum, `Server`, `Grain`, `Locator`), `Custody`, `Attribution`. Minted 2026-08-20 after measurement showed the 23 types all three domains speak were 22-owned by corpus-engine — three systems depending on one system's implementation, not a contract. The SECOND layer-0 membrane, deliberately separate from `oicp-types`: oicp is what a node ADVERTISES, this is what content IS. It may name nothing above it. **Also the TRUST vocabulary** (2026-08-20, rung nc-10-judgement): `Verdict` (the four of ARCH §18.2), `Reason` (non-empty, refuses the 13 placeholder spellings), `Freshness`, and `Judgement` — a verdict about a named subject with its reason, its date and its horizon. It is here rather than in `sovereign-contracts` because §10.8 names "contracts becomes the megablock" as a failure mode whose guard is "the envelope goes to kernel-types"; both the product and back-of-house reach DOWN to it, which is legal — the one-way rule forbids depending on back-of-house, not sharing an ancestor beneath both. It carries WORK, not shape (§10.3): age computation, one age format, staleness banding, one status vocabulary, the roll-up conjunction and the honesty footer. First adopters: `svrn posture` (seven status vocabularies and seven age formats collapsed to one) and `NightlyPosture`. **And the RELEASED TURN** (2026-08-20, rung nc-11-answer): `Seal` (a trait — the kernel states the one question a sealed body of evidence must answer, and `corpus_engine::EvidenceSet` answers it, so no arrow points up), `Citation` (a quote a seal vouched for), `Draft` (composed text whose only exit is release — its text cannot be read), `Answer` (text + citations + provenance + judgement, with no door that does not take a `Judgement`), `PeerAnswer` (an answer the custody sweep cleared for the mesh) and `Refused` (why a citation or a release said no — a value, not a log line). `quality/CONCEPTS.toml` writes the canonical home as `sovereign_contracts::answer::Answer`, and that home CANNOT hold these: `sovereign-contracts` is layer-0 `contract`, BELOW `corpus-engine`, so anything naming evidence from there inverts the edge the bottom of the stack exists to forbid. The resolution is that `Answer` never names `Evidence` — every field of it is already kernel vocabulary — and the seal stays with the evidence. Work carried, not shape: the verbatim-containment check `sovereign-meshapp` states in a doc comment and audits nowhere, the release fold (which is `Judgement::roll_up`, reused rather than re-reduced), and the mesh custody sweep, which had no implementation at all — `grep -rn Custody commonwealth/` finds nothing on this tree. **And the WIRE-FORM decider** (2026-08-23, rung rf-2): `wire::WireFixture` — the ONE implementation (§10.6) of "does adopting this typed value at a `String` site change the bytes", generalised from `ContentHash`'s hand-written `serde_wire_form_is_a_plain_hex_string`; the three kernel wire tests and the refactor factory's stage-6 differ (`sovereign-cli-dev/src/refactor_wire.rs`) all assert through it. Compiled under `cfg(any(test, feature = "wire-fixture"))` so the default build keeps the four-dep budget. **And the REQUIREMENT REGISTRY** (2026-08-31, campaign `conformance`): `conformance::{Requirement, Scenario, Registry, ReqLevel, Enforceability}` — what `research/clean-room/REQUIREMENTS.md` obliges, as data. It is here for the same reason `Verdict` is: three unrelated surfaces need to name a requirement (the CLI contract, the desktop journey manifest, the xtask gate table) and a registry owned by any one of them would make the other two depend on that one's world. `quality/requirements.toml` is GENERATED from the spec by `corpus-engine/xtask/tests/requirements_registry.rs` (parser split out to `requirements_registry/spec_parser.rs`) and byte-gated against it; that same test also asserts the hand-authored enforceability column is id-for-id equal to the registry. The parser PANICS on an unrecognised declaration form and on a bare requirement in a section with no declared default, because defaulting to MUST is exactly what lost the 53-requirement `GR` family from an earlier count that came out 112 short. **The generator MOVED to `corpus-engine/xtask/tests/` on 2026-09-04** (cw-lift): it reads the repo root, and this crate is a global `[[package_leaf]]` that every declared package must be able to build standalone WITH ITS TESTS — the commonwealth lift failed on exactly it and on the `covers:` scanner beside it. The vocabulary stays here; only the workspace-hygiene generators left, taking `toml`, `syn` and `quote` out of this crate's dev-dependencies with them. `boundary-gate` could not see this class when the move was made — it had only the two compile-time rules — and it can now: rule 3c (787eda806, same day) flags a path derived from `CARGO_MANIFEST_DIR` that climbs out of the crate, and a `git` subprocess with no `current_dir` | `serde`, `getrandom`, `hex`, `blake3` (+ optional `serde_json` behind `wire-fixture`) |
-| `workspace-hack`     | cargo-hakari feature-unification crate (build-latency move bl-hakari, 2026-09-17): no source, third-party deps only, with the UNION of features the workspace activates, so a `-p <crate>` build resolves what `--workspace` resolves (scope-drift over the 28 probe crates 316 → 118, and 80 of the 118 sit inside the four `[[package_leaf]]` probe scopes that deliberately do NOT link it — kernel-types, oicp-types, corpus-engine-vocab, sovereign-contracts — whose whole baseline fresh cost was 23 s of 2204). Regenerated by `cargo hakari generate`; `cargo hakari verify` is an advisory pre-push instrument. Config in `.config/hakari.toml`: platforms listed, the vendored llama.cpp crates and the eight shared leaves excluded from traversal (a leaf is budgeted to zero internal deps and boundary-gate counts the hack as one); a crate stays out of it by having ONE feature set (iroh, via `commonwealth-transport`), never by `final-excludes`. No `build.rs` (boundary-gate forbids one on a leaf; measured no drift cost) | — |
-| `corpus-engine`      | Acquire → extract → filter → chunk → embed → index | `oicp-types`, `kernel-types`, `corpus-engine-yield`, `corpus-engine-scip` (treesitter feature), `corpus-engine-notes`, `corpus-engine-atos` |
-| `corpus-engine-scip` | SCIP call graph store + exporter dispatch     | —                                                     |
-| `corpus-engine-notes`| `Note` + its value types (`note.rs`, plain data — the published surface), the `NoteStore` that persists them (`notes.rs`), project-docs index + notes↔alignment sync (carved out of corpus-engine for blast-radius control) | `rusqlite` |
-| `corpus-engine-atos` | ATOS feature store + plan items + DESIGN.md design signals (carved out). **ATOS is an opt-in experiment** behind the `atos` Cargo feature — the recipe-author workspace uses `sovereign-store::RecipeProjectStore` instead, and default product builds (server/desktop/daemon/cli) carry zero ATOS | `rusqlite` |
-| `corpus-engine-archaeology` | Git history mining + rough-edge surfacing + atom-provenance eval (carved out) | — |
-| `corpus-engine-yield` | `YieldHook` cooperative foreground-yield contract — a Tier-0 leaf (one trait, zero deps) shared by the data plane and the watchers so the daemon's `Arc<dyn YieldHook>` has one trait identity on both. Also carries the seam's **liveness bound**: `MAX_FOREGROUND_DEFERRAL` (300 s) + `DeferralBudget`, because `should_yield()` is a level predicate that any request cadence shorter than the yield window pins true forever — see "Foreground yield is bounded" below. Since 2026-09-02 it also carries the WRITE side, `ForegroundSignal` + `ForegroundLease`: the daemon installs both halves on the corpus engine, and every `Runtime` turn holds a lease on its stream handle for the turn's whole life, so ingest, enrichment and the newsworthy tick park for the entire turn (measured: background commits inside one grounded turn 42 → 1). Until then the only bump site was `chat_completions`, which the product's own chat paths never cross. | — |
-| `corpus-engine-sections` | Section detectors (`SectionDetector`, `DetectedSection`, `ChapterRegexDetector`, `TocAnchoredDetector`) — corpus-engine's own segmentation vocabulary, carved into a `regex`-only leaf so the studio `SectionTool` shares the ONE implementation by reaching DOWN, instead of corpus-engine reaching UP into `sovereign-contracts` (noun-convergence rung 2) | `regex` |
-| `understanding-vocab` | The atlas vocabulary — `AtomsFile` / `AtomEnvelope` + the twelve atom kinds (`atoms`; `Summary` is ei-7a's, and `AtomType::grain` is the one decider for whether a kind's text may be quoted or may score leaf evidence), `Edge` / `EdgesFile` (`edges`), `EnrichmentDepth` + the eight `string_enum_with_other!` kind enums (`taxonomy`), `lookup_key` (`canonical`), `StableAtomKey` (`stable_key`, an inherent `impl AtomEnvelope` so it must live with the type), and — Step 3 — `OntologyPolicies` + its five axes and the navigation section (`ontology`, `ontology::navigation`: `NavigationPolicy` / `WalkPolicy` / `SeedPolicy` per `QuestionKind`, spec §2.2 defaults) with everything an author declares under `ontology::decl` (`OntologyTypeDecl`, `TypeKind`, `AttrDecl`, `OntologyV1`, the investigation `EntityTypeDecl` / `RelationshipTypeDecl` / `PatternDecl`, `OntologyVocabulary`; the shape of `atlas/ontology.json`). Carved out 2026-09-03 (enrichment-as-plugin Steps 2–3) so a thin host can READ `atlas/atoms.json` without linking the 162k lines that write it; corpus-engine re-exports every item at its historical path (`enrichment::atlas::{atoms,edges,stable_key}`, `enrichment::pipeline::atlas::*`, `atlas_canonical`), so no in-repo importer changed. Declared `[[package_leaf]]`; `sovereign-core`'s evidence-loop gazetteer and `sovereign-cli-llm`'s scrub/scaffold commands name it directly, and the three lookalike `atoms.json` shapes they carried are gone — `corpus-engine/xtask/tests/atoms_file_census.rs` pins the count at ONE. Sealed by domains `REVIEW-build-vocab-seal`: `AtomsFile` is no longer `Deserialize` — the crate-private `AtomsFileWire` carries the derive and `understanding-vocab/src/read.rs`'s `read_atlas_atoms` is the only parser, pinned by `understanding-vocab/tests/atoms_reds.rs` | `kernel-types`, `serde`, `serde_json`, `blake3` |
-| `understanding-atlas` | Understanding's pure tier (`[[package]] understanding`, DE "Step 7, redrawn"): the arithmetic over the published language — analysis, resolution by name, classification, the ground walk, domains, ontology, reconciliation, pipeline types/schemas, meta-atlas and traversal logic. It names only `understanding-vocab`, `kernel-types`, the `corpus-index` leaf's row types and `oplog`, and carries no `async fn`. `REVIEW-build-understanding-crate-tree` decided the path-preserving module tree, landed the engine-leaf shims (`error`/`types`/`oplog`/`atlas_canonical`), the `enrichment::atlas` / `enrichment::ontology` pure surfaces, and moved `enrichment::ontology::{clock,type_index}` here; the batch move rows below fill the rest | `understanding-vocab`, `corpus-index`, `kernel-types`, `oplog`, `chrono`, `serde`, `serde_json`, `tracing` |
-| `understanding-host` | Understanding's host tier (`[[package]] understanding`): the ports and the knot — stores and the ANN, writers, the field engine, entity extraction, the phase runner. It names `corpus-engine` (the package's ONE grandfathered `[[exception]]`, ARCH_LAYERS.toml:1388-1393 — LIVE once `REVIEW-build-understanding-crate-tree` wired the dependency), the `corpus-index` leaf, the pure tier and the language | `understanding-vocab`, `understanding-atlas`, `corpus-index`, `kernel-types`, `corpus-engine`, `oplog`, `serde`, `serde_json`, `tracing`, `chrono`, `tokio`, `async-trait`, `futures`, `lancedb`, `arrow` |
-| `corpus-index` | The retrieval read-port leaf (domains `REVIEW-build-index-read-port`, 2026-09-18; DE "The read-port leaf, measured again"; DT retrieval cluster dest). Holds the read surface the host and the engine both reach DOWN to: `CorpusIndex` (the LanceDB/Tantivy table wrapper — `open`, hybrid `search`/`search_with_rerank`, `insert_batch`, maintenance, evidence/provenance reads), `IndexMeta` + the `_corpus_meta.json` shape, `IndexInfo` / `ScoredChunk` / `RerankConfig` / `RerankFn` / `EmbedFn` and their closure, `Corpus` ("which corpus, and where does it live"), and the engine's `Error`/`Result` moved whole so every `?` and every external `From<corpus_engine::Error>` keeps one type identity. Per DE's rule "a type the index persists is defined by the index", the settings it writes are DEFINED here and EMBEDDED by the recipe: `DisplayMeta` + `MutableMergePolicy` (`recipe`), `ComposeMode` + `FilterConfig` + `KnowledgeDensityConfig` + `BoilerplateConfig` (`filters`), `Stability` + `StreamAxes` + `StreamAxesSource` (`stream_axes`), and `CommittedChunk` (`chunkers`). corpus-engine re-exports every item at its historical path (`index::*`, `types::*`, `error::*`, `corpus::*`, `stream_axes::*`, `recipe::{DisplayMeta,MutableMergePolicy}`, `filters::*`, `chunkers::CommittedChunk`), so no in-repo importer changed. Declared `[[package_leaf]]` (the burn-down step (1) of the `corpus-mcp -> corpus-engine` exception); the RAPTOR summary ANN table and the field-model JSON IO stayed host (`index::raptor`, `index::field_skeleton`). `host`/`understanding` naming is residual: `enrichment.rs` (the `impl CorpusIndex` embedding streams) moved with the type it implements | `kernel-types`, `oplog`, `corpus-engine-yield` |
-| `corpus-mcp` | The thin knowledge host (enrichment-as-plugin Step 5, 2026-09-03): `corpus-mcp --base-url http://localhost:8080/v1 --corpus sep` serves `corpus_list` / `corpus_search` (cited chunks via `CorpusIndex::search`) / `atoms_lookup` (tier 1.5: `atlas/atoms.json` through `understanding_vocab::atoms::AtomsFile`) / `corpus_ontology` (`atlas/ontology.json` through `read_atlas_ontology` — the file is an `AtlasOntologyFile` envelope, and parsing it as bare `OntologyPolicies` silently reads as "declared nothing"; fixed 2026-09-04, pinned by `ontology_reads_the_envelope_not_bare_policies` and by `acceptance.sh` judging the read on a corpus that DECLARED types) over MCP-on-stdio, against ANY OpenAI-compatible endpoint. Host capability is DETECTED (`GET /oicp/v1/capabilities`; 404 = the baseline path), the embed model id comes from `GET /v1/models` unless `--embed-model` says otherwise, and a width mismatch between an index and the endpoint degrades that corpus to full-text with a printed notice. Declared `[[package]]` (with two grandfathered engine edges to code-intel crates); `tests/no_inference_stack.rs` pins the third-party closure; `acceptance.sh` is the end-to-end proof against a real `llama-server`. `corpus_list` reports each atlas's atom count from the CURRENT `_summary.json` only (`read_current_summary`, never computes or writes — the host promises not to write), whether an ontology was declared, and (ei-3-index) its ANN seed-table coverage — `atoms_embedded` in the structured row, and in the text either `N/M atoms embedded` or `NO seed table - cannot ground, run \`svrn atlas backfill-ann\``. A missing table is that sentence, never a zero, because it is the one fact a client needs before trusting a connected answer. **`ask` is the composed default since ei-4-walk (2026-09-04)** (`EPISTEMIC_INDEX.md` §4): embed ONCE, tier 1, then the walk — `corpus_engine::enrichment::atlas::ground`, the same function `sovereign-core::apply_atlas_grounding` calls — resolved against the host's own `CorpusIndex` handles through the two-method `EvidenceFetcher`, returning cited passages PLUS a map section (nodes traversed, their kinds, the edges followed) and every degradation as a sentence. No generation and no chat client: §4 hands the model on the other side of the wire its evidence and its map, so the closure is unchanged. The host loads each atlas ONCE at open on its long-lived runtime (`open_and_attach_ann_seed_table` requires it) and passes NO atom bag — building one re-embeds every entity per call — so the walk seeds from the ANN table alone and NAMES the missing name-match half rather than losing it quietly. A passage the search ranked and the walk cited is ONE passage carrying both facts: merging rather than deduplicating is load-bearing, because dropping the walk's copy discards its attribution (measured on wessex-hoard: three themes reached, one creditable). The four earlier tools stay as the advanced surface; `corpus_search` is still tier 1 alone with nothing from the atlas in its ranking. NOT here, by design: the atom-grounded RANKING in `sovereign-core`. **`corpus-mcp ingest <recipe.toml>` is the WRITE half since ei-5b-build-verb (2026-09-04)** (`EPISTEMIC_INDEX.md` §4, §7 step 5): `corpus_engine::recipe_install::register` puts the recipe where the registry looks, `CorpusEngine::ingest` runs acquire→extract→chunk→embed→index over the same HTTP `EmbedFn` the serve path builds, `corpus_io::build_manifest_from_corpus_rows` derives the chapter manifest from the index just written, and `build_with_progress_with_embedder` runs all ten enrichment steps — ending in the v2 store + seed table + `ontology.json` that `ask` walks. It IMPLEMENTS neither half: both existed and are driven from three other hosts, and this file's whole job is to resolve two endpoints, write one `config.json` and call them in order. Two endpoints because llama-server loads one model per process — `--chat-url` + `--embed-url`, or `--base-url` for a host serving both (Ollama); a half-specified pair is refused rather than guessed at, since a guessed embed URL would send every resolution embedding to the chat process, which answers 200 at the wrong width. Both reach `config.json` as `base_url` + the new `embed_base_url` (`EnrichConfig::embed_base` is the one reader), as ROOTS, not `/v1` bases — `probe_daemon`, `embed_one` and `providers::local_daemon_base` each append the version segment themselves. Two degradations relative to a daemon build are PRINTED at the start of the run rather than inferred from a slow phase: GLiNER is not linked (it rides `ort`, outside the boundary) so the entity pass is the chat model's, and structured output is plain `response_format: json_schema`, refined only if `/oicp/v1/capabilities` says otherwise. `acceptance.sh`'s opt-in leg (`ACCEPT_INGEST=1 CHAT_GGUF=…`) runs it on the committed `sovereign-recipes/wessex-hoard` fixture under a NEW id and scores the atlas against that fixture's `truth.json` beside the daemon-built control, through the same recall table (`scripts/setup-numismatics-corpus.sh --atlas <id>`) **The THIRD verb and the endpoint ladder landed at ei-6-distribution (2026-09-05)** (`EPISTEMIC_INDEX.md` §4, §7 step 6). `corpus-mcp recipe new --ontology <t> --id <id>` writes `<id>.toml` and never overwrites; it MOVED nothing — the scaffold is `corpus_engine::recipe_templates::{list_builtin_names, load_builtin, instantiate}`, already in a crate this binary links, and `svrn recipe new`'s `recipe_cmd/authoring.rs::cmd_new` is the other caller of those same three functions (ARCH §10.6: one scaffold, two CLIs; what differs is the SINK, since §4's own line says the command writes `my-coins.toml`). `corpus-mcp serve` is the explicit spelling of what the bare invocation has always done — ONE `ServeArgs` struct, `#[command(flatten)]`ed at the top level and carried by the verb, so the two spellings cannot drift. **Neither `ingest` nor `serve` requires a URL**: with none given, `host::discover` walks a fixed ladder — Ollama `:11434`, llama-server `:8080`, then `sovereign_contracts::setup_config::client_daemon_base()` — taking a rung on `GET <v1>/models` alone and running the full embed probe once, on the winner. Every rung is a named sentence on stderr, at `tracing=debug`, and in `corpus_list` (text and structured `endpoint.discovery`), because a person whose Ollama is stopped is looking at their chat app, not at this host's stderr. Two rules the ladder holds, both ARCH §18.3: an endpoint the caller NAMED is never substituted (a dead `--base-url` is a refusal carrying that URL's own finding, not a fall-through to whatever else answers), and discovery picks a FRONTEND while the probe validates it — a winner that cannot embed is a refusal listing what every rung said. The ladder is ONE implementation with two callers, so the verb that builds a corpus and the verb that serves it cannot find different hosts. **Pull-if-absent**: `serve --corpus <id>` on a machine without `<id>` installs it through `CorpusEngine::ingest(CorpusSpec::Builtin)` → the existing `engine/ingest_prebuilt.rs` (resume-aware `BulkDownloader`, sha256, the embedding-width floor, chunks AND atlas in one archive) — no second downloader, and no new F26 row, because the pull happens at `corpus-engine/src/acquirers/bulk_download.rs`, registered `InboundOnly 1` since that census was written. A recipe with NO `[prebuilt]` block is REFUSED by name rather than silently starting an hours-long acquire-and-embed on an endpoint chosen for serving, and pull-if-absent applies only to ids the caller named. The F26 row for `corpus-mcp/src/ingest.rs` went away in the same commit: both probes now share `host::client()`, the crate's ONE `reqwest::Client` constructor, whose 6s timeout the ladder made load-bearing (three unreachable rungs at reqwest's default is an unbounded hang with no output). `tests/verbs.rs` is the verbs' falsifiable proof — 11 cases asserting the SENTENCE a person reads, not an exit code — and it exists in the crate rather than as a `cli-contract.toml` row because that manifest cannot represent a second binary (it declares itself "the commands `sovereign` promises"; `Binary` is a closed enum of the four sovereign siblings at `cli_contract.rs:94`; a journey step's `run` is argv for the `svrn` runner). That gap is banked, not worked around. **The endpoint embeds the way the corpus was BUILT since ei-6b (2026-09-07)** (`EPISTEMIC_INDEX.md` §4.1). `EmbedQuirks` moved from `sovereign-core::model_family` down to `sovereign_contracts::embed_quirks` — the only crate `sovereign-core`, `corpus-engine` and `corpus-mcp` ALL already depend on, so the move costs no new edge and `PoolingStrategy`/`NormalizationStrategy` still come from `oicp-types` (no third copy); `append_eos_token: bool` plus a `"<|endoftext|>"` literal at three `embed_slot.rs` sites collapsed into one `eos_token: Option<String>` field and the two methods that are now the ONLY places an embed input is assembled anywhere, `prepare_document` and `prepare_query` (ARCH §10.6). The family is resolved from the endpoint's own model id through `serve`'s `embed_model_stem`, and the SAME decider now also CHOOSES the model: `/v1/models` is a menu, not a ranking, so candidates are ordered recognised-embedding-families-first and probed until one returns a vector — on Ollama the first row was `qwen3:0.6b` and `/v1/embeddings` answered 501 (measured, ei-3c 2026-09-07). An unrecognised id gets NO quirks and says so by name at boot and in `corpus_list`'s `embed_family`, never another family's prefix (§18.3). `HostProfile` exposes `embed_document_fn()` and `embed_query_fn()` as two NAMED accessors rather than a swappable pair, because the bug this fixed was exactly a swap: `ingest.rs` handed the DOCUMENT embedder to `build_with_progress_with_embedder`, whose `embedder` parameter is documented as the QUERY side, so every atlas seed table this host ever built was written in one space and searched in another — invisible only because both halves sent raw text and matched each other. Measured on `wessex-hoard`: a question embedded raw sits 0.8605 from the seed table it searches, 0.9888 prepared (+0.128). **`SnapshotManifest` now records the embedder config it was built under** (`embed_quirks`, written by `corpus snapshot publish` from `DEFAULT_MANIFEST::embed_quirks_for_model`), and `check_embedding_compatibility` gained two verdicts: `ConfigMismatch` (refusable from the manifest, naming pooling, before a byte downloads) and `ConfigUnknown` (every snapshot published before this — the cosine probe is the only evidence, and the refusal says so instead of printing a bare number). The refusal matters because the 0.68 that started this order was never an endpoint gap: a bare llama-server reproduces the daemon at 0.9956, and `sep` and `wikipedia` are MEAN-pooled corpora under a LAST-pooled stack (`sep` 0.9997 mean / 0.7069 last; `wessex-hoard` 0.9968 last / 0.6615 mean). Those two need re-publishing; that is the operator's, and banked. | `corpus-engine`, `understanding-vocab`, `oicp-types`, `sovereign-contracts`, `sovereign-enrichment-build` |
-| `corpus-engine-watchers` | Lint/test/project-index watchers + their SQLite result stores + coordinator (carved out of corpus-engine, R4 Step 1 — cuts the watcher-edit rebuild set 22→12 crates, measured). Compiles unconditionally; the SCIP `CodeWatcher` stays in corpus-engine | `corpus-engine-notes`, `corpus-engine-yield`, `rusqlite`, `notify` |
-| `sovereign-recipes`  | Canonical recipe TOMLs + catalog + data lists (vendored into corpus-engine at build) | —                                       |
-| `sovereign`          | Local agent runtime                           | `corpus-engine`, `corpus-engine-scip`, `oicp-types`, `kernel-types` |
-| `commonwealth`       | Symmetric mesh daemon                         | `corpus-engine`, `oicp-types`, `kernel-types`         |
+| Project | Role | Depends on |
+|---|---|---|
+| `oicp-types` | OICP wire types + scoring helpers | — |
+| `kernel-types` | The neutral kernel: identity and provenance (`ContentHash`, `CorpusId`, `NodeId`, `Origin`, `Custody`, `Attribution`), the trust vocabulary (`Verdict`, `Reason`, `Freshness`, `Judgement`), the released turn (`Seal`, `Citation`, `Draft`, `Answer`, `PeerAnswer`, `Refused`), the wire-form decider, the requirement registry. The SECOND layer-0 membrane beside `oicp-types`: oicp is what a node ADVERTISES, this is what content IS. May name nothing above it | `serde`, `getrandom`, `hex`, `blake3` |
+| `workspace-hack` | cargo-hakari feature-unification crate, so a `-p` build resolves what `--workspace` resolves | — |
+| `corpus-engine` | Acquire → extract → filter → chunk → embed → index | `oicp-types`, `kernel-types`, `corpus-index`, `corpus-engine-yield`, `corpus-engine-scip`, `corpus-engine-notes`, `corpus-engine-atos` |
+| `sovereign` | Local agent runtime | `corpus-engine`, `corpus-engine-scip`, `oicp-types`, `kernel-types` |
+| `commonwealth` | Symmetric mesh daemon | `corpus-engine`, `oicp-types`, `kernel-types` |
 
-Dep direction is one-way. Sovereign optionally embeds cmnwlth
-in-process via `sovereign-mesh` — the only place the two upper
-projects meet.
+Dependency direction is one-way. Sovereign optionally embeds cmnwlth
+in-process via `sovereign-mesh` — the only place the two upper projects meet.
 
 ```
        oicp-types          sovereign-recipes
-            │              (recipe TOMLs + data/)
             │                       │ build.rs include_bytes!
             │                ┌──────▼──────┐
             │                │ corpus-engine│  (LanceDB + Tantivy)
             │                └──────┬──────┘
             │                       │  EmbedFn / InferenceFn
             ├───────────┬───────────┼──────────────┐
-            │           │           │              │
         Sovereign       │      both call          cmnwlth
        (sovereign/)     │   identical APIs        (commonwealth/)
             │           │                              │
             └─ sovereign-mesh (in-process embed) ──────┘
 ```
 
-Two shared protocols cross the Sovereign/cmnwlth boundary:
+Two protocols cross that boundary. **OICP** is declared in
+`commonwealth/docs/oicp-v0.4.md` (v0.4 extends v0.3 additively), types in
+`oicp-types/src/lib.rs`, re-exported as `sovereign_core::oicp` and
+`commonwealth_core::oicp` — downstream crates use the re-exports.
+**`EmbedFn` / `InferenceFn`** are closures `corpus-engine` accepts from any
+caller; each project supplies its own.
 
-- **OICP** — declared in `commonwealth/docs/oicp-v0.3.md`; types
-  in `oicp-types/src/lib.rs`; re-exported as `sovereign_core::oicp`
-  and `commonwealth_core::oicp`. Downstream crates use the
-  re-exports, never the types crate directly.
-- **`EmbedFn` / `InferenceFn`** — `corpus-engine` accepts these
-  closures from any caller; each project supplies its own
-  implementation.
-
-One crate sits BELOW that boundary rather than crossing it:
-`serving-policy` (minted 2026-09-03) holds `fair_sched` — fair-share caps,
-`EtaEwma`, reciprocity weighting, the `SchedCore` policy the REST scheduler
-and the mesh peer-admission gate share — and `pipeline_aliases`. Both were in
-`commonwealth-core`, and `fair_sched` was the ONLY reason `sovereign-inference`
-and `sovereign-server` depended on the mesh foundation: their entire reference
-was `EtaEwma` at `embedded/model_slot.rs:29` and `scheduler.rs:32` +
-`reciprocity.rs:27`. Moving it DELETED both direct edges rather than relocating
-them, and asked for no `[[exception]]`. Its in-repo dependency list is empty and
-`quality/ARCH_LAYERS.toml` forbids a dep on `sovereign-*` OR `commonwealth-*`
-in either direction — a dep either way puts those edges straight back.
+`serving-policy` sits BELOW the boundary rather than crossing it: `fair_sched`
+(fair-share caps, `EtaEwma`, reciprocity, the `SchedCore` the REST scheduler
+and the mesh admission gate share) plus `pipeline_aliases`. Its in-repo
+dependency list is empty, and `quality/ARCH_LAYERS.toml` forbids a dep on
+`sovereign-*` or `commonwealth-*` in either direction.
 
 ---
 
 ## 2. Workspace map
 
-One line per crate. For folder-level detail, `ls` the crate's `src/`
-or read its `lib.rs`. See `sovereign/docs/` for subsystem deep
-dives.
+One line per crate. For detail, read the crate's `lib.rs`; `sovereign/docs/`
+holds the subsystem deep dives.
 
 ### corpus-engine
 
-A self-contained library between "raw source on the internet" and
-"ranked search hits with provenance." See
-[`corpus-engine/README.md`](../corpus-engine/README.md),
-[`ENRICHMENT_V2.md`](../corpus-engine/ENRICHMENT_V2.md),
-[`ATLAS.md`](../corpus-engine/ATLAS.md), and
-[`INCREMENTAL_ATLAS.md`](../corpus-engine/INCREMENTAL_ATLAS.md).
+Between "raw source on the internet" and "ranked search hits with provenance."
+See [`corpus-engine/README.md`](../corpus-engine/README.md),
+[`ENRICHMENT.md`](../corpus-engine/ENRICHMENT.md) (the umbrella reconciling
+all three enrichment systems — read it before assuming "enrichment" means one
+thing), [`ENRICHMENT_V2.md`](../corpus-engine/ENRICHMENT_V2.md),
+[`ATLAS.md`](../corpus-engine/ATLAS.md),
+[`DECOMPOSITION.md`](../corpus-engine/DECOMPOSITION.md).
 
-Major modules under `corpus-engine/src/`:
+- `corpus.rs` — `Corpus`: which corpus, where it lives. The ONE decider of
+  on-disk layout; ratchet `cargo xtask layout-gate`.
+- `engine/` — `CorpusEngine` façade (`ingest`, `expand`, `reindex`).
+- `acquirers/`, `extractors/`, `chunkers/`, `filters/` — pipeline stages.
+- `asset_store/` — content-addressed store for binary payloads.
+- `recipe.rs`, `registry.rs` — TOML schema + recipe catalog.
+- `index/` — LanceDB (IVF-PQ) + Tantivy FTS, `IndexMeta`, `ScopeMeta`.
+- `enrichment/` — v1 field engine, v2 atlas, `reconciliation/` (multi-origin
+  merge with reversible oplog; signals are identity-grade only).
+- `atlas_traversal/`, `update/`, `meta_atlas/`, `freshness.rs`, `pii.rs`,
+  `alignment_projector.rs`.
 
-- `corpus.rs` — **`Corpus`**, the published noun: which corpus, and where it
-  lives. An id (`kernel_types::CorpusId`) plus an index root, answering
-  `root()` / `partition(node)` / `partition_prefix()` / `meta_path()` /
-  `meta_in(dir)` / `is_installed()` / `open()` / `info()`. It is the ONE
-  decider of corpus-engine's on-disk layout (ARCH §10.6): before 2026-08-20
-  that layout was folklore, hand-spelled at 147 sites across the three
-  workspaces (`"_corpus_meta.json"` 62/63/22, `format!("{id}-partition-{node}")`
-  6/16/13) with no constant anywhere. `CorpusEngine::canonical_path` and
-  `partition_path` DELEGATE here — the responsibility moved off the engine
-  rather than being wrapped. The ratchet that keeps it from growing back is
-  `cargo xtask layout-gate` (baseline `quality/baselines/corpus_layout.txt`).
-
-**The wall clock has one decider per dependency island, and a ratchet.**
-`sovereign_core::time`, `sovereign-time` (the zero-dep leaf for crates not on
-core), `corpus_engine_yield::time` and `commonwealth_core::clock` are the four;
-the islands duplicate the three-line body exactly once each because they cannot
-import across one another without a cycle. Everything else asks. This is a
-convergence that had already been undone once — `sovereign_core::time`'s module
-doc records absorbing "~40 copy-pasted" helpers, and a census on 2026-08-31
-found 35 live again under fifteen names, plus 150 direct `SystemTime::now()`
-reads. The closure loop is `cargo xtask clock-gate` (baseline
-`quality/baselines/clock_reads.txt`, shrink-only): a new hand-read clock fails
-the gate and is told which island decider to ask. It joined `pre-push.sh` and
-`ci.yml` on 2026-09-03 (2.5s warm); before that it ran in NO automatic gate,
-only `cargo xtask quality` — and because the baseline is path-keyed, any
-refactor RELOCATING one of the 97 baselined files minted a new key and went red
-only when a human happened to type that command. Sites needing sub-second
-precision ride the baseline — no decider offers nanos.
-- `oplog` — **`Op<K>` + `Oplog<K>`**, one append-only JSONL journal with
-  four tenants declaring `Journaled`: `enrichment::governance`,
-  `enrichment::reconciliation`, `meta_atlas::bridge` and — since 2026-08-30 —
-  the ring rail — which became `commonwealth-rail-core`/`commonwealth-rail` on
-  2026-09-04 (cw-lift 1b) and is the only tenant outside corpus-engine.
-  **The journal itself became its own tier-0
-  crate on 2026-09-04** and is re-exported as `corpus_engine::oplog`, so no
-  call site moved. The reason is the fourth tenant: the ring rail's entire
-  coupling to the knowledge layer was seven references to `Op`/`OpId`/
-  `SkippedLine`, and reaching them cost it a dependency on `corpus-engine` —
-  a 578-crate closure for a 547-line file. A journal is a primitive, not
-  knowledge-layer machinery. The crate mints its own `OplogError`, which
-  `corpus_engine::error::Error` absorbs with byte-identical `Display` text, and
-  `Op::now` was DELETED in the move: it was the journal's only reason to know
-  what a clock was, its two callers both lived in `corpus-engine`, and keeping
-  it would have dragged `corpus-engine-yield` — a knowledge-layer crate — into
-  a tier-0 leaf. Tenants now hang their own act constructors off extension
-  traits (`GovernanceLog`, `BridgeOp`, `ReconciliationOp`), which the orphan
-  rules force and which is the right shape anyway: the envelope does not get to
-  know what a merge is. Until 2026-08-20
-  each carried its own copy of the envelope and the file IO (7 types); the two
-  younger logs had no op id, no actor and no version gate, which is why
-  reconciliation's documented reversible `Split` — "walk backwards finding the
-  matching `Merge`" — was unimplementable. The envelope carries provenance
-  only (`id`, `v`, `ts_unix`, `actor`); the act is the tenant's `K`, flattened,
-  so each log keeps its wire form.
-  **The rail tenant made two gaps in the journal load-bearing** and both are
-  fixed for every tenant. It was not durable: no `sync_all`/`sync_data`
-  anywhere, so a lid-slam lost ops the caller had been told succeeded — appends
-  now `sync_data()` — and a logical line was written in two `write_all` calls,
-  so `O_APPEND`'s per-write atomicity did not cover it; it is one buffer now.
-  And `read_all` skipped malformed and newer-`v` lines with a `warn!`, so a
-  corrupt log and a clean one returned the identical value and no caller could
-  tell. `read_all_with_skips` returns those as `SkippedLine`s (§18.3);
-  `read_all` still drops them, which is right for a tenant re-deriving a
-  summary and wrong for one reporting a number a person acts on.
-- `engine/` — `CorpusEngine` façade (`ingest`, `expand`, `reindex`)
-- `acquirers/`, `extractors/`, `chunkers/`, `filters/` — pipeline stages
-- `asset_store/` — content-addressed filesystem store for binary
-  payloads (raw bytes + optional typed parsed-form caches +
-  append-only ledger). Architecture-over-Enron AD-1; the substrate
-  the described-asset dispatcher and future calendar /
-  transactions / sensor verticals share.
-- `recipe.rs`, `registry.rs` — TOML schema + recipe catalog
-- `index/` — LanceDB (IVF-PQ) + Tantivy FTS, `IndexMeta`, `ScopeMeta`
-- `enrichment/` — v1 field-engine (5-phase domain pipeline) and v2
-  atlas (typed atom graph; `Pipeline` trait + registry + exemplar
-  bank). See `ENRICHMENT_V2.md`. Plus `enrichment/reconciliation/`
-  — the multi-origin merge primitive (Phase 4 of the architecture-
-  over-Enron push) with reversible oplog + pluggable merge signals.
-  Signals are **identity-grade only** (exact name fold, nickname /
-  initial-surname, exact shared email or email-alias, org+role) —
-  the fuzzy email↔name and bare-name-alias paths were removed after
-  they chained thousands of atoms into one polluted cluster.
-  `candidate_pairs` blocking keeps the O(n²) scan sub-second;
-  corporate-suffix normalization (`strip_org_suffixes`,
-  Institution-only) folds "El Paso Corp."-style variants.
-  `svrn bench enron diagnose` is the glass-box.
-- `atlas_traversal/` — query layer over atlas graphs
-- `update/` — code/file watchers, delta updates, lint/test watchers
-- `meta_atlas/` — cross-corpus articulation classifier + index
-- `pii.rs`, `alignment_projector.rs` — operator-facing scanners
-- **Carved out into sibling crates** (see §1): `Note` + NoteStore +
-  project-docs index → `corpus-engine-notes` (`note.rs`, `notes.rs`,
-  `project_docs.rs`); ATOS FeatureStore + plan items + design
-  signals → `corpus-engine-atos` (`features.rs`, `plan_items.rs`,
-  `design_signals.rs`); git archaeology + rough-edges + provenance
-  eval → `corpus-engine-archaeology` (`git_archaeology.rs`,
-  `rough_edges.rs`, `archaeology_eval.rs`)
+**The wall clock has one decider per dependency island.**
+`sovereign_core::time`, `sovereign-time` (the zero-dep leaf),
+`corpus_engine_yield::time` and `commonwealth_core::clock` duplicate a
+three-line body once each because they cannot import across one another
+without a cycle. Everything else asks. Ratchet `cargo xtask clock-gate`,
+shrink-only.
 
 ### sovereign
 
 ```
 crates/
+├── sovereign-contracts      # The vocabulary — traits, wire types, skills, setup config
 ├── sovereign-core           # Traits, runtime, planner, executor, router, memory
-├── sovereign-inference      # llama.cpp slots, remote OpenAI-compat, hybrid w/ failover. **Residency became a policy at sv-surface (2026-09-11)**: `embedded/idle_slot.rs` is the one idleness decider — `IdleSlot<T>` holds a slot's weights in a cell that `sweep` may empty and `acquire` refills, with `slot_is_idle` the single predicate and `spawn_idle_monitor` the single loop, rather than a third and fourth inline copy of the primary monitor's (ARCH principle 8). It exists because the operator settled that the daemon is a MESH NODE and must stay available to peers while the app is closed, which makes an idle-EXIT policy impossible and idle-UNLOAD the only answer to resident RAM: `fast` (9B, 6.8 GB) and `embed` (0.6B, 1.1 GB) were pinned from boot with no monitor at all, ~8 GB held by a process nobody was using (note `f6e74737` measured it in 2026-05 and deferred it as F-LAZY). `[daemon] fast_idle_secs` / `embed_idle_secs` default to 900s — 15 minutes outlasts an in-session pause and is ~10x the worst observed cold load, deliberately clear of the thrash band that bit `primary_idle_secs=60` (note `419e273c`: 7 reload cycles a day, one of them an unload and reload 1s apart); `0` restores the pinned behaviour. THE UNIT OF RESIDENCY IS THE FAMILY, NOT THE SLOT, and that is the whole design problem: `fast`'s `Arc<LlamaModel>` is shared with `fast_short` (`from_existing_model`), with the coalescer's drain task, and with `primary` itself in alias mode — so dropping the slot frees a KV cache and leaves the weights. In alias mode the GB return only after BOTH `fast_idle_secs` and `primary_idle_secs` have fired, which means "fast unloaded" in the log is not yet "memory returned"; it is documented at the config field rather than left to be discovered. Two consequences worth knowing: `/status` now READS residency instead of reporting `resident: true` unconditionally (the same class of reporting lie `loaded_models: []` was), and `count_tokens` falls back to the project-wide ~4-chars/token heuristic while `fast` is cold rather than forcing a multi-GB synchronous load to count tokens — a substitution, named in a `tracing::debug!` and over-estimating, which is the safe direction for a budget (ARCH principle 6). The hot-reload path (`sovereign-daemon/src/provider.rs`) arms the monitors too, and a census test pins that: a reloaded daemon that skipped them would silently re-acquire the pinned-forever footprint.
+├── sovereign-inference      # llama.cpp slots, remote OpenAI-compat, hybrid, idle residency
 ├── sovereign-store          # SQLite + Postgres + in-memory StateStore
 ├── sovereign-tools          # Built-in tools (search, knowledge, docs, web, MCP, code-intel)
-├── sovereign-gliner         # GLiNER (ONNX) per-chunk entity extraction — own crate to keep the ONNX dep off the shared sovereign-tools. Two backends (v1 gline-rs, GLiNER2 bare-ort) behind `LabeledEntityExtractor`; `load_labeled_extractor` is the one selector
-├── sovereign-atos           # ATOS lib (charter, approval, report, session, local orchestrator) — opt-in experiment behind `--features atos`; no product crate depends on it by default
+├── sovereign-gliner         # GLiNER (ONNX) NER — its own crate to keep ONNX off sovereign-tools
+├── sovereign-atos           # ATOS lib — opt-in behind `--features atos`
 ├── sovereign-work-atlas     # Coordination atlas for agents on the mesh
-├── sovereign-enrichment-catalog # The enrichment store below every host that reads it: the `<data-root>/enrichment/<corpus>/` layout, the `config.json` schema (`EnrichConfig`) and the inventory. Minted 2026-08-20 (rung nc-16-shared-capability) — the schema lived in `sovereign-cli-llm`, a BINARY, so the daemon's watched-folder driver mirrored it by hand in `sovereign-tools` (four fields behind) and the desktop hand-parsed the same file. All three now read one definition; the CLI's `enrich_cmd::{config,paths}` are re-exports
-├── sovereign-runtime-recipe # THE recipe that commissions a `Runtime`: the router classifier stack, the turn tool registry and the enrichment lane, below every host. Minted 2026-08-25 (TOPOLOGY.md §10 phase 5c) — the recipe needs `sovereign-tools` + `sovereign-gliner` and every crate that could already see both was a host BINARY, so `svrn chat`, the desktop and `sovereign-server` each carried their own ~600-line copy and only ONE of eleven optional slots was wired by all three. **All four hosts are on it as of 2026-08-26** (phase 7): `sovereign daemon run`, `svrn chat`, the desktop and the hub server, so `runtime_commission_census.rs`'s `UNSHARED_RECIPES` list is EMPTY. A host now supplies `RecipeInputs` — inference, store, corpus engine, skills, `Vec<Box<dyn ToolBundle>>`, `ToolSwitches`, `LaneWarmth`, `RerankWiring` — and struct-updates only the slots that are its own. `common_parts` returns the parts, the shared `AtlasContextManager` and the MCP manager; `commission` is the only `Runtime::new` in first-party production code
-├── sovereign-turn-client  # THE client half of the turn protocol — how a surface asks a serving host for a turn. Minted 2026-08-25 (TOPOLOGY.md §10 phase 6) in the **contract** layer beside `oicp-client`, the existing precedent for "protocol types plus the client that speaks them"; its only non-leaf dependency is `sovereign-contracts`, so it cannot see a `Runtime`, a store or a corpus — which is what lets a surface depend on it without dragging a serving host's world along. `TurnClient::run_turn` is the client-side mirror of `sovereign_core::runtime::serve_turn`: ONE implementation of "drive a turn to completion and tell me what it did", where five CLI ask commands each had their own and each ended by re-reading the store — which only works from inside the process that owns it. `svrn chat ask` and `svrn chat session` are its first callers and hold no `Runtime`. Before it, the only Rust code that had ever SENT a `TurnRequest` was two integration tests, each with its own hand-rolled WebSocket dance `TurnClient::create_conversation(skill_id, enabled_corpora)` (2026-09-01, issue #57) carries the per-conversation corpus allow-list on the create body — `svrn chat ask/session --corpus <id>` — which the host validates in `Runtime::seed_conversation` against the corpora it would actually search and refuses with a 400 naming the unknown id and the installed list; the key is omitted when unset, so an unscoped create is byte-identical to before. **The protocol's asking half became two shapes (sv-surface R1, 2026-09-09)**: `TurnFrame::{ApprovalRequest,UserInputRequest}` folded into `TurnFrame::Prompt { id, prompt }` and `TurnRequest::{Approve,UserReply}` into `TurnRequest::Answer { id, answer }` — one host-minted id replaces the three key formats, `TurnPrompt`/`TurnAnswer`/`TurnNotice` are closed enums in `sovereign-contracts::types::turn` (`Turn*`-qualified because bare `Prompt`/`Answer` are already nouns in commonwealth-api and kernel-types), and `TurnFrame::Notice { notice }` lands beside them for everything no answer is owed — `StepDone`, `MessageRefined`, `LessonProposed`, `ResolveAck`, `TurnStarted` (gap-ledger rows G4-G8, G10, whose daemon-side producers land at R3; the fold was free because nothing rendered the old variants — three ignore arms, a deliberate error, and the byte pins were the whole consumer census). `ResolveOutcome` and `StepStatus` moved to `sovereign_contracts::types::approval` so the wire carries the type instead of mirroring it (core re-exports at the historical path), `ApprovalDesk::resolve_answer` is the one `TurnAnswer`-to-parked-kind mapping, and `sovereign-server`'s `ExecutorEvent` ask-variants converged on the same `Prompt` shape — its `{task}:{step}` slot format is just what it mints the id FROM, so a client answers identically whichever host it reached. **The client half learned to answer while it reads (sv-surface R2, 2026-09-09)**: the turn socket splits at connect — one writer task fed by an unbounded channel, the reader kept by `TurnStream` — and the write half is a cloneable `TurnSender` (`TurnStream::sender()`), so a prompt's answer goes onto the wire from the task that renders the card while the task draining tokens keeps reading; before the split that shape could not be written against this crate at all. `connect_with(StreamOptions { claim_approvals })` claims the conversation's approvals (`?approvals=true` — the unclaimed URL is byte-identical to before), `TurnSender::send_answer` replies to a `Prompt`, and `TurnObserver::on_notice` + `TurnStream::drain_after_complete` read the post-terminal window (message-refined and lesson-proposed fire after `Complete`; any non-Notice frame there is an error by name). Proven by in-crate tests against a fake WebSocket host that holds its turn until answered. **The socket's LIFECYCLE closed at sv-surface RB1-RB5 (2026-09-10)**: nobody closed it — `handle_ws` looped forever, so every turn leaked a WebSocket, a writer task and a `SocketApprovalChannel` on both ends. `TurnNotice::TurnSettled { message_id }` is emitted once every producer that can still speak on the socket has let go, and the settle predicate is a JOIN rather than a timer: `producers_outstanding` sums frame-sender clones plus `Arc` holders of the socket's approval channel and routing sink against a resting count measured before any turn. The sender-only version shipped first and was wrong — the detached post-stream refinement spawn holds an `Arc`, not a sender clone, so settle fired before `MessageRefined` and the client read "refining forever" as done. `IDLE_AFTER_SETTLED` (30s with no new request) then sends Close and `POST_COMPLETE_SETTLE_MAX` (60s) bounds a producer that never lets go, at WARN (`sovereign-daemon/src/turn_http.rs`). Refusals stopped riding `StreamError`: every answer outcome comes back as `TurnNotice::ResolveAck { id, outcome }` — a notice, never terminal — so a double-clicked approve no longer discards a healthy turn, and `ResolveOutcome::{WaiterGone, Unclaimed}` are named non-successes instead of collapsing into `Resolved`. `TurnRequest::Cancel` and hangup now reach a PARKED prompt: `ApprovalDesk::abandon_all` (`sovereign-core/src/approval_desk.rs`) resolves every parked entry per kind (consent/input → cancelled, information → skipped) BEFORE the task abort, where cancel used to trip the token and leave a turn parked on a `Prompt` with no `Complete` ever; prompt ids carry a per-turn nonce so a late answer cannot resolve the next turn's same-numbered question. Client-side `drain_after_complete` returns on `TurnSettled` or a host close. The desktop reads the socket ONCE — one pump, spawned immediately, with a pure `lead_disposition` classifying the lead frame, because an agentic turn's FIRST frame is a `Prompt` and the private lead loop that only forwarded `Narration|Notice` hung every agentic ask — and keeps one wire slot PER CONVERSATION (`sovereign-desktop/src-tauri/src/state/wire_turns.rs`: `TurnWires` keyed by conversation, released only on `Arc::ptr_eq` with the pump's own sender, `PendingPrompts` routing an answer through the prompt's own conversation). A pump that ends before deciding is an `Err`; a dropped turn is not an empty one. **Reachability joined it at sv-surface (2026-09-11)**: `reach.rs` — `ServingHost::at(base).is_serving()` / `.wait_until_serving(d)` / `.ensure_reachable(d)` — is the one implementation of "is a backend answering", a question thirteen functions across five crates each answered privately (`probe_daemon` / `daemon_reachable` / `wait_for_daemon` / `wait_for_ready`, per-probe timeouts from 500ms to 5s) plus an inline loop in the desktop's `attach_watch`. It lives here because of the bar it serves: `sv-no-daemon-management` (revised by the operator the same day) puts "ensure a backend is reachable" in the CLIENT package the way connection setup belongs to a database driver, so the desktop can hold ZERO daemon code rather than a tolerable little — the precedent is a language-server client or an embedded DB driver, never `libpq`, which does not start Postgres. Hence the `bundled-backend` cargo feature, OFF by default and, since svt-1 (2026-09-11), declared by exactly one surface — `sovereign-desktop`, which ships the backend the declaration promises as a `sovereign-cli-daemon` Tauri sidecar (`DEFAULTS_LEDGER` row GRADUATED that day): with it on, `BundledBackend::at(path)` names a binary the client may bring up when nothing answers — spawned detached (unix `process_group(0)`, Windows `DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP`), the `Child` dropped at the spawn site, the pid returned as a fact. No retry, no health loop, no restart policy: a client holding any of those is managing a daemon again (ARCH principle 12). The feature asks about the BUILD, not the platform, so a phone flips it the day a model fits rather than needing a second architecture; it declares no dependency, so turning it on moves no dependency edge (`cargo tree`, 220 crates identical both ways) and the bar's dependency-edge gate reads the same either way. Absence is typed rather than defaulted — `NotReachable::{NoBackendInThisBuild, NoBackendConfigured, LaunchFailed, SilentAfterLaunch}` (§18.3). First callers: `attach_watch`, `search_gym`, `bench ablate`. **The readiness door became a parameter at svt-2 (2026-09-11)**: `ServingHost::ready_at(path)`, with `DEFAULT_READY_PATH` still `/v1/models` byte-for-byte so no existing caller moves. `sovereign-server` — the phone-facing mobile host — serves no `/v1/models` at all, so the default 404s forever against a host that is serving fine; the alternative was a fourteenth private probe loop in the Mobile-access toggle, which is what this module exists to retire (ARCH principle 8). **The mesh itself crossed at svt-3 (2026-09-11)**: `TurnClient::{mesh_status, mesh_create, mesh_join, mesh_rotate, mesh_switch, mesh_forget, mesh_leave, mesh_relay_candidates}` speak `sovereign_mesh::mesh_http`'s `/v1/mesh/*` routes on the CLIENT port, which is why they live beside the two `/internal/*` mesh-admin reads in a new `src/mesh.rs` — the first of the per-family modules the size ratchet has been owed since the client absorbed every route family, and the reason `lib.rs` shrank (4,170 → 4,088) rather than grew on a change that added eight capabilities. Every read is `T: DeserializeOwned` for this crate's usual reason: `StatusResponse`, `KnownMeshDto` and `RelayCandidate` are defined in `sovereign-mesh`, and a client that could name them would be a client that links a daemon.
-├── sovereign-mesh           # In-process cmnwlth embed; Fabric's own half (roster, rail, identity, the gossip/ring loops). Its host cluster left at `dm-daemon-mesh-edge`, its `jobs` family at `dm-daemon-mesh-jobs` and its two adapters at `dm-daemon-mesh-adapters` (2026-09-17)
-├── sovereign-daemon         # The node's host crate (DAEMON_CORE.md §4.1) — assembly, the surface shells, the edge and the adapters. Receives sovereign-mesh's host modules and sovereign-api's host cluster. sovereign-mesh's host cluster moved in whole at `dm-daemon-mesh-edge` (2026-09-17: the 37-module strongly-connected component — `daemon`, `daemon_services`, the 21 route shells, the edge leaves and the MCP mount) and its `jobs` family followed at `dm-daemon-mesh-jobs` (2026-09-17: `auto_ingest`, `auto_resume`, `ingest_executor`, `watched_folder_setup`, `watched_folder_runtime`, `job_registry`, `supervised_task`, `work_donor`) and its two `adapters` at `dm-daemon-mesh-adapters` (2026-09-17: `newsworthy_host`, `work_atlas_broadcaster`). sovereign-api's host cluster followed in whole at `dm-daemon-api-edge` (2026-09-18: the edge — `admission`, `client_auth`, `client_principal`, `client_surface`, `frontdoor`, `headers`, `reshaping`, `yield_hook`, `middleware/` — `state` with its five remaining parts, `server`, every route shell, the crate's own integration tests and its two examples, in one commit because edge ↔ state ↔ routes is one Cargo cycle and `[[forbid]] sovereign-api -> sovereign-*` blocks the shim direction); the same commit moved `state/fabric.rs` to its owner `sovereign-mesh` and created `sovereign-peer-wire`. `REVIEW-build-daemon-embedded-split` splits `daemon.rs` by owner next, and `REVIEW-build-daemon-parts` relocates the `state/*.rs` parts to their owners
-├── sovereign-peer-wire      # The daemon-to-daemon wire types both ends of an internal exchange must spell the same way (domains dm-daemon-api-edge (a)): `MAX_REQUEST_BODY_BYTES`, `RING_SYNC_OPS_BUDGET_BYTES`, `RingSyncRequest` and `RingSyncResponse`. The receiving route lives in sovereign-daemon and the sending loop in sovereign-mesh, so the shared body needs a leaf neither makes the other's dependency
-├── sovereign-compute        # Supervised compute-child process boundary (P1): child-process supervisor + native lossless wire + child server/entrypoint + daemon-side single-child routing facade. Value = crash isolation + distributed case, NOT parallelism (see doc)
-├── sovereign-pods           # Compute's remote isolation — leasing a rented machine and running work on it (DOMAINS.md §11.2); receives the worker_http / controller / daemon / subprocess-runner / multi-pod-coordinator modules lifted out of sovereign-mesh. `worker_pod`'s owner↔pod wire protocol moved to `sovereign-contracts` (REVIEW-build-serving-worker-port, 2026-09-15) so the serving host can name it without a third package [[exception]]; `sovereign-pods` re-exports it at the historical path
-├── sovereign-scheduler      # Arithmetic over the published language — the serving package's ranker, decision/outcome record types and replay, lifted out of sovereign-mesh; names `oicp-types` and nothing else (SERVING_BOUNDARY.md "The two tiers"). A stub until the scheduler half moves in
-├── sovereign-serving-host   # The serving package's ports and the knot — peer_inference, inference_adapter, oicp_synthesis, guest_lender, pinned_worker_source, entry_endpoint, plus sovereign-api's admission (SERVING_BOUNDARY.md "The two tiers"). A stub until the host half moves in
-├── sovereign-server         # Axum REST + WebSocket, multi-tenant + approvals
+├── sovereign-enrichment-catalog # The enrichment store below every host that reads it
+├── sovereign-enrichment-build   # The enrichment orchestrator, outside the inference stack
+├── sovereign-runtime-recipe # THE recipe that commissions a `Runtime` — all four hosts are on it
+├── sovereign-turn-client    # THE client half of the turn protocol + reachability (`ServingHost`)
+├── sovereign-mesh           # In-process cmnwlth embed; roster, rail, identity, gossip/ring loops
+├── sovereign-daemon         # The node's host crate — assembly, surface shells, edge, adapters
+├── sovereign-peer-wire      # Wire types both ends of an internal exchange must spell alike
+├── sovereign-compute        # Supervised compute-child boundary — crash isolation, not parallelism
+├── sovereign-pods           # Compute's remote isolation — leasing a rented machine
+├── sovereign-scheduler      # Serving's pure tier — ranker, decision records, replay ("The two tiers", SERVING_BOUNDARY.md)
+├── sovereign-serving-host   # Serving's host tier — peer_inference, admission, entry_endpoint
+├── sovereign-grants         # GuestGrant, EphemeralGrantStore, `Scope` — per-turn authorization
+├── sovereign-server         # Axum REST + WebSocket, multi-tenant (the phone-facing host)
 ├── sovereign-desktop        # Tauri 2 + Svelte 5
 ├── sovereign-cli            # User-facing dispatcher — execs into sibling binaries
-├── sovereign-cli-shared     # Tiny shared lib (dirs, repo, help, prompts, tracing init)
-├── sovereign-time           # Wall-clock helpers (Unix-epoch secs/millis) — a zero-dep leaf for crates that don't depend on sovereign-core
-├── serving-policy           # Fair-share scheduling (SchedCore/EtaEwma/reciprocity) + pipeline alias resolution — tier-0, empty in-repo dep list, forbidden from naming either family
-├── oplog                    # Op/OpId/Oplog/Journaled/SkippedLine — the append-only JSONL journal; tier-0, kernel-types its only in-repo dep, forbidden from naming corpus-engine* OR either family
-├── sovereign-cli-daemon     # Long-running host + lifecycle (~241 MB binary; bin+lib. The desktop's --daemon-child re-entry was deleted 2026-09-11 — sv-surface svt-2 — and the crate is no longer a desktop dependency, though the desktop SHIPS this binary as its Tauri sidecar and spawns its `setup` verb for first run). **Owns the Windows GPU backend selection since svt-7 (2026-09-12)**: `windows-vulkan` / `windows-cuda` forward to sovereign-inference from HERE, because this is the process that loads the weights; `scripts/stage-daemon-sidecar.sh` passes `SOVEREIGN_SIDECAR_FEATURES` through.
+├── sovereign-cli-shared     # Shared lib (dirs, repo, help, prompts, tracing init, cli-contract)
+├── sovereign-cli-daemon     # Long-running host + lifecycle; owns Windows GPU backend selection
 ├── sovereign-cli-dev        # Workbench: ATOS + project lifecycle + code intel + tools
-├── sovereign-cli-llm        # Model interaction + heavy retrieval (chat/bench/eval/atlas/…)
+├── sovereign-cli-llm        # Model interaction + heavy retrieval (chat/bench/eval/atlas/mesh/ring/job)
+├── sovereign-time           # Wall-clock helpers — zero-dep leaf for crates off sovereign-core
 ├── sovereign-pipeline       # Pipeline / pod-lifecycle helpers
-├── sovereign-eval           # Eval surfaces
-├── sovereign-authoring-harness # Recipe-authoring verdict ladder — Pass/Fail policy + render over corpus-engine harness StageOutputs
-├── sovereign-meshapp        # Mesh-app explorer ops — pure path-in/DTO-out lib shared by the desktop bridge + `meshapp dev` (§5)
+├── sovereign-eval           # Pure scorers
+├── sovereign-authoring-harness # Recipe-authoring verdict ladder over harness StageOutputs
+├── sovereign-meshapp        # Mesh-app explorer ops — pure path-in/DTO-out lib
+├── sovereign-meshapp-registry  # Mesh-app manifest, registry, port map, proxy
+├── sovereign-mesh-test-harness # SimulatedMesh/SimulatedNode/MockLlamaServer, fault injection
+├── sovereign-service        # Service installation (launchd / systemd / Windows task)
 ├── sovereign-agent-bench    # Eleven-problem agent-coding battery
 ├── sovereign-agent-tools    # Canonical agent-tool primitives (cross-runner contract)
 └── sovereign-tdd            # Unified TDD solver loop (HTTP + MCP transports)
 ```
 
-Top-level: `modes/` (skills — recipe-author, inner-work),
-`models.toml`, `models/`, `bench/`, `inquiries/`, `router/`,
-`sovereign-server.toml`.
+Top-level: `modes/` (skills), `models.toml`, `models/`, `bench/`,
+`inquiries/`, `router/`, `sovereign-server.toml`, `deploy/onprem/`.
 
 ### commonwealth
 
 ```
 crates/
-├── commonwealth-core         # Shared types — ids, mesh, capabilities, ledger, aliases
-├── commonwealth-transport    # PeerTransport seam — (peer, traffic class) → endpoints; IP today, iroh-ready
-├── commonwealth-discovery    # Founding + joining a mesh: join keys, mDNS, local hardware survey (the gossip/latency/TLS modules left; three modules remain)
-├── commonwealth-rail-core    # The ring rail's FOLD — Person/Roster/RailAct/SignedOp, opaque Payload, Ed25519 authorship, admission into one total order, sync digest. Zero I/O, zero clock; deps are oplog + ed25519 + serde + hex
-├── commonwealth-rail         # The ring rail's JOURNAL — one append-only JSONL log per namespace under <root>/rings/<ns>/, single-writer door + peer ingest; re-exports -rail-core wholesale
-├── commonwealth-work         # The WORK PLANE on the rail — WorkAct codec (Submit/Offer/Lease/Renew/Complete/Fail/Revoke), the unit seal, the fold, one lease predicate, the executor seam. Zero I/O + zero clock in the core (`process` feature adds tokio); package closure 58, no sovereign-*
-├── commonwealth-state        # MeshStore — SQLite KV w/ TTL GC; since cw-lift 4 a local PROJECTION of the ring rail (rail_kv vocabulary + fold, rail_outbox table), not a gossip replica
-├── commonwealth-media        # Federated media — who offers a library, who may reach one, the viewer bridge, catalogue fan-out
-└── commonwealth-rails        # `cw-rails` — the minimal daemon a shim author installs: join an invite, run, serve
+├── commonwealth-core         # Shared types — ids, mesh, capabilities, ledger, clock
+├── commonwealth-transport    # PeerTransport seam — (peer, traffic class) → endpoints
+├── commonwealth-discovery    # Founding + joining: join keys, mDNS, local hardware survey
+├── commonwealth-rail-core    # The ring rail's FOLD — Person/Roster/RailAct/SignedOp. Zero I/O
+├── commonwealth-rail         # The ring rail's JOURNAL — one JSONL log per namespace
+├── commonwealth-work         # The WORK PLANE on the rail — WorkAct codec, unit seal, lease predicate
+├── commonwealth-state        # MeshStore — SQLite KV; a local PROJECTION of the ring rail
+├── commonwealth-media        # Federated media — who offers a library, who may reach one
+└── commonwealth-rails        # `cw-rails` — the minimal daemon a shim author installs
 ```
 
-Nine crates, and nine is the whole directory: `commonwealth/crates/` holds the
-package and nothing else since the `domains-2` move (2026-09-11).
-
-**Six crates left this directory on 2026-09-11**, in two moves, because their
-names described a family they were not in (`quality/DOMAINS.md` §7 Phase A).
-None of them is mesh substrate. The first four (`domains-1`) went to
-`sovereign/crates/`:
-
-| Was | Is | What it actually holds |
-|---|---|---|
-| `commonwealth-api` | `sovereign-api` | HTTP servers (client 9741 + internal 9742). Emptied at `dm-daemon-api-edge` (2026-09-18) — the host cluster moved to `sovereign-daemon` — and deleted at `REVIEW-build-sovereign-api-retire` (2026-09-18) once its last shims were repointed and its three `[[exception]]` rows retired to zero |
-| `commonwealth-inference` | `sovereign-serving` | `RequestRouter`, `RoutingRule`, `LoadPolicy`, `InferencePlan`, `MeshPlan` — the SERVING context, named at last. The peg the scheduler in `sovereign-mesh` lands on later. Emptied to zero and deleted 2026-09-15 (`REVIEW-build-serving-empty-peg`): `inference_plan`/`store_adapter` went to `commonwealth-state`, the re-exports to `oicp-types`/`commonwealth-core` |
-| `commonwealth-knowledge` | `sovereign-grants` | No knowledge at all: `GuestGrant`, `GuestGrantStore`, `EphemeralGrantStore` and **`Scope`** — the per-turn authorization value `TOPOLOGY.md` §3.5 is built around, which lived in a crate named for knowledge. Imperfect: its shard manager and work queue do not belong under this name either and were left rather than split in a move |
-| `commonwealth-app` | `sovereign-meshapp-registry` | Mesh-app manifest, registry, port map, proxy. Open question flagged, not settled: `sovereign-meshapp` (5,656 lines of DTOs) is a second crate about mesh apps |
-
-and the remaining two (`domains-2`) went to the two different places their
-consumers named:
-
-| Was | Is | Why there |
-|---|---|---|
-| `commonwealth-test-harness` | `sovereign-mesh-test-harness`, at [`sovereign/crates/sovereign-mesh-test-harness`](../sovereign/crates/sovereign-mesh-test-harness) | `SimulatedMesh<S>`, `SimulatedNode<S>`, `MockLlamaServer`, fault injection. The node is generic over its state — the OICP/contracts seam — so the harness's library names no host. Its only consumer in the repo is `sovereign-mesh`, behind that crate's `dst` feature, so it now sits beside it and is named for it |
-| `oicp-conformance` | same name, at [`oicp-conformance`](../oicp-conformance) — a repo-root sibling | `oicp-types` and `oicp-client`, the two crates it certifies against, are root siblings too. Its dependency budget (oicp-types + serde/reqwest/tokio) was always the point; sitting under `commonwealth/` only implied a mesh it does not need. `commonwealth/docs/ARCHITECTURE_REVIEW_2026-08-05.md:421` asked for exactly this move |
-
-Neither move changed logic and the package's own boundary held —
-`boundary-gate` reads `commonwealth 9/9 crates present`, and
-`scripts/cw-work-lift.sh --sandbox` still reports **verdict 1** (7.9 s build
-outside the monorepo, three heterogeneous units, both escapes refused), which
-is the invariant every move in this campaign must preserve.
-
-The harness carried one thing across that a rename could have quietly
-retired. Its `sovereign-api` dependency is grandfathered in
-`quality/ARCH_LAYERS.toml` as R6 debt that `domains-1` exposed, and the
-grandfathering row's own removal condition read "domains-2 moves the crate, at
-which point `from` no longer matches and this row must be DELETED". That was
-the wrong condition: renaming the subject of a live exception retires the debt
-without paying it. The `[[forbid]]` and the `[[exception]]` were both renamed
-with the crate instead, and the tracking field now names the condition that
-actually discharges them — the harness simulating a node against `oicp-types`
-alone.
-
-`contrib/` ships `install.sh`, systemd unit, launchd plist.
-`docs/oicp-v0.4.md` is the canonical OICP spec (v0.4 extends v0.3
-additively; `oicp-v0.3.md` remains the documented fallback path).
-`oicp-conformance` (a repo-root sibling of `oicp-types`) is the
-standalone OICP v0.4 host conformance tester — minimal deps (oicp-types + HTTP), liftable
-by any third party certifying their own implementation.
+Nine crates, and nine is the whole directory. Six left in 2026-09 because
+their names described a family they were not in: `commonwealth-api` and
+`-inference` became `sovereign-api` / `sovereign-serving` and were then
+deleted; `-knowledge` became `sovereign-grants`; `-app` became
+`sovereign-meshapp-registry`; `-test-harness` became
+`sovereign-mesh-test-harness`; `oicp-conformance` moved to a repo-root
+sibling. `contrib/` ships `install.sh`, a systemd unit and a launchd plist.
 
 ### studio
 
-The liftable authoring package (`studio/crates/`) — buildable against
-only the OICP contract crates, enforced by the xtask `boundary-gate`
-(contract: `studio/BOUNDARY.md`). It is one of N packages the gate
-governs since 2026-09-03: the crate sets and the shared-leaf budgets
-are declared as `[[package]]` / `[[package_leaf]]` blocks in
-`quality/ARCH_LAYERS.toml` (schema v3), beside the layer map and behind
-the same parser, so layer-gate, boundary-gate and `arch_report` cannot
-drift on what a boundary means. Four are declared: `studio`, `code-intel`
-(`docs/CODE_TOOLING_BOUNDARY.md`), `corpus-mcp` (`corpus-mcp/README.md`)
-and — since 2026-09-03 — `commonwealth` (`commonwealth/BOUNDARY.md`), the
-mesh substrate: `commonwealth-{core,transport,state,discovery}`, 17,194
-lines, zero `[[exception]]` rows on the day it was declared. It was
-declared BEFORE the work that moves code across it, because layer-gate
-cannot see liftability — its "no sovereign" property is seven
-hand-enumerated `[[forbid]]` blocks, and a crate added to the
-`mesh-foundation` layer list gets no forbid rule and prints green
-(§18.1). `commonwealth-{knowledge,inference,api}` are NOT in it; nor is
-`sovereign-mesh`, which holds substrate-shaped code with ~15 of ~234
-external refs and would fork the deciders the package owns if extracted
-as a peer (§10.6 at crate scale).
+The liftable authoring package, buildable against only the OICP contract
+crates, enforced by `cargo xtask boundary-gate` (contract
+`studio/BOUNDARY.md`). One of four declared packages — the others are
+`code-intel` (`docs/CODE_TOOLING_BOUNDARY.md`), `corpus-mcp`
+(`corpus-mcp/README.md`) and `commonwealth` (`commonwealth/BOUNDARY.md`).
+Crate sets and shared-leaf budgets are `[[package]]` / `[[package_leaf]]`
+blocks in `quality/ARCH_LAYERS.toml`, beside the layer map and behind the same
+parser, so layer-gate, boundary-gate and `arch_report` cannot drift on what a
+boundary means.
 
 ```
 crates/
-├── sovereign-workflow       # Step·Artifact·Runner — typed dataflow over local-model steps (P0+P1 + content cache + `for_each` collection-map; `svrn workflow run`). Diffed byte-for-byte against the real corpus chunk→embed stage. Owns the `StepKind`/`WireKind` wire-kind catalog the authoring schema derives from (§2.1 source of truth).
-├── sovereign-workflow-host  # Daemon-runnable workflow host — assembles the standard tool registry + daemon inference + content cache to run a workflow in-process; the catalog/resolve surface; the living trigger; the `recipe:` corpus-ingest stage; and the NL workflow-author tool bundle (`workflow_write`/`_write_structured`/`validate`/`test`, the JSON-Schema-constrained author mirroring recipe-author). Two run entries: `run_workflow_in_process` (builds a daemon-routed provider from a URL — the CLI + living trigger) and `run_workflow_with_provider` (takes an **injected** provider + optional `StepObserver` — the desktop **Run a workflow** view feeds its own `AppState.inference` and streams per-step progress to the UI). Also the ONE decider for "which embed model, and does the daemon answer with it" — `daemon_models::resolve_embed_model` (explicit → configured stem → embedding-like `/v1/models` id, then a `POST /v1/embeddings` probe as the verdict), shared by `run_workflow_in_process` (`svrn corpus ingest`), `svrn corpus search`, `svrn recipe test --enrich` and `svrn chat` bootstrap since 2026-09-01; before that three copies disagreed and a daemon whose listing carried only chat ids served chat but refused ingest.
-├── sovereign-tools-base     # Pure leaf workflow tools (shell/web/chunk/file/json/csv/zip/vector/MCP) — the tool set the studio package ships without sovereign-tools
-├── sovereign-recipe-author  # Recipe-authoring tool bundle + RecipeProject model + project store (re-exported as `sovereign_tools::recipe_author` for legacy paths)
-└── sovereign-studio         # Headless studio CLI — authors/tests recipes + runs workflows against any OICP daemon; the proof the package is independently usable
+├── sovereign-workflow       # Step·Artifact·Runner — typed dataflow over local-model steps
+├── sovereign-workflow-host  # Daemon-runnable workflow host + the NL workflow-author bundle
+├── sovereign-tools-base     # Pure leaf workflow tools (shell/web/chunk/file/json/csv/zip/vector/MCP)
+├── sovereign-recipe-author  # Recipe-authoring tool bundle + RecipeProject model + project store
+└── sovereign-studio         # Headless studio CLI — the proof the package is independently usable
 ```
 
 ### quality
 
-The quality program's policy + baselines (landed 2026-07-11).
-`quality/ARCH_LAYERS.toml` is the declared layer map — the
-dependency-direction contract enforced by `cargo xtask layer-gate`
-(Cargo-declared edges, CI) and the code-intel arch report
-(SCIP-observed edges). `quality/arch-layers/` is the tiny shared
-schema/evaluator crate both consumers use. `quality/baselines/` holds
-the machine-written ratchet baselines (oversized files, fan-in caps,
-Cargo.lock duplicates, clippy counts, public-API snapshots) —
-regenerated only via `cargo xtask <gate> --update-baseline`, banked
-weekly via `--tighten`; `concepts.txt` is the concept-duplication ratchet
-(`cargo xtask concept-gate`, minted through `svrn code converge status
---mint`); it was re-minted on 2026-08-21 when the census stopped counting
-collisions no other crate can reach, and a baseline stamped before that
-commit is not comparable to one stamped after it. Since 2026-09-10 it holds
-the NAME SET beside the count — first non-comment line the count, one name
-per line after it — so a red names what crossed instead of only how many
-(§10.1q); a bare-scalar file still reads as a count, and the gate says it
-cannot name the offender rather than reporting an empty list. `cargo xtask quality` runs every fast local gate with one
-summary table, and since 2026-08-20 that table carries FOUR verdicts —
-PASS / FAIL / COULD-NOT-JUDGE / NEVER-RAN — with per-gate enforcement:
-concept-gate is ADVISORY there because it counts type definitions in the
-SCIP graph at the last indexed commit rather than in the working tree
-being gated, and hard where the graph is authoritative (CI, landing
-verdicts, `svrn code converge status`). `lint-gate` (clippy-count ratchet)
-and `api-gate` (public-API surface diffs on the pinned nightly from
-`quality/nightly-pin.txt`) run on their own cadence — locally and in
-the weekly CI lane, never on the PR critical path.
-`quality/CLEANUP.md` is the prioritized cleanup backlog derived from
-this instrumentation (arch-report census + lint counts + temporal
-coupling), with per-item done-metrics.
+`ARCH_LAYERS.toml` is the declared layer map, enforced by `cargo xtask
+layer-gate` (Cargo-declared edges) and the code-intel arch report
+(SCIP-observed edges); `arch-layers/` is the shared evaluator both use.
+`baselines/` holds machine-written ratchet baselines, regenerated only via
+`--update-baseline`, banked via `--tighten`. `cargo xtask quality` runs every
+fast local gate with one table carrying FOUR verdicts: passed / failed /
+could-not-judge / never-ran.
 
-`quality/twin-plants.toml` + `scripts/twin-census.py` are the sabotage
-runner for the one-decider censuses (sv-surface construction 3,
-2026-09-09). One row per family: the census test's crate + full name, a
-plant that is a real second implementation, and the assertion substring
-the red must name. Per family the runner proves the census green on a
-clean tree, applies the plant, requires a FAIL naming that substring,
-restores byte-for-byte and verifies — four verdicts with distinct exit
-codes (proved-red / NOT-A-GATE / could-not-judge / registry error), every
-cargo call through `scripts/with-cargo-lock.sh`, and a refusal to plant
-into a dirty file. 19 families as of 2026-09-10. It earned its keep on
-its first run: `sovereign-mesh`'s `loopback_parity` passed with
-`mesh_router`'s guard middleware DELETED, because both assertions were
-over-determined by the handler's own `enforce_localhost` — the file's own
-claim to catch an unguarded route was falsified by a run. Closed at
-`4c45a1fc9` with a leg no handler can satisfy alone: PUT (a method no
-route registers) at each audited router, spoofed LAN → 403 from the
-layer, real loopback → 405 from axum's fallback.
+`twin-plants.toml` + `scripts/twin-census.py` are the sabotage runner for the
+one-decider censuses: prove the census green, apply a real second
+implementation, require a FAIL naming the expected substring, restore
+byte-for-byte. 19 families.
+
+Also here: `CONCEPTS.toml` (the concept register), `TARGET_ARCHITECTURE.md`,
+`env-flags.toml`, `requirements.toml` + `requirements-enforceability.toml`,
+`instruments.toml` (every instrument in the repo, one table), `DOMAINS.md`,
+`DELETION.md`, `CLEANUP.md`, `REFACTOR_FACTORY.md`, `REFACTOR_LEDGER.md`.
 
 ### sovereign-recipes
 
-The **single source of truth** for corpus recipes — recipe definitions only.
-corpus-engine vendors this tree at build time (`build.rs` → `OUT_DIR`) for the
-offline bundle, so there is no second copy. Catalog is `registry.toml`; field
-reference is `SCHEMA.md` (generated from `corpus-engine/src/recipe.rs` and gated
-by the `recipe_schema` test); `GETTING_STARTED.md` + `_templates/` onboard
-contributors.
-
-The catalog (`registry.toml`) lists 27 recipes: `wikipedia`,
-`wikipedia-simple`, `wikipedia-newsworthy`, `wikipedia-article`,
-`wikipedia-catalog`, `sep`, `stackexchange`, `stackexchange-knowledge`,
-`openalex`, `gutenberg`, `gutenberg-work`, `crs_reports`, `us-code`,
-`olc-opinions`, `scotus-opinions`, `federal-register-presidential`,
-`conversations-anthropic`, `conversations-chatgpt`,
-`sec-filings-company` (one public company's 10-K prose + typed XBRL
-figures, installed BY TICKER under its own id: `[parameters.ticker]`
-feeds the `sec_edgar` custom acquirer in
-`sovereign-tools/src/sec_edgar.rs`, registered on the engine at
-`sovereign-daemon/src/bootstrap.rs::build_corpus_engine`, which resolves
-ticker -> CIK, selects the 10-K NAMING every in-window filing it skips,
-fetches the bytes, and then CALLS the decider (step 6) — `render` with
-`fiscal_years: None`, whose outputs `place_rendered` writes: `docs/facts/*.txt`
-BEFORE the returned `docs/` reaches extraction, the sidecar staged at
-`raw/sec_facts.json` for `install_fact_sidecar`, and `_unmapped_concepts.json`
-in `raw/` so the plaintext extractor never ingests it. A render resolving NO
-concept is an `Err`, never a prose-only corpus carrying an `[authority]`
-claim it cannot honour. SINGLE-INSTANCE — no `id_template` exists in the
-engine, so a second company REPLACES the first and the acquirer says so
-naming both, recording the resident company in
-`_downloads/sec_edgar_resident.json`. Several companies at once still go
-through `scripts/setup-sec-corpus.sh`, which materializes CIK-keyed
-`sec-cik<10-digit>` overrides with a `local_file` acquire, so the two
-paths' namespaces cannot collide; the
-concept-normalization registry is `concept-map.toml` beside the recipe, its
-one decider is `sovereign-tools/src/sec_facts_render.rs` — a PURE
-`render(RenderRequest) -> RenderOutput` that turns raw companyfacts + the
-registry into the ingested `facts/*.txt` lines, the `sec_facts.json`
-typed-fact sidecar the `sec_facts` tool answers from, and the
-`_unmapped_concepts.json` coverage deliverable, with all file placement left
-to the caller; it replaced `scripts/sec_facts.py` (deleted, order
-`sec-facts-decider-port`) under a parity test against that Python's committed
-output — the retrieval-side bar judge is
-`scripts/check-sec-corpus.py`, and the product-path fabrication judge is
-`scripts/check-sec-answer-path.py` with its frozen adversarial prereg under
-`prereg/`; see `docs/specs/FINANCIAL_CORPORA.md`), the five
-`enron-sample*` recipes, and the three `uap-blue-book*` recipes.
-Further recipe dirs ship outside the catalog (installed by path or by a
-setup script): `codebase`, `arch-principles`, `system-overview`,
-`chaos-secret-agent`, `chaos-saltgrass`, `maple-house`, `proxy-company`,
-`search-gym`, `sf-assessor-roll`. Underscore directories like
-`_templates` carry scaffolding; `meshapp-registry.toml` is the curated
-mesh-app registry (§5).
+The single source of truth for corpus recipes; corpus-engine vendors the tree
+at build time, so there is no second copy. Catalog is `registry.toml` (27
+recipes: the `wikipedia*` family, `sep`, `stackexchange*`, `openalex`,
+`gutenberg*`, `crs_reports`, `us-code`, `olc-opinions`, `scotus-opinions`,
+`federal-register-presidential`, `conversations-anthropic`,
+`conversations-chatgpt`, `sec-filings-company`, five `enron-sample*`, three
+`uap-blue-book*`). Field reference is `SCHEMA.md`, generated from `recipe.rs`
+and gated by the `recipe_schema` test. Outside the catalog: `codebase`,
+`arch-principles`, `system-overview`, `chaos-secret-agent`, `chaos-saltgrass`,
+`maple-house`, `proxy-company`, `search-gym`, `sf-assessor-roll`.
 
 ### Bench harnesses
 
-Bench/eval fixtures (`knowledge-gym`, `search-gym`, `routing`,
-`book-report`, per-corpus question banks) live under `sovereign/bench/`;
-orchestrators in `sovereign-cli-llm/src/bench_cmd/`; pure scorers in
-`sovereign-eval/`. The gym *commands* (`svrn search-gym`,
-`knowledge-gym`) still exist; only their fixtures moved. Five harnesses
-deserve a map entry:
+Fixtures under `sovereign/bench/`; orchestrators in `bench_cmd/`; pure scorers
+in `sovereign-eval/`.
 
-**Model attribution + reliability reports** (cross-cutting). Lane
-baselines (`<group>/baselines/<id>/latest.json`, the `LaneBaseline`
-schema) historically recorded only the slot alias (`primary`) the run
-hit — worthless once the alias is repointed. Capture now resolves the
-alias to the **concrete GGUF** at run time
-(`bench_cmd/model_resolve.rs` reads the daemon's `/v1/models`
-`owned_by: "alias→<stem>"`), stamps the concrete stem into every
-transcript row, and records structured `model_attribution`
-(`file_stem`/`base_name`/`family`/`quant`, derived in
-`sovereign-core::models_manifest::attribution_for_file`). `svrn bench
-report` (`bench_cmd/report.rs`) inverts the suite-keyed baselines into a
-durable, git-tracked, per-model tree at `sovereign/bench/reports/`
-(`index.json` + `<model>/{reliability.json,REPORT.md}`), grouping
-quantisations under one model heading but keeping each quant on its own
-row, and surfacing any still-unattributed (legacy) baselines rather than
-folding them in. The `REPORT.md` renderer is pure + deterministic; the
-`reliability.json` is the shape the desktop model-picker card will read.
-See `sovereign/bench/reports/README.md`.
+`scripts/sovereign-ci-bench.sh` is the full nightly (~2-4h) and **the primary
+way to catch a regression anywhere in the inference + retrieval stack** — one
+command spanning retrieval recall, enrichment atom-F1, intent routing,
+synthesis answer-equivalence, tool-use gyms, multi-turn degradation, chaos
+honesty, mechanism fidelity and governance, each diffed against a committed
+baseline. Deterministic baseline-diffed lanes are **hard** (build-breaking);
+the synthesis judge lane is **soft**; chaos, mechanism, multi-turn and
+governance run **tracked** (advisory), each paired with a hard
+`svrn bench gate <lane>` failing only on regression.
 
-**Reasoning-fidelity** (`svrn bench mechanism-fidelity`) — a
-*metamorphic* audit of whether a frozen model reasons from a causal
-mechanism or a memorized label. A registry of `ReasoningClass`es
-(`sovereign-eval/src/mechanism_fidelity/`; three ship:
-`wealth_tax_relocation`, `attribution_support`, `aggregation_threshold`)
-behind one orchestrator that elicits a forced-choice **logprob**
-distribution in one forward pass per probe, keeps a provably-blind
-negative control, and runs anytime-valid early-stopping (`stopping.rs`)
-to a GO/NO-GO verdict. Each run distils a per-`(model, class)`
-**fidelity card** (`~/.svrnmesh/model-fidelity-cards/<model>.json`,
-fingerprint-stamped so stale bands invalidate) — characterize once, read
-free per query. Full mechanics:
-`sovereign/bench/mechanism_fidelity/README.md`.
-
-**Chaos-Monkey** (`svrn bench chaos-monkey`) — the calibration
-counterpart: answer capably + cited **when the facts are in the sealed
-corpus**, abstain honestly **when they aren't**, unfooled by
-distractors. The bank enforces a fairness contract at load (answerable
-items must ship a witness; absent items must not), and a **two-red-line
-scorer** never blends competence-when-present with honesty-when-absent,
-so neither a hallucinator nor a blanket-abstainer can game it. Drives
-the live `handle_message_stream` path sealed to one corpus; the corpus
-installs machine-stable from the committed recipe
-`sovereign-recipes/chaos-secret-agent/` (`scripts/setup-chaos-corpus.sh`)
-so the gate reproduces across boxes. See
-`sovereign/bench/chaos_monkey/README.md`.
-
-**The rubric core** (`sovereign-cli-llm/src/bench_cmd/rubric/`) — shared
-apparatus for every lane that judges **per criterion** rather than per
-answer: a forced-choice binary judge with evidence quotes and could-not-judge
-first-class; the judge **calibration gate** (hand-labeled bank,
-sensitivity/specificity floors of 0.85); weighted scoring over signed
-criterion weights; and Wilson-CI reporting whose diff marks a delta
-significant only when the two 95% intervals are **disjoint**. One
-implementation per formula — a lane binds via the `RubricItem` / `RubricRun`
-traits and owns no private copy (ARCH_PRINCIPLES §10.6). Two tenants today.
-
-**Moral reasoning** (`svrn bench moral`) — the first tenant. Scores *how* a
-model reasons about a dilemma, not which verdict it reaches, against a
-MoReBench-derived rubric bank (`sovereign/bench/moral/`).
-
-**Situatedness** (`svrn bench situated`) — the second tenant, and the process
-layer over Chaos-Monkey. Where chaos grades situated *outcomes* (answered /
-abstained / leaked, with a causal partition), this grades *which situated
-behaviour* failed: grounding citation, gap-naming, actionable abstention,
-outside-knowledge restraint. Two properties make it unusual and are
-load-bearing: (1) it **does not generate** — it scores the transcripts the
-chaos bench already produced on the production turn, so there is no
-bench-local chat loop for a bench-only scaffold to live in; (2) criteria are
-chosen by **question type, never by probe content**, so no corpus vocabulary
-can reach a criterion and the teach-to-the-test audit surface is the closed
-vocabulary in `sovereign/bench/situated/criteria.toml` rather than the
-hundreds of criteria it generates. `--diff` refuses to compare across
-criterion-vocabulary versions. See `sovereign/bench/situated/README.md`.
-
-**Governance** (`svrn bench governance`, FR-9) — gates the
-event-sourced common-law tool (the `govern` verbs over a corpus's
-`GovernanceView` + its `Oplog<GovernanceOpKind>`). **Lane A** is a precision/recall
-detector over `EdgeType::Tension` edges vs an exhaustive `truth.json`
-(scorer: `sovereign-eval/src/governance_bench.rs`). **Lane B** reuses
-the chaos two-red-line scorer and adds **RL-3 (no dead law)**: the gated
-active-set step in `runtime/retrieval_pipeline.rs` drops retrieved
-chunks of amended sections (`GovernanceView::dead_law_sections`) and the
-cite-or-abstain gate runs as `GateSurface::Governance`, driving the same
-hardened turn `govern ask` ships. The "Maple House" fixture installs
-machine-stable from `sovereign-recipes/maple-house/`
-(`scripts/setup-governance-corpus.sh`); both lanes gate via
-`bench gate governance` / `governance-qa`.
-
-The **desktop Conflicts panel** (`sovereign-desktop`
-`governance_commands.rs` + `ConflictsPanel.svelte`) is the "one UX panel"
-of the FR-9 thesis: a per-notebook tab (gated on the corpus carrying a
-`governance_oplog.jsonl`; `NotebookSummary.open_conflicts` is `Some` only
-then) that lists ranked open conflicts with both rule texts, resolves /
-accepts / **dismisses** them (dismiss = a new not-a-conflict op, distinct
-from accept), and exports the meeting agenda + current-rules sheet. A
-folder added via the Library "Rules & decisions" template gets the
-generalized governance ontology recipe and, on enrich-build completion,
-an automatic **migrate-ids → seed** hook. **Living governance**: the
-weekly atlas rebuild renumbers `EdgeId`s, so adjudications also record
-their endpoint rule-id pair (`ActiveSet.tension_pairs`) and the view join
-matches by edge-id → pair → **mootness** (a conflict whose rule is
-superseded is not open), keeping past decisions settled across rebuilds;
-only a genuinely dangling decision (a rule's text was edited away)
-surfaces as a `GovernanceIssue`.
-
-**Inner-work chaos** (`svrn eval inner-chaos`) — the safety
-counterpart of the desktop knowledge chaos loop, re-pointed at the
-inner-work witness (the Reflect rail). Per thread it samples an
-adversarial persona (`bench/inner_work/personas.toml`), seeds the fixed
-resident-memory fixtures, and runs N turns of {35B brain proposes the
-next user move → `Runtime::handle_message` on one `conv_id` →
-length-blind judge}. Two-tier scoring, never averaged: a **safety
-number** (% turns with zero Tier-0 red lines — crisis_mishandling,
-harmful_validation, clinical_overreach, privacy_leak, retrieval_leak;
-must reach ~100%) and a **witness composite** (% good among safe turns).
-A hand-labeled calibration bank (`--calibrate`,
-`bench/inner_work/calibration.toml`) gates any rubric change on breach
-sensitivity ≥0.9. Journal + breach receipts:
-`test-artifacts/inner-chaos-journal.jsonl` (stamped copy per run). Spec:
-`sovereign/bench/inner_work/CHAOS_HARNESS.md`; runner:
-`sovereign-cli-llm/src/inner_chaos/`. The witness's deterministic
-wellbeing gate (`runtime/wellbeing.rs`) fires pre-routing on lexical /
-classifier / sticky signals; since 2026-07-10 the sticky arm re-checks
-the current message and hands non-crisis follow-ups back to the witness
-(only an explicit classifier not-crisis releases; lexical hits and
-classifier failures keep the guaranteed floor) — any edit there must
-re-pass the `--persona crisis_discloser` suite.
-
-**CI composition** (`scripts/sovereign-ci-bench.sh`) — **the primary way
-to catch a regression anywhere in the inference + retrieval stack.** One
-command spans the whole chain — retrieval recall, enrichment atom-F1,
-intent routing, synthesis answer-equiv, tool-use (search/knowledge/agent
-gyms), multi-turn degradation, chaos honesty, mechanism fidelity,
-governance — by *composing* the benches above rather than reinventing
-them, each diffed against a committed baseline. It is the regression net a
-change to any of those subsystems must clear; the per-bench harnesses are
-for drilling into a lane the gate flags, not the front-line check.
-Deterministic baseline-diffed lanes (retrieval recall, enrichment
-atom-F1, intent routing) are **hard** (build-breaking); the synthesis
-answer-equiv judge lane is **soft** (judge variance shouldn't flake the
-build); chaos, mechanism, the multi-turn degradation thread, and the
-governance lanes run as **tracked** (advisory — their absolute verdict is
-a finding about the current system, not a regression), each paired with a
-**hard `svrn bench gate <lane>`** that re-scores the same artifact
-and fails only on regression vs a committed baseline
-(`sovereign/bench/<group>/baselines/<id>/`; first run passes). Gate logic
-is one shared metric/direction/tolerance primitive
-(`bench_cmd/lane_baseline.rs` + `gate.rs`).
-
-Two modes: **`--quick`** is the pre-push lean tier — it down-samples the
-slow lanes (`--sample-questions` on synth, one agent-coding problem,
-`--max-turns` on the multi-turn thread bank) to a stratified, whole-unit
-subset so signal-per-minute stays high (~35–40 min vs ~2–4 h); the full
-run is the release/nightly gate. **Invariant:** a sampled lane's baseline
-is *cap-specific* — it covers a different question/thread subset than the
-full run, so changing a sample size or `MULTITURN_MAX_TURNS` requires
-re-capturing that lane's baseline (`bench gate … --update-baseline` at the
-new cap) or its hard gate false-fires against a stale baseline.
+Named harnesses: **model attribution** (resolves a slot alias to the concrete
+GGUF at run time, so a baseline is not worthless once the alias is repointed);
+**reasoning-fidelity** (`bench mechanism-fidelity`, metamorphic, with a
+provably-blind negative control); **Chaos-Monkey** (answer-when-present /
+abstain-when-absent under a two-red-line scorer that never blends the two);
+**the rubric core** (`bench_cmd/rubric/`, shared forced-choice-per-criterion
+apparatus with a calibration gate and Wilson-CI reporting; tenants `bench
+moral` and `bench situated`); **governance** (FR-9); **inner-work chaos**
+(`eval inner-chaos`, two-tier scored and never averaged).
 
 ---
 
 ## 3. corpus-engine — the shared knowledge layer
 
-Self-contained library; both upstream projects use it through the
-same public API; neither knows the other exists.
-
-### Pipeline
+Both upstream projects use it through the same public API; neither knows the
+other exists.
 
 ```
 Acquirer → Extractor → Filter → Chunker → Embedder → Index
                                           (caller-supplied EmbedFn)
 ```
 
-Each stage is a trait. A **Recipe** TOML configures the whole
-pipeline. Built-ins per stage:
+| Stage | Built-ins |
+|---|---|
+| Acquirer | `bulk_download`, `huggingface_dataset`, `local_file`, `http_api`, `web_crawl`, `custom` (runtime-registered seam) |
+| Extractor | `mediawiki_xml`, `stackexchange_xml`, `jsonl`, `json`, `markdown`, `xml_sections`, `wikipedia_jsonl`, `wikipedia_structured`, `wikipedia_catalog`, `wikipedia_api_article`, `gutenberg_catalog`, `html`, `html_sections`, `csv`, `parquet`, `plaintext`, `code`, `email`, `anthropic_export` / `chatgpt_export`, `alignment_workspace`, `custom`, `described_asset`, `tabular_atoms`. `ExtractorConfig` in `recipe.rs` is the SSOT. `column_aware` is an *enrichment-time* extractor, not a recipe `type =` value |
+| Filter | `pageview_rank`, `title_list`, `knowledge_density`, `boilerplate`, composed via `[[filter]]` (`Any` / `All`) |
+| Chunker | `paragraph`, `sentence`, `fixed`, `semantic`, `passthrough`, `portal_event_bullet`, `threaded_turns` |
+| Index | `CorpusIndex` over LanceDB (IVF-PQ) + Tantivy FTS |
 
-| Stage      | Built-ins                                                          |
-|------------|--------------------------------------------------------------------|
-| Acquirer   | `bulk_download`, `huggingface_dataset`, `local_file`, `http_api`, `web_crawl`, `custom` (runtime-registered seam) |
-| Extractor  | `mediawiki_xml`, `stackexchange_xml`, `jsonl`, `json`, `markdown`, `xml_sections`, `wikipedia_jsonl`, `wikipedia_structured`, `wikipedia_catalog`, `wikipedia_api_article`, `gutenberg_catalog`, `html`, `html_sections`, `csv`, `parquet`, `plaintext`, `code`, `email` (RFC-5322 + MIME), `anthropic_export` / `chatgpt_export` (conversation imports), `alignment_workspace`, `custom`, `described_asset` (content-addressed binary dispatcher), `tabular_atoms` (deterministic typed Entity atoms per row from tabular JSON, e.g. the SF assessor parcel roll). The `ExtractorConfig` enum in `recipe.rs` is the SSOT. (`column_aware` — typed Entity atoms from parquet parsed-form caches — is an *enrichment-time* extractor configured via `[enrichment.reconciliation.column_aware]`, not a recipe `type =` value.) |
-| Filter     | `pageview_rank`, `title_list`, `knowledge_density`, `boilerplate` (email signature / quoted-reply / disclaimer stripping), composed via `[[filter]]` (`Any` / `All`) |
-| Chunker    | `paragraph`, `sentence`, `fixed`, `semantic`, `passthrough`, `portal_event_bullet`, `threaded_turns` |
-| Index      | `CorpusIndex` over LanceDB (IVF-PQ) + Tantivy FTS                  |
-
-The `tabular_atoms` extractor (deterministic, no inference) types each
-row of a structured public dataset into an `Entity` atom whose columns
-land in `Entity::attributes`. The SF land-value-tax demo folds those
-atoms into aggregates via the `parcel_analytics` lib
-(`enrichment/atlas/analysis/`) + the read-only `parcel_analytics` tool.
-Its "no confabulated numbers" guarantee — *the model never originates a
-number* — is enforced three ways: the model narrates only the tool's
-COMPACT figures; the ComplexTask synthesizer appends the tool's
-`derivation` VERBATIM (rendered by the system, not the model); and a
-deterministic audit (`runtime::numeric_audit`) value-matches every $/%
-figure in the prose against the tool's outputs. `svrn corpus
-export-parcels` writes the input set to CSV for independent re-summing.
-See `sovereign-recipes/sf-assessor-roll/`.
-
-The SEC filings corpora reuse that same guarantee contract
-(`FINANCIAL_CORPORA.md` §6): the read-only `sec_facts` tool
-(`sovereign-tools/src/sec_facts.rs`, pure lookup/derivation lib in
-`enrichment/atlas/analysis/sec_facts/`) answers from the typed
-`sec_facts.json` sidecar written by the one decider
-(`sovereign-tools/src/sec_facts_render.rs`) with `cited_figures` + `derivation` +
-`reproduce`, computes ratios and year-over-year changes in Rust, and
-refuses first-class naming what IS available (coverage, freshness, and
-the consolidated-only source limit). The `concept` vocabulary is FIXED
-at compile time, not per corpus: `sovereign-recipes/sec-filings-company/
-concept-map.toml` holds the 20 canonical ids and is `include_str!`'d into
-the binary (`sec_edgar.rs` `CONCEPT_MAP_TOML`), so `concept_vocabulary()`
-derives BOTH the schema's `enum` and the tool's own acceptance check from
-one source (§10.6); a filer's store is a SUBSET of that fixed set. The
-two refusals this produces are deliberately distinct — "not a concept id"
-(malformed request, names all 20) versus `resolve_concept`'s "this corpus
-does not hold it" (a coverage fact, names what the store has). They
-arrived as one indistinguishable `UnmappedConcept` until order
-`sec-facts-concept-enum`, and a planner-invented label was read as a
-coverage limit three occurrences running. Both stay `Ok`-valued
-refusals rather than `Err`: measured n=3, failing a bad parameter as an
-error made the executor replan, drop `period`, fail again, and answer
-from pretraining with no tool output at all — a dead tool step does not
-degrade the honesty machinery, it deletes it. The planner SEES this
-vocabulary: `planner/mod.rs` `format_param_hint` renders a declared `enum`
-into the plan prompt's `Params:` line as `concept* (string: revenue|…)`,
-in FULL and never truncated — a partial list biases the planner to the
-head of it while the tool still rejects everything below the cut. Until
-that change the hint rendered only `name (type)`, so no tool's declared
-enum reached the prompt and `mode`'s enum had never bound either; the
-schema asymmetry the order was raised against was real and inert.
-`description` is still discarded — the enum is the closed set, the prose
-is not. Since F3 the planner is also MASKED to that shape, not merely
-shown it: `planner/schema.rs` `plan_schema` sets `structured_output` on
-both `plan` and `replan`, with one `oneOf` branch PER TOOL — `tool_id`
-pinned to a `const` and that branch's `params` bound to the tool's own
-`parameters` schema, verbatim. So this `concept` enum is now masked at
-logit level, not merely rendered: a non-member id is unreachable rather
-than discouraged, which is what the hand-fought version of this section
-was working around. Verbatim is load-bearing — copying the schema would
-be a second decider that drifts from what the tool accepts (§10.6). A
-tool whose `parameters` is not a typed object is REFUSED, never widened
-back to an open `params`: that shape compiles and masks nothing, so
-accepting it would leave a plan looking constrained while the tool's
-arguments stayed free. Watched live 2026-08-19, same model and prompt
-both ways: told to use a nonexistent `bloomberg_terminal`, the
-unconstrained planner emitted it; the masked planner could not. The
-SAME substitution hazard this section names for concepts applies to
-tool ids and is NOT closed — the masked planner picked the nearest
-legal id (`knowledge_lookup`) while its `description` still said "Query
-the Bloomberg terminal", so a plan step can read as one thing and
-dispatch another. The mask makes fabrication impossible, not honesty
-automatic. The enum closed the in-vocabulary hole and SHARPENED an
-out-of-vocabulary one, so a second guard sits beside it: asked for a
-figure scoped BELOW the consolidated entity, the planner substitutes the
-nearest LEGAL concept (`revenue` for "Mac segment revenue"), the store
-resolves it, and no other refusal can fire — a company-wide figure
-narrated as a segment one, reproduced 2/2. `scope_qualifier_in_question`
-+ `SecRefusal::ScopeNotInSource` refuse it at the same `ToolContext` seam
-`PeriodNotAsAsked` uses and for the same reason: the schema already asks
-the planner not to, and asking is not a guarantee (§7.6). The guard keys
-on STRUCTURAL segment vocabulary, never on one filer's product names —
-so a bare product name with no structural word is KNOWN RESIDUE, scoped
-to the clear case as the calendar check was. The provenance guard does
-not cover this class: it binds numerals to the tool datum, and the datum
-IS the tool's, so its catches here were incidental. Because financial answers carry
-BARE figures (`416,161` millions, EPS `7.46`) outside the default $/%
-audit scope, the tool declares the OPT-IN bare-numeral audit on its step
-output (`numeric_audit.audit_bare_numerals` + `allowed_tokens`, lexed by
-the auditor's own `numeric_tokens`); `handlers/complex_task.rs` harvests
-the declaration and runs `uncited_numerics_including_bare`, which also
-audits refusal turns — a model reciting a figure from pretraining over a
-refusal is caught. On violation the narration is WITHHELD and replaced by
-the tool's own verbatim rendering, naming each untraceable numeral —
-zero unattributable numerals by construction, not by model compliance
-(ARCH §7.6). General turns keep the historical audit scope unchanged.
-Routing reaches this path deterministically: the corpus recipe's
-`[authority]` block names `sec_facts` authoritative, the tool's
-`claims()` answers from its enumerable domain (entity + ask_terms from
-the concept map), and the router's authority pre-check
-(`router.rs` Pre-check -0.5, `AUTHORITY_CLAIM` meta) routes a claimed
-question to ComplexTask before any similarity classification — see
-FINANCIAL_CORPORA.md §7.3.
-
-The audit no longer depends on that routing (order
-authority-guard-at-exit, 2026-08-17): `runtime/authority_guard.rs`
-binds it to the ANSWER EXIT on every dispatch surface. Arming is
-corpus-granular off the same declaration index (`Tool::authority_domains`
-→ `ToolRegistry::authority_domains`, the question-independent read of
-`claims()`'s cache — necessary because `store_claims` deliberately
-declines explanation-shaped questions to keep them on the prose path):
-a turn whose retrieved-evidence pool (`epistemic::pool_corpora`)
-intersects a declared authority domain is audited at bare scope at its
-exit seam, with an allowed basis of tool-emitted figures ∪ numerals in
-quote-verification-VERIFIED verbatim spans
-(`VerificationResult::verified_spans`) ∪ the user's own question
-numerals. Armed streaming turns force hold-mode (`hold` /
-`deep_hold`) so no token is released before the audit, and skip the
-post-stream refinement rewrite; armed turns cannot take the team
-pipeline (`scope_is_armed` gates both branch sites). On violation the
-prose is withheld §6.2(4)-style, naming every numeral, quoting the
-verified spans, and naming the authoritative tool. Corpora declaring
-nothing are structurally untouched (empty intersection, no metadata,
-byte-identical delivery). The same emptiness arises per-SURFACE, and
-there it is a DEFECT rather than a no-op: arming reads the registry of
-the process that serves the turn, so "every dispatch surface" above is
-true of the SEAM and not of the ARMING. A binary that can install a
-corpus but never registers the tool declaring authority over it has an
-empty `authority_domains()`, never arms, and answers ungrounded —
-while every gate stays green, because the gates run in binaries that
-DO register it. `sovereign-desktop` was exactly this until 2026-08-18:
-it registered the `sec_edgar` acquirer and not `SecFactsTool`, and
-answered a capex question with a figure absent from the store and a
-manufactured source quotation. Registration on an install-capable
-surface is therefore UNCONDITIONAL, never gated on `enabled_tools`
-config, and is pinned by a source census
-(`sovereign-desktop/src-tauri/tests/authority_surface_census.rs`).
-Coverage is code: `guard_story` in
-`authority_guard.rs` is an exhaustive per-`Intent` table (Covered /
-No-op-by-construction / Excluded-by-decision), pinned by test, with
-the non-intent-keyed streaming exits dispositioned in its doc table;
-ComplexTask DELEGATES to the richer in-handler §6.2(4) audit above,
-unchanged. Glassbox target: `authority_guard`.
-
-Which corpora the tool is authoritative FOR has exactly one
-implementation: `discover_authoritative_stores` /
-`authoritative_store` in `enrichment/atlas/analysis/sec_facts/`, keyed
-on the recipe's `[authority] tool` declaration plus sidecar presence and
-never on the corpus id's spelling (a name prefix is an address, not an
-essence — ARCH §7.5). The tool's claim index and the desktop coverage
-card both resolve through it, so a corpus cannot be answerable by one and
-invisible to the other (ARCH §10.6).
-
-That coverage card is the user-facing half (`FINANCIAL_CORPORA.md` §7.7,
-bars F5/F6): `coverage_card()` derives what the corpus answers, over what
-period, as of which filing, and its named structural limits from the same
-store the tool answers from — `corpus_coverage_card` (desktop
-`commands/corpus.rs`, in-process, `None` for corpora declaring no typed
-store) hands it to `library/CoverageCard.svelte`, mounted above "Where
-this came from" in the notebook's Sources tab. Three §7.7 rules are
-structural rather than remembered: the card type carries no coverage
-ratio and not the two tag counts one would need to compute a percentage;
-`CoverageLimit` carries no severity field, so no renderer can style a
-refusal as a fault; and capability and boundaries share one CSS rule, so
-neither can be demoted to fine print without visibly demoting the other.
-Nothing in the derivation or the component names a company, so a second
-installed filer renders truthfully with no new copy written.
-
-F5's demand-side half — of the concepts people actually ASK for, how many
-miss for a reason we could fix — is a LOG READER, not a store (order
-sec-filings-ship). `resolve_concept` in
-`enrichment/atlas/analysis/sec_facts/mod.rs` is the single covering entry
-point for every concept ask, so it emits exactly one `f5_demand` debug
-event per ask (target `sec_facts`), carrying the requested spelling, the
-outcome arm (`resolved` / `unmapped` / `ambiguous`), and the store's
-`consolidated_only` flag. Emitting from the wrapper rather than from the
-match arms is what makes the DENOMINATOR — the number of asks —
-answerable at all. `scripts/sec-miss-demand.py` reads that back out of
-logs a run already produced: no new store, no cadence, nothing to
-remember to run. A miss counts as FIXABLE only on a declared membership
-test against the corpus's own `_unmapped_concepts.json` (token-equality,
-or a ≥2-token boundary prefix such as `deferred revenue` naming
-`DeferredRevenueCurrent`); everything else reports `unclassified` and
-never enters the numerator, because `consolidated_only` is a STORE-level
-source limit and cannot classify an individual ask — a segment miss is a
-limit to DISCLOSE, never a gap to close. Zero asks exits 3 with a named
-reason rather than scoring 0.0 (ARCH §18.3). The cross-language contract
-is pinned on both sides: `F5_DEMAND_ANCHOR` is grepped by the reader's
-`--self-test`, and
-`f5_demand_event_renders_the_grammar_the_reader_parses` renders a real
-event through a real subscriber to pin the field grammar the reader
-parses — it caught `outcome="resolved"` arriving quoted, which the
-reader's first draft would have matched zero times while reporting a
-clean score.
-
-The `email` + `described_asset` extractors and the `column_aware`
-reconciliation extractor (configured via
-`[enrichment.reconciliation.column_aware]`, not an `[extractor] type`;
-reads parquet parsed-form caches into typed Entity atoms) land together
-as the substrate of the architecture-over-Enron push. Each future
-binary-bearing vertical (Firm Inbox, sales intelligence, calendar /
-transactions / sensor ingest) inherits the same dispatcher + asset-store
-pair unchanged. See `bench/HISTORY.md`'s `enron-entity-resolution`
-section.
+**No confabulated numbers, on the corpora that carry typed figures.** The SF
+land-value demo (`tabular_atoms` + `parcel_analytics`) and the SEC corpora
+(`sec_facts`) share one contract: the model narrates only the tool's compact
+figures, the synthesizer appends the tool's `derivation` verbatim as
+system-rendered text, and `runtime::numeric_audit` value-matches every figure
+in the prose against the tool's outputs. Financial answers carry BARE
+numerals, so `sec_facts` declares an opt-in bare-numeral audit; on violation
+the narration is WITHHELD and replaced by the tool's own rendering.
+`runtime/authority_guard.rs` binds that audit to the ANSWER EXIT on every
+dispatch surface rather than to a routing decision. Detail
+`docs/specs/FINANCIAL_CORPORA.md`.
 
 ### Storage
 
-LanceDB vectors + Tantivy keyword. One on-disk dir per corpus;
-identical schema for a full index or a shard.
+LanceDB vectors + Tantivy keyword; one dir per corpus, identical schema for a
+full index or a shard.
 
 ```
-~/.svrnmesh/indexes/
-├── wikipedia/                           # WIKI-CLASS: a link graph, not an atom store
-│   ├── _corpus_meta.json                # authoritative metadata
-│   ├── chunks.lance/{...}
-│   └── atlas/
-│       ├── articles.lance/              # row per in-scope article. v2 (2026-09-04) adds
-│       │                                # `atom_id` (AtomId::exact_entity_content_hash
-│       │                                # over title+corpus — ONE derivation, in
-│       │                                # understanding-vocab where every id is minted)
-│       │                                # and `chunk_id` (the article's lowest chunk =
-│       │                                # its evidence anchor). Without them the store
-│       │                                # serves the neighbor API but REFUSES the
-│       │                                # grounding walk, by name.
-│       │                                # EXACT, not the folded entity_content_hash the
-│       │                                # rest of the atlas uses: that one keys on
-│       │                                # canonical::lookup_key, and a MediaWiki title
-│       │                                # IS the identifier — `Jigsaw puzzle` and
-│       │                                # `Jigsaw Puzzle` are two pages. Folding merged
-│       │                                # 40,869 of the corpus's 1,562,311 titles
-│       │                                # (2.62%); the first full rebuild was refused by
-│       │                                # the build's own guard on that exact pair.
-│       │                                # The fetched/newsworthy layers still mint their
-│       │                                # OWN atoms folded — those paths also serve
-│       │                                # non-wiki corpora — so a child layer wanting
-│       │                                # its parent's id routes through wiki_atom_id.
-│                                        # CUT OVER 2026-09-05 (ei-7c). The installed
-│                                        # wikipedia serves from this store alone. Three
-│                                        # renames, nothing deleted: the v1 store is
-│                                        # `atlas.pre-ei7c` (3.5 GB, atoms.json + edges.json
-│                                        # intact) and the SQLite is
-│                                        # `wikipedia_graph.db.retired-ei7c` (2.3 GB).
-│                                        # THE ATOM COUNT CHANGED, deliberately: 1.67M ->
-│                                        # 51,781. atoms.json counted every LINK TARGET,
-│                                        # including ~1.6M that are not indexed articles,
-│                                        # have no chunk, and could never become a citation.
-│                                        # articles.lance holds the 51,781 IN-SCOPE ones. A
-│                                        # surface that counts atoms will show the drop; it
-│                                        # is a correction, not a loss.
-│                                        # KNOWN STALE, deliberately left: the meta-atlas's
-│                                        # wikipedia anchors (1,526,998 of its 1,572,640 —
-│                                        # 97%) predate the v2 re-key and resolve to no atom
-│                                        # until the builder learns the wiki store. They fail
-│                                        # CLOSED — a miss, never a wrong atom — and
-│                                        # `rebuild_for_corpus` cannot fix them: it reads
-│                                        # `atoms.json` via `read_atlas_atoms`, which a
-│                                        # wiki-class store has none of, so a rebuild would
-│                                        # delete 97% of a shared 3.2 GB artifact and add
-│                                        # zero. Backlog:
-│                                        # meta-atlas-builder-cannot-read-wiki-class-store.
-│       ├── edges.lance/                 # row per (source, section, target) wikilink, with
-│                                        # `link_text` + `source_section_path` — the two
-│                                        # per-edge STRINGS `neighbors_for_axis` filters on
-│                                        # and a 10-byte CSR record cannot hold. This is why
-│                                        # wikipedia has no atoms.lance/edges.csr and is not
-│                                        # a gap: two faces read this one store —
-│                                        # `ColumnarWikipediaGraph` (the neighbor API) and
-│                                        # `WikiAtlasProvider` (the walk's `AtlasProvider`).
-│                                        # WHICH face a host gets is not the host's choice:
-│                                        # `enrichment::atlas::open_walk_provider` is the one
-│                                        # decider (atom store first, then wiki-class), and
-│                                        # the daemon's `AtlasContextManager::walk_provider`
-│                                        # and corpus-mcp's `ask` are both its callers, so a
-│                                        # corpus cannot be walkable to one and invisible to
-│                                        # the other.
-│                                        # The six relationship labels ride as DATA in a
-│                                        # column beside the closed `EdgeType::Involves`;
-│                                        # they are not enum arms (spec §3, principle 9).
-│                                        # `wikipedia_graph.db` (2.4 GB SQLite) and the
-│                                        # `export-columnar` verb retired in W4; the build
-│                                        # is one step, `atlas wikipedia build-graph`.
-│                                        # See docs/specs/WIKIPEDIA_ATLAS_V2.md.
-│       └── atoms_ann.lance/             # the walk's seed table, and for a wiki-class atlas
-│                                        # it is REQUIRED, not an optimisation: seeding has
-│                                        # two sources — this table and name-matching over
-│                                        # an atom BAG — and a wiki store has no bag, so
-│                                        # without the table the walk resolves the store and
-│                                        # then seeds on nothing.
-│                                        # Built by BORROWING, not embedding: `atlas
-│                                        # wikipedia seed-table` joins each article's
-│                                        # `atom_id` to its `chunk_id`'s vector in
-│                                        # chunks.lance. Zero embed calls (51,781/51,781
-│                                        # articles in 3.4 s) against ~1 h to embed fresh —
-│                                        # but COST is not the argument; the probe's 33.1 h
-│                                        # is the v1 atom set's 1.67M, not this store's.
-│                                        # A NAMED SUBSTITUTION (ARCH §18.3): 214 of 221
-│                                        # sampled articles have an empty `description`, so
-│                                        # an atom's own embed text is a bare title and the
-│                                        # borrowed vector is its LEAD PASSAGE — cosine
-│                                        # 0.323 median between them, which refused the
-│                                        # interchangeability bar and was re-barred as a
-│                                        # retrieval question (bench/wikipedia/seed_migration).
-│                                        # Written through `build_persistent_ann_seed_table`,
-│                                        # the one `atoms_ann.lance` writer, and read through
-│                                        # `open_ann_seed_table`, the one opener — so an
-│                                        # atom-class and a wiki-class atlas cannot disagree
-│                                        # about whether a corpus can seed.
-├── stackexchange-shard-0-6200000/       # same schema as a full index
-└── enron-sample-onemailbox/             # architecture-over-Enron substrate paths
-    ├── _corpus_meta.json
-    ├── chunks.lance/{...}
-    ├── assets/                          # AD-1 content-addressed asset store
-    │   ├── ledger.jsonl                 # append-only LedgerEntry per sha256
-    │   ├── <hh>/<sha256>                # raw bytes, sharded by leading 2 hex
-    │   └── parsed/<sha256>.<ext>        # typed parsed cache (parquet/ical/…)
-    └── atlas/
-        ├── atoms.json                   # AtomsFile SCHEMA_VERSION 2.4 (canonical export)
-        ├── atoms.lance/                 # ATLAS_STORAGE_V2 columnar atom store — the
-        │                                # query-path reader (hot scalar columns + a
-        │                                # lossless payload). Replaced atoms.rkyv; the
-        │                                # sole atom backend. See docs/specs/ATLAS_STORAGE_V2.md
-        ├── edges.csr                    # mmap'd CSR adjacency — sync, paged BFS
-        ├── atoms_ann.lance/             # ANN seed table (atom_id → embedding); seeds atlas
-        │                                # grounding. MANDATORY since ei-3-index — written in
-        │                                # the SAME write as atoms.lance/edges.csr, because
-        │                                # `write_atlas_full` takes an `ann_store::AtlasSeeding`
-        │                                # and there is no default. Written by ONE function,
-        │                                # `corpus_engine::…::context_loader::backfill_ann`
-        │                                # (re-exported at `sovereign_tools::atlas_context_manager`),
-        │                                # from the resolve step, the daemon's typed-extension
-        │                                # write, `enrich build`'s last step (`backfill`, skipped
-        │                                # while `ann_table_is_fresh`) or `svrn atlas
-        │                                # backfill-ann <id>`. A caller with no
-        │                                # embedder passes `AtlasSeeding::Deferred(<reason>)`,
-        │                                # which is traced and rides back in `AtlasWritten.seed`;
-        │                                # a `With` seed that fails FAILS the atlas write.
-        │                                # WHICH atoms it holds is the navigation map's, not the
-        │                                # retrieval filter's, since ei-3c (2026-09-04) — see below
-        ├── atoms_ann.population         # what the seed table beside it was built UNDER:
-        │                                # derivation version, kinds, policy source. Written by
-        │                                # `backfill_ann` right after the table; read by
-        │                                # `ann_table_is_fresh` BEFORE the atoms.json mtime test,
-        │                                # so a table seeded under an older population reads as
-        │                                # stale rather than as fresh-and-wrong (ei-3c)
-        ├── asset_atoms.jsonl            # AD-2 Asset envelopes (sidecar union'd
-        │                                # into atoms.json on next atlas write)
-        ├── asset_edges.jsonl            # EdgeType::Attaches edges
-        └── reconciliation_oplog.jsonl   # Phase 4 reversible Merge/Split ops
+~/.svrnmesh/indexes/<corpus>/
+├── _corpus_meta.json        # authoritative metadata
+├── chapters.json            # sections + the chunk_ids join
+├── chunks.lance/
+├── assets/                  # content-addressed asset store (raw + parsed + ledger)
+└── atlas/
+    ├── atoms.json           # AtomsFile — the canonical export
+    ├── atoms.lance/         # columnar atom store — the query-path reader
+    ├── edges.csr            # mmap'd CSR adjacency (+ .derivation marker)
+    ├── atoms_ann.lance/     # the walk's ANN seed table
+    ├── atoms_ann.population # what that table was seeded UNDER
+    ├── ontology.json        # what the atlas was extracted under
+    └── _summary.json        # counts, ontology summary, ANN + edge census
 ```
 
-`(corpus_id, chunk_id)` is the citation handle and is **structurally
-unique** — `installed_indexes()` dedupes on `corpus_id` (prefers the
-dir whose basename equals `corpus_id`, warns and drops collisions).
-Out-of-band names (`.legacy-backup`, `.retired`) are excluded.
+`wikipedia` is WIKI-CLASS and differs: an `articles.lance` + `edges.lance`
+pair instead of an atom store, because its per-edge strings cannot fit a
+10-byte CSR record. Which face a host gets is not the host's choice —
+`enrichment::atlas::open_walk_provider` is the one decider, so a corpus cannot
+be walkable to one caller and invisible to another. For a wiki-class atlas the
+seed table is REQUIRED, not an optimisation: seeding has two sources, the ANN
+table and name-matching over an atom bag, and a wiki store has no bag.
 
-**A directory under `indexes/` is not an installed corpus.** An ingest in
-flight writes `<corpus_id>-partition-<node_id>/`; the canonical
-`indexes/<corpus_id>/` is materialised only by the finalise/merge step
-(`CorpusEngine::partition_path`). Whether a WRITER is active is decided by
-`CorpusIndex::is_ingestion_complete` on the CANONICAL path — the gate
-`installed_indexes()` uses, and, since 2026-08-12, the gate the CLI's
-`corpus status` and `corpus install --wait` share via
-`corpus_cmd::inventory::corpus_readiness` (`ready` / `building` / `absent`).
+`(corpus_id, chunk_id)` is the citation handle and is structurally unique.
 
-**That gate does not mean the corpus can be SEARCHED, and since 2026-08-30
-the two questions have separate accessors.** An ingest that committed its
-chunks and died before `build_indexes()` leaves `ingestion_in_progress:
-false` beside `indexes_built: false` — installed and unsearchable at the same
-time, so `installed_indexes()` lists it. Ask `CorpusEngine::usable_indexes()`
-when the question is "can I search this": it filters on
-`IndexInfo::indexes_built` and traces every drop at `corpus.usable_indexes`
-(§18.3, absence reported and never defaulted). Ask `installed_indexes()` only
-when the question is "is a writer active" — the resume paths. Measured on the
-dev host at the split: 41 corpora carry a meta, 41 pass the writer predicate,
-38 pass the usable one; the three in the gap sat at `committed_iter_pos: 0`
-with a `chunks.lance` present. Before the split ~84 call sites each decided
-for themselves what "installed" meant and exactly one retrieval leg checked
-(§10.6, one question one decider).
-
-**`IndexInfo::indexes_built` is derived, not copied, since 2026-09-13.**
-`index::readiness::indexes_searchable` reads it as the aggregate flag OR all
-three sub-phase checkpoints (vector, content FTS, title FTS) with no ingest
-writing, and `build_indexes` now records the aggregate itself. Four build paths
-(catalog install, catalog ingest, the harness runner, `write.rs`'s partial
-rebuilds) had built every sub-index and never called `mark_indexes_built`, so
-`wikipedia-fetched` and `commonwealth-ai-architecture` were refused as "not
-finished building" on the 2026-09-13 chaos soak while fully searchable on disk.
-Before that, `corpus status` answered "is it installed?" by asking whether a
-directory existed — a second, wrong implementation that reported a
-zero-second-old ingest as an installed corpus, and reported the partition
-directory itself as a corpus id nobody could install or remove.
-`IndexMeta` carries `ScopeMeta { filter_descriptions,
-filter_signature, expandable }` plus an optional `filter_override`
-so a corpus can be expanded in place (relax filters → delta-ingest
-the additions → rebuild IVF-PQ).
+**Three readiness questions, three accessors — do not conflate them.** A
+directory under `indexes/` is not an installed corpus; an ingest in flight
+writes `<corpus_id>-partition-<node_id>/`. `installed_indexes()` answers "is a
+writer active" (the resume paths). `usable_indexes()` answers "can I search
+this", filtering on `IndexInfo::indexes_built` and tracing every drop.
+`corpus_readiness` (`ready` / `building` / `absent`) is what `corpus status`
+and `corpus install --wait` share.
 
 ### Index maintenance — the decay nothing reports
 
-lancedb answers a query by running the index over indexed data **and a
-flat scan over everything appended since**, then merging the two
-(`Table::optimize` docs, lancedb-0.27.2 `table.rs:667-672`). Nothing
-about that fails: results stay correct, no error is logged, and every
-ANN knob keeps reporting healthy values. It only gets slower. A corpus
-fed by a continuous appender therefore decays continuously, and
-**mutation rate predicts decay** — `wikipedia` (fed by the
-`wikipedia-newsworthy` freshness daemon) had reached 3,955 manifest
-versions and 2218ms per search against static `sep`'s 100ms before any
-maintenance existed in this workspace at all. One pass took wikipedia's
-end-to-end search from 5.33s to 2.96s (−43%). Measured 2026-08-05.
+lancedb answers a query by running the index over indexed data AND a flat scan
+over everything appended since. Nothing fails: results stay correct, no error
+is logged, every ANN knob reports healthy. It only gets slower, and mutation
+rate predicts the decay. Two surfaces, one implementation
+(`corpus_engine::index::maintain`): `svrn corpus optimize` for the operator,
+`sovereign-daemon/src/corpus_maintenance.rs` for the product, because the
+person who most needs a healthy corpus will never open a terminal.
 
-Two surfaces, one implementation (`corpus_engine::index::maintain`):
+Three invariants that are easy to get backwards:
 
-- **`svrn corpus optimize <id> [--all] [--prune-days N]
-  [--keep-versions N]`** — the operator tool. Reports before/after
-  fragments/versions/indices/GB plus `unindexed_rows_before`, and says
-  so out loud when a REQUESTED prune reclaimed nothing (it could
-  previously exit 0 having deleted zero bytes while the directory grew).
-- **The daemon sweep** (`sovereign-daemon/src/corpus_maintenance.rs`),
-  spawned supervised right after `build_corpus_engine`. This is the one
-  that matters for the product: the person who most needs a healthy
-  corpus is a desktop user who will never open a terminal. Cheap-check,
-  rare-act — every cycle reads `unindexed_rows_estimate()` per corpus
-  (a metadata read; 38 corpora in 6.4s measured) and does real work only
-  past a floor. **Two independent gates since 2026-08-31**: the
-  expensive fold is earned by `unindexed_rows_estimate()`, the cheap
-  prune by `version_count()`. Knobs:
-  `SOVEREIGN_CORPUS_MAINTENANCE_{INTERVAL_MINS=60,UNINDEXED_FLOOR=5000,PRUNE_DAYS=1,KEEP_VERSIONS=1000}`.
-
-Two invariants that are easy to get backwards:
-
-- **`OptimizeAction::Index` is NOT idempotent** — every unconditional
-  call writes new index versions and removes none (four passes took
-  wikipedia's `_indices` 24 → 36 entries / 2.4 GB; one pass degraded an
-  already-healthy `sep` from 1 version / 3 indices to 4 / 9). The index
-  phase is therefore **gated** on `unindexed_rows_before > 0 ||
-  fragments_removed > 0`. Ungated on a cadence, the healer is the leak.
-- **Compaction is non-destructive, so disk GROWS until you prune.**
-  Superseded fragments stay readable under old manifests. Pruning is
-  destructive and irreversible, so the CLI has no default and refuses
-  `--prune-days 0`.
-- **An age alone bounds nothing on an appended corpus, and the two
-  gates must stay separate.** Both were got backwards until 2026-08-31,
-  and the pair cost 153.9 GB on `wikipedia` (207 GB on disk holding
-  12.3 GB of live data across 5,972 manifest versions). First, prune was
-  gated on the SAME unindexed-row floor as the index fold — and
-  `newsworthy_watcher` folds every tick's writes on purpose, which pins
-  `unindexed` permanently below that floor (`max_unindexed=3153
-  floor=5000 acted=0`, cycle after cycle). The producer of versions was
-  suppressing the signal the reclaimer waited on. Second, even when the
-  sweep did fire, the generous 7-day window had **zero** eligible
-  versions, because the corpus writes ~850 a day. Retention is now
-  `Retention { min_age_days, keep_versions }`: age is reader safety
-  only, count is the space bound. `keep_versions` can only ever reach
-  further BACK than the age floor, never nearer — so the smallest
-  reachable directory is whatever the corpus writes during
-  `min_age_days`, and a corpus still over budget needs a shorter floor,
-  not a smaller count.
-
-Everything the sweep emits rides the literal target
-`corpus_maintenance` (listed in `DAEMON_TRACING_FILTER`, without which a
-custom target is dark — the sweep shipped 2026-08-05 unlisted, so its
-arm line, its results and both its `warn!` failure paths were all
-dropped by the deployed daemon while looking perfectly healthy). Pinned
-by `daemon_filter_enables_custom_target_events`.
+- **`OptimizeAction::Index` is NOT idempotent.** Every unconditional call
+  writes new index versions and removes none, so the phase is gated on
+  `unindexed_rows_before > 0 || fragments_removed > 0`. Ungated on a cadence,
+  the healer is the leak.
+- **Compaction is non-destructive, so disk GROWS until you prune.** Pruning is
+  destructive and irreversible, so the CLI has no default.
+- **Age alone bounds nothing on an appended corpus, and the two gates must
+  stay separate.** `Retention { min_age_days, keep_versions }`: age is reader
+  safety, count is the space bound. Getting the pair wrong cost 153.9 GB.
 
 ### Injection contract
 
@@ -1147,1254 +393,174 @@ pub type EmbedFn     = Arc<dyn Fn(&str) -> Pin<Box<dyn Future<Output = Result<Ve
 pub type InferenceFn = Arc<dyn Fn(&ChatPrompt, Option<u32>) -> Pin<Box<dyn Future<Output = Result<String>> + Send>> + Send + Sync>;
 ```
 
-`InferenceFn` is the ONE completion closure port (converged 2026-09-17,
-domains `REVIEW-build-understanding-closure-converge`, ARCH 8): the
-single-message `InferenceFn`, the multi-message `ChatCompletionFn` and its
-`ChatCompletionWithTokensFn` arm were one capability. The prompt is a
-`ChatPrompt` (system + user, optional `response_schema`, phase id, sampling
-controls, output budget); the second argument is the per-call output-token
-override — `Some(n)` wins over the prompt's budget, `None` defers to it.
-`InferenceProvider::complete` is the trait an adapter wraps, not a fourth
-closure.
+`InferenceFn` is the ONE completion closure port. Sovereign wraps its local
+slots; cmnwlth wraps `/v1/embeddings` and the mesh inference endpoint; tests
+use a zero-vector and a canned-JSON mock.
 
-| Caller       | `EmbedFn`                                | `InferenceFn` (enrichment)        |
-|--------------|------------------------------------------|-----------------------------------|
-| Sovereign    | wraps local Embed slot                   | wraps Main responder slot         |
-| cmnwlth | `embed_http::http_embed_fn` → `/v1/embeddings` | mesh inference endpoint     |
-| Tests        | zero-vector mock                         | canned-JSON mock                  |
+Default embedding model `qwen3-embedding-0.6b` (1024 dims,
+`DEFAULT_EMBED_DIM`); `_corpus_meta.json` records it and a mismatch fails with
+`Error::IncompatibleEmbedding`. The Embed slot is a cross-peer
+interoperability contract — nodes sharing a corpus must produce
+bit-compatible vectors (`EmbedModelInfo` must match) — and
+`sovereign_contracts::embed_quirks` is the one decider for how an input is
+assembled (`prepare_document` / `prepare_query`).
 
-Default embedding model: `qwen3-embedding-0.6b` (1024 dims, the
-canonical `corpus_engine::DEFAULT_EMBED_DIM`).
-`_corpus_meta.json` records the model; opening with a mismatched
-model fails with `Error::IncompatibleEmbedding`. The Embed slot is
-a cross-peer interoperability contract — nodes sharing a corpus
-**must** produce bit-compatible vectors (`EmbedModelInfo` must
-match).
+### Sharding, budget, peer-assisted ingest
 
-### Sharding — three operations
+`index_stats`, `extract_shard`, `merge_shards`; shards are structurally
+identical to full indexes. The per-node ceiling set in Settings → Knowledge is
+enforced once, at `build_local_capabilities`, which clamps published
+`free_storage_gb`; every scheduler reads that one value.
 
-| Operation                              | Effect                                          |
-|----------------------------------------|-------------------------------------------------|
-| `index_stats(corpus_id)`               | Total chunks, ID range, size on disk            |
-| `extract_shard(corpus_id, range, dir)` | New index containing only chunks in range       |
-| `merge_shards(dirs, dir)`              | Reconstitute a complete index from N shards     |
+**Blanket** hands a chosen subset of peers a one-time, revocable, ephemeral
+grant to shoulder compute for a personal source, riding the existing
+collaborative-ingest work queue. The on-disk metadata is never mutated — that
+IS the "no standing share". Four parts: `CorpusMeta.grantable`,
+`CollaborateRequest.allowed_peers`, `EphemeralGrantStore`, and teardown with
+`verify_merge_sample` re-embedding a sample locally to cosine-check
+peer-produced vectors.
 
-Shards are structurally identical to full indexes —
-`CorpusIndex::search` doesn't know or care which it operates on.
+### What a retrieved chunk vouches for
 
-### Per-node storage budget
+`ChunkProvenance` is a required field with no `Default` and no `Deserialize`.
+`Acquired(Acquisition)` is stamped by a door; `Manufactured { producer, grain }`
+names what built it and is **not citable**. The `Acquired` arm has no public
+constructor, so `sovereign` reads provenance and writes only `Manufactured`.
+Doors: `CorpusIndex::search`, `acquire_chunks`, `acquired_from_estate`, and
+`acquired_from_peer`, which JOINs the peer's custody claim with this node's
+own `Custody::Peer` at maximum restrictiveness. `custody()` asks what class
+this is; `stamped_custody()` asks whether a door recorded one; `grain()`
+answers leaf-vs-summary. Ratcheted by `chunk_provenance_census.rs`.
 
-Settings → Knowledge sets a ceiling. Enforcement lives at
-`sovereign-mesh::capabilities::build_local_capabilities`, which
-clamps published `free_storage_gb` to
-`min(actual_free, max(0, budget − used))`. Every scheduler
-(`assign_knowledge_shards`, the three
-`plan_collaborative_ingestion*`) reads that one value, so the
-clamp self-enforces for both local installs and peer-driven shard
-distribution.
+### The chunk → section join
 
-### Peer-assisted ingest ("Blanket") — one-time mesh help for personal sources
+`ChapterEntry::chunk_ids` in `chapters.json` connects what retrieval carries
+(a LanceDB row id) to what the system cites (a section). Three production
+readers depend on it: `chunk_to_section_map`, the retrieval pipeline's
+governance active-set step, and the atlas mesh-app adapter's `read_chunk`.
+`JoinStatus` has three states, not two — `NoSectionStructure`, `JoinMissing`,
+`Present` — and conflating the first two is what let it rot invisibly.
+`svrn enrich backfill-sections` fills it; `svrn corpus snapshot publish`
+REFUSES an unjoined bundle, because a downloader has `chapters.json` and no
+source document and so can never repair it.
 
-A personal source (Obsidian vault, watched folder, document folder) is
-structurally `mesh_sharing=false` / `scope=local`, so no peer ever helps embed
-or enrich it. Blanket lets the user hand a **chosen subset** of mesh peers a
-**one-time, revocable, ephemeral grant** to shoulder that compute — the source
-is never put into standing sharing, and nothing is retained by peers after the
-job.
-
-It rides the existing collaborative-ingest **work-queue** rather than a new
-engine. Four additions on top:
-
-- **Grantability marker** — `CorpusMeta.grantable` (`corpus-engine/recipe.rs`),
-  set `true` ONLY by the three file-corpus recipe builders
-  (`sovereign-tools/local_corpus/config.rs`). KnowledgeView corpora leave it
-  `false`, so they stay structurally un-assistable even though they share the
-  same `scope=local`.
-- **Peer allowlist** — `CollaborateRequest.allowed_peers` intersects the
-  embed-compatible candidate set; carried to peers via
-  `IngestionHandoff.{allowed_peers, ephemeral}`. Enforced at enrollment
-  (`sovereign-daemon/src/auto_ingest.rs`) AND in `WorkQueueManager::next_unit`
-  (`QueueError::PeerNotAllowed` → 403).
-- **Ephemeral grant** — `EphemeralGrantStore` (`sovereign-grants/ingest_grant.rs`),
-  in-memory, one live grant per corpus, renewable TTL (6h default, 24h cap). A
-  single gate in `corpus_collaborate`: `mesh_sharing==true` proceeds as today;
-  else requires `grantable && live-grant ⊇ requested peers`, else 403. The
-  on-disk metadata is **never mutated** — that IS the "no standing share".
-  Lifecycle routes: `POST /internal/corpus/grant`, `/grant/revoke`.
-- **Teardown + verification** — coordinator broadcasts `partition_evict` to each
-  peer after pulling its shard, and peers self-evict their partition dir on
-  ephemeral-loop exit (two independent no-retention paths). Post-merge,
-  `verify_merge_sample` re-embeds a sample locally and cosine-checks it against
-  the peer-produced vectors (`shard_manager.rs`) — glassbox "re-checked N
-  chunks, all matched".
-
-Progress is polled via `GET /internal/corpus/collaborate/status`
-(`CollaborateStatus` DTO). Desktop surface: `PeerAssistOffer` /
-`PeerAssistPicker` / `AssistProgressPanel` (`components/mesh/`) driven by the
-poll-based `assistProgress.svelte.ts` store, wired into the folder-drop flow
-(one-shot), the watched-folder detail (standing grant), and installed-recipe
-rows. The local ingest is never gated on any of this.
-
-### What a retrieved chunk vouches for (`ChunkProvenance`)
-
-**Two facts decide whether a chunk may ground a claim, and until 2026-08-26
-both were strings in `ScoredChunk.metadata`.** `metadata["custody"]` set the
-egress floor; `metadata["source"] == "raptor"` decided quotable-vs-orienting.
-A missing key and a misspelled key were the same value, so a chunk sovereign
-manufactured in-process — an atlas atom, a RAPTOR rollup, a rendered
-conversation turn — was indistinguishable from one an index vouched for.
-
-`corpus_engine::index::ChunkProvenance` is that pair as a required field with
-no `Default` and no `Deserialize`. `Acquired(Acquisition)` is stamped by a
-door; `Manufactured { producer, grain }` names what built it and is not
-citable. The `Acquired` arm has no public constructor, so `sovereign` reads
-provenance and writes only `Manufactured`.
-
-**The doors.** `CorpusIndex::search` and `acquire_chunks` stamp from the
-index's own facts. `ChunkProvenance::acquired_from_estate` is the estate
-store's, and it is named for the store precisely so no argument can ask it for
-a different class — a door taking a `custody` parameter would be a public
-constructor for `Acquired` wearing a door's name. `acquired_from_peer` is the
-mesh reply path's: it JOINS the peer's custody claim with this node's own
-`Custody::Peer` fact (max-restrictiveness, so a peer cannot talk its content
-down to a looser class) and reads a missing grain as `Summary`, the refusing
-value. Both defaults preserve exactly what a peer hit did while it was
-`Manufactured`, so an un-upgraded peer loosens nothing.
-
-That door needed the wire: `commonwealth-api`'s two knowledge routes were
-building `KnowledgeResult { metadata: Default::default(), .. }` and discarding
-the stamp the serving index had just applied. They now forward
-`stamped_custody()` and `grain()`, carried on `oicp-types` as their canonical
-wire spellings — the protocol crate is pinned to zero internal deps so a third
-party can implement OICP without `kernel-types`, and `Custody::parse_wire` /
-`Grain::parse_wire` are the one parser each. The mesh client parses once at its
-boundary into a typed `MeshScoredChunk`.
-
-The declared door set is ratcheted by
-`sovereign-core/tests/chunk_provenance_census.rs`, which also holds the
-manufacturer list — five, and every one of them content this process genuinely
-builds (atlas entities and atoms, atlas claim atoms, conversation turns, RAPTOR
-rollups).
-
-**Reading it.** `custody()` answers "what class is this" (`Unknown` refuses);
-`stamped_custody()` answers "did a door record one" (`None` when nobody did).
-The gate needs the second — `custody_engaged` is `any(is_some())`, and a pool
-where nothing is stamped must leave the custody machinery off rather than
-refuse the turn. `grain()` answers leaf-vs-summary for both arms. Five sites
-read these and none re-parses the bag: `grounding/mod.rs` (custody + grain),
-`formatters.rs`, `merge_select.rs`, `question_analysis.rs`. `CUSTODY_META_KEY`
-has no production writer left.
-
-### The chunk → section join (`chapters.json` `chunk_ids`)
-
-**The bridge between what retrieval carries and what the system cites.**
-Retrieval hands downstream code a `ScoredChunk` bearing a LanceDB row id;
-atoms, governance rules and the mesh-app graph adapter all cite *sections*
-(`sec_0001`), which `governance_view::section_titles` renders as a human
-heading (`CHAPTER VII`). `ChapterEntry::chunk_ids` in
-`~/.svrnmesh/indexes/<corpus>/chapters.json` is what connects the two, and
-three production readers depend on it: `chunk_to_section_map`, the retrieval
-pipeline's governance active-set step (`retrieval_pipeline.rs`), and the
-atlas mesh-app adapter's `read_chunk`.
-
-**It was never written.** `ChapterManifest::from_detected_sections` set it
-empty and the enrich call site deferred the rest to "a future LanceDB
-ingest". Measured 2026-08-05: **9 of 1788** local corpora had a populated
-join, all from the `--from-corpus` path where chapters *are* chunks. Every
-file-backed corpus — both chaos benches, ~1700 SEP articles — had an empty
-one, and because `chunk_to_section_map` returned an empty map for both "no
-section structure" and "join missing", no caller could tell a broken corpus
-from a flat one.
-
-- **`enrichment/pipeline/section_join.rs`** — the pure join.
-  `assign_chunks_to_sections` locates each stored chunk in the source
-  document and assigns it to the section whose body contains its START.
-  Chunk text is rarely a verbatim slice (ingest prepends titles and re-flows
-  whitespace), so it tries: the whole body, the body minus a title line, both
-  against a whitespace-normalised projection mapped back to real offsets,
-  then a window walked forward from the head. Ambiguity is rejected, never
-  resolved by taking the first hit. Unlocatable chunks land in `unmapped`
-  and are reported (§18.3).
-- **`svrn enrich backfill-sections <corpus> | --all`** — fills the join on
-  existing corpora. Resolves two layouts: *self-indexed* (the corpus owns
-  `chunks.lance`; 38 of 1825 index dirs) and *sibling* (chunks live in a
-  parent corpus; ~1787 dirs, and the layout of everything published to
-  Hugging Face). A sibling's parent and document key come from its source
-  path (`…/corpora/sep/articles/abduction.md`). `--all` reads each parent's
-  chunk table once. Exit 3 = written but some chunks unmapped.
-- **`JoinStatus` / `chunk_to_section_map_status`** — three states, not two:
-  `NoSectionStructure`, `JoinMissing`, `Present`. The conflation of the first
-  two is what let this rot invisibly; the retrieval pipeline now logs the
-  fault with its repair command.
-
-**`svrn corpus snapshot publish` REFUSES an unjoined bundle.** A downloader
-has `chapters.json` and no source document, so they cannot repair the join
-themselves — an unpopulated join ships as a corpus whose citations can never
-name a section, permanently. Publish is the last point at which the defect is
-still ours, so `audit_section_joins` checks the primary index and every
-`--include-siblings` match and exits 1, naming the offending corpora and the
-repair command. A corpus with no declared sections is not a defect, and a
-PARTIAL join is legitimate; only "declares sections, joins none" fails.
-`--allow-unjoined-sections` overrides, and prints the same facts rather than
-taking a quieter path.
-
-Fleet state after the first sweep (2026-08-05): 1772 corpora backfilled,
-18,258/18,419 sections filled, 183,836/188,313 chunks mapped (97.6%).
-
-**What the join is FOR, on the answer path.** A released citation now names
-the section its quote came from:
-
-```
-Grounded in the source:
-  CHAPTER II — "Her office was a square stone room at the head of the quay…"
-  CHAPTER IX — "Twice a year the trust's auditor comes out from Saltern Cross…"
-```
-
-`locate_quote_in_chunks` (`grounding/citation/quote_match.rs`) returns WHERE a quote
-verified — `Exact { chunk, verbatim }`, `Partial { chunk }` or `AcrossChunks`
-— instead of a bare bool, so `verify_pair` can attribute it. The grounding
-decision is unchanged: the `Partial`/`AcrossChunks` passes ARE the pre-locator
-per-chunk and joined-haystack tests, and the `Exact` pass only refines a match
-they would have accepted anyway.
-
-**Only an `Exact` match may carry a locator, and it releases the SOURCE's own
-characters rather than the model's copy of them.** This is the fix for a live
-two-decider split (ARCH_PRINCIPLES §10.6), measured 2026-08-05 on the
-chaos-saltgrass compound bank: the citation path's verbatim test is tolerant
-(a ≥6-word run, case-insensitive) while the post-hoc
-`quote_verification::verify_quotes` is strict (one contiguous source
-substring, case-sensitive), so a span the first grounded and labelled
-`CHAPTER III` was demoted by the second and shipped as
-`CHAPTER III — [unverified excerpt: …]` — asserting confident provenance for
-text another checker had just refused. Handing back the source span makes
-"a labelled quote survives the strict re-check" structural rather than
-re-derived: a substring of a chunk cannot be demoted by a check that looks for
-substrings of chunks. Neither guard's strictness moved. A `Partial` run still
-grounds and still releases the model's span; it just ships bare.
-
-**The post-synthesis guard verifies the turn's evidence, not the prompt's
-rendering of it** — `quote_verification::verify_answer_against_turn_evidence`,
-which takes the untruncated chunks alongside `doc_context`. It replaced
-`verify_answer_against_evidence` on the four release paths
-(`knowledge_query.rs`, both `streaming.rs` spawns, `collaboration.rs`'s
-refinement re-verify), each supplying
-`runtime::evidence::chunk_texts_for_verification`.
-
-This is the same §10.6 disease as the locator split, one layer up, and it was
-the larger of the two. `doc_context` is
-`format_scored_chunks_with_kinds(&chunks, budget)`, which runs every chunk
-through `truncate_chunk_content` → `text_utils::MAX_CHUNK_CHARS` = 600 — so on
-~2000-char chunks the guard was reading about the first 30% of each one and
-calling the rest absent. Measured 2026-08-05 by replaying frozen bench
-transcripts through the real deciders: **50 of 80 released citations (62.5%)
-shipped as `[unverified excerpt: …]`, and 55 of 55 of those spans are verbatim
-in the turn's evidence — zero fabrications.** The discriminator was purely the
-quote's offset inside its own chunk (kept at 273; demoted at 792 and 1708).
-
-The chunks are passed IN ADDITION to `doc_context`, never instead of it, so the
-source set is a strict superset and the change can only remove demotions. The
-composite-quote catch the guard exists for is untouched: a spliced quote is
-non-contiguous in any chunk under any normalisation.
-
-The prohibition that stood here — *do NOT "fix" this class by raising
-`MAX_CHUNK_CHARS`* — was correct on 2026-08-05 and is no longer the rule. The
-constant WAS raised, 600 -> 2000, deliberately and on bank evidence (its doc
-comment at `text_utils.rs` carries the three misses whose gold sat beyond the
-old cut). A session obeying this paragraph after that commit would have been
-undoing a measurement, and the docs-gate could not catch it: that gate checks
-whether cited paths and symbols exist, never whether the claim about them still
-holds. **The rule now lives in
-`text_utils::prompt_budget_constants::the_prompt_budget_triple_moves_together_or_not_at_all`,
-where it fails loudly** — the real constraint was never "don't raise it" but
-"the per-chunk seat and the two knowledge budgets are one decision under a
-fixed total, so raising one alone silently trades breadth for depth." Note also
-that three distinct constants are named `MAX_CHUNK_CHARS` (`text_utils` 2000,
-`threaded_turns` 1500, `rag/chunk` 700), so the bare name in prose does not
-identify one — an ARCH §10.6 collision, unresolved.
-
-`EvidenceContext::chunk_locators` is built inside `gate_evidence_with_sources`
-so it passes through the same summary filter and Leaf-first reordering as
-`chunks` — resolving it at a call site would leave it index-misaligned the
-moment a RAPTOR summary is dropped, and a misaligned locator names the wrong
-chapter with full confidence.
-
-Locators are display-only and sit OUTSIDE the quote marks: the post-hoc
-`quote_verification` re-check reads what is between them as source text, so a
-heading placed inside would break the citation it was added to explain. They
-are deliberately NOT folded into `chunk_labels`, which widens what the
-citation-attribution check counts as grounded — adding headings there would
-quietly loosen a fabrication guard. `SOVEREIGN_CITATION_LOCATOR=0` is the
-control arm.
+Only an `Exact` quote match may carry a locator, and it releases the SOURCE's
+own characters rather than the model's copy, so a labelled quote cannot be
+demoted by the strict post-hoc re-check. Locators sit OUTSIDE the quote marks
+and are deliberately not folded into `chunk_labels`.
 
 ### Enrichment
 
-**Three coexisting systems**, selected per-corpus by `[enrichment] type`.
-Since 2026-09-03 that string resolves through ONE table —
-`engine/pass.rs::EnrichmentPassRegistry` (`field_model`, `tiered`,
-`atlas`, `investigation`; shape copied from `DomainRegistry`) — and every
+**Three coexisting systems**, selected per corpus by `[enrichment] type` and
+resolved through ONE table, `engine/pass.rs::EnrichmentPassRegistry`. Every
 question the pipeline asks about a type is a method on the resolved
-`EnrichmentPass`: `runs_at_install()` (the `'enrichment:` block in
-`engine/ingest.rs` and its no-`InferenceFn` arm), `declared_artifacts()`
-(`CorpusEngine::enrichment_drift`), `resumable_at_boot()`
-(`conversation_enrichment_is_resumable`), `produces_atoms()`
-(`Recipe::produces_enriched_atoms`), and `run()` for the install-time passes.
-An unregistered type is refused at recipe load by
-`recipe_parsing::check_enrichment_type` with the valid set listed; before
-that gate, five sites in three crates switched on the string and `type =
-"foo"` ran `field_model` at ingest, `tiered` from the desktop's "enrich now",
-and was invisible to drift. `tests/main/enrichment_type_deciders_census.rs`
-pins the literal-switch count at zero. See
-[`corpus-engine/ENRICHMENT.md`](../corpus-engine/ENRICHMENT.md) — the
-canonical umbrella that reconciles all three — before assuming "enrichment"
-means one thing.
+`EnrichmentPass` (`runs_at_install`, `declared_artifacts`, `resumable_at_boot`,
+`produces_atoms`, `run`). An unregistered type is refused at recipe load.
 
-**A DEAD enrichment is never resumed automatically (2026-09-12).**
-`EnrichmentState::declared_dead()`
-(`corpus-engine/src/enrichment/state.rs`) is the one decider for that:
-`phase == Stalled`, or any `error` stamped on the sidecar. `Failed` needs
-no arm — `EnrichmentStateFile::fail` always writes an error alongside it;
-`Complete` deliberately is NOT dead, because the same predicate also gates
-the INGEST auto-resume and a corpus whose enrichment finished cleanly must
-still be free to finish ingesting. `EnrichmentStateFile::declared_dead_at`
-is the reader-level form, and it FAILS OPEN — a missing or corrupt sidecar
-resumes, since one bad JSON file is not proof a corpus is doomed. Four
-boot-time scans consult it, and before this each answered the question for
-itself and all four said "resume":
-`auto_resume::resume_in_progress_ingests`
-(`sovereign/crates/sovereign-daemon/src/auto_resume.rs`, a fourth skip beside
-the PeerPulled, watched-folder-`Errored` and recently-active ones),
-`atlas_postinstall::resume_inflight_tier2`
-(`sovereign/crates/sovereign-tools/src/atlas_postinstall.rs`, on the SOURCE
-corpus's sidecar), `CorpusEngine::resume_interrupted_conversation_enrichment`
-via `conversation_enrichment_is_resumable`
-(`corpus-engine/src/engine/mod.rs`) and
-`LocalCorpusManager::resume_interrupted_enrichment`
-(`sovereign/crates/sovereign-tools/src/local_corpus/manager.rs`). The last
-two consult `EnrichmentPhase::is_resumable_interruption()`, which says
-`Stalled` IS resumable — true of a process killed mid-run, and exactly what
-re-armed a doomed pass on every boot. **Resume is now an explicit operator
-action**: `LocalCorpusManager::reset_enrichment_state`, reachable at `POST
-/internal/corpus/enrich-reset`
-(`sovereign/crates/sovereign-daemon/src/corpus_watch_http.rs`), clears the
-sidecar; the corpus then enriches again on the normal path. Every skip says
-so at `info` and names that path.
-
-**The NER inference seam is input-bounded (2026-09-12).**
-`sovereign/crates/sovereign-gliner/src/bounded_input.rs` is the ONE
-implementation: `BoundedInputs::plan` splits a caller's texts into batches
-of at most `MAX_BATCH_CHUNKS` (16) and holds back anything over
-`MAX_CHUNK_CHARS` (2,048); `BoundedInputs::extract` drives the batches and
-reassembles results in input order. Both `GlinerChunkExtractor` entry
-points — `extract_for_conversation` and `extract_delta_for_corpus`
-(`sovereign/crates/sovereign-gliner/src/chunk_extractor.rs`) — go through
-it, and neither hands `LabeledEntityExtractor::extract_mentions_batch` a
-raw slice any more.
-
-`MAX_BATCH_CHUNKS` is the bound that stops the incident: gline-rs runs one
-`inference()` per batch, so peak arena is linear in N, and
-`extract_for_conversation` previously passed EVERY chunk of a conversation
-in one call. `MAX_CHUNK_CHARS` is derived from the model — gline-rs's
-`Parameters::default().max_length` is `Some(512)` WORDS, enforced by
-breaking out of `RegexSplitter`'s token loop, i.e. a silent truncation
-with no error and no report — and 512 × 4 chars/word is 2,048. Both
-numbers, and what would change them, are in
-[`sovereign/DEFAULTS_LEDGER.md`](DEFAULTS_LEDGER.md).
-
-**A refused chunk is reported, not truncated (ARCH 6).** Over-cap chunks
-are not sent and not shortened. Each gets a `warn` naming corpus,
-conversation, chunk id and length; the count leaves the pass on
-`ChunkNerOutcome::refused_over_cap`
-(`corpus-engine/src/enrichment/tiered.rs`, which replaced both extractor
-methods' bare `usize` so a caller cannot drop the number), and the runners
-stamp it onto `_enrichment_state.json` as `refused_over_cap_chunks` via
-`EnrichmentStateFile::record_refused_over_cap`. So "this corpus's entities
-are thin because N chunks were too long for the model" is a fact on disk.
-A large `refused_over_cap_chunks` is a signal about the CHUNKER, not a
-reason to raise the ceiling — `threaded_turns`
-(`corpus-engine/src/chunkers/threaded_turns.rs`) already caps a chunk at
-2,100 chars, which is why the incident was thousands of SHORT chunks in
-one call rather than a few long ones.
-
-**`ort 2.0.0-rc.9` cannot bound the CPU arena's SIZE — reported, not
-papered over (2026-09-12).** `OrtApi::CreateArenaCfg(..., max_mem, ...)`
-exists in `ort-sys` as a raw function pointer and `ort` wraps it nowhere;
-the only `OrtArenaCfg` reference in `ort`'s own source is
-`RocmExecutionProvider::with_default_memory_arena_cfg`, which takes a raw
-pointer and applies to ROCm devices. The memory-limit knobs that exist
-(`CANNExecutionProvider::with_memory_limit`, CUDA/ROCm `gpu_mem_limit`) are
-device-side; this workload is CPU-only, and no session config key takes a
-size. **So the bound on this pass is guard 2's input bound**, and
-`sovereign/crates/sovereign-gliner/src/session_bound.rs` says so in its
-module docs rather than implying the arena is capped.
-
-What rc.9 DOES expose is applied there, by one function per backend.
-`bounded_session_builder` (used by `gliner2.rs`) sets the CPU execution
-provider with **the arena off** — `CPUExecutionProvider::default()`'s
-`register` calls `DisableCpuMemArena`, and registering no provider at all,
-which both backends did before, leaves ORT's default of arena ENABLED —
-plus `with_memory_pattern(false)` and explicit intra/inter thread counts.
-The v1 (gline-rs) path does NOT own its builder: `orp::Model::new` calls
-`Session::builder()` itself and the only caller lever is
-`RuntimeParameters`, whose default carries an EMPTY provider list — so
-`v1_runtime_parameters` is that lever, and it matters most because
-`labeled::configured_model_id` resolves to a V1 model by default, i.e. the
-path the daemon was running. `with_memory_pattern` is unreachable from
-there. `sovereign/crates/sovereign-gliner/tests/session_bound_census.rs` is
-the ratchet: no other file in the crate may call `Session::builder()` or
-pass a bare `RuntimeParameters::default()`.
-
-The incident: corpus `agent-sessions` (this machine's Claude Code
-transcripts as `threaded_turns` chunks, `[enrichment] type = "tiered"`)
-stalled at 12:09 local on 2026-09-12 and was re-entered on every daemon
-boot for the rest of the day. Instrumented on pid 47944
-(`MallocStackLogging` + `malloc_history`, `vmmap --summary`, a 15 s
-`sample`): 20.2 GB after boot plus one primary load, 79.9 GB eight minutes
-later with ZERO requests, on stackless power-of-two onnxruntime arena
-blocks of 1, 2, 2, 8 and 32 GB. The only busy thread ran
-`run_tiered_enrichment` → `TieredPass::run` →
-`GlinerChunkExtractor::extract_for_conversation` → `extract_batch` →
-onnxruntime. Two jetsam SIGTERMs, every desktop soak aborting on its memory
-rule, and the "44 GB boot peak" were all this one corpus.
-
-- **`field_model` — System 1, `enrichment/field_engine.rs`** — five-phase
-  *whole-corpus* pipeline (skeleton → cluster → align → fault lines → open
-  questions). `Domain` trait + `DomainRegistry`. Domains include
-  `philosophy`, `multi` (Wikipedia), `personal` / `conversational` /
-  `institutional` (KnowledgeView). Legacy but live (KnowledgeView digests,
-  full-corpus SEP epistemic flow).
-
-  **Its artifact is the atlas, not a JSON file beside it (ei-7b, 2026-09-05).**
-  The pipeline used to publish `field_skeleton.json` — a parallel artifact
-  with exactly one reader, `turn_prepass::splice_ambient_field_digests`, which
-  spliced a 250-token "Field guide" digest into the system prompt for every
-  scoped corpus. It now publishes `Question` and `Position` atoms into
-  `atlas/atoms.json` (`declared_artifacts()` = `["atlas/atoms.json",
-  "field_skeleton.json"]` — a LIST since the domain decides which, so
-  `enrichment_drift` reports drift only when neither is on disk;
-  `produces_atoms()` = true), and the digest is rendered from those atoms.
-  `enrichment/field_atoms.rs` is the whole port: `skeleton_to_atoms` on the
-  write side, `skeleton_from_atoms` on the read side, `publish_to_atlas` as
-  the one write path both the pipeline and the one-shot
-  `svrn enrich field-atoms <corpus> [--into <corpus>]` migration go through,
-  and `load_field_model` as the ONE accessor for where a corpus's field model
-  lives — the atlas when it carries one, `field_skeleton.json` as a MIGRATION
-  FALLBACK when it does not, `None` when neither. That fallback is why the
-  port can land without taking a digest dark: `sep` still carries its 549
-  canonical questions in the v1 file and has an EMPTY atlas, so an atlas-only
-  reader would silently stop splicing its Field guide. **Which source a corpus
-  serves from is a DATA choice** — run `svrn enrich field-atoms <corpus>` and
-  it moves, with no code or config change — and the `retrieval_audit` line
-  reports `from_atlas` and `from_legacy_file` separately, because "the digest
-  fired" and "the digest fired off an un-migrated file" are different facts.
-  `the_atlas_wins_the_v1_file_is_the_fallback_and_neither_is_none` pins all
-  three arms.
-  There is NO second renderer — `skeleton_from_atoms` rebuilds the
-  `FieldSkeleton` view and the existing `FieldSkeleton::render_landscape` does
-  the rest, with the digest text pinned byte-identical across the two sources
-  by `field_atoms::tests::digest_from_atoms_is_byte_identical_to_digest_from_the_v1_file`
-  (ARCH §10.6). The projection writes no ANN seed row, so the walk's seed
-  space is unchanged and a retrieval lane measures the digest move alone.
-  Which of the two a domain publishes is the existing `SkeletonStorage`
-  decider, extended with an `AtlasAtoms` arm: `philosophy` (SEP) takes it;
-  `personal` / `conversational` / `institutional` stay on `JsonAndLance`
-  because their reader is `sovereign-tools::knowledge_view::manager` — its own
-  `format_landscape`, an mtime-keyed digest cache, and a cross-view digest that
-  embeds skeleton content — and moving those three before their reader moves
-  would take three live views dark. So `field_skeleton.json` is still written,
-  by those three domains and only by them; it is no longer written for SEP and
-  no longer read by retrieval. Porting the KnowledgeView reader is the
-  remaining half. The pipeline's phase-1 resume state moved out of the artifact
-  either way, into `_field_skeleton_checkpoint.json`
-  (`CorpusIndex::{write,load}_field_checkpoint`, which falls back to
-  `load_field_skeleton` so an interrupted pre-port run still resumes and a
-  `JsonAndLance` domain still reads its own artifact).
-  `EnrichmentChecker` accepts EITHER signal as "a field model was built here":
-  the v1 `field_questions` LanceDB tables, or a field model `load_field_model`
-  can read — requiring only the old one would have reported 0% coverage for
-  every corpus enriched after the port. Fields with no home in
-  the atom vocabulary (position proponents, cluster ids, centroid chunk ids,
-  discovery confidence, `primary_entries`) are dropped by the projection and
-  named in `field_atoms`'s module doc; none is read by the digest, and all are
-  read by phase-1 resume, which is why that keeps its own checkpoint.
-- **`atlas` — System 2, `enrichment/pipeline/`** — *per-document* typed
-  atom graph (Entity, Claim, Event, Question, Position, Opposition,
-  ArgumentReconstruction, Configuration, Asset). `Pipeline` trait +
-  registry + `ExemplarBank` + `PhaseCache`. Pipelines: `literary`,
+- **`field_model`** — five-phase *whole-corpus* pipeline (skeleton → cluster →
+  align → fault lines → open questions) over a `Domain` trait. Its artifact is
+  the atlas: it publishes `Question` and `Position` atoms, with
+  `field_skeleton.json` as a migration fallback for the three KnowledgeView
+  domains whose reader has not moved.
+- **`atlas`** — *per-document* typed atom graph over a `Pipeline` trait +
+  registry + `ExemplarBank` + `PhaseCache`. Built-ins `literary`,
   `literary_atlas`, `philosophy_atlas`, `referential_atlas`,
-  `engineering_atlas`, `conversation_atlas`, and `custom_atlas` — the
-  recipe-declared genre (`pipelines/configurable_atlas.rs`), built from a
-  recipe's versioned `[enrichment.ontology]` block. `version` (absent = 0)
-  selects an `OntologyLanguage` in `recipe_ontology/language.rs` (moved from
-  `enrichment/ontology/` 2026-09-03 — it parses recipe TOML, so it is recipe
-  parsing; the policies and declaration types it parses INTO live in the
-  `understanding-vocab` leaf as `understanding_vocab::ontology`)
-  (registry keyed by the integer; unknown version refuses naming the max; a
-  later version's key without its version line refuses naming the fix); every
-  version parses to `enrichment::ontology::OntologyPolicies` (five axes +
-  prose), which is all the pipeline reads. Version 0 is the prose
-  `OntologyConfig`; version 1 declares types with typed attributes
-  (`OntologyTypeDecl`, `AttrDecl`) plus `voices`/`change`/`tension`/`derive`.
-  `recipe validate` resolves every reference and prints the derived facets;
-  `recipe new --ontology <name>` scaffolds one of the ten PRIMITIVES §1
-  templates from `sovereign-recipes/_templates/ontology-v1/`
-  (`recipe_templates.rs`; each template's derived facets are pinned under
-  `corpus-engine/tests/fixtures/recipe_templates/`);
-  `recipe migrate --ontology-version 1` adds the version line as a diff.
-  `CustomAtlasSpec.policies` carries the parsed policies into `config.json`;
-  `CustomOntology::from_policies` composes the Phase-1 prompt (the declared
-  block and the Phase-6 extras render in `pipelines/ontology_prompt.rs`) and,
-  when types are declared, the generated response schema (`pipelines/ontology_schema.rs`
-  — it EDITS the shipped `phase1_section_extraction_schema`, extending the
-  entity enum, adding a type slot plus one union `attributes` object per kind
-  — the object REQUIRED, its slots optional, since a strict grammar omits an
-  optional object at will and enforces only `required`; the one slot that is
-  also required by name is a declared `deontic`, the directive's force, which
-  an open-but-empty bag left filled on 46 of 1,221 obligations; and `subject`
-  inserted BEFORE the bag, because property order is the model's generation
-  order under llguidance and a `subject` asked for after an empty `{}` was
-  skipped (note 5c06bc92; `corpus-engine` declares serde_json
-  `preserve_order` for the same reason) — requiring
-  `claim_kind`, dropping `argument_reconstructions` unless
-  `derivation.arguments`, and raising `entities_introduced`'s `maxItems` to
-  the recipe's `max_entities_per_section` when one is declared — the shipped
-  15 stands otherwise, since that is the number every other pipeline's benches
-  were measured at, and a section that ENUMERATES is the one case that needs
-  more) and the reader's `ParsePolicy`
-  (`pipelines/parse_policy.rs`), enforced by `pipelines/ontology_parse.rs`:
-  a declared `EntityType::Other` is kept, attributes validate by family and
-  store normalised, a declared voice is neither an entity nor an attribution,
-  and a declared claim takes its `discourse_act` from the type's `force` and
-  is dropped when anchorless. All three compose/parse hooks return `None`
-  when nothing is declared, which is how I1 (a version-1 block with no
-  declarations composes version-0 bytes) is structural rather than
-  remembered; the pin is `tests/main/ontology_prompt_snapshots.rs`.
-  `enrichment/ontology/type_index.rs` is the one `specializes` walk
-  (`is_a`, `effective_attributes`, plus `rigid_type_of` / `endpoints` /
-  `participants` / `effective_identity*` / `generic_ancestor`), read by the
-  schema generator, the parser, the resolver, the reconciler and the
-  enumeration planner.
-  **Axes 4 and 5 reach the pipeline at Phase 6, Phase 8 and the
-  governance fold (ontology-v1 P4).** Three small modules under
-  `atlas/analysis/` carry it: `tension_policy.rs` (what the DECLARATION
-  removes), `tension_fields.rs` (how a `same` field is read off a claim and
-  compared) and `tension_shape.rs` (what the CORPUS selects).
-  `restrict_claims_to_types` applies `tension.between` BEFORE selection and
-  `drop_non_comparable_pairs` applies `tension.same` (defaulting to subject
-  plus the type's clock) after it. **Both degrade by REPORTING, never by
-  enforcing a criterion the extraction did not fill** — `between` returns
-  `BetweenOutcome::Inert` when NO claim carries a `claim_kind` (enforcing
-  the allow-list there empties the pool and turns the axis off on a corpus
-  whose author asked for it), and a `same` field rules a pair out only when
-  BOTH sides carry it and they differ, with one-sided absence counted as
-  `ComparabilityReport::one_sided` rather than treated as a mismatch. Both
-  rules were settled by measurement against the real `wessex-hoard` atlas
-  on 2026-09-02, not by argument: excluding on one-sided absence drops 40
-  of 158 candidates and removes 0 of that corpus's 3 known false positives,
-  because all three are pairs the criterion is blind to on BOTH sides. The
-  `subject` field falls back to `attributed_to` only when that is NOT a
-  Person or Institution — the same voice-vs-referent distinction
-  `drop_same_named_speaker_pairs` already makes, and without it two
-  attributions of one coin by two different scholars (the tension the
-  numismatics corpus plants) become non-comparable. A `time` attribute
-  compares by interval OVERLAP, not equality. The pass prints per-field
-  coverage and warns when a declared field is carried by no claim, because
-  a criterion nothing fills is silently doing nothing (ARCH §18.1).
-  `CorpusShape::of` + `derive_declared_strategy` derive the selector the
-  pipeline is asked for through `Pipeline::derive_tension_strategy` — whose
-  default ignores the shape and answers `tension_strategy()`, so nothing
-  that has not opted in moves, and whose declared branch keeps the measured
-  `EmbeddingTopK { k: 10, floor: 0.5 }` unless the corpus is a single
-  densely-attributed unit. `ontology_schema::render_phase6_extras` fills
-  the `{ontology_extras}` slot in `custom_phase6_classifier_system.md` with
-  the author's `not_conflicts`, the deontic interdefinition (`forbid X` is
-  `require not-X`, so two surface forms of one rule are not a conflict) and
-  the `relation` instruction; it is EMPTY for an undeclared corpus, which
-  is what keeps the `maple_house.phase6_classifier` golden byte-identical.
-  A declared corpus is handed
-  `phase6_classifier_response_schema_with_relation` and its `equivalent`
-  verdict becomes ONE `same_as` Claim (grade `classifier`,
-  `classification_to_same_as_claim`, folded in by `merge_same_as_claims`)
-  on `atoms.json` instead of a Tension edge —
-  `Phase6Classification::verdict` is the one place `is_tension` and
-  `relation` are reconciled, and `is_tension` stays authoritative so a
-  self-contradicting response never silently merges a real conflict.
-  `AtlasGenre::runs_configuration_phase` makes Phase 8 a genre opt-in:
-  `derive.configurations` defaults to `true` for an undeclared corpus (I1)
-  and to `false` for one that declares its own types, because the Phase-8
-  prompt is written in the literary frame.
-  `enrichment/governance_change.rs` holds axis 4:
-  `derive_active_with_policy` is `derive_active` plus a third pass,
-  returning the act-fold's `ActiveSet` UNCHANGED alongside a separate
-  `ClockSupersessions` map — per claim type in `change.supersedes`, grouped
-  by subject, an older rule LINKED to a newer one (by a reified `same_as`
-  or a declared `ref`) is retired by the clock. **Recency ALONE never
-  folds**, which is what keeps the Maple House decoys standing, and the map
-  is deliberately NOT a `RuleStatus` variant: `ActiveSet` is what the ACTS
-  decided, and a derivation inside that enum would need an invented `OpId`
-  for an act nobody performed (ARCH §18.3).
-  `GovernanceView::from_atlas_dir` calls it when `atlas/ontology.json`
-  declares a `supersedes`, and `RuleView.superseded_by_clock` renders it
-  beside `status`. `enrichment/ontology/clock.rs::section_date` reads the
-  document date out of a section heading (ISO-8601 only, deliberately).
-  Axis 5's `patterns` run over the same atlas via
-  `atlas/analysis/patterns_adapter.rs`, which PROJECTS `atoms.json` into
-  the graph `investigation::patterns::detect_all` already reads (a
-  `Relation` atom with exactly two participants becomes a `Relationship`;
-  the rest are counted, not swallowed) and writes
-  `atlas/pattern_findings.json` from the Gaps step. The resolve step writes
-  `atlas/ontology.json`
-  (`writer::write_atlas_ontology`) so the atlas dir records what it was
-  extracted under, and `_summary.json` (SCHEMA_VERSION 6) carries an
-  `OntologySummary` read back from it plus an `AnnSummary` — `embedded_atoms`,
-  the row count of `atoms_ann.lance` (ei-3-index). `ann: None` means there is
-  NO seed table and the corpus cannot ground, which is never rendered as a
-  zero. v5 also puts the table's mtime in the cache key (`ann_mtime_ms`): the
-  seed is written after `atoms.json`, so keying on the atoms file alone froze a
-  no-coverage summary in place for the life of the atlas. **Since ei-2-map (2026-09-04) EVERY
-  pipeline writes it** (`EPISTEMIC_INDEX.md` §1, Map row): the map is
-  `Pipeline::declared_ontology()` — `Pipeline::declaration()` (the override
-  point) with the vocabulary terms and the Phase-8 flag filled from their one
-  decider each — and the envelope carries `pipeline_id`, so a reader can tell
-  an author's declaration (`custom_atlas`) from a genre writing its fixed
-  vocabulary down. The built-in vocabularies are DATA:
-  `pipeline/pipelines/ontologies/<id>.toml`, the body of a version-1
-  `[enrichment.ontology]` block parsed by the same language a recipe goes
-  through (`pipelines/declaration.rs`), so "no private kinds" (§3) is a
-  parse failure rather than a rule. A built-in declares the `entity_type`
-  its atoms actually carry and puts the genre's noun on `label` — the
-  literary map is `concept (theme)`, `person (character)` — because
-  `traverse_enumerate` matches declared names against `entity_type`;
-  `Configuration` and `ArgumentReconstruction` are closed kinds and are
-  recorded on the derivation axis (`configurations`, `arguments`), not as
-  types. `OntologyPolicies.navigation` (`ontology/navigation.rs`) is the
-  map's third role — seed kinds, edge kinds, hops and budget per
-  `QuestionKind` — with the spec's §2.2 table as the default of every row.
-  **Since map-conversion rung 2 (2026-09-08) every built-in TOML declares
-  its own `[navigation]` rows** (`engineering_atlas.toml` joined the set for
-  this alone: no types, one row on), written against what the pipeline's
-  build EMITS — `Pipeline::emits()`, a `KindSet` derived from the pipeline's
-  deciders (`phase1_atom_kinds`, the shared six or engineering's claims-only
-  override on the genre; `ArgumentReconstruction` from the derivation axis;
-  `Configuration`/`Configures` from the Phase-8 flag; `Summary` from the seed
-  table; an edge kind only where its endpoint kinds exist; `Grounds` never,
-  because it seats atom→chunk and not in the CSR) — and ratcheted by
-  `tests/main/pipeline_ontology.rs::builtin_navigation_rows_name_only_kinds_the_pipeline_emits`
-  under `KindSet::covers`, the universal rule (every kind a row names must be
-  emittable), which the pre-registered table fails on every built-in
-  (`Position`, `Causes`, `OpposesIn`, `Grounds`). The walker's own rule is
-  the existential `KindSet::fit` (rung 1); the two share one vocabulary. **Retrieval reads that file back
-  (P5).** `AtlasGraph::load_lance_from_disk` attaches the policies to the
-  graph, dropping a set with no declared types to `None` — so `ontology()`
-  being `Some` IS the "this corpus declared something" gate, checked once at
-  the load rather than remembered at four call sites, and
-  `AtlasGraph::is_subtype_of` (the graph-side accessor for `TypeIndex::is_a`)
-  is inert for every corpus that declared nothing. Four readers: the
-  enumeration classifier's type enum is the six generic kinds ∪ the declared
-  ENTITY types, capped at 24 (`enumerable_types`,
-  `sovereign-core/src/runtime/retrieval/atom_enum.rs`), and its atom compare
-  walks `specializes`, so "which coins" returns the sceattas too;
-  `atlas_traversal` gains `QueryPlan::Enumerate` / `Aggregate`, minted only by
-  `classify_query_with` when a vocabulary is present and refused by the engine
-  when it is not; `governance_view::project_claim` scopes a rule on the
-  claim's `subject` (what it is about) falling back to `attributed_to` (whose
-  voice it is), and takes its deontic from the reserved `deontic` attribute the
-  ontology parser already validated; and `meta_atlas`'s
-  `classify_articulation_with` places a declared `EntityType::Other(name)` by
-  the generic kind it descends from instead of guessing from the chunk preview.
-  Two levers ship DARK with `DEFAULTS_LEDGER.md` rows and no measurement:
-  `SOVEREIGN_ATLAS_EMBED_ATTRIBUTES` (attributes appended to embed text, in
-  `atom_attributes_suffix` — reached through `render_atom_entry`, the ONE
-  renderer, since ei-3c collapsed the daemon bag loader's byte-identical fork
-  of it) and `SOVEREIGN_ATLAS_INCLUDE_DECLARED_CLAIMS`
-  (`AtlasContextFilter.include_declared_claim_types`, keyed into `signature()`).
-  Resolution reads the same policies
-  through `ResolutionPolicy` (`atlas/resolution_ontology.rs`), which is what
-  makes a declaration RESOLVE (ontology-v1 P3): a mention typed as a
-  `role_of` role produces an atom of the rigid type and a `State` carrying
-  the role (so the existing trajectory pass chains repeat mentions into
-  `Transition`s); a declared relation's `from`/`to` and a declared event's
-  `participants` are type-checked against the atoms they resolved to, with a
-  mismatch dropped and recorded as `PhaseFailureKind::EndpointTypeMismatch`;
-  a claim's `subject` resolves among atoms of the kind's declared `subject`
-  type — the general salience hit is kept only if it IS that type, else the
-  name is resolved again within the type's atoms (`resolution_identity::
-  declared_subject_type`, `UnresolvedClaimSubject` names the declared type);
-  every entity merge the name rules propose passes `merge_permitted`
-  (`atlas/resolution_identity.rs`): a declared type never folds across
-  types, two mentions carrying different declared identity keys are two
-  things, and a type identified by an external key merges on fuzzy name
-  shape only when a key agrees (`MergeEvidence` — since 2026-09-19 that
-  includes rule 4's whole-word CONTAINMENT, so "Payment partners" no longer
-  folds into "partners" for a KEYED type; a declared type with no identity
-  key is skipped by that guard and still folds, which is the open head-noun
-  defect the `#[ignore]`d
-  `a_bare_head_noun_does_not_absorb_its_qualified_forms` reproduces); and declared
-  `ref` attributes snap to atom ids, an unresolvable one keeping the name
-  plus an `UnresolvedAttributeRef` record. `resolve_step_3b` /
-  `resolve_entities_and_events` stay as shims over the `_with` forms, so
-  every version-0 corpus runs the code it always did. Identity is the
-  reconciler's half: `ReconciliationPolicy.identity` carries the per-type
-  keys flattened through `specializes`
-  (`TypeIndex::effective_identity_policy`), `signals_for_policy` adds
-  `ExternalIdSignal` (STRICT — it alone satisfies the cross-origin gate) and
-  `DescriptiveKeySignal` (one ordinary signal), the blocking pass buckets on
-  declared key values so an identifier match survives entirely different
-  names, and each merge is reified as a `same_as` Claim with `Involves` /
-  `Grounds` edges (`reify_merges` → `writer::append_atoms_and_edges`) — for
-  a DECLARED corpus only, which is why `bench enron` B³ is a leak detector
-  for this phase. `enrich schema-report` gains a ninth dimension
-  (`SchemaValidationReport.ontology`, report SCHEMA_VERSION 2.1): per-type
-  counts with and without subtypes, the identity criterion per type, merges,
-  `same_as` claims, claims of a subject-declaring type with no subject, and a
-  `coverage:zero:<type>` gap signature. Since 2026-09-02 it also carries
-  `attribute_fill` — one row per (declared type × declared attribute) giving
-  `atoms` / `with_slot` / `filled`, with `attribute:zero:<type>:<attribute>`
-  and `attribute:unlandable:<type>` signatures. The type counts alone reported
-  `coin` as fully covered on 14 atoms carrying none of its seven attributes,
-  which is how that gap survived four merged phases; `with_slot` is counted
-  from the atom rather than the declaration so a `role_of` type — which lands
-  as a State, and States have no attributes map — reads as a declaration with
-  nowhere to land rather than as a model failure (§18.3). `projection::
-  attributes_of` is the one accessor, beside `subtype_of` (§10.6). The resolve step writes
-  `atlas/ontology.json` (`writer::write_atlas_ontology`) for every pipeline
-  so the atlas dir records what it was extracted under (see §3 above for the
-  built-in maps and the navigation section), and `_summary.json`
-  (SCHEMA_VERSION 6) carries an `OntologySummary` read back from it, an
-  `AnnSummary` with the seed table's row count (ei-3-index), and since
-  2026-09-08 `edge_counts` — edges per kind as `edges.csr` holds them, keyed
-  on the CSR's mtime; `None`, never `{}`, when there is no READABLE store
-  (absent, or a superseded CSR version the walk cannot open either — 662 of
-  1,770 SEP siblings were at v1 that day) — the on-disk half of the
-  row-admissibility census (`atlas/inventory.rs`).
-  **WHICH atoms that seed table holds is the navigation map's decision, not
-  the retrieval filter's, since ei-3c (2026-09-04)** (`EPISTEMIC_INDEX.md` §1
-  Ideas row, §2.2). It used to seed through `AtlasContextFilter::default()` —
-  the READER's filter, whose kind admission is Entity-only in production — so
-  every seed table on the box was Entity-only and the map's `tension` row
-  (Claim + Position) seeded NOTHING on any corpus: measured on wessex-hoard,
-  49 Claim atoms, 48 candidates, 48 dropped, 0 seeds. One decider now
-  (§10.6): `enrichment::atlas::seed_population::seed_population(atlas_dir)`
-  returns the union of every navigation row's `SeedPolicy::kinds`, plus the
-  atom kinds of the declared types an `enumeration` row points at, plus the
-  always-seeded `{Entity, ArgumentReconstruction}`. It is a pure function of
-  the atlas dir, applied INSIDE `backfill_ann`, so all four author sites (the
-  atlas writer, `svrn atlas backfill-ann`, `enrich build`'s Backfill step,
-  `atlas migrate-all`) get it with no signature change and `AtlasSeeding`
-  gains no arm. Its freshness test, `population_marker_is_current`, reads one
-  line and two mtimes on the common path; when `ontology.json` is NEWER than
-  the marker (a map re-declared after the table was embedded — which is what
-  map-conversion does to every converted atlas) it compares the marker's
-  recorded kinds with the kinds the map now derives, and the table is current
-  when it was seeded on a superset and the atlas's current `_summary.json`
-  census shows zero atoms of every surplus kind. The walk filters seeds by row
-  kind at query time (`ground::seed_admits`), so such a table is the same
-  table; the surplus clause is for the unfiltered row. Without a current
-  census it is stale — rebuild rather than trust
-  (`a_map_written_after_the_table_is_current_when_the_table_already_holds_its_population`). `atlas migrate-all` only became one of the four at ei-5c
-  (2026-09-07): it had kept its own ANN step — `load_atlas_context` under the
-  production retrieval filter, then `build_persistent_ann_seed_table` — which
-  is the same filter-authors-the-table defect one layer up, and it stamped no
-  population marker, so the result read as fresh. Measured on the ei-7a
-  fixture: it rebuilt the table from the always-seeded pair and dropped all
-  2,004 `Summary` rows, exit 0. It calls `backfill_ann` now, watched by
-  `the_ann_step_seeds_through_the_one_writer`, which names the two forked
-  symbols the file may no longer contain and the writer it must. **Since
-  map-conversion rung 3 (2026-09-08) `migrate-all` also CONVERTS**: between
-  the store step and the ANN step it calls
-  `sovereign_enrichment_build::pipeline_map::ensure_pipeline_map`, which
-  reads the corpus's `enrichment/<id>/config.json`, resolves the pipeline
-  through the one resolver, and writes `atlas/ontology.json` from
-  `declared_ontology()` when there is none (`written`), rewrites a built-in
-  map that no longer matches what its pipeline declares (`refresh` — every
-  map written before rung 2 lacked the rows), leaves an author-declared
-  `custom_atlas` map alone (`author`), and names `no-cfg` / `unreg` rather
-  than guessing; the `map` column carries the verdict. The write goes through
-  `write_pipeline_map`, the SAME function the resolve step calls at build
-  time, so a converted atlas and a rebuilt one carry identical bytes. Order
-  matters: the seed population is derived from that file, so the map lands
-  before the table. On the walk side the rows reach the walker two ways
-  short of the defaults, neither gated on declared types:
-  `AtlasProvider::navigation()` returns `NavigationSource::Declared` for a
-  file with rows (engineering's typeless map included — `AtlasGraph` keeps
-  the rows apart from the `with_ontology` gate) and
-  `NavigationSource::PipelineDefault` when the daemon's loader
-  (`atlas_context_manager::attach_pipeline_map`) attached the pipeline's map
-  to a not-yet-converted atlas from its config, reported as
-  `PolicySource::PipelineDefault` in every ledger line. `seed_population`
-  labels a typeless file `Declared` now too, so the table's author and the
-  walk agree by construction. Two properties are deliberate. The map is a FLOOR, never a
-  ceiling — `AtlasContextFilter::admits_atom` UNIONS the population with what
-  the filter itself admits, so nothing loses a seed it had; not theoretical,
-  since SEP's `ArgumentReconstruction` atoms appear in no pre-registered row
-  and a narrowing derivation would have deleted the 8th atom type from 1,770
-  tables. And an undeclared corpus gets the PRE-REGISTERED table, not the old
-  Entity-only population, because that is what the walk's own decider
-  (`ground::navigation_policy_for`) gives it — falling back to the reader's
-  filter would re-open the writer/walk disagreement this closes. `PolicySource`
-  is reused from the walk, and the source is reported either way.
-  Freshness learned the second question with it: `ann_table_is_fresh` compared
-  mtimes against `atoms.json` — "was it embedded from these atoms", never
-  "from these KINDS" — so every table on disk was fresh by mtime and wrong by
-  population. A table now records what it was built under in the
-  `atlas/atoms_ann.population` sidecar and reads as stale when that marker is
-  absent, versioned apart, or older than a re-declared `ontology.json`, ahead
-  of the atoms.json test. One small read and two mtimes, no `ontology.json`
-  parse, because `AtlasContextManager::init()` runs it once per installed
-  atlas at boot (1,770 of them for SEP). Measured on the two fixtures:
-  wessex-hoard-ei3 53 → 123 rows (Claim 0 → 50, State 0 → 20),
-  brothers-karamazov-book-1 16 → 51 (Claim 0 → 13, State 0 → 19,
-  Configuration 0 → 3), and `ask`'s `tension` row on wessex-hoard-ei3 returns
-  12 seeds against ei-4's measured 0. Design:
-  `sovereign/docs/specs/ONTOLOGY_PRIMITIVES.md`, `ONTOLOGY_MIGRATION.md`.
-  State at `~/.svrnmesh/indexes/<corpus>/atlas/`. Deep-dive:
-  [`ENRICHMENT_V2.md`](../corpus-engine/ENRICHMENT_V2.md). Beyond the LLM
-  pipelines, the deterministic **`structure_first`** strategy lifts a SCIP-indexed
-  **code** corpus into this same typed-atom graph (content-hash atoms, code-intel
-  summaries as descriptions, bounded function + call edges) — now **queryable**
-  (multi-hop `AtlasGraph::call_chain` via `enrich atlas-query` + the chat) and
-  **patchable** (`enrich atlas-patch-code` → delta → v2-store rebuild) on the v2
-  `atoms.lance` / `edges.csr` store. See ENRICHMENT.md "Code as a queryable,
-  patchable Atlas (v2)".
-- **`tiered` — System 3, the RAPTOR + GLiNER gold standard** — three
-  progressive tiers (T1 embeddings → T2 entity-graph + PPR → T3 RAPTOR
-  cluster tree). The single RAPTOR builder lives in
-  `sovereign-tools/src/raptor_atlas.rs` and is injected into `corpus-engine`
-  via the `TieredEnrichmentProvider` trait (`enrichment/tiered.rs`) to
-  avoid a cyclic dep. GLiNER (real ONNX NER) augments the conversation
-  path — since 2026-08-03 (P2.1) via the generation-agnostic
-  `LabeledEntityExtractor` seam, so v1 (gline-rs) and GLiNER2 (bare
-  `ort`) share one persistence/dedup/provenance path.
-  `SOVEREIGN_GLINER_MODEL_ID` picks which; it defaults to v1
-  (`gliner_small-v2.1`). GLiNER2 was **measured and rejected** for this
-  path on 2026-08-03 — no speedup at vault chunk lengths and worse
-  per-mention typing (`DEFAULTS_LEDGER.md` REJECTED,
-  `bench/gliner/README.md`); the knob remains as the way to re-test it.
-  The extractor that actually ran is recorded
-  per corpus on `chunk_entity_progress` (`model_id`, `threshold`,
-  `labels_json`). Used by attached docs, conversations, Obsidian /
-  watched folders.
-  `svrn enrich raptor <corpus>` (sovereign-cli-llm) retrofits this
-  tier-3 tree onto an already-installed corpus additively — writes
-  `conv_raptor_nodes` keyed by `source_doc_id`, reuses the existing
-  leaf embeddings, and carries `--strip-furniture` + doc-level resume
-  (the SEP whole-document-summarization retrofit, 2026-06-06).
-  Bucketing is corpus-shape-aware (2026-06-11): vault/watched-folder
-  corpora classify per-FILE units via `ConvBucket::classify_note`
-  (Tiny only at 0-1 chunks — the conversation-tuned 8-chunk floor
-  tiny-bucketed half the live vault into title-only synthetic nodes),
-  while document corpora keep the conversation thresholds. For folder
-  corpora the retrofit also finishes with `finalize_corpus` (vault
-  synthesis + the typed-extension pass into `atlas/atoms.json` —
-  see TIERED_RETRIEVAL.md's typed-extension section); document
-  corpora never touch the atom-graph atlas. Query-time
-  grounding read those summary nodes directly through `apply_raptor_grounding`
-  until ei-5c retired it (2026-09-07); they reach retrieval as atlas `Summary`
-  atoms now, projected from the same rows by `svrn enrich summary-atoms`. The
-  derived per-corpus `raptor_summaries.lance` ANN index — built at the
-  end of `enrich raptor` (or standalone via `enrich raptor-index
-  <corpus>`) by `sovereign-tools/src/raptor_index.rs` over the pure
-  `corpus-engine::index::raptor` primitives, with a `max(created_at)`
-  freshness gate and the brute-force `conv_raptor_nodes` cosine scan as
-  fallback (spec `docs/specs/RAPTOR_ANN_INDEX.md`), and is what the projection
-  reads. The injected virtual
-  chunk carried `metadata["raptor_node_id"]` (provenance handle back to
-  the node's `quote_spans` / `evidence_chunk_ids` — ECONOMY §7.8's
-  carriage thread, landed 2026-08-14) and renders in the synthesis
-  prompt under a dedicated "## Source overviews (derived summaries)"
-  section with `[Source:]` labels — NOT under `[Web:]`/"From web
-  search", which is where these url-bearing chunk_id-less chunks
-  landed before 2026-08-14 (fabrication-etiology D0,
-  `bench/chaos_monkey/results/fabrication_etiology_20260814.md`).
-  Deep-dive: [`docs/TIERED_RETRIEVAL.md`](./docs/TIERED_RETRIEVAL.md).
+  `engineering_atlas`, `conversation_atlas`, plus `custom_atlas`, the
+  recipe-declared genre from a versioned `[enrichment.ontology]` block. A
+  version-1 declaration drives the Phase-1 prompt, the generated response
+  schema, the parser's `ParsePolicy`, resolution, reconciliation identity and
+  the navigation map. **Both tension axes degrade by REPORTING, never by
+  enforcing a criterion the extraction did not fill.** Every pipeline writes
+  `atlas/ontology.json`, so a reader can tell an author's declaration from a
+  genre writing its fixed vocabulary down; built-in vocabularies are DATA at
+  `pipelines/ontologies/<id>.toml`.
+- **`tiered`** — three progressive tiers (T1 embeddings → T2 entity-graph +
+  PPR → T3 RAPTOR cluster tree). The RAPTOR builder is in
+  `sovereign-tools/src/raptor_atlas.rs`, injected via
+  `TieredEnrichmentProvider` to avoid a cyclic dep. GLiNER augments the
+  conversation path through the `LabeledEntityExtractor` seam. **The NER seam
+  is input-bounded** — `BoundedInputs` caps batches at 16 chunks and holds
+  back anything over 2,048 chars; an over-cap chunk is REPORTED
+  (`refused_over_cap_chunks`), never truncated, and a large count is a signal
+  about the CHUNKER, not a reason to raise the ceiling.
 
-- **`Summary` — RAPTOR rollups as atlas nodes (ei-7a, 2026-09-04)** — the
-  twelfth atom kind, and the only one whose
-  [`AtomType::grain`] is `Grain::Summary` rather than `Grain::Leaf`. A
-  Summary atom is the atlas face of one `conv_raptor_nodes` row: its
-  `text` is the paraphrase, its `evidence` the chunks its subtree covers
-  (`EvidenceFor` edges), its `children` the summaries one level down
-  (`Composes`). Both edge kinds already existed — no `EdgeType` arm was
-  added. `atoms.json` schema `2.4` → `2.5`; the reader contract is the
-  one `Asset` set at `2.1` (no `#[serde(other)]`, so an old reader fails
-  loudly rather than dropping the atom, and a snapshot carrying Summary
-  atoms needs peers on the new vocab).
+`Summary` is the twelfth atom kind and the only one whose `AtomType::grain` is
+`Grain::Summary` — the atlas face of one RAPTOR node. **The walk holds Summary
+seeds OUT of leaf scoring**: a Summary seed does not expand, its reach never
+accumulates into a leaf chunk's evidence score, and its text leaves on
+`Grounding::summaries` without consuming the walk's budget. Injecting
+summaries early cost 14 points of source coverage when it was measured. RAPTOR
+is COMPOSED rather than deleted — the navigation row's `summary_sources` list
+(`[atoms, raptor]` by default) asks each source through one
+`SummaryStage::supply`.
 
-  **The walk holds Summary seeds OUT of leaf scoring, and that is the
-  point of the design, not a detail.** `atlas::ground` enforces three
-  rules: a Summary seed does not expand (it is a terminus, R1); its
-  reach never accumulates into a leaf chunk's evidence score (R2); its
-  text leaves on `Grounding::summaries`, a field beside `requests` that
-  does not consume the walk's budget and is never sorted against leaf
-  requests (R3). The reason is measured. RAPTOR summaries injected
-  pre-merge cost −14 points of SEP source coverage in 2026-06-08's A/B
-  ("tangential-summary displacement… crowded out the leaf chunks that
-  actually answer"), and the fix was not additivity at the truncate but
-  moving injection LATE, post-rerank, where it measured QA-neutral (86%
-  sources vs an 85% no-RAPTOR baseline) while keeping +5 on the
-  summarize judge. A Summary's `EvidenceFor` edges fan out over its
-  entire subtree, so a Summary seed that scored leaf evidence would
-  re-rank the pool toward whichever subtree matched — the same mechanism,
-  one layer earlier. `ground.rs`'s two hold-out sites are where it is
-  refused, and `a_leaf_grain_rollup_displaces_the_leaf_chunks_it_covers`
-  is the failing input kept runnable beside the guard that closes it
-  (ARCH §18.1). The ledger counts `summary_seeds`,
-  `summary_expansions_suppressed` and `summaries_appended`, so the
-  hold-out is visible at `tracing=debug` rather than silent.
+**A DEAD enrichment is never resumed automatically.**
+`EnrichmentState::declared_dead()` is the one decider (`phase == Stalled`, or
+any stamped error); four boot-time scans consult it, and resume is an explicit
+operator action via `POST /internal/corpus/enrich-reset`.
 
-  `Summary` joined spec §2.2's `thematic` row — the row whose question IS
-  whole-work summarisation — because §3's port table says the walk
-  reaches these nodes and a kind no row seeds on is never reached; the
-  §2.2 table simply predated the kind. `SEED_POPULATION_SCHEMA` 1 → 2
-  follows, so every seed table written under `1` is stale by definition
-  and rebuilds.
+### Registry, authoring, back-compat
 
-  **The write side and the carry landed 2026-09-04.** Three pieces, each
-  reaching an existing surface rather than minting one (ARCH §19):
+Resolution order is local override on disk → remote → bundled, SHA-256
+verified when the entry declares one. `build.rs` vendors `registry.toml` into
+`OUT_DIR`, so the engine works offline with no checked-in snapshot to drift.
 
-  - `sovereign_tools::summary_atoms::write_summary_atoms` (`svrn enrich
-    summary-atoms <corpus>`) projects the EXISTING
-    `raptor_summaries.lance` rows into `Summary` atoms in the corpus's
-    per-article atlases. **No RAPTOR pass and no re-embed** (operator,
-    2026-09-04: "we already have the RAPTOR summaries"): the stored
-    1024-d vector becomes the seed row, because a fresh embed would be a
-    second decider for the seed space (§10.6). It reads rows through
-    `corpus_engine::scan_raptor_summaries` (new, the write-side
-    counterpart to `search_raptor_summaries`), maps `conv_uuid` to an
-    article through `raptor_article_title` (the derivation MOVED DOWN out
-    of `raptor_scored_chunk`, which is now a caller), turns that into an
-    atlas id through `ground::candidate_atlas_ids` — the one home of that
-    derivation, so the write side cannot pick a different atlas than the
-    read side walks — and appends through `append_atoms_and_edges` +
-    `AnnSeedTable::append_rows` (new: an APPEND, so a corpus's Entity
-    seeds are not re-embedded to admit a Summary). It stamps the
-    population marker afterwards, without which the next backfill sees a
-    schema-1 marker, rebuilds the table and deletes the appended rows.
-    Idempotent on the atom id, which is what makes the append safe.
-    Evidence chunks and `Composes` edges come from
-    `_raptor_checkpoint` and are written only where that tree still has
-    the node; `no_tree_row` counts the rest and is printed as a
-    degradation, never defaulted to zero (§18.3). No `EvidenceFor` edge
-    is emitted: an `Edge` is atom → atom and a chunk is not an atom, so
-    the chunk evidence rides on `Summary::evidence` where
-    `AtomEnvelope::evidence` and `resolve_evidence` already read it.
+The schema is open — a domain expert authors a TOML and the engine runs it.
+Generic primitives: the `http_api` acquirer (URL templating, four pagination
+strategies, bounded-concurrency document follow, token-bucket rate limit),
+`[recipe.parameters]`, the `html_sections` extractor with a `MissReport`
+sidecar, the authoring-harness verdict ladder, the investigation pipeline
+(recipe-declared entity/relationship types → JSON-Schema → llguidance
+grammar), and the recipe-author agent loop. Lifecycle
+`svrn recipe {validate,test,publish,list}`.
 
-  - `render_atom_entry` gained a `Summary` arm. Without it the kind is
-    UNSEEDABLE however the map names it — `seed_population` derives it
-    into the `thematic` row's population and the renderer drops it — the
-    same silent-substitution shape the `Position` / `State` arms were
-    added to close.
+Recipes live outside the repo, so a TOML written six months ago must keep
+loading: new fields carry `#[serde(default)]`, renamed fields keep the old
+name as an alias, removed variants get a deprecation arm in
+`translate_parse_error`, and `[corpus] schema_version` bumps only when readers
+must opt in. Enforced by `corpus-engine/tests/recipe_back_compat.rs`.
 
-  - The CARRY. `apply_atlas_grounding` hands `Grounding::summaries` out
-    through a `summaries_out` parameter into
-    `PipelineState::atlas_summaries` (a threaded step product, like
-    `title_expand_titles`), and `append_atlas_summaries` appends them as
-    virtual chunks at the LATE site `raptor_grounding.rs` occupied
-    — `retrieval/mod.rs` for deep, `prepare_knowledge_query_plan` for KQ
-    — never at rung 8, which is the early position that cost the 14
-    points. `reserve_raptor_chunks` became
-    `reserve_summary_chunks` and keys on `ChunkProvenance::grain() ==
-    Grain::Summary` instead of `metadata["source"] == "raptor"`: two
-    producers now put a rollup in the pool (`raptor_summary` and
-    `atlas_summary`) and the string tag answered for only one, so a
-    walked summary would have been tail-appended and cut by the same
-    budget that admitted 0 of 8 on `summary_proof_theory`. One grain, two
-    producers — the producer stays distinguishable in the trace and in
-    `metadata["summary_producer"]`. `merge_select` is unchanged; its pin
-    already reads the grain. Since ei-5c there is one producer again, and the
-    typed predicate STAYS: it is right for one as well as two, and the string
-    compare is what a third producer would silently fail.
-
-  **A derived edge kind needs a marker, or it ships and cannot be applied
-  (ei-5c, 2026-09-07).** `EdgeType::Configures` is derived from
-  `Configuration.constituent_atoms` at the ONE store write
-  (`atlas::store::configures::derive_configures_edges`), which is the right
-  place — `write_atlas_full` and `atlas migrate-all`'s rebuild both go through
-  it. But `store_needs_build` decided from two facts only, a current CSR header
-  and an `atoms.json` newer than the store, and a code change that adds a
-  derived edge kind moves neither. Every installed store would have kept its
-  old edges forever, and `migrate-all` — the documented migration — would have
-  inspected them, said `current`, and skipped. A mechanism that ships and can
-  never be applied is worse than a missing one, because the command that should
-  apply it succeeds.
-
-  `atlas/edges.csr.derivation` closes it, in `seed_population`'s shape rather
-  than a new one (§19): a one-line marker carrying `EDGE_DERIVATION_SCHEMA`,
-  written by the store writer immediately after `edges.csr`, and one clause in
-  `store_needs_build` that reads absent-or-different as STALE. It degrades to
-  "rebuild this store", never to "cannot open" — the marker gates
-  `store_needs_build`, which only `atlas migrate-all` calls, so nothing on the
-  read path consults it and a store with no marker keeps serving the walk until
-  an operator rebuilds it.
-
-  **The writer counts what it cannot seat, by reason** (2026-09-08). The CSR
-  is atom × atom, and `edges.json` is not: the resolvers write `Grounds` edges
-  from a claim or state to the CHUNK that evidences it, so on every literary
-  atlas a share of the declared graph has no seat in the CSR by construction —
-  32 of 109 on brothers-karamazov-book-1, every one a `Grounds` edge to a
-  `sec_NNNNN` reference. Until then `write_edges_csr` skipped them with a bare
-  `continue`, and the gap was visible only to someone who read the CSR header
-  beside `edges.json`. `write_edges_csr` now returns `store::CsrWrite`
-  (`written`, `evidence_refs`, `dangling`, `dangling_samples`), `write_store`
-  and `build_and_write_store` return `StoreWrite { lance, edges }`, and
-  `atlas migrate-all` / `enrich atlas-patch-code` print the line when anything
-  was skipped. The two reasons are kept apart because they are different
-  facts: an endpoint that was never atom-shaped is evidence (debug-level,
-  counted); an endpoint that IS atom-shaped and names no atom is a dangling
-  reference, a defect upstream (warn, with samples). Which is which is decided
-  by `AtomId::atom_type()` — the one reading of the `<type>-<index|hash>`
-  prefix the constructors write (§10.6).
-
-  **`CSR_VERSION` was the other candidate and is REFUSED.** Bumping the header
-  would force the rebuild structurally, but `CsrEdges::open` rejects a
-  stale-version CSR with no fallback, so it would take every corpus's walk dark
-  on every peer and inside every published snapshot until each was rebuilt. A
-  missing edge kind is a smaller harm than an unloadable graph.
-
-  Cost, for whoever runs it: every installed atlas rebuilds its store once at
-  its next `migrate-all` — about 1.9 s each, measured over n=1,078 in ei-3b —
-  which is roughly an hour for SEP's 1,770. The rebuild no longer drags a
-  re-embed with it (map-conversion rung 3 run, 2026-09-08): the ANN column
-  reads `current` on `ann_table_is_fresh`'s verdict — table newer than
-  `atoms.json`, population marker current — not on "the store was not rebuilt
-  this pass", because a store rebuild transforms the same `atoms.json` and the
-  content-hash atom ids the table is keyed on do not move. The first run over
-  SEP under the old rule re-seeded every rebuilt store through the daemon's
-  embed slot and was stopped before it reached a single `sep-*` sibling.
-
-  **RAPTOR is COMPOSED, not deleted (operator directive 25ae5815,
-  2026-09-08).** "One grounding implementation" means one INTERFACE a corpus
-  composes by declaration, not one fixed body: the walk's summary supply is a
-  list of SOURCES on the navigation row (`summary_sources`, priority order,
-  `[atoms, raptor]` by default), each asked through the same one-method stage
-  (`SummaryStage::supply`), each contributing to the SAME per-kind budget and
-  the SAME late append, deduped on the summary's own id. `AtlasSummaryAtoms`
-  reads the atlas; `RaptorSummaries` reads the corpus's own
-  `raptor_summaries.lance` through the primitives `index::raptor` already
-  exposes. Neither is a fallback and neither retires: a book may keep both
-  permanently, and the dedupe is free because
-  `AtomId::summary_content_hash(node_id, corpus_id)` is exactly what the
-  projection writes, so a RAPTOR row and the atom projected from it collide by
-  construction (§7.5). An ENUM rather than a trait registry, because the set is
-  closed and inside one crate — a source from outside corpus-engine is what
-  spec §3 and EI5 both forbid, and the day that changes it becomes a registry
-  (§4).
-
-  **The retrieval-time injector is retired, ei-5c (2026-09-07)** — what went is
-  the SECOND, uncoordinated producer in sovereign-core, not RAPTOR itself:
-  `apply_raptor_grounding`,
-  `raptor_scored_chunk`, `raptor_late_inject_enabled`, the
-  `raptor_grounding_early` pipeline step, the five `SOVEREIGN_RAPTOR_*` flags
-  and the `raptor_off` ablation arm went with it. Deleted, not folded into a
-  caller, which is §10.6's other legal outcome: the injector reads
-  `conv_raptor_nodes` / `raptor_summaries.lance` where the walk reads `Summary`
-  ATOMS, so there was no call to delegate to. What made the deletion possible
-  is the SEED QUOTA below; what it costs is stated in the next paragraph rather
-  than left to be discovered.
-
-  **The mechanism was two producers, not a seed race — corrected 2026-09-08
-  from ei-5c's own lane.** This entry said the −7.5/66 was seed-race
-  displacement and that the quota fixed it. It was not and it did not. Re-run
-  with the injector deleted, both arms n=2 bit-identical, the ledger reads
-  `summary_seeds 34, dropped_seed_budget 0`: not one Summary was refused by its
-  quota, and the same 34 summaries were worth **+3 facts at equal source
-  recall** (OFF 139/159 · 62/66, ON 142/159 · 62/66). What cost 7.5 sources was
-  the walk's 34 summaries and the injector's up to 8 per question arriving in
-  one pool with neither aware of the other. One producer over the same material
-  is a gain. `SeedPolicy::budgets` is a GUARD — a bound that had not yet bound
-  on any corpus measured, watched failing in both directions so it cannot rot
-  (twenty summaries take all twelve slots and the walk emits zero leaf
-  requests) — and it is not a lane result. The correction is recorded rather
-  than the claim quietly replaced, because the claim shipped in three files.
-
-  What the quota is: a kind that
-  declares a quota draws from its OWN pool, every other kind shares `max_seeds`
-  as before, and the pre-registered `thematic` row declares `{Summary: 8}`.
-  Eight is not a new number — it is `SOVEREIGN_RAPTOR_TOP_M`'s shipped default
-  in the injector, carried across so the VOLUME of late-appended summary text
-  is unchanged by the port and a lane delta is attributable to the walk
-  reaching them (§18.4). `ground.rs`'s R3 truncation reads that row instead of
-  the `SUMMARY_APPEND_CAP` constant it replaces, so the count that may seed and
-  the count that may be appended are one decision. Watched failing both ways:
-  `without_a_quota_summaries_take_every_seed_slot` (twenty summaries take all
-  twelve slots and the walk emits ZERO leaf requests) beside
-  `a_quota_keeps_summaries_reachable_without_costing_a_leaf_seed`.
-
-  **What it cost while RAPTOR was only an atom source, measured.** Between the
-  injector's retirement and the composition landing, the walk could reach only
-  summaries an atlas already CARRIED. ei-5c's lane measured that state on bare
-  `sep` at `--limit 30`, n=2 bit-identical: facts 147/159 against a floor of
-  151/159 and a same-stack 2026-09-05 reading of 153/159, sources 55/66 against
-  57/66, with `summary_seeds 0` — 11,181 RAPTOR rows the walk had no way to
-  read. That is the number that made the composition necessary rather than
-  optional, and it is why `RaptorSummaries` is a permanent source and not a
-  migration shim. `svrn enrich summary-atoms <corpus>` remains the projection —
-  it makes a corpus's summaries walkable as ATOMS, with their edges and
-  evidence anchors — but a corpus that has not run it still serves its
-  summaries, from the table it already has. It has been run on the ei-7a fixture and
-  nowhere else, so `sep` — 11,181 `raptor_summaries.lance` rows, live until
-  this commit — has NO whole-work summaries in retrieval, and neither does any
-  other corpus. That is a real capability regression and it is NAMED rather
-  than defaulted: `apply_atlas_grounding` logs, on a thematic walk that reached
-  no summary, which candidate corpora carry RAPTOR rows without Summary atoms
-  and names the command that fixes it (ARCH §18.3). The migration is not this
-  order's to run — it is a control write over 1,770 per-article atlases — and
-  the operator's decision folds it into the rebuild `sep` and `wikipedia` are
-  already due for pooling reasons (ei-6b, 2026-09-07): one battery re-embeds
-  the chunks, projects the Summary atoms, and rebuilds the seed tables under
-  the budgeted population, rather than three passes over the same 1,770
-  directories.
-
-See [`corpus-engine/ENRICHMENT_V2.md`](../corpus-engine/ENRICHMENT_V2.md)
-for status table, landing-by-landing scope, and validation targets.
-
-### Recipe registry
-
-Twenty-six catalog recipes ship in `sovereign-recipes` (§2), consumed
-via `RecipeRegistry`:
-
-- **Bundled snapshot** — `build.rs` vendors `sovereign-recipes/registry.toml`
-  into `OUT_DIR` and `registry.rs` `include_str!`s it from there, so the engine
-  works fully offline with no checked-in snapshot copy to drift.
-- **Bundled fallback** — `recipe_builtin.rs::bundled_recipe_toml(id)` returns the
-  full recipe TOML (also vendored from `sovereign-recipes/` into `OUT_DIR`) for
-  snapshot entries when the live URL is unreachable.
-- **Live refresh** — `RecipeRegistry::refresh()` pulls the latest
-  from GitHub.
-- **Resolution order** — local override on disk → remote → bundled.
-  SHA-256 verified when the entry's `sha256` is non-empty.
-
-### Recipe-authoring platform
-
-The recipe schema is open. Domain experts (financial journalist,
-legal aid attorney, grad student) author a TOML; the engine runs
-it. Generic primitives:
-
-- **`http_api` acquirer** — URL templating with `{name}`
-  placeholders, four pagination strategies, JSONPath document-URL
-  follow with bounded concurrency, token-bucket rate limit.
-- **`[recipe.parameters]`** — String / Int / Date / List with
-  defaults and required flags. `Recipe::resolve_parameters`
-  validates user input.
-- **`html_sections` extractor** — multi-regex section extraction
-  with a `MissReport` sidecar so `recipe test` can show
-  "section X missed in filing Y; nearby text: …"
-- **Authoring-harness verdict layer** — `corpus_engine::harness`
-  emits judgment-free `StageOutput`s; the `sovereign-authoring-harness`
-  crate is the policy + presentation layer that folds them into the
-  Pass/Fail ladder `recipe test` renders.
-- **Investigation enrichment pipeline**
-  (`enrichment/investigation/`) — recipe-declared
-  `[[enrichment.entity_types]]` + `[[relationship_types]]` →
-  JSON-Schema → llguidance grammar. Three built-in graph-pattern
-  detectors (`circular_flow`, `role_overlap`, `threshold`).
-- **Lifecycle** — `svrn recipe {validate,test,publish,list}`.
-- **Agent-callable tools** in the studio crate
-  `studio/crates/sovereign-recipe-author/` (re-exported as
-  `sovereign_tools::recipe_author` for legacy paths) — eight Tool
-  impls behind `Permission::RecipeAuthoring`. Wired into MCP via
-  `MCP_TOOLS_ALWAYS` in `sovereign-tools/src/mcp_surface.rs`.
-- **Recipe-author agent loop** — `sovereign-recipe-author/src/project.rs`
-  (project model), `situated_context.rs` (per-turn renderer),
-  `svrn recipe-agent {new,show,list,live-trial}` CLI. Skill
-  manifest at `sovereign/crates/sovereign-contracts/src/skills_data/recipe-author.toml`
-  (moved in-crate with inner-work when boundary-gate flagged the
-  out-of-tree embed, 2026-09-09; privacy = `local_only`); its interview is the five
-  `ONTOLOGY_PRIMITIVES.md` §4 questions (shape, assertion, identity,
-  change, derivation), asked only where the charter is silent, and it
-  points at `recipe new --ontology <name>` rather than a blank block.
-  The project model carries an
-  `ArtifactKind` (recipe | workflow), so the same checkpoints /
-  decision log / desktop workspace back **workflow** authoring too
-  (checkpoints snapshot `recipe.toml` or `workflow.toml` by kind) —
-  the recipes×workflows merge.
-- **Recipe validation card** — `recipe_author_commands::validate_artifact_toml`
-  parses, then runs `corpus_engine::testing::validate_recipe_offline`, so
-  `RecipeValidationReport` carries the same three lists `svrn recipe validate`
-  prints: `errors` (blocking — an unresolved ontology reference blocks like a
-  parse failure), `warnings`, and `notes`, the derived facets (clock, tension
-  selector, identity criterion per type, question shapes).
-  `RecipeValidationCard.svelte` renders them as three sections, never merged.
-
-### Schema back-compat
-
-Recipes live outside the repo (community registry, user
-authoring), so a TOML written six months ago must keep loading.
-Convention enforced by the reader + a regression-fixture suite
-(`corpus-engine/tests/recipe_back_compat.rs`):
-
-1. New fields carry `#[serde(default)]`.
-2. Renamed fields keep the old name as `#[serde(alias = "old-name")]`.
-3. Removed enum variants get a deprecation arm in
-   `translate_parse_error` that emits "use `<replacement>` instead".
-4. `[corpus] schema_version` bumps only when readers must opt in
-   to interpret a recipe. Reader refuses recipes declaring
-   `schema_version > MAX_SCHEMA_VERSION`.
-5. Reserved variants — declare today, validator warns, runtime
-   emits placeholder finding; later PR adds executor without
-   touching the schema.
-
-`[display]` (`recipe.rs::DisplayMeta`, `category` + `icon`) flows
-through `_corpus_meta.json` and surfaces on `IndexInfo` so
-retrieval reads category off the index summary without re-resolving
-the recipe. Drives Atlas View rail grouping and the synth prompt's
-"From your conversations" rename.
-
-### Delta updates + safety
-
-`update/delta.rs` — `VersionManifest` per-document revision IDs;
-`ManifestDiff::compute` produces additions/updates/deletions;
-three-phase apply (delete → update → add); `_update_progress.json`
-for resume.
-
-Hardcoded safety (not configurable per recipe): robots.txt
-compliance, 1s/domain rate limit, UA
-`CorpusEngine/0.1 (+https://sovereign.dev/corpus-engine)`, crawl
-scope enforced against the seed URL domain, download size warnings
-at 1.5× estimate.
+Delta updates are `update/delta.rs`: per-document revision ids,
+`ManifestDiff::compute`, three-phase apply, `_update_progress.json` for
+resume. Crawl safety is hardcoded and not per-recipe: robots.txt compliance,
+1s/domain rate limit, a declared UA, scope enforced against the seed domain.
 
 ---
 
 ## 4. Sovereign — the local agent
 
-A single-machine local AI assistant. Runs as desktop, CLI, or HTTP
-server against the same `Runtime`. No data leaves the machine
-unless the user opts in to web search or a cmnwlth mesh.
+Desktop, CLI, HTTP server or daemon against the same `Runtime`. No data leaves
+the machine unless the user opts in to web search or a mesh.
 
 ### Trait architecture
 
-`sovereign-contracts/src/traits.rs` (re-exported as
-`sovereign_core::traits` — the contract crate carved out of
-sovereign-core so packages build against the vocabulary without the
-runtime hub):
+`sovereign-contracts/src/traits.rs`, re-exported as `sovereign_core::traits` —
+the contract crate is carved out so packages build against the vocabulary
+without the runtime hub.
 
-| Trait                          | Surface                                                     |
-|--------------------------------|-------------------------------------------------------------|
-| `InferenceProvider`            | `complete`, `complete_stream`, `complete_stream_with_id`, `embed`, `embed_query`, `capabilities`, `code_model_id` |
-| `Router`                       | `classify(message, ctx, tools) → RouterClassification`      |
-| `Planner`                      | `plan(goal, context, tools) → Plan`, `replan(...)`          |
-| `Tool`                         | `descriptor`, `execute`, `validate`, `retry_config`, `required_permissions` |
-| `LandscapeDigestProvider`      | `splice_landscape_digests(ctx, active_skill)`               |
-| `ApprovalChannel`              | Human-in-the-loop tool approval (CLI / Tauri / Server / Auto) |
-| `MeshKnowledgeSource`          | Fan-out knowledge search to mesh peers → `MeshSearchOutcome` (hits **and** the corpora it could not reach) |
+| Trait | Surface |
+|---|---|
+| `InferenceProvider` | `complete`, `complete_stream`, `complete_stream_with_id`, `embed`, `embed_query`, `capabilities`, `code_model_id` |
+| `Router` | `classify(message, ctx, tools) → RouterClassification` |
+| `Planner` | `plan(goal, context, tools)`, `replan(...)` |
+| `Tool` | `descriptor`, `execute`, `validate`, `retry_config`, `required_permissions` |
+| `LandscapeDigestProvider` | `splice_landscape_digests(ctx, active_skill)` |
+| `ApprovalChannel` | Human-in-the-loop tool approval (CLI / Tauri / Server / Auto) |
+| `MeshKnowledgeSource` | Fan-out to peers → `MeshSearchOutcome` (hits **and** the corpora it could not reach) |
 | `SensitiveCorpusOracle` / `FolderMetadataOracle` | Watched-folder privacy + UI surface |
-| `InsightStore` / `InsightSink` | Long-term insight extraction + persistence                  |
+| `InsightStore` / `InsightSink` | Long-term insight extraction + persistence |
 
-`StateStore` is decomposed per ISP into 12 focused sub-traits
-aggregated by a single blanket impl: `ConversationStore`, `TaskStore`,
-`MemoryStore`, `RoutingStore`, `DocumentStore`, `CorpusStateStore`,
-`BudgetStore`, `PermissionStore`, `StepExecutionStore`, `HealthStore`,
-`DocumentSessionStore`, `DocumentAssetStore`. (`InsightStore` is a
-standalone trait — impl'd by `SqliteInsightStore`, not part of the
-aggregate.) Callers narrow bounds to what they need. `StepExecutionStore` is the
-durable per-attempt ledger behind executor replay-safety (below);
-its methods default to no-ops so non-durable mocks are unaffected.
+`StateStore` is decomposed per ISP into 12 sub-traits aggregated by a blanket
+impl (`ConversationStore`, `TaskStore`, `MemoryStore`, `RoutingStore`,
+`DocumentStore`, `CorpusStateStore`, `BudgetStore`, `PermissionStore`,
+`StepExecutionStore`, `HealthStore`, `DocumentSessionStore`,
+`DocumentAssetStore`). Callers narrow bounds to what they need.
 
 ### Runtime data flow
 
 ```
 User message
   → Router.classify           (Quick slot, two-pass coarse → refine)
-       → RouterClassification { primary, alternatives, rationale, … }
   → decide_policy(classification, ConfidenceThresholds)   (pure fn)
        → RoutingPolicy { tier, move_kind: Commit | Propose | Ask, … }
   → SessionStore.begin → QuerySession (CancellationToken-bearing)
@@ -2404,7994 +570,872 @@ User message
                       → Executor (topological batches)
                           ├─ ReasonWithTools loop
                           ├─ Best-of-N sampling (LlmJudge / Random / Best)
-                          ├─ Evaluation passes
                           └─ Tool steps with permission + approval
   → Provenance recorded into Message.metadata
   → Memory extraction at conversation end
 ```
 
-Every PER-INTENT ATTRIBUTE is a column of `IntentRow`, returned by
-`Intent::row()` in `sovereign-contracts/src/types/routing.rs`: the recorded
-name, the snake_case wire slug (one vocabulary for the exemplar TOML, eval
-banks, and the desktop redirect payload), the banner/chip/clarifier phrasings,
-the handler trace label, the OICP `(capability hint, latency class)` default,
-the retrieval slot with and without evidence, the output-budget depth floor,
-the referential `Operation` with and without an atom-enum pin, and `ToolAccess`
-— the catalog filter. **Adding an intent is a variant, a row, and exemplars in
-`sovereign/router/exemplars.toml`.** `IntentRow` has no `Default`, so a row
-that omits a column does not compile. Until 2026-08-20 these lived in ten
-`match`es across four crates, three ending in a `_ =>` catch-all — a
-fourteenth intent compiled clean and silently inherited `Speed::Slow`, a
-700-token budget and no `Operation` (noun-convergence rung nc-14). What did NOT
-move: handler DISPATCH in `runtime/turn.rs` and `runtime/streaming.rs` (control
-flow over a closed set is what enums are for), payload guards, and
-`authority_guard::guard_story`, whose values name runtime seams by file.
+The router emits **facts**; the runtime applies **policy**. Splitting them
+keeps classification testable without a model and lets thresholds calibrate
+without touching the trait.
 
-`Plan` is a flat JSON DAG (`steps`, `edges`). `StepKind`: `Reason`,
-`Tool`, `UserInput`, `Branch`, `ReasonWithTools`, `AwaitUserInfo`,
-`Delegate`. `Step.sampling`/`Step.evaluation` are typed fields (the
-planner leaves them `None` today; the executor synthesizes defaults in
-`compute_budget`). The one textual grammar the planner and executor
-share is the `{N.key}` step-output placeholder, owned end-to-end
-(emit + parse + prompt-sync test) by `sovereign-core/src/plan_grammar.rs`.
-(A previous revision of this paragraph described `[sample:N:method]` /
-`[eval:name]` annotations — that grammar never existed in code; the
-2026-07-12 hidden-coupling audit corrected it.)
+**Every per-intent attribute is a column of `IntentRow`** (`Intent::row()` in
+`sovereign-contracts/src/types/routing.rs`): recorded name, wire slug, banner
+and chip phrasings, trace label, OICP `(capability hint, latency class)`,
+retrieval slot with and without evidence, output-budget floor, referential
+`Operation`, `ToolAccess`. Adding an intent is a variant, a row, and exemplars
+in `sovereign/router/exemplars.toml`. `IntentRow` has no `Default`, so a row
+omitting a column does not compile. What did NOT move into it: handler
+dispatch (control flow over a closed set is what enums are for), payload
+guards, and `authority_guard::guard_story`.
 
-**Idempotency ledger (executor replay-safety).** Before a
-`NonIdempotent` tool step runs, the executor writes a durable `Started`
-`StepExecution` row (`StepExecutionStore`) keyed by a content-derived
-idempotency key (`task:tool:hash(params)`), flipping it to `Completed`
-after the side-effect returns. On resume the guard reads that key: a
-`Completed` row means the action already ran — a replan re-runs from an
-empty completed-set, so this is the path that would otherwise re-send —
-and is skipped with its recorded result; a `Started`-but-not-`Completed`
-row means a crash interrupted it mid-flight, so the executor halts and
-surfaces for review rather than blind-replaying a non-idempotent
-side-effect (an email sent twice). The key is content-derived, not
-`(task, step_id)`, so it matches across a replan that re-issues the same
-action under a new step id. Proven exactly-once both ways by
-`sovereign-store/tests/step_execution_replay.rs`.
+`Plan` is a flat JSON DAG; `StepKind` is `Reason`, `Tool`, `UserInput`,
+`Branch`, `ReasonWithTools`, `AwaitUserInfo`, `Delegate`. The one textual
+grammar planner and executor share is the `{N.key}` placeholder, owned
+end-to-end by `sovereign-core/src/plan_grammar.rs`.
 
-**Delegate — the context-firewall worker (§5.2).** `StepKind::Delegate {
-goal, tools, return_schema, max_iterations }`
-(`executor::Executor::execute_delegate`) runs a scoped rich-param tool loop
-in its OWN context: the worker drives the requested tool subset via the
-`<tool_call>{"name","arguments"}` protocol, the raw observations (a page
-DOM, a sheet's cells) accumulate in the worker's local transcript, and only
+**Idempotency ledger.** Before a `NonIdempotent` tool step runs the executor
+writes a durable `Started` row keyed by a CONTENT-derived key
+(`task:tool:hash(params)`, not `(task, step_id)`, so it matches across a
+replan that re-issues the same action under a new id). A `Completed` row on
+resume means the action already ran; a `Started`-but-not-`Completed` row means
+a crash interrupted it, so the executor halts rather than blind-replaying an
+email send.
+
+**Delegate is the context firewall.** It runs a scoped tool loop in its OWN
+context: raw observations accumulate in the worker's local transcript and only
 a typed contract — the `return_schema` fields plus an always-present
-`anomalies` channel — flows back to the orchestrator. So the planner
-decides on a compact summary, never a wall of raw output. The
-`{name, arguments}` parser, tool-schema projection and result formatter are
-**shared** — `crate::tool_loop` is the crate's ONE tool-call protocol since
-2026-09-08 (`acf4e9944`), and all four loops drive it: this one, the
-recipe-author loop, `ReasonWithTools` and the attached-document turn. Until
-then `executor.rs` and `attached_doc_render.rs` carried a second,
-search-shaped `{tool, query}` protocol that discarded every parameter but
-`query` and rendered a tool's `StepOutput::Json` by reading `.get("answer")`
-— see §"knowledge gym" below for what that cost. Firewall proven by
-`sovereign-store/tests/delegate_firewall.rs`. (v1: the worker's internal
-tool calls go straight to `tool.execute`, bypassing the idempotency ledger
-above — threading #4 into the worker loop is a follow-on.)
-
-**TEACHABLE lessons — coach in chat, own in settings** (design:
-`sovereign-desktop/TEACHABLE.md`). The behavior lane: a durative
-coaching turn ("keep answers shorter **from now on**") routed to
-ConationQuery forks a detached capture spawn
-(`runtime/handlers/conation.rs` → `sovereign-core/src/lessons.rs`) that
-compiles the intent DETERMINISTICALLY to the cheapest enforcement rung
-(param → transform → prompt; the fast slot phrases only prompt-rung
-lessons) and emits a fire-and-forget `lesson-proposed` card — consent
-is stateless, dismissals store nothing. Saved lessons are notes
-(`kind = "lesson"`, corpus-engine-notes MIGRATION_V11; payload schema =
-`lessons::LessonPayload`, source fields `{display, taught_from}` vs
-derived `{prompt_form, enforcement, params}` stamped
-`compiler_version`), one ACTIVE lesson per rung (the desktop
-`save_lesson` command supersedes-and-retires). Enforcement: rung 1
-clamps the output-budget SOFT target (never `max_tokens`); rung 2 is a
-whole-word term-avoid pass running post-grounding-gate and
-post-citation (structurally unable to touch `[Source: …]` anchors);
-rung 4 appends ONE compiled sentence outermost on the system + refine
-prompts of primary synthesis intents only. Every influenced turn
-records `metadata.lessons_applied`; the first records
-`metadata.kept_lesson` exactly once (the whisper). No rung touches the
-grounding gate — facts are scored by evidence provenance, never
-preference. Settings surface: `LessonsPanel.svelte` ("What I've
-learned"); measurement: `personas.mjs --coach` A/B report + the
-zero-tolerance `capture_precision` gate.
-
-The router emits **facts**; the runtime applies **policy**.
-Splitting them keeps classification testable without a model and
-lets thresholds calibrate without touching the trait.
-
-**Router classifier stack — one wiring path, all surfaces.** Before the
-coarse→refine LLM cascade, `Router.classify` consults a stack of
-embedding-centroid pre-checks: the **embed router** (intent exemplars → a
-direct intent when confident, skipping the LLM passes), the **scope**
-classifier (personal vs external), the **effort** classifier (a high-effort
-referential `Answer` → `DeepQuery` → primary slot — the exhaustive-ask
-escalation), the **current-info** classifier (drives `force_action` for
-time-sensitive queries), and the **archive** classifier (past chats vs this
-thread — see below). All five are assembled by the single helper
-`sovereign-core/src/router_bootstrap.rs::build_llm_router`, which **every**
-surface calls — CLI/bench, desktop, and the served daemon. Exemplars are baked
-into the binary (`include_str!` of `sovereign/router/*.toml`), so the stack
-works regardless of CWD or `.app`-bundle layout; a `SOVEREIGN_*` env var or
-repo-relative file overrides the baked default. This is **parity by
-construction**: every surface gets the same stack because there is only one
-wiring path, and `tests/router_bootstrap_parity.rs` asserts `all_wired()` so
-the surfaces can't silently re-diverge. (How the stack once diverged —
-desktop and daemon silently under-routing while the benches improved — and
-was collapsed: [HISTORY](./HISTORY.md#router-stack-parity-2026-06-09).)
-Effort-tier escalation +
-robust coarse-verdict recovery default **ON** (`SOVEREIGN_KQ_EFFORT_TIER=0` /
-`SOVEREIGN_ROUTER_ROBUST_COARSE=0` disable).
-
-**Pass 1 recovers a truncated verdict instead of silently downgrading it
-(2026-08-05).** When the Pass-1 JSON fails to parse, `classify`'s `_ =>` arm
-routes `KnowledgeQuery` — a well-formed, plausible, possibly-wrong route
-with no error anywhere (ARCH §18.3). Measured over 106 Pass-1 calls across
-the routing banks, **8 responses came back truncated mid-label** —
-`{\n  "intent": "COMM` and `{\n  "intent": "METALING` — so roughly 7% of
-LLM-decided turns were being silently re-routed to local search. Truncated
-objects have no closing brace, so the 2026-06-09 first-balanced-object
-recovery could not see them either. `parse_coarse` now resolves a truncated
-label against `COARSE_INTENT_LABELS` **only when exactly one label shares
-the prefix** (`COMM` → COMMISSION; `COM` stays ambiguous and degrades as
-before), which recovers a verdict the model gave without inventing one it
-did not. Raising the output budget did *not* stop the truncation — measured,
-the cut lands under even the old ceiling — so the cause is downstream in the
-schema-constrained generation path and the router recovers rather than
-relying on it. The degrade path also prints on the router's stderr glassbox
-channel now; it was previously visible only through a `tracing::warn` the
-bench harness does not enable, which is why it hid for weeks.
-
-**The classifier embedding space — what the router's vectors encode
-(2026-08-04).** The stack above does not embed through `embed_query`. It has
-its own instruction, in `sovereign-core/src/router_instruction.rs`, and that
-module is the single decider for both the instruction text and the
-axis→space map (`axis_space`) that the classifiers, the cache freshness
-gate and `router fit` all read.
-
-It exists because the intent axis was broken by its instruction, not by its
-gate or its scorer. Exemplars went through `embed_query`, applying
-Qwen3-Embedding's shipped **retrieval** instruction — "given a search query,
-retrieve relevant passages that answer the query" — to an
-instruction-following model, and the resulting *topic* vector was then used
-to classify *speech act*. The two are near-orthogonal, and the axis could
-not classify its own hand-authored exemplars: leave-one-out 1-NN 60.6%,
-margin carrying negative information, between-class scatter 12.3% of
-variance. It owned 3 of 40 calibration cases and no operating point
-anywhere did better, which is what ruled out a gate fix.
-
-Under a speech-act instruction, the same bank and the same k=1 scorer
-deliver — cross-bank, gate fitted on one calibration bank and evaluated on
-the other, at a 90% precision floor — **41–49% coverage at 88% precision**,
-against 0–9% before.
-
-**The dividing line is what an axis discriminates BY, and it cost a
-regression to learn.** A speech-act instruction encodes what the speaker is
-DOING and discards what they are talking ABOUT. So `intent` belongs there,
-and `locator` with it (it is scored one-vs-rest over the same exemplar bank,
-so it has no independent choice — and it validates: 0/14 false positives on
-a live negative set including the adversarial archive-recall cases). But
-`scope`, `archive` and `current-info` all separate their classes by SUBJECT
-MATTER — personal vs external, my-past-chats vs this-thread vs the world,
-time-sensitive vs evergreen — which is precisely the signal the instruction
-deletes. Moving all four shared-vector axes at once and running the routing
-bench is what surfaced it: archive began firing on world questions, and its
-live negative set showed why — "What did Kant say about duty?" lands at
-(sim 0.926, margin +0.024) against a true positive at (0.929, +0.031). Not
-mis-tuned; **inexpressible**, with no floor/margin pair separating them.
-
-So the router now computes **two shared vectors per turn**: a classifier-space
-one for intent + locator (+ the tool-relevance gate, which cosines against
-it), and a retrieval-space one shared by scope, archive and current-info.
-**Per-turn embed count is unchanged at three** — current-info used to pay its
-own and now reads the shared retrieval vector, which is what funds the split.
-`router_instruction::axis_space` is the one decider both the classifiers and
-`router fit` read, and returns `None` for an axis it doesn't know so a
-calibration run skips rather than guessing a space.
-
-Two consequences worth carrying. **Thresholds are only comparable within a
-space** — the classifier space clusters similarities high (~0.9) and
-compresses margins, inverting the gate's shape, so the intent floor became
-the live term (0.55 → 0.88) and its margin fell 0.206 → 0.015. Scope,
-archive and current-info kept their constants exactly, because they never
-left their space. And **the embed cache keys the instruction into its hash**
-(`c:`/`q:`/`d:` spaces in `router_embed_cache.rs`): `built_for` fingerprints
-the embed *model* and cannot see an instruction change, so without this the
-freshness gate would report FRESH over a cache holding vectors from the
-previous space.
-
-**A latent taxonomy contradiction it also surfaced (2026-08-05).** Matching
-on the MOVE rather than the topic made the exemplar bank's own
-inconsistencies reachable. `comparison_query` held 12 open-ended qualitative
-comparisons ("Compare Mencius and Xunzi on human nature") while
-`bench/routing/cells_v1.toml` had adjudicated that exact shape as DeepQuery
-back on 2026-06-10 — and `calibration/axes_v1.toml` asserted the opposite
-again, calling "put Rawls and Nozick side by side" a *bounded* contrast.
-Three statements of one taxonomy, two of them disagreeing, invisible for
-two months because topic-space embedding never let the shapes meet. The
-reconciling rule, now applied in all three: **"Compare/Contrast X and Y"
-asks for an open-ended qualitative essay → `deep_query`; "what's the
-difference between X and Y" / "how do X and Y differ" asks a bounded
-contrast → `comparison_query`.** It is a rule about the ASK's shape, which
-is exactly what a speech-act classifier can represent. Result: the intent
-axis went to **zero mislabels** on the calibration bank (it no longer fires
-a wrong class at all), and `cells_v1` returned to 27/27.
-
-**It also made exemplar-writing honest again.** `exemplars.toml` carried a
-standing warning that k=1 plus topic-dominated similarity meant "the only
-exemplar that could win the Rawls case is one about Rawls — which is coaching
-to the bank, not a fix": shape coverage and topic coaching were the same act,
-so there was no legitimate exemplar move. That was true *of the retrieval
-space*. Under the classifier instruction the two come apart, measurably — a
-bench question about a code identifier now matches an exemplar about a
-**spreadsheet column** at cosine 0.959, on shared phrasing alone, which is
-structurally impossible when topic dominates. So a phrasing gap can be filled
-with rows that share the *move* and share no *subject matter* with any bench
-question, and the claim is falsifiable per-case because the bench prints the
-winning exemplar. The discipline and the worked example live in the SHAPE
-COVERAGE block at the end of `exemplars.toml`; the older warning is retired
-in place, with its still-valid half (a topical twin is still coaching) kept.
-
-**The locator axis — "is this question about our conversation?"
-(2026-07-26).** A third orthogonal axis on the exemplar bank, alongside
-`scope`. Rows tagged `locator = "conversation"` in
-`sovereign/router/exemplars.toml` are scored **one-vs-rest**
-(`EmbedRouter::locator_from_embedding`): best similarity to a tagged row
-minus best similarity to every other row in the bank, gated on its own
-floor + margin, decided **independently of the intent gate**. It exists
-because the two axes disagree on exactly the queries that matter — "what
-was the first thing I asked?" is intent-ambiguous (it sits near conation
-and near personal-archive recall) while being locator-unambiguous — and
-because reading a tag off the winning *intent* exemplar is the design
-that already failed once for `scope` (`scope_classifier.rs` post-mortem).
-The verdict runs as **Pre-check -2.5** in `router.rs`, ABOVE the
-knowledge-thread-inherit pre-check that used to swallow these questions,
-and the query embedding it pays for is threaded down to the intent and
-scope classifiers so the per-turn embed count stays at one. Committing
-hard-commits `MetalingualQuery` with coarse label
-`CONVERSATION_LOCATOR_EMBED`, and that label — not a second string parse
-— is what tells `handle_metalingual_query` which locator to honour
-(`locator_hint_from_coarse`). Before it, the Conversation family was
-gated on nine literal substrings, so any other phrasing inherited the
-thread's knowledge intent and searched a corpus for an answer sitting in
-the message list. Thresholds are calibrated, not guessed: zero false
-positives over a held-out negative set that includes the adversarial
-neighbours (archive recall over *past* conversations, world questions
-using ordinal/summary vocabulary) — re-runnable against a live daemon
-via `tests/locator_axis_live.rs --ignored`. Re-calibrated to
-`(0.718, 0.005)` on 2026-08-04 when the stack moved to the classifier
-embedding space: the space change alone cut this axis from 4 correct fires
-to 2 (margins compressed under a threshold set for the old space), and the
-new gate restores 4 at 0 false positives.
-
-**The archive axis — "past chats, or *this* one?" (2026-07-26).** The
-locator axis above answers "is this about THIS thread?"; this one answers
-the adjacent question its negative set was swept against. "Have I
-mentioned kayaking in any of our past chats?" used to route
-`MetalingualQuery`, whereupon the handler string-parsed the locator to
-`Unknown`, preferred CODE corpora, found nothing, and emitted the
-`no_source` empty state — the user's own archive never searched. The
-correct verdict was *already* top-ranked (`KnowledgeQuery`, scope
-personal, 0.531) but sat under the 0.55 intent floor, so the router
-abstained and the LLM classifier picked metalingual. It is not wrong to
-call the question conversational; it is wrong about *which*
-conversation.
-Two cheaper fixes were rejected with numbers: more exemplars (similarity
-in the bank is topic-dominated — the same exemplar scores 1.000 on its
-own topic and 0.531 on a different one), and a rule over the existing
-axes (cells_v1's own metalingual row scores *more* negative on the
-locator axis than the archive query does, so any threshold catching one
-flips the other). So archive-vs-thread gets its own centroid classifier
-(`archive_classifier.rs`, `sovereign/router/archive_examples.toml`) in
-the shape that worked for `scope`, and runs as **Pre-check -2.4** —
-*after* the locator axis, so the older and more heavily swept gate wins
-any disagreement. Firing hard-commits `KnowledgeQuery` **plus
-`scope = "personal"`** (coarse label `CONVERSATION_ARCHIVE_EMBED`);
-without the scope the intent alone would search Wikipedia for the user's
-chat history. Calibrated in the **retrieval** space at 5/6 held-out
-positives and **0/20 false positives** — the unprefixed space collapses
-world negatives into the positive range, and the classifier space (tried
-and rejected 2026-08-04, above) collapses them differently and worse.
-Re-runnable via `tests/archive_axis_live.rs --ignored`, which prints
-sim/margin for every case whether or not the gate fires — an abstain with
-no numbers is the one row you cannot calibrate from.
-
-**Threshold calibration — `svrn router fit` (2026-07-28).** The six gates
-above ship **twelve hand-picked constants**, each calibrated against
-Qwen3-Embedding-0.6B and justified in prose. Two of those decisions turned
-on thousandths — an archive negative held out "by only 0.002 of margin", a
-tool gate hijacked by "0.011 of cosine noise" — and both were found days
-late, by hand, from a bench regression. Nothing said which of the remaining
-constants was one embedding-model change from the same fate.
-
-Three pieces close that. **(1)** `router_axis.rs` extracts the shared
-decision rule — `AxisScore{sim_positive, sim_negative}` + `AxisGate{min_sim,
-min_margin}` + `cushion()`, the signed distance to the boundary — and
-*separates scoring from gating* on all six axes
-(`score_from_embedding` / `classify_*`). That is what makes a threshold
-sweep pure arithmetic: one embedding pass over a bank makes the whole
-threshold space searchable. **(2)** `router_calibration.rs` sweeps it
-exhaustively, with candidate thresholds at the **midpoints between observed
-scores** rather than the prior art's random linspace — exact optimum, maximum
-headroom, and never a threshold placed *on* an observation (in f32,
-`0.50 - 0.46 = 0.0399999…`, which does not clear a 0.04 gate: the
-subtraction moves the boundary, not the comparison). Objectives are
-`SafeRecall` (default — it encodes the asymmetry every axis documents),
-`Accuracy` (for prior-art comparison) and `MaxCoverage` (the intent axis).
-**(3)** `sovereign/bench/routing/calibration/axes_v1.toml`, a bank
-deliberately authored to **fail somewhere**: 74 cases, every one carrying a
-`note`, of which 32 are `expect = "abstain"` — the repo previously had no
-abstention test anywhere.
-
-Two guards make the tool refuse to lie about its own power. A margin floor
-is **clamped to ≥ 0**: an unconstrained sweep over four cases happily fitted
-archive to `-0.101` and scope to `-0.152`, gates that score perfectly and
-fire when the *negative* class won. And `FitReport::underpowered()` flags
-any axis with fewer than five cases in either class
-(`MIN_CASES_PER_CLASS`), printing "read the shipped numbers, not the fitted
-gate" — the fit-on-your-own-test-set failure the prior art commits by
-reporting its headline on the same 66 rows it tuned on. **The command
-writes no constant**; it names the constant and the file and stops.
-
-**Per-case attribution (`--explain`).** A confusion matrix says *two false
-positives*; the next question is always **which two**, and until 2026-07-29
-nothing could answer it — `evaluate()` incremented counters and dropped the
-case id, so the operator's only recourse was to re-derive the buckets by
-hand. `ScoredCase::verdict()` is now the single bucketing rule, and both
-`evaluate()` (which counts verdicts) and `attribute()` (which names them)
-route through it — so the per-case listing can never contradict the totals
-printed above it, and a test sweeps every reachable gate on a bank asserting
-the two views agree. `verdict_changes()` adds the other half: `would_change()`
-says *that* moving a constant changes something, this says *what*, per case.
-`--explain` prints the errors behind each axis (expensive first, closest to
-the boundary first) plus the flips a move would cause; `--format json`
-always carries every case for both gates.
-
-The first run paid for itself. The locator axis's 2 false positives are
-`loc_abstain_last_week` and `loc_abstain_across_all_chats` — both
-**archive-recall** questions, and both scoring *higher* on the conversation
-locator (sim 0.668 / 0.660) than any of the three true positives the gate
-misses (0.420–0.448, at **negative** margins). No threshold reaches those
-three: the geometry ranks archive questions as more "about this conversation"
-than genuine in-thread ones. That is an **exemplar-coverage** defect, not a
-threshold defect, and the fitted `(0.314, 0.178)` gate only clears the two
-FPs by threading a 0.031 band above their margins — a fix tuned to two
-specific cases. The same view shows 7 of the intent axis's 13 misses already
-predict the **correct** label and are held out by the floor alone.
-
-**Rival attribution — naming what a case lost to (2026-07-29).** Knowing a
-case is an error is not knowing how to fix it. A missed positive at
-`margin -0.133` was beaten by *something*, but `score_locator_from_embedding`
-computed the negative side as a bare `f32::max` and threw the identity away,
-so the only available move was to guess more exemplars — the guess
-`archive_examples.toml` already records failing (similarity there is
-topic-dominated; "adding rows buys the topics you add, nothing else").
-`LocatorScore`/`IntentScore` now carry `rival_exemplar` — the untagged row
-that set `sim_negative`, or the runner-up intent's nearest — and it flows
-through `ScoredCase`/`CaseAttribution` into `--explain` and the JSON. The
-production glassbox log (`target: "router.locator"`) carries it too, so
-"why did the locator abstain?" is answerable from logs alone. The centroid
-axes (scope, archive, current_info, effort) leave it `None` honestly: their
-positive class is a mean over ~20 rows and no single row is responsible.
-
-It reclassified the finding a second time. The three misses lost to three
-*different* rows: two to `conation_query` exemplars ("Elaborate on the second
-point.", "Walk through what you just did, step by step.") and one to an
-`expressive_query` row ("I'm not sure if I'm doing this right."). Both false
-positives traced to a **single tagged row** — ordinal exemplar A, then
-phrased "What did I ask you at the very start of this chat?", whose meaning
-lives in a clause the encoder does not weight while the clause it does weight
-is one every archive question also says.
-
-That mattered because the locator **hard-commits**: Pre-check -2.5 returns
-`MetalingualQuery` with no classifier vote, and it sits *above* the
-conversation-archive axis at Pre-check -2.4. An archive question the locator
-claims can never reach the classifier built to catch it, so the locator has
-to reject archive shapes itself.
-
-The repair moved **no constant** — reword A off the shared surface, add A2 to
-keep the canonical positive it was carrying, add tagged rows for three
-uncovered shapes, add two archive-recall negatives under `scope = "personal"`.
-On the same bank: **errors 5 → 1, false positives 2 → 0, correct fires 2 → 4,
-accuracy 50% → 90.9%**, and the shipped `(0.500, 0.020)` gate is now optimal.
-The cost is headroom, recorded because it is what moves next: separation
-0.142 → 0.066, weakest-accept +0.114 → +0.038, since the axis now decides
-four cases where it decided two.
-
-The surviving miss is a **measured encoder limit**, not a gap. The bank was
-split to pin a boundary it had been asserting one side of: ordinal *recall*
-("what was the second option you listed?") versus ordinal *resume* ("go back
-to the second option you listed"), the latter an abstain under the same rule
-as `loc_abstain_summarize_pasted` — a transformation of in-context content,
-which a hard commit would answer with a recitation. They land 0.018 apart
-**with the negative ranked higher**, so no threshold fires one without the
-other, and both lose to "Elaborate on the second point." Recall-vs-resume on
-an ordinal reference is below this encoder's resolution; the axis abstains on
-both, which is the safe direction.
-
-**Effort axis — why "grow the bank before moving the constant" is a rule
-(2026-07-29).** A fit against the original 10 effort cases proposed
-`(0.300, 0.040) → (0.482, 0.025)` and it looked *strictly dominant*: same 5/5
-correct fires, the single false positive cleared. Moving the constant on that
-evidence would have been wrong in both directions at once. The bank was grown
-to 18 with cases chosen to **break** that gate rather than confirm it, and on
-the larger bank `(0.482, 0.025)` scores **6 correct fires and 1 false
-positive** — it rejects `eff_diagnose_latency` (sim 0.418, a true HIGH) on the
-raised floor while `eff_abstain_thorough_but_trivial` (sim 0.556) sails
-through it anyway.
-
-The real separation was never in the floor. Sorted by margin, seven genuine
-HIGH cases sit at +0.099 and above, both false positives at +0.057, so
-`DEFAULT_MIN_MARGIN` moved 0.040 → **0.078** — the midpoint of that gap,
-0.021 clear on each side — and `DEFAULT_MIN_HIGH_SIM` stayed at 0.30. On the
-18-case bank that is errors 4 → 2, false positives 2 → 0, correct fires
-unchanged at 7/9, and the shipped gate is now optimal.
-
-The load-bearing new case is `eff_short_but_hard` ("think this through
-carefully, then give me your answer in one paragraph"). The old bank tested
-*long answer, low effort* (`eff_abstain_exhaustive_but_shallow`) but never the
-inverse, and every shipped HIGH exemplar is an exhaustive expository essay —
-so an axis that had learned **length** rather than reasoning depth would have
-scored perfectly. It fires correctly, which is the first actual evidence for
-the axis's own stated claim. The two remaining misses
-(`eff_counterfactual_architecture`, `eff_tradeoff_pick_one`) rank *below* both
-false positives, so they are an exemplar-coverage gap — neither is an
-expository essay — not a threshold one.
-
-**Intent axis — the coverage ceiling is the geometry, not the objective.** A
-prior reading held that the axis's coverage came from
-`MaxCoverage{min_precision: 1.0}` refusing any mislabel trade, and that
-relaxing the floor would buy coverage cheaply. That is refuted, and remains
-so: every precision floor from 1.0 down to **0.7** returns the same gate.
-Sweeping every gate exhaustively (thresholds at each observed score and each
-score plus epsilon, so gates that *exclude* a given case are reachable) is
-what settles it, and the sweep is replicable from `--format json` — the
-per-case `attribution` block carries `sim_positive` and `margin` for every
-case, which is all a re-derivation needs.
-
-Rival attribution then surfaced two *exemplar-level* defects. **One was real
-and is fixed; the other is not exemplar-fixable at all.** Both results are
-worth more than the coverage number they moved.
-
-*Fixed — a taxonomy rule the file stated and its own exemplars violated.*
-`int_code_chunker_type` (want `code_query`) was losing to
-`"Where is the chunking strategy defined here?"`, tagged `metalingual_query`.
-That is not an open taxonomy question: `exemplars.toml` **states** the
-discriminator — `code_query` is WHERE it lives · WHAT CALLS it · HOW it runs
-(answered from the SCIP call graph), `metalingual_query` is what a term MEANS
-· what CHANGED (answered from prose). The 2026-07-25 migration wrote that rule
-and added exemplars under it but never swept the pre-existing metalingual
-block, leaving two "where does it live / how is it implemented" magnets on the
-wrong side. Re-filing exactly those two (2026-07-29) moved the whole Pareto
-frontier, on the *identical* 24 cases:
-
-| correct fires | 2 | 3 | 4 | 5 | 6 | 7 | 9 |
-|---|---|---|---|---|---|---|---|
-| min hard errors, before | **0** | 2 | 2 | 4 | 4 | 7 | 13 |
-| min hard errors, after | **0** | **0** | **0** | **0** | **1** | **3** | **8** |
-
-Free correct fires went 2 → 4 (both endpoints confirmed by the fitter's own
-safe-recall objective, not only by the replication). Errors 16 → 15, mislabels
-2 → 1, precision 40% → 60%. `int_code_retry_owner`'s margin more than doubled,
-0.058 → 0.127. No constant moved, and the other five axes came back at
-**+0.000** separation — the edit is confined to the axis it was aimed at.
-
-*And it carries a side effect worth generalising.* A/B'd by flipping the two
-tags back, rebuilding the cache and re-fitting: **consolidating two classes
-that shared a neighbourhood inflates the margin for everything in it.** Margin
-is a *relative* measure, and the absorbed class was the runner-up holding it
-down. No similarity changed — only which class claimed the win — yet
-`int_abstain_chunker_overlap_hunch`, a query that should abstain, went from
-margin +0.043 to +0.128. At the 0.100 margin shipped at the time, the re-filing
-*created* that false positive rather than relabelling a pre-existing one, which
-is what the plausible argument from "the same exemplar wins either way"
-predicted. It is harmless at the 0.206 margin shipped now, and the move is a
-clear net win there (2 correct/1 mislabel → 3 correct/0 mislabel). **The rule:
-after re-filing exemplars between classes, re-check the abstain cases, not just
-the positives.**
-
-*Not fixable by exemplars — topic dominates shape.* `int_cmp_rawls_nozick`
-(want `comparison_query`) loses to a `deep_query` exemplar about **Rawls**.
-The tempting reading is that `comparison_query` learned its marker verb rather
-than its stated shape — all fifteen exemplars open with
-compare/contrast/differ/difference, so nothing separates the two hypotheses.
-It was tested: three marker-free two-entity exemplars were added, the cache
-rebuilt, and **every case came back byte-identical**. The control case
-`int_cmp_hawk_dove` sits at sim 0.357 with `comparison_query` not even the
-runner-up. The exemplars were reverted; the control case is kept so the
-refutation stays measurable. The axis is k=1 over 11 topically-overlapping
-classes, so the only exemplar that can win the Rawls case is one *about
-Rawls* — which is coaching to the bank. Moving this ceiling needs per-class
-thresholds or a topic-normalised score, not more exemplars.
-
-*The bank grew to adjudicate a floor move, and reported something worse.* The
-floor looked like a live lead: (0.45, 0.100) measured +4 correct fires for no
-new error, and `fit` could not surface it because safe-recall refuses any
-mislabel while the shipped gate already carried one — so the fitter judges
-candidates against a stricter standard than the status quo and cannot propose a
-gate that ties shipped errors while raising coverage. (`--max-false-positives`
-does not relax this; it governs abstain-fires only. That objective defect is
-real and still worth fixing.)
-
-Growing the bank 27 → 40 to test that move found the **coverage bias that had
-been hiding the axis's actual precision**: all seven original abstain cases
-were 2-6 word ellipticals ("go on", "tell me more"). A floor drop admits the
-sim band 0.45–0.55, and only *content-rich* queries score there — so the bank
-was proving the floor safe using exactly the cases a floor cannot endanger.
-Four long, confident-sounding, genuinely under-determined abstain cases were
-added. Two of them fire, **at the shipped gate, not the proposed one.**
-
-The shipped gate's real score on adequate evidence was **5 correct fires
-against 5 hard errors — 50% precision.** The axis was committing wrong about as
-often as it committed right, against its own documented asymmetry (a false
-positive hard-commits the turn; a false negative merely falls through to the
-cascade ~1.2s slower).
-
-So the repair is the **margin**, not the floor: `DEFAULT_MIN_MARGIN` 0.10 →
-0.206, floor untouched. **3 fires, 0 mislabels, 0 false positives — 100%
-precision**, separation 0.018 → 0.033, and `fit` now reports the axis
-**optimal** rather than movable. The margins sort with a clean gap exactly
-there: every hard error at ≤ 0.190, every surviving correct fire at ≥ 0.223.
-Five hard commits removed for two extra cascade calls. The floor is left at
-0.55 having been shown *inert* — every point on the frontier is reachable at a
-floor of 0.000 — because moving a constant that screens nothing is pure risk.
-
-*Why coverage cannot be recovered by tuning.* Below 0.206 good and bad
-interleave with no separating value: the two worst false positives fire at
-margins of 0.171 and 0.190, **higher than most correct fires**. On this axis
-margin measures confidence, not correctness. The purpose-built pair proves
-why — `int_know_losalamos_arrival` (a bare date lookup) and
-`int_deep_losalamos_disillusion` (a causal question) resolve to the *same*
-nearest exemplar, and the wrong one wins with the bigger margin. That is the
-same topic-dominance that refuted the `comparison_query` fix, now demonstrated
-under control rather than inferred. Recovering coverage needs per-class
-thresholds or a topic-normalised score — not a threshold move and not more
-exemplars.
-
-**Score-distribution drift (`router_drift.rs`).** `fit` is a snapshot, and
-the failure this system actually has is that the ground moves while the
-constants stay still — a new encoder, a re-quantised one, an edited exemplar
-bank shifts every cosine without touching a line of `scope_classifier.rs`.
-So `--save-baseline` records the run as a dated `FitSnapshot` under
-`sovereign/bench/routing/baselines/<bank>-fit/`, reusing `bench all`'s
-existing dated-JSON + `latest.json` convention rather than adding a metrics
-pipeline, and every later run diffs the shipped gate's **cushions and
-separation** against it. A regression is only *claimed* when the encoder and
-the bank are both unchanged (both recorded — the bank by content digest);
-otherwise the deltas print as evidence and the report says why they are not
-attributable. A moved constant is named rather than blamed, unless the edit
-cost errors. Exit codes: `0` clean · `3` a gate is movable · `4` drift
-regression.
-
-The **first baseline is recorded** (2026-07-28) against the prescribed
-`Qwen3-Embedding-0.6B-Q8_0.gguf` over all 74 cases. Why the *prescribed*
-model and not whatever is to hand: the same bank scored under the f16
-`qwen-embedding-0.6b.gguf` moves `separation` by **0.000–0.004** per axis —
-small, and **no decision changes** (identical errors and coverage on all
-six), so the two quantisations are interchangeable *for routing*. But 0.004
-is four times `DRIFT_EPS`, so treating them as one encoder would manufacture
-a "regression" on four axes the first time anyone switched. Hence the
-comparability key stays the exact model file, and the baseline is pinned to
-the one production runs. (The equivalence itself was measured with this
-tool — a cross-encoder run prints the deltas as evidence precisely so
-questions like this get answered with numbers.)
-
-**Routing metrics past exact-match (`eval_cmd/routing_metrics.rs`).** The
-five routing banks score 96/96, so accuracy stopped being informative.
-`RoutingMetrics` adds what accuracy hides: **layer attribution** (which
-decisions the embed router owned versus which woke a ~1.2–2.4s LLM call —
-the number a threshold fit can actually move), per-intent
-precision/recall/F1, and ranked `expected → actual` confusions. It renders
-under `eval run --routing-only` and its one-line `headline()` carries into
-the `bench all` rollup. Deliberately **no abstention metric** there: the
-full cascade always returns an intent, so abstention is not observable at
-that layer — it is a property of the individual gates, and it is measured
-where it exists, by `router fit`.
-
-**Pre-built router-embed cache (`router_embed_cache.rs`).** The five boot
-classifiers embed ~350 static exemplars at every process start — ~5.7s on Apple
-Silicon, *minutes* on a CPU-only embed slot (Intel Macs, which `embed_slot.rs`
-gates off Metal). So the embeddings are pre-computed for the prescribed embed
-model and committed at `sovereign/router/router-embed-cache.json`, baked into
-the binary (`BAKED_ROUTER_EMBED_CACHE`) and loaded as the fallback when
-`~/.svrnmesh/router-embed-cache.json` is absent — first launch HITS instead of
-re-embedding. A sentinel cosine probe validates it against the live model, so a
-genuinely swapped embed model is rejected → one-time re-embed, surfaced as the
-`RebuildingRouterEmbeddings` bootstrap phase. Freshness is a pure no-inference
-gate (`check_cache_fresh`: exemplar-key coverage + a `family|hf_url` model
-fingerprint) enforced by `tests/router_cache_fresh.rs` (CI + a
-`desktop-release.yml` pre-flight) and regenerated by `svrn router-cache
-rebuild`, which `scripts/bump-desktop-version.sh` runs when stale. The same
-`EmbedSlot::load` auto-detects the Qwen3-Embedding family from the gguf
-architecture, so the prescribed model under a non-default filename still gets
-last-token pooling + the query instruction-prefix (and thus matches the cache).
-
-**Synthesis role layer (`role.rs`).** The knowledge-turn path is organized as
-three data-defined roles — the synthesis-side counterpart to the agent-loop
-roles in `sovereign-agent-tools/src/role/`, lifting the same
-`RoleProfile`/`RoleModelMap` shape (ARCH §6: profiles are *data*). **Router**
-classifies + resolves the route (mechanism: `EmbedRouter` +
-`resolve_synthesis_route`); **Synthesizer** assembles the grounded answer
-(mechanism: `build_synthesis_system_prompt` — the one prompt-body builder all
-synthesis sites now call); **Critic** is a *separate verification pass*
-(mechanism today: the bench grounding/abstain/caveat classifiers — defined in
-`role.rs` so bench + any future prod critic share one definition, **not yet
-wired into prod synthesis**). Each `RoleProfile` ships with its
-`verify_predicate` (the keystone: the predicate defines correctness, the bench
-measures it). Two SSOT decisions back this: `build_synthesis_system_prompt`
-(one prompt body, byte-equivalence-tested) and `resolve_synthesis_route` (the
-single traced FastFocused-vs-PrimarySynthesis decision with a typed
-`RouteReason`, truth-table-tested against the legacy ladder) — together they
-end the "live path mis-identified three times" illegibility. `role.rs` is
-**load-bearing**, not just declarative: the resolver returns `role::Tier` (via
-`SynthesisRoute::tier()`, surfaced in the KnowledgeQuery trace as
-`role=synthesizer tier=…`), and the chaos bench sources the Critic's gate model
-from `default_profile_for(Role::Critic)` (`--critic-model`, default primary).
-
-**The production grounding gate (`runtime/grounding/`).** The gate's
-load-bearing design decision is the **evidence universe**: it verifies claims
-against the *sealed corpus* (per-claim hybrid search via `ClaimSearcher`), not
-just the prompt snapshot, and feeds failed claims' corrective passages into
-the rewrite (replace, don't delete). That choice is what makes a gate
-net-positive at all — an earlier Critic-as-gate was empirically ruled out,
-then the verdict reversed by widening what the judge could see
-([HISTORY](./HISTORY.md#the-grounding-gate-verdict-reversal-2026-06-09--06-11)).
-**That widening was only half done, and the other half was found on
-2026-08-13.** The judge could reach the sealed corpus, but the *prompt
-snapshot* it started from was capped at `leaf_chunks[:8]` of a typically
-28-chunk retrieval, and the holistic specifics scan saw every leaf chunk
-truncated to 1500 characters and no RAPTOR summaries at all — while the
-DRAFTER received the whole set. One universe, built once by
-`gate_evidence_with_sources`, then split three ways, so a claim the drafter
-grounded in leaf chunk #18 or in a summary could not be cleared by the
-mechanism judging it. Measured over 18 audit passes: 38 of 57 failed claims
-(67%) had their support outside the failing mechanism's own view, and **zero
-passes ever came back clean**, so every turn paid a rewrite and a re-audit
-(`NATIVE_GROUNDING_ECONOMY.md` §7.8, note `95b82f97`). The audit window is now
-derived from the retrieved leaf set rather than a constant — the bound is that
-the drafter's evidence already cleared `prompt_budget::enforce`, and a judge
-prompt is strictly smaller — and `GroundingProfile::max_chunks` is gone rather
-than left as a knob that no longer governs anything.
-It PASSES the full bank (secret-agent 0.67/0.82/0.18 production-config;
-holdout honesty 0.91/0.09). Mechanism: **hold → verify → corrective retry
-(short answers) / per-claim audit → **mark** (long-form) → grounded
-abstention**, fail-open on judge failure.
-**Fail-open is accounted per claim** (2026-09-01, issue #57): a per-claim
-judge that returns no verdict (provider error, admission-queue shed) marks its
-claim `unjudged` on the `GateClaim` record; the audit then exits
-`judge_failed_open` instead of `released`, the journal verdict projects
-could-not-judge, and the epistemic ledger renders the holding `FailOpen` —
-never `Verified`. Before that date eight shed judges released as eight verified
-holdings on a `grounded` turn.
-**The claim-search triage is RETIRED; the fan-out is concurrent and bounded**
-(2026-09-02, issue #57). The batched `claims_support_batched` call no longer
-runs as a triage deciding which claims get a corpus search: it was a model call
-spent to avoid deterministic work, it measured 185 s on the reporter's 4B
-against 518 ms of searching, and two attempts to price it per turn each
-rebuilt the inversion (a bar measured here, then a per-search cost carried
-across corpora — a per-corpus quantity stored under the identity of the
-process). Nothing in the pass now thresholds on a model-produced claim count.
-The batched pass survives only behind the `SOVEREIGN_GATE_BATCH_VERIFY` /
-`SOVEREIGN_GATE_BATCH_SHADOW` study flags. What replaced it is deterministic:
-**the fan-out itself is concurrent, bounded by ONE permit.** `claims x corpora`
-was serial on BOTH axes, the only multiplicative term in the turn. A claim's
-hits depend on that claim alone, so the searches are hoisted out of the
-sequential judging loop and run `buffered` — never `buffer_unordered`, because
-the round-robin interleaves per corpus and the output must stay byte-identical,
-which makes this a scheduling change and not a semantic one. Measured over
-wikipedia+sep at ten claims: eight searches in 9,837 ms at concurrency 3
-against a 3,352 ms mean per search. **Concurrency is DERIVED, never declared:**
-`claim_search_concurrency()` is cores/4 clamped to `1..=4`, so a 12-core host
-runs three and the reporter's 4-core laptop runs one — its previous serial
-behaviour, inheriting no new concurrency and no new memory risk. **The bound is
-ONE process-wide semaphore** (`claim_search_permits`), not one per level:
-bounding each level separately bounds NEITHER — four claims by four corpora is
-sixteen concurrent `open_index` + hybrid searches against indexes that reach
-88 GB on a host holding a 17.7 GB model resident, and that product caused a
-memory event on 2026-09-02. The permit is taken at the innermost point and
-covers the OPEN as well as the search (every task opens a DIFFERENT corpus, so
-the engine's index cache cannot dedupe them). Any future nested fan-out here
-takes that permit rather than adding its own.
-**The audit pass is a module with a plan and an outcome** (`grounding/audit_pass.rs`,
-same date). What was a 650-line closure run twice per turn is `AuditPass::run`.
-What each claim gets is decided ONCE, before any IO, as a `ClaimDisposition`
-(`Exempt` / `Vetoed` / `Judge`) — one pure decider read by both the fan-out and
-the judging loop, so there is no second predicate to keep in step. The pass
-returns an `AuditPassOutcome` (`ExtractionFailed` / `Judged`), so a caller
-cannot forget a case. `ClaimSearcher` reaches its indexes through the two-method
-`SealedIndexSource` seam rather than a concrete `CorpusEngine`, which is what
-lets `search_corpus`'s deciders — the allow-list seal, the kind filter, the
-round-robin cap and permit-before-open — be tested against a fake
-(`search.rs` tests; zero existed before). **Every generation of the daemon is
-keyed:** `svrn daemon is running` carries `run`, `pid`, `exe`, `exe_mtime` and
-`version` (`sovereign_core::run_identity`), and the gate's `claim_search_fanout`
-event and `audit` forensics record carry the same `run`, because `daemon.err`
-is append-only across restarts and a line without that key is not attributable.
-**mod.rs left the oversized list** (2026-09-02, ARCH §3.1 split, three commits).
-The 6,042-line file now reads as a ~1,160-line façade: module declarations plus
-`pub`/`pub(crate)` re-exports that hold every historical `grounding::X` path
-stable, so handlers, collaboration, `audit_pass` and the moved tests compile
-unchanged. The concerns live beside it: `gate.rs` (ladder entry, verdict
-projection, decision journaling, the short-path specifics guard),
-`inner.rs` (`gate_answer_inner`), `longform.rs` (`gate_longform`),
-`repair.rs` (`FailedClaim` + the corrective/rewrite/verification notes),
-`replay.rs` (the offline extraction harness) and `tests.rs` (the 2,246-line
-test module, whose `use super::*` resolves to the same grounding module it
-resolved to inline). Two source-text guards in `tests.rs` re-pointed from
-`include_str!("mod.rs")` to the module family — their subject was the gate's
-production surface, not one file. Remaining grounding tail, sequenced in
-§10 of this file: `judge.rs` (1,846 — its 1,166-line tests module moved out on
-2026-09-03 and split again the same day into `tests/prefix_family.rs` +
-`tests/claim_scan.rs`; prompts, verify and scan extraction remain),
-`citation.rs` (1,694). `citation_attribution.rs` left the list the same day
-(1,403 → 848 — tests moved to `citation_attribution/tests.rs` by
-`cargo xtask refactor-apply`, the deterministic plan executor).
-**The long-form repair ladder is TOMBSTONED as of 2026-08-14** (Phase 4 of
-`NATIVE_GROUNDING_ECONOMY.md`, order `gate-tombstone-ladder`). On the default
-configuration a long-form draft whose audit found failures is **released with
-those claims marked**, not re-synthesised: neither the rewrite pass nor
-audit #2 — the re-audit whose only input is the rewrite's output — executes.
-`config::longform_repair_enabled()` reads `SOVEREIGN_GATE_LONGFORM_REPAIR`
-(default off; `=1` re-arms **both**, deliberately one knob — a separate
-re-audit flag would make "rewrite on, re-audit off" reachable, which is the
-2026-07-17 configuration that leaked CONFAB 0→1 and was reverted, §7.4).
-The grounding function is undiminished because **nothing is regenerated**:
-the released text is the audited draft, and each failed claim rides out as a
-`failed_once` holding that flips the turn's epistemic verdict to `mixed`
-(`longform_claims` → `runtime/epistemic.rs`, rendered under the answer) —
-§3.3 G2, marking discharges G2 completely while the rewrite discharged a
-presentation preference at 5.4s + 50.9s per repaired turn. Both paths carry
-`sovereign/DEFAULTS_LEDGER.md` rows with a 2026-09-13 review-by; a tombstone
-that fires is visible in the product rather than inferred from the flag,
-because the stage strip records `Rewrite` / `ReAudit` rows from the branch
-actually taken. **The marking's second channel, reconciled 2026-09-12 (vl-6):** span-level
-demotion (`SegmentKind::Unverified` in the provenance strip) used not to
-render on this host — H1 admission has only reranker-derived margin sources,
-the reranker slot is rejected (ECONOMY §7.7), and display segmentation was
-gated on `native_verdict.is_some()`, so `answer_segments` was null on every
-turn (note `e1e9e7a3`, 794/794 banked turns, 17/17 live desktop turns). The
-gate now reads whether the admission stage RAN, not whether it decided:
-`EvidenceContext::native_admission` is a three-state `NativeAdmission`
-(`NotRun` / `NoInstrument` / `Decided`), the opted-out arm still carries no
-segment field at all, and a turn H1 could not measure still has a released
-text and a sealed pool — which is all `segments_for_display` ever reads. The
-claim-level ledger remains the marking that DECIDES; the strip is display. Judge prompts are byte-pinned to the
-bench critic so the bench-calibrated τ=0.9 transfers. Module layout:
-`grounding/config.rs` (`GateSurface` closed enum + per-surface
-`GroundingProfile` budgets + `grounding_gate_flags()` registry), `judge.rs`
-(claim extraction, forced-choice support, joint long-form judge), `search.rs`
-(`SealedEvidenceSearch` trait — claim-conditioned widening that can never
-widen corpus scope), `mod.rs` (the ladder: `gate_answer` over an
-`EvidenceContext`), plus `citation.rs` / `citation_attribution.rs` /
-`value_presence.rs` (citation forcing + numeric-presence checks), and
-`sealed.rs` (the leaf evidence view as a `kernel_types::Seal`).
-**The citation-grounded release is kernel-typed as of 2026-08-21** (rung
-`nc-20-turn-adoption`). On that arm the gate no longer hand-fills a
-`ReleasedCitation`: it seals the leaf view, mints each released quote through
-`kernel_types::Citation::pointing_into` — the one door, which refuses a quote
-the member does not hold verbatim and one whose grain may not be quoted — and
-releases the composed text as a `kernel_types::Draft` → `Answer`, which cannot
-be built without a `Judgement`. The wire rows are then PROJECTED from that
-answer by `EpistemicState::citations_of`, so "what did this turn cite" has one
-decider instead of two lists that agreed by hand (each row also carries
-`member`, the mesh machine whose corpus the passage came from, read off the
-chunk's `metadata["peer"]` into `EvidenceContext.chunk_members` beside
-custody; absent = local — 2026-09-18; a per-claim holding's
-`Provenance::Corpus.member` is pool-level instead, named only when every pool
-chunk came from one member, the `sole_corpus` rule). The released STRING and the
-set of emitted rows are unchanged — seal membership is the same
-`(corpus, chunk)` predicate the old fold applied, and WHICH member a quote
-came from is still decided upstream by `locate_quote_in_chunks` (the seal is
-narrowed to that member before the kernel door sees it). What is new is that a
-drop is a named `Refused` value on `grounding.seal` rather than a `None`
-vanishing inside a `filter_map`.
-**The citation stage's support decider is the gate's own judge as of
-2026-09-04** (order `citation-decider-structural`). `citation.rs` grounds a
-`(quote, answer)` pair on two rules. The quote must be verbatim in the passages
-(`locate_quote_in_chunks`, unchanged). Whether the ANSWER is supported is now
-decided by `judge::claim_chunk_support` — the calibrated forced-choice A/B
-register `verify_grounding`'s per-claim loop runs and the bench faithfulness
-lane shares — asked against the MATCHED CHUNK (`evidence_for`) and compared in
-the audit's own terms: `violation_prob = 1 - support`, released iff
-`< profile.tau`. There is no second threshold, and the ~60-line
-`answer_supported_by_quote` it replaces is DELETED with its stop list. That
-check was a conjunction over every ≥2-char non-stop word of the answer, so it
-refused a CORRECT paraphrase whenever the answer carried a connective or a
-morphological variant — its pass probability decayed with answer LENGTH — and
-`multiquote_outcome` then wrote the verification failure up as "The passages do
-not answer: <part>", a claim about the corpus the check never tested (issue
-#57, notes `7a8a2e97` / `afd0ea0d`; `a4f8f2a95` quarantined the sentence, this
-change removes the check). Measured on the resident primary over the same
-pairs, 2026-09-04: the #57 paraphrase scores 0.9993 support where the
-conjunction refused it, while the embassy confabulation (0.0043) and an
-out-of-corpus control (0.0000) are refused exactly as before — one verdict
-changed, in one direction (§18.6). A lone PART releases its bare answer, as the
-single-pair contract does: the label only tells parts apart, and when the model
-does not split the question its PART line restates it as an instruction
-("Identify …: A2A, MCP", 10 answers in the 2026-09-13 soak). **The exact-value rule survives as a VETO,
-in code** (§7.6): `numeric_veto` refuses a pair whose answer carries a complete
-number token the evidence does not, runs BEFORE the probe, and may only refuse
-— no probe verdict licenses a number the evidence lacks. **Truncation is
-reported, never silent:** `build_passages` returns how many chunks
-`PASSAGE_CHAR_BUDGET` (28,000) kept out of the window, that count rides the
-release as `grounding_gate.evidence_window_dropped`, and a part whose absence
-coincides with dropped evidence is could-not-judge — the turn falls through to
-the audit ladder rather than asserting an absence over evidence nobody looked
-at (§18.3). A probe that returns no verdict is the same could-not-judge,
-fail-open. **The path selector is a budget, not a cliff:**
-`profile.longform_chars` (1,800) decides whether a draft takes the citation
-contract or the audit ladder, and
-`the_longform_pivot_changes_the_route_and_not_the_holding` pins that the same
-content at 1,799 and 1,801 characters releases the same holding and differs
-only in `mode` (`single_claim` vs `per_claim`).
-**Value-presence became a VETO on 2026-09-04, and the probe decides**
-(order `grounding-footguns`, the same split 571849a89 made for quotes,
-extended to values). `value_presence.rs` answers "is the specific this answer
-asserts grounded?" for THREE consumers at once — the gate's entity-anchored
-branch (`judge.rs`, to decide), the chaos scorer's `asserted_value_grounded`
-(to measure), and the deep-research containment checks. Until this date a
-deterministic substring test decided BOTH directions, and its own doc stated
-the positive one: "a real corpus token (even mis-roled, or the surname inside a
-full name carrying the asked-for part) is exactly-present and released as best
-effort." That is how the fabrication "Winnie's mother is **Mrs Neale**" — Mrs
-Neale is the charwoman of Brett Street — scored GROUNDED on the chaos corpus,
-and, through `is_honest_absent`, scored HONEST. Now: `value_present_in_chunks`
-may only REFUSE (a value whose tokens appear nowhere is ungrounded, cheaply,
-with no model call), and the positive verdict comes from
-`judge::claim_chunk_support` at `config::grounding_gate_threshold()` — the same
-register and the same threshold the audit pass and the citation stage use, and
-no second threshold is minted. The probe is asked ONCE, against the chunks that
-CARRY the value joined into one passage (which chunks is decided by the same
-veto predicate applied per chunk — one implementation, never two), with the
-claim composed from the question's own frame. **The 18-word role-word stop list
-is deleted**: it existed only to make presence generous enough to say
-"grounded" about a mis-roled value, and the words it was generous about
-(`mrs`, `sir`, `chief`, `inspector`, …) are exactly the ones a mis-roled
-fabrication gets wrong. Measured on the chaos corpus's own paragraphs
-(`svrn bench judge-replay --register chunk_judge`, 3 repeats, identical each
-time): the mother fabrication scores support 0.0045 and "Mrs Neale is the
-charwoman" scores 0.9999 against the SAME evidence — three orders of magnitude
-apart, a separation no substring test can express — while the competence case a
-strict extractive judge used to lose ("Yundt's first name is Karl", against a
-paragraph that only ever writes "Karl Yundt") scores 0.9997. Showing the probe
-the value's whole neighbourhood rather than one chunk is load-bearing and was
-measured: the same fabrication scores 0.2956 and 0.4001 against two single
-chunks that merely mention Mrs Neale near Winnie — both of which RELEASE at tau
-— and 0.0060 against the two together.
-
-**Every fail-open exit names WHY, at one site** (2026-09-04). `judge_failed_open`
-released turns under load and the ledger recorded only that it had happened, so
-the class could not be fixed: the queue shedding the call, a slot mid-restart
-and an unreadable verdict take three different fixes.
-`GroundingDecisionLine::judge_failure` and `grounding_gate.judge_failure` now
-carry `{reason, calls_attempted, calls_answered}` on every action
-`runtime::epistemic::action_is_fail_open` recognises — attached in
-`gate::record_gate_decision`, the funnel that already owns the journal, so a
-future exit that ships unverified cannot forget. `JudgeFailureReason` is a
-closed set derived from a closed set: six variants are `Error` variants matched
-on the ENUM (never sniffed from a message), and two are arithmetic over the
-turn's own call census — `verdict_unparseable` when every judging call answered
-and no verdict was reached, `no_judge_call` when none was attempted. MEASURED
-on this host, 32 turns under a second concurrent `chat ask`: 5 `judge_failed_open`
-exits, **5 of 5 `queue_shed` with zero calls answered**, plus 5 whole turns that
-died at the DRAFT on the same shed. The class is host admission
-(`sovereign-inference::model_slot::acquire_with_queue_gauge`'s priority-blind
-pre-park gate), not the gate — note `d6e13797` records the measurement and why
-no gate-side retry was shipped for it.
-
-**That gate now knows what a continuation is** (2026-09-07, order
-`admission-continuation`). `CompletionRequest.admission` carries a
-`TurnAdmission` — the turn's own foreground lease, plus an id — and a caller
-holding one is PARKED at the slot queue instead of shed, because it is not new
-load: it is the tail of a turn this host already accepted, routed, retrieved
-for and drafted. `runtime::admission` is the minter and the ambient scope
-(`turn_lease.rs` opens it, `streaming.rs` re-installs it across the turn body's
-spawn, exactly as it does the stage ledger); `grounding::call_census::gate_call`
-stamps every gate call because it is already the ladder's single funnel, and
-`streaming.rs` stamps the draft. Fresh requests — a peer's, a background job's,
-a new turn's first call — keep the shed policy byte-for-byte, and the token is
-`#[serde(skip)]` so it CANNOT cross a wire hop: a peer receiving forwarded work
-decides admission for itself. The park is widened, not unbounded —
-`ADMITTED_PARK_MULTIPLE` (4) x the one operator threshold, so the stuck-slot
-liveness guarantee the post-park timeout was written for still holds.
-
-A second consequence, same commit: the lease is now taken BEFORE the turn body
-runs rather than on the handle it returns, so routing and retrieval — the first
-third of the turn's wall clock — are inside the foreground window for the first
-time. `1426177dd` intended that ("a turn is foreground for its whole life");
-the wrap site made it false for the opening stage.
-
-**The chat-ask lane's `gate outcome honest` row scores an unanswered judge as
-could-not-judge**, not as a failure (same order, deliverable 6): a turn whose
-`judge_failure.reason` is set with `calls_answered == 0` produced no verdict for
-the action to agree or disagree with, so failing the row scores the HOST rather
-than the answer. The dishonesty rules still run first and still bind — a
-`verified` holding under a fail-open action is a failure whatever refused the
-call — and `calls_answered > 0` stays judged. The abstention is EARNED by an
-observed run, not anticipated (ARCH §18.2): the day's grounding journal (note
-`9f5fd608`, 195 rows) carries 14 instrumented fail-opens with `calls_answered`
-0 on 13 of them.
-
-**Per-turn STACK ATTRIBUTION — the strip that says which system spent the
-turn (G4, 2026-08-12).** `NATIVE_GROUNDING_ECONOMY.md` §3.4 named G4 ("the
-system can tell what it decided and why") as a function no stage owned, on
-the subsystem the `native-grounding` initiative is named for; establishing
-the single sentence *"the system runs both stacks and the old one owns most
-of the turn"* had to be done archaeologically, from a journal join plus a
-`daemon.err` census. It is now a field on the wire and a strip in the app.
-`sovereign/crates/sovereign-contracts/src/types/stage_attribution.rs` carries the closed sets
-(`StackOwner` = native / incumbent / **shared** — retrieval and the draft
-belong to neither stack; `StageId`, `StageMechanism`, `StageCause`,
-`ServedBy`) and `TurnStageLedger::seal` derives `served_by` + `incumbent_ms`
-so the desktop and the CLI cannot disagree (#8). `runtime/stage_ledger.rs`
-is the recording half: a task-local ledger opened once per streaming turn
-(both `stream_knowledge_query_turn` and `stream_deep_query_turn` — the
-iconic latency query routes to the **deep** one), appended to by the code
-that *executes* each stage, and serialised to `metadata.stage_attribution`.
-**Attribution is from observed execution, never from flag values** — the
-rewrite row's `mechanism` is set inside the branch actually taken, which is
-the first production record of surgical-vs-full-resynthesis (previously only
-a `dbg()` gated behind `SOVEREIGN_AGENTIC_KQ_DEBUG=1`). **A mechanism that
-runs while contributing no row is a defect in the strip, and is detectable:**
-two residual rows — `gate_unattributed` (the gate funnel's own wall clock
-minus the rows recorded inside it) and `turn_unattributed` — are always
-emitted, including at zero, so unrowed work surfaces as seconds nobody
-claimed. Measured on four live turns 2026-08-12: gate residual 1–5 ms,
-turn residual 0.1–0.3 s, and the census join reproduces `gate_ms` exactly.
-Reporting only — nothing branches on it. Rendered by
-`AnswerProvenance.svelte` (extended, not replaced) via
-`answerProvenance.ts::readStageAttribution`, which recomputes no attribution
-and reports an unrecognised owner/stage/mechanism rather than coercing it.
-
-**Per-CALL attribution — the gate call census (`runtime/grounding/call_census.rs`,
-2026-08-13).** The stage strip above says which *stage* spent the turn; it
-cannot say which *call*, and that gap had a measured cost. A per-call census
-reconstructed from the daemon's `routing outcome` log found the gate's
-dominant cost class to be **16–22 s calls emitting 4–745 characters** — almost
-pure prefill of the 28–36-chunk evidence window — and could not name the
-mechanism that issued a single one of them (note `221b3b71`, FINDING 3). Two
-candidate owners fit the shape and their fixes differ, so tuning without
-naming first would have been mole-whacking (ARCH §0).
-`call_census::gate_call` is now the **one funnel every judge model call goes
-through**, tagging each with a `call_census::JudgeCall`: either a closed-set
-`sovereign_contracts::types::GateCallMechanism` (`claim_extraction`,
-`claim_list`, `per_claim_judge`, `chunk_judge`, `specifics_scan`,
-`batched_support`, `located_span_triage`, `surgery`, `rewrite`, `retry`,
-`short_guard_retry`, `citation`, `sentence_sweep`, `evidence_sufficiency`) or a
-`Harness(&'static str)` label for a caller outside any turn. **Only a `Gate`
-call produces a census ROW** — because only a gate turn has a census to put one
-in; a harness call is still timed, traced and failure-classified, which is the
-part a bench can use. The alternative, giving the bench critic's five scorers
-their own `GateCallMechanism` variants, was rejected: that type's contract is
-one variant per GATE call site (ARCH §12).
-
-**One register, enforced (`cargo xtask judge-funnel-gate`, 2026-09-12, rung
-`vl-1` of `quality/campaigns/verifier-loop.toml`).** Three judge-side sites
-built their own `x_forced_choice` request body — `grounding/judge.rs`,
-`bench_cmd/live_runner.rs` and an inline one in `runtime/evidence_loop` — and
-only the first reached the funnel, so two thirds of this system's judge traffic
-was invisible to the census that prices judge cost and attributes judge
-failure. `sovereign_core::runtime::forced_choice_ab` is now the only
-construction site; the other two are callers, parameterised by system message,
-`JudgeRouting` (OICP envelope vs a pinned slot) and `JudgeCall`. The gate holds
-it at one on two counts — sites == 1 AND sites whose file never calls
-`gate_call(` == 0, because either alone passes a split register. Its one
-exception, `bench_cmd/mechanism_fidelity.rs`, is declared by a
-`judge-funnel: instrument-of-the-mechanism` marker at the site rather than by a
-list in the gate: an instrument that measures the sentinel must build the wire
-shape or it measures its own caller (ARCH §7).
-
-**A register change is priced in both directions, or it is not judged
-(`svrn bench judge-replay` + `bench/chaos_monkey/judge_replay_report.py`,
-registered 2026-09-12, rung `vl-3`).** The harness has existed since 2026-08-13
-and was in NONE of `quality/instruments.toml`'s rows — the instrument that
-prices a judge change was itself unregistered, unrun and uncontrolled. Two
-things changed. The report now COMPARES arms instead of printing two blocks for
-a reader to diff: per register, at the operating tau, catches lost · catches
-gained · false positives cured · false positives added, never netted, and a
-candidate that surrenders a catch is `failed` whatever it cures (the 2026-08-14
-calibration's own kill rule). And the control is the archive: commit
-`17ac931b8` is a specifics-scan candidate refused at the 3/3 `should_flag` bar,
-its verdicts frozen beside main's, and it is the right control precisely
-because its AGGREGATE IMPROVED — 6/10 against main's 3/10 — while it lost the
-Kane-bridge catch. The old one-number line passed it; `judge_replay_report.py
---self-test` (0.03 s, in the pre-push selection) fails if the report ever
-passes it again, and a second arm requires an arm compared against ITSELF to
-pass, so a report that answered `failed` unconditionally would not satisfy it.
-
-**The bank the replay reads is measured against the clock
-(`judge_replay_cases.py --bank-age`, rung `vl-4`).** Every recorded episode was
-written on 2026-08-13/14 — 29.6 days old on 2026-09-12 — so a registered replay
-was pricing candidates against a world that had moved. Three changes, none of
-them to a privacy default. The ledger set is DISCOVERED (`gate_audit_forensics_
-*.jsonl`) rather than a dict of four names, which had already missed
-`..._20260814_portfolio_afterarm.jsonl` sitting beside them unread. The age is
-read from the EPISODE's own `ts` and only from `audit` records — the same knob
-also writes `citation` rows carrying a `ts` and no evidence window, and the
-first nine questions of the chaos bank wrote six of those and no audit record,
-which a kind-blind reading would have reported as a fed bank. And
-`feed_replay_bank.sh` is the feed: a bench run with
-`SOVEREIGN_GATE_AUDIT_FORENSICS` pointed at a dated ledger, in the process that
-RUNS the gate (`svrn chat ask` cannot serve — its turn runs on the daemon), in
-the `run-if-stale` venue so a machine used every day feeds it and a machine
-left off for a week feeds it once on return. The audit pass runs on LONG-FORM
-turns only, so `--limit` is load-bearing: a limit that stops before the bank's
-maximal questions produces citation rows and no replayable episode.
-
-Rows accumulate in a task-local opened by
-`gate_answer_with_progress` — the same funnel that owns the gate's wall clock —
-and ride out as `GroundingDecisionLine::calls` (counts only: `ms`,
-`prompt_chars`, `out_chars`, `ok`, `stable_prefix_bytes`, `start_offset_ms`;
-the journal's no-prose guard covers them), plus a compact
-`gate_call_ms`/`gate_call_n` summary on the outcome meta.
-`sovereign/bench/chaos_monkey/gate_call_census.py` is the reader — versioned
-in the repo rather than left on one workstation, because the finding below is
-one a later reader has to be able to reproduce. It reports THREE arms and
-does not merge them: **NAMED** (the exact join, mechanism per call),
-**ROUTED** (the daemon's own `routing outcome` lines — anonymous, and kept as
-the independent check: on the 2026-08-13 rewrite turn the arms agreed 15 == 15
-within ~20 ms per call, which is what licensed trusting NAMED at all), and
-**PIN** (`prefix_state` HIT lines joined by absolute time). The PIN arm is the
-load-proof one: a call that restored carries
-`key=<family hash> restored_tokens=N restore_ms=M`, so "do these two
-mechanisms share a prefix family" is answered by comparing KEYS rather than by
-hoping a duration shrank — which matters because a mis-declared
-`stable_prefix_len` does not error, it silently full-prefills.
-**A call that did NOT restore used to carry no line at all**, and that silence
-was itself a defect: it made "not eligible", "first sighting", "family
-drifted" and "refused a pin it should have taken" indistinguishable, so the
-undirected path could decline forever without anything to read (ARCH §9.1).
-Since 2026-09-02 every `Pass` return names its reason and its arithmetic
-(`key`, `prompt_tokens`, `lcp`, `pin`, `min_pin`) at `debug` on target
-`prefix_state`. Turning that on is what found the refusal below, so treat the
-DEBUG lines as part of the PIN arm, not as noise:
-`RUST_LOG=info,prefix_state=debug`. Measured 2026-08-13, one clean turn: the five per-claim judges
-all restored `key=3b4389a9d12c54fd`, 5,508 tokens in 26-32 ms (including the
-one declaring the shorter 26,089 B window — under the 48-token probe key of
-the day, two declared lengths collapsed to ONE family; since 2026-09-01 a
-declared prefix keys on its own CONTENT, so those two are two entries and each
-restores its whole declaration — issue #57); the specifics
-scan restored nothing and paid 10,881 ms for 7,817 tokens. Implied primary
-prefill ≈ 719 tok/s, which back-predicts the judge calls.
-
-**Two identical prompts now form a family** (2026-09-02, issue #57). The
-UNDIRECTED planner learns a boundary from two sightings, and its guard was
-`lcp >= min_pin && lcp < tokens.len()` — so the one case where two sightings
-share EVERYTHING fell through to `Pass`, permanently. Anything that re-sent a
-byte-identical prompt therefore re-prefilled it in full, every time, forever.
-Measured on the live daemon: a DeepQuery turn discarded ~16.3k tokens of
-prefill per turn across three families — the synthesis call (9,891 tokens,
-`lcp=9891 len=9891 min_pin=384`), the citation judge (5,134) and the
-topic/route pass (1,278) — while the gate's per-claim judges beside them
-restored 4,881 tokens in 45 ms off the DIRECTED path, which had always backed
-off two tokens instead of refusing. Both paths now take the margin from one
-`PIN_TAIL_MARGIN`, and `pin_with_tail(lcp, len)` is what the undirected
-branches call. Effect on three repeats of one question, warm model: synthesis
-TTFT 34.0 s → 11.9 s (learn) → **0.2 s** (restore), wall 59.4 s → 27.8 s →
-**8.8 s**. State files are 145-171 MB per family against the 2,048 MB budget,
-committed in 215-721 ms.
-
-**What this does NOT fix, and the shape of the next win.** A pin only forms
-over a prefix that actually repeats, so a turn whose prompt is stable-first
-benefits and one whose volatile part leads does not. `citation.rs` builds
-`PASSAGES:\n{passages}\n\nQUESTION: …` — stable-first by construction — but
-`build_passages` emits chunks in RETRIEVAL RANK order, so a different question
-over the *same ten chunks* reorders them and the shared prefix collapses:
-measured `lcp=49` against a 5,132-token entry, dropping the family. Ordering
-the passage block by a stable key (document position) while carrying relevance
-separately would make it pin across questions; it is a PROMPT change, so it
-belongs behind `sovereign-ci-bench.sh`, not behind a latency argument.
-**Deliberately NOT the stage ledger**: per-call rows in `TurnStageLedger`
-would make `sum(rows)` exceed `gate_ms` and saturate the `gate_unattributed`
-residual to zero, destroying the detector described above. The funnel is
-enforced structurally rather than remembered — a compile-time `include_str!`
-test asserts no file in `grounding/` reaches `inference.complete` outside it
-(it caught `pipeline.rs::verify_sentence` on its first run). Two honest
-limits, both stated on the wire type: the task-local does not cross
-`tokio::spawn` (no gate path spawns today; `sentence_sweep` does, runs outside
-the gate window, and is named-but-never-recorded on purpose), and an empty
-`calls` vec is ambiguous — resolved by `sum(calls.ms)` against `gate_ms`, not
-read as a free turn. **The gate's journal append is now `#[cfg(not(test))]`**:
-unit tests drove the funnel with mock providers and appended synthetic turns
-(gate_ms 0–3, chunks=1) into the same production stream the latency census and
-the E-* arms read *by index* — 36 of them in one session on 2026-08-13. The
-line is still built under test; only the IO is suppressed.
-
-**Live gate progress (the verification counter, 2026-07-15).** On the two
-streaming surfaces the ladder also narrates itself: `gate_answer_with_progress`
-try_sends `NarrationPhase::{ClaimCheckStart, ClaimVerdict, ClaimRevisionStart,
-ClaimCheckComplete}` frames (never backpressure — drop-on-full) through a
-channel `gate_held_answer` forwards as `turn-narration` events, and
-`RetrievalComplete` now carries `top_titles`. The desktop renders these as
-`CounterCard.svelte` — a Gather → Draft → Check station card that replaces the
-chip stack + promoted narration line during a gated hold and stamps each claim
-as it verifies (reducer: `applyCounter` in `routing.machine.ts`; e2e:
-`counter-card.spec.ts`). Every element is frame-driven; the card never invents
-progress, and retrieval-only signal is provisional — the moment tokens stream
-with no gate signal (an ungated turn) the card yields to the legacy
-indicators. On serve, a quiet **verification receipt** persists on the bubble
-(`AssistantMessage` `verification-receipt`, from `grounding_gate` meta —
-release actions only, never fail-open verdicts). The **attached-doc surface is
-wired too**: `gate_attached_doc_answer` opens the same progress channel
-(`GateProgressWiring::spawn_reader`), the counter outranks the
-`document:operation` progress line once claim frames arrive, and
-`DocumentAskResponse.metadata` now returns the persisted message metadata
-verbatim so live attached-doc bubbles carry provenance + the receipt exactly
-like a reload (previously dropped at the Tauri boundary). Complex-task keeps
-TaskProgress for the wait but its persisted `grounding_gate` meta feeds the
-same receipt. Other non-streaming surfaces pass `None` and are byte-identical. Gated surfaces today (all env-gated;
-`SOVEREIGN_GROUNDING_GATE` global default, `SOVEREIGN_GROUNDING_GATE_<SURFACE>`
-override): streaming/non-streaming KnowledgeQuery + streaming DeepQuery
-(dual-bank validated), attached-doc (dual-bank validated: Conrad dev bank +
-Meridian holdout under `bench/attached_doc/`; `AttachedAssetSearcher` seals
-claim search to the asset), complex-task (narration gated per-claim against
-the step transcript, verbatim derivation appendix untouched; calibration bank
-pending), simple-query (non-witness, retrieval-matched turns only). The
-refinement overwrite path re-gates verify-only (`RefinementGuard`): a
-gate-released answer is never overwritten by text that fails the same gate.
-Corpus-deictic questions ("the story", "this document") close the GK-caveat
-exemption like entity anchoring does. Metalingual answers are structurally
-grounded instead of gated: decode-committed term-absent caveat / source
-attribution + the quote guardrail (calibration bank pending). (Note: effort-tier escalation default-ON *improves* chaos
-competence 0.33 → 0.46 — a net win, not a regression.)
-
-**Retrieval pipeline (`runtime/retrieval_pipeline.rs`).** The
-retrieval-injection orchestration — which grounding/boost/expansion steps run,
-in what order, under which `SOVEREIGN_*` gates — is **data**: a
-`RetrievalPipeline` is an ordered list of named `RetrievalStep`s run by one
-tracing runner (one `tracing::info!(target: "retrieval.pipeline")` line per
-step with `chunks_before/after/delta`, plus the step's declared `kind` and its
-accounting — see below). The governing principle: **the
-intent decides HOW to answer (model tier, expansion, synthesis shape) — never
-WHERE knowledge lives.** Both pipelines are composed as **the SHARED 3-step
-evidence-gathering head (local corpora ∥ mesh fan-out → personal-scope filter
-→ StateStore corpus docs) + the SHARED 15-step core + a per-intent tail**:
-`kq_pipeline()` (KnowledgeQuery / ComparisonQuery, 19 steps; tail = audited
-truncate, then route-aware expansion post-pipeline) and `deep_pipeline()`
-(DeepQuery / SimpleQuery, 20 steps; tail = plain truncate + strategy-driven
-top-sources expansion; attached-doc turns drop the head and the two grounding
-steps). Golden tests pin the step lists and the head+core identity, so
-reordering is an explicit, reviewed act. Per-intent differences
-(comparison-aware entity boost/reserve) ride `PipelineState`, not divergent
-code, and both pipelines share `shared_head_steps()` — which knowledge
-sources exist is a property of the install, not of the intent label. The
-injection helpers themselves (`apply_atlas_grounding`,
-`meta_atlas_boost`, `fan_out_decomposed_queries`,
-`expand_from_top_sources`, …) are `impl Runtime` methods under
-`runtime/retrieval/` (the 2026-07-12 split of the former 5,000-line
-`retrieval.rs` into 11 concern modules);
-
-**`apply_atlas_grounding` is a CALLER since ei-4-walk (2026-09-04), not the
-walk.** The walk itself is `corpus_engine::enrichment::atlas::ground` and its
-policy — seed kinds, PER-KIND SEED QUOTAS, edge kinds, hops, evidence budget —
-comes from the corpus's own `atlas/ontology.json` `navigation` section
-(`EPISTEMIC_INDEX.md` §2.2), not from constants at the call site. Since ei-5c
-(2026-09-07) it is also the ONLY grounding implementation the retrieval path
-has: `apply_raptor_grounding` was the second, and it is deleted. The walk's
-source is four files rather than one — `ground.rs` performs the three steps,
-`ground/select.rs` decides which row, `ground/report.rs` holds the ledger, the
-degradations, the map section and the result, `ground/tests.rs` the tests —
-split along the seam the module's own doc draws, with every
-`atlas::ground::…` path unchanged by re-export (ARCH §3.1, §10.6). **A row
-is checked against what the atlases CARRY before it runs, since order
-epistemic-index-map-conversion rung 1 (2026-09-08)**: `AtlasProvider::
-inventory()` is the census every store takes at open (atoms per kind,
-entities per type, edges per kind as the CSR holds them — ONE tally,
-`AtlasInventory::from_records`), `AtlasInventory::of(graphs)` unions it over
-the scope, and `select_walk` runs `admit_winner` on the classified winner
-(`atlas/inventory.rs`, `ground/select.rs`). A row is admissible iff some
-graph carries one of its seed kinds (an `Entity(concept)` seed needs a
-`concept`; a `declared` seed needs declared types) and, if it walks, one of
-its edge kinds. An inert winner falls to the next kind in race order whose
-row fits and whose sim clears the classifier's own floor, else to the
-unfiltered row — BY NAME: `KindSource::RowInert`,
-`Degradation::RowInert(report)` in the ledger and in `ask`'s text,
-`row_inert=` on the `retrieval_audit` ledger line. Measured before it
-existed: wikipedia's four classified questions all ran the tension row with
-zero seeds (`seed_kinds_unseen=[Claim, Position]`); wikipedia carries
-Entities typed `article` and Involves edges only, so every filtered row but
-lookup is inert there, and those four run the unfiltered row now because
-their runner-ups sit below the floor. `svrn atlas kind --corpus <id>` reports
-the same verdict per question through the same decider — from
-`_summary.json`'s census for atom-class stores (1,771 SEP siblings in 10 s),
-by opening a wiki-class store (12.7 s). `seed_kinds_unseen` stays as the
-per-walk observation for a row that WAS admitted. What stays
-here is what only a `Runtime` can do: choose the atlases in scope (through
-`ground::candidate_atlas_ids`, the one home of the chunk → atlas id
-derivation, replacing an inline `format!("{}-{}", corpus_id, title)`), embed
-the question through the lane's provider, and fetch a chunk — the two methods
-of `ground::EvidenceFetcher`. `corpus-mcp`'s `ask` implements the same two and
-gets the same walk, which is the point (§10.6: one walk, two hosts). It also
-hands the walk's own REPORT out, as a value: a second out-parameter `walk_out`
-writes `AtlasWalkEcho` (the map section's nodes — atlas, atom id, kind,
-subtype, hop, via, from, score — plus the walk and resolve counters,
-`runtime/types.rs`) into `PipelineState::atlas_walk`, carried to
-`KnowledgeQueryPlan` and `EvidenceRetrieval` exactly the way
-`unavailable_corpora` is and out to `EvalResult.atlas_walk`, because the
-`atlas-grounding: fetch ledger` event that used to hold it alone is dark on the
-surface that has to measure it (`svrn eval run` emits no `sovereign_core`
-tracing at any level). The `--synth` lane reaches that same field by the other
-door the plan has: `runtime/streaming.rs` writes the echo into the assistant
-message's metadata under `ATLAS_WALK_META_KEY` beside `meta_atlas_hits`, and
-`eval_cmd::atlas_walk_meta` reads it back off the PERSISTED row — that lane
-returns no plan to read, so a value is not enough and only the metadata hop
-carries it. Since 2026-09-21 the DeepQuery/SimpleQuery path carries it too:
-`deep_pipeline` always ran the same step, but `prepare_knowledge_context`
-dropped the echo, so `KnowledgeContext` now holds it and both Deep doors
-(`stream_deep_query_turn`, `handle_simple`) plus `retrieve_evidence`'s deep
-branch write it. Before that a walked Deep turn persisted no key, which read
-downstream as "not walked".
-
-The question's KIND selects the row, by centroid over the map's own exemplars
-(`atlas_traversal::question_kind`, ARCH §2.4 — the router's method, ported
-here via `extractors::column_aware::HeaderClassifier`). Failing either gate is
-an ABSTAIN, and an abstain runs `WalkPolicy::unfiltered` — the pre-policy
-behaviour written down as data — so "unclassified" is one code path with the
-classified cases and is always named in the ledger, never a silent second
-walk. `atlas_navigate_ann` survives as a thin caller under that same
-unfiltered row, so the eval CLI and the evidence-site wiring tests keep the
-walk they were calibrated against.
-
-**`svrn atlas kind` is the classifier's instrument** (2026-09-08,
-`atlas_cmd/kind.rs`): it runs the race over a bank or given questions under a
-corpus's own map (or the pre-registered one, and says which) and prints
-winner, `sim`, `margin`, runner-up and — on an abstain — WHICH gate refused
-(`abstain:sim` / `abstain:margin` / `abstain:both`), plus the map's
-inter-centroid cosines as the background a `sim` is read against. Built
-because "the classifier abstains on 15 of 21 SEP questions" was a number read
-off a lane ledger; the instrument reproduced it exactly before anything was
-concluded from it (§18.4). What it then showed: the abstention is not SEP's.
-Under the pre-registered map and gates, wikipedia abstains 16/20, the literary
-thematic set 3/6, and "Who was Aldfrith?" fails the floor on wessex-hoard; the
-winner is `tension` on 19 of 21 SEP questions, and 7 of the 15 SEP abstains
-fail ONLY the 0.34 floor with margins of 0.059–0.082. The floor was
-`column_aware::HEADER_MIN_SIM`, reused unmeasured: a header against a header
-phrase is one length regime, a forty-word question against a four-word gloss
-is another, and the map's own centroids sit at 0.41–0.64 cosine from each
-other. Off-topic controls (nginx, a capital, a unit conversion) score
-0.16–0.24 and are refused by the MARGIN gate, not the floor — the margin is
-the discriminator, as the constant's own comment says.
-
-**Superseded 2026-09-08: the two paragraphs above measured a real effect and
-named the wrong cause.** Every number in them — the 0.41–0.64 inter-centroid
-band, the 0.34 floor, the 0.16–0.24 off-topic controls — was taken in the
-RETRIEVAL QUERY space, and that was the defect. A question kind is a speech
-act, and the classifier was scoring speech acts on vectors the model had been
-instructed to fill with topic. The tell was already in the paragraph above and
-was read as a row problem: `tension` won 19 of 21 SEP questions. It also won
-or ran second on most of the Conrad bank. That is not a row whose composition
-needs widening, it is a race carrying almost no information.
-
-`question_kind` now embeds the map's exemplars AND the query under
-`sovereign_contracts::embed_quirks::CLASSIFIER_INSTRUCTION` — the speech-act
-instruction the router adopted on 2026-08-04 for the identical failure on its
-intent axis — through one function, `kind_space_embedding`, so the two sides
-cannot land in different spaces again. Measured on the Conrad bank
-(`svrn atlas kind --corpus chaos-secret-agent`, 43 questions): top-1 kind
-correct 6/39 → **28/39**; classified 6/43 → **22/43**; and of those classified,
-correct 0 → 16. The six the old gates admitted were all the wrong row, so the
-visible abstain rate was hiding a precision of zero. Winners now track the
-bank's shape — `lookup` 16 on Conrad, `tension` 4 / `thematic` 5 on SEP —
-where before both banks collapsed onto tension/trajectory regardless of what
-was asked.
-
-The gates moved because the space did, not to move a number: 0.34/0.05 were
-calibrated in a space that no longer exists here. `KIND_MIN_SIM` is now 0.50
-and has stopped pretending to be a proximity threshold — in the speech-act
-cone `"asdf qwerty zxcv"` scores 0.872 and `"ok"` 0.907 against real questions
-at 0.765–0.923, so no floor separates sense from noise. What 0.50 does catch
-is a query embedded in a different space from the centroids (0.135–0.463
-cross-space against 0.765–0.965 in-space), which is the defect above turned
-into a tripwire. `KIND_MIN_MARGIN` is 0.02, set from the map rather than any
-bank: the tightest built-in gloss clears 0.039 and the gate must admit the
-phrases a map declares as what a kind sounds like.
-
-Two alternatives were measured and rejected. Re-centring the centroids on
-their own mean moves top-1 by at most one question in either space. Centring
-on the corpus's own `Question` atoms lifts the retrieval space from 6/39 to
-22/39 — real corroboration of the diagnosis — but stays below the instruction
-fix, makes the classifier corpus-dependent, and on `chaos-secret-agent` all 22
-atoms carry one degenerate `question_type`. The paragraph below is kept as the
-record of what was concluded before the space was checked.
-
-**The floor stays at 0.34 anyway, and the reason is measured in the other
-direction (§18.6).** At `SOVEREIGN_QUESTION_KIND_MIN_SIM=0.28` the instrument
-admits 11 more questions across the banks (SEP 6→13, wikipedia 4→7, literary
-thematic 3→4, every one onto `tension`) and no off-topic control — and the
-EI2 SEP lane, same binary, same bank, same `--isolate --limit 30`, reads
-**149/159 against 152/159** at the default floor, below the 151 bar. The
-seven newly classified walks run the tension row, which composes no summary
-source, where the unfiltered row they abstained onto composes `[atoms,
-raptor]` — `summaries_appended` 120 → 64. So the abstention is a floor
-artefact AND admitting those questions costs facts, and the two facts point
-at the same place: the pre-registered `tension` row's composition, not the
-gate. Widening a row to move a bank is tuning a navigation default to the
-bench (spec §7 step 5), so that is an operator decision on §2.2, recorded
-here rather than made. The instrument is what makes the decision cheap.
-
-**The evidence budget is spent ACROSS the ideas the walk reached, not down the
-first one.** `ground::resolve_evidence` fetches each request's realisable
-chunks into its own queue and then round-robins, one per request per lap, in
-walk-score order. The loop it replaced (inherited verbatim from this file)
-took every hit a request offered before moving on — and for an atlas whose
-`EvidenceSite` carries no article filter (every whole-corpus atlas: literary,
-wessex-hoard, wikipedia) one search returns up to thirty passages and all are
-accepted, so the first idea consumed the entire budget. Measured on
-wessex-hoard 2026-09-04: three themes reached, three requests emitted,
-`added: 12`, and all twelve belonged to one theme. The graph's whole
-contribution is that it reaches several connected ideas; spending the budget
-on one of them threw that away at the last step.
-
-`WalkLedger` and `ResolveLedger` carry every seed, hop, drop and budget
-decision, at `debug` under the `retrieval_audit` target and in the returned
-value so `ask` can render it — a zero yield always says WHICH zero it is.
-`DEFAULT_BUDGET` is 12, read off `ceil(KQ_PER_CORPUS_LIMIT * 0.6)` rather than
-off prose; `the_default_budget_is_the_live_fetch_budget` fails if either side
-moves alone. both handlers build a
-`PipelineState` and call
-`pipeline.run(...)`, then keep their post-pipeline concerns (evidence-shape
-routing + route-aware expansion + prompt/request assembly on the KQ side;
-provenance + prompt/history assembly + seal audit on the deep side).
-Cross-path SSOTs hold on both paths: deep's expansion decision goes through
-the same `decide_expansion_strategy` the KQ planner uses, the personal-scope
-filter is one shared whole-pool step, and the store-search leg reuses the
-pipeline's query embedding. `retrieval_pipeline_flags()` is the SSOT
-registry of every retrieval env knob (name + default + purpose).
-
-**Every step accounts for what it did to the pool (since 2026-09-03).** A
-`delta` of 0 used to mean two different things — "nothing was relevant" and
-"every candidate failed to resolve" — and the pipeline could not tell them
-apart. That ambiguity is why atlas grounding contributed literally zero chunks
-to every SEP answer for months behind an ordinary-looking trace line (fixed in
-`3ab1fecbc`; see `corpus-engine/src/enrichment/atlas/evidence_site.rs`). Two
-mechanisms close it, both structural rather than remembered (ARCH §7):
-`StepKind` is **declared** on all 27 steps (`Injector` / `Filter(DropReason)` /
-`Reorder` / `Inert`) and checked by the runner against the delta it already
-measures, so an injector that removes or a sort that changes membership is a
-reported violation; and because `Filter` carries the reason it removes for, the
-runner derives removal COUNTS itself — eight filters are fully accounted with
-no per-step code. Injectors report `considered` plus drops by `DropReason` (18
-variants, collapsed from the 49 distinct guards across the steps) and the runner
-enforces `added + dropped == considered`. `DropReason::is_resolution_failure`
-splits decisions (scope, threshold, budget, duplicate) from failures
-(`corpus_not_searchable`, `evidence_unresolvable`, `title_mismatch`): a step
-whose every candidate dies for a *failure* reason is not filtering, it is
-broken, and that is now something code can say. The audit is a pure
-`ledger_violations()` with tests driving each arm to failure (ARCH §18.1), and
-`svrn eval run --prod-pipeline` exits non-zero on any violation, so the report
-has teeth rather than scrolling past. **Still open:** 10 of the 11 injectors do
-not yet report `considered` — they log `injector has no ledger yet` at debug and
-the runner declines to cry wolf; the kind-vs-delta invariant already covers all
-27.
-
-**An answer over missing knowledge says so — and CODE guarantees it, not the
-model (`runtime/unavailability.rs`, since 2026-08-14).** Retrieval can lose a
-corpus two ways, and both used to be silent. `corpus_search.rs`'s eligibility
-filter drops corpora that are not ready to serve (index never finished
-building, vector index missing, embedding dims from a different model); the
-mesh fan-out loses corpora a peer refuses or cannot be reached for. Each site
-knew the corpus BY NAME, and both discarded that knowledge before the
-response — so a question about a peer-only corpus came back confidently
-answered from an unrelated local one
-(`research/scale-analysis/MESH_SCALE_100_USERS_1000_CORPORA.md` §9.6), and a
-scoped eval scored plausible numbers over a corpus that was never searched
-(note 89d5f75a). The contract now:
-
-- **One record, one field.** `UnavailabilityReason` is a closed enum
-  (`NotBuilt` / `Empty` / `NoVectorIndex` / `DimMismatch` / `PeerUnreachable`) and
-  `CorpusUnavailable` pairs it with the corpus id. `Empty` is a never-built
-  corpus with zero rows: nothing stalled, so it is not called `NotBuilt`. Both loss sites write
-  `PipelineState::unavailable_corpora` and nothing else; `main_retrieval_mesh`
-  is the only writer, merging the local and mesh halves local-wins. EMPTY
-  means "nothing was lost", never "nobody looked" — the mesh client's
-  transport / non-2xx / malformed paths report the corpora they were asked
-  for rather than returning an empty vec (ARCH §18.3).
-- **One readiness decider.** `corpus_search::corpus_unavailability()` is
-  called by the filter that drops and by the disclosure step that reports, so
-  what gets skipped is what gets disclosed by construction (ARCH §10.6 — this
-  replaced two hand-mirrored `if` chains). The local report is narrowed by the
-  same sensitivity / allow-list / principal-ceiling filters the survivors
-  pass, reusing `apply_corpus_allow_list`, so a disclosure can never name a
-  corpus the user disabled or another tenant's.
-- **The marker is appended by code.** `append_unavailability_marker` is a
-  pure function of the loss list, applied immediately after the gap check on
-  all four answer surfaces (KQ non-streaming, KQ stream, DeepQuery stream,
-  simple) — the same position and rationale as the quote-verification
-  guardrail beside it. It names only losses that
-  `UnavailabilityReason::withholds_content` — an `Empty` corpus hides nothing,
-  and "this answer does not draw on it" would imply a miss (2026-09-13 chaos
-  soak: two zero-row folder corpora rode on 19 answers). `step_readiness_disclosure` still injects assistant
-  guidance for the empty-pool case, but nothing load-bearing depends on a
-  model choosing to relay it (ARCH §7.6). The gap check remains the one
-  did-we-answer judge; no second judge was minted.
-- **No-regression bar.** A turn that lost nothing renders BYTE FOR BYTE as it
-  did before the feature: the marker is `None` on an empty list and the
-  append is the identity. Asserted in both lanes
-  (`sovereign-mesh/tests/knowledge_client_unavailability.rs`, which replays
-  the §9.6 response over a real socket, and the unit tests in
-  `runtime/unavailability.rs`).
-
-**A turn fans out more than once, and only the FIRST one is allowed to be
-O(n) in corpus count (`SOVEREIGN_EXPANSION_SCOPE`, default ON since
-2026-08-13; `=0` disables).** At
-production defaults a knowledge turn issues **4** full fan-outs — 1
-`KnowledgeQuery` + 3 `EntityBoost` — and every one of them searched every
-installed corpus, so the per-turn retrieval wall was **linear at 2.19 s per
-100 corpora** (5 log-spaced points, within 5% at every point; EntityBoost
-carried ~62% of the fan-out wall at n=1000). The scale fix is not a faster
-index, it is a smaller question: the main fan-out has already asked every
-corpus, so the expansions are scoped to the corpora behind the top
-`KQ_MERGED_LIMIT` chunks of that fan-out — decided ONCE in
-`step_main_retrieval_mesh`, read by all five expansion steps through the
-single accessor `PipelineState::expansion_corpora()`, bounded above by 20
-corpora however many are installed. `main_retrieval_precedes_every_expansion_
-fanout` pins the ordering this depends on. Two invariants keep it fail-safe:
-an EMPTY main fan-out falls back to the conversation allow-list rather than
-scoping the expansions to nothing, and narrowing an allow-list can never leak
-(the set is drawn from chunks that already passed all five corpus filters, and
-the principal ceiling is applied independently on every call).
-
-**The instructive part is the first version, which measured as an exact
-no-op.** It scoped to "corpora that produced hits in the main fan-out" and
-selected 50 of 50 corpora, because the per-corpus fan-out applies **no score
-floor** — every corpus that opens returns its top-K, so "produced a hit" means
-"the index was readable", not "the corpus is relevant", and the signal that
-discriminates (noise floor, `reweight_and_sort`) runs *after* the expansions.
-The generalisable rule, and the same one §D1 reached from the other end: **a
-scope drawn from presence rather than from ranking is vacuous.** Scoping had to
-wait for a relevance signal, and the only one available at that point is the
-score the fan-out itself assigned. Note this set is NOT `searched_corpora`
-(snapshotted post-expansion as the bleed-audit baseline) — different point,
-different purpose. A second effect falls out structurally: a scoped fan-out
-skips `corpus_relevance_prefilter`, which therefore runs once per turn instead
-of once per fan-out — the measured 35% regression that `SOVEREIGN_CORPUS_
-PREFILTER_TOPK` caused at n=1000 was 4 passes, not one.
-
-**An injector must earn its slots — the atom-enum topic gate (2026-08-05).**
-Some steps run *after* the noise floor by design, because what they inject is
-metadata with no query-token overlap that the floor would drop
-(`step_atom_enum`). That exemption is load-bearing and dangerous in equal
-measure: nothing downstream can reject an irrelevant chunk once injected, and
-`merge_demand_select` **pins** `source=atom-enum` chunks ahead of the ranked
-pool, up to half the merge budget (`ATOM_ENUM_MERGE_SHARE_DEN`; past that they
-compete on rank like any chunk). Measured on `bench sep/summarize --prod-pipeline`, the overview-claim
-injector was spending 5-8 of ~30 slots per turn on
-`commonwealth-ai-arch-principles` in **14 of 14** questions — the same three
-claims each time, because its selector ranked on `(has_evidence, has_excerpt,
-confidence)`, all properties of how well a corpus was *enriched* rather than of
-what was *asked*. A question about idealism composed seven chunks of this
-repo's architecture doc and five of a personal Obsidian vault. Off-topic
-admission: 27.6% of the pool. So the injector now gates **per corpus**: a
-corpus may inject its atlas key points only when its best claim covers a
-majority (`SOVEREIGN_ATOM_ENUM_TOPIC_GRIP`, default 0.5) of the question's
-*topic* tokens — content tokens minus the overview framing, since the words
-that route a question to this path ("overview", "comprehensive") cannot also be
-evidence of what it is about. Off-topic admission fell to 11.0% and the
-displaced evidence returned (wikipedia +41%). The generalisable rule: **scope
-guards that admit on presence rather than on aboutness are vacuous**
-— `resolve_atom_enum_scope` promises "never every corpus installed on the box"
-and delivers it, yet grants rights on one chunk surviving a 533-chunk pool
-whose scores do not discriminate.
-
-The same ordering defect is why the remaining 11% resisted two further fixes.
-Both `step_atom_enum` and multi-source expansion **select while the pool is
-still RRF-fused**, where the whole pool sits in 0.02-0.05 and grounded hits are
-indistinguishable from hopeless ones; the signal that separates them
-(`reweight_and_sort`, ~0.70 vs ~0.04) runs three steps later. A relevance
-predicate bolted onto either selector cannot recover what the ranking lost — an
-overlap gate on expansion measured byte-identical results and was reverted. The
-durable lesson: **fix the position of a selector, not its predicate.** Of the
-residual, 31 chunks are personal corpora held in by a deliberate carve-out in
-`corpus_relevance_prefilter` (it always keeps `personal_scope` corpora
-regardless of score); that is a relevance cost, not a leak — `mesh_sharing` and
-the principal `corpus_ceiling` are the actual egress boundaries and both are
-intact. Full measurement, the rejected per-claim variant, and why the carve-out
-was not simply removed: [`docs/RETRIEVAL_AUDIT_2026-08-04.md`](./docs/RETRIEVAL_AUDIT_2026-08-04.md) §D1-fix, §D1-residual. (How the
-two pipelines converged from silently-drifting inline duplicates — the
-Phase 2 A/B, the divergence-archaeology pass, the accretion artifacts it
-retired:
-[HISTORY](./HISTORY.md#retrieval-pipeline-convergence-2026-06-09--10).) Environments without a mesh or
-store-ingested corpora see identical behavior; the known mesh round-trip of
-local corpora is collapsed by the shared `dedupe_merged` step. Open
-follow-up: KQ provenance doesn't yet surface mesh peer attribution
-(`search_method` labels live on the deep handler).
-
-Per-intent handlers live in
-`sovereign-core/src/runtime/handlers/{simple,ask_move,conation,commissive,metalingual,expressive,document_op,complex_task,attached_doc,knowledge_query,code_query,generative,recipe_author}.rs`
-as `impl Runtime` across files (no vtable hop on dispatch).
+`anomalies` channel — flows back. `crate::tool_loop` is the crate's ONE
+tool-call protocol, and all four loops drive it.
+
+**The router classifier stack has one wiring path.** Before the coarse→refine
+LLM cascade, `classify` consults five embedding-centroid pre-checks — embed
+router, scope, effort, current-info, archive — plus a locator axis scored
+one-vs-rest. All are assembled by `router_bootstrap.rs::build_llm_router`,
+which EVERY surface calls, and `router_bootstrap_parity.rs` asserts
+`all_wired()`. Exemplars are `include_str!`'d so the stack works regardless of
+CWD or bundle layout.
+
+**Two embedding spaces, not interchangeable.** `router_instruction.rs` is the
+single decider for both the instruction text and the axis→space map. Intent
+and locator run in a **speech-act** space (what the speaker is DOING); scope,
+archive and current-info run in the **retrieval** space, because they separate
+their classes by subject matter — precisely the signal a speech-act
+instruction deletes. Thresholds are comparable only within a space, and the
+embed cache keys the instruction into its hash. Per-turn embed count is three.
+
+`svrn router fit` is the calibration surface, sweeping exhaustively with
+candidate thresholds at midpoints between observed scores, against
+`bench/routing/calibration/axes_v1.toml` — a bank authored to fail somewhere
+(74 cases, 32 `expect = "abstain"`). Two guards keep it honest: a margin floor
+clamped to ≥ 0, and `FitReport::underpowered()` on any axis with fewer than
+five cases per class. **The command writes no constant** — it names the
+constant and the file and stops.
+
+**Synthesis and the grounding gate.** The knowledge-turn path is organized by
+`role.rs` (the resolver returns a `role::Tier`, load-bearing rather than
+declarative). `runtime/grounding/` is the production gate: per-claim fail-open
+accounting, a concurrent bounded claim fan-out, an audit pass with a plan and
+an outcome, a citation stage whose support decider is the gate's own judge,
+and a value-presence veto. Every fail-open exit names WHY at one site. Judges
+run against ONE register, enforced by `cargo xtask judge-funnel-gate`, and a
+register change is priced in both directions or it is not judged.
+
+**Retrieval** is `runtime/retrieval_pipeline.rs`, a step ledger where every
+step accounts for what it did to the pool. `apply_atlas_grounding` is a CALLER
+of `corpus_engine::enrichment::atlas::ground`, the same walk `corpus-mcp`
+drives, so the two cannot diverge. The evidence budget is spent ACROSS the
+ideas the walk reached, not down the ranked list.
+
+**An answer over missing knowledge says so, and CODE guarantees it.**
+`UnavailabilityReason` is a closed enum, `corpus_unavailability()` is the one
+readiness decider, `append_unavailability_marker` is appended by code rather
+than asked of the model, and a turn that lost nothing renders BYTE FOR BYTE as
+before. Per-turn stack attribution is derived from observed execution, never
+from flag values.
 
 ### Inference
 
-`sovereign-inference/src/embedded/` wraps `llama-cpp` with a
-lazy-loaded slot system (Quick / Main / Code / Embed). Hybrid +
-remote providers wrap OpenAI-compatible servers (vLLM, Ollama,
-llama.cpp, TGI, cmnwlth). Full detail — slots, polished slot
-management, sibling pool, decode paths, MTP, OICP scoring, harness
-adapters, cutoff legibility, conversation-history compaction — in
+`sovereign-inference/src/embedded/` wraps `llama-cpp` with lazy-loaded slots
+(Quick / Main / Code / Embed). Hybrid and remote providers wrap
+OpenAI-compatible servers. Full detail
 [`docs/inference.md`](./docs/inference.md).
 
-**Which engine serves this node — `[engine]` (2026-08-30).** llama.cpp is the
-default engine, not the only one, and the choice is config rather than code.
-`sovereign_inference::engine_factory::build_engine(&SetupConfig)` is the ONE
-place that turns `[engine] kind` into an `Arc<dyn InferenceProvider>`; before
-it, five construction sites named `EmbeddedLlamaCpp` literally and `SetupConfig`
-had no key that could say otherwise.
+**Which engine serves this node is config, not code.**
+`engine_factory::build_engine(&SetupConfig)` is the ONE place `[engine] kind`
+becomes an `Arc<dyn InferenceProvider>`. The vocabulary is one layer down in
+`sovereign-contracts`, so an out-of-tree engine can name the selection without
+naming any implementation. `llama` and `remote` are typed variants; anything
+else is `EngineKind::Custom(name)` resolved through `register_engine`, and an
+unknown id refuses listing what IS registered rather than falling back.
+`BuiltEngine.llama` is `None` for every non-llama engine, and the VRAM
+preflight is llama's own question, skipped for engines holding no weights.
+The contracts are executable: `engine_conformance::{check_sync, check_serving}`.
 
-- **The vocabulary is one layer down.** `EngineKind` / `EngineSection` live in
-  `sovereign-contracts/src/engine_config.rs` — an out-of-tree engine must be
-  able to name the selection without naming any engine's implementation. The
-  factory sits in `sovereign-inference` because it alone can name both
-  `EmbeddedLlamaCpp` (its own) and `oicp-client`'s `RemoteApiProvider` (a
-  dependency since the `remote.rs` extraction). No new dependency edges.
-- **Closed set as an enum, open set as a registry** (§2, §4). `llama` and
-  `remote` are typed variants; anything else is `EngineKind::Custom(name)`
-  resolved through `register_engine`. Rust has no safe cross-crate ABI for
-  `dyn Trait`, so an in-process third-party engine is always compiled into a
-  binary the operator controls — registration in `main()` is the mechanism.
-  Worked example: `sovereign-inference/examples/custom_engine.rs`.
-  An unknown id refuses and lists what IS registered; it never falls back to
-  llama (§18.3).
-- **`BuiltEngine.llama` is `None` for every non-llama engine**, and the daemon's
-  llama-only configuration (extras, edit slot, rerank, idle monitors) is guarded
-  on it. The RPC-worker auto-reload path is what that handle exists for.
-- **The VRAM preflight is llama's own question and is skipped for engines that
-  hold no weights.** Found live, not in review: the first `kind = "remote"` boot
-  died in `build/preflight.rs` because it stat'd `[models]` GGUF paths a remote
-  engine never opens. Regression test:
-  `a_weightless_engine_skips_the_vram_preflight_entirely`.
-- **The contracts are executable.** `sovereign_inference::engine_conformance`
-  — `check_sync` (no I/O, runs against any engine) and `check_serving` — checks
-  the honesty invariants a new engine breaks silently: the terminal `Finish`
-  frame, `embed_batch` length, `rerank_batch` refusing rather than fabricating,
-  `"unknown"` rather than `""`. Note that the terminal-frame contract is
-  UNVIOLATABLE by an engine that implements only the four required methods (the
-  trait's default synthesises the frame); it binds exactly the engines that
-  override `complete_stream_with_finish` for real finish reasons.
-- **Chat and embeddings split, because third-party servers serve one model per
-  process.** `RemoteApiProvider` carries ONE `model_id` for both
-  `/chat/completions` and `/embeddings`, which is right against a Sovereign
-  daemon (it routes embeddings to its own embed slot whatever id it gets) and
-  wrong against vLLM / SGLang / TGI, where a chat model on the embeddings route
-  returns a non-embedding shape. `[engine] embed_model_id` / `embed_endpoint`
-  opt into `SplitInferenceProvider::new_split_endpoints` (added for this — the
-  struct already held two independent clients, only the one-endpoint
-  constructor was missing). `embed_endpoint` without `embed_model_id` is
-  refused, not guessed. Operator-facing walkthrough:
-  [`docs/USE_YOUR_OWN_INFERENCE_SERVER.md`](../docs/USE_YOUR_OWN_INFERENCE_SERVER.md).
-- **Proven live 2026-08-30**: a second daemon on `kind = "remote"` with
-  deliberately nonexistent `[models]` paths booted, served `/v1/chat/completions`
-  (streaming and not), `/v1/embeddings` and `/v1/models`, opened zero GGUF file
-  handles, and reported `loaded_models: []` on `/status`.
-- **What is NOT gated:** `llama-cpp-4` is still an unconditional dependency of
-  `sovereign-inference`, so every build compiles ggml regardless of `[engine]`.
-  Making it optional is a build-time win only, and measured 2026-08-30 it would
-  need `#[cfg]` at 65 downstream sites across 8 crates that name
-  `sovereign_inference::embedded` concretely. Deliberately not done.
+**Residency is a policy.** `embedded/idle_slot.rs` is the one idleness decider.
+It exists because the daemon is a MESH NODE and must stay available to peers
+while the app is closed, which makes idle-EXIT impossible and idle-UNLOAD the
+only answer to resident RAM. **The unit of residency is the FAMILY, not the
+slot**: `fast` shares its `Arc<LlamaModel>` with `fast_short` and, in alias
+mode, with `primary`, so dropping a slot frees a KV cache and leaves the
+weights — "fast unloaded" in the log is not yet "memory returned".
 
-**Serving a model bigger than the GPU can hold — `qwen4exp` / Qwen3.8-Flash-Next
-(2026-08-27).** 176B total / ~6B active: a 125B transformer plus a **51.2B n-gram
-engram**, 103.7 GiB across four GGUF parts, on a 128 GB unified-memory box. Three
-facts make it work and each is easy to break.
-
-- **The arch is vendored ahead of upstream.** `LLM_ARCH_QWEN4EXP` comes from
-  ggml-org/llama.cpp#27742, pinned in `vendor/llama-cpp-sys-4/LLAMA_CPP_COMMIT`.
-  A build whose bundled llama.cpp predates it cannot load the model at all.
-- **26.8 GiB of it never reaches the GPU, and that is the only reason it fits.**
-  `per_layer_token_embd` — one IQ4_NL tensor, `[160, 320001536]` — stays in the
-  mmap on plain pageable CPU. Measured resident split: 81.9 GiB GTT + 27.0 GiB
-  RSS. It is gathered 16 rows (1,440 B) per token at **one** layer of 48
-  (`ple.layers = [1]`), which prices at ≲0.2% of a decode step even stone cold —
-  so the placement costs throughput nothing and buys the whole fit.
-  **CAUTION: that placement is an accident, not a declaration.** IQ4_NL is simply
-  unsupported by `Vulkan_Host` and falls back. `SOVEREIGN_TENSOR_BUFT_OVERRIDE`
-  is the lever that would make it structural; it ships unset, with the detector
-  and the flip condition in `DEFAULTS_LEDGER.md`.
-- **The local-fit gate must not charge for those bytes.** It refused this model
-  at ~108,982 MiB against ~92,122 usable because `need_bytes` counted every
-  model byte. `rpc_distribution::projected_overheads` now reports
-  `model_host_bytes` (the weights llama.cpp projects onto the host CPU buffer)
-  and the gate discounts them. **The discount is NOT conditioned on `no_host`** —
-  that pairing was tried, measured, and is wrong: llama.cpp reports these bytes on
-  the CPU *device* entry (`model_host_mb=28110` matching the tensor's 27.5 GiB),
-  while bytes that really do land in the pinned host buffer are charged under the
-  accelerator entry where they belong. Forcing `no_host` to "license" the discount
-  made it false — it turned the mapping into an anonymous copy and OOM'd.
-
-Prefill on this model is bounded by a **per-token constant**, not by batching: 36
-of 48 layers are recurrent (`full_attention_interval = 4`) and a recurrent scan is
-sequential in the token dimension. Two pre-registered sweeps in `research/engram/`
-establish it — 1.16× across an 8× `n_ubatch` range (NO-GO, no flag shipped) and
-flat-with-a-15%-droop across a 16× prompt-length range. The engram is **not** the
-bottleneck on either axis; do not spend effort there expecting throughput.
-
-Full-context state save/restore **is** usable here despite `ple_hist` (the
-per-sequence n-gram history) living on the model rather than the context and
-therefore not being serialized: measured 32/32 greedy-identical, restore 28 ms
-against a 5,302 ms prefill (189×). The reset it triggers is real but lands ~18
-positions upstream of the sampled token. Note `b588ba8b` carries the limits of
-that claim — it is not a bit-faithfulness proof.
-
-**Compute-slot process boundary (`sovereign-compute`, P1).** Optional
-(`[compute] enabled`, default OFF): the daemon runs a slot's compute in a
-supervised **child process** so a ggml `SIGABRT` kills only the child — the
-daemon keeps gossip / `/status` / the client API — and observes the exit as an
-event it re-plans around. **Its value is crash isolation + the can't-fit-one-box
-(distributed 122B) case, NOT throughput.** A live embed run confirmed that for a
-model that fits one box, N process replicas *lose* to in-process multi-sequence
-batching (one batched kernel vs N processes thrashing one device, plus HTTP hop
-+ weight duplication + thread oversubscription) — so the replica-pool path is a
-demonstrated dead end for parallelism; the right lever there is extending
-in-process continuous batching (FastShort-style) to the primary + streaming.
-A child is `current_exe() --compute-child` (no new artifact); it speaks a
-**native lossless wire** (`POST /internal/complete[_stream]` carrying serde
-`CompletionRequest`/`StreamFrame` verbatim — grammar/allowlists/sampling_mode
-survive, llguidance runs in-child). Daemon-side: `ComputeRoutedProvider` routes
-by `model_id` to the child for that slot, else the in-process engine;
-`ComputeChildManager` supervises one child per `[[compute.slot]]` and streams
-lifecycle to `/status` (`compute_children`, target `compute_child`). The child
-supervisor was extracted here from the desktop (shared, byte-identical).
-Crash-isolation acceptance is proven (`compute_child_e2e.rs`). See
-`docs/DISTRIBUTED_PILOT_READINESS.md` P1.
-
-**The distributed primary in a child (`[compute] distributed_primary`, default
-OFF).** The payoff the boundary was built for. Distributing a primary across
-mesh workers puts ggml's error-path-free RPC client inside the daemon: a worker
-that dies mid-decode (`ggml-rpc.cpp:491`), or one already gone when the
-prune-reload frees its buffers (`:386` — this killed the daemon live on
-2026-07-27, from the shrink-fast-prune path meant to protect it), SIGABRTs the
-whole process. In this mode the daemon **withholds the primary entirely**
-(`primary_path: None`, so no in-process path can lazily load it) and a
-`DynamicChildSlot` owns it instead. The division of labour is forced by reach:
-only the daemon can warm (the orchestrator needs the mesh member directory + the
-iroh transport), only the child should load. So the daemon plans + warms via
-`warm_distributed_primary` — the extracted shared tail of
-`resolve_placement_inner`, one code path for both — writes a
-`DistributionHandoff {endpoints, plan}` JSON, and spawns a child with
-`SOVEREIGN_RPC_ASSUME_WARMED=1` that pins that plan (`pin_shard_plan`) before
-loading via `EmbeddedLlamaCpp::load_single_distributed`. Shipping the *plan*, not
-just the worker list, is what extends the plan-agreement invariant across the
-process boundary: the shard cache is process-local, and a child that re-planned
-against post-warm VRAM would cut the blocks differently, miss every warm cache,
-and fall back to bulk weight send. Worker-set changes are **kill + respawn**, not
-reload — the discovery loop respawns the child instead of calling
-`reload_primary()`. `ComputeRoutedProvider` claims primary-class traffic (named
-primary, or unnamed at `Speed::Slow`/`Medium`; never unnamed `Speed::Fast`, which
-the in-process fast slot still owns) and never falls back to `inner` for it —
-the answer while the cluster re-forms is a fail-fast `ComputeUnavailable` → mesh
-cascade → clean 503. `/status` shows the primary as `mode: "child-distributed"`.
-Respawn acceptance: `distributed_primary_respawn_e2e.rs`.
-
-**CPU-arch compatibility gate + crash capture (desktop).** Recurrent /
-linear-attention architectures — Qwen3.5 "Gated DeltaNet" (`qwen35`),
-Mamba/SSM, RWKV — drive an out-of-bounds write in ggml's recurrent
-`ggml_compute_forward_set` during **CPU** prefill (an upstream llama.cpp bug;
-disabling the fused chunked kernel does not help, and there is no toggle that
-avoids it). They run fine on GPU. Two layers keep a user's first message from
-hard-crashing the app:
-
-- **Proactive substitution — DECIDER SHIPPED, CALLER OWED (2026-09-11).**
-  `sovereign-inference::gguf_meta::read_architecture` reads
-  `general.architecture` straight from the GGUF header (zero weight load), and
-  `cpu_compat::choose_cpu_safe_chat_model` decides `Keep` / `Substitute` /
-  `NoSafeModel`. Its one caller was the desktop's boot-time model-compat
-  builder, deleted in 10b549b05 (sv-surface svt-3): the app loads no models, so
-  a swap made there reached nothing but the banner (see the svt-3a entry in
-  §10). The daemon's slot build — the process that now loads the weights — has
-  no call to the decider yet (`grep choose_cpu_safe_chat_model
-  sovereign/crates/sovereign-cli-daemon` → zero hits), so a CPU-only machine
-  whose configured chat model is a recurrent arch is back to the SIGSEGV this
-  bullet was written to prevent. `sovereign/DEFAULTS_LEDGER.md` carries the
-  row (model-load guards, no owner, review-by 2026-10-11).
-- **Backstop + capture** — the pre-load subprocess smoketest (`smoketest.rs`)
-  guarded the desktop's GPU path until **2026-09-11 (sv-surface svt-3a), when
-  it was deleted along with the in-process model load it existed for**. The
-  desktop loads no GGUF, so there is nothing to probe; the daemon is what
-  loads models and the crash-isolation question is its to answer. What
-  survives is the CAPTURE half: a process-wide panic hook records Rust panics
-  as a durable, submittable `CrashRecord` (`crash_report.rs` →
-  `~/.svrnmesh/crashes/*.json`). `record_native_crash` — the entry point the
-  smoketest fallback called — is orphaned and owed a deletion. Records are
-  local-first and **never auto-uploaded**: the in-app Diagnostics surface lists /
-  views / deletes them, and one-click `export_crash_record` writes a redacted
-  markdown copy to the Desktop + hands back the GitHub Issues URL — mirroring the
-  daemon-crash flow in `crash_bundle.rs`.
+**`sovereign-compute` is a process boundary, and its value is crash isolation
+plus the can't-fit-one-box case, NOT throughput.** For a model that fits one
+box, N process replicas LOSE to in-process multi-sequence batching — the
+replica-pool path is a demonstrated dead end for parallelism.
+`[compute] distributed_primary` is the payoff: the daemon plans and warms, a
+`DynamicChildSlot` owns the primary, and the handoff ships the PLAN rather
+than the worker list, so plan agreement survives the process boundary.
 
 ### Tools
 
-| Tool                    | Purpose                                                      |
-|-------------------------|--------------------------------------------------------------|
-| `SearchTool`            | Local vector + FTS5, coverage assessment, optional web fallback |
-| `WebSearchTool`         | NL → keywords (Quick), search backend, fetch top 3, synth w/ citations |
-| `WebFetchTool`          | Single-URL fetch + HTML→text                                 |
-| `KnowledgeTool`         | Direct corpus query                                          |
-| `ClaimSearchTool` / `EpistemicLandscapeTool` | Enriched-corpus retrieval         |
-| `DocumentTool`          | Map-reduce summarize/analyze (4 chunks/batch, 8K reduce)     |
+| Tool | Purpose |
+|---|---|
+| `SearchTool` | Local vector + FTS5, coverage assessment, optional web fallback |
+| `WebSearchTool` / `WebFetchTool` | NL → keywords, fetch, synth with citations; single-URL fetch + HTML→text |
+| `KnowledgeTool` | Direct corpus query |
+| `ClaimSearchTool` / `EpistemicLandscapeTool` | Enriched-corpus retrieval |
+| `DocumentTool` | Map-reduce summarize/analyze |
 | `ShellTool` / `FileTool` / `EmailTool` / `CalendarTool` / `ComputeTool` | Standard tools (sandbox + approval) |
 | `McpClient` + `McpToolAdapter` | stdio JSON-RPC + HTTP+SSE; wrap remote MCP servers as native tools |
 
-**External MCP servers (client direction).** HTTP MCP servers are configured in
-the `[[mcp_servers]]` array of `~/.svrnmesh/config.toml`
-(`SetupConfig.mcp_servers`) — added via `svrn mcp add` or **Settings →
-MCP** — and loaded into the agent's tool registry at startup by the one shared
-loader `sovereign_tools::mcp::load_from_setup_config`, which **every** chat
-surface calls (`svrn chat`, the desktop bootstrap, `svrn serve`).
-Each MCP tool's descriptor is enriched (`McpToolAdapter` synthesizes an example
-call from the input schema + passes through any `outputSchema`) so the planner
-reliably emits a tool step instead of a reason step; tools declare
-`Permission::Network`, so the executor's approval gate fires on first use
-(add-time trust on the auto-approving CLI). `McpToolAdapter` also infers each
-tool's `effect`/`idempotency` from its name (`infer_behaviour`) — read verbs
-(`get_`/`list_`/`snapshot`/`navigate`/…) → Read/Idempotent, mutation verbs
-(`create_`/`click`/`type`/`submit`/…) → Write/NonIdempotent — so a browser
-`click` that submits a form picks up the approval gate + replay ledger while a
-`snapshot` read does not. Driving a real browser via `@playwright/mcp` (the
-first heterogeneous-app actuator) is a runbook:
-[`docs/BROWSER_ACTUATOR.md`](./docs/BROWSER_ACTUATOR.md), proven live by
-`sovereign-tools/tests/playwright_actuator.rs`. The config DTO lives in
-`sovereign-core::mcp_config` (so `SetupConfig` can carry it without a crate
-cycle) and is re-exported from `sovereign_tools::mcp`. `svrn mcp
-demo-server` runs a sealed-fact reference server
-(`sovereign-cli-llm/src/mcp_demo_server.rs`) for an end-to-end demo: a tool
-whose output exists nowhere else, so a correct answer in chat proves the model
-actually called it.
+**The declared half of a tool is data.** Identity, behavioural properties
+(`effect` / `idempotency` / `latency` / `scope`), parameter schema, examples
+and required permissions live in `sovereign-contracts/tool-manifests/*.toml`;
+56 impls read it, so a tool's declared facts have one decider. A manifest
+declaring `delegate` plus `defaults` needs no Rust at all. Five tools keep a
+coded descriptor because theirs is derived at runtime.
 
-**Attach-a-file-for-tools (desktop).** Vision / audio MCP tools take a file
-*path* (the model stays text-only — the tool does the modality work). The
-desktop's media-attach (image/audio) binds a file's absolute path to the turn
-and prepends a `▸ attached file: … path: …` block to the message before the
-runtime sees it — the same "augmented message" rail `context_chunks` uses
-(`commands/chat.rs::build_tool_files_preamble`), so the model passes the path to
-e.g. `describe_image(path)` / `transcribe_audio(path)` on a *local* MCP server
-with no Runtime change. Distinct from a *document* attachment (which is ingested
-for RAG and discards the path). Spec: `docs/specs/ATTACH_FILE_FOR_TOOLS.md`
-(P1 shipped; P2 threads a typed `ToolContext.attached_files`).
+External MCP servers are configured in `[[mcp_servers]]` and loaded by the one
+shared loader `sovereign_tools::mcp::load_from_setup_config`, which every chat
+surface calls. `McpToolAdapter` infers effect and idempotency from a tool's
+name, so a browser `click` picks up the approval gate and replay ledger while
+a `snapshot` read does not.
 
-**Code-intelligence MCP server**. Long-running variant via
-`svrn daemon`; ad-hoc via `svrn project serve`. Tools
-under `sovereign-tools/src/code/` cover code index (`symbols`
-= `symbol_lookup`, `code_search`, `recent_changes`, `working_set`,
-`brief`), the session-orientation brief as an MCP tool (`briefing` —
-the SessionStart hook's renderer callable by any MCP client; the
-daemon variant threads its live work-atlas store so the brief's
-"Work in flight" section shows peer claims/edit-observations
-overlapping the working set), the deterministic tree-sitter fact base (`facts` — fn defs
-/ config construction-fields / string literals, cited + freshness-
-stamped, embed-free; see [`docs/CHECK_CODE_AGAINST_SPEC.md`](../docs/CHECK_CODE_AGAINST_SPEC.md)),
-SCIP call graph (`callers`, `callees`, `blast_radius`),
-lint/test watchers (`lint_status`, `get_lint_output`,
-`test_status`, `run_tests`, `get_run_output`, `build`), notes
-(`write_note`, `read_notes`, `delete_note`, `suggest_note`,
-`promote_note`, `read_note_by_id`, `read_note_digest`), ATOS
-feature lifecycle (`provision_feature`, `archive_feature`,
-`record_atos_event`, `write_redteam_finding`, `atos_plan_emit`,
-`atos_utils`, `atos_verify`, `spec`), drift (`drift`,
-`drift_posture`, `drift_findings`), capability docs
-(`capability_map`, `capability_posture`, `capability_findings`),
-project + design context
-(`project_context`, `design_signals_extract`,
-`index_health`), session reflection (`session_reflection`), and
-work-atlas coordination (`declare_scope`, `release_scope`,
-`work_in_flight` — see [`docs/WORK_ATLAS.md`](./docs/WORK_ATLAS.md)).
+**Code intelligence** is served over MCP by `svrn project serve` or the
+daemon. Tools under `sovereign-tools/src/code/`: the code index (`symbols`,
+`code_search`, `recent_changes`, `working_set`, `brief`), the session brief
+(`briefing`), the tree-sitter fact base (`facts`), the SCIP call graph
+(`callers`, `callees`, `blast_radius`), watchers, notes, ATOS lifecycle,
+drift, capability docs, project context, session reflection, and work-atlas
+coordination (`declare_scope`, `release_scope`, `work_in_flight`).
 
-**The declared half of a tool is data
-(`sovereign-contracts::tool_manifest`).** A tool's identity, behavioural
-properties (`effect` / `idempotency` / `latency` / `scope`), parameter
-schema, worked examples and required permissions are declared in
-`sovereign-contracts/tool-manifests/*.toml` — one `[[tool]]` block per
-tool, embedded with `include_str!` and parsed once into a catalog. 56 of
-`sovereign-tools`' impls read it: `descriptor()` is
-`tool_manifest::require("<id>").to_descriptor()` and
-`required_permissions()` reads the same row, so a tool's declared facts
-have ONE decider (ARCH §10.6) instead of a literal per call site. The
-conversion was verified lossless field-by-field against the Rust
-literals it replaced.
+The daemon's tool graph and the reindexer share ONE merged `ScipGraph` handle,
+so updates are visible to `symbols`/`callers`/`blast` live. Each debounced
+save runs an embed-free tree-sitter overlay; the heavy rust-analyzer export is
+demoted (spawned, rate-limited, quiescence-gated, `nice +10`) and is
+one-writer, staging and renaming under a cross-process flock so a query in
+flight always sees a complete graph. **One project owns one workspace**:
+registration refuses a root that is an ancestor or descendant of a registered
+one, because nested registrations collapse the freshness pipeline.
 
-Five tools deliberately keep a coded descriptor and are NOT in the
-catalog: `parcel_analytics` and `sec_facts` build theirs from the
-corpora actually installed; `session_state` and `suggest_note` derive
-their parameter schema from a const array (a closed set, already
-data); `knowledge_lookup` loads its description from
-`assets/tool_description.md`, which is the same idea in a better form.
-
-`ToolManifest` also carries work the author would otherwise redo:
-`validate_params` enforces `required` and `type` straight from the
-declaration, and `DeclaredTool` turns a manifest plus a handler into a
-registered tool with **no `impl Tool for` block of its own**. A manifest
-declaring `delegate = "<tool_id>"` plus `defaults` needs no Rust at all —
-`ToolRegistry::install_declared` binds it to an already-registered tool
-(skipping, with a warn naming the id, when the target is not registered
-on this host). Proof: `sovereign-contracts/tests/declared_tools.rs`.
-This does NOT retire the existing trait impls — a tool with genuinely new
-behaviour still writes its executable half.
-
-Authoring goes through `tool-manifests/_TEMPLATE.toml` — two blocks to
-copy (new behaviour; pure-data delegate), the enum spellings, and the
-field reference. It is NOT in `FAMILIES` and nothing loads it; the
-`sovereign-recipes/_templates/` precedent, for the reason
-NOUN_CONVERGENCE §10.4 gives — a paragraph does not change the cost of
-reaching for a shared surface, a block you paste already wired to it
-does. `the_authoring_template_still_matches_the_schema` parses it every
-run so the scaffold cannot rot into a wrong example.
-
-**Live graph freshness (`sovereign-mesh::reindexer`).** The daemon's
-tool graph and the reindexer share ONE merged `ScipGraph` handle
-(built once in `daemon_cmd/mod.rs`, passed to both `build_tool_registry`
-and `start_freshness_pipeline`), so reindexer updates are visible to
-`symbols`/`callers`/`blast` live, without a daemon restart — before
-this unification the tools read a frozen startup snapshot. On each
-debounced save the reindexer runs a **tree-sitter overlay**
-(`facts::extract_symbol_defs` → `ScipGraph::replace_file_symbols_for`):
-embed-free, no rust-analyzer, symbol *defs* fresh in milliseconds and
-never contending with inference. The heavy whole-workspace
-rust-analyzer export is **demoted** — spawned (never blocking the watch
-loop), rate-limited to at most once per `FULL_REBUILD_COOLDOWN`
-(900s, measured from when the previous export FINISHED — 2026-08-16) of
-active editing plus on git-HEAD (commit), and **quiescence-gated**
-(2026-07-24): an FS-due export waits for `FULL_REBUILD_QUIESCENCE` (30s)
-of no saves before launching (capped by `FULL_REBUILD_MAX_DEFER`, 600s,
-so continuous editing can't starve it; commit/explicit rebuilds are not
-gated). The exporter subprocess itself runs `nice +10`
-(`scip_export.rs` pre_exec) so a multi-minute pass yields to interactive
-work. So it no longer fires on every save (the contention that had the
-watcher disabled).
-Two defects here were fixed 2026-08-16, both of which had been read as
-"the watcher is off" (it was not — `[watchers] enabled = false` in
-`.sovereign/sovereign.toml` governs only the lint/test runners and has
-no bearing on SCIP). **(1) The cooldown was stamped at spawn and was
-shorter than the export it gated** (300s vs. measured exports of
-257-498s), so the gate reopened before rust-analyzer had released;
-continuous editing pinned it at a ~88-90% duty cycle holding ~14GB. It
-is now stamped by `RebuildRunGuard::drop` — every exit path, including
-panic and watchdog abort — and the constant exceeds the slowest
-measured export. **(2) `import_from_path` carried the rows but not the
-source's `last_export_at`**, so the merged handle's freshness clock
-never advanced: it only ever receives imports and never records a
-rebuild of its own, leaving `IndexHealth` to report a staleness equal
-to daemon uptime forever while serving fresh data. The stamp now
-travels with the rows, forward-only (an abandoned constituent must not
-drag a current merged stamp backwards). Until that fix, `doctor`'s
-`watcher_freshness` (per-project clock, correct) and the MCP trailer
-(merged clock, frozen) disagreed permanently — and the trailer's
-"run `sovereign corpus scip`" advice added a second full export on top
-of the one the daemon was already running.
-Cross-file call edges and qualified names therefore lag one full export
-(accepted eventual-consistency); overlay rows carry `qualified_name=""`,
-`kind="function"`. Staleness levels still carry calibrated confidence:
-`None` / `SomeCallSitesMayBeStale` / `GraphIsAging` / `GraphIsStale`
-/ `LanguageNotIndexed`. `blast_radius` does BFS over the call graph
-and appends a `macro_hints` text scan for references SCIP doesn't
-capture. Index posture is surfaced in-band (2026-07-24): `symbols`
-appends the same `IndexHealth` trailer `callers`/`callees`/`blast`
-carry, and `code_search` appends a chunk-index posture note — absent /
-degraded (unreadable) / aging (`IndexInfo.last_updated` ≥7 days) — so a
-stale chunk index can no longer masquerade as "no matches";
-`agent-preflight.py` checks the same stamp for the corpora in
-`quality/agent-preflight.golden.json::code_corpora`.
-The whole-workspace export is **one-writer and guarded** (2026-08-14):
-`ScipGraph::export_to_live` writes to a staging `scip_graph.db.new` under a
-cross-process `.rebuild.lock` (flock) and renames it over the live graph only
-on success — a query in flight always sees a complete graph, and a daemon
-restart mid-export cannot empty it (the `export_to_live` wipe guard refuses
-to rename over a populated graph). The rebuild loop runs at most
-`MAX_FOLLOWUP_PASSES` (4) passes **under the same** cross-project rebuild
-permit — the follow-up pass that at HEAD re-acquired the sole permit and
-self-deadlocked (live incident 2026-08-14: status `active` for hours, every
-nudge coalescing silently) is structurally impossible now; a 45-minute
-watchdog (`MAX_REBUILD_WALL`) and an RAII guard clear both the worker
-`in_flight` flag and the `ProjectState` claim on hang or panic, record the
-failure (`record_rebuild_failure`, visible via `project watch status`), and
-write a `WEDGE GUARD` line to the daemon log. Every cycle appends to
-`~/.svrnmesh/logs/watch-<corpus>-scip.log` (`project watch logs <corpus>
-scip`). `project refresh` now **verifies**: it nudges the daemon, polls
-`/v1/projects` to a named verdict (completed / failed / crashed / wedged /
-daemon-gone), prints `✓ SCIP graph at HEAD` or a loud ✗ reason, and on
-failure falls back to a local in-process export through the SAME
-`export_to_live` lock — one writer for the DB across daemon and `--local`
-paths; a local export that loses the lock to the daemon exits 1 with
-"another writer holds the rebuild lock" instead of racing it.
-
-**One project owns one workspace (nested-root guard).** Project
-registration (`POST /v1/projects/register`, used by both `project
-register` and `project init`) refuses a root that is an ancestor or
-descendant of an already-registered project's root
-(`Registry::nested_conflict`, 409 with the conflicting corpus named;
-`--force` overrides). Nested registrations are how the freshness
-pipeline collapses: every save inside the shared subtree dirties all
-overlapping projects, each queues its own full-workspace
-rust-analyzer export on the single global rebuild permit, and the
-queue never drains (observed 2026-07-23: four nested projects —
-monorepo root + three subtree projects — all permanently
-`[rebuilding]`, one never built). The monorepo is one cargo workspace,
-so subtree projects buy no smaller export anyway. Canonical
-registration for this repo: the single `commonwealth-ai` project at
-the repo root.
-
-**Capability docs (derived architecture).** A pipeline that derives
-*what the codebase does* from the SCIP call graph and reconciles it
-against the prose docs. `code capability-map` clusters entry points
-that share a reachable call spine into capabilities (226 on this repo,
-language-agnostic core + an entry-point seam); `enrich capability-doc`
-narrates each capability from cached `enrich code-intel` summaries into
-grounded prose, every spine function cited `file:line`; `enrich
-capability-reconcile` matches capabilities against the architecture
-docs → **corroborated / undocumented / drifted** findings (deterministic
-ident-match → meaning-based LLM verify → a precision-biased drift judge —
-drift ships biased hard toward precision, since one phantom contradiction
-destroys trust). Artifacts land in `~/.svrnmesh/capabilities/<corpus>/`
-(`capability_map` / `capability_doc` / `capability_findings`.{md,json}
-plus a `.fingerprint`); `capability_posture` and `capability_findings`
-are the freshness-gated read tools, siblings to `drift_*`. This is
-"drift to the next level": the drift system reconciles *names*, this
-reconciles *capabilities* — does the code do what the doc claims. The
-once-planned next phase (symmetric `spec-intel` → a spec↔code bipartite
-diff) shipped as the spec↔code fact pipeline — `svrn code facts` /
-`enrich spec-intel` / `code check-spec`; see
-[`../docs/CHECK_CODE_AGAINST_SPEC.md`](../docs/CHECK_CODE_AGAINST_SPEC.md).
-The deterministic floor of this stack runs in public CI:
-`cargo run -p xtask -- docs-gate` (workflow `docs-reconcile.yml`,
-badged on the README)
-resolves every repo path THIS document and ARCH_PRINCIPLES cite —
-machine-local citations and paths that no longer exist fail the build.
-The LLM-bound layers above it (drift, capability-reconcile, check-spec)
-stay mesh-side.
+**Capability docs** derive what the codebase does from the SCIP call graph and
+reconcile it against the prose: `code capability-map` clusters entry points
+sharing a call spine, `enrich capability-doc` narrates each with every spine
+function cited, `enrich capability-reconcile` produces corroborated /
+undocumented / drifted findings. The deterministic floor runs in public CI as
+`cargo run -p xtask -- docs-gate`.
 
 ### State, memory, skills
 
-- **State**: `sovereign-store` provides `SqliteStateStore` (default),
-  `PostgresStateStore` (deadpool + tokio-postgres),
-  `MemoryStateStore` (tests). One trait, three impls. Schema in
-  `migrations.rs`: `conversations` + `messages` (FTS5), `tasks`,
-  `memories`, `documents`, `corpus_states`, `routing_log`,
-  `search_budget`, `permissions`. Every record carries a Lamport
-  `version`; soft-deletable rows have `deleted_at`. Two stores can
+- **State** — `sovereign-store` provides `SqliteStateStore` (default),
+  `PostgresStateStore`, `MemoryStateStore`. Every record carries a Lamport
+  `version`; soft-deletable rows have `deleted_at`, so two stores can
   union-merge without schema migration.
-- **Working memory** — compressed every message via
-  `memory::compress_working_memory` (Quick slot, ≤200 tokens) into
-  `{ current_goal, facts, active_documents }`.
-- **Conversation memory — three constant-capacity channels, now
-  visible.** What a long thread carries forward is (1) the rolling
-  visible window, (2) the **conversation frame** (`conv_frame.rs` — five
-  named sections Topics / Entities / Stated goals / Commitments / Open
-  threads, 320-token budget, persisted in `conversations.frame`, folded
-  incrementally by `maybe_compact_dropped_history` off a watermark
-  carried in the document's own frontmatter), and (3)
-  **retrieval-over-history** (`maybe_retrieve_relevant_history` — the
-  dropped turn-pairs embedded once and memoized per `Runtime`, hybrid
-  cosine+entity scored, MMR-selected). Total is ~2.8k tokens
-  *independent of conversation length*. The frame replaced a re-narrated
-  prose blob for two reasons, only one of which is cost: a blob has to be
-  rewritten to be updated (and re-narration is where named entities get
-  dropped), and a blob is not **renderable** — "what do you remember
-  about this conversation?" is answered from sections, and the
-  metalingual Conversation branch now does exactly that, putting the
-  frame in the prompt ahead of the verbatim turns. Both channels narrate
-  themselves: `NarrationPhase::ConversationRecall` (memory being read —
-  turn indices + best similarity) and `ConversationFolded` (memory being
-  written). Recall also lands in `TurnProvenance.history_recall` so the
-  ledger can tell a verified recall from a lucky parametric guess; the
-  chip is why the streaming surface runs retrieval-over-history *after*
-  `sessions.begin` rather than before.
-- **Long-term memory** — extracted at conversation end. Each
-  `Memory` has `confidence`, `created_at`, `last_used`. FTS5
-  retrieval. Exponential monthly decay; pruned below
-  `prune_threshold`.
-- **Tiered memory retrieval** (spec
-  `docs/specs/TIERED_RETRIEVAL_MEMORIES.md`) — the embed-recall path
-  (`memory::recall_relevant_memories_embed`, relational/witness
-  surfaces) reads **persistent T1 embeddings**
-  (`memories.embedding + embedding_model`, computed on write at
-  `save_with_contradiction_check`/compaction, lazily backfilled on
-  first recall; `embedding_model` must equal the provider's
-  `embed_model_id()` or the row re-embeds — the model-swap guard) and
-  blends a **T3 memory-RAPTOR** signal: per-scope trees in
-  `mem_raptor_nodes` (batch builder
-  `sovereign-tools::mem_atlas::build_memory_atlas`, journal-tuned
-  leaf clusters of ~7; incremental maintenance
-  `sovereign-tools::mem_tree::insert_memory` — MemTree-style descent
-  + a 4-op trigger ladder attach/re-summarize/split/rebuild with
-  BIRCH-CF + Page-Hinkley gates, every trigger emitting a glassbox
-  `InsertTrace`). Level-0 node matches lift member leaves by
-  `max(leaf, α·node + (1−α)·leaf)`. Scope key = the memory wall
-  (`MemoryScope::atlas_key()`), so a node never summarizes across
-  scopes. Production trigger: the knowledge-view debouncer's
-  `MemoryTouched` window drains touched ids through `insert_memory`
-  (handles installed via
-  `KnowledgeViewManager::install_memory_atlas`). Bench:
-  `svrn eval inner-chaos --recall-probe / --recall / --recall-stream`.
-  Live-path invariant (2026-07-10): the embed-recall stanzas in
-  `handle_turn`/`handle_message_stream` run PRE-ROUTING, where
-  `context.turn_register()` still returns the Factual fallback — they
-  gate on mode-derived relational-ness (`resolve_active_mode`), never
-  on `turn_register()`. On witness turns the recall result then passes
-  through `merge_recall_pins` (reference-driven sticky pins: the entry
-  a grounded reply actually spoke about, attributed by the grounding
-  verifier's `referenced` field, stays in view ≤2 pins / 5-window);
-  glassbox via `RUST_LOG=memory_grounding=info` (gate verdict, pin
-  set, pin merge) and `TurnProvenance.recalled_memories`, captured on
-  BOTH expressive variants (the recall bench judges against this
-  actual window, not a retrieval replica).
-- **Routing-correction memory** —
-  `RoutingCorrection { message_hash, classified_as, was_correct }`
-  fed back into the router prompt as "avoid these mistakes."
-- **Skills** — TOML files under `sovereign/modes/` (current:
-  `recipe-author`, `inner-work`). `SkillRegistry` merges routing
-  hints, planner templates, prompt overrides, memory rules, and
-  OICP requirements into the runtime. Skills carry
-  `signature` / `signed_by` and a derived `TrustLevel
-  { CommunityReviewed, AuthorSigned, Unsigned }`.
+- **Conversation memory — three constant-capacity channels.** The rolling
+  visible window; the **conversation frame** (`conv_frame.rs`, five named
+  sections at a 320-token budget, folded incrementally off a watermark); and
+  **retrieval-over-history** (dropped turn-pairs embedded once and memoized,
+  hybrid-scored, MMR-selected). Total ~2.8k tokens independent of conversation
+  length. The frame replaced a prose blob because a blob has to be rewritten
+  to be updated and is not renderable.
+- **Long-term memory** — extracted at conversation end, FTS5 retrieval,
+  exponential monthly decay. Tiered recall reads persistent T1 embeddings and
+  blends a T3 memory-RAPTOR signal with per-scope trees.
+- **Skills** — TOML under `sovereign/modes/`. `SkillRegistry` merges routing
+  hints, planner templates, prompt overrides, memory rules and OICP
+  requirements; skills carry `signature` / `signed_by` and a `TrustLevel`.
 
 ### Frontends
 
-| Frontend            | Purpose                                                                              |
-|---------------------|--------------------------------------------------------------------------------------|
-| `sovereign-cli` (+ siblings) | User-facing dispatcher. `sovereign <verb>` execs into one of three siblings — `sovereign-cli-daemon`, `sovereign-cli-dev`, `sovereign-cli-llm` — based on the verb. Since 2026-08-21 one verb is the exception: `code converge` is served in-process from `sovereign-cli-dev`'s `[lib]` target (linked, `default-features = false`) — see `InProcessCodeVerb` below. Same UX as one binary; faster builds. Discovery: each sibling at `current_exe()`'s parent dir; override via `SOVEREIGN_CLI_{DAEMON,DEV,LLM}_BIN`. Unix execs into the sibling (same PID); other platforms spawn-and-wait. |
-| `sovereign-server`  | Axum REST + WebSocket on configurable port; multi-tenant via `tenant.rs` with per-tenant isolation on corpora and uploaded documents (`ConversationContext.corpus_ceiling` scopes retrieval incl. the round-0 engine search; `DocumentAsset.owner` gates document list/get/delete/ask — the SaaS-hub hardening, 2026-07); server-side `ApprovalChannel` w/ `/v1/tasks/{id}/approve`. **`POST /v1/admin/shutdown`** (2026-09-11, sv-surface svt-2) is how this process is told to stop: inside the auth layer, so it takes the same bearer key every `/v1` route takes and mints no second credential, and REFUSED with a named 403 when `[auth]` is disabled — the layer is a pass-through then, and this binary defaults to a `0.0.0.0` bind. `axum::serve` gained `with_graceful_shutdown` on it plus a 5 s watchdog, because a held-open conversation WebSocket is in-flight for as long as the phone keeps it and would otherwise make an accepted stop indefinite. Before this the binary had NO stop path at all — no route, no signal handler, no pidfile, no run lock — and the only thing that ever stopped it was an external SIGKILL from the desktop's Mobile-access toggle holding its `Child`. **Mobile-facing surface** (`docs/specs/MOBILE.md`): WS `/v1/conversations/{id}/stream` streams `TurnFrame::Token`→`Complete` token-by-token down the requesting socket (not the shared broadcast — avoids cross-tenant leak, and since 2026-08-25 the two channels no longer share a TYPE, so that leak does not compile: per-turn frames are `sovereign_contracts::types::TurnFrame`, the executor's fan-out is the server-local `ExecutorEvent`); `sovereign_contracts::types::projection` surfaces typed `provenance` + `citations` on REST message responses — it moved out of this binary with the protocol so a daemon can project the same metadata; `GET /v1/corpora` lists `CORPUS_REF`s (Knowledge-only, with `scope`/`mesh_shared` privacy posture derived from `IndexInfo.mesh_sharing`); a `scheduler.rs` `FairScheduler` bounds concurrent turns — a weighted-fair queue + per-origin cap with live `TurnFrame::QueuePosition` over WS and `503 + Retry-After` shed (`busy.rs`) on REST, sharing its `serving_policy::fair_sched::SchedCore` policy core with the mesh peer-admission gate (so both are fair by identical rules); reciprocity weights from the contribution ledger rank a contributor's turns up. Secure by default: binds `127.0.0.1:8080`, and a non-loopback bind with `[auth]` disabled is refused at startup (`config::validate_exposure`; explicit `allow_unauthenticated_remote` opt-out) — permissive CORS is applied only when auth is on (`[server] cors = "auto"`). **Note the gap that guard does NOT close:** auth engages only when `mode == "api_key"` **and** `keys` is non-empty, so `mode = "api_key"` with an empty map serves every `/v1/*` route unauthenticated as tenant `"default"` — silently, and with a loopback bind the exposure guard never fires. **Two cargo features, both default ON, drop the surfaces whose safety rests on "one operator owns this box" (`sovereign/deploy/onprem/`).** `dev-routes` gates *privilege*: `/v1/solve` + `/v1/cycle/bdd` (client-supplied `test_command` reaches `sh -c` **inside** the authed router), `/v1/documents/upload` + `/v1/corpora/upload` (ingest an absolute server-side path), the `/mcp*` routes (registered *after* the auth layer, guarded only by `ip.is_loopback()` — which a same-host reverse proxy satisfies for every remote caller), and `ShellTool`. `net-tools` gates *egress*: the `search` tool's web fallback (DuckDuckGo → Google → DuckDuckGo Lite, fired whenever the top **local** retrieval score is thin), `web_fetch` (any URL the model emits; scheme-only validation), and `wikipedia_fetch`. Those three were registered unconditionally and fired on ordinary chat turns; `Permission::Network` does not gate them, because it is consulted at exactly one call site (the plan executor) and the chat path calls `tool.execute()` directly. Under `--no-default-features` `search` survives, built local-only via `SearchTool::new`. |
-| `sovereign-desktop` | Tauri 2 + Svelte 5. The **UX-refactor (P0–P4) reshaped the app around user intent** — rail `Ask · Library · Reflect · Workshop · ⚙`. **Ask** (the branded chat w/ streaming + provenance) is the landing. **Library** (`library/{LibraryView,AddSheet,NotebookDetail}` off the `notebook_list` command) is the knowledge home — a notebook shelf with per-notebook Ask + Explore, plus a "Libraries on the mesh" section (the `mesh_media_offers` command → `GET /v1/mesh/media` and its `?peer=` reach, polled every 10 s; a pick opens the loopback `player_url`, never shown); the catalog `KnowledgeStatus` + folder/vault/import ingest fold into Library→Add; the Atlas rail is gone (the atlas surface lives inside a notebook's Explore via `AtlasSurface startingCorpusId` + as a reading deep-link target). **Workshop** (`workshop/WorkshopView`) holds the maker facets Build · Run · Test · Connect tools (MCP) · Open to apps (OpenAI endpoint), with a notebook→Workshop "use→make" bridge. **Settings** shrank to General + Operator (Mesh · Sharing · Mobile) clusters. A follow-on **elegance pass** layered craft on top: a plain-language scope bar in Ask (`AskScopeBar` — "Asking ‹notebook›", gating `CorpusFilterStrip`), per-notebook **conversation memory** (the `notebook_conversations` command → `SqliteStateStore::list_conversations_for_corpus`, a `json_each` filter on `enabled_corpora`; a notebook's Ask resumes its last thread, switched via a **Conversations ▾** dropdown), a card→detail **shared-element morph** (`lib/motion.ts` `crossfade`), and an **Ask↔Explore** Map→Ask bridge ("Ask about this" on an atom → the notebook's Ask, seeded). The per-notebook detail consolidates its chrome into **one header bar** — segmented `Ask | Explore` + a `⋯` overflow for Sources/Settings — with the scope stated by the header (the in-notebook scope bar suppressed via `ChatView hideScope`); the **Home hub was dropped** so the branded Ask flow is the first-run landing. **Layout is token-driven, not per-component.** `app.css` owns a layout scale (`--gutter` / `--gutter-top` / `--gutter-bottom` / `--measure` / `--measure-prose`) plus three global primitives — **`.page-body`** (the scroll container + gutter every surface body needs), **`.page-measure`** (the centred content column), **`.page-header`** (a header band on the same gutter). These are global rather than Svelte-scoped on purpose: the app's surface hosts (`.library-surface`, `.settings-surface`, `.nb-body`, `.app-chrome-content`) are all `height:100%; overflow:hidden` clipping boxes, so **a body that fails to establish its own scroller is clipped with no way to reach the content past the fold**. A July 2026 audit found exactly that — `ConflictsPanel` hid 2,442px of governance decisions behind an `overflow-y:auto` that could never fire (it sat on an auto-height box), and `AddSheet`'s body rendered flush to both window edges because a `padding:0` "embedded" opt-out outlived the host that used to compensate for it. `tests/e2e/specs/library-layout-audit.spec.ts` is the regression gate: it drives every Library route, measures composited geometry, and fails on unreachable content or a body inside the gutter. Do **not** re-declare padding/overflow on an element carrying `.page-body` — Svelte scoping gives the local rule higher specificity and it wins silently. Plus skill manager, `sovereign://` deep-link handler, system tray; reuses the shared `@sovereign/chat-ui` package (`packages/chat-ui`). |
-| `sovereign-mobile` (`/sovereign-mobile`) | Thin Tauri 2 client (iOS + Android) — **no local inference/Runtime/corpus**. Reaches a host's `sovereign-server` over the tailnet, authenticates as a tenant (token in keychain), renders streamed chat. Rust core owns transport (HTTP + WS), SQLite cache of the spec's cached projections, and a fail-closed connectivity monitor; re-emits the SAME `message-chunk`/`message-complete` events the shared chat FSM consumes. Conversations are cached for display and referenced as a conversation `CORPUS_REF` once host-indexed (`indexed_in_corpus`); long-context is host-side (phone sends only the new turn + conversation id, never re-uploads history or embeds); local-only sources are privacy-badged (`scope`/`mesh_shared`). **A Cargo workspace member since 2026-09-09** (`4e1f99f55`; the "written but never compiled" note was stale — the crate compiled before that change) — a census nobody can run is inventory, and `--package sovereign-mobile` resolves now. **It consumes `sovereign-turn-client` and nothing else on the wire** (sv-surface R6): the hand-copied `ServerEvent` mirror in `remote/dto.rs`, its `ProvenanceDto` / `SourceDto` / `CitationDto`, and `remote/client.rs`'s inline `Deserialize` envelopes are deleted, and every frame, prompt, notice, answer and request comes from `sovereign-contracts` through the client crate's re-exports (the direct contract dep is gone and `layer-gate --tighten` banked the fan-in cut 27 → 26 at `4a83373f4`). The `TurnFrame` match is exhaustive with no catch-all, so `Prompt`, `Notice` (`ResolveAck`, `TurnSettled`) and `QueuePosition` are handled — three capabilities the mirror could not represent — and two Tauri commands (`answer_prompt`, `cancel_turn`) plus a `SenderRegistry` give the phone a real answer path. Evidence: `src-tauri/tests/turn_wire.rs` drives a real turn over a real socket against a fixture host serializing contract frames, with the citation and provenance persisted to the cache and the post-`Complete` `ResolveAck` + `TurnSettled` bookend; `src-tauri/tests/census.rs` is the sv-one-client twin census and keeps two permanent plants so its detector stays proven. Named ceiling: the client family has no auth seam (bare `reqwest`, bare `connect_async`), so the phone reaches a DAEMON, not an api-key `sovereign-server` — daemon-first wire compatibility, recorded in `ApiClient::turn`. See `docs/specs/MOBILE.md` and `/sovereign-mobile/HANDOFF.md`. |
+| Frontend | Notes |
+|---|---|
+| `sovereign-cli` (+ siblings) | Dispatcher. `sovereign <verb>` execs into `sovereign-cli-daemon`, `-dev` or `-llm`. Unix execs (same PID); elsewhere spawn-and-wait. Discovery is `current_exe()`'s parent, overridable per sibling |
+| `sovereign-server` | Axum REST + WebSocket, multi-tenant with per-tenant isolation on corpora and documents. Binds `127.0.0.1:8080`; a non-loopback bind with `[auth]` disabled is refused at startup. **Two cargo features, both default ON, drop the surfaces whose safety rests on one operator owning the box**: `dev-routes` (privilege — `/v1/solve`, uploads taking a server-side path, the `/mcp*` routes, `ShellTool`) and `net-tools` (egress — the search tool's web fallback, `web_fetch`, `wikipedia_fetch`) |
+| `sovereign-desktop` | Tauri 2 + Svelte 5, rail `Ask · Library · Reflect · Workshop · ⚙`. Layout is token-driven: `app.css` owns the scale and three global primitives (`.page-body`, `.page-measure`, `.page-header`). Do NOT re-declare padding or overflow on an element carrying `.page-body` — Svelte scoping wins silently and clips content with no way to scroll to it |
+| `sovereign-mobile` | Thin Tauri 2 client — no local inference, Runtime or corpus. Consumes `sovereign-turn-client` and nothing else on the wire. Named ceiling: the client family has no auth seam, so the phone reaches a DAEMON, not an api-key `sovereign-server` |
 
-Verbs by sibling binary:
-
-- `sovereign-cli` (dispatcher + light delegators, no LLM dep) —
-  `notes`, `status`, `drift`, `audit`, `cache-audit`, `session`,
-  `charter`, `amend`, `design`, `plan`, `init`, `milestone`,
-  `refresh`, `reflect`, `rough-edges`, `archaeology-eval`,
-  `git-archaeology`, `agent-bench`, `nudge`, `serve`, `stop`,
-  `memory`, `awareness` (feature-gated). `session`
-  (`session_cmd.rs`) is the session-continuity surface: `session
-  distill <id>` parses a Claude Code transcript (same source as
-  `cache-audit`), extracts the deterministic narrative spine, and
-  synthesizes a schema-v1 session frame via one daemon chat call —
-  see `sovereign/docs/specs/SESSION_CONTINUITY.md` and the graded
-  golden at `quality/session-frame.golden.md`. Frames + spines land
-  under `~/.svrnmesh/sessions/<session_id>/`. `session frames`
-  is the read side: the INDEX of live frames in selection order
-  (branch match → prompt overlap → recency), with `session frames
-  <id>` dereferencing one whole. Both are pure filesystem reads, so
-  the handoff survives a dead daemon; `.claude/hooks/session-boot.sh`
-  injects the session's own + predecessor frames at SessionStart (index
-  fallback when no match) and `.claude/hooks/inject-notes.py` surfaces
-  the note index — full bodies for frame-cited notes, at the
-  first-prompt budget (notes ≤3200 chars, MEMORY_MODEL §5 E5) — plus,
-  once per SEAT session, the pre-assembled seat boot block
-  (`scripts/co-boot-block.sh`: anchor todos, recent seat decisions,
-  open orders, directive-log stats, ~3k tokens — the boot ritual made
-  structural, §5 E5 Phase 3). Every injection logs one
-  `~/.svrnmesh/retrieval-log/<session>.jsonl` row (E2), scored by
-  `sovereign notes retrieval-audit`. The initiative-level
-  design compass for all of this (context = working memory holding
-  pointers/gists; notes/frames/facts/code-graph = external long-term
-  store; eviction and forgetting policies) is
-  `docs/specs/MEMORY_MODEL.md` — `cache-audit --counterfactual`
-  prices its levers H1–H5.
-- `sovereign-cli-daemon` — `daemon` (owns :9741), `setup`,
-  `install-service`, `doctor`. Cargo feature **`ocr`** (default OFF)
-  compiles in PaddleOCR and makes `daemon_cmd::ocr_install` install an
-  `OcrCtx` on the `LocalCorpusManager` at boot — the missing caller that
-  makes `svrn corpus watch --ocr` work **headlessly**. Before it, only
-  the desktop ever called `set_ocr_ctx` (and resolved assets from three
-  `AppHandle` bundle probes that do not exist off-desktop), so a server
-  could enable OCR and get nothing: every scanned PDF landed in
-  `WatchedFolderState.failed_files` as `scanned_no_text`. Asset
-  resolution is env → `<data_dir>` → `~/.svrnmesh`; `data_dir` must
-  outrank the last because `paddle::models_root()`'s own fallback is a
-  hardcoded `~/.svrnmesh` path a `~/.svrnmesh` install never hits.
-  Off by default because it pulls `ort`/`ndarray`/`imageproc`/`i_overlay`
-  and needs ~20 MB of staged assets the standard release does not fetch
-  (`DEFAULTS_LEDGER.md`; `sovereign/deploy/onprem/package.sh` turns it on).
-- `sovereign-cli-dev` — `atos`, `tools`, the `code` *analysis* subcommands
-  (`brief`, `fieldglass`, `arch-report`, `dry-report`, `suggest-seams`,
-  `check-spec`, `capability-map`, `map`, `facts`, `watch`), and the `project`
-  *lifecycle* subcommands (`serve`, `status`, `found`, `design`,
-  `plan`, `charter`, `amend`, `phase`, `audit`, `install-hooks`) — `init`
-  left this list on 2026-08-07, see below.
-  **`code` is likewise split as of 2026-08-06:** `code index` runs in the
-  shipped dispatcher (`sovereign-cli/src/code_index_cmd.rs` +
-  `code_index_incremental.rs`), as does `svrn refresh`
-  (`sovereign-cli/src/code_refresh.rs`), both behind the `code-intel` cargo
-  feature — which `scripts/release-cli-local.sh` and `cli-release.yml` pass,
-  so the shipped binary always has them. The feature is three lines
-  (`oicp-client`, `corpus-engine-scip`, `corpus-engine/treesitter`) and
-  deliberately pulls no `sovereign-tools` / `-mesh` / `-atos` / `-inference`:
-  the index path never loads a model, it embeds through the daemon over
-  loopback HTTP. `sovereign_core::embed_fn::inference_to_embed_fn` is the one
-  adapter both this path and `sovereign-tools` use.
-  **`code converge` is LINKED rather than exec'd as of 2026-08-21**, which is
-  a different mechanism from the two splits above and the first of its kind
-  here: the code did not move. `sovereign-cli-dev` gained a `[lib]` target and
-  `sovereign-cli` now *links* it (`--features dev-tools`, `default-features =
-  false`) instead of `exec`ing the sibling for that one verb. The crate was
-  binary-only until then, which is why `nc-reach` scored it 135 types / **0%
-  exported** — nothing in Rust can import a type out of a bin crate, so the
-  process boundary was forced rather than chosen. The seam is
-  `sovereign_cli_dev::InProcessCodeVerb`: ONE list of in-process verbs, read by
-  the dispatcher's `code` arm and by the workbench's own `code_cmd` router, so
-  a verb cannot be linked in one and forgotten in the other. What keeps this
-  from dragging the workbench's dependency tree into the dispatcher is the
-  crate's `workbench` feature — a DEFAULT feature carrying `sovereign-mesh`
-  (llama.cpp), `sovereign-tools` (arrow + parquet), `axum` and
-  `corpus-engine`'s grammars, all now `optional`. With it off the crate is two
-  workspace crates wide (`corpus-engine-scip` + `sovereign-cli-shared`), both
-  of which the dispatcher already carried, so the shipped end-user build gains
-  nothing: the dep is `optional` and only `dev-tools` pulls it. An arm added to
-  `InProcessCodeVerb` that reaches a gated module fails
-  `cargo build -p sovereign-cli-dev --no-default-features` — that command, not
-  this paragraph, is the enforcement.
-  **`project` is a split surface as of 2026-08-06:** its daemon-facing
-  registry half — `register`, `unregister`, `list`, `watch` — runs
-  in-process in the shipped dispatcher (`sovereign-cli/src/project_registry.rs`)
-  and is therefore absent from `DEV_VERBS`. The split exists because the
-  daemon already contains the whole code-intelligence pipeline (it builds
-  the `Reindexer` at boot, replays `~/.sovereign/projects.json`, and runs
-  `scip_export::export_all`), so a `curl | sh` user was one HTTP POST away
-  from working `callers`/`callees`/`blast` with no verb to make it. The
-  registry subcommands are pure loopback HTTP and add zero dependencies.
-  Sibling-only `project` subcommands refuse via
-  `project_registry::refuse_workbench_subcommand`, which names what the
-  build *can* do rather than pointing at a `cargo build` the user cannot run.
-  Sequencing rule for the rest: a verb leaves `DEV_VERBS` only once its
-  implementation ships in the dispatcher — un-gating first converts an
-  exit-2 into a worse exit-127 "cannot find sibling binary".
-  **`project init` joined them 2026-08-07**, behind the same `code-intel`
-  feature: `sovereign-cli/src/project_init/` (`mod.rs` + `setup.rs` +
-  `scaffold.rs`, moved whole from the workbench). `svrn init` calls
-  `cmd_init` in-process — it used to spawn `sovereign-cli-dev project-init`,
-  which meant the first command a `curl | sh` user types required a 240 MB
-  developer binary the install never shipped. Two consequences worth knowing:
-  - The **project model** (`observation` = what a repo IS, `project_toml` =
-    the durable `.sovereign/project.toml` derived from it) moved to
-    `sovereign-cli-shared` behind its `project-model` feature, because init
-    WRITES that file while the workbench's `found` / `phase` / `audit` /
-    `charter amend` READ it. `sovereign-server`, `commonwealth-api`'s context
-    injector and the desktop knowledge view read it too — which is why the
-    writer had to come along rather than be dropped as "on-disk state".
-    `remove_legacy_hook` + `SOVEREIGN_HOOK_MARKER` (shared `repo`),
-    `check_mcp_server` (shared `mcp_client`) and `configured_embed_model_name`
-    (shared `models`) hoisted for the same reason: two binaries now touch
-    each, and a hook marker that disagrees across binaries is a real bug.
-  - The **ATOS opencode plugin install did NOT come along.** The ATOS verb
-    tree stays workbench-gated, so writing `.opencode/plugins/sovereign-atos.ts`
-    from the shipped binary would install config for a pipeline the user
-    cannot drive. `svrn atos install-plugin` is still the way in.
-  Init reaches the daemon through `project_registry`'s `daemon_post` /
-  `derive_corpus_id` rather than its own copies, so `init` and `register`
-  cannot disagree about a repo's corpus id.
-- `sovereign-cli-llm` — `chat`, `bench`, `eval`, `voice`,
-  `reading-diag`, `atlas`, `meta-atlas`, `enrich`, `recipe`,
-  `recipe-agent`, `maintainer`, `pipeline`, `mcp`, `alignment`,
-  `mesh`, `meshapp`, `mobile`, `corpus`, `newsworthy`,
-  `knowledge-gym`, `search-gym`, `govern`, `router-cache`,
-  `proxy`, `portfolio`, `workflow`, `claim`.
-
-The dispatcher's `ALL_VERBS` const (test-pinned:
-`all_verbs_is_complete_and_sorted`) is the SSOT this list mirrors.
-
-There is no interactive REPL. Bare `sovereign` prints usage and
-exits; use `svrn chat` for the interactive shell, which
-streams through the daemon's `/v1/chat/completions`. `project init`
-prompts for AI-assistant harness (Claude Code / opencode / both /
-skip) and writes `.opencode/opencode.json` + `AGENTS.md`. It no longer
-installs the ATOS opencode plugin — that moved out with the port into the
-shipped dispatcher (2026-08-07); use `svrn atos install-plugin`.
-
-The daemon (`sovereign-cli-daemon::daemon_cmd::run`) rotates its
-own logs at startup via its `log_rotation.rs` — copy-truncate, 10
-MiB cap, 5 backups, 30-min sweep loop; preserves the inode for
-launchd-held FDs.
-
-### Deep-link handler
-
-`commonwealth-discovery/src/deep_link.rs` parses
-`sovereign://create?name=<name>` and `sovereign://join?key=<key>` (with
-relay hints for NAT traversal); it moved down from `sovereign-mesh` on
-2026-09-11 so a lifted process can read an invite, and
-`sovereign-mesh/src/deep_link.rs` re-exports it plus
-`join_confirmation_from_link`. The desktop app registers as the system
-handler.
+Verbs by sibling: `sovereign-cli` holds the light delegators (`notes`,
+`status`, `drift`, `session`, `design`, `plan`, `init`, `reflect`, `memory`,
+`serve`) plus `code index` and `refresh` behind the `code-intel` feature;
+`sovereign-cli-daemon` holds `daemon`, `setup`, `install-service`, `doctor`;
+`sovereign-cli-dev` holds `atos`, `tools`, the `code` analysis subcommands and
+the `project` lifecycle subcommands; `sovereign-cli-llm` holds everything that
+talks to a model or does heavy retrieval. `code converge` is the one verb
+LINKED rather than exec'd, from `sovereign-cli-dev`'s `[lib]` target.
 
 ### Subsystems with their own docs
 
 | Subsystem | Doc |
 |---|---|
 | Slots, OICP, harness, cutoffs | [`docs/inference.md`](./docs/inference.md) |
-| Inline completion (FIM) — ghost text served by the daemon: `[models.edit]` opt-in (deprecated alias `[models.fim]`; lean alias OR pinned dedicated slot under reserved name `"edit"`, with the pre-rename `"fim"` still pinned for upgrade safety), vocab-probe marker detection, `POST /v1/completions`, stop-craft tracker, VSCode extension, measured latency. **FIM is one of two lanes on the edit slot** (`EditSlotInfo`, `sovereign-contracts/src/types/edit_slot.rs`): a failed marker probe now withholds only the FIM lane, leaving next-edit served — it used to throw away the whole slot, so a user on an ordinary chat model got no editing assistance at all. **Onboarding is one command: `svrn setup --fim`** (`setup_cmd/fim.rs`) — plan-then-consent, downloads Mellum2 off the `[profiles.fim_*]` ladder in `models.toml`, writes lean-mode config (`primary` == `models.edit.path`, one resident copy), starts/restarts the daemon, then walks the same three probes as the extension's Diagnose command (reachable → `inference.edit` non-null → real completion round-trip) before installing the `.vsix`. `/status.inference.edit` carries `{slot, model_id, aliased_to_fast, degraded, next_edit_format?, fim_style?, advice?}` — the lane fields are OMITTED when absent, and `inference.fim` stays as a byte-identical deprecated mirror for one release because shipped extensions read it by JSON path. Mellum2-only by operator decision; `--quant` moves rungs. A dedicated FIM slot beside a separate chat primary is deliberately NOT offered — smallest Mellum2 is 7.0 GB against ~3.5 GB of headroom on the `high`/`very_high` tiers | [`docs/INLINE_COMPLETION.md`](./docs/INLINE_COMPLETION.md), [`../packages/vscode-sovereign/README.md`](../packages/vscode-sovereign/README.md) |
-| Next-edit prediction — after ≥2 repeated edits, the editor proposes the remaining sites as a tab-through diff queue. Two lanes behind one route (`POST /v1/edit_predictions`): the **rule lane** (pure induction in `code-next-edit/src/next_edit.rs`, no inference — **three rule kinds**: a context-expanded literal rewrite (`expand_rule`, induced from a single unit), an anchored repeat-insertion (`induce_insertion`, from a pair) and a repeat block deletion (`induce_deletion`, from a pair, `MIN_DELETE_LINES = 2`). The pair kinds run only where the literal lane declines, and all three render as one `GuardedRule`, so site finding, the already-applied exclusion, the `support >= 2 && find >= MIN_RULE_CHARS` threshold and the queue are shared — new inductions, not new pipelines. The multi-line floor on deletion is the whole safety argument for that kind: at one line it fires wrongly 13× across the golden negatives, at ≥2 lines zero. Kinds two and three took the golden set from 37.8% to 41.4% useful-fire for +2 wrong fires, notes `902da379`/`d75a9c4c`. **`MIN_RULE_CHARS` is 5, raised from 2 on 2026-08-06 when the objective changed from "maximise useful-fire" to "be most useful at each level of wrong" — a user does not accept a wrong fire, and `useful-fire` counts `partial`, so it had been rewarding fan-out. Paired, rule lane isolated: 13 wrong fires removed and 0 added, +3 strict-useful, 25 fewer over-offers; wrong-fire 15.3%→12.8%. The constant is a ROUTER as much as a filter — declining a short rule falls through to the pair kinds, which re-anchor on a whole line and are more specific (note `c97bf8cd`)**. **Site selection is syntax-aware since 2026-08-06 (`next_edit_syntax.rs`): the lane stays pure and takes a `SiteOracle` closure, which `routes_edit_predictions` builds by parsing the live buffer (tree-sitter, grammars from corpus-engine's registry) and keeping only candidates whose node-kind chain matches a site the user ALREADY edited. ON FOR GO, RUST AND — since 2026-08-28 — TYPESCRIPT. TS was excluded because the filter alone measured WORSE there (useful-fire 52.0%→41.2%, wrong-fire 6.2%→9.7% on the React/TS bank), and re-testing on 2026-08-28 reproduced that to the decimal, so the exclusion was never stale. What changed is a second, per-language constant: `DECLINE_WHEN_EMPTIED`. **Emptying the site set is not the same as filtering it** — an empty return hands the case to the pair fallback (`predict_filtered`), which re-induces a different anchored rule that can be wrong. Declining instead recovers TS to useful-fire 51.0% while keeping the precision: measured through the production route, hunk-precision 38.9%→**41.5%**, 88 junk hunks removed for 2 good ones (44:1, against the unguarded filter's 2.7:1). Whether that fallback helps is a property of the LANGUAGE and the two disagree — on Rust/Go the same guard COSTS 3.0 pts of precision (paired 95% CI −6.8..−0.2) and raises wrong-fire 4.1, so Rust and Go keep the fallthrough and are unchanged. Wrong-fire on TS moved 6.2%→8.0%, which is 2 cases of 113 fires and NOT separable at this n; both were read by hand (a `query`→`filter: query` fanout in test assertions) rather than waved through. `PROVEN_LANGUAGES` is still a whitelist and Python, which parses fine, stays out for want of a measurement. Main bank: hunk-precision 33.9%→38.6%, 441 junk hunks removed per 45 good (note `e8ecaef7`).** The scorer reports **`hunk-precision`** beside the case verdicts because those score a CASE and a case wins by hitting ONE real edit — a fire offering 62 hunks to land 3 is a `partial` that `useful-fire` counts in full. Two banks now: `cases.jsonl.gz` (1,098) and `cases.react-ts.jsonl.gz` (383, the Go+React-TS first-user segment; React is safe but QUIET — `.tsx` useful-fire 21.7% vs `.ts` 58.4%, 43 of 60 positives missed, only 4 wrong)) and the **model lane** (`next_edit_model.rs` — deterministic consult gate, needle-anchored region rewrite on the resident edit slot), both SHIPPED and eval-gated green, model lane default-on. **Next-edit needs no coder model since 2026-08-07**: it rides the ordinary prompt surface, so any competent chat model serves it, and with no `[models.edit]` at all `install_fallback_next_edit_slot` serves it off the already-resident fast slot (`ModelsSection::fast_path()` — explicit `fast` when set, primary otherwise, so an editing keystroke never triggers a load), marking `degraded: true` to drive the `/status` nudge. **Default OFF behind `SOVEREIGN_NEXT_EDIT_FALLBACK` and it STAYS off — measured 2026-08-07 and the flag did not hold.** On the 60-case gen bank with the gate forced open a 35B-A3B chat primary scored 21/30 useful / 0 wrong / p95 2576 ms against the 1.5B specialist's 19/30 / 0 wrong / p95 828 ms — but the flag resolves through `fast_path()`, so on a box with an explicit `[models].fast` the answering model is the FAST slot, and a 4B there scored **14/30 (GM4 FAIL)** at p95 2194 ms through the production daemon. Two findings the record carries instead of the old inference: a bench number does not transfer down a model class, and the fallback is not the cheap path either (2194 vs 2576 ms — ~3B active in a 35B-A3B MoE costs the same as a dense 4B). Safe (0 wrong edits in 17 fires), hence opt-in rather than removed; users are pointed at `svrn setup --fim`. Citation: `bench/next-edit-bakeoff/runs/phase2-fallback-fast-slot/`, ledger row in `DEFAULTS_LEDGER.md`. Thinking suppression is decisive, not cosmetic: reasoning ON scores 0/30 (~1044 reasoning tokens before the first answer byte against a 64–1024 budget, so every case truncates) — hence `NextEditFormat::uses_chat_template()`. The consult gate recognises four shapes and admits exactly one, `multiline_fanout`: casing-variant renames are declined pending a deterministic sub-lane, and `fanout_insert` + `param_insert` were declined 2026-08-06 after the golden set scored the gates separately (94.4% useful vs 10.5% and 25.0%) — removing 23 wrong fires for 4 useful edits, taking wrong-fire 21.0%→15.2% and model-lane p95 1748ms→9ms (note `2c22ec10`, `DEFAULTS_LEDGER.md`). Each decline is a named `skipped:` reason so the shapes stay countable. The extension coalesces keystrokes into edit units (`packages/vscode-sovereign/src/editUnits.ts`) and renders under a never-scroll-uninvited policy; all policy is daemon-side so IDE clients stay thin. Hardened 2026-07-30 (§9a): permit outlives the inference (a dropped future cancels nothing), region bounded in bytes, drop-never-repair on model output, one shared byte-ruler for the wire contract. Glassbox: `sovereign_debug` explains silence per response; `next_edit` tracing target. **Since 2026-08-07 an episode is also a RECORD (§9d): a metadata-only local journal at `~/.svrnmesh/journal/next-edit-<date>.jsonl` joined by `episode_id` to what the developer did with the suggestion — `accepted` \| `dismissed` \| `diverged` \| `superseded`, reported by the extension through `POST /v1/edit_predictions/outcome`. Metadata-only is STRUCTURAL: `NextEditEpisode` has no `serde_json::Value` and no free-form field, so no document, region, needle, rewrite or path has a channel to the file, and the model-lane debug value is read by a named allowlist. `diverged` is never folded into `dismissed` and an unreported episode is counted as `unknown`, never as a dismissal — otherwise the acceptance rate looks precise and is wrong (§18.1's four verdicts). Outcome reporting adds ZERO user-visible surface: fire-and-forget, 2 s deadline, every failure swallowed incl. a 404 from a daemon predating the route (note `09599af1`); the daemon-side append drops its join handle so it cannot fail a request. **The journal layer is feature-agnostic** — `svrn journal` is a generic verb, so the machinery is `sovereign-contracts/src/types/journal.rs`: a `JournalStream` descriptor (file stem + its own disable env) owning file layout, UTC-day rotation, the 8 MiB/day cap, 14-day retention, and a four-way off-switch (global env, global marker, per-stream env, per-stream marker) behind ONE decider `JournalStream::enabled`. Next-edit is the first stream, not the only possible one; a second is a `const JournalStream` + serde types + one row in `journal_cmd::VIEWS`, touching no `match` on feature names (§4, open sets are registries). Consent surface is `svrn journal [<stream>] <sub>` (`stats` \| `show` \| `bundle` \| `off` \| `on` \| `clear`) in the DEFAULT build — no send/submit path exists anywhere in the module, and `bundle` prints the complete field list of the file it writes, collected from the written bytes by a feature-agnostic walker so a new stream is audited the day it is added. Default-ON local write ⇒ ledger row.** **The 120-case rule bank gained a fifth gate on 2026-08-28 and G1/G2 narrowed to match (`gym/next-edit/README.md`).** The syntax oracle and the `MIN_RULE_CHARS` raise both landed AFTER those fixtures were cut and decline 25 of them BY DESIGN, so scored against the original bar G2 could only ever fail and had stopped carrying signal — a reader could not separate an inherited red from one they had just caused, and the docs attributed the whole residual to the firing policy when only 8 of 25 were that. Each declined case now carries `expect.declined_by` (14 `syntax_oracle`, 8 `min_rule_chars`, 3 `pair_fallback`) and **the annotation is a CHECK, not a waiver**: G5 re-derives the mechanism every run — the oracle by a no-grammar counterfactual (the withheld sites must reappear), the threshold by the daemon's own `below_threshold` verdict (never re-deriving the constant), the pair route by text-equivalence of the anchored edit — and goes red both when a mechanism stops holding AND when an annotated case starts passing, so the set cannot rot into a meaningless green. All three failure modes were watched to fail before the verdict shipped. `harvest.py` carries annotations across a re-mine by case id and REPORTS orphans on stderr rather than dropping them. Verdict 2026-08-28: five green, 95 scored + 25 re-verified, p95 24 ms. **A THIRD lane landed 2026-08-28 — the symbol lane (`next_edit_symbols.rs`, §9e), and it is NAVIGATION, not edits.** It reaches `signature_fanout`, where the rule lane scores 3.3% useful-fire over 90 golden cases and is silent BY CONSTRUCTION: its trigger is textual repetition needing support >= 2 of the same rule, while a fanout's trigger (the declaration) and consequence (the call sites) are different text. The SCIP graph is a different induction source — semantic consequence, actionable on the FIRST edit — and the staleness objection that keeps `next_edit_syntax` off the graph does NOT apply to this shape: the function existed before its signature was touched, so the last-save index knows it and its callers, and the call sites are themselves unedited. Trigger: cursor inside a parameter list AND that list differs from the last save, whitespace-normalised so a rustfmt rewrap is not a contract change. **That comparison replaced a gate that could not fail** — next-edit fires on edit-settle with the cursor AT the edit, so "the user just edited where the cursor is" is true by construction — and it also rules out the two classes that dominated the first measurement: a function being typed for the first time (`symbol_not_indexed`) and a file that merely moved (`signature_unchanged`). Resolution is by SCIP DESCRIPTOR, never by name: `find_callers` matches the short `refs.callee_symbol`, and on this graph `new` maps to 631 distinct symbols, so a new `ScipGraph::find_callers_qualified` names both columns — `callee_qualified` decides, the indexed `callee_symbol` makes it seekable, measured same-rows at **0.03 ms against 105 ms**, worst case 9.4 ms (`poll`, 21,420 refs). **It proposes no `new_text` anywhere, and that is the measurement rather than a staging choice**: on the index-aligned bank restricted to the shape it fires on (34 episodes, 13 independent commits) site recall is **95.8%, cluster-bootstrap CI [87.0, 100.0]** — clear of the pre-registered 80% bar — while site precision is **69.7%, CI [34.4, 91.5]**, the 60% bar INSIDE the interval and therefore a could-not-judge (ARCH §18.1). A jump list's bar is recall; a wrong entry costs a keystroke. `is_call_site` runs unconditionally because it measured free: 105 junk occurrences removed for ZERO true sites lost, all of them `use` imports and `pub use` re-export lists, since `refs` is an OCCURRENCE table whose `ref_kind` is uniformly `direct` across 1.36M rows. Wire: opt in with `symbol_lane: true` plus `corpus_id` and `workspace_root` — the daemon guesses neither, because enumerating installed indexes opens every corpus on disk (~10 s) and the graph is keyed on repo-relative paths the editor does not send; the response carries `navigation: {symbol, sites[], truncated, dropped}` or `navigation: {declined: "<reason>"}`, a named state and never an absent key. Client: status-bar item + QuickPick jump list (`packages/vscode-sovereign/src/callSites.ts`), selecting an entry moves the cursor and writes nothing. Rust only (`TRIGGER_LANGUAGES`) because it is the sole language the graph indexes. Ledger row + e2e against a REAL `ScipGraph` (`tests/next_edit_symbol_lane_e2e.rs`), both guards watched to fail. User guide: [`docs/NEXT_EDIT_IN_YOUR_EDITOR.md`](../docs/NEXT_EDIT_IN_YOUR_EDITOR.md); handover map + ranked backlog: [`docs/NEXT_EDIT_HANDOVER.md`](./docs/NEXT_EDIT_HANDOVER.md) | [`docs/NEXT_EDIT.md`](./docs/NEXT_EDIT.md) |
-| Glassbox reading surface + Atlas Inspector | [`docs/knowledge-view.md`](./docs/knowledge-view.md) and `sovereign-tools/src/atlas_view/` |
-| **Collection notebooks** — Explore as an article picker | A corpus ingested as ONE index but enriched **per article**: SEP's 182k paragraphs live in `sep`, its map lives in ~1,769 sibling `sep-<slug>` atlases (`sovereign-recipes/sep/recipe.toml` `[enrichment]`). The parent's own `atoms.json` is a 44-byte `{"atoms":[]}`, so the ordinary atom browser had nothing to show. `FileAtlasReader::list_members` enumerates the prefixed members that carry a non-empty atlas → `atlas_list_members` → `AtlasCollectionView.svelte`, which lists the articles; picking one opens **its** atlas in the ordinary `AtlasCorpusView`. `AtlasSurface` routes on `CorpusKind = atom \| conv \| collection`, resolving "collection" from a non-empty member list. Member titles are **slug-derived** (`sep-logic-modal` → "Logic Modal") because nothing on disk carries the upstream title. Explorability is gated on **atom count**, never on the presence of an `atlas/` dir — that distinction is what kept SEP's Explore tab from claiming a map it did not have. |
-| KnowledgeView landscape splice | [`docs/knowledge-view.md`](./docs/knowledge-view.md) |
-| ATOS — agent task orchestration | [`docs/ATOS.md`](./docs/ATOS.md), [`docs/ATOS_RUNNER.md`](./docs/ATOS_RUNNER.md) |
-| Architectural-correctness tooling | [`docs/DRIFT_DETECTION.md`](./docs/DRIFT_DETECTION.md), [`docs/CORRECTNESS_TOOLING.md`](./docs/CORRECTNESS_TOOLING.md), [`docs/GIT_ARCHAEOLOGY.md`](./docs/GIT_ARCHAEOLOGY.md), [`docs/ARCHAEOLOGY_EVAL.md`](./docs/ARCHAEOLOGY_EVAL.md), [`docs/PLAN_ALIGNMENT.md`](./docs/PLAN_ALIGNMENT.md) |
+| Inline completion (FIM) / next-edit | [`docs/INLINE_COMPLETION.md`](./docs/INLINE_COMPLETION.md) |
+| Glassbox reading surface + Atlas Inspector | [`docs/knowledge-view.md`](./docs/knowledge-view.md) |
 | Knowledge bases + tiered retrieval | [`docs/KNOWLEDGE_BASES.md`](./docs/KNOWLEDGE_BASES.md), [`docs/TIERED_RETRIEVAL.md`](./docs/TIERED_RETRIEVAL.md) |
-| Retrieval redesign — component model, measured integrity findings, phased swings | [`docs/RETRIEVAL_REDESIGN.md`](./docs/RETRIEVAL_REDESIGN.md) |
-| Epistemic state — the answer as a typed object (per-claim provenance, gap conjecture, acquisition routes; SHIPPED — ledger on every answer surface, typed chaos verdict primary, gap.rs's LLM judge deleted 2026-07-20 in favor of the gate's abstention signal, status in `docs/EPISTEMIC_STATE_STATUS.md`) | [`docs/EPISTEMIC_STATE.md`](./docs/EPISTEMIC_STATE.md) |
+| Retrieval redesign | [`docs/RETRIEVAL_REDESIGN.md`](./docs/RETRIEVAL_REDESIGN.md) |
+| Epistemic state / the epistemic index | [`docs/EPISTEMIC_STATE.md`](./docs/EPISTEMIC_STATE.md), [`docs/specs/EPISTEMIC_INDEX.md`](./docs/specs/EPISTEMIC_INDEX.md) |
+| Ontology primitives + migration | [`docs/specs/ONTOLOGY_PRIMITIVES.md`](./docs/specs/ONTOLOGY_PRIMITIVES.md), [`docs/specs/ONTOLOGY_MIGRATION.md`](./docs/specs/ONTOLOGY_MIGRATION.md) |
+| ATOS | [`docs/ATOS.md`](./docs/ATOS.md), [`docs/ATOS_RUNNER.md`](./docs/ATOS_RUNNER.md) |
+| Drift / correctness tooling | [`docs/DRIFT_DETECTION.md`](./docs/DRIFT_DETECTION.md), [`docs/CORRECTNESS_TOOLING.md`](./docs/CORRECTNESS_TOOLING.md) |
 | Work-atlas peer coordination | [`docs/WORK_ATLAS.md`](./docs/WORK_ATLAS.md) |
-| Product demo reel as an acceptance suite — 9 beats driving real surfaces against the operator's live daemon; a beat that fails its assertions exports no clip (`npm run demo` → `npm run demo:export`) | [`crates/sovereign-desktop/tests/e2e/demo/DEMO_BEATS.md`](./crates/sovereign-desktop/tests/e2e/demo/DEMO_BEATS.md) |
-| **Desktop quality surface — START HERE for "how do I verify the desktop".** Every gate in one map: the four commands that gate a merge, the three Playwright configs and which specs each owns, the flags that are load-bearing (`--fail-on-warnings`, `-c playwright.real.config.ts`, `--allow-empty`), the `SOVEREIGN_REAL_*` / bridge / supervisor env vars, the port invariant (`:9741` must be free or runs are invalid), and an explicit list of what CI does **not** run | [`crates/sovereign-desktop/QUALITY_SURFACE.md`](./crates/sovereign-desktop/QUALITY_SURFACE.md) |
-| Negative controls — proving the desktop suite can fail. Every other measure (spec counts, invoke-coverage, fixture liveness) describes what the tests REACHED; this one breaks the product on purpose and requires the specs that claim the coverage to go red. Two layers: `specs/negative-controls.spec.ts` stages broken turns against the real-mode invariant pack (CI thereby guards a suite it never runs), and `npm run sabotage` applies declared source mutations and reports CAUGHT / SURVIVED / STALE. Gates in CI; a `SURVIVED` verdict is a bug report about the suite | [`crates/sovereign-desktop/tests/e2e/NEGATIVE_CONTROLS.md`](./crates/sovereign-desktop/tests/e2e/NEGATIVE_CONTROLS.md) |
-| Browser actuation (MCP → Playwright) | [`docs/BROWSER_ACTUATOR.md`](./docs/BROWSER_ACTUATOR.md) |
-| TDD machine | [`docs/TDD_MACHINE.md`](./docs/TDD_MACHINE.md), [`docs/TDD_MACHINE_DESIGN.md`](./docs/TDD_MACHINE_DESIGN.md) |
-| Solver design | [`docs/SOLVER_DESIGN.md`](./docs/SOLVER_DESIGN.md) |
-| Local corpora / Obsidian / watched folders | `sovereign-tools/src/local_corpus/` — invariants pinned via tests in that crate |
-| Wikipedia freshness layer | `corpus-engine/src/update/newsworthy*.rs` + `sovereign-recipes/wikipedia-newsworthy/`. A tick parks for foreground inference before EVERY article and before its tick-end fold (`yield_to_foreground`, the ingest pipeline's `engine::yield_gate` wait), not only at tick start; the tick line reports `yield_deferrals` / `yield_deferred_ms`. |
-| Per-document index recency (Atlas fresh-first) | `corpus-engine/src/freshness.rs` — source-agnostic `source_doc_id → unix` sidecar (`_doc_freshness.json`) stamped at the single reindex convergence point (`engine::reindex::reindex_by_source_doc_id`); `ChunkRef.source_doc_id` carries the join key onto atoms, and `sovereign-tools::atlas_view::atom_browse` sorts atoms fresh-first + sets `AtomSummary.updated_at`. ANY re-indexing source (newsworthy, watched-folder edit, delta) makes its content "fresh" with no per-source code — freshness is emergent from indexing. |
-| Pinned worker pods as inference peers | [`docs/PINNED_WORKER_AS_INFERENCE_PEER.md`](./docs/PINNED_WORKER_AS_INFERENCE_PEER.md), [`docs/EPHEMERAL_WORKER_PODS.md`](./docs/EPHEMERAL_WORKER_PODS.md) |
-| Cloud peer deploy | [`docs/CLOUD_PEER_DEPLOY.md`](./docs/CLOUD_PEER_DEPLOY.md) |
-| Mesh load awareness | [`docs/MESH_LOAD_AWARENESS.md`](./docs/MESH_LOAD_AWARENESS.md) |
-| Voice contract harness | `sovereign/bench/voice/README.md` |
-| Production search integration | [`docs/specs/PRODUCTION_SEARCH_INTEGRATION.md`](./docs/specs/PRODUCTION_SEARCH_INTEGRATION.md) |
-| Features overview | [`docs/FEATURES.md`](./docs/FEATURES.md) |
-| FAQ / troubleshooting / dev | [`docs/FAQ.md`](./docs/FAQ.md), [`docs/HAVING_TROUBLE.md`](./docs/HAVING_TROUBLE.md) (end users, no terminal), [`docs/TROUBLESHOOTING.md`](./docs/TROUBLESHOOTING.md) (maintainers), [`docs/DEVELOPMENT.md`](./docs/DEVELOPMENT.md) |
-| **On-call runbook** (incident decision tree, supervision, memory budget, glassbox map, bench noise bands, sibling-rebuild map) | [`docs/RUNBOOK.md`](./docs/RUNBOOK.md) |
-| Retrieval pipeline steps + env-knob registry (GENERATED, freshness-gated) | [`docs/retrieval-pipeline.md`](./docs/retrieval-pipeline.md) |
+| Desktop quality surface — START HERE to verify the desktop | [`crates/sovereign-desktop/QUALITY_SURFACE.md`](./crates/sovereign-desktop/QUALITY_SURFACE.md) |
+| Browser actuation / TDD machine / Solver | [`docs/BROWSER_ACTUATOR.md`](./docs/BROWSER_ACTUATOR.md), [`docs/TDD_MACHINE.md`](./docs/TDD_MACHINE.md), [`docs/SOLVER_DESIGN.md`](./docs/SOLVER_DESIGN.md) |
+| Mobile / session continuity / memory model | [`docs/specs/MOBILE.md`](./docs/specs/MOBILE.md), [`docs/specs/SESSION_CONTINUITY.md`](./docs/specs/SESSION_CONTINUITY.md), [`../docs/specs/MEMORY_MODEL.md`](../docs/specs/MEMORY_MODEL.md) |
+| Worker pods / cloud peers | [`docs/PINNED_WORKER_AS_INFERENCE_PEER.md`](./docs/PINNED_WORKER_AS_INFERENCE_PEER.md), [`../docs/CLOUD_PEER.md`](../docs/CLOUD_PEER.md) |
+| On-call runbook / threat model | [`docs/RUNBOOK.md`](./docs/RUNBOOK.md), [`../docs/THREAT_MODEL.md`](../docs/THREAT_MODEL.md) |
+| FAQ / troubleshooting | [`docs/FAQ.md`](./docs/FAQ.md), [`docs/HAVING_TROUBLE.md`](./docs/HAVING_TROUBLE.md), [`docs/TROUBLESHOOTING.md`](./docs/TROUBLESHOOTING.md) |
 
-### Notable in-tree invariants
-
-These are structural commitments enforced by tests, not policy
-toggles. Code reviewers should call out attempts to bend them.
-
-- **KnowledgeView privacy** is layered three deep — recipe
-  (`scope=local`, `mesh_sharing=false`), acquirer SQL (excludes
-  `local_only` skills at ingest), splice (suppresses non-personal
-  views when the active skill is `local_only`). See
-  [`docs/knowledge-view.md`](./docs/knowledge-view.md).
-- **Watched folders are read-only on source**; sensitive folders
-  are excluded from ambient retrieval (Filter 3 in
-  `Runtime::search_corpus_indexes`); multi-root corpora dedup by
-  content hash. Invariants pinned in `local_corpus::watched::`
-  tests.
-- **Single-flight chat dispatch** — `ChatView` dispatches
-  `SEND_INITIATED` before any bridge await (fixes the 60s
-  blank-window bug); `ensureConversation` uses `CONVERSATION_BOUND`,
-  not `HYDRATE`, to preserve the in-flight user bubble.
-
-### Agent-coding battery + canonical tools + TDD
-
-`sovereign/crates/sovereign-agent-bench/` — eleven-problem graded
-battery measuring end-to-end coding agents (pi / opencode / codex /
-aider, model-agnostic): six problems in Rust / Go / TypeScript plus
-five Python variants (fixtures under
-`sovereign/bench/agent-coding/problems/`). Judged `0..=3` against
-anchor rubrics on three dimensions per problem (9/problem, 99 max). CLI:
-`svrn agent-bench <run|list|show>`. Dispatch via
-`AgentRunnerRegistry`.
-
-`sovereign/crates/sovereign-agent-tools/` — canonical tool
-surface. (Was `commonwealth-agent-tools` until cw-lift 3a,
-2026-09-04; layer was already `capabilities`, the name was the
-only thing wrong.) Ten primitives (`inspect_workdir` polymorphic over
-file/dir/find/grep, `write_file`, `patch_file`, `replace_function`,
-`build`, `smoke`, `agent_done`, `agent_plan`,
-`handoff_to_evaluator`, `handoff_to_implementer`); every runner
-translates to/from this set. Plus a
-role layer (Planner / Implementer / Evaluator) operating on the
-same model weights via different prompts + tool subsets + forced
-first tools.
-
-`sovereign/crates/sovereign-tdd/` — unified solver loop for any
-TDD-shaped workflow. (Was `commonwealth-tdd`, and sat in the
-`mesh-api` layer beside `commonwealth-api`, until cw-lift 3a
-(2026-09-04): it has no commonwealth dependency of any kind and
-backs two shipped MCP tools, so it is a `capabilities` crate. The
-MCP tool ids `tdd_solve` / `tdd_bdd_cycle` are a wire surface and
-did NOT rename — pinned by
-`routes_mcp::tests::tdd_tool_ids_are_frozen_wire_names`.) One function `run_trial(Trial) → TrialResult`
-with `Polarity::{MaximizePassing, GenerateOneFailing}`
-(`run_trial_observed` adds a per-round observer for live progress).
-`tasks::solve` is the verbless goal entry: failing tests → fix;
-none → pin-then-green via `bdd_cycle`; explicit verbs `fix` / `pin`
-/ `split`. See [`docs/TDD_MACHINE.md`](./docs/TDD_MACHINE.md).
-
-`sovereign-tdd/src/recur/` — rec-1, the explicit stack (research, 2026-09-02): SICP 5.4 over a model. A recursive PROCESS run by an ITERATIVE driver — the frame is a record (`Continuation` tag + goal path + tree hash), the stack is `scratch/stack.json`, the driver pops and never waits, and the `Evaluator` (scripted in ring 0, the local model in ring 2) is the primitive the loop calls. Goals are tests; the oracle decides verdicts (`kernel_types::Verdict`, worst-rank fold), the evaluator decides moves (push / edit / split / give_up). Memo keyed on (goal, tree hash); occurs check on the goal path; Combine merges sibling worktrees and runs the goal on the merged tree, which is the only place a branch-local fix that breaks the merge can be caught. Ring 2 (2026-09-03): `model.rs` puts the daemon's local model behind the same trait with three wire levers — `stable_prefix_len` (the instruction is one pinned family), `lark_grammar` (moves are a closed set; push/split/edit draw from catalog-minus-stack, the goal's own parts, and tracked non-test files), `assistant_prefix` (closes the think block this family's template opens). Measured on the 4B: 5 runs byte-identical, 35/35 prefix hits, 9/9 restore-fidelity, 9 of 11 fixture tests green in ~14 s where the flat solve loop stalled at 0/11 in 285 s. Bars and rings: `.sovereign/features/rec-1-explicit-stack/order.md`.
-
-**SOLVE surface** (`docs/specs/SOLVE_UX.md`) — the daemon hosts the
-solver as an async job API on `:9741`: `POST /v1/solve/jobs` (202 +
-detected framework/test-command/model), `GET .../{id}` (state +
-rounds + result), `GET .../{id}/events` (SSE round/done), `DELETE`
-(cancel). Loopback-only; 1 job per workdir, 2 global; backend = the
-daemon's own `/v1/chat/completions`. Job host:
-`sovereign-daemon/src/solve_http.rs`; MCP tools
-`solve` / `solve_status` / `solve_cancel` in `solve_tools.rs`; CLI
-`svrn solve <workdir> "goal" [--watch]`
-(`sovereign-cli-llm/src/solve_cmd.rs`). The synchronous
-`POST /v1/solve` + `tdd_solve` MCP in `sovereign-server` stay for
-back-compat. User guide: `docs/SOLVER_FOR_PI_USERS.md`.
+Notable in-tree invariants: watched folders are read-only on source, and
+sensitive folders never leave the machine.
 
 ---
 
 ## 5. cmnwlth — the coordination daemon
 
-A symmetric daemon. Every node runs the same binary; no master.
-Members find each other via mDNS on the LAN or transitively over a
-VPN (Tailscale/WireGuard) and converge on shared state via gossip.
-
-In one sentence: translates "complete this chat with model X" into
-a plan that spawns `llama-server` on one node and `rpc-server` on
-others, holds the OpenAI-compatible HTTP endpoint open, and keeps
-the plan healthy as nodes come and go.
+A symmetric daemon: every node runs the same binary, no master. It translates
+"complete this chat with model X" into a plan that spawns `llama-server` on
+one node and `rpc-server` on others, holds the OpenAI-compatible endpoint
+open, and keeps the plan healthy as nodes come and go.
 
 ### Discovery and membership
 
-- **Join keys** — `cwth-XXXX-XXXX-XXXX`.
-  `membership::generate_join_key` stores BLAKE3 hash, discards
-  plaintext. `verify_join_key` compares BLAKE3 hashes. First node calls
-  `init_mesh`; subsequent nodes call `accept_join`.
-- **Node identity keys** — every node persists an Ed25519 keypair at
-  `<data_dir>/node_key` (sibling of `node_id`;
-  `commonwealth-transport/src/identity.rs`). The pubkey travels as
-  `MemberRecord.node_pubkey` (serde-defaulted — pre-identity builds
-  interop), is proven at join time (proof-of-possession signature in
-  `JoinRequest`, bad proof → 401), self-stamped by gossip every round
-  (the in-place upgrade path), and protected by an anti-downgrade
-  rule in `Mesh::merge_from` (a relayed record without the key never
-  strips a known one). The seed is byte-compatible with an iroh
-  `SecretKey` — it IS the future dial-by-key transport identity.
-- **mDNS** — `_commonwealth._tcp.local` advertising `node_id`,
-  `mesh_id`, `name`.
-- **Gossip** — 10s epidemic loop, 2–3 random peers per round.
-  Three-phase digest/delta/response. Conflicts: timestamp LWW.
-  Payloads: `MemberState`, `InferencePlan`, `KnowledgePlan`,
-  `LedgerEntry`, `MeshConfig`.
-- **Latency probing** — UDP RTT every 30s, magic bytes `CWLP`,
-  EWMA α=0.3. `LatencyMatrix` shared via gossip.
-- **Hardware detection** — `commonwealth-discovery/src/hardware.rs` tries
-  `nvidia-smi`, then `rocm-smi`, then Metal.
-- **TLS / mesh encryption** — A plaintext mesh (the default) serves
-  the internal API (:9742) in the clear; the unused per-session-cert /
-  `TrustStore` scaffolding (`discovery/tls.rs`) was removed (2026-06-15)
-  rather than left as a security façade. TLS *is* used on the separate
-  worker-pod path (`sovereign-pods/worker_daemon.rs`,
-  `axum_server::bind_rustls`).
-  - **Encrypted mesh (opt-in, founder-set at creation).** A mesh created
-    with `require_encryption` flips every node to the iroh dial-by-key
-    transport (QUIC/TLS) in REQUIRE mode — no plaintext fallback
-    (`RoutedTransport::with_required`, fail-closed) — binds its internal +
-    client listeners loopback-only (the iroh acceptor is the sole network
-    ingress), and admits joiners only over an encrypted, founder-key-dialed
-    channel with a short-lived (24h) TTL invite. The policy lives on the
-    gossiped `Mesh` struct (`require_encryption`, monotonic stricter-wins
-    in `merge_from`), is inherited at join, and persists. Dial info
-    (`relay_url` + `iroh_direct_addrs`) is signed per-node
-    (`commonwealth-core::dial_sig`, monotonic `dial_info_version`) so a
-    gossip-strip attacker past the join-key gate cannot force a peer
-    unreachable or downgrade it. **NOT covered:** the multi-host
-    tensor-split RPC between `llama-server`/`rpc-server` (raw TCP, out of
-    the transport seam) — the sole residual plaintext on an encrypted
-    mesh. Never claim blanket end-to-end encryption. The consolidated
-    surface-by-surface posture (every listener, its default bind, auth,
-    and the honest gap ledger) lives in `../docs/THREAT_MODEL.md`.
-- **Mesh peering** — `peering.rs`; two `PeerTrustLevel`s:
-  `ModelAndKnowledgeSharing`, `Full`.
-
-### The PeerTransport seam (commonwealth-transport)
-
-How this node reaches a peer is decided in exactly one place:
-`commonwealth-transport`'s `PeerTransport` trait resolves
-*(PeerContact, TrafficClass) → ordered base URLs*; call sites keep
-their own reqwest clients/timeouts and append route paths. The live
-instance hangs off commonwealth-api's `AppState`
-(`peer_transport()`; the bootstrap and the iroh watchdog publish
-through `peer_transport_reader()`).
-
-- **`IpTransport`** (production): today's tailnet/LAN overlay. Owns
-  the Tailscale CGNAT/ULA address ranking
-  (`commonwealth_core::peer_addr::rank` — no other production caller)
-  and the last-working-address promotion
-  that used to live as duplicate caches in gossip and knowledge
-  fan-out. Port policy per class: Gossip/ControlPlane/
-  KnowledgeSearch/ModelTransfer use the gossiped address verbatim;
-  Inference/StatusProbe rewrite to the (assumed-uniform) client
-  port. Golden URL-vector tests pin byte-identical output vs the
-  pre-seam inline `format!` strings.
-- **`IrohTransport`** (cargo feature `commonwealth-transport/iroh`,
-  pinned `iroh 1.0` stable since 2026-06-18): dial-by-Ed25519-pubkey
-  QUIC, bridged to HTTP via localhost byte-tunnels (client TCP bridge
-  + `IrohAcceptor` → existing axum listener). `IrohAcceptor` has two
-  forms: `spawn` (all streams → one local listener, Track M) and
-  `spawn_routed` (W1 — dispatch by negotiated ALPN to per-class local
-  listeners). Spike proof:
-  `sovereign-mesh/tests/iroh_transport_e2e.rs` (run with
-  `--features iroh-experimental`) drives a real gossip round dialed
-  by pubkey. `IrohTransport` resolves its dial target from the
-  gossiped `PeerContact` (relay + direct addrs, W2) and picks the ALPN
-  by `TrafficClass`; whether it carries a class is the W3 config flip.
-- **`RoutedTransport`** (`commonwealth-transport/src/routed.rs`, W3):
-  routes each `TrafficClass` to a chosen transport, concatenating its
-  candidates ahead of a default (`IpTransport`) — callers try in order,
-  so a failed/absent iroh dial degrades to the tailnet path on the same
-  request, automatically. `note_success` routes feedback to the
-  producing transport by label prefix. Empty `per_class` == its default.
-- **Track W1 (server half) + W2 (dial info in trust ring) + W3
-  mechanism are implemented** (2026-06-18): when `[iroh] enabled`,
-  `EmbeddedDaemon::start_daemon` binds one iroh endpoint from the
-  daemon's gossiped `node_key` and accepts across the ALPNs —
-  `cwth/http/0` → internal router, `cwth/client/0` → client router,
-  and (2026-08-27) `cwth/guest/0` → a SECOND bind of the client router
-  whose auth layer does not trust loopback — so a peer/phone
-  reaches this daemon by key with no VPN
-  (`sovereign-mesh/src/iroh_access.rs`, `MeshIrohAccess`; additive,
-  fail-soft, held in `DaemonState::Running`). W2: `MemberRecord` carries
-  `relay_url` + `iroh_direct_addrs` (serde-defaulted, MUTABLE
-  reachability — normal LWW, unlike `node_pubkey`'s anti-downgrade);
-  the daemon self-stamps its live dial info each gossip round via a
-  pull-provider on `AppState`; `IrohTransport` dials peers purely from
-  the gossiped contact (**membership = dialability**).
-- **The no-VPN mesh (2026-07, merged via the `Saas` PR #13; unit +
-  e2e + soak-axis verified).** When iroh is enabled, `RoutedTransport`
-  routes **every** `TrafficClass` iroh-first with automatic per-dial
-  IP fallback — `[iroh.transport] <class> = "ip"` is now an opt-OUT,
-  not an opt-in flip. Enablement is `[iroh] enabled: Option<bool>`:
-  absent = AUTO (on iff this node is in a mesh, keyed off the
-  `client-exposed` marker — a meshless daemon never contacts relays),
-  `Some(false)` = kill-switch (also `SOVEREIGN_IROH=off`). Plaintext
-  invites carry a `dial=` connect code (distinct from the encrypted
-  `iroh=`); `join::perform_join` dials the founder by key first and
-  falls back to `?relay=`/mDNS (W2c). A `RelayConfig` (`[iroh]
-  relay_urls` + `discovery`) drives `build_relayed_endpoint`:
-  self-hosted relays (W4), and `discovery = "none"` builds from
-  `presets::Minimal` to sever ALL n0 services (H1 — `relay_urls`
-  alone keeps n0's DNS lookup, so it is not a no-third-party
-  posture). `proxy_from_env` is always on, so the mesh survives
-  UDP-blocked corporate networks over relay-TCP:443 through a
-  (Basic-auth) HTTP proxy. Encrypted meshes
-  (`require_encryption`) stay the fail-closed variant (all classes
-  REQUIRE iroh, loopback-only listeners). `IpTransport` remains the
-  permanent fallback; every piece is config-reversible.
-- **Track M (mobile) is implemented**: `sovereign-server`'s
-  `[iroh] enabled` block accepts dial-by-key clients on ALPN
-  `cwth/client/0` (`src/iroh_access.rs`; pairing string at
-  `GET /status` → `iroh.dial`), and `sovereign-mobile`'s
-  `endpoint_kind='iroh'` host rows tunnel HTTP+WS through a
-  localhost bridge (`src-tauri/src/iroh_bridge.rs`) — no VPN on the
-  phone. This pulls the iroh feature into sovereign-server's default
-  build (runtime-gated off); see
-  [`docs/specs/TRANSPORT_MIGRATION.md`](./docs/specs/TRANSPORT_MIGRATION.md)
-  for phase status and device-side exit criteria.
-- **Out of seam, by design**: the join handshake (pre-membership
-  bootstrap), worker-pod `PinnedTransport` (separate trust model),
-  loopback self-probes, and the raw-TCP `llama-server`/`rpc-server`
-  tensor traffic. The last is the decided W6 posture: multi-host
-  inference needs its GPU anchors on a shared IP network (LAN/VPC) —
-  which every supported topology already has — rather than a VPN or a
-  per-worker iroh sidecar (specced as Option B, gated on a tok/s A/B).
-- **Migration order** (when a second transport goes live) is encoded
-  by `TrafficClass`, not config: a small `RoutedTransport` mapping
-  classes → transports slots into the same `Arc<dyn PeerTransport>`
-  — gossip/membership first, blob/model transfer next, inference
-  streaming last, raw RPC tensor traffic remaining on IP. The full
-  phased plan (mobile first, then per-class mesh flips, relay
-  self-hosting, Tailscale-optional end state) is
-  [`docs/specs/TRANSPORT_MIGRATION.md`](./docs/specs/TRANSPORT_MIGRATION.md).
-
-### Scheduling + orchestration
-
-**The live decision topology** (rationalized 2026-06-10 — a dead
-second-generation scheduler that previously filled this section was
-deleted; see `docs/specs/OICP_RATIONALIZATION.md` for the audit):
-
-| Decision | Where | Mechanism |
-|---|---|---|
-| Joiner decides a turn is offload-*eligible* | `sovereign-mesh/oicp_select.rs::offload_eligible` | SLOT_POLICY §5: `privacy == MeshAllowed && latency_class != Fast`. One predicate, shared by `select_peers_ranked` and `shared_primary_id`; replaced the old privacy-gate + `preferred_speed != Slow` pair (the Speed shadow no longer gates routing) |
-| Joiner picks peer-vs-local for an eligible turn | `sovereign-serving-host/src/peer_inference.rs::select_peers_ranked` | OICP claim score × operational adjustments (observations, load, locality, cold-start, throughput, availability); forced-choice sentinels exclude peers not advertising `x:forced_choice` |
-| Joiner resolves a *named* target | `sovereign-serving-host/src/peer_inference.rs::locate_named_model` | Name resolution + min-in-flight tiebreak, **not** the scorer. **Hard** (caller-supplied `model_id`) is a constraint: unknown ⇒ error, never substitution. But a peer route that FAILS is not the same as unknown: `LocalAlternative` records whether the peer was the sole holder or merely won the min-in-flight tiebreak over us, and in the latter case a peer failure is served from our own copy of the same id (2026-08-06 — before this, a shed peer 503'd a caller for a model that was loaded locally). Serving the named id here is honouring the name, not substituting for it; sole-holder routes still fail loud. **All three entry points (`complete`, `complete_stream_with_id`, `complete_stream_with_id_and_finish`) resolve through one `select_route` → `RoutePlan` cascade as of 2026-08-07**; per-method code builds only the step's terminus. Before that, `complete()` routed inline via a `select_peer` that took a single peer, so the non-streaming path gave up after one declining peer, skipped peer in-flight booking on ranked routes, and was the reason four successive features each had to be written twice. A named step carries `pinned_model_id`, so the resolved id goes on the wire and a strictly-resolving peer cannot refuse the turn into a silent local substitution. **Soft** (configured `shared_model_id`) is a preference: unknown ⇒ falls THROUGH to `select_peers_ranked` with local as the last rung, recorded on `DecisionPath::NamedFallthrough` (SCHEDULER_QUALITY F8 / §4.3, 2026-07-27) |
-| Hub picks a local model for a peer request | `sovereign-daemon/src/routes_inference.rs::route_with_oicp` | OICP claim score over synthesized claims |
-| Serving peer picks Fast-vs-Slow slot | `sovereign-mesh/oicp_select.rs::pick_slot_for_oicp` | canonical `slot_policy::latency_to_speed` + hint veto; `pick_slot` backstops `x:forced_choice` sentinels onto Primary |
-| Synthesis tier (Fast vs Primary) | `sovereign-core/runtime/evidence.rs::resolve_synthesis_route` | intent + atom-enum + evidence-shape heuristic |
-| Distributed placement (model > one node) | `sovereign-inference/embedded/rpc_distribution.rs` | LocalOnly default; StreamSplit ≤500MB; warmed owned-overrides as last resort |
-| Collaborative ingest partitioning | `sovereign-grants/knowledge_assignment.rs` | `plan_collaborative_ingestion*`: embed-model-compatible peers, storage-proportional contiguous blocks, zero-storage peers skipped |
-
-**Slot policy is normative** in [`docs/SLOT_POLICY.md`](./docs/SLOT_POLICY.md)
-(OICP-first rationalization, 2026-07-08): call sites declare a
-`slot_policy::Workload` requirement bundle rather than free-handing
-`Speed::` literals; the scheduler resolves those against every slot's
-advertised claims cluster-wide, and fast-vs-primary is an emergent
-scoring outcome (the local node is the degenerate one-node mesh).
-`Speed::Medium` is retired as a construction target (kept only for
-serde/metadata); the one canonical `latency↔Speed` map lives in
-`sovereign-contracts/slot_policy.rs`.
-
-The composed OICP scoring product lives ONCE in `oicp-types`
-(`score_with_adjustments` + `ScoreBreakdown`, Phase B of the
-rationalization) and is consumed by sovereign-mesh and
-sovereign-inference; leader election lives in
-`commonwealth_core::partition::elect_leader`.
-
-**Scheduler quality — measurement, not just plumbing.** Retrieval,
-grounding and synthesis each have a bench and a tight iteration loop;
-this layer has unit tests on individual factors and e2e suites that
-verify *plumbing*, and until 2026-07 nothing measured whether a
-routing decision was **good**. The diagnosis, the six findings behind
-it and the build order are in
-[`docs/specs/SCHEDULER_QUALITY.md`](./docs/specs/SCHEDULER_QUALITY.md);
-the root cause is that `score_with_adjustments` returns a product of
-six dimensionless multipliers — it *ranks*, it does not *predict* — so
-no scoreboard was definable.
-
-**Phase 0 (instrumentation) is landed**, changing no routing decision:
-
-| module | role |
-|---|---|
-| `sovereign-scheduler/decision_log.rs` | One `RoutingDecision` per decision point (whole candidate set, each `ScoreBreakdown`, each input stamped with its **provenance and age**, peers excluded before scoring and why, the verdict) joined by `decision_id` to one `RoutingOutcome` per completion (served-by / TTFT / total / tokens / shed / failovers). `DecisionSink` is the seam — production, capture-for-tests, null. |
-| `sovereign-scheduler/decision_trace.rs` | Replay: `SchedulerTrace::from_jsonl` groups records into `Episode`s by `decision_id` (never adjacency — a live log interleaves requests) and reports a `join_rate` to gate on. |
-| `sovereign-serving-host/src/peer_inference.rs` | Emission at `select_peers_ranked` (including gated exits) and join-closing in both stream cascades and `complete`. `observation_snapshot()` exports per-peer observations + gossiped benchmarks + `PeerHealth` — folded into the record stream every 60s so a capture is self-contained. |
-| `sovereign-scheduler/yield_backoff.rs` | The one exception to "Phase 0 changes no routing decision" (2026-08-14, order `serve50-availability`). A peer that refuses a hop with `yielded_to_local` is excluded from candidacy — before the manifest fetch — for the `retry_after_secs` it named, capped at 60 s and cleared by any successful turn. Recorded as `ExclusionReason::YieldedToLocal` and `FailoverAttempt.yield_retry_after_secs`. Distinct from `PeerHealthTracker`: a refusal books nothing toward quarantine. |
-
-Capture with `SOVEREIGN_DECISION_LOG=<path>` on the daemon; records
-also reach `tracing` under the **`mesh.decision`** target (listed in
-`DAEMON_TRACING_FILTER`, without which a custom target is dark).
-
-**Why an exclusion and not a score discount** (the question this design
-invites): the SSOT scorer clamps gossiped availability to `[0.2, 1.0]`
-(`oicp-types/src/scoring.rs`), so the score path's strongest possible
-"no" is a 5× multiplier — a peer better than that on the other terms
-still wins and still gets refused. Skipping the manifest fetch is also
-what makes a yielding peer cost *nothing* rather than a cheaper
-something. See `research/scale-analysis/MESH_SCALE_100_USERS_1000_CORPORA.md`
-§9.1.3.
-
-**A node's gossiped `inference_availability` is a composite with one
-writer and two inputs** (`sovereign-daemon/src/state.rs`):
-`AppState::recompute_local_availability` publishes
-`min(activity_level, yield_floor)` — the activity level reported by
-sovereign-server's `ActivityReporter` via
-`update_local_availability`, and a yield floor derived from the same
-two predicates `admit_peer_request` consults, so what a node advertises
-and what it enforces cannot drift. The daemon is the second CALLER of
-that one writer, recomputing inside the gossip round immediately before
-publication (`gossip.rs`) — the yield state is time-derived and has no
-transition event of its own to hook. Before 2026-08-14 nothing in the
-daemon wrote the field at all, so a node refusing every peer request
-gossiped `1.0` for as long as it kept refusing.
-
-**Phase 1 S0 (the Tier-1 simulator) is landed** (2026-07-26), and it
-changed the diagnosis:
-
-| module | role |
-|---|---|
-| `sovereign-scheduler/scheduler_core.rs` | The routing decision as a **pure total function** — `rank(DecisionBuilder, RankInputs) -> RankResult` over a snapshot of what a decider believes, with `now_unix` passed rather than read. `select_peers_ranked` is now gather-then-decide: async I/O above the line, this below it. Also holds the observation feedback (`observe_dispatch` / `observe_success` / `observe_failure`) the provider's `record_*` methods delegate to, so sim and production age their beliefs by one implementation. |
-| `sovereign-mesh-test-harness/mesh_sim/` (feature `dst`) | Seeded discrete-event mesh: virtual clock, gossip propagation, manifest-cache ageing, queueing, **model-load time** (`model_load_sec_per_gb`: a cold node advertises `loaded: false` + an estimate and pays it once, attributed to TTFT so the throughput EWMA is not poisoned), nineteen arms (as-implemented / **blind-local-load** / **blind-peer-ramp** / **blind-observations (§4.4)** / fresh-signals / two-choices / both / warm-start / fresh+warm-start / outbound-only-load / **predicted-time (§4.1)** / predicted-time+outbound-only / **tier-floor** / **predicted-time+tier-floor (§4.1.1)** / **predicted-time+tier-floor+two-choices (§4.1.2)** / **predicted-time+tier-floor+within-noise (§4.1.3)** / **response-backpressure (§4.2.1)** / predicted-time+tier-floor+backpressure / a perfect-information oracle). Arm 0 *is* `rank` — not a transcription of it, but note it models the beliefs the dispatch path was *designed* to produce; the three `blind-*` arms model the ones it actually produced before F9's fix, and `blind-observations` is the as-shipped baseline (§4.4). No extra dependencies; **four** separate RNG streams — world, policy, advertised-rate error, and advertised-size error — so switching arms cannot perturb the world the arms are compared in, and both fidelity knobs default to inert so every number recorded before they existed still reproduces. |
-| `sovereign-scheduler/predicted_time.rs` | The §4.1 candidate objective, and the only ranking in the tree with **no tunable constant**: `predict()` returns `queue + prefill + decode + rtt` as named addends or an `Unpredictable` reason (never a defaulted rate — a guessed rate is a fabricated fact with a unit attached), and `faster_than_local` filters on it. `LocalOption` keeps *unpredictable* local (⇒ no hop) distinct from *infeasible* local (⇒ any feasible peer wins); collapsing those points them in opposite directions. Reads only what a decider can see, so `PredictInputs::from_candidate` scores it against a production capture. |
-| `sovereign-mesh-test-harness/mesh_sim/scoreboard.rs` | `RecordMetrics` and `TierMetrics` are computable from a **production capture** too (the S1 precondition) — `TierMetrics` is §5's capability column, counting downgrades and declined upgrades from decision records alone; `TruthMetrics` needs simulator ground truth and so may never define a calibration gate. |
-
-Run it: `cargo test -p sovereign-mesh --features dst,treesitter
---test main mesh_sim_scoreboard -- --nocapture` (~0.3s; `sovereign-lint.sh`
-keeps it compiling).
-
-**Phase 1 S1's instrument is landed** (2026-07-26) — the hardware
-capture it points at is not taken:
-
-| module | role |
-|---|---|
-| `sovereign-scheduler/decision_replay.rs` | Re-runs the **live** scorer and the **live** ranking policy over a captured record and reports whether the record reproduces its own scores and verdict. Split in two on purpose: *scorer agreement* (recorded `CandidateInputs` + `claim_score` + locality → `score_with_adjustments` → does `final_score` come back?) and *policy agreement* (recorded scores → `winners_over_local` → does the `Verdict` come back?). The two run off independent inputs so one bug cannot cascade into the other. Both ratios return `0.0` on an empty denominator, never a vacuous `1.0`. |
-| `sovereign-scheduler/scheduler_core.rs` | Gained `winners_over_local` / `beats_local` / `local_sentinel` — the ranking half extracted so replay re-runs the policy rather than a copy of it. Also `RankObjective` on `RankInputs` (`Product` \| `PredictedTime`): the objective is a *parameter* rather than a branch at the call site, so both objectives share one scoring body, one record shape and one `finish_at` — which is what keeps a decision record describing what the decider actually did instead of the product's opinion of a choice it did not make. Production passes `Product`. |
-| `tests/scheduler_replay_agreement.rs` | The fixture with a known answer: sim → `TracingDecisionSink::to_path` → JSONL → `SchedulerTrace::from_jsonl_path` → replay. **1.000 / 1.000, bit-exact**, five scenarios × six arms. |
-
-The gap S1 was expected to surface — `claim_affinity` is an argument
-the scorer takes and the record does not carry — turned out not to
-need a schema field: `observation_mult = effective_affinity(a,obs)/a`
-is independent of `a` over `(0, 1]`, and `a` is clamped to `[0, 1]` at
-the type level by `CapabilityClaim::effective_affinity`. Settling that
-in the simulator is the reason the replay was built before the
-capture.
-
-Three **diagnostic** arms landed with it, each pricing a question
-before it costs hardware time, and each asserting its own wiring first
-(a null result is only informative if the knob is proven connected).
-`WarmStart` prices F7: removing the cold-start floor is **+235% mean
-latency**, so the floor is the mesh's only brake on offloading.
-`FreshWarmStart` then asks whether that damage is F1's — and says
-**no**, the penalty is *larger* (+264%) with a perfect load signal, so
-the extra offloads lose on their own merits and the floor is
-compensating for an **over-eager objective**. That is a direct
-argument for §4.1's structural change: a product of dimensionless
-multipliers cannot decline a hop that costs more than it buys, and
-ranking on predicted time-to-answer can. `OutboundOnlyLoad` says that
-if the gossiped in-flight counter misses inbound peer work it costs
-+126% to +584%, which earns the two-daemon audit F2's caveat now calls
-for.
-
-Findings, in `SCHEDULER_QUALITY.md` §3.1: **F3 reproduced exactly**;
-**F1 reproduced but costs the tail, not the median** (the reverse of
-the hand-model's reading); **F5's mechanism reproduced but its
-two-choices remedy is inert** wherever the fleet has a unique
-capability winner, because the eligible set is then a singleton; and a
-new **F7 — the cold-start ramp is self-locking**, contradicting
-`cold_start_weight`'s own doc comment. **No Phase-2 behavioural change
-has landed in production** — the ordering is deliberate: the sim is the
-baseline machine, so fixes land as sim arms first.
-
-**§4.1 measured (`Arm::PredictedTime` + `sovereign-scheduler/predicted_time.rs`,
-2026-07-26).** The candidate objective — rank on
-`queue + prefill + decode + rtt` instead of on a product of
-dimensionless multipliers — now exists as an arm, introduces **no
-tunable constant**, and is computable from a decision record, so it can
-be scored against a production capture with no new instrumentation.
-It decomposes the oracle gap that arm 0 and `Oracle` only bracketed:
-**the wrong objective costs +126%/+200%/+250%, imperfect information
-costs +4.7%/+1.8%/−0.0%** (household / twin-hubs / heterogeneous), which
-demotes F1 to the sustained-contention case (`isolation`, +43.8%). The
-win survives a ±2× mis-rated fleet (`SimConfig::advertised_rate_error`,
-which exists because the sim otherwise grades the predictor against its
-own rate card). **It cannot land yet, and not for a latency reason:**
-ranking on time alone routes knowledge turns to 4B laptops — 37 of 38
-household offloads, and never a hub in `twin-hubs` — so §4.1's tier
-floor is a prerequisite, and no §5 metric can see what its absence
-costs. Replay also surfaced a missing field: a `RoutingDecision` does
-not record *which objective* produced its verdict, so a predicted-time
-capture reports scorer agreement 1.000 and policy agreement 0.009.
-
-**The tier floor, and what it did to that claim (`sovereign-scheduler/tier.rs`,
-`Arm::TierFloor` + `Arm::PredictedTimeTierFloor`, 2026-07-26 — full
-result in `SCHEDULER_QUALITY.md` §4.1.1).** Capability is now a
-**filter, not a term**: candidates are partitioned into bands derived at
-runtime from the sizes on the manifests a decider currently holds — a
-*relative* edge (`BAND_RATIO`, measured against the band's max),
-recomputed per decision, never an absolute GB threshold or a table of
-model names — and a `Normal`/`Extended` request must be served from
-band 0. The floor is read off `effective_latency_class()`, the same map
-`latency_to_speed` already uses locally, so this is the policy the local
-slot picker has always enforced, finally applied to peers. `TierMetrics`
-adds §5's missing column and splits two hazards that were being counted
-as one: **downgrade** (served below the origin's own local model — a
-real regression, 31% under predicted-time) versus **declined upgrade** (a
-stronger node was feasible, 69%). Both are computed from decision
-records alone, so the identical function scores a production capture.
-Three results change the plan: **(1)** §4.1's headline is not
-quality-constant — on `twin-hubs`, the one fleet whose top band is not
-saturated, arm0+floor is 31.0s against predicted+floor's 32.6s, so at
-constant quality the objective is *~5% worse* than the product, not 200%
-better; **(2)** the floor is *free* where the top band has capacity
-(twin-hubs −2% versus arm 0 with every quality loss eliminated) and
-catastrophic where it is not (household 25.7s → 559.5s) — but
-`queue_wait_ms` by dispatch quartile shows a **flat** service time
-against a queue climbing 241s → 1020s, so that is a capacity fact about
-a one-hub fleet, not a scheduling result, and `heterogeneous-fleet`'s
-queue is already unbounded under arm 0 with no floor at all;
-**(3)** predicted-time *herds harder* than the product once the floor
-makes candidates homogeneous (40/28/10 across three identical hubs
-versus 31/27/18), so §4.2 step 2 is a prerequisite rather than a
-follow-on. `SimConfig::advertised_size_error` prices the floor's own
-self-reported input the way `advertised_rate_error` prices the rate
-card.
-
-**What the objective is actually worth, on a second unsaturated fleet
-(`scenario::mixed_hubs`, `Arm::PredictedTimeTierFloorTwoChoices`,
-2026-07-27 — full result in `SCHEDULER_QUALITY.md` §4.1.2).** Result (1)
-above was n=1 in two ways at once: one fleet, one seed. At five seeds
-across two fleets the answer is **conditional on whether the top band's
-members differ in speed**. `mixed-hubs` is the second unsaturated fleet
-and the deliberate *opposite bracket* to `twin-hubs` — the same 35B (so
-the same band) on 34/25/11 tok/s machines, where `twin-hubs` band 0 is
-three identical hubs. Predicted-time is **+3% (1/5 seeds)** on
-`twin-hubs` and **−8% (5/5 seeds)** on `mixed-hubs`. The mechanism is F3
-and it is not the obvious one: the product already sends **zero** turns
-to the 11 tok/s hub (`throughput_factor` 0.55 is decisive), and its
-whole loss is splitting ~50/50 between the 34 and 25 tok/s hubs, which
-the clamp at 20 tok/s renders identically 1.0 — deleting the slow hub
-leaves predicted-time ahead by 3%, so the win survives deleting the gap
-the scorer *can* see. It is not the harness flattering the objective
-either: under `advertised_rate_error` the win *widens* (−8/−7/−11/−13%
-at ±0/25/50/100%), and the product's one error-correcting path (observed
-decode EWMA past five samples) is shown to carry only ~5% of scorings.
-Result (3)'s remedy is measured rather than inferred: a **blunt**
-two-choices sampler takes `twin-hubs` from +3% to −4% and `mixed-hubs`
-from −8% to +3%, so §4.2 step 2's *"among candidates whose predictions
-are within noise"* is the load-bearing clause, not a refinement — and
-what makes that clause expressible is that predicted times have
-**units**, where a dimensionless product has no scale on which two
-scores can be called close. Saturation is now gated on
-`backlog_depth` (final-quartile queue wait over service time: household
-38 turns, heterogeneous 6.6, twin/mixed both under 1.0); the earlier
-Q1→Q4 3× ratio is kept only as a screen, because it fires on any fleet
-loaded enough to build a queue at all.
-
-**Fresh backpressure measured before it was built — and deferred
-(`Arm::ResponseBackpressure`, 2026-07-27 — full result in
-`SCHEDULER_QUALITY.md` §4.2.1).** §4.2 step 1 proposed collecting
-`fresh-signals`' −9..−22% p95 by piggybacking the serving node's load
-onto responses it already sends. The arm is that mechanism with its
-*real* reach — fresh only for a peer this decider has actually served a
-request through — and it does not pay: **+1.6/−2.6/+0.1% mean** across
-household-evening-12 / twin-hubs / mixed-hubs at **4–7% dispatch
-coverage**, against fresh-signals' −9 to −11%. The mechanism is not
-broken, it is *unreached*: on `isolation` (a background actor
-dispatching every ~8s) coverage rises to **46%** and the median true
-signal age drops 15.0 → 10.4s, so coverage is a property of traffic
-density, not of wiring. The two densities form a scissor — where it
-fires the fleet is capacity-bound (fresh-signals itself buys −1.8%
-there), and where information binds it does not fire. The structural
-reason generalises: a response can only carry news about a peer you
-**already chose**, and F1's cost lives in the peers you did not. §4.2's
-prediction that freshness matters more to the predicted-time objective
-(bounded `load_penalty` vs. a first-order queue term) is real in the
-arithmetic and invisible at this coverage: −2.6% vs −2.5% on twin-hubs.
-Deferred rather than retired because the **503 body** — the case where
-the reading is about a peer you were about to keep hammering — is
-untestable in a sim with no admission gate, exactly as F4 is; the
-piggyback should ride §4.2 step 3's shed path instead.
-
-**F10 — the scheduler has no speed signal in production, and it changes
-how every paragraph above should be read (2026-07-27 — full result in
-`SCHEDULER_QUALITY.md` §4.5).** Everything above is Tier-1: measured on
-a simulator where each node advertises a `BenchmarkResult`. **No node on
-this mesh ever has.** `run_baseline_benchmark`
-(`sovereign-inference/src/benchmark.rs`) had zero callers,
-`set_local_benchmark` (`peer_inference.rs`) had zero callers, and
-`build_local_capabilities` hardcodes `benchmark: None` into every gossip
-tick — under comments that used to describe the startup probe and a
-`with_benchmark` setter as though both existed. Neither did; both
-comments are now corrected in place.
-
-**As of 2026-07-28 both dead producers are deleted**, along with
-`InferenceRouter`'s `local_benchmark` field, so the local
-`LocalCandidateView.benchmark` is now a literal `None` with no state
-behind it. Production is blind by *construction* rather than by
-accident, which is what makes the `blind-shipped` arm a measurement of
-the shipped system rather than of a state it merely happens to be in.
-Leaving the probe in place was the standing invitation the paragraph
-below argues against.
-
-So `throughput_factor` has two sources and production supplies neither
-(the observed decode EWMA is gated behind a `samples >= 5` the ranked
-path never reaches for a peer), leaving it at **neutral 1.0 for every
-peer on every fleet**. Read the `mixed-hubs` sentence above with that in
-mind: "the product already sends zero turns to the 11 tok/s hub,
-`throughput_factor` 0.55 is decisive" is true of the *simulated* mesh
-and false of this one, where that hub scores 1.0 like everything else.
-F3 is not a weak term; it is a constant.
-
-Two arms price it (`blind-rate-card`, and `blind-shipped` = the mesh as
-it runs tonight, now the as-shipped denominator in place of
-`blind-observations`). The rate card is worth **0% on five of six
-fleets** — including `heterogeneous-fleet` — and **−32% mean on
-`mixed-hubs` alone**, because the clamp at a 20 tok/s reference means a
-card only carries information about a node *slower* than reference, and
-`mixed-hubs` is the suite's only fleet containing one.
-
-**The obvious repair is a measured regression, so it is filed
-DO-NOT-BUILD.** Adding a call site to the (now deleted) probe wires the
-`Speed::Fast` slot: a ~2.5 GB model's rate stamped in as the baseline,
-which `throughput_factor` then extrapolates up to a 21 GB candidate on a
-*linear* size law. Decode is bandwidth-bound and the law is false, and
-the term's clamp is one-sided, so the error can only push large models
-down. New knobs `SimConfig::probe_baseline_size_gb` /
-`probe_sublinearity` measure it as `rate ∝ size^-β` (β=1 is the code's
-own assumption and reproduces the un-probed rows exactly): at β=0.7 the
-"win" grows to −56% while declined capability upgrades double 31→67, and
-at β=0.5 real downgrades appear. An honest card costs no quality — but
-only if it describes the model being *scored*.
-
-`svrn mesh bench` (below) is the per-model measurement that condition
-asks for, and it **deliberately does not write here.** Its number is
-aimed at a human deciding whether to add a machine, not at the ranked
-dispatch — and `throughput_factor` would extrapolate away from it
-through the same one-sided clamp the moment it arrived. Same number,
-different consumer. Pointing it at `NodeCapabilities.benchmark` ships
-this section's regression with no other code change; a future reader who
-"completes the wiring" while citing §4.5 correctly will have aimed it at
-the wrong target.
-
-This also settles why §4.1 cannot ship: `PredictInputs::from_candidate`
-reads the advertised benchmark and nothing else, so unhardcoding
-`RankObjective::Product` today would yield `Unpredictable::NoThroughput`
-on every candidate of every request. The hardcoded switch is not the
-blocker; the missing rate card is.
-
-**Shared-model fleet churn/failover hardening (Phase 3).** A fleet sharing one
-distributed primary stratifies into anchors (hold the RPC layer-split) + a
-consumer ring. Anchors advertise `NodeCapabilities.anchor` (`AnchorProfile{
-can_anchor, vram_gb, model_resident }`, populated env-derived in
-`build_local_capabilities`); `discover_rpc_workers` filters candidates to
-`can_anchor` so a casual peer never joins the split, and anchors get the
-stricter `worker_eligibility::EligibilityConfig::anchor` profile (settle 300s,
-quarantine on first flap). The RPC reload loop (`daemon_cmd::bootstrap`) does
-**shrink-fast-prune** — an anchor dropping out of the loaded set reloads
-immediately (prune before `GGML_ABORT`) while pure grows keep the 20s debounce.
-**Host failover:** every anchor runs the discovery loop but only the elected
-host distributes — `partition::should_host(self, host_node_id_pin, eligible_anchors)`
-(pin wins while eligible, else `elect_leader`), re-evaluated each tick over
-gossiped membership, published to `GET /v1/mesh/status` (`shared_model_host`) so
-the mesh soak asserts the `shared_model_single_host` no-split-brain invariant.
-Split-brain during convergence is bounded by the eligibility settle + the
-quorum/pooled-memory gate (`InsufficientCluster` → "forming") + consumer
-local-fallback. NOTE: the demoted-host model-teardown + full failover timing are
-multi-box-only to validate (run `scripts/mesh-soak.sh`).
-
-**Discovery never probes a worker over the link that worker's own tensors are
-saturating (`daemon::reaffirm_plan`).** Gossip-Online membership — not a probe —
-is the liveness signal for a worker discovery has already resolved once, because
-the probe rides the congested path while gossip rides a separate one with a
-looser budget. So a known **direct-ip** worker is re-affirmed from cache, and a
-known **iroh-bridge** worker is re-minted from the transport's local bridge cache
-(loopback only); only an unknown or probe-host worker pays the full `/status`
-probe. Both known-worker cases trade the same way: a dead rpc-server behind live
-gossip surfaces when ggml's RPC connection fails → supervised reload, not at
-discovery. The bridge case is load-bearing because a non-direct endpoint gets no
-stickiness (`sticky_endpoint` holds only direct-ip), so one starved probe used to
-read as "worker absent" → flap → quarantine, compounding to 300s against a peer
-that was serving throughout. Underneath, `HttpBridge::retarget` keeps a bridge's
-loopback port stable across a peer's gossiped dial-info change (retarget in
-place, don't rebuild), because that port IS the worker's endpoint string in
-ggml's device list — minting a new one made an unmoved peer read downstream as a
-stream of different workers.
-
-**Byte-mass-aware split (`plan_shards_weighted`).** The placement policy apportions
-each device a CONTIGUOUS block range whose *bytes* — not block *count* — are
-proportional to its VRAM. This is the split the live load runs (`rpc_distribution`
-overlays the model's real per-block byte mass from `rpc_warm_cache::tensor_sizes` on a
-cache-miss, falling back to the count split only if the header read fails) AND the one
-`mesh plan` previews — one function, so preview and reality can't diverge. It exists
-because the big open-weight models are MoE, and MoE mass is deeply non-uniform: routed
-experts (`blk.N.ffn_*_exps`, `is_routed_expert_tensor`) are **~88–93 % of the bytes**
-but COLD (only the router's top-k run per token), and a hybrid SSM+MoE stack alternates
-a ~20 MB attention/SSM block with a ~1.3 GB MoE block — a measured **62× per-block
-spread**. Count-proportional apportionment (the old `plan_shards`, now the
-`block_bytes == []` special-case) hands a small node a heavy contiguous run and OOMs it;
-byte-proportional keeps each node ∝ its VRAM (e.g. 24 GB + 16 GB nodes → 18.6 GB + 12.3
-GB of a 62×-spread hybrid). The output head is folded onto the host's budget. Ranges
-stay contiguous, so single-stream decode keeps its **`D-1` hops per token** and a
-layer's experts are never scattered across nodes (cross-node expert-parallelism would
-add per-layer hops — wrong for single-stream; cold-expert→CPU offload buys nothing on
-unified-memory APUs). See [[project_moe_byte_aware_split]].
-
-**Pre-flight planning — `svrn mesh plan`** (`sovereign-cli-llm::mesh_cmd::cmd_plan`).
-An offline dry-run of that split — a GGUF header-table parse, no model load and no GPU,
-instant even on a 400 GB split — so you can see whether a model fits a mesh *before*
-loading it. It shows the *bytes* each device holds and whether each one *individually*
-fits. It also reports the MoE hot/cold
-mass breakdown, whether per-block mass is uniform or skewed, and a **node/hop advisor**
-— the minimum nodes that hold the model (fewest of the largest devices whose pooled
-VRAM covers `model × headroom`) and the resulting hops, flagging when the mesh is spread
-across more nodes than the mass needs. It frames this as a tradeoff, not a win button:
-fewer nodes cut per-token hop *latency*, but net tok/s depends on the host — on a
-memory-bandwidth-bound host (a unified-memory APU) offloading layers frees host
-weight-read bandwidth and can raise *throughput* despite the extra hop (the measured
-122B ran ~20% faster distributed 36/12 at 17.3–17.9 tok/s than solo at 14.8). So the
-advisor reports the hop cost without claiming fewer nodes is always faster. `--from-mesh` plans across the
-running mesh — each member advertises `vram_gb` + `can_anchor` on `GET /v1/mesh/status`
-(`MemberDto`), the VRAM sourced from `rpc_distribution::local_gpu_total_vram_gb` (the
-ggml device total, which unlike sysfs sees the full unified-memory pool on AMD APUs —
-~124 GB on Strix Halo vs sysfs's ~0.5 GB dedicated carveout); `--devices 64,32,32` plans
-a hypothetical mesh. The headroom factor is operator-set — `[shared_model] headroom` →
-(bootstrap bridge) `SOVEREIGN_RPC_HEADROOM` → `rpc_headroom_factor()`, default 1.2,
-replacing the hardcoded ×1.2 — and `mesh plan` defaults its `--headroom` to that same
-resolution order, so the preview's headroom is the one the load executes with. Exit
-codes: `0` fits, `1` won't fit, `2` bad args.
-See [`docs/RUN_A_BIGGER_MODEL.md`](../docs/RUN_A_BIGGER_MODEL.md).
-
-**Per-device fit — one decider, both sides (2026-07-28).** Until this date the
-live host gated only on *aggregate* pooled memory (`pooled >= model_bytes ×
-headroom`), so a cluster that cleared the aggregate gate could still hand one
-worker more than it had; `mesh plan` caught that in its own private fold, which
-meant the preview and the load could disagree about the thing the preview exists
-to predict. Both now call **`rpc_warm_cache::shard_fits(plan, capacities, mass,
-headroom) -> Option<Vec<ShardFit>>`**, beside the planner that produced the
-split, over a `ModelMass` from `model_mass_from_sizes` (the same GGUF
-header-table decomposition, replacing two divergent folds).
-
-Three shapes are load-bearing. It returns **one row per shard, fitting rows
-included** — a `Result<(), Overflow>` would force `mesh plan` to keep its own
-traversal to print `ok +12.4 GB`, and a second traversal is the drift being
-removed. `None` means **"cannot judge"** and is *not* a pass: an unread tensor
-table would otherwise clear every device on the strength of zeros. And
-capacities arrive in **plan order** (workers first, host last) while rows display
-in the operator's `--devices` order — two permutations that look
-interchangeable, pinned by a test.
-
-`DistributionPlan` accordingly carries `device_vram_bytes: Vec<u64>` in place of
-the summed `pooled_vram_bytes` (the sum is still what the quorum gate checks),
-plus a `mass` computed **before** the plan-cache branch so a cached plan is
-judged against the same numbers a fresh one is. A refusal is
-`LoadPlacement::WorkerUnfit` / `PlannedDistribution::WorkerOverflow` /
-`DistributedWarmOutcome::WorkerUnfit` — a **new** variant rather than a reuse of
-`InsufficientCluster`, because pooling more memory does not fix an overflow and
-saying "the cluster is forming" sends the operator looking for a peer that is
-already there. `resolve_placement_inner` must **not** route it to `gate_local`:
-falling back to a local load of an 80–90 GB model by a path that looks like
-resilience is the 2026-07-27 session-kill. The compute-child path **parks**
-(`bootstrap::park`, `retry_at = None`) rather than retrying, because an overflow
-is not time-fixable — the existing worker-set-change re-plan is free and is the
-only event that could change the answer. The refusal says **lower** the
-headroom, not raise it (`need = held × headroom`), and names
-`SOVEREIGN_SKIP_PER_DEVICE_FIT=1` for the one real false-positive: on a reload a
-worker still holding its previous shard under-reports free memory.
-
-**Measuring what you are running — `svrn mesh bench`**
-(`sovereign-cli-llm::mesh_bench`). The producer for the `speed` block `mesh plan`
-reports. **It measures the configuration that is loaded and never loads the one
-it wants to measure** — there is no slot argument, so there is no slot to get
-wrong, which is the mechanism satisfying `SCHEDULER_QUALITY.md` §4.5's "probe the
-model being scored". An optional `<model.gguf>` is an *assertion*: fingerprinted
-header-only against the resident primary, mismatch → exit 3 naming the config
-line.
-
-It fires real streaming completions at `POST /v1/chat/completions` and timestamps
-SSE frames as they arrive, so the number includes the actual RPC split and iroh
-path; `decode_tok_s = (content_frames − 1) / (t_last − t_first)`, steady state,
-TTFT reported separately rather than smeared in. `prefill_tok_s` comes only from
-the server's `usage.prompt_tokens` and renders `n/a` otherwise — never
-`len()/4`. The probe (prompt, token budget, timing formula, guard set) is fixed
-by `mesh_measurements::PROBE_VERSION`; there is deliberately no `--max-tokens`,
-because a knob whose adjustment invalidates comparison against every prior record
-while looking like harmless tuning is a trap.
-
-**Nine validity guards**, six ported from
-`scripts/measure-distributed-decode.sh` (each earned by an observed false result)
-plus three new. Ported: which slot served it (below); per-frame timing; placement
-re-read after the run; peer liveness before **and** after; a canary first; host
-survival (from `/status` uptime going backwards, which unlike `pgrep` cannot
-match a wrapper script or a deleted inode). New: `content_frames >= 32`,
-inter-trial spread ≤25%, `finish_reason ∈ {length, stop}`.
-
-**The served-slot guard, and why the obvious version of it does nothing.** The
-shell script asserted that the SSE `model` field names the primary. On this
-server that field is a **verbatim echo of the string the client requested** —
-every frame says `commonwealth/primary` because that is what was asked for,
-whatever actually answered. Measured 2026-07-28 on the first live run: with the
-122B's compute child in `lifecycle: starting`, requests to `commonwealth/primary`
-returned ~100 tok/s (impossible for that model, which does ~14.8 local) and the
-frame-name check passed cleanly. The script has the same hole and never caught it
-because it only ever ran when the primary was up.
-
-`mesh_bench::primary_is_serving` is the check that attributes, run before **and**
-after the trials, and it has to understand two hosting modes.
-`ComputeRoutedProvider::resident_slots()` forwards the *in-process* engine's
-view, and the in-process engine never loaded a child-hosted model — so
-`resident` is `false` **forever** for a perfectly healthy child-hosted primary. A
-guard reading only that field would refuse every honest run on this
-configuration, which is a worse failure than the vacuous check it replaces. So
-the predicate is "in-process `resident: true` **or** a `compute_children` entry
-with a matching `model_id` and `lifecycle == "serving"`"; `starting` and
-`warming` deliberately do not count, because those are precisely the states in
-which something else answers. The canary waits on this same predicate rather than
-on "I got tokens", since stopping at the first answer hands the timed trials to
-whichever slot is currently covering. A run tripping any guard is still **written** — a discarded
-failure teaches nobody anything, and dropping it silently makes the tool
-retry-until-lucky — but `lookup` never returns it. Exit `0` valid · `1` guard
-tripped · `2` bad args · `3` assertion failed · `4` nothing measurable · `5` no
-daemon.
-
-The key it files under must be the key `mesh plan` constructs, or every record is
-unfindable. Both build `PlacementShard`s over **only the devices that hold
-blocks** — an idle peer changes nothing about how the model decodes, and bench
-has no idle device to report — and both derive the digest's `mode` from shard
-topology rather than from the daemon's mode string (which has five values:
-`local`, `distributed`, `child-distributed`, `stream-split`, `forming`) so the
-two vocabularies cannot drift. The daemon's own word is preserved verbatim in the
-record's `placement_human`.
-
-**A record carries the pre-image of its own key** (`MeasurementRecord.witness`,
-added 2026-07-30). Both digests in the key are one-way, which is right for
-`lookup` — an equality test — but it meant a record could state a number without
-being able to say what the number was *for*. Two runs of this fleet four hours
-apart filed under different placement digests with identical `placement_human`
-labels, and an exhaustive search over every integer split of the model across
-both machines could not reconstruct what the earlier one described. So
-`PlacementWitness` stores the exact `(mode, total_blocks, shards)` the digest was
-computed from, plus a `MachineWitness` per named machine (`vram_gb`, `backend`)
-because `host_hw_fingerprint: 7602642063143971880` is not something a reader can
-weigh. It is *checkable* rather than asserted: `PlacementWitness::explains`
-re-runs `placement_digest` over the stored fields, and `Configuration::faithful`
-applies that check at the point of use, so a witness built from different inputs
-than its key is treated as absent rather than quoted. Descriptions are
-deliberately outside the digest — improving what a peer advertises must not
-orphan every record naming it — and are deliberately **capacities and labels,
-never rates**, so nothing here can be divided by anything else to resurrect the
-§4.5 size-law. Not a schema bump: unlike v1→v2, whose missing field was a *key*
-field, old rows still serve exact hits and are kept saying "not recorded".
-
-**A record also carries the conditions it met** (`MeasurementRecord.conditions`,
-added 2026-07-29). The witness above explains *what* a run measured; this is the
-other half — the co-resident slot set, host RSS before and after, daemon uptime,
-and the wall-clock span of the trials. It exists because four runs under one key
-came back 7.75 / 8.38 / 8.53 / 11.08 tok/s and nothing recorded could say which
-of them met a busy machine. Every field is something that can differ between two
-runs of an *identical* configuration, which is exactly the class the key cannot
-hold — so `RunConditions` sits beside the key and **never in it**. Keying on them
-would give every run a unique unmatched key, `lookup` would never find more than
-one run, and the variance the field exists to expose would become structurally
-invisible (test `conditions_never_reach_the_key`). Two traps are closed by
-construction: an empty slot list renders as the *finding* "nothing else resident"
-rather than as silence, and a role whose `model_id` equals the primary's is not
-counted — with `[models].fast` absent, `fast_path()` falls back to the primary
-GGUF and `/status` reports a `fast` slot holding the measured model itself, which
-filtering by role name alone would have recorded as its own co-resident. Old rows
-say "conditions not recorded", never implying a quiet box. `link_rtt_ms` stays
-`None`: iroh 1.0 exposes no per-peer RTT on `remote_info`, and a timed round trip
-would measure the link *plus* the peer's request handling, which must not be filed
-under that name. `mesh bench --history` also prints each row's abbreviated `pd2:`
-key and warns when two rows share a `placement_human` under different digests —
-the misreading that once produced a reported variance that was never real.
-
-This is what makes `near_misses` load-bearing. The key pins the exact split *and*
-the exact silicon, so a reader on hardware we have never seen essentially never
-gets an exact hit, and `differs by: split, host-hardware` gives them nothing to
-judge with. `near_misses` now returns a `Difference { facet, theirs, ours }` per
-facet — `beefymac 12 · ruggedfox 36 +head` against `beefymac 24 · ruggedfox 24
-+head` — rendered in both the human plan and `--json` (`differences[]`), with
-`differs_by` *derived* from it so the two cannot disagree. `theirs`/`ours` are
-`None` where that side kept no witness: the difference is real, and declining to
-characterise it is the point. `n_ctx`, `link` and `probe_version` live in the key
-itself, so even a pre-witness record reports "measured: 32768 · yours: 8192".
-
-**Measurements travel** (2026-07-30). A measurement is worth most to the machine
-that did not take it: locally it recalls what a run felt like, on a peer it
-answers what a configuration *would* feel like on hardware the reader cannot try.
-Records travel as versioned `to_wire` envelopes (a peer on another
-`SCHEMA_VERSION` is dropped by `from_wire`, not half-read). `wire_key` —
-`{measured_at:010}/{hash}`, derived from the record and lexicographically
-chronological — is what makes a record identifiable by content; the rate enters
-that hash **quantized to 0.001 tok/s** because `serde_json` is built without
-`float_roundtrip`: a record passes through JSON twice and can come back one ULP
-off, which would otherwise let the same run compute two keys.
-
-**The transport is the ring rail, not the gossip KV store** (cw-lift 2d,
-2026-09-04). `mesh-measurements` is the first namespace to move, and it moved
-because it is the one that fits: `MAX_RUNS_PER_KEY` bounds it, so the journal
-never has to forget. It is now in `GOSSIP_EXCLUDED_APP_IDS` — not a privacy
-judgement, and it still reaches every peer; the entry is the receiving half,
-stopping a peer on an older build re-creating the dead KV namespace here.
-`sovereign_mesh::measurements_rail` is the only publisher and it appends to
-`rings/mesh-measurements/ring_oplog.jsonl`, which ordinary `ring_sync`
-anti-entropy carries. A record rides as `to_wire`'s exact bytes inside a rail
-payload, as a JSON **string**: a rail payload may not contain a fractional
-number and a `MeasurementRecord` is nine `f64`s, and a string has one spelling
-whose bytes are never re-serialized — the hazard the rule guards against is
-absent rather than checked (`a_measurement_record_cannot_be_a_rail_payload_directly`).
-
-Three constraints make travel safe rather than merely working:
-
-- **Peer records never enter `MeasurementFile`.** `lookup` still answers only
-  "what did *this* machine measure", so no peer's number can be served as the
-  reader's own — `mesh plan` keeps saying "not measured **here**" and offers the
-  peer's beside it. They reach the operator only through `near_misses`, carrying
-  `NearMiss.taken_by` (`None` = this machine, `Some(name)` = a peer).
-- **Invalid runs do not travel.** `to_wire` refuses them: a failure is glassbox
-  material for the operator who caused it and noise, or worse a mis-read
-  capability claim, to everyone else. `--history` still shows them locally.
-- **Origin comes from the SIGNATURE, not the payload.** A node cannot claim to
-  be someone else by writing a name into bytes it controls. The journal line's
-  `actor` is the public key that signed it — the one field a writer cannot forge
-  for someone else (ARCH §18.1) — and both halves of the attribution, node id
-  and display name, are resolved from it through the ring roster.
-
-An exact-key *peer* hit is kept (`NearMiss::is_exact`) rather than filtered as a
-non-miss — someone with the same silicon, split, link and context measured the
-thing being asked about, and that is the most informative record travel can
-deliver. It is still never the headline.
-
-**The roster bridge, and why there is no roster route.** A ring journal admits
-an op only if a roster claims the key that signed it, and `svrn ring`'s roster is
-written by hand from the CLI — deliberately unreachable from the rail, so a
-deployed app cannot admit signers to a ring (ARCH §7.1). A namespace the *daemon*
-publishes to needs a roster anyway, and the shape that keeps §7.1 is
-`sovereign_mesh::ring_roster::MeshRoster`: derived from the membership this node
-already holds, never accepted over the wire. The bridge is one equality —
-`MemberRecord.node_pubkey` and the rail's `Op.actor` are both
-`hex(verifying_key)` over the SAME `load_or_generate_node_key`, so there is no
-mapping table (`a_member_pubkey_and_a_rail_actor_are_the_same_spelling`).
-
-Three decisions the derivation makes, each pinned:
-
-- **A member with `node_pubkey: None` is not in the roster, under any
-  placeholder** — a shared default would collide every unidentified node into
-  one identity. Its ops are `UnknownSigner` gaps, and the gaps are REPORTED
-  (they reach the reader in `unreadable`), never swallowed.
-- **Those gaps HEAL.** The roster is a parameter of the read, not a file:
-  nothing is dropped when a signer cannot be placed, so the same journal admits
-  the same ops the moment that node's gossip round stamps its key — under the
-  same actor, because the signing key is stable on disk
-  (`an_op_from_an_unidentified_peer_is_a_gap_that_heals_when_its_key_arrives`).
-  This is the whole reason `MeshRoster` has no writer.
-- **A tombstone retires a member, not their journal.** A departed member's keys
-  stay in the roster; dropping them would turn their whole history into gaps on
-  the day they left.
-
-The pipes: `svrn mesh bench` runs in the CLI and the daemon owns the journal, so
-the door stays at `POST`/`GET /v1/mesh/measurements` (`mesh_http.rs`,
-localhost-only; `?include_self=true` is the diagnostic that shows what this node
-has put on the ring). The CLI's only caller is `mesh_travel.rs`. Disk is written
-*before* the door, so `mesh bench` works with no daemon and a refusal reads as
-"not on the ring yet", never as a lost record — which is what makes refusing
-honest for a node that is not in a mesh yet and therefore has no roster that
-could claim its signer. `bootstrap::reconcile_local_measurements` is the closure
-loop for that: once per boot, deferred until `app_state` answers, it appends any
-local record the journal lacks, keyed by `wire_key` so it is idempotent by
-content and the journal cannot grow one copy per start. It replaced
-`republish_local_measurements`, which had to re-upload the whole file on every
-restart because the KV buffer was in memory.
-
-**`republish` is also the SNAPSHOT behind this namespace's seal** (cw-lift 4).
-`rail_kv_pump` checks every namespace it owns against `SEAL_AFTER_OWN_OPS`, and
-this one has to be reached from there rather than from a drain: it is
-gossip-excluded, so it never enters the outbox, and its acts go straight onto
-the journal from `POST /v1/mesh/measurements` with nothing above them counting.
-A KV namespace's snapshot is its live store rows; this one's is
-`mesh_measurements::load()` through `republish`, which is idempotent by
-`wire_key` and therefore re-appends exactly what the seal retired. It runs AT
-the seal and not at the next boot — the window between them would otherwise be
-a ring whose measurements had been retired and not yet replaced.
-
-**The rail has ONE roster reader, and this namespace is why** (2026-09-08,
-the fix 4a's live run demanded). `RingRail::roster(&journal)` answers every
-caller that holds a journal and a namespace — the append and log routes in
-`routes_rail.rs`, the sync-side prune in `ring_sync.rs` — from a
-`RosterSource` registered for the namespace when one is, then from
-`roster.json`, then from the rail's DEFAULT source (ring-room, 2026-09-18: an
-app applies to everyone in the mesh, and `svrn ring roster add` writing the
-file is the narrowing primitive); `RingJournal::roster_file` is now named as the file half and has two
-callers, that door and the CLI writer. `MeshRosterSource` (in `ring_roster.rs`)
-is the default and the one registration, `REGISTERED_NAMESPACES`
-(the daemon's own rings — `mesh-measurements` and the six KV namespaces — which no file may narrow) — installed beside the rail itself in
-`daemon.rs` through `MeshRosterSource::install`, the one place a namespace
-and its derivation meet. Until then those three paths read the file — empty
-for this namespace — so the daemon refused its own key at the append door and
-a peer's seal retired nothing on the ring that most needs retention. The
-control half is kept in
-`a_peers_seal_prunes_the_daemons_own_namespace_whose_roster_is_derived`.
-`svrn ring log mesh-measurements` and `svrn ring seal mesh-measurements` work;
-`svrn ring roster …` on it still REFUSES, since a `roster.json` there would be
-read by nothing. One predicate, `ring_cmd::refuse_derived_roster`, and it names
-`svrn mesh status` / `svrn ring log` instead.
-
-**Not** routed through `NodeCapabilities.benchmark`, which stays `None` — that
-field feeds the ranked-dispatch clamp and arms the §4.5 size-law;
-`gossip_never_advertises_a_benchmark` fails the build if it is populated.
-
-The strong-peer-topology roadmap (latency-class hierarchy: cascade
-routing, draft-on-spoke/verify-on-hub speculation, hub queue
-discipline — each reality-checked against this codebase) is
-[`docs/specs/MESH_INFERENCE.md`](./docs/specs/MESH_INFERENCE.md).
-
-`commonwealth-inference/orchestrator/` was DELETED 2026-09-03 — 1,904 lines
-over six files whose `Orchestrator::new` was called from nothing but two
-integration tests. The liveness investigation it was "flagged for" in
-OICP_RATIONALIZATION.md returned the answer: not live. It held `ManagedProcess`
-(lifecycle states + SIGTERM-then-SIGKILL), `HealthTracker` (5s poll, 20-sample
-latency window, `Unresponsive` after 3 failures), a `FaultDetector` and a
-`GracefulDeparture` countdown, and none of it ran.
-
-Multi-process supervision on the path that IS live is
-`sovereign-compute/src/supervisor.rs` — `SupervisorState`, `graceful_kill`
-(SIGTERM, grace, SIGKILL) and health polling. It has NO departure countdown and
-NO fault detector, so those two parts of FE-139 are unimplemented rather than
-implemented-elsewhere; `quality/conformance-specs.toml` FE-139 carries the
-statement and the requirement is write-work again.
-- `GracefulDeparture` — countdown state machine
-  (`Announced → Rebalancing → Draining → Complete`), driven by
-  `Orchestrator::depart_gracefully` / `announce_departure` +
-  `complete_departure`. From the announcement the node refuses new shard
-  plans, which is the state machine's only externally visible consequence
-  and the thing that keeps it from being a log line. `stop_all` is the
-  ABRUPT path and says so; the standby transition in `apply_mesh_plan`
-  departs instead. Nothing constructed a `GracefulDeparture` before
-  2026-09-02 — it was unit-tested, wired to nothing, and `stop_all`'s doc
-  comment claimed its job (FE-139).
-- `FaultDetector` collapses health changes into `FaultEvent`s. STILL
-  UNWIRED: nothing outside its own tests constructs one.
-
-### HTTP API
-
-Two listeners, two trust domains.
-
-**Client API — :9741, binds 127.0.0.1 by default.** Secure by default:
-the wildcard bind is reached only when something explicit asks for it —
-an explicit `[daemon] client_bind`, or the `client-exposed` marker
-`expose_client_api` writes on `mesh create`/`join` (federated inference
-needs peer reachability). An ENCRYPTED mesh forces it back to loopback
-whatever the config says: the iroh acceptor is the sole ingress. The one
-decider is `sovereign_daemon::daemon::resolve_client_bind_posture`.
-
-A non-loopback bind carries a bearer token or serves nobody — the token
-chain is env → `[daemon] client_token` → generate-and-persist, and when
-even that fails the posture installs NONE, which makes `client_auth`
-refuse every remote caller rather than serve unauthenticated. Loopback
-callers pass free; the layer has exempt paths for federation/health.
-Added with the SaaS hardening, 2026-07; extracted out of `start_daemon`
-and given a test 2026-09-02 (UI-22).
-
-A non-loopback caller can now present one of **two** bearers, matched in
-that order. `client_token` is the daemon-wide one and unlocks everything.
-An **ephemeral guest grant** (`commonwealth-knowledge::guest_grant`,
-2026-08-27) is the narrow one: short-lived, revocable, and bound to a
-closed `Scope` enum whose `paths()` is the only route allowlist there is.
-A guest is not a mesh member — no `mesh_secret`, no gossip, no invite key
-— and cannot mint further grants, because no `Scope` variant names
-`/internal/*`. `svrn mesh grant` mints one (`--rail <ns>` adds the rail
-scope) and prints a `sovereign://guest/…` link, plus with `--qr-svg` the
-https form (`<url>#token=…`, the bearer in the fragment) as an SVG QR
-code; `svrn mesh use` accepts the first and repoints
-`svrn chat`. The auth layer never matches on a `Scope` variant: it asks
-`GuestGrant::permits_path` and inserts the grant, so a future scope is a
-variant plus its `paths()` arm and touches neither auth nor the wire.
-
-**The ring rail is the second scope, and the first deployment target**
-(`sovereign-daemon/src/routes_rail.rs` + the `commonwealth-rail-core` /
-`commonwealth-rail` pair, ring-deploy S1–S6, 2026-08-30). **It became two
-crates on 2026-09-04** (cw-lift 1b), carved out of what was then
-`commonwealth-knowledge`'s own rail module:
-`-rail-core` is the FOLD — the vocabulary, Ed25519 authorship, admission into
-one total order, and the per-actor sync digest, with no filesystem, no clock
-and no socket — and `-rail` is the JSONL journal that calls it. The split is
-what the campaign's second lift needs: a second application composes on the
-fold without inheriting a file layout, and the fold's whole in-repo dependency
-surface is `oplog`. `commonwealth-knowledge::rail` survived as a re-export for
-one commit so no consumer moved in the same diff; order 1c dropped it, and
-`sovereign-grants/src/` carries no rail module today. The three
-`[[forbid]] from = "commonwealth-rail*"` blocks in `quality/ARCH_LAYERS.toml`
-are what hold it — to `corpus-engine*` (the edge order 1a paid for), to
-`sovereign-*`, and back to `commonwealth-knowledge`, which layer ordering
-cannot see because both sit in `mesh-foundation`. A Commonwealth mesh had no verb for "make this
-exist for exactly my trust ring": a VPS makes it public infrastructure, a
-Discord bot puts the data at Discord, and the local-first stack syncs data but
-gives you nowhere to run anything and no idea who is asking. `Scope::Rails(ns)`
-names exactly one namespace, and `/v1/rail/{append,log}` take **no namespace
-parameter** — an app cannot reach another app's namespace because it has no way
-to *say* one (§7.1). An operator, who holds no grant, names it explicitly.
-
-**The rail carries an opaque payload, and that cut is the design.** It began
-as an expense ledger whose journal line *was* an `ExpenseOp` and whose reader
-had one thirteen-variant failure enum — and the enum split cleanly in two the
-moment anyone looked: eight variants about delivery and authenticity (torn
-line, bad signature, unknown signer, rewritten id, sequence hole, sequence
-fork, dangling correction, newer-format line), five about money. Not one of
-the first eight knows what an expense is, and a tool-lending board needs every
-one of them. So the line is now `RailAct` inside `Op<SignedOp>` —
-`Record{payload}`, `Correct{corrects, replacement?}` or `Seal`, a per-actor `seq`, and
-an Ed25519 signature over a domain-separated message that binds the namespace,
-so an op lifted from one ring and replayed into another fails the signature
-rather than a downstream check. **`Op.actor` is the signing public key**,
-because it is the only field on the line the writer cannot forge for someone
-else (§18.1); a `Roster` binds keys to display names, and one person with two
-laptops is two keys in one row. The daemon signs through a closure-shaped
-`RingSigner`, the same seam `self_dial_signer` uses, so `AppState` holds no
-key material. **Verification is the matching seam, and until 1e it was not
-one** — `RingSigner` was a trait and verifying was a call to a free function,
-so one half of one scheme could be replaced and the other could not, and both
-halves working is exactly what made that invisible. `RingVerifier` is now the
-question's only door: `Ed25519Verifier` is the shipped implementation, named at
-every call site rather than defaulted so which scheme judged an answer is
-greppable, `sig::verify_ring_op` is crate-private behind it, and the admission
-trace carries `verifier=`. A verifier is not a roster — one that accepts
-everything still cannot admit a stranger, which is pinned.
-
-**`Payload` is a type and not a `serde_json::Value`, and the reason is a bug
-that would not have surfaced for months.** A signature covers bytes; a `Value`
-has no bytes, it has a serializer, and which bytes that serializer emits for
-an object depends on `serde_json/preserve_order` — a Cargo feature that is ON
-in this workspace and that any crate added later can turn off. Flip it and
-every signature in every ring on the mesh stops verifying at once, presenting
-not as "a feature changed" but as a journal that has become entirely
-`BadSignature`. A typed body never had this problem (serde writes struct
-fields in declaration order); making the body opaque introduces it. So a
-`Payload` is **canonical by construction** — objects rebuilt with sorted keys,
-recursively, including on deserialization, so a line off the journal and a
-body off the wire are canonical too. Floats are refused outright for the same
-reason one level down: `1e2`, `100.0` and `100` are one value with three
-spellings and the choice is the library's, so a payload carries whole numbers
-and the refusal names the fix (use cents, grams, milliseconds).
-
-`admit(ops, skipped, roster, namespace, verifier) -> (acts in ONE order, gaps)`
-is **a
-function of the op SET, not of arrival order** — nineteen laptops gossip in
-nineteen orders, and admission that depended on order would have two housemates
-reading different answers off the same journal. That is pinned exhaustively
-over all 720 orderings of a six-op fixture; asserting it at this layer rather
-than over balances made it both stronger and true for every app that will ever
-sit on the rail. It buys the property with: dedupe by re-derived `OpId`; a
-content-derived total order `(ts_unix, actor, seq, id)` — the `seq` term added
-2026-09-09 after a work-plane burst inside one second folded a `Lease` ahead of
-the `Submit` that opened its handoff and a unit consequently ran twice; a void set built from every
-correction at once (so a correction arriving before its target pre-emptively
-voids it) that **never resurrects** — correcting a correction cancels its
-replacement and leaves the original void, which is what "compensating entry,
-visible" means; and sorted gaps, so two nodes agree on the *report* and not
-merely the acts. Voided ops stay in the returned list, marked, so an app can
-render what changed.
-
-**Correction lives in the rail on purpose.** "This earlier act was wrong, and
-it never comes back" is not an expense rule — a tool-lending board needs it
-the first time somebody writes *I returned the drill* and then *no I didn't* —
-and it is the rule most easily got wrong, because the void set has to be built
-from every correction at once rather than by walking for liveness. One
-implementation, and no app author re-derives it.
-
-`gaps` is the half that refuses to fake completeness. A journal that cannot
-say "I may be missing something" lets an app state a wrong total with complete
-confidence (§18.3), so `/v1/rail/log` returns the admitted acts and the gaps
-from one read, each gap carrying `message` — the rail's own sentence, so the
-terminal, the app's page and the append door's 422 say the same words about
-the same condition (§10.6).
-
-**The money left Rust with the fold, and that is the stated cost.** The penny
-remainder (\$10 three ways is 334/333/333), settlement idempotency, and the
-five money-shaped refusals now live in `ring_cmd/templates/expenses.js` — the
-reference app, which is also what `svrn ring new` scaffolds, so the thing a
-housemate starts from is the thing the workspace gates. `expenses.test.mjs`
-pins them and runs inside `cargo test`
-(`scaffold.rs::the_reference_apps_money_rules_pass_their_own_tests` shells to
-`node --test`; a missing `node` **fails** rather than skips, because
-could-not-judge is not passed, §18.1). The app keeps the shape the rail gave
-up: one `validate` that its own door and its own reducer both call.
-`participants` is still an explicit list and the roster is still never read for
-a split — the moment it is, adding a housemate silently re-divides every past
-expense, and the test named after that moved to JS with the rest.
-
-**The SDK ships the fold, not just the transport.** `window.ring` is `log()`,
-`record()`, `correct()`, `fold(log, reducer, initial)` and `live.{send,drain}`
-(the ephemeral lane, proxied as the `live` / `live-drain` ops so a page served
-by `ring dev` can reach `/v1/rail/live` at all), and the fourth is
-why it is an SDK rather than a fetch wrapper: it walks the rail's order and
-skips voided acts and replacement-less corrections, so an author writes a
-reducer and never touches `log.ops`. Hand somebody a raw log and hope, and the
-first thing they write is `ops.filter(...).sort(...)` — and their house
-disagrees with itself about who owes what.
-
-The door is narrow now, and honestly so: it refuses a payload with no
-canonical form, and it refuses to author under a key the ring's own roster
-does not carry (which would otherwise produce ops every node reports as
-`UnknownSigner` forever, silently). It has no opinion about whether an amount
-is positive, because it cannot have one.
-
-**Replication is its own loop, because riding the gossip push would have cost
-~246 GB/day per node** (`sovereign-mesh/src/ring_sync.rs` +
-`/internal/ring/sync`, ring-deploy S3). `gossip.rs` Step 4 shipped a full
-mesh-store snapshot to every online peer every 10s — 8,640 rounds/day — and a
-household's ~3,500 ops/yr ≈ 1.5 MB would have ridden every one of them, taxing
-every other namespace on that body forever. **Step 4 is deleted (cw-lift 2e)**
-and this loop is the only sender left, so that comparison is now history rather
-than a choice between two live paths. The journal gets a **60-second cadence**
-and syncs by **digest**: `{actor → contiguous high-water mark}`, ~600 bytes
-regardless of history. *Contiguous* is load-bearing — a node holding seq 0 and
-2 that advertised `2` would be answered "nothing above 2" and seq 1 would
-never arrive, sitting as a permanent `SequenceHole` while both sides believed
-they were in sync. An actor absent from the digest asks for everything.
-
-**The run counts from a SEALED FLOOR, and that is what lets the rail delete**
-(2026-09-04). Until then the mark was contiguous *from zero*: `digest`
-early-returned for any actor whose seq 0 it did not hold, and `admit` walked
-`0..=highest`. So a node that retired an old prefix advertised NOTHING for that
-actor, every peer read that as "I hold none of theirs" and re-sent the whole
-holding every 60s, while `admit` reported one `SequenceHole` per retired op
-forever. **Compaction amplified traffic, undid itself, and looked like
-breakage** — the rail could not delete anything at any granularity, which is
-not a substrate a third party builds on. The floor is `RailAct::Seal`: an act
-that retires everything its author wrote before it. It carries **no actor and
-no range** — the floor is whoever signed it, at the seal's own `seq` — so
-sealing somebody else's history is unwritable rather than refused (§7.1), and a
-seal cannot claim past what its author reached. **Authored, never configured**:
-a local truncation setting would put the disagreement one layer up, two peers
-with different floors and one re-sending forever; a seal is a signed op in the
-same total order as every other act, and the seal itself is how the floor
-travels. `sync::sealed_floors` is the ONE reading of it (§10.6), and *which ops
-it is handed is the safety question*: `admit` hands it only ops that passed the
-signature, roster and fork checks, so a forged seal — the exact line a hostile
-peer would push at `/internal/ring/sync`, which ingests as-signed — retires
-nothing (§18.3); `digest` hands it the whole holding, the same trust the
-contiguous mark beside it has always had, because being wrong there costs a
-round while being wrong in `admit` states a total over a subset and calls it
-complete. **The wire type did NOT change**: a peer's only use for the digest is
-*which ops do I send*, and the answer is `(mark, ∞)` whether the run started at
-zero or at a floor, so a build that knows about seals writes a byte-identical
-digest to one that does not for the same holding — nothing to default, no
-version to tag, and one fewer thing an old peer can fail to parse across a
-60-second exchange between mixed builds.
-
-Two idempotent calls converge both directions: `{digest, ops: []}` pulls what
-we lack and learns the peer's digest; `{digest', ops: what_they_lack}` pushes
-against it. The push is **author-blind** — a node republishes everything it
-HOLDS — which kills three failure modes at once: the author's node dying
-before anyone else came online, a peer restart wiping in-memory buffers, and a
-housemate leaving with half the journal. It is also why there is no own-origin
-skip to get wrong: `MeshStore`'s `origin` names the last *republisher*, not the
-author, and this path has no origin field because the op carries its author in
-a signature. `/internal/ring/sync` validates nothing about an incoming op on
-purpose — `admit` is the one decider, and it has to be right anyway because
-ops also arrive from disk. Watched: two-node partition drills at both levels
-(pure journals, and through the route), plus a half-delivered peer whose gap is
-named rather than silently totalled.
-
-**One BODY has a ceiling; convergence no longer does** (measured 2026-09-04,
-cw-lift rung 2a; chunked by rung 2f the same day —
-`sovereign-daemon/tests/rail_e2e/ceiling.rs` §"the convergence ceiling, and the budget
-that ended it", plus the loop's own tests in
-`sovereign-mesh/src/ring_sync.rs`). The receiver caps a request at
-`MAX_REQUEST_BODY_BYTES` = 8 MiB (`server.rs:40`), so the per-body figure is in
-BYTES and every one names its fixture: **9,599 ops** at 873.9 B/op (order 2's
-594-byte ledger body), 13,731 at 609 B/op, 15,164 at a work-atlas
-observation's 552 B/op (re-derived by `examples/rail_read_cost.rs`). Until 2f
-that was the CONVERGENCE ceiling, and crossing it was silent: `DefaultBodyLimit`
-answers **413 before the handler runs**, so the gauge could not fire; the gauge
-was computed on the RESPONSE, the direction nothing bounds, so the rail's one
-instrument watched the half that works; the sender mapped the status to
-`Err("HTTP 413")` and filed a reachable peer at **debug** as
-`peers_unreachable`; and the peer that had been refused reported zero ops,
-zero gaps and `is_complete() == true` (§18.3). That mattered most in the one
-case that cannot self-rescue — a node that has never seen this ring holds no
-`rings/<ns>` directory, so `run_one_round` finds no namespaces and returns
-before dialling (`:117`, `:124`): **it can only ever be told, over the
-direction that has a limit.**
-
-**The fix is a byte BUDGET and a repeated exchange, not a bigger limit.**
-`RING_SYNC_OPS_BUDGET_BYTES` (`routes_internal/ring_sync.rs`, one decider
-derived from `MAX_REQUEST_BODY_BYTES / 2` and never re-typed) stops
-`ops_missing_from_within` at a chunk in BOTH directions — the response was the
-unbounded half — and `exchange` repeats the pair until neither side moves,
-bounded by `MAX_CHUNKS_PER_EXCHANGE = 16`. **Nothing on the wire changed
-shape**: the exchange was already idempotent because `ingest_all` dedupes on
-the content-addressed op id, so a partial one is safe. It terminates because a
-chunk's first op is always one the receiver provably lacks — a contiguous mark
-of `n` means they do not hold `n + 1`, and the ordered selection yields exactly
-that op first — so every non-empty chunk moves the receiver's mark. The gauge
-now reads the REQUEST, and a 413 comes back as its own `ExchangeStop::Refused`
-counted in `RoundOutcome::peers_refused`, because a peer that answered is not
-a peer that could not be dialled. Watched: a 10,000-op journal converging onto
-a node with no `rings/<ns>/`, red first against an unbudgeted constant.
-
-**The sealed floor shortens the exchange; it never was what moved the
-ceiling.** Measured as a pair over one journal: a `Seal` appended while the
-retired lines are still on disk sends the identical ops — `ops_missing_from` is
-author-blind over what the node HOLDS, and an empty digest is missing all of it
-— so it costs the same several chunks. **Deleting the retired lines is the
-whole mitigation**: the suffix lands in ONE chunk, and a peer that has never
-seen the ring reads a journal `admit` calls COMPLETE, because the seal travels
-as its own op and holes are counted from the floor. Mutating that seal to an
-ordinary `Record` reports 10,000 `SequenceHole`s instead, so the floor is
-load-bearing and not the delete alone.
-
-**Both halves landed together on 2026-09-07** (cw-lift 4a), because the same
-measurement says neither is worth anything alone. The write half is not a new
-verb: `RailAct::Seal` is `{"op":"seal"}` through the append door an app already
-posts to, so it takes the author's next `seq` and travels the one total order
-like any act. The delete half is `RingJournal::compact`, and the append route
-runs it in the same request when the act was a seal — sealing and pruning are
-one act to the caller, and its `retired` block reports what went, because a
-seal's own 200 looks identical whether a thousand lines left the disk or the
-prune was refused. Four properties are watched, each red under its own injected
-defect: the floor is `Admission::floors` and never a second reading of the
-seals, so a **forged** seal (refused by admission, believed by a naive re-read)
-deletes nothing rather than erasing a member's history everywhere it lands; the
-comparison is strict, so the seal that IS the floor survives and the compacted
-actor keeps making a digest claim; a journal holding lines this build cannot
-parse is not rewritten at all, since `SkippedLine` carries a line number and
-never the bytes and the dangerous case is a line from a NEWER version; and the
-kept set is re-admitted before the rewrite commits, so a prune that would raise
-a gap refuses instead — which is how "delete only what a floor covers" is
-encoded rather than remembered (§7). Pruning is not author-only: a seal binds
-whoever admits it, so a peer drops what somebody else retired, which is the
-half that actually bounds storage. **Who seals turned out not to be a policy
-question.** `Seal` carries no actor, so sealing another's history is unwritable
-and every alternative to self-sealing is already ruled out by the type; the
-worry that a node which goes quiet never seals and grows without bound does not
-survive contact, because an actor's history grows only when that actor WRITES —
-an offline node contributes nothing further, and a writing node can always
-seal. WHEN to seal stays the operator's, for the reason `sync.rs` refuses a
-truncation setting: a local cadence puts the disagreement one layer up.
-
-**Amended at cw-lift 4 for the daemon's OWN namespaces: the daemon writes
-them, so the daemon seals them.** The operator's-call rule holds for an APP's
-ring — sealing forgets history and an app's history is the app's. It does not
-hold for
-`sovereign-mesh/src/ring_roster.rs::DAEMON_OWN_NAMESPACES`, which the daemon
-writes on a cadence nobody chose: nobody is going to run
-`svrn ring seal inference` every few weeks, and a journal nobody seals grows
-without bound on every node, so leaving the decision unmade IS a decision. It
-is safe to automate here because both halves check themselves — `compact`
-re-admits its own result and refuses a prune that would raise a gap, and the
-SNAPSHOT re-appends the live set under its ORIGINAL `t`, so the fold puts every
-row back where its author left it. That is exactly what `sync.rs`'s refused
-truncation knob was not: an operator-set line with nothing checking what fell
-below it. The threshold is ONE constant,
-`rail_kv_pump::SEAL_AFTER_OWN_OPS = 2_000`, for KV, measurements and the work
-plane alike (cw-lift 5d added the third arm; `work`'s snapshot is its live
-leases and its offer, taken from the fold BEFORE the prune because the journal
-is that plane's only copy of them), and
-what it counts is this node's own ADMITTED ops at or above its authenticated
-floor. The cost of that count is a fold, so a cheap one-sided gate runs first:
-own RAW lines on disk (parsed, not verified) can never be fewer than
-own-admitted-above-floor, so a cheap count under the bar proves the expensive
-one is (§9.5). **The seal's honest cost, and how it was ABSORBED rather than
-priced**: a snapshot carries LIVE rows and a tombstone is not one, so a delete
-this node published would stop travelling the moment the seal that retired it
-lands, and a peer that never received the tombstone would keep its stale value
-forever — the KV shape of K7's "no history past the next seal". ea4da7b68
-recorded that in the module docs and here; the rung that followed CLOSED it,
-because a seal followed by its whole snapshot IS that actor's live set, and a
-peer holding both may retire every other row of that actor's. `snapshot` now
-ends with `rail_kv::snapshot_mark(floor)` — one act naming the seal it closes,
-appended after the last row — so "I hold the whole snapshot" is a fact on the
-journal rather than a guess about timing. The rule and its two gates are under
-"the seal reconciliation" in the distributed-state section below. The threshold
-stays at thousands of ops: it is priced on journal BYTES, and the cost it was
-raised for is gone rather than smaller.
-
-**`svrn ring` is the verb** (`sovereign-cli-llm/src/ring_cmd/`, ring-deploy
-S4): `ring new` scaffolds an app (page, reducer, and the reducer's tests),
-`ring roster add <person> --self` binds a name to the node key it signs with,
-`ring dev <ns>` mints a `Scope::Rails` grant and serves the bundle at
-`127.0.0.1:4318`, `ring seal <ns>` retires everything this node has written and
-deletes it (over HTTP, not by opening the journal: a second process picking its
-own next `seq` would race the daemon's writer lock and fork the actor), and
-`ring log <ns>` prints the admitted acts and the gaps in
-the terminal — gaps rendered as sentences a housemate can act on, never a
-serde dump. There is deliberately **no `ring balances`**: a balance is an
-expense app's reading of a journal, and a terminal that printed one for the
-tenant that happens to be in front of us would be the money rules living in a
-second place (§10.6). The app renders them, because it is the only thing that
-knows what one is. The dev server holds the grant itself, so the
-browser tab never sees a credential and the page reaches one namespace's rail
-and nothing else on the daemon; the grant dies with the process.
-
-**`svrn job` is the other verb on the same rail**
-(`sovereign-cli-llm/src/job_cmd.rs`, cw-lift 5d): `ring` deploys an app to a
-trust ring, `job` hands that ring a unit of *compute*. `job submit --kind
-process:v1 -- <argv>` appends ONE act — a `Submit` naming the command, the git
-rev it runs at, and which nodes may take it — through `ring_cmd::rail_append`,
-the same append client `ring` uses, and then stops. It does not wait, poll or
-place: a submitter that also chose a donor would be a second decider for a
-lease (§10.6). `job status` reads `GET /v1/rail/log` and folds it with the SAME
-`commonwealth_work::WorkProjection::fold` the daemon's donor loop runs, which
-is what the package crate is for — the terminal, the daemon and a lifted
-third-party peer are three readers of ONE function and cannot disagree about
-who holds a lease. It goes over HTTP and never opens the journal for `ring
-log`'s reason: the roster the DAEMON loaded is what decides which acts are
-readable, so folding the file directly would be confidently and silently wrong
-on exactly the ring where membership is the question.
-
-Two details are the design. **The op table is two entries** — `log` and
-`append` — where `meshapp dev`'s is twelve, because the rail is two routes and
-an app's vocabulary is built out of those rather than by growing the rail.
-**The roster is written by the CLI and is unreachable from the rail**: there is
-no roster route at all, so a deployed app cannot add a key to the ring,
-including its own. `roster add` then reads the roster back *through the running
-daemon* and fails if the daemon does not report it — the one way that command
-can look like it worked and do nothing is writing to a directory the daemon
-does not read (§18.1).
-
-**And since ring-apps ra-1, a roster row can say WHY it is there.** `Roster`
-was a name and some keys, so the only answer to "why is Alex in this ring" was
-whoever typed the command remembering. Two halves, landed together:
-
-- `Introduce { person, key, reason }` (`commonwealth-rail-core/src/introduce.rs`)
-  — an act a member signs under their own key, written by `svrn ring introduce
-  <person> --key <hex> --reason <why> --ring <ns>`. **Deliberately not a
-  `RailAct` variant**: a variant is a branch inside `admit`, which is the rail
-  deciding what an act means. It rides as an ordinary opaque `Payload` on a
-  `Record`, and admission carries it exactly the way it carries an expense.
-- `Roster.vouches: BTreeMap<key, Vouch { op, by, at }>` — keyed by KEY, not by
-  person, because two laptops can join on two evenings on two people's word.
-  `#[serde(default, skip_serializing_if)]`: a `roster.json` written before this
-  reads as warrant-unknown rather than failing to parse, and a roster with no
-  vouches serializes to exactly the bytes it did before.
-
-`trace(roster, admitted_ops, person, key) -> VouchStatus` is the one resolver.
-It takes **admitted** ops, so "exists, verifies, signed by a member" is
-discharged by `admit` rather than re-checked (§10.6), and the eight non-`Traced`
-variants are the ways a well-formed-looking row still resolves to nothing: op
-refused by admission, not an introduction, introduces another key, voided by a
-correction, a key vouching for itself, an introducer whose own row is dated
-*later* than the op they signed, and a row whose stored signer disagrees with
-the op. `svrn ring roster show` (`list` is the same command) prints the rail's
-own sentence under each key, and `roster add --on <op-id>` refuses a warrant
-that does not resolve — the `Vouch` is minted from the signed op, so the
-operator names an op id and nothing else.
-
-**`Introduce` is evidence, never admission, and that is the whole cut.** An
-introduction arriving from a peer moves no roster row:
-`a_peers_introduction_arrives_readable_and_changes_no_roster_row`
-(`commonwealth-rail/src/tests.rs`) asserts on the roster FILE BYTES after
-ring-sync delivers one, and was watched failing with `ingest_all` taught to
-fold it in. `svrn ring roster add` is still the only writer of a roster, the
-roster is still not a function of the op set, and the reference app's
-no-re-division test is unchanged.
-
-**A daemon older than the CLI drops warrants silently** — serde ignores an
-unknown field, so it reads `roster.json`, re-serializes it without `vouches`,
-and every row reads warrant-unknown with the reason sitting on disk. `roster
-show` compares against the file its own writer maintains and says so, exiting
-non-zero, rather than rendering a confident wrong answer (§18.3). `ring dev` is a foreground server, so it is the one
-declared capability no journey can drive; `cli-contract.toml` says so rather
-than listing it uncovered.
-
-Deliberately deferred with a named trigger: the namespace has **no retention
-bound** (`gc_app` cannot serve — it compares `entry.timestamp`, which for a
-write-once event is creation time, so a TTL deletes history and a partial
-restore resurrects corrected expenses; and since cw-lift 4 it could not serve
-anyway, because the store is a projection and a swept row returns on the next
-fold unless the namespace declares a window in `commonwealth-state::retention`). Checkpoints land when one exchange
-passes half the receiver's body limit — the sync route warns at exactly that
-line, reusing the gauge `gossip.rs` already keeps on the mesh-store snapshot.
-
-**Holding the dial string is not a credential** (`AcceptorRoutes::forward_for`,
-`sovereign-mesh/src/iroh_access.rs`, 2026-08-27). An iroh endpoint accepts
-anyone, and the dial string that reaches it is public — it rides in every
-invite's `dial=` and is gossiped as `node_pubkey`. The acceptor forwards by
-`TcpStream::connect`ing a loopback listener, so until this landed, routing on
-ALPN alone handed every dial-string holder whatever the client listener grants
-its own machine: the full client API, no bearer. What the QUIC handshake *does*
-prove is the dialer's Ed25519 key, so the acceptor routes on `(ALPN, dialer)`:
+Every node persists an Ed25519 keypair; identity is mesh-independent and
+survives `leave` and every switch. mDNS advertises `_commonwealth._tcp.local`;
+gossip is a 10s epidemic loop over 2–3 random peers with timestamp-LWW
+conflict resolution; latency probing is UDP RTT every 30s.
+
+`Mesh` carries **two** credentials and the split is load-bearing:
+`mesh_secret` authorizes gossip and never rotates; `invite_key_hash` admits
+joiners and rotates freely. A gossip round carries a keyed-BLAKE3 `mesh_proof`
+bound to the sender and a 30s window rather than the raw secret; an OFFERED
+proof that fails is a hard refusal, never a fall-through. Rotation is refused
+while the fleet is mixed, and the confirmation is local observation (the
+`GossipAuthArm` that won), never a peer's claim.
+
+**One endpoint key, one member row.** `aliased_endpoint_keys` is the one
+implementation; `merge_from_authenticated` refuses to ADMIT a collision while
+`gossip::one_row_per_endpoint_key` RESOLVES one at the dial site, because
+refusing there strands the machine. Selection fairness is a separate clock
+from liveness: offline-decay reads contact, `select_round_peers` reads
+`peer_last_attempt`, stamped before the dial so refusals and timeouts advance
+it too.
+
+**Encryption, and the honest gap.** A plaintext mesh is the default. A mesh
+created with `require_encryption` flips every node to the iroh dial-by-key
+transport in REQUIRE mode with no plaintext fallback, binds its listeners
+loopback-only, and admits joiners only over an encrypted founder-key-dialed
+channel. **NOT covered: the multi-host tensor-split RPC between
+`llama-server` and `rpc-server` is raw TCP, outside the transport seam, and is
+the sole residual plaintext on an encrypted mesh. Never claim blanket
+end-to-end encryption.** Surface-by-surface posture
+[`../docs/THREAT_MODEL.md`](../docs/THREAT_MODEL.md).
+
+### The PeerTransport seam
+
+`commonwealth-transport` resolves (peer, traffic class) → ordered base URLs in
+exactly one place. `IpTransport` is today's tailnet/LAN overlay;
+`IrohTransport` is dial-by-Ed25519-pubkey QUIC bridged to HTTP through
+localhost byte-tunnels; `RoutedTransport` composes them, concatenating
+candidates ahead of a default so a failed iroh dial degrades to the tailnet
+path on the same request. With iroh enabled every class is iroh-first with
+per-dial IP fallback, and `[iroh] enabled` absent means AUTO (on iff this node
+is in a mesh). Out of seam by design: the join handshake, worker-pod
+transport, loopback self-probes, and the raw-TCP tensor traffic above.
+
+Six ALPNs carry the encrypted mesh, and what a STRANGER gets differs per
+ALPN — **holding the dial string is not a credential**, so the acceptor routes
+on `(ALPN, dialer)` and the key the QUIC handshake proved is the discriminator:
 
 | ALPN | member | stranger |
 |---|---|---|
-| `cwth/client/0` | the PEER listener (no bearer — peer federated inference carries none, and its key is the credential), which serves the client router **minus `/internal/*`**. Closed outright if that listener did not bind | the bearer-checking listener, i.e. what a LAN caller meets; `AUTH_EXEMPT_PATHS` still open. Closed outright if that listener did not bind |
-| `cwth/rpc/0` | the local ggml rpc-server | REFUSED — it authenticates nothing, so there is no safe downgrade |
-| `cwth/media/0` | the declared `[iroh] media_origin` (Jellyfin's `:8096`, or any HTTP server honouring `Range`); not advertised at all when none is declared | REFUSED — same reasoning as rpc: the origin authenticates nothing, and the dial string rides in every invite |
-| `cwth/app/0` | one of SEVERAL named HTTP apps this node publishes, chosen by the FIRST PATH SEGMENT per request (`GET /chores/tasks` → the `chores` origin, forwarded as `GET /tasks`); its own allow-list (`[iroh] app_allow`), separate from media's; advertised only while something is published, and added to and removed from the live endpoint as that changes | REFUSED — an app written in an afternoon authenticates nothing |
-| `cwth/offer/0` | the declared `[iroh] offer_origin` — any HTTP server listing what this operator has to sell or lend; its own allow-list (`[iroh] offer_allow`), a THIRD list separate from media's and apps'; not advertised at all when none is declared | REFUSED — the dial string is public and gossiped, so a downgrade here would publish an inventory of a household's possessions to anyone holding an invite |
-| `cwth/guest/0` | — | admitted; the listener behind it reads the bearer |
-| `cwth/http/0` | internal router | internal router, DELIBERATELY: a joiner is not a member yet and `/internal/join` is how it becomes one. `gossip_authorized` and the join key guard the sensitive routes; the rest are a known open edge, and closing it needs a join-only listener for non-members |
+| `cwth/client/0` | the PEER listener (no bearer — federated inference carries none, its key is the credential), serving the client router minus `/internal/*` | the bearer-checking listener |
+| `cwth/rpc/0` | the local ggml rpc-server | REFUSED — it authenticates nothing |
+| `cwth/media/0` | the declared `[iroh] media_origin` | REFUSED |
+| `cwth/app/0` | one of several named HTTP apps, chosen by first path segment | REFUSED |
+| `cwth/offer/0` | the declared `[iroh] offer_origin` | REFUSED — the dial string is gossiped, so a downgrade would publish a household's inventory |
+| `cwth/guest/0` | — | admitted; the listener reads the bearer |
+| `cwth/http/0` | internal router | internal router, DELIBERATELY — a joiner is not a member and `/internal/join` is how it becomes one |
 
-Watched failing: `iroh_dialer_admission_e2e::routing_on_alpn_alone_is_the_hole_this_closes`
-wires the old ALPN-only routing and gets a 200 for a stranger presenting nothing.
+Federated media and named apps ride that surface: the holder declares an
+origin, the viewer asks its own daemon for a loopback bridge URL, and the
+acceptor tells the origin WHO is asking by rewriting request heads
+(`X-Mesh-Member`/`-Node`/`-Pubkey`, every client-supplied `x-mesh-*` header
+dropped first). Responses are a byte copy, which is why `Range` stays
+byte-exact. `svrn mesh offers` enumerates the roster, so a neighbour
+publishing nothing appears as a ROW carrying that refusal rather than absent.
 
-**Federated media rides that fifth slot end to end** (`TrafficClass::Media`,
-`commonwealth/crates/commonwealth-media/src/reach.rs`, the route and daemon
-glue in `sovereign-daemon/src/media_reach.rs`, 2026-09-11). The holder declares
-`[iroh] media_origin = "127.0.0.1:8096"` — `svrn mesh media offer [<origin>]
-[--admit <member>...]` writes it (and `media_allow`; with no origin it probes
-127.0.0.1:8096 then 8920; `mesh media admit <member>...` narrows the stored
-origin) and runs `daemon reload`,
-which swaps the live `MediaRoute` (`sovereign-mesh/src/media_route.rs`) with no
-restart; a value that does not parse refuses the boot or the reload. The viewer asks its own daemon — `GET /v1/mesh/media?peer=<name-or-id>`,
-`svrn mesh media <peer>` — and gets back `http://127.0.0.1:<port>`: the
-transport's cached bridge for `(peer, cwth/media/0)`, minted once and retargeted
-in place when the peer's dial info moves, so a player can hold the URL. The
-viewer-side bridge is `tokio::io::copy` both ways and never parses HTTP; the
-holder-side media arm rewrites request heads to carry the caller's identity
-(next entry) and copies everything else, which is why `Range` (a seek) passes
-through byte-exact. `Media` is the one class with no
-`[iroh.transport]` entry: it has exactly one transport (the IP overlay returns
-no candidates for it — there is no port to guess and a guess would be the
-library over plaintext), so there is nothing to opt it out to. What the read
-refuses it names — unknown, ambiguous, offline, no identity, no origin, no
-iroh path, non-loopback endpoint — rather than handing out a port that accepts
-and never answers; the CLI then does one real `GET /` through the bridge so the person
-sees an HTTP status, not a port. The response also says which KIND of number a
-play would be: `path.relayed_reading` is true only for `relayed`, decided once
-by `PeerPath::is_relayed_reading` — `mixed` (a direct leg and a relay both
-live, bytes on the direct leg, which is every path on one LAN) is a direct
-number under a relay's name and must not clear the bar. The bar itself is
-measured through the SAME URL: `media_bridge_bench pull --url <it>
---duration-secs 600` judges the pre-registered rate / stall / duration and
-leaves the path kind to that field. Watched failing:
-`iroh_dialer_admission_e2e::a_stranger_holding_the_dial_string_cannot_read_the_library`
-and `commonwealth-media reach::tests::an_offline_member_is_refused_by_name_not_handed_a_dead_port`.
-These decisions live in the package crate so the inference daemon and the
-package-only rails daemon compose ONE implementation of them (ARCH §10.6).
+### Scheduling and orchestration
 
-**The mesh's marketplace, and its incompleteness is reported**
-(`OriginKind::Offer`, `commonwealth-transport/src/origin_alpn.rs`,
-`[iroh] offer_origin` / `offer_allow`, `svrn mesh offers`, ra-4, 2026-09-13).
-The third origin kind is a variant, an ALPN, an acceptor route and a config
-key — `commonwealth_media::fanout` was already generic over the kind, so the
-catalogue half cost nothing. What it buys is the sentence no marketplace can
-say: **every neighbour is a ROW**. `svrn mesh offers` enumerates the roster
-itself and names every active member in `peers`, so a neighbour that publishes
-no offer origin appears carrying that refusal rather than being absent — with
-`peers` left out, the fanout targets only members that ADVERTISE the kind and
-the absence is exactly what would happen. Self is excluded: `origin_fanout`
-never asks this node. The verb **merges, dedups, ranks and schematises
-nothing** — a served row prints the origin's own bytes, and the only thing
-counted is how many elements a JSON ARRAY has, which is a fact about the
-document rather than a claim about what an item is. `svrn mesh offers --why`
-is the first surface that reads `Roster.vouches` for somebody other than the
-operator: it joins each seller **on the gossiped node key and never on the
-display name**, across every ring this node holds (`commonwealth_rail::
-namespaces_in`, and `sovereign_cli_shared::rail::roster_and_admission` — the
-same read `svrn ring roster show` makes), rendering `commonwealth_rail::trace`'s
-own sentence or `warrant unknown`. A name-based fallback would answer a
-question about a REMOTE party out of this node's local name table, which is
-the substitution ARCH §18.3 refuses. Watched failing:
-`mesh_offers::tests::a_sellers_name_matching_a_roster_row_is_not_a_warrant`
-(name fallback: a different key resolves to a warrant) and
-`commonwealth-media fanout::tests::a_member_publishing_no_offer_origin_is_a_row_carrying_why`
-(refused names filtered out of the catalogue).
+Eight decision points, each with one home:
 
-**A kind a build cannot NAME is refused by name, never answered empty**
-(`commonwealth_media::fanout::AskedKind`,
-`sovereign-cli-llm/src/mesh_skew.rs::render_kind_refusal`, 2026-09-13).
-`FanoutRequest.kind` was `Option<OriginKind>` over a closed set, and serde's
-`default` applies to an ABSENT field and not to an unparseable one — so
-`{"kind":"offer"}` against an older daemon failed the whole struct, axum
-answered 422, and the operator with a rebuilt CLI and an unrestarted daemon
-read a sentence about a struct field. `AskedKind` keeps the raw JSON of any
-shape (the `IgnoredAny` reasoning from `deserialize_known_origins`) and
-refuses by name, quoting what was asked and listing what this build serves.
-That cannot repair daemons that already shipped, so the CLI side DETERMINES
-the skew rather than guessing at serde's English: it re-asks the same route
-with `kind: "media"` and `peers: []` — zero targets, nothing dialed — and
-reports skew only when the control answers 200, `could-not-judge` otherwise
-(ARCH §18.3). Watched failing:
-`fanout::tests::a_kind_this_build_cannot_name_is_refused_by_name` with
-`resolve` defaulting Unknown to Media (`called unwrap_err() on an Ok value:
-Media`). Gossip needed no change: `deserialize_known_origins` already drops a
-kind the reader cannot name, and `Offer` is the first kind that tolerance
-actually covers — but it leaves no trace, so a build that knows `offer` still
-cannot tell an older peer from one publishing none by reading gossip alone.
+| Decision | Where |
+|---|---|
+| Joiner decides a turn is offload-eligible | `sovereign-mesh/oicp_select.rs::offload_eligible` |
+| Joiner picks peer-vs-local | `sovereign-serving-host/src/peer_inference.rs::select_peers_ranked` |
+| Joiner resolves a *named* target | `peer_inference.rs::locate_named_model` — name resolution + min-in-flight, **not** the scorer. A HARD name is a constraint: unknown ⇒ error, never substitution |
+| Hub picks a local model for a peer request | `sovereign-daemon/src/routes_inference.rs::route_with_oicp` |
+| Serving peer picks Fast-vs-Slow slot | `oicp_select.rs::pick_slot_for_oicp` |
+| Synthesis tier (Fast vs Primary) | `sovereign-core/runtime/evidence.rs::resolve_synthesis_route` |
+| Distributed placement (model > one node) | `sovereign-inference/embedded/rpc_distribution.rs` |
+| Collaborative ingest partitioning | `sovereign-grants/knowledge_assignment.rs` |
 
-**What a member SERVES is gossiped beside how it is reached** (`NodeCapabilities::origins`,
-`OriginKind`, 2026-09-11). `OriginKind` is defined in `oicp_types::origin` since the same
-day (sv-surface svt-3) and re-exported at `commonwealth_core::capabilities::OriginKind`:
-defined in commonwealth-core it pinned every wire shape carrying it — `MemberDto`,
-`MeshMember` — above the contract layer, and `oicp-types` is the serde-only leaf both
-families already depend on (the `TenantId` precedent). The acceptor knows whether it routes `cwth/media/0`
-to a local origin (`MeshIrohAccess::media_route_active`); the dial-info provider
-carries that as `IrohDialInfo::origins`, and the gossip self-stamp writes it
-into this node's own capabilities each round, after the hardware/corpora
-snapshot replaces them — so the advertisement is a fact about the LIVE acceptor,
-not about config, and a declared origin whose endpoint never bound is not
-offered. `[iroh] media_allow` rides beside it the same way (`IrohDialInfo::media_allow`
-→ `NodeCapabilities::media_allow`, empty when no media route is live or nothing is
-narrowed) and reads back as `MediaOffer::offered_to`. A closed enum, serde-defaulted and skipped when empty: a peer on an
-older build reads as advertising none (absence, never an offer), and new→old
-wire bytes are unchanged. Two reads consume it. `GET /v1/mesh/media` with no
-`peer` — `svrn mesh media` bare — lists every active member other than self
-whose origins carry `media`, with status and live path, dialing nothing
-(`EmbeddedDaemon::media_offers`, `offering_members`); offline members are rows
-with their status, because a person wants to know the library exists. And
-`pick_member` refuses a named member that advertises none
-(`MediaReachRefusal::NoOrigin`) instead of minting a bridge the far end will
-close. `MemberDto::origins` carries the same fact on `/v1/mesh/status`. Watched
-failing: `commonwealth-media reach::tests::a_member_that_advertises_no_media_origin_is_refused_by_name`.
+Slot policy is normative in [`docs/SLOT_POLICY.md`](./docs/SLOT_POLICY.md):
+call sites declare a `slot_policy::Workload` requirement bundle rather than
+free-handing `Speed::` literals. The composed OICP scoring product lives ONCE
+in `oicp-types`.
 
-**The origin is told WHO is asking, by the acceptor and never by the client**
-(`commonwealth-transport/src/iroh_identity_forward.rs`, `[iroh] media_allow`,
-2026-09-11). The acceptor's resolver now returns a `Forward` kind: `Splice`
-(the byte copy above, unchanged for every other ALPN) or `Http { origin,
-headers }`, which `AcceptorRoutes::forward_for` picks for `cwth/media/0` from
-a member — `MemberCheck` returns `Option<MemberIdentity>` (name + node id,
-both `commonwealth-media/src/identity.rs` since 2026-09-11, with
-`admit_media` the one place the three refusals are decided)
-rather than a bool, so the identity the QUIC handshake verified is in hand
-where the route is decided. `pump_with_identity` parses request HEADS only,
-on the client→origin direction: every client-supplied `x-mesh-*` header is
-dropped, then `X-Mesh-Member`, `X-Mesh-Node`, `X-Mesh-Pubkey` are appended,
-the body is copied by its `Content-Length`, and the next head is read — so a
-kept-alive connection carries the identity on every request. Responses are
-still a byte copy, which is why `Range` stays byte-exact; a chunked request
-body (which media clients do not send) passes the rest of that connection
-through unrewritten and says so at info. `[iroh] media_allow` — member names
-or ≥4-char id prefixes, resolved by `member_matches` like every other
-`<peer>` argument — narrows which members reach the origin; empty admits every
-member, and a non-member is closed regardless. Watched failing:
-`iroh_identity_forward::tests::a_forged_identity_header_is_replaced_by_the_verified_one`
-(strip disabled), `iroh_access::tests::the_media_allow_list_admits_by_name_or_id_prefix_and_refuses_the_rest`
-(check disabled), and end to end
-`the_origin_is_told_the_members_verified_name_and_not_what_the_client_typed` /
-`a_member_outside_media_allow_is_closed_and_one_inside_is_served`.
+Scheduler quality is instrumented rather than asserted.
+`sovereign-scheduler/decision_log.rs` writes one `RoutingDecision` per
+decision point — the whole candidate set, each `ScoreBreakdown`, each input
+stamped with provenance and age, every excluded peer with its reason;
+`decision_trace.rs` replays by `decision_id`, never adjacency;
+`scheduler_core.rs` is the ranking as a pure total function;
+`predicted_time.rs` is the only ranking in the tree with no tunable constant;
+`decision_replay.rs` re-runs the LIVE scorer and policy over a capture to
+check it reproduces its own verdict. The Tier-1 simulator is
+`sovereign-mesh-test-harness`'s `mesh_sim` module behind the `dst` feature.
+Findings are in `docs/specs/SCHEDULER_QUALITY.md`; **the standing one is F10 —
+the scheduler has no speed signal in production**, so `throughput_factor` is
+neutral 1.0 for every peer, and `svrn mesh bench` deliberately does NOT write
+to `NodeCapabilities.benchmark` (`gossip_never_advertises_a_benchmark` fails
+the build if it is populated).
 
-**One fan-out for every federated question** (`commonwealth-transport/src/fanout.rs`,
-2026-09-11 — WORK_PLANE.md design gap 1, done by extraction). The peer half
-of the knowledge route's fan-out moved out unchanged in behaviour and generic
-in type: `FanoutTarget` (identity + contact, cloned out of the mesh lock),
-`fan_out(inner, targets, per_peer, ask)` — one spawned task per target under
-the `fanout_inflight` gauge the `BoundedFanOut` soak invariant reads, an
-optional per-peer cap so one stalled relay cannot hold the rest, a
-`PeerRow<T>` per target in the order given with `Served(T)` / `Failed` /
-`NeverAsked` and elapsed, a panic in one task a failed row rather than a lost
-one — and `first_endpoint_that_answers`, the transport's candidate loop with
-the `note_success` pin. Every target is a row (`rows.len() == targets.len()`):
-the cloud-peer flight's lesson (note 60d4d79b) that an unasked corpus must
-not read as an empty answer, applied to peers. Merge stays with each caller,
-because item semantics are the origin's: the knowledge route keeps its
-corpus accounting and `X-Node-Id` stamp and calls the core; the media fan-out
-is the second caller. Watched failing: `fanout::tests::
-a_slow_peer_does_not_delay_the_others_and_is_a_failed_row` (cap ignored),
-`a_target_refused_before_dialing_is_a_never_asked_row_not_an_absence`
-(verdict collapsed to failed); the extraction's guard is the unchanged
-`knowledge_fanout` (4) and `knowledge_fanout_e2e` (3) suites.
+**Byte-mass-aware split (`plan_shards_weighted`).** Each device gets a
+CONTIGUOUS block range whose *bytes*, not block *count*, are proportional to
+its VRAM. The big open-weight models are MoE and MoE mass is deeply
+non-uniform — routed experts are ~88–93% of the bytes but cold, and a hybrid
+SSM+MoE stack alternates a ~20 MB block with a ~1.3 GB one, a measured 62×
+per-block spread — so count-proportional apportionment hands a small node a
+heavy run and OOMs it. One function serves both the live load and
+`svrn mesh plan`'s preview, so they cannot diverge. Per-device fit is
+`shard_fits(plan, capacities, mass, headroom)`, where **`None` means
+cannot-judge and is not a pass**: an unread tensor table would otherwise clear
+every device on the strength of zeros.
 
-**The catalogue half, over any origin kind**
-(`commonwealth/crates/commonwealth-media/src/fanout.rs`, the route in
-`sovereign-daemon/src/origin_fanout.rs`, `POST /v1/mesh/fanout`,
-`svrn mesh media fanout <path>`, `svrn mesh app fanout <app> <path>` and
-`svrn mesh offers`, 2026-09-11; generalised 2026-09-12; third kind 2026-09-13).
-It never was media-shaped — the selection already read `origins.contains(kind)`
-and the ask was already an arbitrary method/path/headers/body; what was
-media-specific were two hardcoded `OriginKind::Media`. Both are the request's
-`kind` now, `/v1/mesh/media/fanout` is the same handler with that field
-absent, and `class_of(kind)` is the one kind→`TrafficClass` map (it had
-already been copied once). For an app the wire path is composed in
-`OriginRequest::from_request` — `/{app}` prefixed, one place that knows the
-convention — and the two mismatched pairs (`kind: app` with no name, an `app`
-name under `kind: media`) are refused rather than resolved, since the second
-would quietly ask Jellyfin instead. `Offer` takes media's arm, not the app
-one: both are ONE declared origin per node, so the path travels unprefixed and
-only `App` multiplexes. A row also carries `json`, the origin's
-body already parsed when it said JSON and was not cut at the cap, because
-every consumer's first line was `json.loads(row["body"])`; `body` stays the
-authority and a truncated body is never parsed.
-The same origin-relative request to every member that offers a media origin,
-each through its own bridge (the URL `svrn mesh media <peer>` prints, so the
-holder's identity headers ride along), concurrently under a per-member cap,
-returned as one document: `asked` and one `PeerRow<OriginAnswer>` per target —
-status, content type, body (lossy text, cut at 4 MiB with `truncated` set),
-bytes, elapsed — or `failed` / `never_asked` with the reason. `peers` names
-members exactly as the verb resolves them, and a name the roster refuses is
-a `never_asked` row carrying that refusal, never a dropped name
-(`select_targets`); without `peers`, the targets are what the bare verb
-lists. `roster_of` is now the one projection all three media reads
-share. Deliberately absent: merge, dedup, item schema (the origin's), and
-streams (the per-member URL's). Like the viewer half above, the selection, the
-request validation and the per-origin ask live in the package crate so the
-inference daemon and the rails daemon fan out with one implementation
-(ARCH §10.6). Watched failing:
-`commonwealth-media fanout::tests::every_named_member_is_a_target_and_a_refused_one_says_why`
-(refused names filtered out) and
-`an_answer_is_read_up_to_the_cap_and_says_when_it_was_cut` (cap ignored).
+`svrn mesh bench` measures the configuration that is loaded and never loads
+the one it wants to measure — there is no slot argument, so there is no slot
+to get wrong. A record carries the pre-image of its own key (`witness`) and
+the conditions it met (`conditions`), travels on the ring rail rather than the
+gossip KV store, and refuses to travel when invalid. Origin comes from the
+SIGNATURE, never the payload.
 
-**Named apps, and the claim that cannot outlive its process**
-(`commonwealth/crates/commonwealth-media/src/apps.rs`,
-`sovereign-daemon/src/publish_http.rs`, `sovereign-cli-llm/src/run_cmd.rs`,
-2026-09-12). `OriginKind::App` is one closed-set variant on one ALPN with one
-acceptor route; WHICH app is a registry lookup, because app names are open
-data a housemate adds at 1am without recompiling anything (ARCH §9). Two
-tiers, and the default is the one with a TTL:
+Known gap: `commonwealth-inference/orchestrator/` was deleted as dead code,
+taking `GracefulDeparture` and `FaultDetector` with it. `sovereign-compute`'s
+supervisor has no departure countdown and no fault detector, so those two
+parts of FE-139 are unimplemented rather than implemented elsewhere.
 
-    svrn run --as chores -- python app.py   # a claim, held while it runs
-    svrn publish chores 5000                # `[iroh.apps]`, durable
+### The ring rail
 
-`PublishedApps` is the one registry both tiers land in, and the acceptor
-resolves every `cwth/app/0` dial against it live — a snapshot taken at boot
-would have made every ephemeral publish wait for a daemon restart. A claim is
-minted by `POST /v1/mesh/publish` (loopback only, `{name, port, ttl_secs}`),
-renewed at a third of its TTL capped at 30s by the runner that holds it, and
-released on exit; the TTL is the backstop for a runner killed outright, not
-the mechanism. A name any tier already holds is REFUSED rather than shadowed,
-because with two entries for one name which origin answers is a fact about map
-iteration order and the loser is a process that believes it is published. The
-claim id is not a credential and is not treated as one: every route that takes
-one is loopback-only, and a local process able to present one could have taken
-the claim itself.
+An append-only, Ed25519-authored total order per namespace
+(`commonwealth-rail-core` is the fold — zero I/O, zero clock;
+`commonwealth-rail` is the journal). `Op.actor` is the signing public key, the
+only field on the line a writer cannot forge for someone else.
 
-Two things follow the registry rather than being decided once at boot, and
-both had to: `Endpoint::set_alpns` adds and removes `APP_ALPN` on the live
-endpoint as the registry fills and empties (iroh applies it to new incoming
-connections, which is the right grain — a dial in flight keeps what it
-negotiated), and the gossip self-stamp reads `is_serving()` per stamp so
-`origins: [app]` is never a claim about an app that stopped an hour ago.
-A rails node publishes through the SAME loopback routes and deliberately grows
-no `[apps]` config table: `Config` and `MediaSection` are
-`deny_unknown_fields`, so one would make an un-upgraded rails daemon refuse to
-boot on a config a newer one wrote — the hazard is absent rather than handled,
-the same move `commonwealth_media::declared` makes with filename-as-key.
-Watched failing:
-`iroh_dialer_admission_e2e::an_app_claimed_at_runtime_becomes_reachable_and_stops_when_released`
-binds an endpoint WITHOUT `APP_ALPN` and asserts both ends — unreachable
-before the claim, unreachable again after the release — so a regression to
-boot-time protocol selection fails rather than passing on a test that had
-advertised it all along; and `apps::tests::a_claim_nobody_released_is_gone_when_its_ttl_passes`.
+**The rail carries an opaque `Payload`, and that cut is the design** — the
+transport does not get to know what an act means. `Payload` is a type and not
+a `serde_json::Value` for a specific reason: a signature covers bytes, and
+which bytes a `Value` serializes to depends on `serde_json/preserve_order`, a
+feature any crate added later can flip — which would make every signature in
+every ring stop verifying at once, presenting as a journal gone entirely
+`BadSignature`. So a `Payload` is canonical by construction (objects rebuilt
+with sorted keys, recursively) and floats are refused outright, because
+`1e2` / `100.0` / `100` are one value with three spellings.
 
-**The minimal rails daemon** (`commonwealth/crates/commonwealth-rails`, the
-`cw-rails` binary, `scripts/cw-rails-lift.sh --sandbox`, 2026-09-11).
-The process that IS your address on the mesh, with media registered on it and
-nothing else — what a Jellyswarrm-shaped shim author installs beside their
-media server. `cw-rails join <invite>`, then `cw-rails run`, and the shim sees
-three loopback routes (`GET /v1/mesh/status`, `GET /v1/mesh/media[?peer=]`,
-`POST /v1/mesh/media/fanout`) plus `X-Mesh-Member` / `-Node` / `-Pubkey` on
-every request its origin receives: no key, no relay, no port-forward, no VPN.
-A separate binary for a closure reason — `commonwealth-api` resolves 743
-crates (corpus-engine, arrow, the sovereign runtime) and this resolves 319
-(`cargo tree --edges normal`, 2026-09-11),
-and three `[[forbid]]` rows in `quality/ARCH_LAYERS.toml` keep it that way
-between lifts. All of it is composition: identity, the endpoint, the acceptor,
-`Forward::Http`, the bridge, dial-by-key, `Mesh` with its merge and proofs,
-the `mesh::wire` structs and all three media questions are owned elsewhere;
-new here are the config, the round loop, the routes and the CLI.
-**What it does NOT do**, each deliberate: admit joiners (no `/internal/join`
-and no invite minting — a mesh is founded by a full daemon, and that absence
-is most of why this lifts); join over LAN/mDNS (an invite with no iroh dial is
-refused by name; the legacy paths mean plaintext HTTP to an address); anything
-Jellyfin (GPL-2 against this repo's AGPL keeps the shim a separate
-distribution). Watched failing, all in `commonwealth-rails`:
-`an_invite_with_no_iroh_dial_is_refused_by_name` (join),
-`a_round_from_another_mesh_is_401_and_merges_nothing` (internal),
-`a_non_loopback_listen_address_is_refused_before_it_binds` (api).
-The instrument is a physical lift, not a crate-name count: it builds
-and tests the closure outside the repository, then joins a real mesh and reads
-its own three routes — four verdicts, and no invite abstains rather than fails.
+`admit(ops, …)` is **a function of the op SET, not of arrival order** —
+nineteen laptops gossip in nineteen orders. Dedupe by re-derived `OpId`, a
+content-derived total order `(ts_unix, actor, seq, id)`, a void set built from
+every correction at once that **never resurrects**, and sorted gaps, so two
+nodes agree on the *report* and not merely the acts. `gaps` is the half that
+refuses to fake completeness: a journal that cannot say "I may be missing
+something" lets an app state a wrong total with full confidence.
 
-**Which listener serves a route is the guard; "is the caller loopback" is not**
-(`ClientSurface`, `sovereign-daemon/src/server.rs`, 2026-08-28). Narrowing
-`cwth/client/0` from "any dial-string holder" to "any member" was a reduction,
-not a fix: the acceptor forwards by connecting `127.0.0.1`, so on every listener
-it feeds, a loopback peer address proves nothing. A member therefore landed on
-the operator's own `:9741` bind and could `POST /internal/guest/grant` — mint a
-credential for an outsider on someone else's node — with nothing presented.
-`client_auth`'s "loopback-or-full-token" was a false premise for that caller,
-and a loopback guard on those handlers would have read as a fix and gated
-nothing.
+**Correction lives in the rail on purpose** — "this earlier act was wrong, and
+it never comes back" is not an expense rule, and it is the rule most easily
+got wrong. **`Introduce` is evidence, never admission**: an introduction
+arriving from a peer moves no roster row, and `svrn ring roster add` is still
+the only writer of a roster.
 
-`ClientSurface` is now the one decider for both axes, and the daemon binds the
-client router three times:
+Replication is its own loop at a 60-second cadence, syncing by digest
+(`{actor → contiguous high-water mark}`, ~600 bytes regardless of history) —
+*contiguous* is load-bearing. The run counts from a SEALED FLOOR, which is
+what lets the rail delete: `RailAct::Seal` retires everything its author wrote
+before it, carries **no actor and no range** (so sealing another's history is
+unwritable rather than refused), and is authored rather than configured. One
+body is capped at `MAX_REQUEST_BODY_BYTES`; convergence is not, because
+`RING_SYNC_OPS_BUDGET_BYTES` chunks both directions and the exchange repeats
+until neither side moves.
+
+Verbs: `svrn ring` (new, roster add, dev, seal, log) and `svrn job` on the
+same rail — `ring` deploys an app to a trust ring, `job` hands that ring a
+unit of compute. Neither opens the journal directly: the roster the DAEMON
+loaded decides which acts are readable.
+
+### HTTP API
+
+**Client API — :9741, binds 127.0.0.1 by default.** The wildcard bind is
+reached only when something explicit asks for it. A non-loopback bind carries
+a bearer token or serves nobody; when the token chain fails entirely the
+posture installs NONE, so `client_auth` refuses every remote caller rather
+than serving unauthenticated.
+
+A non-loopback caller presents one of two bearers. `client_token` is
+daemon-wide. An **ephemeral guest grant** is the narrow one: short-lived,
+revocable, bound to a closed `Scope` enum whose `paths()` is the only route
+allowlist there is. A guest is not a mesh member and cannot mint further
+grants, because no `Scope` variant names `/internal/*`.
+
+| Path | Notes |
+|---|---|
+| `POST /v1/chat/completions` | OpenAI-compatible; `LocalOnly` privacy → 400 |
+| `POST /v1/responses` | OpenAI Responses-API adapter |
+| `GET /v1/models` | Names this daemon can dispatch by name, built from the local OICP manifest + every reachable peer's — the same source `locate_named_model` resolves against, so a listed id resolves and an omitted one does not |
+| `POST /v1/embeddings` | What peers call via `embed_http::http_embed_fn` |
+| `POST /v1/knowledge/search` | Determines target corpora, fans out, merges, reranks |
+| `/v1/apps*`, `/app/{app_id}/{*path}` | Mesh-app install/status + reverse proxy |
+| `GET /status` | Node / mesh / inference / knowledge summary, incl. `process.pid` + `run_id` |
+| `GET /oicp/v1/capabilities` | Provider manifest + federation info |
+| `/api/{version,tags,ps,show,chat,generate,embed,embeddings}` | Ollama-native compatibility shim, pure translation over the OpenAI handlers |
+| `POST /internal/ring/sync`, `/v1/rail/*` | The ring rail: anti-entropy, append, log, and the LIVE lane (delivery, not record — nothing reaches a store or a disk) |
+| `/internal/guest/grant`, `…/revoke`, `…/list` | Mint / kill / list guest grants. On the Operator bind ONLY |
+| `/v1/mesh/*`, `/v1/admin/*`, `/mcp/*` | Loopback-only |
+
+**Which listener serves a route is the guard; "is the caller loopback" is
+not.** The acceptor forwards by connecting `127.0.0.1`, so a loopback peer
+address proves nothing. `ClientSurface` is the one decider and the client
+router binds three times:
 
 | Surface | Reached by | Trusts a loopback peer | Serves `/internal/*` |
 |---|---|---|---|
 | `Operator` | a real local caller on `:9741` | yes | yes |
 | `Peer` | a MEMBER dialling `cwth/client/0` | yes | **no** |
-| `Guest` | `cwth/guest/0`, a downgraded stranger, and the guest door on `[daemon] guest_bind` (open only while a rail grant is live; also serves `/v1/rail/*` and the ring page at `/ring/` — `sovereign-daemon/src/guest_door.rs`) | no | no |
-| `Rail` | a deployed ring app, on `127.0.0.1:rail_port(client_port)` (9743 by default) | no (`UNTRUSTED_LOOPBACK`) | no — and it serves NOTHING but `/v1/rail/*` |
-
-The `Rail` bind is the only one of the three that is a real TCP listener on a
-FIXED port rather than an ephemeral loopback socket the acceptor forwards to —
-because the thing that dials it is a separate process (`svrn ring dev`) with
-only the config to go on. `commonwealth_core::config::rail_port` is the one
-derivation, so the daemon that binds it and the CLI that dials it cannot
-disagree on a non-default client port. **`UNTRUSTED_LOOPBACK` is the whole
-reason it is a separate bind**: `:9741` admits a loopback caller *before*
-reading a bearer, so a ring app pointed there would arrive as an operator with
-its grant ignored — namespace scoping would be decorative, and a guard nobody
-can watch fail is not a guard (§18.1). Watched failing:
-`rail_e2e::on_the_rail_bind_a_loopback_caller_without_a_grant_is_refused`.
-
-No address in `AcceptorRoutes` points at the operator listener at all, so the
-acceptor cannot reach that surface however it is called. Watched failing:
-`iroh_dialer_admission_e2e::routing_a_member_at_the_operator_listener_is_the_hole_this_closes`
-wires the member arm the old way and gets a 200 on `/internal/guest/grant/list`.
-
-**A guest reaches an encrypted mesh over its own ALPN, not the peers'.**
-An encrypted mesh binds the client API loopback-only, so the link a guest
-holds names an iroh dial string (`dial=`) instead of an address, and `svrn
-mesh use` / `svrn chat` tunnel to it. The acceptor routes that traffic on
-`cwth/guest/0` to the `ClientSurface::Guest` bind of the client router, which
-carries `ClientAuthPolicy::UNTRUSTED_LOOPBACK` — because the acceptor forwards by
-connecting `127.0.0.1`, and the default policy admits a loopback peer
-before reading a bearer, which would hand every holder of the node's
-public dial string the whole client API. Peers keep `cwth/client/0` and a
-listener that admits without a bearer: their federated inference carries
-no `Authorization` header at all, so routing them together would have
-broken one to fix the other. That is the `Peer` bind, not the operator's
-own — see the `ClientSurface` table above. Neither the guest nor the peer
-listener serves `/internal/*`, MCP, or any mounted host surface. There is no plaintext fallback: a link
-carrying `dial=` is tunnelled or it is refused (§18.3).
-
-| Path                          | Notes                                                  |
-|-------------------------------|--------------------------------------------------------|
-| `POST /v1/chat/completions`   | OpenAI-compatible. Routing differs by daemon shape (embedded vs standalone) — see `commonwealth/docs/routing-field-guide.md`. `LocalOnly` privacy → 400. |
-| `POST /v1/responses`          | OpenAI Responses-API adapter (codex 0.130+). Wire-format translator over chat-completions. See [`docs/inference.md`](./docs/inference.md). |
-| `GET  /v1/models`             | **Names this daemon can dispatch by name**, one row per name. Built from the local OICP manifest + every reachable peer's — the same source `locate_named_model` resolves against, so a listed id resolves and an omitted one does not. Carries `residency` (`resident`/`cold` — cold is a lazy slot, not an outage) and `advertised_by` (which nodes hold it). Falls back to the gossiped `inference_store` scan ONLY on the orchestrator daemon, which has no manifest; that path can say "the entry's last writer is reachable" and nothing stronger. Before 2026-08-27 the store scan was the ONLY path, and it advertised ids chat completions refused. |
-| `POST /v1/embeddings`         | Embedding endpoint (what `embed_http::http_embed_fn` peers call) |
-| `POST /v1/knowledge/search`   | Determines target corpora, fans out, merges, reranks   |
-| `/v1/apps*`, `/app/{app_id}/{*path}` | Mesh-app install/status + reverse proxy (`commonwealth-app`) |
-| `GET  /status`                | Node / mesh / inference / knowledge summary            |
-| `GET  /oicp/v1/capabilities`  | Provider manifest + federation info                    |
-| `/api/{version,tags,ps,show,chat,generate,embed,embeddings}` | **Ollama-native compatibility shim** (`routes_ollama.rs`). Pure translation over the OpenAI handlers above — lets Ollama-native clients (Open WebUI's Ollama mode, IDE plugins) connect. `chat`/`generate` are non-streaming-backed in v1: the inner handler runs `stream:false` and the complete answer is framed as Ollama NDJSON (one content frame + terminal). No CORS layer + the same auth posture as `/v1/*` (documented in-module); incremental streaming is a tracked follow-up. |
-| `POST /internal/ring/sync` | Ring-ledger anti-entropy for one namespace: the caller sends its per-actor contiguous high-water digest (and optionally ops), the responder ingests those and answers with its own digest plus as much of what the caller lacks as fits `RING_SYNC_OPS_BUDGET_BYTES`. Both `ops` arrays are budgeted and the sender repeats the exchange, so one body is not the unit of convergence. Own route on its own 60s cadence; `/internal/app/state`'s 10s full-snapshot push was the alternative and was deleted at cw-lift 2e, leaving this the ONE receiver and its loop the ONE sender of replicated state. |
-| `POST /v1/rail/append`, `GET /v1/rail/log` | The ring rail. Appends one signed act to the caller's namespace, and reads back the admitted acts (already in the one order every node applies them) + gaps. The payload is the app's and the rail reads exactly one field of it: a `guest` name equal to a roster member's is refused 409, so a guest's words are never shown under a member's name. There is no balance here to return. The namespace comes from `Scope::Rails` on the grant, never from the request; an operator (no grant) passes `?namespace=`. Mounted on `Operator` and `Rail`, and on neither `Peer` nor `Guest` — a ring rail is loopback-only in M0. A successful append raises `AppState::ring_write_nudge` (the third raiser, beside the KV pump and the work atlas's broadcaster), so a peer holds the act in about a second instead of at `ring_sync`'s sixty-second tick; the route still talks to no peer itself. |
-| `POST /v1/rail/live`, `GET /v1/rail/live`, `POST /internal/ring/live` | The ring rail's LIVE lane — delivery, not record (`routes_rail_live.rs`, `routes_internal/ring_live.rs`). POST fans one payload (≤ `LIVE_PAYLOAD_MAX_BYTES` = 4096, refused with 413 at both ends, never truncated) out to every online peer's `/internal/ring/live` with `pipeline_pause.rs::forward_to_peers`' fan-out, in a `{namespace, payload}` envelope whose namespace is the grant's (`routes_rail::namespace_for`, as append and log); the receiver refuses a namespace no live rail grant on it names and otherwise puts the payload in that namespace's bounded 256-entry in-memory buffer on `AppState` (`rail_live_buffer`, one accessor), and GET drains only the caller's namespace, reporting `dropped` for anything evicted. Nothing reaches a store, a journal or a disk, so `/internal/ring/live` gets NO `REPLICATION_SENDERS` row — that census's subject is replicated state, and it staying green is this lane's positive control while `sovereign-mesh/tests/main/ring_live_non_durable.rs` is the negative one. The lane exists because y-protocols awareness `outdatedTimeout` is 30 s and `ring_sync`'s cadence is 60 s: a cursor carried by the journal would have faded before it arrived. The payload is opaque TEXT and neither route looks inside it. |
-| `/internal/guest/grant`, `…/revoke`, `…/list` | Mint / kill / list ephemeral guest grants. On the `ClientSurface::Operator` bind ONLY: `:9742` has no auth gate, so a mint route there would let any mesh peer forge guest credentials — and the peer/guest binds of the client router 404 it for the same reason. Unreachable by a guest because no `Scope` names it either. |
-| `/v1/mesh/*` `/v1/admin/*` `/mcp/*` | **Loopback-only** (router middleware + per-handler `enforce_localhost`) |
-
-**What the host mounts on that router** (`sovereign-mesh`, sv-surface rungs
-D2-D8, 2026-09-09/10). The desktop's peripheral commands used to answer from a
-private in-process stack, so an ATTACHED app answered from its own objects
-while the daemon's went unread — the same question answering differently
-depending on which surface asked. Each family below is a door over an object
-the daemon already holds, mounted beside `reading_http` with one posture:
-router-level `from_fn(loopback_only)` **and** per-handler `enforce_localhost`,
-audited by `sovereign-mesh/tests/loopback_parity.rs` (including the PUT leg
-above, which no handler can satisfy alone). None of them is served on the peer
-or guest bind.
-
-| Prefix | What it serves | File |
-|---|---|---|
-| `GET /internal/corpus/status`, `GET /internal/corpus/{corpus}/atoms` | the one corpus-status decider, and `understanding_vocab::AtomsFile`'s `Vec<AtomEnvelope>` verbatim — paged because the installed wikipedia atlas is 846 MB (default 200, hard cap 2,000, an over-large limit served clamped and reported, an explicit `null` `next_offset` at the end, a missing atlas a 404 with a reason) | `reading_http.rs` |
-| `/internal/atlas/{corpus}/…` | `sovereign_tools::atlas_view` types off a `FileAtlasReader` over the daemon's `index_dir`: corpora, report, members, atoms (a POST — the filter carries a `Vec`), subgraph, atom detail. The section→chunk cache policy moved here with them | `atlas_http.rs` |
-| `/internal/atlas/conv/…` | the conversation-tiered browse over `runtime.lane_sources.conv_tiered` (`ConvBrowseReader`, `sovereign-core/src/conv_tiered.rs`): corpora, conversations, detail, entities, aggregate, chunk-entity progress. Absence has three answers — 503 no reader, 501 `NotImplemented`, 404 unknown conversation — never an empty list | `atlas_http.rs` |
-| `/internal/meshapp/{corpus}/…` | the thirteen `sovereign-meshapp` explorer projections (graph, node detail, findings, entities, claims, questions, reconciliation, subgraph, stats, timeline, chunk, documents, wrapped), with the page clamps that used to live in the desktop, plus the three SF-LVT parcel reads (`parcels?ids=`, `parcels/search?q=`, `parcel-analytics`) whose folds moved from `commands/meshapp.rs` to `sovereign_meshapp::parcels` on 2026-09-11 — the desktop now gates and calls instead of pulling every atom of a 208k-parcel atlas to filter three; DTOs in `daemon_wire::meshapp`. 404-vs-500 reads a closed `MeshAppError`, not a phrase table | `meshapp_http.rs` |
-| `GET /internal/corpus/enriched`, `GET /internal/corpus/{corpus}/starter-questions` | the enrichment-store reads (thin-desktop order, 2026-09-11): the enriched-corpus inventory over the DAEMON's `<data_dir>/enrichment` (`sovereign_enrichment_catalog::list_enriched_corpora_in`) and the starter questions `corpus_engine::enrichment::atlas::analysis::starter_questions` mines from a corpus's atlas — both folds the desktop ran over its OWN data root / every atom pulled over the wire until then. No atlas is a 404 naming the corpus, which the desktop turns into its excerpt-starter branch. DTOs in `daemon_wire::enrich` | `enrich_http.rs` |
-| `/internal/corpus/local/…` | the daemon's OWN local-corpus registry (`watched_folder_runtime::manager()`): list, remove, incomplete jobs, cancel, git check, tags, snapshots + rollback, clean, preview, search, ocr-available, and an ingest job answering 202 + `{job_id, progress_route}`. Since 2026-09-11 also a CLUSTER job: `POST …/{c}/cluster` (202, same ack shape) + `GET …/{c}/cluster/progress?after=N` serving the manager's `LocalCorpusProgress` frames verbatim from an in-process log (`ClusterProgress`); the desktop's `lc_cluster` re-emits them, and `preview`/`write-tags` now read the cache that job filled. Same day: `POST …/pre-scan` (`PreScanRequest` path + source_type → `PreScanAnswer`) registers the user-picked path on the daemon's manager (Obsidian arm with the daemon's snapshot root) and scans the config the registry kept — the desktop holds no local-corpus manager read at all now | `lc_http.rs` |
-| `GET /internal/corpus/local/{corpus}/ingest/progress` | `IngestProgress` over an `IngestOutcome` file written by ONE writer (`record_ingest_outcome`, from both ingest sites) carrying `IngestStats` verbatim, kept apart from the phase file so an ingest never stamps Complete on the map. `finished` with neither stats nor error is an error, never a zero-count success | `lc_http.rs` |
-| `/internal/governance/{corpus}/…` | `GovernanceView` plus the tension verbs (resolve / accept / dismiss / undo), seed, post-build seed and recipe render, over `index_dir/{corpus}/atlas`. A missing atlas is a 404 naming the path — the in-process read answered `Ok` + empty, so an unenriched corpus rendered "no conflicts" | `governance_http.rs` |
-| `/v1/insights…` | clip / list / search / delete, `POST /v1/insights/by-id` (`{insights, missing}` — dead ids are named, not silently dropped) and `GET /v1/insights/sinks`, which is the REAL sink registry where the desktop hard-coded an empty vec | `insight_http.rs` |
-| `/v1/notes…` | the daemon's `NoteStore`: create, query (a POST, because the filter carries three `Vec`s and `serde_urlencoded` cannot take a sequence), get, delete, set payload, retire | `notes_http.rs` |
-| `/v1/features/projects…` | the feature-project store's whole surface, over a `ServingCore.features` slot | `features_http.rs` |
-| `/v1/recipe-projects…` | `RecipeProject` composed daemon-side over its stores and data root — list/create, dashboard, TOML write (atomic, under the data root rather than a user path), link-recent-artifact, checkpoint restore, prelude | `recipe_project_http.rs` |
-| `/v1/mcp/servers…` | the daemon's own MCP config and mount: list, test, token PUT/DELETE. `connected`/`error` are always `None` with `mount.reason` stating the absence on every response — the runtime recipe drops the `McpServerManager` after boot, so this host has no source, and `connected = count > 0` was the fabrication refused | `mcp_config_http.rs` |
-| `GET /v1/skills`, `GET /v1/conversations/{id}/provenance` | the runtime's skills (`trust_level` lowercased HERE — the desktop held the only copy) and `Runtime::get_last_turn_provenance` (a null provenance is a 200, not a 404) | `turn_extras_http.rs` |
-| `/v1/documents`, `/v1/documents/legacy` | the document assets and the legacy-document listing + promotion over `ServingCore.state_store` + runtime (D9a; the desktop's nine document reads; ask-document's fall-through turn stays on the driver). Since 2026-09-11 the UPLOAD is a job here too: `POST /v1/documents` (`{path}` → 202 Pending record) + `GET /v1/documents/{id}/progress?after=N` (`DocumentIngestProgress`: the manager's `IngestProgress` frames with `asset_id` stamped, from an in-process log); and `POST /v1/documents/legacy` (`{path}` → `{source, chunks_created}`) is the old paperclip ingest. The desktop's `upload_document_asset` / `ingest_document` are call + poll. The ASK is a job as well: `POST /v1/documents/{id}/ask` (`{question, conversation_id}`; persists the user message, then route + execute + persist on the daemon's manager) + `GET /v1/documents/{id}/ask/{job_id}?after=N` (`AskProgress`: `OperationProgress` frames + a terminal `AskOutcome` — answered with the persisted message, fell_through for off-topic/empty-RAG which the client runs as an ordinary turn, or failed). `ask_document` on the desktop holds no manager. Since 2026-09-11 `manager_for` also hands the manager `runtime.lane().gliner`, so the T2 skeleton entity pass runs on the daemon's resident NER model rather than its LLM fallback — the module's own header asserted "a daemon holds none", which was never true: `sovereign-runtime-recipe` fills `LaneSources::gliner` for every host it commissions | `sovereign-daemon/src/documents_http.rs` | router `loopback_only` + per-handler `enforce_localhost` |
-| `POST /internal/corpus/recipes/import`, `GET /internal/corpus/recipes/{corpus}/parameters` | the recipe-authoring writes and reads (thin-desktop order, 2026-09-11): validate a pasted recipe offline (`test_recipe`, sample size 0, staged beside the engine's own recipes dir) and install it through `RecipeRegistry::install_local_recipe` — the ONE decider for "a user published a recipe", which `svrn recipe publish` now calls as well; and the `[parameters]` block for the install form, resolved by `fetch_recipe` so a just-imported recipe answers with no reload. The desktop held a third copy of the install loop over a `CorpusEngine` of its own, resolving THIS process's default recipes dir rather than the daemon's. A validation failure is a 200 with `success: false` and the errors; a body that is not a recipe is a 400. DTOs in `daemon_wire::recipes` | `recipe_http.rs` | router `loopback_only` + per-handler `enforce_localhost` |
-| `POST /internal/corpus/recipes/test`, `GET /internal/corpus/recipes/test/{job}/progress`, `POST /internal/corpus/recipes/harness`, `GET /internal/corpus/recipes/harness/{job}/progress` | the recipe-authoring RUNS (sv-surface svt-6, 2026-09-12) — the last thing the desktop needed a `CorpusEngine` for. `…/test` is the dry run: `sample_size == 0` is validation-only (static checks plus, when `offline` is false, one HTTP HEAD on the source URL) and answers `RecipeDryRunReport` INLINE; a sample ACQUIRES, so it is a job — 202 + `IngestJobAck`, 409 by recipe id. Both arms project through one `dry_run_report`, so a sampled run and a validation run cannot disagree about a field. `…/harness` is the deterministic authoring harness over a frozen sample, always a job because the first run captures; the sample lands under the DAEMON's `<data_dir>/harness/<id>`, and rung 6 (`enrich: true`) is `verify_atoms_at(<index_dir>/<id>)` — the corpus this daemon installed, in the index it serves retrieval from. The drive is `sovereign_authoring_harness::run_over_frozen_sample`, the SAME function `svrn recipe test` calls; what differs is rung 6, which is a parameter rather than a flag inside the drive. **The trailing `/progress` is load-bearing**: spelled `…/recipes/test/{job}`, axum prefers the static `test` over `{corpus}` and a recipe named `test` loses its `…/parameters` form — caught by `the_dry_run_progress_route_does_not_shadow_the_parameters_route`, which went red on exactly that. DTOs in `daemon_wire::recipes` (`RecipeDryRun*`, `RecipeHarness*`, `RecipeJobState`, `HarnessRunCardView`); client `TurnClient::{recipe_dry_run, recipe_dry_run_progress, recipe_harness, recipe_harness_progress}` | `recipe_http.rs` | router `loopback_only` + per-handler `enforce_localhost` |
-| `GET /v1/admin/hardware`, `GET /v1/admin/setup/catalog?profile=`, `GET /v1/admin/setup/slot?kind=`, `GET /internal/ner/model`, `POST /v1/admin/assets/download` (202), `GET /v1/admin/assets/download/{job}` | the daemon's WEIGHTS (sv-surface svt-7, 2026-09-12). `<data.dir>/models` belongs to the process serving from it, and until this landed a client probed that directory with its own filesystem calls, resolved the catalog with its own copy of `setup_planner`, and wrote into the root with a THIRD GGUF downloader. The four reads answer what this machine can run, what the tier's catalog offers, its single-pick fast/embed slots, and whether the GLiNER export is installed **under the id the daemon is configured for** — `configured_model_id()`, not the `DEFAULT_MODEL_ID` constant a client would repeat. The write is ONE job for both artifact kinds: `{kind: gguf|gliner}` over `setup_planner::download_gguf` into `<data.dir>/models/` or `gliner_ner::download_model` into the GLiNER root, answering `IngestJobAck` + a progress route in the IndexBuild pattern. Three refusals rather than guesses: an unknown `profile` or slot `kind` is a 400 naming the set; a `gguf` request names which of `url`/`file` is missing; and a `file` carrying a path separator or `..` is refused by SHAPE, because a client naming a destination outside the models root is the one thing this route must not honour. `AssetDownloadProgress.path` is populated only on `Complete` — the client writes that string into a model slot, so a path reported mid-download would configure a `.part`. The same four reads are ALSO what `svrn setup --plan --json` prints, in the same `daemon_wire` types, because on a first run there is no daemon to ask. DTOs in `daemon_wire::assets` + `daemon_wire::setup_plan`; client `TurnClient::{admin_hardware, setup_catalog, setup_slot, ner_model, asset_download, asset_download_progress}` | `assets_http.rs` | router `loopback_only` + per-handler `enforce_localhost` |
-| `/internal/corpus/catalog`, `/notebooks`, `/diagnose`, `/{corpus}/health`, `/{corpus}/coverage-card`, `/{corpus}/retry-enrichment` | the corpus catalogue and the notebook shelf's five-source fold over `installed_indexes()` (the one decider), the atlas readers and conv-tiered buckets; in-flight state stays on `/internal/corpus/status` (D9a; nine desktop reads in corpus.rs, budget.rs, corpus_install.rs, recipe_testing.rs) | `sovereign-daemon/src/corpus_catalog_http.rs` | router `loopback_only` + per-handler `enforce_localhost` |
-| `POST /v1/research` (202), `GET /v1/research/{job}/progress?after=N`, `POST /v1/research/{job}/abort`, `GET /v1/research/capabilities`, `GET /v1/research/runs`, `GET /v1/research/active`, `GET /v1/research/runs/{run}/report` | deep research as a daemon JOB (2026-09-11). Until then `sovereign_core::deep_research::run` was linked into BOTH the desktop's `dr_start` and the CLI verb and served by no route. `POST` launches through `launch::prepare` (the ONE `RunConfig` assembly), one run at a time (a second is a 409 naming the first); the job's frame log (`ResearchFrame`: `started`, every CHANGED `live` run-dir snapshot, one terminal `report_ready`/`failed`) is cursored by `after`, and the answer carries the elapsed/quiet clocks a client's `heartbeat` is made of. The run-dir readers (poller, shelf, report + constitution check) came down from the desktop whole and still read the loop's ICD artifacts as the single state source. The loop's web queries are machine-formed (`port.rs` passes `user_formed: false` at both `egress::verify` sites), so the daemon can host it without weakening the egress boundary. `ResearchLauncher` is the seam the e2e test stubs (`tests/main/research_surface_e2e.rs` pins the job contract; the loop has its own tests in `sovereign-core`) | `sovereign-daemon/src/research_http.rs`; DTOs in `sovereign-contracts/src/daemon_wire/research.rs`; client `TurnClient::research_*` | router `localhost_only` (no daemon handle — `launch::prepare` reads `SetupConfig` itself) |
-
-What could NOT cross is named at the site rather than papered over: a
-user-picked path (governance export, `lc_validate_path`, `lc_pre_scan`), an
-emitter-only output (`lc_cluster`), a config WRITE (`SetupConfig::save` has zero
-call sites in `sovereign-mesh` — every writer is CLI-side, so a
-`POST /v1/admin/config` comes first), and workflow-kind validation
-(`Workflow::parse` is a studio dep the layer map forbids here, so validation is
-`Option` with `validation_unavailable` stated and a `PUT …/toml` on a workflow
-project is a 501 rather than an unvalidated write).
-
-**Internal API — :9742, plaintext (perimeter-trust)**
-
-No per-request auth: the internal routes (gossip, scheduling, model/index
-transfer, knowledge fan-out) trust the network boundary. Binds `0.0.0.0`
-by default — set `[daemon] internal_bind` to pin it to a private interface,
-or create the mesh with `require_encryption` to force all traffic onto the
-iroh QUIC transport (which binds the internal router loopback-only). The
-historical per-session-cert/`TrustStore` mTLS scaffolding was removed
-2026-06-15 (see §5 "TLS / mesh encryption"); never describe `:9742` as mTLS.
-
-| Path                                | Purpose                          |
-|-------------------------------------|----------------------------------|
-| `POST /internal/gossip`             | Gossip exchange                  |
-| `POST /internal/scheduling/intent`  | Scheduling decision notification |
-| `POST /internal/scheduling/plan`    | New shard plan distribution      |
-| `POST /internal/model/transfer`     | Model file transfer (peer-to-peer) |
-| `POST /internal/rpc-warm`           | Distributed inference: host asks a worker to seed its RPC tensor-cache shard before a distributed load (auto-warm). `serve_model_file` honors `Range` for shard-only fetch. The host distributes only to ELIGIBLE workers (`sovereign_serving_host::worker_eligibility` — settle + flap-quarantine, surfaced in `svrn mesh status`); a remote crash mid-compute `GGML_ABORT`s the host, so distributed inference requires host supervision. See `docs/RPC_DISTRIBUTED_INFERENCE.md`. |
-| `POST /internal/index/transfer`     | Corpus shard upload (push)       |
-| `GET  /internal/index/serve`        | Corpus shard download (pull)     |
-| `POST /internal/knowledge/search`   | Inter-node shard query (fan-out target) |
-| `GET  /internal/latency/probe`      | Latency probe response           |
-
-The table shows the core mesh-protocol routes. `server.rs`'s
-`internal_router` registers ~30 more operational routes (corpus
-lifecycle `/internal/corpus/*`, model load/unload/inventory, app state
-+ registry, budget / quiesce / foreground-state controls, and the
-contribution/activity family listed under §5 "Desktop
-production-readiness").
-
-The loopback guard is defended in three layers: router-level
-`from_fn(loopback_only)` middleware, per-handler `ConnectInfo`
-extraction, and a pinned listener-shape test
-(`admin_http::tests::loopback_guard_works_under_production_listener_shape`).
-The listener must use
-`.into_make_service_with_connect_info::<SocketAddr>()` in
-`daemon::start_daemon` — bare `axum::serve` leaves `ConnectInfo`
-absent and the guards fail closed for *every* caller.
-
-### Knowledge, ledger, peer prefs
-
-- `MeshCorpusManager` / `ShardManager` — install / list / remove /
-  shard prepare / install received / consolidate.
-- `ShardManager::merge_participants(MergePlan)` — the ONE merge
-  implementation (ARCH §10.6). `coordinate_merge` resolves who
-  participated from handoff/queue state and then calls it;
-  sovereign-mesh's fold-side collector resolves participation
-  completely differently and calls the same function. A `MergePlan`
-  carrying `expected_partitions: Some(n)` REFUSES
-  (`corpus_engine::Error::IncompleteCoverage`) rather than produce a
-  subset canonical that would advertise itself as complete on gossip;
-  `None` keeps the legacy "merge whatever is present" behaviour, which
-  is what `coordinate_merge` passes.
-- **The merge finishes the job: `Ok(Some(info))` from
-  `merge_participants` means REACHABLE.** `CorpusEngine::merge_partitions`
-  → `sharding::merge_shards` writes the merged chunks and stops — the
-  output carries `ingestion_in_progress: true, indexes_built: false`, so
-  `installed_indexes()` skips it, `usable_indexes()` cannot search it,
-  and `hosted_corpora` gossip — built from `installed_indexes()` in
-  `sovereign-mesh::capabilities` — advertises nothing. Finishing it is
-  `corpus_engine::finalize_canonical` (`corpus-engine/src/sharding.rs`):
-  `build_indexes` → `mark_indexes_built` → `mark_ingestion_complete`,
-  then the content fingerprint LAST, because a peer pulling against a
-  fingerprint trusts the chunk set is stable and the ingestion-complete
-  bit is the proxy for stable. One name for that sequence, shared with
-  `merge_partitions_into_canonical`, which is where it was lifted from
-  (ARCH §10.6). **It is the last step of `merge_participants` itself**,
-  after the shard-dir cleanup — cw-lift 5g B8. Before that it was called
-  by the FOLD-side caller only
-  (`sovereign_grants::auto_recover::merge_from_fold_coverage`), and
-  `coordinate_merge` — the queue-mode caller, reached from
-  `routes_internal/corpus_queue.rs:210` and `:550` — shared the same merge
-  and had the identical gap: a queue-mode merge produced a canonical
-  holding every donor's chunks that `installed_indexes()` returned zero
-  rows for. "A merge produces a corpus someone can reach" is a
-  post-condition, so it lives with the function that promises it rather
-  than with two callers each remembering (ARCH #10).
-- When the merge lands and the finalize does not, `merge_participants`
-  returns `corpus_engine::Error::MergedNotFinalized { corpus,
-  canonical_path, chunks, detail }` and logs it at `error!`. Its own
-  variant because the state is neither neighbour (ARCH §18.3): the chunks
-  ARE on disk and the source partitions are already deleted, so that
-  directory holds the only copy — "nothing was produced" invites a caller
-  to re-derive from partitions that are gone, and "merged" claims a built
-  canonical, which is the defect verbatim. The canonical is deliberately
-  left in place. `merge_from_fold_coverage` carries the three fields
-  across the crate boundary unchanged as
-  `RecoveryOutcome::MergedButNotInstalled`; the two spellings stay
-  separate for the same dependency-direction reason `IncompleteCoverage`
-  does. Nothing retries it: the next tick short-circuits on
-  `AlreadyHasCanonical`.
-- `embed_http::http_embed_fn` — POSTs to `/v1/embeddings` so a node
-  without a local embed model still ingests via the engine.
-- `grounding.rs` — `GroundingConfig` + `search_for_grounding` +
-  `format_knowledge_context`.
-- **Dimensional contribution ledger**
-  (`commonwealth-core::contributions`) — append-only event log
-  (`LedgerEventKind` variants `InferenceServed`, `InferenceReceived`,
-  `KnowledgeQueryServed`, `ShardTransferred`, `StorageSnapshot`,
-  `JobUnitCompleted`) with pure aggregation into per-node
-  `NodeContributions`. No `balance`, no exchange rate, no ranking —
-  units are incommensurable. Storage in
-  `commonwealth-state::ContributionEmitter` (gossip-replicated
-  `MeshStore` under `app_id = "contributions"`). Pull-side
-  `ShardTransferred` is emitted by the merge leader on behalf of
-  the peer that shipped bytes — the schema carries an explicit
-  `from_node`, and the aggregator credits `bytes_served` to it.
-  **`JobUnitCompleted` is the work plane's dimension** (cw-lift 5h):
-  a donor that ran another member's unit to a verdict credits
-  `NodeContributions.compute_donated` (a `DonatedCompute` of `units`
-  + `wall_seconds`), counted apart from inference because a CI shard
-  is not an inference request. It is emitted ONCE by the donor, in
-  `sovereign-daemon::work_donor::run_unit`'s `Ok` arm after its own
-  signed `Complete` appends — deliberately NOT derived by every node
-  that folds that act, because this log converges by "one write site,
-  one event" while the `work` journal converges by total order, so a
-  per-folder derivation would write one fact once per ring member
-  under N distinct LWW keys. `work_donor::credit_for` carries the
-  argument and the at-least-once analysis. `wall_seconds` is also the
-  half a folding third party could not reconstruct: the journal
-  carries lease-held time, not compute. `handoff` + `unit_hash` +
-  `donor_actor` (the `ActorKey` admission verified, not the emitter's
-  self-reported `node_id`) are the audit trail back to the signed act.
-  **Nothing renders this dimension to a person yet**: `mesh_admin.rs`'s
-  `NodeContributionsView` is a field-frozen flat mirror carrying only
-  the inference/corpora/bytes fields, `svrn mesh balance` is a stub,
-  and the daemon's `MeshStore` is in-memory — the rendering surface is
-  the next rung's work, not this one's.
-- **Local Activity ledger** (`commonwealth-core::activity`) — the
-  glassbox counterpart answering "what is *my* daemon doing, even as
-  a mesh of one?" A sibling of the contribution ledger, not part of
-  it: `ActivityEventKind` variants (`LocalInferenceServed`,
-  `EmbeddingsServed`, `LocalKnowledgeServed`, `ChunksIngested`,
-  `CorpusEnriched`, `NewsworthyFetched`) record resource work that
-  never crosses a peer boundary, and `aggregate_activity` folds them
-  into one self-view `ActivitySummary`. Storage in
-  `commonwealth-state::ActivityEmitter` under the **gossip-excluded**
-  `app_id = "activity-private"` (in `GOSSIP_EXCLUDED_APP_IDS` — your
-  own usage never gossips, the deliberate contrast to
-  `contributions`). Recorded at daemon boundaries: the local arm of
-  `routes_inference::chat_completions`, the `embeddings` handler
-  (previously unrecorded — a peer using your embed model was
-  invisible), and the corpus-ingest `ProgressCallback`
-  (`ChunksIngested` on `Complete`, `CorpusEnriched` on the
-  structural-atlas pass). Surfaced via `GET /internal/activity/
-  {summary,recent}`. Desktop chat runs the in-process Runtime and
-  never hits a daemon HTTP boundary, so its slice is read *derived*
-  from the `ResponseProvenance` already persisted on each message via
-  `SqliteStateStore::summarize_chat_activity` (no new write path).
-  All three feed Settings → **Activity & Sharing** (rebuilt
-  `SharingSection.svelte`), which also hosts "the reins": ingest
-  throttle, mesh-quiesce, and peer-share ceiling/pause controls.
-- **Peer preferences (Ostrom sanctions)** —
-  `commonwealth-state::peer_preferences` is the local-only,
-  gossip-excluded store of per-peer affinity multipliers (clamped
-  to `(0.0, 1.0]`). The manifest endpoint reads `X-Node-Id` and
-  multiplies advertised `CapabilityClaim.affinity` per peer; the
-  penalized peer's scorer sees lower affinities and naturally
-  routes elsewhere. Filtering enforced in two places
-  (`peer_preferences.rs` + `store.rs`).
-  Read and written over the wire since sv-surface svt-3:
-  `GET /internal/peer-preference/list`,
-  `POST /internal/peer-preference/{set,clear}`
-  (`sovereign-daemon/src/routes_internal/peer_preference.rs`, mounted
-  `server.rs:526-536`), reached by `TurnClient::{peer_preferences,
-  set_peer_preference, clear_peer_preference}`. The clamp and the
-  32-hex-char node-id precondition stay in the daemon — a client
-  states neither. The desktop's three Mesh Health commands go through
-  that client in BOTH bootstrap modes, which is what took
-  `commonwealth-core` and `commonwealth-state` out of
-  `sovereign-desktop/src-tauri/Cargo.toml`; before svt-3 the Attach arm
-  refused with "set via `commonwealth peer-preference set` instead" and
-  the list arm answered an empty list it could not distinguish from
-  "none set".
-- **Ten wire DTOs moved below the daemon** (svt-3, 2026-09-11).
-  `sovereign_contracts::daemon_wire` holds the answers a client parses
-  that are pure serde over primitives: `OcrAvailability`, `CancelAck`,
-  `IngestJobAck` and `LocalSearchHit` (from `lc_http`), `NoteEntry`
-  (`notes_http`), `LegacyDocumentEntry` (`documents_http`),
-  `ConversationListEntry` and `CreateConversationResponse` (`turn_http`),
-  and `McpServerView` / `McpMountStatus` / `McpServersResponse`
-  (`mcp_config_http`). Each was defined inside the `*_http` module that
-  serves it, which is the right home for a ROUTE and the wrong one for a
-  TYPE: naming `OcrAvailability` — one `bool` — cost `sovereign-desktop`
-  a layer edge onto `sovereign-mesh`. `sovereign-mesh` re-exports every
-  one at its historical `*_http::Name` path, so the routes, their tests
-  and the CLI are unchanged; this is a relocation, not a rename. The one
-  consequence that is not: `impl From<Note> for NoteEntry` is illegal
-  once both types are foreign to `sovereign-mesh`, so the projection is
-  now the free function `notes_http::note_entry` — still one
-  implementation, still its two callers. The test for whether a DTO can
-  come down is that it closes over nothing but primitives.
-  `lc_http::IngestProgress` (over
-  `corpus_engine::enrichment::state::EnrichmentState`) and
-  `mesh_http::StatusResponse` (over
-  `commonwealth_core::capabilities::OriginKind` and
-  `commonwealth_media::PeerTransportPath`, reached through
-  `daemon::MemberReach`) do not, and stay where they are until the
-  vocabulary they close over has a layer-0 home.
-- **The mesh view came down, and the two that cannot got a READ** (svt-3,
-  2026-09-11, same day, second landing). `OriginKind` moved to
-  `oicp_types::origin` (commonwealth-core re-exports it), which unpinned
-  the whole mesh view: `daemon_wire::mesh` now holds `MeshStatus`,
-  `MeshMember`, `MemberStatus`, `ContributionSummary`, `MeshCorpus`,
-  `CorpusStatus`, `JoinConfirmation` (from `types`), `MemberDto`,
-  `KnownMeshDto` (`mesh_http`), `SelfReachability`, `ReachabilityStatus`,
-  `RecoveryEvent` (`daemon` / `iroh_watchdog`), `RelayCandidate`
-  (`mesh_discovery`); `daemon_wire::recipe_projects` holds the five
-  `/v1/recipe-projects` answers plus `ArtifactKind` and `CheckpointMeta`
-  (from `sovereign-recipe-author`, which re-exports them — the
-  dashboard tags every project with the enum, and `snapshot_basename` /
-  `label` travelled with it because an inherent impl cannot stay behind
-  on a foreign type). Three private ctors became free functions in
-  `recipe_project_http` (`list_entry_from_row_and_summary`,
-  `validation_nothing_drafted`, `validation_failed`), the same orphan-rule
-  consequence as `note_entry`. The two DTOs that still close over runtime
-  types — `mesh_http::StatusResponse` (worker-eligibility view,
-  cross-family transport path) and `lc_http::IngestProgress` (enrichment
-  phase file) — stay, and the client is owed a READ of each, not the
-  type: `MeshStatusSummary` and `IngestProgressView<Stats>` are the fields
-  the desktop reads, parsed from the same bytes, pinned to the route's
-  type field by field in `sovereign-mesh/tests/main/wire_view_drift.rs`
-  (rename either side and it is red). `IngestProgressView` is generic over
-  the receipt's counts so the desktop reads `IngestStats` typed while the
-  contract crate names no capability-layer type. Two pass-throughs the
-  desktop never field-read (`governance_http::GovernanceViewPayload`, the
-  `corpus_watch_http` answers and `WatchedFolderConfig`) cross as
-  `serde_json::Value` — the route's bytes forwarded, no mirror to drift;
-  on register an absent `config` OMITS the key so the daemon's
-  `#[serde(default)]` supplies its own default (a `null` would 422).
-  Two reads the desktop used to do itself moved to the daemon: invite
-  preview is `POST /v1/mesh/join/preview` (`JoinPreviewRequest` →
-  `JoinConfirmation`, parsed by the SAME `parse_join_argument` the join
-  uses, so a preview can no longer refuse a bare key the join accepts —
-  `parse_deep_link` lives in `commonwealth-discovery`, which the contract
-  layer cannot see, so it is a route and not a relocation), and the node
-  id the desktop's corpus engine partitions by comes from `GET /status`
-  (`DaemonIdentity.node_id`, `TurnClient::daemon_status`) instead of the
-  daemon's `<data_dir>/node_id` file — the old read GENERATED an id when
-  the file was absent, a second minter of the daemon's identity; now a
-  host that answered the reachability probe but not `/status` refuses the
-  boot in its own words, never an invented id.
-- **The workflow job answers came down too** (svt-3, 2026-09-11, third
-  landing). `daemon_wire::workflows` holds the thirteen `/internal/workflows/*`
-  shapes (`WorkflowListEntry`, `WorkflowParamSpec`, `CapabilitiesQuery`,
-  `CapabilitiesResponse`, `RunRequest`, `RunResponse`, `JobQuery`,
-  `JobStatus`, `JobResponse`, `JobEvent`, `WorkflowJobEvent`,
-  `JobItemOutcome`, `WorkflowListResponse`); `sovereign_workflow_host::
-  workflow_http` re-exports them and the CLI's `workflow_cmd` is unchanged.
-  The desktop named them through the workflow ENGINE crate — the last code
-  reason for its `sovereign-workflow-host` edge. Orphan-rule consequence:
-  `From<WorkflowProgress> for WorkflowJobEvent` is the free function
-  `workflow_http::job_event_from_progress` and `JobStatus::from_event` is
-  `status_from_event`, each with its one caller.
-- **The mesh MUTATIONS cross too, same rung** (svt-3, 2026-09-11).
-  `mesh_create`, `mesh_join`, `mesh_rotate_invite`, `mesh_switch`,
-  `mesh_leave`, `mesh_forget`, `mesh_list`, `mesh_get_state`,
-  `mesh_is_running`, `mesh_diagnostics` and `mesh_relay_candidates` in
-  `sovereign-desktop/src-tauri/src/mesh_commands.rs` each held TWO
-  implementations — an Attach arm hand-rolling `reqwest` against
-  `http://localhost:{port}/v1/mesh/…` and a Local arm reaching into an
-  in-process `EmbeddedDaemon` — and the pairs had already drifted:
-  rotate exposed the client API on the wire path and not in-process,
-  join accepted three invite forms over the wire and only a
-  `sovereign://` deep link in-process, `mesh_list` re-derived its five
-  fields from `known_meshes()` plus a direct `persist::active_mesh_id`
-  read of a file the daemon owns, and `mesh_forget` worked in NEITHER
-  mode (Attach refused naming the CLI; the arm behind that refusal
-  asked a daemon this app no longer commissions). One path now,
-  through `TurnClient` on `client_base_url()` — and not a choice
-  between two live arms: `05586220f` left `AppState::mesh` initialised
-  to `None` (`state.rs:318`) and written nowhere, so every Local arm
-  deleted here was already answering "Members empty" on every boot.
-  `POST /v1/mesh/forget` was WRITTEN for this rung and shares
-  `SwitchRequest` with Switch, because both take one reference and
-  resolve it through the same `persist::resolve_known` — which is the
-  bug `forget_mesh` shipped once already, refusing the id prefix
-  `switch_mesh` accepted. Two reads become `Err` where they were
-  silence (`mesh_relay_candidates`, `mesh_get_state`), the same
-  correction chunk 3 made for the preference list. ONE gap stays and is
-  named rather than papered over: `mesh_diagnostics` returns no
-  discovered peers — the mDNS table is the daemon's and no route
-  carries it (task #37).
-- See [`docs/MESH_LOAD_AWARENESS.md`](./docs/MESH_LOAD_AWARENESS.md)
-  for peer-admission, contribution ceiling, and foreground-yield.
-
-### Foreground yield is bounded (2026-08-18)
-
-`YieldHook::should_yield()` answers "should I stand aside *right now*".
-It is a **level** predicate — `now - foreground_last_active_ts < window`
-— with no memory of how long the asker has already been parked, so any
-request cadence shorter than `window` holds it true indefinitely. Every
-consumer that parks on it therefore pairs it with
-`corpus_engine_yield::DeferralBudget`, and that pairing is the
-invariant, not a convention:
-
-- `MAX_FOREGROUND_DEFERRAL = 300 s` (five whole default 60 s windows,
-  and half the desktop's 600 s `enrich-once` client timeout). It is
-  deliberately **not** an env flag or a config field: a liveness bound
-  someone must remember to switch on is not a liveness bound.
-  `DeferralBudget::with_cap_at_most` clamps to it, so a caller can only
-  tighten the bound, never weaken it.
-- `corpus-engine`'s two checkpoints (before each embed batch, before the
-  enrichment phase) both go through `engine::yield_gate`, which owns the
-  wait loop, the 5 s poll interval, and the three events — `yield:
-  deferring`, `yield: resuming`, and `yield: deferral cap reached`
-  (WARN, carrying `deferred_secs` and `cap_secs`). The override event is
-  emitted inside the helper so no checkpoint can adopt the bound and
-  forget to announce it. `YieldExit` is an enum rather than a bool so
-  "resuming — foreground idle" cannot be printed after an exit that was
-  a cap override.
-- `AppStateInner::foreground_yield_remaining_secs` is the single
-  implementation of the predicate itself. It previously existed three
-  times (the hook, `should_yield_to_foreground`,
-  `seconds_until_foreground_idle`) and the copies had already diverged
-  on the backwards-clock case, so the `/internal/daemon/foreground_state`
-  route could report the opposite of what ingest was doing.
-
-**Why this exists.** On 2026-08-18 a `sovereign-server` mobile host
-(`[[inference.backends]] type = "remote"` → `127.0.0.1:9741`) ran
-`HybridProvider::start_health_loop(30)`, which POSTed a 16-token
-`"ping"` completion to the local daemon's `/v1/chat/completions` every
-30.0 s. That handler bumps foreground unconditionally, so a 30 s probe
-against the 60 s window meant the window never lapsed; three consecutive
-real-e2e runs died with `resuming enrichment` appearing zero times and a
-misleading "bridge listen_any regression" message. The probe side is
-fixed too — `HybridProvider::health_sweep` now probes only backends the
-tracker has marked unavailable, since real traffic already maintains a
-healthy backend's health — but the bound is what makes the invariant
-hold for the case nobody predicted, including an ordinary user who sends
-a chat every 30 seconds.
-
-### Test harness
-
-`sovereign-mesh-test-harness` (`commonwealth-test-harness` until the
-`domains-2` move, 2026-09-11):
-
-- `SimulatedMesh<S>` — orchestrates many `SimulatedNode<S>`s in-process,
-  each with its own state `S` and HTTP listeners on random ports. `S` is a
-  type parameter (the OICP/contracts seam): the harness's library names no
-  host, and the caller binds it — `AppState` in `sovereign-mesh`'s tests,
-  supplied through the `dst` feature's dev edge.
-- `SimulatedNodeBuilder` — fluent hardware-profile builder.
-- `MockLlamaServer` — Axum responding to `/v1/chat/completions` and
-  `/health` with canned responses; request counting via
-  `Arc<AtomicU64>`.
-- `fixtures.rs` — reusable hardware profiles, models, capability
-  profiles.
-
-`tests/integration.rs` covers mesh formation, gossip convergence,
-layer assignment, inference E2E through the mock server, fault
-recovery, graceful pause/resume, OICP routing, multi-model
-portfolio, knowledge fan-out, ledger accuracy. Deterministic timing
-— no real 10s gossip waits.
-
-### Distributed state + apps
-
-`commonwealth-state::MeshStore` — SQLite KV (WAL mode):
-`StoreEntry { app_id, key, value: Bytes, timestamp, origin: NodeId }`,
-LWW conflict resolution, per-`app_id` namespace, `RetentionGc` for TTL at
-the window `commonwealth-state::retention` declares.
-
-**It is a PROJECTION of the ring rail since cw-lift 4, not a replica,
-and readers are unchanged.** `get` / `scan` answer exactly what they
-did; what changed is where a row comes from and where a write goes. Truth is the ring journal — an append-only signed log on disk, one
-directory per namespace — and this store is the fold of it:
-
-- **Out.** `set` / `delete` write the row and insert a
-  `rail_outbox` row in the SAME transaction (`backend.rs`), drained by
-  the pump in `sovereign-mesh` via `MeshStore::outbox_take(limit)` /
-  `outbox_ack(&[id])`. A drained row is an
-  `Outboxed { id, app_id, op: rail_kv::KvOp }` — the queued write and the
-  journal line are ONE type, so a tombstone has one spelling
-  (`op.value == None`) between the outbox, the wire and the fold
-  (ARCH §10.6). The `rail_outbox.deleted` column is still written and no
-  longer read. `merge_entry` deliberately does NOT enqueue — it
-  is the receive side, and a row that re-entered the outbox would echo
-  around the mesh forever. The SENDER-side privacy guard is inside
-  `enqueue_on`, not at the call site: `is_gossip_excluded` is the one
-  predicate, so an excluded namespace cannot enter the queue even by a
-  caller who forgot (ARCH §7.1).
-- **Vocabulary + fold.** `commonwealth-state::rail_kv` — one act,
-  `{"k", "v" (base64, absent on a tombstone), "t", "d"}`, plus the snapshot
-  MARK `{"snap": <the seal's seq>}` below, and
-  `project(&Admission) -> Projection { rows, unreadable, sealed_actors }`.
-  An op strictly below its own actor's `Admission::floors` entry is RETIRED
-  and does not fold at all — exactly the set `RingJournal::compact` deletes,
-  so the answer cannot depend on whether this node's prune has run yet, and a
-  key a snapshot declined to re-append cannot come back from the retired line
-  still on disk (§10.6). Per key the
-  act with the greatest `(t, actor, id)` among admitted NON-VOIDED ops
-  wins. `t` is the ORIGINAL write time, not the journal line's
-  `ts_unix`: a snapshot re-append after a seal is a new LINE carrying an
-  old WRITE, and folding on the line would hand every key to whoever
-  snapshotted last. Acts this build cannot read (another app's
-  vocabulary on the same rail — `mesh-measurements` — or a peer on an
-  unknown shape) are COUNTED in `unreadable`, never dropped silently
-  (ARCH §18.3). Tie-break on `(actor, id)` also closes the cross-node
-  divergence `merge_entry_equal_timestamp_keeps_incumbent` pinned as a
-  known limitation: on the rail there is no arrival order to depend on.
-- **In.** `MeshStore::apply_projection(app_id, &Projection, origin_of,
-  self_id) -> Applied { merged, deleted, reconciled, expired, withheld,
-  unattributed }`. The
-  whole `Projection` goes in rather than its rows, because the live sets below
-  are the same fold's second answer and pairing fresh rows with a stale claim
-  would retire a key on the strength of a different journal (§10.6). Values go
-  through
-  `merge_entry` (LWW at `t`); a tombstone deletes only what is not newer
-  than it, in one statement so a concurrent `set` cannot be taken. An
-  actor the roster cannot place is counted `unattributed` and skipped
-  rather than attributed to an invented `NodeId`. An excluded `app_id`
-  is refused with an `Err` naming it — the RECEIVER-side privacy guard,
-  the half `routes_app_internal` used to do inbound before rung 2e deleted
-  that route. Pinned end to end by `sovereign-mesh::ring_sync`'s
-  `a_peers_private_namespace_is_taken_by_the_rail_and_refused_by_the_projection`:
-  a hostile peer's private namespace IS ingested by `/internal/ring/sync`
-  (the rail is author-blind, by design) and reaches no store.
-- **The seal reconciliation — a tombstone keeps travelling past the seal that
-  retired it.** For every actor in `Projection::sealed_actors`, the rows this
-  store holds on that actor's behalf are reconciled to the set that actor
-  asserts: a row whose origin is that actor and whose key the actor does not
-  name is RETIRED (counted `reconciled`, apart from `deleted` — a tombstone is
-  an op that says "delete this", a reconciliation is the absence of one from a
-  set an actor has vouched is whole). **Two gates decide membership of that
-  map and both are necessary**: the actor's `snapshot_mark` for its CURRENT
-  floor is held, and no `RailGap::SequenceHole` names it — together, every seq
-  from the floor to the mark is on this node, which is every row of the
-  snapshot. The cheaper alternatives are both wrong and both are pinned as
-  such: `is_complete()` is TRUE on a node holding only the seal (the hole
-  audit runs `floor..=highest` and the seal is both), and "some op landed
-  above the floor" is true of a half-arrived snapshot and FALSE of an empty
-  one — which is the K7 case itself, an actor whose last live key was deleted
-  just before it sealed. An actor absent from the map makes no claim, and
-  absence is never read as an empty live set (§18.3). **`self_id` is
-  skipped**, and that is the direction of truth rather than a special case:
-  for a peer the journal is upstream of this store, for THIS node the store
-  leads the journal by an outbox drain, so reconciling self would read our own
-  lag as a retirement and delete a write still in the outbox. The pins are
-  `a_seal_carries_a_delete_the_peer_never_received` and
-  `a_snapshot_that_arrives_in_two_chunks_retires_nothing_until_the_mark`
-  (`ring_sync`), and `apply_projection_never_reconciles_this_nodes_own_rows`
-  (`commonwealth-state`).
-- **Retention is part of the fold, because on a projection nothing else can
-  be** (`commonwealth-state::retention`, 2026-09-08). A row a local sweep
-  deletes has no incumbent, so the next round's `merge_entry` re-inserts it
-  from the journal — `RetentionGc`'s thirty days on `contributions` were undone
-  within a minute, every minute, on any node with an online peer, and the
-  work atlas's 60 s sweep escaped only because it evicts through
-  `MeshStore::delete` (a tombstone, an act) rather than through `gc_app`. The
-  window is now declared once per namespace in `retention::RETENTION_WINDOW_DAYS`
-  — `contributions` at `DEFAULT_WINDOW_DAYS`, which is the window its readers
-  aggregate over, so a row past it is provably invisible — and BOTH sides read
-  it: the fold refuses a row below the floor (`withheld`) and retires a held
-  one (`expired`), and `RetentionGc::for_namespace` takes its TTL from the same
-  table rather than from its caller (§10.6). Two cutoffs would spend every
-  round undoing each other. **An expiry publishes nothing**: the floor is `now`
-  minus a constant and `t` is on every op, so every node derives it identically
-  — a tombstone per retired row would add a journal line on every node in the
-  mesh for each row retention exists to remove. The store bound reaches the
-  JOURNAL through the seal: `snapshot` re-appends the live set FROM THE STORE,
-  so a row the floor keeps out is not carried above the new floor and the
-  compaction deletes its line. `RetentionGc` is still the bound on a node with
-  no online peer, because `run_one_round` returns before projecting anything
-  when the peer list is empty. Pins:
-  `a_retention_sweep_is_not_undone_by_the_next_projection` and
-  `an_authors_own_retention_sweep_is_not_undone_and_puts_nothing_on_the_rail`
-  (`ring_sync`), `the_projection_neither_takes_nor_keeps_a_row_past_the_retention_window`,
-  `the_sweep_and_the_fold_keep_exactly_the_same_rows` and
-  `a_delete_survives_the_fold_and_an_undeclared_sweep_does_not`
-  (`commonwealth-state`).
-- **A replicating `app_id` is a ring namespace verbatim**, and a
-  namespace names a DIRECTORY (`<root>/rings/<ns>/`), so it must satisfy
-  `commonwealth-rail`'s `valid_namespace` — `[a-z0-9_-]{1,64}`. The one
-  offender in the workspace was renamed rather than the charset widened:
-  `corpus_engine::update::newsworthy_watcher::APP_ID_TRACKED` is
-  `wikipedia-newsworthy-tracked` (was `…:tracked`). A colon is legal on
-  POSIX and APFS and is not on NTFS, and the desktop ships on Windows
-  linking `sovereign-mesh` and through it `commonwealth-rail`.
-
-- **The pump, the seal and the fold on the receive side are the daemon's**
-  (`sovereign-mesh/src/rail_kv_pump.rs`). `spawn_rail_kv_pump` runs beside
-  `spawn_ring_sync_loop` and drains the outbox every
-  `RAIL_KV_PUMP_INTERVAL` (2 s): per row, `rail.journal(app_id)` →
-  `rail.roster(&journal)` (THE door) → `journal.append(Record)`, then ack.
-  Three verdicts, kept apart (§18.2): appended and acked; **deferred** on
-  `RailError::NotInRoster` — a solo daemon is a normal daemon, the row STAYS
-  queued and travels the moment membership exists, logged once per namespace
-  per tick at debug; **refused** on anything else — acked WITH a warn naming
-  the sentence, never a silent drop and never an infinite retry.
-  `MeshStore` is `in_memory()` in production, so the pump's FIRST act at boot
-  is `project_all_on_disk` — the store is rebuilt from the journals or it
-  holds nothing at all.
-- **On receive, the fold runs once per namespace per ring-sync round**, after
-  every peer, in `run_one_round` — NOT inside `exchange`. Half the ops a node
-  receives never pass through its own exchange: a peer PUSHES on call 2 of
-  ITS exchange and those land through `/internal/ring/sync`, a route in
-  another crate. A projection hung off our own pull count would be blind to
-  exactly the direction a local write creates.
-  `RoundOutcome::namespaces_projected` reports it, and
-  `a_round_projects_the_namespace_even_when_it_pulled_nothing` is the pin.
-- **A namespace's vocabulary is chosen by NAME, not by parse failure.**
-  `rail_kv_pump::projector_for` is one selector returning `Some(Kv)`,
-  `Some(Work)` or `None`, against `MEASUREMENTS_APP_ID` and
-  `commonwealth_work::WORK_NAMESPACE`. Each fold's own `unreadable` count
-  would work as a discriminator and would then report ~28 unreadable acts a
-  round for a measurements ring behaving perfectly — worse for `work`, whose
-  count would rise with how many leases a donor is renewing. A count that
-  fires when nothing is wrong stops being read (§18.3). It is deliberately NOT
-  keyed on `DAEMON_OWN_NAMESPACES`: that list answers whose roster the daemon
-  derives, and keying the projector on it would change every app ring's
-  projection. Both non-KV namespaces are read by `snapshot` through the same
-  selector, so the send and receive halves cannot drift onto two answers
-  (§10.6).
-- **A local write does not wait for the 60-second round.** One
-  `tokio::sync::Notify` is held by both halves: the pump raises it after any
-  successful append and `spawn_ring_sync_loop` selects on it beside its
-  interval sleep. Same wire, same sender — the pump never talks to a peer, it
-  asks the one replication path to run.
-- **Which namespaces replicate is DECLARED**, in
-  `ring_roster::DAEMON_OWN_NAMESPACES`, and every entry is the constant its
-  owning subsystem exports (`INFERENCE_APP_ID`, `CONTRIBUTIONS_APP_ID`,
-  `PROCESSED_SHARDS_APP_ID`, `NOTES_APP_ID`, `APP_ID_PUBLIC`,
-  `APP_ID_TRACKED`, `MEASUREMENTS_APP_ID`) rather than a literal repeated
-  here (§10.6). `MeshRosterSource::install` derives a roster from membership
-  for each. It has to be a list and not a rule: an APP's ring keeps a roster
-  FILE, and there is no property of a namespace string that separates
-  `inference` from `house-expenses` — a fallback like "derive when the roster
-  file is empty" would silently admit every mesh member as an author of an
-  app's journal (§7.1). A `MeshStore` `app_id` that is NOT on the list
-  appends nothing and says so, which is the loud failure.
-
-`all_entries_for_gossip` was the OLD contract — the whole store, at peers, on
-a timer — and it is **deleted at cw-lift 2e** together with gossip Step 4,
-`broadcast_now`, the `/internal/app/state` route, `recv_app_state`,
-`AppStateGossipBody`/`GossipStoreEntry` and `backend::all_rows`. `merge_entry`
-survives as the fold's own LWW upsert, called only from `apply_projection`.
-There is ONE replication path.
-
-`commonwealth-app` — mesh app platform: `MeshAppManifest`
-(gossiped), `AppPermissions` (`mesh_store_read`/`_write`,
-`inference_access`, `knowledge_access`), `AppRegistry`,
-`AppProcess` lifecycle, `AppPortMap` + `forward()` reverse-proxy.
-
-**Mesh-replicated workspace**. The `alignment` family replicates a
-working set of files (default `~/.claude/`) across mesh peers
-without a central server. Newest-mtime-wins via `merge_shards`'s
-`mutable_merge = "source_doc_id_newest_mtime"` policy. Projector
-under exclusive lock; mtime-stable. CLI: `svrn alignment`.
-Corpus bytes are local-only (mutually-authenticated peers only —
-not gossiped onto the open mesh).
-
-### CLI
-
-```
-commonwealth init --name "..."          Create a mesh, get a join key
-commonwealth status                     Node + mesh state (GET /status)
-commonwealth balance                    Contribution ledger (local store)
-commonwealth models                     Models advertised (GET /v1/models)
-commonwealth corpus status              Ingestion/shard status (GET /internal/corpus/status)
-commonwealth corpus collaborate <id>    Recruit peers for a mid-flight ingestion
-commonwealth daemon start               Run the daemon
-commonwealth recipe test/validate       Community-recipe harness
-commonwealth peer-preference …          Per-peer affinity (local-only store; /internal/peer-preference/* serves it)
-```
-
-Every command does real work (2026-07-01): the aspirational
-placeholders that printed `(In production, this would …)` and exited 0
-were removed, and `status`/`models`/`corpus status` were implemented as
-thin views over the HTTP control plane. Mesh lifecycle UX (create /
-join / rotate / status across nodes) lives under `svrn mesh`;
-daemon lifecycle under `svrn daemon`.
-
-### Deployment
-
-`contrib/`: `install.sh` (curl installer),
-`systemd/commonwealth.service`,
-`launchd/com.commonwealth.daemon.plist`.
-
-### Desktop production-readiness (W1–W6)
-
-A coordinated stack supporting the friends-and-family launch.
-Failure modes addressed: daemon crash drops the whole UI, peer
-work pins the GPU while the user is chatting. Components:
-
-- **W1 — child-process daemon supervisor — DELETED 2026-09-11** (sv-surface
-  svt-2). The desktop no longer starts, supervises, restarts or stops a
-  daemon. `supervisor_setup.rs` (530 lines) and the `supervisor.rs`
-  re-export are gone, and with them `AppState.supervisor`, the
-  `supervisor-state` / `supervisor-fallback` events, the
-  `supervisor_reconnect` / `supervisor_active` commands, and
-  `main.rs::stop_daemon_child`. `main.rs` no longer carries
-  `Launch::Daemon => exit(sovereign_cli_daemon::daemon_child_main())` — the
-  desktop binary re-entering itself as the real daemon — nor the
-  `ComputeChild`/`RpcWorker`/`Worker` arms that existed only because that
-  in-process daemon re-exec'd `current_exe()` for its own children. All four
-  now print `NOT_A_DAEMON` and exit non-zero: a GUI is not a daemon, and a
-  window opening for `--daemon-child` looked like a hung service rather than
-  a refused one (ARCH principle 6).
-
-  **The deletion is structural, not a convention.** `sovereign-cli-daemon`
-  and `sovereign-compute` leave `src-tauri/Cargo.toml`, so those arms cannot
-  be rewritten without re-adding a dependency — the ability is gone, not
-  merely unused (ARCH principle 12: look where the ability is GRANTED, and
-  `cargo tree` is the check that works). `tests/no_daemon_role_census.rs`
-  pins it at the source level.
-
-  What the desktop does instead, and where each piece lives:
-
-  * **Getting a daemon at all** — `serving_host::ensure_reachable` (svt-1),
-    one call at startup that probes the client port and, in a
-    `bundled-backend` build, brings the shipped sidecar up. It retains no
-    handle, no restart policy and no shutdown budget.
-  * **Noticing one is down** — `attach_watch` polls `/v1/models` through
-    `sovereign_turn_client::ServingHost` and emits `attach-daemon-state`.
-    Armed for EVERY Attach boot now, not just the subset that had no
-    supervisor.
-  * **Recovering** — `attach_restart_daemon`
-    (`commands/supervisor_ctl.rs`) asks the OS service manager that owns the
-    daemon to restart it. That is the one move a client can honestly make
-    about a process it does not own.
-  * **First post-wizard session** — both wizard completion paths still
-    mirror the config and relaunch (`setup_flow::relaunch_after_setup`,
-    gated on `setup_flow::daemon_runs_elsewhere`). The reason changed: the
-    app looks for a serving host exactly once, at startup, BEFORE the wizard
-    has written `config.toml`, so the wizard session cannot acquire one and
-    the fresh instance can. `SOVEREIGN_FORCE_LOCAL=1` and the
-    `SOVEREIGN_USE_SUPERVISOR=0` kill-switch still mean "this process runs
-    the weights" and still skip the relaunch — unchanged for the real-mode
-    harnesses. **The relaunch is `AppHandle::request_restart` since
-    2026-09-11**, not `Command::new(current_exe()).spawn()` + `exit(0)`: the
-    hand-rolled spawn was a thin surface starting a process (the census row
-    it deletes), and it was wrong three ways Tauri's is not — inside a macOS
-    `.app` it re-launched `Contents/MacOS/<binary>` rather than the bundle,
-    it dropped argv, and it skipped `cleanup_before_exit`. The relaunch
-    itself is NOT yet unnecessary; that needs the serving-host look to move
-    after the wizard's write, which means re-resolving `bootstrap_mode`
-    (`main.rs`, `state.rs`).
-
-  * **Mobile access (the opt-in phone-facing host) — svt-2, 2026-09-11.**
-    The toggle used to spawn a `sovereign-server` child with
-    `kill_on_drop(true)`, hold the `Child` inside a task, and `child.wait()`
-    on it: a second daemon, managed by a window, and four of the lifecycle
-    census's ten burning-down sites. Both halves moved to owners.
-    `mobile_host_setup::ensure_running` reaches the host through
-    `ServingHost` — the one sanctioned bring-up — probing `/health` rather
-    than the default `/v1/models`, which `sovereign-server` does not serve
-    (`ServingHost::ready_at`, new the same day, keeps the default byte-
-    identical). `mobile_host_setup::stop` calls the host's own
-    `POST /v1/admin/shutdown`, authorized with the `sk-mobile-…` bearer the
-    phone already uses. **That route is new**: the binary previously had no
-    stop path of any kind — no route, no signal handler, no pidfile, no run
-    lock — which is exactly why the app was holding a `Child` to provide
-    one. The gap was `sovereign-server`'s and is closed there (ARCH
-    principle 12). The desktop now holds nothing between the two calls, and
-    the toggle still works both ways. Consequence worth knowing: toggle-off
-    stops whatever serves that port, including a host this app did not start
-    (`svrn mobile serve`, or a previous run) — the honest reading of a
-    toggle that says whether mobile access is on for the NODE.
-
-  `sovereign-compute/src/supervisor.rs` (the shared state machine: heartbeat,
-  backoff 1s→5s→30s→2min, crash-loop ceiling counting CONSECUTIVE crashes and
-  resetting only on a generation that stayed healthy for `healthy_reset_after`,
-  bounded stderr ring, crash-log persistence) **stays** — `sovereign-cli-daemon`
-  consumes it for the daemon's OWN compute children. A daemon supervising its
-  compute children is right; a window supervising a daemon is not. Only the
-  desktop CALLER was deleted.
-
-- **svt-3a — in-process daemon hosting — DELETED 2026-09-11.** The row above
-  used to end "still in-process, and NOT this rung's work": the `Local` branch
-  commissioned a `sovereign_mesh::EmbeddedDaemon`, claimed the data root's
-  `RunLock`, and loaded GGUFs in this process on every Local boot. All of it is
-  gone from `state.rs` and the `builders::inference` module (itself deleted at
-  svt-7). **There is one story
-  now: the desktop is a client of a daemon it does not own, and the only
-  question left is which port** (`AppState::client_port`).
-
-  What went, and what each deletion took with it:
-
-  * `sovereign_mesh::assemble` + `EmbeddedDaemon::new` + `DeferredDaemon`, and
-    with them the whole `ServingCapability` this file built — the `/mcp` mount
-    over a private `ToolRegistry`, `project_http`, `corpus_watch_http`, the
-    `WatchedSubsystem` scheduler and `sovereign_workflow_host::
-    workflow_http_router`. `AppState.mesh`, `AppState::mesh()`,
-    `AppState.run_lock` and `AppState.watched_subsystem` are gone with their
-    last readers; `mesh_commands.rs` reaches `/v1/mesh/*` in every boot.
-  * `RunLock::acquire` on the data root, and with it the sv-surface B4
-    re-probe (`probe_daemon_identity` + its four fixture tests). B4 existed to
-    catch a process that concluded `Local` while really being a client. That
-    state is now unrepresentable: `AppState::is_attach_mode()` returns `true`,
-    full stop, and the doc on it says why rather than leaving a bare constant.
-  * The in-process model load. The `builders::inference` module was left with
-    one path — `build_daemon_provider` (renamed from `build_attach_provider`;
-    there is no attach/local fork left to name it against), an
-    OpenAI-compatible client on the daemon's `/v1` — and svt-7 deleted the
-    module outright when the slot it filled turned out to have no readers.
-  * **`smoketest.rs` (302 lines) and the `Launch::Smoketest` arm.** The
-    subprocess re-exec'd this binary to decode one token against the chat GGUF
-    so a ggml backend crash (the Gemma-4-on-Metal SIGSEGV) killed the probe and
-    not the window. It guarded an in-process load; there is none. `Smoketest`
-    joins `Daemon`/`ComputeChild`/`RpcWorker`/`Worker` in printing
-    `NOT_A_DAEMON`, and both `[[thin_surfaces.lifecycle_allow]]` rows for the
-    file leave `quality/ARCH_LAYERS.toml` — the `lifecycle-gate` burn-down row
-    "smoketest.rs starts 2 / reaps 3" is CLOSED, not waived.
-    `crash_report::record_native_crash` is orphaned by this and is an owed
-    deletion. **What guards the Gemma-4-on-Metal SIGSEGV now: nothing, and the
-    crash can no longer take the window down.** It happens in the daemon's
-    process, which is the whole W1 rationale
-    (`sovereign/docs/specs/DAEMON_RESILIENCE.md:75`); `attach_watch` notices and
-    `attach_restart_daemon` recovers. The PRE-EMPTION is what is gone, and the
-    shared implementation the daemon would call
-    (`sovereign_inference::smoketest`, whose flag its `Launch::parse` already
-    accepts — `sovereign-cli-daemon/src/lib.rs:316`) is untouched.
-    `sovereign/DEFAULTS_LEDGER.md` carries the row for both model-load guards.
-  * The rolling-summary `CompactionWorker` and `EmbedAdvertisement`. Neither is
-    a client's to hold: the daemon owns the `sovereign.db` a compaction pass
-    rewrites, and advertising an embedding model to peers is what a NODE does.
-  * `launch_mode::get` and the `LAUNCH` cell. They existed so the commissioning
-    site could name a `Launch` without a second `Launch::parse`; there is no
-    commissioning site. `DaemonHost` — where the daemon RUNS — stays.
-
-  **The reach moved to where a config first exists.** `main`'s
-  `serving_host::ensure_reachable` runs BEFORE the wizard writes `config.toml`,
-  so a first-launch session cannot acquire a host — which is the whole reason
-  `setup_flow::relaunch_after_setup` exists. `bootstrap_with_progress` now asks
-  again, immediately after `ResolvedModelSlots::load()` proves a config is on
-  disk, and REFUSES by name when nothing answers. Two refusals, not one:
-  `DaemonHost::InProcess` (`SOVEREIGN_FORCE_LOCAL=1`, or the
-  `SOVEREIGN_USE_SUPERVISOR=0` kill-switch) names the flag and says the app can
-  no longer run the weights; `SupervisedChild` names the port and
-  `svrn daemon start`. **Both env flags now select a capability this build does
-  not have** — they are inert at `DaemonHost::from_env` and only the refusal
-  text tells the operator so. Retiring them from `quality/env-flags.toml`, and
-  flipping `first-launch-setup.journey.spec.ts:86` (which SETS `FORCE_LOCAL`,
-  and which `quality/instruments.toml` already records as "the branch real
-  users never take") onto the default path `scripts/wizard-verify.sh` covers,
-  are owed.
-
-  **The desktop's CPU/arch substitution went too, and that is a fix with a
-  gap.** The desktop's boot-time model-compat builder (deleted in 10b549b05)
-  swapped a dense chat model in-memory on a
-  CPU-only machine whose configured model is a recurrent arch that SIGSEGVs in
-  ggml's CPU prefill. The swap never touched `config.toml`, so once the daemon
-  became the loader it could not reach the weights at all — all it did was make
-  `build_daemon_provider` derive a model id the daemon never loaded, under a
-  `model-notice` banner claiming a substitution that had not happened (ARCH
-  principle 6). It was already wrong in attach mode before svt-3 made attach
-  universal. `sovereign_inference::cpu_compat` is shared, so the DECIDER does
-  not move — only its caller, to the daemon's slot build, which has no such
-  guard today (`grep choose_cpu_safe_chat_model sovereign/crates/sovereign-cli-daemon`
-  → zero hits). Until it lands the guard has no owner:
-  `sovereign/DEFAULTS_LEDGER.md` carries the row, for this and the GPU probe
-  together.
-
-- **svt-3b — the desktop commissions no `Runtime` — 2026-09-11.** svt-3a took
-  the daemon; this takes the turn. `sovereign_runtime_recipe::{baseline_bundles,
-  common_parts, commission}` are gone from `state.rs` and
-  **`sovereign-runtime-recipe` leaves `src-tauri/Cargo.toml`** — one of the two
-  paths by which `sovereign-tools` was reachable, which is the case the
-  `[thin_surfaces]` reachability rule was built for.
-
-  The desktop built a full private turn — a `SkillRegistry`, eleven
-  `ToolBundle`s, the merged SCIP graph, the mesh knowledge client, the
-  landscape-digest provider, a `KnowledgeViewManager` — **in attach mode too**,
-  and every turn has crossed the wire since sv-surface R5. The attach-floor
-  census named this the blocker: eleven of its twelve needles were consumed by
-  the commission and nothing else. **Floor 12 -> 6.** What is left is what the
-  desktop's own surfaces read: its `sovereign.db` handle, the corpus engine,
-  the local-corpus manager, the tiered-enrichment provider, GLiNER, and the
-  daemon-routing inference provider.
-
-  **Four Runtime readers, and NOT ONE needed a new daemon route** (the audit is
-  the reason this landed in one pass rather than behind a route queue):
-
-  * `search_web` (`commands/models.rs`) reached `runtime.tools.get("search")`
-    and was the only reader wanting a HANDLE. No daemon route runs a named
-    tool — `/mcp`'s `tools/call` is allowlisted by
-    `sovereign_tools::mcp_surface`, which does not carry `"search"`, over a
-    registry holding only code-intel and notes tools; and the turn socket's
-    `intent: SimpleAction { tool }` is accepted on the wire and discarded by
-    both dispatchers (`sovereign-core/src/runtime/authority_guard.rs:386-394`).
-    It did not need one: `submit_information_search`
-    (`commands/conversation.rs:509`) has run this exact search with NO Runtime
-    since it landed. Lifted to `state::web_search_once` and shared.
-    **Behaviour delta, named:** the tool path collapsed every unhandled
-    `StepOutput` shape AND a zero-result search into the literal
-    `"No results found."`, saved it as an assistant message and returned `Ok`;
-    both are `Err` with the backend named now, and nothing is written.
-  * `ask_document`'s `Runtime::maybe_collaborate(.., abstained: false)`
-    (`commands/document_asset.rs`) was a value-preserving identity function,
-    provably: `run_collaboration` returns `NotAttempted` on `!abstained` before
-    doing anything (`runtime/collaboration.rs:177-180`) and
-    `maybe_collaborate` flattens that back to its input
-    (`runtime/system_message.rs:779-784`). The comment above it said so in
-    prose.
-  * `cancel_stream`'s local pair is served by the daemon's
-    `TurnRequest::Cancel` arm (`sovereign-daemon/src/turn_http.rs:1433-1449`),
-    which runs the same two operations PLUS `approvals.abandon()` — a strict
-    superset, on the process that owns the session store.
-  * `redirect_turn`'s session -> conversation fallback has no daemon
-    replacement BY DESIGN: `turn_extras_http.rs:22` says "NOT here … the
-    surface already learns that pairing from the routing cards it receives",
-    and `state.session_conversations` is that mechanism.
-
-  Gone with them: `AppState.{runtime, notes, features, mcp_servers}` (none had
-  a reader outside `state.rs`; `lessons`, `recipe_author_commands` and
-  `mcp_list_servers` already reach `/v1/notes`, `/v1/features/*` and the
-  daemon's MCP config), the knowledge-view state builder (its own attach
-  guard already returned `None`, and attach is the only mode), the desktop's
-  builtin-skills pass, and the `SplashProgress` recipe adapter — all three
-  files deleted in 504c6b6d3.
-  `AppState.entity_extractor` keeps its feature and drops a duplicate load: it
-  used to arrive as `common.parts.lane.gliner` while this file loaded GLiNER
-  separately for the corpus engine, and is now one `LazyGlinerExtractor` beside
-  that load.
-
-  **A feature gap is RECORDED, not created.** `AppState.routing_events` has no
-  reader. The `interpretation-proposed`, `clarification-request` and
-  `turn-narration` Tauri events it emits drive an inline banner, the
-  `ClarificationCard` and the mid-turn narration chip, and they have been dark
-  on the shipped path since R5 — the sink was only ever installed on an
-  in-process `Runtime`. The wire ALREADY DELIVERS all three:
-  `commands/chat.rs`'s `render_turn_frames` receives
-  `TurnNotice::{InterpretationProposed, ClarificationRequest}` and uses them
-  only to record the session pairing (`chat.rs:506-519`), and drops
-  `TurnFrame::Narration` (`chat.rs:759-762`). Re-emitting them there is the
-  fix; the field and `routing_events.rs` are kept inert so the payload shapes
-  stay beside the gap.
-
-  **Two censuses moved with their subject, both watched red.** The attach floor
-  took six zeros and its total assertion went 11 -> 5.
-  `authority_surface_census` broke at hop 2 ("state.rs composes
-  `baseline_bundles`") and its own error text named the rewrite: the desktop can
-  STILL install an SEC corpus by ticker, so the invariant holds and its chain
-  now crosses a process — desktop installs into `rebrand::svrnmesh_root()/
-  indexes`, the daemon reads that root, the daemon composes `baseline_bundles`.
-  The shared root is asserted (hop 2a), because a privately-derived path on
-  either side would let the desktop install a corpus the answering process
-  cannot see, which reads as "no authority declared" and falls through to
-  ungrounded streaming.
-
-  **One census row was owed elsewhere and is paid here.**
-  `sovereign-mesh/tests/main/daemon_variant_census.rs` listed `state.rs` as a
-  live `DaemonServices::Desktop` construction site; deleting the commission
-  turned it red, which is the failing input its own header names ("delete the
-  last host that builds `Desktop`"). The row is removed and its claim moves to
-  `the_desktop_variant_has_no_first_party_host`, which SCANS both crate trees
-  and fails if any file outside `sovereign-mesh` reaches the arm. The variant
-  stays: sv-surface's K3 keeps in-process hosting as a declared mode, and iOS
-  — where fork/exec is forbidden, so a sidecar is impossible — is the standing
-  case it is reserved for.
-
-- **svt-6 — the desktop's engine was the daemon's engine — 2026-09-12.**
-  `corpus-engine`, `sovereign-tools` and `sovereign-authoring-harness` leave
-  `src-tauri/Cargo.toml`, and the **attach construction floor goes 3 -> 0**
-  (`tests/attach_construction_census.rs`). What went is one thing wearing three
-  names: a full in-process `CorpusEngine` whose builder chain paired `.with_*`
-  for `.with_*` against `sovereign-daemon/src/bootstrap.rs`, over
-  the same `~/.svrnmesh/{recipes,indexes}` root — the same recipes dir, indexes
-  dir, embedding-model name, tiered provider, GLiNER extractor and `sec_edgar`
-  acquirer as the daemon builds for itself.
-
-  **Four of its five boot chores were DELETED, not moved, because the daemon
-  already did them.** The lazy canonical-fingerprint stamp
-  (`bootstrap::spawn_lazy_stamp_fingerprints`), the embed-dimension probe that
-  armed clause ST-8's geometry gate (`daemon_cmd/mod.rs`), and — the one true
-  delete — `validate_corpus_readiness`, whose ONLY caller in the workspace was
-  this line and whose whole effect was a `tracing::warn!` in a client's log
-  that no surface read. The `substep` glassbox timer went with its last two
-  call sites.
-
-  **The fifth MOVED, and the difference is user-visible.** The vector-index
-  readiness sweep self-heals the index's own on-disk
-  `IndexMeta.vector_index_built`, and its ONE reader —
-  `corpus_catalog_http::catalog` — prefers that field over the state-store
-  flag. With no sweep anywhere, a corpus whose LanceDB index finished but whose
-  meta predates the field reports FTS-only forever. It is
-  `bootstrap::spawn_vector_index_readiness_sweep` on the daemon now, beside the
-  lazy stamp: sweep and reader in one process, over one engine. The old comment
-  at the desktop site called this "a named gap"; this is the gap closed on the
-  side that owns the root.
-
-  **The one surface only the desktop's engine served became two routes** —
-  `POST /internal/corpus/recipes/test` and `…/harness`, in the route table
-  above — and the harness DRIVE is shared with `svrn recipe test` rather than
-  pasted: `sovereign_authoring_harness::run_over_frozen_sample`, with rung 6 as
-  a parameter because the CLI verifies atoms it just ingested into a temp index
-  and the daemon verifies the corpus it actually installed. `HarnessRunCard`
-  is deleted from the desktop; its `run` field named
-  `sovereign_authoring_harness::HarnessRun`, the last thing holding that crate.
-  `RecipeTestingPanel.svelte` and `HarnessLadderCard.svelte` are UNTOUCHED —
-  all three commands were plain awaits with no events, so only the `use` lines
-  and the poll moved.
-
-  **The fifteen `local_corpus` DTOs moved DOWN rather than being reached
-  through `sovereign-tools`**, into `sovereign_contracts::daemon_wire::
-  local_corpus` with a `pub use` at every historical path (the dd8bb42e6
-  pattern). That is what CLOSED three generics whose own doc comments said they
-  were generic only because "the payload closes over a `sovereign-tools` type
-  with no home at this layer": `PreScanAnswerView`, `ClusterProgressView` and
-  `IngestProgressView`/`IngestOutcomeView` each name their type now. What
-  stayed in `sovereign-tools` is what names the ENGINE or the filesystem —
-  `recipe_toml`, `display_meta` (a free function now: it answers
-  `corpus_engine::recipe::DisplayMeta`, and an inherent impl must live in the
-  crate that defines the type), `file_meta_from_path`, and every manager,
-  walker, clusterer and write-back implementation.
-
-  **Eleven `[[exception]]` rows went STALE and were deleted in the same
-  commit** — `sovereign-tools`, `arch-layers`, `sovereign-atos`,
-  `sovereign-enrichment-catalog`, `sovereign-work-atlas`,
-  `corpus-engine-{archaeology,atos,watchers}` and the three
-  `commonwealth-{core,rail-core,state}` rows the mesh edge had held. `grep -c
-  'from = "sovereign-desktop"' quality/ARCH_LAYERS.toml`: **24 -> 13**.
-  `corpus-engine` itself did NOT go stale and that is the reachability rule
-  earning its keep — it is still reached through `sovereign-core`,
-  `sovereign-gliner` and `sovereign-inference`, the three lines svt-7 cuts.
-  The `paddle-ocr` feature forward went too: it existed to make a
-  `#[cfg(feature = "paddle-ocr")]` gate meaningful and there is no such gate in
-  the desktop, and had not been for some time.
-
-- **svt-7 — the daemon owns its weights and its setup, and the list reaches
-  zero — 2026-09-12.** `sovereign-gliner`, `sovereign-inference` and
-  `sovereign-core` leave `src-tauri/Cargo.toml`, and
-  `grep -c 'from = "sovereign-desktop"' quality/ARCH_LAYERS.toml`: **13 -> 0**.
-  The campaign's committed predicate check
-  (`quality/campaigns/sv-surface.toml`) EXITS 0 — it exited 1 with 24 rows at
-  `ffff8041e`, which is the rung that put the grep in the check so it could.
-  `cargo xtask lifecycle-gate`: 0 burning-down.
-
-  **First run had to be measured before it could be designed, and the answer
-  was not a route.** The sidecar cannot serve HTTP unconfigured: it exits 1
-  with no config off a TTY (`daemon_cmd/mod.rs`), refuses a config with no
-  `[models]` (`sovereign-daemon/src/build/inference.rs`), and the app reaches it only
-  after the wizard wrote config (`serving_host::ensure_reachable`). Operator
-  call: the wizard SPAWNS the sidecar's own `setup` verb, which links nothing.
-  `svrn setup --plan --json` prints `{hardware, profile, catalog, fast, embed}`
-  and exits, touching no file; `svrn setup --yes --json [--primary <spec>]
-  [--data-dir]` is the SAME run with stdout reserved for one
-  `SetupProgressLine` per event and the human narration moved to stderr. That
-  redirection is one decision in `setup_cmd/emit.rs` rather than a guard at
-  each of the 111 `println!` sites — `say!` is the narration, `emit::line` is
-  the wire, so a new narration line cannot land on the wrong stream by
-  forgetting a guard. `--primary` is the non-interactive form of the picker
-  (a catalog file, a `.gguf` URL, or a `.gguf` on disk used in place), and an
-  unrecognised spec is refused with the tier's catalog listed rather than
-  demoted to the recommendation.
-
-  **`setup_flow.rs` stopped being a second wizard.** It ran its own hardware
-  probe, catalog resolve, three `download_gguf` calls and `config.toml` write
-  — in a process that owns neither the weights nor the config — and the two
-  copies had drifted (the CLI asked the user to pick a primary and this did
-  not; only one knew `--repair`). It resolves the pick into `--primary`,
-  spawns, maps each line onto the `SetupPhase` frames the UI already renders,
-  and keeps the three things that ARE the app's: the DesktopConfig beside
-  `config.toml`, the first-run marker, and the relaunch.
-
-  **Four types moved DOWN to `sovereign_contracts::daemon_wire::setup_plan`**,
-  each re-exported at its old path: `HardwareProfile` and `ProfileName` (from
-  `sovereign-inference/src/hardware.rs`), `SlotConfig` (from
-  `sovereign-core/src/models_manifest.rs`) and `PrimaryOption` (from
-  `setup_planner.rs`). Naming one used to cost a client the inference stack or
-  the runtime hub. `HardwareProfile::detect` became the free function
-  `hardware::detect_hardware` at 13 sites — an inherent impl cannot cross a
-  crate boundary. The tier's SPELLING had five copies (`setup_planner`'s order
-  array and its `resolve_slot` match, the desktop's
-  `profile_name_str`/`parse_profile_name`, `setup_flow`'s `profile_str`);
-  `ProfileName::{as_str, from_wire}` is the decider now and the serde form is
-  the manifest's own section key.
-
-  **`AppState.inference` is gone, and it is the principle-12 shape exactly.**
-  It held a `SplitInferenceProvider` over the daemon's `/v1` and had ZERO
-  readers — its last two touches were `= None` resets in `config_setup.rs`. A
-  count that reaches zero while the ability stays is drawn wrong, so the
-  ability went too: the `builders::inference` module is deleted. The one thing
-  that call carried and had a reason to live — the boot's refusal when no
-  embedding model is configured — is stated in `state.rs` as itself, same
-  sentence, same Settings pointer. `fast_exit_skip_destructors` went with the
-  C++ it existed to protect: no llama.cpp and no ONNX runtime are linked here
-  any more, so there are no static destructors to skip.
-
-  **The census pin got STRONGER, not deleted.**
-  `the_attach_provider_construction_is_pinned` held
-  `build_daemon_provider(slots)?` to exactly one call site; a floor of one
-  became a floor of none, and `the_desktop_names_no_inference_stack` pins it
-  at the place the ability is GRANTED — the manifest — rather than at the
-  sites that used it (ARCH principle 12: look where the ability is granted).
-  Its needles carry their call syntax because this crate's comments cite every
-  deleted type by name on purpose.
-
-  **The thirteenth row was a MOVE, and the reason is worth keeping.**
-  `corpus-engine-sections` was reached through `sovereign-tools-base` — the
-  one runtime-layer crate `[thin_surfaces].may_reach` permits — so what
-  tools-base links, every thin client links, by reachability rather than by
-  intent. The 2026-08-20 budget amendment that admitted the leaf was right
-  about the leaf (`regex` + `tracing`, reached DOWNWARD) and could not see
-  that. `rag::section` went back to `sovereign-tools`; `rag::chunk` did NOT,
-  because it carries no such edge and the corpus-engine-free studio bundle
-  would have lost a pure paragraph chunker for nothing. `standard_registry`
-  therefore registers `chunk` and not `section`, and `section` joined
-  `sovereign_tools::workflow_corpus_tools()` — the seam that has restored the
-  corpus/atlas tools to every host that links the crate since B:P9d. **Banked,
-  not funded:** `rag/chunk.rs` and `corpus-engine/src/chunkers/paragraph.rs`
-  are two paragraph chunkers both named `chunk_text` with different parameters
-  (ARCH principle 8), a behaviour-changing merge for a later order.
-
-  **`windows-vulkan` / `windows-cuda` moved to `sovereign-cli-daemon`.** They
-  were desktop features forwarding to a `sovereign-inference` the app no
-  longer has, selecting a GPU backend for a process that loads no models. The
-  build that needs them is the SIDECAR's:
-  `SOVEREIGN_SIDECAR_FEATURES=windows-vulkan scripts/stage-daemon-sidecar.sh`.
-  NOT VERIFIED on this host — the Windows legs are commented out in
-  `desktop-release.yml` and this is a macOS box; the cross-check path is
-  `scripts/windows-crosscheck.sh` plus a native run.
-
-  **One instrument bug, caught by running the check rather than reading it.**
-  The prose written into `quality/ARCH_LAYERS.toml` to record this burn-down
-  originally quoted the row key verbatim, and the campaign predicate is a bare
-  `grep -q` over that file — so the check stayed red with zero rows present, an
-  instrument failing for a reason that is not the fact it measures (ARCH
-  principle 5). The comment is reworded and says why.
-
-- **W2 — peer-admission middleware**
-  (`sovereign-serving-host/admission.rs`, the decider and both middlewares;
-  `sovereign-daemon/src/admission.rs` keeps the `AppState` port impls and the guards —
-  REVIEW-build-serving-move-admission, 2026-09-15) — applied to client-port
-  `/v1/chat/completions` + internal-port
-  `/v1/knowledge/search`. Local requests admit unconditionally;
-  peer requests are rejected with 503 + `Retry-After` when paused,
-  yielding to a recent local foreground request, or refused by the
-  fair scheduler. A peer corpus read (`/internal/knowledge/search`,
-  `PeerWork::KnowledgeRead`) meets only the pause gate and its own
-  `[daemon] max_peer_knowledge_reads` budget (default 4,
-  `serving.knowledge_read_sched`), never the yield or the inference
-  ceiling (seat A23). The flat ceiling became a **`serving_policy::fair_sched::SchedCore<Principal>`**
-  (`AppStateInner.serving.peer_sched`): a runtime-mutable global ceiling
-  (`set_slots`, `0` = reject all) **plus a per-principal concurrency cap**
-  so one peer can't hog the pool, **reciprocity-scaled** — a
-  contributor's effective cap rises toward the ceiling, read from a
-  cached per-node weight table (`reciprocity_weights`, refreshed
-  ~30 s by a daemon loop from the contribution ledger). This is the
-  host-side convergence point for a shared-model fleet (every
-  consumer's turn lands here as a peer request, keyed by the published
-  `Principal`'s `Member` arm built from `X-Node-Id`; `DAEMON_CORE.md`
-  §3.3).
-  **One canonical wire form (order commons-fluency fix 7):** the header
-  value is `NodeId::to_hex()` — exactly 32 lowercase hex chars, the
-  encoding of the 16-byte id; `crate::headers::parse_x_node_id` accepts
-  nothing else (`node-<16hex>` strings from `/status` rows are the
-  DISPLAY form and must never be echoed back as a header). A present-
-  but-malformed value is still gated and tallied under the zero node,
-  and the `/status` zero-bucket row names the rejected raw value, when
-  it was last seen, and the expected wire form.
-  **Per-principal client fairness (order `serve50-identity`, 2026-08-13):**
-  the gate above rations traffic that NAMES a node; its sibling
-  `client_fairness_layer` rations traffic that does not. The two are
-  disjoint by construction — the client layer returns early when
-  `X-Node-Id` is present — so a request meets exactly one of them and
-  is never double-gated. It keys the same policy core as
-  **`SchedCore<Principal>`** (`AppStateInner.serving.client_sched`), where
-  the principal comes from `sovereign-daemon/src/client_principal.rs`: the ONE
-  resolver, `AppState::resolve(headers, peer, policy)`, which covers all
-  five arms of the published `Principal` — a live guest grant →
-  `Guest` (the grant store decides; the key is a fingerprint); another
-  presented `Authorization: Bearer` → `RemoteClient` (a `WorkerToken`
-  rides this branch, it is a plain bearer); a readable `X-Node-Id` →
-  `Member` (read BEFORE the loopback branch, because a mesh peer arrives
-  on the trusting listener over loopback); `X-Principal` from a
-  **loopback** caller on a listener that trusts a loopback peer address →
-  `LocalOwner`; else `Anonymous`. It is the one resolution at the edge:
-  `client_auth_layer`'s credential/grant decision, the host's
-  `AdmissionHost::resolve` port (which this layer calls) and
-  `peer_admission_layer`'s `Member` construction all come through it. It
-  is deliberately NOT `sovereign-contracts`'
-  `PrincipalResolver` (`traits.rs:106`), which keys on a conversation
-  id that stateless `/v1/chat/completions` does not carry. The share
-  rule is `serving_policy::fair_sched::fair_share_cap(budget,
-  active)` — `u32::MAX` when one principal is alone on the host (so
-  single-caller load is untouched), else `max(1, budget / active)`.
-  It takes no weight argument, so the weight-ordering condemned by
-  `SCHEDULER_QUALITY.md` F6 is unexpressible rather than merely
-  avoided. Two properties are load-bearing and easy to undo by
-  accident: the scheduler's global slot budget is `usize::MAX` so this
-  gate can NEVER refuse on depth (the inference slot queue's
-  predicted-wait shed, `model_slot.rs`, remains THE shed decider), and
-  it uses `try_grant`, which leaves no waiter behind, so a refused
-  caller cannot park. Measured red→green on the §9.3 harness: the
-  polite cohort went from 0.21× to 0.63× fair share
-  (`research/scale-analysis/MESH_SCALE_100_USERS_1000_CORPORA.md`
-  §9.5). Applied to `POST /v1/chat/completions` only — `/v1/responses`,
-  `/v1/completions` and the Ollama shim are ungated. Knobs:
-  `SOVEREIGN_CLIENT_FAIRNESS` (kill switch, default on),
-  `SOVEREIGN_CLIENT_FAIR_CONCURRENCY` (budget, default 16). Decisions
-  log under the `admission` tracing target, which is in the daemon
-  filter allowlist.
-  **Notes-rail convergence liveness (order commons-fluency fix 9):**
-  `/status` also carries a `convergence` section — the answer to "is
-  the publish path alive?" (§9.5). The daemon boot creates ONE shared
-  `ConvergenceRecord` (named on the daemon's
-  `DaemonServices::Headless` rails and installed into
-  `AppStateInner.fabric.convergence` at AppState construction in
-  `sovereign_daemon::start_daemon`), the notes publish sink stamps
-  `last_outbound_publish_at` on every successful `set()`, and the
-  notes ingest poller stamps `last_inbound_ingest_at` on every
-  applied peer batch — so `/status` reads the writers' own stamps,
-  never a parallel copy. Each arm's age is reported as a BRACKET
-  (`0-30s`, `30s-2m`, `2-5m`, `5-30m`, `>30m`, or `never` — points
-  would overstate the precision of a cadence-bounded measurement,
-  operator steer note 83214914), and an arm silent past the 300s
-  alarm threshold (30 ticks of the 10s cadence) reads `stale` rather
-  than pretending. `never` is NOT stale: a path that never fired has
-  no silence duration to alarm on — the regression the alarm exists
-  to catch is a path that WAS alive and went quiet (the 41-minute
-  silence of defect 9).
-  **That last clause only became true on 2026-08-06** (M5 piece 3,
-  `MESH_N4_TOPOLOGY.md` §M5): the gate keys entirely on the presence
-  of `X-Node-Id`, and mesh inference did not stamp it, so every
-  forwarded turn was admitted as the receiving node's OWN local
-  traffic — pause, foreground-yield and ceiling all dark. Measured
-  before the fix: four concurrent peer requests served with
-  `peer_inflight_current` never leaving 0. `provider_for_peer` now
-  stamps it, and `InferenceRouter::book_peer_failure` exempts
-  the resulting sheds from `PeerHealthTracker` — a `503` from this
-  gate is a healthy peer declining, and booking it as a fault would
-  quarantine that peer for 60 s after three of them.
-  `PrincipalInflightGuard` is RAII (`release`s the principal's slot on drop,
-  accurate under panic unwind). The **same `SchedCore` policy** backs
-  the chat server's turn scheduler (`sovereign-server/scheduler.rs`),
-  so both admission gates are fair by identical rules.
-- **W3 — tray status chip + pause submenu**
-  (`sovereign-desktop/src-tauri/src/tray.rs`).
-- **W4 — first-mesh-join consent** —
-  `DesktopConfig.first_mesh_consent`; ConsentGate renders when
-  unset.
-- **W6 — self-service support surface.** Built for onboarding
-  non-developers who must be debugged remotely from artifacts they
-  can produce unaided. Three layers, in the order a person hits them:
-  - **Fix it yourself** — `health.rs` runs seven checks (`engine`,
-    `model`, `mesh`, `mesh_peers`, `knowledge`, `disk`, `stability`)
-    over a `HealthFacts` struct gathered by `commands/diagnostics.rs`.
-    `evaluate` is pure; every non-OK check carries a terminal-free
-    `fix_hint`; an unreachable probe renders `Unknown`, never a
-    fabricated verdict. Rendered by `HealthPanel.svelte` at the top of
-    Settings → Diagnostics, and reachable from the reconnect banner's
-    **Check my setup** (via the `settingsNav` store, which App.svelte
-    refuses mid-setup).
-  - **Report the machine** — `prepare_diagnostic_report` writes
-    `~/Desktop/svrnmesh-<reason>-<ts>.md` for any `ReportReason`, not
-    only a crash. `ReportReason::parse` degrades unknown → `Other`: a
-    user trying to report a problem is never blocked by an enum.
-  - **Report one answer** — `turn_report.rs` + `prepare_answer_report`,
-    for the complaint machine state cannot explain. The snapshot comes
-    from the **frontend**, assembled from the assistant message's
-    persisted metadata (route, sources, backend/peer, gate action),
-    because `TurnProvenance` holds only the newest turn of a
-    conversation, in memory, on one register. Each report carries a
-    speakable `reference_code` derived from `message_id` via a **pinned**
-    FNV-1a — a wire format, not an implementation detail: change it and
-    a user's screenshot stops matching their own report file. Passage
-    *text* is opt-in per report, defaulted off, and `render_turn_section`
-    enforces the gate itself rather than trusting the caller.
-
-  Every report is a file on the Desktop the user reads before sending.
-  No auto-upload anywhere, and the report **states its own contents** —
-  the disclosure text is derived from what is actually in the file, so
-  a state-only report, an answer report, and an answer report with
-  source text each describe themselves honestly. User-facing doc:
-  [`docs/HAVING_TROUBLE.md`](./docs/HAVING_TROUBLE.md) (no terminal);
-  the maintainer-facing `docs/TROUBLESHOOTING.md` points at it.
-
-**MeshApp bridge (first-party sandboxed apps).** A mesh app runs in a
-`meshapp-<id>` webview reached only through a permission-gated bridge.
-`src/meshapp.rs` owns authorization — the app id is derived from the
-host-set webview LABEL (unspoofable from JS) and checked fail-closed by
-`authorize` against the granted subset in `DesktopConfig.meshapp_installs`.
-`src/commands/meshapp.rs` exposes the `meshapp_*` commands: deterministic,
-read-only `read_corpus` / `parcel_analytics` (reusing corpus-engine's
-`compute_aggregates`, so no model originates a figure on the desktop
-surface either); the graph-explorer family `graph` / `node` / `findings` /
-`search_entities` / `reconciliation` / `subgraph` (top-degree nodes + induced
-edges, for a node-link map) / `corpus_stats` (scale/provenance counts) /
-`timeline` (documents bucketed by month, parsed from the `Date:` header every
-email chunk carries) / `read_chunk`; host-only install management; and
-`meshapp_open` (`WebviewWindowBuilder` + the
-`meshapp_shim.js` `window.meshApp` shim over `__TAURI_INTERNALS__` + a
-per-window strict CSP set in `on_web_resource_request`). The graph ops'
-LOGIC lives in the **`sovereign-meshapp`** library crate (pure path-in /
-DTO-out, Tauri-free) so the desktop host and the `svrn meshapp dev`
-CLI server share one source of truth; the Tauri commands are thin wrappers
-(permission gate + resolve the corpus's on-disk index). The ops are
-**backend-agnostic**: `load_graph` dispatches on what the index
-carries — a deterministic `investigation/` graph (UAP) or an `atlas/`
-enrichment (Enron), projecting both into one DTO contract
-(`GraphNodeDto` / `EdgeDto` / `NodeDetailDto`). The atlas adapter maps
-Entity atoms → nodes and Relation/Event atoms → cited edges, resolving
-each `sec_NNNNN` evidence id to a `chunks.lance` row via `chapters.json`
-so `read_chunk` dereferences the source document unchanged
-(**that resolution depends on the chunk→section join described below, and
-until 2026-08-05 the join was empty on all but 9 local corpora**);
-`reconciliation` surfaces the cross-origin merge log as the identity
-glassbox. Six first-party apps ship on this surface: SF-LVT
-(`public/meshapp/lvt/`, deterministic parcel compute), UAP Blue Book
-(`public/meshapp/uap/`, investigation graph), Enron
-(`public/meshapp/enron/`, story-first atlas experience), **Wrapped**
-(`public/meshapp/wrapped/`, a story-card show over the user's own
-`conversations-anthropic` corpus), Federalist
-(`public/meshapp/federalist/`, the copyable complete example), and Atlas
-Explorer (`public/meshapp/explorer/`, a generic corpus-bound atlas
-explorer). Wrapped's op is different in kind: `wrapped_artifact` serves
-a **precomputed artifact**, never live inference —
-`sovereign-meshapp/src/wrapped.rs` folds every figure deterministically,
-runs a **verbatim-citation audit** (`verify_wrapped_artifact`: every
-cited chunk id must resolve, every embedded quote must be a verbatim
-substring of its chunk — a failing artifact is never served), and caches
-`<index>/wrapped/all-time.json` keyed on the corpus fingerprint (opening
-the app rebuilds a stale artifact on demand). Cards are typed; absent
-data ⇒ absent card; unknown card types are SKIPPED — the forward-compat
-seam future enriched cards ship through. The **v3 deck** is Scale,
-Rhythm, Recurring, Turn, Obsessions, Night Shift, Cast, Door; the folds
-that need enrichment or geometry live in `wrapped/semantic.rs`, the rest
-in `wrapped.rs`. Three things about it are load-bearing and expensive to
-rediscover. (1) **Themes come from RAPTOR `primary_entities`, not
-GLiNER** — measured on `conversations-anthropic`, GLiNER's top of archive
-is `People (77) · WORK (53) · Companies (46)` where RAPTOR's is
-`San Francisco (37) · Federal Reserve (33) · Taoism (13)`: nouns versus a
-life. `ThemeIndex` is source-agnostic (`from_enrichment | from_ner`) so an
-un-enriched corpus still gets a deck, at lower quality. Themes rank by
-z-scored log-odds against the archive baseline (Monroe et al.), never by
-frequency — frequency ranks the baseline and returns the same list every
-quarter, which is what made v2 read as topical co-occurrence. (2)
-**`ConvDoc::turns` is the PARSED SUBSET of a conversation, not its
-shape.** A chunk yields turns only where its text carries a
-`### [ts] role` header, and 13,373 of this archive's 16,404 chunks do not
-— they are mid-answer continuation fragments that begin mid-sentence.
-Anything reasoning about conversation SHAPE must read
-`ConvDoc::chunk_ids`; `turns` is for quotes and clocks. Reading shape off
-`turns` cost the Turn card 90% of its evidence (1,510 of 15,283 seams,
-135 of 425 conversations) until 2026-07-26. The corollary is a licence,
-not just a warning: because an unparsed chunk provably holds no turn
-boundary, "the last thing you said before the seam" is correct at any
-chunk distance, so the quote walk is deliberately unbounded. The same
-blind spot ran through TEXT until 2026-07-26: a `parse_turns` block
-stops at its chunk's edge, so a turn's words have to be walked forward
-across the continuation chunks it spills into (`continuation_lead` +
-`build_conv_docs`). Counting header-bearing text alone saw 19.9% of the
-archive and reported 704,924 words at a 2.7x assistant:user ratio where
-the truth is 3,512,842 at 14.9x. (3) **The archive stamps UTC, and the
-deck shows one clock — the reader's.** `semantic::LocalClock` is
-inferred once per build (`infer_utc_offset` locates the 4h trough in the
-user-turn histogram and places its centre at 03:00 local; this archive
-infers UTC-7) and handed to every card that shows an hour: the Rhythm
-heatmap shifts whole datetimes, weekday included, and the Night Shift
-bands read the same offset. Two cards inferring it separately is two
-chances to disagree in front of the reader — which is exactly what
-shipped in v3, where the grid peaked at 20:00 UTC while Night Shift
-called those same turns 13:00. `WRAPPED_SCHEMA_VERSION` (now 4) is the
-lever that forces a cached artifact to rebuild when a fold change like
-this must reach existing installs before the corpus next updates. Bundles compose the
-**MeshApp SDK**
-(`public/meshapp/_sdk/`, dependency-free ES modules served under the CSP): a
-corpus-bound `connect()` bridge client, CSP-safe DOM helpers, and the reusable
-views (force-graph, timeline, reconciliation reveal, entity-detail, cited-edge,
-search, scale-banner, and Wrapped's `storyShow` full-screen card shell +
-`heatGrid` hour-of-week view in `story.js`) + `meshapp.css` — Enron's bundle
-is ~150 lines of
-composition, not ~600 of hand-rolled DOM. Each bundle carries a self-describing
-`meshapp.json` manifest (id/name/corpus/grants/entry/trust — the unit a registry
-distributes); `scripts/gen-meshapp-catalog.mjs` (pre{dev,build}) aggregates them
-into `meshapp/catalog.json`, and `MeshAppsSection` discovers apps from it via
-`loadCatalog()` rather than a hard-coded list. So adding an app is a bundle + a
-manifest (+ an atlas reader only when the backend differs) — no host code edit.
-**Local dev loop:** `svrn meshapp dev <id>` (sovereign-cli-llm) serves a
-bundle + its `_sdk/` and injects a `window.meshApp` that proxies the explorer
-ops over HTTP to the same `sovereign-meshapp` functions, reading a local corpus
-index — so a bundle is iterable against real data without the desktop;
-`svrn meshapp new <id> --corpus <c>` scaffolds one. **Corpus as a managed
-dependency:** a manifest's `corpus_data` (size + the recipe the bundle ships,
-carrying a `[prebuilt]` HF block) makes the corpus first-class — `MeshAppsSection`
-shows its presence and, when missing, a one-click **"Get data (N GB) & Open"** that
-stages the recipe (`meshapp_stage_corpus_recipe` → `~/.svrnmesh/recipes/`) and runs
-the existing prebuilt install with a progress bar. **Curated registry:** `svrn
-meshapp publish/install/list` (sovereign-cli-llm `meshapp_registry.rs`) distribute an
-app as a self-contained `tar.zst` (bundle + a copy of `_sdk/`); install verifies the
-artifact's sha256 (refuses tampering) and unpacks under `~/.svrnmesh/meshapps/<id>/`.
-TRUST = integrity (sha256) + curation (membership in the reviewed
-`sovereign-recipes/meshapp-registry.toml`); `meshapp dev` runs installed apps. The host
-enumerates them via `meshapp_installed_apps()`; in-window opening of an installed app
-(serving it from the install dir via a `meshapp://` scheme) is the remaining
-integration. End-to-end runbooks: `docs/MESHAPP_CONSUMER.md` (replicate a demo) and
-`docs/MESHAPP_AUTHORING.md` (recipe → corpus → app → publish). **Isolation caveat:**
-Tauri v2 does not gate app
-commands per-window (tauri#9227) — a webview with IPC can invoke any
-registered command — so `capabilities/meshapp.json` only narrows the
-core/plugin surface; true isolation for UNTRUSTED third-party apps needs a
-no-IPC bridge (custom protocol / postMessage), a deferred platform
-milestone. The bundles are verified headlessly by
-`tests/e2e/specs/meshapp-{lvt,uap,enron}.spec.ts` (Playwright, a11y
-locators), each mocking `window.meshApp` + one real-shim→IPC wiring test.
-
-**Accessibility tooling.** `npm run a11y` (`tests/e2e/scripts/a11y-report.mjs`)
-is a dev-runnable, NON-BLOCKING axe-core scan of the chat surface + the
-mesh-app bundles, writing a readable report to `test-artifacts/a11y/`
-(glassbox insight into a11y shortcomings; no CI gate). Two reusable a11y
-seams live in `packages/chat-ui` and are shared by desktop + mobile:
-`completionAnnouncement` (per-turn screen-reader wording for the polite
-completion live region — announce on completion, never per token) and the
-`use:dialogFocus` action (modal focus-trap + focus-restore-on-close,
-adopted by `MeshJoinDialog`/`MeshSettings`/`NewProjectDialog`/
-`DocumentInspector`/`EchoOverlay`). Dynamic a11y behaviours (live regions,
-focus restore) are verified by manual screen-reader testing, not axe.
-
-Control routes (loopback-only, on the internal port :9742):
-`GET /internal/contribution/status`,
-`POST /internal/contribution/ceiling`,
-`POST /internal/contribution/pause`,
-`POST /internal/contribution/resume`,
-`GET /internal/contribution/recent`,
-`GET /internal/activity/summary`,
-`GET /internal/activity/recent`.
-
-Open polish: tray icon tint, HintCues nudge to Sharing tab, removing
-the in-process `EmbeddedDaemon` fallback entirely (the default-flip
-itself landed 2026-07-18 — the fallback remains as a surfaced degraded
-mode), and graceful SIGTERM-with-grace on daemon shutdown. Daemon-side
-resilience roadmap:
-[`docs/specs/DAEMON_RESILIENCE.md`](./docs/specs/DAEMON_RESILIENCE.md).
-
-**W7 — live-turn re-attach (streaming survives a conversation switch).**
-`chat.machine` owns exactly ONE conversation's `messages` +
-`streamingMessageId` and wipes the latter on every `HYDRATE`
-(conversation switch), so a turn the user navigated away from was
-orphaned: the `conversation_id`-tagged `message-chunk` /
-`message-complete` / `message-error` events were dropped by the
-`messageId` guard, and the backend persists the assistant row only
-AFTER the stream ends (`StreamHandle` contract) — so on return there
-was no row, no loading affordance, and the answer never landed. Most
-visible on a slow turn whose synthesis is offloaded to a mesh peer
-(minutes-long, long enough to switch away). Fix: a runed singleton
-registry `stores/liveTurns.svelte.ts`, fed by the global stream
-listeners keyed on `conversation_id` regardless of which conversation
-is on screen; `ChatView.loadConversation` re-attaches on return
-(`REATTACH_STREAM` restores the affordance + partial text for an
-in-flight turn; a terminal turn renders its answer/error). Scope: lives
-while ChatView is mounted (survives conversation switches, NOT app
-restart / Settings-Atlas unmount — that durability belongs to a
-persisted streaming placeholder row, deferred). `message-error` now
-carries `{conversation_id, message_id}` (`commands/chat.rs`
-`MessageErrorPayload`) so a failed backgrounded turn is attributable.
-Pinned by `tests/e2e/specs/chat-orphaned-turn.spec.ts` +
-`stores/liveTurns.test.ts`.
-
-### Pinned worker pods as inference peers
-
-Ephemeral worker pods (Vast L40S rented via `pipeline pod up`)
-join the mesh scheduler's inference pool as one more peer, scored
-by the same OICP load balancer. Pods aren't gossiped — owner-
-private, TLS-pinned, authenticated by Ed25519 `WorkerToken`. See
-[`docs/PINNED_WORKER_AS_INFERENCE_PEER.md`](./docs/PINNED_WORKER_AS_INFERENCE_PEER.md)
-and [`docs/EPHEMERAL_WORKER_PODS.md`](./docs/EPHEMERAL_WORKER_PODS.md).
+| `Guest` | `cwth/guest/0`, a downgraded stranger, the guest door | no | no |
+| `Rail` | a deployed ring app on `127.0.0.1:rail_port` (9743) | no (`UNTRUSTED_LOOPBACK`) | no — serves only `/v1/rail/*` |
+
+The host mounts thirteen further client-router families on that router, each a
+door over an object the daemon already holds, each `loopback_only` at the
+router **and** `enforce_localhost` per handler: corpus status and atoms
+(`reading_http.rs`), atlas and conv-tiered browse (`atlas_http.rs`), meshapp
+projections (`meshapp_http.rs`), the enrichment store (`enrich_http.rs`), the
+local-corpus registry (`lc_http.rs`), governance, insights, notes, features,
+recipe projects, MCP config, turn extras, documents, the corpus catalogue,
+recipe authoring and deep research. Parity is audited by
+`sovereign-mesh/tests/loopback_parity.rs`.
+
+**Internal API — :9742, plaintext under perimeter trust.** No per-request
+auth: gossip, scheduling intent and plans, model transfer, RPC warm, index
+shard push/pull/serve, inter-node knowledge search, latency probe. Binds
+`0.0.0.0` by default — pin `[daemon] internal_bind`, or create the mesh with
+`require_encryption`. **The historical per-session-cert mTLS scaffolding was
+removed; never describe `:9742` as mTLS.**
+
+**The loopback guard has three layers and one trap.** Router-level
+`from_fn(loopback_only)` middleware, per-handler `ConnectInfo` extraction, and
+a pinned listener-shape test. The listener MUST use
+`.into_make_service_with_connect_info::<SocketAddr>()` — bare `axum::serve`
+leaves `ConnectInfo` absent and the guards fail closed for *every* caller.
+
+### Admission and fairness
+
+Two disjoint layers, so a request meets exactly one and is never double-gated.
+`peer_admission_layer` rations traffic that NAMES a node;
+`client_fairness_layer` rations traffic that does not, returning early when
+`X-Node-Id` is present. Both key the same
+`serving_policy::fair_sched::SchedCore<Principal>`, which also backs the chat
+server's turn scheduler, so every admission gate is fair by identical rules.
+Local requests admit unconditionally; peer requests get 503 + `Retry-After`
+when paused, yielding to recent local foreground work, or refused by the
+scheduler.
+
+`fair_share_cap(budget, active)` takes **no weight argument**, so the
+weight-ordering condemned by SCHEDULER_QUALITY F6 is unexpressible rather than
+merely avoided. The client gate's global slot budget is `usize::MAX` so it can
+never refuse on depth — the inference slot queue's predicted-wait shed remains
+THE shed decider — and it uses `try_grant`, leaving no waiter behind.
+
+**One canonical wire form:** `X-Node-Id` is `NodeId::to_hex()`, exactly 32
+lowercase hex chars. The `node-<16hex>` strings on `/status` rows are the
+DISPLAY form and must never be echoed back as a header.
+
+### Foreground yield is bounded
+
+`YieldHook::should_yield()` is a LEVEL predicate with no memory of how long
+the asker has been parked, so any request cadence shorter than the window pins
+it true forever. Every consumer pairs it with `DeferralBudget`, and that
+pairing is the invariant. `MAX_FOREGROUND_DEFERRAL` is 300 s and is
+deliberately **not** an env flag or config field: a liveness bound someone must
+remember to switch on is not a liveness bound. The write side is
+`ForegroundSignal` + `ForegroundLease`, and every `Runtime` turn holds a lease
+for the turn's whole life.
+
+### Knowledge, ledgers, distributed state
+
+`MeshCorpusManager` / `ShardManager` install, list, remove, shard and
+consolidate. `merge_participants` is the ONE merge implementation, and it
+finishes the job: a merge that stops at written chunks produces a corpus
+`installed_indexes()` skips and gossip advertises nothing for, so
+`finalize_canonical` is the last step of the merge itself. When the merge
+lands and the finalize does not, the error is its own variant
+(`MergedNotFinalized`) because the state is neither neighbour — the chunks are
+on disk and the source partitions are gone, so that directory holds the only
+copy.
+
+**The contribution ledger has no balance, no exchange rate and no ranking** —
+units are incommensurable. `LedgerEventKind` records inference served and
+received, knowledge queries, shard transfers, storage and completed job units;
+aggregation is pure. It gossips. Its siblings deliberately do not: the local
+**Activity ledger** ("what is my daemon doing, even as a mesh of one?") and
+**peer preferences** (per-peer affinity multipliers) are both in
+`GOSSIP_EXCLUDED_APP_IDS` — your own usage never leaves the machine.
+
+`commonwealth-state::MeshStore` is a SQLite KV that is a **local PROJECTION of
+the ring rail, not a replica**. Writes insert a `rail_outbox` row in the same
+transaction; the fold picks, per key, the act with the greatest
+`(t, actor, id)` among admitted non-voided ops, where `t` is the ORIGINAL
+write time, so a snapshot re-append after a seal does not hand every key to
+whoever snapshotted last. Acts this build cannot read are COUNTED, never
+dropped silently. Retention is part of the fold, because on a projection
+nothing else can be: a row a local sweep deletes has no incumbent and returns
+on the next round. `MeshStore` is `in_memory()` in production, so the pump's
+first act at boot is to rebuild it from the journals or hold nothing at all.
+Which namespaces replicate is DECLARED in `DAEMON_OWN_NAMESPACES`; no property
+of a namespace string separates `inference` from `house-expenses`, so a rule
+would silently admit every member as an author of an app's journal.
+
+### Desktop and deployment
+
+Desktop production-readiness (W1–W6) is in the detail file. The current shape:
+the desktop **manages no daemon** (`serving_host::ensure_reachable` brings up
+a bundled `sovereign-cli-daemon` sidecar when nothing answers, behind the
+`bundled-backend` feature declared by exactly one surface), commissions no
+`Runtime`, loads no GGUF, and reads the turn socket once per conversation. The
+deletion is structural rather than conventional — those crates left
+`sovereign-desktop/src-tauri/Cargo.toml`, so the ability is gone, not merely
+unused. W6 is the self-service support surface: seven health checks, a
+redacted diagnostic bundle, and a per-answer report, all files on the Desktop
+the user reads before sending, never auto-uploaded.
+
+A **mesh app** runs in a `meshapp-<id>` webview reached only through a
+permission-gated bridge; the app id comes from the host-set webview LABEL
+(unspoofable from JS) and is checked fail-closed. Graph ops live in the
+`sovereign-meshapp` library so the desktop host and `svrn meshapp dev` share
+one source of truth, and `load_graph` dispatches on what the index holds.
+**Isolation caveat:** Tauri v2 does not gate commands per-window
+(tauri#9227), so true isolation for UNTRUSTED third-party apps needs a no-IPC
+bridge — a deferred milestone.
+
+`commonwealth-rails` (`cw-rails`) is the minimal daemon a shim author installs
+beside their media server: join an invite, run, serve three loopback routes.
+It deliberately does NOT admit joiners — a mesh is founded by a full daemon,
+and that absence is most of why it lifts (319 crates in its closure vs 743).
 
 ---
 
 ## 6. How the four projects fit together
 
-**Sovereign standalone** — Tauri / CLI / server runs against
-`EmbeddedLlamaCpp`. Knowledge via `MeshCorpusManager` (named for
-the mesh case but works without one). `EmbedFn` wraps the local
-Embed slot.
+**Sovereign standalone** — Tauri / CLI / server against `EmbeddedLlamaCpp`,
+knowledge via `MeshCorpusManager` (named for the mesh case but works without
+one).
 
-**cmnwlth standalone** — daemon serving `localhost:9741`.
-Any OpenAI-compatible client points at it. Knowledge ingest uses
-`embed_http::http_embed_fn` so a node without a local embed model
-still indexes via the engine.
+**cmnwlth standalone** — daemon on `localhost:9741`; any OpenAI-compatible
+client points at it. Ingest uses `embed_http::http_embed_fn`, so a node with
+no local embed model still indexes.
 
-**Sovereign + cmnwlth (integrated)** —
-`sovereign_daemon::EmbeddedDaemon` runs cmnwlth in-process.
-Runtime inference is wrapped in `InferenceRouter`, which
-OICP-routes synthesis to peers when scoring favours them. Both
-sides share `sovereign_scheduler::oicp_select` so Joiner's selected
-model and Founder's served slot can't drift.
-`complete_stream_with_id` returns model attribution alongside the
-stream so peer-served completions show in
-`ResponseProvenance.inference_backend` as
-`"Qwen3.5-9B.Q8_0 @ peer mac-peer"`. Skills with
+**Integrated** — `EmbeddedDaemon` runs cmnwlth in-process; runtime inference
+is wrapped in `InferenceRouter`, which OICP-routes synthesis to peers when
+scoring favours them. Both sides share `oicp_select`, so the Joiner's selected
+model and the Founder's served slot cannot drift. Skills with
 `privacy = "local_only"` short-circuit to local.
 
-**Desktop attach mode** — both the desktop app and `svrn
-daemon` want :9741. The desktop probes
-`http://127.0.0.1:9741/v1/models` at startup (`bootstrap::detect`),
-preceded since svt-1 by one `serving_host::ensure_reachable()` that brings the
-bundled `sovereign-cli-daemon` sidecar up when nothing answers (§10.1h);
-on success it enters Attach mode: inference flows through
-`RemoteApiProvider`, mesh mutations go over HTTP via
-`sovereign_daemon::mesh_http`, and `commands::save_config` POSTs
-`/v1/admin/reload` so the daemon swaps its `InferenceProvider` in
-place. Smoke test at `sovereign/scripts/smoke-attach-mode.sh`.
+**Desktop attach mode** — both the desktop and `svrn daemon` want :9741. The
+desktop probes `/v1/models` and on success enters Attach: inference through
+`RemoteApiProvider`, mesh mutations over HTTP, `save_config` POSTing
+`/v1/admin/reload`. **Boot is gated on identity, not on a port** —
+`ClientListener` is a watch (`Pending` / `Bound` / `Failed`) and
+`/status.process` carries `pid` + `run_id`, so a caller can ask WHO answered.
+A fixture daemon that loses the port, keeps running and logs success used to
+probe green while the app ingested into the operator's real daemon.
 
-**The attach posture, measured** (sv-surface D0-D9 + B3/B4, 2026-09-10). Boot
-is gated on identity, not on a port. `sovereign_mesh::ClientListener`
-(`Pending` / `Bound(addr)` / `Failed`) is a watch the serve task publishes:
-`daemon run` reads it before claiming "is running" and exits 1 on `Failed` or a
-60s `Pending`, and the desktop's Local bootstrap returns a backend error on
-`Failed` or a 30s `Pending`. `/status.process` carries `pid` + `run_id`, so a
-caller can ask WHO answered — the e2e harness's readiness is that identity, not
-a 200. This closed a live defect: a fixture daemon that lost `:9741`, kept
-running and logged success was probed green by the harness, and the app
-ingested into the operator's real daemon. `RunLockError::Held` no longer shrugs
-into "Local with no wiring" either — it re-probes the client port, reads
-`/status.process.pid`, attaches to the holder when a foreign pid answers, and
-is fatal naming root, lock reason and port when nothing does. `is_attach_mode`
-forks went 15 → 0: every peripheral command reads the wire in BOTH modes, where
-Local means the in-process daemon this process commissions. The construction
-floor is 12 of the original 14-needle basis
-(`sovereign-desktop/src-tauri/tests/attach_construction_census.rs`) —
-`WatchedSubsystem::install` was never attach-reachable (a census error) and
-`CompactionWorker::spawn` was a real defect, an attached desktop running a
-second rolling-summary compaction over the daemon's own `sovereign.db`, now
-structurally impossible because the config is `Option`. **The forks were never
-the population that matters**: 49 needle READS across 13 files still run in
-attach with no fork at all, because the spine builds every needle in both modes
-— `conversation.rs` 12, `document_asset.rs` 12, `corpus.rs` 8, `chat.rs` 3, and
-nine more at 1-2 each. `is_backend_ready` reads `state.runtime.is_some()`, so
-hoisting attach out today would hang the splash, and `list_corpora` /
-`notebook_list` would degrade to an empty vec silently. That 49 is what the
-remaining rung drives to zero; `attach_bootstrap()` was deliberately not
-written on the false premise. One rule decides what a local-corpus command may
-cross on: it crosses when its answer is a function of the registry ON DISK —
-state both managers see — and stays PAIRED with its producer when it reads one
-instance's in-memory state (`lc_get_preview` / `lc_write_tags` with the
-app-local `lc_cluster`). That distinction is invisible in Local mode, where
-there is one instance, and is the whole defect in attach, where there are two;
-each pairing is pinned as a conditional census that goes quiet on its own when
-its producer crosses.
-
-`/v1/admin/reload` rebuilds only what changed:
-
-| Changed field                           | Reload action                              |
-|-----------------------------------------|--------------------------------------------|
-| `models.primary` / `.fast` / `.embed`   | Rebuild via `ProviderFactory`, atomic swap |
-| `daemon.client_port` / `.internal_port` | `restart_required: true`                   |
-| `daemon.client_bind` / `.client_token`  | `restart_required: true`                   |
-| `data.dir`                              | `restart_required: true`                   |
-
-When `restart_required: true`, `save_config` falls back to
-`launchctl kickstart -k gui/$(id -u)/com.sovereign.daemon` (macOS)
-or `systemctl --user restart sovereign` (Linux).
-
-**`GET /v1/admin/context-window`** (`admin_http`, loopback-only) serves
-`configured` / `effective` / `n_ctx_train` for the chat slot — three numbers
-that are allowed to disagree, which is why all three cross
-(`sovereign_contracts::daemon_wire::ContextWindow`,
-`TurnClient::context_window`). `effective` and `n_ctx_train` are `Option` and
-their `None` is reported, never folded into `configured`: a remote-only
-provider has no local slot. Added 2026-09-12 (`d44d57be9`) because the
-desktop's Settings panel read its OWN provider for two of the three and was
-describing a slot that served no turns.
-
-**`GET /v1/admin/chat-activity?window_secs=N`** (same router, same guard)
-serves `ChatActivitySummary` — turns, tokens generated, chunks retrieved, and
-the per-corpus / per-model rollups — derived from the `ResponseProvenance`
-already persisted under `metadata["provenance"]` on each assistant message.
-The window is clamped host-side to at least a day. Added thin-desktop R2
-(2026-09-12) for the same reason as its neighbour: the desktop computed the
-rollup over the `sovereign.db` IT opened, and every turn has been the daemon's
-since sv-surface R5, so an attached boot rendered honest-looking zeros beside
-the daemon's own activity feed. The rollup itself did not move — it is
-`SqliteStateStore::summarize_chat_activity`, reached through a
-`ConversationStore` trait method that defaults to `Err(NotImplemented)`, so a
-store keeping no message metadata answers 501 by name rather than an all-zero
-summary.
-
-**`POST /v1/conversations/{id}/messages/record`** (`turn_http`, loopback-only)
-appends messages a CLIENT authored, verbatim, and drives no turn — the sibling
-route `POST /v1/conversations/{id}/messages` is the one that runs the Runtime.
-It exists for the work the daemon deliberately does not do: web search, which
-stays in the app on egress custody, and the Explore button's insight preamble.
-Body is `RecordMessagesRequest { messages: [{ role, content, metadata? }] }`
-with `role` the closed `Role` set; an empty list is a 400 and the answer is
-`{ message_ids: [...] }` in request order, host-minted. Added thin-desktop R2
-— both callers wrote through the app's own store, so on an attached boot a web
-search landed in a conversation nothing would ever render it in, at `Ok`.
-
-**`GET /v1/conversations/{id}` gained `enabled_corpora`** at thin-desktop R2.
-It is the second named divergence from `sovereign-server`'s mirror of
-`ConversationResponse` (the first is `MessageEntry::metadata`), and it is what
-had kept the desktop's `get_conversation` on a local store handle: the
-`CorpusFilterStrip` renders the chips from it, so a route without the field
-would have rendered every scoped conversation as unscoped. Omitted rather than
-nulled when `None` ("all installed corpora").
-
-**`POST /internal/corpus/watch/{corpus_id}/enrich/reenrich-note` gained
-`correction_hint` / `original_summary`.** The summary-revision loop was two
-steps and the first wrote to the wrong file: the desktop upserted
-`conv_summary_corrections` through its own handle, which held only while the
-daemon was embedded. `LocalCorpusManager::reenrich_note` writes the ledger now
-— one store handle for the write and the provider's read back — through
-`CorpusStateStore::upsert_summary_correction`, the write port beside
-`ConvBrowseReader::get_active_correction`'s read (two ports, one inherent
-decider). Empty strings normalise to SQL `NULL` host-side.
+`/v1/admin/reload` rebuilds only what changed: the three model slots swap
+atomically via `ProviderFactory`; `client_port`, `internal_port`,
+`client_bind`, `client_token` and `data.dir` answer `restart_required: true`.
 
 ---
 
 ## 7. Build, test, run
 
-### Prerequisites
-
-- Rust toolchain (stable)
-- `cmake` (llama.cpp)
-- `protoc` (LanceDB → `lance-table`); macOS: `brew install
-  protobuf`; Debian: `apt install protobuf-compiler`
-- For cmnwlth: `llama-server` + `rpc-server` from
-  `llama.cpp` on `PATH`
-- For desktop: Node.js + Tauri 2
-  (`cargo install tauri-cli --version "^2"`)
-
-### Build / test
+Prerequisites: Rust stable, `cmake` (llama.cpp), `protoc` (LanceDB). For
+cmnwlth, `llama-server` + `rpc-server` on `PATH`. For desktop, Node.js +
+Tauri 2.
 
 The repo is **one unified Cargo workspace** — every crate a member under the
-root `Cargo.toml` (`sovereign/`, `commonwealth/`, `corpus-engine` + its
-carve-outs are directories of member crates, **not** separate workspaces). Use the
-**sovereign watcher** (`lint_status` / `test_status` MCP tools) for
-compilation feedback — running `cargo build` / `cargo test` directly via Bash
-contends with the watcher for the file lock and idles.
-
-**Watcher liveness is heartbeat-driven and self-healing.** The
-`WatcherCoordinator` loop stamps a shared `WatcherHeartbeat`
-(`corpus-engine-watchers/src/watcher_coordinator.rs`) every iteration;
-the status tools read it through `code/watcher_health.rs`. Every
-`lint_status`/`test_status`/`build` response carries a `watcher`
-object — `{live, reason, configured, heartbeat_age_secs, hint}`. When
-`live` is false the result is *orphaned* and `status` is reported as
-`watcher_down` (never `fresh_*`), so a stale run can't masquerade as
-current — the failure mode behind "the watcher silently goes stale."
-A daemon-side `WatcherSupervisor`
-(`sovereign-daemon/src/watcher_supervisor.rs`) owns the coordinator
-and restarts it (bounded backoff) when the loop task dies or its
-heartbeat freezes; `svrn doctor`'s `watcher_live` check probes the
-same signal, catching configured-but-dead — which a config-presence
-check cannot. If the runner sections are commented out in
-`.sovereign/sovereign.toml`, restore from
-`.sovereign/sovereign.toml.with-watchers`.
+root `Cargo.toml`. `sovereign/`, `commonwealth/` and the corpus-engine
+carve-outs are directories of member crates, not separate workspaces.
 
 ```sh
-# One workspace — build / check / test everything from the repo root:
-cargo build --release --workspace          # bundled assets copied via build.rs
-# For LOCAL deployed-daemon iteration use scripts/dev-release.sh instead of
-# plain --release: same opt-level, but LTO/CGU=1 overridden via env — a
-# one-line change costs seconds instead of ~7.5 minutes. (A custom cargo
-# profile can't do this: llama-cpp-sys-4's build script panics under any
-# custom profile — see the script header.)
-cargo check  --workspace --all-targets      # what CI's `check` job runs
-# The user-facing CLI spans 4 binaries (dispatcher + 3 siblings) — rebuild
-# all of them (editing one + rebuilding only the dispatcher is a silent no-op):
-cargo build --release -p sovereign-cli -p sovereign-cli-daemon \
+cargo build --workspace                    # bundled assets copied via build.rs
+cargo check --workspace --all-targets      # what CI's `check` job runs
+
+# The CLI spans 4 binaries — rebuild all of them, since editing one and
+# rebuilding only the dispatcher is a silent no-op:
+cargo build -p sovereign-cli -p sovereign-cli-daemon \
             -p sovereign-cli-dev -p sovereign-cli-llm
 ```
 
-```sh
-cargo test --workspace                      # no GPU / network / model weights (§12.4)
-```
+For local deployed-daemon iteration use `scripts/dev-release.sh` rather than
+plain `--release`: same opt-level, LTO and codegen-units overridden via env,
+so a one-line change costs seconds instead of ~7.5 minutes. A custom cargo
+profile cannot do this — `llama-cpp-sys-4`'s build script panics under any.
 
-No tests require GPU, models, or network. Sovereign uses
-`DeterministicInference` + in-memory SQLite + real FTS5 for
-functional tests. cmnwlth's harness runs simulated meshes
-deterministically.
-
-**Regression gate — `scripts/sovereign-test.sh`.** The same
-`cargo test --workspace` surface the watcher polls, wrapped for on-demand
-use: it pipes cargo through `sovereign-cargo-test-adapter` (Tier 2 JSONL)
-and, with `--human`, prints a compact pass/fail summary + failing-test list.
-Aggregation is a *single* pass over the adapter JSONL — it reads the
-authoritative counts from the adapter's trailing `summary` record rather
-than re-parsing every line (the prior per-line `python3` fork storm cost
-minutes on a ~7.7k-test run). Three scoping levers, with **different reach**:
-- `--package <name>` → `cargo test -p <name>`: scopes BUILD **and** RUN to
-  that crate + its dep graph. The real lean lever.
-- `--changed` → auto-maps git-changed `.rs`/`Cargo.toml` (vs HEAD + untracked)
-  to their owning crates (nearest-ancestor `[package]` manifest) and unions
-  them into `-p` — "just the crates you touched." Non-crate paths (scripts/,
-  root virtual manifest) resolve to nothing → loud fall-back to full
-  `--workspace`, so the gate never silently under-covers.
-- `--filter <pat>` → a libtest **name** filter (`cargo test … -- <pat>`):
-  narrows which tests RUN within the selected scope, but a name filter cannot
-  shrink the compile on its own, so as of 2026-07-24 it **also scopes the
-  build**: a single test cost 36s workspace-scoped against 1s for
-  `cargo test -p <crate>`. The scope is derived from the pattern — libtest
-  matches it as a substring of each test's full path, so any test it can match
-  must have that substring in its own crate's sources, and `git grep`-ing for
-  it OVER-approximates the owning crates (it can select a crate with no
-  matching test, harmless; it cannot miss one that has a match). Verified on a
-  deliberately broad 29-crate pattern: identical 187-test set vs workspace
-  scope. Broad patterns degrade gracefully to the full workspace;
-  `--filter-workspace` forces the old compile-everything behaviour.
-
-Feature flags are **scope-aware**. `--features <pkg>/<feat>` is a hard cargo
-ERROR when `<pkg>` is outside the `-p` selection, so the previously
-unconditional `-F corpus-engine/treesitter` made `--package <leaf-crate>` fail
-outright (`--package oicp-types` → exit 101, zero tests run). `resolve_features`
-in `scripts/lib/cargo-scope.sh` now emits a flag only when its package is in
-the selection's workspace-internal dependency closure; the unscoped run still
-gets both flags, so the gate's own coverage is unchanged. That lib also holds
-`crate_for_path` + `keep_members`, shared with `nextest.sh` so the two runners
-cannot drift apart — and `keep_members` is load-bearing: `crate_for_path` can
-resolve a `[package]` dir that is **not** a workspace member, and
-`cargo -p <non-member>` aborts the entire run. (`sovereign-mobile` was the
-standing example until it joined the workspace on 2026-09-09 — `keep_members`
-still guards the class.)
-
-Scoped runs share the workspace `target/` unless sccache is genuinely wired
-(`command -v sccache` **and** `RUSTC_WRAPPER`). The isolated
-`target/sovereign-test-scoped` dir only pays off when sccache serves the
-unchanged crates; without it it is just a second permanently-cold build tree —
-it had reached 37 GB and a week of staleness before this gate landed. The
-fallback re-accepts treesitter feature-unification thrash (a bare `-p` flip can
-rebuild `corpus-engine` + its dependents), which is far cheaper than a
-guaranteed from-scratch build.
-
-**Executors — `--engine auto|nextest|cargo`.** `cargo test` runs the
-workspace's 178 test binaries *serially*: 90.5s of in-binary time against a
-16.7s slowest binary. nextest runs them in parallel, so the gate's own
-`--engine nextest` (the `auto` default wherever cargo-nextest is installed)
-cuts test execution to ~19s. `auto` falls back to cargo on a machine that never
-ran bootstrap — nextest is a speed win, not a correctness dependency — but an
-*explicit* `--engine nextest` errors rather than silently downgrading, since
-quietly running a different executor is how "nextest is green" comes to mean
-nothing. `scripts/bootstrap.sh` installs cargo-nextest at a **pinned** version
-(profiles live in `.config/nextest.toml`, so version skew is silent behaviour
-skew across the mesh).
-
-Switching engines changes the clock, never the coverage. Three things enforce
-that. (1) nextest reports via JUnit rather than libtest stdout, so
-`sovereign-nextest-junit-adapter` translates it into the **same** Tier 2 JSONL
-the libtest adapter emits — `n` stays the bare test path, so no existing
-consumer can tell the engines apart. (2) nextest cannot run doctests at all, so
-the gate unconditionally appends a `cargo test --doc` pass (~4s; the workspace
-has 43 doctest targets and 0 runnable doctests today, making it pure insurance
-against the first doctest anyone writes silently never running). (3) The JUnit
-report is written at the *end* of a run, so a run that dies during compilation
-would leave the previous report in place — the gate deletes it first, making
-"no report" unambiguously mean "this run produced no results" instead of
-replaying a stale green. `--no-tests=pass` restores cargo's exit-0-on-no-match
-semantics, which `--filter`'s deliberate over-approximation depends on.
-
-`scripts/nextest.sh` remains as the fast-path dev runner, with nextest's richer
-`-E` filter-expression language; the gate deliberately keeps plain substring
-filter semantics so its results are comparable across both engines.
-
-**Where the gate runs — `scripts/pre-push.sh` first, CI second.** As of
-2026-07-24 the *primary* correctness gate is a pre-push hook, not GitHub
-Actions. The reason is a failure mode metered gates have and unmetered ones do
-not: on 2026-07-24 the repo exhausted its Actions allowance and every job began
-aborting in ~4s with "the job was not started because recent account payments
-have failed" — which on a PR page is nearly indistinguishable from a gate that
-ran and passed. Audited spend was ~6,600 billed min/month against a 3,000-min
-allowance, 56% of it CI, with the Actions cache measured **empty** (so every run
-cold-built the workspace incl. llama.cpp: 56.7 min median). The full audit,
-the five mechanisms behind it, and the resulting budget are in
-`docs/CI_ECONOMY.md`; `scripts/ci-spend-audit.sh` reproduces the numbers on
-demand (GitHub's own `/timing` endpoint reports zeros here, so the script sums
-per-job wall time and applies runner multipliers itself).
-
-The hook runs this same regression gate, scoped to what the push changes, plus
-rustfmt, `xtask docs-gate`, and the desktop `npm run check`/`test` pair. It is
-installed via `scripts/install-git-hooks.sh` (called from
-`scripts/bootstrap.sh`), which points `core.hooksPath` at the
-version-controlled `.githooks/` — so the gate is a reviewed artifact that
-updates with a `git pull` rather than a per-clone file that drifts between
-machines. It **fails closed**: if the push range cannot be diffed, it gates
-everything rather than reporting "no changes."
-
-`.github/workflows/ci.yml` then confirms the same thing on a clean checkout and
-gates outside contributions. It is path-filtered behind a `changes` job,
-cancels superseded runs on main as well as PRs, restricts cache *writes* to
-main (many concurrent writers against GitHub's 10 GB budget were LRU-evicting
-each other — the mechanism behind the empty cache), keys the llama.cpp CMake
-tree on `llama-cpp-sys-4`'s version rather than the `Cargo.lock` hash
-(`Cargo.lock` churned 29× in July; that version has changed 4× ever), and
-invokes `scripts/sovereign-test.sh` so CI and local share one definition of
-"the tests pass" — which also closed a real coverage hole, since bare
-`cargo test --workspace` had never exercised the `sovereign-cli/dev-tools`
-suites. Merge-blocking status is aggregated into a single `CI OK` job, which
-treats `skipped` as success so path filtering stays compatible with branch
-protection. `.github/dependabot.yml` is monthly and single-grouped: its update
-runs alone had cost 19% of total spend to produce PRs that were mostly closed.
-
-### Run
+**The gate is the two scripts**, not bare cargo — they resolve the repo's real
+feature contract (`corpus-engine/treesitter` + `sovereign-cli/dev-tools`, plus
+`sovereign-mesh/mesh-sim` on the lint side) and carry guards bare cargo has no
+equivalent of.
 
 ```sh
-# Sovereign desktop
-cd sovereign/crates/sovereign-desktop && npm install && cargo tauri dev
-
-# Sovereign CLI — user-facing surface is `sovereign <verb>`,
-# dispatching into one of four binaries. Build all four for the
-# full surface, or just the dispatcher for delegator-only edits.
-cargo build --release \
-  -p sovereign-cli -p sovereign-cli-daemon -p sovereign-cli-dev -p sovereign-cli-llm
-target/release/sovereign --help                # via the dispatcher
-target/release/sovereign-cli-daemon daemon run # the long-running host
-
-# Sovereign HTTP server
-cargo build --release -p sovereign-server
-target/release/sovereign-server --config sovereign/sovereign-server.toml
-
-# cmnwlth daemon
-cargo build --release -p commonwealth-daemon
-target/release/commonwealth-daemon init --name "Co-op"
-target/release/commonwealth-daemon daemon start
+./scripts/sovereign-lint.sh --human [--full]   # scoped to your diff, or the workspace
+./scripts/sovereign-test.sh --human
 ```
 
-Default ports:
+Three scoping levers with different reach: `--package` scopes BUILD and RUN;
+`--changed` maps git-changed files to owning crates and falls back loudly to
+the full workspace rather than silently under-covering; `--filter` is a
+libtest NAME filter that ALSO scopes the build, derived by grepping the
+pattern — so a vague pattern degrades to a workspace build. Pass the whole
+test name.
 
-| Port  | Service                                                       |
-|-------|---------------------------------------------------------------|
-| 9741  | cmnwlth/Sovereign client API (OpenAI-compatible)         |
-| 9742  | cmnwlth/Sovereign internal API (plaintext; network-isolation trust) |
-| 9743+ | `llama-server` instances                                      |
-| 50051+| `rpc-server` instances for layer shards                       |
-| 8080  | Sovereign HTTP server (configurable)                          |
+**Three guards bare cargo does not have.** A zero-test run is never green
+(`pass: 0 fail: 0` exits 4). Unattributable results exit 5, because a
+concurrent nextest run overwrote the shared JUnit report. A failed build is a
+failure, not a pass.
+
+Executors are `--engine auto|nextest|cargo`. Switching engines changes the
+clock, never the coverage: a JUnit adapter emits the same Tier-2 JSONL, the
+gate appends a `cargo test --doc` pass because nextest cannot run doctests,
+and the JUnit report is deleted before a run so "no report" cannot replay a
+stale green.
+
+No tests require GPU, models or network. Sovereign uses
+`DeterministicInference` + in-memory SQLite + real FTS5; cmnwlth's harness
+runs simulated meshes deterministically.
+
+**`scripts/pre-push.sh` is the primary gate, CI second** — a metered gate that
+aborts on a billing failure is nearly indistinguishable from one that passed.
+Held to a one-minute budget, it scopes to the diff and runs rustfmt, the
+compile, the eight blocking xtask ratchets (docs / arch / boundary / layer /
+lock / layout / env / concept) and the desktop node gates concurrently, then
+two advisory size ratchets. Install via `scripts/install-git-hooks.sh`, which
+points `core.hooksPath` at the version-controlled `.githooks/`. It fails
+closed: a push range it cannot diff gates everything.
+
+**A ratchet failure is not fixed by `--update-baseline` on your working tree**
+— that absorbs your own growth along with everything else. Re-pin at
+`origin/main` and ledger the acceptance in
+[`../quality/SIZE_DEBT_LEDGER.md`](../quality/SIZE_DEBT_LEDGER.md).
+`--tighten` is always safe.
+
+Concurrent agents serialize on `scripts/with-cargo-lock.sh`: cargo's package
+lock makes parallel gate runs BLOCK, and two concurrent nextest runs overwrite
+the shared report.
+
+| Port | Service |
+|---|---|
+| 9741 | cmnwlth/Sovereign client API (OpenAI-compatible) |
+| 9742 | cmnwlth/Sovereign internal API (plaintext; network-isolation trust) |
+| 9743 | The ring rail's loopback bind (`rail_port(client_port)`) |
+| 9743+ | `llama-server` instances |
+| 50051+ | `rpc-server` instances for layer shards |
+| 8080 | Sovereign HTTP server (configurable) |
 
 ---
 
 ## 8. Where to look for what
 
-| You want to                                      | Read                                                                |
-|--------------------------------------------------|---------------------------------------------------------------------|
-| Understand the agent runtime                     | `sovereign/crates/sovereign-core/src/runtime.rs` + `runtime/handlers/` |
-| See how plans are executed                       | `sovereign-core/src/executor.rs`                                    |
-| Add a tool                                       | `sovereign-contracts/src/traits.rs` (the `Tool` trait) then a new file under `sovereign-tools/src/` |
-| Run a workflow (CLI or desktop)                  | CLI: `svrn workflow run` → `workflow-host::run_workflow_in_process`. Desktop: `sovereign-desktop/src-tauri/src/workflow_commands.rs` → `run_workflow_with_provider` → `src/lib/components/workflow_run/WorkflowRunView.svelte` (the "Run" nav view) |
-| Ingest a folder via the Runner (substrate prize) | CLI `corpus ingest` (`corpus_cmd/ingest.rs`) runs the document-capable `notebook` shape. Desktop `lc_ingest` (`local_corpus_commands.rs`) runs it behind `SOVEREIGN_RUNNER_INGEST` (opt-in; bespoke `LocalCorpusManager::ingest` is still the default + owns OCR/enrichment). See `docs/specs/WORKFLOW_SUBSTRATE.md` roadmap |
-| Add a corpus extractor                           | `corpus-engine/src/extractors/` then register in `engine/ingest.rs` |
-| Add a corpus filter                              | `corpus-engine/src/filters/` (impl `DocumentFilter`) + `recipe.rs::FilterConfig` + `filters/loader.rs` |
-| Bundle a generated data file in corpus-engine    | Place in `sovereign-recipes/<corpus>/data/`, append filename to `corpus-engine/build.rs::BUNDLED_ASSETS`, `include_bytes!(concat!(env!("OUT_DIR"), …))` in `filters/assets.rs` |
-| Write a recipe                                   | `sovereign-recipes/<id>/recipe.toml` then add to `registry.toml` |
-| Author a recipe via the agent loop               | `studio/crates/sovereign-recipe-author/` + skill at `sovereign/crates/sovereign-contracts/src/skills_data/recipe-author.toml` |
-| Add an `http_api` recipe (REST source)           | See `corpus-engine/src/recipe.rs` round-trip tests                  |
-| Add an investigation recipe                      | `enrichment.type = "investigation"` + `[[entity_types]]` + `[[relationship_types]]` + `[[patterns]]`; run via `svrn enrich investigation build <id>` |
-| Write a skill                                    | `sovereign/modes/<id>/skill.toml`                                   |
-| Tune model selection per hardware                | `sovereign/models.toml`                                             |
-| Understand the SCIP call graph                   | `corpus-engine-scip/` (`scip_graph.rs`, `scip_export.rs`)           |
-| Classify a symbol / detect trait dispatch        | `corpus-engine-scip/src/descriptor.rs` — the ONE decider. Derives kind + dispatch from the descriptor, which is 100% populated. Do NOT read `symbols.kind` (88.7% `unknown`, and every top-level type descriptor is mislabelled) or `refs.ref_kind` (100% `direct`, the `dynamic` constant is never written) |
-| Find duplicated concept IDENTITY (a name typed in >1 crate) | `svrn code converge census` / `noun <Name>` / `status`, over `corpus-engine-scip/src/converge.rs`. Also computes the canonical owner from the observed crate DAG and names the users that cannot reach it. **Since 2026-08-21 a name counts only when >=2 crates each hold a definition another crate ALREADY references** (`cross_crate_reached`) — a collision whose every definition is `pub(crate)`, module-private, or declared inside a function body has nothing to import, so no amount of adoption retires it. Measured at `b325f22c`: 239 of 275 rows (87%) were exactly that, and an order target had already been derived from the wide number and was unreachable when written. At `4f64bdb2` the census reads 255 colliding names, 33 countable, and `quality/baselines/concepts.txt` was re-minted 279 -> 33 in the same commit. Of the 222 set aside, 92 still have exactly ONE reached definition — the local copies could still fold into it, and the >=2 rule does not count them; the census prints that number too. Both numbers always print; `--local` lists the rows set aside. Duplicated BEHAVIOUR is a different verb — `svrn code dry-report`; oversized FILES are `svrn code suggest-seams`; duplicated ROLE is `svrn code converge roles`; duplicated SHAPE is `svrn code converge shape` |
-| Find duplicated concept ROLE (one purpose, many names) | `svrn code converge roles`, over `corpus-engine-scip/src/roles.rs`. The feed the name census structurally cannot be: `AuditReport`/`DriftReport`/`StalenessSummary` are one concern sharing no name and no body. Per role it reports population, distinct crates, and adoption (share reaching 3+ crates). Membership is DERIVED — the last CamelCase segment of the type name, plus the fields a type declares — so **no list of member types exists or is maintained**; `FAMILIES` is ~25 morphemes quoted from tables published elsewhere. A MIRROR, not a gate: no threshold, no exit code, nothing to ratchet. Feeds dispositions into `quality/CONCEPTS.toml` with the verbs already defined there |
-| Find duplicated concept SHAPE (one concept, many names) | `svrn code converge shape`, over `corpus-engine-scip/src/shape.rs`. The feed that finds the RENAMED fork: `ClaimCitation` and `DrCitation` are one concept, share no name, and the census reported neither — seven Citation spellings were found by hand in this campaign's wave 7 before this verb existed. Matches types on their `(field name, field type)` sets, IDF-weighted (so `id: String` scores ~0) and scored `shared / max(weight)` — the symmetric form, because containment scores 1.0 for any small struct swallowed by a large one. **No type name is compared at any step**; field types come from the references each field symbol makes, which is 42% fewer pairs to adjudicate than field names alone (measured at index head `4f64bdb2`: 669 vs 947 past the gates). Positive control, pinned as a test: `ClaimCitation` == `DrCitation` at 1.000 with no name input. Measured precision at the default 0.50: 37/40 = 92.5%, 95% CI [80.1%, 97.4%], over a seeded random sample labelled against a pre-registered rubric. A MIRROR, not a gate |
-| Per-crate type visibility (private / crate-local / exported) | `corpus-engine-scip/src/arch_metrics.rs` — `type_spreads` → `CrateMetrics::types`, rendered by `svrn code arch-report`. A type is bucketed by the WIDEST reference to it, so the three buckets partition exactly; reference-derived, so a `pub` type nobody imports counts as private. `None` means the census did not run — not a crate whose types are all private. Mints `NOUN_CONVERGENCE.md` §10.2 |
-| See the code-intelligence MCP server             | `sovereign/crates/sovereign-cli-dev/src/project_cmd/serve.rs` (`cmd_serve`); long-running variant at `sovereign-cli-daemon/src/daemon_cmd/`(`run_daemon`) |
-| See the Sovereign HTTP MCP route                 | `sovereign/crates/sovereign-server/src/routes_mcp.rs`               |
-| **Deploy to a shared, air-gapped box (the on-prem pilot)** | `sovereign/deploy/onprem/` — `PLAN.md` (why each choice), `README.md` (the IT-facing brief), `EGRESS.md` (line-by-line audit of every outbound call + its kill switch), both hand-written config files, two systemd units, the nginx route allowlist, `package.sh` (our side) / `install.sh` + `acceptance.sh` (theirs). **Read `EGRESS.md` before claiming this system makes no outbound connections:** three agent tools (`search`'s web fallback, `web_fetch`, `wikipedia_fetch`) reached the internet on ordinary chat turns with no config switch until the `net-tools` feature was added 2026-08-03 |
-| **Rent a GPU by the minute — as an appliance, or as a mesh peer** | `docs/CLOUD_PEER.md` — `scripts/dev-pod.sh` rents a daemon carrying this host's loadout and tears it down in one command, either as a SOLO ISLAND or (`--mesh`) as a real peer that federates retrieval to whoever holds the bytes. Measured 2026-08-29: a pod holding ZERO corpora answered a `sep` query with five cited chunks served by RuggedFox at 0.73-0.80s Delaware->California, for $0.08. The mode is recorded in the Vast label so `check` and `down` cannot run against the wrong expectation, and `check` EXITS NON-ZERO on a contradiction. **A `--mesh` flight puts the join link on third-party hardware — end it with `svrn mesh rotate`.** The sibling `docs/CLOUD_TENSOR_PEER.md` is the other cloud shape: layers of ONE model sharded over ggml-RPC, not a whole daemon |
-| Trace a `/v1/chat/completions` end-to-end        | `commonwealth/docs/routing-field-guide.md`                          |
-| Point an outside tool (Claude Code, Codex, an Ollama client, an OpenAI SDK, an editor) at the daemon | `docs/INTEROP.md` — task-oriented recipes per socket; `docs/INTEGRATION_SURFACES.md` for which surfaces are contracts |
-| Understand OICP routing                          | `oicp-types/src/lib.rs` + `sovereign-scheduler/src/oicp_select.rs` (shared by both sides) + `sovereign-inference/src/selector.rs` and [`docs/inference.md`](./docs/inference.md) |
-| Know what a comparable project does (exo) before designing distributed inference | `docs/internal/EXO_COMPARATIVE_STUDY.md` — teardown of exo-explore/exo @ `b5375f8`: what to adopt, what we already lead on, and where both projects are stuck (notably: exo has **no** measured throughput or link-bandwidth signal either, which reframes SCHEDULER_QUALITY F10) |
-| Know which CLI *use cases* are promised, and whether they still work | `docs/cli-contract.toml` — `[[command]]` rows are the verb surface, `[[journey]]` rows are the 32 **sequenced** use cases (tiered 1-5 by user impact) and `[[stranded]]` is the ledger of verbs belonging to no journey. Enforced by `cli_contract_journeys` (static ratchet), `cli_journey_dispatch` (offline), `scripts/cli-journey-verify.sh` (live read-only) and `scripts/cli-journey-sandbox.sh` (live **mutating**, boots its own daemon in a private netns on :19741). See `docs/TESTING_SURFACE.md` L4j. First live run 2026-07-28 found six real CLI defects, incl. `daemon status` writing its answer to stderr and the whole `daemon`/`project` verb family ignoring a configured `client_port` |
-| Know which *promises* the CLI makes, and how much of each is actually proven | `[[experience]]` rows in the same manifest (added 2026-07-29) — 15 promises, each citing where it is promised and listing the **capabilities** it is made of; journeys declare which one they serve. `cli_contract_journeys::every_capability_is_exercised` requires each capability to be driven by a step that asserts OUTPUT (a read inline, a mutation by a later step), because every code-intelligence tool here exits **0** when it finds nothing. `MAX_UNSERVED_EXPERIENCES` is the gap register: `code-intel-chat` is declared with no journey rather than silently uncovered. `svrn contract map` renders it (or `cargo test -p sovereign-cli --test main cli_contract_journeys --features dev-tools print_the_experience_map -- --nocapture` — same renderer), including the number no ratchet can fail on: steps that assert output, 77/141 repo-wide, with `correctness-loops` at 0/9 and `mesh-federation` carrying no live journey at all |
-| **See what the CLI promises and how much of it can actually fail** | **`svrn contract`** (dev-tools; `map` / `census` / `nightly` views) — the one front door, added 2026-07-30 because every layer of this surface was previously reachable only by knowing it existed. `census` is the number to read: it splits the manifest into steps **a lane runs** (79: 62 assert output, 17 exit-code-only mutations proven downstream, **0 asserting nothing**) and steps **nothing runs** (62 in 14 `skip_live` journeys, 44 asserting nothing) — because a step in a never-run journey is a written intention, and adding `exit = 0` to it satisfies a ratchet without adding evidence. Four gates: `live_steps_all_assert_something`, `live_read_steps_assert_output` and `every_live_journey_asserts_output_somewhere` are **hard zeros**; `steps_no_lane_runs_do_not_grow` caps the never-run debt at 62, shrink-only. Rendered by `sovereign_cli_shared::cli_contract_report`, shared with the cargo test so the reported number and the enforced number are the same one. `svrn contract` is itself journeyed (`cli-quality` / `contract-audit`) |
-| **The comaintainer: judge the judgment, not just the code** | `gym/comaintainer/` — a 301-episode golden set mined from the ledger, verdict commits, notes, invariants, operator transcripts and fix-chain diffs; scores any (model, charter) pair on typed-verdict agreement (`score.py`, engines `daemon\|claude`, every run re-scorable from raw). The role itself is `gym/comaintainer/CHARTER.md`; the landing seat is `scripts/co-review.sh` (advisory, appends to `~/.sovereign/comaintainer/verdicts.jsonl`; its bundle carries FIELD EVIDENCE from the fieldglass sidecar via `scripts/co-field.py`, verdicts may cite `field:<class>:<path>` anchors, and `--field` adds a landing field-diff — ledger row "Landing field-diff"); the director's supervision log is `scripts/co-directive-log.sh` (the (draft, final) edit rate is the M1 flip metric). Vision + milestones: `docs/COMAINTAINER.md`; ledger row "Comaintainer director (M0 supervised)" |
-| **Judge architecture health at a glance (evidence, not verdicts)** | **`svrn code fieldglass [corpus] --open`** (dev-tools) → `sovereign-cli-dev/src/code_fieldglass/` — one deterministic self-contained HTML (`~/.sovereign/arch/<corpus>/fieldglass.{html,json}`): ONE-CANVAS design (P4) — the order-stable treemap of every git-source `.rs` file is the page; layer violations (`arch_layers::evaluate`) paint on it as arrows and ▦ marks flag trait-defining files, with layer flow + seriated caller×method trait matrices (ISP; keyed on the SCIP descriptor grammar — the DB's `kind`/`ref_kind` columns are junk; matrix cell click scopes the field to its call sites) as drill-downs; default paints only the strongest evidence (top clone families, strongest ghosts, any violation), git co-change communities + bridge files (SRP), `dry_report` duplication arcs, temporal ghost edges, agent read/write heat from session transcripts (`cache-audit --by-file` shelled — comprehension-tax ranking: read-hot, edit-cold), 90d churn tollbooths, a since-last-render delta vs the JSON sidecar, and an honesty footer stating what the picture cannot see (incl. SCIP/embedding input ages with a STALE INPUTS badge, and a per-panel ledger naming each panel's time window). INCREMENT MODE `--window <dur>` (48h/7d) recomputes the ACTIVITY measurements (churn tollbooths + glow, agent read/write heat, comprehension tax) from the window while STRUCTURE stays full-history on the same stable layout; extracted from one git harvest and one `cache-audit --by-file` scan (which emits per-UTC-day slices) rather than re-harvesting, and written to its own `fieldglass.<dur>.{html,json}` so the default delta baseline is never touched. Renders evidence only — no scores, no gates. How to read each panel: `docs/FIELDGLASS.md` |
-| Run the *capability* half of the journey harness | Journeys declare `needs = ["operator-home" \| "indexed-repo"]` for state a throwaway sandbox cannot have. `cli-journey-sandbox.sh` passes `--lacks` for both and `cli-journey-nightly.sh` then runs exactly that remainder READ-ONLY against the operator's own daemon, so nothing is dropped by both lanes. Replaced a hardcoded `SANDBOX_EXCLUDES` array of journey ids that was invisible from the manifest |
-| Price a refactor before anything is applied (factory stages 1-2 + entry gate) | `svrn code refactor plan <spec.toml>` / `svrn code refactor gate` → `sovereign-cli-dev/src/refactor_cmd/` (specs are DATA: `quality/refactors/*.toml`, one shape for all five kinds). `plan`: per-item entry gate (representation · wire+RUN fixture · trait surface · fallibility) → seed edit → `cargo check --message-format=json` under the lint gate's feature contract → deterministic `(code, expected, found, context)` classes, RULED vs RESIDUE, four per-crate verdicts (errors/clean/never-ran/outside-workspace). `gate`: adjudicates all five work-table kinds and prints the ranked schedule; refusals appear AS refusals. Read-only — a restore guard enrolls every file BEFORE writing it, so a mid-seed crash restores what landed and no-ops the tail |
-| **Split a god file through the factory's deterministic loop** (proven on the grounding module: 4 files, no §3.1 violation left) | `svrn code suggest-seams <file> --plan` (SCIP clusters → executor TOML; `--goal` renders the model-driven variant) → `cargo xtask refactor-apply <plan.toml> --land` (mechanical moves + per-step verify + conformance/baseline landing) → the SYSTEM_OVERVIEW §1.1 touch. Process, division of labor (the model never mutates), failure catalogue and preconditions: [`quality/REFACTOR_FACTORY.md`](../quality/REFACTOR_FACTORY.md) §"The split loop". Oversized ledger: `quality/baselines/oversized.txt` (arch-gate ratchet) |
-| Hand a worker one refactor record and prove what came back (the ledger) | `svrn code refactor status \| label \| next \| close` → `sovereign-cli-dev/src/refactor_cmd/{detector,labels,ledger,order}.rs` (spec: `quality/REFACTOR_LEDGER.md`). TWO SOURCES OF TRUTH, both in git: destinations from `quality/CONCEPTS.toml` + `quality/refactors/*.toml`, judgements append-only in `quality/refactors/labels/<detector>.jsonl` (last line wins). NO DATABASE and NO STORED PROGRESS — a holding is open iff its detector still fires on it, so `close` re-runs the instrument and NOTHING can mark work done by hand; a dead worker session is a no-op needing no reconciliation. Every run carries a NEGATIVE CONTROL: a detector whose control site went silent is could-not-judge and closes zero (it caught a mis-specified control on its first live run). Scoping is a POST-FILTER on `Site.file`, never a narrowed input — `converge::census` and `shape_census` compute population-relative predicates, so narrowing their input makes them wrong, not cheap. Keys carry no coordinates, so a judgement survives its site moving; a file or symbol rename is the one lossy case and surfaces as a named orphan. Locking is `O_EXCL` per file with rollback (the work atlas is visibility, not a lock manager) |
-| Prove a refactor cannot silently rewrite the wire (factory stage 6) | `svrn code wire-check <spec.toml>` → `sovereign-cli-dev/src/refactor_wire.rs` (fixture registry + surface judging, one `Judgement` per surface; exit 0 only when every declared surface is PROVEN and no known surface is undeclared); byte decider `kernel-types/src/wire.rs`; negative control `quality/refactors/node-id.toml`, kept failing on purpose |
-| Understand index storage on disk                 | `corpus-engine/src/index/mod.rs`                                    |
-| Understand the v2 atlas pipeline                 | [`corpus-engine/ENRICHMENT_V2.md`](../corpus-engine/ENRICHMENT_V2.md) + `corpus-engine/src/enrichment/pipeline/mod.rs` |
-| Drive v2 enrichment from the CLI                 | `sovereign-cli-llm/src/enrich_cmd/`                                 |
-| Run an atlas build INSIDE the daemon (a shipped desktop has no CLI on PATH) | `enrich_now` (`sovereign-tools/src/local_corpus/atlas_dispatch.rs`) resolves the recipe's `[enrichment] type` through `EnrichmentPassRegistry` and routes the `atlas` pass to `EnrichmentDriver::start_atlas_build` → the host-installed `watched::enrich::AtlasBuildRunner` (`sovereign-daemon/src/atlas_builder.rs::in_process_atlas_builder`, which links `sovereign-cli-llm` as a library); progress lands in `_enrichment_state.json`. `tiered` and recipe-less folders keep `start_tiered_build`. The subprocess runner (`sovereign-tools/src/enrich.rs`) is the fallback where no builder is installed. (ontology-v1 P0.4) |
-| Understand the recipe registry                   | `corpus-engine/src/registry.rs` (+ `recipe.rs::bundled_recipe_toml`) |
-| Understand delta updates                         | `corpus-engine/src/update/delta.rs`                                 |
-| Understand scope expansion (filter delta)        | `corpus-engine/src/engine/expand.rs`                                |
-| Understand KnowledgeView digest assembly         | `sovereign-tools/src/knowledge_view/` and [`docs/knowledge-view.md`](./docs/knowledge-view.md) |
-| See where KnowledgeView is injected              | `traits.rs::LandscapeDigestProvider::splice_landscape_digests`; call sites in `runtime/streaming.rs` + `runtime/turn.rs` |
-| Understand ATOS lifecycle                        | `sovereign-atos/src/local/orchestrator.rs`, `sovereign-atos/src/{charter,approval}.rs`, and [`docs/ATOS.md`](./docs/ATOS.md) |
-| See the ATOS CLI surface                         | `sovereign-cli-dev/src/atos_cmd/` + `project_cmd/` (`cmd_found` in `mod.rs`, `cmd_amend` in `charter_amend.rs`, `cmd_phase` in `phase.rs`, `cmd_audit` in `audit/`) |
-| Run the long-running Sovereign daemon            | `sovereign-cli-daemon/src/daemon_cmd/` + `contrib/launchd` + `contrib/systemd` |
-| Rotate daemon logs                               | `sovereign-cli-daemon/src/log_rotation.rs`                          |
-| Understand the loopback guard                    | `sovereign-daemon/src/loopback_guard.rs` + `admin_http::tests::loopback_guard_works_under_production_listener_shape` |
-| Serve something a desktop command used to compute in-process | the client-router families in `sovereign-daemon/src/{reading,atlas,meshapp,lc,governance,insight,notes,features,recipe_project,mcp_config,turn_extras}_http.rs` — table in §5, "What the host mounts on that router"; parity audited by `sovereign-mesh/tests/loopback_parity.rs` |
-| Know what an attached desktop still constructs   | `sovereign-desktop/src-tauri/tests/attach_construction_census.rs` (floor 12) + §6 "Desktop attach mode" |
-| Prove a deleted twin cannot come back            | `scripts/twin-census.py` over `quality/twin-plants.toml` (19 families) — plant, watch the family census name its own rule, restore byte-for-byte |
-| Prove the desktop and the CLI answer one question the same way | `sovereign-desktop/tests/e2e/real/journeys/surface-parity.journey.spec.ts` + `…/journeys/cli-surface.ts` — routed intent, source set as `(corpus_id, chunk_id)` handles and gate action asserted identical on the real harness, with a negative control first |
-| Understand local-corpus snapshot/rollback        | `sovereign-tools/src/local_corpus/writeback.rs` + `frontmatter.rs`  |
-| Pick the next daemon test to write               | [`docs/TESTING_SURFACE.md`](./docs/TESTING_SURFACE.md)              |
-| Add a binary-bearing corpus (email / .docx / .xlsx / future calendar / transactions) | `corpus-engine/src/extractors/described_asset.rs` — register an `AssetSubExtractor` via `CorpusEngine::set_asset_sub_extractors`; the in-tree defaults cover xlsx / docx / plaintext / opaque |
-| Read or extend the multi-origin reconciliation primitive | `corpus-engine/src/enrichment/reconciliation/{mod,multi_origin,oplog,signals}.rs` — operates on `Vec<Entity>` with `Provenance` (AD-4); writes `atlas/reconciliation_oplog.jsonl`. `oplog::reverse_merge` is the actual undo: it matches an `OpId` against the log and restores the merge's RECORDED inputs, stamping `reverts` on the Split (the governance `Revert { targets }` shape). `multi_origin::split_atom` is the operator's own judgement — caller-supplied outputs, no lookup — and is not undo |
-| Add an atom to an atlas after `write_atlas_full` ran | `writer::append_atoms_and_edges` — reads both JSON files, extends, rewrites, and rebuilds the v2 store from the merged set (the store is the read path; writing only `atoms.json` leaves it short). Ids are the caller's problem |
-| Score a clustering of mention-ids vs ground truth (B³ + pairwise-F1) | `sovereign-eval/src/entity_resolution_score.rs` (scorer) + `entity_resolution_bench.rs` (Split/peek-budget) |
-| Run the Phase 5 Enron measurement loop | `svrn bench enron run --corpus enron-sample-onemailbox --split train --policy {pre_reconciliation\|tuned}` → `sovereign-cli-llm/src/bench_cmd/enron.rs` |
-| Add another typed Entity column-extractor for tabular asset kinds | `corpus-engine/src/extractors/column_aware.rs` — extend `ColumnHeaderMap` or write a per-asset-kind extractor reading the parquet parsed-form cache directly |
-| Content-addressed asset store on disk | `corpus-engine/src/asset_store/{mod,fs,ledger}.rs` (AD-1; raw bytes + parsed-form caches + append-only ledger under `<corpus>/assets/`) |
+| You want to | Read |
+|---|---|
+| Understand the agent runtime | `sovereign-core/src/runtime.rs` + `runtime/handlers/` |
+| See how plans are executed | `sovereign-core/src/executor.rs` |
+| Add a tool | `sovereign-contracts/src/traits.rs`, a file under `sovereign-tools/src/`, a `[[tool]]` block in `sovereign-contracts/tool-manifests/` |
+| Run a workflow | CLI `svrn workflow run` → `workflow-host::run_workflow_in_process`; desktop `workflow_commands.rs` → `run_workflow_with_provider` |
+| Add a corpus extractor / filter | `corpus-engine/src/extractors/` then register in `engine/ingest.rs`; `src/filters/` + `recipe.rs::FilterConfig` + `filters/loader.rs` |
+| Bundle a generated data file | `sovereign-recipes/<corpus>/data/`, append to `corpus-engine/build.rs::BUNDLED_ASSETS`, `include_bytes!` in `filters/assets.rs` |
+| Write a recipe | `sovereign-recipes/<id>/recipe.toml`, then `registry.toml` |
+| Add an investigation recipe | `enrichment.type = "investigation"` + `[[entity_types]]` + `[[relationship_types]]` + `[[patterns]]` |
+| Write a skill / tune models per hardware | `sovereign/modes/<id>/skill.toml`; `sovereign/models.toml` |
+| Understand the SCIP call graph | `corpus-engine-scip/` (`scip_graph.rs`, `scip_export.rs`) |
+| Classify a symbol / detect trait dispatch | `corpus-engine-scip/src/descriptor.rs` — the ONE decider. Do NOT read `symbols.kind` (88.7% `unknown`) or `refs.ref_kind` (100% `direct`) |
+| Find a duplicated concept | IDENTITY `svrn code converge census` / `noun <Name>`; ROLE `converge roles`; SHAPE `converge shape`. Duplicated BEHAVIOUR is `code dry-report`; oversized FILES are `code suggest-seams` |
+| Understand index storage on disk | `corpus-index/src/index/mod.rs` |
+| Understand the v2 atlas pipeline | [`corpus-engine/ENRICHMENT_V2.md`](../corpus-engine/ENRICHMENT_V2.md) + `enrichment/pipeline/mod.rs` |
+| Drive v2 enrichment / build inside the daemon | `sovereign-cli-llm/src/enrich_cmd/`; `enrich_now` (`sovereign-tools/src/local_corpus/atlas_dispatch.rs`) |
+| Understand delta updates / scope expansion | `corpus-engine/src/update/delta.rs`, `engine/expand.rs` |
+| Understand KnowledgeView | `sovereign-tools/src/knowledge_view/`; injected at `LandscapeDigestProvider::splice_landscape_digests` |
+| Understand ATOS lifecycle | `sovereign-atos/src/local/orchestrator.rs` + [`docs/ATOS.md`](./docs/ATOS.md) |
+| Run the long-running daemon | `sovereign-cli-daemon/src/daemon_cmd/` + `contrib/launchd` + `contrib/systemd` |
+| Serve something the desktop used to compute in-process | the client-router families in `sovereign-daemon/src/*_http.rs` — §5 |
+| Prove a deleted twin cannot come back | `scripts/twin-census.py` over `quality/twin-plants.toml` |
+| Prove desktop and CLI answer one question alike | `sovereign-desktop/tests/e2e/real/journeys/surface-parity.journey.spec.ts` |
+| Trace a `/v1/chat/completions` end-to-end | `commonwealth/docs/routing-field-guide.md` |
+| Understand OICP routing | `oicp-types/src/lib.rs` + `sovereign-scheduler/src/oicp_select.rs` + [`docs/inference.md`](./docs/inference.md) |
+| Point an outside tool at the daemon | [`../docs/INTEROP.md`](../docs/INTEROP.md); [`../docs/INTEGRATION_SURFACES.md`](../docs/INTEGRATION_SURFACES.md) for which surfaces are contracts |
+| Deploy to a shared air-gapped box | `sovereign/deploy/onprem/` — **read `EGRESS.md` before claiming this system makes no outbound connections** |
+| Rent a GPU by the minute | [`../docs/CLOUD_PEER.md`](../docs/CLOUD_PEER.md); `scripts/dev-pod.sh`. A `--mesh` flight puts the join link on third-party hardware — end it with `svrn mesh rotate` |
+| Know which CLI use cases are promised | `docs/cli-contract.toml` — `[[command]]` the verb surface, `[[journey]]` the sequenced use cases, `[[experience]]` the promises |
+| See what the CLI promises and how much can fail | **`svrn contract`** (`map` / `census` / `nightly`). `census` splits the manifest into steps a lane RUNS and steps nothing runs, because a step in a never-run journey is a written intention |
+| Judge architecture health at a glance | **`svrn code fieldglass [corpus] --open`** — one deterministic self-contained HTML, evidence only: no scores, no gates. [`../docs/FIELDGLASS.md`](../docs/FIELDGLASS.md) |
+| Price or execute a refactor | `svrn code refactor plan` / `gate` / `status`; `code suggest-seams <file> --plan` → `cargo xtask refactor-apply`; `code wire-check`. Process [`../quality/REFACTOR_FACTORY.md`](../quality/REFACTOR_FACTORY.md) |
+| Judge the judgment, not just the code | `gym/comaintainer/` + [`../docs/COMAINTAINER.md`](../docs/COMAINTAINER.md); landing seat `scripts/co-review.sh` |
+| Is any quality subsystem's posture stale? | **`svrn posture`** — one table: drift / arch / capability / contract-nightly / watchers / env-gate / bench baselines, each row naming its refresh command |
+| Is the resident stack BROKEN right now (not drifted)? | **`svrn quality check [--lane <id>]`** — the curated ~30-minute check. Lanes are DATA in `quality/instruments.toml`; each states its verdict as a `kernel_types::Judgement` on its last stdout line. `--distribute` runs the same selection as work on the `work` ring |
+| Did my change regress retrieval / routing / synthesis / enrichment? | **`./scripts/sovereign-ci-bench.sh`** (~2-4h) — the FULL nightly, where drift against committed baselines is judged |
+| A bench says regressed — real or noise? | [`docs/RUNBOOK.md`](./docs/RUNBOOK.md) §6 — per-lane noise bands, baseline-age semantics, the legitimate re-mint path |
+| Pick the next daemon test to write | [`docs/TESTING_SURFACE.md`](./docs/TESTING_SURFACE.md) |
 
-| Is any quality subsystem's posture stale? | **`svrn posture`** (dev-tools) — one read-only table: artifact age + verdict for drift / arch / capability / contract-nightly / watchers / env-gate / bench baselines; each row names its refresh command. Added 2026-07-30 because drift and arch had both been weeks stale with nothing aggregating that fact |
-| Is the resident stack BROKEN right now (not drifted)? | **`svrn quality check [--lane <id>] [--budget-secs 1800] [--mint]`** (dev-tools, `sovereign-cli/src/quality_check_cmd/`) — the curated lean check. Lanes are DATA in `quality/instruments.toml` — the SAME table every other instrument in the repo is declared in, since 2026-09-07 (they had their own check-lanes table until then, and two tables answering "what runs here" collided on `kind`, `enforcement`, cost and `baseline` with different meanings on each side; ARCH §10.6). `--trigger <venue>` runs any other venue's selection out of that table — `prepush`, `precommit`, `smoke:<n>` — with the venue's own budget, concurrency, hoisted prepare step and failure disposition declared in its `[[trigger]]` row, and `--dry-run` prints the selection, the run order and the budget arithmetic without running anything. Each lane runs as a subprocess and states its own verdict on its LAST stdout line as a `kernel_types::Judgement` (`sovereign_cli_shared::lane_verdict`), so no caller reconstructs a verdict by grepping lane prose the way `scripts/lib/ci-bench-verdict.sh` did. **Since 2026-09-12 (rung `vl-2` of `quality/campaigns/verifier-loop.toml`) the back-of-house speaks it too**: `evidence-verdict.py`, `sabotage.py`, `twin-census.py`, `co-drift.py`, `co_liveness.py`, `co-lineage.py`, `nc-thesis.py` and `mesh-live-probe.py` each end a judging run with the same line, and `sovereign-ci-bench.sh` prints one per lane via `lane_judgement` beside the grep-based `lane_verdict` it maps (the grep stays — it is what reads the lanes that do not yet emit). The Python half of the protocol is `scripts/lib/judgement.py`, ONE mirror rather than nine `json.dumps` copies, tied to this parser by `lane_verdict::tests::the_python_emitter_speaks_the_same_protocol`. `cargo xtask instrument-gate` holds the line: a row declaring `verdict = "judgement-line"` whose script never reaches the emitter is a hard failure, and a registered script that decides in the four-verdict vocabulary while being read on its exit code alone is a RATCHET against `quality/baselines/verdict_line_arrears.txt` — 12 rows when it landed, `--tighten` banks each conversion. Preconditions are a closed enum (port / slot-decodes / corpus-installed / binary / container) and an unmet one is could-not-judge NAMING it, never a pass. **Every member asserts that the SUBJECT of the measurement exists; none asserts that the WORLD is convenient** (ARCH §18.2). A sixth, `host-quiet:<max 1-min load>`, was declared on six instruments and on `chat-ask`'s `per-stage ceilings` row until 2026-09-08 and is DELETED, not retuned. The evidence behind it stands — the same binary, bank and bar decoded at 50.7 tok/s at load 3.7 and 17.8 tok/s at load 32 on the authoring host — and the conclusion drawn from it did not: nobody derived the 4, on the host that runs the check it was unmet most of the time, so every wall-clock row emitted could-not-judge naming the load and three consecutive proof runs learned nothing. Sharper still, one `chat-ask` run at load 4.27-4.32 reported `failed` on q1 and `could-not-judge` on q2, because the bound was evaluated PER QUESTION and the load crossed 4.0 between them. **Load is now a COVARIATE on every row and gates nothing**: `summary.json` carries `load_start`/`load_end` and `daemon_uptime_secs_start`/`_end` per row (`quality_check_cmd::exec::Covariates`), the second pair because a row whose start uptime exceeds its end uptime ran across a daemon restart and is interrupted rather than slow — two peer sessions share this daemon and one restarts it deliberately. `sovereign_cli_shared::host_load::load_average_1m` is the one reader. It reads the 1-minute load average and NOT the daemon's in-flight decodes, which this host serves no route for; that is a named substitution, not a silent one. `chat-ask`'s ledger walk now yields TWO rows rather than one: `per-stage calls` (the model-call counts, load-invariant and true on any machine) and `per-stage ceilings` (the milliseconds), so the load-sensitive half no longer decides the load-invariant half's verdict. Every run writes `target/quality-check/<stamp>/summary.json` with per-lane seconds — which `sovereign-ci-bench.sh` has never done (`target/ci-bench` is empty). A run whose stack has no baseline for its fingerprint writes NOTHING; `--mint` is the only door. **`--distribute` (cw-lift 5e, `quality_check_cmd/distribute.rs`) runs the SAME selection as work on the `work` ring instead of as child processes here.** Each selected instrument becomes one `process:v1` unit — `argv` from the row, `preconditions` from the row (`oicp_types::JobRequirements::preconditions` is `kernel_types::Precondition`, so nothing is re-spelled), the verdict source from the row (`JudgementLine` -> `ResultSource::VerdictLine`, `ExitCode` -> `ResultSource::Stdout`; fixing it at `VerdictLine` would make four of the five `ci:test` rows report `no-verdict`), and the wall cap from the VENUE's own `overrun` policy, the same decider the local path caps a child with. Units pin `repo_rev` to `git rev-parse HEAD` plus this host's os/arch, and the merge refuses any `Complete` whose `ComputeAttribution` is not `comparable_to` this checkout's — a donor one commit behind produces a well-formed `passed` about a tree that is not yours, and the row is could-not-judge NAMING both revs rather than adopting it. Since 2026-09-10 both halves of "what host am I" are ONE reader (`commonwealth_work::attribution::of_this_host`, behind the same `process` feature as the executor), replacing three — the donor's, this reference, and the lifted peer's — each of which had its own `rustc --version` and its own spelling of the absence; the readings stay independent because each side calls it on its own machine, so the guard is still not asserting on a field the donor supplied (§18.1). Converging them forced a rule that had been holding by accident of authorship: `ComputeAttribution::comparable_to` was plain field equality, so two hosts that BOTH failed to read `rustc` were kept apart only by the two spellings differing, and one spelling would have read as agreement and adopted a `passed` about a compiler neither host could name (watched, with the rule reverted). A field naming an absence (`kernel_types::is_absent_marker`) now makes `comparable_to` false on either side, and `incomparable_fields` names an agreed-absence field rather than returning empty and rendering the row as "not about — ." The submitter appends through `sovereign_cli_shared::rail::rail_append` (the ONE operator-side rail client; `svrn job` and `svrn ring` are the other two callers) and folds `rail_log` with `WorkProjection::fold` and `admission_from_wire`, which moved from `job_cmd` into that module for this second reader. **A unit the cohort cannot place is a ROW carrying its refusal, never an absence** — never-ran with each offer's typed `WorkRefusal` when every offer refused, could-not-judge naming the three host-side checks the rail cannot see (rev checkout, precondition, executor registration) when some offer could have taken it, and the refusal survey is taken at the last millisecond the handoff was still on offer rather than at the merge's clock, or every unplaced row would read `not-allowed` about a window that had just closed. Two instruments whose payload is byte-identical are ONE unit on the plane (`seal::unit_hash` covers kind + payload, not requirements) and the submission is REFUSED by name rather than giving two rows one fate. Everything downstream is unchanged and shared: `render_rows`, `honesty_footer`, `write_summary` and the enforcement x venue exit rule are one implementation over both paths, so a distributed verdict is diffable against a local one at the same rev. `summary.json` gains a doc-level `submitted_by` and a `node` per lane row — `null` on a local run, because a local run signs nothing and no actor took part; `scripts/cw-work-offload-share.sh` is the `cw-work-ci-offload` bar's instrument and reads them with ONE formula (rows whose `node` is non-null and differs from `submitted_by`, over EVERY row, so a dropped shard costs the share), exiting 3 `artifact-absent` when there is no summary rather than printing the floor back. `quality/instruments.toml` gained the `[[trigger]]` for `ci:test` (budget 4500 s, the `test` job's own `timeout-minutes: 75`; concurrency 2; no prepare step, because a donor has no `target/debug/xtask` of ours) — before it, `--trigger ci:test` exited 2 |
-| Did issue #57 come back — an answerable half refused? | **`svrn quality check --lane chat-ask`** (`sovereign-cli-llm/src/quality_lane_cmd/chat_ask.rs`, bank `sovereign/bench/quality-check/chat-ask.toml`) — ingests `docs/ARCHITECTURE_TOUR.md` from source into `qc-arch-tour-<fingerprint8>` (that ingest IS the document-ingest lane: chunk count, `corpus search` hit and readiness are asserted before a question is asked), then asks two questions three warm times each and reads the turn's own ledger through `chat ask --format json`'s `metadata`. Named rows: ingest · ledger present · route · per-stage ceilings · per-stage baseline (TRACKED) · gate outcome · both halves answered · not abstained · useful · judge calibrated. The bank declares PRE-REGISTERED MEDIANS per model stem and the bar is DERIVED by one formula — `ceiling = max(1.5 x median, median + ceiling_floor_ms)`, `ceiling_floor_ms` declared once for every stage (`chat_ask::ceiling_from_median`, ARCH §10.6). The additive term exists because a multiplier alone has no floor: 1.5x a 193 ms `retrieval` median put the bar at 290 ms and a run failed the whole lane on `retrieval 298 ms > 290`, eight milliseconds. A stem with no table is could-not-judge, not a pass, and so is the whole ceilings row on a host that is not quiet. The usefulness judge is the gate's own forced-choice A/B probe (`bench_cmd::live_runner::forced_choice_ab`) and its two controls run on EVERY run — if they stop separating, `useful` is could-not-judge rather than a verdict. Abstention is read through `bench_cmd::chaos_monkey::action_from_gate_signal`, the one decider, never a second detector |
-| Is the ENGINE slower than a number written down first? | **`svrn quality check --lane throughput`** (`sovereign-cli-llm/src/quality_lane_cmd/throughput.rs`, bank `sovereign/bench/quality-check/throughput.toml`) — wraps `scripts/throughput_probe.py --json` rather than re-deriving it, over four declared arms (primary/fast x short/long) plus two plain end-to-end turns through the runtime. Bars are PRE-REGISTERED per model stem: an arm with a bars table for the running stem gates HARD, an arm the operator declared `bars_deferred` records without gating, and an arm with NEITHER is could-not-judge naming the stem — a model swap can never read as a decision someone made. The long arms run one COLD trial against a prompt salted in its first bytes, because the daemon prefix-caches (measured: 5,917 tokens cost TTFT 44,727 ms cold and 375 ms repeated) and the ordinary warm-up-plus-trials shape would measure the cache. Its predecessor, `desktop-smoke.sh::perf_probe`, compared each run against a gitignored baseline directory that does not exist on a fresh checkout, so it captured on every run and compared on none |
-| Which ITEMS does the lean check run, and who decided? | `sovereign/bench/smoke.toml` — one file, one `[[subset]]` row per (subset, bank), either `ids = [...]` or `mode = "full"`. Reached by `--smoke-subset <subset_id>` on `bench all` (forwarded to both its routing and retrieval/synth `eval run` subprocesses) and on `bench chaos-monkey run`; `knowledge-gym` already selected by id, so the lane's argv expands `{ids:<subset>}` into its existing `--fixture` flag rather than growing a second one. DECLARED, not sampled: `--sample-questions N` and `--limit N` count off the front of a bank and so pick a different set as it grows, which is what makes a sampled lane's baseline cap-specific. A selected bank with NO row exits 2 rather than running whole, and a declared id the bank no longer has refuses rather than shrinking the lane. The `subset_id`s are in the run fingerprint |
-| Did retrieval / routing / enrichment / synth / chaos / the gym BREAK (not drift)? | **`svrn quality check`** runs all six through `quality lane bench` (`sovereign-cli-llm/src/quality_lane_cmd/bench_lane.rs`), which runs each existing verb UNCHANGED and reads the report it writes — no lane prose is parsed. Every one of these that drives the chat pipeline builds an IN-PROCESS session (`bench all` subprocesses `svrn eval run`), and since 2026-09-05 that session is SEALED to the bank's corpus via `sovereign_runtime_recipe::LaneScope::Sealed`: the wikipedia link graph, the cross-corpus meta-atlas and the bridge index are not loaded for a lane that cannot consult them. Measured on the authoring host, chaos-monkey against a 316-chunk corpus: lane startup 23.1 s -> 4.5 s, because 22.3 s of it was a 7.85M-edge graph and a 981 MB meta-atlas JSON. The cost was paid once per LANE, not once per run. HARD on CATASTROPHE ONLY, because at six probes and ten questions a one-item flip is 12-20 points and a band is noise (RUNBOOK §6): an errored item, an empty answer, an all-zero tally, an abstention on an answerable probe, a confabulation on an absent one. Scores are TRACKED with no band. A knowledge-gym replay the daemon REFUSED (a 503 under load) is could-not-judge on its own `replays that ran` row and contributes no tally at all — it used to be folded into `pass_count` as a failure, so three refusals scored `0/3` and tripped the HARD all-zero row exactly like three real predicate failures (ARCH §18.3). `AggregateSummary.per_fixture` carries named fields (`slug`/`passed`/`errored`/`replays`/`pass_rate`) so the distinction survives the wire, and `pass_rate` is over JUDGED replays. Since 2026-09-07 every knowledge-gym fixture DECLARES the surface it drives, in `pass.toml`'s `production_path` (`executor` | `attached-doc` | `raw`, a closed set; a fixture declaring none is refused at load), and `per_fixture` carries `path` plus a `caveat` of `"not-the-product"` on `raw`. The three smoke-subset fixtures now run on `executor` — `Executor::execute_reason_with_tools`, driven through the public `Executor::run` with the REAL `knowledge_lookup` manifest bound to the fixture's canned envelope, so production builds the prompt, parses the inline `<tool_call>` and dispatches through `ToolRegistry::call_cached`. Before that every fixture POSTed an OpenAI `tools[]` array to `/v1/chat/completions` and the predicates read `choices[0].message.tool_calls` — a surface NO product turn reaches (`knowledge_query.rs` passes `tools: None` on both synthesis routes, `:1301` and `:1352`), so a green subset was a fact about the daemon's function-calling adapter that the lane read as a fact about the product. Predicates now read ONE `ToolLedger` (`knowledge_gym_cmd/ledger.rs`) that each driver projects its own record into (ARCH §10.6), and its `path_result_count` row — what the PATH counted in what it handed the model — is what surfaces `! EVIDENCE NOT DELIVERED` when a path dispatches the tool, gets rows, and delivers none. `--raw` keeps the old endpoint reachable for model-only measurement and labels every line; `--sabotage no-tool-offered` builds the step with an empty tool list so the lane can be watched red (ARCH §18.1). A path with no driver, an unknown `production_path` spelling, and a multi-turn fixture on `executor` are all refused AT LOAD exiting non-zero, never turned into per-replay could-not-judge verdicts (ARCH §18.2 as amended, 859185ad0: an abstention nobody has watched be necessary is not rigor, and a fact the loader already knows must not become N unjudged replays that read as a careful lane); every run prints `verdicts: passed N failed N could-not-judge N` in both human and `--json` mode, and `AggregateSummary` carries `total_failed` on the wire beside `total_passes`/`total_errored`. Measured on the retarget (2026-09-07, one binary, one daemon, n=3, model `primary`, ZERO abstentions on all four runs): the subset scored 9/9 on `--raw` and **0/9 through the production path**, and the ledger named two production-side mechanisms — `knowledge_lookup` returns `StepOutput::Json` with no `answer` key while both consumers read exactly that key and substitute a string (`executor.rs` -> `"No results."`, `attached_doc.rs` -> `"(no answer field)"`), so 4 of 9 replays reported `EVIDENCE NOT DELIVERED` and zero evidence ids were cited on any replay; and `build_retrieval_reasoning_prompt` hardcoded `"tool":"search"` in its one worked example whatever `available_tools` held, so 6 of 9 replays emitted `search` first and got `Tool 'search' not available.` **BOTH FIXED 2026-09-08** (`acf4e9944` + `7f2663024`): `crate::tool_loop` is now the crate's ONE tool-call protocol — the `{tool, query}` fork in `executor.rs` and the third parser in `attached_doc_render.rs` are DELETED, `format_step_output` renders a `StepOutput::Json` whole and knows no tool's schema, `result_cardinality` replaces a `matches("[Source")` count that reported zero for every JSON envelope, and the prompt's worked example is generated from `available_tools` (absent entirely when nothing is offered) rather than naming `search`. A third defect surfaced on the way and is the reason the wire fix has its own commit: passing the scoped tools on the wire made the daemon answer with `content: ""` and the call in `choices[0].message.tool_calls`, which `oicp-client` did not deserialise at all — so the response reached every caller as an empty completion, silently, and the delegate + recipe-author loops had the same blind spot since they were written. `ChatMessage::as_text` now renders a native `tool_calls` array back into the shared envelope at the wire boundary. Re-measured the same day, n=3, ONE daemon across both banks (pid 48485, unchanged start-to-end of each), zero replays discarded for a restart: the executor subset goes **0/9 -> 8/9**, `EVIDENCE NOT DELIVERED` 4 replays -> **0**, and evidence ids (`ev-0000`, `ev-0001`) are cited and verified against what the mock returned where none were cited before. The raw control moved 24/24 -> 22/23 judged with one never-ran, named (`daemon http 503 local_queue_full`, ~30s predicted wait on a contended host) and contributing no tally. Verdicts: pre passed 24 / failed 9 / could-not-judge 0 (exit 3); post passed 30 / failed 2 / could-not-judge 1 (exit 0). The two remaining failures are model behaviour the gym exists to catch — one replay read the evidence and answered from it without citing the handles. `BenchOutcome::tally` exists so the ROUTING surface can answer "did this score zero" as data — it is the one surface that carries neither per-item rows nor a count, and put `correct/total` in `note` prose |
-| Did my change regress retrieval / routing / synthesis / enrichment? | **`./scripts/sovereign-ci-bench.sh`** (~2-4h) — the FULL nightly bench; it composes every lane rather than reinventing one, and is where drift against committed baselines is judged. Its `--quick` tier was deleted 2026-09-04: it down-sampled by COUNT and wrote nothing durable, and `svrn quality check` is the lean tier now. Lane semantics + tiers at §"Bench harnesses" above; entry point `sovereign/bench/README.md`. The workspace lint/test scripts are the *build* gate and never run a model against a question bank |
-| A bench says regressed — is that real, or noise? | `sovereign/docs/RUNBOOK.md` §6 — per-lane noise bands, baseline-age semantics, and the legitimate `--update-baseline` re-mint path |
-
-The `svrn quality check` banks live under
-`sovereign/bench/quality-check/baselines/` and are per STACK. The current one
-is `4dd212fbca5f` (Qwen3.6-35B-A3B primary, Qwopus3.5-4B fast,
-qwen-embedding-0.6b), minted 2026-09-10 at `9e46fc4bf` against a daemon at
-`d51cd2b4c` — the first `check` run on this stack, so a delta claimed against
-anything earlier is not a delta, and the reading is a pre-deletion baseline
-rather than a verdict on the commits before it. Two lane states are known and
-belong to their own owners, not to whatever change is being gated: `chat-ask`
-can fail `per-stage calls` when the audit pass's retry ladder re-extracts and
-re-judges a claim (16 calls against a 12 budget on one run of three; both
-questions passed on re-sample — one run is not a measurement), and
-`chaos-monkey` fails `ungrounded assertion: distract-bomb-maker` on every run
-since `f4b13a68c` added the row: the answer is the gold keyword and 7 of 19
-retrieved chunks carry it, but the released quote does not support it, so the
-citation gate grounds a correct answer on the wrong quote — a grounding-gate
-finding.
-
-The serial campaign is `scripts/ralph.py` (subcommands `run`, `supervise`,
-`watch`, `models`, `plan`): a typed queue parser over `ralph/STATE.md`, a
-session layer (process group, timeout, STOP, heartbeat), and three explicit
-FSMs. `run` resumes `[~]` before the first dependency-ready `[ ]` row and halts
-on a ready `HUMAN-` row, the stall bound, a stale `ralph/waiting` marker or
-MAX_ITER; `supervise` wraps a campaign command with bounded resolutions whose
-progress is a unit COMPLETED, escalating a resolution that changes nothing and
-never treating a halt STOP (non-empty) as the operator's (an empty
-`ralph/STOP`); `watch` notifies on needs-human, stopped-without-DONE, a stale
-`ralph/.heartbeat` and low disk, re-nagging at most once per 30 min. Every
-terminal state is DONE, an operator stop, or an escalation —
-`python3 scripts/tests/ralph.py` proves the FSMs in-process (90 tests). `pool`
-runs waves of ready units in git worktrees with serial merges (a conflict
-halts) and lane markers at `ralph/lanes/<unit>.done`; a lane that ends holding
-`ralph/waiting` naming a marker is WAITING, not a failure (2026-09-19,
-r9-boundary-sweep struck out twice while its detached sweep ran): the tick
-polls the marker, respawns the lane when it lands, and escalates past
-`LANE_MAX_WAIT_SECS` (48h). The shell family it
-replaced (`ralph-*.sh`) is deleted. Reference: `scripts/RALPH_LOOP.md`.
+The serial campaign runner is `scripts/ralph.py` (`run`, `supervise`, `watch`,
+`pool`): a typed queue parser over `ralph/STATE.md`, a session layer, and
+three explicit FSMs, where every terminal state is DONE, an operator stop, or
+an escalation. Reference `scripts/RALPH_LOOP.md`.
 
 ### 8.1 Where configuration and state live
 
-The system's configuration and mutable state live on four roots. The rule that
-holds them together (center-of-mass program, 2026-07-30): **path derivations
-come from the SSOT accessors** — `sovereign_contracts::rebrand`
-(`svrnmesh_root` / `data_dir` / `projects_json` / `work_atlas_toml` /
-`drift_dir` / `state_db_path` / `sessions_root`; `mesh_data_dir` was deleted
-2026-08-24 as a second data-root derivation) or their
-`sovereign_cli_shared::dirs` wrappers — enforced by a `clippy.toml`
-`disallowed-methods` ban on hand-rolled `dirs::home_dir` joins. Since
-2026-09-10 the `SVRNMESH_DATA_DIR` override is applied INSIDE
-`svrnmesh_root` (`RootChoice::Override`), so every accessor above it moves
-together and `data_dir` is an alias; before that only `data_dir` honoured
-it while the 266 `svrnmesh_root` sites — `SetupConfig::load`, the ring
-journal, the roster — stayed on `$HOME`, which is why a second node on one
-host could be booted (827f4f6ab) but not addressed by any CLI verb. **Env-var
-overrides are declared** in `quality/env-flags.toml` (enforced by `cargo run
--p xtask -- env-gate`; human view generated at `docs/ENV_FLAGS.md`), and ~25
-of them shadow `SetupConfig` fields — declared debt via the registry's
-`shadows` key, unification deferred to `quality/CLEANUP.md`.
-
-`rebrand::sessions_root` (added 2026-09-03) is the newest of these and the one
-with a structural reason to exist rather than a stylistic one: the session-frame
-WRITER (`sovereign-tools::code::session_state`) and the boot-time READER
-(`sovereign-cli::session_cmd`) are in crates that deliberately cannot see each
-other — `sovereign-cli` does not depend on `sovereign-tools`, the same
-constraint that put the shared frame combinators in `sovereign-contracts`. While
-each hand-rolled the `SESSIONS_DIR` override they drifted twice: until
-2026-07-29 the writer ignored the override outright (a sandboxed run wrote six
-junk frames into the live store), and after that fix they still disagreed when
-`SVRNMESH_SESSIONS_DIR` was set but blank — writer fell back to the live store,
-reader honoured `SOVEREIGN_SESSIONS_DIR`. Neither crate could host a test
-comparing the two. The precedence is now pinned once, in
-`rebrand::tests::sessions_root_precedence_is_one_decider`.
+Four roots, held together by one rule: **path derivations come from the SSOT
+accessors** — `sovereign_contracts::rebrand` (`svrnmesh_root`, `data_dir`,
+`projects_json`, `work_atlas_toml`, `drift_dir`, `state_db_path`,
+`sessions_root`) or their `sovereign_cli_shared::dirs` wrappers — enforced by
+a `clippy.toml` `disallowed-methods` ban on hand-rolled `dirs::home_dir`
+joins. The `SVRNMESH_DATA_DIR` override applies INSIDE `svrnmesh_root`, so
+every accessor above it moves together. Env overrides are declared in
+`quality/env-flags.toml`, enforced by `cargo xtask env-gate`.
 
 **Committed contracts (versioned, reviewed):**
 
-| Surface | What it declares | Writer | Enforced / read by |
-|---|---|---|---|
-| `quality/ARCH_LAYERS.toml` | crate layer map + exceptions | humans | `cargo xtask layer-gate`, `arch_report` |
-| `quality/env-flags.toml` | the env-knob registry (cluster/default/status/`alias_of`/`shadows`) | humans | `cargo xtask env-gate` + pin-tests in the two in-code flags tables |
-| `quality/baselines/` | shrink-only ratchet baselines | **machine only** (`--update-baseline` / `--tighten`) | every count-based xtask gate |
-| `quality/CONCEPTS.toml` | the concept register — one canonical owner per noun; the noun-convergence program's source of truth. Also carries each noun's `gloss` and (9 rows) its `shape`, moved here 2026-08-20 from `TARGET_ARCHITECTURE.md` §2 so the document can render them | humans | `cargo xtask concept-gate` (the ratchet, over `quality/baselines/concepts.txt`) + `svrn code converge status` + `cargo xtask target-arch` (renders §2 of `quality/TARGET_ARCHITECTURE.md`) |
-| `quality/TARGET_ARCHITECTURE.md` | the noun-convergence destination. Four regions are GENERATED — §2 register and §6 layer map from `CONCEPTS.toml` + `ARCH_LAYERS.toml` (declared, diffed every check); §2.1 graph evidence and §6.1 boundary table from `scripts/nc-pressure.py` and `scripts/nc-boundary.py` (measured, stamped with the graph commit and the register digest they were taken against). §1, §3-§5 and §7 remain hand-written prose | `cargo xtask target-arch --update-doc` / `--measure` for the blocks; humans for the prose | `cargo xtask target-arch` — four verdicts: passed / stale / could-not-judge / never-ran |
-| `quality/source-tree.toml` | the residual "not our source" dirs a gate walk must skip — only what git's ignore rules cannot express (`vendor/` is tracked but not authored here) | humans | `common::SourceTree::discover` → arch-gate, docs-gate, env-gate |
-| `quality/requirements.toml` | the requirement registry — all 625 in-scope requirements of `research/clean-room/REQUIREMENTS.md` (591 must-class, 34 should) plus §17's 10 out-of-scope entries, §4.4's 5 aliases, and §16's 19 acceptance scenarios A-1…A-19 with the ids each cites. Carries `spec_hash` (blake3 of the spec at generation time), so a consumer can refuse to render a verdict against a document it has not read. Each row is id/family/n/level/spec_line/text — the domain and section headings are NOT copied, because the spec is tracked and `spec_line` reaches them | **machine only** (`UPDATE_REQUIREMENTS=1 cargo test -p xtask --test requirements_registry`) | the same test's byte gate, which rides the live `test:` CI job; types in `kernel-types/src/conformance.rs` |
-| `quality/requirements-enforceability.toml` | the ONE hand-authored column: how each of the 625 can be settled — `cli` 311 / `desktop` 11 / `model` 9 / `structural` 260 / `review` 34. Separate from the generated registry so regeneration cannot clobber a judgement no parser could make; 582 of 625 need no model at all, which is what makes a fast tier possible and is pinned rather than printed | humans | `corpus-engine/xtask/tests/requirements_registry.rs` `assert_every_column_resolves` — id sets must be EQUAL, so a requirement cannot arrive unclassified and a class cannot outlive its requirement |
-| `quality/conformance/<crate>.toml` | which test claims each requirement — generated from `covers:` doc tags. A tag naming an unknown id, or sitting over a body with no assertion (`claimed-unproven`), fails the generator rather than being counted | **machine only** (`UPDATE_CONFORMANCE_TAGS=1 cargo test -p xtask --test conformance_tags`) | `svrn conformance`, which joins it to `quality/requirements.toml` and the newest `target/nextest/*/junit.xml` and reports four verdicts. See `docs/TESTING_SURFACE.md` §"The requirement conformance surface" |
-| `quality/campaigns/conformance.toml` | the campaign's 8 pre-registered kill bars — positive control (gates every other bar), the 625 ± 0 denominator, CI-seat membership, the 30s SMOKE budget, mutation survival | humans, BEFORE the data | `scripts/co-lineage.py` (`coverage conformance` / `measure`) — bar `status` is only open/deferred/descoped and the VERDICT is a machine-stamped row, never a hand-written one |
-| `docs/cli-contract.toml` | CLI verbs, journeys, experiences | humans | `cli_contract_journeys`, `svrn contract` |
-| `models.toml` | model selection per hardware | humans | daemon model selection |
-| `../sovereign-recipes/registry.toml` | recipe registry | humans | `corpus-engine/src/registry.rs` |
-| `../clippy.toml` | lint budgets + the path-SSOT ban | humans | clippy / lint-gate ratchet |
+| Surface | What it declares | Writer |
+|---|---|---|
+| `quality/ARCH_LAYERS.toml` | crate layer map, exceptions, package boundaries | humans |
+| `quality/env-flags.toml` | the env-knob registry | humans |
+| `quality/baselines/` | shrink-only ratchet baselines | **machine only** |
+| `quality/CONCEPTS.toml` | the concept register — one canonical owner per noun | humans |
+| `quality/TARGET_ARCHITECTURE.md` | the noun-convergence destination; four regions generated | `cargo xtask target-arch`; humans for the prose |
+| `quality/source-tree.toml` | the residual "not our source" dirs a gate walk must skip | humans |
+| `quality/requirements.toml` | the 625-requirement registry, carrying `spec_hash` | **machine only** |
+| `quality/requirements-enforceability.toml` | the ONE hand-authored column: how each can be settled | humans |
+| `quality/conformance/<crate>.toml` | which test claims each requirement, from `covers:` tags | **machine only** |
+| `quality/instruments.toml` | every instrument and every trigger venue | humans |
+| `docs/cli-contract.toml` | CLI verbs, journeys, experiences | humans |
+| `models.toml` | model selection per hardware | humans |
+| `../sovereign-recipes/registry.toml` | recipe registry | humans |
+| `../clippy.toml` | lint budgets + the path-SSOT ban | humans |
 
-**Repo-local `.sovereign/` (per-checkout):** `project.toml` + `project.json`
-(project identity — triplicated with the per-user `projects.json`; on the
-CLEANUP ledger), `sovereign.toml` (per-repo daemon/watcher posture — watchers
-deliberately off in this repo), `notes.db` (gossiped working notes; dual-homed
-with the per-user root via the `active_notes_db` pointer — CLEANUP),
-`mesh.db` (CLI work-atlas claims — **split-brain**: the daemon keeps its
-atlas store in memory, so CLI claims never gossip; CLEANUP), `features.db`
-(ATOS), `SOVEREIGN.md` (the repo charter agents read).
+**Repo-local `.sovereign/`:** `project.toml` + `project.json`, `sovereign.toml`
+(per-repo daemon/watcher posture — watchers deliberately off in this repo),
+`notes.db`, `mesh.db`, `features.db`, `SOVEREIGN.md`.
 
-**Per-user root** — `~/.svrnmesh`, with `~/.svrnmesh` as the transitional
-symlink the migrator leaves behind (`rebrand::run_startup_migration`); on this
-host the migration has run. Key members: `config.toml` (`SetupConfig` — THE
-per-user config; note the accumulating `config.toml.bak-*` experiment
-siblings. **`[models]` is OPTIONAL since 2026-08-30**: absent — or present but
-naming no primary — plus a `[node] entry`, is `NodeClass::Terminal`: a full mesh
-member that holds no weights and forwards the work it cannot do to the
-named entry node over HTTP. The class is DERIVED by `SetupConfig::node_class()`,
-never stored, and judged on CONTENT via `ModelsSection::is_populated()` — a
-`[models]` table the desktop wizard wrote mid-flight names nothing and is
-`Unconfigured`, not a `Holder` holding nothing. Loadability is a SEPARATE
-question with its own implementation: `validate_class` stays presence-based so
-that mid-wizard file keeps loading, while refusing one that declares neither a
-table nor an entry. `models()` (and `models_mut()`) return a named refusal that
-distinguishes a terminal from an unconfigured node and never hand back empty
-paths. A terminal plans zero VRAM slots (`capacity::build_slots_from_config`),
-registers no local models (`daemon::register_local_model_slots`), advertises no
-models to peers (`build_self_manifest` gates candidacy on `resident_slots()`
-being non-empty) and **no embed model either** (`advertise_embed_model` returns
-`EmbedAdvertisement::Unavailable` BEFORE probing, because on a terminal the
-probe succeeds by forwarding and would publish the entry node's model as this
-node's own — the collaborative-ingestion planner filters candidates by exact
-match on that field), and gets a `SplitInferenceProvider` instead of an
-`EmbeddedLlamaCpp` — so the daemon's engine handle is `Option`. Two accessors
-keep the embed question honest: `local_embed_model_id()` (the space this node's
-own text lands in — the entry node's, on a terminal) and
-`advertised_embed_model_id()` (what it offers peers — `None` on a terminal).
-Written by `svrn setup --terminal <entry>`, which probes the entry node's
-`/status` for its embed model id and refuses unless one real turn comes back
-served. The class is reported by `svrn doctor` (`node_class` check) and on
-`GET /v1/mesh/status` (`node_class` / `entry_node`, local-only, never gossiped),
-because after the residency gate a terminal and a holder whose slots failed to
-load both advertise nothing. **The bind is a mesh IDENTITY** — `[node]
-entry_node`, resolved per call by `EntryNodeEndpoint`
-(`sovereign-serving-host/src/entry_endpoint.rs`) through `PeerEndpointSource`, plugged
-into `RemoteApiProvider` via the `EndpointResolver`/`EndpointRef` seam in
-`oicp-client`. `svrn setup --terminal <join-link>` joins the mesh, finds the
-member holding models, and binds it. The older address form (`[node] entry`, an
-HTTP base URL) remains for an entry node that is NOT a mesh member; a config
-carrying both is refused at load. `SplitInferenceProvider` stores its
-`ServingLocus` rather than deriving it from the endpoint string, because a
-resolved binding on an encrypted mesh is an iroh bridge on `127.0.0.1` whose far
-end is another machine. **The binding decides chat as well as embeddings**
-(2026-08-31): `locate_named_model`'s `bound_locus_authoritative` gate returns
-`Local` for any node whose `serving_locus()` is not `OwnWeights`, so a joined
-terminal no longer routes chat to the nearest advertising peer. Consent to leave
-the bound node is per-request and reuses existing vocabulary —
-`ShardingPrivacy::MeshAllowed` — rather than a new knob; an ABSENT envelope
-withholds it, which is why `MeshRoutingConsent` is a separate reading of that
-field from `resolve_named_dispatch`'s `privacy_permits_peer` (an absent envelope
-permits a peer there, because forcing local would 503 every thin-client request
-for a peer-only model). Before this, chat resolved through the advertised
-manifests and embeddings through the binding, so one node answered "where does
-my turn go" two ways — invisible to `scripts/terminal-e2e.sh`, which is
-co-located, and caught only by a two-machine run. `local_only` on a bound
-terminal still refuses (`ForwarderCannotServeLocalOnly`): honouring it by
-routing to the bound node is defensible under the same reasoning but turns a
-privacy refusal into an off-box hop, and is deliberately NOT part of the routing
-fix. Requests a terminal sends its entry node carry `X-Node-Id` — read from the
-persisted `<data_dir>/node_id` via `persist::load_node_id`, because
-`DeferredDaemon::self_node_id()` is async and empty until the join handshake
-while the provider is built before it — without which the entry node admits a
-terminal's traffic as its own local traffic and can neither ration nor account
-for it. Design + the naming collision with
-`SharedModelRole::Consumer`:
-`docs/specs/MESH_N4_TOPOLOGY.md` §4.5),
-`work-atlas.toml` (atlas node config + privacy default),
-`projects.json` (project registry — writer `sovereign project register` and
-readers now share one accessor), `~/.svrnmesh/indexes/<corpus>/` (LanceDB
-chunks, `scip_graph.db`, atlas), `~/.svrnmesh/drift/` (drift-report mirror),
-`~/.svrnmesh/arch/` + `~/.svrnmesh/capabilities/` (posture artifacts),
-`~/.svrnmesh/sessions/` (session-continuity frames), plus the models /
-corpora / recipes / logs trees, `workspace`, `daemon.pid`,
-`worker_owner_key.bin`, and the `active_notes_db` pointer.
+**Per-user root `~/.svrnmesh`:** `config.toml` (`SetupConfig` — THE per-user
+config), `work-atlas.toml`, `projects.json`, the indexes / drift / arch /
+capabilities / sessions trees, plus models, corpora, recipes and logs,
+`daemon.pid` and `worker_owner_key.bin`.
 
-**Platform data dir** — `~/.local/share/svrnmesh` (legacy `sovereign` name
-still common on migrated hosts; resolve via `rebrand::mesh_data_dir`) — the
-mesh identity, deliberately platform-native so the desktop app and CLI share it:
+**`[models]` is optional.** Absent — or present naming no primary — plus a
+`[node] entry` is `NodeClass::Terminal`: a full mesh member holding no weights
+that forwards what it cannot do to a named entry node. The class is DERIVED by
+`SetupConfig::node_class()`, never stored, and judged on CONTENT via
+`ModelsSection::is_populated()`. A terminal plans zero VRAM slots, registers
+no local models, and advertises **no embed model either** — probing would
+publish the entry node's model as its own. Two accessors keep that honest:
+`local_embed_model_id()` (where this node's text lands) and
+`advertised_embed_model_id()` (what it offers peers, `None` on a terminal).
+The bind is a mesh IDENTITY, and it decides chat as well as embeddings.
 
-- `node_id`, `node_key` — this machine's identity. Mesh-independent by
-  design: both survive `leave` and every switch, so a node is the same node
-  in every mesh it belongs to.
-- `active` — hex `MeshId` of the mesh currently live. Absent = no mesh.
-- `meshes/<mesh-id-hex>/` — one directory per membership, holding that mesh's
-  `mesh.json` and its own invite key. A node can belong
-  to many meshes and is active in exactly one; the parked ones keep their full
-  roster and their `mesh_secret`, which is why switching back to one is a
-  *resume* (no handshake, no invite redeemed) rather than a join.
-- `client-exposed` stays at the ROOT, not per-mesh: "this node serves remote
-  callers" is a property of the machine, and `expose_client_api` runs before
-  any mesh exists. The per-mesh half of the bind decision is
-  `mesh.require_encryption`, re-read by `start_daemon` on every resume/switch.
-- `mesh.json` + `join_key.secret` at the root are the **legacy single-mesh
-  layout**. `persist::migrate_legacy_layout` moves them into `meshes/<id>/` on
-  first boot and derives that mesh's `mesh_secret`; it is idempotent.
-- **Writing a mesh does not make it active.** `persist::save` writes into
-  `meshes/<mesh.id>/` and touches nothing else; `persist::save_and_activate` is
-  the two-step, used by the only two callers that ESTABLISH a membership
-  (`create_mesh`, `join_mesh`), and `switch_mesh` moves the pointer itself.
-  Saving used to re-point `active` at its subject, which made every caller an
-  implicit switcher — including the gossip loop's per-round re-persist and the
-  mesh-mutation hook, so a round still in flight for the mesh just PARKED could
-  silently undo a switch. The order is file-then-pointer, so `active` never
-  names a directory with no `mesh.json` in it.
-- `leave` clears the pointer (`persist::clear_active`) and removes the departed
-  mesh's directory. It used to leave `active` naming a mesh whose `mesh.json` it
-  had just deleted, which read as healthy at boot while making that mesh
-  permanently unforgettable — `forget` refuses the ACTIVE one.
-
-`Mesh` carries two credentials, and the split is load-bearing:
-`mesh_secret` authorizes gossip (`Mesh::gossip_authorized`) and never rotates;
-`invite_key_hash` admits joiners (`membership::accept_join_with_identity`) and
-rotates freely. They were one field until 2026-08-26, which is why rotating an
-invite used to partition the rotator — re-keying admission re-keyed gossip.
-`invite_expires_at` moved onto the mesh at the same time, from per-node RAM
-where it died on restart and was never armed on any member that had not
-personally minted the invite.
-
-`mesh_secret` does not ride the wire between upgraded peers. A gossip round
-carries `from` + `mesh_proof` — a keyed-BLAKE3 proof (`Mesh::mesh_proof`) bound
-to the SENDER and to a 30s window (`PROOF_WINDOW_SECS`), so a captured proof is
-neither transferable nor durable. `Mesh::gossip_authorized_with` tries the proof
-first and reports which predicate won as a `GossipAuthArm`: `Proof`, `RawSecret`
-(both sides sent matching secrets — the pre-proof path), `Legacy` (`invite_key_hash`,
-the compat arm), or `Refused`. An OFFERED proof that fails is a hard refusal, never
-a fall-through — otherwise stripping it buys the weaker predicate. A node with no
-secret offers no proof at all (`mesh_proof` returns `None`), or two un-migrated
-nodes would hard-refuse each other. The raw secret goes out only to peers not yet
-confirmed post-split, and comes BACK only on the `RawSecret` arm.
-
-Rotation is refused while the fleet is mixed. `rotate_invite` answers `409
-RotateWouldPartition { pre_split, unconfirmed }` — two populations, because the
-remedies differ: a `pre_split` peer authorizes on `invite_key_hash` and needs
-UPGRADING; an `unconfirmed` peer has simply not been merged from since this
-daemon started and needs one gossip ROUND. Collapsing them told operators their
-fleet was un-migrated when it was not.
-
-The confirmation is local observation, never a peer's claim.
-`MergeReport::peer_pre_split` derives from the `GossipAuthArm`, not from the
-payload: an upgraded peer withholds its `mesh_secret` deliberately, so a zeroed
-field stopped being evidence of an old build — reading it as one made two
-upgraded nodes report each other pre-split, blocking rotation on both sides.
-`AppState::peer_split_generation` is the three-valued read (`Some(true)` /
-`Some(false)` / `None`); `peer_confirmed_post_split` folds `None` into unsafe and
-stays the SAFETY read. Because that map is in-memory, `rotate_invite` runs ONE
-gossip round before it is willing to refuse — it never reports a verdict from an
-instrument it has not run. `--force` overrides.
-
-Mesh HTTP surface (`mesh_http.rs`, loopback-only): `GET /v1/mesh/status`,
-`POST /v1/mesh/{create,join,rotate,switch,leave,forget-member}`,
-`GET /v1/mesh/relay-candidates`, `POST`/`GET /v1/mesh/measurements`.
-
-`forget-member` (2026-08-28) retires ONE member row — the repair half of the
-endpoint-key rule. `node_pubkey` is what peers dial and what the iroh acceptor
-admits on, so two ACTIVE members carrying one key split a single node's
-liveness across two records that each read offline while the endpoint behind
-both answers; observed live on mesh `27ba8166…`. The rule has one
-implementation, `commonwealth_core::mesh::aliased_endpoint_keys`
-(`mesh_identity.rs`), and three callers: `merge_from_authenticated` refuses to
-admit a record that would CREATE a collision (`MergeReport::aliased_refused`),
-the DST pack's `UniqueEndpointKey` checks for one, and `svrn mesh status`
-warns on one and names this route's CLI verb as the repair. It tombstones
-rather than deletes, so the removal converges; a row belonging to a live
-daemon is re-announced on that node's next round, which is why the repair
-cannot evict a live member. `GET /v1/mesh/status` carries `node_pubkey` and
-`active` per member as of the same date — before that no read surface exposed
-the field, so the collision was undiagnosable from outside the process.
-
-The rule deliberately never refuses a TOMBSTONE sharing a key with a live row:
-that is the legitimate rejoin shape. A fourth site had to learn the same thing
-on 2026-09-09 — the gossip round's candidate list, which filtered only `self`
-and so dialed departed members forever. Harmless on its own; destructive
-against the permitted shape, because `IrohTransport` keys its bridge cache on
-`(pubkey, alpn)`, so the retired and live rows resolve to ONE bridge and their
-differing dial info retargets the live peer's tunnel every round. Measured on
-`Meshsonics`: 181 retargets in 12 minutes on one endpoint, gossip to the live
-Mac timing out at exactly `PEER_TIMEOUT`, and that peer decaying to Offline
-while iroh reported an ACTIVE path throughout — which is why the reachability
-watchdog's relay-home, self-discovery AND peer-path terms all read green
-through it. `gossip::is_gossip_candidate` is now the one predicate for "is this
-member worth dialing", and it reads `removed_at`, not liveness;
-`announce_presence_change` had filtered `is_active()` on its own push targets
-since it was written.
-
-A FIFTH SITE, later the same day, and it is the one the fourth was silently
-standing in for. Filtering tombstones stops the retarget storm only while ONE
-of the twins is a tombstone; the moment both rows are live — any legitimate
-rejoin — the shared `(pubkey, alpn)` bridge is back, measured at 83 retargets
-in six minutes on `27ba8166…`. `gossip::one_row_per_endpoint_key` collapses
-live rows sharing a key to ONE dial per round (greatest `event_time`,
-`node_id` as a deterministic tiebreak) and traces `collapsed`/`dialing` when it
-fires. It deliberately RESOLVES the ambiguity where `merge_from`'s
-`alias_clash` REFUSES it: refusing at the door is right, but refusing at the
-dial site drops every row involved and strands the machine — which is the
-failure this whole rule exists to prevent. Picking the wrong twin costs
-nothing (both names resolve to one endpoint key); picking a different one each
-round would be the storm at gossip cadence, so the choice is stable and
-self-reinforcing.
-
-WHAT IS STILL UNFIXED, and it is the actual defect under all five sites: the
-roster can hold two ACTIVE rows for one physical machine, and `is_active`
-cannot tell a graceful `leave` from a `revoke_member` because both stamp only
-`removed_at`. A widening that read `last_seen > removed_at` as a rejoin was
-tried and reverted the same day (`63743acdf`) — revocation targets a live
-member, so its next heartbeat would carry `last_seen` past its own removal and
-re-admit it (§18.1: a guard asserting on a field the subject supplies). The
-repair is a `RemovalKind` (`Left` | `Revoked`) on the record, additive behind a
-serde default; until then a stranded rejoined row is repaired by
-`forget-member`, an operator act.
-
-SELECTION FAIRNESS is a separate clock as of 2026-09-09, and the two must not
-be merged again. `select_round_peers` orders most-stale-first, and its bound
-("a peer waits at most `ceil(n / FANOUT)` rounds") holds only if being PICKED
-advances the key. It was keyed on `peer_last_contact`, which
-`observe_peer_contact` stamps ONLY on a completed round-trip — correctly, that
-success-only rule is what fixed the 2026-07-29 false-Offline — so a peer that
-never answers never advanced and held a slot for ever: 74 dials each to two
-unreachable peers in twenty minutes and ZERO to the other five members, one of
-whose daemons was up. `AppState::peer_last_attempt` (`note_peer_attempt` /
-`peer_attempt_or_init`) records when a round last SPENT A SLOT, stamped before
-the dial so refusals and timeouts advance it too. Offline-decay reads contact;
-selection reads attempt.
-
-`switch` answers `202` and detaches, like `leave` — it is served by the
-listener it drops.
-
-CLI: `svrn mesh {create,join,list,switch,forget,rotate,status,transport,
-balance,leave,logs,fetch-model,warm-cache,plan,bench,check-invariants,
-soak-gate}`.
+**Platform data dir `~/.local/share/svrnmesh`** holds the mesh identity,
+deliberately platform-native so desktop and CLI share it: `node_id` +
+`node_key` (mesh-independent, surviving every leave and switch), `active` (the
+hex `MeshId` currently live), and `meshes/<mesh-id-hex>/` — one directory per
+membership. A node can belong to many meshes and is active in exactly one; a
+parked mesh keeps its roster and `mesh_secret`, so switching back is a RESUME,
+not a join. **Writing a mesh does not make it active** — `persist::save`
+writes the directory and touches nothing else; `save_and_activate` is the
+two-step, used only by `create_mesh` and `join_mesh`.
 
 ---
 
 ## 9. Glossary
 
-- **OICP** — Open Inference Capabilities Protocol (v0.3). Wire
-  types in `oicp-types`. A model publishes one `CapabilityClaim`
-  per kind-of-work it does well; schedulers score requests against
-  claims with shared protocol-level + per-scheduler operational
-  adjustments. See [`docs/inference.md`](./docs/inference.md).
-- **CapabilityHint** — Validated tag identifying a kind of work.
-  Standardized: `general`, `code`. Open vocabulary via `x:<tag>`.
-- **Recipe** — A TOML file in `sovereign-recipes` describing how
-  to ingest one corpus end-to-end.
-- **Registry** — The recipe catalog at
-  `sovereign-recipes/registry.toml` (single source of truth).
-  `corpus-engine`'s `build.rs` vendors it into `OUT_DIR` as the
-  compile-time bundled snapshot; can refresh from GitHub at runtime.
-- **DocumentFilter** — Trait between extract and chunk that drops
-  `ExtractedDoc`s by predicate. Composable via `[[filter]]`.
-- **FilterPipeline / ScopeMeta** — A recipe's filter set + its
-  hash. Stored in `_corpus_meta.json`; lets a corpus expand in
-  place by relaxing filters and delta-ingesting.
-- **Field Model (v1)** — Five-phase enrichment (skeleton → cluster
-  → align → fault lines → open questions) that analyses a corpus
-  holistically rather than per-chunk.
-- **Domain (v1)** — Trait encoding the epistemic conventions of a
-  knowledge field (philosophy, personal, conversational, …). The single
-  extension point for v1; only fully-implemented domains are registered.
-- **Atlas (v2)** — Typed atom graph + `Pipeline` trait + registry +
-  `ExemplarBank` + `PhaseCache`. See `ENRICHMENT_V2.md`. `PhaseCache`
-  stamps each phase output with the producing model (`<phase>.model.json`
-  sidecar) and declines to reuse a phase written by a different model —
-  a model swap forces recomputation rather than silently mixing outputs
-  (OICP v0.4 §6; keyed on `chat_model`, fingerprint deferred). Built via
-  the single `EnrichConfig::phase_cache()` helper so all pipeline reads
-  and writes carry the same identity. `EnrichConfig` itself lives in
-  `sovereign-enrichment-catalog` since 2026-08-20 — see the workspace map;
-  `enrich_cmd::config` is a re-export of it, not a second definition.
-- **SCIP** — Source Code Intelligence Protocol. `scip_graph.rs`
-  stores SCIP data in SQLite; `scip_export.rs` dispatches to
-  language-specific analyzers.
-- **Exporter resolution** — `corpus-engine-scip/src/tool_path.rs` is the
-  ONE decider for "where is this tool?": process PATH first (an
-  operator's explicit environment always wins), then the well-known
-  per-user toolchain dirs (`~/.cargo/bin`, nvm version bins newest
-  first, `~/.local/bin`, volta, pyenv shims, `~/go/bin`, homebrew,
-  macOS framework Pythons). `check_exporters` returns
-  `ResolvedExporter { config, path, via }` and `run_exporters_collect`
-  spawns that ABSOLUTE path with `augmented_path_env()` as the child's
-  PATH — both halves are required, because the exporters shell out to
-  their own runtimes (rust-analyzer invokes `cargo`; scip-typescript is
-  a `#!/usr/bin/env node` script). This exists because the daemon runs
-  under launchd/systemd with a minimal PATH while `svrn doctor` runs in
-  the operator's shell: resolving by NAME in two processes let doctor
-  report an exporter as present that the daemon could not execute, and
-  the index silently stayed empty. Doctor's `scip_exporters` check
-  shares this resolver and returns a **Warning**, never a pass, when a
-  tool resolves only through the calling shell's PATH from a directory
-  the shared probe does not search — it runs in the CLI's process but
-  is answering a question about the daemon's.
-- **CodeWatcher** — `notify`-crate filesystem watcher. Re-indexes
-  modified files via `CorpusEngine::reindex_file` and marks them
+- **OICP** — Open Inference Capabilities Protocol. A model publishes one
+  `CapabilityClaim` per kind-of-work it does well; schedulers score requests
+  against claims. **CapabilityHint** is a validated tag: `general`, `code`,
+  open vocabulary via `x:<tag>`.
+- **Recipe** — a TOML describing how to ingest one corpus end-to-end.
+  **Registry** is the catalog at `sovereign-recipes/registry.toml`.
+- **DocumentFilter** — trait between extract and chunk that drops
+  `ExtractedDoc`s by predicate. **FilterPipeline / ScopeMeta** is a recipe's
+  filter set plus its hash, which lets a corpus expand in place.
+- **Field Model (v1)** — five-phase enrichment analysing a corpus
+  holistically. **Domain (v1)** encodes a knowledge field's epistemic
+  conventions.
+- **Atlas (v2)** — typed atom graph + `Pipeline` + registry + `ExemplarBank` +
+  `PhaseCache`, which stamps each phase output with the producing model and
+  declines to reuse one written by a different model.
+- **SCIP** — Source Code Intelligence Protocol. **Exporter resolution** is
+  `corpus-engine-scip/src/tool_path.rs`, the ONE decider for "where is this
+  tool", because the daemon runs under launchd with a minimal PATH while
+  `doctor` runs in the operator's shell.
+- **CodeWatcher** — `notify` watcher; re-indexes modified files and marks them
   stale in the call graph (800 ms debounce).
-- **Shard** — A `corpus-engine` index containing only a contiguous
-  chunk-ID range. Structurally identical to a complete index.
-- **Skill** — A TOML file configuring routing triggers, planner
-  templates, prompt overrides, memory rules, and OICP requirements
-  for a class of work.
-- **Slot** — A model-loading position in `EmbeddedLlamaCpp`
-  (Quick / Main / Code / Embed). See
-  [`docs/inference.md`](./docs/inference.md).
-- **Mesh** — A closed trust ring of cmnwlth nodes that share
-  inference and knowledge. Joined via a `cwth-XXXX-XXXX-XXXX` key.
-- **Peering** — A trust relationship between two distinct meshes
-  that lets them exchange models or knowledge under a chosen
-  `PeerTrustLevel`.
-- **EmbedFn / InferenceFn** — Function types `corpus-engine`
-  accepts from its caller for embedding text and (optionally)
-  running an LLM during enrichment. Keeps the engine free of any
-  specific runtime. `InferenceFn` takes a `ChatPrompt` and a per-call
-  `Option<u32>` output-token override (one port since 2026-09-17).
-- **EmbedModelInfo** — `{ model_id, dimensions, pooling,
-  normalization }`. Cross-peer interoperability contract.
-- **KnowledgeView** — Three-map landscape-digest system (personal
-  memories, 180-day conversation history, institutional notes)
-  spliced into the system prompt before each turn. Strict
-  local-scope privacy is structural, not policy.
-- **ATOS** — Agent Task Orchestration System. Two-layer
-  scaffolding (project charter + per-feature specs) injecting the
-  relevant contract into every agent turn, detecting SHA-256
-  drift, recording decisions/deviations/milestones under
-  `.sovereign/`.
-- **Charter** — ATOS specification document (`CHARTER.md` for the
-  project, `spec.md` for a feature). Committing it is approval.
-- **Drift** — ATOS term for "spec file changed since approval."
-  Warns next turn; does not block. Either revert or
-  `atos spec accept`.
-- **Sovereign-coder pipeline** — cmnwlth middleware chain
-  (`approval_gate → session_briefing → context_injector →
-  tool_injector → artifact_surface`) that adapts a generic coder
-  model into an ATOS-aware one.
-- **Work atlas** — Cross-mesh peer awareness:
-  `work_in_flight` / `declare_scope` / `release_scope` MCP tools.
-  See [`docs/WORK_ATLAS.md`](./docs/WORK_ATLAS.md).
+- **Shard** — an index holding a contiguous chunk-ID range, structurally
+  identical to a complete index.
+- **Slot** — a model-loading position in `EmbeddedLlamaCpp` (Quick / Main /
+  Code / Embed).
+- **Skill** — a TOML configuring routing triggers, planner templates, prompt
+  overrides, memory rules and OICP requirements for a class of work.
+- **Mesh** — a closed trust ring of nodes sharing inference and knowledge,
+  joined via a `cwth-XXXX-XXXX-XXXX` key. **Peering** is a trust relationship
+  between two distinct meshes.
+- **EmbedFn / InferenceFn** — the closures `corpus-engine` accepts from its
+  caller. **EmbedModelInfo** (`{model_id, dimensions, pooling, normalization}`)
+  is the cross-peer interoperability contract.
+- **KnowledgeView** — three-map landscape digest (personal memories, 180-day
+  conversation history, institutional notes) spliced into the system prompt
+  before each turn. Local-scope privacy is structural, not policy.
+- **ATOS** — Agent Task Orchestration System. **Charter** is its spec document;
+  committing it is approval. **Drift** is "spec changed since approval" —
+  warns next turn, does not block.
+- **Ring rail** — the append-only, Ed25519-authored total order per namespace
+  carrying mesh state, work and measurements. **Work atlas** is cross-mesh
+  peer awareness: `work_in_flight` / `declare_scope` / `release_scope`.
 
 ---
 
 ## 10. Architecture roadmap
 
-Work intentionally deferred. Listed so the next engineer inherits a
-todo list rather than a surprise (per
-[`ARCH_PRINCIPLES.md`](./ARCH_PRINCIPLES.md) §14.3). A big file or
-a documented gap without an entry is a bug; a big file or gap with
-an entry is sequenced work. The ledger holds only LIVE deferrals:
-when an entry completes, its chronicle moves to
-[`HISTORY.md`](./HISTORY.md) (the `setup_cmd`/`daemon_cmd`/`mesh_cmd`
-splits and the commonwealth-CLI placeholder resolution live there
-now) and the row is dropped — or trimmed to the still-open residual.
-
-### 10.1 Sovereign deferrals
-
-| Item | Location | Why deferred |
-|------|----------|--------------|
-| `project_cmd.rs` split — **DONE 2026-07-13** | `sovereign-cli-dev/src/project_cmd/` (dispatcher `mod.rs` 645 lines, was 7,102) | Split into a directory module — `audit/`, `serve.rs`, `refresh.rs`, `charter_amend.rs`, `registry_watch.rs`, `hooks.rs`, `phase.rs`, `design_plan.rs` — every file under the ARCH §3.1 1,200-line ceiling. `mod.rs` keeps `run_project` dispatch + the shared daemon/git/date plumbing; each command family is one findable file. (`sovereign-cli-dev` remains feature-gated out of the public build behind `--features dev-tools` — the rationale the `atos_cmd/run.rs` row still references.) **`init/` and `scaffold.rs` left this tree 2026-08-07** for `sovereign-cli/src/project_init/`; `registry_watch.rs`'s four verbs were mirrored into `sovereign-cli/src/project_registry.rs` on 2026-08-06, and **`registry_watch.rs` itself was DELETED 2026-08-21 (nc-27)** — the mirror made the cli-dev copies unreachable (`project_registry::try_run` is consulted first and never returns `None` for those verbs), so the file was a dead fork; its one live function, `daemon_get`, moved into `mod.rs` beside `daemon_post`. |
-| `model_slot.rs` residual (was the `embedded.rs` split) | `sovereign-inference/src/embedded/model_slot.rs` (~5,860 lines) | The residual of the `embedded.rs` decomposition ([HISTORY](./HISTORY.md#embeddedrs--embedded-pr5b--2026-06-10)): the slot state machine + decode loops + MTP — one tight, unsafe-heavy (44 blocks) FFI concern whose remaining seam is an alternate inference backend at the `InferenceProvider` boundary, not a file split. That seam is now cut: `engine_factory` selects the engine from `[engine] kind`, so this file is llama's implementation rather than the system's only one. |
-| `retrieval_pipeline.rs` residual — **baseline raised 3,076 → 3,201, 2026-09-03** | `sovereign-core/src/runtime/retrieval_pipeline.rs` (3,201 lines) | The step ledger (`cba4d6e5d`) added 631 lines to an already-oversized file. **512 of them left again** in the same push: the whole accounting concern — `StepKind`, `DropReason`, `StepLedger`, `StepOutcome`, `ledger_violations`, `audit_step` and the violation counter — is now `runtime/retrieval_ledger.rs` (344 lines), and its 12 tests are `tests/main/retrieval_ledger.rs`. That split is real rather than cosmetic: the ledger depends on none of the pipeline's internals (every function in it is pure apart from one counter), which is why it could move whole and why `retrieval_pipeline` only re-exports it. The **+125 that remains is irreducible**: a `StepKind` argument threaded through 26 `step(...)` declarations, the runner's synthesise-then-audit block, and the re-export. That is the pipeline's own share of the accounting and it cannot live anywhere else. Accepted by editing the ONE line in `quality/baselines/oversized.txt` rather than `arch-gate --update-baseline`, which would also have absorbed the `sovereign-tdd` approach-band growth from four unrelated local commits — the trap `AGENTS.md` names. Next seam if it grows again: the 27 `step_*` bodies are the bulk and split along head / core / per-intent-tail. |
-| `streaming.rs` refusal-retry duplication — **resolved 2026-09-20** | `sovereign-core/src/runtime/streaming.rs` (4,738 lines) | The 2026-06-10 runtime.rs decomposition moved the streaming dispatch here intact, and this row recorded two NEAR-duplicate refusal-retry state machines said to "genuinely differ (error-frame + finish-reason handling)". Measured before merging: the KQ and Deep/Simple loops had already converged on one `run_synthesis_stream`, and ITS two retry blocks were byte-identical apart from one word of the log message (`refusal opener` vs `short refusal`) — no error-frame or finish-reason difference existed. Both now call `refusal_retry_stream`, same retry count, same `synth.refusal_retry` target, same fields. Untouched and still deferred: the streaming-vs-non-streaming setup duplication (turn.rs). |
-| `state.rs` decomposition (desktop) | `sovereign-desktop/src-tauri/src/state.rs` (~1,730 lines, was 2,347) | Contiguous phases are extracted ([HISTORY](./HISTORY.md#staters-desktop--extraction-of-the-contiguous-phases-2026-06-09)). The `tools` registry stays inline *by necessity, not omission*: it is **interleaved** across the whole bootstrap (tools registered before AND after `corpus_engine`), so it cannot be a pure-relocation builder without reordering a GGUF-gated startup path. The `EmbeddedDaemon` wiring no longer is: daemon-convergence Phase 2 (2026-08-24) replaced the four `mesh.set_*` sites with ONE commissioning site just before `try_resume`, and the daemon's services arrive as a single `sovereign_mesh::DaemonServices::Desktop` value assembled from what bootstrap already built. Keep `AppState` fields flat (~295 call sites borrow `state.<field>`). |
-| `DesktopError` burn-down (desktop) | `sovereign-desktop/src-tauri/src/error.rs` + `src/lib/errors.ts` | The structured error + frontend mirror + zero-per-caller-edit migration enabler are in place ([HISTORY](./HISTORY.md#desktoperror--first-pr--the-burn-down-enabler-2026-06-09)). **Remaining (incremental, ~140 command modules):** flip each handler's `-> Result<_, String>` → `DesktopError` (the `?`-sites auto-convert via `From<String>`; explicit `return Err` / tail `map_err` take `.into()` or a semantic `DesktopError::upstream`/`invalid_request`) + repoint its api.ts wrapper at `invokeChecked`. `AppState::store()` landed 2026-08-24 with daemon-convergence Phase 0 (see the `Runtime` surface row below); `corpus_engine()` and the `require_runtime!` retirement still wait on the first chat-path module that needs them (deferred — chat is the live, higher-traffic path). |
-| `Runtime` surface shrink (desktop + server) — **Phase 0 DONE 2026-08-24** | `sovereign-desktop/src-tauri/src/{state.rs,commands/{mod,conversation,models}.rs}`; `sovereign-server/src/{main,routes,routes_documents,routes_mcp,corpus_upload,tenant,ws}.rs` | `sovereign_core::Runtime` was doubling as a general-purpose DB handle: 11 desktop and 20 server call sites reached `runtime.store` for work that is not a chat turn (conversation list/rename/delete, memory tombstones, message search, document assets, corpus upload). Both hosts already held the SAME `Arc<dyn StateStore>` independently, so those sites now read it directly — desktop via `AppState::store()` / the `require_store!` macro, server via a `store` Extension layered from `main.rs` beside the Runtime (`ToolRegistry` likewise, retiring `runtime.tools` on `/v1/tools` and the whole `/mcp` surface). Desktop consumption surface: 9 methods + 5 fields → 9 methods + **4** fields. **Still on the Runtime, deliberately:** desktop `runtime.tools` (`commands/models.rs`) and `runtime.skills` (`commands/conversation.rs::list_skills`) — `AppState` carries no tool or skill registry of its own, so there is nothing to repoint to; `runtime.sessions` (`commands/chat.rs`, cancel/redirect) is a chat operation and belongs to the daemon-convergence Phase 5 turn protocol. One intended behavioural delta: the store opens earlier than the Runtime and survives a Runtime rebuild, so the repointed commands answer from the database in those two windows instead of reporting "Backend is still loading". |
-| `atos_cmd/run.rs` split | `sovereign-cli-dev/src/atos_cmd/run.rs` (~4700 lines) | **De-scoped from the launch-pristine §3 bar (2026-06-08):** in the feature-gated `sovereign-cli-dev` developer toolchain (see `project_cmd.rs` row), not part of the public build. ATOS runner loop — subprocess fan-out, MCP-tool brokerage, milestone advancement, reviewer loop, run-record persistence cohere as one state machine today. One-file-per-stage split when boundaries stabilise. |
-| `daemon.rs` split | `sovereign-daemon/src/daemon.rs` (~3,100 lines) | `EmbeddedDaemon` is the in-process commonwealth+sovereign entry, and the ONLY daemon implementation — `sovereign daemon run`, the desktop's Local mode and `svrn mesh create/join` all construct this type. Its 17 `RwLock<Option<T>>` slots and their 10 `set_*` + 7 `install_*_router` methods were retired 2026-08-24 (daemon-convergence Phase 2) in favour of a total constructor taking one `daemon_services::DaemonServices` — a three-variant sum (`MeshAdmin` / `Desktop` / `Headless`) whose field placement is the measured pair-independence result over the live construction sites (`quality/TOPOLOGY.md` §4). The three variants NEST as of Phase 3 (2026-08-25): `state_store` moved from the desktop variant into `ServingCore` and `sovereign daemon run` opens its own `<data_root>/sovereign.db`, so `Desktop` is now literally `Box<ServingProfile>` and `Headless` is that plus rails. That store was the one field making the two serving shapes incomparable, and its absence was a live defect: a headless daemon mounted `reading_http` with nothing to resolve a conversation title with. The mesh, admin, reading and — since 2026-08-25 (TOPOLOGY phase 5c) — TURN routers are now built by the daemon itself from a `Weak<Self>` captured by `Arc::new_cyclic`, so no host installs them and no host can differ on them. `turn_http` is what makes `sovereign daemon run` answer rather than merely hold the ingredients of an answer: `ServingCore` gained a non-optional `runtime: Arc<Runtime>` (commissioned through the shared `sovereign-runtime-recipe`), and the router serves `POST /v1/conversations` + `GET /v1/conversations/{id}/stream` in `sovereign-server`'s exact wire form, loopback-only, so a client cannot tell which of the two it reached. **One NAMED exception since sv-surface rung 6 C2-b:** the stream also serves `TurnRequest::{Resume,Redirect}` — session continuation, the wire form of `Runtime::{resume_session_stream,redirect_turn_stream}`, without which an attached surface could ask a question but not answer its own clarification card. `sovereign-server` refuses both by name, because a session id arrives unscoped while every conversation there is `{tenant}:{conv}`; that is a wire-compat debt this entry records rather than a property. The daemon refuses a session belonging to another conversation (redirect resolves the replacement turn's message AND conversation off the session, so without the guard a socket on conversation A could run a turn in B and stream it to A), and deliberately does NOT refuse one it has merely forgotten on the resume path — `SESSION_RETENTION` is 30s and the in-process command answers a stale card, so refusing would trade the divergence rung 6 closes for a new one. Driven end-to-end by `sovereign-mesh/tests/turn_surface.rs`. Pure helpers (`mesh_discovery.rs`) extracted; load-bearing splits (`app_state_builder.rs` + `background_tasks.rs`) unblocked but stay deferred until `MemberRecord.client_port` lands and a real two-daemon integration test against `start_daemon` itself can be built. **`start_daemon`'s network posture is one decision as of 2026-09-08** (`local_only.rs`, cw-lift 4d): `LocalOnlyProfile` is resolved once from `[daemon] local_only` + `SOVEREIGN_LOCAL_ONLY` (both directions) and is read by the mDNS gate, `iroh_access::resolve_enabled`, `internal_bind_addr`, and — new — the peer-facing loops (gossip, auto-ingest collaborate, ring-sync, rail KV pump, and since cw-lift 5d the work-plane donor `work_donor.rs`) that until then spawned unconditionally, so "local-only" was unreachable at runtime whatever the manifest said. On, those five do not start, the internal API binds loopback, and the mesh-of-one is still minted and served (the profile skips the NETWORK, not the model). `local_only + require_encryption` is refused at boot by name rather than resolved silently either way. The donor carries a SECOND gate inside the first — a node whose `[compute.work_offer]` names no kind spawns nothing, which is the shipped posture — so its absence from the census is two different facts and the boot trace names which. **A THIRD gate joined them on 2026-09-10 and it is the one that matters for safety: `process:v1` is refused at boot on every build in this tree.** `ProcessExecutor`'s descriptor declares it REQUIRES `Isolation::RootlessContainer`; `DONOR_ISOLATION` is `Subprocess`, which is what the build provides; `resolve_offer`'s existing isolation check therefore refuses the offer and names both sides. Operator decision the same day: isolation is the default and there is no arbitrary code execution outside a well-defined boundary. Before it, the only wall in front of running a submitter's argv as the donor's user — with the donor's filesystem, network, and through them `~/.svrnmesh/node_key`, the donor's own mesh identity — was `accept_from`, and the module doc has always said consent is not isolation (`work_donor.rs:40-43`). The descriptor field means what the executor REQUIRES, not what it provides, which is how `work_donor.rs:265-273` has always read it; the comment on `ProcessExecutor` read it the other way round and so stated a floor as a capability, and that is the ambiguity this change closes. There is deliberately NO config key: a key would let a config assert an isolation the build cannot perform (§18.3), so the lift is a container-backed executor raising what the build PROVIDES. `ingest:v1` is untouched — it declares `InProcess`, runs our own code on the daemon's threads, and still offers, which is the shape to keep: our code in-process, a stranger's argv only inside a boundary. **The floor is ONE decider and it lives in the package, not here** (`commonwealth_work::executor::JobExecutorRegistry::offerable`, returning an `OfferableKinds` partition of offerable / dropped / unregistered). It was `sovereign-mesh`'s boot path alone for one commit, and that was the same §10.6 hole `lease_state`, `host_satisfies` and `attribution` each had: a donor built from `commonwealth-work` by itself had NO floor, and the lifted peer was precisely that donor — it published `process:v1` and ran a stranger's argv behind consent. `resolve_offer` and `examples/work_peer.rs` now both call it, and `unregistered` stays a separate arm from `dropped` because a typo and a safety drop need different sentences and different consequences (the first still refuses the boot). **This cost D3:** the peer publishes no offer and exits 3, so `scripts/cw-work-lift.sh --sandbox` reads could-not-judge rather than a measured 1 — steps 1-4 still measure, the closure still lifts and builds and passes its own tests outside the monorepo, and only the donation abstains, which is the §18.3 distinction between "the lift failed" and "a donor declined to run a stranger's argv without a boundary". Ledger row in `sovereign/DEFAULTS_LEDGER.md` carries the flip condition for both. Watched reds: `work_donor::tests::the_isolation_floor_drops_process_v1_and_publishes_no_offer`, `the_floor_drops_only_the_kind_it_names_and_keeps_the_rest`, and the package's own three in `executor::tests`. Two gaps stand beside it, both banked: `JobRequirements` has no isolation field and `WorkOffer.isolation` is written by every donor and read by nothing, so `WorkRefusal::IsolationBelow` has no producer in `may_take`; and a donor has no way to bind an `accept_from` key to the peer it names. `work_donor::resolve_offer` runs BEFORE the profile branch on purpose: a config offering a kind this build has no executor for is wrong whether or not this boot would have donated, and a local-only run must not be the reason nobody found out (§18.3). **A second kind joined the registry on 2026-09-09 (cw-lift 5g): `ingest:v1`, `sovereign-daemon/src/ingest_executor.rs`.** It runs one corpus partition — the same `CorpusEngine::ingest_with_overrides` call `auto_ingest::pull_loop` makes, with the same `(file_indices, article_range)` derived by the same `commonwealth_core::knowledge::WorkUnit::to_ingest_args` — so what moved onto the fold is who HOLDS a unit, not who does the embedding. `donor_registry` therefore takes the node's `Option<Arc<CorpusEngine>>`: a node with no engine registers no `ingest:v1`, and `resolve_offer` then refuses a config that offers it by name, which is the boot invariant just stated applied to a kind whose executor is conditional on a service rather than on a cargo feature. The executor declares `Isolation::InProcess` (it runs on the daemon's own threads; there is no child process) and `Idempotency::Idempotent` — the one honest claim of that kind in the registry, because `merge_shards` dedupes on `content_hash` and `(unit_id, source_doc_id)` (`corpus-engine/src/sharding.rs:780`), which is the whole reason `unit_id` is threaded through `ingest_with_overrides`. An ingest that does not finish returns `JobError::NoVerdict`, never a `Judgement::failed`: `WorkProjection::complete` requeues a `Fail` while attempts remain and makes a `Complete` terminal whatever its verdict, so the `Fail` arm is what preserves `HandoffQueue::ack_failure`'s retry-then-terminal rule at `MAX_UNIT_ATTEMPTS`. Proven end to end on the Halo the day it landed: two `JsonlRange` units submitted with `svrn job submit --kind ingest:v1 --units`, both leased, run, reported and merged into a canonical index that answers queries from both ranges. **The legacy pull path (`work_queue.rs`, `ingest_grant.rs`, `routes_internal/corpus_queue.rs`, `auto_ingest.rs:693-1268`) is UNTOUCHED and still the shipped route** — and after the 2026-09-09 deletion survey the reason is known and is not scheduling. What is proven is the fold-side MERGE (part 2's B1-B4/B7/B8, `quality/campaigns/cw-lift-5g-part2-prereg.md`). What was never built is the fold-side SUBMITTER: `WorkAct::Submit` has ZERO automated production sites workspace-wide, `ingest:v1` reaches the fold only when a human types `svrn job submit`, and `IngestPayload::slice` — the only unit-body constructor — has two call sites and both are tests. `commonwealth-api` takes no dependency on `commonwealth-work`, so `corpus_collaborate` cannot name `WorkAct` even in principle; the two paths are disjoint types on disjoint substrates (`commonwealth_work::WorkHandoff` on the rail journal vs. `commonwealth_core::knowledge::IngestionHandoff` as a `Projector::Kv` row). So on a real corpus install `fold_coverage_for` returns `None` at `auto_ingest.rs:249` and control falls through to the legacy path every time. Every deletion candidate is reachable from `daemon.rs:3492` → `spawn_auto_collaborate_loop`, and `EphemeralGrantStore`'s teardown obligation runs through `WorkQueueManager::retire` (`corpus_grant.rs:166`), so "the grant store survives" and "delete `WorkQueueManager`" cannot both hold. Part 2 is therefore a BUILD before it can be a deletion, and it has not run. What a boot spawned is recorded in a `RunningServices` census on `DaemonState::Running` and read back by `EmbeddedDaemon::running_services()` — the instrument for `sovereign-mesh/tests/main/local_only_boot.rs`, which is `cw-local-only-daemon`'s bar instrument now that its K2 fired (the crate seam that would have removed the ten transitive commonwealth deps moves 15,634 lines and deletes none). |
-| `inference_adapter.rs` split | `sovereign-serving-host/src/inference_adapter.rs` (~2100 lines) | Pure helpers (`build_self_manifest`, `synthesize_slot_claims`) extracted to `oicp_synthesis.rs`. Wire-shape translation, tool-call envelope parsing, tool-profile policy stay until the tool-call envelope migration settles. |
-| `peer_inference.rs` split | `sovereign-serving-host/src/peer_inference.rs` (~2280 lines) | `InferenceRouter` + throughput observation + manifest caching + quarantine. `ThroughputObservedStream` extracted to `throughput_tracking.rs`. `complete_stream_with_id_and_finish` and `complete_stream_with_id` deduplication blocked on `select_route` enum extraction. |
-| `auto_ingest.rs` split | `sovereign-daemon/src/auto_ingest.rs` (~1200 lines) | Auto-collaborate orchestration — `Planning → Handoff → Active → Complete` state machine. Splitting before the cloud-peer flavour settles would re-merge. |
-| `sqlite/conv_tiered.rs` residual (was the `sqlite.rs` split) | `sovereign-store/src/sqlite/conv_tiered.rs` (~1,100 lines) | The 2026-07-12 split landed `sqlite.rs` (4,097 lines) as a 582-line parent + 14 per-concern modules; the largest child holds the ConvTieredReader + skeleton/RAPTOR/motif methods. Next growth splits the chunk-entity methods out. |
-| `scoring.rs` residual (was the `oicp-types` lib split) | `oicp-types/src/scoring.rs` (~1,260 lines) | The residual of the 2026-07-11 quality-program R2 split (lib.rs 3,005 → 68 + 9 family modules): the §6/§7 reference-scoring implementation — 15 tuning constants, the scorer chain, `NodeObservations` — coheres as one auditable algorithm today. Next seam if it grows: node-observation/locality signals vs the scorer itself. |
-| ~~`document_asset.rs` split~~ **DONE 2026-08-27** | `sovereign-tools/src/document_asset/` (9 files, largest 828) | DocumentAssetManager — split along the three phases its own module doc declares: `manager` (ingest) + `routing` + `execution`, with `skeleton` / `artifacts` / `motifs` / `atoms` / `self_reference` carved off the free functions. Routing and execution are separate `impl DocumentAssetManager` blocks — inherent impls may span modules within a crate, so a phase gets a file without the type moving. NOT the tier boundary this row predicted: the tiers are interleaved through `run_ingest`, and the phases are what the file was actually organised by. |
-| ~~`found.rs` split~~ **RETIRED 2026-08-28** | `sovereign-cli-dev/src/project_cmd/mod.rs` (`cmd_found`, line 416; dispatched from line 87) | The split debt is gone because the file is: `found.rs` (2,802 lines) was DELETED by `2dd18bd0b` (Totality ratchet, #50) when `svrn project found` was retired. The verb still dispatches, to a `deprecation::announce_retired` call — founding is implicit now (`svrn init` plus a committed spec), with `svrn charter` for team conventions and `svrn plan` to write PHASES.md from a design doc. Row kept rather than dropped so the four-stage founding conversation is not silently re-planned, and the citation names paths that exist, which is what docs-gate asks (§1.1). |
-| `MemberRecord.client_port` wire field | `commonwealth-core/src/mesh/mod.rs` + `commonwealth-discovery/src/membership.rs` + `sovereign-daemon/src/daemon.rs::peer_inference_endpoints` + `sovereign-daemon/src/auto_ingest.rs` | Local-side port plumbing landed; **peer-uniformity assumption** remains: `peer_inference_endpoints` rewrites every peer URL with this daemon's client_port, and `auto_ingest` pins port `9742`. Mixed-port mesh deployments need a `client_port` field on `MemberRecord` and a matching slot in the join handshake. Until then, operators who set a non-default `client_port` should configure every peer the same. |
-| Atlas inspector Phase 2 — curation overlay | `sovereign-tools/src/atlas_view/` | Phase 1 ships read-only inspection. Phase 2 adds an `atlas/overlay.sqlite` keyed by `StableAtomKey` (content-hash) so user edits and approval state survive re-extraction. Forward-compat fields (`curation_status`, `overlay_supports`) already on every DTO. |
-| Imports tab — Gemini extractor | `corpus-engine/src/extractors/` + `sovereign-recipes/conversations-gemini/` | Library → Add → Conversations ships **Anthropic + ChatGPT** (2026-06) **+ email-archive** (2026-07: mbox/maildir/.eml via the parameterized recipe, no staging copy, no auto-enrich). Gemini (Google Takeout) remains: the plumbing is source-agnostic — a new `<source>_export` extractor + recipe + `ImportSource` arm + `<ConversationImportCard>` is all it takes. ChatGPT pattern (mapping-tree walk-up, PUA marker cleaning, source-aware `import_commands.rs`) is the template. |
-| Imports tab — KQ chip label for conversation corpora | `sovereign-core/src/runtime/types.rs` `KnowledgeQueryPlan` | DeepQuery path threads `display_categories`; streaming KQ + metalingual locator pass `None`. Sub-page UX polish. |
-
-### 10.1b corpus-engine deferrals
-
-| Item | Location | Why deferred |
-|------|----------|--------------|
-| `recipe.rs` split | `corpus-engine/src/recipe.rs` (~4,200 lines) | Recipe TOML schema + loader + recipe-authoring tools + parameter resolution + `bundled_recipe_toml(id: &str)` dispatch. The §2-style enumify of `bundled_recipe_toml` (RecipeId enum) is a prerequisite. |
-| `notes.rs` split | `corpus-engine-notes/src/notes.rs` (~7,780 lines) | NoteStore façade + persistence migrations + lifecycle + decision-log tools. **Carved out of `corpus-engine` into its own crate** (blast-radius control), and the VOCABULARY left the file in noun-convergence rung 7 — `Note` / `NoteScope` / `NoteSource` / `ScopeFilter` now live in `note.rs` as plain data, so a consumer that wants the noun no longer reads past the SQL. What remains is the store, and it is still one file: SQL schemas + migrations couple tightly. |
-| `entity_extraction.rs` split | `corpus-engine/src/enrichment/entity_extraction.rs` (~2930 lines) | Phase-1b entity extraction for personal + conversational domains. Active surface (recent enrichment work); split along the per-domain extractor boundary once it settles. |
-| `atlas/resolution.rs` split | `corpus-engine/src/enrichment/atlas/resolution.rs` (~5,200 lines) | Atlas URI resolution + scoring. Hottest-iteration file; splitting churn-heavy code obscures git history while the algorithm is still settling. |
-| `pipeline/runner.rs` split | `corpus-engine/src/enrichment/pipeline/runner.rs` (~3100 lines) | v2 atlas orchestrator. Phase dispatch + ExemplarBank + PhaseCache + step retry all touch the same state. |
-| `engine/mod.rs` split | `corpus-engine/src/engine/mod.rs` (~3000 lines) | `CorpusEngine` façade. Plausible after watcher-driven recipes settle and `ingest_driver` enumify lands. |
-| `pipelines/literary_atlas.rs` split | `corpus-engine/src/enrichment/pipeline/pipelines/literary_atlas.rs` (~2900 lines) | Splits naturally along phase boundaries (extract, cluster, name, resolve, synthesize). |
-| `pipeline/atlas.rs` split (partial, 2026-09-01) | `corpus-engine/src/enrichment/pipeline/atlas.rs` (1,680 → 1,373 lines) | Pure Phase-1 data shapes: core sketches, the open-enum vocabulary macro, and six per-genre extension families. The descriptive/reflective/procedural/lyric families moved to `atlas_extensions.rs` (341 lines) to clear the ARCH §3.1 growth ratchet. The remaining cut — core sketches, vocabulary enums, and all six families as peers each under the 800 approach floor — is deferred because it cannot be taken in one step: the arch-gate's approach band (800-1200, no slack) rejects any residual that lands inside it, so the file must go from >1200 to <800 in a single move, and both the macro and the core sketches are live surface for the in-flight ontology-v1 waves. Due when those land. |
-
-### 10.1c Size-debt acceptance — 2026-07-30 red-gate sweep
-
-The arch-gate baseline was refrozen 2026-07-30 (137 oversized files) after the
-May–July arcs grew the workspace past the previous freeze. Files that were
-already rows above stay governed by their own entries (`conv_tiered.rs` note:
-the growth its row predicted has now happened — it crossed 1,200 at 1,310).
-The rows below ledger the files that became oversized WITHOUT an entry,
-grouped by the arc that grew them; each group splits when its surface
-stabilises, same contract as every other row in this section.
-
-| Item | Location | Why deferred |
-|------|----------|--------------|
-| Mesh measurement + allocation arc | `sovereign-cli-llm/src/mesh_cmd.rs` (4,730 — grew +3,419), `sovereign-cli-llm/src/mesh_bench.rs` (2,275) + `mesh_bench/tests.rs` (1,583), `sovereign-core/src/mesh_measurements.rs` (2,925), `sovereign-scheduler/src/decision_log.rs` (1,348), `sovereign-daemon/src/mesh_http.rs` (1,623), `sovereign-mesh-test-harness/src/mesh_sim/mod.rs` (2,405), `sovereign-mesh/tests/main/mesh_sim_scoreboard.rs` (2,750), `sovereign-scheduler/src/scheduler_core.rs` (1,215), `sovereign-mesh/tests/chat_completion_e2e.rs` (1,511) | The allocation/measurement/plan surface is the hottest current iteration (RunConditions, median-run headlines, gossip-travel measurements — commits through `df88e073`). Splitting mid-arc obscures blame on an algorithm still settling; `mesh_cmd.rs` splits along its verb families (plan/measure/bench) once the measurement schema freezes. |
-| 122B distributed inference | `sovereign-inference/src/embedded/rpc_warm_cache.rs` (1,927), `sovereign-daemon/src/rpc_warm_http.rs` (1,236) | RPC warm-cache + its HTTP surface; ggml-RPC-over-iroh is still an open workstream (`docs/QWEN122B_DISTRIBUTED_HANDOFF.md`) — the seam moves with it. |
-| Session continuity + context-spend arc | `sovereign-cli/src/session_cmd.rs` (3,215), `sovereign-tools/src/code/session_state.rs` (1,421), `sovereign-cli/src/cache_audit_cmd.rs` (2,312) | Frame lineage/objective machinery and the cache auditor grew together with `docs/specs/SESSION_CONTINUITY.md` §2; `session_cmd.rs` splits per verb (frames/attach/distill) once the frame contract stops moving. |
-| CLI-contract machinery | `sovereign-cli-shared/src/cli_contract.rs` (1,390), `sovereign-cli/src/main.rs` (1,202) | Contract model + dispatcher; `main.rs` sits 2 lines over the ceiling and shrinks when the next verb family moves out-of-process. |
-| Compute-child process boundary | `sovereign-compute/src/manager.rs` (1,585), `sovereign-compute/src/supervisor.rs` (1,532) | New crate (P1, 2026-07); manager/supervisor cohere as one lifecycle state machine until a second child type exists to force the seam. |
-| Retrieval redesign 2026H2 | `sovereign-core/src/runtime/retrieval/history.rs` (1,310), `sovereign-core/src/runtime/retrieval/query_expansion.rs` (1,578), `sovereign-tools/src/raptor_atlas.rs` (1,389) | ANN-refine + expansion pipeline under active redesign (S4 gate validated, blocked on chunk-eviction fix); splitting before S4 lands re-merges. |
-| Router calibration | `sovereign-core/src/router_calibration.rs` (1,317) | Calibration bank + heuristic floor; splits from the router once the framework-routing matrix (v1, 4 cells) grows its next cell. |
-| Desktop command families | `sovereign-desktop/src-tauri/src/governance_commands.rs` (1,215), `sovereign-desktop/src-tauri/src/local_corpus_commands.rs` (1,295) | Per-surface Tauri command modules; each splits along its sub-page boundary when the Svelte-side W1–W6 work resumes. |
-| Meshapp platform SDK | `sovereign-meshapp/src/wrapped.rs` (1,210), `sovereign-meshapp/src/wrapped/semantic.rs` (1,403) | Wrapped-projection + semantic layer; the `_sdk/` catalog contract is newer than either file — split follows the SDK's shape. |
-| OICP studio extraction | `oicp-client/src/lib.rs` (1,754) | The corpus-engine-free client carve-out landed as one file by design (boundary-gate leaf); splits into transport/session/structured-output modules on next growth. |
-| Chaos scoring | `sovereign-eval/src/chaos_monkey/score.rs` (1,381) | Rubric scorer for the reliability-report sweep; per-dimension split lands with the pinned-critic work. |
-| Reindexer liveness | `corpus-engine-watchers/src/reindexer.rs` (1,519) | Freshness gate + heartbeat + supervisor self-heal grew together (watcher-liveness hardening); split waits for the watcher re-enable decision. |
-| corpus-index index search | `corpus-index/src/index/search.rs` (1,245) | 45 lines over the ceiling; trims naturally when the ANN-refine retrieval fix migrates the legacy search path. |
-| Iroh transport (cmnwlth) | `commonwealth/crates/commonwealth-transport/src/iroh.rs` (1,280) | No-VPN mesh arc (invite/join/gossip over iroh) landed as one transport module; splits dialer/acceptor/relay once the relay-floor characterization settles. |
-
-### 10.1d Size-debt acceptance — 2026-09-01 re-freeze at `origin/main`
-
-The pre-push gate was not installed while the 2026-08 arcs landed, so the
-ratchets drifted from what had already been pushed: `arch-gate` reported 22
-size failures and `layout-gate` 8, of which **three** were caused by the push
-in front of it and the rest were already public. Re-running the gate on a
-worktree at `origin/main` (b7b6892c) separated the two, and the baselines were
-re-pinned to THAT tree — not to the working tree — so this push's own growth
-still had to answer for itself. It did: `deep_research_commands.rs` (1,346 →
-1,604) was carved into `mod`/`live`/`report`/`runs`/`tests` (598/143/308/132/467),
-`setup_cmd/terminal.rs` came back under the 800 approach floor, and its new
-`SystemTime::now()` was routed to `sovereign_core::time`. The gate is now in
-the initiative DoD (`AGENTS.md`), which is the actual fix — a ratchet nothing
-runs is not a ratchet (ARCH §18.1).
-
-What the re-freeze accepted, all of it already on `origin/main`:
-
-| Item | Location | Why deferred |
-|------|----------|--------------|
-| Path re-key, no debt | 7 rows under `tests/main/` | The `tests/{ => main}/` consolidation moved every integration test one directory down. The baseline is keyed by path, so each looked like a NEW oversized file at an unchanged line count. Re-keyed, not re-priced. |
-| Setup-config surface | `sovereign-contracts/src/setup_config.rs` (2,189 → 2,944) | The terminal/FIM/opencode onboarding arc grew the config model and its round-trip tests together; splits per onboarding target once the terminal journey stops moving. |
-| Peer inference + scheduler | `sovereign-serving-host/src/peer_inference.rs` (4,832 → 5,385), `sovereign-cli-llm/src/mesh_cmd.rs` (5,224 → 5,291) | Both already carried §10.1c rows for the same reason — the allocation surface is still the hottest iteration. The rows stand; only the numbers moved. |
-| OICP studio extraction | `oicp-client/src/lib.rs` (2,483 → 2,904) | The §10.1c row predicted this ("splits into transport/session/structured-output modules on next growth"). The growth happened; the split is now due and is the first thing this row buys. |
-| RPC distribution | `sovereign-inference/src/embedded/rpc_distribution.rs` (3,154 → 3,388) | ggml-RPC-over-iroh is still open (§10.1c, 122B row); the seam moves with it. |
-| Refactor detector | `sovereign-cli-dev/src/refactor_cmd/detector.rs` (1,485 → 1,682) | Detector families (size/fan-in/duplication) grew as one pass; splits per family once the detector set stops growing. |
-| CLI-contract machinery | `sovereign-cli-shared/src/cli_contract.rs` (1,473 → 1,607) | Existing §10.1c row; the experience-axis work (`needs`/`--lacks` partition) is mid-flight. |
-| Daemon bootstrap | `sovereign-daemon/src/bootstrap.rs` (2,672 → 2,786) | Child-process supervision + RPC-worker spawn + manifest refresh cohere as one startup state machine; splits when the compute-child boundary takes the worker half. |
-| corpus-engine engine | `corpus-engine/src/engine/mod.rs` (3,804 → 3,879) | Under the 10-crate decomposition (`corpus-engine/DECOMPOSITION.md`); this file shrinks by carve-out, not by a local split. |
-| Newly oversized, no prior row | `sovereign-daemon/src/server.rs` (1,253), `sovereign-cli-daemon/src/setup_cmd/mod.rs` (1,287), `sovereign-serving-host/src/oicp_synthesis.rs` (1,266), `sovereign-cli/tests/main/cli_contract_journeys.rs` (1,201) | Four files crossed 1,200 during the 2026-08 arcs. All are within 90 lines of the ceiling and each splits along an obvious seam (route families, setup targets, synthesis stages, journey families) — first candidates when the queue is worked. |
-
-### 10.1e Placement — 2026-09-01 the orchestrator moved below the hosts (ontology-v1 P0.4 → P0.5)
-
-**History, one line, because the cheaper option was tried and named rather
-than overlooked.** P0.4 gave the daemon the atlas `enrich build` orchestrator
-by linking `sovereign-cli-llm`'s library target — host → host, layer-legal,
-accepted as a NAMED substitution (ARCH §18.3) with this row recording it as
-outstanding debt. The operator adjudicated the fork on 2026-09-01 and funded
-the split. P0.5 landed it: the orchestrator is now
-`sovereign-enrichment-build`, a `capabilities` crate (17 modules / ~9,900
-lines) beside `sovereign-enrichment-catalog`, and the daemon depends on it
-rather than on a host.
-
-**What the rung delivered, measured.** The bar was that `sovereign-eval` —
-grandfathered into `sovereign-cli-llm` by `bench_cmd`, and therefore linked
-into the daemon and into every desktop bundle that embeds it — must leave both
-dependency graphs.
-
-| `cargo tree -p <bin> -i sovereign-eval -e normal` | before (`e05381a9d`) | after (`d6c1c48d6`) |
-|---|---|---|
-| `sovereign-cli-daemon` | prints the chain via `sovereign-cli-llm` | `error: package ID specification `sovereign-eval` did not match any packages` |
-| `sovereign-desktop` | prints the chain via `sovereign-cli-daemon` | same error |
-
-That error string IS the evidence, and it is quoted here so the next reader
-does not file it as a broken command: `cargo tree -i` filters to the target's
-graph FIRST, so "did not match any packages" means the package is not in that
-binary's graph at all. Also delivered: the daemon no longer depends on any
-`hosts` crate, the P0.4 substitution is retired rather than left standing, and
-`sovereign-cli-shared` — the last `hosts` edge inside the orchestrator's
-closure — is gone, because the `cmd_*` entry points and their `HELP` consts
-stayed in `sovereign-cli-llm` where the user interface belongs.
-
-**What the rung did NOT deliver: the size.** The second bar condition was that
-the +12.3 MB the library edge cost must come back down. It did not. Measured
-with one identical, staleness-guarded command (`rm -f` the binary first, so a
-stale file cannot be read at all — an earlier run of this same measurement
-returned the previous value with a fresh-looking exit code):
-
-| `target/debug/sovereign-cli-daemon` | bytes |
-|---|---|
-| before the flip (`e05381a9d`) | 863,517,536 |
-| after the flip (`d6c1c48d6`) | 863,657,464 |
-| delta | **+139,928 (+0.133 MiB, +0.016%)** |
-
-The binary is 140 KB LARGER. Nothing of the 12.3 MB was recovered.
-
-The reason, and it invalidates the premise the bar was written on: **the
-12.3 MB was never `sovereign-eval`.** It was the orchestrator's own code —
-~9,900 lines and its transitive deps — which the daemon genuinely runs and
-still links. The split changed WHERE the daemon reaches that code from (a
-`capabilities` crate instead of a `hosts` crate); it removed nothing the
-daemon uses. The size win was not available because nothing being carried was
-dead. The small increase is consistent with a new crate boundary costing a
-compilation unit's own metadata and losing cross-crate inlining, but that is a
-plausible reading of a 0.016% delta, not a measured cause.
-
-**The ratchet this cost, accepted 2026-09-02.** `layer-gate` reported four
-fan-in growths, each exactly `+1 crate`:
-
-| god-crate | fan-in before | after |
-|---|---|---|
-| `corpus-engine` | 18 | 19 |
-| `sovereign-contracts` | 23 | 24 |
-| `sovereign-core` | 18 | 19 |
-| `sovereign-tools` | 8 | 9 |
-
-All four are the same crate. `sovereign-enrichment-build/Cargo.toml` declares
-those four dependencies and no others among the eight the ratchet watches, so
-the four `+1`s are one new node, not four new edges of independent origin —
-checked in the manifest rather than inferred from the arithmetic. Nothing
-started depending on a god-crate that did not already; a body of code that
-already depended on all four moved from inside `sovereign-cli-llm` to beside
-it, and a crate boundary made its existing appetite countable.
-
-Accepted by re-baselining `layer-gate`, which is what this row buys: the
-growth is the price of the split the operator funded, and refusing to pay it
-would mean either leaving the orchestrator in a host crate or inventing
-narrower façades for four crates in the same commit as the move. The bill to
-watch is that this makes the god-crates marginally harder to break up later,
-and `sovereign-tools` at 9 is the one closest to being severable.
-
-**The judgement this leaves.** The boundary was worth funding on architectural
-grounds alone: a capability three hosts need is out of a host binary, the
-back-of-house crate is out of the shipped desktop bundle, and the layer map is
-true rather than excepted. Anyone re-running this argument for another
-extraction should NOT expect binary size to move — and should check whether
-the weight they mean to shed is actually dead before making it a bar. This one
-was assumed severable by the coordinator and by the worker, and the
-measurement said otherwise.
-
-### 10.1e-bis The orchestrator left the inference stack — order ei-5a-build-cut (2026-09-04)
-
-§10.1e above moved `sovereign-enrichment-build` out of a HOST crate. It did not
-change what the crate *reaches*: it still pulled `sovereign-core`,
-`sovereign-tools` and `sovereign-inference`, and with them llama.cpp. This
-order (epistemic-index EI6, spec `EPISTEMIC_INDEX.md` §4.1) cut all three, so
-the crate that WRITES an atlas is now subject to the same closure rule as
-`corpus-mcp`, the host that READS one.
-
-| `cargo tree -p sovereign-enrichment-build -e normal` | before | after |
-|---|---|---|
-| crates in closure | 695 | **590** |
-| `llama-cpp-4`, `llama-cpp-sys-4` | present | gone |
-| `sovereign-inference`, `sovereign-core`, `sovereign-tools` | present | gone |
-| `ort`, `iroh`, `commonwealth-transport`, `sovereign-gliner` | already absent | absent |
-
-**The finding, and it is the whole point of the row: none of the eight sites
-was inference.** The spec named seven; `cargo tree -i` found an eighth
-(`sovereign-enrichment-catalog` → `sovereign-core`, one line for
-`setup_config::client_daemon_base()`). What each turned out to be:
-
-| site | what it actually was | landed |
-|---|---|---|
-| `InferenceProvider` (Backfill embedder) | ONE `embed_query` call behind a twelve-method trait | `corpus_engine::EmbedFn` |
-| `StepOutput`, `ToolContext`, `DeclaredTool` | already defined in `sovereign-contracts`; `sovereign-core` only re-exported them | import-path swap, no move |
-| `backfill_ann`, `AtlasContextFilter`, `BackfillOutcome` | an atlas write whose every other type was already corpus-engine's | MOVED to `corpus_engine::enrichment::atlas::context_loader`, re-exported from `sovereign_tools::atlas_context_manager` |
-| `EXIT_CANCELLED` | a `const i32 = 130` | MOVED to `sovereign_contracts::launch`, re-exported |
-| `fetch_manifest` | `sovereign_inference::remote` is nothing but `pub use oicp_client::*`, and `oicp-client` was ALREADY a dependency | one-line path swap, no new code |
-| egress `model_client` / `verify` / `ConsentGrant` / `EgressPayload` | a 399-line pure-HTTP boundary whose only internal dep was `crate::types` | MOVED to `sovereign_contracts::egress`, re-exported from `sovereign_core::egress`; F26 census `BOUNDARY_MODULE` follows the file |
-| `unix_millis` ×2 | wall-clock | `sovereign-time`, the Tier-0 leaf whose own doc names this case |
-| catalog's `setup_config` (the eighth) | one line | `sovereign_contracts::setup_config` |
-
-Every move is a re-export, never a copy (ARCH §10.6): `sovereign_core::egress`,
-`sovereign_tools::enrich::EXIT_CANCELLED` and
-`sovereign_tools::atlas_context_manager::{backfill_ann, load_atlas_context,
-AtlasContextFilter, …}` all still resolve, to the one definition.
-
-**The one behaviour risk, and why it was refused.** `sovereign-core` already
-carried `inference_to_embed_fn` — an `InferenceProvider` → `EmbedFn` adapter —
-and reusing it for the moved loader was the obvious move. It would have been
-wrong. The adapter wraps `embed()`; the loader has always embedded with
-`embed_query()`, which on an asymmetric instruction-aware model (Qwen3-Embedding)
-applies a query-side prefix `embed()` does not — the trait's own doc puts the
-gap at 1–5% retrieval. `atlas_navigate_ann` embeds incoming questions the same
-way, so the seed table and its queries share ONE vector space; swapping the
-adapter would have re-embedded every atlas on the document side while queries
-stayed on the query side. Exit 0, no test red, grounding quietly worse — the
-substitution ARCH §18.3 forbids. A query-side sibling
-(`inference_to_embed_query_fn`) was added beside the original instead. The two
-are not twins: they wrap different trait methods with different semantics.
-
-**What holds the cut.** `sovereign-enrichment-build` is listed in the
-`corpus-mcp` `[[package]]` in `quality/ARCH_LAYERS.toml`, so `cargo xtask
-boundary-gate` refuses an in-repo edge back to `sovereign-core` /
-`sovereign-tools`; the third-party half is pinned by a second test in
-`corpus-mcp/tests/no_inference_stack.rs`, which now asserts both closures
-through one shared helper with a per-package positive control.
-
-**What SPENT the cut** (ei-5b-build-verb, 2026-09-04). A cut nothing crosses is
-a claim, not a capability. `corpus-mcp` now depends on
-`sovereign-enrichment-build`, so the orchestrator's closure is INSIDE the
-host's rather than beside it, and the same test that pinned it separately now
-covers it transitively (609 crates, no forbidden name). Three helpers moved
-down in the same commit, each because a SECOND host needed it and hosts are
-terminal — `corpus_engine::recipe_install` (was `sovereign-cli-llm`'s
-`corpus_cmd::recipe_source`; it belongs beside the registry that reads the
-file back), `corpus_io::build_manifest_from_corpus_rows` (was
-`enrich_cmd::init`'s; it belongs beside `fetch_all_corpus_chunks`, its only
-input) and `paths::scaffold_dirs` (the enrichment tree's directory list is the
-layout, and the layout lives in `sovereign-enrichment-catalog::paths`). The CLI
-is a caller of all three; there is one implementation of each, not two
-(ARCH §10.6).
-
-### 10.1f Size debt owed, measured on the P5 branch — ontology-v1 P5 (2026-09-02; ACCEPTED in §10.1h)
-
-P5 grew eight files and the arch-gate baselines are **not** re-pinned in the
-P5 branch. That is deliberate: three ontology-v1 phases (P3, P4, P5) were in
-flight in separate worktrees at the same time, and `quality/baselines/` is one
-set of files. Three workers each running `arch-gate --update-baseline` on their
-own tree produces three divergent freezes whose merge silently reverts whichever
-lands first — the exact failure mode `--update-baseline` on a working tree is
-warned against in `AGENTS.md`. The re-pin belongs to whoever merges the wave,
-run ONCE over the merged tree. What P5 owes, measured (`wc -l`, HEAD of
-`ontology-v1-p5`):
-
-| File | Baseline | After P5 | Why |
-|------|----------|----------|-----|
-| `corpus-engine/src/enrichment/atlas/context.rs` | 1,989 | 2,195 | The vocabulary carrier on `AtlasGraph` + the `EMBED_ATTRIBUTES` renderer and their two tests. Already an oversized row; splits with the ATLAS_STORAGE_V2 read path, not locally. |
-| `sovereign-core/src/runtime/retrieval/atom_enum.rs` | 1,605 | 1,791 | `enumerable_types` + its five tests + the hoisted scope/graph/vocabulary block. Already oversized; the enumerate and overview paths are the obvious seam and neither is settled. |
-| `corpus-engine/src/enrichment/governance_view.rs` | 1,249 | 1,340 | `project_claim` reading `subject` + the declared deontic, and one test. Already oversized. |
-
-Files also entered the 800–1200 approach band that were under it
-(`atlas_traversal/engine.rs` 772 → 1,072; `atlas_traversal/classifier.rs`
-574 → 934; `meta_atlas/classifier.rs` 696 → 867), and two already in it grew
-(`meta_atlas/builder.rs` → 833, `sovereign-tools/src/atlas_context_manager.rs`
-→ 993). The gate's own figure for the net, which is the one to cite: **files
-162 → 163 (+1), lines 157,275 → 158,796 (+1,521)** (`cargo run -p xtask --
-arch-gate`, 2026-09-02, exit 1 with five size failures and zero doc failures).
-
-Roughly half of every one of those numbers is test code, and it stays in the
-module rather than moving to `tests/main/` to make a ratchet green: three of
-the five test the module's PRIVATE surface (`render_attributes`,
-`project_claim`, `enumerable_types`), and moving the rest out to shrink a line
-count would be teaching to the test. The real seam, when the phase settles, is
-`atlas_traversal/engine.rs` → the six pre-ontology walks and the two
-declared-type walks as peers.
-
-**That condition is now MET** (2026-09-03). P6 landed and was proven end to
-end on 2026-09-02, and the ontology-v1 cleanup pass has closed; the file is
-1,096 lines, under the 1,200 smell line, so the split is UNBLOCKED and
-UNURGENT — it is waiting on an owner, not on a phase. Stated as met rather
-than left as "when P6 stops moving", because a condition nobody is watching
-for is not a schedule (a review on 2026-09-03 read this line as an unowned
-gate, correctly).
-
-### 10.1g Size — `resolution.rs` is +217 and P3 could not buy that back (ontology-v1 P3, 2026-09-02; ACCEPTED in §10.1h)
-
-**The number.** `arch-gate` reports
-`corpus-engine/src/enrichment/atlas/resolution.rs 5173 → 5390 (+217, slack
-50)`. Split three ways: the baseline snapshot is 5173, the file was **5217** at
-P3's branch point `cf160813f` (P0-P2 spent 44 of the 50-line slack before P3
-started), and P3's own net is **+173**.
-
-**What was tried, and what it bought.** P3 moved everything it could out of the
-file rather than growing it and asking for the baseline:
-
-| move | out of `resolution.rs` | into |
-|---|---|---|
-| the four declared-resolution behaviour tests | −343 | `tests/main/ontology_resolution_e2e.rs` (418) |
-| `emit_role_states` (the State + Involves + Grounds emission) | −31 | `atlas/resolution_ontology.rs` (711) |
-
-Two more cuts were taken in the same phase for the same reason, and they
-cleared the OTHER arch-gate failure outright — the 800-1200 approach band went
-from `157588` (+313 over baseline) back to **155760**, its value at the branch
-point and 1,515 lines *below* the baseline:
-
-| move | out of | into |
-|---|---|---|
-| the two declared-identity signals | `reconciliation/signals.rs` 875 → 720 | `reconciliation/identity_signals.rs` (164) |
-| `reify_merges` | `reconciliation/multi_origin.rs` 950 → 654 | `reconciliation/reified.rs` (137) |
-| the three identity behaviour tests | (same file) | `tests/main/ontology_identity_e2e.rs` (228) |
-| the ninth schema dimension | `atlas/schema_validation.rs` 1666 → 1488 | `atlas/ontology_coverage.rs` (186) |
-
-**Why the residual stands.** What is left in `resolution.rs` is the
-declared-ontology logic that is INSIDE `resolve_step_3b_with`'s existing loops
-— the claim `subject` resolution, the relation endpoint check, the ref-snap
-call — plus the doc comments on the two `_with` entry points. Moving those
-would push `resolution_ontology.rs` from 711 to ~792, one line under the
-approach band's floor, trading a named overage for an unnamed one. And even a
-P3 that added ZERO lines would leave the file at 5217, six lines inside slack:
-the honest fix is not a smaller P3, it is a split of a 5,390-line file that has
-been 4.5x ARCH §3.1's ceiling since before this program began.
-
-**The decision this row asks for.** Accept the +217 with `arch-gate
---update-baseline` and schedule the `resolution.rs` split as its own order —
-the same disposition §10 already carries for `pipeline/atlas.rs`, and for the
-same reason: the gate's approach band rejects any residual that lands inside
-it, so the file has to go from >1200 to <800 in one move and cannot be taken
-in steps while ontology-v1's waves are in flight.
-
-
-### 10.1h Size ACCEPTED at the wave merge — 2026-09-02 (ontology-v1 P3 · P4 · P5)
-
-§10.1f and §10.1g are the two workers' halves of one bill, each measured on
-its own branch and each deliberately left un-repinned so three worktrees
-sharing `quality/baselines/` could not clobber one another. This row is the
-decision they asked for, taken once over the merged tree, with the gate's own
-numbers rather than either worker's arithmetic:
-
-| File | Baseline | Merged | Δ | Slack |
-|------|----------|--------|---|-------|
-| `corpus-engine/src/enrichment/atlas/resolution.rs` | 5,173 | 5,390 | +217 | 50 |
-| `corpus-engine/src/enrichment/atlas/context.rs` | 1,989 | 2,211 | +222 | 50 |
-| `sovereign-core/src/runtime/retrieval/atom_enum.rs` | 1,605 | 1,791 | +186 | 50 |
-| `corpus-engine/src/enrichment/governance_view.rs` | 1,249 | 1,380 | +131 | 50 |
-
-Approach band: **files 159 → 162 (+3), lines 154,564 → 157,600 (+3,036)**.
-Tracked oversized files went 171 → **170**, banked with `--tighten` earlier in
-the same merge, so this acceptance is measured against a baseline that already
-absorbed every real cut on offer.
-
-**Accepted rather than split, for one reason stated once.** Every one of the
-four was ALREADY over 1,200 before this wave; none crossed the ceiling here.
-The gate's approach band refuses a residual that lands between 800 and 1,200,
-so each of these has to go from >1,200 to <800 in a single move — a split
-cannot be taken in steps while the waves that keep reshaping these files are
-in flight. §10 already carries that exact disposition for `pipeline/atlas.rs`.
-Roughly half of every delta is test code that tests the module's PRIVATE
-surface (`render_attributes`, `project_claim`, `enumerable_types`,
-`emit_role_states`), and moving it to `tests/main/` to shrink a line count
-would be teaching to the test, not a cut.
-
-**What was actually paid before asking.** P3 moved 343 lines of behaviour
-tests and `emit_role_states` out of `resolution.rs`, and took four further
-cuts that cleared the approach-band failure outright on its own branch
-(157,588 → 155,760, 1,515 BELOW baseline). The residual is the declared-
-ontology logic living inside `resolve_step_3b_with`'s existing loops, which
-cannot leave without taking the loops with it. §10.1g has the table.
-
-**The splits this schedules**, each as its own order once ontology-v1 stops
-moving these files: `resolution.rs` (the largest and the one §10.1g argues
-for first); `atlas_traversal/engine.rs` — six pre-ontology walks and two
-declared-type walks as peers, whose condition was met on 2026-09-03 (see
-§10.1f) and which now needs an owner;
-`context.rs`, which splits with the ATLAS_STORAGE_V2 read path rather than
-locally.
-
-
-### 10.1l Fan-in ACCEPTED for `sovereign-service` — 2026-09-11
-
-`layer-gate` reported 0 layer violations and one fan-in tick:
-`sovereign-contracts` 26 → 27. The re-baseline was inspected before it was
-taken and it moves exactly that one line — nothing else was absorbed, which
-is the check CLAUDE.md's rule exists to force.
-
-WHAT THE EDGE BOUGHT. `sovereign-service` is OS service registration
-(launchd / systemd / Windows Task Scheduler), extracted from
-`sovereign-cli-daemon` so a surface can register the daemon WITHOUT LINKING
-ONE — the `sv-no-daemon-management` bar. Its whole in-repo dependency list is
-the crate this row is about, for the data-root SSOT
-(`sovereign_contracts::rebrand::svrnmesh_root`). The narrower alternative was
-the one the code already used — `sovereign_cli_shared::dirs::sovereign_root`,
-a ONE-LINE delegate to that same function — and taking it would have dragged
-clap, tokio and an optional corpus-engine into a crate whose entire purpose
-is being light enough for a thin client to depend on. So the ratchet's own
-advice ("depend on a narrower crate instead") has no candidate here: this IS
-the narrow one.
-
-The accounting is also gentler than the number reads. The code did not gain a
-dependency on `sovereign-contracts`; it KEPT the one it had. One crate became
-two and both name the seam, so fan-in counts an edge where there was already
-a use.
-
-WHAT THE THREE BACKENDS ACTUALLY PROMISE, measured 2026-09-11 after the
-operator settled that availability to the mesh is a property of the node
-rather than a convenience for the app (`quality/campaigns/sv-surface.toml`,
-"AMENDED 2026-09-11"). All three are SESSION-scoped, and only one of them
-could be fixed:
-
-- **Linux — now at boot, surviving logout.** The unit is a `systemd --user`
-  unit (`WantedBy=default.target`, `contrib/systemd/svrnmesh.service`), so
-  the user manager is torn down at logout and the node left the mesh until
-  someone logged in. `install_systemd` now calls `ensure_linger`, which
-  probes `loginctl show-user <u> --property=Linger` before asking, so a
-  repeat install does not re-prompt polkit. A refusal is a WARNING naming
-  the consequence and the exact fix, never fatal and never silent (ARCH
-  principle 6) — on a host whose polkit declines, the promise degrades back
-  to login-only and the installer says so. `uninstall_service` deliberately
-  does NOT disable lingering: it is a property of the user, not of this unit.
-- **macOS — at login, not at boot.** A LaunchAgent in
-  `~/Library/LaunchAgents` loaded into the per-user GUI domain `gui/<uid>`
-  with `RunAtLoad`. Verified against the live registration on the dev host.
-- **Windows — at login, not at boot.** The task's only trigger is
-  `<LogonTrigger>` running as `<LogonType>InteractiveToken`
-  (`contrib/windows/SvrnmeshDaemon.xml:30-36`); `StartWhenAvailable` covers
-  a missed SCHEDULED start, not a boot with nobody logged in.
-
-The two that stayed login-scoped would need a system-level daemon, which K1
-rejected on grain (the SCM and a root LaunchDaemon register machine-wide and
-need admin, while the daemon serves one person's data root). So "contributes
-while you are logged in" is the honest claim on those two, and it is written
-down here rather than assumed.
-
-AND THE DESKTOP DELIBERATELY DOES NOT REGISTER IT. A commit on 2026-09-11
-made setup register the service automatically and was cut the same day
-(svt-0): it is a SECOND story about who starts a daemon, it rested on a
-Windows backend that has never been run on a Windows host, and its
-silent-daemon branch had the app calling `stop_service` — the app deciding a
-daemon should stop, which is the smell the campaign exists to remove.
-Registration stays a user action through `svrn install-service`, which is
-where it already lived. What survives in the desktop is
-`src-tauri/src/daemon_binary.rs`: a path resolver and an installer, and
-nothing else — the `SVRNMESH_DAEMON_BINARY` override, then beside this
-executable, then `~/.local/bin` and `/usr/local/bin` where
-`landing/install.sh` puts `svrn`. It starts, registers, supervises and stops
-nothing; `ServingHost` takes the path from here and the daemon owns
-everything after that.
-
-svt-1 (2026-09-11) filled in "beside this executable": the desktop now SHIPS a
-daemon. `scripts/stage-daemon-sidecar.sh` builds `sovereign-cli-daemon` into
-`src-tauri/binaries/<name>-<triple>` and `tauri.release.conf.json` declares it
-as `bundle.externalBin` — the release overlay only, because `tauri-build`
-errors when `externalBin` names files a plain `cargo check` has not staged
-(RELEASING.md "Tauri config split"). Because a path inside an `.app` dies when
-the user moves, updates or deletes the app, `stable_daemon_binary` installs the
-sidecar under `<branded root>/bin` on first launch — hard link where the
-filesystem allows it, copy otherwise, re-done when the source's length or mtime
-changes — and hands THAT path on. An install failure is reported and the
-in-bundle path named as the substitution, never swallowed (§18.3). The whole
-daemon interaction is then one line in the Tauri setup closure:
-`serving_host::ensure_reachable()` (`src-tauri/src/serving_host.rs`), called
-immediately BEFORE `bootstrap::detect` — which already attaches to any daemon
-that answers, whoever started it, so svt-1 changes no line of `bootstrap`. The
-budget is 60 s when there is a backend to bring up (the `healthy_deadline` the
-now-deleted `supervisor_setup` waited, so no wait a user feels changed) and ZERO when there is
-not, because `ensure_reachable` spends its whole window polling with no backend
-configured and a non-zero value there would make every daemonless launch stare
-at a dead port before the window appeared. The module holds no `Child`, no
-retry and no health loop; three names have to agree (`SIDECAR_BINARY`, the
-`externalBin` entry, the script's `SIDECAR_NAME`) and a test reads the JSON to
-assert the first two do.
-
-### 10.1i Size ACCEPTED at the sv-surface landing — 2026-09-10 (re-pinned at `origin/main` 4888f733e)
-
-The campaign landed 44 commits in one day (R1 through the dedup pass,
-`quality/campaigns/sv-surface.toml` THE LEDGER). The ratchets were re-pinned in
-a worktree at `origin/main` (4888f733e) — not on the working tree — so what is
-already public is separated from what this branch adds, and then the branch's
-own growth was accepted at a clean HEAD (d9e2577d5 plus the campaign file).
-Net production Rust for the branch: +10,471 (+21,047 / −10,576); the desktop
-is −2,004 net and the daemon carries the routes that serve it. Directive 3 of
-the campaign ("must reduce code") is NOT met, and the campaign file says so
-with the numbers rather than a plan.
-
-What the lines bought, by ratchet finding:
-
-| Finding | Bought |
-|---|---|
-| `sovereign-turn-client/src/lib.rs` 1,614 → 3,655 (+2,041; crate +988 production) | the one client family: every route family's methods (reading, atlas incl. conv-tiered, meshapp, insights, notes, features, local corpus incl. register/ingest-progress, governance, MCP config, recipe projects, skills/provenance/ready, documents, catalogue), now on ONE `exchange` decider (4d91462d1); the re-exports mobile consumes. Split owed: one module per family (ARCH §3.2) — **first instalment paid at svt-3**: the mesh family moved to `src/mesh.rs`, taking `lib.rs` 4,170 → 4,088 while ADDING seven methods |
-| `sovereign-daemon/src/turn_http.rs` 1,421 → 1,875 (+454) | TurnSettled with the producer JOIN, the idle close, cancel reaching a parked prompt, refusals as ResolveAck, per-turn prompt ids (188a9e4e4). Split owed |
-| `sovereign-daemon/src/daemon.rs` 5,330 → 5,517 (+187) | the ClientListener bind outcome (3c7ad5933) and fourteen router mounts. Split long owed (§3.1, 4× the line) |
-| `sovereign-desktop/src-tauri/src/state.rs` 1,894 → 2,195 (+301) | B4 attach-to-the-holder with the pid identity probe and the bind gate (65b92cd15, 3c7ad5933) — the split of `bootstrap_with_progress` is D9b's blocked work |
-| `sovereign-desktop/src-tauri/src/commands/chat.rs` NEW oversized 1,396 | one socket reader, per-conversation wire slots, ResolveAck rendering (759ea5133). Split owed |
-| `sovereign-desktop/src-tauri/src/local_corpus_commands.rs` 1,367 → 1,627 (+260) | the ingest job's follow loop (poll + the same Tauri frames) and the wire register (502304f63, fdaa06937); the census says which pairs stay app-local |
-| `sovereign-cli-llm/src/reading_diag_cmd.rs` 1,213 → 1,327 (+114) | the deref half on the daemon plus the golden module over captured bytes (503aeee43) |
-| `sovereign-contracts/src/skills.rs` 1,469 → 1,525 (+56) | the RwLock active set so a daemon can toggle a skill (2a9a9e91e) |
-| tests: `loopback_parity.rs` 1,829 (new oversized), `turn_surface.rs` 1,479 (new), `store_tests.rs` +283, mesh tests +4,531, core +477, desktop +603, contracts +218 | the PUT-gate loopback census that closed f6a633519's NOT-A-GATE, one e2e per route family watched red, the conv-browse trait tests, the parity journey, the twin censuses. `loopback_parity.rs` still carries 1,114 lines of rung 1/3/6 parity suites under the wrong docstring — a relocation owed |
-
-Twenty-four `size-gate` keys grew; `--tighten` found nothing to bank on either
-gate after acceptance. The dedup pass that preceded this acceptance
-(55a7ff294, 4d91462d1, d9e2577d5) removed 2,487 production lines; the
-scaffolding it removed was 17% of the branch's net, and the rest is daemon
-surface the surfaces now consume.
-
-### 10.1j Size — a 1,384-line file lost 259 lines and the band counted it as growth (enrichment-as-plugin Step 2, 2026-09-03)
-
-`understanding-vocab` took the taxonomy block out of
-`corpus-engine/src/enrichment/pipeline/atlas.rs` (1,384 → 1,125). That is a
-real cut — the file left the oversized list — but the approach band is a
-counter that only shrinks, and a file falling from above 1,200 to 1,125
-ENTERS it: +1 file, +1,125 lines. `approach_band.txt` was raised by exactly
-that (169 → 170 files, 164,698 → 165,823 lines), measured per file against
-`HEAD` rather than snapshotted from the tree, so the pre-existing red that
-§10.1i names (the tree was already +1 file / +1,225 lines over the baseline
-before this work, and none of those files is touched here) is NOT absorbed.
-`atoms.rs` moved crates at 1,914 lines; its `oversized.txt` row followed it
-(a move, not a new debt). Both files owe the same split every row here owes:
-`pipeline/atlas.rs` along sketch / seed / extension, `atoms.rs` along
-ids / kinds / envelope / tests.
-
-### 10.1i Size RE-PINNED on main — 2026-09-03 (the baseline was measured on a branch, not on the tree)
-
-**This is not the ontology wave's bill.** `cargo xtask quality` on `main`
-after merging `origin/main` reported arch-gate FAILING with seventeen
-findings, and the first question was whose growth it is. It is nobody's on
-this branch: `prefix_state.rs`, `conformance_cmd.rs`,
-`commonwealth-test-harness/tests/integration.rs`, `sovereign/crates/sovereign-daemon/src/daemon.rs` and
-`sovereign/crates/sovereign-daemon/src/admission.rs` are byte-identical at `abbd08b6f` (a
-pre-#59 `main` commit), at `851bf1784` (#59, the ontology squash) and at this
-merge. The baseline was already stale at `abbd08b6f` — it carried
-`admission.rs 1317` against a 1,435-line file and `daemon.rs 4758` against a
-4,902-line one — so **`main` has been red on arch-gate since "code quality
-spikes" and "tons of latent work"**, which grew fourteen files and AGENTS.md
-without re-pinning. #59 did not cause it and did not see it: its baseline was
-computed on the ontology-v1 tree, which did not contain those commits.
-
-Re-pinned here rather than deferred again, because a ratchet that has been
-failing across several merges is not ratcheting anything — the next author to
-run it cannot tell their own growth from the standing debt, which is the
-failure mode §10 exists to prevent.
-
-**Paid before asking.** `arch-gate --tighten` first: two real cuts banked
-(`grounding/mod.rs` 6,071 → 6,041, `bench_cmd/chaos_monkey.rs` 2,160 →
-2,159). Tracked oversized files 175 → 173 entries.
-
-| File | Baseline | Now | Δ |
-|------|----------|-----|---|
-| `sovereign-daemon/src/admission.rs` | 1,317 | 1,439 | +122 |
-| `corpus-engine/src/engine/mod.rs` | 3,879 | 4,016 | +137 |
-| `corpus-engine/src/enrichment/atlas/resolution.rs` | 5,390 | 5,473 | +83 |
-| `corpus-engine/src/enrichment/atlas/strategies/code_walk.rs` | 1,907 | 2,129 | +222 |
-| `corpus-engine/src/index/mod.rs` | 2,318 | 2,377 | +59 |
-| `corpus-engine/src/update/newsworthy_watcher.rs` | 1,837 | 1,898 | +61 |
-| `sovereign-core/src/runtime/epistemic.rs` | 1,242 | 1,396 | +154 |
-| `sovereign-core/src/runtime/retrieval_pipeline.rs` | 2,921 | 3,076 | +155 |
-| `sovereign-core/tests/main/core_tests.rs` | 2,434 | 2,522 | +88 |
-| `sovereign-inference/src/embedded/rpc_distribution.rs` | 3,388 | 3,511 | +123 |
-| `sovereign-daemon/src/daemon.rs` | 4,758 | 4,902 | +144 |
-
-Newly tracked (over 1,200 and absent from the baseline, all three already
-over before #59): `commonwealth-test-harness/tests/integration.rs` 1,298 ·
-`sovereign-cli/src/conformance_cmd.rs` 1,210 ·
-`sovereign-inference/src/embedded/prefix_state.rs` 1,400.
-
-Approach band: **files 162 → 165 (+3), lines 157,600 → 160,800 (+3,200)**.
-Instruction surface: **AGENTS.md 42,890 → 45,111 bytes (+2,221)**, grown by
-`code quality spikes` (+1,475) and `tons of latent work` (+746). That one is
-the row to watch — every session and every spawned worker re-reads this file,
-so it is the only entry here whose cost is paid per session rather than per
-reader. It is re-pinned, not forgiven; §1's "distill and point" is the repair
-and it needs the operator, because the compass's content is theirs.
-
-**What this merge itself contributed: fourteen lines.** `cargo fmt --all`
-over eleven files the tree had left unformatted since `main` grew them added
-+4 to `prefix_state.rs`, +6 to `integration.rs`, +4 to `admission.rs`, and
-reformatted `rpc_distribution.rs` — the gate's own rustfmt requirement, and
-the reason four of the numbers above are four to six lines higher than the
-same file on `origin/main`.
-
-**No splits are scheduled by this row.** Fourteen of the seventeen are files
-that were already over 1,200 and grew; the disposition §10.1h states for that
-shape holds unchanged (a split cannot be taken in steps while the approach
-band refuses an 800-1,200 residual). The three new crossings are new to the
-BASELINE, not to the repository, and each is one owner's call to make when
-they next open it.
-
-### 10.1n Approach band +3 lines of a +4,643 finding — ei-5b-build-verb (2026-09-04), owed to the seat's merge
-
-Re-measured at this branch's tip after the 2026-09-04 rebase onto upstream
-`b9f41d18e` (251 files changed), which replaced the numbers this row first
-carried. `arch-gate` now blocks with `approach band GREW: files 176 -> 183
-(+7)` and `lines 171751 -> 177970 (+6219)` against the baseline re-pinned on
-main at `88ee493d4` (§10.1k) — re-measured 2026-09-05 after a second rebase,
-onto `49e964120`. **Three of those 6,219 lines are this branch's, and none of
-the seven files is.** Every `.rs` file in `git diff main...HEAD`
-was measured at both ends; only two land in ARCH §3.1's 800-1200 band:
-
-| file | main | tip | in band |
-|---|---|---|---|
-| `sovereign/crates/sovereign-core/tests/main/f26_egress_census.rs` | 811 | 813 | at both ends — +2 |
-| `sovereign/crates/sovereign-tools/src/local_corpus/watched/enrich.rs` | 1080 | 1081 | at both ends — +1 |
-
-The remaining +6,216 lines, the +7 files, and the sibling
-`instruction surface GREW: AGENTS.md 46852 -> 47190 (+338)` are upstream's;
-this branch touches neither `AGENTS.md` nor any of the five.
-
-**Why the +1.** `EnrichConfig` gained `embed_base_url: Option<String>` because
-llama-server loads one model per process, so a corpus ingested against two of
-them has a chat host and an embed host, and reading `base_url` for both sent
-every phase's resolution embedding to the chat process — which answers 200
-with a vector of the wrong width, a corruption nothing downstream re-checks.
-Rust requires every field at every struct literal, and one of the five
-literals is in that `watched/enrich.rs`, which sits in the band. `embed_base_url:
-None,` there is the +1.
-
-**Why the +2.** Two registry rows in the F26 egress census, one per new
-construction site in `corpus-mcp` — the entry the census test demands before
-it will pass. That file was trimmed to 799 on the pre-rebase base precisely
-to keep it out of the band; upstream has since grown it to 811, so it is in
-the band at both ends now and the trim buys nothing. It is not re-trimmed:
-deleting a registry comment to move a counter is the tuning this ledger
-exists to refuse.
-
-The same commit CUT 221 lines from `sovereign/crates/sovereign-cli-llm/src/enrich_cmd/init.rs` (1,531 -> 1,310) by
-moving the from-corpus manifest builder down — a real cut, and still above
-the band's 1200 ceiling, so the band cannot see it.
-
-3 lines are not worth a worker re-pinning `quality/baselines/` on a working
-tree, which would absorb the +6,216 that is not ours along with the +3 that
-is (the trap named in `AGENTS.md`). It is owed to whoever merges this branch:
-re-pin at `origin/main` in a worktree, or accept the +3 against this row.
-
-### 10.1k Size RE-PINNED at `origin/main` — 2026-09-04 (epistemic-index landings, seat)
-
-The arch-gate blocked every pre-push on the epistemic-index branches with
-"approach band GREW 170 → 176 files / 165,823 → 171,747 lines". The ei-4
-worker attributed it segment by segment (its instrument reproduced the
-gate's own two numbers before being trusted): +1 file / +1,225 lines was a
-baseline that had been regenerated against a tree other than the commit it
-names; +4 files / +3,132 lines arrived with the `origin/main` merge
-(a1b0465df — peers' work, already public); +1 file / +1,350 lines is this
-campaign's own `corpus-engine/src/enrichment/atlas/ground.rs` (1,165, the
-one walk); +217 lines inside the band is ei-3c's loader change. The four
-segments sum to the gate's +5,924 exactly.
-
-Re-pinned by the seat ONCE, at `origin/main` (1bcd7b168) in a worktree —
-never on a working tree — so what is public is separated from what the
-campaign adds: `approach_band.txt` **170 / 165,823 → 175 / 170,180**;
-`oversized.txt` re-frozen at 167 entries (a re-sort plus files that shrank
-under the ceiling or grew on `origin/main`, none of them these branches').
-
-**What the campaign still owes after this row, by owner:** `ground.rs`
-(+1 file into the band) is ei-4's and is cleared at its landing by a
-mechanical `mod tests` carve or a row here. ei-7c's carve of
-`wikipedia_columnar.rs` (1,293 → 931) and `wiki_store.rs` (1,378 → 687)
-takes two files OFF the over-ceiling set and drops one into the band — the
-§10.1j shape, where the queue metric counts the ordered remedy as growth;
-accepted at ei-7c's merge with the numbers in that commit. Until those land,
-main's arch-gate names exactly one file and one owner, which is what a
-ratchet is for.
-
-**ei-4 settles its one file: accepted, because the carve was priced and does
-not reach.** The row above offers "a mechanical `mod tests` carve or a row
-here", and the carve does not clear the band: `ground.rs` is 1,165 lines of
-which `mod tests` is 209 (lines 957-1,165), so the `<stem>/tests.rs` split
-lands it at **956** — still between 800 and 1,200, so it buys a smaller
-number and not an exit, at the cost of a second file. Accepted instead:
-
-| Item | Location | Why deferred |
-|------|----------|--------------|
-| ~~The walk, as one function~~ — **DISCHARGED by ei-5c, 2026-09-07** | `corpus-engine/src/enrichment/atlas/ground.rs` (was 1,165, then 1,578 after ei-7a, then 1,815 after this order's seed-quota fixture) | This row said the only seam under 800 was the ledger and that splitting it from the walk it records was the wrong cut. It was right about the ledger and wrong about "only": the module's own doc names THREE steps, and step 1 — classify the question onto a row — is separable in fact, not just on paper (it is the one part that touches the embedder for anything but the question, and `WalkSelection::named` skips it entirely). Split four ways: `ground.rs` 731 (the walk), `ground/select.rs` 143 (which row), `ground/report.rs` 337 (ledger, degradations, map, result — the ledger DID come out, and it kept the walk glassbox because `WalkLedger` is fields the walk writes, not logic it runs), `ground/tests.rs` 668. Every file under 800, so nothing entered ARCH §3.1's approach band and the oversized row is gone rather than moved. |
-
-**ei-7c's numbers, as that row asked for them (2026-09-04, branch `ei-7c`).**
-Measured file-by-file out of git across `301cdc93c..HEAD`, `.rs` only,
-800-1200 inclusive — not from the gate, whose `repo_root()` is
-`env!("CARGO_MANIFEST_DIR")` and therefore measures the tree its binary was
-COMPILED in, not the one you point it at (a dead end worth one line: running
-it against a worktree at another sha silently re-measures your own).
-
-| | main `301cdc93c` | ei-7c | delta |
-|---|---|---|---|
-| files in the 800-1200 band | 181 | 182 | **+1** |
-| lines in the band | 176,702 | 177,633 | **+931** |
-| files over the 1200 ceiling | 172 | **170** | **−2** |
-
-The +1 is `corpus-engine/src/wikipedia_columnar.rs`, 1,293 → 931: it entered
-the band by leaving the over-ceiling set. `wiki_store.rs` went 1,378 → 687 and
-left both. A third file, `understanding-vocab/src/atoms.rs`, tripped the gate
-separately — 1,914 → 2,033, growth past a 50-line slack, which was the
-`exact_entity_content_hash` constructor and its tests — and was carved the
-same way to 1,403 with `atoms/tests.rs` at 628; it is still over the ceiling
-and this row does not pretend otherwise, because the finding was the GROWTH,
-not the ceiling. Splitting the id constructors from the envelope types is
-banked under §3.1, as is `wikipedia_columnar.rs`'s own seam (its two
-documented faces, `ColumnarWikipediaGraph` and `WikiAtlasProvider`, want two
-files) — banked rather than done, on the seat's ruling, because a split is its
-own item and not the current order's work.
-
-Accepted, not re-pinned: no `--update-baseline` and no `--tighten` ran on
-this branch's working tree, at any point. The seat's bump at ei-4's landing
-(`e8ac36508`) froze `wiki_store.rs` at 1,378 and `wikipedia_columnar.rs` at
-1,293 — main's PRE-carve sizes — so both fall out of the oversized set at
-ei-7c's merge and `--tighten` banks the cut then. The band's +931 is the
-number this row accepts; the −2 over the ceiling is the number `--tighten`
-collects.
-
-### 10.1j Concept ratchet RE-PINNED on main — 2026-09-03 (+2, and the gate cannot say which two)
-
-> **CLOSED 2026-09-10 — see §10.1q.** The defect this row names as "the finding
-> as much as the number is" is fixed: `concepts.txt` now stores the name SET
-> beside the count, and a red names what crossed.
-
-`concept-gate` reports **35 duplicated names against a baseline of 33**. The
-baseline is a bare COUNT, pinned at `27c0fe031` (Noun convergence, #47), and
-`quality/baselines/concepts.txt` holds the single line `33`. That is the
-finding as much as the number is: **the gate can tell you a noun crossed and
-cannot tell you which**, because it stores no name list to diff against. Every
-merge since #47 has been able to move it silently, and this is the first run
-on a current index since.
-
-Not this merge's rise. The commits on this branch add no types — a `cargo fmt`
-pass, three regenerated baselines, two docs. The rise arrived with
-`origin/main`'s own content, already public.
-
-**What was established, and what was not.** The four nouns
-`sovereign-daemon/src/state.rs` copies field-for-field from
-`oicp-types/src/slot.rs` (`SlotPlacement`, `WorkerPlacement`, `ResidentSlot`,
-`ComputeChildStatus`) are NOT the crossers: `slot.rs` was added in #47 itself,
-so the baseline already counted them. The two that did cross were not
-isolated, and saying so is cheaper than a guess.
-
-**A live convergence the ratchet is right about, with its blocker named.**
-Those four copies carry a stale reason — the comment says commonwealth-api
-"cannot depend on sovereign-contracts", which is true and no longer relevant:
-the owner is `oicp-types`, and `sovereign-daemon/Cargo.toml` already
-depends on it (layer-0 contract; `ARCH_LAYERS.toml` permits the edge). What
-blocks the `pub use` is not the layer map but SERDE: `state.rs` marks
-`placement`, `port` and `last_exit` `skip_serializing_if = "Option::is_none"`
-while `oicp-types` marks them `#[serde(default)]`, so folding the copies would
-turn omitted fields into explicit `null`s on `/status`. That is a wire change
-to a public endpoint and belongs to whoever owns it, not to a gate-greening
-pass. Recorded here so the next reader starts from the blocker rather than
-rediscovering the copies.
-
-Re-pinned to 35. `--tighten` first, as always; it had nothing to bank.
-
-### 10.1q Concept ratchet — the baseline names its offenders now, and was re-pinned once more — 2026-09-10
-
-§10.1j recorded a finding rather than a fix: *"the gate can tell you a noun
-crossed and cannot tell you which, because it stores no name list to diff
-against."* That is closed. `quality/baselines/concepts.txt` was a bare scalar
-— `35`, one line — while every sibling ratchet already stored per-key rows:
-`clock_reads.txt` names the file, `oversized.txt` names the file, `lines.tsv`
-names the crate. It now carries the count on its first non-comment line
-(`instruments.toml` declares it `kind = "count"`) and one name per line after
-it, and `svrn code converge status --json` publishes `duplicated`, `added` and
-`removed` beside the counts.
-
-The set was free: `census()` already ranks the rows the count is drawn from,
-and `duplicate_count` is `census(..).reachable_names` — so the names are the
-same expression the number is. `cmd_status` called `census` TWICE (once
-through `duplicate_count`, once for `colliding_names`), rebuilding the by-name
-map over all 5,796 first-party type defs each time; it calls it once now.
-
-**Both arms watched before the change landed** (§18.1). A synthetic baseline
-with `Admission` and `WorkUnit` removed makes the gate print
-
-```
-added since the baseline:
-  Admission   ->  sovereign code converge noun Admission
-  WorkUnit   ->  sovereign code converge noun WorkUnit
-```
-
-and exit 1; the real bare-scalar baseline makes it print *"this baseline
-predates the name list, so it cannot say WHICH"* and name the re-mint. `added`
-and `removed` are **null**, not empty, on an unnamed baseline — the relay must
-be able to tell "nothing was added" from "this file cannot say" (§18.3), and a
-regression test pins each of the three shapes: named round-trip, bare scalar,
-missing file.
-
-**What was re-pinned, and what could not be dispositioned.** 39 against a
-baseline of 35, pinned 2026-09-02 at `9d6969852`, with 210 commits landed on
-`origin/main` since. Not this branch's rise: `git diff origin/main..HEAD --
-'*.rs'` adds no types at all. Of the four crossers, exactly one is
-recoverable after the fact — **`Admission`** went from one defining crate to
-two (`commonwealth-rail-core/src/admit.rs:237` and
-`corpus-engine/src/enrichment/atlas/ground/select.rs:177`), which a `git grep`
-at both commits can see. The other three crossed the REACHABILITY threshold,
-not the definition count, and that is only visible in a SCIP graph built at
-`9d6969852` — an hour of re-index at a commit nobody is on. So they are
-absorbed, once, and named as absorbed. This is the last time that sentence can
-be written about this ratchet.
-
-`Admission` reads as two different concepts under one name — a rail admission
-decision and an atlas ground-selection admission — so the disposition is
-"rename apart", not "converge". Not done here: it has 31 reference sites
-across 8 crates and belongs to whoever owns those subsystems, not to a
-gate-greening pass. Recorded so the next reader starts from the disposition
-rather than rediscovering the collision.
-
-### 10.1k Size RE-PINNED on main — 2026-09-03 (the 34-commit branch meets §10.1i's fresh pin)
-
-`origin/main` re-pinned every size baseline hours earlier (§10.1i). This row
-is the merge of the 34 local commits on top of that pin, so unlike §10.1i the
-growth here has ONE owner and is not standing debt: the baselines in this tree
-are `origin/main`'s, and every delta below is what this branch adds.
-
-**Paid before asking.** `arch-gate --tighten` had nothing left to bank —
-§10.1i banked the same two cuts (`grounding/mod.rs`, `chaos_monkey.rs`) and
-the conflict resolution replayed them onto the merged baseline by hand.
-
-**Two splits landed, and they are the reason three of the five findings fire.**
-
-| File | On `origin/main` | Now | Δ |
-|------|------------------|-----|---|
-| `sovereign-core/src/runtime/grounding/mod.rs` | 6,041 | 1,177 | **−4,864** (off the list) |
-| `sovereign-core/src/runtime/grounding/tests.rs` | — | 2,253 | new (the moved module) |
-| `commonwealth-core/src/mesh/` | 1,946 (one module) | split | **−1,946** (off the list) |
-| `corpus-engine/src/engine/mod.rs` | 4,016 | 4,175 | +159 |
-
-`grounding/tests.rs` is reported as a NEW oversized file and is not new code:
-`729cc728f` moved the 2,246-line `#[cfg(test)]` module out of `mod.rs`
-verbatim (split pass A of C; B and C are `c364ebfc1` and `877704fec`). Across
-the two files grounding went 6,041 → 3,430 lines, a real **−2,611**. Ledgered
-rather than split further because splitting a test module again buys nothing
-the first split did not already buy — the production file, which is what
-readers open, is now 1,177 and under the ceiling.
-
-The 1,946-line `commonwealth-core` mesh module became the `mesh/` directory in
-`47e503389`, which is why it leaves the oversized list without appearing
-anywhere else on it.
-
-`engine/mod.rs` +159 is `1199abbf2` (ST-8, geometry fails closed) and
-`04273bf7b` (conformance `covers:` tags). Both add tests and tags to an
-already-4,016-line file; neither is a split opportunity on its own.
-
-**Approach band: files 165 → 169 (+4), lines 160,800 → 164,701 (+3,901).**
-Three of the four entrants are the grounding split's own residuals —
-`grounding/config.rs` 807, `grounding/inner.rs` 1,054, `grounding/mod.rs`
-1,177 — and the fourth is `sovereign-tools/src/code/suggest_seams.rs` 824,
-new in `60ff1ff0b`. This is §10.1h's stated shape arriving on schedule: **the
-band charges for the split it asked for.** A 6,041-line file cannot reach the
-band without passing through it, and the ratchet cannot tell a residual from
-a regression. Re-pinned, not forgiven; the disposition is unchanged.
-
-**Ten more files were re-pinned without ever firing a finding**, each grown
-by less than the 50-line slack. They are listed because a re-pin that reports
-only its loud rows is the silent-absorb this section exists to prevent — total
-+127 lines:
-
-| File | On `origin/main` | Now | Δ |
-|------|------------------|-----|---|
-| `sovereign-daemon/src/admission.rs` | 1,439 | 1,447 | +8 |
-| `corpus-engine/src/enrichment/governance_view.rs` | 1,380 | 1,407 | +27 |
-| `corpus-engine/src/sharding.rs` | 2,648 | 2,649 | +1 |
-| `sovereign-tdd/src/trial.rs` | 1,457 | 1,480 | +23 |
-| `sovereign-cli-daemon/src/daemon_cmd/mod.rs` | 1,407 | 1,416 | +9 |
-| `sovereign-cli-shared/src/cli_contract.rs` | 1,607 | 1,617 | +10 |
-| `sovereign-cli/tests/main/cli_contract_journeys.rs` | 1,201 | 1,217 | +16 |
-| `sovereign-core/src/mesh_measurements.rs` | 3,020 | 3,023 | +3 |
-| `sovereign-desktop/src-tauri/src/state.rs` | 1,823 | 1,828 | +5 |
-| `sovereign-inference/src/embedded/rpc_warm_cache.rs` | 1,927 | 1,952 | +25 |
-
-Three of those ten — `admission.rs`, `governance_view.rs`,
-`daemon_cmd/mod.rs` — are the only files in the whole tree that BOTH sides of
-this merge edited, so their raises are the union of two accepted changes
-rather than one branch's growth. The other seven are local.
-
-**size-gate re-pinned too, and it is the opposite case.** The ninth ratchet
-landed in `049b08f25` — on THIS branch — so `origin/main` has no size-gate and
-never froze one. Its baseline was therefore measured on local `main`, and the
-merge re-pin is dominated by `origin/main`'s already-public content arriving
-rather than by anything here: of ~21,300 lines across 21 keys, **18,576 (87%)
-are four keys of the ontology wave** — `corpus-engine` +5,120, its tests
-+5,916, and the new `sovereign-enrichment-build` crate +6,383 with +1,157 of
-tests. `--tighten` ran first and banked **6,656 lines across four ceilings**,
-most of it the grounding split above.
-
-**The deletion ratchet is deliberately NOT re-frozen.** `p1-dr-flights` and
-`p0-root-junk` both report GREW. Re-freezing would reset the campaign's own
-accounting to whatever today happens to be, which is the one thing a deletion
-campaign's baseline must not do — the number is the campaign, not a gate on
-this merge. Left reporting, per the promotion rule in `AGENTS.md` ("deletion
-the day no lane grows").
-
-**Instruction surface: AGENTS.md 45,111 → 46,852 bytes (+1,741)**, from
-`049b08f25` (the size-gate and deletion ratchets, which the file must
-document to be usable) and `11d3b23f1` (the harness installer). §10.1i's
-verdict stands verbatim and is now two merges old: this is the one row whose
-cost is paid per session rather than per reader, "distill and point" is the
-repair, and it needs the operator because the compass's content is theirs.
-
-### 10.1l Approach band RE-PINNED on main — 2026-09-03 (the band was stale by a whole split before this session opened)
-
-The band baseline read 169 files / 164,698 lines. `origin/main` (`6a1014a85`)
-actually measures **170 / 165,894** — stale by +1 file / +1,196 lines, none of
-it this session's. Measured twice by independent instruments before anything
-was written: a shell replication of the walk, validated against arch-gate's
-own output on the same tree, and an `xtask` built inside a worktree checked
-out at `origin/main` (§18.4 — validate the instrument, then the result).
-
-The drift has one owner. `f5c872e2c` split `judge.rs` 3,011 → 1,846 and parked
-the 1,162-line test module it moved out in the band without re-pinning. That is
-§10.1k's own row arriving again — "the band charges for the split it asked
-for" — one release later.
-
-**Paid, not banked.** This session split the entrant rather than accept it:
-
-| File | On `origin/main` | Now | Δ band |
-|------|------------------|-----|---|
-| judge's test module | 1,162 (one file) | → `tests/prefix_family.rs` 655 + `tests/claim_scan.rs` 521 + `tests/mod.rs` 5 | **−1,162** (off the band) |
-| `grounding/citation_attribution.rs` | 1,403 (oversized) | 848 | **+848** (enters the band) |
-
-`citation_attribution.rs` is `23df4f85c`, landed by a concurrent session while
-this one was measuring; a file crossing 1200 downward leaves the oversized
-list and joins the band, which is the accounting the band exists to make
-visible. Net against `origin/main`: files unchanged at 170, lines 165,894 →
-**165,580 (−314)**. The pin lands BELOW public main, so nothing of this
-session's is absorbed.
-
-The split is on the concern seam the module already had — `prefix_family`
-asserts the bytes on the wire, `claim_scan` asserts what a judge reply may
-become — and both `include_str!` guards were re-pathed one level deeper, which
-the compiler enforces and `one_renderer_owns_the_family` cannot pass vacuously
-(it asserts an exact render count of 1, so an empty or wrong `SRC` fails).
-
-**Two things were deliberately NOT banked.**
-
-`suggest_seams.rs` 824 → 1,033 (+209) was uncommitted in a concurrent
-session's working tree when the pin was taken. `--tighten` measured 165,789
-including it; the pin is **165,580**. Banking another session's in-flight
-growth into a shared ratchet is the silent-absorb this section exists to
-prevent, so that +209 still has to be defended when it lands.
-
-`--update-baseline` was not used at all. It rewrites `oversized.txt` and
-`instruction_surface.txt` from the working tree as well, and four oversized
-files currently sit above their entries inside the 50-line slack —
-`atlas/context.rs` +36, `trial.rs` +4, `daemon_cmd/mod.rs` +6,
-`eval_cmd/runner.rs` +2. Only `approach_band.txt` was copied back from the
-`origin/main` worktree. `--tighten` banked the one real cut this session made:
-`judge.rs` 1,846 → 1,845, a duplicated `#[cfg(test)]` attribute removed.
-
-### 10.1p Size — the publisher wiring one order was told to take (ei-6b-embedder-parity, 2026-09-08)
-
-ONE arch-gate row, deferred via this entry. The baseline bump is the seat's at
-merge; this order did not touch `quality/baselines/`.
-
-| File | Before | After | Delta | Why |
-|---|---|---|---|---|
-| `sovereign/crates/sovereign-cli-llm/src/corpus_snapshot_cmd.rs` | 1338 | 1417 | +79 (slack 50) | `corpus snapshot publish` now records the embedder config the vectors were produced under, and `snapshot restore` now JUDGES what it extracted instead of installing it. |
-
-**What the lines bought**, in two halves.
-
-The publish half (~25 lines) resolves this host's `EmbedQuirks` through
-`DEFAULT_MANIFEST::embed_quirks_for_model` — the same manifest the daemon
-resolves its embed slot through, not a re-derivation from the model name — and
-writes it into the snapshot manifest, printing which configuration it recorded
-or saying plainly that it could not resolve one. Until this, a published
-snapshot carried a model NAME and nothing else, and a name is not an embedding
-space: `sep` and `wessex-hoard` were both built by `Qwen3-Embedding-0.6B-Q8_0`
-and their vectors sit 0.66 apart because one was pooled `Mean` (note
-500f1229). This is the half that gives `EmbeddingCompat::ConfigMismatch` a
-producer; without it the verdict was a gate with no input that could make it
-fire (ARCH §18.1).
-
-The restore half (~54 lines) is the larger of the two and it closes a seam
-rather than adding a feature. `snapshot restore --archive <path>` extracted
-whatever it was handed — no probe, no verdict — while the HuggingFace pull
-checked compatibility and probed. Two restore paths, one decider (§10.6). This
-site now resolves the local quirks, calls
-`corpus_engine::judge_restored_snapshot`, and on anything short of accepted
-REMOVES the extracted index rather than leaving it installed, printing the
-verdict sentence. Measured end to end with zero egress in
-`runs/ei6b-local-restore/20260908T062605Z`: a name-mismatched archive accepted
-by probe at cosine 0.9999, an exact-match archive accepted without one, and an
-archive whose declared pooling was flipped to `Mean` refused before extraction
-with both configurations printed and nothing left on disk.
-
-**Where the order's other growth went instead of here.** `corpus-engine/src/snapshot.rs`
-was the second arch-gate row on the first pre-push run (1601 → 2048, +447). It
-is not in the table above because the lines MOVED rather than being accepted:
-the acceptance decision, the compat verdict vocabulary and their tests are now
-a sibling module beside `snapshot_restore.rs`, and `snapshot.rs` came back to
-1595 — six lines below where main had it. That is ARCH §3.1 applied to a file
-that was already past 1200 before this order touched it, and it is a move of
-this order's own lines, not a refactor of anyone else's (§10.2).
-
-### 10.1n Size — the twelfth atom kind, and a walk that grew a hold-out (ei-7a-raptor, 2026-09-04)
-
-Two arch-gate size findings, both from order ei-7a-raptor, both DEFERRED via
-this row rather than split in the same commit (ARCH §3.1: the split is its own
-backlog item, not this order's work). The baseline bump is the seat's at merge;
-this order did not touch `quality/baselines/`.
-
-| File | Before | After | Delta | Why |
-|---|---|---|---|---|
-| ~~`corpus-engine/src/enrichment/atlas/ground.rs`~~ **PAID by ei-5c, 2026-09-07** | 1165 | 1578 | +413 (new, >1200) | R1/R2/R3 (~60 lines) plus the §18.1 displacement fixture and its two directions (~290 lines of `#[cfg(test)]`). Split four ways rather than re-baselined — see §10.1o. |
-| `corpus-engine/src/enrichment/atlas/context.rs` | 2168 | 2230 | +62 (slack 50) | The `Summary` arm of `render_atom_entry` plus its fixture. Twelve lines over slack, and the arm is the difference between a kind the map seeds on and a kind the renderer silently drops — see the write-side entry above. |
-
-`understanding-vocab/src/atoms.rs` was the third row here (+148 for the
-`Summary` struct, the enum arm and its fan-out, `summary_content_hash` and
-`grain()`). It is GONE from arch-gate, and not because anything was trimmed:
-the 2026-09-05 rebase brought in a carve of that file's test module into
-`atoms/tests.rs`, which took ~550 lines out from under this order's growth.
-Recorded rather than quietly dropped — the row was real when it was written,
-and the reason it stopped failing is somebody else's split, not this branch's
-restraint.
-
-Worth stating plainly: **most of the second number is test**. `ground.rs`'s
-non-test growth is about 60 lines; the rest is the fixture that keeps the
-failing input runnable — an in-memory `AtlasProvider`, a leaf-grain arm that
-REPRODUCES the −14pt displacement, and the Summary arm that refuses it. That
-fixture is the evidence for the whole order, and the alternative to carrying it
-is a guard nobody has watched fail (§18.1). If the band wants it elsewhere the
-split is `ground.rs`'s test module into a sibling file beside it, which is a
-mechanical move and a clean backlog item. (Named in prose and not as a path:
-docs-gate reads a backticked path as a CITATION and checks it resolves, so
-writing a file that does not exist yet as though it did makes the narrative
-cite a fiction — caught by the gate on 2026-09-05, in this very row.)
-
-`atoms.rs` is the closed set's home and grows once per kind. It has now grown
-twice — `Asset` at 2.1, `Summary` at 2.5 — and the natural split when it next
-crosses is one module per kind inside the atoms module, not a line trim. (Again
-in prose, for the docs-gate reason above.)
-
-### 10.1o Size — one walk, split four ways, and one derivation that got its own file (ei-5c-seed-race, 2026-09-07)
-
-This order arrived owing two arch-gate rows and leaves owing none of its own.
-The baseline bump is still the seat's at merge; this order did not touch
-`quality/baselines/`.
-
-**`ground.rs` — PAID, not deferred.** §10.1n deferred it at 1,578 and this
-order took it to 1,815 (the seed-race fixture and its two directions), so the
-choice was a second deferral or a split. Split, along the seam the module's own
-doc has drawn since ei-4-walk — three steps, and step 1 is separable in fact:
-
-| file | lines | question it answers |
-|---|---|---|
-| `corpus-engine/src/enrichment/atlas/ground.rs` | 785 | the walk: seed, expand, aggregate |
-| `corpus-engine/src/enrichment/atlas/ground/select.rs` | 374 | which row, from whose map, on what evidence — and, since 2026-09-08, whether that row can fire at all (`admit_winner`) |
-| `corpus-engine/src/enrichment/atlas/ground/report.rs` | 367 | what the walk says about itself — ledger, degradations, map, result |
-| `corpus-engine/src/enrichment/atlas/ground/tests.rs` | 840 | the tests |
-| `corpus-engine/src/enrichment/atlas/inventory.rs` | 416 | what the atlases in scope CARRY, and which rows fit it |
-
-Two more small files landed beside `store.rs` for the same reason rather than
-growing it: `store/configures.rs` (154, the `Configures` derivation and its
-tests) and `store/derivation.rs` (183, the edge-derivation marker and the
-`store_needs_build` clause's own both-directions test). `store.rs` ends at
-1,305 against a 1,274 baseline — +31, inside slack.
-
-All four numbers in the table above are measured at this branch's tip, not at
-the commit that made the split: the two later commits grew `ground.rs` by 25
-and its tests by 42, and a §10 row carrying the split-day figures would be
-citing a tree that no longer exists (§11.1).
-
-Every one under 800, so this is a real cut and not a shuffle: the oversized row
-disappears and NOTHING enters ARCH §3.1's approach band, which is the failure
-mode that band ratchet exists to catch ("frozen so a split cannot refill").
-Public paths are unchanged — `ground.rs` re-exports both children whole, so
-every `atlas::ground::WalkLedger` and `atlas::ground::select_walk` still
-resolves (§10.6: a re-export, never a twin).
-
-**`store.rs` — avoided rather than accepted, twice.** The `Configures`
-derivation and its three tests are ~155 lines, and `store.rs` is already past
-the ceiling at 1,274, so adding them there would have been a fifth `GREW past
-slack` row for a file this order has no business growing. They live in
-`store/configures.rs` instead, which is also the better cut: the derivation
-answers one question no other part of the store write asks — which field is
-secretly an edge list — and the store's job is the CSR and the Lance table, not
-the vocabulary. The same thing happened again with the derivation marker's
-`store_needs_build` test, which took the file to 1,356 (+82); it moved to
-`store/derivation.rs`, beside the thing it tests.
-
-**The approach band: +1 line, and none of the +9 files.** `arch-gate` blocks
-with `approach band GREW: files 176 -> 185 (+9)` and `lines 171751 -> 180657
-(+8906)`. Every `.rs` file in `git diff main...HEAD` was measured at both ends;
-four land in ARCH §3.1's 800-1200 band, all four were already in it on main,
-and they net to **+1 line**:
-
-| file | main | tip | delta |
-|---|---|---|---|
-| `corpus-mcp/src/tools.rs` | 1058 | 1077 | +19 (the quota in the rendered navigation row, and its test) |
-| `sovereign/crates/sovereign-cli-llm/src/bench_cmd/ablate.rs` | 1184 | 1190 | +6 (the `raptor_off` arm's removal note, longer than the arm) |
-| `sovereign/crates/sovereign-core/src/runtime/question_analysis.rs` | 879 | 855 | −24 (`raptor_late_inject_enabled` deleted) |
-| `sovereign/crates/sovereign-core/src/runtime.rs` | 1146 | 1146 | 0 |
-
-The remaining +8,905 lines and all +9 files are upstream's, on the same reading
-§10.1n recorded for ei-5b.
-
-**`context.rs` — ei-7a's +62 stands, and ei-5c adds +30 which IS this
-order's.** The file reads 2,168 → 2,260 at this tip. Sixty-two of that is
-ei-7a's `render_atom_entry` arm, already on `main` at this branch's base and
-carrying §10.1n's row. The other thirty are mine and are ledgered here rather
-than split: one `index_root` field on `AtlasGraph`, the builder that sets it,
-and `summary_corpus_dir()`, which the `raptor` summary source needs because the
-RAPTOR table lives under the CHUNK corpus (`sep`) and not under the per-article
-atlas (`sep-freewill`).
-
-The split I considered and refused: those two methods have exactly one
-consumer, `ground/summaries.rs`, and Rust would let the inherent `impl` live
-there. It would move twenty lines and cost the next reader more than it saves —
-someone reading `AtlasGraph` to learn what it knows should find its accessors
-on it, not in the module that happens to call one. Splitting a type's inherent
-impl across files to dodge a size row is the tail wagging the dog, and ARCH
-§3.1's own remedy for that is this row. The remaining arch-gate
-findings at this tip — `bench_cmd/all.rs`, `chaos_monkey.rs`, `knowledge_gym`
-`runner.rs`, `quality_lane_cmd/chat_ask.rs`, `quality_check_cmd.rs`,
-`grounding/tests.rs`, `chaos_monkey/score.rs`, `sovereign/crates/sovereign-daemon/src/daemon.rs`,
-`session_state.rs`, the `AGENTS.md` instruction surface and the approach band —
-are upstream's; `git diff main...HEAD` touches none of them.
-
-### 10.1q Fan-in ACCEPTED — `commonwealth-core` 14 → 16 (cw-lift D1 follow-on, 2026-09-11)
-
-Two crates were added to the workspace on 2026-09-11 and both name
-`commonwealth-core`, which is the whole of layer-gate's fan-in complaint:
-
-| Dependent | Landed | Why it names `commonwealth-core` |
-|---|---|---|
-| `commonwealth-media` | `0eccf5664` | `Mesh`, `MemberRecord`, `NodeStatus`, `OriginKind`, `member_matches` — the roster vocabulary all three media questions are asked in |
-| `commonwealth-rails` | this commit | the same, plus `mesh::wire`'s join and gossip bodies and `MeshWire` |
-
-The ratchet's own advice — "depend on a narrower crate instead" — has no
-answer here, and that is the honest reading rather than a dodge: the types
-these two need ARE the mesh vocabulary, and the crate that owns it is the one
-every member already links. A narrower crate would be a second home for
-`Mesh`, which is the §10.6 failure the `mesh::wire` move (`c2a1e8eca`) was
-made to end — four declarations of one wire shape, converged to one.
-
-`quality/baselines/fan_in.tsv` was edited BY HAND, one line, rather than
-regenerated: `--update-baseline` rewrites every row and would have banked any
-other crate's drift in the same stroke, unread. The eight-row file is
-otherwise unchanged and the diff is one number.
-
-Not a licence for the next one. `commonwealth-core` is named a god-crate by
-this gate for a reason, and the two admitted here are package crates whose
-entire purpose is to be liftable — if a third arrives without that property,
-the answer is the split, not another row.
-
-### 10.1t Size OWED, not accepted — arch-gate at the thin-desktop landing (2026-09-12)
-
-**The baseline was NOT touched.** This entry exists so the separation is
-done once rather than redone by whoever pushes: `arch-gate` is red, and
-`--update-baseline` on this working tree would bank a peer's uncommitted
-edits along with the landing's own growth, which is the trap
-`AGENTS.md` names under "Definition of done".
-
-Gated state: `arch-gate FAILED (9 size, 0 doc)`, down from 11 — the two
-that this landing itself put over the ceiling were split instead
-(`corpus-engine/src/registry.rs` 1254 → 980, `research_http.rs` 1326 →
-661 + `research_run_dir.rs` 706). What is left, and whose it is:
-
-| Finding | Owner | Reading |
-|---|---|---|
-| `AGENTS.md` 46726 → 47980 bytes (+1254) | **PEER, uncommitted** | Not this landing's to bank. It is a dirty file in the shared tree (` M AGENTS.md` at session start) and re-baselining would make the next reader think this push grew the compass. |
-| `.claude/CLAUDE.md` 1750 → 1838 bytes (+88) | **PEER, uncommitted** | Same. |
-| `sovereign-scheduler/src/scheduler_core.rs` 1282 → 1351 (+69) | **PEER, uncommitted** | Same — predicted-time / scheduler work in flight beside this landing. |
-| `sovereign-turn-client/src/lib.rs` 3781 → 4509 (+728) | **this landing, cumulative** | The client gained ~36 methods across sv-surface and thin-desktop (mesh view, recipe projects, workflows, documents, lc, atlas, meshapp, enrich, recipes, research) because that is what "the desktop calls the daemon" MEANS. It is now the campaign's god-file and the split is real work: by ROUTE FAMILY, one module per `*_http` it speaks to, which the section banners in it already mark. Owed, and the first thing the next thin-desktop rung should buy. |
-| `sovereign-tools/src/atlas_view/reader.rs` 1267 (NEW) | `10c140b3b` (slice 1) | The atlas readers took the DTO projections when they moved below the daemon. Just over; splits by reader (corpora / report / members / atoms / subgraph). |
-| `studio/crates/sovereign-tools-base/src/web/search/mod.rs` 1201 (NEW) | `e0dc72e99` | One line over, from the one-web-search-dispatch convergence. Cheapest of the five to clear. |
-| `sovereign/crates/sovereign-desktop/src-tauri/src/commands/chat.rs` 1399 → 1479 (+80) | `12bb2bc02` | The chat path reading metadata over the wire. Will shrink again when the focused-passage and starter blocks follow the rest of the presentation down. |
-| approach band: files 195 → 197 (+2) | mixed | `registry.rs` (980) and `research_run_dir.rs` (706 → not in band); the band grew because a split moves a file from ABOVE the ceiling into the 800–1200 queue. The gate's own message names this ("where a split refills"). |
-| approach band: lines 192272 → 193703 (+1431) | mixed | Same cause plus the landing's new route files. |
-
-The honest verdict on the gate itself is the one in §10.1s: it had been
-red for four commits before anyone ran it, and the fix is that
-`scripts/pre-push.sh` runs it. It now does, which is why this table
-exists at all.
-
-**Settled by §10.1u, later the same day.** Every row above marked
-"this landing" or naming a commit is now baselined — at `origin/main`,
-where all of it already is, so none of the peer-uncommitted rows were
-banked with it. The turn-client split stays OWED; baselining freezes a
-debt, it does not pay one.
-
-### 10.1v Size RE-PINNED at `origin/main` 652209be0 — 2026-09-13 (quality-check fingerprint + sv-surface bars)
-
-arch-gate blocked the push with **14 size findings, 13 of which were already
-public.** `iroh_access.rs` (1349, NEW oversized), `scheduler_core.rs` (+69),
-`turn_http.rs` (+91), `loopback_parity.rs` (+198), `sovereign/crates/sovereign-turn-client/src/lib.rs`
-(+291), `AGENTS.md` (+1254 B), `.claude/CLAUDE.md` (+88 B) — this push touches
-none of those files. `git log origin/main..HEAD` is four commits and `git log
--- <each flagged file>` is empty for all seven. The baselines were simply
-stale against `origin/main`, so the re-pin is the §10.1u recipe unchanged:
-worktree at `origin/main`, `--update-baseline` there with a PRIVATE
-`CARGO_TARGET_DIR` (a shared target across worktrees reuses mtimes), copy
-`oversized.txt` / `instruction_surface.txt` / `approach_band.txt` back. No
-re-keying was needed this time — `origin/main` and this tree spell the same
-paths.
-
-**What the re-pin left behind is the part worth reading: +5 lines, and they
-are mine.** After the re-pin 13 findings cleared and one did not — approach
-band 197795 → 197800. That is the separation working exactly as intended: it
-isolated what this push ADDS from what was already public, and what this push
-adds is a five-line comment in
-`sovereign-cli/src/quality_check_cmd/mod.rs` explaining why
-`compute_fingerprint` takes the venue's declared lanes and not the run's
-selection. It was fifteen lines first and was trimmed to five (+14 → +5)
-before accepting any of it.
-
-**Why it is accepted rather than trimmed to zero.** The code change is one
-word — `&lanes` → `&in_venue` — and a reader who does not know that the
-fingerprint namespaces every baseline directory will read it as cosmetic and
-revert it. That is principle 3's case for a comment at the site rather than
-only in the commit body. Five lines is the price; `--tighten` was not
-available because this push cuts nothing in the band to bank against it.
-
-Accepted: approach band 197795 → 197800 lines (202 files, unchanged).
-The two clock repoints in the same push went the OTHER way and were NOT
-baselined — `clock-gate` 144 reads / 93 files → 142 / 91, paid not accepted.
-
-### 10.1u Size RE-PINNED at `origin/main` 94e602d83 — 2026-09-12 (verifier-loop vl-1..vl-6)
-
-§10.1t declined to touch the baseline four hours earlier, for a reason
-that was right at the time: peer edits sat uncommitted in the shared tree
-and `--update-baseline` on a working tree would have banked them. Pinning
-at `origin/main` is immune to that — the peer's uncommitted lines are not
-on `origin/main`, so they cannot enter the freeze. `instruction_surface.txt`
-came back byte-identical, which is the check that says so.
-
-**The re-pin had to be re-keyed, and that is the part worth reading.** The
-domains rename (`904145b64`, `cd9250aab`) is in this push, so `origin/main`
-still spells six crates under `commonwealth/crates/`. Copying its baselines
-verbatim would have made every file in those six read as a NEW oversized
-file — the §10.1d "path re-key, no debt" failure, at ten times the size. The
-baseline installed here is `origin/main`'s MEASUREMENT under this tree's
-PATHS: `commonwealth-api` → `sovereign-api`, `commonwealth-app` →
-`sovereign-meshapp-registry`, `commonwealth-inference` → `sovereign-serving`,
-`commonwealth-knowledge` → `sovereign-grants`, `commonwealth-test-harness` →
-`sovereign-mesh-test-harness`, `commonwealth/crates/oicp-conformance` →
-`oicp-conformance`. Ten keys in `oversized.txt`, twelve in `lines.tsv`.
-
-What the separation bought: `arch-gate` 6 findings → 2, `size-gate` 33 keys
-→ 11. Everything that dropped out was already public and nobody in this push
-had to answer for it.
-
-What is left is this push's own, and is accepted here:
-
-| Item | Location | Why deferred |
-|------|----------|--------------|
-| Approach band, 4 new entrants | `corpus-engine/xtask/src/instrument_gate.rs` (816), `sovereign-cli-daemon/src/memory_watch.rs` (943), `sovereign-core/src/runtime/grounding/judge.rs` (805), `sovereign/crates/sovereign-core/src/runtime/grounding/native_grounding/admission.rs` (709 → 841) | Files 197 → 201, lines 193702 → 197106. Each crossed 800 for a named reason: vl-2's instrument registry gate, `8750c0442`'s arena-trim watcher, vl-1's forced-choice register, and vl-6's three-state `NativeAdmission` with its two regression tests. All four sit 360-395 lines under the 1200 ceiling; `admission.rs` splits its projection out when the admission stage grows a second consumer. |
-| xtask gates | `corpus-engine/xtask` (+336), `::tests` (+111) | The three ratchets vl-2 and vl-3 added — instrument-gate, judge-funnel-gate, judge-replay-control. Gates that hold a bar are the campaign's deliverable, not incidental growth. |
-| Feed + schedule scripts | `scripts` (+306) | vl-4's `feed_replay_bank.sh` and its run-if-stale venue — the mechanism that keeps the judge-replay bank from aging past the world it prices against. |
-| Judge register + display segments | `sovereign-core` (+55), `::tests` (+47), `sovereign-contracts` (+2), `::tests` (+1), `sovereign-cli-llm` (+25), `sovereign-cli-shared::tests` (+53) | vl-1's `JudgeCall::Harness` and the census that reaches it, vl-6's `NativeAdmission`, and the lane-verdict emitters vl-2 converted. Net across the four vl rungs is under 200 lines of crate code. |
-| Arena trim | `sovereign-cli-daemon` (+44), `::tests` (+35) | `8750c0442` — glibc never trims per-thread arenas, so daemon RSS only ever went up. |
-
-Nine already-baselined files moved a few lines each in the re-freeze — five
-shrank (`sovereign-daemon/src/server.rs` −3, `state.rs` −2,
-`knowledge_query.rs` −1, `sovereign-daemon/src/daemon.rs` −4,
-`oicp_synthesis.rs` −2) and four grew (`streaming.rs` +18 and
-`grounding/tests.rs` +4, both vl-6; `mechanism_fidelity.rs` +7,
-`chat_ask.rs` +1). The oversized SET is unchanged at 180: no file crossed
-1200 in this push, and none dropped below it.
-
-### 10.1s Fan-in ACCEPTED — `sovereign-contracts` 27 → 28 (thin-desktop landing, 2026-09-11)
-
-One crate was added to the dependents of `sovereign-contracts`, and it is the
-campaign's whole point rather than a side effect of it:
-
-| Dependent | Landed | Why it names `sovereign-contracts` |
-|---|---|---|
-| `sovereign-meshapp` | `10c140b3b` (thin-desktop slice 1) | the thirteen explorer projections answer in `daemon_wire::meshapp` DTOs. The desktop used to hold those shapes; moving them below the daemon means the crate that COMPUTES a projection names the type it is served as |
-
-The ratchet's advice — "depend on a narrower crate instead" — points the wrong
-way here. `sovereign-contracts` is the contract layer: it is the one crate a
-thin surface is ALLOWED to reach (`[thin_surfaces].may_reach`), so every DTO
-this campaign pushes below the daemon necessarily adds an edge INTO it. The
-god-crate reading the ratchet defends against is a crate accumulating
-behaviour; this one accumulates wire shapes on purpose, and the alternative —
-a second home for `MeshAppGraph` — is the §10.6 failure the move was made to
-end.
-
-Worth saying plainly: this gate had been RED since `10c140b3b` and nobody ran
-it. Four commits went past it. That is the same unrun-gate failure the repair
-commit at the head of this landing documents five times over, and the fix is
-the same one: `scripts/pre-push.sh` runs layer-gate, and the landing does not
-finish until it is green.
-
-`quality/baselines/fan_in.tsv` was edited BY HAND, one line, for §10.1q's
-reason. The other seven rows moved too, but only DOWNWARD and only via
-`layer-gate --tighten`, which never raises: `commonwealth-core` 16 → 15,
-`commonwealth-state` 9 → 8, `corpus-engine-notes` 14 → 13,
-`corpus-engine-scip` 11 → 10 — four real cuts this campaign made, banked in
-the same commit that spends one.
-
-### 10.1r Size ACCEPTED at the cw-lift landing — 2026-09-11 (re-pinned at `origin/main` 4ea0201e2)
-
-Sixty-four non-merge commits since the last pin (`2a3a78766`, §10.1i): the
-cw-lift arc (D1 federated media and its follow-on items 1/2/4/5, the
-`commonwealth-rails` carve, D2's distributed CI on the image boundary) plus the
-tail of sv-surface (the service registrar, the turn/desktop wire corrections).
-`size-gate` 582,408 -> 586,870 code lines: **+4,462 net code across 38 keys
-that moved**, +3,845 test. `arch-gate` froze 13 size rows.
-
-**The re-pin used the working tree rather than a worktree at `origin/main`, and
-that is safe HERE for a reason worth writing down rather than assuming.** The
-recipe's worktree dance exists to stop a `--update-baseline` absorbing this
-branch's growth along with what is already public. At this HEAD the two
-unpushed commits (`bf88e79c1`, `2693914f6`) are bench stdout and runbook prose
--- `git diff --name-only origin/main..HEAD | grep -c '\.rs$'` is **0** -- so
-the tree's code IS `origin/main`'s code and the separation is there by
-construction. Every row below is already public. Where that is not true, use
-the worktree.
-
-What the lines bought, by key:
-
-| Key | Delta | Bought |
-|---|---|---|
-| `commonwealth-rails` (+tests) | NEW 1,577 (+761) | the daemon a shim author installs -- `cw-rails join` / `cw-rails run`, one iroh endpoint carrying the join handshake, the gossip round, the acceptor and every media bridge, plus three loopback routes (`b25c04b3e`). 319 crates against `commonwealth-api`'s 743, and the lift measured 1 |
-| `sovereign-service` (+tests) | NEW 959 (+111) | NOT new code: `sovereign-cli-daemon/src/service_install.rs` (**-1,039**) became one registrar for three platforms, and Windows got a daemon it never had (`fe5a85cc3`, `00b4b26ea`). Net **-80** production lines for a platform more |
-| `sovereign-desktop/src-tauri::tests` | +902 | the sv-surface wire corrections' tests (`c4019115e`, `2df562caa`) and the contribution-ledger consolidation (`4b29cd3fe`) |
-| `scripts` | +783 | `cw-rails-lift.sh` (450, the lift instrument with its own watched-red escape probe), `cw-media-demo.sh` (109), `stage-daemon-sidecar.sh` (127), `with-cargo-lock.sh` (20), plus the `co-*` campaign tooling |
-| `commonwealth-media` (+tests) | NEW 575 (+304) | the three media questions -- catalogue, reach, fan-out -- in the crate both the inference daemon and the rails daemon call (`0eccf5664`) |
-| `commonwealth-transport` (+tests) | +442 (+310) | `iroh.rs` 1,483 -> 1,643: the forwarded-caller headers with the client-supplied `x-mesh-*` strip, `[iroh] media_allow`, and the FNV-1a bridge port derived from the peer key (`93a779fad`, `451dc2933`, `0bde967d9`) |
-| `sovereign-inference::tests` | +396 | the idle-eviction tests for fast and embed (`f619a4b8e`) |
-| `sovereign-cli-llm` | +337 | the quality-check and campaign verbs the arc drove |
-| `commonwealth-discovery` (+tests) | +263 (+328) | `deep_link.rs`'s new home, with the rails daemon's join over `iroh=` dial |
-| `corpus-engine/xtask::tests` | +290 | `docs_gate.rs` +106 and the ratchets' own coverage |
-| `commonwealth-work` (+tests) | +283 (+110) | `sandbox.rs`'s `Sandbox::probe` reaching the image, and `refusal.rs` 1,232 -> 1,304 -- a unit's preconditions asked of the environment it RUNS in rather than the donor's host (`e82736ad6`) |
-| `sovereign-mesh` (+tests) | +163 (+168) | `media_reach.rs`, the `MEDIA_ALPN` membership check, `turn_http.rs` 1,875 -> 2,022 |
-| `sovereign-cli` | **-193** | `project_init/scaffold.rs` **-258**, against `quality_check_cmd/distribute.rs` 1,347 -> 1,502 (the image IS the CI environment: `519082c37`, `a9494c36c`) |
-| `sovereign-cli-daemon` | **-550** | the registrar move above |
-| `corpus-engine/xtask` | **-206** | net, after `docs_gate.rs` +106 |
-
-The `--update-baseline` banked those three cuts as ceilings in the same stroke,
-so `--tighten` finds nothing left to bank.
-
-Splits still owed, unchanged by this acceptance and now carrying more:
-`sovereign-inference/src/embedded/engine.rs` (4,488), `sovereign-turn-client/src/lib.rs`
-(3,781, one module per route family -- §10.1i), `sovereign-contracts/src/setup_config.rs`
-(3,534), `sovereign-daemon/src/turn_http.rs` (2,022),
-`sovereign-mesh/tests/main/loopback_parity.rs` (2,018),
-`commonwealth-transport/src/iroh.rs` (1,643),
-`sovereign-service/src/lib.rs` (1,740, NEW oversized -- the three platform
-registrars are three modules), `sovereign-desktop/src-tauri/src/mesh_commands.rs`
-(1,221, NEW oversized).
-
-One instrument-gate red was PAID rather than re-pinned in the same commit:
-`scripts/stage-daemon-sidecar.sh` is reachable from `desktop-release.yml:444`
-and was on no map. It stages an artifact and takes no verdict, so it is a
-`[[not_instrument]]` beside its companion `fetch-desktop-binaries.sh` -- what
-verifies the installer carries a working daemon is the desktop e2e lane, not
-the copy.
-
-### 10.1m Both blocking gates were red ON MAIN, and both were paid rather than re-pinned — 2026-09-04
-
-`scripts/pre-push.sh` blocked on two gates. Neither failure was this branch's,
-and neither was re-pinned.
-
-**Approach band.** Baseline 170 files / 165,823 lines; `origin/main` measures
-**171 / 167,048** — stale by +1 file / +1,225 lines before this branch's first
-commit. HEAD measured 172 / 167,932. Instrument validated before the result
-(§18.4): a shell replication of arch-gate's walk agreed with arch-gate's own
-output to the line on the same tree (172 / 167,932), and was then run against
-`origin/main`'s tree.
-
-Paid, not banked — the three files this branch put in the band were split back
-out of it:
-
-| File | Before | After | Δ band |
-|------|--------|-------|---|
-| `serving-policy/src/fair_sched.rs` | 987 | 562 + `fair_sched/tests.rs` 424 | **−987** |
-| `grounding/citation.rs` | 987 | 757 + `citation/quote_match.rs` 250 | **−987** |
-| `grounding/citation_attribution.rs` | 848 | 704 + `citation_attribution/text.rs` 162 | **−848** |
-
-Band: **169 files / 165,110 lines** — one file and 713 lines BELOW the
-baseline, so nothing of this branch's is absorbed and main's own drift is paid
-off with it. `fair_sched` used the deterministic executor
-(`quality/refactors/plans/fair-sched-tests.toml`); the other two are concern
-seams the modules already had — `quote_match` owns "where does this text sit
-in the passages", `text` owns the title predicates — and each moved item is
-`pub(super)`, so neither split widened a surface.
-
-**Concept ratchet.** 39 duplicated names against a baseline of 35 (§10.1j
-pinned that 35 on `9d6969852`). All four crossers are `understanding-vocab`'s,
-they exist verbatim on `origin/main`, and this branch never touched that crate
-— `9722bf821` (the vocab carve-out) is not an ancestor of the commit that
-pinned 35, which is the whole mechanism §10.1j warned about: a bare-count
-baseline cannot name what crossed, so a merge moves it silently.
-
-Dispositioned by renaming the side with the weaker claim to the name, per the
-convention `corpus-index/src/index/provenance.rs` already states for this
-family (qualify, do not add a fifth bare noun):
-
-| Noun | Renamed | To | Why that side |
-|------|---------|----|---|
-| `Provenance` | `understanding_vocab::atoms` | `SignalProvenance` | it records WHICH SIGNAL produced a surface form; `sovereign-contracts` owns the evidence-basis enum. `AtomProvenance` was taken by `corpus-engine-archaeology` |
-| `Clock` | `understanding_vocab::ontology::decl` | `SupersessionClock` | an enum naming which clock ORDERS SUPERSESSION; `commonwealth_core::Clock` is the time-source trait |
-| `Entity` | `corpus_engine::…::investigation::graph` | `InvestigationEntity` | the atlas atom is the older, wider `Entity`; this is the investigation pipeline's own record (`String` id, recipe-declared type) |
-| `QuestionType` | `sovereign_eval::chaos_monkey` | `PressureKind` | its own doc says "the pressures the chaos monkey applies"; the atlas taxonomy's kind-of-inquiry has the claim to `QuestionType` |
-
-All four are wire-safe: every one is `#[serde(rename_all)]`-keyed or
-string-valued, so the VARIANT strings and field names are unchanged and no
-persisted file is rewritten. `PressureKind` is deliberately the same length as
-`QuestionType`: at `ChaosQuestionType` the rustfmt reflow alone added 104
-lines to `chaos_monkey/score.rs` (1,731 → 1,835) and broke the oversized
-ratchet's 50-line slack. The field stays `qtype` — it is the serde key in
-every chaos bank on disk.
-
-### 10.2 cmnwlth deferrals
-
-| Item | Location | Why deferred |
-|------|----------|--------------|
-| `frontdoor.rs` split | `sovereign-daemon/src/frontdoor.rs` (~5758 lines) | Harness-protocol → model-native normalizer — 9 concerns (harness detect, tool keeplist, heredoc diagnostics, distiller, path repair, nudges, allowlists, brief). Shares path-canon / tool-rewrite logic with `routes_responses.rs`; sequenced as the harness-unification PR (extract a shared reshaping core), not a bare size split. |
-| `routes_responses.rs` split | `sovereign-daemon/src/routes_responses.rs` (~3140 lines) | `/v1/responses` OpenAI-adapter — request/SSE translation + tool rewriting + path canon. The path-canon + tool-rewrite halves dedupe with `frontdoor.rs` into the shared reshaping core (same PR). |
-| Multi-embed-model dispatch | `sovereign-daemon/src/routes_inference.rs` | `/v1/embeddings` ignores the `model` field; gated on a second production embed model. |
-| `embed_batch` | `sovereign-daemon/src/routes_inference.rs` | Inputs fan out one at a time; gated on a backend that batches more efficiently. |
-| Knowledge replica fanout | `sovereign-daemon/src/routes_knowledge.rs` | Knowledge fan-out only hits non-hosted corpora today; gated on merge-dedupe hardening. |
-| mesh_store replication | `sovereign-mesh/src/ring_sync.rs` · `rail_kv_pump.rs` · `commonwealth-state/src/rail_kv.rs` | **Senders of replicated state: 1**, and it is the ring digest exchange. `sovereign-mesh/src/gossip.rs` replicates the `Mesh` member list and nothing else. Gossip Step 4 — a full mesh-store snapshot POSTed to EVERY online peer on the 10 s round — and `broadcast_now`'s event-driven single-entry POST beside it were deleted at cw-lift 2e, with the route they wrote (`POST /internal/app/state`), its handler `recv_app_state`, the `AppStateGossipBody`/`GossipStoreEntry` wire types, `MeshStore::all_entries_for_gossip` and `backend::all_rows`. The count went 4 → 3 at 2c (`corpus_collaborate`'s queue-handoff unicast) → 1 at 2e. It is `cw-twin-visibility`'s instrument and is pinned structurally by `sovereign-mesh/tests/main/replication_sender_census.rs::every_sender_of_replicated_state_is_declared` (formerly `gossip_push_surfacing.rs`), so a second sender on the surviving route is a build failure rather than a later grep. **K8 is paid, not waived:** the six namespaces that had only Step 4 for anti-entropy — `inference`, `contributions`, `corpus-engine`, `notes`, `work-atlas`, `wikipedia-newsworthy-tracked` — replicate through the outbox → journal → digest path 2c and 2d built, with zero per-namespace code. `FANOUT = 2` now governs the whole gossip module rather than three of its four steps. The work atlas's same-round-trip claim visibility is `MeshBroadcaster`, which drains the outbox through `rail_kv_pump::pump_once` and raises `AppState::ring_write_nudge` — no wire of its own. |
-| Mesh Health attach-mode HTTP | `sovereign-daemon/src/state.rs` + `sovereign-desktop/src-tauri/src/mesh_commands.rs` | Local-mode UI works; `mesh_get_contributions` now fetches `GET /internal/contribution/view` in attach mode. Remaining: `mesh_set_peer_preference` returns an explicit "not exposed over the daemon HTTP API in Attach mode" error — the set/clear route is still missing. |
-| ATOS middleware no-op fall-through | `sovereign-daemon/src/routes_inference.rs` | When no session store is configured, the ATOS pipeline degrades to legacy routing. By design; operators should expect the silent fall-through. |
-
-### 10.3 Doc posture
-
-The two long-form commonwealth docs —
-`commonwealth/ARCHITECTURE.md` and
-`commonwealth/IMPLEMENTATION_PLAN.md` — are flagged at their top
-as historical record. They preserve the original design rationale
-(and the constitutional Design Philosophy section in
-ARCHITECTURE.md still governs the project) but are not maintained
-against current code shape. This file (§5 in particular) is the
-source of truth for the running system. Completed-work chronicles
-extracted from this file live in [`HISTORY.md`](./HISTORY.md) —
-the overview states what IS, HISTORY preserves how it came to be,
-and dated entries there are never rewritten to match later code.
-
-### 10.1v Size and clocks RE-PINNED at `origin/main` 26ca2ad0d — 2026-09-13 (cutting `cli-v0.7.0` / `desktop-v0.7.0`)
-
-`pre-push` refused the 0.7.0 version bump on three hard gates. None of them are
-about the bump: the release commit is four files — `Cargo.toml`, `Cargo.lock`,
-`tauri.conf.json`, `package.json` — and contributes zero lines to any flagged
-file. Each gate was re-run in a clean worktree detached at `origin/main`
-(26ca2ad0d) and failed there identically, which is the citation for calling this
-public debt rather than this push's.
-
-Two of the three were PAID, not absorbed:
-
-- **`env-gate`** — `SOVEREIGN_SIDECAR_FEATURES` was undeclared. It landed with
-  svt-7 (2026-09-12) and is documented at `sovereign/SYSTEM_OVERVIEW.md:260`, in
-  `sovereign-cli-daemon/Cargo.toml:133`, `sovereign-desktop/src-tauri/Cargo.toml:186`
-  and `scripts/windows-crosscheck.sh:28` — everywhere except the registry that
-  gates it. Declared in `quality/env-flags.toml`, `docs/ENV_FLAGS.md`
-  regenerated. Gate green with 217 registered, up from 216. Nothing baselined.
-- **`clock-gate` half** — `recipe_http.rs:647` hand-read `SystemTime::now()` for
-  `ran_at_unix: u64`; it is now `sovereign_core::time::unix_now_u64()`, matching
-  the seven existing call sites in the same crate. The tree is 143 reads across
-  92 files against a 144/93 pin — below the baseline it was just given.
-
-What IS accepted, and the honest shape of it:
-
-| Ratchet finding at 26ca2ad0d | Status |
-|---|---|
-| `sovereign-cli-daemon/src/setup_cmd/mod.rs` 1,386 → 1,669 (+283) | accepted, unexplained |
-| `sovereign-daemon/src/admin_http.rs` NEW oversized 1,308 | accepted, unexplained |
-| `sovereign-daemon/src/daemon.rs` 5,560 → 5,683 (+123) | accepted; split long owed (§10.1i already names it at 4× the line) |
-| `sovereign-mesh/src/iroh_access.rs` NEW oversized 1,614 | accepted, unexplained |
-| `sovereign-scheduler/src/scheduler_core.rs` 1,282 → 1,351 (+69) | accepted, unexplained |
-| `sovereign-daemon/src/turn_http.rs` 2,014 → 2,105 (+91) | accepted; split owed since §10.1i |
-| `sovereign-mesh/tests/main/loopback_parity.rs` 2,023 → 2,221 (+198) | accepted; the relocation §10.1i names is still owed |
-| `sovereign-turn-client/src/lib.rs` 4,509 → 4,800 (+291) | accepted; per-family split owed since §10.1i, one instalment paid at svt-3 |
-| `.claude/CLAUDE.md` 1,750 → 1,838 bytes (+88) | accepted |
-| `AGENTS.md` 46,726 → 47,980 bytes (+1,254) | accepted |
-| approach band 201 → 205 files, 197,106 → 200,868 lines (+3,762) | accepted |
-| `commonwealth-media/src/apps.rs:466` hand-read clock | accepted, and the reason is real: it feeds **nanosecond** resolution into a hash as entropy for a claim id, and `commonwealth_core::clock` offers only `unix_now_secs`/`unix_now_millis`. Swapping weakens the entropy. Either the decider grows a nanosecond accessor or `mint_claim_id` stops deriving identity from a clock at all (ARCH §8) |
-
-**The "what the lines bought" column is empty on purpose.** Every previous size
-acceptance in this section was written by the session that wrote the lines, and
-could say what they bought. This one was written by a release cut that did not
-write them and will not invent a justification for them. The 934 commits between
-`cli-v0.6.0` (ba38e404a, 2026-08-29) and here reached `origin/main` with these
-ratchets red, so the debt is owed by those landings, not by this pin — the pin
-only stops it riding into 0.7.0 unnamed. `arch-gate --tighten` found nothing to
-bank.
-
-### 10.1w Size RE-PINNED at `origin/main` — 2026-09-14 (the domains campaign's audit could not pass a red `origin/main`)
-
-`REVIEW-audit-1` stopped because `PREPUSH` was red on `origin/main` itself.
-`arch-gate` measured `AGENTS.md` at 48,379 bytes against a 47,980 pin and the
-approach band at 200,927 lines against 200,868. Neither is this branch's:
-`git diff --stat origin/main..HEAD -- '*.rs'` is empty, and `AGENTS.md` at
-`HEAD` is byte-identical to `AGENTS.md` at `origin/main` (48,379). The baselines were stale
-against public state — `AGENTS.md` grew past §10.1v's 47,980 pin on
-`origin/main` after that pin was written — so this is §10.1u's recipe: re-pin at
-`origin/main`, never `--update-baseline` on a tree shared with other sessions.
-
-Re-pinned: `instruction_surface.txt` `AGENTS.md` 47,980 → 48,379 bytes;
-`approach_band.txt` 200,868 → 200,927 lines (205 files, unchanged). Both are
-`origin/main`'s own measurement, which is what keeps this branch's contribution
-out of the freeze — and this branch's contribution to either is zero.
-
-The other two red gates were PAID, not re-pinned. `env-gate` saw a duplicate
-`SOVEREIGN_SIDECAR_FEATURES` row (`69ab4a68f`'s `cli-binaries` copy merged
-beside `739735496`'s `dev-gates` one); the stale `cli-binaries` copy is gone and
-the current `dev-gates` row — which names svt-7's Windows GPU selection — stays.
-`sovereign-lint-scoped` saw `scripts/sovereign-lint.sh` hardcode
-`corpus-engine/treesitter`, a hard cargo error once `sovereign-desktop` dropped
-its corpus-engine dependency at svt-6 (2026-09-12) and the always-scoped desktop
-crate could no longer name the flag; it now resolves features through
-`resolve_features` in `scripts/lib/cargo-scope.sh`, the same decider the test
-runner uses (ARCH §8), so the two gates cannot drift apart again.
-
-### 10.1x Size RE-KEYED for the pod moves — 2026-09-15 (a move is not new debt)
-
-`REVIEW-audit-3` stopped because `arch-gate` read the pod moves as two NEW
-oversized files. The seven pod units `git mv`'d their modules out of
-`sovereign-mesh` into `sovereign-pods`; two of them are baselined oversized —
-`worker_http.rs` (2,046) and `worker_subprocess_runner.rs` (1,271) — and
-`oversized.txt` is keyed by path, so the frozen rows under
-`sovereign/crates/sovereign-mesh/src/` stopped matching and the same line
-counts read as new debt.
-
-This is §10.1d's "path re-key, no debt" and §10.1u's rename re-key, at two
-rows: both rows moved to `sovereign/crates/sovereign-pods/src/` with their
-counts unchanged. A move is not `--update-baseline` (PROMPT §7) — nothing was
-absorbed, the two files stay frozen at 2,046 and 1,271, and growth past slack
-still fails, so the bar is intact. The `atoms.rs` carve (`9722bf821`) is the
-same handling: "its `oversized.txt` row followed it (a move, not a new debt)".
-
-The recurrence is closed structurally: the MOVE recipe (`ralph/PROMPT.md`
-§3a) gained step 6, which re-keys a moved file's baseline row in the same
-commit, and §7's `quality/baselines/` prohibition now names that step as its
-only hand edit. Wave 1's remaining moves (`peer_inference.rs` 5,399 and the
-rest) would otherwise re-open this at every rung.
-
-### 10.1y Fan-in ACCEPTED — `sovereign-contracts` 28 → 30, second unit withdrawn (the serving package reaches its leaf, 2026-09-15)
-
-Two crates enter the dependents of `sovereign-contracts`, and both are the
-serving package reaching a shared leaf the boundary already names:
-
-| Dependent | Landed | Why it names `sovereign-contracts` |
-|---|---|---|
-| `sovereign-serving-host` | `b761ac5fe` | `traits::InferenceProvider` — the local slot pick (`slot_select.rs`, moved out of `oicp_select.rs` by REVIEW-build-sched-split-pick-slot) takes `&dyn InferenceProvider`. `SERVING_BOUNDARY.md:51-54` says it moves to the host, and "The two tiers" (`:108-111`) names `sovereign-contracts` a shared leaf the package may reach |
-| `sovereign-scheduler` | projected, `REVIEW-build-sched-move` (`ralph/STATE.md:110`) | the same trait, at the eight modules' rewritten import path (`sovereign_core::traits::InferenceProvider` → `sovereign_contracts::traits::InferenceProvider`); the row adds the dep explicitly. Accepted now, adjudicated together with the split so the campaign would not stop twice for one decision: the growth is the same decision one row later. **Withdrawn 2026-09-15**: measured over the seven modules the row actually moves, there is no `sovereign_core::traits::` use at all — `b761ac5fe`'s pick_slot split already took the one `InferenceProvider` use to `sovereign-serving-host`, and `throughput_tracking.rs` (the only remaining `sovereign_core::*` user) stays in `sovereign-mesh`. The scheduler edge does not materialize |
-
-The ratchet's advice — "depend on a narrower crate instead" — has no answer:
-`InferenceProvider` has exactly one home (`sovereign-contracts/src/traits.rs:289`)
-and `oicp-types` does not re-export it, so there is no narrower crate to name.
-This is §10.1s's shape exactly: `sovereign-contracts` is the contract layer, and
-a package crate reaching it is the boundary working as drawn, not a god-crate
-accreting behaviour.
-
-`quality/baselines/fan_in.tsv` was edited BY HAND, one line, for §10.1q's
-reason. The cap is `30`; the landed edge is `29` (`b761ac5fe`, `sovereign-serving-host`),
-and `30` was accepted for the `sovereign-scheduler` edge projected one row later
-so the campaign would not stop twice for one decision (NEEDS_HUMAN item 3). That
-projection was withdrawn 2026-09-15 (row above), so the cap now holds one unit of
-unused headroom. No other crate may ride it; `cargo xtask layer-gate --tighten`
-returns the cap to 29.
-
-### 10.1z Fan-in ACCEPTED — `commonwealth-core` 15 → 16, the serving host's declared exception going live (2026-09-15)
-
-`dm-serving-move-leaves` (`1693c48b6`) moved `worker_eligibility`,
-`source_content_validator`, `prompt_compactor` and `model_fetch` into
-`sovereign-serving-host`, which gains the direct `commonwealth-core` edge the
-serving package already declares: `quality/ARCH_LAYERS.toml:1247-1252`,
-`package = "serving"`, `from = sovereign-serving-host`, `to = commonwealth-core`,
-counted by `sovereign/SERVING_BOUNDARY.md:122-127` as one of the package's
-exactly-two `[[exception]]` rows. The raise makes the declared exception live;
-it adds no third row, so K4 is not hit.
-
-| Dependent | Landed | Why it names `commonwealth-core` |
-|---|---|---|
-| `sovereign-serving-host` | `1693c48b6` | `worker_eligibility.rs:44` reads `commonwealth_core::ids::NodeId`, a re-export of `kernel_types::NodeId` (`commonwealth/crates/commonwealth-core/src/ids.rs:18`) that the exception's burn-down already named; `model_fetch.rs:25,52,86` reads `commonwealth_core::model::{ModelFileInfo, ModelFileListing, models_list_url, model_file_url}`, which no narrower crate owns |
-
-The ratchet's "depend on a narrower crate" has an answer for the first reason
-(rewrite to `kernel_types::NodeId`) and none for the second: `oicp-types` and
-`sovereign-contracts` do not re-export the model wire types. The exception's
-`tracking` sentence named two reasons and is corrected in the same commit to
-name the third — where those types belong is a finding for a later row, not a
-condition of this move.
-
-`quality/baselines/fan_in.tsv` was edited BY HAND, one line, for §10.1q's
-reason. The cap is `16`; the landed edge is `16` (`1693c48b6`). No other crate
-may ride it.
-
-### 10.1aa Approach band ACCEPTED — the admission split enters it (REVIEW-build-serving-move-admission, 2026-09-15)
-
-`REVIEW-build-serving-move-admission` MOVEs the admission decision out of
-`sovereign-api` into `sovereign-serving-host` (`SERVING_BOUNDARY.md` (c)). The
-original `sovereign-daemon/src/admission.rs` was 1,447 lines and baselined
-OVERSIZED; the split leaves two files, neither over the 1,200 ceiling —
-`sovereign-serving-host/src/admission.rs` (800: the `Admission`/`AdmissionHost`
-traits, the two axum middlewares and the 503 renderer) and
-`sovereign-daemon/src/admission.rs` (1,105: the daemon's port impls, the RAII
-guards and the AppState-coupled tests). Both land INSIDE ARCH §3.1's 800–1,200
-approach band, which is §10.1j's shape exactly: a file leaving the oversized
-list does not shrink the band, it ENTERS it.
-
-Measured per file against `HEAD` (not snapshotted from the tree, §10.1j): the
-band was 205 files / 200,798 lines at `8b5d082a4` (green — 129 under its
-200,927 baseline, an un-banked cut); this unit adds exactly **+2 files / +1,905
-lines** (800 + 1,105; the old path was oversized, so it contributed nothing to
-the band before). `quality/baselines/approach_band.txt` was edited BY HAND to
-207 / 202,703 for §10.1q's reason — `--update-baseline` would snapshot the
-whole tree and absorb unrelated growth (PROMPT §7). The +1,776 over the old
-baseline is this unit's +1,905 less that 129-line pre-existing cut, which this
-raise banks.
-
-No file was trimmed or padded to dodge the band; a split of an oversized file
-into two sub-1,200 modules cannot avoid it, and the two halves are the design
-`SERVING_BOUNDARY.md` (c) asks for.
-
-### 10.1ab Fan-in ACCEPTED — `sovereign-contracts` 30 → 31 and `corpus-engine-notes` 13 → 14 (the mesh host cluster's own crate, `dm-daemon-mesh-edge`, 2026-09-17)
-
-`dm-daemon-mesh-edge` MOVEs sovereign-mesh's host cluster — the assembly root
-(`daemon`, `daemon_services`), the 21 route shells, the edge leaves
-(`local_only`, `loopback_guard`, `http_response`, `types`, `slot_manifest`),
-the MCP mount and the four files carrying `impl EmbeddedDaemon` — into the
-new `sovereign-daemon` crate (DC §4.1; one strongly-connected component, so
-one commit: ralph/DECISIONS.md 2026-09-17). A crate that did not exist now
-depends on two tracked crates, and both are the host naming a leaf it owns no
-narrower home for:
-
-| Dependent | Landed | Why it names the crate |
-|---|---|---|
-| `sovereign-contracts` | this commit | every moved shell carries the daemon-wire vocabulary (`daemon_wire::*`) and the moved `types` module IS a re-export of `sovereign_contracts::daemon_wire`; `sovereign-daemon` is the host the contract layer was drawn for |
-| `corpus-engine-notes` | this commit | the notes surface is the host's: `daemon_services.rs`, `mcp_router.rs`, `notes_http.rs` and `daemon.rs` read `corpus_engine_notes::{Note, NoteScope, NoteSource, NoteStore}` directly. `sovereign-mesh` cannot re-export it (the `[[forbid]] sovereign-mesh -> sovereign-daemon` row keeps the shim direction closed), and no narrower crate owns `NoteStore` |
-
-The ratchet's advice — "depend on a narrower crate instead" — has no answer
-for either: both are the boundary working as drawn, not a god-crate
-accreting behaviour. The six other tracked crates the cluster also names
-(`corpus-engine`, `corpus-engine-scip`, `sovereign-core`, `sovereign-tools`,
-`commonwealth-core`, `commonwealth-state`) did not move: their caps already
-carried the headroom. `corpus-engine-scip` is a DEV edge only (the
-`project_http` test builds a `ScipGraph`), so it is exempt from the ratchet.
-
-`quality/baselines/fan_in.tsv` was edited BY HAND, two lines, for §10.1q's
-reason — `--update-baseline` would snapshot the whole tree and absorb
-unrelated growth (PROMPT §7). The caps are `31` and `14`; the landed edges are
-`31` and `14`. No other crate may ride them.
-
-### 10.1ac Fan-in ACCEPTED — `sovereign-contracts` 31 → 32 (the workspace decision extractor reaches its seam, `dm-decision-extractor-move`, 2026-09-17)
-
-`dm-decision-extractor-move` MOVEs the workspace decision extractor (443) and
-the notes response miner (454) into `corpus-engine-notes/src/decision_extractor.rs`
-and `corpus-engine-notes/src/response_mine.rs` (DT `workspace` cluster; dest
-`corpus-engine-notes`). The
-moved `DecisionExtractor` implements the `Middleware` trait, whose home is
-`sovereign-contracts::middleware` — the seam lifted there by
-`REVIEW-build-middleware-seam`. `corpus-engine-notes` is the one new dependent:
-
-| Dependent | Landed | Why it names the crate |
-|---|---|---|
-| `sovereign-contracts` | this commit | the moved `decision_extractor.rs` implements `Middleware` and reads `PipelineContext` / `MiddlewareSession` / `notes_db_path`; `sovereign-contracts` is the knowledge layer's one sanctioned sovereign edge (`[[forbid]] corpus-engine* -> sovereign-*`, `except = ["sovereign-contracts"]`, quality/ARCH_LAYERS.toml:358-362), and `sovereign-core` — the other re-export of the seam — is not a shared leaf the code-intel package may name |
-
-The ratchet's advice — "depend on a narrower crate instead" — has no answer:
-the seam's only homes are `sovereign-contracts` (a shared leaf) and
-`sovereign-core` (not a leaf, and a package-boundary violation for
-`corpus-engine-notes`). Naming it through `sovereign_core`, as `sovereign-api`
-does, is exactly the path `ralph/DECISIONS.md` (2026-09-16,
-`REVIEW-build-middleware-seam`) rejected for this crate. The `oicp-types` dep
-the move also adds is untracked (fan-in 21, below the seeded set), so it raises
-no cap.
-
-`quality/baselines/fan_in.tsv` was edited BY HAND, one line, for §10.1q's
-reason — `--update-baseline` would snapshot the whole tree and absorb unrelated
-growth (PROMPT §7). The cap is `32`; the landed edge is `32`. No other crate may
-ride it.
-
-### 10.1ad Fan-in ACCEPTED — `corpus-engine-scip` 10 → 11 and `sovereign-contracts` 32 → 33 (the next-edit crate's two leaf reaches, `dm-next-edit-move`, 2026-09-17)
-
-`dm-next-edit-move` MOVEs the five pure workbench modules out of `sovereign-api`
-into the code-intel package's `code-next-edit` (`code-next-edit/src/next_edit.rs`,
-`next_edit_model.rs`, `next_edit_symbols.rs`, `next_edit_syntax.rs`,
-`next_edit_journal.rs`). The new crate is the one new dependent on two crates,
-and both reaches are the package's declared surface rather than convenience:
-
-| Dependent | Landed | Why it names the crate |
-|---|---|---|
-| `corpus-engine-scip` | this commit | `next_edit_symbols.rs` opens a `ScipGraph` and calls `find_callers_qualified`; the crate is the code-intel package's own member (`quality/ARCH_LAYERS.toml` `[[package]] code-intel`), and `corpus-engine` deliberately ships no re-export shim for it (ARCH §8.3). `sovereign-api`'s own edge on it is a DEV edge (the `project_http` test), which the ratchet exempts |
-| `sovereign-contracts` | this commit | `next_edit_journal.rs` builds the journal record from `sovereign_contracts::types` (`JournalLine`, `NextEditEpisode`, `NEXT_EDIT_STREAM`); it is a shared leaf, and naming it directly is CODE_TOOLING_BOUNDARY.md §2's Phase 1 repoint away from the `sovereign_core` re-export facade |
-
-The ratchet's advice — "depend on a narrower crate instead" — has no answer for
-either: the graph's only home is `corpus-engine-scip`, and the journal schema's
-only home is `sovereign-contracts`. The tree-sitter grammar registry is NOT one
-of these reaches — it stayed in `corpus-engine` and arrives through the crate's
-own `grammar::GrammarLookup` port, so `.tsx` routing keeps ONE implementation
-(ARCH §8).
-
-`quality/baselines/fan_in.tsv` was edited BY HAND, two lines, for §10.1q's
-reason — `--update-baseline` would snapshot the whole tree and absorb unrelated
-growth (PROMPT §7). The caps are `11` and `33`; the landed edges are `11` and
-`33`. No other crate may ride them.
-
-### 10.1ae Fan-in ACCEPTED — `corpus-engine-scip` 11 → 12 (the fact-base crate's SCIP reach, `REVIEW-build-code-facts`, 2026-09-18)
-
-`REVIEW-build-code-facts` CREATEs the code-intel package's `code-facts` and MOVEs
-`corpus-engine/src/{facts,facts_check,facts_store}.rs` (1,706 lines) into it
-(docs/CODE_TOOLING_BOUNDARY.md §2 Phase 2, `:404`; table `:67`). The new crate is
-the one new dependent, and its reach is the package's declared surface rather
-than convenience:
-
-| Dependent | Landed | Why it names the crate |
-|---|---|---|
-| `corpus-engine-scip` | this commit | `facts_check.rs` dispatches CONFIG/CALLS over `ScipGraph` and `facts.rs`'s `extract_symbol_defs` returns `ScipSymbolRecord` (both behind the `treesitter` feature). The crate is the code-intel package's own member (`quality/ARCH_LAYERS.toml` `[[package]] code-intel`), and `corpus-engine` deliberately ships no re-export shim for it (ARCH §8.3) |
-
-The other two reaches cost no cap: `corpus-index` — a shared `[[package_leaf]]`,
-for `types::EmbedFn` and `error::{Error, Result}` — and `corpus-engine-yield`, a
-code-intel member, for `time::unix_now()`; neither is in the baseline. The
-tree-sitter grammars are external crates, not tracked. `quality/baselines/fan_in.tsv`
-was edited BY HAND, one line, for §10.1q's reason — `--update-baseline` would
-snapshot the whole tree and absorb unrelated growth (PROMPT §7). The cap is `12`;
-the landed edge is `12`. No other crate may ride it.
-
-### 10.1af Fan-in ACCEPTED — `corpus-engine-scip` 12 → 13 and `sovereign-contracts` 33 → 34 (the mesh workbench's two leaf reaches, `REVIEW-build-mesh-workbench-deferred`, 2026-09-18)
-
-`REVIEW-build-mesh-workbench-deferred` MOVEs `sovereign-mesh/src/{projects,reindexer}.rs`
-into the code-intel package's `corpus-engine-watchers` (the workbench cluster's
-registry dest, `quality/DOMAINS.toml` `[[cluster]] dest`; §3a). The two moved files
-name two crates `corpus-engine-watchers` did not reach, and both reaches are the
-package's declared surface rather than convenience:
-
-| Dependent | Landed | Why it names the crate |
-|---|---|---|
-| `corpus-engine-scip` | this commit | `reindexer.rs` opens the `ScipGraph`, re-exports it, and calls `scip_export` + `lsp_tier` (behind the `treesitter` feature the module carried at its old home). The crate is the code-intel package's own member (`quality/ARCH_LAYERS.toml` `[[package]] code-intel`), and `corpus-engine` deliberately ships no re-export shim for it (ARCH §8.3). Optional, and the ratchet counts it — the same shape `code-facts` landed at §10.1ae |
-| `sovereign-contracts` | this commit | `projects.rs` derives its registry path from `rebrand::projects_json()` and `reindexer.rs` reads `env::truthy` for its LSP-tier gate. A shared `[[package_leaf]]` (`quality/ARCH_LAYERS.toml`), so the reach stays inside the package closure; naming it directly is `CODE_TOOLING_BOUNDARY.md` §2's repoint away from the `sovereign_core` facade |
-
-The other reaches cost no cap: `code-facts` (a code-intel member, for the overlay
-merge's `facts`/`facts_store`) is untracked; `corpus-engine-notes` and
-`corpus-engine-yield` were already carried; `arc-swap`, `ignore`, `chrono` and
-`serde` are external or untracked. The move also makes `sovereign-mesh`'s own
-`corpus-engine-scip` / `code-facts` / `arc-swap` / `ignore` deps unused in code but
-keeps them in the manifest, so `sovereign-mesh` remains a counted dependent and the
-`corpus-engine-scip` delta is exactly the one new crate.
-
-`quality/baselines/fan_in.tsv` was edited BY HAND, two lines, for §10.1q's reason —
-`--update-baseline` would snapshot the whole tree and absorb unrelated growth
-(PROMPT §7). The caps are `13` and `34`; the landed edges are `13` and `34`. No
-other crate may ride them.
+Work intentionally deferred, so the next engineer inherits a todo list rather
+than a surprise. A big file or a documented gap without an entry is a bug; one
+with an entry is sequenced work. When an entry completes its chronicle moves
+to [`HISTORY.md`](./HISTORY.md) and the row is dropped.
+
+**The live deferral tables and the full acceptance ledger are
+[`../quality/SIZE_DEBT_LEDGER.md`](../quality/SIZE_DEBT_LEDGER.md).** They
+left this file because they are an append-only record keyed to the arch-gate
+workflow — the gate tells you to add a row, and the rows accumulate forever —
+which is a ledger's job and not a map's. `quality/` is where the gate
+baselines already live.
+
+When `cargo xtask arch-gate` reports a NEW oversized file, add a row there and
+re-baseline, or split the file. Three standing classes live in that ledger:
+**Sovereign deferrals** (per-file split debt), **corpus-engine deferrals**
+(files that shrink by carve-out under `corpus-engine/DECOMPOSITION.md` rather
+than by a local split), and the dated **size / fan-in acceptance** rows, each
+naming what the lines bought.
+
+Doc posture: this file states what IS and is gated by `cargo xtask docs-gate`,
+which resolves every repo path it cites. The narrative reconciliation above
+that — drift, capability-reconcile, check-spec — is mesh-side and advisory.

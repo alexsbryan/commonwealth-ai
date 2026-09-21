@@ -1,0 +1,131 @@
+{
+ "service": "YouTube",
+ "source": "ontology-retrieval/spikes/fineprint-data/ota-pga-versions/YouTube/Privacy Policy.md",
+ "verdict": "passed",
+ "reason": "8 published items under 4 matching heading(s) (9 prose items dropped)",
+ "headings_matched": [
+  {
+   "line": 58,
+   "level": 2,
+   "text": "We want you to understand the types of information we collect as you use our services",
+   "span_ends_line": 66
+  },
+  {
+   "line": 74,
+   "level": 2,
+   "text": "Information we collect as you use our services",
+   "span_ends_line": 122
+  },
+  {
+   "line": 180,
+   "level": 2,
+   "text": "You have choices regarding the information we collect and how it's used",
+   "span_ends_line": 186
+  },
+  {
+   "line": 768,
+   "level": 3,
+   "text": "use the information we collect across our services",
+   "span_ends_line": 777
+  }
+ ],
+ "items": [
+  {
+   "item": "terms you search for",
+   "line": 89,
+   "from": "list-item",
+   "raw": "Terms you search for"
+  },
+  {
+   "item": "videos you watch",
+   "line": 90,
+   "from": "list-item",
+   "raw": "Videos you watch"
+  },
+  {
+   "item": "views and interactions with content and ads",
+   "line": 91,
+   "from": "list-item",
+   "raw": "[Views and interactions with content and ads](https://policies.google.com/privacy#footnote-content-views)"
+  },
+  {
+   "item": "voice and audio information",
+   "line": 92,
+   "from": "list-item",
+   "raw": "[Voice and audio information](https://policies.google.com/privacy#footnote-voice-audio-information)"
+  },
+  {
+   "item": "purchase activity",
+   "line": 93,
+   "from": "list-item",
+   "raw": "Purchase activity"
+  },
+  {
+   "item": "people with whom you communicate or share content",
+   "line": 94,
+   "from": "list-item",
+   "raw": "People with whom you communicate or share content"
+  },
+  {
+   "item": "gps and other sensor data from your device",
+   "line": 110,
+   "from": "list-item",
+   "raw": "GPS and other [sensor data from your device](https://policies.google.com/privacy#footnote-sensor-data)"
+  },
+  {
+   "item": "ip address",
+   "line": 111,
+   "from": "list-item",
+   "raw": "[IP address](https://policies.google.com/privacy#footnote-ip)"
+  }
+ ],
+ "item_count": 8,
+ "prose_dropped": [
+  {
+   "item": "activity on third party sites and apps that use our services",
+   "line": 95,
+   "from": "list-item"
+  },
+  {
+   "item": "chrome browsing history you ve synced with your google account",
+   "line": 96,
+   "from": "list-item"
+  },
+  {
+   "item": "activity on google services such as from your searches or places you label like home or work",
+   "line": 112,
+   "from": "list-item"
+  },
+  {
+   "item": "information about things near your device such as wi fi access points cell towers and bluetooth enabled devices",
+   "line": 113,
+   "from": "list-item"
+  },
+  {
+   "item": "when you re signed in to your google account and search on google you can see search results from the public web along with relevant information from the content you have in other google products like gmail or google calendar this can include things like the status of your upcoming flights restaurant and hotel reservations or your photos learn more",
+   "line": 772,
+   "from": "list-item"
+  },
+  {
+   "item": "if you have communicated with someone via gmail and want to add them to a google doc or an event in google calendar google makes it easy to do so by autocompleting their email address when you start to type in their name this feature makes it easier to share things with people you know learn more",
+   "line": 773,
+   "from": "list-item"
+  },
+  {
+   "item": "the google app can use data that you have stored in other google products to show you personalized content depending on your settings for example if you have searches stored in your web app activity the google app can show you news articles and other information about your interests like sports scores based on your activity",
+   "line": 774,
+   "from": "list-item"
+  },
+  {
+   "item": "if you connect your google account to your google home you can manage your information and get things done through the google assistant for example you can add events to your google calendar or get your schedule for the day ask for status updates on your upcoming flight or send information like driving directions to your phone learn more",
+   "line": 775,
+   "from": "list-item"
+  },
+  {
+   "item": "if you re a user in the eu the decisions you make on linking services will affect how certain google services can use the data across our services",
+   "line": 776,
+   "from": "list-item"
+  }
+ ],
+ "min_items": 8
+}

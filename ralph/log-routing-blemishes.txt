@@ -1,0 +1,15 @@
+2026-09-20T16:25:53Z supervisor: director charter loaded from /Users/alexsbryan/dev/commonwealth-ai/ralph/next/routing-blemishes/CHARTER.md
+2026-09-20T16:25:53Z unit rb-simple-trace-label — --model claude-opus-5 --variant high
+2026-09-20T16:25:54Z prompt: ralph/PROMPT.base.md + ralph/next/routing-blemishes/PROMPT.addendum.md sha256=3dba3a10dd96a71e
+2026-09-20T16:42:24Z unit rb-deep-arm-gate-trace — --model claude-opus-5 --variant high
+2026-09-20T16:57:24Z unit rb-stream-dispatch-trace — --model claude-opus-5 --variant high
+2026-09-20T17:04:24Z unit rb-one-refusal-retry — --model claude-opus-5 --variant high
+2026-09-20T17:20:25Z unit rb-document-op-abstention-record — --model claude-opus-5 --variant high
+2026-09-20T17:35:55Z unit rb-generative-returns-what-it-stores — --model claude-opus-5 --variant high
+2026-09-20T17:35:55Z prompt: ralph/PROMPT.base.md + ralph/next/routing-blemishes/PROMPT.addendum.md sha256=8bc31e87d311b9a0
+2026-09-20T17:56:26Z unit REVIEW-build-rb-routed-intent-everywhere — --model claude-opus-5 --variant high
+2026-09-20T18:18:56Z unit REVIEW-build-rb-routing-log-joinable — --model claude-opus-5 --variant high
+2026-09-20T18:54:57Z WARNING: 1 permission auto-rejections — extend opencode.json
+2026-09-20T18:54:57Z unit REVIEW-audit-rb-1 — --model claude-opus-5 --variant high
+campaign: done — done file present
+2026-09-20T19:44:57Z supervisor: campaign DONE
