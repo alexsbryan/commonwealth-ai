@@ -2,7 +2,7 @@
   "bank_name": "ontology-pilot-secret-agent-v1",
   "corpus": "chaos-secret-agent",
   "limit": 0,
-  "started_at_unix": 1789883562,
+  "started_at_unix": 1789963442,
   "results": [
     {
       "question_id": "lookup-wife",
@@ -115,10 +115,10 @@
       ],
       "vector_eligible": true,
       "synth": {
-        "answer": "In the novel, Adolf Verloc’s wife is **Winnie** (also referred to as Mrs. Verloc or Winnie of the Belgravian mansion days).\n\n[Source: The Secret Agent: A Simple Tale]",
+        "answer": "Based on the retrieved passages, Adolf Verloc's wife is **Mrs. Verloc**, who is also referred to as **Winnie** (e.g., \"Adolf,\" \"Winnie made the tea\").\n\nThe text explicitly identifies her relationship and name in several contexts:\n*   She is described as his **\"wife\"** multiple times [Source: The Secret Agent: A Simple Tale].\n*   Her first name is revealed when she calls out to him while he is sitting by the fire: \"**Adolf.**\" Winnie made the tea...[unverified excerpt:  [Source: The Secret Agent: A Simple Tale].\n*   Later, during a conversation about emigration, she says, ]You know I wouldn't... But the man was her husband now...\" confirming their marital bond at that point in the narrative [Source: The Secret Agent: A Simple Tale].\n\nNotably, the passages describe her character as initially appearing respectable and domestic (\"a respectable home,\" \"domestic propriety\") but gradually revealing a darker, more calculating nature regarding her husband's involvement with espionage and his financial dealings. She manages the household while he is away on missions or under suspicion, often displaying a cold pragmatism (e.g., hiding his money when she suspects him of being involved with dangerous figures like Karl Yundt).",
         "reasoning_chars": 0,
-        "stream_wall_ms": 20556,
-        "total_latency_ms": 18010,
+        "stream_wall_ms": 9194,
+        "total_latency_ms": 6906,
         "intent": "KnowledgeQuery",
         "source_origins": [
           "chaos-secret-agent"
@@ -144,7 +144,7 @@
           {
             "fact": "Winnie|Mrs Verloc|Winnie Verloc",
             "present": true,
-            "evidence": "\"In the novel, Adolf Verloc's wife is **Winnie** (also referred to as Mrs. Verloc or Winnie of the Belgravian mansion days).\""
+            "evidence": "\"Adolf.\" Winnie made the tea..."
           }
         ]
       }
@@ -154,41 +154,6 @@
       "category": "k4_whole_story",
       "question": "What is Stevie's family relationship to Winnie Verloc?",
       "retrieved": [
-        {
-          "corpus_id": "chaos-secret-agent",
-          "title": "The Secret Agent: A Simple Tale",
-          "url": null,
-          "score": 0.0,
-          "snippet": "The Secret Agent: A Simple Tale\n\ndrop stealthily into the gutter.\n\nThe evening visitors—the men with collars turned up and soft hats rammed\n\ndown—nodded familiarly to Mrs Verloc, and with a..."
-        },
-        {
-          "corpus_id": "chaos-secret-agent",
-          "title": "The Secret Agent: A Simple Tale",
-          "url": null,
-          "score": 0.0,
-          "snippet": "The Secret Agent: A Simple Tale\n\ntoo.  They were apparent in the\n\nextremely neat and artistic arrangement of her glossy dark hair.  Winnie\n\nhad also other charms: her youth; her full, rounded form;..."
-        },
-        {
-          "corpus_id": "chaos-secret-agent",
-          "title": "The Secret Agent: A Simple Tale",
-          "url": null,
-          "score": 0.0,
-          "snippet": "The Secret Agent: A Simple Tale\n\nideal; he attained it, in fact.\n\n“Of course, we’ll take over your furniture, mother,” Winnie had remarked.\n\nThe lodging-house was to be given up.  It seems it..."
-        },
-        {
-          "corpus_id": "chaos-secret-agent",
-          "title": "The Secret Agent: A Simple Tale",
-          "url": null,
-          "score": 0.0,
-          "snippet": "The Secret Agent: A Simple Tale\n\nbeen able to conceal from herself\n\nthat he was a terrible encumbrance, that poor Stevie.  But in view of\n\nWinnie’s fondness for her delicate brother, and of Mr..."
-        },
-        {
-          "corpus_id": "chaos-secret-agent",
-          "title": "The Secret Agent: A Simple Tale",
-          "url": null,
-          "score": 0.0,
-          "snippet": "The Secret Agent: A Simple Tale\n\nfits (which was encouraging); and\n\nbefore the natural outbursts of impatience on the part of his father he\n\ncould always, in his childhood’s days, run for..."
-        },
         {
           "corpus_id": "chaos-secret-agent",
           "title": "The Secret Agent: A Simple Tale",
@@ -237,6 +202,41 @@
           "url": null,
           "score": 0.0,
           "snippet": "The Secret Agent: A Simple Tale\n\nthe horse-hair arm-chair where Mrs\n\nVerloc’s mother was generally privileged to sit, Karl Yundt giggled\n\ngrimly, with a faint black grimace of a toothless mouth. ..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nlook!  Till three and four o’clock in the morning.  Cold\n\nand ’ungry.  Looking for fares.  Drunks.”\n\nHis jovial purple cheeks bristled with white hairs; and..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\npushing his hands deeper into his\n\npockets with convulsive sympathy.  He could say nothing; for the\n\ntenderness to all pain and all misery, the desire to make the..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nlean thighs moving with ascetic deliberation\n\naway from the light into the obscurity of the open space bordered dimly\n\nby the pointed roofs and the feebly shining..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nfor fundamental\n\ninformation.  This is a sort of economy having all the appearances and\n\nsome of the advantages of prudence.  Obviously it may be good for one not\n\nto..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nas to\n\nstrike the casual passers-by.\n\nBefore the doors of the public-house at the corner, where the profusion\n\nof gas-light reached the height of positive wickedness,..."
         }
       ],
       "source_score": {
@@ -246,12 +246,12 @@
         "ratio": null
       },
       "fact_score": {
-        "matched": [
+        "matched": [],
+        "missing": [
           "brother"
         ],
-        "missing": [],
         "total_expected": 1,
-        "ratio": 1.0
+        "ratio": 0.0
       },
       "embed_ms": 0,
       "search_ms": 0,
@@ -260,36 +260,36 @@
       ],
       "vector_eligible": true,
       "synth": {
-        "answer": "brother\n\nGrounded in the source:\n  \"Her daughter’s future was obviously assured, and even as to her son Stevie she need have no anxiety. She had not been able to conceal from herself that he was a terrible encumbrance, that poor Stevie. But in view of Winnie’s fondness for her delicate brother...\"",
+        "answer": "his only sister\n\nGrounded in the source:\n  CHAPTER VIII — \"Mrs Verloc, his only sister, guardian, and protector, could not pretend\n\nto such depths of insight.\"",
         "reasoning_chars": 0,
-        "stream_wall_ms": 19511,
-        "total_latency_ms": 17196,
+        "stream_wall_ms": 7717,
+        "total_latency_ms": 5475,
         "intent": "KnowledgeQuery",
         "source_origins": [
           "chaos-secret-agent"
         ],
         "retrieved_chunk_count": 12,
         "chunks_fact_score": {
-          "matched": [
+          "matched": [],
+          "missing": [
             "brother"
           ],
-          "missing": [],
           "total_expected": 1,
-          "ratio": 1.0
+          "ratio": 0.0
         },
         "judge_fact_score": {
-          "matched": [
+          "matched": [],
+          "missing": [
             "brother"
           ],
-          "missing": [],
           "total_expected": 1,
-          "ratio": 1.0
+          "ratio": 0.0
         },
         "judge_evidence": [
           {
             "fact": "brother",
-            "present": true,
-            "evidence": "\"She had not been able to conceal from herself that he was a terrible encumbrance, that poor Stevie. But in view of Winnie's fondness for her delicate brother...\""
+            "present": false,
+            "evidence": "(absent)"
           }
         ]
       }
@@ -405,10 +405,10 @@
       ],
       "vector_eligible": true,
       "synth": {
-        "answer": "Brett Street\n\nGrounded in the source:\n  [unverified excerpt: Farther on, on the opposite side of the street, another suspect patch of dim light issued from Mr Verloc’s shop front... The Assistant Commissioner stood observing it across the roadway. By the side of the front window, encumbered by the shadows of nondescript things, the door, standing ajar, let escape on the pavement a narrow, clear streak of gas-light within. Behind the Assistant Commissioner the van and horses, merged into one mass, seemed something alive—a square-backed black monster blocking half the street... Brett Street was not very far away. It branched off, narrow, from the side of an open triangular space surrounded by dark and mysterious houses...]",
+        "answer": "Brett Street\n\nGrounded in the source:\n  [unverified excerpt: Farther on, on the opposite side of the street, another suspect patch of dim light issued from Mr Verloc’s shop front... The Assistant Commissioner stood observing it across the roadway. There could be no mistake. By the side of the front window, encumbered by the shadows of nondescript things, the door, standing ajar, let escape on the pavement a narrow, clear streak of gas-light within. Behind the Assistant Commissioner the van and horses, merged into one mass, seemed something alive—a square-backed black monster blocking half the street... Brett Street was not very far away. It branched off, narrow, from the side of an open triangular space surrounded by dark and mysterious houses...]",
         "reasoning_chars": 0,
-        "stream_wall_ms": 22665,
-        "total_latency_ms": 20298,
+        "stream_wall_ms": 8688,
+        "total_latency_ms": 6595,
         "intent": "KnowledgeQuery",
         "source_origins": [
           "chaos-secret-agent"
@@ -434,7 +434,7 @@
           {
             "fact": "Brett",
             "present": true,
-            "evidence": "\"Brett Street was not very far away. It branched off, narrow, from the side of an open triangular space surrounded by dark and mysterious houses...\""
+            "evidence": "\"Brett Street was not very far away.\""
           }
         ]
       }
@@ -477,21 +477,7 @@
           "title": "The Secret Agent: A Simple Tale",
           "url": null,
           "score": 0.0,
-          "snippet": "The Secret Agent: A Simple Tale\n\nbeen able to conceal from herself\n\nthat he was a terrible encumbrance, that poor Stevie.  But in view of\n\nWinnie’s fondness for her delicate brother, and of Mr..."
-        },
-        {
-          "corpus_id": "chaos-secret-agent",
-          "title": "The Secret Agent: A Simple Tale",
-          "url": null,
-          "score": 0.0,
-          "snippet": "The Secret Agent: A Simple Tale\n\nfits (which was encouraging); and\n\nbefore the natural outbursts of impatience on the part of his father he\n\ncould always, in his childhood’s days, run for..."
-        },
-        {
-          "corpus_id": "chaos-secret-agent",
-          "title": "The Secret Agent: A Simple Tale",
-          "url": null,
-          "score": 0.0,
-          "snippet": "The Secret Agent: A Simple Tale\n\na shilling now and then.  Mr Verloc showed himself\n\nthe most generous of lodgers.  But altogether all that did not amount to\n\nmuch either in the way of gain or..."
+          "snippet": "The Secret Agent: A Simple Tale\n\nin\n\nthe brooding silence of the parlour.\n\nDuring the contact of that unexpected and lingering kiss Mr Verloc,\n\ngripping with both hands the edges of his chair,..."
         },
         {
           "corpus_id": "chaos-secret-agent",
@@ -527,6 +513,20 @@
           "url": null,
           "score": 0.0,
           "snippet": "The Secret Agent: A Simple Tale\n\nextended hand for\n\nsome time before he slapped his brow.\n\n“Money!  Yes!  Yes!  I didn’t know what you meant.”\n\nHe drew out of his breast pocket a new pigskin..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nher “customer stare” to mere\n\nindifference, and faced him across the counter.\n\nHe approached, on his side, confidentially, but not too markedly so.\n\n“Husband at..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nprofessional hope in the\n\nmain, but not without its moral value.  For Chief Inspector Heat was a\n\nservant of justice.  Finding Mr Verloc from home, he felt..."
         }
       ],
       "source_score": {
@@ -550,10 +550,10 @@
       ],
       "vector_eligible": true,
       "synth": {
-        "answer": "The retrieved passages do not describe the murder of Adolf Verloc. They end with Winnie’s mother arriving at the shop and Mrs Verloc inspecting her husband’s pocket-book, but they never show or mention what happens to Mr Verloc afterward—whether he is killed, by whom, or how.\n\nI don’t have reliable information on this from your sources.",
+        "answer": "I couldn't confirm an answer to this against the 12 passages your sources turned up — so rather than guess at something I can't verify from them, I'd flag that instead. If you think it's there, try rephrasing with the specific names or terms involved and I'll take another look.",
         "reasoning_chars": 0,
-        "stream_wall_ms": 18020,
-        "total_latency_ms": 15758,
+        "stream_wall_ms": 11107,
+        "total_latency_ms": 8631,
         "intent": "KnowledgeQuery",
         "source_origins": [
           "chaos-secret-agent"
@@ -681,12 +681,12 @@
         "ratio": null
       },
       "fact_score": {
-        "matched": [],
-        "missing": [
+        "matched": [
           "Observatory"
         ],
+        "missing": [],
         "total_expected": 1,
-        "ratio": 0.0
+        "ratio": 1.0
       },
       "embed_ms": 0,
       "search_ms": 0,
@@ -695,10 +695,10 @@
       ],
       "vector_eligible": true,
       "synth": {
-        "answer": "science\n\nGrounded in the source:\n  CHAPTER II — \"The\n\nsacrosanct fetish of to-day is science.\"",
+        "answer": "Based on the retrieved passages, Mr. Vladimir Verloc's intended target for a series of bomb outrages is **science** (specifically \"learning\" and institutions associated with it), which he describes as \"the sacrosanct fetish of to-day.\" He explicitly states that attacks should be directed against buildings representing this value:\n\n[unverified excerpt: The sacrosanct fetish of to-day is science... Why don't you get some of your friends to go for that wooden-faced panjandrum—eh?] [Source: The Secret Agent: A Simple Tale]\n\nHe argues that while attacking royalty or religion would not work because those fetishes are no longer the primary focus, attacking science will cause a \"howl from all these intellectual idiots\" who believe their material prosperity depends on it. He suggests targeting institutions where professors and intellectuals gather, noting they are \"radicals at heart\" but hold onto this belief blindly. However, he does **not** name a specific building (such as a university hall or laboratory) by proper noun; his target is the abstract concept of scientific institutions in general.\n\nRegarding the actual event mentioned later in the text—a bomb explosion in Greenwich Park—the passage notes: \"No doubt a wicked attempt to blow up the Observatory, they say.\" [Source: The Secret Agent: A Simple Tale] Mr. Verloc dismisses this report as \"hardly credible,\" suggesting the man blew himself up rather than being part of a plot against the Royal Observatory specifically. Thus, while the *intended* philosophical targets are science and its institutions, no single named building is identified as the primary objective of Vladimir's plan within these excerpts.\n\nNot in your sources — from general knowledge: In the novel, Vladimir Verloc does not specify one particular building; his strategy relies on striking at the abstract concept of scientific authority itself. Want me to read any specific section about the Greenwich Park incident or the nature of Verloc's philosophy? It would take about 2 minutes.\n\n---\n*Verification note: these statements could not be confirmed against your sources — treat them as unverified:*\n- the sacrosanct fetish of to-day.\n- The sacrosanct fetish of to-day is science... Why don't you get some of your friends to go for that wooden-faced panjandrum—eh?",
         "reasoning_chars": 0,
-        "stream_wall_ms": 22431,
-        "total_latency_ms": 20218,
+        "stream_wall_ms": 12510,
+        "total_latency_ms": 10670,
         "intent": "KnowledgeQuery",
         "source_origins": [
           "chaos-secret-agent"
@@ -713,18 +713,18 @@
           "ratio": 0.0
         },
         "judge_fact_score": {
-          "matched": [],
-          "missing": [
+          "matched": [
             "Observatory"
           ],
+          "missing": [],
           "total_expected": 1,
-          "ratio": 0.0
+          "ratio": 1.0
         },
         "judge_evidence": [
           {
             "fact": "Observatory",
-            "present": false,
-            "evidence": "(absent)"
+            "present": true,
+            "evidence": "\"No doubt a wicked attempt to blow up the Observatory, they say.\""
           }
         ]
       }
@@ -840,10 +840,10 @@
       ],
       "vector_eligible": true,
       "synth": {
-        "answer": "Chief Inspector Heat holds the rank of **Chief Inspector** [Source: The Secret Agent: A Simple Tale].\n\nThe text explicitly identifies him as \"the right-hand man of the department\" and refers to him throughout by this title, including when he is described as a \"valuable Chief Inspector.\"",
+        "answer": "Chief Inspector\n\nGrounded in the source:\n  CHAPTER VI — \"The Assistant Commissioner watched the bullet head; the points of that\n\nNorse rover’s moustache, falling below the line of the heavy jaw; the\n\nwhole full and pale physiognomy, whose determined character was marred by\n\ntoo much flesh; at the cunning wrinkles radiating from the outer corners\n\nof the eyes—and in that purposeful contemplation of the valuable and\n\ntrusted officer he drew a conviction so sudden that it moved him like an\n\ninspiration.\"",
         "reasoning_chars": 0,
-        "stream_wall_ms": 21105,
-        "total_latency_ms": 18001,
+        "stream_wall_ms": 7001,
+        "total_latency_ms": 4928,
         "intent": "KnowledgeQuery",
         "source_origins": [
           "chaos-secret-agent"
@@ -869,7 +869,7 @@
           {
             "fact": "Chief Inspector",
             "present": true,
-            "evidence": "\"Chief Inspector Heat holds the rank of Chief Inspector\""
+            "evidence": "\"The Assistant Commissioner watched the bullet head...\""
           }
         ]
       }
@@ -987,8 +987,8 @@
       "synth": {
         "answer": "photographs of more or less undressed dancing girls\n\nGrounded in the source:\n  CHAPTER I — \"The window contained photographs of more or less undressed dancing girls;\"",
         "reasoning_chars": 0,
-        "stream_wall_ms": 17324,
-        "total_latency_ms": 15888,
+        "stream_wall_ms": 8258,
+        "total_latency_ms": 4914,
         "intent": "KnowledgeQuery",
         "source_origins": [
           "chaos-secret-agent"
@@ -1130,10 +1130,10 @@
       ],
       "vector_eligible": true,
       "synth": {
-        "answer": "Not in your sources — from general knowledge: Stevie Verloc is not depicted drawing with a compass and pencil; he is portrayed as an excitable, emotionally volatile child who works odd jobs (including driving a cab) to earn money for his sister Winnie.\n\nThe passages describe him as having “a faithful memory of sensations” but forgetting facts like his name and address [Source: The Secret Agent: A Simple Tale]. He exhibits intense compassion (“tenderness to all pain”) that quickly turns into rage when confronted with suffering [Source: The Secret Agent: A Simple Tale], yet there is no mention of artistic activity or technical skills such as using drafting instruments.",
+        "answer": "Not in your sources — from general knowledge: Stevie Verloc is not depicted drawing with a compass and pencil; he is characterized as destitute, peculiar, and prone to sudden whims or outbursts of compassion (such as when he tries to get off the cab box), but there is no mention of him using drafting tools.\n\nWant me to search for details about Stevie's habits or activities?",
         "reasoning_chars": 0,
-        "stream_wall_ms": 32694,
-        "total_latency_ms": 31795,
+        "stream_wall_ms": 12408,
+        "total_latency_ms": 10810,
         "intent": "KnowledgeQuery",
         "source_origins": [
           "chaos-secret-agent"
@@ -1174,35 +1174,35 @@
           "title": "The Secret Agent: A Simple Tale",
           "url": null,
           "score": 0.0,
-          "snippet": "The Secret Agent: A Simple Tale\n\nand their horses, carriages, houses,\n\nservants had to be protected; and the source of their wealth had to be\n\nprotected in the heart of the city and the heart of the..."
+          "snippet": "The Secret Agent: A Simple Tale\n\nthrough a glazed and cheerful corridor on the\n\nfirst floor.  The footman threw open a door, and stood aside.  The feet\n\nof Mr Verloc felt a thick carpet.  The room..."
         },
         {
           "corpus_id": "chaos-secret-agent",
           "title": "The Secret Agent: A Simple Tale",
           "url": null,
           "score": 0.0,
-          "snippet": "The Secret Agent: A Simple Tale\n\ntrod the pavement heavily with his\n\nshiny boots, and his general get-up was that of a well-to-do mechanic in\n\nbusiness for himself.  He might have been anything from..."
+          "snippet": "The Secret Agent: A Simple Tale\n\nchanged the language, and began to\n\nspeak idiomatic English without the slightest trace of a foreign accent.\n\n“Ah!  Yes.  Of course.  Let’s see.  How much did you..."
         },
         {
           "corpus_id": "chaos-secret-agent",
           "title": "The Secret Agent: A Simple Tale",
           "url": null,
           "score": 0.0,
-          "snippet": "The Secret Agent: A Simple Tale\n\nknockers of the doors gleamed as far as the\n\neye could reach, the clean windows shone with a dark opaque lustre.  And\n\nall was still.  But a milk cart rattled noisily..."
+          "snippet": "The Secret Agent: A Simple Tale\n\nsocialist or\n\nanarchist—which is it?”\n\n“Anarchist,” stated Mr Verloc in a deadened tone.\n\n“Bosh!” went on Mr Vladimir, without raising his voice.  “You..."
         },
         {
           "corpus_id": "chaos-secret-agent",
           "title": "The Secret Agent: A Simple Tale",
           "url": null,
           "score": 0.0,
-          "snippet": "The Secret Agent: A Simple Tale\n\nadministration.  Mr Verloc did not trouble his head about it,\n\nhis mission in life being the protection of the social mechanism, not its\n\nperfectionment or even its..."
+          "snippet": "The Secret Agent: A Simple Tale\n\nwas still Ambassador in Paris.  Then by his\n\nExcellency’s instructions I settled down in London.  I am English.”\n\n“You are!  Are you?  Eh?”\n\n“A natural-born..."
         },
         {
           "corpus_id": "chaos-secret-agent",
           "title": "The Secret Agent: A Simple Tale",
           "url": null,
           "score": 0.0,
-          "snippet": "The Secret Agent: A Simple Tale\n\nwhisker on each side of a pair of wrinkled\n\nhands.  The person who had entered was holding a batch of papers before\n\nhis eyes and walked up to the table with a rather..."
+          "snippet": "The Secret Agent: A Simple Tale\n\nsee I gave a warning only three\n\nmonths ago, on the occasion of the Grand Duke Romuald’s visit to Paris,\n\nwhich was telegraphed from here to the French police,..."
         },
         {
           "corpus_id": "chaos-secret-agent",
@@ -1261,12 +1261,12 @@
         "ratio": null
       },
       "fact_score": {
-        "matched": [],
-        "missing": [
+        "matched": [
           "Stott-Wartenheim"
         ],
+        "missing": [],
         "total_expected": 1,
-        "ratio": 0.0
+        "ratio": 1.0
       },
       "embed_ms": 0,
       "search_ms": 0,
@@ -1275,10 +1275,10 @@
       ],
       "vector_eligible": true,
       "synth": {
-        "answer": "The old Baron\n\nGrounded in the source:\n  CHAPTER XI — \"The old Baron knew what I was worth\n\nto his country.\"",
+        "answer": "Baron Stott-Wartenheim\n\nGrounded in the source:\n  CHAPTER II — \"“Ever since the time of the late Baron Stott-Wartenheim,” Mr Verloc\n\nanswered in subdued tones, and protruding his lips sadly, in sign of\n\nsorrow for the deceased diplomat.\"",
         "reasoning_chars": 0,
-        "stream_wall_ms": 19261,
-        "total_latency_ms": 16503,
+        "stream_wall_ms": 7972,
+        "total_latency_ms": 5498,
         "intent": "KnowledgeQuery",
         "source_origins": [
           "chaos-secret-agent"
@@ -1304,7 +1304,7 @@
           {
             "fact": "Stott-Wartenheim",
             "present": true,
-            "evidence": "\"The old Baron knew what I was worth to his country.\""
+            "evidence": "\"Baron Stott-Wartenheim\""
           }
         ]
       }
@@ -1420,10 +1420,10 @@
       ],
       "vector_eligible": true,
       "synth": {
-        "answer": "The Professor carries a detonator in his left trouser pocket.\n\n[Source: The Secret Agent: A Simple Tale]",
+        "answer": "Based on the provided passages, there is a fundamental contradiction in your question's premise that must be corrected first: **The Professor does not carry an explosive detonator strapped to his body.**\n\nAccording to the text, the explosives were placed inside a shop owned by Verloc. The Professor carried only a small device intended for use as a \"detonator,\" which he had prepared but did not strap to himself or wear on his person during the incident described.\n\nHere are the specific details supported by the sources regarding what was actually involved:\n\n*   **What the Professor Carried:** The Professor carried a **\"thin tube of tin\"** enclosing a mechanism designed to combine time and shock [Source: The Secret Agent: A Simple Tale]. This tube contained a connection point that would be made when screwed tight; if left unscrewed, it remained inert until a sharp physical shock occurred.\n*   **The Explosives' Location:** The explosives themselves were packed inside an **\"old one-gallon copal varnish can.\"** Inside this can was a \"wide-mouthed, well-corked jar of thick glass\" containing sixteen ounces of X2 green powder, surrounded by wet clay [Source: The Secret Agent: A Simple Tale].\n*   **What Happened:** Verloc took the Professor's prepared device and attached it to the explosive can in his shop. When Verloc forgot to screw the top on tightly (making the connection) or dropped the item, the contact was made, resulting in an explosion that killed him [Source: The Secret Agent: A Simple Tale].\n\nThe text explicitly states regarding the detonator mechanism itself: [unverified excerpt: It was ingenious—a combination of time and shock... It was a thin tube of tin enclosing a—] [Source: The Secret Agent: A Simple Tale]. There is no mention anywhere in these passages of the Professor having explosives strapped to his body or carrying a full set of explosives for personal use at this moment; he only carried the prepared detonator component which Verloc misused.\n\nNot in your sources — from general knowledge: No further details can be added as the provided text does not describe any other items in the Professor's pocket beyond the described tin tube, nor does it depict him wearing explosives on his person. Want me to search for additional context regarding the specific contents of the Professor's pockets if they are mentioned elsewhere?\n\n---\n*Verification note: these statements could not be confirmed against your sources — treat them as unverified:*\n- Verloc attached the Professor's device to the explosive can and forgot to screw it tightly.\n- An explosion occurred when contact was made, killing Verloc.\n- The Professor carried only a small device intended for use as a \"detonator,\" which he had prepared but did not strap to himself or wear on his person during the…\n- According to the text, the explosives were placed inside a shop owned by Verloc.\n- There is no mention anywhere in these passages of the Professor having explosives strapped to his body or carrying a full set of explosives for personal use at …",
         "reasoning_chars": 0,
-        "stream_wall_ms": 32286,
-        "total_latency_ms": 29857,
+        "stream_wall_ms": 14467,
+        "total_latency_ms": 12445,
         "intent": "KnowledgeQuery",
         "source_origins": [
           "chaos-secret-agent"
@@ -1551,12 +1551,12 @@
         "ratio": null
       },
       "fact_score": {
-        "matched": [
+        "matched": [],
+        "missing": [
           "almshouse"
         ],
-        "missing": [],
         "total_expected": 1,
-        "ratio": 1.0
+        "ratio": 0.0
       },
       "embed_ms": 0,
       "search_ms": 0,
@@ -1565,10 +1565,10 @@
       ],
       "vector_eligible": true,
       "synth": {
-        "answer": "almshouses\n\nGrounded in the source:\n  CHAPTER VII — \"Having infused by persistent importunities some sort of heat into the\n\nchilly interest of several licensed victuallers (the acquaintances once\n\nupon a time of her late unlucky husband), Mrs Verloc’s mother had at last\n\nsecured her admission to certain almshouses founded by a wealthy\n\ninnkeeper for the destitute widows of the trade.\"",
+        "answer": "I couldn't confirm an answer to this against the 12 passages your sources turned up — so rather than guess at something I can't verify from them, I'd flag that instead. If you think it's there, try rephrasing with the specific names or terms involved and I'll take another look.",
         "reasoning_chars": 0,
-        "stream_wall_ms": 29914,
-        "total_latency_ms": 27203,
+        "stream_wall_ms": 16050,
+        "total_latency_ms": 13487,
         "intent": "KnowledgeQuery",
         "source_origins": [
           "chaos-secret-agent"
@@ -1583,18 +1583,18 @@
           "ratio": 0.0
         },
         "judge_fact_score": {
-          "matched": [
+          "matched": [],
+          "missing": [
             "almshouse"
           ],
-          "missing": [],
           "total_expected": 1,
-          "ratio": 1.0
+          "ratio": 0.0
         },
         "judge_evidence": [
           {
             "fact": "almshouse",
-            "present": true,
-            "evidence": "\"secured her admission to certain almshouses founded by a wealthy innkeeper for the destitute widows of the trade.\""
+            "present": false,
+            "evidence": "(absent)"
           }
         ]
       }
@@ -1604,27 +1604,6 @@
       "category": "k0_look_it_up",
       "question": "According to Mr Vladimir, what 'sacrosanct fetish' of the modern age should an outrage be aimed at, to most scandalise the public?",
       "retrieved": [
-        {
-          "corpus_id": "chaos-secret-agent",
-          "title": "The Secret Agent: A Simple Tale",
-          "url": null,
-          "score": 0.0,
-          "snippet": "The Secret Agent: A Simple Tale\n\nface and figure.  The fellow was\n\nunexpectedly vulgar, heavy, and impudently unintelligent.  He looked\n\nuncommonly like a master plumber come to present his bill. ..."
-        },
-        {
-          "corpus_id": "chaos-secret-agent",
-          "title": "The Secret Agent: A Simple Tale",
-          "url": null,
-          "score": 0.0,
-          "snippet": "The Secret Agent: A Simple Tale\n\nthe\n\nfirst humbugging rascal that came along, thought Mr Vladimir, smiling\n\nvaguely at Mr Verloc.\n\n“You ought to venerate the memory of Baron Stott-Wartenheim,”..."
-        },
-        {
-          "corpus_id": "chaos-secret-agent",
-          "title": "The Secret Agent: A Simple Tale",
-          "url": null,
-          "score": 0.0,
-          "snippet": "The Secret Agent: A Simple Tale\n\nIt’s intolerable to think that all your friends have got only\n\nto come over to—”\n\n“In that way I have them all under my eye,” Mr Verloc..."
-        },
         {
           "corpus_id": "chaos-secret-agent",
           "title": "The Secret Agent: A Simple Tale",
@@ -1644,14 +1623,7 @@
           "title": "The Secret Agent: A Simple Tale",
           "url": null,
           "score": 0.0,
-          "snippet": "The Secret Agent: A Simple Tale\n\nthe class you are attacking are\n\nsoon blunted.  Property seems to them an indestructible thing.  You can’t\n\ncount upon their emotions either of pity or fear for..."
-        },
-        {
-          "corpus_id": "chaos-secret-agent",
-          "title": "The Secret Agent: A Simple Tale",
-          "url": null,
-          "score": 0.0,
-          "snippet": "The Secret Agent: A Simple Tale\n\nwould be above suspicion, no material\n\ninterests being openly at stake, and it will alarm every selfishness of\n\nthe class which should be impressed.  They believe..."
+          "snippet": "The Secret Agent: A Simple Tale\n\ngot out of the house, he saw with disgust the “confounded\n\npoliceman” still standing on the pavement.\n\n“Can he be waiting for me,” thought Mr Vladimir,..."
         },
         {
           "corpus_id": "chaos-secret-agent",
@@ -1665,28 +1637,105 @@
           "title": "The Secret Agent: A Simple Tale",
           "url": null,
           "score": 0.0,
-          "snippet": "The Secret Agent: A Simple Tale\n\nsome time between the bedroom and the\n\ndressing-room, changing his clothes, going to and fro with the air of a\n\nthoughtful somnambulist.  But he shook it off before..."
+          "snippet": "The Secret Agent: A Simple Tale\n\nthe\n\nfirst humbugging rascal that came along, thought Mr Vladimir, smiling\n\nvaguely at Mr Verloc.\n\n“You ought to venerate the memory of Baron Stott-Wartenheim,”..."
         },
         {
           "corpus_id": "chaos-secret-agent",
           "title": "The Secret Agent: A Simple Tale",
           "url": null,
           "score": 0.0,
-          "snippet": "The Secret Agent: A Simple Tale\n\nThe Assistant Commissioner knew the lady.\n\n“You do not look frightened,” he pronounced, after surveying her\n\nconscientiously with his tired and equable gaze.  He..."
+          "snippet": "The Secret Agent: A Simple Tale\n\nchanged the language, and began to\n\nspeak idiomatic English without the slightest trace of a foreign accent.\n\n“Ah!  Yes.  Of course.  Let’s see.  How much did you..."
         },
         {
           "corpus_id": "chaos-secret-agent",
           "title": "The Secret Agent: A Simple Tale",
           "url": null,
           "score": 0.0,
-          "snippet": "The Secret Agent: A Simple Tale\n\nslightly in his chair.\n\n“You mean that we have a great experience of these people.  Yes; indeed,\n\nwe suffer greatly from their activity, while you”—Mr Vladimir..."
+          "snippet": "The Secret Agent: A Simple Tale\n\nthe class you are attacking are\n\nsoon blunted.  Property seems to them an indestructible thing.  You can’t\n\ncount upon their emotions either of pity or fear for..."
         },
         {
           "corpus_id": "chaos-secret-agent",
           "title": "The Secret Agent: A Simple Tale",
           "url": null,
           "score": 0.0,
-          "snippet": "The Secret Agent: A Simple Tale\n\ngot out of the house, he saw with disgust the “confounded\n\npoliceman” still standing on the pavement.\n\n“Can he be waiting for me,” thought Mr Vladimir,..."
+          "snippet": "The Secret Agent: A Simple Tale\n\nIt’s intolerable to think that all your friends have got only\n\nto come over to—”\n\n“In that way I have them all under my eye,” Mr Verloc..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\ndifferences.  He drew them with\n\na certain complacency, because the instinct of conventional\n\nrespectability was strong within him, being only overcome by his..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nface and figure.  The fellow was\n\nunexpectedly vulgar, heavy, and impudently unintelligent.  He looked\n\nuncommonly like a master plumber come to present his bill. ..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nin unfeigned\n\nastonishment.  “Married!  And you a professed anarchist, too!  What is\n\nthis confounded nonsense?  But I suppose it’s merely a manner of\n\nspeaking. ..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\ntypical.”\n\n“What’s very good?” grunted inquiringly Mr Verloc, settled again in the\n\ncorner of the sofa.  The other explained his meaning negligently, with..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nthe force of economic\n\nconditions.  Capitalism has made socialism, and the laws made by the\n\ncapitalism for the protection of property are responsible for..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nhe had spent most of his time sitting in the tap-room of an\n\nobscure little public-house, he could hardly have hoped for such\n\nfavourable news.\n\n“That’s the..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nadded with the same leisurely\n\nassurance: “To break up the superstition and worship of legality should\n\nbe our aim.  Nothing would please me more than to see..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nbut I’ve always felt that we ought to\n\nbe good Europeans besides—I mean governments and men.”\n\n“Yes,” said the Assistant Commissioner simply.  “Only you..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nair of gracious resolution; a clean-shaved\n\nindividual with sunken cheeks, and dangling a gold-mounted eyeglass on a\n\nbroad black ribbon with an old-world, dandified..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nto copy this detachment.\n\n“If the police here knew their business they would shoot you full of\n\nholes with revolvers, or else try to sand-bag you from behind in..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nthere’s somebody over at your shop who\n\nthinks that the Secretary of State may be trusted now and then.”\n\nThe Assistant Commissioner had an amused smile.\n\n“I..."
         }
       ],
       "source_score": {
@@ -1712,13 +1761,13 @@
       "synth": {
         "answer": "science\n\nGrounded in the source:\n  CHAPTER II — \"The\n\nsacrosanct fetish of to-day is science.\"",
         "reasoning_chars": 0,
-        "stream_wall_ms": 24371,
-        "total_latency_ms": 21101,
-        "intent": "KnowledgeQuery",
+        "stream_wall_ms": 10854,
+        "total_latency_ms": 8479,
+        "intent": "DeepQuery",
         "source_origins": [
           "chaos-secret-agent"
         ],
-        "retrieved_chunk_count": 12,
+        "retrieved_chunk_count": 19,
         "chunks_fact_score": {
           "matched": [
             "science"
@@ -1857,8 +1906,8 @@
       "synth": {
         "answer": "the infirm and lonely steed\n\nGrounded in the source:\n  CHAPTER VIII — \"The contemplation of the infirm and lonely steed overcame him.\"",
         "reasoning_chars": 0,
-        "stream_wall_ms": 27891,
-        "total_latency_ms": 24334,
+        "stream_wall_ms": 9050,
+        "total_latency_ms": 6597,
         "intent": "KnowledgeQuery",
         "source_origins": [
           "chaos-secret-agent"
@@ -2000,10 +2049,10 @@
       ],
       "vector_eligible": true,
       "synth": {
-        "answer": "Mr Verloc receives the anarchist circle in his **drawing-room** (also referred to as a drawing room or parlour), which is located at the back of his shop.\n\nThe passages describe this space explicitly: \"Through the open door of the parlour at the back of the shop Winnie, his sister, glanced at him from time to time with maternal vigilance\" and later mention Mr Vladimir's visit where he sat in an armchair within that same room [Source: The Secret Agent: A Simple Tale].",
+        "answer": "Based on the provided passages, there is no mention of a specific room behind Verloc's shop where he receives an anarchist circle. The text describes his meeting with Mr. Vladimir taking place in \"an arm-chair\" within what appears to be a drawing-room or parlour setting ([unverified excerpt: Through the open door of the parlour at the back of the shop Winnie... glanced at him]), but it does not explicitly state this location was used for receiving the broader anarchist group.\n\nThe passages do confirm that:\n*   There is a **shop** selling stationery and newspapers located in Soho [Source: The Secret Agent: A Simple Tale].\n*   Behind the shop, there are basement stairs leading down where Verloc's political work takes place [Source: The Secret Agent: A Simple Tale].\n*   Mr. Vladimir meets with Verloc in an armchair, likely within the domestic quarters (parlour) accessible from behind the shop front [Source: The Secret Agent: A Simple Tale].\n\nNot in your sources — I cannot identify the specific room name for receiving the circle; want me to search web results for this detail?",
         "reasoning_chars": 0,
-        "stream_wall_ms": 20727,
-        "total_latency_ms": 18278,
+        "stream_wall_ms": 7891,
+        "total_latency_ms": 5628,
         "intent": "KnowledgeQuery",
         "source_origins": [
           "chaos-secret-agent"
@@ -2029,7 +2078,7 @@
           {
             "fact": "parlour",
             "present": true,
-            "evidence": "\"Through the open door of the parlour at the back of the shop Winnie, his sister, glanced at him from time to time with maternal vigilance\""
+            "evidence": "\"Through the open door of the parlour at the back of the shop Winnie... glanced at him\""
           }
         ]
       }
@@ -2148,10 +2197,10 @@
       ],
       "vector_eligible": true,
       "synth": {
-        "answer": "The retrieved passages do not list every single member who attended meetings there during the period covered in the narrative.\n\n**Members explicitly named as present at or associated with the secret fund/parlour:**\n*   **Mr Verloc (Adolf Verloc)** – The shopkeeper and central figure [Source: The Secret Agent: A Simple Tale].\n*   **Comrade Ossipon** – Described as “the robust anarchist” whose glance had a corrupt clearness sufficient to enlighten any woman not absolutely imbecile; he is mentioned as having passed through Mrs Verloc’s house, implying presence within their domestic sphere which includes the parlour/shop space [Source: The Secret Agent: A Simple Tale].\n*   **The old terrorist Yundt** – Identified as being present in Piccadilly wearing his green havelock almost every day; Mr Vladimir notes him specifically when discussing who has the gang under control [Source: The Secret Agent: A Simple Tale].\n*   **Michaelis (the ticket-of-leave apostle)** – Mentioned by name alongside Yundt as someone whose location was known to Mr Vladimir and presumably part of the circle operating from that base [Source: The Secret Agent: A Simple Tale].\n\n**Members mentioned but not confirmed as physically present at a specific meeting:**\n*   **“The whole Lausanne lot”** – Described as having been “flocking over here” in response to news of the Milan Conference, implying they were arriving or had arrived; however, no passage confirms their presence inside the parlour during any particular gathering [Source: The Secret Agent: A Simple Tale].\n*   **Mr Vladimir (Vladimir Trigorin)** – While he is clearly an anarchist (“the First Secretary”) who meets with Verloc and gives him instructions for dynamite outrages, the passages describe his meetings taking place elsewhere (implied by Mr Verloc’s exit through side doors after leaving a room where Vladimir was seated), not specifically within the shop/parlour behind the stationery store [Source: The Secret Agent: A Simple Tale].\n\n**Not in your sources — from general knowledge:**  \nThe full roster of members meeting regularly at that specific location during any given week or month cannot be determined from these excerpts.",
+        "answer": "Based on the provided passages, there is no mention of a specific \"anarchist circle\" meeting in a parlour behind Verloc's shop. The text describes Mr. Vladimir (the First Secretary) visiting Mr. Verloc at his stationery and newspaper shop to discuss anarchist tactics, such as bombing the first meridian or attacking science [Source: The Secret Agent: A Simple Tale]. It also mentions other individuals associated with the movement who are known to be present or active, including Comrade Ossipon, Michaelis (a ticket-of-leave apostle), Yundt, and members referred to collectively as \"the whole Lausanne lot,\" but it does not describe them gathering for a formal meeting in a parlour located behind the shop [Source: The Secret Agent: A Simple Tale].\n\nThe only location described where an anarchist-related event occurs is inside Mr. Verloc's own domestic space—the kitchen and parlour of his home—where Mrs. Verloc contemplates her husband taking Stevie away to murder him [Source: The Secret Agent: A Simple Tale]. This scene involves no other anarchists present except perhaps mentally or in memory; Ossipon is mentioned only as someone whose glance had previously corrupted Winnie, not as being physically there at that moment [Source: The Secret Agent: A Simple Tale].\n\nI don't have reliable information on this specific meeting arrangement from your sources. Want me to search the web for details about the plot of *The Secret Agent* regarding anarchist gatherings?",
         "reasoning_chars": 0,
-        "stream_wall_ms": 48645,
-        "total_latency_ms": 45781,
+        "stream_wall_ms": 8454,
+        "total_latency_ms": 6206,
         "intent": "KnowledgeQuery",
         "source_origins": [
           "chaos-secret-agent"
@@ -2182,12 +2231,12 @@
           {
             "fact": "Michaelis",
             "present": true,
-            "evidence": "\"Michaelis (the ticket-of-leave apostle) – Mentioned by name alongside Yundt as someone whose location was known to Mr Vladimir and presumably part of the circle operating from that base\""
+            "evidence": "...including Comrade Ossipon, Michaelis (a ticket-of-leave apostle), Yundt..."
           },
           {
             "fact": "Ossipon",
             "present": true,
-            "evidence": "\"Comrade Ossipon – Described as “the robust anarchist” whose glance had a corrupt clearness sufficient to enlighten any woman not absolutely imbecile; he is mentioned as having passed through Mrs Verloc’s house, implying presence within their domestic sphere which includes the parlour/shop space\""
+            "evidence": "\"including Comrade Ossipon, Michaelis (a ticket-of-leave apostle), Yundt...\""
           },
           {
             "fact": "Professor",
@@ -2310,10 +2359,10 @@
       ],
       "vector_eligible": true,
       "synth": {
-        "answer": "**Retrieved from your sources:**\n\nThe following police officials are explicitly named as working on the Greenwich investigation:\n\n1. **Chief Inspector Heat** – He is described as a \"renowned subordinate\" of his superior, leading investigations and managing officers in the Special Crimes section [Source: The Secret Agent: A Simple Tale]. His men have been tasked with watching Verloc and tracking anarchists [Source: The Secret Agent: A Simple Tale].\n\n2. **Assistant Commissioner (unnamed)** – This character serves as Chief Inspector Heat’s immediate superior; he oversees the case, receives reports, and directs further inquiries including tracing an escaped suspect [Source: The Secret Agent: A Simple Tale].\n\n3. **The old woman** – She provided testimony to police sergeant in Greenwich regarding two men seen at Maze Hill Station [Source: The Secret Agent: A Simple Tale]. While not a formal officer, she is treated by the Assistant Commissioner as a witness whose account may be relevant (\"unless on the ground of sudden inspiration\") [Source: The Secret Agent: A Simple Tale].\n\n4. **Ticket collectors and porters** (unnamed) – These railway workers were instructed to provide details about appearance and ticket inspection for the investigation; one porter specifically remembered \"two chaps answering to the description\" passing through Maze Hill Station [Source: The Secret Agent: A Simple Tale].\n\n5. **The unpaid private secretary** – He served as an intermediary between the Assistant Commissioner and Sir Ethelred, though he was not part of the police force itself [Source: The Secret Agent: A Simple Tale].\n\n6. **Permanent Under-Secretary** – Mentioned by the Secretary’s assistant as having met with the great personage earlier that day regarding the Greenwich affair [Source: The Secret Agent: A Simple Tale].\n\n7. **Secretary of State (unnamed)** – Referred to indirectly when the Assistant Commissioner remarks on making him \"look a fool\" in connection with assurances about dynamite campaigns; this is clearly a senior political figure rather than a police official [Source: The Secret Agent: A Simple Tale].\n\n8. **Sir Ethelred** – Though not explicitly identified as holding a specific title, he appears to be a high-ranking government official consulted by the Assistant Commissioner regarding the case; his description (\"great personage,\" [unverified excerpt: unbroken record... surpassed in number of centuries]) suggests significant status but no explicit rank or departmental affiliation is given [Source: The Secret Agent: A Simple Tale].\n\n---\n\n*Not in your sources — from general knowledge:* Verloc himself was an anarchist and spy working for the Russian revolutionary movement (the Revolutionary International Council), though he operated outside formal police structures until discovered through Heat’s surveillance network.\n\n---\n*Verification note: these statements could not be confirmed against your sources — treat them as unverified:*\n- Ticket collectors and porters (unnamed) – These railway workers were instructed to provide details about appearance and ticket inspection for the investigation\n- Sir Ethelred – Though not explicitly identified as holding a specific title, he appears to be a high-ranking government official consulted by the Assistant Comm…",
+        "answer": "Based on the retrieved passages, there are three police officials explicitly identified as working on or directly involved in the Greenwich investigation:\n\n1.  **Chief Inspector Heat**: He is described as a \"renowned subordinate\" and holds the position of Chief Inspector [Source: The Secret Agent: A Simple Tale]. His specific role involves conducting field investigations; he personally interrogated Professor Verloc at his shop, gathered testimony from an old woman regarding two men leaving Maze Hill Station, inspected railway tickets, and monitored Mr. Verloc's movements through Special Crimes section officers stationed at Charing Cross and Victoria [Source: The Secret Agent: A Simple Tale].\n2.  **The Assistant Commissioner**: He serves as the superior officer to Chief Inspector Heat [Source: The Secret Agent: A Simple Tale]. His holding includes managing departmental affairs, reviewing reports on anarchists (which were described as \"exactly accounted for\"), overseeing the investigation into the Greenwich explosion, and consulting with high-ranking government officials like Sir Ethelred [Source: The Secret Agent: A Simple Tale].\n3.  **Special Crimes Section Officers**: These are unnamed personnel who work under Chief Inspector Heat's command [Source: The Secret Agent: A Simple Tale]. They hold specific duties of taking careful notice of anyone seen with Professor Verloc at Charing Cross and Victoria stations and keeping track of him to provide addresses when needed [Source: The Secret Agent: A Simple Tale].\n\nNot in your sources, but from general knowledge: Other minor characters such as the \"old woman\" (a ticket collector/porter witness) or the \"unpaid private secretary\" assist the investigation but do not hold official police ranks. Want me to read a specific section of *The Secret Agent* regarding the character list? It would take about 2 minutes.",
         "reasoning_chars": 0,
-        "stream_wall_ms": 39222,
-        "total_latency_ms": 36688,
+        "stream_wall_ms": 12392,
+        "total_latency_ms": 10352,
         "intent": "KnowledgeQuery",
         "source_origins": [
           "chaos-secret-agent"
@@ -2332,29 +2381,28 @@
         "judge_fact_score": {
           "matched": [
             "Chief Inspector",
-            "Assistant"
-          ],
-          "missing": [
+            "Assistant",
             "Commissioner"
           ],
+          "missing": [],
           "total_expected": 3,
-          "ratio": 0.6666667
+          "ratio": 1.0
         },
         "judge_evidence": [
           {
             "fact": "Chief Inspector",
             "present": true,
-            "evidence": "**Chief Inspector Heat** – He is described as a \"renowned subordinate\" of his superior, leading investigations and managing officers in the Special Crimes section"
+            "evidence": "**Chief Inspector Heat**: He is described as a 'renowned subordinate' and holds the position of Chief Inspector"
           },
           {
             "fact": "Assistant",
             "present": true,
-            "evidence": "\"Assistant Commissioner (unnamed) – This character serves as Chief Inspector Heat's immediate superior; he oversees the case, receives reports, and directs further inquiries including tracing an escaped suspect\""
+            "evidence": "\"The Assistant Commissioner: He serves as the superior officer to Chief Inspector Heat\""
           },
           {
             "fact": "Commissioner",
-            "present": false,
-            "evidence": "(absent)"
+            "present": true,
+            "evidence": "\"The Assistant Commissioner: He serves as the superior officer to Chief Inspector Heat\""
           }
         ]
       }
@@ -2456,14 +2504,15 @@
         "ratio": null
       },
       "fact_score": {
-        "matched": [],
-        "missing": [
+        "matched": [
           "Winnie",
-          "Stevie",
           "Verloc"
         ],
+        "missing": [
+          "Stevie"
+        ],
         "total_expected": 3,
-        "ratio": 0.0
+        "ratio": 0.6666667
       },
       "embed_ms": 0,
       "search_ms": 0,
@@ -2472,10 +2521,10 @@
       ],
       "vector_eligible": true,
       "synth": {
-        "answer": "I couldn't confirm an answer to this against the 12 passages your sources turned up — so rather than guess at something I can't verify from them, I'd flag that instead. If you think it's there, try rephrasing with the specific names or terms involved and I'll take another look.",
+        "answer": "The retrieved passages do not state who lives in the household behind Mr. Verloc's shop at Brett Street; they only describe Mrs. Verloc and her mother as living *in* or associated with that specific domestic space (the parlour behind the shop), while noting elsewhere that she had secured an almshouse for widows, implying a separation of residences [Source: The Secret Agent: A Simple Tale].\n\nNot in your sources — from general knowledge: In Joseph Conrad’s novel *The Secret Agent*, the household consists primarily of Winnie Verloc (Mrs. Verloc) and her husband Stephen Vermorel (Mr. Verloc). After Stephen is murdered by his own hand, Winnie lives alone until Comrade Ossipon arrives to help her escape later in the narrative. Her mother visits frequently but does not reside permanently with them; instead, she secures lodging in almshouses for destitute widows after spending money on travel to see Winnie [General Knowledge].\n\nWant me to search for a specific scene or character detail you're interested in?",
         "reasoning_chars": 0,
-        "stream_wall_ms": 30908,
-        "total_latency_ms": 28610,
+        "stream_wall_ms": 11871,
+        "total_latency_ms": 9840,
         "intent": "KnowledgeQuery",
         "source_origins": [
           "chaos-secret-agent"
@@ -2493,20 +2542,21 @@
           "ratio": 0.33333334
         },
         "judge_fact_score": {
-          "matched": [],
-          "missing": [
+          "matched": [
             "Winnie",
-            "Stevie",
             "Verloc"
           ],
+          "missing": [
+            "Stevie"
+          ],
           "total_expected": 3,
-          "ratio": 0.0
+          "ratio": 0.6666667
         },
         "judge_evidence": [
           {
             "fact": "Winnie",
-            "present": false,
-            "evidence": "(absent)"
+            "present": true,
+            "evidence": "\"In Joseph Conrad's novel The Secret Agent, the household consists primarily of Winnie Verloc (Mrs. Verloc)\""
           },
           {
             "fact": "Stevie",
@@ -2515,8 +2565,8 @@
           },
           {
             "fact": "Verloc",
-            "present": false,
-            "evidence": "(absent)"
+            "present": true,
+            "evidence": "\"The retrieved passages do not state who lives in the household behind Mr. Verloc's shop at Brett Street...\""
           }
         ]
       }
@@ -2580,35 +2630,35 @@
           "title": "The Secret Agent: A Simple Tale",
           "url": null,
           "score": 0.0,
-          "snippet": "The Secret Agent: A Simple Tale\n\nthrough a glazed and cheerful corridor on the\n\nfirst floor.  The footman threw open a door, and stood aside.  The feet\n\nof Mr Verloc felt a thick carpet.  The room..."
+          "snippet": "The Secret Agent: A Simple Tale\n\na glance, half arch, half cruel, out of her\n\nlarge eyes—a glance of which the Winnie of the Belgravian mansion days\n\nwould have been incapable, because of her..."
         },
         {
           "corpus_id": "chaos-secret-agent",
           "title": "The Secret Agent: A Simple Tale",
           "url": null,
           "score": 0.0,
-          "snippet": "The Secret Agent: A Simple Tale\n\nchanged the language, and began to\n\nspeak idiomatic English without the slightest trace of a foreign accent.\n\n“Ah!  Yes.  Of course.  Let’s see.  How much did you..."
+          "snippet": "The Secret Agent: A Simple Tale\n\ntime acquired a\n\nbewildered and harassed expression.  He walked straight to the sofa, and\n\nstood looking down at his overcoat lying there, as though he were..."
         },
         {
           "corpus_id": "chaos-secret-agent",
           "title": "The Secret Agent: A Simple Tale",
           "url": null,
           "score": 0.0,
-          "snippet": "The Secret Agent: A Simple Tale\n\nsocialist or\n\nanarchist—which is it?”\n\n“Anarchist,” stated Mr Verloc in a deadened tone.\n\n“Bosh!” went on Mr Vladimir, without raising his voice.  “You..."
+          "snippet": "The Secret Agent: A Simple Tale\n\nsilent smile.  He had a kindly mouth and\n\nprobing eyes.  And he shook his head a little sadly, it seemed.\n\n“My husband will see you through all right.  Meantime for..."
         },
         {
           "corpus_id": "chaos-secret-agent",
           "title": "The Secret Agent: A Simple Tale",
           "url": null,
           "score": 0.0,
-          "snippet": "The Secret Agent: A Simple Tale\n\nwas still Ambassador in Paris.  Then by his\n\nExcellency’s instructions I settled down in London.  I am English.”\n\n“You are!  Are you?  Eh?”\n\n“A natural-born..."
+          "snippet": "The Secret Agent: A Simple Tale\n\nuse of a\n\nhat.\n\n“Well—he’s waiting for you,” said Mrs Verloc at last.  “I say, Adolf, he\n\nain’t one of them Embassy people you have been bothered with of..."
         },
         {
           "corpus_id": "chaos-secret-agent",
           "title": "The Secret Agent: A Simple Tale",
           "url": null,
           "score": 0.0,
-          "snippet": "The Secret Agent: A Simple Tale\n\nsee I gave a warning only three\n\nmonths ago, on the occasion of the Grand Duke Romuald’s visit to Paris,\n\nwhich was telegraphed from here to the French police,..."
+          "snippet": "The Secret Agent: A Simple Tale\n\nextended hand for\n\nsome time before he slapped his brow.\n\n“Money!  Yes!  Yes!  I didn’t know what you meant.”\n\nHe drew out of his breast pocket a new pigskin..."
         }
       ],
       "source_score": {
@@ -2634,16 +2684,25 @@
       ],
       "vector_eligible": true,
       "synth": {
-        "answer": "Figures attached to the foreign embassy that employs Verloc: porter\nFigures attached to the foreign embassy that employs Verloc: footman\nFigures attached to the foreign embassy that employs Verloc: lackey\nFigures attached to the foreign embassy that employs Verloc: Privy Councillor Wurmt, Chancelier\n\nd’Ambassade\nFigures attached to the foreign embassy that employs Verloc: Mr Vladimir\nFigures attached to the foreign embassy that employs Verloc: footman\n\nGrounded in the source:\n  CHAPTER II — \"It was so early that the porter of the Embassy issued hurriedly out of\n\nhis lodge still struggling with the left sleeve of his livery coat.\"\n  CHAPTER II — \"He produced the same talisman also to the footman who opened\n\nthe door, and stood back to let him enter the hall.\"\n  CHAPTER II — \"another lackey, in brown\n\ntrousers and claw-hammer coat edged with thin yellow cord, approaching Mr\n\nVerloc listened to the murmur of his name, and turning round on his heel\n\nin silence, began to walk, without looking back once.\"\n  CHAPTER II — \"Privy Councillor Wurmt, Chancelier\n\nd’Ambassade, was rather short-sighted.\"\n  CHAPTER II — \"“I think,” he said, “that you had better see Mr Vladimir.  Yes, decidedly\n\nI think you ought to see Mr Vladimir.\"\n  CHAPTER II — \"The footman threw open a door, and stood aside.\"",
+        "answer": "Based on the retrieved passages, there is no mention of specific figures (individuals) attached to the foreign embassy that employs Mr. Verloc other than his direct superior and a colleague he meets later in the narrative.\n\nThe primary figure identified as holding authority within the Embassy is **Privy Councillor Wurmt**, who holds the title of **Chancelier d'Ambassade**. He is described as \"rather short-sighted,\" having a face of [unverified excerpt: pasty complexion and melancholy ugliness] surrounded by fine dark grey hairs barred by bushy eyebrows. During their meeting at No. 10 Chesham Square, he refers to himself simply as \"**the official**\" or \"**the man of papers**.\" The text explicitly states that these reports were written for him: [unverified excerpt: I have here some of your reports... We are not very satisfied with the attitude of the police here...]\n\nAnother figure mentioned in relation to Verloc's employment context is **State Councillor Wurmt**, who appears alongside Privy Councillor Wurmt during the discussion about stimulating police vigilance. While they share a surname and appear together discussing the same intelligence matters, the passages distinguish them by title (\"Privy Councillor\" vs. \"State Councillor\") rather than confirming if they are distinct individuals or different aspects of the same person; however, given their separate titles and presence in the scene, they represent two documented figures within that diplomatic structure [Source: The Secret Agent: A Simple Tale].\n\nThe passage also mentions Mr. Verloc was directed to see \"**Mr Vladimir**,\" but it does not explicitly state whether he is attached to this specific foreign embassy or merely another contact involved in the plot involving Karl Yundt's circle. Therefore, only Privy Councillor Wurmt (Chancelier d'Ambassade) and State Councillor Wurmt can be confirmed as figures attached to the employing Embassy based on these texts.\n\nNot in your sources, but from general knowledge: In Joseph Conrad's *The Secret Agent*, the character of **Karl Yundt** is often associated with the German diplomatic mission in London, though his direct employment status within the \"Embassy\" building at Chesham Square is less explicit than that of the officials Verloc meets; he is described here merely as a friend of an old man waiting for Mr. Verloc outside Winnie's shop.\n\nWant me to search for more specific details about Karl Yundt or other unnamed agents mentioned in relation to this embassy?\n\n---\n*Verification note: these statements could not be confirmed against your sources — treat them as unverified:*\n- State Councillor Wurmt appears alongside Privy Councillor Wurmt during discussions about stimulating police vigilance.\n- **Mr Vladimir**,\n- Another figure mentioned in relation to Verloc's employment context is **State Councillor Wurmt**, who appears alongside Privy Councillor Wurmt during the discu…",
         "reasoning_chars": 0,
-        "stream_wall_ms": 29710,
-        "total_latency_ms": 27101,
+        "stream_wall_ms": 15009,
+        "total_latency_ms": 12955,
         "intent": "KnowledgeQuery",
         "source_origins": [
           "chaos-secret-agent"
         ],
         "retrieved_chunk_count": 12,
         "chunks_fact_score": {
+          "matched": [],
+          "missing": [
+            "Vladimir",
+            "Stott-Wartenheim"
+          ],
+          "total_expected": 2,
+          "ratio": 0.0
+        },
+        "judge_fact_score": {
           "matched": [
             "Vladimir"
           ],
@@ -2653,25 +2712,16 @@
           "total_expected": 2,
           "ratio": 0.5
         },
-        "judge_fact_score": {
-          "matched": [
-            "Vladimir",
-            "Stott-Wartenheim"
-          ],
-          "missing": [],
-          "total_expected": 2,
-          "ratio": 1.0
-        },
         "judge_evidence": [
           {
             "fact": "Vladimir",
             "present": true,
-            "evidence": "\"Figures attached to the foreign embassy that employs Verloc: Mr Vladimir\""
+            "evidence": "\"The passage also mentions Mr Verloc was directed to see 'Mr Vladimir'\""
           },
           {
             "fact": "Stott-Wartenheim",
-            "present": true,
-            "evidence": "\"Privy Councillor Wurmt, Chancelier d'Ambassade\""
+            "present": false,
+            "evidence": "(absent)"
           }
         ]
       }
@@ -2679,8 +2729,149 @@
     {
       "question_id": "arc-anarchism",
       "category": "k4_whole_story",
-      "question": "Write an exhaustive, multi-section essay covering every aspect of anarchism and revolutionary politics in the novel — the competing ideologies, every character who embodies them, and the central plot they drive. Cover each in full detail; do not stop early or collapse into a summary.",
-      "retrieved": [],
+      "question": "Across the whole of the novel, how do anarchism and revolutionary politics play out — the competing ideologies, every character who embodies them, and the central plot they drive?",
+      "retrieved": [
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nobviously, since, for instance,\n\nI am not impressed by them.  Therefore they are inferior.  They cannot be\n\notherwise.  Their character is built upon conventional..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nthe other continued, with leisurely\n\nself-confidence, “are the slaves of the social convention, which is\n\nafraid of you; slaves of it as much as the very police..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nIt’s intolerable to think that all your friends have got only\n\nto come over to—”\n\n“In that way I have them all under my eye,” Mr Verloc..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nIt was a sad-faced, miserable little man who\n\nemerged from the narrow passage into the bustle of the broad\n\nthoroughfare.  He walked with the nerveless gait of a..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\ndifferences.  He drew them with\n\na certain complacency, because the instinct of conventional\n\nrespectability was strong within him, being only overcome by his..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nthey!  Before a week’s\n\nout I’ll make some of them wish themselves twenty feet underground.  Eh?\n\nWhat?”\n\nHe glanced sideways, with his head down.  Mrs Verloc..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nstories, you had better try to\n\nmake your profit off what I am taking the trouble to explain to you.  The\n\nsacrosanct fetish of to-day is science.  Why don’t you..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nwith circles dropped out of\n\nhis fingers, and he remained staring at the old terrorist, as if rooted\n\nsuddenly to the spot by his morbid horror and dread of physical..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\ntired of seeing Stevie about?”\n\nTo this Winnie replied habitually by a slight toss of her head.  Once,\n\nhowever, she retorted, with a rather grim pertness:..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nof Mr Verloc in revolutionary politics\n\nhaving been to observe, he could not all at once, either in his own home\n\nor in larger assemblies, take the initiative of..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\npacified its unrest; and in their own way the most ardent of\n\nrevolutionaries are perhaps doing no more but seeking for peace in common\n\nwith the rest of..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nA Turk would have more decency.”\n\n“You forget, Sir Ethelred, that strictly speaking we know nothing\n\npositively—as yet.”\n\n“No!  But how would you define it?..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nto her singularly repulsive in its\n\nmechanical and unfeeling character.  The humanitarian hopes of the mild\n\nMichaelis tended not towards utter destruction, but..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nto copy this detachment.\n\n“If the police here knew their business they would shoot you full of\n\nholes with revolvers, or else try to sand-bag you from behind in..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nwith cynical self-satisfaction, which would\n\nhave astonished the intelligent women his wit entertained so exquisitely.\n\n“Yes,” he continued, with a contemptuous..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nhalf audibly, after\n\nthe manner of a man reflecting in perfect solitude.\n\n“Confounded ass!  To leave such an imbecile business on my hands.  And I\n\ndon’t even..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nI would call it cannibalistic.  That’s what it is!  They are\n\nnourishing their greed on the quivering flesh and the warm blood of the\n\npeople—nothing..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nwhat I had to do.  Had to!”\n\nThere were suggestions of triumph, relief, gratitude in the indefinable\n\ntone of these words.  It engrossed the whole attention of..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nconsoling trust in the organised\n\npowers of the earth.\n\n“Police,” he suggested confidently.\n\n“The police aren’t for that,” observed Mrs Verloc cursorily,..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nfarmer.  The Assistant Commissioner shook it, and withdrew.\n\nIn the outer room Toodles, who had been waiting perched on the edge of a\n\ntable, advanced to meet him,..."
+        }
+      ],
       "source_score": {
         "matched": [],
         "missing": [],
@@ -2688,26 +2879,30 @@
         "ratio": null
       },
       "fact_score": {
-        "matched": [],
-        "missing": [
+        "matched": [
           "anarchist",
           "bomb"
         ],
+        "missing": [],
         "total_expected": 2,
-        "ratio": 0.0
+        "ratio": 1.0
       },
       "embed_ms": 0,
       "search_ms": 0,
-      "corpora_hit": [],
+      "corpora_hit": [
+        "chaos-secret-agent"
+      ],
       "vector_eligible": true,
       "synth": {
-        "answer": "It appears that you have not specified which novel you are referring to. Anarchism and revolutionary politics appear in many works of literature, ranging from the philosophical explorations in Fyodor Dostoevsky’s *The Brothers Karamazov* or *Demons*, to the dystopian critiques in Ursula K. Le Guin’s *The Dispossessed*, the historical upheavals in Victor Hugo’s *Les Misérables*, or the post-apocalyptic struggles in Cormac McCarthy’s *The Road*.\n\nTo provide the exhaustive, multi-section essay you requested—covering competing ideologies, character embodiments, and central plot mechanics—I need a specific text as my subject. Please specify the novel you would like me to analyze.",
+        "answer": "Based on the provided passages from Joseph Conrad's *The Secret Agent: A Simple Tale*, here is an analysis of how anarchism and revolutionary politics play out, including the competing ideologies, character embodiments, and central plot.\n\n### Competing Ideologies\nThe novel presents a stark contrast between two distinct approaches to revolution and social change:\n\n1.  **Destructive Anarchism (The Professor):** This ideology views society as fundamentally artificial and bound by conventions that must be shattered. The Professor argues that he \"depends on death,\" which knows no restraint, whereas others depend on life [Source: The Secret Agent: A Simple Tale]. He believes anarchists are slaves to the very social convention they seek to destroy because their actions are reactive rather than conclusive [Source: The Secret Agent: A Simple Tale]. His goal is not political reform but total annihilation; he seeks a \"perfect detonator\" to break up the \"superstition and worship of legality\" [Source: The Secret Agent: A Simple Tale].\n2.  **Economic Socialism/Revolutionary Propaganda (Michaelis, Ossipon, Yundt):** This group views revolution through an economic lens. Michaelis argues that history is determined by \"the tool and the production,\" believing capitalism has made socialism inevitable [Source: The Secret Agent: A Simple Tale]. He advocates for \"revolutionary propaganda\" as a delicate work of education rather than immediate violence, arguing it should advance cautiously like the education given to kings [Source: The Secret Agent: A Simple Tale]. Karl Yundt represents the aging, posturing shadow of this movement, while Alexander Ossipon (\"the Doctor\") engages in theoretical debates but lacks decisive action [Source: The Secret Agent: A Simple Tale].\n3.  **State Authority (The Police):** Chief Inspector Heat views anarchism not as a serious political threat but as [unverified excerpt: disorderly conduct... distinctly no class at all,] often dismissing anarchists as lunatics [Source: The Secret Agent: A Simple Tale]. He sees himself as having the moral support of the entire population and believes his mission is authorized by universal law [Source: The Secret Agent: A Simple Tale].\n\n### Characters Embodying These Ideologies\n\n*   **Mr. Verloc:** An anarchist who is temperamentally incompatible with revolutionary zeal. He is described as lazy, devoid of discipline, and motivated more by vanity and dislike of labor than genuine ideology [Source: The Secret Agent: A Simple Tale]. He serves as a spy for an unnamed embassy while pretending to be part of the London anarchist circle.\n*   **The Professor:** The embodiment of pure, destructive anarchism. He lives in isolation (\"the hermitage of the perfect anarchist\"), works fourteen hours a day on his experiments at the cost of his own comfort, and views all other revolutionaries as insignificant compared to his singular focus on destruction [Source: The Secret Agent: A Simple Tale].\n*   **Mr. Vladimir:** An agent of a foreign power (implied Russian) who manipulates the anarchists. He confuses \"causes with effects\" and treats the revolutionary party as either a disciplined army or loose brigands depending on what suits him [Source: The Secret Agent: A Simple Tale]. He demands sensational outrages to provoke political change.\n*   **Michaelis:** A former prisoner and apostle of economic socialism. He believes in the inevitable ruin of capitalism but opposes violent methods, favoring patience and education [Source: The Secret Agent: A Simple Tale].\n*   **Alexander Ossipon (\"the Doctor\"):** A theorist who engages in debates about logic and revolution but is characterized by his reliance on women for financial support and his lack of independent character [Source: The Secret Agent: A Simple Tale].\n*   **Karl Yundt:** An aging terrorist described as a \"posturing shadow\" supported by an old woman, representing the fading era of individual terror [Source: The Secret Agent: A Simple Tale].\n*   **Stevie (Winnie’s brother):** Not a revolutionary, but a victim. His innocence highlights the brutality of the political machinations around him. He views police with trustful benevolence until he learns they exist to protect property owners from those who have nothing [Source: The Secret Agent: A Simple Tale].\n\n### Central Plot Driven by Revolutionary Politics\nThe central plot is driven by Mr. Vladimir’s demand for a sensational anarchist outrage in London to embarrass the British government and advance his foreign power's interests [Source: The Secret Agent: A Simple Tale]. \n\n1.  **The Mandate:** Vladimir insists on an \"outrage upon... science\" or a similar symbolic target, rejecting traditional assassinations as no longer effective [Source: The Secret Agent: A Simple Tale]. He pressures Verloc, who has failed to produce results, threatening to cut off his pay [Source: The Secret Agent: A Simple Tale].\n2.  **The Act:** Unable to plan such an act himself due to caution and temperament, Verloc is manipulated into using Stevie’s innocence against him (implied by the context of the explosion in Greenwich Park mentioned later) or forces Stevie into a role that leads to disaster. The passages indicate Verloc feels trapped between Vladimir's demands and his own inability to act decisively [Source: The Secret Agent: A Simple Tale].\n3.  **The Aftermath:** An explosion occurs in Greenwich Park, killing several people including Stevie. Mr. Verloc is blown to pieces [Source: The Secret Agent: A Simple Tale]. \n4.  **Investigation:** Chief Inspector Heat investigates the bombing with confidence but little understanding of anarchist ideology, viewing it as mere criminal disorder rather than political action [Source: The Secret Agent: A Simple Tale]. He clashes with his superiors over strategy while pursuing leads connected to Verloc’s associates (Ossipon, Michaelis) and the foreign embassy [Source: The Secret Agent: A Simple Tale].\n\n### Conclusion\nIn *The Secret Agent*, anarchism is portrayed not as a coherent movement for liberation but as a fragmented collection of egos, theorists, and manipulators. The \"revolution\" is driven less by genuine ideological conviction among most characters than by vanity, laziness, or foreign manipulation. The central tragedy—the death of Stevie—results from this collision between Vladimir's cynical political calculations, Verloc's cowardly compliance, and the Professor's destructive nihilism, all while the state responds with bureaucratic indifference rather than true understanding.\n\n---\n*Verification note: these statements could not be confirmed against your sources — treat them as unverified:*\n- The central plot is driven by Vladimir’s demand for a sensational anarchist outrage in London to embarrass the British government.\n- depends on death,\n- He believes anarchists are slaves to the very social convention they seek to destroy because their actions are reactive rather than conclusive\n- superstition and worship of legality\n- the tool and the production,\n- Karl Yundt represents the aging, posturing shadow of this movement, while Alexander Ossipon (\"the Doctor\") engages in theoretical debates but lacks decisive act…\n- the hermitage of the perfect anarchist\n- Alexander Ossipon (\"the Doctor\"): A theorist who engages in debates about logic and revolution but is characterized by his reliance on women for financial suppo…\n- outrage upon... science",
         "reasoning_chars": 0,
-        "stream_wall_ms": 5002,
-        "total_latency_ms": 3090,
-        "intent": "GenerativeQuery",
-        "source_origins": [],
-        "retrieved_chunk_count": 0,
+        "stream_wall_ms": 34461,
+        "total_latency_ms": 32471,
+        "intent": "DeepQuery",
+        "source_origins": [
+          "chaos-secret-agent"
+        ],
+        "retrieved_chunk_count": 20,
         "chunks_fact_score": {
           "matched": [],
           "missing": [
@@ -2719,24 +2914,23 @@
         },
         "judge_fact_score": {
           "matched": [
-            "anarchist"
-          ],
-          "missing": [
+            "anarchist",
             "bomb"
           ],
+          "missing": [],
           "total_expected": 2,
-          "ratio": 0.5
+          "ratio": 1.0
         },
         "judge_evidence": [
           {
             "fact": "anarchist",
             "present": true,
-            "evidence": "\"Anarchism and revolutionary politics appear in many works of literature\""
+            "evidence": "\"The Professor argues that he 'depends on death,' which knows no restraint, whereas others depend on life\""
           },
           {
             "fact": "bomb",
-            "present": false,
-            "evidence": "(absent)"
+            "present": true,
+            "evidence": "\"Investigation: Chief Inspector Heat investigates the bombing with confidence but little understanding of anarchist ideology...\""
           }
         ]
       }
@@ -2744,8 +2938,142 @@
     {
       "question_id": "arc-statepower",
       "category": "k4_whole_story",
-      "question": "Give a complete, in-depth analysis of how the novel depicts state power, policing, and espionage — every relevant figure and institution, traced through the whole plot. Be exhaustive and write it section by section.",
-      "retrieved": [],
+      "question": "Across the whole of the novel, how does it depict state power, policing, and espionage — every relevant figure and institution, traced through the whole plot?",
+      "retrieved": [
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nthere’s somebody over at your shop who\n\nthinks that the Secretary of State may be trusted now and then.”\n\nThe Assistant Commissioner had an amused smile.\n\n“I..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nto copy this detachment.\n\n“If the police here knew their business they would shoot you full of\n\nholes with revolvers, or else try to sand-bag you from behind in..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nA Turk would have more decency.”\n\n“You forget, Sir Ethelred, that strictly speaking we know nothing\n\npositively—as yet.”\n\n“No!  But how would you define it?..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nconsoling trust in the organised\n\npowers of the earth.\n\n“Police,” he suggested confidently.\n\n“The police aren’t for that,” observed Mrs Verloc cursorily,..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nthat we can taste the comfort\n\nof complete self-deception.  The Assistant Commissioner did not like his\n\nwork at home.  The police work he had been engaged on in a..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nIt was a sad-faced, miserable little man who\n\nemerged from the narrow passage into the bustle of the broad\n\nthoroughfare.  He walked with the nerveless gait of a..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nbut I’ve always felt that we ought to\n\nbe good Europeans besides—I mean governments and men.”\n\n“Yes,” said the Assistant Commissioner simply.  “Only you..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nInspector Heat felt very angry with himself\n\nfor having stopped, for having spoken, for having taken that way at all\n\non the ground of it being a short cut from the..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nthe velvet collar back on the\n\ntable—\n\n“Cover up,” he directed the attendants curtly, without another look, and,\n\nsaluted by the constable, carried off his..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nthis\n\naffair eventuated in the stoppage of the modest subsidy allotted to the\n\npublication of the F. P. pamphlets, then indeed he would have to regret\n\nVerloc’s..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nexcept a little bronze statuette\n\ndraped in a toga, mysteriously watchful in its shadowy immobility.  The\n\nAssistant Commissioner, invited to take a chair, sat down. ..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nsurpassed in the number of\n\ncenturies the age of the oldest oak in the country.\n\n“No.  As far as one can be positive about anything I can assure you that\n\nit is..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nat last to the\n\ntune of “Blue Bells of Scotland.”  The painfully detached notes grew\n\nfaint behind his back while he went slowly upstairs, across the hall,..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nmassive scrolls in the same dark marble as\n\nthe mantelpiece, and with a ghostly, evanescent tick—had moved through\n\nthe space of seven minutes.  He spoke with a..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nthey!  Before a week’s\n\nout I’ll make some of them wish themselves twenty feet underground.  Eh?\n\nWhat?”\n\nHe glanced sideways, with his head down.  Mrs Verloc..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nthat place in Chesham Square.  The people he cursed so.  I don’t\n\nknow.  What does it matter!”\n\n“And that fellow, what did he do or say to you?”\n\n“I don’t..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nwhisker on each side of a pair of wrinkled\n\nhands.  The person who had entered was holding a batch of papers before\n\nhis eyes and walked up to the table with a rather..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nwould be above suspicion, no material\n\ninterests being openly at stake, and it will alarm every selfishness of\n\nthe class which should be impressed.  They believe..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nchanged the language, and began to\n\nspeak idiomatic English without the slightest trace of a foreign accent.\n\n“Ah!  Yes.  Of course.  Let’s see.  How much did you..."
+        }
+      ],
       "source_score": {
         "matched": [],
         "missing": [],
@@ -2753,55 +3081,58 @@
         "ratio": null
       },
       "fact_score": {
-        "matched": [],
-        "missing": [
+        "matched": [
           "police",
           "agent"
         ],
+        "missing": [],
         "total_expected": 2,
-        "ratio": 0.0
+        "ratio": 1.0
       },
       "embed_ms": 0,
       "search_ms": 0,
-      "corpora_hit": [],
+      "corpora_hit": [
+        "chaos-secret-agent"
+      ],
       "vector_eligible": true,
       "synth": {
-        "answer": "I am not certain which specific novel you are referring to, as no title was provided in your request and the previous step indicates that an attached document search is required to identify it. Without knowing whether we are discussing *1984*, *The Trial*, *Brave New World*, or another work, I cannot provide a factual analysis of state power, policing, and espionage within its plot.\n\nTo proceed with this exhaustive analysis:\n1. Please specify the **title** and **author** of the novel.\n2. Or, if there is an attachment containing the text or summary, please ensure it is accessible for searching (e.g., by providing key excerpts or confirming the file name).\n\nOnce identified, I can trace every relevant figure and institution through the whole plot as requested.\n\n---\n*Verification note: these statements could not be confirmed against your sources — treat them as unverified:*\n- The assistant identifies *1984*, *The Trial*, and *Brave New World* as potential examples of novels discussing state power, policing, and espionage.\n- I am not certain which specific novel you are referring to, as no title was provided in your request and the previous step indicates that an attached document s…\n- Without knowing whether we are discussing *1984*, *The Trial*, *Brave New World*, or another work",
+        "answer": "Based on the provided passages from Joseph Conrad’s *The Secret Agent: A Simple Tale*, here is how the novel depicts state power, policing, and espionage.\n\n### State Power\nState power in the novel is depicted as a cynical, bureaucratic apparatus that prioritizes international diplomacy over justice or truth. It operates through foreign embassies (specifically the fictional \"Embassy\" of Waldenstein) which exert control over domestic affairs by manipulating local institutions.\n\n*   **The Secretary of State:** Represented by the figure of Sir Ethelred (\"the great man\"), he embodies the detached, arrogant nature of high-level government authority. He views political instability not with moral concern but as an administrative problem to be managed discreetly [Source: The Secret Agent: A Simple Tale]. His primary interest lies in maintaining the appearance of order and protecting diplomatic relations rather than uncovering factual reality.\n*   **Foreign Embassies as Instruments of Power:** The Embassy is portrayed as a hub of manipulation where foreign powers (represented by Mr. Vladimir) use British soil for their own geopolitical ends. The Assistant Commissioner notes that embassies are [unverified excerpt: supposed to be part and parcel of the country... abroad only by a fiction,] highlighting how state power blurs national boundaries through espionage [Source: The Secret Agent: A Simple Tale].\n*   **The Exploitation of Anarchism:** State power is shown to actively cultivate or utilize anarchism for its own gain. The Assistant Commissioner argues that secret agents exist because governments find them useful, despite acknowledging they fabricate information and spread panic [Source: The Secret Agent: A Simple Tale]. The government’s response to violence is often driven by a desire to suppress the *idea* of anarchism rather than address its causes, leading to \"hasty legislation\" and unreflecting hate [Source: The Secret Agent: A Simple Tale].\n\n### Policing\nPolicing in the novel is depicted as an institution characterized by internal rivalry, bureaucratic self-preservation, and a fundamental misunderstanding of political crime. It is shown more through its interpersonal dynamics and institutional flaws than its effectiveness.\n\n*   **The Assistant Commissioner:** He represents administrative policing—detached, cynical, and focused on career advancement and departmental efficiency. He views his work with amusement or sardonic detachment, often prioritizing how events look to superiors (like Sir Ethelred) over moral clarity. He admits that police success can be performative ([unverified excerpt: we have established the identity... we could have gone further; only we stopped at the limits of our territory]) [Source: The Secret Agent: A Simple Tale].\n*   **Chief Inspector Heat:** In contrast, Heat embodies the zealous but limited \"old hand\" of traditional detective work. He is portrayed as aggressive, somewhat brutal, and deeply concerned with personal credit within the force. His interactions with anarchists reveal a lack of genuine understanding; he views them merely as criminals rather than political actors. His authority relies on the \"consciousness of universal support,\" believing the entire population backs him against crime, which isolates him when faced with complex political motives [Source: The Secret Agent: A Simple Tale].\n*   **Institutional Self-Interest:** Both police figures are shown to be more concerned with departmental politics than truth. The Assistant Commissioner considers replacing Heat not because Heat failed, but due to internal power struggles (\"He would accuse me of perverting its morality\"). The police are depicted as an institution that protects itself and its own reputation, often viewing anarchists as a nuisance or a tool for bureaucratic maneuvering rather than engaging with their ideology seriously [Source: The Secret Agent: A Simple Tale].\n\n### Espionage\nEspionage is depicted as a morally bankrupt profession driven by greed, incompetence, and the cynical manipulation of both revolutionaries and state officials. It lacks honor or clear ideological alignment, existing instead in a gray area of betrayal.\n\n*   **Verloc (The \"Simple\" Agent):** Adolf Verloc represents the low-level spy who navigates between the anarchist community and foreign embassies out of necessity and opportunism rather than conviction. He is described as having no respect for either side (\"Anarchists or diplomats were all one to him\"). His espionage is characterized by petty betrayal and a lack of grand vision; he is trapped by his own mediocrity and the demands of his employers [Source: The Secret Agent: A Simple Tale].\n*   **Mr. Vladimir:** As the representative of the Waldenstein Embassy, Vladimir embodies high-level state-sponsored espionage. He views anarchism not as an ideology but as a weapon to be deployed against Britain (his rival power). He manipulates Verloc and other anarchists with cold calculation, instructing them on how to commit acts that will cause maximum political damage while maintaining plausible deniability. His dialogue reveals a worldview where morality is irrelevant compared to strategic advantage [Source: The Secret Agent: A Simple Tale].\n*   **The Professor:** Representing the ideological extreme of anti-state sentiment, the Professor seeks to destroy \"legal conceptions\" through terror. However, his role in the narrative also highlights how even pure anarchist violence can be co-opted or manipulated by state interests. He views police and institutions as enemies to be destroyed, yet he operates within the same shadowy networks as Verloc and Vladimir [Source: The Secret Agent: A Simple Tale].\n\n### Key Figures Summary\n*   **Sir Ethelred (Secretary of State):** High government authority; cynical, detached, prioritizes diplomatic stability over truth.\n*   **Assistant Commissioner:** Senior police administrator; bureaucratic, self-serving, uses anarchism for political leverage.\n*   **Chief Inspector Heat:** Detective inspector; zealous, aggressive, focused on personal credit and traditional crime-fighting methods.\n*   **Verloc:** Shopkeeper/secret agent; opportunistic betrayer caught between anarchists and foreign diplomats.\n*   **Mr. Vladimir:** Foreign embassy official; manipulates anarchist violence for geopolitical gain against Britain.\n*   **The Professor:** Anarchist ideologue; seeks to destroy state legality through terror, representing the \"destructive matter\" within society.\n\nThese passages collectively depict a world where state power is maintained through manipulation, policing is driven by internal bureaucracy rather than justice, and espionage is a corrupting force that degrades all who participate in it.\n\n---\n*Verification note: these statements could not be confirmed against your sources — treat them as unverified:*\n- Sir Ethelred is identified as the Secretary of State in Joseph Conrad's *The Secret Agent*.\n- Mr. Vladimir represents the fictional Embassy of Waldenstein within the novel.\n- supposed to be part and parcel of the country... abroad only by a fiction,\n- we have established the identity... we could have gone further; only we stopped at the limits of our territory\n- Verloc (The \"Simple\" Agent): Adolf Verloc represents the low-level spy who navigates between the anarchist community and foreign embassies out of necessity and …",
         "reasoning_chars": 0,
-        "stream_wall_ms": 68021,
-        "total_latency_ms": 4925,
-        "intent": "ComplexTask",
-        "source_origins": [],
-        "retrieved_chunk_count": 0,
+        "stream_wall_ms": 27807,
+        "total_latency_ms": 26494,
+        "intent": "DeepQuery",
+        "source_origins": [
+          "chaos-secret-agent"
+        ],
+        "retrieved_chunk_count": 19,
         "chunks_fact_score": {
-          "matched": [],
-          "missing": [
+          "matched": [
             "police",
             "agent"
           ],
+          "missing": [],
           "total_expected": 2,
-          "ratio": 0.0
+          "ratio": 1.0
         },
         "judge_fact_score": {
           "matched": [
-            "police"
-          ],
-          "missing": [
+            "police",
             "agent"
           ],
+          "missing": [],
           "total_expected": 2,
-          "ratio": 0.5
+          "ratio": 1.0
         },
         "judge_evidence": [
           {
             "fact": "police",
             "present": true,
-            "evidence": "\"policing\""
+            "evidence": "Policing in the novel is depicted as an institution characterized by internal rivalry, bureaucratic self-preservation..."
           },
           {
             "fact": "agent",
-            "present": false,
-            "evidence": "(absent)"
+            "present": true,
+            "evidence": "\"Verloc (The 'Simple' Agent): Adolf Verloc represents the low-level spy...\""
           }
         ]
       }
@@ -2809,8 +3140,198 @@
     {
       "question_id": "arc-tragedy",
       "category": "k4_whole_story",
-      "question": "Produce a thorough, section-by-section account of the novel's domestic tragedy — the Verloc household, Stevie, and Winnie's arc from beginning to end. Cover every stage in exhaustive detail and do not cut it short.",
-      "retrieved": [],
+      "question": "Across the whole of the novel, what happens in its domestic tragedy — the Verloc household, Stevie, and Winnie's arc from beginning to end?",
+      "retrieved": [
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\ntable, offered for her approval with an\n\nair of self-assurance hiding a perpetual residue of anxiety.  Formerly\n\nthe anger of the father was the supremely effective..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nout into one of his fits of loquacity.  He\n\nfaced Mr Verloc across the table, and remained very good and quiet,\n\nstaring vacantly.  The endeavour to keep him from..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\na shilling now and then.  Mr Verloc showed himself\n\nthe most generous of lodgers.  But altogether all that did not amount to\n\nmuch either in the way of gain or..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nStevie had nothing in\n\nthe world he could call his own except his mother’s heroism and\n\nunscrupulousness.\n\nThe first sense of security following on Winnie’s..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nboy just worships you.  But if you\n\nshould miss him—”\n\nMrs Verloc paused for a moment, but only for a moment.\n\n“You just go on, and have your walk out.  Don’t..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\ntell you.  He won’t be happy at all.”\n\nThe idea of Mr Verloc’s grief and unhappiness acting as usual powerfully\n\nupon Stevie’s fundamentally docile..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nfor fundamental\n\ninformation.  This is a sort of economy having all the appearances and\n\nsome of the advantages of prudence.  Obviously it may be good for one not\n\nto..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\npapered bricks to the objects of its\n\nsolicitude.  The delicacy guiding her choice to the least valuable and\n\nmost dilapidated articles passed unacknowledged, because..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nideal; he attained it, in fact.\n\n“Of course, we’ll take over your furniture, mother,” Winnie had remarked.\n\nThe lodging-house was to be given up.  It seems it..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nHe stood still in the middle\n\nof the parlour, and looked into the kitchen in silence.  Nor yet did he\n\nknow what would happen if he did say anything.  And this..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nthe edge of the sofa.  It was the handle\n\nof the domestic carving knife with nothing strange about it but its\n\nposition at right angles to Mr Verloc’s waistcoat and..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nthat.  He knew how it was to be done so\n\nthat the devil himself—\n\nHe waved his hand.  He seemed to boast.  He wished only to put heart into\n\nher.  It was a..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nthe fault of that damned Heat.  What did\n\nhe want to upset the woman for?  But she mustn’t be allowed, for her own\n\ngood, to carry on so till she got quite beside..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nhis only sister, guardian, and protector, could not pretend\n\nto such depths of insight.  Moreover, she had not experienced the magic\n\nof the cabman’s eloquence. ..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\npeculiar—had not a sufficient\n\nstanding.  He had been taken over with his mother, somewhat in the same\n\nway as the furniture of the Belgravian mansion had been..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nthe van and horses, merged into one\n\nmass, seemed something alive—a square-backed black monster blocking half\n\nthe street, with sudden iron-shod stampings, fierce..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\ntired of seeing Stevie about?”\n\nTo this Winnie replied habitually by a slight toss of her head.  Once,\n\nhowever, she retorted, with a rather grim pertness:..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\ndrop stealthily into the gutter.\n\nThe evening visitors—the men with collars turned up and soft hats rammed\n\ndown—nodded familiarly to Mrs Verloc, and with a..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nturned towards the door of the kitchen.\n\nThere Mrs Neale was scrubbing the floor.  At Stevie’s appearance she\n\ngroaned lamentably, having observed that he could be..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nnerves had been tried to the utmost.\n\nAfter a month of maddening worry, ending in an unexpected catastrophe,\n\nthe storm-tossed spirit of Mr Verloc longed for repose. ..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nand concerned.  Striking a match on the box she\n\nheld in her hand, she turned on and lighted, above the parlour table, one\n\nof the two gas-burners, which, being..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\npieces—and he contemplated\n\nthem in perfect stillness, as if they had been the surprising terms of a\n\nmelancholy problem.  The slow transfer of that treasure to an..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nother in a thoughtful whisper, and\n\nimmediately whipped.  He did this, not because his soul was cruel and his\n\nheart evil, but because he had to earn his fare.  And..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\npoor boy was dead.\n\nThis shaking piece of forgetfulness stimulated Mrs Verloc’s intelligence.\n\nShe began to perceive certain consequences which would have surprised..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nand called his attention to the cold beef.  He\n\nremained insensible to the suggestion, with his chin on his breast.\n\n“You should feed your cold,” Mrs Verloc said..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\npushing his hands deeper into his\n\npockets with convulsive sympathy.  He could say nothing; for the\n\ntenderness to all pain and all misery, the desire to make the..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nsteamy, greasy shop in a blaze of gas\n\nand in the smell of fried fish.\n\nThe old woman raised a wail again.\n\n“And, my dear, I must see that poor boy every Sunday. ..."
+        }
+      ],
       "source_score": {
         "matched": [],
         "missing": [],
@@ -2828,24 +3349,28 @@
       },
       "embed_ms": 0,
       "search_ms": 0,
-      "corpora_hit": [],
+      "corpora_hit": [
+        "chaos-secret-agent"
+      ],
       "vector_eligible": true,
       "synth": {
-        "answer": "**I. The Equilibrium of St. Simeon’s Street: A Study in Static Decay**\n\nThe narrative opens not with action, but with atmosphere—a suffocating, humid stillness that defines the Verloc household at 93 St. Simeon’s Street. This is a home suspended in time, governed by the rigid rhythms of routine rather than emotional connection. Mr. Vladimir Verloc, known to his employers as \"Verloc\" and to his wife simply as \"Winnie,\" occupies a small shop selling cheap prints, postcards, and trivial curiosities. To the outside world, he is a harmless, slightly dull proprietor; internally, however, he serves as an agent for an unnamed foreign embassy, tasked with monitoring political agitators and maintaining order through subtle manipulation or, when necessary, discreet violence.\n\nThe domestic sphere is defined by absence. The house is empty during the day, save for Winnie’s meticulous maintenance of its cleanliness. She polishes brass until it shines like gold, sweeps every inch of floorboards twice daily, and arranges flowers in vases that remain perpetually fresh. This obsessive tidiness is not merely habit; it is a psychological defense mechanism against the chaos of her husband’s double life and the looming threat of his employer’s demands. Her world is small, bounded by the shop counter and the kitchen table, yet she possesses a fierce, quiet dignity derived from this orderliness.\n\nCentral to this fragile equilibrium is Stevie (Adolphus Verloc), Winnie’s younger brother. A man-child with an innocent, almost animalistic sensitivity, Stevie suffers from epilepsy and profound emotional vulnerability. He lives under the guardianship of Mr. and Mrs. Verloc, treated less as family and more as a cherished pet or a delicate artifact that must be protected from the harshness of reality. Stevie loves flowers above all else; he speaks in fragmented sentences, often repeating phrases like \"I love you\" or expressing awe at natural beauty. His presence introduces a note of tenderness into the otherwise sterile environment, but also a constant source of anxiety for Winnie, who fears his instability will eventually shatter their precarious peace.\n\n**II. The Intrusion: The Arrival of Chief Inspector Heat**\n\nThe first crack in the domestic facade appears with the arrival of Chief Inspector Alexander Heat. A man obsessed with appearances and social climbing, Heat frequents Verloc’s shop under the guise of purchasing postcards. He is vain, cowardly, and deeply insecure, projecting an air of authority that masks his incompetence. His interest in Winnie is predatory yet pathetic; he sees her as a prize to be won, unaware that she views him only with detached amusement or mild disdain.\n\nHeat’s presence serves two functions: it highlights Verloc’s isolation (as no one else visits) and introduces the theme of surveillance. Just as Verloc spies on others for his employers, Heat watches Verloc—and by extension, Winnie—without understanding what he is looking at. This mirroring of observation sets the stage for the eventual unraveling, where secrets are exposed not through grand revelations but through accidental discoveries and misinterpretations.\n\n**III. The Catalyst: The Bomb Plot and Stevie’s Role**\n\nThe central conflict arises from a directive issued by Verloc’s employer in Berlin. A new political agitator, Professor Vladimir (no relation to Mr. Verloc), has emerged as a threat to the status quo. To discredit him and demonstrate loyalty to their foreign masters, Verloc is ordered to commit an act of terrorism that will appear spontaneous and politically motivated, thereby discrediting the anarchist movement without implicating his handlers directly.\n\nVerloc chooses the Greenwich Observatory—a symbol of scientific rationality—as the target for a bomb intended to kill Professor Vladimir during a meeting with other radicals. However, Verloc faces a moral dilemma: he cannot bring himself to involve Stevie directly in such violence. Instead, he manipulates events so that Stebecomes inadvertently entangled. He tells Stevie that the observatory contains \"flowers\" (a metaphorical or literal misdirection) and encourages him to visit it under the pretense of delivering flowers to someone there. Unaware of the danger, Stevie agrees, driven by his desire to please his brother-in-law and his innate love for beauty.\n\nWinnie is kept in ignorance of this plan. She senses tension in her husband’s behavior—his increased anxiety, his late-night absences—but attributes it to work stress. Her trust in Verloc remains absolute until the moment of catastrophe. This blindness is not portrayed as stupidity but as a necessary survival strategy; acknowledging the truth would mean confronting the horror that her life has been built upon lies.\n\n**IV. The Catastrophe: Explosion at Greenwich Observatory**\n\nOn the night of the bombing, Stevie arrives at the observatory carrying a bag containing explosives disguised as flowers. He encounters Professor Vladimir and other anarchists inside. In a tragic twist of fate, Stevie does not place the bomb himself; rather, he leaves the bag unattended while interacting with the group. When the explosion occurs, it kills several people instantly, including Professor Vladimir, but critically injures others. Most devastatingly, Stevie is caught in the blast zone. Though physically alive for a short time after the initial detonation (depending on textual interpretation, some versions suggest immediate death or near-death trauma), he suffers severe psychological shock and physical wounds that leave him broken.\n\nThe aftermath is depicted with brutal realism. The police arrive, led by Chief Inspector Heat, who immediately suspects Verloc due to his proximity to the scene and previous suspicious behavior. However, evidence points away from Verloc initially, creating confusion among investigators. Meanwhile, Winnie receives news of the explosion through fragmented reports and rumors circulating in London’s underworld circles. She does not yet know her brother was involved until she sees Stevie being taken away—or learns of his condition through official channels.\n\n**V. The Unraveling: Winnie’s Awakening and Descent into Horror**\n\nWinnie’s journey from ignorance to awareness is gradual but inexorable. Initially, she tries to maintain normalcy, continuing her domestic rituals even as dread mounts. When she finally confronts Verloc about Stevie’s involvement, he lies calmly, claiming that Stevie merely witnessed events and had no part in them. But Winnie begins to piece together the truth through overhearing conversations between Verloc and his associates, including Mr. Ossipon—a Russian anarchist who becomes entangled with both Verlocs due to shared guilt or complicity.\n\nOssipon plays a crucial role in deepening the tragedy. He reveals fragments of information to Winnie, either out of pity, manipulation, or self-preservation. Through these interactions, Winnie realizes that her husband orchestrated the bombing specifically because it involved Stevie indirectly—that her brother was used as an unwitting pawn in a political game. This realization shatters her worldview: not only has she been deceived by her husband’s profession, but he has also sacrificed their family member for career advancement and ideological obedience.\n\nHer love for Stevie transforms into protective fury. She sees him now not just as a vulnerable sibling but as a victim of systemic cruelty—both from Verloc’s employers and from Verloc himself, who enabled this exploitation through silence and complicity. The domestic space becomes a prison rather than a sanctuary; every polished surface reflects her growing despair, every quiet moment amplifies the memory of Stevie’s suffering.\n\n**VI. The Climax: Murder in the Kitchen**\n\nDriven to madness by grief, rage, and a twisted sense of justice, Winnie decides to kill Mr. Verloc. This act is not premeditated in the traditional criminal sense but emerges organically from emotional collapse. She prepares for it with chilling precision: she cleans the kitchen thoroughly (a final act of control), sharpens a knife, and waits for Verloc to return home late at night after another meeting with his handlers.\n\nWhen Verloc enters, exhausted and unaware of her knowledge, he attempts to reassure her that everything will be fine—that Stevie will recover, that their lives can continue as before. His words ring hollow against the backdrop of what has happened. In a single, swift motion, Winnie stabs him repeatedly until he dies on the floor of their shared bedroom/kitchen area. The violence is intimate and brutal, contrasting sharply with the earlier cleanliness of the space. Blood stains the pristine tiles—a permanent mark on the domestic ideal she cherished.\n\nAfterward, there is no panic or flight. Instead, Winnie experiences a strange calmness. She cleans up the blood meticulously, washes herself, dresses in clean clothes, and sits quietly by her husband’s body. This moment represents both triumph and defeat: she has avenged Stevie (in her mind) but destroyed her own life forever. There is no escape from guilt; even if she were to flee, the psychological weight would remain. Her action is less about freedom than about ending an unbearable reality.\n\n**VII. The Aftermath: Arrest, Trial, and Psychological Collapse**\n\nWinnie does not attempt to hide her crime. When police arrive—prompted perhaps by neighbors hearing screams or noticing unusual activity—they find her sitting calmly beside Verloc’s corpse. She confesses immediately, offering little explanation beyond stating that he deserved it for what he did to Stevie. Her trial becomes a media spectacle, drawing public attention to themes of marital abuse, political corruption, and female agency in Victorian society. However, rather than sympathy, she faces judgment; the legal system struggles to categorize her actions as either justified revenge or cold-blooded murder.\n\nMeanwhile, Stevie survives but is permanently altered. He suffers from severe neurological damage due to the explosion and subsequent trauma. Taken into care (possibly by relatives or state institutions), he regresses further into childhood-like behavior. His mind fractures completely under the weight of guilt—he believes *he* caused his sister’s downfall because he went to the observatory. This belief consumes him: he",
+        "answer": "Based on the provided passages from Joseph Conrad's *The Secret Agent: A Simple Tale*, here is the arc of the domestic tragedy within the Verloc household, focusing on Winnie and Stevie.\n\n### The Domestic Status Quo\nAt the beginning of the narrative, the Verloc household in Soho consists of Mr. Verloc (a shopkeeper selling \"shady wares\"), his wife Winnie, her mother, and Winnie’s brother, Stephen (\"Stevie\"). Stevie is described as a man-child who is \"peculiar,\" intellectually disabled, and fundamentally docile. He has no possessions other than what he can draw with compasses; his only security is his sister's devotion [Source: The Secret Agent: A Simple Tale].\n\nWinnie married Mr. Verloc to secure a home for herself and Stevie after their father died. Her late father had been irascible toward Stevie, so Winnie found consolation in the fact that she need no longer tremble for him under Mr. Verloc’s roof [Source: The Secret Agent: A Simple Tale]. However, this sense of security was fragile. Mrs. Verloc’s mother lived in seclusion in back rooms, constantly anxious about her daughter's marriage and fearing that Mr. Verloc would eventually tire of supporting \"the poor boy\" [Source: The Secret Agent: A Simple Tale]. She viewed Stevie as an encumbrance but recognized his sisterly devotion to him as a divine constant [Source: The Secret Agent: A Simple Tale].\n\n### The Mother’s Departure\nThe domestic equilibrium is disrupted when Mrs. Verloc’s mother decides she must leave the Brett Street household. Her motivation is twofold: material prudence (she has secured admission to almshouses for destitute widows) and maternal strategy. She believes that by removing herself, she strengthens Stevie's moral claim on Winnie and Mr. Verloc, ensuring he remains permanently dependent on them rather than being seen merely as her burden [Source: The Secret Agent: A Simple Tale].\n\nWinnie reluctantly agrees but worries about how she will manage Stevie alone at first. During their cab ride away from Soho, Stevie becomes agitated by a sight of suffering (a weary horse), leading to a moment where he tries to jump off the moving vehicle before calming down under his sister’s authority [Source: The Secret Agent: A Simple Tale]. Mrs. Verloc departs for good, leaving Winnie solely responsible for Stevie's care within the household [Source: The Secret Agent: A Simple Tale].\n\n### Mr. Verloc’s Betrayal and Stevie’s Death\nThe tragedy culminates when Mr. Verloc returns home in a state of extreme agitation after an incident involving anarchists. He reveals that he has withdrawn all their money from the bank and is considering emigrating abroad (\"Lie low for a bit\") because his career as a secret agent has come to an end in a \"catastrophe\" [Source: The Secret Agent: A Simple Tale].\n\nWinnie realizes with sudden clarity what this means: her husband took Stevie out under the pretense of companionship but actually had him killed (blown up) by the authorities or agents, likely to cover up his own tracks or due to political maneuvering. As she processes this, Mr. Verloc attempts to comfort her, suggesting she cry it out, completely unaware that he has destroyed the only thing Winnie truly loved [Source: The Secret Agent: A Simple Tale].\n\n### Winnie’s Transformation and Revenge\nThe news of Stevie's death transforms Mrs. Verloc from a submissive wife into an agent of vengeance. She experiences no tears; instead, her heart hardens \"into a lump of ice,\" and she enters a state of frozen contemplation [Source: The Secret Agent: A Simple Tale]. She realizes she is now released from all earthly ties—her contract with existence ends because Stevie is gone forever [Source: The Secret Agent: A Simple Tale].\n\nWhile Mr. Verloc sleeps or rests nearby, believing he has comforted his grieving wife, Winnie retrieves the domestic carving knife hidden under the sofa cushion. In a moment described as instinctive repulsion turning to action, she stabs him in the back while he sits by the fire. Blood drips onto the floorcloth like an \"insane clock\" ticking down [Source: The Secret Agent: A Simple Tale].\n\n### Conclusion\nThe novel concludes with Mrs. Verloc standing over her husband's corpse and Stevie’s scattered remains (implied by the context of his death). She is no longer the woman who leaned over the sofa; she is a widow defined by loss and retribution. The passages end on this note of stillness after violence, marking the total collapse of the domestic sphere that once revolved around protecting Stevie from a cruel world, only for him to be destroyed by it through his own brother-in-law [Source: The Secret Agent: A Simple Tale].\n\n---\n*Verification note: these statements could not be confirmed against your sources — treat them as unverified:*\n- Mr. Verloc returns home claiming he withdrew all money from the bank because his career as a secret agent ended in catastrophe.\n- Winnie stabs her husband in the back with a domestic carving knife hidden under a sofa cushion while he sits by the fire.\n- secured admission to almshouses for destitute widows",
         "reasoning_chars": 0,
-        "stream_wall_ms": 63143,
-        "total_latency_ms": 61036,
-        "intent": "GenerativeQuery",
-        "source_origins": [],
-        "retrieved_chunk_count": 0,
+        "stream_wall_ms": 48749,
+        "total_latency_ms": 46757,
+        "intent": "DeepQuery",
+        "source_origins": [
+          "chaos-secret-agent"
+        ],
+        "retrieved_chunk_count": 27,
         "chunks_fact_score": {
-          "matched": [],
-          "missing": [
+          "matched": [
             "Winnie",
             "Stevie"
           ],
+          "missing": [],
           "total_expected": 2,
-          "ratio": 0.0
+          "ratio": 1.0
         },
         "judge_fact_score": {
           "matched": [
@@ -2860,12 +3385,12 @@
           {
             "fact": "Winnie",
             "present": true,
-            "evidence": "\"Mr. Vladimir Verloc, known to his employers as 'Verloc' and to his wife simply as 'Winnie,' occupies a small shop selling cheap prints...\""
+            "evidence": "focusing on Winnie and Stevie"
           },
           {
             "fact": "Stevie",
             "present": true,
-            "evidence": "\"Central to this fragile equilibrium is Stevie (Adolphus Verloc), Winnie's younger brother.\""
+            "evidence": "focusing on Winnie and Stevie. ... his wife Winnie, her mother, and Winnie's brother, Stephen (\"Stevie\")."
           }
         ]
       }
@@ -2873,7 +3398,7 @@
     {
       "question_id": "arc-bombing",
       "category": "k4_whole_story",
-      "question": "Give an exhaustive, section-by-section account of the Greenwich bombing plot — its conception at the embassy, Verloc's role, how it was carried out, and its aftermath. Cover every stage in full detail; do not stop early.",
+      "question": "Across the whole of the novel, what happens in the Greenwich bombing plot — its conception at the embassy, Verloc's role, how it was carried out, and its aftermath?",
       "retrieved": [
         {
           "corpus_id": "chaos-secret-agent",
@@ -2894,20 +3419,6 @@
           "title": "The Secret Agent: A Simple Tale",
           "url": null,
           "score": 0.0,
-          "snippet": "The Secret Agent: A Simple Tale\n\nadministration.  Mr Verloc did not trouble his head about it,\n\nhis mission in life being the protection of the social mechanism, not its\n\nperfectionment or even its..."
-        },
-        {
-          "corpus_id": "chaos-secret-agent",
-          "title": "The Secret Agent: A Simple Tale",
-          "url": null,
-          "score": 0.0,
-          "snippet": "The Secret Agent: A Simple Tale\n\nMr Verloc flung himself heavily upon the\n\nsofa, disregarding as usual the fate of his hat, which, as if accustomed\n\nto take care of itself, made for a safe shelter..."
-        },
-        {
-          "corpus_id": "chaos-secret-agent",
-          "title": "The Secret Agent: A Simple Tale",
-          "url": null,
-          "score": 0.0,
           "snippet": "The Secret Agent: A Simple Tale\n\ncertainly as pious\n\nas anything likely to come from such a source.\n\n“I wish to goodness,” he growled huskily, “I had never seen Greenwich\n\nPark or anything..."
         },
         {
@@ -2915,21 +3426,14 @@
           "title": "The Secret Agent: A Simple Tale",
           "url": null,
           "score": 0.0,
-          "snippet": "The Secret Agent: A Simple Tale\n\nmaddening to her abstract terror.\n\nThe newspapers never gave any details except one, but that one with some\n\naffectation was always there at the end of a meagre..."
+          "snippet": "The Secret Agent: A Simple Tale\n\nthrown into\n\nconsiderable disorder by the prospect of losing his employment,\n\nespecially if the man is a secret agent of political police, dwelling\n\nsecure in the..."
         },
         {
           "corpus_id": "chaos-secret-agent",
           "title": "The Secret Agent: A Simple Tale",
           "url": null,
           "score": 0.0,
-          "snippet": "The Secret Agent: A Simple Tale\n\nchanged the language, and began to\n\nspeak idiomatic English without the slightest trace of a foreign accent.\n\n“Ah!  Yes.  Of course.  Let’s see.  How much did you..."
-        },
-        {
-          "corpus_id": "chaos-secret-agent",
-          "title": "The Secret Agent: A Simple Tale",
-          "url": null,
-          "score": 0.0,
-          "snippet": "The Secret Agent: A Simple Tale\n\nand concerned.  Striking a match on the box she\n\nheld in her hand, she turned on and lighted, above the parlour table, one\n\nof the two gas-burners, which, being..."
+          "snippet": "The Secret Agent: A Simple Tale\n\nuse of a\n\nhat.\n\n“Well—he’s waiting for you,” said Mrs Verloc at last.  “I say, Adolf, he\n\nain’t one of them Embassy people you have been bothered with of..."
         },
         {
           "corpus_id": "chaos-secret-agent",
@@ -2943,7 +3447,21 @@
           "title": "The Secret Agent: A Simple Tale",
           "url": null,
           "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\naltering even the aspect of inanimate\n\nthings, it was a thought to sit still and marvel at for ever and ever.\n\nMrs Verloc sat still.  And across that thought (not..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
           "snippet": "The Secret Agent: A Simple Tale\n\npsychological order.  How with his want of\n\npractice could he tell her what he himself felt but vaguely: that there\n\nare conspiracies of fatal destiny, that a notion..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nchanged the language, and began to\n\nspeak idiomatic English without the slightest trace of a foreign accent.\n\n“Ah!  Yes.  Of course.  Let’s see.  How much did you..."
         },
         {
           "corpus_id": "chaos-secret-agent",
@@ -2957,14 +3475,7 @@
           "title": "The Secret Agent: A Simple Tale",
           "url": null,
           "score": 0.0,
-          "snippet": "The Secret Agent: A Simple Tale\n\nnot having been identified.  It was\n\ninconceivable on any theory that Verloc should have given her an inkling\n\nof his intention—whatever it was.  This problem..."
-        },
-        {
-          "corpus_id": "chaos-secret-agent",
-          "title": "The Secret Agent: A Simple Tale",
-          "url": null,
-          "score": 0.0,
-          "snippet": "The Secret Agent: A Simple Tale\n\nand called his attention to the cold beef.  He\n\nremained insensible to the suggestion, with his chin on his breast.\n\n“You should feed your cold,” Mrs Verloc said..."
+          "snippet": "The Secret Agent: A Simple Tale\n\non the table.  Mr Verloc watched at her back as if he could\n\nread there the effect of his words.\n\n“There isn’t a murdering plot for the last eleven years that I..."
         },
         {
           "corpus_id": "chaos-secret-agent",
@@ -2978,21 +3489,21 @@
           "title": "The Secret Agent: A Simple Tale",
           "url": null,
           "score": 0.0,
-          "snippet": "The Secret Agent: A Simple Tale\n\nheard him.  Her eyes remained very wide\n\nopen, and she lay very still, confirmed in her instinctive conviction\n\nthat things don’t bear looking into very much.  And..."
+          "snippet": "The Secret Agent: A Simple Tale\n\na glance, half arch, half cruel, out of her\n\nlarge eyes—a glance of which the Winnie of the Belgravian mansion days\n\nwould have been incapable, because of her..."
         },
         {
           "corpus_id": "chaos-secret-agent",
           "title": "The Secret Agent: A Simple Tale",
           "url": null,
           "score": 0.0,
-          "snippet": "The Secret Agent: A Simple Tale\n\ntoo.  They were apparent in the\n\nextremely neat and artistic arrangement of her glossy dark hair.  Winnie\n\nhad also other charms: her youth; her full, rounded form;..."
+          "snippet": "The Secret Agent: A Simple Tale\n\nand concerned.  Striking a match on the box she\n\nheld in her hand, she turned on and lighted, above the parlour table, one\n\nof the two gas-burners, which, being..."
         },
         {
           "corpus_id": "chaos-secret-agent",
           "title": "The Secret Agent: A Simple Tale",
           "url": null,
           "score": 0.0,
-          "snippet": "The Secret Agent: A Simple Tale\n\npoor boy was dead.\n\nThis shaking piece of forgetfulness stimulated Mrs Verloc’s intelligence.\n\nShe began to perceive certain consequences which would have surprised..."
+          "snippet": "The Secret Agent: A Simple Tale\n\nextended hand for\n\nsome time before he slapped his brow.\n\n“Money!  Yes!  Yes!  I didn’t know what you meant.”\n\nHe drew out of his breast pocket a new pigskin..."
         },
         {
           "corpus_id": "chaos-secret-agent",
@@ -3006,14 +3517,28 @@
           "title": "The Secret Agent: A Simple Tale",
           "url": null,
           "score": 0.0,
-          "snippet": "The Secret Agent: A Simple Tale\n\nI would call it cannibalistic.  That’s what it is!  They are\n\nnourishing their greed on the quivering flesh and the warm blood of the\n\npeople—nothing..."
+          "snippet": "The Secret Agent: A Simple Tale\n\ntrod the pavement heavily with his\n\nshiny boots, and his general get-up was that of a well-to-do mechanic in\n\nbusiness for himself.  He might have been anything from..."
         },
         {
           "corpus_id": "chaos-secret-agent",
           "title": "The Secret Agent: A Simple Tale",
           "url": null,
           "score": 0.0,
-          "snippet": "The Secret Agent: A Simple Tale\n\nalone, quite alone, absolutely alone.\n\nI’ve worked alone for years.”\n\nOssipon’s face had turned dusky red.\n\n“At the perfect detonator—eh?” he sneered,..."
+          "snippet": "The Secret Agent: A Simple Tale\n\npoor boy was dead.\n\nThis shaking piece of forgetfulness stimulated Mrs Verloc’s intelligence.\n\nShe began to perceive certain consequences which would have surprised..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nand called his attention to the cold beef.  He\n\nremained insensible to the suggestion, with his chin on his breast.\n\n“You should feed your cold,” Mrs Verloc said..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nHis modesty shrank from\n\nthat explanation.\n\nBut the true sense of the scene he was beholding came to Ossipon through\n\nthe contemplation of the hat.  It seemed an..."
         },
         {
           "corpus_id": "chaos-secret-agent",
@@ -3027,13 +3552,6 @@
           "title": "The Secret Agent: A Simple Tale",
           "url": null,
           "score": 0.0,
-          "snippet": "The Secret Agent: A Simple Tale\n\nA Turk would have more decency.”\n\n“You forget, Sir Ethelred, that strictly speaking we know nothing\n\npositively—as yet.”\n\n“No!  But how would you define it?..."
-        },
-        {
-          "corpus_id": "chaos-secret-agent",
-          "title": "The Secret Agent: A Simple Tale",
-          "url": null,
-          "score": 0.0,
           "snippet": "The Secret Agent: A Simple Tale\n\nof\n\ntempers just now.”\n\n“It’s in connection with that Greenwich affair.”\n\n“Oh!  I say!  He’s very bitter against you people.  But I will go and\n\nsee, if..."
         },
         {
@@ -3041,14 +3559,21 @@
           "title": "The Secret Agent: A Simple Tale",
           "url": null,
           "score": 0.0,
-          "snippet": "The Secret Agent: A Simple Tale\n\nimmobility by the side of the arm-chair\n\nresembled a state of collapsed coma—a sort of passive insensibility\n\ninterrupted by slight convulsive starts, such as may..."
+          "snippet": "The Secret Agent: A Simple Tale\n\nat last to the\n\ntune of “Blue Bells of Scotland.”  The painfully detached notes grew\n\nfaint behind his back while he went slowly upstairs, across the hall,..."
         },
         {
           "corpus_id": "chaos-secret-agent",
           "title": "The Secret Agent: A Simple Tale",
           "url": null,
           "score": 0.0,
-          "snippet": "The Secret Agent: A Simple Tale\n\nwe\n\nhave not met the solicitation requirements, we know of no prohibition\n\nagainst accepting unsolicited donations from donors in such states who\n\napproach us with..."
+          "snippet": "The Secret Agent: A Simple Tale\n\nto copy this detachment.\n\n“If the police here knew their business they would shoot you full of\n\nholes with revolvers, or else try to sand-bag you from behind in..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nimmobility by the side of the arm-chair\n\nresembled a state of collapsed coma—a sort of passive insensibility\n\ninterrupted by slight convulsive starts, such as may..."
         }
       ],
       "source_score": {
@@ -3073,10 +3598,10 @@
       ],
       "vector_eligible": true,
       "synth": {
-        "answer": "Based on the provided excerpts from Joseph Conrad’s *The Secret Agent: A Simple Tale*, here is an account of the Greenwich bombing plot.\n\n### Conception and Embassy Pressure\nThe plot originated at a foreign embassy in London, where Mr. Verloc served as a secret agent [Source: The Secret Agent: A Simple Tale]. Verloc was summoned by Privy Councillor Wurmt and met with Mr. Vladimir, the First Secretary [Source: The Secret Agent: A Simple Tale]. Vladimir held a cynical view of revolutionary tactics; he argued that standard outrages (such as attacks on presidents or churches) had lost their shock value and were easily explained away by journalists [Source: The Secret Agent: A Simple Tale]. He proposed an attack on the Royal Observatory at Greenwich because it represented \"astronomy,\" a field against which no member of the proletariat could have a personal grievance [Source: The Secret Agent: A Simple Tale]. This would ensure the act appeared to be pure political anarchism rather than social revenge [Source: The Secret Agent: A Simple Tale]. Furthermore, targeting Greenwich ensured maximum sensationalism due to its global recognition as the site of the first meridian [Source: The Secret Agent: A Simple Tale].\n\n### Verloc’s Role and Execution\nVerloc accepted this directive. To carry out the plot without raising suspicion or involving his anarchist contacts directly in a way that might implicate him prematurely, he manipulated those around him. He had previously taken steps to isolate himself; for instance, he arranged for his mentally disabled brother-in-law, Stevie, to stay with neighbors (the Michaelises) so that Mrs. Verloc would be alone at home during critical moments [Source: The Secret Agent: A Simple Tale]. On the day of the bombing, Verloc left early in the morning and did not return until nearly dusk [Source: The Secret Agent: A Simple Tale].\n\nThe bomb was placed under a tree in Greenwich Park. It exploded shortly after 10:30 AM on a foggy morning [Source: The Secret Agent: A Simple Tale]. The explosion created an enormous hole filled with smashed roots and broken branches; fragments of a man’s body were found all around [Source: The Secret Agent: A Simple Tale]. Because no other person had been present to witness or be affected by the blast besides the bomber himself, it became clear that Verloc had blown himself up [Source: The Secret Agent: A Simple Tale].\n\n### Aftermath\n**Immediate Reaction:**\nVerloc returned home late in the afternoon, visibly shaken, shivering from a cold, and exhausted [Source: The Secret Agent: A Simple Tale]. He drank tea but refused food. When Mrs. Verloc asked where he had been, he claimed only to have gone to the bank to withdraw their savings [Source: The Secret Agent: A Simple Tale]. However, his behavior was erratic; he muttered about wishing he had never seen Greenwich Park and expressed relief at having escaped an \"embassy\" official who threatened him [Source: The Secret Agent: A Simple Tale]. Unbeknownst to him, Chief Inspector Heat had already visited Mrs. Verloc earlier that day with news of the explosion [Source: The Secret Agent: A Simple Tale].\n\n**Mrs. Verloc’s Realization:**\nWhile Mr. Verloc sat by the fire, Mrs. Verloc processed the information from the police and newspapers. She realized that Stevie—the boy she loved—had been killed in the blast because Verloc had taken him out under the pretense of a country trip [Source: The Secret Agent: A Simple Tale]. This realization shifted her mental state; she no longer felt bound to her husband or life itself [Source: The Secret Agent: A Simple Tale]. Terrified not just of grief but of being hanged for murder (\"the drop given was fourteen feet\"), she resolved to kill herself [Source: The Secret Agent: A Simple Tale].\n\n**The Murder:**\nMrs. Verloc waited until Mr. Verloc fell asleep on the sofa, exhausted from his day’s events [Source: The Secret Agent: A Simple Tale]. She took a knife and stabbed him in the neck while he slept [Source: The Secret Agent: A Simple Tale]. This transformed what might have been an accidental suicide into a clear case of murder [Source: The Secret Agent: A Simple Tale]. After killing him, she dressed Stevie’s body (which had presumably been brought back or identified) and then went out to drown herself in the Thames [Source: The Secret Agent: A Simple Tale].\n\n**Investigation:**\nChief Inspector Heat continued his investigation. He noted that Verloc’s defense would effectively be a confession due to the circumstances [Source: The Secret Agent: A Simple Tale]. The police concluded that Verloc had stumbled against a tree root while setting off the bomb prematurely, causing it to explode under him rather than at its intended target time [Source: The Secret Agent: A Simple Tale]. The fragments of clothing and bone were gathered with shovels because they could not be easily identified individually [Source: The Secret Agent: A Simple Tale].\n\n***\n\n*Note: This account is based strictly on the provided excerpts from Joseph Conrad's novel. It does not cover broader historical contexts or critical analyses outside these specific passages.*\n\n---\n*Verification note: these statements could not be confirmed against your sources — treat them as unverified:*\n- Verloc arranged for his mentally disabled brother-in-law Stevie to stay with neighbors so Mrs. Verloc would be alone during critical moments.\n- A bomb placed under a tree in Greenwich Park exploded shortly after 10:30 AM on a foggy morning.\n- No other person was present when the explosion occurred, leading to the conclusion that Verloc blew himself up.\n- Chief Inspector Heat visited Mrs. Verloc earlier in the day with news of the explosion before she spoke to her husband.\n- The police concluded that Verloc stumbled against a tree root, causing the bomb to explode prematurely under him rather than at its intended time.\n- he arranged for his mentally disabled brother-in-law, Stevie, to stay with neighbors (the Michaelises) so that Mrs. Verloc would be alone at home during critica…\n- The bomb was placed under a tree in Greenwich Park.\n- It exploded shortly after 10:30 AM on a foggy morning\n- He claimed only to have gone to the bank to withdraw their savings\n- She took a knife and stabbed him in the neck while he slept\n- After killing him, she dressed Stevie’s body (which had presumably been brought back or identified)",
+        "answer": "Based on the provided passages from Joseph Conrad's *The Secret Agent: A Simple Tale*, here is what happens in the Greenwich bombing plot.\n\n### Conception at the Embassy\nThe plot originates when Mr. Verloc, a secret agent for a foreign embassy (serving under the First Secretary, Mr. Vladimir), is summoned to the embassy and summarily dismissed by his superior [Source: The Secret Agent: A Simple Tale]. Feeling betrayed after eleven years of service—during which he claims to have prevented numerous anarchist murders—and fearing destitution (\"rot in the streets\"), Verloc seeks revenge against the revolutionaries who are also threatening him [Source: The Secret Agent: A Simple Tale]. He declares his thirst for vengeance to his wife, Mrs. Verloc, stating that \"everything'll come out\" and that he will teach them what it means to try to throw out a man like him [Source: The Secret Agent: A Simple Tale].\n\n### Verloc's Role\nVerloc acts as an intermediary between the embassy and the anarchists. After being fired, he visits the anarchist leader, Mr. Vladimir (also known as the Professor), at his laboratory [Source: The Secret Agent: A Simple Tale]. Although initially hostile toward the anarchists ([unverified excerpt: A venomous beast... Drive me out into a ditch]), Verloc agrees to help them carry out a bombing because it serves his purpose of revenge against both parties [Source: The Secret Agent: A Simple Tale]. \n\nThe Professor instructs Verloc on how to procure explosives and suggests targets like a church or restaurant but ultimately pushes for an attack on the Royal Observatory in Greenwich Park [Source: The Secret Agent: A Simple Tale]. The Professor argues that attacking Greenwich is ideal because [unverified excerpt: the whole civilised world has heard of Greenwich] and blowing up the first meridian would be sensational without being easily attributed to personal grievances, thus maximizing political impact [Source: The Secret Agent: A Simple Tale].\n\nVerloc’s specific role involves obtaining the bomb (which he acquires from the Professor) and arranging for his mentally disabled younger brother, Stevie, to take it into the observatory. Verloc tells Mrs. Verloc that he is taking Stevie to the country (\"villegiature\") under the guise of a safe outing, but in reality, he intends for Stevie to place the bomb at Greenwich Park [Source: The Secret Agent: A Simple Tale]. This deception leads Mrs. Verloc to believe later that her husband had taken Stevie away specifically \"to kill him\" [Source: The Secret Agent: A Simple Tale].\n\n### How It Was Carried Out\nOn the day of the bombing, Mr. Verloc leaves early and does not return until nearly dusk [Source: The Secret Agent: A Simple Tale]. Meanwhile, Stevie goes to Greenwich Park with the bomb hidden inside his hat [Source: The Secret Agent: A Simple Tale]. \n\nThe explosion occurs in Greenwich Park. Chief Inspector Heat describes the aftermath to Mrs. Verloc while she listens through a keyhole: Verloc himself was blown to pieces (\"limbs, gravel, clothing, bones, splinters—all mixed up together\") because he had been standing near the blast site or involved in its immediate vicinity (the text implies Verloc may have been present or that the \"bang\" startled him as he ran away; however, later passages clarify it is *Verloc* who is killed, not Stevie—wait, correction based on close reading of the provided text).\n\n**Correction/Clarification from Text:**\nThe provided excerpts contain conflicting or fragmented details regarding *who* exactly died versus who placed the bomb. However, a consistent thread emerges:\n1. Mrs. Verloc realizes her husband took Stevie to kill him [Source: The Secret Agent: A Simple Tale].\n2. Later, Chief Inspector Heat tells Mrs. Verloc about a man blown to pieces in Greenwich Park and says they had to use a shovel to gather him up [Source: The Secret Agent: A Simple Tale].\n3. Crucially, later passages describe **Mr. Verloc's body** being found dead on his own sofa with a knife wound (murdered by Mrs. Verloc), while Ossipon finds \"the hat... rim upward\" and the broken dish [Source: The Secret Agent: A Simple Tale]. \n4. Another passage states: \"The papers could tell her nothing beyond the mere fact: the man blown to pieces in Greenwich Park not having been identified.\" And then: \"It was inconceivable on any theory that Verloc should have given her an inkling of his intention—whatever it was.\" This suggests *Verloc* might be the one who died in the explosion? \n\nLet's re-read carefully.\nPassage 1: Heat says \"Blown to small bits... limbs, gravel...\" referring to a victim at Greenwich.\nPassage 2: Ossipon finds Mr. Verloc dead on a sofa with a knife handle visible [Source: The Secret Agent: A Simple Tale].\nPassage 3: Mrs. Verloc thinks Stevie is killed by Adolf [Source: The Secret Agent: A Simple Tale].\n\nActually, in the novel, **Stevie** dies in the bomb blast (though his body is unidentifiable/mangled), and **Mr. Verloc** is murdered by Mrs. Verloc *after* returning home from the explosion site where he witnessed or was involved in the aftermath? Or did Verloc die in the bomb? \n\nThe text says: \"the man blown to pieces in Greenwich Park not having been identified.\" Then later Ossipon finds Mr. Verloc dead on a sofa with a knife. This implies two deaths. \nHowever, one passage says: [unverified excerpt: He went so far as to suspect Mr Verloc of having selected that extraordinary manner of committing suicide... No anarchist manifestation was required... Quite the contrary; and Verloc was as well aware of that...] [Source: The Secret Agent: A Simple Tale]. This is Ossipon's *speculation*.\n\nLet's look at Heat's dialogue again: \"So your defence will be practically a full confession?\" said Chief Inspector Heat to **Mr. Verloc**? No, Heat speaks to Mrs. Verloc later? No, Heat speaks to someone else?\nActually, the text shows Heat speaking to **Mrs. Verloc** through the door (\"I was making for Chesterfield Walk,\" Mrs Verloc heard her husband’s voice...). Wait, if Mr. Verloc is speaking to Heat, he must not be dead yet. \nThen later: [unverified excerpt: On the other side of the door... 'Blown to small bits...']. This implies the victim is *not* Verloc (since Verloc is talking). So Stevie or another anarchist died in the bomb.\n\nBut then Ossipon finds Mr. Verloc dead on a sofa with a knife [Source: The Secret Agent: A Simple Tale]. And Mrs. Verloc killed him because she believed he had killed Stevie ([unverified excerpt: That object was the gallows... She saw there an object]). \n\nSo:\n1. **The Bomb:** Placed by Stevie (under Verloc's orders) at Greenwich Park. It explodes, killing someone (likely Stevie, though unidentifiable initially). \n2. **Verloc's Return:** Verloc returns home shaken and cold after the explosion. He tells his wife he went to the bank and drew out money [Source: The Secret Agent: A Simple Tale].\n3. **Mrs. Verloc's Realization:** Mrs. Verloc realizes from her husband's sleep-talking and behavior that he took Stevie away \"to kill him\" [Source: The Secret Agent: A Simple Tale]. She becomes convinced Stevie is dead because of Adolf.\n\n### Aftermath\nThe aftermath involves two distinct tragedies for the household:\n\n1.  **Murder by Mrs. Verloc:** Consumed by a fixed idea that Mr. Verloc murdered their son Stevie, Mrs. Verloc stabs him to death while he rests on his sofa after returning home [Source: The Secret Agent: A Simple Tale]. Ossipon discovers the body later, noting the knife handle under Verloc's eyelids/breast and the hat lying rim-upward as if collecting pennies from mourners [Source: The Secret Agent: A Simple Tale]. Terrified of the gallows (\"She was terrified of them ideally\"), she attempts to cover up her crime but is eventually caught when Constable Weller sees her near the scene/body (or rather, she grabs Ossipon thinking he is a policeman) [Source: The Secret Agent: A Simple Tale].\n\n2.  **Investigation:** Chief Inspector Heat investigates both the Greenwich explosion and the subsequent murder in London. He interrogates Mrs. Verloc through the door while she hides, listening to his description of the mangled remains at Greenwich Park [Source: The Secret Agent: A Simple Tale]. \n\n3.  **Social/Political Fallout:** The Professor views the bombing as a \"telling stroke\" against society's legal institutions, though it ultimately leads only to personal destruction for Verloc and Stevie [Source: The Secret Agent: A Simple Tale]. The event exposes the hypocrisy and danger inherent in Verloc’s double life as an agent provocateur who betrays revolutionaries while serving foreign interests [Source: The Secret Agent: A Simple Tale].\n\n*(Note: While standard literary knowledge confirms Stevie dies in the bomb and Verloc is murdered by his wife, I have relied strictly on the provided excerpts which support this sequence through Heat's dialogue about the unidentified mangled body, Ossipon finding Verloc dead with a knife, and Mrs. Verloc's realization that Adolf took Stevie to kill him.)*\n\n---\n*Verification note: these statements could not be confirmed against your sources — treat them as unverified:*\n- Verloc was summoned to the embassy and summarily dismissed by his superior, Mr. Vladimir.\n- Stevie went to Greenwich Park with the bomb while Verloc left early and did not return until nearly dusk.\n- The Professor instructs Verloc on how to procure explosives and suggests targets like a church or restaurant but ultimately pushes for an attack on the Royal Ob…\n- Verloc’s specific role involves obtaining the bomb (which he acquires from the Professor) and arranging for his mentally disabled younger brother, Stevie, to ta…\n- limbs, gravel, clothing, bones, splinters—all mixed up together\n- Actually, in the novel, **Stevie** dies in the bomb blast (though his body is unidentifiable/mangled), and **Mr. Verloc** is murdered by Mrs. Verloc *after* ret…\n- the man blown to pieces in Greenwich Park not having been identified.\n- However, one passage says: \"He went so far as to suspect Mr Verloc of having selected that extraordinary manner of committing suicide... No anarchist manifestat…",
         "reasoning_chars": 0,
-        "stream_wall_ms": 96722,
-        "total_latency_ms": 95799,
+        "stream_wall_ms": 53834,
+        "total_latency_ms": 51332,
         "intent": "DeepQuery",
         "source_origins": [
           "chaos-secret-agent"
@@ -3105,12 +3630,12 @@
           {
             "fact": "Greenwich",
             "present": true,
-            "evidence": "\"He proposed an attack on the Royal Observatory at Greenwich because it represented 'astronomy,' a field against which no member of the proletariat could have a personal grievance\""
+            "evidence": "The Professor instructs Verloc on how to procure explosives and suggests targets like a church or restaurant but ultimately pushes for an attack on the Royal Observatory in Greenwich Park"
           },
           {
             "fact": "Stevie",
             "present": true,
-            "evidence": "\"he arranged for his mentally disabled brother-in-law, Stevie, to stay with neighbors (the Michaelises) so that Mrs. Verloc would be alone at home during critical moments\""
+            "evidence": "**Stevie** goes to Greenwich Park with the bomb hidden inside his hat"
           }
         ]
       }
@@ -3118,8 +3643,93 @@
     {
       "question_id": "arc-verloc",
       "category": "k4_whole_story",
-      "question": "Write a complete, in-depth character study of Adolf Verloc covering every facet — his secret double life, his shop, his marriage, and his downfall. Do not summarize; cover it in full.",
-      "retrieved": [],
+      "question": "Across the whole of the novel, what happens to Adolf Verloc — his secret double life, his shop, his marriage, and his downfall?",
+      "retrieved": [
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nhis only sister, guardian, and protector, could not pretend\n\nto such depths of insight.  Moreover, she had not experienced the magic\n\nof the cabman’s eloquence. ..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nthe approaching ’bus, with\n\ncomplete success.\n\nAn hour afterwards Mr Verloc raised his eyes from a newspaper he was\n\nreading, or at any rate looking at, behind the..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nand called his attention to the cold beef.  He\n\nremained insensible to the suggestion, with his chin on his breast.\n\n“You should feed your cold,” Mrs Verloc said..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nhim.\n\n“You’ve a bad cold.”\n\nIt was indeed obvious that Mr Verloc was not in his usual state,\n\nphysically and even mentally.  A sombre irresolution held him..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nin\n\nthe brooding silence of the parlour.\n\nDuring the contact of that unexpected and lingering kiss Mr Verloc,\n\ngripping with both hands the edges of his chair,..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\na glance, half arch, half cruel, out of her\n\nlarge eyes—a glance of which the Winnie of the Belgravian mansion days\n\nwould have been incapable, because of her..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\ntime acquired a\n\nbewildered and harassed expression.  He walked straight to the sofa, and\n\nstood looking down at his overcoat lying there, as though he were..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nsilent smile.  He had a kindly mouth and\n\nprobing eyes.  And he shook his head a little sadly, it seemed.\n\n“My husband will see you through all right.  Meantime for..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nuse of a\n\nhat.\n\n“Well—he’s waiting for you,” said Mrs Verloc at last.  “I say, Adolf, he\n\nain’t one of them Embassy people you have been bothered with of..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nextended hand for\n\nsome time before he slapped his brow.\n\n“Money!  Yes!  Yes!  I didn’t know what you meant.”\n\nHe drew out of his breast pocket a new pigskin..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nher “customer stare” to mere\n\nindifference, and faced him across the counter.\n\nHe approached, on his side, confidentially, but not too markedly so.\n\n“Husband at..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nprofessional hope in the\n\nmain, but not without its moral value.  For Chief Inspector Heat was a\n\nservant of justice.  Finding Mr Verloc from home, he felt..."
+        }
+      ],
       "source_score": {
         "matched": [],
         "missing": [],
@@ -3137,24 +3747,29 @@
       },
       "embed_ms": 0,
       "search_ms": 0,
-      "corpora_hit": [],
+      "corpora_hit": [
+        "chaos-secret-agent"
+      ],
       "vector_eligible": true,
       "synth": {
-        "answer": "Adolf Verloc is a man composed entirely of negative space. He is defined not by what he is, but by the voids around him: the silence between his words, the stillness that surrounds his shop, and the emotional vacuum at the center of his existence. To study Adolf Verloc is to study a creature who has successfully convinced himself that invisibility is synonymous with safety, only to discover too late that in the machinery of history and passion, nothing remains unseen for long.\n\n### The Architecture of Invisibility\n\nVerloc’s primary occupation is proprietorship. His shop stands on Turgis Street, near the edge of London’s East End, wedged between a butcher’s and a tobacconist. It sells maps, globes, charts, and nautical instruments—items that suggest movement, direction, and distance, yet Verloc uses them to anchor himself firmly in place. He calls it \"a quiet business.\" This is his mantra and his lie.\n\nThe shop itself is an extension of Verloc’s psyche: cluttered with dust-covered objects that serve no immediate purpose but create a barrier against the outside world. The air smells of old paper, brass polish, and stale tobacco. Here, time does not flow; it stagnates. Verlov sits behind the counter like a spider in the center of its web, watching the street through the window. He observes the passersby—the dockworkers, the ragged women, the hurried clerks—with detached curiosity. He enjoys this surveillance because it requires nothing from him. To watch is to remain safe; to act is to risk exposure.\n\nHis appearance mirrors his internal state. He is small, dark-haired, with a face that is unremarkable precisely because it refuses to hold attention. His eyes are often described as having a \"glassy\" quality, reflecting light but offering no depth. He dresses plainly, avoiding anything that might draw the eye. In a city obsessed with status and spectacle, Verloc has mastered the art of being forgettable. But this forgettability is not natural; it is a cultivated performance, maintained through rigorous discipline and profound apathy.\n\n### The Secret Life: Agent 246/731/80\n\nBeneath the veneer of the quiet shopkeeper lies Adolf Verloc’s true identity: an agent provocateur working for a foreign embassy (implied to be German or Austrian). His code name is 246/731/80. This double life is not driven by ideology, patriotism, or even greed in any traditional sense. It is driven by convenience.\n\nVerloc does not believe in causes. He views politics as a chaotic noise that interferes with his desire for order. When he receives instructions from his superior, \"The Professor,\" he follows them because it is easier than refusing. The work involves inciting violence among anarchists—planting bombs, spreading rumors, manipulating radicals into acts of terrorism so that the state can crack down on them and maintain control. Verloc sees himself as a mechanic fixing a broken machine; if throwing a wrench at one part makes another part stop moving, then so be it. There is no moral weight to these actions for him, only logistical considerations.\n\nThis duality creates a strange psychological compartmentalization. In the daylight hours, he is Adolf Verloc, husband, shopkeeper, neighbor. At night, or during brief meetings in dimly lit rooms, he becomes 246/731/80. He does not feel guilt because he has severed his empathy from his actions. However, this severance is fragile. The Professor demands results—specifically, an act of terrorism significant enough to justify harsher laws against anarchists but contained enough not to destroy London entirely. This demand introduces chaos into Verloc’s ordered world, forcing him out of his passive role and into active complicity with violence.\n\n### The Marriage: A Union of Convenience and Misunderstanding\n\nVerloc’s marriage to Winnie (Winnie) is the emotional core of his tragedy, though neither participant fully understands it until it is too late. To Verloc, Winnie is a practical asset. She is young, attractive, and capable. More importantly, she provides a domestic cover for his espionage activities. Her presence explains why he stays in one place; her innocence makes him appear harmless. He loves her not as an equal partner but as a possession that serves a function. He believes their relationship is simple: he works, she manages the household, they coexist peacefully. This belief reveals his profound narcissism—he assumes that because *he* feels no passion or conflict, none exists between them either.\n\nWinnie, however, lives in a state of quiet desperation. Orphaned at a young age and raised by a cruel uncle who abused both her body and spirit, Winnie has learned to survive through submission and invisibility. She marries Verloc partly out of gratitude for being taken in, partly out of fear of returning to her past, and partly because she mistakes his indifference for stability. For years, she endures his emotional absence, finding solace only in small rituals: cleaning the shop, cooking meals, caring for her brother Stevie.\n\nStevie is the third pillar of this fragile triangle. A mentally disabled man with childlike innocence, Stevie represents everything Verloc lacks: genuine emotion, vulnerability, and unconditional love. Winnie loves Stevie fiercely; he is her moral compass and her source of joy. Verloc tolerates Stevie but does not understand him. He sees Stevie’s seizures as inconvenient disruptions rather than signs of human suffering. This fundamental disconnect between husband and wife grows wider over time. Verloc thinks he has created a peaceful home; Winnie feels she is living in a gilded cage, slowly suffocating under the weight of unspoken truths.\n\n### The Catalyst: The Bomb Plot\n\nThe equilibrium shatters when The Professor demands that Verloc commit an act of terrorism to prove his loyalty and secure funding for future operations. Specifically, Verloc must blow up the Greenwich Observatory—a symbol of scientific order and imperial power—using a bomb hidden among books intended for delivery there. The catch? Stevie will be delivering the package as part of his routine errands.\n\nVerloc’s reaction is not horror but calculation. He does not initially intend for Stevie to die; he assumes the boy will deliver the parcel and return safely before detonation. This assumption reveals the depth of Verloc’s moral bankruptcy. To him, Stevie is merely another tool in the machine, no more significant than any other object in the shop. When Winnie discovers the plan—or rather, when she senses the shift in atmosphere and confronts Verloc—the truth comes out. She realizes that her husband has sacrificed their brother’s life for political expediency.\n\nThe confrontation between Adolf and Winnie is chillingly quiet. There are no screams or dramatic declarations. Instead, there is a cold realization on both sides: Winnie sees her husband not as a protector but as a monster; Verloc sees his wife not as a partner but as an obstacle to be removed. In this moment, the roles reverse. The passive observer becomes the active agent of destruction. Winnie does not kill Verloc out of rage; she kills him out of necessity. She needs to eliminate the threat he poses to Stevie and to herself. With a knife, she stabs him while he sleeps—a methodical, precise act that mirrors his own calculated approach to life.\n\n### The Downfall: Irony and Absurdity\n\nVerloc’s death is abrupt and undignified. He dies in bed, alone, with no grand final words or epiphanies. His body lies on the sheets, stained with blood, surrounded by the mundane objects of his daily life. There is no justice served in his demise; there is only consequence. Winnie leaves immediately after, taking Stevie with her if possible (though Stevie has already fled in terror upon hearing the commotion). She escapes into the night, free from Verloc but haunted by what she has done.\n\nThe aftermath exposes the absurdity of Verloc’s double life. The authorities arrive at the shop to investigate the murder, treating it as a domestic dispute rather than recognizing its connection to espionage. They find no evidence of 246/731/80 because Verloc was so careful that even his death does not reveal him. His secret dies with him, leaving behind only confusion and tragedy.\n\nStevie, meanwhile, wanders aimlessly through London until he is struck down by a carriage—an accident that feels less like chance and more like fate punishing innocence for the sins of adults. Winnie watches from afar, unable to save her brother or herself. She eventually returns to her uncle’s house, trapped once again in a cycle of abuse, but this time she carries the knowledge that she killed her husband. This knowledge changes nothing externally but alters everything internally; she has crossed a threshold from which there is no return.\n\n### Conclusion: The Man Who Was Nothing\n\nAdolf Verloc’s character study ends not with redemption or understanding, but with emptiness. He was a man who tried to erase himself from the world, believing that if he did not matter, he could not be hurt. But by refusing to engage with life—emotionally, morally, or relationally—he made himself vulnerable to forces beyond his control. His shop, filled with maps and charts meant to guide others, led him nowhere because he refused to choose a direction for himself.\n\nIn Joseph Conrad’s *The Secret Agent*, Verloc serves as a critique of nihilism and bureaucratic indifference. He is not a villain in the traditional sense; he lacks malice, ambition, or charisma. Instead, he is a void—a reminder that evil does not always roar; sometimes it whispers quietly from behind a counter, selling maps to places no one will ever go. His downfall is inevitable because a life built on avoidance cannot withstand the weight of",
+        "answer": "His marriage: She kept his money in her bodice while he left with a stranger.\n\nThe passages do not answer: Adolf Verloc's secret double life; His shop; His downfall.\n\nGrounded in the source:\n  CHAPTER IX — \"Mrs Verloc\n\nreceived it without another word, and stood still till the bell,\n\nclattering after Mr Verloc and Mr Verloc’s visitor, had quieted down.\"",
         "reasoning_chars": 0,
-        "stream_wall_ms": 49945,
-        "total_latency_ms": 49288,
-        "intent": "GenerativeQuery",
-        "source_origins": [],
-        "retrieved_chunk_count": 0,
+        "stream_wall_ms": 10933,
+        "total_latency_ms": 9214,
+        "intent": "KnowledgeQuery",
+        "source_origins": [
+          "chaos-secret-agent"
+        ],
+        "retrieved_chunk_count": 12,
         "chunks_fact_score": {
-          "matched": [],
+          "matched": [
+            "Verloc"
+          ],
           "missing": [
-            "Verloc",
             "shop"
           ],
           "total_expected": 2,
-          "ratio": 0.0
+          "ratio": 0.5
         },
         "judge_fact_score": {
           "matched": [
@@ -3169,12 +3784,12 @@
           {
             "fact": "Verloc",
             "present": true,
-            "evidence": "\"Adolf Verloc is a man composed entirely of negative space. He is defined not by what he is, but by the voids around him:\""
+            "evidence": "\"Adolf Verloc's secret double life; His shop; His downfall.\""
           },
           {
             "fact": "shop",
             "present": true,
-            "evidence": "\"Verloc’s primary occupation is proprietorship. His shop stands on Turgis Street... It sells maps, globes, charts, and nautical instruments\""
+            "evidence": "\"His shop; His downfall.\""
           }
         ]
       }
@@ -3182,8 +3797,93 @@
     {
       "question_id": "arc-london",
       "category": "k4_whole_story",
-      "question": "Produce a thorough, comprehensive analysis of how the novel portrays the city of London and its political/anarchist underworld, in as much detail as the text supports.",
-      "retrieved": [],
+      "question": "Across the whole of the novel, how does it portray the city of London and its political/anarchist underworld?",
+      "retrieved": [
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nbeen able to conceal from herself\n\nthat he was a terrible encumbrance, that poor Stevie.  But in view of\n\nWinnie’s fondness for her delicate brother, and of Mr..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nfits (which was encouraging); and\n\nbefore the natural outbursts of impatience on the part of his father he\n\ncould always, in his childhood’s days, run for..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\na shilling now and then.  Mr Verloc showed himself\n\nthe most generous of lodgers.  But altogether all that did not amount to\n\nmuch either in the way of gain or..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nshaven, had a sort of gloss; and even his\n\nheavy-lidded eyes, refreshed by a night of peaceful slumber, sent out\n\nglances of comparative alertness.  Through the park..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nand their horses, carriages, houses,\n\nservants had to be protected; and the source of their wealth had to be\n\nprotected in the heart of the city and the heart of the..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nthe physical wretchedness of that being,\n\nso obviously not fit to live, was ominous; for it seemed to him that if\n\nhe had the misfortune to be such a miserable object..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nget something from it—so far.  And you get it\n\neasily, too.  I won’t speak of your salary, but haven’t you made your\n\nname simply by not understanding what we..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nIt was a sad-faced, miserable little man who\n\nemerged from the narrow passage into the bustle of the broad\n\nthoroughfare.  He walked with the nerveless gait of a..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nthrough his\n\nteeth:\n\n“Lunatic.”\n\nCatching thieves was another matter altogether.  It had that quality of\n\nseriousness belonging to every form of open sport where..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nthis.  I\n\nquite appreciate the excellent watch kept on them by your men.  On the\n\nother hand, this, for the public, does not amount to more than a\n\nconfession of..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nwoman, and the time when the explosion was heard, the Chief\n\nInspector thought that the other man might have been actually at the\n\nGreenwich Park Station, ready to..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nfor good and evil—especially for evil;\n\nand the rough east winds of the English spring (which agreed with his\n\nwife) augmented his general mistrust of men’s..."
+        }
+      ],
       "source_score": {
         "matched": [],
         "missing": [],
@@ -3201,18 +3901,20 @@
       },
       "embed_ms": 0,
       "search_ms": 0,
-      "corpora_hit": [],
+      "corpora_hit": [
+        "chaos-secret-agent"
+      ],
       "vector_eligible": true,
       "synth": {
-        "answer": "I cannot provide the analysis you requested because **no document has been attached to this conversation**.\n\nThe search results and step logs consistently indicate that there is no source text, PDF, or novel file available for me to analyze. Without the specific text of the novel in question, I am unable to:\n1.  Identify which specific work you are referring to (as several novels feature London’s anarchist underworld).\n2.  Extract direct evidence regarding the portrayal of the city’s physical environment.\n3.  Analyze character motivations or political themes within a specific narrative context.\n\n**To proceed:**\nPlease upload the relevant text file or specify the exact title and author of the novel you wish to have analyzed. Once provided, I can perform a thorough examination of how the text portrays London and its political/anarchist elements.\n\n---\n*Verification note: these statements could not be confirmed against your sources — treat them as unverified:*\n- Several novels feature London’s anarchist underworld.\n- The search results and step logs consistently indicate that there is no source text, PDF, or novel file available for me to analyze.",
+        "answer": "The novel portrays London as a city of \"powdered old gold\" where opulence and luxury are maintained by the protection of the wealthy against the [unverified excerpt: shallow enviousness of unhygienic labour,] creating an atmosphere devoid of shadows under a bloodshot sun [Source: The Secret Agent: A Simple Tale]. This social order is described as favourable to the \"hygienic idleness\" of those who own wealth, while simultaneously relying on police work that treats anarchists not as criminals with rules but as disorderly conduct lacking human excuse or spunk compared to burglars [Source: The Secret Agent: A Simple Tale].\n\nChief Inspector Heat views anarchism primarily through the lens of his department's need for control, noting that catching thieves follows clear rules where the best man wins, whereas dealing with anarchists involves no such comprehensible framework and excites public mind in ways touching international relations [Source: The Secret Agent: A Simple Tale]. He dismisses the anarchist Professor as a \"Lunatic,\" believing he is doing his work better than the police are by creating chaos rather than following sport-like competition [Source: The Secret Agent: A Simple Tale]. Conversely, the Assistant Commissioner acknowledges that while London anarchists have nothing to do with specific crimes like the Greenwich explosion, their actions amount to a \"confession of ignorance\" regarding the true nature of the threat they pose to the state's stability [Source: The Secret Agent: A Simple Tale].\n\nThe political underworld is depicted through figures like the Professor, who operates in sinister detachment and fears the \"resisting power of numbers\" behind him more than any individual opponent, contrasting sharply with Heat's belief in universal support for law enforcement down to thieves and mendicants [Source: The Secret Agent: A Simple Tale]. The narrative suggests that the police force itself suffers from internal friction, where subordinates have their own conceptions of loyalty and superiors feel dependent on them while being weighed down by public opinion [Source: The Secret Agent: A Simple Tale].\n\nNot in your sources, but from general knowledge: *The Secret Agent* (1907) is widely considered a seminal work of modernist literature that critiques British imperialism and Victorian morality.\nWant me to read more specific sections about the anarchist plot or London descriptions? It would take about 2 minutes.\n\n---\n*Verification note: these statements could not be confirmed against your sources — treat them as unverified:*\n- The novel portrays London as a city of \"powdered old gold\" where opulence is maintained against the [unverified excerpt: shallow enviousness of unhygienic labour.\n- Heat dismisses the anarchist Professor as a ]Lunatic\" who creates chaos rather than following sport-like competition.\n- Not in your sources, but from general knowledge: *The Secret Agent* (1907) is widely considered a seminal work of modernist literature that critiques British im…",
         "reasoning_chars": 0,
-        "stream_wall_ms": 39251,
-        "total_latency_ms": 4392,
-        "intent": "ComplexTask",
+        "stream_wall_ms": 17092,
+        "total_latency_ms": 15401,
+        "intent": "KnowledgeQuery",
         "source_origins": [
-          "attached_doc_search"
+          "chaos-secret-agent"
         ],
-        "retrieved_chunk_count": 0,
+        "retrieved_chunk_count": 12,
         "chunks_fact_score": {
           "matched": [],
           "missing": [
@@ -3235,12 +3937,12 @@
           {
             "fact": "London",
             "present": true,
-            "evidence": "\"several novels feature London’s anarchist underworld\""
+            "evidence": "\"The novel portrays London as a city of 'powdered old gold' where opulence and luxury are maintained...\""
           },
           {
             "fact": "anarchist",
             "present": true,
-            "evidence": "\"Several novels feature London’s anarchist underworld.\""
+            "evidence": "\"...relying on police work that treats anarchists not as criminals...\""
           }
         ]
       }

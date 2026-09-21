@@ -3,9 +3,9 @@
   "identity": {
     "arm": "bare",
     "corpus": "chaos-secret-agent",
-    "host": "http://localhost:9741",
-    "synth_model": "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL",
-    "judge_model": "Qwopus3.5-4B-v3-MTP-Q8_0",
+    "host": "http://127.0.0.1:9841",
+    "synth_model": "Qwen3.6-35B-A3B-MTP-UD-Q6_K",
+    "judge_model": "Qwen3.5-4B-UD-Q6_K_XL",
     "recipe_sha256": "9002b6a176c7940bf182bd5223f20106fe2c0e45edc834f762ccb5d1d48357f2",
     "ontology_sha256": "a5ea4ca32dbbc02e1c49a28503a1f403aa033c24a848188aed02b37f9f1e7662",
     "chunks_listing_sha256": "47102b42df4439d7652cb6c8a111ae1bda67dde03132006f49a0a1477b26cce4"
@@ -28,20 +28,22 @@
     "--format",
     "json",
     "--output",
-    "research/ontology-retrieval/pilot/runs/bare/run-1/eval.json"
+    "research/ontology-retrieval/pilot/runs/bare/run-1/eval.json",
+    "--chat-model",
+    "Qwen3.6-35B-A3B-MTP-UD-Q6_K"
   ],
   "eval_exit": 0,
   "daemon_refusals": {
     "count": 0,
     "sample": []
   },
-  "models_source": "http://localhost:9741/v1/models",
+  "models_source": "http://127.0.0.1:9841/v1/models",
   "verdict": null,
   "never_ran_reasons": [],
   "provenance": {
-    "commit": "6dd388f5da3b9e91519522a2e1fd7c424115fbef",
+    "commit": "45d00f35354d8c025047d89b50bc9667a51c2768",
     "dirty": true,
-    "started_at_unix": 1789883560,
+    "started_at_unix": 1789963438,
     "paths": {
       "index_dir": "/Users/alexsbryan/.svrnmesh/indexes/chaos-secret-agent",
       "recipe": "sovereign-recipes/chaos-secret-agent/recipe.toml"
