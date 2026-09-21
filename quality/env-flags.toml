@@ -40,6 +40,13 @@ third_party_allowlist = []
 # ── grounding ───────────────────────────────────────────────────────
 
 [[flag]]
+name = "SOVEREIGN_BENCH_ROOT"
+cluster = "bench"
+default = "sovereign/bench (set by the workspace .cargo/config.toml)"
+purpose = "Root of the bank/baseline tree sovereign-eval reads; a lifted bench sets it."
+status = "shipped"
+
+[[flag]]
 name = "SOVEREIGN_TENSOR_BUFT_OVERRIDE"
 cluster = "inference"
 default = "unset"

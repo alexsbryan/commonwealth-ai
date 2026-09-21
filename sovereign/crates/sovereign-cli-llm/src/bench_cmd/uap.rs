@@ -193,6 +193,16 @@ fn parse_args(args: &[String]) -> Result<Args, String> {
 }
 
 fn default_bench_dir() -> PathBuf {
+    // One env decider, shared with sovereign-eval's bank tests. The cwd walk
+    // below stays because a user typing `svrn bench uap` has no knob set.
+    if let Some(root) = sovereign_eval::bench_root::bench_root() {
+        let candidate = root.join("uap");
+        if candidate.exists() {
+            tracing::debug!(target: "bench.root", source = "env", dir = %candidate.display());
+            return candidate;
+        }
+        tracing::debug!(target: "bench.root", source = "env", miss = %candidate.display());
+    }
     if let Ok(cwd) = std::env::current_dir() {
         let candidate = cwd.join("sovereign/bench/uap");
         if candidate.exists() {

@@ -415,16 +415,14 @@ mod tests {
     /// agree with the file on disk rather than only with each other.
     #[test]
     fn shipped_compound_bank_loads_as_partially_present() {
-        let bench =
-            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../bench/chaos_monkey");
-        // Skip only when the bench tree is genuinely absent (filtered
-        // checkout). If the tree IS here and the bank is not, that is a
-        // missing file or a path that has rotted — a failure, not a skip.
-        // A guard that cannot tell those apart turns into a test that has
-        // silently never run (§18.1).
-        if !bench.is_dir() {
-            return;
-        }
+        let bench = crate::bench_root::require_bench_root()
+            .expect("bench tests need the bench tree")
+            .join("chaos_monkey");
+        assert!(
+            bench.is_dir(),
+            "{} names no directory — the knob is set but wrong",
+            bench.display()
+        );
         let path = bench.join("saltgrass_compound.toml");
         assert!(
             path.is_file(),

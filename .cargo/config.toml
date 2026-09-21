@@ -102,3 +102,7 @@ rustflags = [
 # NB this is a COMPILE-time floor — a rustflags link-arg cannot fix it.
 [env]
 MACOSX_DEPLOYMENT_TARGET = { value = "10.15", force = true }
+# The bench tree, absolute, resolved from this file's directory. Lets
+# sovereign-eval's bank tests name their data without climbing out of the
+# crate root, which boundary-gate rule 3c forbids for a liftable package.
+SOVEREIGN_BENCH_ROOT = { value = "sovereign/bench", relative = true }
