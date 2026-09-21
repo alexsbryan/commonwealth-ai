@@ -26,8 +26,8 @@ different builds, models or hosts.
 
 Two exclusion rules drop a question from EVERY arm, both reported by name on
 the table: closed-book answered it without retrieving, or some retrieving arm
-routed it away from `knowledge_query`/`comparison_query` (check I7 censuses
-the same routes).
+routed it away from the routes in `GROUNDED_ROUTES` (check I7 censuses the
+same set).
 
 No bar is read here. The per-category verdict answers judgeability only
 (pre-reg "Bars": a kind under n = 20 after those exclusions is
@@ -124,14 +124,22 @@ CLOSED_BOOK_KNOWN = 0.5   # pre-reg "Arms": judge >= 0.5 on ALL runs is excluded
 BAND_FLOOR = 0.05         # check I4
 MIN_N = 20                # pre-reg "Bars": below this the kind is could-not-judge
 
-# The two routes that retrieve (check I7). Written once, in the wire spelling.
+# The routes that retrieve (check I7). Written once, in the wire spelling.
+# `deep_query` and `simple_query` dispatch to `handle_simple`, whose first act
+# is `prepare_knowledge_context` (`sovereign-core/src/runtime/handlers/
+# simple.rs:24-27`). Until 2026-09-21 this listed the first two only, and the
+# pod pilot (`research/ontology-retrieval/pod/20260921T035355Z/`) failed I7 on
+# five `DeepQuery` rows that had each retrieved 20-28 chunks. Retrieving is not
+# being WALKED: those rows carry no `atlas_walk`, and check I2 is what reads
+# that.
 # `Intent::name()` stamps `routed_intent` in PascalCase while the intent
 # table's `slug` is the same route in snake_case
 # (`sovereign-contracts/src/types/routing.rs:305-332`), and the knowledge
 # handler's DISPLAY label is the slug — so one route reaches this file under
 # two spellings. `route_key` folds them onto one rather than listing each
 # route twice (ARCH §8).
-GROUNDED_ROUTES = ("knowledge_query", "comparison_query")
+GROUNDED_ROUTES = ("knowledge_query", "comparison_query", "deep_query",
+                   "simple_query")
 
 # Identity fields every arm of one corpus must agree on. `chunks_listing_sha256`
 # is deliberately NOT here: the oracle arm runs against a corpus holding only
@@ -1561,6 +1569,23 @@ def self_test():
                   and b["categories"]["K1"]["n"] == 24)
             return ok, f"count={ug['count']} n={b['categories']['K1']['n']}"
 
+    def a_deep_query_row_retrieved_and_a_generative_one_did_not():
+        """PLANT: `full` routed q00 to DeepQuery and q01 to GenerativeQuery.
+        The first retrieves through `handle_simple` and stays; the second
+        retrieves nothing and goes. A set widened until nothing is excluded
+        would pass the first half of this and fail the second."""
+        with tempfile.TemporaryDirectory() as t:
+            root = clean(Path(t) / "runs")
+            route = {"q00": "DeepQuery", "q01": "GenerativeQuery"}
+            for r in (1, 2, 3):
+                fixture(root, FULL_ARM, r,
+                        [row(q, "K1", 0.7, 0.35, members=[("f1", True)],
+                             intent=route.get(q, "KnowledgeQuery")) for q in QIDS])
+            _code, b = study(root, Path(t) / "out", quiet=True)
+            ug = b["ungrounded_route"]
+            ok = ug["excluded"] == ["q01"] and b["categories"]["K1"]["n"] == 23
+            return ok, f"excluded={ug['excluded']} n={b['categories']['K1']['n']}"
+
     def no_retrieving_arm_is_never_ran_not_zero():
         """PLANT: only closed-book ran. A count of 0 reads exactly like a board
         on which every question retrieved."""
@@ -1600,6 +1625,7 @@ def self_test():
     case("query-sharing-false-withholds", query_sharing_false_withholds_snippets)
     case("column-falls-to-next-measured-run", column_falls_to_the_next_run_that_measured)
     case("ungrounded-route-excludes-every-arm", ungrounded_route_excludes_the_question_from_every_arm)
+    case("deep-query-retrieved-generative-did-not", a_deep_query_row_retrieved_and_a_generative_one_did_not)
     case("unrouted-row-is-not-an-exclusion", an_unrouted_row_is_not_an_exclusion)
     case("route-spellings-are-one-route", the_two_spellings_of_one_route_are_one_route)
     case("no-retrieving-arm-is-never-ran", no_retrieving_arm_is_never_ran_not_zero)

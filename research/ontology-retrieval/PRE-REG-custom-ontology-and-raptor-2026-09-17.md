@@ -745,3 +745,27 @@ recorded `verdict: never-ran` on 7 refusals and `bare` on 16. The primary synth
 slot is healthy (0.85 s for a small completion) and the committed pilot record
 is the earlier one, unchanged. A second rental, and the daemon's state, are the
 operator's call; the measurements are in `ralph/NEEDS_HUMAN.md`.
+
+### 2026-09-21 — I7's grounded set was wrong about DeepQuery (operator decision A41)
+
+**What was wrong.** Record 2 above calls a row grounded when its route is
+`knowledge_query` or `comparison_query`, on the premise that every other route
+retrieves nothing. `deep_query` and `simple_query` dispatch to `handle_simple`,
+which calls `prepare_knowledge_context` first
+(`sovereign/crates/sovereign-core/src/runtime/handlers/simple.rs:24-27`). The
+pod pilot (`research/ontology-retrieval/pod/20260921T035355Z/`) failed I7 on
+five `DeepQuery` rows that had each retrieved 20-28 chunks.
+
+**What changed.** `GROUNDED_ROUTES` in `compare.py` gains `deep_query` and
+`simple_query`; I7 and the `excluded_ungrounded_route` rule read the one set.
+A `generative_query` row is still excluded and the I7 plant is still caught. The
+change was made AFTER the pod table was read; it is a correction of a false
+premise about the product, made in neither arm's favour, and no score was read
+to make it.
+
+**What it does not change.** I2 and its 50% floor. Those four K4 `DeepQuery`
+rows carry no `atlas_walk`, so `full` is `bare` on them by construction, and I2
+still reads 3/8 (38%), never-ran. With the set corrected they are no longer
+excluded from the study either, so a K4 delta would be diluted by them until
+DeepQuery runs the walk. That is product work with its own order, and stage 0
+does not proceed past the pilot until I2 passes.

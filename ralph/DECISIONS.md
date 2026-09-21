@@ -5680,3 +5680,17 @@ Operator, in session: "1, 2, 3 — go with your recommendations". Read against P
 - **The audit row now carries data**: a per-unit net-line ledger, `dry-report` clones involving symbols added since launch, and `converge noun` on every new type.
 
 </details>
+
+## A41 · 2026-09-21 — the pod pilot: I7's set corrected, DeepQuery gets the walk before stage 0 proceeds (OPERATOR decision)
+
+<details>
+
+**Decided by the operator in session** ("go with your rec"), on the seat's recommendation, from `ralph/NEEDS_HUMAN.md`. The pilot ran on Vast 51850589 (window `20260921T035355Z`, four arms recorded, 0 refusals) and exited 4: I2 never-ran at 3/8 K4 summaries, I7 failed on five `DeepQuery` rows. One fact under both: in `full`, the four K4 rows on KnowledgeQuery all walked (3 with summaries); the four on DeepQuery carry no `atlas_walk` and retrieved 20-28 chunks each. A39's falsifier fired.
+
+**Ruled.** (2) I7's grounded set is an instrument defect and is corrected: `deep_query` and `simple_query` retrieve through `handle_simple` (`simple.rs:24-27`). Recorded under PR Deviations 2026-09-21 as made after the table was read. (3) DeepQuery running the atlas walk is product work under its own order; stage 0 waits on it. Refused: scoring K4 over the four KnowledgeQuery rows only — a claim staged on n = 4.
+
+**Also landed.** `run_arm.py` passes the daemon's primary id as `--chat-model` (45d00f353); the I5 plant no longer depends on the borrowed arm's scores (9216aa972). After both, on the committed pod runs: I7 passed, seven of seven plants caught, I2 unchanged.
+
+**D8 amends A40.** Pod latency exists now (median / p90: bare 12.4 / 26.3 s, deep 9.5 / 26.5, full 10.1 / 36.8) against the committed local 2026-09-19 runs (20.8 / 40.8, 20.7 / 45.8, 25.1 / 59.7). Not a controlled pair: the local runs used IQ4_NL and six pre-rewrite K4 items. "At most half the local figure" holds for deep and full on the median and misses for bare (12.4 vs 10.4); recorded, not ruled.
+
+</details>
