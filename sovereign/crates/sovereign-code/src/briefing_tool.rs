@@ -21,14 +21,14 @@ use std::sync::Arc;
 use serde_json::json;
 
 use corpus_engine_notes::NoteStore;
-use sovereign_core::error::{Error, Result};
-use sovereign_core::types::{StepOutput, ToolContext};
+use sovereign_contracts::error::{Error, Result};
+use sovereign_contracts::types::{StepOutput, ToolContext};
 use sovereign_work_atlas::store::ScopeMatch;
 use sovereign_work_atlas::WorkAtlasStore;
 
 use super::brief::{assemble_brief, BriefInputs, WorkInFlightEntry};
 use super::working_set::{detect_working_set, Strategy};
-use sovereign_core::tool_manifest::DeclaredTool;
+use sovereign_contracts::tool_manifest::DeclaredTool;
 
 /// Daemon-side MCP wrapper around the brief assembler.
 pub struct BriefingTool {
@@ -132,7 +132,7 @@ impl OverlapAccumulator {
     pub fn new(repo_root: &std::path::Path) -> Self {
         Self {
             repo_root: repo_root.to_path_buf(),
-            now: sovereign_core::time::unix_now_u64(),
+            now: sovereign_time::unix_now_u64(),
             seen_claims: Default::default(),
             seen_observations: Default::default(),
             entries: Vec::new(),
@@ -234,7 +234,7 @@ impl BriefingTool {
     /// `tool-manifests/`. What is left here is the part that runs.
     pub fn declared(self) -> DeclaredTool {
         let state = Arc::new(self);
-        sovereign_core::tool_manifest::declared("briefing", move |params, ctx| {
+        sovereign_contracts::tool_manifest::declared("briefing", move |params, ctx| {
             let state = Arc::clone(&state);
             async move { state.run(&params, &ctx).await }
         })

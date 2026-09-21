@@ -180,7 +180,7 @@ fn invert(order: &[usize]) -> Vec<usize> {
 /// lexicographically-smallest member.
 ///
 /// Keyed by STRING with insertion-ordered ids;
-/// `sovereign_tools::code::dry_report`'s same-named helper is private and
+/// `sovereign_code::dry_report`'s same-named helper is private and
 /// indexes by `usize`. Same algorithm, different key domain — no owner to
 /// import.
 #[derive(Default)]

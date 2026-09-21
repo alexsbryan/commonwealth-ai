@@ -858,4 +858,39 @@ mod tests {
         assert!(names_with.contains(&"spec".to_string()));
         assert!(!names_without.contains(&"spec".to_string()));
     }
+
+    /// Each code tool's descriptor id must land on the surface list it was
+    /// classified into, or the tool is advertised over MCP yet not callable
+    /// (or retired yet still advertised).
+    ///
+    /// These three assertions used to live beside each tool in
+    /// `sovereign-tools/src/code/`. `code` became its own crate on 2026-09-21
+    /// (FIVE_PROGRAMS §2) and `sovereign-code` cannot see `mcp_surface` — the
+    /// dependency runs the other way — so the check moved to the surface it
+    /// is about. The `assert_eq!(descriptor().id, "...")` half stayed with
+    /// each tool, where it needs nothing from here.
+    #[test]
+    fn code_tool_descriptor_ids_land_on_their_surface_list() {
+        use sovereign_contracts::traits::Tool;
+        use std::path::PathBuf;
+
+        let capability_map =
+            sovereign_code::CapabilityMapTool::with_indexes_dir(PathBuf::from("/nonexistent"))
+                .declared();
+        assert!(MCP_TOOLS_ALWAYS.contains(&capability_map.descriptor().id.as_str()));
+
+        // Registry-only since 2026-08-31: both retired from the MCP surface on
+        // usage evidence (arch_posture 1 call in 190 sessions, arch_report 0),
+        // still reachable through `svrn tools call <id>`.
+        for retired in [
+            sovereign_code::ArchPostureTool::with_data_dir(PathBuf::from("/nonexistent"))
+                .declared(),
+            sovereign_code::ArchReportTool::with_indexes_dir(PathBuf::from("/nonexistent"))
+                .declared(),
+        ] {
+            let id = retired.descriptor().id;
+            assert!(MCP_TOOLS_RETIRED.contains(&id.as_str()), "{id} not retired");
+            assert!(!is_mcp_exposed(&id), "{id} still exposed");
+        }
+    }
 }

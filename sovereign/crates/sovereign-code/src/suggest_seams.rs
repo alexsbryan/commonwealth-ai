@@ -37,7 +37,7 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
 use std::path::Path;
 
-use sovereign_core::error::{Error, Result};
+use sovereign_contracts::error::{Error, Result};
 
 use corpus_engine_scip::capability_map::{is_function, pkg_and_desc};
 use corpus_engine_scip::ScipGraph;
@@ -1001,7 +1001,7 @@ mod plan_tests {
         let p: PathBuf = dir.join("f.rs");
         write_fixture(&p);
         let span = find_tail_tests_span(&p);
-        let mut r = crate::code::suggest_seams::tests::fixture();
+        let mut r = crate::suggest_seams::tests::fixture();
         r.file = "crates/app/src/cmd.rs".to_string();
         let plan = render_split_plan(&r, span, 1200);
         eprintln!("=== RENDERED ===\n{plan}===");

@@ -16,7 +16,7 @@
 //! hands both into [`format_relational`].
 
 use crate::knowledge_view::timeline::{InteractionTimeline, TimelineEntityKind};
-use crate::knowledge_view::tokens::estimate_tokens;
+use sovereign_contracts::tokens::estimate_tokens;
 use crate::knowledge_view::view_kind::ViewKind;
 
 /// Half-life used for the relational recency-decay score, in seconds.

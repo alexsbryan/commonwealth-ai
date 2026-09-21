@@ -13,11 +13,11 @@ use std::sync::Arc;
 
 use serde_json::json;
 
-use sovereign_core::error::{Error, Result};
-use sovereign_core::types::*;
+use sovereign_contracts::error::{Error, Result};
+use sovereign_contracts::types::*;
 
 use corpus_engine_notes::NoteStore;
-use sovereign_core::tool_manifest::DeclaredTool;
+use sovereign_contracts::tool_manifest::DeclaredTool;
 
 pub struct RetireNoteTool {
     store: Arc<NoteStore>,
@@ -37,7 +37,7 @@ impl RetireNoteTool {
     pub fn declared(self) -> DeclaredTool {
         let state = Arc::new(self);
         let run_state = Arc::clone(&state);
-        sovereign_core::tool_manifest::declared("retire_note", move |params, ctx| {
+        sovereign_contracts::tool_manifest::declared("retire_note", move |params, ctx| {
             let state = Arc::clone(&run_state);
             async move { state.run(&params, &ctx).await }
         })
@@ -121,7 +121,7 @@ impl RetireNoteTool {
 mod tests {
     use super::*;
     use serde_json::json;
-    use sovereign_core::types::ToolContext;
+    use sovereign_contracts::types::ToolContext;
 
     fn ctx() -> ToolContext {
         ToolContext {

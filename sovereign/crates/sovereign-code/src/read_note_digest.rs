@@ -30,13 +30,13 @@ use std::sync::Arc;
 
 use serde_json::json;
 
-use sovereign_core::error::{Error, Result};
-use sovereign_core::slot_policy::Workload;
-use sovereign_core::traits::InferenceProvider;
-use sovereign_core::types::*;
+use sovereign_contracts::error::{Error, Result};
+use sovereign_contracts::slot_policy::Workload;
+use sovereign_contracts::traits::InferenceProvider;
+use sovereign_contracts::types::*;
 
 use corpus_engine_notes::{Note, NoteScope, NoteStore, ScopeFilter};
-use sovereign_core::tool_manifest::DeclaredTool;
+use sovereign_contracts::tool_manifest::DeclaredTool;
 
 pub struct ReadNoteDigestTool {
     notes: Arc<NoteStore>,
@@ -64,7 +64,7 @@ impl ReadNoteDigestTool {
     /// `tool-manifests/`. What is left here is the part that runs.
     pub fn declared(self) -> DeclaredTool {
         let state = Arc::new(self);
-        sovereign_core::tool_manifest::declared("read_note_digest", move |params, ctx| {
+        sovereign_contracts::tool_manifest::declared("read_note_digest", move |params, ctx| {
             let state = Arc::clone(&state);
             async move { state.run(&params, &ctx).await }
         })

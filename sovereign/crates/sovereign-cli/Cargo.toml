@@ -27,6 +27,7 @@ sovereign-store = { workspace = true }
 # frame combinators: the boot-time frame READER and the frame WRITER
 # (sovereign-tools) must compute the carried-item advisory identically, and
 # sovereign-cli cannot see sovereign-tools in a gated build.
+sovereign-code = { workspace = true }
 sovereign-contracts = { workspace = true }
 # The neutral kernel — `posture` renders every row as a `Judgement`, so the
 # verdict vocabulary, the age format and the staleness band are one decider

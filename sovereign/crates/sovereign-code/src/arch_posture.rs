@@ -12,11 +12,11 @@
 
 use std::path::PathBuf;
 
-use sovereign_core::error::{Error, Result};
-use sovereign_core::types::*;
+use sovereign_contracts::error::{Error, Result};
+use sovereign_contracts::types::*;
 
 use super::arch_report::compute_fingerprint;
-use sovereign_core::tool_manifest::DeclaredTool;
+use sovereign_contracts::tool_manifest::DeclaredTool;
 use std::sync::Arc;
 
 pub struct ArchPostureTool {
@@ -76,7 +76,7 @@ impl ArchPostureTool {
     pub fn declared(self) -> DeclaredTool {
         let state = Arc::new(self);
         let run_state = Arc::clone(&state);
-        sovereign_core::tool_manifest::declared("arch_posture", move |params, ctx| {
+        sovereign_contracts::tool_manifest::declared("arch_posture", move |params, ctx| {
             let state = Arc::clone(&run_state);
             async move { state.run(&params, &ctx).await }
         })
@@ -250,17 +250,12 @@ impl ArchPostureTool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sovereign_core::traits::Tool;
+    use sovereign_contracts::traits::Tool;
 
     #[test]
     fn descriptor_id_matches_mcp_surface() {
         let tool = ArchPostureTool::with_data_dir(PathBuf::from("/nonexistent")).declared();
         assert_eq!(tool.descriptor().id, "arch_posture");
-        // Registry-only since 2026-08-31: retired from the MCP surface on
-        // usage evidence (1 call in 190 sessions), still reachable through
-        // `svrn tools call arch_posture`.
-        assert!(crate::mcp_surface::MCP_TOOLS_RETIRED.contains(&tool.descriptor().id.as_str()));
-        assert!(!crate::mcp_surface::is_mcp_exposed(&tool.descriptor().id));
     }
 
     #[test]

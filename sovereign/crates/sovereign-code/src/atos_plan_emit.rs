@@ -34,9 +34,9 @@ use std::path::{Path, PathBuf};
 
 use serde_json::{json, Value};
 
-use sovereign_core::error::{Error, Result};
-use sovereign_core::tool_manifest::DeclaredTool;
-use sovereign_core::types::*;
+use sovereign_contracts::error::{Error, Result};
+use sovereign_contracts::tool_manifest::DeclaredTool;
+use sovereign_contracts::types::*;
 use std::sync::Arc;
 
 pub struct AtosPlanEmitTool {}
@@ -61,7 +61,7 @@ impl AtosPlanEmitTool {
     pub fn declared(self) -> DeclaredTool {
         let state = Arc::new(self);
         let run_state = Arc::clone(&state);
-        sovereign_core::tool_manifest::declared("atos_plan_emit", move |params, ctx| {
+        sovereign_contracts::tool_manifest::declared("atos_plan_emit", move |params, ctx| {
             let state = Arc::clone(&run_state);
             async move { state.run(&params, &ctx).await }
         })
@@ -253,7 +253,7 @@ fn read_prior_plan_meta(plan_path: &Path) -> (Option<u32>, Option<String>) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sovereign_core::types::ToolContext;
+    use sovereign_contracts::types::ToolContext;
 
     fn ctx() -> ToolContext {
         ToolContext {

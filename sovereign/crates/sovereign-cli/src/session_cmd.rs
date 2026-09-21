@@ -34,7 +34,7 @@ use crate::util::urls::{v1_url, DEFAULT_CLIENT_PORT};
 /// The nine body sections of a session-frame/v1, in contract order
 /// (`SESSION_CONTINUITY.md §2`). Validation and grading key off this list.
 ///
-/// Must stay in lockstep with `sovereign_tools::code::session_state::
+/// Must stay in lockstep with `sovereign_code::session_state::
 /// FRAME_SECTIONS` (the writer's list, unprefixed). The
 /// `the_reader_and_writer_agree_on_the_contract` test is the lock.
 pub(crate) const FRAME_SECTIONS: &[&str] = &[

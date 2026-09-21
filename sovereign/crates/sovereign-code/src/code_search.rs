@@ -18,14 +18,14 @@ use futures::TryStreamExt;
 use lancedb::index::scalar::FullTextSearchQuery;
 use lancedb::query::{ExecutableQuery, QueryBase};
 
-use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::InferenceProvider;
-use sovereign_core::types::*;
+use sovereign_contracts::error::{Error, Result};
+use sovereign_contracts::traits::InferenceProvider;
+use sovereign_contracts::types::*;
 
 use corpus_engine::CorpusEngine;
 
 use super::{escape_sql, extract_code_rows_pub, CodeRow};
-use sovereign_core::tool_manifest::DeclaredTool;
+use sovereign_contracts::tool_manifest::DeclaredTool;
 
 /// Semantic search over installed code corpora.
 /// A code corpus whose chunk index is at least this many days old gets
@@ -96,7 +96,7 @@ impl CodeSearchTool {
     pub fn declared(self) -> DeclaredTool {
         let state = Arc::new(self);
         let run_state = Arc::clone(&state);
-        sovereign_core::tool_manifest::declared("code_search", move |params, ctx| {
+        sovereign_contracts::tool_manifest::declared("code_search", move |params, ctx| {
             let state = Arc::clone(&run_state);
             async move { state.run(&params, &ctx).await }
         })

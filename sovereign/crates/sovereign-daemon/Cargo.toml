@@ -23,6 +23,7 @@ sovereign-mesh = { workspace = true }
 # The daemon-to-daemon wire bodies the ring-sync route receives and the loops
 # send; a leaf both may name (domains dm-daemon-api-edge (a)).
 sovereign-peer-wire = { workspace = true }
+sovereign-code = { workspace = true }
 sovereign-contracts = { workspace = true }
 kernel-types = { workspace = true }
 oicp-types = { workspace = true }

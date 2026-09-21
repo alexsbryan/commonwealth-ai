@@ -12,7 +12,7 @@
 
 use std::path::PathBuf;
 
-use sovereign_tools::code::arch_report::{
+use sovereign_code::arch_report::{
     build_arch_report, persist_arch_report, render_report, ArchReportInputs,
 };
 

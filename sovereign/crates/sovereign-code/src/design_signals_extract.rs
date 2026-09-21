@@ -41,9 +41,9 @@ use std::path::{Path, PathBuf};
 
 use serde_json::{json, Value};
 
-use sovereign_core::error::{Error, Result};
-use sovereign_core::tool_manifest::DeclaredTool;
-use sovereign_core::types::*;
+use sovereign_contracts::error::{Error, Result};
+use sovereign_contracts::tool_manifest::DeclaredTool;
+use sovereign_contracts::types::*;
 use std::sync::Arc;
 
 pub struct DesignSignalsExtractTool {
@@ -78,7 +78,7 @@ impl DesignSignalsExtractTool {
     pub fn declared(self) -> DeclaredTool {
         let state = Arc::new(self);
         let run_state = Arc::clone(&state);
-        sovereign_core::tool_manifest::declared("design_signals_extract", move |params, ctx| {
+        sovereign_contracts::tool_manifest::declared("design_signals_extract", move |params, ctx| {
             let state = Arc::clone(&run_state);
             async move { state.run(&params, &ctx).await }
         })
@@ -212,7 +212,7 @@ fn gap_reason_label(reason: &corpus_engine_atos::design_signals::GapReason) -> &
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sovereign_core::traits::Tool;
+    use sovereign_contracts::traits::Tool;
     use std::fs;
 
     fn write(path: &Path, body: &str) {

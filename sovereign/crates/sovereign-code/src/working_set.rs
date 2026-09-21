@@ -20,7 +20,7 @@
 //!
 //! Path semantics + git subprocess style mirror
 //! [`corpus_engine_archaeology::git_archaeology`] and
-//! [`crate::code::recent_changes`] — explicit `current_dir`,
+//! [`crate::recent_changes`] — explicit `current_dir`,
 //! `Result`-typed errors, no libgit2.
 
 use std::collections::BTreeSet;

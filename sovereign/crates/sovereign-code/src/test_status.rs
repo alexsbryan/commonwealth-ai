@@ -18,8 +18,8 @@ use std::time::SystemTime;
 
 use serde_json::json;
 
-use sovereign_core::error::{Error, Result};
-use sovereign_core::types::*;
+use sovereign_contracts::error::{Error, Result};
+use sovereign_contracts::types::*;
 
 use corpus_engine_watchers::TestResultStore;
 use corpus_engine_watchers::WatcherHeartbeat;
@@ -27,7 +27,7 @@ use corpus_engine_watchers::WatcherHeartbeat;
 use super::watcher_health::{
     apply_liveness, assess, read_legacy, watcher_json, WatcherHealthInputs,
 };
-use sovereign_core::tool_manifest::DeclaredTool;
+use sovereign_contracts::tool_manifest::DeclaredTool;
 
 pub struct TestStatusTool {
     store: Arc<TestResultStore>,
@@ -94,7 +94,7 @@ impl TestStatusTool {
     pub fn declared(self) -> DeclaredTool {
         let state = Arc::new(self);
         let run_state = Arc::clone(&state);
-        sovereign_core::tool_manifest::declared("test_status", move |params, ctx| {
+        sovereign_contracts::tool_manifest::declared("test_status", move |params, ctx| {
             let state = Arc::clone(&run_state);
             async move { state.run(&params, &ctx).await }
         })
@@ -325,7 +325,7 @@ async fn build_previous_run(store: &TestResultStore) -> serde_json::Value {
 mod tests {
     use super::*;
     use corpus_engine_watchers::{TestResultKind, TestResultStore};
-    use sovereign_core::types::ToolContext;
+    use sovereign_contracts::types::ToolContext;
 
     fn ctx() -> ToolContext {
         ToolContext {

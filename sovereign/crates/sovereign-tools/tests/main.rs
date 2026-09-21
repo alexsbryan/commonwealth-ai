@@ -26,8 +26,6 @@ mod corpus_store_readiness;
 mod delegate_browser_worker;
 #[path = "main/duckduckgo_real_e2e.rs"]
 mod duckduckgo_real_e2e;
-#[path = "main/e2e_code_intel.rs"]
-mod e2e_code_intel;
 #[path = "main/enrichment_health_e2e.rs"]
 mod enrichment_health_e2e;
 #[path = "main/knowledge_view_e2e.rs"]

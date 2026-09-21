@@ -58,7 +58,7 @@ pub fn estimate_tokens(text: &str) -> usize {
 /// dominant / settled. Accepts the vocabulary used by the domain
 /// enrichment prompts — lowercased before comparison so capitalised
 /// variants ("Held", "Dominant") still match.
-pub(crate) fn is_settled_status(status: &str) -> bool {
+pub fn is_settled_status(status: &str) -> bool {
     let s = status.to_lowercase();
     matches!(
         s.as_str(),

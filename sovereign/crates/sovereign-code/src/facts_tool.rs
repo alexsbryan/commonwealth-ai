@@ -31,9 +31,9 @@ use std::path::{Path, PathBuf};
 use serde_json::json;
 
 use code_facts::facts_store::FactStore;
-use sovereign_core::error::{Error, Result};
-use sovereign_core::tool_manifest::DeclaredTool;
-use sovereign_core::types::*;
+use sovereign_contracts::error::{Error, Result};
+use sovereign_contracts::tool_manifest::DeclaredTool;
+use sovereign_contracts::types::*;
 use std::sync::Arc;
 
 pub struct FactsTool {
@@ -78,7 +78,7 @@ impl FactsTool {
     /// `tool-manifests/`. What is left here is the part that runs.
     pub fn declared(self) -> DeclaredTool {
         let state = Arc::new(self);
-        sovereign_core::tool_manifest::declared("facts", move |params, ctx| {
+        sovereign_contracts::tool_manifest::declared("facts", move |params, ctx| {
             let state = Arc::clone(&state);
             async move { state.run(&params, &ctx).await }
         })
@@ -196,7 +196,7 @@ impl FactsTool {
                 "query": query,
                 "corpora_searched": corpora,
                 "match_count": 0,
-                "freshness": freshness_block(None, false, sovereign_core::time::unix_now()),
+                "freshness": freshness_block(None, false, sovereign_time::unix_now()),
                 "functions": [], "config": [], "literals": [],
                 "hint": hint,
             })));
@@ -208,7 +208,7 @@ impl FactsTool {
             "query": query,
             "corpora_searched": corpora,
             "match_count": match_count,
-            "freshness": freshness_block(oldest_built, any_lags_graph, sovereign_core::time::unix_now()),
+            "freshness": freshness_block(oldest_built, any_lags_graph, sovereign_time::unix_now()),
             "functions": functions,
             "config": config,
             "literals": literals,

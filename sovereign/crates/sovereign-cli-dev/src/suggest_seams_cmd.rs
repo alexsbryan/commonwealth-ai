@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! `svrn code suggest-seams <file>` — advisory god-file split proposals.
 //!
-//! Thin CLI wrapper over `sovereign_tools::code::suggest_seams`: resolves the
+//! Thin CLI wrapper over `sovereign_code::suggest_seams`: resolves the
 //! corpus + its SCIP graph (same resolution as `arch-report`), normalizes the
 //! file path to the repo-relative form SCIP stores, and prints the report.
 //! Read-only analysis — a human does the extraction.
 
 use std::path::PathBuf;
 
-use sovereign_tools::code::suggest_seams::{build_seam_report, render_seam_report, SeamInputs};
+use sovereign_code::suggest_seams::{build_seam_report, render_seam_report, SeamInputs};
 
 pub(crate) async fn run(args: &[String]) -> i32 {
     let mut corpus_id: Option<String> = None;
@@ -122,16 +122,16 @@ pub(crate) async fn run(args: &[String]) -> i32 {
                 // The tests span needs the file on disk (SCIP drops
                 // #[cfg(test)] symbols); when unreadable, the plan is
                 // emitted without a tests step rather than guessed.
-                let tests_span = sovereign_tools::code::suggest_seams::find_tail_tests_span(
+                let tests_span = sovereign_code::suggest_seams::find_tail_tests_span(
                     &std::path::PathBuf::from(&file_path),
                 );
-                let plan = sovereign_tools::code::suggest_seams::render_split_plan(
+                let plan = sovereign_code::suggest_seams::render_split_plan(
                     &report, tests_span, max_lines,
                 );
                 println!("{plan}");
             } else if as_goal {
                 let goal =
-                    sovereign_tools::code::suggest_seams::render_split_goal(&report, max_lines);
+                    sovereign_code::suggest_seams::render_split_goal(&report, max_lines);
                 // Paste-ready: the caller wraps it in quotes for the solve verb,
                 // so strip nothing — newlines are the concern map's structure.
                 println!("{goal}");

@@ -99,6 +99,7 @@ members = [
     "sovereign/crates/sovereign-store",
     "sovereign/crates/sovereign-time",
     "sovereign/crates/sovereign-tools",
+    "sovereign/crates/sovereign-code",
     # GLiNER (ONNX) per-chunk entity extraction — carved out of sovereign-tools
     # 2026-07-17 so the fragile ort=rc.9 stack is a mandatory dep of only the
     # four binaries that need it, not an optional feature on a shared crate
@@ -332,6 +333,7 @@ sovereign-scheduler = { path = "sovereign/crates/sovereign-scheduler" }
 sovereign-store = { path = "sovereign/crates/sovereign-store" }
 sovereign-time = { path = "sovereign/crates/sovereign-time" }
 sovereign-tools = { path = "sovereign/crates/sovereign-tools" }
+sovereign-code = { path = "sovereign/crates/sovereign-code" }
 sovereign-gliner = { path = "sovereign/crates/sovereign-gliner" }
 sovereign-enrichment-catalog = { path = "sovereign/crates/sovereign-enrichment-catalog" }
 sovereign-enrichment-build = { path = "sovereign/crates/sovereign-enrichment-build" }

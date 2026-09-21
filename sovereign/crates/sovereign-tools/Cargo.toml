@@ -14,6 +14,7 @@ sovereign-enrichment-catalog = { workspace = true }
 # registry consts from the contract crate directly, so it needs no corpus-engine
 # dependency — the seam that lets the authoring stack extract (B:P6).
 sovereign-contracts = { workspace = true }
+sovereign-time = { workspace = true }
 # The recipe-authoring tool bundle now lives in this extractable package;
 # re-exported as `sovereign_tools::recipe_author`. The corpus-engine-backed
 # adapters that satisfy its seams (recipe_notes_adapter, recipe_tester_adapter)
@@ -240,6 +241,10 @@ zip = { version = "8", default-features = false, features = ["deflate"] }
 uuid = { workspace = true }
 futures = { workspace = true }
 tempfile = { workspace = true }
+# TEST-ONLY edge: the MCP surface list is this crate's, the tools it classifies
+# are sovereign-code's, so the cross-check has to see both. Dev-only keeps the
+# PRODUCTION graph free of svrn -> code (FIVE_PROGRAMS §4 rule 6).
+sovereign-code = { workspace = true, features = ["atos", "dev-tools"] }
 tokio = { workspace = true, features = ["test-util"] }
 filetime = "0.2"
 # axum is the HTTP stub harness for `notes::diff_extract_backend`
@@ -260,10 +265,6 @@ tracing-subscriber = { workspace = true }
 # feature is on. Declaring `required-features` lets `cargo test`
 # / `cargo check` skip them under the default feature set instead
 # of failing the workspace build.
-[[example]]
-name = "exercise_code_tools"
-required-features = ["treesitter"]
-
 # Tesseract-vs-PaddleOCR bake-off harness. Compiles only with the
 # `paddle-ocr` feature; runs both engines on a scanned PDF and emits a
 # side-by-side quality/latency comparison (+ CER/WER if a ground-truth

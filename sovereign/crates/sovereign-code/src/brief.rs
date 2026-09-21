@@ -26,7 +26,7 @@
 //!    Skipped if `repo_root` isn't a git repo.
 //!
 //! All sections are token-budgeted via
-//! [`crate::knowledge_view::tokens::estimate_tokens`], same pattern
+//! [`sovereign_contracts::tokens::estimate_tokens`], same pattern
 //! as `digest::format_landscape` (per-bullet check, hard-cap trim).
 //!
 //! ## v0 trade-offs
@@ -55,7 +55,7 @@ use corpus_engine_archaeology::git_archaeology::{batch_harvest_all_commits, Comm
 use corpus_engine_notes::{NodeRoster, Note, NoteStore};
 use serde::Deserialize;
 
-use crate::knowledge_view::tokens::estimate_tokens;
+use sovereign_contracts::tokens::estimate_tokens;
 
 // ── Inputs and errors ─────────────────────────────────────────
 
@@ -181,7 +181,7 @@ pub async fn assemble_brief(
     // means cited principles may not match the current code.
     //
     // Gated on `treesitter` because `render_drift_posture` calls into
-    // `crate::code::drift_posture`, which is itself a treesitter-only
+    // `crate::drift_posture`, which is itself a treesitter-only
     // module (the posture computation reads SCIP-derived state).
     // Without this cfg the brief still assembles; the drift section is
     // simply omitted on non-treesitter builds.
@@ -334,13 +334,13 @@ fn render_work_in_flight(entries: &[WorkInFlightEntry], roster: Option<&NodeRost
 /// say (`fresh` with no Act-on findings) — a clean drift state is
 /// the default and shouldn't burn brief tokens.
 ///
-/// Treesitter-only: depends on the `crate::code::drift_posture` module
+/// Treesitter-only: depends on the `crate::drift_posture` module
 /// which is itself feature-gated. The caller in `assemble()` is
 /// cfg-gated to match so non-treesitter builds compile cleanly without
 /// pulling this section.
 #[cfg(feature = "treesitter")]
 fn render_drift_posture(drift_dir: &Path, repo_root: &Path) -> String {
-    use crate::code::drift_posture::{compute_posture, PostureStatus, DEFAULT_NARRATIVES};
+    use crate::drift_posture::{compute_posture, PostureStatus, DEFAULT_NARRATIVES};
 
     let narrative_paths: Vec<PathBuf> = DEFAULT_NARRATIVES
         .iter()

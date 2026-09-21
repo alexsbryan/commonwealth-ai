@@ -2,12 +2,12 @@
 //! `svrn code dry-report [--corpus-id <id>] [--scope <prefix>] [--min-lines N]
 //!  [--threshold F]` — semantic-duplication report over the code embeddings.
 //!
-//! Thin CLI wrapper over `sovereign_tools::code::dry_report`. Resolves the
+//! Thin CLI wrapper over `sovereign_code::dry_report`. Resolves the
 //! corpus the same way `arch-report` / `suggest-seams` do (explicit `--corpus-id`
 //! or the sole indexed code corpus), then reuses the per-symbol embeddings that
 //! already live in that corpus's LanceDB index. Read-only.
 
-use sovereign_tools::code::dry_report::{
+use sovereign_code::dry_report::{
     build_dry_report, render_dry_report, DryInputs, DEFAULT_MIN_LINES, DEFAULT_NEAR_THRESHOLD,
 };
 

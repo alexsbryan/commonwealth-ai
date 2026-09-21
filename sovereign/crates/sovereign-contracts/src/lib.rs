@@ -108,6 +108,7 @@ pub mod setup_config_iroh;
 pub mod skills;
 pub mod slot_policy;
 pub mod tool_bundle;
+pub mod tokens;
 pub mod tool_manifest;
 pub mod tool_result_cache;
 pub mod traits;

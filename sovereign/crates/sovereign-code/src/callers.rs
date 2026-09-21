@@ -7,15 +7,15 @@
 
 use std::sync::Arc;
 
-use sovereign_core::error::{Error, Result};
-use sovereign_core::types::*;
+use sovereign_contracts::error::{Error, Result};
+use sovereign_contracts::types::*;
 
 use corpus_engine::CorpusEngine;
 
 use super::callees::ScipGraphHandle;
 use super::index_health::IndexHealthChecker;
 use super::is_valid_symbol_name;
-use sovereign_core::tool_manifest::DeclaredTool;
+use sovereign_contracts::tool_manifest::DeclaredTool;
 
 pub struct FindCallersTool {
     #[allow(dead_code)]
@@ -47,7 +47,7 @@ impl FindCallersTool {
     pub fn declared(self) -> DeclaredTool {
         let state = Arc::new(self);
         let run_state = Arc::clone(&state);
-        sovereign_core::tool_manifest::declared("callers", move |params, ctx| {
+        sovereign_contracts::tool_manifest::declared("callers", move |params, ctx| {
             let state = Arc::clone(&run_state);
             async move { state.run(&params, &ctx).await }
         })

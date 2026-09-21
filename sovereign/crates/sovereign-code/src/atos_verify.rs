@@ -24,11 +24,11 @@ use std::time::UNIX_EPOCH;
 
 use serde_json::{json, Value};
 
-use sovereign_core::error::{Error, Result};
-use sovereign_core::types::*;
+use sovereign_contracts::error::{Error, Result};
+use sovereign_contracts::types::*;
 
 use super::atos_utils::{detect_hollow_files, run_verify_cmd};
-use sovereign_core::tool_manifest::DeclaredTool;
+use sovereign_contracts::tool_manifest::DeclaredTool;
 use std::sync::Arc;
 
 const TOOL_ID: &str = "atos_verify";
@@ -54,7 +54,7 @@ impl AtosVerifyTool {
     /// `tool-manifests/`. What is left here is the part that runs.
     pub fn declared(self) -> DeclaredTool {
         let state = Arc::new(self);
-        sovereign_core::tool_manifest::declared("atos_verify", move |params, ctx| {
+        sovereign_contracts::tool_manifest::declared("atos_verify", move |params, ctx| {
             let state = Arc::clone(&state);
             async move { state.run(&params, &ctx).await }
         })

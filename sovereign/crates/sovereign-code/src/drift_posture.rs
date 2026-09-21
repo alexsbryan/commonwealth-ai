@@ -36,9 +36,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sha2::{Digest, Sha256};
 
-use sovereign_core::error::Result;
-use sovereign_core::tool_manifest::DeclaredTool;
-use sovereign_core::types::*;
+use sovereign_contracts::error::Result;
+use sovereign_contracts::tool_manifest::DeclaredTool;
+use sovereign_contracts::types::*;
 use std::sync::Arc;
 
 /// Default narrative docs the architectural drift detector tracks.
@@ -347,7 +347,7 @@ impl DriftPostureTool {
     pub fn declared(self) -> DeclaredTool {
         let state = Arc::new(self);
         let run_state = Arc::clone(&state);
-        sovereign_core::tool_manifest::declared("drift_posture", move |params, ctx| {
+        sovereign_contracts::tool_manifest::declared("drift_posture", move |params, ctx| {
             let state = Arc::clone(&run_state);
             async move { state.run(&params, &ctx).await }
         })

@@ -9,11 +9,11 @@
 
 use std::path::PathBuf;
 
-use sovereign_core::error::{Error, Result};
-use sovereign_core::types::*;
+use sovereign_contracts::error::{Error, Result};
+use sovereign_contracts::types::*;
 
 use corpus_engine_scip::{build_capability_map, MapOptions, ProviderKind, ScipGraph};
-use sovereign_core::tool_manifest::DeclaredTool;
+use sovereign_contracts::tool_manifest::DeclaredTool;
 use std::sync::Arc;
 
 pub struct CapabilityMapTool {
@@ -67,7 +67,7 @@ impl CapabilityMapTool {
     pub fn declared(self) -> DeclaredTool {
         let state = Arc::new(self);
         let run_state = Arc::clone(&state);
-        sovereign_core::tool_manifest::declared("capability_map", move |params, ctx| {
+        sovereign_contracts::tool_manifest::declared("capability_map", move |params, ctx| {
             let state = Arc::clone(&run_state);
             async move { state.run(&params, &ctx).await }
         })
@@ -167,7 +167,7 @@ impl CapabilityMapTool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sovereign_core::traits::Tool;
+    use sovereign_contracts::traits::Tool;
 
     // The descriptor id is load-bearing: it must match the `"capability_map"`
     // entry in `mcp_surface::MCP_TOOLS_ALWAYS`, or the tool is advertised over
@@ -176,7 +176,6 @@ mod tests {
     fn descriptor_id_matches_mcp_surface() {
         let tool = CapabilityMapTool::with_indexes_dir(PathBuf::from("/nonexistent")).declared();
         assert_eq!(tool.descriptor().id, "capability_map");
-        assert!(crate::mcp_surface::MCP_TOOLS_ALWAYS.contains(&tool.descriptor().id.as_str()));
     }
 
     #[test]

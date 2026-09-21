@@ -24,14 +24,14 @@
 //! Run with:
 //!     cargo test -p sovereign-tools --test main e2e_code_intel
 
-use sovereign_core::tool_manifest::DeclaredTool;
+use sovereign_contracts::tool_manifest::DeclaredTool;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
 
-use sovereign_core::traits::Tool;
-use sovereign_core::types::{StepOutput, ToolContext};
-use sovereign_tools::{CodeSearchTool, RecentChangesTool, SymbolLookupTool};
+use sovereign_contracts::traits::Tool;
+use sovereign_contracts::types::{StepOutput, ToolContext};
+use sovereign_code::{CodeSearchTool, RecentChangesTool, SymbolLookupTool};
 
 use corpus_engine::{CorpusEngine, CorpusSpec, EmbedFn};
 
@@ -135,7 +135,7 @@ vector = false
         // SymbolLookupTool reads SCIP. Use an empty in-memory graph
         // for the LanceDB-only fixtures — those tests assert empty
         // results today.
-        let scip_handle: sovereign_tools::ScipGraphHandle =
+        let scip_handle: sovereign_code::ScipGraphHandle =
             Arc::new(arc_swap::ArcSwap::from_pointee(
                 corpus_engine_scip::ScipGraph::open_in_memory("fixture")
                     .expect("in-memory ScipGraph for fixture"),
@@ -219,7 +219,7 @@ vector = false
     }
 }
 
-fn text(result: &Result<StepOutput, sovereign_core::error::Error>) -> String {
+fn text(result: &Result<StepOutput, sovereign_contracts::error::Error>) -> String {
     match result {
         Ok(StepOutput::Text(s)) => s.clone(),
         Ok(other) => format!("{other:?}"),
@@ -639,7 +639,7 @@ fn percentile(times: &[u128], p: usize) -> u128 {
 
 use arc_swap::ArcSwap;
 use corpus_engine_scip::scip_graph::{ScipGraph, ScipRefRecord, ScipSymbolRecord};
-use sovereign_tools::{FindCalleesTool, FindCallersTool, ScipGraphHandle};
+use sovereign_code::{FindCalleesTool, FindCallersTool, ScipGraphHandle};
 
 struct AuthFixture {
     #[allow(dead_code)]
@@ -1486,7 +1486,7 @@ embedding_dimensions = 8
     );
 
     // ── Run the three tools. Each must succeed (no Lance error). ─
-    let mixed_graph: sovereign_tools::ScipGraphHandle = Arc::new(arc_swap::ArcSwap::from_pointee(
+    let mixed_graph: sovereign_code::ScipGraphHandle = Arc::new(arc_swap::ArcSwap::from_pointee(
         corpus_engine_scip::ScipGraph::open_in_memory("mixed")
             .expect("in-memory ScipGraph for mixed-corpora test"),
     ));

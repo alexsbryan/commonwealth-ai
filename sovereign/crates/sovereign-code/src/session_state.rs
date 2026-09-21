@@ -34,9 +34,9 @@ use std::path::{Path, PathBuf};
 use serde_json::json;
 
 use sovereign_contracts::frame::{Frame, FrameSchema};
-use sovereign_core::error::{Error, Result};
-use sovereign_core::tool_manifest::DeclaredTool;
-use sovereign_core::types::{StepOutput, ToolContext};
+use sovereign_contracts::error::{Error, Result};
+use sovereign_contracts::tool_manifest::DeclaredTool;
+use sovereign_contracts::types::{StepOutput, ToolContext};
 use std::sync::Arc;
 
 /// The nine schema-v1 sections, in contract order (SESSION_CONTINUITY §2).
@@ -639,9 +639,9 @@ impl SessionStateTool {
     /// `tool-manifests/`. What is left here is the part that runs.
     pub fn declared(self) -> DeclaredTool {
         let state = Arc::new(self);
-        let mut manifest = sovereign_core::tool_manifest::require("session_state").clone();
+        let mut manifest = sovereign_contracts::tool_manifest::require("session_state").clone();
         manifest.parameters = Self::parameter_schema();
-        sovereign_core::tool_manifest::declared_from(manifest, move |params, ctx| {
+        sovereign_contracts::tool_manifest::declared_from(manifest, move |params, ctx| {
             let state = Arc::clone(&state);
             async move { state.run(&params, &ctx).await }
         })

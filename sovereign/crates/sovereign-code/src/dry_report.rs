@@ -42,7 +42,7 @@ use corpus_engine::index::CorpusIndex;
 use corpus_engine_scip::capability_map::{is_function, pkg_and_desc};
 use corpus_engine_scip::converge::SourceScope;
 use corpus_engine_scip::ScipGraph;
-use sovereign_core::error::{Error, Result};
+use sovereign_contracts::error::{Error, Result};
 
 /// Skip symbols shorter than this — trivial getters/one-liners are "duplicated"
 /// everywhere and are noise, not a DRY problem. Applies to the NEAR (embedding)
@@ -827,7 +827,7 @@ mod tests {
             "use commonwealth_core::clock::unix_now_secs as now_secs;"
         ])));
         assert!(is_use_alias(&body(&[
-            "pub use sovereign_core::time::unix_now as unix_now;"
+            "pub use sovereign_time::unix_now as unix_now;"
         ])));
         assert!(is_use_alias(&body(&["pub(crate) use foo::bar as bar;"])));
         assert!(is_use_alias(&body(&["pub(super) use foo::bar as bar;"])));

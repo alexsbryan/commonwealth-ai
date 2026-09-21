@@ -33,6 +33,8 @@
 //! and Lance errors at column resolution before the predicate can run.
 
 pub mod brief;
+#[cfg(feature = "treesitter")]
+pub mod bundle;
 pub mod briefing_tool;
 pub mod code_search;
 pub mod recent_changes;
@@ -197,6 +199,12 @@ pub mod write_redteam_finding;
 // the CLI.
 #[cfg(all(feature = "treesitter", feature = "atos"))]
 pub mod design_signals_extract;
+
+// Root re-exports for three tools whose hosts named them at the crate root
+// via sovereign-tools' old `pub use sovereign_code::<module>::<Tool>;` lines.
+pub use drift_findings::DriftFindingsTool;
+pub use facts_tool::FactsTool;
+pub use session_state::SessionStateTool;
 
 pub use code_search::CodeSearchTool;
 pub use recent_changes::RecentChangesTool;

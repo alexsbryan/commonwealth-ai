@@ -8,7 +8,7 @@
 //! build(full: true)           // → status + every error's full output
 //! ```
 //!
-//! Why a new tool when [`crate::code::LintStatusTool`] already
+//! Why a new tool when [`crate::LintStatusTool`] already
 //! exists? Two reasons:
 //!
 //! 1. **Demo ergonomics.** A panicked engineer asking the agent to
@@ -32,8 +32,8 @@ use std::time::SystemTime;
 
 use serde_json::json;
 
-use sovereign_core::error::{Error, Result};
-use sovereign_core::types::*;
+use sovereign_contracts::error::{Error, Result};
+use sovereign_contracts::types::*;
 
 use corpus_engine_watchers::LintResultStore;
 use corpus_engine_watchers::WatcherHeartbeat;
@@ -41,7 +41,7 @@ use corpus_engine_watchers::WatcherHeartbeat;
 use super::watcher_health::{
     apply_liveness, assess, read_legacy, watcher_json, WatcherHealthInputs,
 };
-use sovereign_core::tool_manifest::DeclaredTool;
+use sovereign_contracts::tool_manifest::DeclaredTool;
 
 /// Maximum output bytes per error in the default (non-`full`)
 /// response. Each error's `output` field is truncated to this with
@@ -105,7 +105,7 @@ impl BuildTool {
     pub fn declared(self) -> DeclaredTool {
         let state = Arc::new(self);
         let run_state = Arc::clone(&state);
-        sovereign_core::tool_manifest::declared("build", move |params, ctx| {
+        sovereign_contracts::tool_manifest::declared("build", move |params, ctx| {
             let state = Arc::clone(&run_state);
             async move { state.run(&params, &ctx).await }
         })

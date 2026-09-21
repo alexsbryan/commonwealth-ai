@@ -9,11 +9,11 @@ use std::sync::Arc;
 
 use serde_json::json;
 
-use sovereign_core::error::{Error, Result};
-use sovereign_core::types::*;
+use sovereign_contracts::error::{Error, Result};
+use sovereign_contracts::types::*;
 
 use corpus_engine_notes::{NoteScope, NoteStore, ScopeFilter};
-use sovereign_core::tool_manifest::DeclaredTool;
+use sovereign_contracts::tool_manifest::DeclaredTool;
 
 /// Anchors whose notes are OPERATIONAL RECORD rather than knowledge.
 ///
@@ -209,7 +209,7 @@ impl ReadNotesTool {
     pub fn declared(self) -> DeclaredTool {
         let state = Arc::new(self);
         let run_state = Arc::clone(&state);
-        sovereign_core::tool_manifest::declared("notes", move |params, ctx| {
+        sovereign_contracts::tool_manifest::declared("notes", move |params, ctx| {
             let state = Arc::clone(&run_state);
             async move { state.run(&params, &ctx).await }
         })
@@ -483,7 +483,7 @@ mod tests {
     use super::*;
     use corpus_engine_notes::NoteSource;
     use serde_json::json;
-    use sovereign_core::types::ToolContext;
+    use sovereign_contracts::types::ToolContext;
     use std::path::Path;
 
     fn floor() -> Vec<String> {

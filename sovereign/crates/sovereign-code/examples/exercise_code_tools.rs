@@ -17,9 +17,9 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use corpus_engine::{CorpusEngine, EmbedFn};
-use sovereign_core::traits::Tool;
-use sovereign_core::types::{StepOutput, ToolContext};
-use sovereign_tools::{CodeSearchTool, RecentChangesTool, SymbolLookupTool};
+use sovereign_contracts::traits::Tool;
+use sovereign_contracts::types::{StepOutput, ToolContext};
+use sovereign_code::{CodeSearchTool, RecentChangesTool, SymbolLookupTool};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -56,7 +56,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("─── symbol_lookup(name = \"Runtime\") ───");
     // SymbolLookupTool now reads SCIP. Example uses an empty
     // in-memory graph; lookups will report "not found" honestly.
-    let graph: sovereign_tools::ScipGraphHandle = Arc::new(arc_swap::ArcSwap::from_pointee(
+    let graph: sovereign_code::ScipGraphHandle = Arc::new(arc_swap::ArcSwap::from_pointee(
         corpus_engine_scip::ScipGraph::open_in_memory("example").expect("in-memory ScipGraph"),
     ));
     let sym_tool = SymbolLookupTool::new(Arc::clone(&engine), Arc::clone(&graph)).declared();

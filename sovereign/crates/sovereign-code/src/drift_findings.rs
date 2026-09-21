@@ -58,9 +58,9 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use sovereign_core::error::{Error, Result};
-use sovereign_core::tool_manifest::DeclaredTool;
-use sovereign_core::types::*;
+use sovereign_contracts::error::{Error, Result};
+use sovereign_contracts::tool_manifest::DeclaredTool;
+use sovereign_contracts::types::*;
 use std::sync::Arc;
 
 /// On-disk shape of one finding inside the drift report's JSON
@@ -166,7 +166,7 @@ impl DriftFindingsTool {
     /// `tool-manifests/`. What is left here is the part that runs.
     pub fn declared(self) -> DeclaredTool {
         let state = Arc::new(self);
-        sovereign_core::tool_manifest::declared("drift_findings", move |params, ctx| {
+        sovereign_contracts::tool_manifest::declared("drift_findings", move |params, ctx| {
             let state = Arc::clone(&state);
             async move { state.run(&params, &ctx).await }
         })

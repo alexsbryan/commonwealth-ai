@@ -367,7 +367,7 @@ pub(super) fn orphaned_indexes() -> Vec<(String, Option<String>)> {
 /// question the tool asks does.
 ///
 /// So this check runs the REAL predicate the code tools run
-/// (`sovereign_tools::code::has_code_graph`) over the REAL corpus list and
+/// (`sovereign_code::has_code_graph`) over the REAL corpus list and
 /// reports the count. If a corpus has a graph but the tools would skip it,
 /// that discrepancy IS the finding.
 pub(super) async fn check_code_tools_see_corpora() -> CheckResult {
@@ -396,7 +396,7 @@ pub(super) async fn check_code_tools_see_corpora() -> CheckResult {
         let Ok(info) = index.info().await else {
             continue;
         };
-        if sovereign_tools::code::has_code_graph(&info) {
+        if sovereign_code::has_code_graph(&info) {
             visible.push(info.corpus_id);
         }
     }
@@ -416,7 +416,7 @@ pub(super) async fn check_code_tools_see_corpora() -> CheckResult {
             repair: Repair::Manual(
                 "A corpus is visible to the code tools when it is tagged \
                  CorpusKind::Code OR has a scip_graph.db beside its chunk table \
-                 (sovereign_tools::code::has_code_graph). Check that the index \
+                 (sovereign_code::has_code_graph). Check that the index \
                  dir and _corpus_meta.json agree."
                     .into(),
             ),

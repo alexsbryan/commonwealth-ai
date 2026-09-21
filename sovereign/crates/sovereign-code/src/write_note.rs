@@ -9,11 +9,11 @@ use std::sync::Arc;
 
 use serde_json::json;
 
-use sovereign_core::error::{Error, Result};
-use sovereign_core::types::*;
+use sovereign_contracts::error::{Error, Result};
+use sovereign_contracts::types::*;
 
 use corpus_engine_notes::{NoteScope, NoteSource, NoteStore};
-use sovereign_core::tool_manifest::DeclaredTool;
+use sovereign_contracts::tool_manifest::DeclaredTool;
 
 /// Kinds the tool admits in `validate()`. Single source of truth for
 /// the schema-`enum` field, the validator, and any future test that
@@ -49,7 +49,7 @@ impl WriteNoteTool {
     pub fn declared(self) -> DeclaredTool {
         let state = Arc::new(self);
         let run_state = Arc::clone(&state);
-        sovereign_core::tool_manifest::declared("note", move |params, ctx| {
+        sovereign_contracts::tool_manifest::declared("note", move |params, ctx| {
             let state = Arc::clone(&run_state);
             async move { state.run(&params, &ctx).await }
         })
@@ -194,7 +194,7 @@ impl WriteNoteTool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sovereign_core::types::ToolContext;
+    use sovereign_contracts::types::ToolContext;
 
     fn ctx() -> ToolContext {
         ToolContext {

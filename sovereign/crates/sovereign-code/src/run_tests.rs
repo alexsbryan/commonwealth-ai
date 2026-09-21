@@ -17,11 +17,11 @@ use std::sync::Arc;
 
 use serde_json::json;
 
-use sovereign_core::error::Result;
-use sovereign_core::types::*;
+use sovereign_contracts::error::Result;
+use sovereign_contracts::types::*;
 
 use corpus_engine_watchers::TestWatcher;
-use sovereign_core::tool_manifest::DeclaredTool;
+use sovereign_contracts::tool_manifest::DeclaredTool;
 
 pub struct RunTestsTool {
     watcher: Arc<TestWatcher>,
@@ -40,7 +40,7 @@ impl RunTestsTool {
     /// `tool-manifests/`. What is left here is the part that runs.
     pub fn declared(self) -> DeclaredTool {
         let state = Arc::new(self);
-        sovereign_core::tool_manifest::declared("run_tests", move |params, ctx| {
+        sovereign_contracts::tool_manifest::declared("run_tests", move |params, ctx| {
             let state = Arc::clone(&state);
             async move { state.run(&params, &ctx).await }
         })

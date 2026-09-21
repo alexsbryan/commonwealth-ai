@@ -29,12 +29,12 @@ use std::path::{Path, PathBuf};
 
 use sha2::{Digest, Sha256};
 
-use sovereign_core::error::{Error, Result};
-use sovereign_core::types::*;
+use sovereign_contracts::error::{Error, Result};
+use sovereign_contracts::types::*;
 
 use corpus_engine_scip::arch_metrics::{self, normalize_crate_name, ArchOptions, DeclaredDeps};
 use corpus_engine_scip::ScipGraph;
-use sovereign_core::tool_manifest::DeclaredTool;
+use sovereign_contracts::tool_manifest::DeclaredTool;
 use std::sync::Arc;
 
 /// Feature axes whose `cfg(feature = "…")` spread is worth watching — the
@@ -644,7 +644,7 @@ impl ArchReportTool {
     pub fn declared(self) -> DeclaredTool {
         let state = Arc::new(self);
         let run_state = Arc::clone(&state);
-        sovereign_core::tool_manifest::declared("arch_report", move |params, ctx| {
+        sovereign_contracts::tool_manifest::declared("arch_report", move |params, ctx| {
             let state = Arc::clone(&run_state);
             async move { state.run(&params, &ctx).await }
         })
@@ -720,17 +720,12 @@ impl ArchReportTool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sovereign_core::traits::Tool;
+    use sovereign_contracts::traits::Tool;
 
     #[test]
     fn descriptor_id_matches_mcp_surface() {
         let tool = ArchReportTool::with_indexes_dir(PathBuf::from("/nonexistent")).declared();
         assert_eq!(tool.descriptor().id, "arch_report");
-        // Registry-only since 2026-08-31: retired from the MCP surface on
-        // usage evidence (0 calls in 190 sessions), still reachable through
-        // `svrn tools call arch_report`.
-        assert!(crate::mcp_surface::MCP_TOOLS_RETIRED.contains(&tool.descriptor().id.as_str()));
-        assert!(!crate::mcp_surface::is_mcp_exposed(&tool.descriptor().id));
     }
 
     #[test]

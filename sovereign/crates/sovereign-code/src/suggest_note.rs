@@ -38,12 +38,12 @@ use std::sync::Arc;
 
 use serde_json::json;
 
-use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::ApprovalChannel;
-use sovereign_core::types::*;
+use sovereign_contracts::error::{Error, Result};
+use sovereign_contracts::traits::ApprovalChannel;
+use sovereign_contracts::types::*;
 
 use corpus_engine_notes::{NoteScope, NoteStore};
-use sovereign_core::tool_manifest::DeclaredTool;
+use sovereign_contracts::tool_manifest::DeclaredTool;
 
 /// Kinds the suggest_note tool may emit. Strict subset of the
 /// NoteStore's v5 kind set — the relational + strategic kinds only.
@@ -72,9 +72,9 @@ impl SuggestNoteTool {
     pub fn declared(self) -> DeclaredTool {
         let state = Arc::new(self);
         let run_state = Arc::clone(&state);
-        let mut manifest = sovereign_core::tool_manifest::require("suggest_note").clone();
+        let mut manifest = sovereign_contracts::tool_manifest::require("suggest_note").clone();
         manifest.parameters = Self::parameter_schema();
-        sovereign_core::tool_manifest::declared_from(manifest, move |params, ctx| {
+        sovereign_contracts::tool_manifest::declared_from(manifest, move |params, ctx| {
             let state = Arc::clone(&run_state);
             async move { state.run(&params, &ctx).await }
         })
@@ -250,8 +250,8 @@ impl SuggestNoteTool {
 mod tests {
     use super::*;
     use async_trait::async_trait;
-    use sovereign_core::error::Result as CoreResult;
-    use sovereign_core::traits::ApprovalChannel;
+    use sovereign_contracts::error::Result as CoreResult;
+    use sovereign_contracts::traits::ApprovalChannel;
     use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
     /// Approval stub that records every call and returns a configured

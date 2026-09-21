@@ -40,11 +40,11 @@ use std::sync::Arc;
 
 use serde_json::json;
 
-use sovereign_core::error::{Error, Result};
-use sovereign_core::types::*;
+use sovereign_contracts::error::{Error, Result};
+use sovereign_contracts::types::*;
 
 use corpus_engine_notes::ProjectDocsStore;
-use sovereign_core::tool_manifest::DeclaredTool;
+use sovereign_contracts::tool_manifest::DeclaredTool;
 
 /// Hard cap on the bytes returned for any one document. The spec
 /// is normally a few KB at most; ARCHITECTURE.md is the long
@@ -85,7 +85,7 @@ impl SpecTool {
     /// `tool-manifests/`. What is left here is the part that runs.
     pub fn declared(self) -> DeclaredTool {
         let state = Arc::new(self);
-        sovereign_core::tool_manifest::declared("spec", move |params, ctx| {
+        sovereign_contracts::tool_manifest::declared("spec", move |params, ctx| {
             let state = Arc::clone(&state);
             async move { state.run(&params, &ctx).await }
         })

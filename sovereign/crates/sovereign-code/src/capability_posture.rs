@@ -17,11 +17,11 @@ use std::path::{Path, PathBuf};
 use serde::Deserialize;
 use serde_json::json;
 
-use sovereign_core::error::Result;
-use sovereign_core::types::*;
+use sovereign_contracts::error::Result;
+use sovereign_contracts::types::*;
 
 use super::drift_posture::{compute_posture, PostureStatus, DEFAULT_NARRATIVES};
-use sovereign_core::tool_manifest::DeclaredTool;
+use sovereign_contracts::tool_manifest::DeclaredTool;
 use std::sync::Arc;
 
 /// Headline tallies pulled from the reconcile's JSON artifact — a permissive
@@ -138,7 +138,7 @@ impl CapabilityPostureTool {
     /// `tool-manifests/`. What is left here is the part that runs.
     pub fn declared(self) -> DeclaredTool {
         let state = Arc::new(self);
-        sovereign_core::tool_manifest::declared("capability_posture", move |params, ctx| {
+        sovereign_contracts::tool_manifest::declared("capability_posture", move |params, ctx| {
             let state = Arc::clone(&state);
             async move { state.run(&params, &ctx).await }
         })

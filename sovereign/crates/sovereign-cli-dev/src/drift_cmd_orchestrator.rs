@@ -295,7 +295,7 @@ pub async fn cmd_detect(args: &[String]) -> i32 {
         // honest. The two directories are exactly the pair this file's own
         // partial-extract remediation already tells operators to wipe.
         let atlas_source = narrative_source_hash_path(&nid);
-        let current_hash = sovereign_tools::hash_file(narrative_path).ok();
+        let current_hash = sovereign_code::hash_file(narrative_path).ok();
         let built_from = std::fs::read_to_string(&atlas_source)
             .ok()
             .map(|s| s.trim().to_string());
@@ -614,7 +614,7 @@ pub async fn cmd_detect(args: &[String]) -> i32 {
         .iter()
         .map(|p| std::fs::canonicalize(p).unwrap_or_else(|_| p.clone()))
         .collect();
-    match sovereign_tools::write_fingerprint(&drift_dir, &narrative_abs, &output_path) {
+    match sovereign_code::write_fingerprint(&drift_dir, &narrative_abs, &output_path) {
         Ok(fp_path) => {
             info!(
                 fingerprint = %fp_path.display(),
@@ -702,7 +702,7 @@ fn mirror_to_canonical(
     // `drift_posture::compute_posture(~/.svrnmesh/drift/, ...)`
     // reads. Using `dest_md` as the recorded `output_path` so
     // the posture report points at the canonical mirror.
-    let _ = sovereign_tools::write_fingerprint(canonical_dir, narrative_abs, &dest_md)?;
+    let _ = sovereign_code::write_fingerprint(canonical_dir, narrative_abs, &dest_md)?;
     Ok(dest_md)
 }
 

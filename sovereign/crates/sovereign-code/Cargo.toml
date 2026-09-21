@@ -1,0 +1,62 @@
+[package]
+name = "sovereign-code"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# `svrn code` — the LSP-for-agents program (FIVE_PROGRAMS §2). Lifted out of
+# `sovereign-tools/src/code/` on 2026-09-21. It links NO other program: the
+# tool ABI it needs (`Tool`, `ToolContext`, `DeclaredTool`, `error`) is read
+# from `sovereign-contracts` directly rather than through `sovereign-core`'s
+# aliases, which is what made the lift a path rewrite instead of a move.
+
+[dependencies]
+sovereign-contracts = { workspace = true }
+sovereign-time = { workspace = true }
+sovereign-atos = { workspace = true, optional = true }
+sovereign-work-atlas = { workspace = true }
+corpus-engine = { workspace = true }
+corpus-engine-scip = { workspace = true }
+corpus-engine-notes = { workspace = true }
+corpus-engine-atos = { workspace = true, optional = true }
+corpus-engine-archaeology = { workspace = true, optional = true }
+corpus-engine-watchers = { workspace = true }
+code-facts = { workspace = true }
+arch-layers = { workspace = true }
+commonwealth-core = { workspace = true }
+
+arc-swap = { workspace = true }
+async-trait = { workspace = true }
+blake3 = "1"
+toml = { workspace = true }
+arrow-array = { workspace = true }
+futures = { workspace = true }
+lancedb = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+tokio = { workspace = true }
+chrono = { workspace = true }
+tracing = { workspace = true }
+workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
+
+[features]
+# Mirrors sovereign-tools' axes exactly — these modules were gated there before
+# the lift and the gates travel with the code, not with the old home.
+default = ["treesitter"]
+treesitter = ["corpus-engine/treesitter"]
+atos = ["dep:sovereign-atos", "dep:corpus-engine-atos"]
+dev-tools = ["dep:corpus-engine-archaeology"]
+
+[dev-dependencies]
+tempfile = { workspace = true }
+# e2e_code_intel builds LanceDB fixtures by hand and ages file mtimes.
+arrow = { workspace = true }
+parquet = { workspace = true }
+filetime = "0.2"
+tokio = { workspace = true, features = ["test-util"] }
+
+# Moved from sovereign-tools with the module it exercises.
+[[example]]
+name = "exercise_code_tools"
+required-features = ["treesitter"]

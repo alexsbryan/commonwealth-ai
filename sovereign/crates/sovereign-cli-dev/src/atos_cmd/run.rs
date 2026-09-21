@@ -25,7 +25,7 @@ use corpus_engine_atos::FeatureStore;
 use corpus_engine_notes::NoteStore;
 use serde::{Deserialize, Serialize};
 use sovereign_atos::{AtosOrchestrator, LocalAtosOrchestrator, RunMode};
-use sovereign_tools::code::atos_utils::{
+use sovereign_code::atos_utils::{
     detect_hollow_files, detect_missing_scaffold, detect_untouched_files, extract_verify_cmd,
     is_weak_verify, parse_inline_list, run_verify_cmd, sha256_hex, snapshot_file_mtimes,
     split_state_marker, step_goal_is_scaffold, strip_failure_cruft, truncate,

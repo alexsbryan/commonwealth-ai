@@ -18,8 +18,8 @@
 
 use std::sync::Arc;
 
-use sovereign_core::error::{Error, Result};
-use sovereign_core::types::*;
+use sovereign_contracts::error::{Error, Result};
+use sovereign_contracts::types::*;
 
 use corpus_engine::CorpusEngine;
 use corpus_engine_scip::scip_graph::SymbolRow;
@@ -27,7 +27,7 @@ use corpus_engine_scip::scip_graph::SymbolRow;
 use super::callees::ScipGraphHandle;
 use super::index_health::IndexHealthChecker;
 use super::is_valid_symbol_name;
-use sovereign_core::tool_manifest::DeclaredTool;
+use sovereign_contracts::tool_manifest::DeclaredTool;
 
 /// Look up a symbol by exact name across every corpus in the merged
 /// SCIP graph.
@@ -61,7 +61,7 @@ impl SymbolLookupTool {
     pub fn declared(self) -> DeclaredTool {
         let state = Arc::new(self);
         let run_state = Arc::clone(&state);
-        sovereign_core::tool_manifest::declared("symbols", move |params, ctx| {
+        sovereign_contracts::tool_manifest::declared("symbols", move |params, ctx| {
             let state = Arc::clone(&run_state);
             async move { state.run(&params, &ctx).await }
         })

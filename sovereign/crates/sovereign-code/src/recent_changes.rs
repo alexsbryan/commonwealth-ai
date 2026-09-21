@@ -8,13 +8,13 @@
 
 use std::sync::Arc;
 
-use sovereign_core::error::{Error, Result};
-use sovereign_core::types::*;
+use sovereign_contracts::error::{Error, Result};
+use sovereign_contracts::types::*;
 
 use corpus_engine::CorpusEngine;
 
 use super::{group_by_file, query_all_code_indexes};
-use sovereign_core::tool_manifest::DeclaredTool;
+use sovereign_contracts::tool_manifest::DeclaredTool;
 
 /// Default window if the caller omits `hours`.
 const DEFAULT_HOURS: u64 = 24;
@@ -44,7 +44,7 @@ impl RecentChangesTool {
     pub fn declared(self) -> DeclaredTool {
         let state = Arc::new(self);
         let run_state = Arc::clone(&state);
-        sovereign_core::tool_manifest::declared("recent_changes", move |params, ctx| {
+        sovereign_contracts::tool_manifest::declared("recent_changes", move |params, ctx| {
             let state = Arc::clone(&run_state);
             async move { state.run(&params, &ctx).await }
         })

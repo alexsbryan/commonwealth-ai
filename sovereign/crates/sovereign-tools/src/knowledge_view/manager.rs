@@ -42,7 +42,7 @@ use super::digest::format_landscape;
 use super::recipes::{
     conversation_history_recipe, institutional_notes_recipe, personal_knowledge_recipe,
 };
-use super::tokens::estimate_tokens;
+use sovereign_contracts::tokens::estimate_tokens;
 use super::view_kind::ViewKind;
 
 #[cfg(feature = "treesitter")]

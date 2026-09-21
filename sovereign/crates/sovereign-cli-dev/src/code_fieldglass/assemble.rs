@@ -376,7 +376,7 @@ pub(super) fn layout_treemap(
 /// ones (caught in the 2026-08-06 render audit). The cut count lands in the
 /// honesty footer.
 pub(super) fn dup_arcs_from(
-    report: &sovereign_tools::code::dry_report::DryReport,
+    report: &sovereign_code::dry_report::DryReport,
     root: &Path,
 ) -> (Vec<DupArc>, usize, Vec<DupClusterSummary>) {
     let rel = |p: &str| -> String {
@@ -385,7 +385,7 @@ pub(super) fn dup_arcs_from(
     };
     let mut arcs = Vec::new();
     let mut summaries = Vec::new();
-    let mut collect = |members: &[sovereign_tools::code::dry_report::SymbolRef],
+    let mut collect = |members: &[sovereign_code::dry_report::SymbolRef],
                        sim: f32,
                        exact: bool,
                        lines: usize| {

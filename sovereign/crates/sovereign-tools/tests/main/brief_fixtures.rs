@@ -30,7 +30,7 @@
 use std::path::{Path, PathBuf};
 use std::process::Command as Cmd;
 
-use sovereign_tools::code::brief::{assemble_brief, BriefInputs};
+use sovereign_code::brief::{assemble_brief, BriefInputs};
 
 // ── Snapshot harness ─────────────────────────────────────────
 

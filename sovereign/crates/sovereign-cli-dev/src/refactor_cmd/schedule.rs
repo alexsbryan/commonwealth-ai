@@ -16,7 +16,7 @@
 //!                   detector settings (the campaign's guard: changing any of
 //!                   them restarts the miss-rate series)
 //!   names         → `corpus_engine_scip::converge::census` (reachable rows)
-//!   behaviour     → `sovereign_tools::code::dry_report`
+//!   behaviour     → `sovereign_code::dry_report`
 //!   arg loops     → the `scripts/hpr-cost.py` detection rule (this module)
 
 use super::census;
@@ -591,7 +591,7 @@ async fn behaviour_kind(
     schedule: &mut Vec<ScheduleRow>,
     _limit: usize,
 ) {
-    use sovereign_tools::code::dry_report::{
+    use sovereign_code::dry_report::{
         build_dry_report, DryInputs, DEFAULT_MIN_LINES, DEFAULT_NEAR_THRESHOLD,
     };
     let report = match build_dry_report(DryInputs {
