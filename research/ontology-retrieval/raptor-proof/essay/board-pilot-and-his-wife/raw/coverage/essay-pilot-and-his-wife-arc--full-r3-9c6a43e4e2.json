@@ -1,0 +1,28 @@
+{
+ "kind": "coverage",
+ "key": "essay-pilot-and-his-wife-arc--full-r3",
+ "prompt": "Below are numbered plot points of a novel and an answer written about the novel.\nLabel every point by what the answer says about it:\n\"correct\" = the answer states it\n\"contradicted\" = the answer says something that conflicts with it\n\"absent\" = the answer does not mention it\nReturn only JSON with one entry per point: {\"P1\": \"correct\", \"P2\": \"absent\"}\n\nPoints:\nP1. The novel portrays the life of a sailor named Salve Kristiansen.\nP2. Salve loves Elisabeth and she returns his affection.\nP3. Elisabeth is attracted to a young officer who wishes to marry her.\nP4. Elisabeth spurns the officer because her old love for Salve prevails.\nP5. Salve leaves his native land in desperation before he can reconcile with Elisabeth.\nP6. Salve sails toward foreign shores after leaving home.\nP7. Salve returns to his old home years later.\nP8. Salve finds that Elisabeth has remained true to him during his absence.\nP9. Salve marries Elisabeth upon his return.\nP10. The thought of Elisabeth's momentary hesitation makes life miserable for both spouses.\nP11. Ten years elapse while Salve and Elisabeth struggle with their marital issues.\nP12. Salve and Elisabeth finally come to a clear understanding of one another.\nP13. Salve and Elisabeth lay the foundation for a happy life together.\nP14. The novel emphasizes the need of implicit confidence and trust in marriage.\n\nAnswer:\nThe novel opens with the introduction of Old Jacob, a reclusive former pilot who lives in isolation on Merdoe. He is characterized by his gloomy demeanor and obstinacy; he lost his piloting certificate after taking blame for his son's drinking and subsequent drowning. His home serves as a lighthouse beacon for ships at night, though its purpose remains ambiguous to the townsfolk. The narrative then shifts to reveal that Elizabeth, his wife (referred to as Salve), has been enduring years of domestic tyranny from him following their marriage, which deteriorated when her brother-in-law, Carl Beck, arrived in Arendal.\n\nThe plot arc moves through these two parallel lives before converging. We see Old Jacob's life with his granddaughter, who possesses an uncanny ability to identify ships and believes they are \"barbarians\" or \"Mohammedans\" who salt human flesh\u2014a fear instilled by her grandfather's tales. Meanwhile, the young Becks (Carl and Fru) are depicted as a wealthy but emotionally distant couple; Carl is vain and socially successful, while Fru acts as his social manager despite appearing cold and unappreciated for his attentions. The central tension builds as Elizabeth's patience wears thin under Jacob's unpredictable temper, which often leads him back to sea immediately after conflicts.\n\nThe story reaches its climax when Old Jacob dies in Arendal during a storm, leaving behind only his granddaughter and the memory of his harsh exterior masking deep love. His death triggers a revelation regarding the true nature of their relationship and the tragic fate awaiting the young Becks. While the provided text cuts off before detailing the final resolution involving Carl Beck's downfall or the specific outcome for Elizabeth, it establishes that \"Brighter days\" were promised but not yet seen. The narrative suggests an inevitable tragedy where social ambition destroys happiness, mirroring the isolation of the old couple on Merdoe.\n\nNot in your sources, but from general knowledge: The novel concludes with Old Jacob dying alone in Arendal; his granddaughter is taken away by authorities who believe she has been poisoned (a misunderstanding), while Carl Beck falls into ruin due to a gambling debt and suicide, leaving Fru Beck destitute and broken-hearted. Want me to read the final chapters of *The Pilot and His Wife*? It would take about 5 minutes.\n\n---\n*Verification note: these statements could not be confirmed against your sources \u2014 treat them as unverified:*\n- Old Jacob lost his piloting certificate after taking blame for his son's drinking and subsequent drowning.\n- Elizabeth endured years of domestic tyranny from Old Jacob following their marriage, which deteriorated when Carl Beck arrived in Arendal.\n- The novel concludes with Old Jacob dying alone in Arendal while his granddaughter is taken away by authorities who believe she has been poisoned.\n- Carl Beck falls into ruin due to a gambling debt and suicide, leaving Fru Beck destitute and broken-hearted.\n- The narrative then shifts to reveal that Elizabeth, his wife (referred to as Salve), has been enduring years of domestic tyranny from him following their marria\u2026\n- The story reaches its climax when Old Jacob dies in Arendal during a storm, leaving behind only his granddaughter and the memory of his harsh exterior masking d\u2026\n- Not in your sources, but from general knowledge: The novel concludes with Old Jacob dying alone in Arendal; his granddaughter is taken away by authorities who b\u2026",
+ "attempts": [
+  {
+   "nudged": false,
+   "reply": "{\n\"P1\": \"contradicted\",\n\"P2\": \"absent\",\n\"P3\": \"absent\",\n\"P4\": \"absent\",\n\"P5\": \"absent\",\n\"P6\": \"absent\",\n\"P7\": \"absent\",\n\"P8\": \"absent\",\n\"P9\": \"absent\",\n\"P10\": \"absent\",\n\"P11\": \"absent\",\n\"P12\": \"absent\",\n\"P13\": \"absent\",\n\"P14\": \"absent\"\n}",
+   "model": "Qwen3.6-35B-A3B-MTP-UD-Q6_K"
+  }
+ ],
+ "parsed": {
+  "P1": "contradicted",
+  "P2": "absent",
+  "P3": "absent",
+  "P4": "absent",
+  "P5": "absent",
+  "P6": "absent",
+  "P7": "absent",
+  "P8": "absent",
+  "P9": "absent",
+  "P10": "absent",
+  "P11": "absent",
+  "P12": "absent",
+  "P13": "absent",
+  "P14": "absent"
+ }
+}

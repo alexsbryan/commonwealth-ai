@@ -1,0 +1,28 @@
+{
+ "kind": "coverage",
+ "key": "essay-pilot-and-his-wife-relationship--full-r1",
+ "prompt": "Below are numbered plot points of a novel and an answer written about the novel.\nLabel every point by what the answer says about it:\n\"correct\" = the answer states it\n\"contradicted\" = the answer says something that conflicts with it\n\"absent\" = the answer does not mention it\nReturn only JSON with one entry per point: {\"P1\": \"correct\", \"P2\": \"absent\"}\n\nPoints:\nP1. The novel portrays the life of a sailor named Salve Kristiansen.\nP2. Salve loves Elisabeth and she returns his affection.\nP3. Elisabeth is attracted to a young officer who wishes to marry her.\nP4. Elisabeth spurns the officer because her old love for Salve prevails.\nP5. Salve leaves his native land in desperation before he can reconcile with Elisabeth.\nP6. Salve sails toward foreign shores after leaving home.\nP7. Salve returns to his old home years later.\nP8. Salve finds that Elisabeth has remained true to him during his absence.\nP9. Salve marries Elisabeth upon his return.\nP10. The thought of Elisabeth's momentary hesitation makes life miserable for both spouses.\nP11. Ten years elapse while Salve and Elisabeth struggle with their marital issues.\nP12. Salve and Elisabeth finally come to a clear understanding of one another.\nP13. Salve and Elisabeth lay the foundation for a happy life together.\nP14. The novel emphasizes the need of implicit confidence and trust in marriage.\n\nAnswer:\nBased on the provided passages from *The Pilot and His Wife*, the main relationship is that between **Salve Kristiansen** (the pilot) and his wife, **Elizabeth**.\n\nTheir marriage strains over the course of the story due to Salve\u2019s profound selfishness, vanity, and lack of constancy. The specific factors driving this strain include:\n\n*   **Salve's Self-Centered Nature:** Elizabeth eventually realizes that Salve has never truly loved her; rather, [unverified excerpt: it is yourself, and yourself only, you have loved all along.] She confronts him by stating he took her as a wife merely \"to help you,\" viewing her as an accessory to his ego rather than an equal partner.\n*   **Vanity and Social Ambition:** Salve is described as having a nature like a \"drifting cloud\" that glows only when played upon by popular applause. He is deeply vain and requires Elizabeth\u2019s social talents to maintain his status in Arendal's circles. However, he remains oblivious to the sacrifices she makes for this purpose, taking her loyalty for granted because they are married.\n*   **Infidelity and Emotional Neglect:** The strain was decisively triggered early on by Salve\u2019s intimate relationship with another woman (the wife of an officer), which Elizabeth could not tolerate despite knowing it stemmed from his vanity rather than deep affection. This led to a decisive confrontation where Elizabeth withdrew emotionally but remained bound to him.\n*   **The Burden of Waiting:** A significant source of resentment is the physical absence caused by Salve's profession as a pilot. He frequently leaves home, sometimes in anger over minor disputes (\"for some unlucky word of hers he had gone to sea again\"), leaving Elizabeth alone for long periods. She endures \"dulness and loneliness\" while he pursues his life at sea or shore, often returning only briefly before departing again.\n\nUltimately, their relationship becomes one of mutual misery masked by social appearances. Elizabeth hides her despair behind a facade of happiness, while Salve remains unaware of the depth of her suffering until it is too late to repair the damage.\n\n---\n*Verification note: these statements could not be confirmed against your sources \u2014 treat them as unverified:*\n- Salve frequently leaves home for sea due to minor disputes, leaving Elizabeth alone.\n- Salve\u2019s profound selfishness, vanity, and lack of constancy\n- The strain was decisively triggered early on by Salve\u2019s intimate relationship with another woman (the wife of an officer)",
+ "attempts": [
+  {
+   "nudged": false,
+   "reply": "{\n\"P1\": \"correct\",\n\"P2\": \"contradicted\",\n\"P3\": \"absent\",\n\"P4\": \"absent\",\n\"P5\": \"absent\",\n\"P6\": \"absent\",\n\"P7\": \"absent\",\n\"P8\": \"absent\",\n\"P9\": \"absent\",\n\"P10\": \"correct\",\n\"P11\": \"absent\",\n\"P12\": \"absent\",\n\"P13\": \"absent\",\n\"P14\": \"absent\"\n}",
+   "model": "Qwen3.6-35B-A3B-MTP-UD-Q6_K"
+  }
+ ],
+ "parsed": {
+  "P1": "correct",
+  "P2": "contradicted",
+  "P3": "absent",
+  "P4": "absent",
+  "P5": "absent",
+  "P6": "absent",
+  "P7": "absent",
+  "P8": "absent",
+  "P9": "absent",
+  "P10": "correct",
+  "P11": "absent",
+  "P12": "absent",
+  "P13": "absent",
+  "P14": "absent"
+ }
+}

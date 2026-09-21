@@ -1,0 +1,28 @@
+{
+ "kind": "coverage",
+ "key": "essay-pilot-and-his-wife-relationship--closed-book-r1",
+ "prompt": "Below are numbered plot points of a novel and an answer written about the novel.\nLabel every point by what the answer says about it:\n\"correct\" = the answer states it\n\"contradicted\" = the answer says something that conflicts with it\n\"absent\" = the answer does not mention it\nReturn only JSON with one entry per point: {\"P1\": \"correct\", \"P2\": \"absent\"}\n\nPoints:\nP1. The novel portrays the life of a sailor named Salve Kristiansen.\nP2. Salve loves Elisabeth and she returns his affection.\nP3. Elisabeth is attracted to a young officer who wishes to marry her.\nP4. Elisabeth spurns the officer because her old love for Salve prevails.\nP5. Salve leaves his native land in desperation before he can reconcile with Elisabeth.\nP6. Salve sails toward foreign shores after leaving home.\nP7. Salve returns to his old home years later.\nP8. Salve finds that Elisabeth has remained true to him during his absence.\nP9. Salve marries Elisabeth upon his return.\nP10. The thought of Elisabeth's momentary hesitation makes life miserable for both spouses.\nP11. Ten years elapse while Salve and Elisabeth struggle with their marital issues.\nP12. Salve and Elisabeth finally come to a clear understanding of one another.\nP13. Salve and Elisabeth lay the foundation for a happy life together.\nP14. The novel emphasizes the need of implicit confidence and trust in marriage.\n\nAnswer:\nIt appears there is a slight confusion regarding the title. There is no widely known major novel titled *The Pilot and His Wife*. It is highly likely you are referring to one of the following works with similar themes or titles:\n\n1. **\"The Pilot's Wife\" by Ann Patchett** \u2013 This is a non-fiction narrative (narrative journalism) about Annie Hearn, whose husband, Tom Hearn, was an Air Canada pilot who disappeared in 2007.\n2. **\"The Pilot\" (or stories involving pilots)** by various authors, but none feature \"His Wife\" as the central title pair.\n3. Possibly a mix-up with **\"The Great Gatsby\"** (no), **\"Rebecca\"** (no), or perhaps **\"Pilot\" by Haruki Murakami** (short story).\n\nHowever, **Ann Patchett\u2019s *The Pilot's Wife*** is the most prominent recent work that fits this description closely. Let me answer based on that assumption:\n\n### If you mean ***The Pilot's Wife* by Ann Patchett**:\n\n- **Main Relationship**: The relationship between **Annie Hearn and Tom Hearn**, an Air Canada pilot who vanished in 2007 over the Atlantic Ocean.\n  \n- **What Strains It Over the Course of the Story**:\n  - **Tom\u2019s Obsession with Flying**: Tom was deeply passionate about aviation, often prioritizing his career and personal flying ambitions over family time. His meticulous nature and dedication to safety sometimes created emotional distance.\n  - **Communication Barriers**: Like many high-stress professions, their communication had gaps. Annie felt she didn\u2019t fully know her husband despite being married for years.\n  - **The Mystery of Disappearance**: The central strain comes from *after* Tom vanishes without a trace (later revealed to be suicide by murder-suicide after he realized he was terminally ill). Annie is left grappling not just with grief, but with the realization that she may never understand why he did it or what truly happened in his final days.\n  - **Secrets and Misunderstandings**: As Annie investigates through interviews with friends, colleagues, and experts, she uncovers layers of complexity about Tom\u2019s inner life that strained their relationship retrospectively \u2014 including his fear of losing control due to illness.\n\n### If you meant a different book:\n\nCould you clarify? For example:\n- Did you mean **\"The Pilot's Daughter\"** (a novel)?\n- Or perhaps **\"Flight Behavior\" by Barbara Kingsolver** (features a pilot character)?\n- Or maybe **\"American Psycho\"** (no), **\"Catch-22\"** (pilots, but not focused on marriage)?\n\nPlease confirm the correct title so I can provide a more accurate analysis!",
+ "attempts": [
+  {
+   "nudged": false,
+   "reply": "{\n\"P1\": \"absent\",\n\"P2\": \"contradicted\",\n\"P3\": \"absent\",\n\"P4\": \"absent\",\n\"P5\": \"absent\",\n\"P6\": \"absent\",\n\"P7\": \"absent\",\n\"P8\": \"absent\",\n\"P9\": \"absent\",\n\"P10\": \"correct\",\n\"P11\": \"absent\",\n\"P12\": \"absent\",\n\"P13\": \"absent\",\n\"P14\": \"absent\"\n}",
+   "model": "Qwen3.6-35B-A3B-MTP-UD-Q6_K"
+  }
+ ],
+ "parsed": {
+  "P1": "absent",
+  "P2": "contradicted",
+  "P3": "absent",
+  "P4": "absent",
+  "P5": "absent",
+  "P6": "absent",
+  "P7": "absent",
+  "P8": "absent",
+  "P9": "absent",
+  "P10": "correct",
+  "P11": "absent",
+  "P12": "absent",
+  "P13": "absent",
+  "P14": "absent"
+ }
+}

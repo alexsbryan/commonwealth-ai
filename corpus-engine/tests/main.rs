@@ -58,6 +58,8 @@ mod ontology_identity_e2e;
 mod ontology_prompt_snapshots;
 #[path = "main/ontology_recipe.rs"]
 mod ontology_recipe;
+#[path = "main/ontology_recipe_validate.rs"]
+mod ontology_recipe_validate;
 #[path = "main/ontology_resolution_e2e.rs"]
 mod ontology_resolution_e2e;
 #[path = "main/ontology_retrieval_e2e.rs"]

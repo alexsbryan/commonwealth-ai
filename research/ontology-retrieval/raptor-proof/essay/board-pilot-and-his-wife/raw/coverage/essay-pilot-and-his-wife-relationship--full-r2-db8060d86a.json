@@ -1,0 +1,28 @@
+{
+ "kind": "coverage",
+ "key": "essay-pilot-and-his-wife-relationship--full-r2",
+ "prompt": "Below are numbered plot points of a novel and an answer written about the novel.\nLabel every point by what the answer says about it:\n\"correct\" = the answer states it\n\"contradicted\" = the answer says something that conflicts with it\n\"absent\" = the answer does not mention it\nReturn only JSON with one entry per point: {\"P1\": \"correct\", \"P2\": \"absent\"}\n\nPoints:\nP1. The novel portrays the life of a sailor named Salve Kristiansen.\nP2. Salve loves Elisabeth and she returns his affection.\nP3. Elisabeth is attracted to a young officer who wishes to marry her.\nP4. Elisabeth spurns the officer because her old love for Salve prevails.\nP5. Salve leaves his native land in desperation before he can reconcile with Elisabeth.\nP6. Salve sails toward foreign shores after leaving home.\nP7. Salve returns to his old home years later.\nP8. Salve finds that Elisabeth has remained true to him during his absence.\nP9. Salve marries Elisabeth upon his return.\nP10. The thought of Elisabeth's momentary hesitation makes life miserable for both spouses.\nP11. Ten years elapse while Salve and Elisabeth struggle with their marital issues.\nP12. Salve and Elisabeth finally come to a clear understanding of one another.\nP13. Salve and Elisabeth lay the foundation for a happy life together.\nP14. The novel emphasizes the need of implicit confidence and trust in marriage.\n\nAnswer:\nBased on the provided passages from *The Pilot and His Wife*, the main relationship is that between **Salve** (the pilot) and his wife, **Elizabeth**.\n\nTheir marriage strains over the course of the story due to Salve\u2019s profound selfishness, vanity, and emotional unavailability. The specific factors driving this strain include:\n\n*   **Salve's Self-Love:** Elizabeth eventually realizes that Salve has never truly loved her; rather, [unverified excerpt: it is yourself, and yourself only, you have loved all along.] She confronts him by stating he took her as a wife merely \"to help you,\" not out of mutual affection.\n*   **Vanity and Social Climbing:** Salve is described as having a nature like a \"drifting cloud\" that glows only when played upon by popular applause. He is deeply vain and requires his wife to be something he can be proud of socially. While Elizabeth uses her social talent to elevate their status in Arendal, Salve remains entirely wrapped up in the flattery he receives from others, failing to appreciate the compliment she pays him through her efforts.\n*   **Infidelity (Emotional or otherwise):** The strain was decisively triggered early on by Salve\u2019s intimate relations with an officer's wife. Although it may have been driven more by vanity than deep passion, Elizabeth could not stand the breach of trust. This event led to a decisive *eclaircissement* where she treated his mistress with coldness and left the room when confronted, marking the beginning of their emotional separation.\n*   **Salve's Restlessness:** Salve is depicted as having no \"root or tie,\" constantly longing for sea voyages even while feverishly wanting to return home. His temperament makes him unable to endure domestic stability; he becomes restless like an anchovy that \"don't bear taking out of the jar\". He often leaves in anger over minor slights, leaving Elizabeth to weep alone on Merdoe.\n*   **Mutual Misunderstanding and Isolation:** Elizabeth hides her suffering behind a facade of happiness (\"perfectly happy\") because she feels she has no one to confide in. Salve, conversely, is blind to her pain until it is too late, only realizing his own pettiness when faced with her dignified silence or departure. The distance between them grows not just through physical separation at sea, but through an emotional chasm where he sees her as a tool for his ego rather than a partner.\n\nThe relationship deteriorates from early marital bliss into a \"desert\" life for Elizabeth, who remains tied to him out of duty and lingering love, while Salve remains trapped by his own inability to offer constancy or truth.\n\n---\n*Verification note: these statements could not be confirmed against your sources \u2014 treat them as unverified:*\n- Elizabeth realizes Salve loved only himself rather than her.\n- Salve had intimate relations with an officer's wife early in their marriage.\n- Salve leaves home frequently due to restlessness, leaving Elizabeth alone on Merdoe.\n- Infidelity (Emotional or otherwise): The strain was decisively triggered early on by Salve\u2019s intimate relations with an officer's wife.\n- The relationship deteriorates from early marital bliss into a",
+ "attempts": [
+  {
+   "nudged": false,
+   "reply": "{\n\"P1\": \"correct\",\n\"P2\": \"contradicted\",\n\"P3\": \"absent\",\n\"P4\": \"contradicted\",\n\"P5\": \"absent\",\n\"P6\": \"absent\",\n\"P7\": \"absent\",\n\"P8\": \"contradicted\",\n\"P9\": \"contradicted\",\n\"P10\": \"correct\",\n\"P11\": \"correct\",\n\"P12\": \"contradicted\",\n\"P13\": \"contradicted\",\n\"P14\": \"absent\"\n}",
+   "model": "Qwen3.6-35B-A3B-MTP-UD-Q6_K"
+  }
+ ],
+ "parsed": {
+  "P1": "correct",
+  "P2": "contradicted",
+  "P3": "absent",
+  "P4": "contradicted",
+  "P5": "absent",
+  "P6": "absent",
+  "P7": "absent",
+  "P8": "contradicted",
+  "P9": "contradicted",
+  "P10": "correct",
+  "P11": "correct",
+  "P12": "contradicted",
+  "P13": "contradicted",
+  "P14": "absent"
+ }
+}

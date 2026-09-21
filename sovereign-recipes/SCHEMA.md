@@ -970,7 +970,7 @@ A structural source for a declared type: a file already holding it as a table, i
 |---|---|---|---|---|
 | `label` | `Option<String>` | no | type default | What the UI calls a tension in this domain (`"conflict"`). Becomes the tension term. |
 | `between` | `Vec<String>` | no | type default | The claim types tensions are sought between. |
-| `same` | `Vec<String>` | no | type default | Fields two claims must share to be comparable: `"subject"` or a declared attribute name. Defaults to the subject plus the type's clock. |
+| `same` | `Option<Vec<String>>` | no | type default | Fields two claims must share to be comparable: `"subject"`, `"clock"`, or a declared attribute name. Omit the key for the default (subject plus the type's clock); write `same = []` for NO criterion, which is how a corpus seeks tensions across subjects — two characters in conflict are two claims with different subjects, and the default rules out exactly those pairs. |
 | `not_conflicts` | `Vec<String>` | no | type default | Pairs that look like conflicts and are not, in the author's words. Rendered into the Phase-6 classifier; never complete, so versioned with the recipe. |
 
 ## `DeriveDecl`
@@ -1206,6 +1206,35 @@ grades = ["die-link", "hoard-context", "stylistic", "metrological"]
 between = ["attribution"]
 ```
 
+A `state` type is a condition of something, so it must name `of`, and `of`
+decides which of the two Phase-1 state facets it reaches: an entity (declared
+type or base kind) puts it on `entities_developed`, a declared RELATION puts it
+on `relations_developed` — which is how a state of a PAIR is said, the relation
+being the pair. A state type declares no attributes; the `State` atom has no
+attribute bag, so they would be extracted and dropped, and `recipe validate`
+refuses them rather than asking the model for values nothing stores.
+
+```toml
+[[enrichment.ontology.types]]
+name = "bond"
+kind = "relation"
+from = "character"
+to = "character"
+
+[[enrichment.ontology.types]]
+name = "bond_state"   # the condition of the PAIR, not of either character
+kind = "state"
+of = "bond"
+```
+
+`tension.same` is the comparability criterion: the fields two claims must
+share before they can be read as a tension. Two field names are reserved —
+`subject`, the claim's referent, and `clock`, the type's time axis — and the
+rest name declared attributes. Omit the key for the default, `["subject",
+"clock"]`. Write `same = []` for NO criterion, which is how a corpus seeks
+tensions ACROSS subjects: a conflict between two characters is two claims with
+different subjects, and the default rules out exactly those pairs.
+
 `max_entities_per_section` raises how many entities Phase 1 may introduce in
 one section (5–60; omit it to take the shipped cap of 15). Raise it for a
 corpus whose sections enumerate — a data table, a list of recipients — where
@@ -1237,8 +1266,9 @@ Keys: `guidance`, `vocabulary`, `must_not`, `types`,
 `ref … of` names a declared type or one of the base entity kinds the atlas
 already emits (`person`, `concept`, `institution`, `work`, `place`,
 `initiative`); that `tension.between` and
-`change.supersedes` name claim types and `tension.same` names `subject` or a
-declared attribute; that `deontic` appears only on directive claims; that no
+`change.supersedes` name claim types and `tension.same` names `subject`,
+`clock` or a declared attribute; that a `state` type names `of` and declares no
+attributes; that `deontic` appears only on directive claims; that no
 claim type takes a reserved kind name; and that the caps hold (12 types per
 kind, 8 attributes per type, 12 values per closed set). It then prints what
 was derived — the clock, the tension selector, the identity default for each

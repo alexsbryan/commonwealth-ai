@@ -606,10 +606,19 @@ pub struct TensionDecl {
     /// The claim types tensions are sought between.
     #[serde(default)]
     pub between: Vec<String>,
-    /// Fields two claims must share to be comparable: `"subject"` or a
-    /// declared attribute name. Defaults to the subject plus the type's clock.
+    /// Fields two claims must share to be comparable: `"subject"`, `"clock"`,
+    /// or a declared attribute name. Omit the key for the default (subject
+    /// plus the type's clock); write `same = []` for NO criterion, which is
+    /// how a corpus seeks tensions across subjects — two characters in
+    /// conflict are two claims with different subjects, and the default rules
+    /// out exactly those pairs.
+    //
+    // `Option` rather than `Vec` because the two answers differ: a bare `Vec`
+    // read "declared empty" as "declared nothing" and silently substituted
+    // the default (ARCH 6), which left a literary ontology unable to express
+    // its central relation at all.
     #[serde(default)]
-    pub same: Vec<String>,
+    pub same: Option<Vec<String>>,
     /// Pairs that look like conflicts and are not, in the author's words.
     /// Rendered into the Phase-6 classifier; never complete, so versioned
     /// with the recipe.

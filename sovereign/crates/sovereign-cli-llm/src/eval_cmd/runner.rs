@@ -212,10 +212,10 @@ pub struct SynthSnapshot {
     /// Diagnostic: the same fact rule applied to the *snippets* in
     /// `retrieved_chunks` rather than the answer. Lets the report
     /// distinguish "retrieval missed the fact" from "retrieval had the
-    /// fact but the model didn't surface it." Snippets are truncated
-    /// to ~200 chars by the runtime, so this is a lower bound on what
-    /// retrieval actually saw — read alongside the retrieval-mode
-    /// baseline for the unbiased number.
+    /// fact but the model didn't surface it." Scored over the FULL
+    /// chunk text since the `snippet` cap was removed, so it is now
+    /// what retrieval saw rather than a lower bound on it. Values from
+    /// before that change are strictly lower and not comparable.
     pub chunks_fact_score: ScoreSnapshot,
     /// Instructor-mode (LLM-as-judge) score: per fact, did a fast-slot
     /// model decide the concept was conveyed by the answer? Catches
@@ -236,8 +236,13 @@ pub struct RetrievedChunk {
     pub title: Option<String>,
     pub url: Option<String>,
     pub score: f32,
-    /// Truncated to ~600 chars to keep run files readable; the full
-    /// chunk lives in the index if the developer wants to drill in.
+    /// The chunk's full text, newlines flattened. NOT truncated.
+    ///
+    /// It was capped at 600 chars "to keep run files readable" — a cost
+    /// nobody measured — and the cap silently biased every metric read
+    /// off this field downward, because a fact past the cap scored as
+    /// absent. Cap it again only when a measured run-file cost says to,
+    /// and raise the consuming metrics' floor in the same commit.
     pub snippet: String,
     /// Provenance tag from the chunk's `metadata.source` — "raptor",
     /// "atlas", "atom-enum", or absent for organically-retrieved
@@ -917,7 +922,7 @@ async fn run_question_prod(
             title: c.title.clone(),
             url: c.url.clone(),
             score: c.score,
-            snippet: truncate(&c.content.replace('\n', " "), 600),
+            snippet: c.content.replace('\n', " "),
             source: None,
         })
         .collect();
@@ -1493,7 +1498,7 @@ async fn run_question(
             title: c.title.clone(),
             url: c.url.clone(),
             score: c.score,
-            snippet: truncate(&c.content.replace('\n', " "), 600),
+            snippet: c.content.replace('\n', " "),
             source: None,
         })
         .collect();
@@ -1504,7 +1509,7 @@ async fn run_question(
             title: c.title.clone(),
             url: c.url.clone(),
             score: c.score,
-            snippet: truncate(&c.content.replace('\n', " "), 600),
+            snippet: c.content.replace('\n', " "),
             source: None,
         })
         .collect();

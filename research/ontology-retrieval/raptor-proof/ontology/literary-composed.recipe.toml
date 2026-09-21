@@ -154,24 +154,24 @@ scope = "in_work"
 subject = "character"
 description = "What a character holds to be right or true, about themselves or another."
 
-# ── States: declared, but NOT extracted as declared kinds ───────────────────
+# ── States: a condition of one thing, or of a pair ──────────────────────────
+#
+# `of` routes a state type to its Phase-1 facet: an entity puts it on
+# `entities_developed`, a relation on `relations_developed`. Both reach the prompt and
+# the schema as a `state_type` enum, and the name lands on the State atom.
+# Until 2026-09-21 neither did: a declared state type added no prompt text and no schema
+# slot, so both blocks below were documentation and seed population only.
 
-# Serves: how the protagonist changes [change]. CANNOT: a declared state type adds no
-# prompt text and no schema slot — "States are not extracted as a declared kind in
-# Phase 1" (parse_policy.rs:217-220; ontology_prompt.rs:32-37 renders four kinds, not
-# five). The states themselves ARE extracted, by the generic `entities_developed` facet.
-# This declaration puts `State` in the seed population (seed_population.rs:122-130) and
-# records intent; delete it and extraction is unchanged.
+# Serves: how the protagonist changes [change].
 [[enrichment.ontology.types]]
 name = "inner_state"
 kind = "state"
 of = "character"
 description = "A condition a character is in: trust, jealousy, shame, resolve."
 
-# Serves: the condition of a relationship over the story [relationship]. CANNOT: `of`
-# takes ONE declared type (decl.rs:377-379), so a state of a PAIR of characters has no
-# direct form. Nearest legal form: a state of the `bond` relation, which is the pair.
-# Same caveat as inner_state: documentation and seed population only.
+# Serves: the condition of a relationship over the story [relationship]. A state of a
+# PAIR is said this way — `of` names the declared relation, and the relation IS the
+# pair; it routes to `relations_developed`. There is no second construct for it.
 [[enrichment.ontology.types]]
 name = "bond_state"
 kind = "state"
@@ -196,17 +196,24 @@ not_entities = ["the narrator", "the author"]
 [enrichment.ontology.derive]
 configurations = true
 
-# Serves: inner conflicts [inner-conflicts, conflict]. `between` admits claim types only
-# (validate.rs:294-301). CANNOT: there is no "no comparability criterion" — an empty
-# `same` means subject + clock (tension_policy.rs:304-311), and under a narrative clock
-# the clock is vacuous (tension_fields.rs:88-102). So pairs are comparable when they are
-# about the SAME character: this block finds a character at odds with themselves. A
-# conflict BETWEEN two characters is dropped whenever both claims name their character;
-# that conflict is carried by `bond` and its developed states instead.
+# Serves: conflict, inner and between characters [inner-conflicts, conflict]. `between`
+# admits claim types only (validate.rs:294-301).
+#
+# `same = []` is "no comparability criterion", which is what lets a claim by one
+# character be read against a claim by another. It did not exist when this file was
+# drafted — an empty `same` was indistinguishable from an absent one and took the
+# default, subject plus clock, so every conflict BETWEEN two characters was dropped
+# before the classifier saw it and only inner conflict survived.
+#
+# The trade-off is the candidate pool: with no criterion every motive/conviction pair in
+# the work is comparable, and the Phase-6 classifier (not this block) does all the
+# rejecting. If that proves too loose, `same = ["subject"]` restores the inner-conflict-
+# only reading in one line, and the conflict between characters goes back to riding
+# `bond` and its developed states.
 [enrichment.ontology.tension]
 label = "conflict"
 between = ["motive", "conviction"]
-same = ["subject"]
+same = []
 not_conflicts = [
   "a character changing their mind later in the story",
   "a wish and the fear of losing the same thing",

@@ -1,0 +1,28 @@
+{
+ "kind": "coverage",
+ "key": "essay-pilot-and-his-wife-inner-conflicts--closed-book-r1",
+ "prompt": "Below are numbered plot points of a novel and an answer written about the novel.\nLabel every point by what the answer says about it:\n\"correct\" = the answer states it\n\"contradicted\" = the answer says something that conflicts with it\n\"absent\" = the answer does not mention it\nReturn only JSON with one entry per point: {\"P1\": \"correct\", \"P2\": \"absent\"}\n\nPoints:\nP1. The novel portrays the life of a sailor named Salve Kristiansen.\nP2. Salve loves Elisabeth and she returns his affection.\nP3. Elisabeth is attracted to a young officer who wishes to marry her.\nP4. Elisabeth spurns the officer because her old love for Salve prevails.\nP5. Salve leaves his native land in desperation before he can reconcile with Elisabeth.\nP6. Salve sails toward foreign shores after leaving home.\nP7. Salve returns to his old home years later.\nP8. Salve finds that Elisabeth has remained true to him during his absence.\nP9. Salve marries Elisabeth upon his return.\nP10. The thought of Elisabeth's momentary hesitation makes life miserable for both spouses.\nP11. Ten years elapse while Salve and Elisabeth struggle with their marital issues.\nP12. Salve and Elisabeth finally come to a clear understanding of one another.\nP13. Salve and Elisabeth lay the foundation for a happy life together.\nP14. The novel emphasizes the need of implicit confidence and trust in marriage.\n\nAnswer:\nIt appears there is a misunderstanding regarding the title of the work. **There is no widely known or canonical novel titled *The Pilot and His Wife* that features a character named Elisabeth.**\n\nHowever, it is highly likely you are referring to one of the following works with similar themes or titles:\n\n1. **\"The Captain's Daughter\" (or \"The Captain\u2019s Wife\") by Alexander Pushkin** \u2013 Features Masha (not Elisabeth), but involves duty, love, and rebellion against social norms.\n2. **\"Elisabeth\" or historical fiction about Empress Elisabeth of Austria (\"Sisi\")** \u2013 Many novels explore her inner conflicts between personal freedom and imperial duty.\n3. ***The Pilot* by James Fenimore Cooper**? No female lead named Elisabeth drives major internal conflict in that specific way.\n4. **A confusion with *Wuthering Heights***? Where Catherine Earnshaw struggles between passion (Heathcliff) and status (Linton).\n5. **Or perhaps you mean the novel *Elizabeth Is Missing* by Emma Healey?** This features an elderly protagonist, Elizabeth, dealing with memory loss and grief, but no \"pilot.\"\n\n### Most Likely Scenario: Confusion with a Different Work\n\nIf you are thinking of a story involving a **female protagonist named Elisabeth** whose inner conflicts revolve around **a man who is away at sea or flying**, it may be one of these:\n\n- ***The English Patient*** by Michael Ondaatje \u2013 Features Katharine Clifton (not Elisabeth), who struggles between her love for a married man and her duty to her husband.\n- ***Outlander*** series by Diana Gabaldon \u2013 Claire Randall deals with conflict between two men in different time periods.\n- ***Poldark* novels** \u2013 Demelza Poldark faces internal conflicts regarding social status and marriage.\n\n### If You Meant *Empress Elisabeth of Austria* (\"Sisi\")\n\nIf you are referring to historical fiction about **Elisabeth of Bavaria, Empress of Austria**, her inner conflicts typically include:\n\n1. **Freedom vs. Duty**: Her lifelong struggle against the rigid protocols of the Habsburg court versus her role as an empress and mother.\n2. **Identity vs. Expectation**: She resisted being reduced to a ceremonial figurehead, seeking personal autonomy in beauty, travel, and poetry while maintaining public appearances.\n3. **Grief vs. Resilience**: The deaths of her son Rudolf and daughter Sophie drove much of her later behavior, leading to isolation and self-destructive tendencies (extreme dieting, excessive traveling).\n\nThese conflicts play out through:\n- Her refusal to participate fully in state functions.\n- Her obsessive grooming routines as a form of control.\n- Her emotional distance from her husband, Franz Joseph I.\n- Her secret relationships and literary pursuits away from the court.\n\n---\n\n### Please Clarify\n\nCould you please confirm:\n1. The **author** of the novel?\n2. A brief **plot summary**?\n3. Or if you meant a different character name or title?\n\nThis will allow me to provide an accurate analysis of Elisabeth\u2019s inner conflicts and their narrative progression.",
+ "attempts": [
+  {
+   "nudged": false,
+   "reply": "{\n\"P1\": \"contradicted\",\n\"P2\": \"absent\",\n\"P3\": \"absent\",\n\"P4\": \"absent\",\n\"P5\": \"absent\",\n\"P6\": \"absent\",\n\"P7\": \"absent\",\n\"P8\": \"absent\",\n\"P9\": \"absent\",\n\"P10\": \"absent\",\n\"P11\": \"absent\",\n\"P12\": \"absent\",\n\"P13\": \"absent\",\n\"P14\": \"absent\"\n}",
+   "model": "Qwen3.6-35B-A3B-MTP-UD-Q6_K"
+  }
+ ],
+ "parsed": {
+  "P1": "contradicted",
+  "P2": "absent",
+  "P3": "absent",
+  "P4": "absent",
+  "P5": "absent",
+  "P6": "absent",
+  "P7": "absent",
+  "P8": "absent",
+  "P9": "absent",
+  "P10": "absent",
+  "P11": "absent",
+  "P12": "absent",
+  "P13": "absent",
+  "P14": "absent"
+ }
+}

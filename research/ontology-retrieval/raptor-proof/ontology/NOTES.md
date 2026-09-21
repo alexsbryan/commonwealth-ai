@@ -15,13 +15,26 @@ Exemplars are optional, but a row without them can never be classified onto (nav
   `summary_sources = ["atoms","raptor"]`; `lookup` and `enumeration` carry none.
 
 ## What the syntax could not express
-1. Declared STATE types are inert in extraction: no prompt text, no schema slot (parse_policy.rs:217-220). States come
-   from the generic `entities_developed` / `relations_developed` facets, steered only by `guidance`.
-2. A state `of` a PAIR: `of` names one type. Nearest form: `bond_state of = "bond"` (the relation is the pair).
-3. Conflict BETWEEN characters: an empty `tension.same` means subject + clock (tension_policy.rs:304-311), so claims about
-   two characters are dropped; the block finds INNER conflict. Minimal change: `same: Option<_>`, `[]` = no criterion.
-4. No cause edge: no build emits `Causes`; setup/payoff rides on `plot_event.consequence` (free text).
-5. `seed.entity_types` is unchecked (`EntityType::Other` takes any string): a typo seeds nothing, silently.
+
+Three of the five were fixed on 2026-09-21 by the change this file provoked; the
+strikethroughs are kept because the recipe above still cites them.
+
+1. ~~Declared STATE types are inert in extraction: no prompt text, no schema slot~~ —
+   FIXED. `of` routes a state type to `entities_developed` or `relations_developed`, and
+   both facets carry a `state_type` enum through the prompt, the schema, the reader and
+   onto the State atom. A state type now MUST name `of` and may NOT declare attributes
+   (the State atom has no attribute bag); both refuse at load.
+2. ~~A state `of` a PAIR: `of` names one type~~ — FIXED by the same routing, and it is
+   the same form this file already used: `bond_state of = "bond"`. The relation is the
+   pair, so there is no second construct; what was missing was the type reaching Phase 1.
+3. ~~Conflict BETWEEN characters: an empty `tension.same` means subject + clock~~ —
+   FIXED as proposed here: `same` is `Option<Vec<String>>` and `same = []` is a real
+   no-criterion. The validator also accepts the reserved `clock` field, which it had
+   rejected — so the documented default could not be written out.
+4. STILL OPEN. No cause edge: no build emits `Causes`; setup/payoff rides on
+   `plot_event.consequence` (free text).
+5. STILL OPEN. `seed.entity_types` is unchecked (`EntityType::Other` takes any string):
+   a typo seeds nothing, silently.
 
 ## Seen in the model-free dry-run (`svrn enrich extract <id> --chapters sec_0001 --dry-run`)
 - The one worked attribute example takes the FIRST type with attributes and prints it entity-shaped; with `bond` first

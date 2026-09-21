@@ -1,0 +1,30 @@
+{
+ "kind": "points",
+ "key": "reference",
+ "prompt": "Split this plot summary of a novel into atomic plot points: one event, fact or stated theme of the story per point, each a short sentence that names its characters.\nReturn only JSON: {\"points\": [\"...\", \"...\"]}\n\nSummary:\nThe Pilot and His Wife portrays the life of the sailor both at home and abroad and describes varied experiences out on the stormy deep as well as in distant ports. The work is noted for its vigor of description. With a background of ocean waves, it is a story of married life.\nSalve Kristiansen loves a beautiful woman named Elisabeth and is evidently loved in return. But for a time Elisabeth is attracted to a young officer who wishes to marry her. The old love for Salve prevails, however, and Elisabeth spurns the officer, but Salve has already left his native land in desperation and is sailing toward foreign shores. When he finally, after some years, returns to his old home, he finds that Elisabeth, after all, has been true to him. He marries her.\nIt would seem that all is well, but such is not the case. The thought of Elisabeth's momentary hesitation does not leave Salve, and this unfortunate circumstance makes life miserable for both. Ten years elapse before the husband and wife finally come to a clear understanding and a genuine appreciation of one another, and now at last are enabled to lay the foundation for a happy life together. The novel emphasizes the need of implicit confidence and trust, if two persons united in wedlock are to live happily together.",
+ "attempts": [
+  {
+   "nudged": false,
+   "reply": "{\n  \"points\": [\n    \"The novel portrays the life of a sailor named Salve Kristiansen.\",\n    \"Salve loves Elisabeth and she returns his affection.\",\n    \"Elisabeth is attracted to a young officer who wishes to marry her.\",\n    \"Elisabeth spurns the officer because her old love for Salve prevails.\",\n    \"Salve leaves his native land in desperation before he can reconcile with Elisabeth.\",\n    \"Salve sails toward foreign shores after leaving home.\",\n    \"Salve returns to his old home years later.\",\n    \"Salve finds that Elisabeth has remained true to him during his absence.\",\n    \"Salve marries Elisabeth upon his return.\",\n    \"The thought of Elisabeth's momentary hesitation makes life miserable for both spouses.\",\n    \"Ten years elapse while Salve and Elisabeth struggle with their marital issues.\",\n    \"Salve and Elisabeth finally come to a clear understanding of one another.\",\n    \"Salve and Elisabeth lay the foundation for a happy life together.\",\n    \"The novel emphasizes the need of implicit confidence and trust in marriage.\"\n  ]\n}",
+   "model": "Qwen3.6-35B-A3B-MTP-UD-Q6_K"
+  }
+ ],
+ "parsed": {
+  "points": [
+   "The novel portrays the life of a sailor named Salve Kristiansen.",
+   "Salve loves Elisabeth and she returns his affection.",
+   "Elisabeth is attracted to a young officer who wishes to marry her.",
+   "Elisabeth spurns the officer because her old love for Salve prevails.",
+   "Salve leaves his native land in desperation before he can reconcile with Elisabeth.",
+   "Salve sails toward foreign shores after leaving home.",
+   "Salve returns to his old home years later.",
+   "Salve finds that Elisabeth has remained true to him during his absence.",
+   "Salve marries Elisabeth upon his return.",
+   "The thought of Elisabeth's momentary hesitation makes life miserable for both spouses.",
+   "Ten years elapse while Salve and Elisabeth struggle with their marital issues.",
+   "Salve and Elisabeth finally come to a clear understanding of one another.",
+   "Salve and Elisabeth lay the foundation for a happy life together.",
+   "The novel emphasizes the need of implicit confidence and trust in marriage."
+  ]
+ }
+}

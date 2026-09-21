@@ -19,7 +19,8 @@ use tracing::debug;
 
 use super::super::atlas::{normalise_enum_tag, ClaimScope, DiscourseAct};
 use crate::enrichment::ontology::{
-    AttrDecl, AttrFamily, ClaimScopeDecl, Deontic, Force, OntologyPolicies, TypeIndex, TypeKind,
+    AttrDecl, AttrFamily, ClaimScopeDecl, Deontic, Force, OntologyPolicies, OntologyTypeDecl,
+    TypeIndex, TypeKind,
 };
 
 // ── Declared-ontology parse policy ──────────────────────────────────────────
@@ -42,6 +43,14 @@ pub struct ParsePolicy {
     pub(super) relation_types: BTreeMap<String, Vec<AttrDecl>>,
     pub(super) event_types: BTreeMap<String, Vec<AttrDecl>>,
     pub(super) claim_types: BTreeMap<String, ClaimTypeRules>,
+    /// Declared `state` types whose `of` names an entity — the vocabulary
+    /// for `entities_developed`. Kept apart from [`Self::relation_state_types`]
+    /// because the two facets are two slots in the schema and a state type
+    /// belongs to exactly one of them: routing happens once, here, off `of`.
+    pub(super) entity_state_types: BTreeMap<String, Vec<AttrDecl>>,
+    /// Declared `state` types whose `of` names a relation — the vocabulary
+    /// for `relations_developed`.
+    pub(super) relation_state_types: BTreeMap<String, Vec<AttrDecl>>,
     /// Folded speaker roles that must never become entity atoms
     /// (`voices.not_entities`). Enforced here, not asked of the model (§7.6).
     not_entities: BTreeSet<String>,
@@ -158,6 +167,28 @@ pub(super) fn declared_attributes<'a>(
     }
 }
 
+/// Which Phase-1 facet a declared `state` type belongs to: `true` for
+/// `relations_developed`, `false` for `entities_developed`.
+///
+/// The rule is `of`. A state whose `of` names a declared RELATION is a state
+/// of that pair and rides the relation facet; anything else — a declared
+/// entity type, or one of the base entity kinds the atlas already emits — is
+/// a state of one thing and rides the entity facet. `of` is required on a
+/// state type and resolved by `recipe validate`, so an unroutable name never
+/// reaches a build.
+///
+/// One function because two readers ask: [`ParsePolicy::from_policies`] to
+/// build the vocabulary it validates the model's answer against, and
+/// `ontology_schema::phase1_schema_for` to put the enum on the right sketch.
+/// Two spellings of this rule would put a type in the prompt's entity slot
+/// and the reader's relation map, and every state of that type would be
+/// dropped as unknown.
+pub(super) fn state_is_of_relation(policies: &OntologyPolicies, t: &OntologyTypeDecl) -> bool {
+    t.of.as_deref()
+        .and_then(|of| policies.type_decl(of))
+        .is_some_and(|d| d.kind == TypeKind::Relation)
+}
+
 /// Reserved attribute key carrying a directive claim's deontic normal form.
 /// `pub(crate)` since ontology-v1 P5: `governance_view::project_claim` reads
 /// the same key off the atom, and one spelling is the point (§10.6).
@@ -214,10 +245,20 @@ impl ParsePolicy {
                         },
                     );
                 }
-                // States are not extracted as a declared kind in Phase 1 —
-                // the section schema has no state-type slot. P3 emits them
-                // from `role_of`.
-                TypeKind::State => {}
+                // A declared state reaches Phase 1 through the facet its
+                // `of` names: an entity (declared type or base kind) puts
+                // it on `entities_developed`, a declared RELATION puts it
+                // on `relations_developed` — which is how a state of a
+                // PAIR is said, the relation being the pair. `of` is
+                // required and resolved by `recipe validate`, so an
+                // unroutable name cannot reach here.
+                TypeKind::State => {
+                    if state_is_of_relation(policies, t) {
+                        out.relation_state_types.insert(t.name.clone(), attrs);
+                    } else {
+                        out.entity_state_types.insert(t.name.clone(), attrs);
+                    }
+                }
             }
         }
         out.not_entities = policies
@@ -242,6 +283,8 @@ impl ParsePolicy {
             && self.relation_types.is_empty()
             && self.event_types.is_empty()
             && self.claim_types.is_empty()
+            && self.entity_state_types.is_empty()
+            && self.relation_state_types.is_empty()
             && self.not_entities.is_empty()
     }
 

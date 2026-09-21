@@ -36,7 +36,9 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info};
 
-use crate::enrichment::pipeline::atlas::{EntitySketch, EventSketch, EventType, SectionExtraction};
+use crate::enrichment::pipeline::atlas::{
+    EntitySketch, EventSketch, EventType, SectionExtraction, StateType,
+};
 use crate::error::Result;
 use crate::types::EmbedFn;
 
@@ -1315,12 +1317,7 @@ pub fn resolve_step_3b_with(
                 id: state_id.clone(),
                 entity_id: entity_id.clone(),
                 label: sketch.label.trim().to_string(),
-                // State-type classification defers to Phase 5 — the
-                // sketch carries no type. Use Other("unclassified")
-                // so atoms are well-typed on disk.
-                state_type: crate::enrichment::pipeline::atlas::StateType::Other(
-                    "unclassified".into(),
-                ),
+                state_type: StateType::declared_or_unclassified(sketch.state_type.as_deref()),
                 evidence: evidence.clone(),
                 section_range: super::atoms::SectionRange::point(section.section_id.clone()),
                 // Deterministic derivation — no LLM scoring here. The
@@ -1547,9 +1544,7 @@ pub fn resolve_step_3b_with(
                 id: state_id.clone(),
                 entity_id: rel_id.clone(),
                 label: sketch.label.trim().to_string(),
-                state_type: crate::enrichment::pipeline::atlas::StateType::Other(
-                    "unclassified".into(),
-                ),
+                state_type: StateType::declared_or_unclassified(sketch.state_type.as_deref()),
                 evidence: evidence.clone(),
                 section_range: super::atoms::SectionRange::point(section.section_id.clone()),
                 // Derived — see the note at the entity-state call site.
@@ -3881,6 +3876,7 @@ mod tests {
                     entity_name: "Alyosha".into(),
                     label: "Eager attention at the elder's feet".into(),
                     anchor: "knelt at Zossima's feet".into(),
+                    state_type: None,
                 }],
                 relations_introduced: vec![RelationSketch {
                     attributes: Default::default(),
@@ -3893,6 +3889,7 @@ mod tests {
                     participants: vec!["Alyosha".into(), "Zossima".into()],
                     label: "Formation through blessing".into(),
                     anchor: "blessed the novice".into(),
+                    state_type: None,
                 }],
                 events: vec![],
                 claims: vec![ClaimSketch {
@@ -3922,6 +3919,7 @@ mod tests {
                     entity_name: "Alyosha".into(),
                     label: "Resolve to leave the monastery".into(),
                     anchor: "must go out into the world".into(),
+                    state_type: None,
                 }],
                 ..Default::default()
             },
@@ -4010,11 +4008,13 @@ mod tests {
                     entity_name: "Alyosha".into(),
                     label: "real state".into(),
                     anchor: String::new(),
+                    state_type: None,
                 },
                 EntityStateSketch {
                     entity_name: "Mystery Character".into(),
                     label: "orphan state".into(),
                     anchor: String::new(),
+                    state_type: None,
                 },
             ],
             ..Default::default()
@@ -4711,6 +4711,7 @@ mod tests {
                     entity_name: "Alyosha".into(),
                     label: "At the monastery".into(),
                     anchor: String::new(),
+                    state_type: None,
                 }],
                 ..Default::default()
             },
@@ -4726,6 +4727,7 @@ mod tests {
                     entity_name: "Alyosha".into(),
                     label: "Leaving".into(),
                     anchor: String::new(),
+                    state_type: None,
                 }],
                 ..Default::default()
             },
@@ -4772,6 +4774,7 @@ mod tests {
                     entity_name: "Alyosha".into(),
                     label: "Before".into(),
                     anchor: String::new(),
+                    state_type: None,
                 }],
                 ..Default::default()
             },
@@ -4787,6 +4790,7 @@ mod tests {
                     entity_name: "Alyosha".into(),
                     label: "After".into(),
                     anchor: String::new(),
+                    state_type: None,
                 }],
                 ..Default::default()
             },
@@ -4828,6 +4832,7 @@ mod tests {
                 entity_name: "Mystery Person".into(), // (1) unknown
                 label: "distressed".into(),
                 anchor: String::new(),
+                state_type: None,
             }],
             relations_introduced: vec![RelationSketch {
                 attributes: Default::default(),
@@ -4840,6 +4845,7 @@ mod tests {
                 participants: vec!["Ghost A".into(), "Ghost B".into()], // (3) both unresolved
                 label: "phantom bond".into(),
                 anchor: String::new(),
+                state_type: None,
             }],
             claims: vec![ClaimSketch {
                 attributes: Default::default(),
@@ -4931,6 +4937,7 @@ mod tests {
                 entity_name: "Alyosha".into(),
                 label: "resolute".into(),
                 anchor: String::new(),
+                state_type: None,
             }],
             claims: vec![ClaimSketch {
                 attributes: Default::default(),
@@ -4980,6 +4987,7 @@ mod tests {
                     entity_name: "Alyosha".into(),
                     label: "Before".into(),
                     anchor: String::new(),
+                    state_type: None,
                 }],
                 ..Default::default()
             },
@@ -4995,6 +5003,7 @@ mod tests {
                     entity_name: "Alyosha".into(),
                     label: "After".into(),
                     anchor: String::new(),
+                    state_type: None,
                 }],
                 ..Default::default()
             },
