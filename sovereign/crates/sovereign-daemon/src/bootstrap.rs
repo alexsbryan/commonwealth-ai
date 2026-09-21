@@ -2751,8 +2751,7 @@ mod rpc_worker_flag_tests {
     /// rather than on one caller.
     #[test]
     fn the_default_bind_is_loopback_only() {
-        let serve =
-            sovereign_contracts::launch::RpcServe::resolve(Some(DEFAULT_RPC_BIND), false);
+        let serve = sovereign_contracts::launch::RpcServe::resolve(Some(DEFAULT_RPC_BIND), false);
         assert!(
             serve.is_serving(),
             "the default must SERVE with no acknowledgement, not be refused: \

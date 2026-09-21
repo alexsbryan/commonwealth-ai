@@ -539,9 +539,7 @@ impl RpcServe {
     pub fn from_env() -> Self {
         Self::resolve(
             std::env::var("SOVEREIGN_RPC_SERVE").ok().as_deref(),
-            accepts_plaintext_lan(
-                std::env::var(RPC_ALLOW_PLAINTEXT_LAN_ENV).ok().as_deref(),
-            ),
+            accepts_plaintext_lan(std::env::var(RPC_ALLOW_PLAINTEXT_LAN_ENV).ok().as_deref()),
         )
     }
 
@@ -692,13 +690,23 @@ mod tests {
     /// every interface exactly as `0.0.0.0` does.
     #[test]
     fn loopback_serves_and_every_other_reachable_host_is_refused() {
-        for bind in ["127.0.0.1:50052", "127.0.0.53:50052", "[::1]:50052", "localhost:50052"] {
+        for bind in [
+            "127.0.0.1:50052",
+            "127.0.0.53:50052",
+            "[::1]:50052",
+            "localhost:50052",
+        ] {
             assert!(
                 RpcServe::resolve(Some(bind), false).is_serving(),
                 "{bind} is loopback and must serve with no acknowledgement"
             );
         }
-        for bind in ["0.0.0.0:50052", "[::]:50052", ":50052", "192.168.1.10:50052"] {
+        for bind in [
+            "0.0.0.0:50052",
+            "[::]:50052",
+            ":50052",
+            "192.168.1.10:50052",
+        ] {
             assert!(
                 RpcServe::resolve(Some(bind), false).is_refused(),
                 "{bind} is reachable from another host and must be refused"
