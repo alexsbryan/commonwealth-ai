@@ -240,8 +240,15 @@ pub async fn run_one_round(fabric: &FabricPart) -> RoundOutcome {
     };
 
     let self_id = fabric.identity.current();
-    let (peers, exchanged_with, skipped_offline) = {
+    let now_secs = fabric.clock().now_unix_secs();
+    let (stamp, peers, exchanged_with, skipped_offline) = {
         let mesh = fabric.mesh.read().await;
+        // Minted once per round, under the lock this block already holds.
+        // `verify_mesh_proof` accepts the previous window too, so a round
+        // that outlives one `PROOF_WINDOW_SECS` is still accepted; a round
+        // that outlives two is not, and that is a round in far worse trouble
+        // than an unproved dial.
+        let stamp = commonwealth_transport::mesh_proof::mesh_proof_stamp(&mesh, self_id, now_secs);
         let mut peers: Vec<OnlinePeer> = Vec::new();
         let (mut online, mut offline): (Vec<String>, Vec<String>) = (Vec::new(), Vec::new());
         for m in mesh.members.values() {
@@ -263,7 +270,7 @@ pub async fn run_one_round(fabric: &FabricPart) -> RoundOutcome {
                 offline.push(m.name.clone());
             }
         }
-        (peers, online, offline)
+        (stamp, peers, online, offline)
     };
     // GLASSBOX: which members this round carried and which it passed over. A
     // round that skips the only peer looks exactly like a round that had
@@ -342,7 +349,7 @@ pub async fn run_one_round(fabric: &FabricPart) -> RoundOutcome {
             let mut refused = false;
             for ep in &endpoints {
                 let url = format!("{}/internal/ring/sync", ep.base_url);
-                let ex = exchange(http, &url, &rail, &journal).await;
+                let ex = exchange(http, &url, &rail, &journal, stamp.as_ref()).await;
                 // Counted BEFORE the verdict is read. `ingest_all` has already
                 // written these lines to disk, so they are progress whether or
                 // not a later call in the same exchange failed — the old shape
@@ -529,6 +536,10 @@ pub async fn exchange(
     url: &str,
     rail: &commonwealth_rail::RingRail,
     journal: &commonwealth_rail::RingJournal,
+    // This node's proof that it holds the mesh secret, or `None` on a mesh
+    // with no credential. Carried through rather than minted here: one
+    // function mints it, and it is the round that holds the mesh.
+    stamp: Option<&commonwealth_transport::mesh_proof::MeshProofStamp>,
 ) -> ExchangeOutcome {
     let namespace = journal.namespace();
     let mut out = ExchangeOutcome::default();
@@ -548,6 +559,7 @@ pub async fn exchange(
                 digest: mine,
                 ops: Vec::new(),
             },
+            stamp,
         )
         .await
         {
@@ -596,6 +608,7 @@ pub async fn exchange(
                     digest: refreshed,
                     ops: for_peer,
                 },
+                stamp,
             )
             .await
             {
@@ -650,6 +663,7 @@ async fn post(
     http: &reqwest::Client,
     url: &str,
     body: &RingSyncRequest,
+    stamp: Option<&commonwealth_transport::mesh_proof::MeshProofStamp>,
 ) -> Result<RingSyncResponse, ExchangeStop> {
     // Serialised here rather than handed to `.json(body)` so the byte count
     // the receiver's limit judges is a number THIS side can name in a log.
@@ -658,10 +672,17 @@ async fn post(
         Err(e) => return Err(ExchangeStop::Failed(format!("local encode: {e}"))),
     };
     let sent_bytes = payload.len();
-    let resp = http
+    let mut request = http
         .post(url)
         .header(reqwest::header::CONTENT_TYPE, "application/json")
-        .body(payload)
+        .body(payload);
+    // Ring sync is NOT gossip: nothing in its body proves the caller holds
+    // this mesh's secret, so on a plain-IP hop the header is the only thing
+    // that can. Absent on a mesh with no credential, never faked.
+    if let Some((name, value)) = stamp.map(|s| s.pair()) {
+        request = request.header(name, value);
+    }
+    let resp = request
         .send()
         .await
         .map_err(|e| ExchangeStop::Failed(e.to_string()))?;

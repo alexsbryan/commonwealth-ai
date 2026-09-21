@@ -76,10 +76,12 @@ use axum::http::HeaderMap;
 use axum::middleware::Next;
 use axum::response::Response;
 use commonwealth_core::ids::{NodeId, NodePubkey};
+use commonwealth_core::Clock;
 use commonwealth_media::MemberIdentity;
 use commonwealth_transport::iroh_identity_forward::{
     is_acceptor_mark, ACCEPTOR_MARK_HEADER, MESH_HEADER_PREFIX,
 };
+use commonwealth_transport::mesh_proof::MESH_PROOF_HEADER;
 use sovereign_serving_host::admission::Principal;
 
 use crate::state::AppState;
@@ -87,6 +89,22 @@ use crate::state::AppState;
 /// The header the acceptor writes the verified Ed25519 key into. Full
 /// lowercase hex of 32 bytes (`commonwealth_media::verified_headers`).
 const PUBKEY_HEADER: &str = "x-mesh-pubkey";
+
+/// A holder of this mesh's secret is calling — and that is ALL it says.
+///
+/// A mesh proof proves the GROUP: any holder of the secret can mint one
+/// naming any sender (`Mesh::proof_for`). So this is a marker attached BESIDE
+/// the principal, never a [`Principal`] arm and never a carrier of the sender
+/// the proof named — a valid proof leaves the principal exactly what it would
+/// have been without one. Reading the sender as an identity would be member B
+/// naming C, the same forgery the `x-node-id` work closed, reopened on
+/// plaintext meshes.
+///
+/// It exists for one decider: the internal port's gate can tell a member of
+/// the group from a stranger on a plain-IP hop, where nothing proves WHICH
+/// member is calling.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ProvedMeshMember;
 
 /// Whether this connection is one this daemon's own acceptor made — see the
 /// module docs for why both conditions, and why there is no third.
@@ -170,12 +188,75 @@ impl AppState {
     /// that is to take it off the request (ARCH principle 10 — structural, not
     /// remembered). On a tied connection the identity triple is left in place
     /// for the log fields that already read it; only the mark is removed.
+    /// Whether `raw` is a `<sender-hex>.<proof>` this mesh's secret accepts.
+    ///
+    /// The sender is read back out of the value because
+    /// [`Mesh::verify_mesh_proof`](commonwealth_core::mesh::Mesh::verify_mesh_proof)
+    /// is keyed to it — not as an identity claim. Nothing here reads
+    /// `x-node-id`, and nothing here builds a principal.
+    async fn mesh_proof_holds(&self, raw: &str) -> bool {
+        let Some((sender_hex, proof)) = raw.split_once('.') else {
+            return false;
+        };
+        let Some(sender) = NodeId::from_hex(sender_hex) else {
+            return false;
+        };
+        let now = self.clock().now_unix_secs();
+        let mesh = self.inner.fabric.mesh.read().await;
+        mesh.verify_mesh_proof(proof, sender, now)
+    }
+
     pub async fn resolve_internal(
         &self,
         headers: &mut HeaderMap,
         peer: Option<SocketAddr>,
-    ) -> Principal {
+    ) -> (Principal, Option<ProvedMeshMember>) {
         if !tied_to_our_acceptor(headers, peer) {
+            // BEFORE the strip, because the proof's name sits under
+            // `MESH_HEADER_PREFIX` and `strip_mesh_headers` would take it —
+            // and it must, so that no handler downstream can re-read a proof
+            // this function judged. Taken off the request here either way,
+            // and NOT counted as a claim: it claims membership of the group,
+            // which this daemon can check for itself, rather than an identity
+            // it would have to be talked into believing.
+            let offered = headers.remove(MESH_PROOF_HEADER);
+            let proved = match &offered {
+                None => None,
+                Some(raw) => {
+                    let holds = match raw.to_str() {
+                        Ok(raw) => self.mesh_proof_holds(raw).await,
+                        Err(_) => false,
+                    };
+                    if holds {
+                        tracing::debug!(
+                            target: "transport",
+                            peer = ?peer,
+                            "internal: an untied caller proved it holds this mesh's \
+                             secret — a member of the GROUP, not a named member: \
+                             any holder can mint a proof naming any sender, so the \
+                             principal is unchanged"
+                        );
+                        Some(ProvedMeshMember)
+                    } else {
+                        tracing::debug!(
+                            target: "transport",
+                            peer = ?peer,
+                            "internal: an untied caller offered a mesh proof this \
+                             daemon's secret does not accept — no marker, and the \
+                             caller is unverified"
+                        );
+                        None
+                    }
+                }
+            };
+            // An offered-and-failed proof is a claim that failed, which is
+            // `Unverified` however little else was presented (ARCH principle
+            // 6). An accepted one leaves the answer exactly where it would
+            // have been with no proof at all.
+            if offered.is_some() && proved.is_none() {
+                strip_mesh_headers(headers);
+                return (Principal::Unverified, None);
+            }
             let stripped = strip_mesh_headers(headers);
             // An untied caller that presented NOTHING claimed nothing, and
             // `Anonymous` is what "nothing was presented" means. Only a caller
@@ -194,11 +275,14 @@ impl AppState {
                  any x-mesh-* was typed by the caller, not proved by a handshake, \
                  so it is stripped and the caller is unverified"
             );
-            return if claimed {
-                Principal::Unverified
-            } else {
-                Principal::Anonymous
-            };
+            return (
+                if claimed {
+                    Principal::Unverified
+                } else {
+                    Principal::Anonymous
+                },
+                proved,
+            );
         }
         headers.remove(ACCEPTOR_MARK_HEADER);
 
@@ -215,8 +299,11 @@ impl AppState {
                 "internal: the hop carries this daemon's acceptor mark but no \
                  readable verified key — resolving unverified"
             );
-            return Principal::Unverified;
+            return (Principal::Unverified, None);
         };
+        // No marker on a tied hop, and no proof read: the acceptor strips
+        // every client-supplied `x-mesh-*` before forwarding, so a proof
+        // cannot arrive here — and would say less than the key already did.
         match self.member_by_pubkey(dialer).await {
             Some(who) => {
                 tracing::debug!(
@@ -225,9 +312,12 @@ impl AppState {
                     node = %who.node_id,
                     "internal: request resolved to a verified member"
                 );
-                Principal::Member {
-                    node_id: who.node_id,
-                }
+                (
+                    Principal::Member {
+                        node_id: who.node_id,
+                    },
+                    None,
+                )
             }
             None => {
                 tracing::debug!(
@@ -236,7 +326,7 @@ impl AppState {
                     "internal: the acceptor proved this key and the roster does \
                      not name it — a joiner, not a member"
                 );
-                Principal::Unverified
+                (Principal::Unverified, None)
             }
         }
     }
@@ -270,10 +360,15 @@ pub async fn internal_principal_layer(
         .get::<ConnectInfo<SocketAddr>>()
         .map(|c| c.0);
     let mut request = request;
-    let principal = state.resolve_internal(request.headers_mut(), peer).await;
+    let (principal, proved) = state.resolve_internal(request.headers_mut(), peer).await;
     request
         .extensions_mut()
         .insert(crate::admission::AttachedPrincipal(principal));
+    // Beside the principal, not inside it: a proof says a holder of the mesh
+    // secret is calling and cannot say which one.
+    if let Some(marker) = proved {
+        request.extensions_mut().insert(marker);
+    }
     next.run(request).await
 }
 
@@ -289,6 +384,7 @@ mod tests {
     use commonwealth_core::capabilities::{AvailableResources, HardwareProfile, NodeCapabilities};
     use commonwealth_core::ids::MeshId;
     use commonwealth_core::mesh::Mesh;
+    use commonwealth_transport::mesh_proof::mesh_proof_stamp;
     use std::collections::HashMap;
 
     const KEY: [u8; 32] = [7u8; 32];
@@ -312,8 +408,19 @@ mod tests {
         Some("192.168.1.13:51000".parse().unwrap())
     }
 
+    /// This test mesh's gossip credential — a SET one, so a proof can be
+    /// minted against it. `MESH_SECRET_UNSET` is the other case and the tests
+    /// that want it say so.
+    const MESH_SECRET: [u8; 32] = [5u8; 32];
+
     /// A daemon whose roster names one member, by the key `KEY`.
     fn state_with_member(node_id: NodeId) -> AppState {
+        AppState::new(NodeId::from_u128(1), mesh_with_member(node_id, MESH_SECRET))
+    }
+
+    /// The mesh `state_with_member` is built from, so a test can mint a proof
+    /// against the same secret the daemon will verify with.
+    fn mesh_with_member(node_id: NodeId, secret: [u8; 32]) -> Mesh {
         let mut members = HashMap::new();
         members.insert(
             node_id,
@@ -357,8 +464,8 @@ mod tests {
                 removed_at: None,
             },
         );
-        let mesh = Mesh {
-            mesh_secret: [0u8; 32],
+        Mesh {
+            mesh_secret: secret,
             invite_expires_at: None,
             id: MeshId::from_u128(1),
             name: "Internal Principal Test".into(),
@@ -367,8 +474,7 @@ mod tests {
             require_encryption: true,
             members,
             peers: vec![],
-        };
-        AppState::new(NodeId::from_u128(1), mesh)
+        }
     }
 
     /// What the acceptor's internal arm actually puts on the wire.
@@ -391,7 +497,7 @@ mod tests {
         let id = NodeId::from_u128(0xBEEF);
         let state = state_with_member(id);
         let mut h = acceptor_headers(&hex::encode(KEY));
-        let p = state.resolve_internal(&mut h, loopback()).await;
+        let (p, _) = state.resolve_internal(&mut h, loopback()).await;
         assert_eq!(member_of(&p), Some(id), "got {p:?}");
     }
 
@@ -410,7 +516,7 @@ mod tests {
             ("x-mesh-node", "node-0000000000000000"),
             ("x-mesh-pubkey", &hex::encode(KEY)),
         ]);
-        let p = state.resolve_internal(&mut h, loopback()).await;
+        let (p, _) = state.resolve_internal(&mut h, loopback()).await;
         assert_eq!(p, Principal::Unverified, "a typed key is not a proved one");
         assert!(
             h.get("x-mesh-member").is_none()
@@ -428,7 +534,7 @@ mod tests {
     async fn an_untied_caller_that_presented_nothing_is_anonymous() {
         let state = state_with_member(NodeId::from_u128(0xBEEF));
         let mut h = HeaderMap::new();
-        let p = state.resolve_internal(&mut h, loopback()).await;
+        let (p, _) = state.resolve_internal(&mut h, loopback()).await;
         assert_eq!(p, Principal::Anonymous, "nothing was presented");
     }
 
@@ -440,7 +546,7 @@ mod tests {
         let state = state_with_member(id);
         let mut h = acceptor_headers(&hex::encode(KEY));
         h.insert(ACCEPTOR_MARK_HEADER, "00".repeat(32).parse().unwrap());
-        let p = state.resolve_internal(&mut h, loopback()).await;
+        let (p, _) = state.resolve_internal(&mut h, loopback()).await;
         assert_eq!(p, Principal::Unverified);
     }
 
@@ -453,7 +559,7 @@ mod tests {
         let id = NodeId::from_u128(0xBEEF);
         let state = state_with_member(id);
         let mut h = acceptor_headers(&hex::encode(KEY));
-        let p = state.resolve_internal(&mut h, lan()).await;
+        let (p, _) = state.resolve_internal(&mut h, lan()).await;
         assert_eq!(p, Principal::Unverified);
         assert!(h.get("x-mesh-pubkey").is_none(), "stripped: {h:?}");
     }
@@ -466,7 +572,7 @@ mod tests {
         let id = NodeId::from_u128(0xBEEF);
         let state = state_with_member(id);
         let mut h = acceptor_headers(&hex::encode(KEY));
-        let p = state.resolve_internal(&mut h, None).await;
+        let (p, _) = state.resolve_internal(&mut h, None).await;
         assert_eq!(p, Principal::Unverified);
     }
 
@@ -477,7 +583,7 @@ mod tests {
     async fn a_proved_key_the_roster_does_not_name_is_a_joiner_not_a_member() {
         let state = state_with_member(NodeId::from_u128(0xBEEF));
         let mut h = acceptor_headers(&hex::encode([9u8; 32]));
-        let p = state.resolve_internal(&mut h, loopback()).await;
+        let (p, _) = state.resolve_internal(&mut h, loopback()).await;
         assert_eq!(p, Principal::Unverified);
     }
 
@@ -497,12 +603,130 @@ mod tests {
     }
 
     /// A truncated or malformed key is not narrowed to a prefix match.
+    // ── The plain-IP member, and what a mesh proof can and cannot say ──
+    //
+    // The two tests below are the OPENING CHECK for
+    // `tg-2-plain-ip-members-prove-membership`: they pin what a plain-IP
+    // member gets from this resolver with no proof in hand, which is the
+    // state the rest of the row exists to change.
+
+    /// A non-loopback caller that types only the peer header claims nothing
+    /// in this module's namespace, so it is anonymous — indistinguishable
+    /// here from a stranger, which is the gap.
+    #[tokio::test]
+    async fn a_non_loopback_caller_typing_only_the_peer_header_is_anonymous() {
+        let state = state_with_member(NodeId::from_u128(0xBEEF));
+        let mut h = headers(&[("x-node-id", &NodeId::from_u128(0xBEEF).to_hex())]);
+        let (p, proved) = state.resolve_internal(&mut h, lan()).await;
+        assert_eq!(p, Principal::Anonymous);
+        assert_eq!(proved, None, "no proof was offered");
+    }
+
+    /// The same caller typing anything in the acceptor's namespace claimed
+    /// something this daemon cannot tie to its own acceptor: unverified.
+    #[tokio::test]
+    async fn a_non_loopback_caller_presenting_any_mesh_header_is_unverified() {
+        let state = state_with_member(NodeId::from_u128(0xBEEF));
+        let mut h = headers(&[("x-mesh-member", "LittleMac")]);
+        let (p, proved) = state.resolve_internal(&mut h, lan()).await;
+        assert_eq!(p, Principal::Unverified);
+        assert_eq!(proved, None);
+    }
+
+    /// A stamp minted under this mesh's secret: the caller holds the group's
+    /// credential, so the marker is attached — and the principal is exactly
+    /// what it would have been without it.
+    #[tokio::test]
+    async fn a_valid_proof_from_a_plain_ip_caller_carries_the_marker() {
+        let id = NodeId::from_u128(0xBEEF);
+        let mesh = mesh_with_member(id, MESH_SECRET);
+        let state = AppState::new(NodeId::from_u128(1), mesh.clone());
+        let now = state.clock().now_unix_secs();
+        let stamp = mesh_proof_stamp(&mesh, id, now).expect("secret is set");
+        let (name, value) = stamp.pair();
+        let mut h = headers(&[(name, value)]);
+        let (p, proved) = state.resolve_internal(&mut h, lan()).await;
+        assert_eq!(proved, Some(ProvedMeshMember));
+        assert_eq!(
+            p,
+            Principal::Anonymous,
+            "the proof names a group, not a caller"
+        );
+        assert!(
+            h.get(name).is_none(),
+            "the proof is stripped either way: {h:?}"
+        );
+    }
+
+    /// THE forgery this arm must not reopen: any holder of the secret can
+    /// mint a proof naming any sender, so a valid proof naming a member is
+    /// still not that member. `mp-1` closed this on the verified plane and it
+    /// must stay closed on the plaintext one.
+    #[tokio::test]
+    async fn a_valid_proof_naming_another_members_id_is_still_anonymous() {
+        let victim = NodeId::from_u128(0xBEEF);
+        let mesh = mesh_with_member(victim, MESH_SECRET);
+        let state = AppState::new(NodeId::from_u128(1), mesh.clone());
+        let now = state.clock().now_unix_secs();
+        // Minted by SOMEBODY ELSE, naming the roster's member.
+        let stamp = mesh_proof_stamp(&mesh, victim, now).unwrap();
+        let (name, value) = stamp.pair();
+        let mut h = headers(&[(name, value)]);
+        let (p, _) = state.resolve_internal(&mut h, lan()).await;
+        assert_eq!(
+            p,
+            Principal::Anonymous,
+            "a group proof must never resolve to a named member"
+        );
+        assert_eq!(member_of(&p), None);
+    }
+
+    /// A proof this daemon's secret does not accept is a claim that failed:
+    /// no marker, and `Unverified` rather than the `Anonymous` a caller that
+    /// offered nothing would get.
+    #[tokio::test]
+    async fn a_non_loopback_caller_with_a_wrong_proof_carries_no_marker_and_resolves_unverified() {
+        let id = NodeId::from_u128(0xBEEF);
+        let state = AppState::new(NodeId::from_u128(1), mesh_with_member(id, MESH_SECRET));
+        let theirs = mesh_with_member(id, [9u8; 32]);
+        let now = state.clock().now_unix_secs();
+        let stamp = mesh_proof_stamp(&theirs, id, now).unwrap();
+        let (name, value) = stamp.pair();
+        for bad in [value, "not-a-proof", &format!("{}.", id.to_hex()), "zz.zz"] {
+            let mut h = headers(&[(name, bad)]);
+            let (p, proved) = state.resolve_internal(&mut h, lan()).await;
+            assert_eq!(proved, None, "{bad} must not mark anyone");
+            assert_eq!(p, Principal::Unverified, "{bad} is a claim that failed");
+            assert!(h.get(name).is_none(), "stripped: {h:?}");
+        }
+    }
+
+    /// A daemon with no gossip credential of its own verifies nothing — it
+    /// refuses rather than keying every proof identically (`verify_mesh_proof`
+    /// carries the same rule).
+    #[tokio::test]
+    async fn a_daemon_with_no_secret_accepts_no_proof() {
+        let id = NodeId::from_u128(0xBEEF);
+        let theirs = mesh_with_member(id, MESH_SECRET);
+        let state = AppState::new(
+            NodeId::from_u128(1),
+            mesh_with_member(id, commonwealth_core::mesh::MESH_SECRET_UNSET),
+        );
+        let now = state.clock().now_unix_secs();
+        let stamp = mesh_proof_stamp(&theirs, id, now).unwrap();
+        let (name, value) = stamp.pair();
+        let mut h = headers(&[(name, value)]);
+        let (p, proved) = state.resolve_internal(&mut h, lan()).await;
+        assert_eq!(proved, None);
+        assert_eq!(p, Principal::Unverified);
+    }
+
     #[tokio::test]
     async fn a_malformed_verified_key_resolves_unverified() {
         let state = state_with_member(NodeId::from_u128(0xBEEF));
         for bad in ["", "zz", &hex::encode([7u8; 16])] {
             let mut h = acceptor_headers(bad);
-            let p = state.resolve_internal(&mut h, loopback()).await;
+            let (p, _) = state.resolve_internal(&mut h, loopback()).await;
             assert_eq!(p, Principal::Unverified, "{bad} must not resolve");
         }
     }

@@ -1968,3 +1968,21 @@ finding — `CLIENT_ALPN` splices with no identity, so `client_principal` still
 mints `Principal::Member` from a typed `x-node-id` and member B can still
 spend C's reciprocity on an inference turn — is the half that remains. It is
 written as unowned, because the row A61 proposed is not approved.
+
+## threat-gaps — for THREAT_MODEL
+
+Recorded by `tg-2-plain-ip-members-prove-membership`, for the audit row to write
+into `docs/THREAT_MODEL.md` §Known gaps. Not a fix and not a refusal:
+
+On a plaintext mesh the internal port can now tell a MEMBER OF THE GROUP from a
+stranger, and still cannot tell one member from another. A caller that offers a
+valid `x-mesh-proof` gets a `ProvedMeshMember` marker beside its principal
+(`sovereign/crates/sovereign-daemon/src/internal_principal.rs:239`) and its
+principal is left exactly what it would have been — `Anonymous` — because any
+holder of `mesh_secret` can mint a proof naming any sender
+(`commonwealth/crates/commonwealth-core/src/mesh/mod.rs:794`), so reading the
+sender as an identity would reopen the `mp-1` forgery on plaintext meshes.
+Nothing on a plain-IP hop proves WHICH member is calling; only the encrypted
+posture does, where the QUIC handshake proves a key and
+`resolve_internal`s tied branch reads it
+(`sovereign/crates/sovereign-daemon/src/internal_principal.rs:287-332`).

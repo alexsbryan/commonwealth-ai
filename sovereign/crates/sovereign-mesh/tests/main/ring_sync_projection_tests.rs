@@ -188,7 +188,7 @@ async fn a_local_store_write_reaches_a_peers_store_through_the_ring() {
 
     let url = serve(internal_router(b_state.clone())).await;
     let journal = a_rail.journal(KV).unwrap();
-    let out = exchange(&reqwest::Client::new(), &url, &a_rail, &journal).await;
+    let out = exchange(&reqwest::Client::new(), &url, &a_rail, &journal, None).await;
     assert!(out.stop.is_none(), "the exchange failed: {:?}", out.stop);
     assert_eq!(out.pushed, 1, "the write landed on the peer's journal");
 
@@ -252,7 +252,7 @@ async fn a_delete_travels_and_an_older_write_does_not_resurrect_the_key() {
 
     let b_url = serve(internal_router(b_state.clone())).await;
     let client = reqwest::Client::new();
-    let out = exchange(&client, &b_url, &a_rail, &a_journal).await;
+    let out = exchange(&client, &b_url, &a_rail, &a_journal, None).await;
     assert!(out.stop.is_none(), "{:?}", out.stop);
     sovereign_mesh::rail_kv_pump::project_all_on_disk(&*b_state.inner.fabric).await;
     assert_eq!(
@@ -265,7 +265,7 @@ async fn a_delete_travels_and_an_older_write_does_not_resurrect_the_key() {
     assert!(a_state.inner.fabric.mesh_store.delete(KV, "k").unwrap());
     let pumped = sovereign_mesh::rail_kv_pump::pump_once(&*a_state.inner.fabric).await;
     assert_eq!(pumped.appended, 1, "the tombstone is an act like any other");
-    let out = exchange(&client, &b_url, &a_rail, &a_journal).await;
+    let out = exchange(&client, &b_url, &a_rail, &a_journal, None).await;
     assert!(out.stop.is_none(), "{:?}", out.stop);
     sovereign_mesh::rail_kv_pump::project_all_on_disk(&*b_state.inner.fabric).await;
     assert_eq!(
@@ -290,7 +290,7 @@ async fn a_delete_travels_and_an_older_write_does_not_resurrect_the_key() {
     );
     // …and it does not resurrect it on the node that deleted it either,
     // once the op gets there.
-    let out = exchange(&client, &b_url, &a_rail, &a_journal).await;
+    let out = exchange(&client, &b_url, &a_rail, &a_journal, None).await;
     assert!(out.stop.is_none(), "{:?}", out.stop);
     assert_eq!(out.pulled, 1, "B's older write came over");
     sovereign_mesh::rail_kv_pump::project_all_on_disk(&*a_state.inner.fabric).await;
@@ -354,7 +354,7 @@ async fn a_seal_bounds_the_ring_and_the_snapshot_keeps_every_live_key() {
     let a_url = serve(internal_router(a_state.clone())).await;
     let client = reqwest::Client::new();
     let b_journal = b_rail.journal(KV).unwrap();
-    let out = exchange(&client, &a_url, &b_rail, &b_journal).await;
+    let out = exchange(&client, &a_url, &b_rail, &b_journal, None).await;
     assert!(out.stop.is_none(), "{:?}", out.stop);
     assert_eq!(
         b_journal.read().unwrap().0.len(),
@@ -393,7 +393,7 @@ async fn a_seal_bounds_the_ring_and_the_snapshot_keeps_every_live_key() {
     );
 
     // ── The peer meets the seal and retires the same prefix.
-    let out = exchange(&client, &a_url, &b_rail, &b_journal).await;
+    let out = exchange(&client, &a_url, &b_rail, &b_journal, None).await;
     assert!(out.stop.is_none(), "{:?}", out.stop);
     assert_eq!(
         b_journal.read().unwrap().0.len(),
@@ -468,7 +468,7 @@ async fn a_seal_carries_a_delete_the_peer_never_received() {
     let client = reqwest::Client::new();
     let a_journal = a_rail.journal(KV).unwrap();
     let b_journal = b_rail.journal(KV).unwrap();
-    let out = exchange(&client, &a_url, &b_rail, &b_journal).await;
+    let out = exchange(&client, &a_url, &b_rail, &b_journal, None).await;
     assert!(out.stop.is_none(), "{:?}", out.stop);
     sovereign_mesh::rail_kv_pump::project_all_on_disk(&*b_state.inner.fabric).await;
     assert_eq!(
@@ -497,7 +497,7 @@ async fn a_seal_carries_a_delete_the_peer_never_received() {
     assert_eq!(mark_of(&held), Some(held[0].kind.seq));
 
     // ── The round that meets the seal.
-    let out = exchange(&client, &a_url, &b_rail, &b_journal).await;
+    let out = exchange(&client, &a_url, &b_rail, &b_journal, None).await;
     assert!(out.stop.is_none(), "{:?}", out.stop);
     assert!(
         !carries_write_for(&b_journal.read().unwrap().0, "gone"),

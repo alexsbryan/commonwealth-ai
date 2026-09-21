@@ -166,6 +166,10 @@ pub mod frontdoor;
 pub mod internal_principal;
 /// The test that keeps `x-node-id` out of every decider — see the module.
 pub mod mesh_principal_gate;
+/// The test that keeps `x-mesh-proof` to one minter and one reader.
+pub mod mesh_proof_header_gate;
+/// The outbound half of the mesh proof: `AppState` → the one stamp.
+pub mod mesh_proof_outbound;
 pub mod middleware;
 pub mod reshaping;
 pub mod routes_apps;

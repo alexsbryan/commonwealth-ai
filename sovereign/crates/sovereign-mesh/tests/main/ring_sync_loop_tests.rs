@@ -174,7 +174,7 @@ async fn a_journal_past_the_one_exchange_ceiling_converges_onto_a_fresh_peer() {
         node(peer_dir.path(), &SigningKey::from_bytes(&[2u8; 32]), 0);
 
     let url = serve(internal_router(peer_state)).await;
-    let out = exchange(&reqwest::Client::new(), &url, &rail, &journal).await;
+    let out = exchange(&reqwest::Client::new(), &url, &rail, &journal, None).await;
 
     assert!(out.stop.is_none(), "the exchange failed: {:?}", out.stop);
     assert_eq!(out.pushed, N, "every op landed on the peer");
@@ -216,7 +216,7 @@ async fn a_peers_seal_prunes_this_nodes_disk_in_the_round_it_arrives() {
     assert_eq!(journal.read().unwrap().0.len(), 3, "control: we hold three");
 
     let url = serve(internal_router(peer_state)).await;
-    let out = exchange(&reqwest::Client::new(), &url, &rail, &journal).await;
+    let out = exchange(&reqwest::Client::new(), &url, &rail, &journal, None).await;
 
     assert!(out.stop.is_none(), "the exchange failed: {:?}", out.stop);
     assert_eq!(out.pulled, 1, "one op came over, and it was the seal");
@@ -289,7 +289,7 @@ async fn a_peers_seal_prunes_the_daemons_own_namespace_whose_roster_is_derived()
     let (a, b) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
     let (_s, journal, rail) = node_on_own(a.path(), false);
     let url = serve(internal_router(sealed_peer(b.path()))).await;
-    let out = exchange(&reqwest::Client::new(), &url, &rail, &journal).await;
+    let out = exchange(&reqwest::Client::new(), &url, &rail, &journal, None).await;
     assert_eq!(out.pulled, 1, "{:?}", out.stop);
     assert_eq!(
         journal.read().unwrap().0.len(),
@@ -309,7 +309,7 @@ async fn a_peers_seal_prunes_the_daemons_own_namespace_whose_roster_is_derived()
         "the derived roster does not claim our key: {roster:?}"
     );
     let url = serve(internal_router(sealed_peer(d.path()))).await;
-    let out = exchange(&reqwest::Client::new(), &url, &rail, &journal).await;
+    let out = exchange(&reqwest::Client::new(), &url, &rail, &journal, None).await;
     assert_eq!(out.pulled, 1, "{:?}", out.stop);
     let held = journal.read().unwrap().0;
     assert_eq!(
@@ -345,7 +345,7 @@ async fn an_ordinary_op_arriving_prunes_nothing() {
         .unwrap();
 
     let url = serve(internal_router(peer_state)).await;
-    let out = exchange(&reqwest::Client::new(), &url, &rail, &journal).await;
+    let out = exchange(&reqwest::Client::new(), &url, &rail, &journal, None).await;
 
     assert_eq!(out.pulled, 1);
     assert_eq!(journal.read().unwrap().0.len(), 4, "nothing was retired");
@@ -420,7 +420,7 @@ async fn a_second_call_that_fails_still_reports_what_the_first_call_pulled() {
     let key = SigningKey::from_bytes(&[1u8; 32]);
     let (_state, journal, rail) = node(dir.path(), &key, 3);
 
-    let out = exchange(&reqwest::Client::new(), &url, &rail, &journal).await;
+    let out = exchange(&reqwest::Client::new(), &url, &rail, &journal, None).await;
     assert!(
         matches!(out.stop, Some(ExchangeStop::Refused { .. })),
         "a 413 is a refusal, not an unreachable peer: {:?}",
@@ -451,7 +451,7 @@ async fn a_peer_that_answers_413_is_refused_rather_than_unreachable() {
     let key = SigningKey::from_bytes(&[1u8; 32]);
     let (_state, journal, rail) = node(dir.path(), &key, 3);
 
-    let out = exchange(&reqwest::Client::new(), &url, &rail, &journal).await;
+    let out = exchange(&reqwest::Client::new(), &url, &rail, &journal, None).await;
     match out.stop {
         Some(ExchangeStop::Refused { sent_bytes }) => {
             assert!(
@@ -470,6 +470,7 @@ async fn a_peer_that_answers_413_is_refused_rather_than_unreachable() {
         "http://127.0.0.1:1/internal/ring/sync",
         &rail,
         &journal,
+        None,
     )
     .await;
     assert!(
@@ -509,7 +510,7 @@ async fn a_peer_whose_digest_never_moves_stops_the_loop_instead_of_spinning() {
     let key = SigningKey::from_bytes(&[1u8; 32]);
     let (_state, journal, rail) = node(dir.path(), &key, 3);
 
-    let out = exchange(&reqwest::Client::new(), &url, &rail, &journal).await;
+    let out = exchange(&reqwest::Client::new(), &url, &rail, &journal, None).await;
     assert!(out.stop.is_none());
     assert_eq!(out.pulled, 0);
     assert_eq!(out.pushed, 0);

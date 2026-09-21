@@ -6433,7 +6433,14 @@ does carry a PRINCIPAL, resolved once at the edge by
 this daemon can tie to its own iroh acceptor (loopback peer + the per-process
 acceptor mark) resolves to the `Member` its verified Ed25519 key names, and
 every other connection has its `x-mesh-*` STRIPPED and resolves
-`Principal::Unverified`. The layer refuses nothing yet — which routes may
+`Principal::Unverified` (or `Anonymous`, when it claimed nothing). Since
+2026-09-21 an untied caller may also offer `x-mesh-proof`
+(`<sender-hex>.<proof>`, minted by
+`commonwealth-transport/src/mesh_proof.rs`): a value this mesh's secret
+accepts attaches a `ProvedMeshMember` marker BESIDE the principal and changes
+the principal not at all, because any holder of the secret can mint a proof
+naming any sender — it proves the GROUP, never which member. A present proof
+that fails is `Unverified`. The layer refuses nothing yet — which routes may
 serve an unverified caller is each route's own question. Binds `0.0.0.0`
 by default — set `[daemon] internal_bind` to pin it to a private interface,
 or create the mesh with `require_encryption` to force all traffic onto the
