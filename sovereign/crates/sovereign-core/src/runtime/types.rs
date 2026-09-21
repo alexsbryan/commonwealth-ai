@@ -29,6 +29,11 @@ pub(crate) struct KnowledgeContext {
     /// Corpora this turn would have searched and could not. Twin of the
     /// field on [`KnowledgeQueryPlan`] — the DeepQuery path carries it here.
     pub(crate) unavailable_corpora: Vec<crate::traits::CorpusUnavailable>,
+    /// The atlas walk's evidence path. Twin of the field on
+    /// [`KnowledgeQueryPlan`]: `deep_pipeline` runs the same `atlas_grounding`
+    /// step, and until 2026-09-21 this path dropped what it produced, so a
+    /// walked DeepQuery turn persisted no `atlas_walk` key at all.
+    pub(crate) atlas_walk: Option<AtlasWalkEcho>,
     pub(crate) prompt: String,
     /// The call-graph block appended to `prompt` for code-intel hits, kept
     /// separately so the DeepQuery grounding gate can seal it into the turn's

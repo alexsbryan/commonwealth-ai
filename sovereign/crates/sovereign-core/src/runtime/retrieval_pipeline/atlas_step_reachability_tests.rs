@@ -470,4 +470,84 @@ mod ledger {
             );
         }
     }
+
+    /// A DEEPQUERY TURN THAT WAS WALKED SAYS SO.
+    ///
+    /// `deep_pipeline` has carried `atlas_grounding` all along (test 1 above),
+    /// and until 2026-09-21 `prepare_knowledge_context` destructured the
+    /// pipeline state with `..` and let the echo fall through it. Every
+    /// DeepQuery and SimpleQuery message therefore persisted no `atlas_walk`
+    /// key, and the ei7 pod pilot read four walked whole-story turns as
+    /// unwalked (`research/ontology-retrieval/pod/20260921T035355Z/`).
+    ///
+    /// Same fixture and same assertion target as the echo test above: the
+    /// names come out of the store `write_wiki_atlas` wrote, not out of the
+    /// echo's own report.
+    #[tokio::test]
+    async fn a_walked_deep_query_turn_carries_the_echo_out_of_retrieval() {
+        let tmp = tempfile::tempdir().unwrap();
+        write_wiki_atlas(tmp.path(), "wikish").await;
+        let mgr = manager(tmp.path());
+        mgr.init_from_cache().await;
+        let rt = Runtime::new(crate::runtime::RuntimeParts::new(
+            Arc::new(FixedEmbed),
+            Box::new(crate::stubs::PassthroughRouter),
+            Box::new(crate::stubs::NoOpPlanner),
+            Arc::new(ToolRegistry::new()),
+            Arc::new(sovereign_store::memory::InMemoryStateStore::new()),
+            Arc::new(SkillRegistry::new()),
+            Arc::new(crate::executor::AutoApprovalChannel),
+            crate::types::InferenceConfig::default(),
+            crate::runtime::lane::LaneSources {
+                atlas_context: Some(mgr.clone() as Arc<dyn AtlasContextProvider>),
+                ..crate::runtime::lane::LaneSources::none()
+            },
+        ));
+        let context = crate::types::ConversationContext {
+            conversation: crate::types::Conversation {
+                id: "conv-deep-echo".to_string(),
+                title: None,
+                messages: Vec::new(),
+                created_at: 0,
+                updated_at: 0,
+                version: 0,
+                deleted_at: None,
+                skill_id: None,
+                enabled_corpora: Some(vec!["wikish".to_string()]),
+                searched_sources: None,
+            },
+            memories: Vec::new(),
+            working_memory: None,
+            installed_corpora: vec![],
+            corpus_ceiling: None,
+            document_session: None,
+            topic_context: None,
+            knowledge_view_digests: None,
+            temporal_tensions: Vec::new(),
+            compacted_history: None,
+            history_retrieval_hits: None,
+            tool_dossier: None,
+            intent_policy: None,
+        };
+
+        let kc = rt
+            .prepare_knowledge_context(
+                "what does alpha say about beta",
+                &context,
+                &crate::types::Intent::DeepQuery,
+                None,
+            )
+            .await;
+
+        let walk = kc.atlas_walk.expect(
+            "the deep pipeline ran `atlas_grounding` over a store it can walk; \
+             `None` here is the echo being dropped between the pipeline state \
+             and the `KnowledgeContext`, not a walk that did not run",
+        );
+        assert!(
+            !walk.nodes.is_empty()
+                && walk.nodes.iter().all(|n| ["Alpha", "Beta"].contains(&n.name.as_str())),
+            "the carried echo must be the walk over the fixture's two articles. {walk:?}"
+        );
+    }
 }

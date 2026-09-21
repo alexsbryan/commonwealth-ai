@@ -2993,6 +2993,7 @@ impl Runtime {
         let sources = kc.sources;
         let coverage = kc.coverage;
         let retrieved_chunks = kc.retrieved_chunks;
+        let atlas_walk = kc.atlas_walk;
         // TEACHABLE P0 — the context's lesson snapshot + a note-store
         // handle ride into the spawn for the post-gate transform,
         // metadata, and whisper-once stamping.
@@ -3522,6 +3523,9 @@ impl Runtime {
                 "routed_intent": routed_intent_name,
                 "provenance": provenance,
                 "retrieved_chunks": retrieved_chunks,
+                // Same key, same meaning as the KnowledgeQuery writer above:
+                // `null` = the walk did not run on this turn.
+                ATLAS_WALK_META_KEY: atlas_walk,
                 // Phase 3b: present only on the relational/witness
                 // path; absent or null elsewhere. The desktop's
                 // inner-work surface renders these as gutter echo

@@ -3619,7 +3619,12 @@ door the plan has: `runtime/streaming.rs` writes the echo into the assistant
 message's metadata under `ATLAS_WALK_META_KEY` beside `meta_atlas_hits`, and
 `eval_cmd::atlas_walk_meta` reads it back off the PERSISTED row — that lane
 returns no plan to read, so a value is not enough and only the metadata hop
-carries it.
+carries it. Since 2026-09-21 the DeepQuery/SimpleQuery path carries it too:
+`deep_pipeline` always ran the same step, but `prepare_knowledge_context`
+dropped the echo, so `KnowledgeContext` now holds it and both Deep doors
+(`stream_deep_query_turn`, `handle_simple`) plus `retrieve_evidence`'s deep
+branch write it. Before that a walked Deep turn persisted no key, which read
+downstream as "not walked".
 
 The question's KIND selects the row, by centroid over the map's own exemplars
 (`atlas_traversal::question_kind`, ARCH §2.4 — the router's method, ported

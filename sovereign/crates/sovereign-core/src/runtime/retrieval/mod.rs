@@ -193,6 +193,7 @@ impl Runtime {
             local_hits,
             unavailable_corpora,
             atlas_summaries,
+            atlas_walk,
             ..
         } = pipeline_state;
 
@@ -610,6 +611,7 @@ impl Runtime {
         KnowledgeContext {
             chunks: all_chunks,
             unavailable_corpora,
+            atlas_walk,
             prompt,
             code_trace: code_trace_out,
             system,

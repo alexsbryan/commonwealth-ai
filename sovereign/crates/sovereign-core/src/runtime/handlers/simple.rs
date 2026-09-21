@@ -356,6 +356,8 @@ impl Runtime {
                     "routed_intent": intent.name(),
                     "provenance": provenance,
                     "retrieved_chunks": kc.retrieved_chunks,
+                    // `null` = the walk did not run on this turn.
+                    crate::runtime::ATLAS_WALK_META_KEY: kc.atlas_walk,
                     "recalled_memories": recalled_memories_metadata,
                     "epistemic_state": epistemic_state,
                 });

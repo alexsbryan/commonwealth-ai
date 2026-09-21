@@ -322,10 +322,9 @@ impl Runtime {
                 search_ms: t0.elapsed().as_millis() as u64,
                 result_quality: "deep_pipeline",
                 unavailable_corpora: kc.unavailable_corpora,
-                // The deep branch returns a `KnowledgeContext`, which does not
-                // carry the echo — so this is "not carried here", not "the
-                // walk reached nothing". The measured lane is `kq_pipeline`.
-                atlas_walk: None,
+                // `deep_pipeline` runs the same `atlas_grounding` step, and
+                // `KnowledgeContext` carries its echo since 2026-09-21.
+                atlas_walk: kc.atlas_walk,
             });
         }
         let plan = self
