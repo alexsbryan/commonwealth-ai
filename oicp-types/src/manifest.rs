@@ -452,4 +452,69 @@ mod tests {
         assert_eq!(back.models[0].claims.len(), 2);
         assert_eq!(back.models[0].claims[0].latency_class, LatencyClass::Fast);
     }
+
+    // ───── ModelStatus estimate-field wire tolerance ──────────
+
+    /// The committed wire fixture: model 0 is `/oicp/v1/capabilities`
+    /// as this host's daemon served it on 2026-09-20 (no shard plan,
+    /// so `routes_oicp.rs:298-300` writes all three estimates `None`
+    /// and `skip_serializing_if` drops every key); model 1 carries all
+    /// three present, the shape a sharded host publishes.
+    const WIRE_FIXTURE: &str = include_str!("manifest_wire_fixture.json");
+
+    /// A peer that sends `status` with NO estimate keys — which is
+    /// every non-sharded production node today — must still parse, and
+    /// the absent estimates must read as `None` rather than as zero.
+    /// This pins the `#[serde(default)]` on all three fields.
+    #[test]
+    fn model_status_estimates_absent_on_the_wire_parse_as_none() {
+        let m: ProviderManifest = serde_json::from_str(WIRE_FIXTURE).unwrap();
+        let s = &m.models[0].status;
+        assert!(s.available && !s.loaded);
+        assert_eq!(s.estimated_tokens_per_sec, None);
+        assert_eq!(s.estimated_ttft_ms, None);
+        assert_eq!(s.estimated_load_time_sec, None);
+    }
+
+    /// The same fixture's sharded model carries all three, and they
+    /// survive the round trip with their values intact.
+    #[test]
+    fn model_status_estimates_present_on_the_wire_round_trip() {
+        let m: ProviderManifest = serde_json::from_str(WIRE_FIXTURE).unwrap();
+        let s = &m.models[1].status;
+        assert_eq!(s.estimated_tokens_per_sec, Some(14.75));
+        assert_eq!(s.estimated_ttft_ms, Some(900));
+        assert_eq!(s.estimated_load_time_sec, Some(37));
+
+        let back: ProviderManifest =
+            serde_json::from_str(&serde_json::to_string(&m).unwrap()).unwrap();
+        assert_eq!(
+            back.models[1].status.estimated_tokens_per_sec,
+            s.estimated_tokens_per_sec
+        );
+        assert_eq!(back.models[1].status.estimated_ttft_ms, s.estimated_ttft_ms);
+        assert_eq!(
+            back.models[1].status.estimated_load_time_sec,
+            s.estimated_load_time_sec
+        );
+    }
+
+    /// The other half of the tolerance: a node with no estimates emits
+    /// no keys at all, never `null`s. A v0.3 reader that types these as
+    /// required-or-absent chokes on an explicit null, so
+    /// `skip_serializing_if` is what keeps it readable.
+    #[test]
+    fn model_status_with_no_estimates_serialises_two_keys_and_no_nulls() {
+        let status = ModelStatus {
+            available: true,
+            loaded: false,
+            estimated_tokens_per_sec: None,
+            estimated_ttft_ms: None,
+            estimated_load_time_sec: None,
+        };
+        let v = serde_json::to_value(&status).unwrap();
+        let obj = v.as_object().unwrap();
+        assert_eq!(obj.len(), 2, "serialised keys: {obj:?}");
+        assert!(obj.contains_key("available") && obj.contains_key("loaded"));
+    }
 }
