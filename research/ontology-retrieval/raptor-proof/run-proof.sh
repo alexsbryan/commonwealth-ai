@@ -67,7 +67,9 @@ step "atlas"
 "$SVRN" enrich extract "$CORPUS" --finalize || die "extract --finalize failed"
 "$SVRN" enrich build "$CORPUS" --skip extract --skip tensions || die "enrich build failed"
 step "raptor tree + Summary atoms"
-"$SVRN" enrich raptor "$CORPUS" --doc-type narrative || die "enrich raptor failed"
+# --force: `raptor` skips documents already built, and a local rehearsal leaves a
+# tree summarised by THIS host's model. One model per board (DECISIONS A38).
+"$SVRN" enrich raptor "$CORPUS" --doc-type narrative --force || die "enrich raptor failed"
 "$SVRN" enrich summary-atoms "$CORPUS" || die "enrich summary-atoms failed"
 python3 - "$INDEX_DIR/atlas/atoms.json" <<'PY' || exit 11
 import json, sys
