@@ -27,12 +27,17 @@ die()  { echo "run-proof: $*" >&2; exit "${2:-1}"; }
 for f in "$BANK" "$RECIPE"; do [ -f "$f" ] || die "missing $f" 2; done
 [ -d "$INDEX_DIR" ] || die "corpus $CORPUS is not installed (svrn corpus install $RECIPE)" 2
 
-arm() { python3 "$RUN_ARM" --arm "$1" --bank "$BANK" --corpus "$CORPUS" \
+done_run() { [ -f "$RUNS/$1/run-$2/manifest.json" ] && [ -f "$RUNS/$1/run-$2/eval.json" ]; }
+arm() { if [ "${RESUME:-0}" = 1 ] && done_run "$1" "$2"; then echo "RESUME: $1 run $2 already on disk"; return 0; fi
+  rm -rf "$RUNS/$1/run-$2"; python3 "$RUN_ARM" --arm "$1" --bank "$BANK" --corpus "$CORPUS" \
           --index-dir "$INDEX_DIR" --recipe "$RECIPE" --out "$RUNS" \
           --run "$2" --pool-scale "${POOL_SCALE:-2}" || die "arm $1 run $2 refused its premises"; }
 
-rm -rf "$RUNS"
+[ "${RESUME:-0}" = 1 ] || rm -rf "$RUNS"
 step "atlas"
+if [ "${RESUME:-0}" = 1 ] && [ -f "$INDEX_DIR/atlas/ontology.json" ]; then
+  echo "RESUME: atlas already built ($INDEX_DIR/atlas), not rebuilding"
+else
 # `enrich reset` leaves <index>/atlas in place and `build` then skips resolve as
 # cached (raptor window 20260921T153541Z). The chunks are not under atlas/.
 rm -rf "$INDEX_DIR/atlas"
@@ -43,6 +48,7 @@ rm -rf "$INDEX_DIR/atlas"
 "$SVRN" enrich extract "$CORPUS" --full --resume || echo "run-proof: extract exited $? (skips count as failures; finalize decides)" >&2
 "$SVRN" enrich extract "$CORPUS" --finalize || die "extract --finalize failed"
 "$SVRN" enrich build "$CORPUS" --skip extract --skip tensions || die "enrich build failed"
+fi
 [ -f "$INDEX_DIR/atlas/ontology.json" ] || die "no atlas/ontology.json: the build was not a declared-ontology build" 11
 
 step "arm closed-book run 1"; arm closed-book 1
