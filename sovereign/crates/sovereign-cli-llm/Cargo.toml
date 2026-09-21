@@ -55,7 +55,6 @@ sovereign-contracts = { workspace = true }
 # `declare`: write this node's own origin credential to the 0600 secret
 # store. One implementation of where a declaration lives, shared with the
 # acceptor that reads it.
-commonwealth-media = { workspace = true }
 # Phase 6: the chat surface asks the daemon for a turn instead of building
 # a Runtime to run one itself (TOPOLOGY §10).
 sovereign-turn-client = { workspace = true }
@@ -81,7 +80,6 @@ sovereign-pods = { path = "../sovereign-pods" }
 # root. Capabilities layer — down.
 sovereign-runtime-recipe = { workspace = true }
 sovereign-pipeline = { workspace = true }
-sovereign-work-atlas = { workspace = true }
 # `recipe test` renders the deterministic authoring ladder. It reaches the
 # harness DIRECTLY rather than through `sovereign_eval::authoring_harness`,
 # which is only a compatibility alias: the crate was carved out of
@@ -95,7 +93,6 @@ sovereign-authoring-harness = { workspace = true }
 # crate with `chat`/`corpus`/`mesh` — see the [[exception]] in ARCH_LAYERS.toml.
 sovereign-eval = { workspace = true }
 # `meshapp dev` serves a bundle + proxies the explorer ops to this shared lib.
-sovereign-meshapp = { workspace = true }
 sovereign-cli-shared = { workspace = true, features = ["scip", "mcp-client", "rail-client"] }
 sovereign-cli-mesh = { path = "../sovereign-cli-mesh" }
 # The neutral kernel — `quality lane` rows are `Judgement`s, so the lane and
@@ -115,7 +112,6 @@ commonwealth-core = { path = "../../../commonwealth/crates/commonwealth-core" }
 # the rail without the knowledge layer. The last thing holding that dep was a
 # rustdoc link from `ring_cmd`'s module header to `Scope::Rails` — no code, no
 # type, one link — and `ring dev` mints its grant over HTTP.
-commonwealth-rail = { workspace = true }
 # `svrn job` is a client of the work plane, not a second implementation of it:
 # the act codec, the unit seal and `WorkProjection::fold` all come from here, so
 # the terminal, the daemon's donor loop and a lifted third-party peer are three
@@ -128,8 +124,6 @@ commonwealth-rail = { workspace = true }
 # ["dep:tokio"]` and this crate already links tokio). If a submitter-only peer
 # ever needs the shape without the runner, the cut is to ungate `ProcessPayload`
 # and leave `ProcessExecutor` behind the flag.
-commonwealth-work = { workspace = true, features = ["process"] }
-commonwealth-transport = { path = "../../../commonwealth/crates/commonwealth-transport" }
 bytes = { workspace = true }
 corpus-engine = { workspace = true, features = ["treesitter"] }
 # The atlas vocabulary leaf — the ONE `atoms.json` shape (§10.6).
