@@ -979,6 +979,12 @@ crates = [
     # domains REVIEW-build-code-facts (Phase 2). `corpus-engine` re-exports the
     # three modules at their historical paths.
     "code-facts",
+    # `svrn code` itself — the 18,431 lines lifted out of
+    # `sovereign-tools/src/code/` on 2026-09-21 (FIVE_PROGRAMS §2). Registering
+    # it here is what makes the lift's boundary a GATE rather than a claim: it
+    # names no svrn-side crate in production, and this row is what refuses the
+    # first edge that would put one back.
+    "sovereign-code",
 ]
 
 [[package]]
@@ -1316,6 +1322,57 @@ from = "corpus-mcp"
 to = "corpus-engine"
 reason = "the host does the engine's own work through corpus-engine — the `ingest` verb, the pull-if-absent prebuilt restore in `serve`, recipe install, and the atlas reads — and corpus-engine cannot join a liftable package yet: it carries a `build.rs` (recipe vendoring), `include_str!`s tree-sitter queries from `queries/` outside its crate root, and an optional edge to `corpus-engine-scip`. Burn-down: (1) the read-only index surface the host needs — open + hybrid search over LanceDB/Tantivy — LANDED 2026-09-18 as the `corpus-index` leaf (domains REVIEW-build-index-read-port), and the host's read-only sites (`serve`, `ask`, `host`, the `corpus_search` tool) now reach it directly, so the read surface is no longer why this row exists; (2) the tree-sitter queries moved inside the crate or behind the code-intel seam; (3) the recipe vendoring build.rs replaced by the checked-in artifact. The row stays for the engine work that genuinely ingests and for the atlas reads Understanding still owns; it retires when (2) and (3) land and those reads move."
 tracking = "corpus-engine lift: (2) tree-sitter queries inside the crate, (3) recipe vendoring build.rs"
+
+
+# ── code-intel exceptions: what `sovereign-code` still reaches ───────────────
+# Declared 2026-09-21 with the `sovereign-code` row above. The lift
+# (FIVE_PROGRAMS §2) made `svrn code` a crate and removed every svrn-side
+# crate's production edge INTO it; these six are the edges that still run the
+# other way, out of it. They were invisible while the code lived inside
+# `sovereign-tools` — the gate's unit is the crate, and there was no crate.
+# Each is a real dependency, not an accident, and each names what closes it.
+
+[[exception]]
+package = "code-intel"
+from = "sovereign-code"
+to = "corpus-engine"
+reason = "the code tools query LanceDB code corpora through the engine — `query_all_code_indexes`, the `has_code_graph` screen, and every chunk the symbol/search tools return. The same unliftable `corpus-engine` the corpus-mcp rows name: build.rs recipe vendoring, `include_str!` escaping the crate root for tree-sitter queries. The read-only half it actually needs is the `corpus-index` leaf, already a shared leaf here."
+tracking = "move the code tools' reads onto `corpus-index`, as corpus-mcp's read-only sites did at domains REVIEW-build-index-read-port"
+
+[[exception]]
+package = "code-intel"
+from = "sovereign-code"
+to = "sovereign-atos"
+reason = "`DriftTool` calls `sovereign_atos::approval::{find_approval, detect_drift, current_spec_hash}` so its verdict matches the daemon's approval-gate middleware exactly — one decider, not a second copy of the hash rule. Feature-gated (`atos`, off by default), so a product build carries neither the edge nor the tools."
+tracking = "ATOS is an experimental subsystem; this row retires with it, or with the approval predicate moving to a shared leaf"
+
+[[exception]]
+package = "code-intel"
+from = "sovereign-code"
+to = "corpus-engine-atos"
+reason = "the ATOS store behind the same feature axis as the row above; `atos_plan_emit` and `atos_utils` read it directly."
+tracking = "same as sovereign-atos"
+
+[[exception]]
+package = "code-intel"
+from = "sovereign-code"
+to = "sovereign-work-atlas"
+reason = "`blast` surfaces concurrent peer claims in the same response (work-atlas spec §8), so the impact answer and the collision warning are one call rather than two the caller must correlate. One-way: work-atlas does not depend on the code tools."
+tracking = "work-atlas is mesh-side state; the edge closes when `blast` reads claims over the wire instead of linking the store"
+
+[[exception]]
+package = "code-intel"
+from = "sovereign-code"
+to = "commonwealth-core"
+reason = "ONE reference. Atlas peer-advice consumes `CorpusShardInfo` from commonwealth-core's gossip schema — a wire type, not behaviour."
+tracking = "move `CorpusShardInfo` to `oicp-types`, which is already a shared leaf, and this row goes with it"
+
+[[exception]]
+package = "code-intel"
+from = "sovereign-code"
+to = "arch-layers"
+reason = "`arch_report` and `arch_posture` evaluate `quality/ARCH_LAYERS.toml` itself, and share the parser with the xtask layer-gate so the declared (CI) and observed (arch_report) halves cannot drift — ARCH principle 8. arch-layers is a schema+evaluator leaf with no reverse reach."
+tracking = "promote `arch-layers` to a [[package_leaf]]; it is leaf-shaped already, and widening a leaf budget widens every package, so it is a deliberate decision rather than a fix"
 
 # ── Serving package exceptions (the burn-down list) ──────────────────────────
 # Declared 2026-09-14 with the [[package]] row above, per SERVING_BOUNDARY.md

@@ -466,7 +466,18 @@ fn scan_runtime_escapes(text: &str) -> Vec<RuntimeEscape> {
 
         if line.contains(r#"Command::new("git")"#) {
             let hi = (i + GIT_FWD + 1).min(lines.len());
-            if !lines[i..hi].iter().any(|l| l.contains("current_dir(")) {
+            // TWO spellings of the same property, because the property is
+            // "the repo path came from the CALLER", not "this builder names
+            // `current_dir`". `git -C <path>` is git's own flag for it and is
+            // what `sovereign-code` uses at all four of its sites; reading only
+            // `current_dir(` made this rule fire on four call sites that already
+            // take a `&Path` argument — exactly the shape the doc above says it
+            // deliberately does NOT flag. Watched failing on those four
+            // (2026-09-21) before it was fixed.
+            let caller_directed = lines[i..hi]
+                .iter()
+                .any(|l| l.contains("current_dir(") || l.contains(r#"arg("-C")"#));
+            if !caller_directed {
                 out.push(RuntimeEscape {
                     line: i + 1,
                     kind: EscapeKind::AmbientGit,
@@ -785,6 +796,34 @@ fn head() -> String {
         assert_eq!(hits.len(), 1);
         assert!(matches!(hits[0].kind, EscapeKind::AmbientGit));
         assert!(hits[0].describe().contains("no `.git` at all"));
+    }
+
+    /// `git -C <path>` is the SAME property as `.current_dir(path)` — the repo
+    /// came from the caller — and the rule must read both spellings. It read
+    /// only `current_dir(` until 2026-09-21 and fired on four `sovereign-code`
+    /// sites that all take a `&Path` argument, which is the shape the rule's
+    /// own doc says it deliberately does not flag.
+    ///
+    /// The pair is the point: the `-C` form passes, the form that names
+    /// neither still fails (`runtime_scan_flags_git_that_never_says_where`
+    /// above). Loosening a rule without a control is how a gate stops being one.
+    #[test]
+    fn runtime_scan_accepts_git_dash_c_as_caller_directed() {
+        let dash_c = r#"
+fn current_branch(repo_root: &std::path::Path) -> Option<String> {
+    let out = std::process::Command::new("git")
+        .arg("-C")
+        .arg(repo_root)
+        .args(["rev-parse", "--abbrev-ref", "HEAD"])
+        .output()
+        .ok()?;
+    Some(String::from_utf8_lossy(&out.stdout).to_string())
+}
+"#;
+        assert!(
+            scan_runtime_escapes(dash_c).is_empty(),
+            "`git -C <caller path>` is caller-directed, not ambient"
+        );
     }
 
     /// Rule 3c's negative controls — every shape that is in a governed crate

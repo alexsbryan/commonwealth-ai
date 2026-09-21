@@ -14,7 +14,6 @@ sovereign-enrichment-catalog = { workspace = true }
 # registry consts from the contract crate directly, so it needs no corpus-engine
 # dependency — the seam that lets the authoring stack extract (B:P6).
 sovereign-contracts = { workspace = true }
-sovereign-time = { workspace = true }
 # The recipe-authoring tool bundle now lives in this extractable package;
 # re-exported as `sovereign_tools::recipe_author`. The corpus-engine-backed
 # adapters that satisfy its seams (recipe_notes_adapter, recipe_tester_adapter)
