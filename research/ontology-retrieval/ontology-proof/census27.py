@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""How many CLEAN scattered-list K1 cells do all 27 services yield? Zero model cost.
+"""How many CLEAN scattered-list K1 cells do all services yield (26 directories, not 27)? Zero model cost.
 
 THE RULE, written before its yield was looked at. Source: `<Service>/Privacy
 Policy.md` only. Types: collects / uses / shares only (defines and prohibits are
@@ -102,8 +102,8 @@ def main():
         print(f"{s:<12} {row[0]:>9} {row[1]:>9} {row[2]:>9}   {named:>10}  {words:>5}  "
               f"{len(gold_lists.headings(md)):>8}  {est_chunks(md):>10}")
     done = sum(s in EXTRACTED for s, _ in cells)
-    print(f"\nqualifying cells: {len(cells)}  (6 extracted services: {done}; 21 not extracted: {len(cells) - done})")
-    print(f"words in the 21 un-extracted Privacy Policy files: {words_todo}")
+    print(f"\nqualifying cells: {len(cells)}  ({len(EXTRACTED)} extracted services: {done}; {len(services) - len(EXTRACTED)} not extracted: {len(cells) - done})")
+    print(f"words in the {len(services) - len(EXTRACTED)} un-extracted Privacy Policy files: {words_todo}")
     cal = HERE.parent / "recensus" / "fineprint.md"
     if cal.exists():
         print(f"calibration: est_chunks(recensus/fineprint.md) = {est_chunks(cal.read_text())} "
