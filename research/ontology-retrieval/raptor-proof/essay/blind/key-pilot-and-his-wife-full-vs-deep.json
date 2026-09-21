@@ -1,0 +1,148 @@
+{
+ "schema": "ei7-blind-key/v1",
+ "DO_NOT_OPEN": "until every line of the packet is filled in",
+ "packet": "packet-pilot-and-his-wife-full-vs-deep.md",
+ "pair": "full_vs_deep",
+ "x": "full",
+ "y": "deep",
+ "run": 1,
+ "seed": 20260921,
+ "rng": "random.Random('20260921:full-vs-deep'), one random() < 0.5 per bank question, in bank order; True puts full on side A",
+ "scrub": "essay_judge.scrub",
+ "footer_check": {
+  "per_arm": {
+   "full": {
+    "answers": 36,
+    "with_footer": 36,
+    "arm_tokens_in_footer": 0,
+    "bullets_mean": 4.33,
+    "bullets_range": [
+     1,
+     10
+    ]
+   },
+   "deep": {
+    "answers": 36,
+    "with_footer": 36,
+    "arm_tokens_in_footer": 0,
+    "bullets_mean": 3.33,
+    "bullets_range": [
+     1,
+     8
+    ]
+   }
+  },
+  "reveals_arm": false,
+  "decision": "kept"
+ },
+ "sides": {
+  "1": {
+   "question_id": "essay-pilot-and-his-wife-arc",
+   "question": "What is the overall arc of the plot of the novel The Pilot and His Wife, from its opening situation to its close?",
+   "A": "full",
+   "B": "deep",
+   "identical": false,
+   "sha256_A": "2ac56233b9e9",
+   "sha256_B": "9528a8225853"
+  },
+  "2": {
+   "question_id": "essay-pilot-and-his-wife-conflict",
+   "question": "What is the central conflict of the novel The Pilot and His Wife, and how is it resolved?",
+   "A": "deep",
+   "B": "full",
+   "identical": true,
+   "sha256_A": "5fa18e03b6a5",
+   "sha256_B": "5fa18e03b6a5"
+  },
+  "3": {
+   "question_id": "essay-pilot-and-his-wife-change",
+   "question": "How does Elisabeth change from the beginning to the end of the novel The Pilot and His Wife, and what causes that change?",
+   "A": "full",
+   "B": "deep",
+   "identical": false,
+   "sha256_A": "cf4c1249cb73",
+   "sha256_B": "dba4bad2f62a"
+  },
+  "4": {
+   "question_id": "essay-pilot-and-his-wife-relationship",
+   "question": "What is the main relationship in the novel The Pilot and His Wife, and what strains it over the course of the story?",
+   "A": "full",
+   "B": "deep",
+   "identical": false,
+   "sha256_A": "bd843976f34c",
+   "sha256_B": "ccbb525d3d7c"
+  },
+  "5": {
+   "question_id": "essay-pilot-and-his-wife-secondary",
+   "question": "What role does Salve play in the development of Elisabeth in the novel The Pilot and His Wife?",
+   "A": "deep",
+   "B": "full",
+   "identical": false,
+   "sha256_A": "84e93c8f4b6c",
+   "sha256_B": "bbae02d66cc0"
+  },
+  "6": {
+   "question_id": "essay-pilot-and-his-wife-themes",
+   "question": "What are the major themes of the novel The Pilot and His Wife, and which events in the story carry them?",
+   "A": "deep",
+   "B": "full",
+   "identical": false,
+   "sha256_A": "de5267c5ce49",
+   "sha256_B": "48e57acffdc8"
+  },
+  "7": {
+   "question_id": "essay-pilot-and-his-wife-setting",
+   "question": "How does the setting of the novel The Pilot and His Wife shape the choices its characters make?",
+   "A": "deep",
+   "B": "full",
+   "identical": false,
+   "sha256_A": "88d50b11de5c",
+   "sha256_B": "e4f96a1d12b3"
+  },
+  "8": {
+   "question_id": "essay-pilot-and-his-wife-turning-point",
+   "question": "What is the turning point of the story in the novel The Pilot and His Wife, and why does it matter for what follows?",
+   "A": "full",
+   "B": "deep",
+   "identical": false,
+   "sha256_A": "a664b40ccfc0",
+   "sha256_B": "6f2d19100a60"
+  },
+  "9": {
+   "question_id": "essay-pilot-and-his-wife-ending",
+   "question": "What does the ending of the novel The Pilot and His Wife resolve, and what does it leave open?",
+   "A": "deep",
+   "B": "full",
+   "identical": false,
+   "sha256_A": "d32ac701f3f1",
+   "sha256_B": "a81dff91bea2"
+  },
+  "10": {
+   "question_id": "essay-pilot-and-his-wife-inner-conflicts",
+   "question": "What inner conflicts drive Elisabeth in the novel The Pilot and His Wife, and how do they play out across the story?",
+   "A": "deep",
+   "B": "full",
+   "identical": false,
+   "sha256_A": "c41d61e02930",
+   "sha256_B": "ca4f528df5ec"
+  },
+  "11": {
+   "question_id": "essay-pilot-and-his-wife-setup",
+   "question": "How do the early events of the novel The Pilot and His Wife set up its later ones?",
+   "A": "deep",
+   "B": "full",
+   "identical": true,
+   "sha256_A": "6fc18d3b7cb8",
+   "sha256_B": "6fc18d3b7cb8"
+  },
+  "12": {
+   "question_id": "essay-pilot-and-his-wife-society",
+   "question": "What does the novel The Pilot and His Wife suggest about the society it depicts?",
+   "A": "deep",
+   "B": "full",
+   "identical": false,
+   "sha256_A": "db230bdd6892",
+   "sha256_B": "648d75a51b96"
+  }
+ }
+}
