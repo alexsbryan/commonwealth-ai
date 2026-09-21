@@ -56,7 +56,11 @@ if mean >= 0.5:
 PY
 
 step "atlas"
-"$SVRN" enrich init "$CORPUS" --source "$BOOK" --force || die "enrich init failed"
+# `literary_atlas`, as chaos-secret-agent's config.json records. The default
+# `literary` is a legacy non-atlas pipeline that `enrich build` refuses — window
+# 20260921T065349Z paid for a pod to learn that.
+"$SVRN" enrich reset "$CORPUS" --full --yes >/dev/null 2>&1 || true   # a local rehearsal pins this host's daemon into config.json
+"$SVRN" enrich init "$CORPUS" --source "$BOOK" --pipeline literary_atlas --force || die "enrich init failed"
 # `extract` exits 1 when it SKIPS a too-short section (DECISIONS A38); --finalize
 # is the step that has to succeed.
 "$SVRN" enrich extract "$CORPUS" --full --resume || echo "run-proof: extract exited $? (skips count as failures; finalize decides)" >&2

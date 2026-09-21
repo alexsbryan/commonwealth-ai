@@ -1,0 +1,114 @@
+
+== closed-book screen  [06:53:49]
+arm closed-book run 1 -> research/ontology-retrieval/raptor-proof/runs/pilot-and-his-wife/closed-book/run-1
+  host http://127.0.0.1:9841  synth Qwen3.6-35B-A3B-MTP-UD-Q6_K  judge Qwen3.5-4B-UD-Q6_K_XL
+svrnmesh: bridged 1 legacy SOVEREIGN_* env var(s) to SVRNMESH_* (the SOVEREIGN_* prefix is deprecated — update your scripts)
+loaded bank `raptor-proof-pilot-and-his-wife-v1` — 30 questions, target corpus `raptor-pilot-and-his-wife`
+Daemon: http://127.0.0.1:9841
+Chat model:  Qwen3.6-35B-A3B-MTP-UD-Q6_K
+Embed model: qwen-embedding-0.6b
+Database:    /Users/alexsbryan/.sovereign/sovereign.db
+Indexes:     /Users/alexsbryan/.svrnmesh/indexes
+Temperature: 0 (override)
+Corpora:     alignment (4090 chunks), arch-principles (58 chunks), arch-tour-fixture (40 chunks), atos-experiment-oicp-types (55 chunks), brothers-karamazov-book-1 (41 chunks), chaos-saltgrass (30 chunks), chaos-secret-agent (316 chunks), climb-ostrom (5 chunks), commonwealth (2590 chunks), commonwealth-ai-arch-principles (72 chunks), commonwealth-ai-system-overview (60 chunks), conversation-history (91 chunks), conversations-anthropic (16404 chunks), conversations-personal (267 chunks), corpus-engine (6252 chunks), drift-target (0 chunks), e2e-notebook (2 chunks), ei7-recensus-fineprint (1870 chunks), enron-sample-multi-tiny (900 chunks), enron-sample-multi-wide (8829 chunks), enron-sample-tiny (468 chunks), federalist-starter (31 chunks), folder-fixture-vault-8a83955f975c (111 chunks), folder-governance-corpus-bf503493df46 (0 chunks), institutional-notes (9 chunks), maple-house (24 chunks), obsidian-vault-959ee8a8f330 (3175 chunks), oicp-types (76 chunks), proxy-cik0000012927 (121 chunks), proxy-cik0000034088 (311 chunks), qc-arch-tour-01500518 (40 chunks), qc-arch-tour-250f6f45 (40 chunks), qc-arch-tour-4dd212fb (40 chunks), qc-arch-tour-52c92f2d (40 chunks), qc-arch-tour-695ffb90 (40 chunks), qc-arch-tour-6c7947a7 (40 chunks), qc-arch-tour-8899c85d (40 chunks), qc-arch-tour-adhoc (40 chunks), qc-arch-tour-d1255ea4 (40 chunks), qc-probe (40 chunks), raptor-eagle-cliff (254 chunks), raptor-pilot-and-his-wife (244 chunks), sec-cik0000320193 (115 chunks), sep (187967 chunks), sovereign (15352 chunks), sovereign-cli (1218 chunks), spike-fineprint-census (699 chunks), spike-fineprint-census-pod (699 chunks), system-overview (57 chunks), tokei (308 chunks), tokei-readme (25 chunks), uap-blue-book (710 chunks), uap-blue-book-index (10750 chunks), watched-9ef2f912ea2e (1530 chunks), watched-fixture-495a8a964229 (10 chunks), wikipedia (2029882 chunks), wikipedia-newsworthy (61 chunks)
+Tools:       wiring
+Tools:       no per-user switches on this host
+Tools:       core-turn: 6 tools
+Tools:       web: 1 tools
+Tools:       knowledge-front-door: 2 tools, withheld knowledge_lookup:auto-escalate (the operator has not opted in to automatic web escalation)
+Tools:       wikipedia: 1 tools
+Tools:       shell: 1 tools
+Tools:       11 registered
+Router:      assembling classifier stack
+Router classifier stack: embed=true scope=true effort=true current_info=true
+Lane:        gathering enrichment sources
+Lane scope:  sealed to `raptor-pilot-and-his-wife`
+[2m2026-09-21T06:53:53.238310Z[0m [32m INFO[0m atlas-context: scanning indexes dir for atlases [3mcandidate_count[0m[2m=[0m1818
+[2m2026-09-21T06:53:53.505556Z[0m [32m INFO[0m atlas-context: init complete (graphs without a loaded context parse on first use) [3mcontexts[0m[2m=[0m0 [3mgraphs[0m[2m=[0m0 [3mgraphs_available[0m[2m=[0m1818
+Atlas: 0 corpus context(s) loaded from cache
+Meta-atlas:  not loaded (lane spans one corpus)
+Bridge:      not loaded (lane spans one corpus)
+closed-book mode — each question is a RAW MODEL turn (no retrieval, no router, no grounding gate, no atlas). Answers come from the model's parametric memory alone; `retrieved` is empty by construction.
+isolation mode — retrieval scoped to corpus `raptor-pilot-and-his-wife`
+wrote run JSON to research/ontology-retrieval/raptor-proof/runs/pilot-and-his-wife/closed-book/run-1/eval.json
+  verdict: recorded (the comparison judges it)
+closed-book: n=30 mean judge=0.356 known(>=0.5)=11
+
+== atlas  [06:55:11]
+svrnmesh: bridged 1 legacy SOVEREIGN_* env var(s) to SVRNMESH_* (the SOVEREIGN_* prefix is deprecated — update your scripts)
+Detected 32 section(s):
+    1. CHAPTER I. — On the stern, pine-clad southern coast of Norway, off the
+    2. CHAPTER II. — After old Jacob had fallen into ill health, lighterman Kristiansen used
+    3. CHAPTER III. — Salve came out to the rock again the next autumn, after a voyage to
+    4. CHAPTER IV. — The old Juno, to which Salve belonged, was lying at that time at
+    5. CHAPTER V. — The party, meanwhile, that had left the ship, were passing the night
+    6. CHAPTER VI. — The Juno arrived in due course at Boston, where Salve invested a
+    7. CHAPTER VII. — Out on Little Torungen meanwhile noteworthy events had occurred, which
+    8. CHAPTER VIII. — As for Salve, during the first few days after coming home he was a happy
+    9. CHAPTER IX. — All these events had come upon Elizabeth with overwhelming suddenness.
+   10. CHAPTER X. — The outer side of Tromoe, which lies off the entrance to Arendal, has
+   11. CHAPTER XI. — The house in the town was undergoing repairs this year, which kept the
+   12. CHAPTER XII. — It was some months after. The Juno lay ready to sail in the roads of
+   13. CHAPTER XIII. — They stood slowly away to the north-east along the coast of Brazil.
+   14. CHAPTER XIV. — With a view to bring himself into harmony with his surroundings, he
+   15. CHAPTER XV. — It was into a badly-lighted tavern, with two or three rooms leading out
+   16. CHAPTER XVI. — The Stars and Stripes lay in the roads with the Union flag at her gaff.
+   17. CHAPTER XVII. — They doubled Cape Horn, and came to Valparaiso. But, on the morning they
+   18. CHAPTER XVIII. — An opportunity offered almost immediately for taking a passage home with
+   19. CHAPTER XIX. — Skipper Garvloit, into whose family Elizabeth had come, occupied one of
+   20. CHAPTER XX. — When Madam Garvloit had made some excuse next morning to leave the two
+  ... and 12 more
+
+  ✓ wrote /Users/alexsbryan/.svrnmesh/indexes/raptor-pilot-and-his-wife/chapters.json (32 chapters)
+  ✓ wrote /Users/alexsbryan/.svrnmesh/enrichment/raptor-pilot-and-his-wife/config.json
+  ✓ pipeline      = literary
+  ✓ chat_model    = commonwealth/primary
+  ✓ embed_model   = qwen3-embedding-0.6b
+
+  Next: svrn enrich extract raptor-pilot-and-his-wife --chapters sec_0001,sec_0002,sec_0003
+svrnmesh: bridged 1 legacy SOVEREIGN_* env var(s) to SVRNMESH_* (the SOVEREIGN_* prefix is deprecated — update your scripts)
+  · --resume: checkpoint at /Users/alexsbryan/.svrnmesh/enrichment/raptor-pilot-and-his-wife/runs/_phase1_checkpoint.jsonl is empty (or missing); proceeding with full selection.
+  running phase 1 (full) over 32 chapter(s) — checkpoint: /Users/alexsbryan/.svrnmesh/enrichment/raptor-pilot-and-his-wife/runs/_phase1_checkpoint.jsonl
+    · 0 exemplar(s) loaded, 32 chapter(s) to process
+    [1/32] sec_0001… 0 e, 2 q
+    [2/32] sec_0002… 0 e, 2 q
+    [3/32] sec_0003… 0 e, 2 q
+    [4/32] sec_0004… 0 e, 2 q
+    [5/32] sec_0005… 0 e, 2 q
+    [6/32] sec_0006… 0 e, 2 q
+    [7/32] sec_0007… 0 e, 2 q
+    [8/32] sec_0008… 0 e, 2 q
+    [9/32] sec_0009… 0 e, 2 q
+    [10/32] sec_0010… 0 e, 2 q
+    [11/32] sec_0011… 0 e, 2 q
+    [12/32] sec_0012… 0 e, 2 q
+    [13/32] sec_0013… 0 e, 2 q
+    [14/32] sec_0014… 0 e, 2 q
+    [15/32] sec_0015… 0 e, 2 q
+    [16/32] sec_0016… 0 e, 2 q
+    [17/32] sec_0017… 0 e, 2 q
+    [18/32] sec_0018… 0 e, 2 q
+    [19/32] sec_0019… 0 e, 2 q
+    [20/32] sec_0020… 0 e, 2 q
+    [21/32] sec_0021… 0 e, 2 q
+    [22/32] sec_0022… 0 e, 2 q
+    [23/32] sec_0023… 0 e, 2 q
+    [24/32] sec_0024… 0 e, 2 q
+    [25/32] sec_0025… 0 e, 2 q
+    [26/32] sec_0026… 0 e, 2 q
+    [27/32] sec_0027… 0 e, 2 q
+    [28/32] sec_0028… 0 e, 2 q
+    [29/32] sec_0029… 0 e, 2 q
+    [30/32] sec_0030… 0 e, 2 q
+    [31/32] sec_0031… 0 e, 2 q
+    [32/32] sec_0032… 0 e, 2 q
+  ✓ 32 ok, 0 failed — /Users/alexsbryan/.svrnmesh/enrichment/raptor-pilot-and-his-wife/runs/questions-full-001.json
+  · token spend: 32 call(s), 116999 prompt + 5599 completion = 122598 total
+  ✓ cache updated (cache/questions.json)
+svrnmesh: bridged 1 legacy SOVEREIGN_* env var(s) to SVRNMESH_* (the SOVEREIGN_* prefix is deprecated — update your scripts)
+  · finalize: 32 entries → 32 successes + 0 failures
+  ✓ wrote run-file /Users/alexsbryan/.svrnmesh/enrichment/raptor-pilot-and-his-wife/runs/questions-finalize-001.json
+  ✓ updated cache/questions.json
+svrnmesh: bridged 1 legacy SOVEREIGN_* env var(s) to SVRNMESH_* (the SOVEREIGN_* prefix is deprecated — update your scripts)
+error: pipeline `literary` is a legacy (non-atlas) pipeline; `build` only supports atlas pipelines. Re-init with `svrn enrich reset raptor-pilot-and-his-wife --full --yes` followed by `svrn enrich init raptor-pilot-and-his-wife --source <path> --pipeline literary_atlas` (or `--pipeline philosophy_atlas`), then retry.
+run-proof: enrich build failed
