@@ -247,18 +247,28 @@ if adm is not None:
         alpn_tests.append(name)
         if re.search(r"(?<![_A-Z])ALPN\b", body) and re.search(r"is_err|unwrap_err|401|403|refus", body):
             internal_alpn_tests.append(name)
-# (e) the exempt set, pinned by a test: exactly `/internal/join` and
-# `/internal/gossip` named together in one place the daemon crate tests read.
+# (e) the exempt set, pinned by a test: ONE slice literal in the daemon crate
+# whose `/internal/*` members are EXACTLY join and gossip, named by an
+# identifier some `#[test]` in the crate reads. Prose about exemptions does
+# not count — a set nothing enumerates cannot be the set a gate consults.
 daemon_src = os.path.join(REPO, "sovereign/crates/sovereign-daemon/src")
-exempt_pin = []
+daemon_rs = []
 for root, _dirs, files in os.walk(daemon_src):
-    for f in files:
-        if not f.endswith(".rs"):
-            continue
-        rel = os.path.relpath(os.path.join(root, f), REPO)
-        t = src(rel) or ""
-        if "/internal/join" in t and "/internal/gossip" in t and re.search(r"EXEMPT|exempt", t):
-            exempt_pin.append(rel)
+    daemon_rs += [os.path.relpath(os.path.join(root, f), REPO)
+                  for f in files if f.endswith(".rs")]
+exempt_pin, exempt_consts = [], []
+for rel in daemon_rs:
+    t = src(rel) or ""
+    for m in re.finditer(r"(?:const|static)\s+(\w+)\s*:[^=]*=\s*&\[([^\]]*)\]", t):
+        members = set(re.findall(r'"(/internal/[^"]*)"', m.group(2)))
+        if members == {"/internal/join", "/internal/gossip"}:
+            exempt_consts.append((rel, m.group(1)))
+for rel, name in exempt_consts:
+    for other in daemon_rs:
+        ot = src(other) or ""
+        if any(name in body[:3000] for body in re.split(r"#\[test\]", ot)[1:]):
+            exempt_pin.append(f"{rel}::{name} (read by a test in {other})")
+            break
 if "stranger" not in legs.split(",") or st is None:
     row(BAR, None, "the stranger leg did not run: no bring-up, nothing measured",
         adm_file=adm_rel, internal_alpn_tests=internal_alpn_tests)
@@ -283,7 +293,8 @@ else:
         reason += (f"(b): no test in {adm_rel} dials the internal ALPN and reads a refusal; "
                    f"it names {len(alpn_tests)} tests, all on the client/rpc/media paths. ")
     if not exempt_pin:
-        reason += "(e): no file under sovereign-daemon/src names /internal/join and /internal/gossip as an exempt set."
+        reason += (f"(e): no slice literal under sovereign-daemon/src has exactly /internal/join and "
+                   f"/internal/gossip as its members and is read by a test (candidates: {exempt_consts}).")
     row(BAR, score(clauses), reason.strip(), clauses=clauses,
         adm_file=adm_rel, exempt_pin=exempt_pin, **st)
 
