@@ -1503,6 +1503,10 @@ mod tests {
             score: 0.5,
             snippet: String::new(),
             source: None,
+            // This fixture isolates pool COMPOSITION from recall; it builds no
+            // prompt, so both prompt fields are "not known here".
+            in_prompt: None,
+            prompt_text: None,
         };
         let mut pool: Vec<RetrievedChunk> = Vec::new();
         for (cid, n) in mix {

@@ -230,27 +230,7 @@ pub struct SynthSnapshot {
     pub judge_evidence: Vec<crate::eval_cmd::score::JudgeFactDetail>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RetrievedChunk {
-    pub corpus_id: String,
-    pub title: Option<String>,
-    pub url: Option<String>,
-    pub score: f32,
-    /// The chunk's full text, newlines flattened. NOT truncated.
-    ///
-    /// It was capped at 600 chars "to keep run files readable" — a cost
-    /// nobody measured — and the cap silently biased every metric read
-    /// off this field downward, because a fact past the cap scored as
-    /// absent. Cap it again only when a measured run-file cost says to,
-    /// and raise the consuming metrics' floor in the same commit.
-    pub snippet: String,
-    /// Provenance tag from the chunk's `metadata.source` — "raptor",
-    /// "atlas", "atom-enum", or absent for organically-retrieved
-    /// chunks. Makes structural-layer injection visible in the run file
-    /// so a bench can confirm (not infer) which layer surfaced a hit.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub source: Option<String>,
-}
+pub use crate::eval_cmd::retrieved_chunk::RetrievedChunk;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScoreSnapshot {
@@ -924,6 +904,10 @@ async fn run_question_prod(
             score: c.score,
             snippet: c.content.replace('\n', " "),
             source: None,
+            // retrieval mode builds no prompt — `None` is
+            // "not known here", never a defaulted true.
+            in_prompt: None,
+            prompt_text: None,
         })
         .collect();
 
@@ -1500,6 +1484,10 @@ async fn run_question(
             score: c.score,
             snippet: c.content.replace('\n', " "),
             source: None,
+            // retrieval mode builds no prompt — `None` is
+            // "not known here", never a defaulted true.
+            in_prompt: None,
+            prompt_text: None,
         })
         .collect();
     let atlas_navigation_packed = atlas_navigation
@@ -1511,6 +1499,10 @@ async fn run_question(
             score: c.score,
             snippet: c.content.replace('\n', " "),
             source: None,
+            // retrieval mode builds no prompt — `None` is
+            // "not known here", never a defaulted true.
+            in_prompt: None,
+            prompt_text: None,
         })
         .collect();
 
@@ -1845,6 +1837,11 @@ async fn run_question_synth(
                 .unwrap_or("")
                 .to_string(),
             source: c.get("source").and_then(|v| v.as_str()).map(str::to_string),
+            in_prompt: c.get("in_prompt").and_then(|v| v.as_bool()),
+            prompt_text: c
+                .get("prompt_text")
+                .and_then(|v| v.as_str())
+                .map(str::to_string),
         })
         .collect();
 
