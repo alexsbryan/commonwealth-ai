@@ -12250,7 +12250,6 @@ dependencies = [
  "dirs 5.0.1",
  "futures",
  "hostname",
- "kernel-types",
  "libc",
  "reqwest 0.12.28",
  "serde",
@@ -12261,20 +12260,13 @@ dependencies = [
  "sovereign-contracts",
  "sovereign-core",
  "sovereign-daemon",
- "sovereign-enrichment-build",
- "sovereign-gliner",
  "sovereign-inference",
  "sovereign-mesh",
- "sovereign-pods",
  "sovereign-runtime-recipe",
- "sovereign-scheduler",
  "sovereign-service",
  "sovereign-serving-host",
  "sovereign-store",
- "sovereign-tdd",
  "sovereign-tools",
- "sovereign-work-atlas",
- "sovereign-workflow",
  "sovereign-workflow-host",
  "tempfile",
  "tokio",
@@ -12801,7 +12793,6 @@ dependencies = [
  "axum-server",
  "bytes",
  "chrono",
- "code-facts",
  "commonwealth-core",
  "commonwealth-discovery",
  "commonwealth-media",
@@ -12829,16 +12820,13 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.9",
- "sovereign-authoring-harness",
  "sovereign-contracts",
  "sovereign-core",
  "sovereign-daemon",
  "sovereign-enrichment-catalog",
- "sovereign-gliner",
  "sovereign-grants",
  "sovereign-inference",
  "sovereign-mesh-test-harness",
- "sovereign-meshapp",
  "sovereign-meshapp-registry",
  "sovereign-peer-wire",
  "sovereign-pods",
@@ -12912,29 +12900,6 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "tracing",
- "workspace-hack",
-]
-
-[[package]]
-name = "sovereign-mobile"
-version = "0.1.0"
-dependencies = [
- "commonwealth-transport",
- "futures",
- "futures-util",
- "reqwest 0.12.28",
- "rusqlite",
- "serde",
- "serde_json",
- "sovereign-turn-client",
- "tauri",
- "tauri-build",
- "tauri-plugin-deep-link",
- "thiserror 2.0.18",
- "tokio",
- "tokio-tungstenite",
- "tracing",
- "uuid",
  "workspace-hack",
 ]
 
@@ -13044,47 +13009,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "sovereign-server"
-version = "0.7.0"
-dependencies = [
- "arc-swap",
- "async-trait",
- "axum",
- "chrono",
- "commonwealth-transport",
- "corpus-engine",
- "corpus-engine-notes",
- "corpus-engine-scip",
- "corpus-engine-watchers",
- "dirs 5.0.1",
- "futures",
- "hex",
- "reqwest 0.12.28",
- "serde",
- "serde_json",
- "serving-policy",
- "sovereign-contracts",
- "sovereign-core",
- "sovereign-gliner",
- "sovereign-inference",
- "sovereign-runtime-recipe",
- "sovereign-store",
- "sovereign-tdd",
- "sovereign-tools",
- "sovereign-workflow-host",
- "tempfile",
- "tokio",
- "tokio-tungstenite",
- "toml 0.8.2",
- "tower",
- "tower-http",
- "tracing",
- "tracing-subscriber",
- "uuid",
- "workspace-hack",
-]
-
-[[package]]
 name = "sovereign-service"
 version = "0.7.0"
 dependencies = [
@@ -13145,21 +13069,6 @@ dependencies = [
  "tokio-postgres",
  "tracing",
  "uuid",
- "workspace-hack",
-]
-
-[[package]]
-name = "sovereign-studio"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "serde_json",
- "sovereign-contracts",
- "sovereign-recipe-author",
- "sovereign-tools-base",
- "sovereign-workflow",
- "sovereign-workflow-host",
- "tokio",
  "workspace-hack",
 ]
 
@@ -15147,7 +15056,6 @@ version = "0.7.0"
 dependencies = [
  "chrono",
  "corpus-index",
- "kernel-types",
  "oplog",
  "regex",
  "serde",
@@ -15165,17 +15073,13 @@ dependencies = [
  "async-trait",
  "chrono",
  "corpus-engine",
- "corpus-index",
  "futures",
- "kernel-types",
  "lancedb",
- "oplog",
  "serde",
  "serde_json",
  "tempfile",
  "tokio",
  "tracing",
- "understanding-atlas",
  "understanding-vocab",
 ]
 

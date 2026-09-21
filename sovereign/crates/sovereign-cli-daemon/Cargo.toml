@@ -36,7 +36,6 @@ sovereign-compute = { workspace = true }
 sovereign-service = { workspace = true }
 sovereign-store = { workspace = true }
 sovereign-tools = { workspace = true, features = ["treesitter"] }
-sovereign-gliner = { workspace = true }
 sovereign-mesh = { workspace = true, features = ["treesitter"] }
 # The mesh host cluster (domains dm-daemon-mesh-edge): the assembly root, the
 # route shells and the edge. `treesitter` because `bootstrap.rs` mounts
@@ -44,11 +43,9 @@ sovereign-mesh = { workspace = true, features = ["treesitter"] }
 sovereign-daemon = { workspace = true, features = ["treesitter"] }
 # The rented-pod modules lifted out of sovereign-mesh (domains REVIEW-audit-3);
 # reached directly rather than through sovereign-mesh's shim.
-sovereign-pods = { path = "../sovereign-pods" }
 # The scheduler half lifted out of sovereign-mesh (domains REVIEW-build-sched-move);
 # the daemon's slot-alias resolution reaches it directly rather than through
 # sovereign-mesh's shim (domains REVIEW-build-sched-repoint-daemon).
-sovereign-scheduler = { path = "../sovereign-scheduler" }
 # The serving host lifted out of sovereign-mesh (domains
 # REVIEW-build-serving-move-*); the daemon reaches the router and the ports
 # directly rather than through sovereign-mesh's shim (domains
@@ -59,9 +56,7 @@ sovereign-serving-host = { path = "../sovereign-serving-host" }
 # `sovereign daemon run` be the process that assembles a Runtime rather
 # than the process that has every ingredient for one. Capabilities — down.
 sovereign-runtime-recipe = { workspace = true }
-sovereign-workflow = { workspace = true }
 sovereign-workflow-host = { workspace = true }
-sovereign-work-atlas = { workspace = true }
 sovereign-cli-shared = { workspace = true, features = ["scip"] }
 # The atlas build orchestrator. The daemon runs `enrich build` in-process for
 # an `[enrichment] type = "atlas"` recipe, because a shipped desktop bundle
@@ -73,7 +68,6 @@ sovereign-cli-shared = { workspace = true, features = ["scip"] }
 # (ARCH §18.3) with a §10.1e ledger row, and the operator funded the split
 # rather than keeping it. Now a capability, one layer down, and the interface
 # is two names: `build_with_progress_with_embedder` and `ParsedBuild`.
-sovereign-enrichment-build = { workspace = true }
 # `commonwealth-state`, `commonwealth-core` and `commonwealth-api` (now
 # `sovereign-api`) WERE HERE,
 # and cw-lift rung 3b deleted all three. The whole coupling was eleven lines in
@@ -91,8 +85,6 @@ sovereign-enrichment-build = { workspace = true }
 # say so.
 #
 # `NodeId` straight from the neutral kernel, not through a re-export.
-kernel-types = { workspace = true }
-sovereign-tdd = { workspace = true }
 corpus-engine = { workspace = true, features = ["treesitter"] }
 corpus-engine-notes = { workspace = true }
 corpus-engine-scip = { workspace = true }

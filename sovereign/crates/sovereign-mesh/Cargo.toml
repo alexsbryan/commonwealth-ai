@@ -120,7 +120,6 @@ corpus-engine-scip = { workspace = true }
 # The code-intel package's fact base (`facts`/`facts_store`), moved out of
 # corpus-engine at domains REVIEW-build-code-facts; `reindexer.rs` names
 # `code_facts::*` directly. The `stores` feature arrives through corpus-engine.
-code-facts = { workspace = true }
 # The atlas vocabulary leaf. Named directly rather than through corpus-engine's
 # re-export so `reading_formatters` resolves at its new home (domains row
 # dm-mesh-move-reading-formatters, DC §4.3).
@@ -131,7 +130,6 @@ understanding-vocab = { workspace = true }
 # `svrn recipe test` both call. Added svt-6 (2026-09-12) when the harness
 # stopped being something the desktop ran in-process; same layer as this
 # crate, and `sovereign-cli-llm` already names it.
-sovereign-authoring-harness = { workspace = true }
 
 # Sovereign core (for InferenceProvider + MeshKnowledgeSource traits)
 sovereign-core = { workspace = true }
@@ -166,7 +164,6 @@ sovereign-inference = { workspace = true }
 # side that owns the files; the desktop was doing both with its own
 # filesystem calls. Downward edge on `quality/ARCH_LAYERS.toml`
 # (runtime < mesh-api), same direction as `sovereign-inference` above.
-sovereign-gliner = { workspace = true }
 # `mcp_surface` — the shared MCP allowlist + alias map. The
 # embedded daemon's mcp_router and the standalone MCP server in
 # sovereign-server share this so they advertise the same surface
@@ -181,7 +178,6 @@ sovereign-enrichment-catalog = { workspace = true }
 # here is what stops the desktop opening the daemon's own index dir in a
 # second process. Downward edge on `quality/ARCH_LAYERS.toml`
 # (capabilities < mesh-api), same as `sovereign-tools` above.
-sovereign-meshapp = { workspace = true }
 # `RecipeProjectStore` (the recipe-author `features.db` layer), reached
 # through its re-exporter rather than by a direct dep on
 # `sovereign-recipe-author` (ARCH §8.3). Was a dev-dep until sv-surface D6
