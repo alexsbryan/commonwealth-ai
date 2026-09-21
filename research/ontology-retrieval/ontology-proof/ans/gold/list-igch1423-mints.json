@@ -91,8 +91,6 @@
  ],
  "members_in_corpus": [
   "Abydus",
-  "Aenus",
-  "Alexandreia Troas",
   "Amphipolis",
   "Aradus",
   "Babylon",
@@ -104,9 +102,6 @@
   "Ecbatana",
   "Ephesus",
   "Lampsacus",
-  "Laodicea ad Mare",
-  "Lysimachia",
-  "Magnesia ad Maeandrum",
   "Marathus",
   "Miletus",
   "Myriandrus",
@@ -124,21 +119,16 @@
  ],
  "members_local": [
   "Abydus",
-  "Alexandreia Troas",
   "Amphipolis",
   "Aradus",
   "Babylon",
   "Lampsacus",
-  "Miletus",
-  "Pergamum",
-  "Sicyon"
+  "Miletus"
  ],
- "hoard_paragraphs": 24,
- "paragraphs_with_a_member": 6,
- "cover": 3,
+ "hoard_paragraphs": 5,
+ "paragraphs_with_a_member": 3,
+ "cover": 2,
  "works_naming_hoard": [
-  "nnan15879",
-  "nnan28180",
   "nnan49321",
   "nnan49322",
   "nnan50879"

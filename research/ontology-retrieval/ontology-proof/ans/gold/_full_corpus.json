@@ -1,0 +1,737 @@
+{
+ "note": "K1 rows as fixed on the 25-work corpus; the subset run must reproduce these ids",
+ "rows": {
+  "list-igch0076-mints": {
+   "members_local": [
+    "Amphipolis",
+    "Larissa, Thessaly",
+    "Sicyon",
+    "Tarsus"
+   ],
+   "cover": 1,
+   "paragraphs_with_a_member": 9,
+   "hoard_paragraphs": 21,
+   "works": {
+    "nnan118901": [
+     "H1"
+    ]
+   }
+  },
+  "list-igch0077-mints": {
+   "members_local": [
+    "Amphipolis",
+    "Salamis",
+    "Sidon",
+    "Tarsus"
+   ],
+   "cover": 3,
+   "paragraphs_with_a_member": 11,
+   "hoard_paragraphs": 52,
+   "works": {
+    "nnan174624": [
+     "H1"
+    ]
+   }
+  },
+  "list-igch0081-mints": {
+   "members_local": [
+    "Amphipolis",
+    "Athens",
+    "Babylon",
+    "Pella",
+    "Sicyon",
+    "Side"
+   ],
+   "cover": 4,
+   "paragraphs_with_a_member": 9,
+   "hoard_paragraphs": 30,
+   "works": {
+    "nnan174624": [
+     "H1"
+    ]
+   }
+  },
+  "list-igch0083-mints": {
+   "members_local": [
+    "Aegina",
+    "Amphipolis",
+    "Aradus",
+    "Babylon",
+    "Byblus",
+    "Citium",
+    "Myriandrus",
+    "Pella",
+    "Salamis",
+    "Sicyon",
+    "Side",
+    "Tarsus"
+   ],
+   "cover": 10,
+   "paragraphs_with_a_member": 25,
+   "hoard_paragraphs": 374,
+   "works": {
+    "nnan174624": [
+     "H1"
+    ],
+    "nnan40403": [
+     "H2"
+    ]
+   }
+  },
+  "list-igch0091-mints": {
+   "members_local": [
+    "Athens",
+    "Miletus",
+    "Rhodes",
+    "Siphnos"
+   ],
+   "cover": 2,
+   "paragraphs_with_a_member": 29,
+   "hoard_paragraphs": 173,
+   "works": {
+    "nnan49321": [
+     "H1"
+    ],
+    "nnan50879": [
+     "H2"
+    ]
+   }
+  },
+  "list-igch0091-denominations": {
+   "members_local": [
+    "Didrachm",
+    "Stater",
+    "Tetradrachm",
+    "Tetrobol"
+   ],
+   "cover": 3,
+   "paragraphs_with_a_member": 11,
+   "hoard_paragraphs": 173,
+   "works": {
+    "nnan49321": [
+     "H1"
+    ],
+    "nnan50879": [
+     "H2"
+    ]
+   }
+  },
+  "list-igch0095-mints": {
+   "members_local": [
+    "Amphipolis",
+    "Babylon",
+    "Byblus",
+    "Side"
+   ],
+   "cover": 2,
+   "paragraphs_with_a_member": 3,
+   "hoard_paragraphs": 5,
+   "works": {
+    "nnan174624": [
+     "H1"
+    ]
+   }
+  },
+  "list-igch0176-mints": {
+   "members_local": [
+    "Athens",
+    "Chalcis",
+    "Lampsacus",
+    "Sicyon"
+   ],
+   "cover": 3,
+   "paragraphs_with_a_member": 13,
+   "hoard_paragraphs": 146,
+   "works": {
+    "nnan49321": [
+     "H1"
+    ],
+    "nnan49322": [
+     "H1"
+    ],
+    "nnan818": [
+     "H2"
+    ]
+   }
+  },
+  "list-igch0242-mints": {
+   "members_local": [
+    "Argos",
+    "Chalcis",
+    "Megalopolis",
+    "Sicyon"
+   ],
+   "cover": 2,
+   "paragraphs_with_a_member": 2,
+   "hoard_paragraphs": 12,
+   "works": {
+    "nnan73727": [
+     "H2"
+    ]
+   }
+  },
+  "list-igch0260-mints": {
+   "members_local": [
+    "Argos",
+    "Chalcis",
+    "Megalopolis",
+    "Sicyon"
+   ],
+   "cover": 2,
+   "paragraphs_with_a_member": 3,
+   "hoard_paragraphs": 26,
+   "works": {
+    "nnan73727": [
+     "H2"
+    ]
+   }
+  },
+  "list-igch0270-mints": {
+   "members_local": [
+    "Aenianes",
+    "Chalcis",
+    "Histiaea",
+    "Lamia",
+    "Megalopolis",
+    "Rhodes",
+    "Sicyon"
+   ],
+   "cover": 2,
+   "paragraphs_with_a_member": 15,
+   "hoard_paragraphs": 141,
+   "works": {
+    "nnan73727": [
+     "H2"
+    ]
+   }
+  },
+  "list-igch0271-mints": {
+   "members_local": [
+    "Aenianes",
+    "Argos",
+    "Athens",
+    "Chalcis",
+    "Cyme",
+    "Histiaea",
+    "Lamia",
+    "Megalopolis",
+    "Messene",
+    "Oeta",
+    "Sicyon"
+   ],
+   "cover": 2,
+   "paragraphs_with_a_member": 110,
+   "hoard_paragraphs": 2170,
+   "works": {
+    "nnan73727": [
+     "H2"
+    ]
+   }
+  },
+  "list-igch0395-mints": {
+   "members_local": [
+    "Amphipolis",
+    "Salamis",
+    "Sidon",
+    "Tarsus"
+   ],
+   "cover": 3,
+   "paragraphs_with_a_member": 3,
+   "hoard_paragraphs": 12,
+   "works": {
+    "nnan174624": [
+     "H1"
+    ]
+   }
+  },
+  "list-igch0410-mints": {
+   "members_local": [
+    "Abydus",
+    "Amphipolis",
+    "Babylon",
+    "Lampsacus",
+    "Miletus",
+    "Sicyon",
+    "Side",
+    "Sidon"
+   ],
+   "cover": 5,
+   "paragraphs_with_a_member": 15,
+   "hoard_paragraphs": 59,
+   "works": {
+    "nnan174624": [
+     "H1"
+    ],
+    "nnan49321": [
+     "H1"
+    ],
+    "nnan49322": [
+     "H1"
+    ]
+   }
+  },
+  "list-igch0774-mints": {
+   "members_local": [
+    "Lampsacus",
+    "Miletus",
+    "Salamis",
+    "Tarsus"
+   ],
+   "cover": 1,
+   "paragraphs_with_a_member": 5,
+   "hoard_paragraphs": 13,
+   "works": {
+    "nnan174624": [
+     "H1"
+    ],
+    "nnan49321": [
+     "H1"
+    ],
+    "nnan49322": [
+     "H1"
+    ]
+   }
+  },
+  "list-igch0866-mints": {
+   "members_local": [
+    "Abydus",
+    "Colophon",
+    "Lampsacus",
+    "Miletus",
+    "Teos"
+   ],
+   "cover": 3,
+   "paragraphs_with_a_member": 4,
+   "hoard_paragraphs": 9,
+   "works": {
+    "nnan174624": [
+     "H1"
+    ],
+    "nnan49321": [
+     "H1"
+    ],
+    "nnan49322": [
+     "H1"
+    ]
+   }
+  },
+  "list-igch0958-mints": {
+   "members_local": [
+    "Abydus",
+    "Babylon",
+    "Byzantium",
+    "Lampsacus",
+    "Miletus"
+   ],
+   "cover": 3,
+   "paragraphs_with_a_member": 14,
+   "hoard_paragraphs": 35,
+   "works": {
+    "nnan49321": [
+     "H1"
+    ],
+    "nnan49322": [
+     "H1"
+    ]
+   }
+  },
+  "list-igch1395-mints": {
+   "members_local": [
+    "Abydus",
+    "Amphipolis",
+    "Colophon",
+    "Miletus",
+    "Teos"
+   ],
+   "cover": 2,
+   "paragraphs_with_a_member": 10,
+   "hoard_paragraphs": 69,
+   "works": {
+    "nnan174624": [
+     "H1"
+    ],
+    "nnan49321": [
+     "H1"
+    ],
+    "nnan49322": [
+     "H1"
+    ]
+   }
+  },
+  "list-igch1423-mints": {
+   "members_local": [
+    "Abydus",
+    "Alexandreia Troas",
+    "Amphipolis",
+    "Aradus",
+    "Babylon",
+    "Lampsacus",
+    "Miletus",
+    "Pergamum",
+    "Sicyon"
+   ],
+   "cover": 3,
+   "paragraphs_with_a_member": 6,
+   "hoard_paragraphs": 24,
+   "works": {
+    "nnan49321": [
+     "H1"
+    ],
+    "nnan49322": [
+     "H1"
+    ]
+   }
+  },
+  "list-igch1436-mints": {
+   "members_local": [
+    "Amphipolis",
+    "Babylon",
+    "Byblus",
+    "Myriandrus",
+    "Paphos",
+    "Pella",
+    "Tarsus"
+   ],
+   "cover": 3,
+   "paragraphs_with_a_member": 9,
+   "hoard_paragraphs": 24,
+   "works": {
+    "nnan174624": [
+     "H1"
+    ]
+   }
+  },
+  "list-igch1438-mints": {
+   "members_local": [
+    "Abydus",
+    "Amphipolis",
+    "Aradus",
+    "Babylon",
+    "Byblus",
+    "Lampsacus",
+    "Myriandrus",
+    "Sidon",
+    "Tarsus"
+   ],
+   "cover": 4,
+   "paragraphs_with_a_member": 28,
+   "hoard_paragraphs": 214,
+   "works": {
+    "nnan174624": [
+     "H1"
+    ],
+    "nnan49322": [
+     "H1"
+    ]
+   }
+  },
+  "list-igch1441-mints": {
+   "members_local": [
+    "Abydus",
+    "Amphipolis",
+    "Babylon",
+    "Lampsacus",
+    "Miletus",
+    "Pella",
+    "Sidon",
+    "Teos"
+   ],
+   "cover": 3,
+   "paragraphs_with_a_member": 35,
+   "hoard_paragraphs": 214,
+   "works": {
+    "nnan49321": [
+     "H1"
+    ],
+    "nnan49322": [
+     "H1"
+    ]
+   }
+  },
+  "list-igch1443-mints": {
+   "members_local": [
+    "Amphipolis",
+    "Byblus",
+    "Myriandrus",
+    "Tarsus"
+   ],
+   "cover": 2,
+   "paragraphs_with_a_member": 9,
+   "hoard_paragraphs": 30,
+   "works": {
+    "nnan174624": [
+     "H1"
+    ],
+    "nnan49321": [
+     "H1"
+    ]
+   }
+  },
+  "list-igch1444-mints": {
+   "members_local": [
+    "Abydus",
+    "Cius",
+    "Colophon",
+    "Teos"
+   ],
+   "cover": 1,
+   "paragraphs_with_a_member": 9,
+   "hoard_paragraphs": 136,
+   "works": {
+    "nnan49321": [
+     "H1"
+    ],
+    "nnan49322": [
+     "H1"
+    ]
+   }
+  },
+  "list-igch1471-mints": {
+   "members_local": [
+    "Amphipolis",
+    "Babylon",
+    "Lampsacus",
+    "Miletus"
+   ],
+   "cover": 3,
+   "paragraphs_with_a_member": 6,
+   "hoard_paragraphs": 9,
+   "works": {
+    "nnan174624": [
+     "H1"
+    ],
+    "nnan49321": [
+     "H1"
+    ],
+    "nnan49322": [
+     "H1"
+    ]
+   }
+  },
+  "list-igch1472-mints": {
+   "members_local": [
+    "Abydus",
+    "Alexandria",
+    "Citium",
+    "Lampsacus",
+    "Miletus",
+    "Tarsus",
+    "Teos"
+   ],
+   "cover": 6,
+   "paragraphs_with_a_member": 11,
+   "hoard_paragraphs": 33,
+   "works": {
+    "nnan174624": [
+     "H1"
+    ],
+    "nnan49321": [
+     "H1"
+    ],
+    "nnan49322": [
+     "H1"
+    ]
+   }
+  },
+  "list-igch1516-mints": {
+   "members_local": [
+    "Abydus",
+    "Amphipolis",
+    "Babylon",
+    "Byblus",
+    "Lampsacus",
+    "Miletus",
+    "Paphos",
+    "Pella",
+    "Sidon"
+   ],
+   "cover": 4,
+   "paragraphs_with_a_member": 10,
+   "hoard_paragraphs": 19,
+   "works": {
+    "nnan174624": [
+     "H1"
+    ],
+    "nnan49321": [
+     "H1"
+    ],
+    "nnan49322": [
+     "H1"
+    ]
+   }
+  },
+  "list-igch1664-mints": {
+   "members_local": [
+    "Alexandria",
+    "Amathus",
+    "Amphipolis",
+    "Aradus",
+    "Babylon",
+    "Berytus",
+    "Byblus",
+    "Carne",
+    "Citium",
+    "Damascus",
+    "Lampsacus",
+    "Marium",
+    "Miletus",
+    "Myriandrus",
+    "Paphos",
+    "Pella",
+    "Salamis",
+    "Sardis",
+    "Sicyon",
+    "Side",
+    "Sidon",
+    "Tarsus"
+   ],
+   "cover": 4,
+   "paragraphs_with_a_member": 120,
+   "hoard_paragraphs": 321,
+   "works": {
+    "nnan174624": [
+     "H1"
+    ],
+    "nnan49321": [
+     "H1"
+    ],
+    "nnan49322": [
+     "H1"
+    ],
+    "nnan98007": [
+     "H2"
+    ]
+   }
+  },
+  "list-igch1667-mints": {
+   "members_local": [
+    "Amphipolis",
+    "Babylon",
+    "Byblus",
+    "Lampsacus",
+    "Miletus"
+   ],
+   "cover": 3,
+   "paragraphs_with_a_member": 7,
+   "hoard_paragraphs": 20,
+   "works": {
+    "nnan174624": [
+     "H1"
+    ],
+    "nnan49321": [
+     "H1"
+    ],
+    "nnan49322": [
+     "H1"
+    ]
+   }
+  },
+  "list-igch1668-mints": {
+   "members_local": [
+    "Amathus",
+    "Amphipolis",
+    "Lampsacus",
+    "Sidon"
+   ],
+   "cover": 3,
+   "paragraphs_with_a_member": 4,
+   "hoard_paragraphs": 12,
+   "works": {
+    "nnan49322": [
+     "H1"
+    ]
+   }
+  },
+  "list-igch1669-mints": {
+   "members_local": [
+    "Amphipolis",
+    "Babylon",
+    "Lampsacus",
+    "Sidon",
+    "Susa"
+   ],
+   "cover": 4,
+   "paragraphs_with_a_member": 8,
+   "hoard_paragraphs": 17,
+   "works": {
+    "nnan174624": [
+     "H1"
+    ],
+    "nnan49321": [
+     "H1"
+    ],
+    "nnan49322": [
+     "H1"
+    ]
+   }
+  },
+  "list-igch1670-mints": {
+   "members_local": [
+    "Amphipolis",
+    "Lampsacus",
+    "Miletus",
+    "Pella",
+    "Sidon"
+   ],
+   "cover": 3,
+   "paragraphs_with_a_member": 7,
+   "hoard_paragraphs": 24,
+   "works": {
+    "nnan174624": [
+     "H1"
+    ],
+    "nnan49321": [
+     "H1"
+    ],
+    "nnan49322": [
+     "H1"
+    ]
+   }
+  },
+  "list-igch1678-mints": {
+   "members_local": [
+    "Amphipolis",
+    "Babylon",
+    "Byblus",
+    "Lampsacus",
+    "Miletus",
+    "Salamis",
+    "Sidon",
+    "Tarsus"
+   ],
+   "cover": 4,
+   "paragraphs_with_a_member": 8,
+   "hoard_paragraphs": 30,
+   "works": {
+    "nnan174624": [
+     "H1"
+    ],
+    "nnan49321": [
+     "H1"
+    ],
+    "nnan49322": [
+     "H1"
+    ]
+   }
+  },
+  "list-igch1764-mints": {
+   "members_local": [
+    "Abydus",
+    "Babylon",
+    "Lampsacus",
+    "Susa"
+   ],
+   "cover": 3,
+   "paragraphs_with_a_member": 3,
+   "hoard_paragraphs": 17,
+   "works": {
+    "nnan49321": [
+     "H1"
+    ],
+    "nnan49322": [
+     "H1"
+    ]
+   }
+  }
+ }
+}

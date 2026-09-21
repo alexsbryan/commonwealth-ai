@@ -87,16 +87,13 @@
   "Byblus",
   "Lampsacus",
   "Miletus",
-  "Salamis",
-  "Sidon",
-  "Tarsus"
+  "Sidon"
  ],
- "hoard_paragraphs": 30,
- "paragraphs_with_a_member": 8,
- "cover": 4,
+ "hoard_paragraphs": 18,
+ "paragraphs_with_a_member": 7,
+ "cover": 3,
  "works_naming_hoard": [
   "nnan174624",
-  "nnan23257",
   "nnan49321",
   "nnan49322"
  ],

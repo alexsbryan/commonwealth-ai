@@ -52,21 +52,14 @@
   "Lampsacus",
   "Sicyon"
  ],
- "hoard_paragraphs": 146,
- "paragraphs_with_a_member": 13,
+ "hoard_paragraphs": 130,
+ "paragraphs_with_a_member": 10,
  "cover": 3,
  "works_naming_hoard": [
-  "nnan15879",
-  "nnan23257",
-  "nnan40931",
   "nnan49321",
   "nnan49322",
-  "nnan50879",
   "nnan73727",
-  "nnan818",
-  "nnan96021",
-  "nnan97809",
-  "nnan97810"
+  "nnan818"
  ],
  "single_passage": false,
  "question": "Which mints are represented among the coins of the Olympia hoard, found 1922?"

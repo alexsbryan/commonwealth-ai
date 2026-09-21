@@ -25,13 +25,29 @@
   hold >= 1 local member, and the greedy minimum number of paragraphs covering all local
   members. cover == 1 is labelled `single_passage` so it can be reported apart.
 * K0: 15 hand-written lookups in k0.toml, fact copied from one line; this script REFUSES a
-  row whose fact is not on the line its `notes` cites.
+  row whose fact is not on the line its `notes` cites, or is in more than one paragraph.
+* THE INSTALLED CORPUS IS A SUBSET (2026-09-21, for the pod window): the K1 rows were fixed
+  on the 25-work text (gold/_full_corpus.json, commit 6423999ad); the subset is the union of
+  the works rule H ties to those rows' hoards (build_text.SUBSET; refused here if it is not).
+  The default run reads text-subset/, keeps exactly the fixed row ids, and writes every
+  number that moved into gold/_summary.json `moved`. A fixed row that no longer qualifies
+  on the subset is reported `lost`, never silently kept; a new qualifier is not added.
+* bank.toml is bank.src.toml with kinds set BY CONSTRUCTION (k1_list_them_all,
+  k0_look_it_up) and each fact attested by harness/attest.py's own `attest_fact` over the
+  subset's paragraphs; unattested facts are dropped and counted. attest.py itself reads
+  installed chunks, and ei7-ans is not installed, so its count rules have NOT judged these.
 
-    python3 make_bank.py       # writes bank.src.toml, gold/*.json, gold/_summary.json
+    python3 make_bank.py                # text-subset/ -> bank.src.toml, bank.toml, gold/
+    python3 make_bank.py --full-corpus  # text/ -> gold/_full_corpus.json only (the reference)
 """
 import collections, json, pathlib, re, sys, tomllib, unicodedata
 
 HERE = pathlib.Path(__file__).resolve().parent
+sys.path[:0] = [str(HERE), str(HERE.parent.parent / "harness")]
+import attest, build_text  # noqa: E402
+
+FULL = "--full-corpus" in sys.argv
+TEXT = HERE / ("text" if FULL else "text-subset")
 LO, HI, MIN_LOCAL = 4, 40, 4
 TEMPLATES = {
     "mints": "Which mints are represented among the coins of the {name} hoard{when}?",
@@ -56,11 +72,12 @@ def short(label):
 def paragraphs():
     """[(work, line, folded text, heading level or 0)] for every block of every work."""
     out = []
-    for f in sorted((HERE / "text").glob("nnan*.md")):
+    for f in sorted(TEXT.glob("nnan*.md")):
         line = 1
         for block in f.read_text(encoding="utf8").split("\n\n"):
             m = re.match(r"(#+) ", block)
-            out.append((f.stem, line, fold(block), len(m.group(1)) if m else 0))
+            own = block.rsplit(" › ", 1)[-1] if m else block   # a subset heading is matched by its OWN head,
+            out.append((f.stem, line, fold(own), len(m.group(1)) if m else 0, block))  # not its breadcrumb
             line += block.count("\n") + 2
     return out
 
@@ -72,7 +89,7 @@ def hoard_paragraphs(h, name, paras):
     pat = re.compile(rf"(?<!\w)igch {h['igch']}(?!\d)" + (rf"|(?<!\w){n}(?!\w).{{0,30}}?(?<!\w)({near})(?!\w)"
                      rf"|(?<!\w)(hoards?|find|deposit)(?!\w).{{0,30}}?(?<!\w){n}(?!\w)" if name else ""))
     keep, until = [], None                    # `until`: heading level that closes the open section
-    for i, (work, _, text, level) in enumerate(paras):
+    for i, (work, _, text, level, _raw) in enumerate(paras):
         if level and until and level <= until or (until and work != paras[i - 1][0]):
             until = None
         if pat.search(text):
@@ -90,12 +107,11 @@ def cover(sets, universe):
     return n
 
 
-def main():
+NUMBERS = ("members_local", "cover", "paragraphs_with_a_member", "hoard_paragraphs")
+
+
+def k1(paras):
     hoards = json.loads((HERE / "truth/hoards.json").read_text())["hoards"]
-    paras = paragraphs()
-    (HERE / "gold").mkdir(exist_ok=True)
-    for stale in (HERE / "gold").glob("list-*.json"):
-        stale.unlink()
     rows, absent = [], []
     for h in hoards:
         name = re.split(r"[,(]", h["findspot"] or "")[0].strip().strip('"“”')
@@ -124,14 +140,39 @@ def main():
             rows.append(rec)
     dupes = {q for q, n in collections.Counter(r["question"] for r in rows).items() if n > 1}
     absent += [{**r, "reason": "same question text as another hoard"} for r in rows if r["question"] in dupes]
-    rows = [r for r in rows if r["question"] not in dupes]
+    return [r for r in rows if r["question"] not in dupes], absent
+
+
+def main():
+    paras = paragraphs()
+    rows, absent = k1(paras)
+    ref = HERE / "gold" / "_full_corpus.json"
+    if FULL:
+        ref.write_text(json.dumps({"note": "K1 rows as fixed on the 25-work corpus; the subset run must reproduce these ids",
+                                   "rows": {r["id"]: {k: r[k] for k in NUMBERS + ("works",)} for r in rows}},
+                                  indent=1, ensure_ascii=False) + "\n")
+        return print(f"full corpus: {len(rows)} K1 rows -> {ref.name}")
+    fixed = json.loads(ref.read_text())["rows"]
+    union = sorted(set().union(*[set(v["works"]) for v in fixed.values()]))
+    if union != sorted(build_text.SUBSET):
+        sys.exit(f"REFUSED: build_text.SUBSET is not the union of the fixed rows' rule-H works: {union}")
+    lost = sorted(set(fixed) - {r["id"] for r in rows})
+    extra = sorted({r["id"] for r in rows} - set(fixed))
+    rows = [r for r in rows if r["id"] in fixed]
+    moved = {r["id"]: {k: [fixed[r["id"]][k], r[k]] for k in NUMBERS if fixed[r["id"]][k] != r[k]} for r in rows}
+    moved = {i: m for i, m in moved.items() if m}
+    for stale in (HERE / "gold").glob("list-*.json"):
+        stale.unlink()
 
     k0 = tomllib.loads((HERE / "k0.toml").read_text())["questions"]
     for q in k0:
         work, line = re.match(r"(\S+\.md):(\d+)", q["notes"]).groups()
-        text = (HERE / "text" / work).read_text(encoding="utf8").split("\n")[int(line) - 1]
-        if not all(f.casefold() in text.casefold() for f in q["expected_facts"]):
-            sys.exit(f"REFUSED: {q['id']}: fact not on {work}:{line}")
+        text = (TEXT / work).read_text(encoding="utf8").split("\n")[int(line) - 1]
+        if work[:-3] not in build_text.SUBSET or not all(f.casefold() in text.casefold() for f in q["expected_facts"]):
+            sys.exit(f"REFUSED: {q['id']}: fact not on {work}:{line} of the subset")
+        n = sum(all(fold(f) in p[2] for f in q["expected_facts"]) for p in paras)
+        if n != 1:
+            sys.exit(f"REFUSED: {q['id']}: fact is in {n} paragraphs of the subset, not 1")
 
     esc = lambda s: json.dumps(s, ensure_ascii=False)
     out = ['[bank]', 'name = "ontology-proof-ans-v1"', 'corpus = "ei7-ans"',
@@ -140,21 +181,36 @@ def main():
         out += ["[[questions]]", f'id = "{r["id"]}"', 'category = "unattested"', f"question = {esc(r['question'])}",
                 f"expected_facts = {esc(r['facts'])}",
                 f'notes = "{TYPE[r["kind"]]}; IGCH {r["igch"]}; local {len(r["members_local"])}/{len(r["members"])}; '
-                f'cover {r["cover"]}{"; single_passage" if r["single_passage"] else ""}; gold/{r["id"]}.json"', ""]
+                f'cover {r["cover"]}{"; SINGLE_PASSAGE (report apart)" if r["single_passage"] else ""}; gold/{r["id"]}.json"', ""]
         (HERE / "gold" / f"{r['id']}.json").write_text(json.dumps(r, indent=1, ensure_ascii=False) + "\n")
     for q in k0:
         out += ["[[questions]]", f'id = "{q["id"]}"', 'category = "unattested"', f"question = {esc(q['question'])}",
                 f"expected_facts = {esc(q['expected_facts'])}", f"notes = {esc(q['notes'])}", ""]
     (HERE / "bank.src.toml").write_text("\n".join(out), encoding="utf8")
+    raw, folded, dropped, final = [p[4] for p in paras], [p[4].casefold() for p in paras], {}, []
+    for line in out:                             # bank.toml: same rows, kinds set, facts attested
+        if line.startswith("id = "):
+            qid = json.loads(line[5:])
+        if line.startswith("expected_facts = "):
+            facts = json.loads(line[17:])
+            kept = [f for f in facts if attest.attest_fact(f, folded, raw)[0]]
+            if len(kept) < len(facts):
+                dropped[qid] = [f for f in facts if f not in kept]
+            line = f"expected_facts = {esc(kept)}"
+        final.append(line.replace('category = "unattested"',
+                                  f'category = "{"k1_list_them_all" if qid.startswith("list-") else "k0_look_it_up"}"')
+                     if line.startswith("category") else line)
+    (HERE / "bank.toml").write_text("\n".join(final), encoding="utf8")
     by = lambda rs, k: dict(sorted(collections.Counter(r[k] for r in rs).items()))
-    summary = {"k1_rows": len(rows), "k1_by_kind": by(rows, "kind"), "k0_rows": len(k0),
+    summary = {"corpus": "text-subset (9 works)", "lost_on_subset": lost, "qualify_on_subset_but_not_fixed": extra,
+               "moved": moved, "facts_dropped_unattested": dropped, "k1_rows": len(rows), "k1_by_kind": by(rows, "kind"), "k0_rows": len(k0),
                "single_passage_rows": sum(r["single_passage"] for r in rows), "cover_distribution": by(rows, "cover"),
                "paragraphs_with_a_member_distribution": by(rows, "paragraphs_with_a_member"),
                "local_over_members": [f"{len(r['members_local'])}/{len(r['members'])}" for r in rows],
                "hoards_with_a_row": len({r["igch"] for r in rows}),
                "absent_by_reason": dict(collections.Counter(a["reason"].split(":")[0] for a in absent)), "absent": absent}
     (HERE / "gold" / "_summary.json").write_text(json.dumps(summary, indent=1, ensure_ascii=False) + "\n")
-    print(json.dumps({k: v for k, v in summary.items() if k not in ("absent", "local_over_members")}, indent=1))
+    print(json.dumps({k: v for k, v in summary.items() if k not in ("absent", "local_over_members", "moved")}, indent=1))
 
 
 if __name__ == "__main__":

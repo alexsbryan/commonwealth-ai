@@ -71,7 +71,6 @@
   "Citium",
   "Colophon",
   "Lampsacus",
-  "Magnesia ad Maeandrum",
   "Miletus",
   "Salamis",
   "Sardis",
@@ -84,21 +83,19 @@
  "members_local": [
   "Abydus",
   "Alexandria",
-  "Citium",
   "Lampsacus",
   "Miletus",
   "Tarsus",
   "Teos"
  ],
- "hoard_paragraphs": 33,
- "paragraphs_with_a_member": 11,
- "cover": 6,
+ "hoard_paragraphs": 31,
+ "paragraphs_with_a_member": 9,
+ "cover": 5,
  "works_naming_hoard": [
   "nnan174624",
   "nnan49321",
   "nnan49322",
-  "nnan50879",
-  "nnan97810"
+  "nnan50879"
  ],
  "single_passage": false,
  "question": "Which mints are represented among the coins of the Larnaca hoard, found 1870, buried about 300 B.C.?"

@@ -18,17 +18,23 @@
 [corpus]
 id = "ei7-ans"
 name = "ANS monographs: Alexander-era and Hellenistic hoards and mints"
-description = "25 American Numismatic Society monographs (Newell, Thompson, Troxell, Bellinger, Noe), extracted as hoards, coins, mints, rulers and dated attributions."
+description = "Nine American Numismatic Society monographs (Newell, Thompson, Troxell), extracted as hoards, coins, mints, rulers and dated attributions."
 # The text is CC BY-NC 4.0 (ANS Digital Library): local use only, never shared.
 license = "private"
 mesh_sharing = false
 schema_version = 1
 
-# One markdown file: each work under a `# <Title> (<Author>, <year>)` heading, its own
-# headings beneath it (build_text.py writes it; it is gitignored).
+# The nine-work subset (build_text.SUBSET; 231k words, adverts stripped). ONE markdown file
+# inside text-subset/, not the directory: the markdown extractor reads a single file
+# (extractors/markdown.rs `fs::read_to_string(source_path)`; ingest.rs passes the acquired
+# path straight to it), and the only directory-walking extractor, `plaintext`, takes .txt
+# and emits one section-less document per file. A work's identity therefore rides in its
+# headings: every heading is "<Author Series Issue (year)> › <parents> › <head>", because
+# `enrich init --from-corpus` keys a chapter by the heading text alone for markdown corpora
+# (see build_text.py HEADINGS). The per-work files beside it are the same text, for reading.
 [acquire]
 type = "local_file"
-path = "/Users/alexsbryan/dev/commonwealth-ai/research/ontology-retrieval/ontology-proof/ans/text/ans.md"
+path = "/Users/alexsbryan/dev/commonwealth-ai/research/ontology-retrieval/ontology-proof/ans/text-subset/ans-subset.md"
 
 [extract]
 type = "markdown"

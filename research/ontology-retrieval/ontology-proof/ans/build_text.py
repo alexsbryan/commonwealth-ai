@@ -18,7 +18,25 @@ STRIP: the whole teiHeader (it indexes every nomisma person and place), every at
 in printed text. Printed citations such as "IGCH 1664" or a Price number stay: they are the
 book's words and name a hoard, not its contents. The run REFUSES if a truth host survives.
 
-    python3 build_text.py      # writes text/*.md, text/ans.md, manifest.json, truth/hoard_refs.json
+SUBSET (text-subset/, the corpus that is installed): the works rule H ties to at least one
+K1 row fixed on the 25-work corpus (gold/_full_corpus.json) — i.e. the minimum-word set of
+works such that every K1 row's rule-H works are included. It is a union, so it is unique,
+and it is blind to any system output. make_bank.py refuses if SUBSET is not that union.
+Two things differ from text/, both by a shape rule fixed before the subset bank was counted:
+  ADVERTS  a top-level division is dropped when its TEI type is cover / colophon / copyright /
+           dedication (in NNM volumes the "dedication" is the publication committee), or it is
+           not a chapter and holds < 60 words (half-titles, plate stubs), or it is untyped /
+           frontma / backma and its head names the publisher (PUBLISHER). Forewords,
+           introductions, abbreviations, contents, notes, indices and plate keys stay.
+  HEADINGS every heading is written as "<work tag> › <parent> › <own head>". `enrich init
+           --from-corpus` keys a chapter by (chunk title, section_path), and for the markdown
+           extractor section_path never parses (MarkdownChunkMetadata has no `section_type`,
+           which WikipediaChunkMetadata requires: corpus_io.rs build_manifest_from_corpus_rows;
+           seen in ei7-recensus-fineprint/chapters.json, 1273 headings -> 826 chapters, every
+           section_path ""). So the heading text alone is the chapter's identity, and bare
+           heads ("NOTES", "HOARDS", "Asia Minor 1964") would merge across the nine works.
+
+    python3 build_text.py      # writes text/, text-subset/, manifest.json, truth/hoard_refs.json
 """
 import json, pathlib, re, sys
 import xml.etree.ElementTree as ET
@@ -28,6 +46,9 @@ TEI, NUDS = HERE / "raw/tei-ebooks/tei", HERE / "raw/coinhoards/nuds"
 SOURCE = "https://github.com/AmericanNumismaticSociety/tei-ebooks/blob/master/tei/{}"
 LICENCE = "CC BY-NC 4.0 (local use only; not redistributed, mesh_sharing=false)"
 AUTHORS = {"Newell", "Thompson", "Troxell"}
+SUBSET = ["nnan118901", "nnan174624", "nnan40403", "nnan49321", "nnan49322", "nnan50879", "nnan73727", "nnan818", "nnan98007"]
+DROP_TYPES = {"cover", "colophon", "copyright", "dedication"}
+PUBLISHER = re.compile(r"PUBLICATIONS|NUMISMATIC NOTES|NUMISMATIC STUDIES|AMERICAN NUMISMATIC SOCIETY", re.I)
 T = "{http://www.tei-c.org/ns/1.0}"
 SKIP = {"teiHeader", "graphic", "figure", "pb", "titlePage"}
 LEAF = {"p", "item", "note", "byline", "closer", "bibl", "q", "titlePart", "signed", "dateline"}
@@ -53,12 +74,30 @@ def clean(s):
     return re.sub(r"\s+", " ", URL.sub("", s)).strip()
 
 
-def walk(el, depth, out):
+def advert(div):
+    head = div.find(T + "head")
+    words = len("".join(div.itertext()).split())
+    kind = div.get("type")
+    return (kind in DROP_TYPES or (kind != "chapter" and words < 60)
+            or (kind in (None, "frontma", "backma") and head is not None and PUBLISHER.search("".join(head.itertext()))))
+
+
+def walk(el, depth, out, crumbs=None, cut=None):
+    """`crumbs` (subset mode): the heading chain, written into every heading. `cut`: a list
+    that collects the word count of each advert division dropped."""
     tag = el.tag.replace(T, "")
     if tag in SKIP:
         return
+    if cut is not None and tag == "div1" and advert(el):
+        cut.append(len("".join(el.itertext()).split()))
+        return
     if tag == "head":
-        out.append("#" * min(depth + 1, 6) + " " + clean(inner(el)))
+        name = clean(inner(el))
+        if crumbs is not None:
+            del crumbs[depth - 1:]
+            crumbs.append(name)
+            name = " › ".join(c for c in crumbs if c)
+        out.append("#" * min(depth + 1, 6) + " " + name)
     elif tag == "table":
         out.append("\n".join("| " + " | ".join(clean(inner(c)) for c in r.iter(T + "cell")) + " |"
                              for r in el.iter(T + "row")))
@@ -69,14 +108,14 @@ def walk(el, depth, out):
         for c in el:
             if c.tag.replace(T, "") in NESTS | {"head"} or c.tag.replace(T, "").startswith("div"):
                 out.append(clean(run)); run = c.tail or ""
-                walk(c, depth + tag.startswith("div"), out)
+                walk(c, depth + tag.startswith("div"), out, crumbs, cut)
             else:
                 run += flat(c)
         out.append(clean(run))
         return
     for n in el.iter(T + "note"):                # notes inside a leaf block follow it
         if n is not el:
-            walk(n, depth, out)
+            walk(n, depth, out, crumbs, cut)
 
 
 def header(root):
@@ -105,13 +144,27 @@ def main():
         if (m := LEAK.search(md)):
             sys.exit(f"REFUSED: {f.name} still carries {m.group(0)!r} after stripping")
         (HERE / "text" / f"{f.stem}.md").write_text(md, encoding="utf8")
+        sub = None
+        if f.stem in SUBSET:
+            abbr = "".join(w[0] for w in h["series"].split() if w[0].isupper())
+            tag = f"{h['author'].split(',')[0]} {abbr} {h['issue']} ({h['date']})"
+            out, cut = [f"# {tag} › {h['title']}"], []
+            walk(root.find(T + "text"), 1, out, [tag], cut)
+            sub = "\n\n".join(b for b in out if b.strip("#- |›")) + "\n"
+            if (m := LEAK.search(sub)):
+                sys.exit(f"REFUSED: subset {f.name} still carries {m.group(0)!r}")
+            (HERE / "text-subset").mkdir(exist_ok=True)
+            (HERE / "text-subset" / f"{f.stem}.md").write_text(sub, encoding="utf8")
         ids = set(re.findall(r"coinhoards\.org/id/(igch\d{4})", raw))
         other += len(set(re.findall(r"coinhoards\.org/id/((?:ch|change)\.[\w.]+)", raw)))
         for i in ids:
             refs.setdefault(i, {}).setdefault(f.stem, []).append("H1")
         manifest.append({"work": f.stem, **{k: h[k] for k in ("title", "author", "date", "series", "issue")},
                          "source_url": SOURCE.format(f.name), "licence": LICENCE,
-                         "words": len(md.split()), "hoards_H1": len(ids)})
+                         "words": len(md.split()), "hoards_H1": len(ids),
+                         **({"subset": {"tag": tag, "words": len(sub.split()), "advert_divisions_dropped": len(cut),
+                                        "advert_words_dropped": sum(cut), "headings": sub.count("\n#") + 1,
+                                        "paragraphs": sub.count("\n\n") + 1}} if sub else {})})
     nnm = {m["issue"]: m["work"] for m in manifest if m["series"] == "Numismatic Notes and Monographs"}
     for n in sorted(NUDS.glob("igch*.xml")):
         cited = re.findall(r"<reference[^>]*>(.*?)</reference>", n.read_text(encoding="utf8"), re.S)
@@ -121,13 +174,21 @@ def main():
         m["hoards_H2"] = sum("H2" in v.get(m["work"], []) for v in refs.values())
     (HERE / "text" / "ans.md").write_text("\n".join((HERE / "text" / f"{m['work']}.md").read_text(encoding="utf8")
                                                     for m in manifest), encoding="utf8")
+    subset = [m for m in manifest if "subset" in m]
+    (HERE / "text-subset" / "ans-subset.md").write_text("\n".join(
+        (HERE / "text-subset" / f"{m['work']}.md").read_text(encoding="utf8") for m in subset), encoding="utf8")
     (HERE / "manifest.json").write_text(json.dumps({"rule_W": __doc__.split("RULE H")[0].split("RULE W")[1].strip(),
         "licence": LICENCE, "works": manifest, "total_words": sum(m["words"] for m in manifest),
+        "subset_works": len(subset), "subset_words": sum(m["subset"]["words"] for m in subset),
+        "subset_advert_words_dropped": sum(m["subset"]["advert_words_dropped"] for m in subset),
         "non_igch_coinhoards_refs_ignored": other}, indent=1, ensure_ascii=False) + "\n")
     (HERE / "truth" / "hoard_refs.json").write_text(json.dumps(dict(sorted(refs.items())), indent=1) + "\n")
     print(f"works {len(manifest)}  words {sum(m['words'] for m in manifest)}  hoards {len(refs)} "
           f"(H1 {sum(any('H1' in r for r in v.values()) for v in refs.values())}, "
           f"H2 {sum(any('H2' in r for r in v.values()) for v in refs.values())})")
+    print(f"subset {len(subset)} works  {sum(m['subset']['words'] for m in subset)} words  "
+          f"adverts dropped {sum(m['subset']['advert_words_dropped'] for m in subset)} words "
+          f"in {sum(m['subset']['advert_divisions_dropped'] for m in subset)} divisions")
     for m in manifest:
         print(f"  {m['work']:12} {m['author'].split(',')[0]:9} {m['date']} {m['series'][:3]} {m['issue']:>3} "
               f"{m['words']:>7}w H1={m['hoards_H1']:<3} H2={m['hoards_H2']:<3} {m['title'][:50]}")

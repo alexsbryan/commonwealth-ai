@@ -56,19 +56,14 @@
   "Amphipolis",
   "Babylon",
   "Byblus",
-  "Myriandrus",
   "Paphos",
-  "Pella",
-  "Tarsus"
+  "Pella"
  ],
- "hoard_paragraphs": 24,
- "paragraphs_with_a_member": 9,
- "cover": 3,
+ "hoard_paragraphs": 18,
+ "paragraphs_with_a_member": 6,
+ "cover": 2,
  "works_naming_hoard": [
-  "nnan131509",
   "nnan174624",
-  "nnan23257",
-  "nnan28180",
   "nnan49321",
   "nnan49322",
   "nnan50879",

@@ -1,18 +1,418 @@
 {
- "k1_rows": 34,
+ "corpus": "text-subset (9 works)",
+ "lost_on_subset": [
+  "list-igch1443-mints",
+  "list-igch1764-mints"
+ ],
+ "qualify_on_subset_but_not_fixed": [],
+ "moved": {
+  "list-igch0076-mints": {
+   "paragraphs_with_a_member": [
+    9,
+    6
+   ],
+   "hoard_paragraphs": [
+    21,
+    13
+   ]
+  },
+  "list-igch0077-mints": {
+   "hoard_paragraphs": [
+    52,
+    44
+   ]
+  },
+  "list-igch0081-mints": {
+   "paragraphs_with_a_member": [
+    9,
+    6
+   ],
+   "hoard_paragraphs": [
+    30,
+    23
+   ]
+  },
+  "list-igch0083-mints": {
+   "paragraphs_with_a_member": [
+    25,
+    24
+   ],
+   "hoard_paragraphs": [
+    374,
+    364
+   ]
+  },
+  "list-igch0091-mints": {
+   "paragraphs_with_a_member": [
+    29,
+    23
+   ],
+   "hoard_paragraphs": [
+    173,
+    92
+   ]
+  },
+  "list-igch0091-denominations": {
+   "hoard_paragraphs": [
+    173,
+    92
+   ]
+  },
+  "list-igch0176-mints": {
+   "paragraphs_with_a_member": [
+    13,
+    10
+   ],
+   "hoard_paragraphs": [
+    146,
+    130
+   ]
+  },
+  "list-igch0260-mints": {
+   "hoard_paragraphs": [
+    26,
+    19
+   ]
+  },
+  "list-igch0270-mints": {
+   "members_local": [
+    [
+     "Aenianes",
+     "Chalcis",
+     "Histiaea",
+     "Lamia",
+     "Megalopolis",
+     "Rhodes",
+     "Sicyon"
+    ],
+    [
+     "Aenianes",
+     "Chalcis",
+     "Histiaea",
+     "Lamia",
+     "Megalopolis",
+     "Sicyon"
+    ]
+   ],
+   "paragraphs_with_a_member": [
+    15,
+    11
+   ],
+   "hoard_paragraphs": [
+    141,
+    125
+   ]
+  },
+  "list-igch0271-mints": {
+   "hoard_paragraphs": [
+    2170,
+    2150
+   ]
+  },
+  "list-igch1423-mints": {
+   "members_local": [
+    [
+     "Abydus",
+     "Alexandreia Troas",
+     "Amphipolis",
+     "Aradus",
+     "Babylon",
+     "Lampsacus",
+     "Miletus",
+     "Pergamum",
+     "Sicyon"
+    ],
+    [
+     "Abydus",
+     "Amphipolis",
+     "Aradus",
+     "Babylon",
+     "Lampsacus",
+     "Miletus"
+    ]
+   ],
+   "cover": [
+    3,
+    2
+   ],
+   "paragraphs_with_a_member": [
+    6,
+    3
+   ],
+   "hoard_paragraphs": [
+    24,
+    5
+   ]
+  },
+  "list-igch1436-mints": {
+   "members_local": [
+    [
+     "Amphipolis",
+     "Babylon",
+     "Byblus",
+     "Myriandrus",
+     "Paphos",
+     "Pella",
+     "Tarsus"
+    ],
+    [
+     "Amphipolis",
+     "Babylon",
+     "Byblus",
+     "Paphos",
+     "Pella"
+    ]
+   ],
+   "cover": [
+    3,
+    2
+   ],
+   "paragraphs_with_a_member": [
+    9,
+    6
+   ],
+   "hoard_paragraphs": [
+    24,
+    18
+   ]
+  },
+  "list-igch1438-mints": {
+   "members_local": [
+    [
+     "Abydus",
+     "Amphipolis",
+     "Aradus",
+     "Babylon",
+     "Byblus",
+     "Lampsacus",
+     "Myriandrus",
+     "Sidon",
+     "Tarsus"
+    ],
+    [
+     "Abydus",
+     "Amphipolis",
+     "Aradus",
+     "Babylon",
+     "Byblus",
+     "Lampsacus",
+     "Sidon"
+    ]
+   ],
+   "cover": [
+    4,
+    3
+   ],
+   "paragraphs_with_a_member": [
+    28,
+    25
+   ],
+   "hoard_paragraphs": [
+    214,
+    208
+   ]
+  },
+  "list-igch1441-mints": {
+   "paragraphs_with_a_member": [
+    35,
+    33
+   ],
+   "hoard_paragraphs": [
+    214,
+    208
+   ]
+  },
+  "list-igch1444-mints": {
+   "hoard_paragraphs": [
+    136,
+    130
+   ]
+  },
+  "list-igch1472-mints": {
+   "members_local": [
+    [
+     "Abydus",
+     "Alexandria",
+     "Citium",
+     "Lampsacus",
+     "Miletus",
+     "Tarsus",
+     "Teos"
+    ],
+    [
+     "Abydus",
+     "Alexandria",
+     "Lampsacus",
+     "Miletus",
+     "Tarsus",
+     "Teos"
+    ]
+   ],
+   "cover": [
+    6,
+    5
+   ],
+   "paragraphs_with_a_member": [
+    11,
+    9
+   ],
+   "hoard_paragraphs": [
+    33,
+    31
+   ]
+  },
+  "list-igch1664-mints": {
+   "paragraphs_with_a_member": [
+    120,
+    111
+   ],
+   "hoard_paragraphs": [
+    321,
+    294
+   ]
+  },
+  "list-igch1678-mints": {
+   "members_local": [
+    [
+     "Amphipolis",
+     "Babylon",
+     "Byblus",
+     "Lampsacus",
+     "Miletus",
+     "Salamis",
+     "Sidon",
+     "Tarsus"
+    ],
+    [
+     "Amphipolis",
+     "Babylon",
+     "Byblus",
+     "Lampsacus",
+     "Miletus",
+     "Sidon"
+    ]
+   ],
+   "cover": [
+    4,
+    3
+   ],
+   "paragraphs_with_a_member": [
+    8,
+    7
+   ],
+   "hoard_paragraphs": [
+    30,
+    18
+   ]
+  }
+ },
+ "facts_dropped_unattested": {
+  "list-igch0076-mints": [
+   "Ptolemais-Ake"
+  ],
+  "list-igch0083-mints": [
+   "Ptolemais-Ake"
+  ],
+  "list-igch0091-denominations": [
+   "Drachma"
+  ],
+  "list-igch0095-mints": [
+   "Ptolemais-Ake"
+  ],
+  "list-igch0260-mints": [
+   "Patrae"
+  ],
+  "list-igch0270-mints": [
+   "Thebae"
+  ],
+  "list-igch0410-mints": [
+   "Magnesia ad Maeandrum",
+   "Ptolemais-Ake"
+  ],
+  "list-igch0866-mints": [
+   "Aenus",
+   "Alexandreia Troas",
+   "Calchedon",
+   "Callatis",
+   "Heracleia Pontica",
+   "Lysimachia",
+   "Magnesia ad Maeandrum",
+   "Mesembria",
+   "Odessus",
+   "Ptolemais-Ake",
+   "Sestos",
+   "Tomis"
+  ],
+  "list-igch0958-mints": [
+   "Alexandreia Troas",
+   "Callatis",
+   "Lysimachia",
+   "Odessus",
+   "Ptolemais-Ake",
+   "Tomis"
+  ],
+  "list-igch1395-mints": [
+   "Magnesia ad Maeandrum"
+  ],
+  "list-igch1423-mints": [
+   "Aenus",
+   "Alexandreia Troas",
+   "Heracleia Pontica",
+   "Laodicea ad Mare",
+   "Lysimachia",
+   "Magnesia ad Maeandrum",
+   "Ptolemais-Ake",
+   "Seleuceia Pieria",
+   "Seleuceia ad Tigrim",
+   "Sestos"
+  ],
+  "list-igch1438-mints": [
+   "Ptolemais-Ake"
+  ],
+  "list-igch1441-mints": [
+   "Magnesia ad Maeandrum"
+  ],
+  "list-igch1444-mints": [
+   "Magnesia ad Maeandrum"
+  ],
+  "list-igch1472-mints": [
+   "Magnesia ad Maeandrum",
+   "Ptolemais-Ake"
+  ],
+  "list-igch1516-mints": [
+   "Callatis",
+   "Magnesia ad Maeandrum",
+   "Ptolemais-Ake"
+  ],
+  "list-igch1664-mints": [
+   "Ptolemais-Ake"
+  ],
+  "list-igch1667-mints": [
+   "Ptolemais-Ake"
+  ],
+  "list-igch1668-mints": [
+   "Ptolemais-Ake"
+  ],
+  "list-igch1670-mints": [
+   "Ptolemais-Ake"
+  ],
+  "list-igch1678-mints": [
+   "Ptolemais-Ake"
+  ]
+ },
+ "k1_rows": 32,
  "k1_by_kind": {
   "denominations": 1,
-  "mints": 33
+  "mints": 31
  },
  "k0_rows": 15,
  "single_passage_rows": 3,
  "cover_distribution": {
   "1": 3,
-  "2": 8,
-  "3": 14,
-  "4": 6,
-  "5": 1,
-  "6": 1,
+  "2": 9,
+  "3": 13,
+  "4": 4,
+  "5": 2,
   "10": 1
  },
  "paragraphs_with_a_member_distribution": {
@@ -20,21 +420,20 @@
   "3": 4,
   "4": 2,
   "5": 1,
-  "6": 2,
-  "7": 2,
-  "8": 2,
-  "9": 5,
-  "10": 2,
+  "6": 4,
+  "7": 3,
+  "8": 1,
+  "9": 2,
+  "10": 3,
   "11": 3,
-  "13": 1,
   "14": 1,
-  "15": 2,
+  "15": 1,
+  "23": 1,
+  "24": 1,
   "25": 1,
-  "28": 1,
-  "29": 1,
-  "35": 1,
+  "33": 1,
   "110": 1,
-  "120": 1
+  "111": 1
  },
  "local_over_members": [
   "4/7",
@@ -47,7 +446,7 @@
   "4/8",
   "4/5",
   "4/7",
-  "7/8",
+  "6/8",
   "11/11",
   "4/4",
   "8/11",
@@ -55,28 +454,26 @@
   "5/37",
   "5/14",
   "5/7",
-  "9/36",
-  "7/12",
-  "9/13",
+  "6/36",
+  "5/12",
+  "7/13",
   "8/10",
-  "4/10",
   "4/5",
   "4/10",
-  "7/20",
+  "6/20",
   "9/25",
   "22/23",
   "5/18",
   "4/11",
   "5/13",
   "5/16",
-  "8/20",
-  "4/23"
+  "6/20"
  ],
- "hoards_with_a_row": 33,
+ "hoards_with_a_row": 31,
  "absent_by_reason": {
-  "Q3": 91,
+  "Q3": 90,
   "Q1": 269,
-  "Q2": 4,
+  "Q2": 7,
   "same question text as another hoard": 4
  },
  "absent": [
@@ -265,7 +662,6 @@
     "Triobol"
    ],
    "members_in_corpus": [
-    "Drachma",
     "Stater",
     "Tetradrachm",
     "Triobol"
@@ -327,7 +723,6 @@
     "Triobol"
    ],
    "members_in_corpus": [
-    "Drachma",
     "Tetradrachm",
     "Tetrobol",
     "Triobol"
@@ -336,16 +731,13 @@
     "Tetradrachm",
     "Tetrobol"
    ],
-   "hoard_paragraphs": 21,
-   "paragraphs_with_a_member": 4,
+   "hoard_paragraphs": 13,
+   "paragraphs_with_a_member": 3,
    "cover": 2,
    "works_naming_hoard": [
     "nnan118901",
-    "nnan15879",
     "nnan174624",
-    "nnan23257",
     "nnan40403",
-    "nnan53903",
     "nnan98007"
    ],
    "single_passage": false,
@@ -919,7 +1311,6 @@
     "Triobol"
    ],
    "members_in_corpus": [
-    "Drachma",
     "Stater",
     "Tetradrachm",
     "Tetrobol",
@@ -1006,7 +1397,6 @@
    ],
    "members_in_corpus": [
     "Didrachm",
-    "Drachma",
     "Tetradrachm",
     "Tetrobol"
    ],
@@ -1264,8 +1654,6 @@
     "Triobol"
    ],
    "members_in_corpus": [
-    "Drachma",
-    "Hemiobol",
     "Obol",
     "Stater",
     "Tetradrachm",
@@ -1347,7 +1735,6 @@
    ],
    "members_in_corpus": [
     "Alexander III of Macedon",
-    "Lachares",
     "Philip II"
    ],
    "members_local": [
@@ -1524,7 +1911,6 @@
     "Tyre"
    ],
    "members_in_corpus": [
-    "Alexandreia Troas",
     "Amphipolis",
     "Aradus",
     "Athens",
@@ -1532,7 +1918,6 @@
     "Carrhae",
     "Citium",
     "Lampsacus",
-    "Magnesia ad Maeandrum",
     "Marathus",
     "Miletus",
     "Myriandrus",
@@ -1547,17 +1932,12 @@
     "Tyre"
    ],
    "members_local": [],
-   "hoard_paragraphs": 8,
+   "hoard_paragraphs": 3,
    "paragraphs_with_a_member": 0,
    "cover": 0,
    "works_naming_hoard": [
     "nnan174624",
-    "nnan40931",
-    "nnan49321",
-    "nnan50879",
-    "nnan96021",
-    "nnan97809",
-    "nnan97810"
+    "nnan49321"
    ],
    "single_passage": false,
    "reason": "Q3: 0 local members"
@@ -1593,17 +1973,12 @@
     "Lysimachus"
    ],
    "members_local": [],
-   "hoard_paragraphs": 8,
+   "hoard_paragraphs": 3,
    "paragraphs_with_a_member": 0,
    "cover": 0,
    "works_naming_hoard": [
     "nnan174624",
-    "nnan40931",
-    "nnan49321",
-    "nnan50879",
-    "nnan96021",
-    "nnan97809",
-    "nnan97810"
+    "nnan49321"
    ],
    "single_passage": false,
    "reason": "Q3: 0 local members"
@@ -1682,7 +2057,6 @@
     "Citium",
     "Ecbatana",
     "Lampsacus",
-    "Magnesia ad Maeandrum",
     "Miletus",
     "Phaselis",
     "Salamis",
@@ -1863,7 +2237,6 @@
     "Babylon",
     "Byzantium",
     "Epidaurus",
-    "Magnesia ad Maeandrum",
     "Miletus",
     "Sicyon",
     "Tarsus",
@@ -1873,15 +2246,13 @@
     "Epidaurus",
     "Miletus"
    ],
-   "hoard_paragraphs": 16,
-   "paragraphs_with_a_member": 13,
+   "hoard_paragraphs": 6,
+   "paragraphs_with_a_member": 4,
    "cover": 1,
    "works_naming_hoard": [
-    "nnan15879",
     "nnan40403",
     "nnan49321",
-    "nnan49322",
-    "nnan96021"
+    "nnan49322"
    ],
    "single_passage": true,
    "reason": "Q3: 2 local members"
@@ -1918,15 +2289,13 @@
     "Lysimachus"
    ],
    "members_local": [],
-   "hoard_paragraphs": 16,
+   "hoard_paragraphs": 6,
    "paragraphs_with_a_member": 0,
    "cover": 0,
    "works_naming_hoard": [
-    "nnan15879",
     "nnan40403",
     "nnan49321",
-    "nnan49322",
-    "nnan96021"
+    "nnan49322"
    ],
    "single_passage": false,
    "reason": "Q3: 0 local members"
@@ -2008,16 +2377,13 @@
     "Thebes"
    ],
    "members_in_corpus": [
-    "Alexandreia Troas",
     "Amphipolis",
     "Athens",
-    "Calchedon",
     "Cius",
     "Cyzicus",
     "Ephesus",
     "Lampsacus",
     "Larissa, Thessaly",
-    "Magnesia ad Maeandrum",
     "Pella",
     "Pergamum",
     "Perinthus",
@@ -2072,7 +2438,6 @@
    ],
    "members_in_corpus": [
     "Alexander III of Macedon",
-    "Eumenes I of Pergamum",
     "Lysimachus"
    ],
    "members_local": [],
@@ -2143,25 +2508,19 @@
    ],
    "members_in_corpus": [
     "Athens",
-    "Carystus",
     "Chalcis",
     "Histiaea",
     "Rhodes"
    ],
-   "members_local": [
-    "Carystus",
-    "Chalcis"
-   ],
-   "hoard_paragraphs": 10,
-   "paragraphs_with_a_member": 3,
-   "cover": 1,
+   "members_local": [],
+   "hoard_paragraphs": 1,
+   "paragraphs_with_a_member": 0,
+   "cover": 0,
    "works_naming_hoard": [
-    "nnan131509",
-    "nnan49321",
-    "nnan96021"
+    "nnan49321"
    ],
-   "single_passage": true,
-   "reason": "Q3: 2 local members"
+   "single_passage": false,
+   "reason": "Q3: 0 local members"
   },
   {
    "id": "list-igch0175-rulers",
@@ -2199,18 +2558,14 @@
     "Alexander III of Macedon",
     "Lysimachus",
     "Philip II",
-    "Ptolemy I Soter",
-    "Ptolemy II Philadelphus",
-    "Ptolemy III Euergetes"
+    "Ptolemy II Philadelphus"
    ],
    "members_local": [],
-   "hoard_paragraphs": 10,
+   "hoard_paragraphs": 1,
    "paragraphs_with_a_member": 0,
    "cover": 0,
    "works_naming_hoard": [
-    "nnan131509",
-    "nnan49321",
-    "nnan96021"
+    "nnan49321"
    ],
    "single_passage": false,
    "reason": "Q3: 0 local members"
@@ -2245,20 +2600,17 @@
    ],
    "members_in_corpus": [
     "Didrachm",
-    "Drachma",
     "Stater",
     "Tetradrachm",
     "Tetrobol",
     "Triobol"
    ],
    "members_local": [],
-   "hoard_paragraphs": 10,
+   "hoard_paragraphs": 1,
    "paragraphs_with_a_member": 0,
    "cover": 0,
    "works_naming_hoard": [
-    "nnan131509",
-    "nnan49321",
-    "nnan96021"
+    "nnan49321"
    ],
    "single_passage": false,
    "reason": "Q3: 0 local members"
@@ -2298,28 +2650,20 @@
    "members_in_corpus": [
     "Alexander III of Macedon",
     "Lysimachus",
-    "Ptolemy I Soter",
     "Ptolemy II Philadelphus"
    ],
    "members_local": [
     "Lysimachus",
     "Ptolemy II Philadelphus"
    ],
-   "hoard_paragraphs": 146,
-   "paragraphs_with_a_member": 3,
+   "hoard_paragraphs": 130,
+   "paragraphs_with_a_member": 2,
    "cover": 2,
    "works_naming_hoard": [
-    "nnan15879",
-    "nnan23257",
-    "nnan40931",
     "nnan49321",
     "nnan49322",
-    "nnan50879",
     "nnan73727",
-    "nnan818",
-    "nnan96021",
-    "nnan97809",
-    "nnan97810"
+    "nnan818"
    ],
    "single_passage": false,
    "reason": "Q3: 2 local members"
@@ -2355,7 +2699,6 @@
     "Triobol"
    ],
    "members_in_corpus": [
-    "Drachma",
     "Stater",
     "Tetradrachm",
     "Triobol"
@@ -2364,21 +2707,14 @@
     "Stater",
     "Tetradrachm"
    ],
-   "hoard_paragraphs": 146,
-   "paragraphs_with_a_member": 37,
+   "hoard_paragraphs": 130,
+   "paragraphs_with_a_member": 36,
    "cover": 2,
    "works_naming_hoard": [
-    "nnan15879",
-    "nnan23257",
-    "nnan40931",
     "nnan49321",
     "nnan49322",
-    "nnan50879",
     "nnan73727",
-    "nnan818",
-    "nnan96021",
-    "nnan97809",
-    "nnan97810"
+    "nnan818"
    ],
    "single_passage": false,
    "reason": "Q3: 2 local members"
@@ -2430,26 +2766,22 @@
     "Sidon"
    ],
    "members_in_corpus": [
-    "Alexandreia Troas",
     "Amphipolis",
-    "Apameia in Syria",
     "Athens",
     "Babylon",
     "Chios",
     "Cius",
     "Damascus",
     "Lampsacus",
-    "Laodicea ad Mare",
     "Pella",
     "Sardis",
     "Sidon"
    ],
    "members_local": [],
-   "hoard_paragraphs": 2,
+   "hoard_paragraphs": 1,
    "paragraphs_with_a_member": 0,
    "cover": 0,
    "works_naming_hoard": [
-    "nnan15879",
     "nnan49321"
    ],
    "single_passage": false,
@@ -2490,17 +2822,14 @@
    "members_in_corpus": [
     "Alexander III of Macedon",
     "Antiochus Hierax",
-    "Antiochus II Theos",
     "Lysimachus",
-    "Ptolemy I Soter",
     "Ptolemy II Philadelphus"
    ],
    "members_local": [],
-   "hoard_paragraphs": 2,
+   "hoard_paragraphs": 1,
    "paragraphs_with_a_member": 0,
    "cover": 0,
    "works_naming_hoard": [
-    "nnan15879",
     "nnan49321"
    ],
    "single_passage": false,
@@ -2586,7 +2915,6 @@
     "Athens",
     "Babylon",
     "Citium",
-    "Clazomenae",
     "Colophon",
     "Cyrene",
     "Ephesus",
@@ -2653,9 +2981,7 @@
    ],
    "members_in_corpus": [
     "Alexander III of Macedon",
-    "Antiochus II Theos",
     "Lysimachus",
-    "Ptolemy I Soter",
     "Ptolemy II Philadelphus"
    ],
    "members_local": [],
@@ -3050,7 +3376,6 @@
    ],
    "members_in_corpus": [
     "Didrachm",
-    "Drachma",
     "Tetradrachm",
     "Tetrobol",
     "Triobol"
@@ -3093,24 +3418,7 @@
     "Sicyon",
     "Thebes"
    ],
-   "members_in_corpus": [
-    "Histiaea",
-    "Megalopolis",
-    "Rhodes",
-    "Sicyon",
-    "Thebes"
-   ],
-   "members_local": [
-    "Thebes"
-   ],
-   "hoard_paragraphs": 1,
-   "paragraphs_with_a_member": 1,
-   "cover": 1,
-   "works_naming_hoard": [
-    "nnan51012"
-   ],
-   "single_passage": true,
-   "reason": "Q3: 1 local members"
+   "reason": "Q2: no paragraph anchors 'Thebes'"
   },
   {
    "id": "list-igch0233-rulers",
@@ -3156,21 +3464,7 @@
     "Tetrobol",
     "Triobol"
    ],
-   "members_in_corpus": [
-    "Denarius",
-    "Drachma",
-    "Tetrobol",
-    "Triobol"
-   ],
-   "members_local": [],
-   "hoard_paragraphs": 1,
-   "paragraphs_with_a_member": 0,
-   "cover": 0,
-   "works_naming_hoard": [
-    "nnan51012"
-   ],
-   "single_passage": false,
-   "reason": "Q3: 0 local members"
+   "reason": "Q2: no paragraph anchors 'Thebes'"
   },
   {
    "id": "list-igch0242-rulers",
@@ -3396,7 +3690,6 @@
    ],
    "members_in_corpus": [
     "Denarius",
-    "Drachma",
     "Tetradrachm",
     "Triobol"
    ],
@@ -3405,11 +3698,10 @@
     "Tetradrachm",
     "Triobol"
    ],
-   "hoard_paragraphs": 2170,
+   "hoard_paragraphs": 2150,
    "paragraphs_with_a_member": 17,
    "cover": 3,
    "works_naming_hoard": [
-    "nnan51012",
     "nnan73727"
    ],
    "single_passage": false,
@@ -3786,12 +4078,11 @@
     "Amphipolis",
     "Miletus"
    ],
-   "hoard_paragraphs": 7,
+   "hoard_paragraphs": 5,
    "paragraphs_with_a_member": 2,
    "cover": 2,
    "works_naming_hoard": [
     "nnan174624",
-    "nnan23257",
     "nnan49321"
    ],
    "single_passage": false,
@@ -3852,18 +4143,16 @@
     "Tetrobol"
    ],
    "members_in_corpus": [
-    "Drachma",
     "Stater",
     "Tetradrachm",
     "Tetrobol"
    ],
    "members_local": [],
-   "hoard_paragraphs": 7,
+   "hoard_paragraphs": 5,
    "paragraphs_with_a_member": 0,
    "cover": 0,
    "works_naming_hoard": [
     "nnan174624",
-    "nnan23257",
     "nnan49321"
    ],
    "single_passage": false,
@@ -4036,7 +4325,6 @@
     "Tyre"
    ],
    "members_in_corpus": [
-    "Alexandreia Troas",
     "Alexandria",
     "Amphipolis",
     "Aradus",
@@ -4045,8 +4333,6 @@
     "Citium",
     "Ecbatana",
     "Lampsacus",
-    "Lysimachia",
-    "Magnesia ad Maeandrum",
     "Miletus",
     "Myriandrus",
     "Pella",
@@ -4483,7 +4769,6 @@
     "Damascus",
     "Ecbatana",
     "Lampsacus",
-    "Magnesia ad Maeandrum",
     "Marathus",
     "Miletus",
     "Pella",
@@ -4544,8 +4829,6 @@
    ],
    "members_in_corpus": [
     "Alexander III of Macedon",
-    "Attalus I",
-    "Eumenes I of Pergamum",
     "Lysimachus",
     "Philip II"
    ],
@@ -4846,7 +5129,6 @@
     "Byblus",
     "Colophon",
     "Lampsacus",
-    "Magnesia ad Maeandrum",
     "Pella",
     "Sidon",
     "Teos"
@@ -5326,25 +5608,20 @@
    ],
    "members_in_corpus": [
     "Citium",
-    "Idalium",
-    "Lapethus",
     "Paphos",
     "Salamis"
    ],
-   "members_local": [
-    "Citium"
-   ],
-   "hoard_paragraphs": 8,
-   "paragraphs_with_a_member": 2,
-   "cover": 1,
+   "members_local": [],
+   "hoard_paragraphs": 5,
+   "paragraphs_with_a_member": 0,
+   "cover": 0,
    "works_naming_hoard": [
     "nnan174624",
     "nnan49321",
-    "nnan50879",
-    "nnan97810"
+    "nnan50879"
    ],
-   "single_passage": true,
-   "reason": "Q3: 1 local members"
+   "single_passage": false,
+   "reason": "Q3: 0 local members"
   },
   {
    "id": "list-igch1272-rulers",
@@ -5595,8 +5872,6 @@
    ],
    "members_in_corpus": [
     "Abydus",
-    "Clazomenae",
-    "Magnesia ad Maeandrum",
     "Mylasa",
     "Teos"
    ],
@@ -5879,24 +6154,7 @@
     "Tetarte",
     "Tetradrachm"
    ],
-   "members_in_corpus": [
-    "Didrachm",
-    "Drachma",
-    "Hemidrachm",
-    "Stater",
-    "Tetradrachm"
-   ],
-   "members_local": [
-    "Hemidrachm"
-   ],
-   "hoard_paragraphs": 26,
-   "paragraphs_with_a_member": 1,
-   "cover": 1,
-   "works_naming_hoard": [
-    "nnan51012"
-   ],
-   "single_passage": true,
-   "reason": "Q3: 1 local members"
+   "reason": "Q2: no paragraph anchors 'Marmaris'"
   },
   {
    "id": "list-igch1357-mints",
@@ -5981,7 +6239,6 @@
    ],
    "members_in_corpus": [
     "Byzantium",
-    "Calchedon",
     "Cius",
     "Salamis"
    ],
@@ -6484,18 +6741,15 @@
     "Thebes",
     "Tyre"
    ],
-   "members_local": [
-    "Tarsus"
-   ],
-   "hoard_paragraphs": 2,
-   "paragraphs_with_a_member": 1,
-   "cover": 1,
+   "members_local": [],
+   "hoard_paragraphs": 1,
+   "paragraphs_with_a_member": 0,
+   "cover": 0,
    "works_naming_hoard": [
-    "nnan117864",
     "nnan49321"
    ],
-   "single_passage": true,
-   "reason": "Q3: 1 local members"
+   "single_passage": false,
+   "reason": "Q3: 0 local members"
   },
   {
    "id": "list-igch1399-rulers",
@@ -6647,7 +6901,6 @@
     "Abydus",
     "Colophon",
     "Ephesus",
-    "Magnesia ad Maeandrum",
     "Miletus",
     "Teos"
    ],
@@ -6806,14 +7059,11 @@
     "Amphipolis",
     "Babylon"
    ],
-   "hoard_paragraphs": 28,
-   "paragraphs_with_a_member": 8,
+   "hoard_paragraphs": 22,
+   "paragraphs_with_a_member": 6,
    "cover": 1,
    "works_naming_hoard": [
-    "nnan131509",
     "nnan174624",
-    "nnan23257",
-    "nnan28180",
     "nnan49321",
     "nnan49322",
     "nnan50879",
@@ -6901,21 +7151,17 @@
     "Alexander III of Macedon",
     "Lysimachus"
    ],
-   "members_local": [
-    "Lysimachus"
-   ],
-   "hoard_paragraphs": 24,
-   "paragraphs_with_a_member": 2,
-   "cover": 1,
+   "members_local": [],
+   "hoard_paragraphs": 5,
+   "paragraphs_with_a_member": 0,
+   "cover": 0,
    "works_naming_hoard": [
-    "nnan15879",
-    "nnan28180",
     "nnan49321",
     "nnan49322",
     "nnan50879"
    ],
-   "single_passage": true,
-   "reason": "Q3: 1 local members"
+   "single_passage": false,
+   "reason": "Q3: 0 local members"
   },
   {
    "id": "list-igch1423-denominations",
@@ -7459,6 +7705,73 @@
    "reason": "Q1: 1 members"
   },
   {
+   "id": "list-igch1443-mints",
+   "igch": 1443,
+   "uri": "http://coinhoards.org/id/igch1443",
+   "findspot": "Asia Minor",
+   "name": "Asia Minor",
+   "kind": "mints",
+   "works": {
+    "nnan174624": [
+     "H1"
+    ],
+    "nnan49321": [
+     "H1"
+    ]
+   },
+   "members": [
+    "Amphipolis",
+    "Aradus",
+    "Byblus",
+    "Damascus",
+    "Marathus",
+    "Myriandrus",
+    "Ptolemais-Ake",
+    "Sardis",
+    "Side",
+    "Tarsus"
+   ],
+   "facts": [
+    "Amphipolis",
+    "Aradus",
+    "Byblus",
+    "Damascus",
+    "Marathus",
+    "Myriandrus",
+    "Ptolemais-Ake",
+    "Sardis",
+    "Side",
+    "Tarsus"
+   ],
+   "members_in_corpus": [
+    "Amphipolis",
+    "Aradus",
+    "Byblus",
+    "Damascus",
+    "Marathus",
+    "Myriandrus",
+    "Sardis",
+    "Side",
+    "Tarsus"
+   ],
+   "members_local": [
+    "Amphipolis",
+    "Byblus"
+   ],
+   "hoard_paragraphs": 24,
+   "paragraphs_with_a_member": 6,
+   "cover": 1,
+   "works_naming_hoard": [
+    "nnan174624",
+    "nnan49321",
+    "nnan49322",
+    "nnan50879",
+    "nnan98007"
+   ],
+   "single_passage": true,
+   "reason": "Q3: 2 local members"
+  },
+  {
    "id": "list-igch1443-rulers",
    "igch": 1443,
    "uri": "http://coinhoards.org/id/igch1443",
@@ -7584,7 +7897,6 @@
    "members_in_corpus": [
     "Colophon",
     "Lampsacus",
-    "Magnesia ad Maeandrum",
     "Teos"
    ],
    "members_local": [
@@ -7592,14 +7904,11 @@
     "Lampsacus",
     "Teos"
    ],
-   "hoard_paragraphs": 30,
+   "hoard_paragraphs": 24,
    "paragraphs_with_a_member": 6,
    "cover": 1,
    "works_naming_hoard": [
-    "nnan131509",
     "nnan174624",
-    "nnan23257",
-    "nnan28180",
     "nnan49321",
     "nnan49322",
     "nnan50879",
@@ -7682,7 +7991,6 @@
     "Pergamum"
    ],
    "members_in_corpus": [
-    "Alexandreia Troas",
     "Ephesus",
     "Lampsacus",
     "Pergamum"
@@ -7690,14 +7998,11 @@
    "members_local": [
     "Lampsacus"
    ],
-   "hoard_paragraphs": 36,
+   "hoard_paragraphs": 30,
    "paragraphs_with_a_member": 6,
    "cover": 1,
    "works_naming_hoard": [
-    "nnan131509",
     "nnan174624",
-    "nnan23257",
-    "nnan28180",
     "nnan49321",
     "nnan49322",
     "nnan50879",
@@ -8344,9 +8649,7 @@
    ],
    "members_in_corpus": [
     "Alexander III of Macedon",
-    "Philip II",
-    "Pnytagoras of Salamis",
-    "Ptolemy I Soter"
+    "Philip II"
    ],
    "members_local": [
     "Philip II"
@@ -8482,7 +8785,6 @@
    ],
    "members_in_corpus": [
     "Alexander III of Macedon",
-    "Euagoras II of Salamis",
     "Mazaeus"
    ],
    "members_local": [],
@@ -8905,8 +9207,7 @@
     "Tennes"
    ],
    "members_in_corpus": [
-    "Alexander III of Macedon",
-    "Ptolemy I Soter"
+    "Alexander III of Macedon"
    ],
    "members_local": [],
    "hoard_paragraphs": 3,
@@ -9045,8 +9346,6 @@
     "Colophon",
     "Ephesus",
     "Lampsacus",
-    "Lysimachia",
-    "Magnesia ad Maeandrum",
     "Miletus",
     "Mytilene",
     "Sardis",
@@ -9166,10 +9465,7 @@
     "Syros"
    ],
    "members_in_corpus": [
-    "Alabanda",
     "Cyme",
-    "Lebedus",
-    "Magnesia ad Maeandrum",
     "Myrina"
    ],
    "members_local": [],
@@ -9811,16 +10107,14 @@
    ],
    "members_in_corpus": [
     "Alexander III of Macedon",
-    "Ptolemy I Soter",
     "Ptolemy II Philadelphus"
    ],
    "members_local": [],
-   "hoard_paragraphs": 30,
+   "hoard_paragraphs": 18,
    "paragraphs_with_a_member": 0,
    "cover": 0,
    "works_naming_hoard": [
     "nnan174624",
-    "nnan23257",
     "nnan49321",
     "nnan49322"
    ],
@@ -10472,6 +10766,101 @@
    "reason": "Q1: 2 members"
   },
   {
+   "id": "list-igch1764-mints",
+   "igch": 1764,
+   "uri": "http://coinhoards.org/id/igch1764",
+   "findspot": "Mesopotamia",
+   "name": "Mesopotamia",
+   "kind": "mints",
+   "works": {
+    "nnan49321": [
+     "H1"
+    ],
+    "nnan49322": [
+     "H1"
+    ]
+   },
+   "members": [
+    "Abydus",
+    "Alexandreia Troas",
+    "Amphipolis",
+    "Antioch, Syria",
+    "Apameia in Syria",
+    "Aradus",
+    "Babylon",
+    "Berytus",
+    "Bishapur",
+    "Colophon",
+    "Ephesus",
+    "Lampsacus",
+    "Lysimachia",
+    "Magnesia ad Maeandrum",
+    "Nisibis",
+    "Pella",
+    "Ptolemais-Ake",
+    "Sardis",
+    "Seleuceia Pieria",
+    "Seleuceia ad Tigrim",
+    "Susa",
+    "Tarsus",
+    "Thebes"
+   ],
+   "facts": [
+    "Abydus",
+    "Alexandreia Troas",
+    "Amphipolis",
+    "Antioch",
+    "Apameia",
+    "Aradus",
+    "Babylon",
+    "Berytus",
+    "Bishapur",
+    "Colophon",
+    "Ephesus",
+    "Lampsacus",
+    "Lysimachia",
+    "Magnesia ad Maeandrum",
+    "Nisibis",
+    "Pella",
+    "Ptolemais-Ake",
+    "Sardis",
+    "Seleuceia Pieria",
+    "Seleuceia ad Tigrim",
+    "Susa",
+    "Tarsus",
+    "Thebes"
+   ],
+   "members_in_corpus": [
+    "Abydus",
+    "Amphipolis",
+    "Antioch, Syria",
+    "Aradus",
+    "Babylon",
+    "Berytus",
+    "Colophon",
+    "Ephesus",
+    "Lampsacus",
+    "Pella",
+    "Sardis",
+    "Susa",
+    "Tarsus",
+    "Thebes"
+   ],
+   "members_local": [
+    "Abydus",
+    "Lampsacus"
+   ],
+   "hoard_paragraphs": 11,
+   "paragraphs_with_a_member": 2,
+   "cover": 2,
+   "works_naming_hoard": [
+    "nnan49321",
+    "nnan49322"
+   ],
+   "single_passage": false,
+   "reason": "Q3: 2 local members"
+  },
+  {
    "id": "list-igch1764-rulers",
    "igch": 1764,
    "uri": "http://coinhoards.org/id/igch1764",
@@ -10513,25 +10902,18 @@
    "members_in_corpus": [
     "Alexander III of Macedon",
     "Antiochus Hierax",
-    "Antiochus II Theos",
-    "Eumenes I of Pergamum",
     "Lysimachus"
    ],
-   "members_local": [
-    "Lysimachus"
-   ],
-   "hoard_paragraphs": 17,
-   "paragraphs_with_a_member": 1,
-   "cover": 1,
+   "members_local": [],
+   "hoard_paragraphs": 11,
+   "paragraphs_with_a_member": 0,
+   "cover": 0,
    "works_naming_hoard": [
-    "nnan23257",
-    "nnan28180",
-    "nnan40931",
     "nnan49321",
     "nnan49322"
    ],
-   "single_passage": true,
-   "reason": "Q3: 1 local members"
+   "single_passage": false,
+   "reason": "Q3: 0 local members"
   },
   {
    "id": "list-igch1764-denominations",
@@ -10609,15 +10991,12 @@
    ],
    "members_in_corpus": [
     "Abydus",
-    "Alexandreia Troas",
     "Amphipolis",
-    "Calchedon",
     "Chios",
     "Cius",
     "Colophon",
     "Ephesus",
     "Lampsacus",
-    "Magnesia ad Maeandrum",
     "Miletus",
     "Pergamum",
     "Sardis",
@@ -10723,21 +11102,17 @@
    ],
    "members_in_corpus": [
     "Abydus",
-    "Alexandreia Troas",
     "Byzantium",
     "Lampsacus",
-    "Lysimachia",
-    "Parium",
-    "Tenedos"
+    "Parium"
    ],
    "members_local": [
     "Abydus"
    ],
-   "hoard_paragraphs": 6,
+   "hoard_paragraphs": 3,
    "paragraphs_with_a_member": 1,
    "cover": 1,
    "works_naming_hoard": [
-    "nnan28180",
     "nnan49322"
    ],
    "single_passage": true,
@@ -10776,11 +11151,10 @@
     "Lysimachus"
    ],
    "members_local": [],
-   "hoard_paragraphs": 6,
+   "hoard_paragraphs": 3,
    "paragraphs_with_a_member": 0,
    "cover": 0,
    "works_naming_hoard": [
-    "nnan28180",
     "nnan49322"
    ],
    "single_passage": false,
@@ -10899,7 +11273,6 @@
     "Abydus",
     "Colophon",
     "Lampsacus",
-    "Magnesia ad Maeandrum",
     "Miletus",
     "Sardis"
    ],
@@ -10908,12 +11281,10 @@
     "Lampsacus",
     "Miletus"
    ],
-   "hoard_paragraphs": 14,
+   "hoard_paragraphs": 10,
    "paragraphs_with_a_member": 3,
    "cover": 3,
    "works_naming_hoard": [
-    "nnan131509",
-    "nnan28180",
     "nnan49321",
     "nnan49322"
    ],
@@ -11186,19 +11557,14 @@
     "Lampsacus",
     "Teos"
    ],
-   "hoard_paragraphs": 32,
-   "paragraphs_with_a_member": 6,
+   "hoard_paragraphs": 25,
+   "paragraphs_with_a_member": 5,
    "cover": 3,
    "works_naming_hoard": [
-    "nnan131509",
-    "nnan23257",
-    "nnan28180",
     "nnan49321",
     "nnan49322",
-    "nnan51012",
     "nnan73727",
     "nnan818",
-    "nnan96021",
     "nnan98007"
    ],
    "single_passage": false,
@@ -11256,7 +11622,6 @@
     "Byblus",
     "Colophon",
     "Lampsacus",
-    "Magnesia ad Maeandrum",
     "Miletus",
     "Phaselis",
     "Sardis"
@@ -11268,19 +11633,14 @@
     "Lampsacus",
     "Miletus"
    ],
-   "hoard_paragraphs": 69,
+   "hoard_paragraphs": 62,
    "paragraphs_with_a_member": 11,
    "cover": 2,
    "works_naming_hoard": [
-    "nnan131509",
-    "nnan23257",
-    "nnan28180",
     "nnan49321",
     "nnan49322",
-    "nnan51012",
     "nnan73727",
     "nnan818",
-    "nnan96021",
     "nnan98007"
    ],
    "single_passage": false,
@@ -11341,18 +11701,13 @@
     "Amphipolis",
     "Aradus",
     "Babylon",
-    "Byblus",
-    "Myriandrus",
-    "Tarsus"
+    "Byblus"
    ],
-   "hoard_paragraphs": 29,
-   "paragraphs_with_a_member": 11,
-   "cover": 3,
+   "hoard_paragraphs": 23,
+   "paragraphs_with_a_member": 8,
+   "cover": 2,
    "works_naming_hoard": [
-    "nnan131509",
     "nnan174624",
-    "nnan23257",
-    "nnan28180",
     "nnan49321",
     "nnan49322",
     "nnan50879",
@@ -11420,18 +11775,13 @@
     "Aradus",
     "Babylon",
     "Byblus",
-    "Lampsacus",
-    "Myriandrus",
-    "Tarsus"
+    "Lampsacus"
    ],
-   "hoard_paragraphs": 30,
-   "paragraphs_with_a_member": 16,
-   "cover": 4,
+   "hoard_paragraphs": 24,
+   "paragraphs_with_a_member": 13,
+   "cover": 3,
    "works_naming_hoard": [
-    "nnan131509",
     "nnan174624",
-    "nnan23257",
-    "nnan28180",
     "nnan49321",
     "nnan49322",
     "nnan50879",

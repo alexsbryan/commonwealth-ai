@@ -42,16 +42,13 @@
   "Sicyon",
   "Tarsus"
  ],
- "hoard_paragraphs": 21,
- "paragraphs_with_a_member": 9,
+ "hoard_paragraphs": 13,
+ "paragraphs_with_a_member": 6,
  "cover": 1,
  "works_naming_hoard": [
   "nnan118901",
-  "nnan15879",
   "nnan174624",
-  "nnan23257",
   "nnan40403",
-  "nnan53903",
   "nnan98007"
  ],
  "single_passage": true,

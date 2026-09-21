@@ -45,22 +45,14 @@
   "Histiaea",
   "Lamia",
   "Megalopolis",
-  "Rhodes",
   "Sicyon"
  ],
- "hoard_paragraphs": 141,
- "paragraphs_with_a_member": 15,
+ "hoard_paragraphs": 125,
+ "paragraphs_with_a_member": 11,
  "cover": 2,
  "works_naming_hoard": [
-  "nnan15879",
-  "nnan23257",
-  "nnan40931",
-  "nnan50879",
   "nnan73727",
-  "nnan818",
-  "nnan96021",
-  "nnan97809",
-  "nnan97810"
+  "nnan818"
  ],
  "single_passage": false,
  "question": "Which mints are represented among the coins of the Olympia hoard, found 1939?"

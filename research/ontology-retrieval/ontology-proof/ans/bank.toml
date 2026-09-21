@@ -5,329 +5,329 @@ description = "K1 hoard-contents lists (truth: CoinHoards IGCH, held out) and 15
 
 [[questions]]
 id = "list-igch0076-mints"
-category = "unattested"
+category = "k1_list_them_all"
 question = "Which mints are represented among the coins of the Kyparissia hoard, buried about 327 B.C.?"
-expected_facts = ["Amphipolis", "Histiaea", "Larissa", "Ptolemais-Ake", "Sicyon", "Tarsus", "Thebes"]
+expected_facts = ["Amphipolis", "Histiaea", "Larissa", "Sicyon", "Tarsus", "Thebes"]
 notes = "mint; IGCH 76; local 4/7; cover 1; SINGLE_PASSAGE (report apart); gold/list-igch0076-mints.json"
 
 [[questions]]
 id = "list-igch0077-mints"
-category = "unattested"
+category = "k1_list_them_all"
 question = "Which mints are represented among the coins of the Corinth hoard, found 1930?"
 expected_facts = ["Amphipolis", "Salamis", "Sidon", "Tarsus"]
 notes = "mint; IGCH 77; local 4/4; cover 3; gold/list-igch0077-mints.json"
 
 [[questions]]
 id = "list-igch0081-mints"
-category = "unattested"
+category = "k1_list_them_all"
 question = "Which mints are represented among the coins of the Greece hoard, found 1911, buried about 319 B.C.?"
 expected_facts = ["Amphipolis", "Aradus", "Athens", "Babylon", "Citium", "Pella", "Sicyon", "Side"]
 notes = "mint; IGCH 81; local 6/8; cover 4; gold/list-igch0081-mints.json"
 
 [[questions]]
 id = "list-igch0083-mints"
-category = "unattested"
+category = "k1_list_them_all"
 question = "Which mints are represented among the coins of the Andritsaena hoard, found 1923?"
-expected_facts = ["Aegina", "Amphipolis", "Aradus", "Babylon", "Byblus", "Citium", "Damascus", "Myriandrus", "Pella", "Ptolemais-Ake", "Salamis", "Sicyon", "Side", "Tarsus"]
+expected_facts = ["Aegina", "Amphipolis", "Aradus", "Babylon", "Byblus", "Citium", "Damascus", "Myriandrus", "Pella", "Salamis", "Sicyon", "Side", "Tarsus"]
 notes = "mint; IGCH 83; local 12/14; cover 10; gold/list-igch0083-mints.json"
 
 [[questions]]
 id = "list-igch0091-mints"
-category = "unattested"
+category = "k1_list_them_all"
 question = "Which mints are represented among the coins of the Siphnos hoard, found 1930?"
 expected_facts = ["Athens", "Miletus", "Rhodes", "Siphnos"]
 notes = "mint; IGCH 91; local 4/4; cover 2; gold/list-igch0091-mints.json"
 
 [[questions]]
 id = "list-igch0091-denominations"
-category = "unattested"
+category = "k1_list_them_all"
 question = "Which coin denominations are represented in the Siphnos hoard, found 1930?"
-expected_facts = ["Didrachm", "Drachma", "Stater", "Tetradrachm", "Tetrobol", "Triobol"]
+expected_facts = ["Didrachm", "Stater", "Tetradrachm", "Tetrobol", "Triobol"]
 notes = "coin.denomination; IGCH 91; local 4/6; cover 3; gold/list-igch0091-denominations.json"
 
 [[questions]]
 id = "list-igch0095-mints"
-category = "unattested"
+category = "k1_list_them_all"
 question = "Which mints are represented among the coins of the Messene hoard, found before 1922?"
-expected_facts = ["Alexandria", "Amphipolis", "Aradus", "Babylon", "Byblus", "Myriandrus", "Ptolemais-Ake", "Salamis", "Side", "Sidon", "Susa", "Tarsus"]
+expected_facts = ["Alexandria", "Amphipolis", "Aradus", "Babylon", "Byblus", "Myriandrus", "Salamis", "Side", "Sidon", "Susa", "Tarsus"]
 notes = "mint; IGCH 95; local 4/12; cover 2; gold/list-igch0095-mints.json"
 
 [[questions]]
 id = "list-igch0176-mints"
-category = "unattested"
+category = "k1_list_them_all"
 question = "Which mints are represented among the coins of the Olympia hoard, found 1922?"
 expected_facts = ["Athens", "Babylon", "Byblus", "Chalcis", "Lampsacus", "Pella", "Sicyon", "Susa"]
 notes = "mint; IGCH 176; local 4/8; cover 3; gold/list-igch0176-mints.json"
 
 [[questions]]
 id = "list-igch0242-mints"
-category = "unattested"
+category = "k1_list_them_all"
 question = "Which mints are represented among the coins of the Arcadia hoard, found 1929?"
 expected_facts = ["Argos", "Chalcis", "Megalopolis", "Rhodes", "Sicyon"]
 notes = "mint; IGCH 242; local 4/5; cover 2; gold/list-igch0242-mints.json"
 
 [[questions]]
 id = "list-igch0260-mints"
-category = "unattested"
+category = "k1_list_them_all"
 question = "Which mints are represented among the coins of the Greece hoard, found 1936, buried about 146 B.C.?"
-expected_facts = ["Argos", "Chalcis", "Lacedaemon", "Megalopolis", "Messene", "Patrae", "Sicyon"]
+expected_facts = ["Argos", "Chalcis", "Lacedaemon", "Megalopolis", "Messene", "Sicyon"]
 notes = "mint; IGCH 260; local 4/7; cover 2; gold/list-igch0260-mints.json"
 
 [[questions]]
 id = "list-igch0270-mints"
-category = "unattested"
+category = "k1_list_them_all"
 question = "Which mints are represented among the coins of the Olympia hoard, found 1939?"
-expected_facts = ["Aenianes", "Chalcis", "Histiaea", "Lamia", "Megalopolis", "Rhodes", "Sicyon", "Thebae"]
+expected_facts = ["Aenianes", "Chalcis", "Histiaea", "Lamia", "Megalopolis", "Rhodes", "Sicyon"]
 notes = "mint; IGCH 270; local 6/8; cover 2; gold/list-igch0270-mints.json"
 
 [[questions]]
 id = "list-igch0271-mints"
-category = "unattested"
+category = "k1_list_them_all"
 question = "Which mints are represented among the coins of the Agrinion hoard, found 1959?"
 expected_facts = ["Aenianes", "Argos", "Athens", "Chalcis", "Cyme", "Histiaea", "Lamia", "Megalopolis", "Messene", "Oeta", "Sicyon"]
 notes = "mint; IGCH 271; local 11/11; cover 2; gold/list-igch0271-mints.json"
 
 [[questions]]
 id = "list-igch0395-mints"
-category = "unattested"
+category = "k1_list_them_all"
 question = "Which mints are represented among the coins of the Samovodene hoard, found 1957?"
 expected_facts = ["Amphipolis", "Salamis", "Sidon", "Tarsus"]
 notes = "mint; IGCH 395; local 4/4; cover 3; gold/list-igch0395-mints.json"
 
 [[questions]]
 id = "list-igch0410-mints"
-category = "unattested"
+category = "k1_list_them_all"
 question = "Which mints are represented among the coins of the Paeonia hoard, found 1968?"
-expected_facts = ["Abydus", "Amphipolis", "Babylon", "Lampsacus", "Magnesia ad Maeandrum", "Miletus", "Ptolemais-Ake", "Sardis", "Sicyon", "Side", "Sidon"]
+expected_facts = ["Abydus", "Amphipolis", "Babylon", "Lampsacus", "Miletus", "Sardis", "Sicyon", "Side", "Sidon"]
 notes = "mint; IGCH 410; local 8/11; cover 5; gold/list-igch0410-mints.json"
 
 [[questions]]
 id = "list-igch0774-mints"
-category = "unattested"
+category = "k1_list_them_all"
 question = "Which mints are represented among the coins of the Gîldau hoard, found 1960, buried about 320 B.C.?"
 expected_facts = ["Amphipolis", "Lampsacus", "Miletus", "Salamis", "Tarsus"]
 notes = "mint; IGCH 774; local 4/5; cover 1; SINGLE_PASSAGE (report apart); gold/list-igch0774-mints.json"
 
 [[questions]]
 id = "list-igch0866-mints"
-category = "unattested"
+category = "k1_list_them_all"
 question = "Which mints are represented among the coins of the Anadol hoard, found 1895?"
-expected_facts = ["Abydus", "Aenus", "Alexandreia Troas", "Amphipolis", "Aradus", "Babylon", "Byblus", "Byzantium", "Calchedon", "Callatis", "Carrhae", "Colophon", "Cyrene", "Damascus", "Ecbatana", "Ephesus", "Heracleia Pontica", "Istrus", "Lampsacus", "Lysimachia", "Magnesia ad Maeandrum", "Mesembria", "Miletus", "Mytilene", "Odessus", "Perinthus", "Ptolemais-Ake", "Sardis", "Sestos", "Side", "Sidon", "Sinope", "Susa", "Tarsus", "Teos", "Tomis", "Tyre"]
+expected_facts = ["Abydus", "Amphipolis", "Aradus", "Babylon", "Byblus", "Byzantium", "Carrhae", "Colophon", "Cyrene", "Damascus", "Ecbatana", "Ephesus", "Istrus", "Lampsacus", "Miletus", "Mytilene", "Perinthus", "Sardis", "Side", "Sidon", "Sinope", "Susa", "Tarsus", "Teos", "Tyre"]
 notes = "mint; IGCH 866; local 5/37; cover 3; gold/list-igch0866-mints.json"
 
 [[questions]]
 id = "list-igch0958-mints"
-category = "unattested"
+category = "k1_list_them_all"
 question = "Which mints are represented among the coins of the Marasesti hoard, found 1909?"
-expected_facts = ["Abydus", "Alexandreia Troas", "Amphipolis", "Aradus", "Babylon", "Byzantium", "Callatis", "Lampsacus", "Lysimachia", "Miletus", "Odessus", "Ptolemais-Ake", "Sidon", "Tomis"]
+expected_facts = ["Abydus", "Amphipolis", "Aradus", "Babylon", "Byzantium", "Lampsacus", "Miletus", "Sidon"]
 notes = "mint; IGCH 958; local 5/14; cover 3; gold/list-igch0958-mints.json"
 
 [[questions]]
 id = "list-igch1395-mints"
-category = "unattested"
+category = "k1_list_them_all"
 question = "Which mints are represented among the coins of the Sinan Pascha near Afyon-Karahissar hoard, buried about 318 B.C.?"
-expected_facts = ["Abydus", "Amphipolis", "Colophon", "Magnesia ad Maeandrum", "Miletus", "Sardis", "Teos"]
+expected_facts = ["Abydus", "Amphipolis", "Colophon", "Miletus", "Sardis", "Teos"]
 notes = "mint; IGCH 1395; local 5/7; cover 2; gold/list-igch1395-mints.json"
 
 [[questions]]
 id = "list-igch1423-mints"
-category = "unattested"
+category = "k1_list_them_all"
 question = "Which mints are represented among the coins of the Armenak hoard, found 1927, buried about 280 B.C.?"
-expected_facts = ["Abydus", "Aenus", "Alexandreia Troas", "Amphipolis", "Aradus", "Babylon", "Byblus", "Carrhae", "Chios", "Cius", "Colophon", "Ecbatana", "Ephesus", "Heracleia Pontica", "Lampsacus", "Laodicea ad Mare", "Lysimachia", "Magnesia ad Maeandrum", "Marathus", "Miletus", "Myriandrus", "Mytilene", "Paphos", "Pella", "Pergamum", "Perinthus", "Priene", "Ptolemais-Ake", "Salamis", "Sardis", "Seleuceia Pieria", "Seleuceia ad Tigrim", "Sestos", "Sicyon", "Teos", "Tyre"]
+expected_facts = ["Abydus", "Amphipolis", "Aradus", "Babylon", "Byblus", "Carrhae", "Chios", "Cius", "Colophon", "Ecbatana", "Ephesus", "Lampsacus", "Marathus", "Miletus", "Myriandrus", "Mytilene", "Paphos", "Pella", "Pergamum", "Perinthus", "Priene", "Salamis", "Sardis", "Sicyon", "Teos", "Tyre"]
 notes = "mint; IGCH 1423; local 6/36; cover 2; gold/list-igch1423-mints.json"
 
 [[questions]]
 id = "list-igch1436-mints"
-category = "unattested"
+category = "k1_list_them_all"
 question = "Which mints are represented among the coins of the Asia Minor hoard, found 1966, buried about 323 B.C.?"
 expected_facts = ["Amphipolis", "Aradus", "Athens", "Babylon", "Byblus", "Citium", "Damascus", "Myriandrus", "Paphos", "Pella", "Salamis", "Tarsus"]
 notes = "mint; IGCH 1436; local 5/12; cover 2; gold/list-igch1436-mints.json"
 
 [[questions]]
 id = "list-igch1438-mints"
-category = "unattested"
+category = "k1_list_them_all"
 question = "Which mints are represented among the coins of the Asia Minor hoard, found 1964, buried about 320 B.C.?"
-expected_facts = ["Abydus", "Amphipolis", "Aradus", "Babylon", "Byblus", "Citium", "Damascus", "Lampsacus", "Myriandrus", "Ptolemais-Ake", "Salamis", "Sidon", "Tarsus"]
+expected_facts = ["Abydus", "Amphipolis", "Aradus", "Babylon", "Byblus", "Citium", "Damascus", "Lampsacus", "Myriandrus", "Salamis", "Sidon", "Tarsus"]
 notes = "mint; IGCH 1438; local 7/13; cover 3; gold/list-igch1438-mints.json"
 
 [[questions]]
 id = "list-igch1441-mints"
-category = "unattested"
+category = "k1_list_them_all"
 question = "Which mints are represented among the coins of the Asia Minor hoard, found 1964, buried about 315 B.C.?"
-expected_facts = ["Abydus", "Amphipolis", "Babylon", "Lampsacus", "Magnesia ad Maeandrum", "Miletus", "Pella", "Sardis", "Sidon", "Teos"]
+expected_facts = ["Abydus", "Amphipolis", "Babylon", "Lampsacus", "Miletus", "Pella", "Sardis", "Sidon", "Teos"]
 notes = "mint; IGCH 1441; local 8/10; cover 3; gold/list-igch1441-mints.json"
 
 [[questions]]
 id = "list-igch1444-mints"
-category = "unattested"
+category = "k1_list_them_all"
 question = "Which mints are represented among the coins of the Asia Minor hoard, found 1961, buried about 300 B.C.?"
-expected_facts = ["Abydus", "Cius", "Colophon", "Magnesia ad Maeandrum", "Teos"]
+expected_facts = ["Abydus", "Cius", "Colophon", "Teos"]
 notes = "mint; IGCH 1444; local 4/5; cover 1; SINGLE_PASSAGE (report apart); gold/list-igch1444-mints.json"
 
 [[questions]]
 id = "list-igch1471-mints"
-category = "unattested"
+category = "k1_list_them_all"
 question = "Which mints are represented among the coins of the Katô Paphos hoard, found 1965, buried about 305 B.C.?"
 expected_facts = ["Amphipolis", "Aradus", "Babylon", "Colophon", "Lampsacus", "Miletus", "Pella", "Salamis", "Sardis", "Susa"]
 notes = "mint; IGCH 1471; local 4/10; cover 3; gold/list-igch1471-mints.json"
 
 [[questions]]
 id = "list-igch1472-mints"
-category = "unattested"
+category = "k1_list_them_all"
 question = "Which mints are represented among the coins of the Larnaca hoard, found 1870, buried about 300 B.C.?"
-expected_facts = ["Abydus", "Alexandria", "Amathus", "Amphipolis", "Aradus", "Babylon", "Byblus", "Citium", "Colophon", "Lampsacus", "Magnesia ad Maeandrum", "Miletus", "Ptolemais-Ake", "Salamis", "Sardis", "Sidon", "Susa", "Tarsus", "Teos", "Tyre"]
+expected_facts = ["Abydus", "Alexandria", "Amathus", "Amphipolis", "Aradus", "Babylon", "Byblus", "Citium", "Colophon", "Lampsacus", "Miletus", "Salamis", "Sardis", "Sidon", "Susa", "Tarsus", "Teos", "Tyre"]
 notes = "mint; IGCH 1472; local 6/20; cover 5; gold/list-igch1472-mints.json"
 
 [[questions]]
 id = "list-igch1516-mints"
-category = "unattested"
+category = "k1_list_them_all"
 question = "Which mints are represented among the coins of the Aleppo hoard, found 1893, buried about 305 B.C.?"
-expected_facts = ["Abydus", "Alexandria", "Amathus", "Amphipolis", "Aradus", "Babylon", "Berytus", "Byblus", "Callatis", "Citium", "Colophon", "Damascus", "Lampsacus", "Magnesia ad Maeandrum", "Miletus", "Myriandrus", "Paphos", "Pella", "Ptolemais-Ake", "Salamis", "Sardis", "Sicyon", "Side", "Sidon", "Tarsus"]
+expected_facts = ["Abydus", "Alexandria", "Amathus", "Amphipolis", "Aradus", "Babylon", "Berytus", "Byblus", "Citium", "Colophon", "Damascus", "Lampsacus", "Miletus", "Myriandrus", "Paphos", "Pella", "Salamis", "Sardis", "Sicyon", "Side", "Sidon", "Tarsus"]
 notes = "mint; IGCH 1516; local 9/25; cover 4; gold/list-igch1516-mints.json"
 
 [[questions]]
 id = "list-igch1664-mints"
-category = "unattested"
+category = "k1_list_them_all"
 question = "Which mints are represented among the coins of the Demanhur hoard, found 1905, buried about 318 B.C.?"
-expected_facts = ["Alexandria", "Amathus", "Amphipolis", "Aradus", "Babylon", "Berytus", "Byblus", "Carne", "Citium", "Damascus", "Lampsacus", "Marium", "Miletus", "Myriandrus", "Paphos", "Pella", "Ptolemais-Ake", "Salamis", "Sardis", "Sicyon", "Side", "Sidon", "Tarsus"]
+expected_facts = ["Alexandria", "Amathus", "Amphipolis", "Aradus", "Babylon", "Berytus", "Byblus", "Carne", "Citium", "Damascus", "Lampsacus", "Marium", "Miletus", "Myriandrus", "Paphos", "Pella", "Salamis", "Sardis", "Sicyon", "Side", "Sidon", "Tarsus"]
 notes = "mint; IGCH 1664; local 22/23; cover 4; gold/list-igch1664-mints.json"
 
 [[questions]]
 id = "list-igch1667-mints"
-category = "unattested"
+category = "k1_list_them_all"
 question = "Which mints are represented among the coins of the Abu Hommos hoard, found 1919?"
-expected_facts = ["Alexandria", "Amphipolis", "Aradus", "Babylon", "Berytus", "Byblus", "Citium", "Damascus", "Lampsacus", "Miletus", "Myriandrus", "Pella", "Ptolemais-Ake", "Salamis", "Side", "Sidon", "Susa", "Tarsus"]
+expected_facts = ["Alexandria", "Amphipolis", "Aradus", "Babylon", "Berytus", "Byblus", "Citium", "Damascus", "Lampsacus", "Miletus", "Myriandrus", "Pella", "Salamis", "Side", "Sidon", "Susa", "Tarsus"]
 notes = "mint; IGCH 1667; local 5/18; cover 3; gold/list-igch1667-mints.json"
 
 [[questions]]
 id = "list-igch1668-mints"
-category = "unattested"
+category = "k1_list_them_all"
 question = "Which mints are represented among the coins of the Egypt hoard, found 1912, buried about 310 B.C.?"
-expected_facts = ["Alexandria", "Amathus", "Amphipolis", "Aradus", "Babylon", "Byblus", "Citium", "Lampsacus", "Ptolemais-Ake", "Side", "Sidon"]
+expected_facts = ["Alexandria", "Amathus", "Amphipolis", "Aradus", "Babylon", "Byblus", "Citium", "Lampsacus", "Side", "Sidon"]
 notes = "mint; IGCH 1668; local 4/11; cover 3; gold/list-igch1668-mints.json"
 
 [[questions]]
 id = "list-igch1669-mints"
-category = "unattested"
+category = "k1_list_them_all"
 question = "Which mints are represented among the coins of the Egypt hoard, found 1894, buried about 310 B.C.?"
 expected_facts = ["Alexandria", "Amphipolis", "Babylon", "Citium", "Lampsacus", "Marathus", "Myriandrus", "Salamis", "Sardis", "Side", "Sidon", "Susa", "Tarsus"]
 notes = "mint; IGCH 1669; local 5/13; cover 4; gold/list-igch1669-mints.json"
 
 [[questions]]
 id = "list-igch1670-mints"
-category = "unattested"
+category = "k1_list_them_all"
 question = "Which mints are represented among the coins of the Kuft hoard?"
-expected_facts = ["Alexandria", "Amphipolis", "Aradus", "Babylon", "Byblus", "Damascus", "Lampsacus", "Miletus", "Myriandrus", "Pella", "Ptolemais-Ake", "Sardis", "Side", "Sidon", "Susa", "Tarsus"]
+expected_facts = ["Alexandria", "Amphipolis", "Aradus", "Babylon", "Byblus", "Damascus", "Lampsacus", "Miletus", "Myriandrus", "Pella", "Sardis", "Side", "Sidon", "Susa", "Tarsus"]
 notes = "mint; IGCH 1670; local 5/16; cover 3; gold/list-igch1670-mints.json"
 
 [[questions]]
 id = "list-igch1678-mints"
-category = "unattested"
+category = "k1_list_them_all"
 question = "Which mints are represented among the coins of the Phacous hoard, found 1956, buried about 283 B.C.?"
-expected_facts = ["Alexandria", "Amathus", "Amphipolis", "Aradus", "Babylon", "Byblus", "Citium", "Damascus", "Lampsacus", "Marathus", "Miletus", "Myriandrus", "Pella", "Ptolemais-Ake", "Salamis", "Sardis", "Side", "Sidon", "Susa", "Tarsus"]
+expected_facts = ["Alexandria", "Amathus", "Amphipolis", "Aradus", "Babylon", "Byblus", "Citium", "Damascus", "Lampsacus", "Marathus", "Miletus", "Myriandrus", "Pella", "Salamis", "Sardis", "Side", "Sidon", "Susa", "Tarsus"]
 notes = "mint; IGCH 1678; local 6/20; cover 3; gold/list-igch1678-mints.json"
 
 [[questions]]
 id = "lookup-agrinion-acquired"
-category = "unattested"
+category = "k0_look_it_up"
 question = "When did the American Numismatic Society finally acquire the coins of the Agrinion hoard?"
 expected_facts = ["summer of 1962"]
 notes = "nnan73727.md:29 — 'the coins themselves were not acquired until the summer of 1962'"
 
 [[questions]]
 id = "lookup-megara-obverse-dies"
-category = "unattested"
+category = "k0_look_it_up"
 question = "In Thompson's study of the Agrinion hoard, how many obverse dies are on record for the 101 coins of the Megarian Achaean League series?"
 expected_facts = ["Fifty-four obverse dies"]
 notes = "nnan73727.md:2267 — 'Fifty-four obverse dies are on record for 101 coins'"
 
 [[questions]]
 id = "lookup-siphnos-modern-name"
-category = "unattested"
+category = "k0_look_it_up"
 question = "By what modern name does Newell call the island on which the Siphnos hoard was found?"
 expected_facts = ["Siphanto"]
 notes = "nnan50879.md:7 — 'found on the island of Siphanto—the ancient Siphnos'"
 
 [[questions]]
 id = "lookup-demanhur-jars"
-category = "unattested"
+category = "k0_look_it_up"
 question = "In what kind of containers does Newell conclude the Demanhur coins were once held?"
 expected_facts = ["terra cotta jars"]
 notes = "nnan98007.md:75 — 'the Demanhur coins were once contained in several terra cotta jars'"
 
 [[questions]]
 id = "lookup-demanhur-first-notice"
-category = "unattested"
+category = "k0_look_it_up"
 question = "Who first brought the Demanhur hoard to Newell's attention?"
 expected_facts = ["Azeez Khayat"]
 notes = "nnan98007.md:17 — 'Mr. Azeez Khayat of this city ... It was Mr. Khayat who first brought the hoard to the writer’s attention.'"
 
 [[questions]]
 id = "lookup-demanhur-dattari-division"
-category = "unattested"
+category = "k0_look_it_up"
 question = "According to Dattari's letter, into how many parts had the Demanhur deposit been divided?"
 expected_facts = ["five parts"]
 notes = "nnan98007.md:39 — 'had been divided into five parts “of several thousand coins each”'"
 
 [[questions]]
 id = "lookup-troxell-group-e-dies"
-category = "unattested"
+category = "k0_look_it_up"
 question = "In Troxell's study of the Amphipolis Alexander tetradrachms, how many obverse dies are known for Group E, the largest group?"
 expected_facts = ["193 dies"]
 notes = "nnan174624.md:1032 — 'Group E (605 coins, 193 dies known and 241 estimated) is clearly the largest group'"
 
 [[questions]]
 id = "lookup-troxell-issues-per-group"
-category = "unattested"
+category = "k0_look_it_up"
 question = "In the pattern Newell established for the Alexander tetradrachms, how many different issues does each successive group include?"
 expected_facts = ["three to twelve"]
 notes = "nnan174624.md:807 — 'each of which includes from three to twelve different issues'"
 
 [[questions]]
 id = "lookup-thessaly-1914-size"
-category = "unattested"
+category = "k0_look_it_up"
 question = "How many Bœotian, Sicyonian and Æginetan coins were in the great hoard found in Thessaly in 1914, as Newell describes it?"
 expected_facts = ["1596"]
 notes = "nnan40403.md:699 — 'the great hoard of 1596 Bœotian, Sicyonian, and Æginetan coins found in 1914 in Thessaly'"
 
 [[questions]]
 id = "lookup-andritsaena-offered"
-category = "unattested"
+category = "k0_look_it_up"
 question = "When was the Andritsaena hoard offered for sale by an Athenian antiquity dealer?"
 expected_facts = ["March of 1923"]
 notes = "nnan40403.md:7 — 'offered for sale by an Athenian antiquity dealer early in March of 1923'"
 
 [[questions]]
 id = "lookup-olympia-importer-story"
-category = "unattested"
+category = "k0_look_it_up"
 question = "With which famous gold object, now in Boston, did the importer claim the Olympia hoard coins had been found?"
 expected_facts = ["Cypselus"]
 notes = "nnan818.md:227 — 'found in company with the now famous gold bowl of the sons of Cypselus'"
 
 [[questions]]
 id = "lookup-histiaea-oxidation"
-category = "unattested"
+category = "k0_look_it_up"
 question = "To what does Newell attribute the peculiar oxidation shared by the coins of the Histiaea find?"
 expected_facts = ["sea water"]
 notes = "nnan118901.md:49 — 'due, no doubt, to the action of sea water on them'"
 
 [[questions]]
 id = "lookup-strauss-hoard-size"
-category = "unattested"
+category = "k0_look_it_up"
 question = "About how many staters is the hoard recorded by Strauss said to have contained originally, in Thompson's discussion of the northern Greece gold hoard?"
 expected_facts = ["about 350 staters"]
 notes = "nnan49321.md:3924 — 'the hoard recorded by Strauss is said to have contained originally about 350 staters'"
 
 [[questions]]
 id = "lookup-correspondent-letter"
-category = "unattested"
+category = "k0_look_it_up"
 question = "When was the letter written in which the ANS's correspondent reported that the hoard of staters had been with its owner for some ten years?"
 expected_facts = ["July 1969"]
 notes = "nnan49321.md:3924 — 'his letter of July 1969 states that according to his source'"
 
 [[questions]]
 id = "lookup-pozzi-stater-verdict"
-category = "unattested"
+category = "k0_look_it_up"
 question = "How did Naville judge the Pozzi Collection stater with a horse's leg below and a cornucopia in the exergue?"
 expected_facts = ["judged a forgery"]
 notes = "nnan49322.md:3970 — 'was judged a forgery by Naville'"

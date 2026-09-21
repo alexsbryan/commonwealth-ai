@@ -31,7 +31,6 @@
   "Abydus",
   "Cius",
   "Colophon",
-  "Magnesia ad Maeandrum",
   "Teos"
  ],
  "members_local": [
@@ -40,14 +39,11 @@
   "Colophon",
   "Teos"
  ],
- "hoard_paragraphs": 136,
+ "hoard_paragraphs": 130,
  "paragraphs_with_a_member": 9,
  "cover": 1,
  "works_naming_hoard": [
-  "nnan131509",
   "nnan174624",
-  "nnan23257",
-  "nnan28180",
   "nnan49321",
   "nnan49322",
   "nnan50879",

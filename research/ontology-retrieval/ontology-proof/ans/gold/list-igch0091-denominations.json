@@ -31,7 +31,6 @@
  ],
  "members_in_corpus": [
   "Didrachm",
-  "Drachma",
   "Stater",
   "Tetradrachm",
   "Tetrobol",
@@ -43,17 +42,12 @@
   "Tetradrachm",
   "Tetrobol"
  ],
- "hoard_paragraphs": 173,
+ "hoard_paragraphs": 92,
  "paragraphs_with_a_member": 11,
  "cover": 3,
  "works_naming_hoard": [
-  "nnan23257",
-  "nnan40931",
   "nnan49321",
-  "nnan50879",
-  "nnan96021",
-  "nnan97809",
-  "nnan97810"
+  "nnan50879"
  ],
  "single_passage": false,
  "question": "Which coin denominations are represented in the Siphnos hoard, found 1930?"
