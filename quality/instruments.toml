@@ -208,6 +208,10 @@ fidelity = "F0"
 baseline = { kind = "count", path = "quality/baselines/oversized.txt" }
 negative_control = "none"
 runs_in = ["prepush", "ci:gates"]
+# when_changed: file sizes over `.rs`, plus the instruction surface it censuses (arch_gate.rs
+#               names AGENTS.md, .claude/CLAUDE.md, sovereign/SYSTEM_OVERVIEW.md) and its
+#               three baselines. Superset: a `.rs` anywhere re-selects it.
+when_changed = "(\\.rs$|^AGENTS\\.md$|^\\.claude/CLAUDE\\.md$|^sovereign/SYSTEM_OVERVIEW\\.md$|^quality/baselines/)"
 doc = "sovereign/ARCH_PRINCIPLES.md §3.1"
 
 [[instrument]]
@@ -277,6 +281,9 @@ fidelity = "F0"
 baseline = { kind = "count", path = "quality/baselines/corpus_layout.txt" }
 negative_control = "none"
 runs_in = ["prepush", "ci:gates"]
+# when_changed: walks `.rs` under the declared crate trees against
+#               quality/baselines/corpus_layout.txt.
+when_changed = "(\\.rs$|^quality/baselines/)"
 doc = "sovereign/ARCH_PRINCIPLES.md §3"
 
 [[instrument]]
@@ -290,6 +297,9 @@ fidelity = "F0"
 baseline = { kind = "count", path = "quality/baselines/env_unregistered.txt" }
 negative_control = "none"
 runs_in = ["prepush", "ci:gates"]
+# when_changed: env_gate.rs reads `.rs` AND `.sh` AND .claude/hooks, checks the
+#               registry quality/env-flags.toml and the GENERATED docs/ENV_FLAGS.md.
+when_changed = "(\\.rs$|\\.sh$|^\\.claude/hooks/|^quality/env-flags\\.toml$|^docs/ENV_FLAGS\\.md$|^quality/baselines/)"
 doc = "quality/env-flags.toml (header)"
 load_bearing = [
   { flag = "--update-doc", why = "docs/ENV_FLAGS.md is GENERATED from the registry and freshness-checked by this gate; editing the doc by hand reddens it" },
@@ -306,6 +316,8 @@ fidelity = "F0"
 baseline = { kind = "count", path = "quality/baselines/clock_reads.txt" }
 negative_control = "none"
 runs_in = ["prepush", "ci:gates"]
+# when_changed: scans `.rs` for direct clock reads against quality/baselines/clock_reads.txt.
+when_changed = "(\\.rs$|^quality/baselines/)"
 doc = "sovereign/ARCH_PRINCIPLES.md §9"
 
 [[instrument]]
@@ -319,6 +331,9 @@ fidelity = "F0"
 baseline = { kind = "count", path = "quality/baselines/concepts.txt" }
 negative_control = "none"
 runs_in = ["prepush"]
+# when_changed: new nouns come from `.rs` via the SCIP graph; the name set lives in
+#               quality/baselines/concepts.txt.
+when_changed = "(\\.rs$|^quality/baselines/)"
 # Exits 3 or 4 when the concept graph cannot judge THIS commit — an index
 # older than the diff. `scripts/pre-push.sh` special-cased these two codes by
 # name until 2026-09-07; declared here, no runner has to know the gate.
@@ -339,6 +354,9 @@ fidelity = "F0"
 baseline = { kind = "count", path = "quality/baselines/lines.tsv" }
 negative_control = "none"
 runs_in = ["prepush", "ci:gates"]
+# when_changed: per-crate `.rs` lines (crate roots found by Cargo.toml) plus the two
+#               script trees that are keys of their own (size_gate.rs:58).
+when_changed = "(\\.rs$|(^|/)Cargo\\.toml$|^scripts/|^sovereign/crates/sovereign-desktop/tests/e2e/scripts/|^quality/baselines/)"
 doc = "AGENTS.md §Definition of done"
 load_bearing = [
   { flag = "--tighten", why = "banks a real cut and never raises — always safe" },
@@ -609,7 +627,11 @@ fidelity = "F0"
 verdict = "judgement-line"
 baseline = { kind = "none" }
 negative_control = "none"
-runs_in = ["by-hand"]
+runs_in = ["by-hand", "prepush"]
+# when_changed: the declared constructions live in quality/campaigns/noun-convergence.toml
+#               and the recorded reds are `**/tests/ui/*.stderr` beside the compile_fail
+#               harness in `.rs` (nc-thesis.py:87-92).
+when_changed = "(^quality/campaigns/noun-convergence\\.toml$|/tests/ui/|\\.rs$)"
 doc = "scripts/nc-thesis.py (module header — is the product claim a TYPE?)"
 
 # ── The domains campaign's census — one row per subcommand a venue runs ──
@@ -795,7 +817,10 @@ fidelity = "F0"
 verdict = "judgement-line"
 baseline = { kind = "none" }
 negative_control = "none"
-runs_in = ["by-hand"]
+runs_in = ["by-hand", "prepush"]
+# when_changed: a control over the censusing script itself and the registry it reads;
+#               nothing else can change its verdict.
+when_changed = "(^scripts/domains-census\\.py$|^quality/DOMAINS\\.toml$)"
 doc = "scripts/domains-census.py (module header — the planted controls)"
 
 [[instrument]]
@@ -830,6 +855,8 @@ fidelity = "F0"
 baseline = { kind = "none" }
 negative_control = "none"
 runs_in = ["prepush", "ci:gates"]
+# when_changed: judge_funnel_gate.rs walks `.rs` only (skipping */tests.rs).
+when_changed = "\\.rs$"
 doc = "quality/campaigns/verifier-loop.toml §vl-one-primitive"
 
 [[instrument]]
@@ -1086,6 +1113,9 @@ fidelity = "F0"
 baseline = { kind = "none" }
 negative_control = "settings-wiring-self-test"
 runs_in = ["prepush"]
+# when_changed: settings-wiring.sh validates .claude/settings.json hook commands and the
+#               scripts they name.
+when_changed = "^\\.claude/"
 doc = ".claude/hooks/tests/settings-wiring.sh"
 
 # The negative control for the gate above. It EXISTED before it was
@@ -2756,4 +2786,6 @@ fidelity = "F0"
 baseline = { kind = "none" }
 negative_control = "none"
 runs_in = ["prepush"]
+# when_changed: workspace-hack correctness is a function of the manifests alone.
+when_changed = "((^|/)Cargo\\.toml$|^Cargo\\.lock$)"
 doc = "quality/BUILD_LATENCY.md D1 — the workspace-hack crate keeps feature resolution scope-invariant; `cargo hakari generate` after any dependency change, or this reports drift. Advisory until a week of pushes shows no false positive (AGENTS.md §Definition of done); needs cargo-hakari installed (`cargo install cargo-hakari --locked`)."
