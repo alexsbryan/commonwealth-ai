@@ -33,6 +33,9 @@ arm() { python3 "$RUN_ARM" --arm "$1" --bank "$BANK" --corpus "$CORPUS" \
 
 rm -rf "$RUNS"
 step "atlas"
+# `enrich reset` leaves <index>/atlas in place and `build` then skips resolve as
+# cached (raptor window 20260921T153541Z). The chunks are not under atlas/.
+rm -rf "$INDEX_DIR/atlas"
 "$SVRN" enrich reset "$CORPUS" --full --yes >/dev/null 2>&1 || true   # a local rehearsal pins this host's daemon into config.json
 "$SVRN" enrich init "$CORPUS" --from-corpus "$CORPUS" --force || die "enrich init failed"
 # `extract` exits 1 when it SKIPS a too-short section (DECISIONS A38); --finalize
