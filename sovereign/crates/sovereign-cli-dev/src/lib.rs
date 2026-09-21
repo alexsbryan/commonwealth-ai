@@ -49,6 +49,7 @@
 // build breaks loudly if it is broken.
 mod converge_baseline;
 mod converge_cmd;
+mod repo;
 
 // ── The workbench proper — `workbench` feature ──────────────────────
 #[cfg(feature = "workbench")]

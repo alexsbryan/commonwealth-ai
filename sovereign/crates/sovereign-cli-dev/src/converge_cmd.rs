@@ -702,11 +702,8 @@ fn counted_extensions(defs: &[corpus_engine_scip::converge::TypeDef]) -> Vec<Str
 }
 
 fn git_stdout(args: &[&str]) -> Option<String> {
-    let out = std::process::Command::new("git").args(args).output().ok()?;
-    if !out.status.success() {
-        return None;
-    }
-    String::from_utf8(out.stdout).ok()
+    let root = crate::repo::repo_root_here().ok()?;
+    crate::repo::git_stdout_in(&root, args)
 }
 
 /// Paths git reports as dirty in the working tree, including untracked ones.

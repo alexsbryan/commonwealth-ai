@@ -385,43 +385,41 @@ pub(super) fn dup_arcs_from(
     };
     let mut arcs = Vec::new();
     let mut summaries = Vec::new();
-    let mut collect = |members: &[sovereign_code::dry_report::SymbolRef],
-                       sim: f32,
-                       exact: bool,
-                       lines: usize| {
-        let mut files: Vec<String> = members.iter().map(|m| rel(&m.file)).collect();
-        files.sort();
-        files.dedup();
-        summaries.push(DupClusterSummary {
-            label: members
-                .first()
-                .map(|m| m.symbol.clone())
-                .unwrap_or_default(),
-            members: members.len(),
-            redundant: lines * members.len().saturating_sub(1),
-            files,
-            lines,
-            exact,
-        });
-        let mut n = 0usize;
-        for (i, a) in members.iter().enumerate() {
-            for b in &members[i + 1..] {
-                if a.file == b.file || n >= DUP_ARCS_PER_CLUSTER {
-                    continue;
+    let mut collect =
+        |members: &[sovereign_code::dry_report::SymbolRef], sim: f32, exact: bool, lines: usize| {
+            let mut files: Vec<String> = members.iter().map(|m| rel(&m.file)).collect();
+            files.sort();
+            files.dedup();
+            summaries.push(DupClusterSummary {
+                label: members
+                    .first()
+                    .map(|m| m.symbol.clone())
+                    .unwrap_or_default(),
+                members: members.len(),
+                redundant: lines * members.len().saturating_sub(1),
+                files,
+                lines,
+                exact,
+            });
+            let mut n = 0usize;
+            for (i, a) in members.iter().enumerate() {
+                for b in &members[i + 1..] {
+                    if a.file == b.file || n >= DUP_ARCS_PER_CLUSTER {
+                        continue;
+                    }
+                    arcs.push(DupArc {
+                        a: rel(&a.file),
+                        a_line: a.line_start,
+                        b: rel(&b.file),
+                        b_line: b.line_start,
+                        sim,
+                        exact,
+                        lines,
+                    });
+                    n += 1;
                 }
-                arcs.push(DupArc {
-                    a: rel(&a.file),
-                    a_line: a.line_start,
-                    b: rel(&b.file),
-                    b_line: b.line_start,
-                    sim,
-                    exact,
-                    lines,
-                });
-                n += 1;
             }
-        }
-    };
+        };
     for c in &report.exact_clones {
         collect(&c.members, 1.0, true, c.lines);
     }

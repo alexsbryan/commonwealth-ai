@@ -130,8 +130,7 @@ pub(crate) async fn run(args: &[String]) -> i32 {
                 );
                 println!("{plan}");
             } else if as_goal {
-                let goal =
-                    sovereign_code::suggest_seams::render_split_goal(&report, max_lines);
+                let goal = sovereign_code::suggest_seams::render_split_goal(&report, max_lines);
                 // Paste-ready: the caller wraps it in quotes for the solve verb,
                 // so strip nothing — newlines are the concern map's structure.
                 println!("{goal}");

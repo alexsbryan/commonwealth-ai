@@ -32,9 +32,7 @@ use std::path::{Path, PathBuf};
 
 use corpus_engine_archaeology::git_archaeology::batch_harvest_all_commits;
 use corpus_engine_scip::ScipGraph;
-use sovereign_code::arch_report::{
-    build_arch_report, declared_deps_from_cargo, ArchReportInputs,
-};
+use sovereign_code::arch_report::{build_arch_report, declared_deps_from_cargo, ArchReportInputs};
 use sovereign_code::dry_report::{build_dry_report, DryInputs};
 
 const TEMPLATE: &str = include_str!("fieldglass.html");
