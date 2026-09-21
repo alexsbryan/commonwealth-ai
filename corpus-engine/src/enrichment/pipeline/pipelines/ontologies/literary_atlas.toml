@@ -44,7 +44,7 @@ arguments = true
 # (`Pipeline::emits`) and ratcheted by
 # `builtin_navigation_rows_name_only_kinds_the_pipeline_emits`. Kinds the
 # pre-registered table lists and no built-in build produces are absent on
-# purpose: `Position`/`Opposition` atoms, `Causes` and `OpposesIn` edges, and
+# purpose: `Position`/`Opposition` atoms, `OpposesIn` edges, and
 # `Grounds`, which the resolvers write from an atom to a CHUNK — it has no
 # seat in the atom CSR and a row walking it walks nothing. Exemplars describe
 # question SHAPES this genre's readers ask, never a bank's sentences.
@@ -76,8 +76,12 @@ exemplars = [
 ]
 
 [navigation.trajectory]
+# `Causes` joins `Transition` here now that Phase 3b emits it (resolution.rs,
+# step 6): the transition reaches the next STATE, the cause reaches the EVENT
+# that produced it. Walking transitions alone answered "what states did they
+# pass through" and never "what made them".
 seed = { kinds = ["Entity", "State"] }
-walk = ["Transition"]
+walk = ["Transition", "Causes"]
 hops = 2
 budget = 12
 exemplars = [

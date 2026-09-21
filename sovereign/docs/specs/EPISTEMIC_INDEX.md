@@ -139,9 +139,11 @@ names the inferred edges. What is missing is the third role.
    universal rule (`KindSet::covers`): a row may not seed on, budget or walk
    a kind its pipeline never produces. The table above is what an UNDECLARED
    atlas walks under, and it fails that ratchet on every built-in — no
-   built-in build emits `Position` or `Opposition` atoms, `Causes` or
-   `OpposesIn` edges, and `Grounds` is written from an atom to a chunk and
-   never seats in the atom CSR. Philosophy's tension row seeds on `Claim` +
+   built-in build emits `Position` or `Opposition` atoms or `OpposesIn`
+   edges, and `Grounds` is written from an atom to a chunk and
+   never seats in the atom CSR. `Causes` was on that list until 2026-09-21,
+   when Phase 3b began emitting it (Event → the State its trigger produced);
+   the four genre trajectory rows walk it beside `Transition` now. Philosophy's tension row seeds on `Claim` +
    `ArgumentReconstruction`, walks `Tension` → `Involves` for two hops and
    composes `[atoms, raptor]`; referential seeds no `Configuration` (it skips
    Phase 8); engineering keeps one row on (tension, claims only) and switches

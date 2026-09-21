@@ -11,7 +11,6 @@ use corpus_engine::enrichment::ontology::{
     validate_block, AttrFamily, Deontic, Force, OntologyLanguageRegistry, OntologyPolicies,
     OntologyTypeDecl, SupersessionClock, TypeKind,
 };
-use corpus_engine::enrichment::pipeline::atlas::EntityType;
 use corpus_engine::recipe::{EntityTypeDecl, RelationshipTypeDecl};
 use corpus_engine::testing::validate_recipe_offline;
 use corpus_engine::{recipe_templates, Recipe};

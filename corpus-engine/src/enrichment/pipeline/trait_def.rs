@@ -346,6 +346,14 @@ pub trait Pipeline: Send + Sync + 'static {
         }
         if atoms.contains(&AtomType::State) {
             edges.insert(EdgeType::Transition);
+            // `Causes` comes off the same decision as `Transition`: Phase 3b
+            // names the Event that triggered a state change and emits the
+            // edge from it. So it needs an Event to be the source, and a
+            // State pair to be the change — a pipeline with States but no
+            // Events emits transitions and no causes.
+            if atoms.contains(&AtomType::Event) {
+                edges.insert(EdgeType::Causes);
+            }
         }
         if atoms.contains(&AtomType::Claim) {
             edges.insert(EdgeType::Tension);

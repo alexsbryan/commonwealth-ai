@@ -35,7 +35,7 @@ The vocabulary is small and stable:
 |---|---|---|
 | **Involves** | Atom → Entity | "this event/state/claim involves this entity" |
 | **Transition** | State → State | "trajectory step" |
-| **Causes** | Event → Event | "directly precipitated" |
+| **Causes** | Event → State | "this event produced this state" |
 | **Grounds** | Claim → Evidence | "this claim is supported by this passage" |
 | **Tensions** | Claim ↔ Claim | "these are in productive disagreement" |
 | **Contrasts** | Entity ↔ Entity | "compared on shared dimension" |
@@ -43,6 +43,13 @@ The vocabulary is small and stable:
 
 Both shapes are stable across corpora. What *varies* is which strategy
 populates them and how deep the enrichment goes.
+
+`Causes` read `Event → Event`, "directly precipitated", for as long as nothing
+produced one. Phase 3b produces it now, from the trigger it already names for a
+state change (`resolution.rs`, step 6), so the endpoints are the ones the
+producer actually writes. Event → Event was also unreachable by the only row
+that walks the edge: the trajectory row seeds on `Entity` and `State`
+(`EPISTEMIC_INDEX.md` §2.2), and an edge between two Events touches neither.
 
 ---
 
