@@ -88,7 +88,6 @@ sovereign-daemon = { workspace = true, optional = true }
 # the daemon comes up; pulled in directly here rather than via
 # sovereign-tools so the dep is visible in this crate's tree.
 sovereign-work-atlas = { workspace = true, optional = true }
-commonwealth-core = { path = "../../../commonwealth/crates/commonwealth-core", optional = true }
 corpus-engine = { workspace = true, features = ["treesitter"], optional = true }
 # Read-port leaf (`EmbedFn`, `Error`, `DEFAULT_EMBED_DIM`, `CorpusIndex`) —
 # same workbench gate as corpus-engine.
@@ -152,7 +151,6 @@ workbench = [
     "dep:sovereign-mesh",
     "dep:sovereign-daemon",
     "dep:sovereign-work-atlas",
-    "dep:commonwealth-core",
     "dep:corpus-engine",
     "dep:corpus-index",
     "dep:code-facts",

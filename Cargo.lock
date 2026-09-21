@@ -12225,7 +12225,6 @@ dependencies = [
  "axum",
  "chrono",
  "code-facts",
- "commonwealth-core",
  "corpus-engine",
  "corpus-engine-archaeology",
  "corpus-engine-notes",

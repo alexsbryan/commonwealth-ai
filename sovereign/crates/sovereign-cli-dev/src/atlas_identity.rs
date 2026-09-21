@@ -21,7 +21,7 @@
 //! It was repaired in `registry` and left in the other two, which is what one
 //! decision living in three places buys you (`ARCH_PRINCIPLES` §10.6).
 
-use commonwealth_core::ids::NodeId;
+use kernel_types::NodeId;
 
 /// This workstation's atlas identity.
 ///
