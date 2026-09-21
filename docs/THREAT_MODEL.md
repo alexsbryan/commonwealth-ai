@@ -200,39 +200,78 @@ it.
    published research — see `commonwealth/ARCHITECTURE.md` §9.)
    *Closes when:* the RPC stream rides an authenticated, encrypted transport
    (the iroh path the rest of the mesh uses) or the port refuses a peer it
-   cannot verify. *Owner:* campaign `threat-gaps` (order `threat-gaps-close`), approved 2026-09-20, next in the queue (`mesh-principal` finished 2026-09-21). Measured for that order: the member-only encrypted
+   cannot verify. *Owner:* campaign `threat-gaps` (order `threat-gaps-close`),
+   approved 2026-09-20, running. Measured for that order: the member-only encrypted
    tunnel for this traffic already exists and is in use. The `0.0.0.0` default
-   bind is closed as of 2026-09-20 (`DEFAULT_RPC_BIND` is loopback and a
-   non-loopback bind is refused without `SOVEREIGN_RPC_ALLOW_PLAINTEXT_LAN`),
-   but the entry STAYS OPEN: the stream is still plaintext wherever it runs,
+   bind is closed as of 2026-09-21 by `b38c3cf88`: `DEFAULT_RPC_BIND` is
+   `127.0.0.1:50052`, and `RpcServe::resolve` — the one decider — answers
+   `Refused { bind }` rather than `Off` for any bind reachable from another
+   machine unless the operator acknowledges it with
+   `SOVEREIGN_RPC_ALLOW_PLAINTEXT_LAN=1` or `[shared_model]
+   allow_plaintext_lan = true`. The entry STAYS OPEN: the stream is still plaintext wherever it runs,
    and that the split completes over the tunnel on a direct path has not been
    measured on two machines (owed to `HUMAN-tg-rpc-two-machines`).
-2. **The internal API `:9742` has no blanket auth, in either mode.** Join
-   is key-and-proof gated and gossip carries a mesh proof; the remaining
-   routes, including ones that change state (`/internal/mesh/quiesce`,
-   `/internal/models/load`), answer any caller that can reach them. In
-   trusted-network mode that is any device on your tailnet/LAN — a hostile
-   device *inside* the perimeter is inside the trust ring. Encrypted mode
-   narrows it but does not close it: the listener is loopback-only, but the
-   internal iroh ALPN admits any dialer so that a joiner can reach
-   `/internal/join`, and forwards it to that listener
+2. **The internal API `:9742` admits the group, not a member.** Narrowed
+   2026-09-21 by `8885071db` (the gate) on `530db2bb2` (the credential), not
+   closed. Until then, join was key-and-proof gated and gossip carried a mesh
+   proof, and the remaining routes — including ones that change state
+   (`/internal/mesh/quiesce`, `/internal/models/load`) — answered any caller
+   that could reach the port: on a trusted network, any device on your
+   tailnet/LAN. Encrypted mode narrowed that and did not close it: the
+   listener is loopback-only, but the internal iroh ALPN admits any dialer so
+   that a joiner can reach `/internal/join`, and forwards it to that listener
    (`sovereign/crates/sovereign-mesh/src/iroh_access.rs`, `forward_for`).
    Since `e8f7f0520` that hop carries the dialer's verified key, and its
-   member name when the roster has one. Since `0f190bc47` exactly one route
-   behind it refuses on that — `/internal/ring/sync`, by roster. The other 54
-   do not; see entry 9.
+   member name when the roster has one. Since `0f190bc47` `/internal/ring/sync`
+   refuses on that key, by roster; see entry 7.
+   What `8885071db` added is one gate for every other route
+   (`sovereign/crates/sovereign-daemon/src/internal_gate.rs`, applied in
+   `server.rs` immediately before `internal_principal_layer`, so the resolver
+   runs outermost and the gate reads what it attached). It exempts exactly
+   `/internal/join` and `/internal/gossip` by exact path equality, admits a
+   `Principal::Member`, admits a request carrying `ProvedMeshMember` — the
+   marker a valid `x-mesh-proof` earns, which a plain-IP member can now mint
+   (`commonwealth-transport::mesh_proof_stamp`) — admits a true loopback
+   caller that is not `Unverified`, and answers everything else 401 with a
+   sentence and one `warn!` naming route, peer and principal. `[daemon]
+   internal_auth` defaults to `"member"`; `"perimeter"` restores the
+   behaviour every build before this one had, and says so at startup.
+   What remains is the reason this is narrowed and not closed: the mesh proof
+   proves the group, not which member is calling (entry 8), so on a plaintext
+   mesh any member is every member on this port; and nobody has yet watched a
+   non-member refused from a second machine.
    Corrected 2026-09-20: this entry said encrypted mode "already closes it",
    and the surfaces table said admin routes were loopback-only per handler;
    neither was true. Until closed: keep `:9742` off any network you do not
    control. *Closes when:* a non-member reaches only the join route, over
    iroh and over plain IP, and everything else requires a verified member.
-   *Owner:* campaign `threat-gaps` (order `threat-gaps-close`), approved 2026-09-20, next in the queue (`mesh-principal` finished 2026-09-21).
-3. **One shared client token, not per-user tenancy, on `:9741`.** Every
-   remote holder of the client token has the same authority.
+   *Owner:* campaign `threat-gaps` (order `threat-gaps-close`), approved
+   2026-09-20; the live half — a real second machine refused on the shipped
+   defaults, with join and gossip between members unchanged — is owed to row
+   `HUMAN-tg-the-stranger`.
+3. **One shared client token on `:9741`; named tokens exist beside it.**
+   Narrowed 2026-09-21 by `36501a41c`, not closed. Until then every remote
+   holder of the client token had the same authority and taking it back from
+   one device meant rotating it for all of them.
    (`sovereign-server` on `:8080` does have per-key tenants; guest grants are
-   per-bearer, scoped and expiring.) *Closes when:* a remote client holds a
-   credential of its own that can be revoked without rotating everyone's.
-   *Owner:* campaign `threat-gaps` (order `threat-gaps-close`), approved 2026-09-20, next in the queue (`mesh-principal` finished 2026-09-21).
+   per-bearer, scoped and expiring.) `svrn mesh token --new <label> | --list
+   | --revoke <label>` now mints a bearer per device, stored 0600 under
+   `<data_dir>/client-tokens/`; `revoke` drops the in-memory entry before
+   deleting the file, so the refusal lands in the same daemon lifetime with
+   no restart. A named token is not a new principal — it is the credential
+   `client_principal::resolve` already turns into `Principal::RemoteClient`,
+   with a label attached, so the admit log carries the label and no log line
+   carries a token. `[daemon] client_tokens` defaults to `"shared"`, which
+   keeps admitting the one shared token beside the named ones; `"named-only"`
+   refuses it with a 401 naming the posture. This is not per-user tenancy:
+   a named token's authority is still the whole client API, and on the
+   default posture the shared secret is still a credential.
+   *Closes when:* the shipped default is a per-device credential and a
+   remote client's authority can be scoped, not only revoked.
+   *Owner:* campaign `threat-gaps` (order `threat-gaps-close`), approved
+   2026-09-20; the live half — two labelled devices, one revoked and refused
+   while the other keeps working with no restart — is owed to row
+   `HUMAN-tg-the-stranger`.
 4. ~~**The standalone `commonwealth` binary hardcodes `0.0.0.0:9741`**
    (bearer-gated, loopback-exempt) rather than following the embedded
    daemon's loopback-first default.~~ Struck 2026-09-20 by `27c0fe031`
@@ -240,13 +279,34 @@ it.
    crates and none of them is `commonwealth-daemon`, so the surface this entry
    described no longer ships. The embedded daemon's loopback-first default
    (first row of the surfaces table) is the only `:9741` there is.
-5. **Tauri v2 does not gate app commands per-window** (tauri#9227): a
-   webview with IPC access can invoke any registered command. Relevant only
-   if untrusted content ever gets a webview. *Closes when:* upstream lands
-   per-window gating, or the desktop gains its own per-window command
-   allowlist. *Owner:* campaign `threat-gaps` (order `threat-gaps-close`), approved 2026-09-20, next in the queue (`mesh-principal` finished 2026-09-21). Measured for that order: the
-   desktop ships no app-command manifest, so a mesh-app window can invoke
-   every host command, not only the bridge's.
+5. **A mesh-app window is held to the bridge in source, and nobody has
+   watched one refused.** Closed in source 2026-09-21 by `00451b8ac`. Tauri
+   v2 still does not gate app commands per-window (tauri#9227, open): its ACL
+   check applies only to a crate carrying an app manifest, this crate's
+   `build.rs` is a bare `tauri_build::build()`, so `capabilities/meshapp.json`
+   could not decide WHICH commands a `meshapp-*` window reaches and a webview
+   with IPC access could invoke any registered command. That is no longer what
+   this entry waits on: the desktop gained its own allowlist rather than
+   waiting for upstream. `meshapp::bridge_refusal(label, command)`
+   (`sovereign/crates/sovereign-desktop/src-tauri/src/meshapp.rs`) is the one
+   decider — pure, label and command in, refusal out — called in the invoke
+   closure in `src-tauri/src/main.rs` before the handler runs, so a label
+   `app_id_from_label` recognises may invoke only a name in
+   `MESHAPP_BRIDGE_COMMANDS` (18) and every other label is unchanged. The
+   allowlist is not hand-kept beside the shim:
+   `the_bridge_allowlist_is_exactly_the_shims_commands`
+   (`src-tauri/src/commands/meshapp.rs`) parses the `invoke("…")` names back
+   out of `MESHAPP_SHIM` and asserts set-equality with the const, so widening
+   one without the other is red.
+   What remains is the live half, and it is the reason this entry is not
+   struck: both of that commit's plants are SOURCE checks — the second,
+   `the_invoke_closure_consults_the_bridge_decider`
+   (`src-tauri/tests/command_surface.rs`), is a census of `main.rs`, and the
+   crate has no mock-runtime harness, so nothing here can drive a real
+   refusal from a real `meshapp-*` window (ARCH 5: a gate nobody has watched
+   fail). *Closes when:* a real mesh-app window is observed being refused a
+   non-bridge command. *Owner:* campaign `threat-gaps` (order
+   `threat-gaps-close`), row `HUMAN-tg-the-stranger`.
 6. **A mesh member can act as any other member on the CLIENT plane** —
    narrowed 2026-09-21, not closed. On the internal plane (`:9742`) the nine
    deciders that read `x-node-id` now read a principal resolved from the key
@@ -277,13 +337,15 @@ it.
    documented default and what the seven `REGISTERED_NAMESPACES` rely on; the
    file-rostered work plane narrows. See entry 8 for the posture this depends
    on.
-8. **An asker with no verified key is served every ring on a plaintext
-   mesh.** The roster filter in entry 7 decides on the key the iroh handshake
-   proved. A caller that presents no `x-mesh-*` at all is
-   `Principal::Anonymous` and is served without a roster check — on the
-   encrypted posture that is a local process reaching a loopback-only
-   `:9742`, and on a plaintext mesh it is every peer that can route to the
-   host. (A caller that presents an identity the daemon cannot tie to its own
+8. **An asker that proves only the mesh secret is served every ring on a
+   plaintext mesh.** The roster filter in entry 7 decides on the key the iroh
+   handshake proved. A caller that presents no `x-mesh-*` at all is
+   `Principal::Anonymous` and is served without a roster check once it is past
+   the gate — on the encrypted posture that is a local process reaching a
+   loopback-only `:9742`, and on a plaintext mesh, before `8885071db`, it was
+   every peer that could route to the host; since that commit such a peer must
+   at least carry a valid `x-mesh-proof` to be let in at all, which proves the
+   group and not the member. (A caller that presents an identity the daemon cannot tie to its own
    acceptor is `Principal::Unverified` and is refused every namespace; this
    entry is about the one that claims nothing.) Disclosed in the route's own
    module header. *Closes when:* a plaintext mesh either carries a per-caller
@@ -291,24 +353,32 @@ it.
    asker there too — which is a product decision, because it breaks a
    deployed plaintext mesh. *Owner:* campaign `threat-gaps`, bar
    `tg-stranger-refused-9742`. The product decision was taken 2026-09-20
-   (ledger A58): `:9742` defaults to member-only, a plain-IP member proves
-   membership with the mesh proof gossip already carries, so a plaintext mesh
-   keeps working, and `internal_auth = "perimeter"` restores today's
+   (ledger A58) and landed 2026-09-21 — `530db2bb2` gave a plain-IP member
+   the one outbound stamp, `8885071db` the gate: `:9742` defaults to
+   member-only, a plain-IP member proves membership with the mesh proof
+   gossip already carries, so a plaintext mesh keeps working, and
+   `internal_auth = "perimeter"` restores the earlier
    behaviour. That NARROWS this entry and does not close it: the mesh proof
-   proves the group, not which member is calling, so after it lands an
-   unkeyed asker must at least hold the mesh secret, and a member who is on
+   proves the group, not which member is calling, so an
+   unkeyed asker must now at least hold the mesh secret, and a member who is on
    no roster for a ring can still read it over plain IP. Only the encrypted
    posture, where the handshake proves the key, closes that half; refusing it
    on a plaintext mesh would stop file-rostered rings replicating there, and
    that decision has not been taken.
-9. **The internal API's other 54 routes still answer an unverified caller.**
-   `internal_principal_layer` resolves a principal for every request on
-   `:9742`, but `/internal/ring/sync` is the only route that refuses on it.
-   Everything else — `/internal/models/load`, `/internal/ring/live`, the
-   corpus grant issue/revoke pair, the model-file routes, scheduling intent
-   and plan — is reached by any caller that reaches the port, exactly as
-   entry 2 says. What changed is that the principal now EXISTS for those
-   routes to read. *Closes when:* entry 2 closes. *Owner:* campaign
+9. **The internal API's other 54 routes refuse a stranger but tell its
+   members apart only on the encrypted posture.** Narrowed 2026-09-21 by
+   `8885071db`, not closed. Until then `internal_principal_layer` resolved a
+   principal for every request on `:9742` and `/internal/ring/sync` was the
+   only route that refused on it, so everything else —
+   `/internal/models/load`, `/internal/ring/live`, the corpus grant
+   issue/revoke pair, the model-file routes, scheduling intent and plan — was
+   reached by any caller that reached the port. `internal_gate.rs` now refuses
+   all of them to a caller that is neither a verified member, nor the holder
+   of a valid mesh proof, nor a true loopback caller (entry 2 has the exact
+   rule and the two exempt routes). What it does not do is give those 54
+   routes a per-member authority: on a plaintext mesh they read
+   `ProvedMeshMember`, which names no member, so any member can drive any of
+   them. *Closes when:* entry 2 closes. *Owner:* campaign
    `threat-gaps` (order `threat-gaps-close`), approved 2026-09-20.
 10. **A compromised node can serve bad inference.** Not defended. *By design:*
    the social trust model, documented since the first architecture draft —
