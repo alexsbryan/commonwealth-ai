@@ -59,6 +59,10 @@ step "atlas"
 # `literary_atlas`, as chaos-secret-agent's config.json records. The default
 # `literary` is a legacy non-atlas pipeline that `enrich build` refuses — window
 # 20260921T065349Z paid for a pod to learn that.
+# `enrich reset` leaves <index>/atlas in place, and `build` then reads
+# "resolve cached — atoms.json exists; skipping": window 20260921T153541Z kept a
+# two-chapter rehearsal atlas that way. The chunks are not under atlas/.
+rm -rf "$INDEX_DIR/atlas"
 "$SVRN" enrich reset "$CORPUS" --full --yes >/dev/null 2>&1 || true   # a local rehearsal pins this host's daemon into config.json
 "$SVRN" enrich init "$CORPUS" --source "$BOOK" --pipeline literary_atlas --force || die "enrich init failed"
 # `extract` exits 1 when it SKIPS a too-short section (DECISIONS A38); --finalize
@@ -69,7 +73,17 @@ step "atlas"
 step "raptor tree + Summary atoms"
 # --force: `raptor` skips documents already built, and a local rehearsal leaves a
 # tree summarised by THIS host's model. One model per board (DECISIONS A38).
-"$SVRN" enrich raptor "$CORPUS" --doc-type narrative --force || die "enrich raptor failed"
+# `raptor` does NOT read SOVEREIGN_DAEMON_URL; it takes --daemon (default
+# localhost:9741), so the same window summarised nothing on the pod and kept the
+# local tree in 0.0 s. Under 20 s of wall clock is that failure again.
+DAEMON="${SOVEREIGN_DAEMON_URL:-${SVRNMESH_DAEMON_URL:-http://localhost:9741}}"
+t0=$SECONDS
+"$SVRN" enrich raptor "$CORPUS" --doc-type narrative --force --daemon "$DAEMON" || die "enrich raptor failed"
+# A summary cache survives --force: once a tree exists for this text, a rebuild
+# is 0.0 s whatever daemon it is pointed at (measured 2026-09-21, local build
+# 1,394 s, pod rebuild 0.0 s). So the SUMMARISER MODEL is whichever host built
+# the tree first; the board must name it. Reported, not refused.
+echo "raptor step wall: $((SECONDS - t0)) s (under ~20 s = summaries reused from an earlier build)"
 "$SVRN" enrich summary-atoms "$CORPUS" || die "enrich summary-atoms failed"
 python3 - "$INDEX_DIR/atlas/atoms.json" <<'PY' || exit 11
 import json, sys
