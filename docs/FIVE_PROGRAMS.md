@@ -489,22 +489,39 @@ core 39, corpus-mcp 16, meshapp 10.
 - [ ] Decide: a new thin reader leaf, or widen `understanding-vocab`
       (already a leaf) / lift from `understanding-atlas` (an ingest member).
 
-### Step 10, the de-embed — EXECUTED 2026-09-21 (the shape the scouts measured)
+### Step 10, the de-embed — PARTIAL 2026-09-21; AND A CORRECTION TO THIS SECTION
 
-Scouts found only TWO production construction sites (the "fourteen" was edge
-counts, not sites): `cli-daemon daemon_cmd/mod.rs:1224` (the `daemon run` verb)
-and `setup_cmd/terminal.rs:319` (wizard MeshAdmin one-shot), plus two cli-mesh
-fallbacks. The cut that landed:
+**The correction, first.** This section's closing line below used to say the
+endstate greps to "only the `cmnwlth` binary's own main". That is WRONG and it
+cost a session: `sovereign-daemon` is §2's knowledge server and belongs to
+`svrn` — the table says svrn "exists today as `corpus-mcp/` + the turn path in
+`sovereign-core`", and §7 step 9's own words ("`cmnwlth -> svrn` … [is]
+already exactly what a `[[package]]` row says") only hold if the daemon is in
+`svrn`. A session read the old line, moved `sovereign-daemon` into `[cmnwlth]`
+in ARCH_LAYERS.toml, and the gate fell 117 → 102. That 15-edge "gain" was
+fake: it hid the rule-6 work (a program never links another's crates — the
+serving cluster must be DIALED, never absorbed) behind a re-homing. Reverted
+in the next commit; the honest number was **115**. The lesson is the one §11
+already preaches: a zero reached by promotion is fake. Read §2 before moving a
+crate between programs; the daemon is svrn's host, `cw-rails` is cmnwlth's.
 
-- [x] `sovereign-daemon` gained its own `[[bin]]` (`sovereign-daemon`, the
-      cmnwlth binary's main) — the run body forked from cli-daemon's
-      daemon_cmd, `[[package]]` membership moved svrn → cmnwlth in
-      ARCH_LAYERS.toml (~25 edges became intra-package).
+**What actually landed.** Scouts found only TWO production construction sites
+(the "fourteen" was edge counts, not sites): `cli-daemon daemon_cmd/mod.rs` (the
+`daemon run` verb) and `setup_cmd/terminal.rs` (wizard MeshAdmin one-shot),
+plus two cli-mesh fallbacks.
+
+- [x] `sovereign-daemon` gained its own `[[bin]]` — the svrn host's entry
+      point, with the run body forked from cli-daemon's daemon_cmd.
 - [x] `svrn daemon run` execs the sibling (agent-bench pattern,
       `SOVEREIGN_DAEMON_BIN` override; pid preserved through exec(2)).
 - [x] cli-mesh create/join fallbacks dial: `ServingHost::ensure_reachable` +
       `TurnClient` mesh create/join over HTTP; no bundled spawn.
-- [x] cli-daemon dropped 8 emptied serving deps + 4 pre-existing zeros.
+- [x] cli-daemon dropped 8 emptied serving deps + 4 pre-existing zeros
+      (genuine closures: `cli-daemon -> {sovereign-runtime-recipe,
+      corpus-engine-notes, corpus-engine-watchers}`).
+- [ ] Done when `grep -rn EmbeddedDaemon sovereign/crates --include=*.rs`
+      returns only the svrn daemon binary's own main (NOT cmnwlth's — see the
+      correction).
 - [ ] **terminal.rs wizard seam**: `find_holders` needs
       `peer_inference_endpoints()` (roster + TrafficClass::Inference rewrite);
       no HTTP equivalent — `/v1/mesh/status` `MemberDto.addresses` would dial

@@ -1066,7 +1066,7 @@ doc = "docs/FIVE_PROGRAMS.md"
 # The knowledge server (§2): MCP `ask`, `search`, `atoms_lookup`; HTTP
 # `/v1/chat/completions`. Owns corpus indexes and conversations on disk.
 #
-# The turn path plus the frontdoor CLI. It is
+# The turn path plus the daemon that serves it plus the frontdoor CLI. It is
 # the widest of the five and that is the shape of the thing, not a failure to
 # draw a line: §6 measured `sovereign-tools` at 800 references into runtime and
 # corpus across 183 files, and the 187 that belonged to `code/` already left as
@@ -1082,15 +1082,17 @@ doc = "docs/FIVE_PROGRAMS.md"
 # in the only place that counts.
 #
 # `sovereign-cli` is the dispatcher and its siblings are the programs; it is
-# here because `svrn` is the name a user types. The daemon that serves the
-# turn path is cmnwlth's own [[bin]] since the de-embed (FIVE_PROGRAMS §11
-# step 10, 2026-09-21): `svrn daemon` execs the sibling binary, it does not
-# link the host. `sovereign-service` is the OS
+# here because `svrn` is the name a user types. `sovereign-daemon` is §2's
+# knowledge server: it serves this program's own wires, and its edges to the
+# serving cluster are the dial-never-embed task (§4 rules 1/2/6), not a
+# re-homing — `cmnwlth -> svrn` being expressible as a package row is what
+# makes that true (FIVE_PROGRAMS §7 step 9). `sovereign-service` is the OS
 # service wrapper — §2a's "the daemon is an OS service and is present when no
 # window is".
 crates = [
     "corpus-mcp",
     "sovereign-core",
+    "sovereign-daemon",
     "sovereign-tools",
     "sovereign-tools-base",
     "sovereign-store",
@@ -1179,10 +1181,6 @@ crates = [
     "commonwealth-work",
     "commonwealth-media",
     "commonwealth-rails",
-    # The assembled host (FIVE_PROGRAMS §2b — one daemon per organisation,
-    # de-embed 2026-09-21): EmbeddedDaemon, the routers, the assembly and
-    # the `sovereign-daemon` [[bin]] that is the only construction site.
-    "sovereign-daemon",
     "sovereign-mesh",
     "sovereign-mesh-test-harness",
     "sovereign-scheduler",
