@@ -2,7 +2,7 @@
   "bank_name": "ontology-pilot-secret-agent-v1",
   "corpus": "chaos-secret-agent",
   "limit": 0,
-  "started_at_unix": 1789962893,
+  "started_at_unix": 1789968937,
   "results": [
     {
       "question_id": "lookup-wife",
@@ -28,9 +28,9 @@
       "corpora_hit": [],
       "vector_eligible": true,
       "synth": {
-        "answer": "In Joseph Conrad's novel *The Secret Agent*, the wife of Adolf Verloc is **Winnie Verloc** (born Winnie Brown).\n\nShe is a central character in the story, known for her quiet demeanor and deep love for her brother, Michaelis. Her husband, Adolf Verloc, poses as an owner of a shop selling pornographic material but secretly works as a police informant. The plot revolves around the tensions within their marriage and the tragic events that unfold after Verloc pressures Winnie to deliver a bomb to Greenwich Observatory on behalf of his employer, \"the Chief.\"",
+        "answer": "In Joseph Conrad's novel *The Secret Agent*, the wife of Adolf Verloc is **Winnie Verloc** (born Winnie Brown).\n\nShe is a central character in the story, known for her complex relationship with her husband and her eventual tragic actions.",
         "reasoning_chars": 0,
-        "stream_wall_ms": 1179,
+        "stream_wall_ms": 5746,
         "total_latency_ms": null,
         "intent": null,
         "source_origins": [],
@@ -84,9 +84,9 @@
       "corpora_hit": [],
       "vector_eligible": true,
       "synth": {
-        "answer": "Stevie is Winnie Verloc's **younger brother**.\n\nIn Joseph Conrad's novel *The Secret Agent*, Stevie suffers from mental disabilities and relies heavily on his sister, Winnie, for care and emotional support. Their relationship is central to the story, as Stevie's tragic fate serves as a major catalyst for the plot's development.",
+        "answer": "Stevie is **Winnie Verloc's younger brother**.\n\nIn Joseph Conrad's novel *The Secret Agent*, Stevie lives with Winnie and her husband, Adolf Verloc. He has a mental disability and relies heavily on his sister for care and guidance, which creates significant tension in the household due to the pressure placed on him by Adolf (who uses Stevie as an unwitting agent for espionage).",
         "reasoning_chars": 0,
-        "stream_wall_ms": 646,
+        "stream_wall_ms": 614,
         "total_latency_ms": null,
         "intent": null,
         "source_origins": [],
@@ -140,9 +140,9 @@
       "corpora_hit": [],
       "vector_eligible": true,
       "synth": {
-        "answer": "Verloc's shop is located on **Saffron Lane**.\n\nThis detail appears in Joseph Conrad's novel *The Secret Agent*, where Verloc runs a small shop that sells pornographic literature and other dubious items. The address is often cited as \"103 Saffron Lane\" (though the exact number may vary slightly depending on the edition or interpretation, Saffron Lane is the consistent street name).",
+        "answer": "Verloc's shop is located on **Saffron Hill** in London.\n\nThis detail appears in Joseph Conrad's 1907 novel *The Secret Agent*. The shop, which sells cheap clocks and toys, is situated in the Spitalfields area of London, a neighborhood known for its immigrant communities and bustling market streets at the time. Saffron Hill was historically associated with various trades and had a reputation for being somewhat seedy or dangerous, fitting the atmosphere of Verloc's establishment as a front for espionage activities.",
         "reasoning_chars": 0,
-        "stream_wall_ms": 788,
+        "stream_wall_ms": 876,
         "total_latency_ms": null,
         "intent": null,
         "source_origins": [],
@@ -184,21 +184,21 @@
         "ratio": null
       },
       "fact_score": {
-        "matched": [],
-        "missing": [
+        "matched": [
           "knife"
         ],
+        "missing": [],
         "total_expected": 1,
-        "ratio": 0.0
+        "ratio": 1.0
       },
       "embed_ms": 0,
       "search_ms": 0,
       "corpora_hit": [],
       "vector_eligible": true,
       "synth": {
-        "answer": "Winnie Verloc kills Adolf Verloc with a **cutlass** (specifically, she hits him on the head with it).\n\nThis occurs in Joseph Conrad's novel *The Secret Agent*. In a moment of intense emotional turmoil and realization that her brother Stevie has been used as an instrument in Verloc’s political machinations, Winnie strikes Verloc with the cutlass he keeps in their shop.",
+        "answer": "Winnie Verloc kills Adolf Verloc with a **knife** (specifically, she stabs him in the back).\n\nThis occurs at the climax of Joseph Conrad's novel *The Secret Agent*. After discovering that her brother Stevie has died due to the explosion orchestrated by Verloc and his employer (the \"Professor\"), Winnie confronts Verloc. In a fit of rage and grief, she strikes him down with a carving knife from their kitchen.",
         "reasoning_chars": 0,
-        "stream_wall_ms": 828,
+        "stream_wall_ms": 782,
         "total_latency_ms": null,
         "intent": null,
         "source_origins": [],
@@ -212,18 +212,18 @@
           "ratio": 0.0
         },
         "judge_fact_score": {
-          "matched": [],
-          "missing": [
+          "matched": [
             "knife"
           ],
+          "missing": [],
           "total_expected": 1,
-          "ratio": 0.0
+          "ratio": 1.0
         },
         "judge_evidence": [
           {
             "fact": "knife",
-            "present": false,
-            "evidence": "(absent)"
+            "present": true,
+            "evidence": "\"Winnie Verloc kills Adolf Verloc with a **knife** (specifically, she stabs him in the back).\""
           }
         ]
       }
@@ -252,9 +252,9 @@
       "corpora_hit": [],
       "vector_eligible": true,
       "synth": {
-        "answer": "To provide an accurate answer, I need to know **which specific bomb plot** you are referring to. There have been many historical and recent incidents involving alleged or actual bomb plots targeting various buildings worldwide (e.g., the 1993 World Trade Center bombing, the Oklahoma City bombing, the 2016 Brussels bombings, etc.).\n\nCould you please specify:\n- The name of the incident?\n- The year it occurred?\n- Or any other identifying details?\n\nThis will help me give you a precise and correct response.",
+        "answer": "To provide an accurate answer, I need more context. \"The bomb plot\" is a generic term that could refer to many historical events (e.g., the 1993 World Trade Center bombing, the 2006 transatlantic aircraft plot, the Oklahoma City bombing attempt, etc.).\n\nCould you please specify:\n1. **Which year** or time period?\n2. **Which country** or city?\n3. Any other details about the event?\n\nFor example:\n- If you mean the **September 11 attacks**, the targets were the **World Trade Center towers** and the **Pentagon**.\n- If you mean the **Oklahoma City bombing**, the target was the **Alfred P. Murrah Federal Building**.\n- If you are referring to a specific movie, book, or recent news story, please clarify that as well.",
         "reasoning_chars": 0,
-        "stream_wall_ms": 883,
+        "stream_wall_ms": 1130,
         "total_latency_ms": null,
         "intent": null,
         "source_origins": [],
@@ -308,9 +308,9 @@
       "corpora_hit": [],
       "vector_eligible": true,
       "synth": {
-        "answer": "In the television series *Miami Vice*, James \"Sonny\" Crockett does not hold a high-ranking command position like Captain or Lieutenant at the start of the series. He is primarily identified as a **Detective** in the Miami Police Department's Violent Crimes Branch (specifically, Narcotics).\n\nHowever, his exact rank title varies slightly depending on the source and episode:\n\n1.  **Most Commonly:** He is referred to as a **Detective**.\n2.  **Specific Rank:** In some episodes and official character bios, he is listed with the rank of **Lieutenant** (*Lieutenant* Sonny Crockett). This promotion occurs during the course of the series. For much of Season 1, he may have been a senior detective or sergeant-equivalent before being promoted.\n3.  **Partner Status:** His partner, Ricardo Tubbs, starts as an undercover officer from Chicago PD and later becomes a Miami Detective/Lieutenant as well.\n\nSo, while often just called \"Detective,\" his formal police rank for most of the series' run is **Lieutenant**.",
+        "answer": "Heat (played by Robert De Niro) does not hold a police rank. He is the leader of a crew of professional bank robbers and is **not** a member of law enforcement.\n\nThe character who holds a high police rank in *Heat* is **Lt. Vincent Hanna**, played by Al Pacino, who leads the Robbery/Homicide detail investigating Heat's crimes.",
         "reasoning_chars": 0,
-        "stream_wall_ms": 1671,
+        "stream_wall_ms": 675,
         "total_latency_ms": null,
         "intent": null,
         "source_origins": [],
@@ -364,9 +364,9 @@
       "corpora_hit": [],
       "vector_eligible": true,
       "synth": {
-        "answer": "In Joseph Conrad's novel *The Secret Agent*, the photographs displayed in the window of Verloc's shop are **pictures of young girls**.\n\nMore specifically, they are described as **\"lady photographers'** works,\" often depicting young women or children in a somewhat sentimental or idealized manner. These images contribute to the respectable and harmless appearance of Verloc’s newsstand and toy shop on Fleet Street, helping him maintain his cover as an unremarkable, ordinary citizen while he secretly serves as an agent provocateur for a foreign embassy. The innocent nature of the photographs contrasts sharply with the dark political conspiracies taking place behind the scenes.",
+        "answer": "In Joseph Conrad’s novel *The Secret Agent*, the photographs displayed in the window of Verloc's shop are primarily **cheap, sentimental portraits and stereoscopic views**.\n\nSpecifically, they include:\n\n1.  **Stereoscopic cards (stereoscopes):** These were popular Victorian-era novelties that created a 3D effect when viewed through a special viewer. They often depicted scenic landscapes, exotic locations, or dramatic events—things designed to evoke wonder or curiosity from passersby.\n2.  **Sentimental or picturesque images:** The shop is described as having a somewhat garish and eclectic display meant to attract casual customers looking for small trinkets, postcards, or curiosities.\n\nThese items serve an ironic purpose in the novel: Verloc’s shop appears harmless, mundane, and even slightly frivolous—a \"shop of trivialities\"—which helps conceal his true role as a spy working for the Embassy agent known as \"the Chief.\" The banality of the photographs contrasts sharply with the dark political conspiracy and violence that unfold within the story.",
         "reasoning_chars": 0,
-        "stream_wall_ms": 1167,
+        "stream_wall_ms": 1877,
         "total_latency_ms": null,
         "intent": null,
         "source_origins": [],
@@ -420,9 +420,9 @@
       "corpora_hit": [],
       "vector_eligible": true,
       "synth": {
-        "answer": "Stevie habitually draws **circles**.\n\nThis refers to the character Stevie from the children's book series *The Chronicles of Narnia* by C.S. Lewis, or more likely, it is a reference to a common riddle or trivia question about an artist who is known for drawing perfect circles using only a compass and pencil without lifting his hand. However, in popular culture and riddles, \"Stevie\" isn't a universally recognized figure associated with this specific action unless it's from a very specific niche context (like a local joke or a specific textbook problem).\n\nIf you are referring to **Steve** from *The Steve Jobs Story* or another famous illustrator like **M.C. Escher**, they might draw geometric shapes. But the most classic answer to \"What does one habitually draw with a compass?\" is simply **circles**.\n\n*(Note: If this is from a specific book, movie, or puzzle not widely known, please provide more context!)*",
+        "answer": "Based on the phrasing of your question, it appears to be a specific trivia question referring to **Stevie Wonder** or potentially a character from literature/film named Stevie. However, there is no widely known public fact stating that Stevie Wonder habitually draws with a compass and pencil.\n\nIf this refers to a fictional character (such as **Stevie** from *The Perks of Being a Wallflower* by Stephen Chbosky), he does not have a defining habit of drawing geometric shapes with those tools.\n\nHowever, if this is a riddle or a reference to a specific puzzle:\n1.  **Compass and Pencil** are standard tools for drafting **geometric figures**, circles, arcs, or technical drawings.\n2.  If \"Stevie\" refers to **Stevie Nicks**, she is known for writing lyrics and poetry, not specifically geometry.\n3.  It is possible the question contains a typo or misattribution (e.g., perhaps referring to an artist like **M.C. Escher** who used compasses heavily).\n\nWithout more context on which \"Stevie\" is being referenced, the most logical answer based *strictly* on what one draws with a compass and pencil is:\n\n**Geometric shapes** (or specific constructions like **circles**, **triangles**, or **technical blueprints**).\n\nIf this is from a specific book, movie, or quiz you are currently engaging with, please provide the title for a more accurate identification of the character Stevie.",
         "reasoning_chars": 0,
-        "stream_wall_ms": 1542,
+        "stream_wall_ms": 2053,
         "total_latency_ms": null,
         "intent": null,
         "source_origins": [],
@@ -447,7 +447,7 @@
           {
             "fact": "circles",
             "present": true,
-            "evidence": "Stevie habitually draws **circles**."
+            "evidence": "\"1. Compass and Pencil are standard tools for drafting geometric figures, circles...\""
           }
         ]
       }
@@ -476,9 +476,9 @@
       "corpora_hit": [],
       "vector_eligible": true,
       "synth": {
-        "answer": "The late Baron who had been the embassy patron long associated with Verloc's employment is **Baron S** (often referred to simply as \"the late Baron\" in Joseph Conrad's novel *The Secret Agent*).\n\nIn the context of the novel, Adolf Verloc works as a spy for an unnamed foreign power. His handler and former employer was this influential Baron, who represented that country’s interests at the embassy. After the Baron died, Verloc continued his espionage activities under new arrangements but remained linked to his previous service and connections through this patronage. The specific name \"S\" is used to maintain anonymity and emphasize the bureaucratic, impersonal nature of the espionage world.",
+        "answer": "The late Baron referred to is **Baron Verloc** himself.\n\nIn Joseph Conrad's novel *The Secret Agent*, Mr. Verloc works as a spy for an unnamed foreign power (widely believed to be Germany). His direct superior and the person who appointed him to this role was the **late Baron**, who had been his patron at the embassy long before Verloc took on his current duties involving surveillance of anarchists in London. The Baron has died by the time the main events of the novel begin, but his influence and past association with Verloc are central to understanding Verloc's background and motivations.",
         "reasoning_chars": 0,
-        "stream_wall_ms": 1251,
+        "stream_wall_ms": 1179,
         "total_latency_ms": null,
         "intent": null,
         "source_origins": [],
@@ -532,9 +532,9 @@
       "corpora_hit": [],
       "vector_eligible": true,
       "synth": {
-        "answer": "In the 1964 James Bond film *Goldfinger*, the Professor (played by Harold Sakata) carries a **tennis ball** in his trouser pocket as the detonator for the explosives strapped to his body.\n\nHe squeezes it to trigger an explosion, though he ultimately uses it more as a threat than actually detonating himself during most of the confrontation with Bond and Goldfinger.",
+        "answer": "In the 1974 film *The Parallax View*, the character known as The Professor (played by Paul Sorvino) carries a **rubber ball** (specifically, a small stress ball or squeeze toy) in his trouser pocket. This rubber ball serves as the hand-held detonator for the explosives strapped to his body when he attempts to assassinate Senator Charles Hammond.",
         "reasoning_chars": 0,
-        "stream_wall_ms": 761,
+        "stream_wall_ms": 758,
         "total_latency_ms": null,
         "intent": null,
         "source_origins": [],
@@ -548,18 +548,18 @@
           "ratio": 0.0
         },
         "judge_fact_score": {
-          "matched": [],
-          "missing": [
+          "matched": [
             "india-rubber ball"
           ],
+          "missing": [],
           "total_expected": 1,
-          "ratio": 0.0
+          "ratio": 1.0
         },
         "judge_evidence": [
           {
             "fact": "india-rubber ball",
-            "present": false,
-            "evidence": "(absent)"
+            "present": true,
+            "evidence": "\"carries a rubber ball (specifically, a small stress ball or squeeze toy)\""
           }
         ]
       }
@@ -576,21 +576,21 @@
         "ratio": null
       },
       "fact_score": {
-        "matched": [],
-        "missing": [
+        "matched": [
           "almshouse"
         ],
+        "missing": [],
         "total_expected": 1,
-        "ratio": 0.0
+        "ratio": 1.0
       },
       "embed_ms": 0,
       "search_ms": 0,
       "corpora_hit": [],
       "vector_eligible": true,
       "synth": {
-        "answer": "In Oscar Wilde's play *The Importance of Being Earnest*, Lady Bracknell (Winnie/Algernon's aunt, and often confused with Gwendolen or Cecily in memory, but specifically the mother figure who is actually **Lady Bracknell**'s daughter-in-law? No, wait. Let's clarify the characters.)\n\nActually, let's correct the premise: **Wendy?** No, there is no character named \"Winnie\" as a main protagonist whose mother does this. However, there is a famous line regarding **Gwendolen Fairfax** or perhaps you are referring to **Cecily Cardew**? Or maybe **Miss Prism**?\n\nWait, looking at standard trivia questions for *The Importance of Being Earnest*:\nThere is a scene where Lady Bracknell discusses her past and future plans. But more likely, you might be thinking of **Lady Bracknell herself** discussing sending someone away?\n\nLet's re-read the question carefully: *\"To what kind of charitable institution does Winnie's mother arrange to move herself...\"*\n\nThis sounds like it might refer to **\"Winnie\"** as in **Winifred**? There isn't a prominent \"Winnie\" in Wilde's major works who has a mother doing this.\n\nHowever, there is a very famous line from Oscar Wilde's play **\"A Woman of No Importance\"** or perhaps **\"The Importance of Being Earnest\"** regarding a convent?\n\nActually, let's look at **\"The Picture of Dorian Gray\"**? No.\n\nLet's consider if \"Winnie\" refers to **Winnie-the-Pooh** (A.A. Milne)? Winnie's mother is Christopher Robin's mother (Mrs. Rabbit/Christopher Robin's mom). She doesn't move into a charitable institution.\n\nLet's reconsider the context of British literature quizzes. A common question asks about **Lady Bracknell**. In *The Importance of Being Earnest*, Lady Bracknell mentions that she once sent her sister to a **convent**? Or perhaps it is about **Miss Prism**?\n\nActually, there is a character named **Woolsey** or similar? No.\n\nLet's look at **\"Tess of the d'Urbervilles\"**? No.\n\nIs it possible you are referring to **Willa Cather**? No.\n\nLet's go back to Oscar Wilde. Is there a \"Winnie\"?\nIn *A Woman of No Importance*, there is Mrs. Arbuthnot.\nIn *Lady Windermere's Fan*, there is Lady Windermere.\n\nWait, could \"Winnie\" be short for **Winifred**? In some adaptations or lesser-known works?\n\nAlternatively, this might be a trick question or a misremembered character name from **\"The Importance of Being Earnest\"**. The character who discusses being sent away or institutionalized is often related to the Bunburying plot. But actually, **Gwendolen** and **Cecily** are the young ladies. Their mothers/guardians are **Lady Bracknell** (Gwendolen's mother) and **Miss Prism/Cecily's Aunt Augusta** (actually Cecily lives with Lady Bracknell).\n\nLet's look at **Miss Prism**. She lost a manuscript and a baby.\n\nIs it possible you mean **\"Winnie\"** as in **Winifred**, the daughter in **\"Howards End\"**? No.\n\nLet's try searching for the specific phrase \"charitable institution\" and \"mother\".\nIn **\"The Importance of Being Earnest\"**, Act I, Lady Bracknell says to Jack: *\"I do not approve of anything that tampers with natural ignorance... Ignorance is like a delicate exotic fruit; touch it and the bloom is gone.\"* This doesn't fit.\n\nHowever, there is a line where Lady Bracknell mentions her husband's family or herself. She says she has had an eventful life. She mentions being buried alive? No.\n\nActually, could you be referring to **Woolf**? Virginia Woolf wrote *Mrs. Dalloway*. Clarissa Dalloway? No.\n\nLet's look at **\"Little Women\"**? Jo March? No.\n\nIs it possible \"Winnie\" refers to **Winifred** in **\"The Good Soldier\"**? Ford Madox Ford. Mrs. Ashburton? No.\n\nLet's reconsider the most likely candidate: **Oscar Wilde**.\nIn **\"A Woman of No Importance\"**, Lady Illington sends her daughter away?\n\nWait! There is a character named **Winnipeg**? No.\n\nLet's assume there is a typo and you mean **\"Gwendolen's mother\" (Lady Bracknell)** or **\"Cecily's guardian\" (Lady Bracknell/Miss Prism)**.\n\nActually, I found a reference to this specific trivia question online often associated with **\"The Importance of Being Earnest\"** but referring to **Lady Bracknell** discussing her own past or future? No, she doesn't move herself into an institution.\n\nHowever, in **\"An Ideal Husband\"**, Mrs. Cheveley threatens Lady Chiltern? No.\n\nLet's look at **\"Tess\"**. Tess sends Liza-Lu away? No.\n\nIs it possible you are asking about **\"Winnie-the-Pooh\"** and the character is **Rabbit**? Rabbit has children. He sends them to school? Not a charitable institution.\n\nLet's try one more angle: **Winifred Holtby**'s *South Riding*?\n\nActually, there is a famous quote from **Jane Austen** or similar?\n\nWait, I may have identified the confusion. In **\"The Importance of Being Earnest\"**, Miss Prism mentions she once placed a baby in a handbag... no.\n\nLet's look at **\"Bleak House\"** by Charles Dickens. Ada Clare? No.\n\nIs it possible you mean **\"Woolf\"** and Mrs. Dalloway arranging something for her husband? No.\n\nOkay, let's look at the phrase \"spare the household her keep\". This implies an elderly relative who feels like a burden.\nIn **\"A Room with a View\"**? No.\n\nCould \"Winnie\" be **Winifred** from **\"Jude the Obscure\"**? Sue Bridehead? No.\n\nActually, there is a character named **Lady Bracknell**. She says: *\"I never travel without my diary... It keeps one always in the right path.\"*\n\nLet's consider that you might be referring to **\"The Picture of Dorian Gray\"** and Sibyl Vane? Her mother? No.\n\nIf I cannot identify \"Winnie\", I will state that clearly but offer the most likely correction if it refers to a similar plot point.\n\nHowever, there is a possibility this refers to **\"Woolf\"**'s *To the Lighthouse*. Mrs. Ramsay? No.\n\nWait! Is it from **\"Goodnight Mister Tom\"**? Winnie Holman? Her mother dies early. She goes to live with Mr. Tate. Not a charitable institution arranged by her mother (who was dead).\n\nLet's go back to **Oscar Wilde**.\nIn **\"The Importance of Being Earnest\"**, Lady Bracknell says: *\"I have heard you say in your youth that you were not responsible for your own actions...?\"*\n\nActually, I suspect the user might be misremembering the name **\"Winifred\"** or **\"Winnie\"** and referring to **Lady Bracknell** discussing sending someone to a **convent** or a **refuge**?\n\nOr perhaps it is from **\"Pride and Prejudice\"**? Mrs. Bennet doesn't move herself away.\n\nLet's try searching specifically for \"charitable institution mother spare household her keep\".\nThis phrasing appears in relation to **\"The Importance of Being Earnest\"** regarding **Miss Prism**? No.\n\nIt actually sounds like something from **\"Little Dorrit\"**. Mrs. Clennam? She lives in the workhouse (Marshalsea). But that was before she moved out, or rather, she left the Marshalsea when freed. Her father kept them there.\n\nAnother possibility: **\"Winnie\"** refers to **Winifred** in a specific short story by O. Henry or similar?\n\nGiven the ambiguity and lack of a famous character named \"Winnie\" whose mother arranges this, I will provide a disclaimer. However, if \"Winnie\" is a typo for **\"Gwendolen\"**'s mother (**Lady Bracknell**), Lady Bracknell does not move herself into an institution; she is quite wealthy and imposing. If it's about **Cecily**, her guardian is Lady Bracknell/Miss Prism.\n\nWait! Could it be **\"Woolf\"** and **\"Mrs. Dalloway\"** arranging something for Septimus? No.\n\nLet's consider **\"Jane Eyre\"**. Miss Temple leaves Lowood (a charitable school/charity). But Jane stays.\n\nI will answer based on the most likely literary figure who fits the *action* if \"Winnie\" is a misnomer, or state that no such character exists in major canon under that name with those specific details.\n\nHowever, there is one strong candidate: In **\"The Importance of Being Earnest\"**, **Lady Bracknell** mentions that she once sent her sister to a **convent**? Or perhaps it is about **Miss Prism** working at a **Vauxhall Villa**? No.\n\nActually, I found a similar question online regarding **\"Winifred\"** from **\"Howards End\"**. Helen Schlegel? Ruth Wilcox? Mrs. Muntz sends them away?\n\nLet's assume the user might mean **\"Woolf\"** and *Mrs. Dalloway* sending someone to a sanatorium?\n\nSince I cannot pinpoint \"Winnie\", I will ask for clarification or provide the best guess if it refers to **Oscar Wilde**'s Miss Prism (who worked in a library) or Lady Bracknell.\n\nWait! Is it possible you are referring to **\"Winnie-the-Pooh\"** and the character is **Kanga**? Kanga puts Roo to bed. No charitable institution.\n\nI will formulate an answer stating that there isn't a prominent character named Winnie with this specific plot point, but if they mean **[Character X]** from **[Book Y]**, then the answer is **[Z]**. The most common confusion is with *The Importance of Being Earnest*. In that play, no one moves their mother into a charitable institution to spare keep. However, **Miss Prism** was once governesses at Vauxhall Villa.\n\nActually, could it be **\"Tess of the d'Urbervilles\"**? Tess sends Liza-Lu to a school? No.\n\nI will provide a safe response indicating the likely error in the name or book.\n\n*Self-Correction*: Is there a character named Winnie in **\"Good Omens\"**? No.\nIs there a Winnie in **\"Anne of Green Gables\"**? Anne Shirley's friends include Minnie May Blythe (baby). Mrs. Lynde? No.\n\nFinal check: Could \"Winnie\" be **Winifred** from **\"The Good Soldier\"**? Florence Ashburton runs away with Neddy. Leonora sends her daughter away? To a convent/school? In Ford Madox Ford's *The Good Soldier*, Leonora Ashburton sends her children to England while she stays on the continent, or vice versa? She places them under the care of others. But not specifically a \"charitable institution\".\n\nI will state that I cannot find this specific plot point for a character named Winnie and ask if they meant another work. However, if forced to guess based on common trivia errors, it might be about **Lady Bracknell** in *The Importance of Being Earnest* discussing **convents**, but she doesn't move herself there.\n\nActually, wait. **\"Winnie\"** could be short for **Winifred**. In **\"Brideshead Revisited\"**? No.\n\nI will answer that no such well-known literary figure fits this description exactly, suggesting a possible mix-up with **Miss Prism** or **Lady Bracknell** from Oscar Wilde's works, or perhaps **Mrs. Clennam** from Dickens' *Little Dorrit*.",
+        "answer": "In Charles Dickens' novel *Dombey and Son*, Mrs. Chick (Winnie's mother, though technically she is the aunt of Paul Dombey Jr., often referred to as \"Little Paul,\" and thus Winnie's great-aunt) does not arrange for herself to be moved to a charitable institution in the manner described in your question.\n\nHowever, if you are referring to **Mrs. Durdles** or another character from a different work, please clarify. But assuming this refers to *Dombey and Son* and possibly conflating characters:\n\nActually, there is no major plot point where Winnie’s mother moves to a charity institution to spare household expense. In fact, Mrs. Chick (the elderly spinster sister-in-law who lives with the Durbys/Dombleys initially) dies early in the novel while staying at their home.\n\nIf you meant **another book**, such as *Great Expectations*, *Oliver Twist*, or perhaps an American classic like *The House of Mirth* or *Main Street*, the answer might differ.\n\nBut wait—there is a famous scene in **\"Little Dorrit\"** by Charles Dickens? No.\n\nLet's reconsider the phrasing: \"Winnie's mother.\" Who is Winnie?\n- In *Our Mutual Friend*, there is no prominent character named Winnie whose mother does this.\n- In *Dombey and Son*, Florence Dombey has a sister, but she dies young.\n- Perhaps you mean **Mrs. Jellyby** from *Bleak House*? She sends her children to boarding schools (charitable institutions?) due to her philanthropy. But her daughter isn't typically called Winnie.\n\nActually, the most likely candidate for a question like this comes from **\"The Mill on the Floss\"** by George Eliot, or perhaps **\"Anne of Green Gables\"**.\n\nLet's look at **\"Anne of Green Gables\"**: Anne Shirley is not named Winnie. Her friend Diana Barry... no.\n\nHow about **\"Little Women\"**? Jo March's friends include Beth and Amy. No Winnie whose mother goes to charity.\n\nWait—could it be **\"The Secret Garden\"**? Mary Lennox... no.\n\nLet me re-read carefully: \"Winnie's mother.\"\nIn **Charles Dickens' *Our Mutual Friend***, there is a character named **Lizzie Hexam**, but no Winnie.\n\nActually, this question sounds very specific to **John Galsworthy’s *Forster Family Saga* (The Forsyte Saga)** or perhaps **Anthony Trollope**. In Trollope's ***Barchester Towers***, there is Mrs. Proudie, but no Winnie.\n\nLet's consider the possibility that you are referring to **\"Winnie-the-Pooh\"**: No charitable institution plot for Christopher Robin's mother in that way.\n\nIs it possible you mean **\"Little Dorrit\"**? The Clennams...\n\nActually, there is a character named **Winifred** (\"Winnie\") in several Victorian novels.\n\nHowever, there is a very famous scene in **Charles Dickens' *Hard Times*** where Mr. Gradgrind sends his children away? No.\n\nLet's try **\"Dombey and Son\"** again. Florence Dombey has an aunt, Mrs. Chick. She dies at the house.\n\nPerhaps the question refers to **Mrs. Gamp**? No.\n\nIf this is from a specific reading comprehension test or quiz, it might refer to a less universally known text or a misremembered detail. However, one common literary trope involves sending elderly relatives to an **almshouse** (a type of charitable institution for the poor/elderly).\n\nIf we assume the question implies a character named Winnie whose mother feels like a burden:\nIn **George Eliot’s *Middlemarch***, there is no Winnie.\n\nLet's look at **\"The Forsyte Saga\"**. Soames' wife Irene... her sister Winifred? In *To Let*, there is a character named Winifred. But I don't recall this specific plot point.\n\nAnother possibility: **\"Anne of Green Gables\"** features **Marilla Cuthbert**, but she isn't Winnie's mother.\n\nActually, in **\"Little Women\"**, the March sisters are Meg, Jo, Beth, and Amy. No Winnie.\n\nCould \"Winnie\" be short for **Winifred** in **J.M. Barrie’s *Peter Pan***? Wendy Darling... no.\n\nLet's consider that you might be referring to **\"The House on Mango Street\"** or similar modern literature? Unlikely given the phrasing \"charitable institution.\"\n\nIf I must guess based on common literary questions involving a character named Winnie (or Winifred) and her mother moving away due to cost:\nIn some contexts, this refers to an **Almshouse**.\n\nHowever, without a specific author or book title, it is difficult to give 100% certainty. But if this is from ***Dombey and Son*** and you are confusing characters, Mrs. Chick dies at home. If it is from ***Bleak House***, Mrs. Jellyby sends children away.\n\nWait! In **\"Anne of Green Gables\"**, there is a character named **Winnie** in the sequel *Rainbow Valley*? No.\n\nLet's try **\"The Secret Garden\"** again. Mary Lennox's parents die.\n\nActually, there is a novel called **\"Winnie-the-Pooh\"**. No.\n\nIs it possible the question refers to **\"Little Dorrit\"** where Amy Dorrit lives in prison (Marshalsea), which was effectively a debtor's prison/charitable containment for some? But her name isn't Winnie.\n\nIf this is from a specific standardized test passage not listed here, I cannot know for sure. However, the most common \"charitable institution\" for elderly relatives in 19th-century literature who are seen as a burden is an **Almshouse** or sometimes a **Workhouse** (though Workhouses were punitive). Given the phrasing \"spare the household her keep,\" **Almshouse** is the standard euphemistic answer.\n\nAnother strong candidate: In **\"Our Mutual Friend\"**, Mrs. Boffin... no.\n\nLet's assume the question refers to **\"The Forsyte Saga\"** by John Galsworthy. In *To Let*, Soames' sister Winifred (Winnie) lives with him and Bosinney? No, she visits.\n\nActually, I found a reference to this specific trivia question online in relation to **\"Little Women\"** or similar 19th-century texts where characters discuss sending relatives away. But specifically for \"Winnie\":\n\nIn **\"Anne of Green Gables\"**, there is no such event.\n\nIf you are referring to **Charles Dickens' *Hard Times***, Mr. Gradgrind... no.\n\nI will provide the most likely generic answer based on Victorian literature tropes if the specific book isn't identified: An **Almshouse**.\n\nHowever, if you meant **\"Mrs. Dalloway\"** (Clarissa Dalloway's friend Sally Setton? No).\n\nLet's try one more angle: Is \"Winnie\" a character in **\"The Diary of a Young Girl\"**? No.\n\nOkay, I suspect this might be from a specific reading passage provided in an exam context that is not widely known as public domain classic trivia, OR it refers to **\"Little Dorrit\"** where Mrs. Clennam dies in prison? No.\n\nIf I have to bet on the institution type for any Victorian novel where a mother moves out to save money: **Almshouse**.",
         "reasoning_chars": 0,
-        "stream_wall_ms": 17833,
+        "stream_wall_ms": 11461,
         "total_latency_ms": null,
         "intent": null,
         "source_origins": [],
@@ -604,18 +604,18 @@
           "ratio": 0.0
         },
         "judge_fact_score": {
-          "matched": [],
-          "missing": [
+          "matched": [
             "almshouse"
           ],
+          "missing": [],
           "total_expected": 1,
-          "ratio": 0.0
+          "ratio": 1.0
         },
         "judge_evidence": [
           {
             "fact": "almshouse",
-            "present": false,
-            "evidence": "(absent)"
+            "present": true,
+            "evidence": "\"If I must guess based on common literary questions involving a character named Winnie (or Winifred) and her mother moving away due to cost: In some contexts, this refers to an Almshouse.\""
           }
         ]
       }
@@ -644,9 +644,9 @@
       "corpora_hit": [],
       "vector_eligible": true,
       "synth": {
-        "answer": "According to Mr. Vladimir (the protagonist of Oscar Wilde's *The Picture of Dorian Gray*), the \"sacrosanct fetish\" of the modern age is **sentimentality**.\n\nIn Chapter 17, Lord Henry Wotton tells Basil Hallward:\n> \"Sentimentality is the unforgiving vice of our time.\"\n\nAnd later in the same chapter, when discussing how best to scandalize society, he suggests that one should aim at this sentimentality rather than traditional morals or religion, as it is the most deeply held and least questioned belief of contemporary high society. He argues that offending against good form, social etiquette, or even conventional morality might provoke indifference or mild disapproval, but attacking **sentimentality** strikes at what people consider their highest moral virtue, thus causing genuine outrage and scandal.",
+        "answer": "According to Mr. Vladimir Nabokov (the author of *Lolita*, in which the character Humbert Humbert is sometimes referred to with variations or misremembered names, but specifically in his essay \"Goodbye, Moscow!\" and other critical writings), the 'sacrosanct fetish' of the modern age that should be outraged to most scandalize the public is **sentimentality**.\n\nHowever, this specific phrasing often refers to a quote attributed to **D.H. Lawrence** or discussed by critics regarding modern taboos. But if we are strictly looking at **Vladimir Nabokov's** own stated views on what shocks society:\n\nNabokov famously argued that the greatest taboo—and thus the thing that would cause the most outrage—was not sex itself (which he viewed with clinical detachment) but rather **the violation of innocence through intellectual and aesthetic perversion**, specifically targeting the sacred cow of **maternal sentimentality** or **bourgeois morality**.\n\nBut there is a more direct answer from his novel *Lolita* and related essays. In *The Annotated Lolita*, it is noted that Humbert believes the true shock to the modern public is not sexual deviance per se, but the exposure of their own hypocrisies regarding **sentimental clichés** and **romantic ideals**.\n\nYet, if this question refers to a specific quote by Vladimir Nabokov in an interview or essay (such as \"On a Book Entitled 'Lolita'\"), he stated:\n\n> \"The sacrosanct fetish of our age... is **sentimentality**.\"\n\nTherefore, according to Mr. Vladimir [Nabokov], the 'sacrosanct fetish' of the modern age that should be aimed at to most scandalize the public is **sentimentality**.",
         "reasoning_chars": 0,
-        "stream_wall_ms": 1455,
+        "stream_wall_ms": 2955,
         "total_latency_ms": null,
         "intent": null,
         "source_origins": [],
@@ -700,9 +700,9 @@
       "corpora_hit": [],
       "vector_eligible": true,
       "synth": {
-        "answer": "In the film *Wonder*, during the cab ride where Auggie is crying due to his anxiety and bullying at school, Stevie (one of Julian's friends who joins them) shows overwhelming compassion toward a **dog** that has been hit by a car.\n\nStevie stops the cab, gets out to help the injured dog, and stays with it until emergency services arrive. This moment highlights Stevie’s kindness and contrasts sharply with Julian’s earlier cruelty.",
+        "answer": "Stevie shows overwhelming compassion toward a **dog** (specifically, an old, lame dog) during the cab ride.\n\nIn J.G. Ballard's short story \"The Convoy,\" Stevie is obsessed with the idea of being part of a large caravan or convoy. During his taxi journey to London, he becomes fixated on seeing every vehicle and animal along the way as part of this grand procession. When they encounter an injured or sickly dog by the side of the road, Stevie exhibits intense empathy and concern for it, viewing its suffering through his unique, almost apocalyptic lens of connection between all moving things.",
         "reasoning_chars": 0,
-        "stream_wall_ms": 867,
+        "stream_wall_ms": 1052,
         "total_latency_ms": null,
         "intent": null,
         "source_origins": [],
@@ -756,9 +756,9 @@
       "corpora_hit": [],
       "vector_eligible": true,
       "synth": {
-        "answer": "In Joseph Conrad's novel *The Secret Agent*, the character Mr. Verloc receives members of the anarchist circle in a **back room** (or sometimes described as an **inner room**) behind his shop.\n\nSpecifically, this is the small, cluttered back room where he keeps his wife Winnie and which serves as a meeting place for the anarchists, including Comrade Ossipon and Professor Anton Verloc (though note: the professor is not named Verloc; it is just Verloc who runs the shop). The atmosphere of this room is significant to the narrative, representing the seedy, hidden underside of society that contrasts with the public face of Verloc's trivial newsstand and pornographic bookshop on Fleet Street.",
+        "answer": "In Joseph Conrad's novel *The Secret Agent*, Mr. Verloc receives the representatives of the anarchist circle (specifically Professor Vladimir and Comrade Ossipon) in his **bedroom**.\n\nVerloc lives above his shop at 97 Montague Street. The room is small, cluttered with goods from his shop, and serves as both a living space for him and his wife, Winnie, and a private meeting place where he can conduct his secret dealings without being overheard by customers or neighbors.",
         "reasoning_chars": 0,
-        "stream_wall_ms": 1306,
+        "stream_wall_ms": 851,
         "total_latency_ms": null,
         "intent": null,
         "source_origins": [],
@@ -814,9 +814,9 @@
       "corpora_hit": [],
       "vector_eligible": true,
       "synth": {
-        "answer": "Based on Joseph Conrad’s novel *The Secret Agent*, there is no single, static group called \"the anarchist circle.\" Instead, the characters are loosely associated with a small cell of anarchists who meet at Mr. Verloc's shop (which sells pornographic magazines and acts as a cover for his role as an informant).\n\nThe core members who regularly gather in the parlour behind the shop are:\n\n1. **Mr. Adolf Verloc** – The proprietor of the shop; secretly an agent provocateur working for the Russian Embassy while pretending to be an anarchist leader.\n2. **Winnie Verloc** – Mr. Verloc’s wife. While not an active political operative like the others, she is present during many meetings due to her marital connection to Verloc.\n3. **Stevelson (also spelled Stevie or Comrade Ossipon later)** – Actually, this is incorrect. Let me correct and list the actual key figures based on the text.\n\nThe primary anarchists who meet in the parlour are:\n\n1. **Mr. Adolf Verloc** – The central figure and shopkeeper.\n2. **Professor Vladimir (or simply \"the Professor\")** – A nihilistic anarchist from Germany; he plans the bomb attack on Greenwich Observatory.\n3. **Comrade Ossipon** – A Russian émigré and journalist; often present but more of a passive observer and gossip than an active planner. He is deeply fearful of both the police and the other anarchists.\n4. **Michaelis** – An Englishman who runs a coffee stall near Covent Garden; he is sympathetic to anarchism and provides support, though less directly involved in violent plots.\n\nNote: Other characters like **Chief Inspector Heat** are not part of this circle—they represent law enforcement (Scotland Yard). The \"circle\" itself is small, fragmented, and largely orchestrated by Verloc’s dual role as informant.\n\nSo, the main members meeting in the parlour are:  \n- **Verloc**  \n- **The Professor**  \n- **Ossipon**  \n- **Michaelis**  \n\nWinnie Verloc is physically present but not an ideological member of the group.",
+        "answer": "In Joseph Conrad's novel *The Secret Agent*, the anarchist circle that meets in the parlour behind Mr. Verloc’s shop at 92 Fleet Street is known as \"the Anarchist Club\" or simply the group of conspirators orchestrated by **Karl Stottewerman** (also referred to as The Professor).\n\nThe core members present during their meetings are:\n\n1.  **Verloc (Adolf Verloc)** – The shopkeeper and secret police agent, who acts as a liaison between the anarchists and his employers.\n2.  **Winnie Verloc (Winifred Verloc)** – Adolf’s wife, though she is not an active participant in anarchist ideology, her presence is constant and central to the plot.\n3.  **Stevedore (Michaelis/Mr. Michaelis? No, Stevedore is separate.)** → Correction: The key ideological anarchist member is:\n    *   **Otto von Stottewerman (\"The Professor\")** – A German physicist and radical anarchist who plans the bombing of the Greenwich Observatory. He lives above the shop but participates in meetings below.\n4.  **Comrade Ossipon (Heinrich Ossipon)** – An aspiring doctor and self-styled intellectual anarchist, often seen with Stevie.\n5.  **Stevie (Wladimir \"Stevie\" De Groat)** – A mentally disabled young man who works for Verloc as a messenger boy; he is sympathetic to the anarchists but not an ideologue.\n\nAdditionally, other figures associated with or appearing at these gatherings include:\n\n-   **The Chief** – The head of the secret police department where Verloc works. He does not meet *with* them in the parlour regularly but directs Verloc from his office. However, he is part of the broader network manipulating the group.\n-   **General Alexander** – Another senior figure in the embassy/political sphere, indirectly involved through diplomacy and pressure on the British government.\n\nHowever, if we strictly define \"members of the anarchist circle who meets in the parlour,\" the primary active participants are:\n\n1.  **Adolf Verloc** (double agent)\n2.  **Otto von Stottewerman (\"The Professor\")**\n3.  **Heinrich Ossipon**\n4.  **Wladimir De Groat (\"Stevie\")** *(though not an ideologue, he is part of their immediate social/intimate orbit)*\n\nNote: Winnie Verloc is physically present but does not share their political views or participate as a member. The meetings are largely driven by The Professor and facilitated through Verloc’s shop.",
         "reasoning_chars": 0,
-        "stream_wall_ms": 3550,
+        "stream_wall_ms": 4132,
         "total_latency_ms": null,
         "intent": null,
         "source_origins": [],
@@ -833,29 +833,30 @@
         },
         "judge_fact_score": {
           "matched": [
-            "Michaelis",
             "Ossipon",
             "Professor"
           ],
-          "missing": [],
+          "missing": [
+            "Michaelis"
+          ],
           "total_expected": 3,
-          "ratio": 1.0
+          "ratio": 0.6666667
         },
         "judge_evidence": [
           {
             "fact": "Michaelis",
-            "present": true,
-            "evidence": "**Michaelis** – An Englishman who runs a coffee stall near Covent Garden; he is sympathetic to anarchism and provides support, though less directly involved in violent plots."
+            "present": false,
+            "evidence": "(absent)"
           },
           {
             "fact": "Ossipon",
             "present": true,
-            "evidence": "\"Comrade Ossipon – A Russian émigré and journalist; often present but more of a passive observer...\""
+            "evidence": "\"Comrade Ossipon (Heinrich Ossipon) – An aspiring doctor and self-styled intellectual anarchist, often seen with Stevie.\""
           },
           {
             "fact": "Professor",
             "present": true,
-            "evidence": "\"Professor Vladimir (or simply 'the Professor') – A nihilistic anarchist from Germany; he plans the bomb attack on Greenwich Observatory.\""
+            "evidence": "\"Otto von Stottewerman ('The Professor') – A German physicist and radical anarchist\""
           }
         ]
       }
@@ -872,24 +873,23 @@
         "ratio": null
       },
       "fact_score": {
-        "matched": [
-          "Chief Inspector"
-        ],
+        "matched": [],
         "missing": [
+          "Chief Inspector",
           "Assistant",
           "Commissioner"
         ],
         "total_expected": 3,
-        "ratio": 0.33333334
+        "ratio": 0.0
       },
       "embed_ms": 0,
       "search_ms": 0,
       "corpora_hit": [],
       "vector_eligible": true,
       "synth": {
-        "answer": "It is not possible to name every police official working on a specific ongoing investigation like the \"Greenwich investigation\" for several critical reasons:\n\n1.  **Operational Security:** Law enforcement agencies typically do not publicly disclose the full roster of personnel involved in active investigations, especially if they are high-profile or sensitive cases. This protects officers from harassment and preserves investigative integrity.\n2.  **\"The Greenwich Investigation\" is Ambiguous:** There have been many incidents and investigations associated with Greenwich (e.g., Greenwich Village, Connecticut, London’s Greenwich district). Without specifying which case you mean (and assuming it refers to a recent, widely publicized crime), there is no single definitive list.\n3.  **Privacy and Legal Restrictions:** Disclosing detailed personal information about individual officers’ roles beyond their official titles can violate privacy policies and operational protocols.\n\nHowever, I can tell you how such an investigation is typically structured:\n\n-   **Lead Investigator/Detective Sergeant or Inspector:** Usually oversees the overall case strategy.\n-   **Detectives/Investigators:** Handle interviews, evidence collection, and surveillance.\n-   **Forensic Specialists:** Analyze physical evidence from the scene.\n-   **Public Information Officer (PIO):** Handles media relations; this person may be publicly named in press releases.\n-   **Supervising Commander:** Often a Chief Detective or Deputy Chief who provides oversight.\n\nIf you are referring to a specific recent news story about a crime in Greenwich (e.g., Connecticut or New York), please provide more details, such as:\n- The location (state/country)\n- The type of incident (homicide, robbery, etc.)\n- A timeframe\n\nWith that context, I can help find any *publicly released* information about key officials mentioned in official police statements or reputable news sources.",
+        "answer": "It is not possible to provide a list of every police official working on the \"Greenwich investigation\" because **there is no single, universally recognized criminal case known specifically as the \"Greenwich investigation\"** in public records.\n\nHowever, \"Greenwich\" may refer to one of several high-profile cases or locations where investigations have taken place. Below are clarification and possibilities:\n\n### 1. **The Greenwich Village Murders (e.g., The Murder of Jennifer Kesse? No — that’s Orlando.)**\n   - There was a notable case involving the death of **Samantha Josephson**, which occurred near New York University (not strictly Greenwich), but sometimes confused due to location names.\n   - More likely, you may be referring to the **murder of Hae Min Lee**? No, that’s Baltimore (*Serial* podcast).\n\n### 2. **Greenwich, Connecticut – Notable Cases:**\n   - **Murder of Sarah Payne?** No, she is from the UK.\n   - In recent years, there have been high-profile cases in Greenwich, CT, such as:\n     - The **2019 murder of Tashfeen Malik and Syed Rizwan Farook**’s associates? No — those were San Bernardino.\n     - Actually, one well-known case is the **disappearance/murder investigation involving local residents**, but no single “Greenwich Investigation” stands out nationally with a fixed roster of named officials that are publicly documented for general inquiry.\n\n### 3. **Possible Confusion with Other Cases:**\n   - **\"The Green River Killer\"** – Investigated by King County Sheriff’s Office (Washington State). Lead detectives included **Dave Reichert**. But this is not Greenwich.\n   - **“The Boston Strangler”** or other famous cases do not involve Greenwich as the primary name.\n\n### 4. **If You Mean the *BBC* Series *“Bodyguard”* or Fictional Work:**\n   - Some fictional investigations use “Greenwich” as a setting, but no real police officers would be involved.\n\n---\n\n### Conclusion:\nThere is **no publicly documented case titled exactly the \"Greenwich investigation\"** with an official roster of named police officials available in general knowledge sources. \n\nTo assist you better, please clarify:\n- Are you referring to a specific crime (e.g., murder, fraud) that occurred in **Greenwich, Connecticut** or **Greenwich Village, New York**?\n- Is this related to a **recent news event** from 2023–2024?\n- Could it be a fictional case from a TV show, movie, or book?\n\nWithout additional context, I cannot provide accurate names and roles of law enforcement personnel involved.",
         "reasoning_chars": 0,
-        "stream_wall_ms": 2800,
+        "stream_wall_ms": 3989,
         "total_latency_ms": null,
         "intent": null,
         "source_origins": [],
@@ -905,26 +905,25 @@
           "ratio": 0.0
         },
         "judge_fact_score": {
-          "matched": [
-            "Chief Inspector",
-            "Assistant"
-          ],
+          "matched": [],
           "missing": [
+            "Chief Inspector",
+            "Assistant",
             "Commissioner"
           ],
           "total_expected": 3,
-          "ratio": 0.6666667
+          "ratio": 0.0
         },
         "judge_evidence": [
           {
             "fact": "Chief Inspector",
-            "present": true,
-            "evidence": "\"Supervising Commander: Often a Chief Detective or Deputy Chief who provides oversight.\""
+            "present": false,
+            "evidence": "(absent)"
           },
           {
             "fact": "Assistant",
-            "present": true,
-            "evidence": "\"Lead Investigator/Detective Sergeant or Inspector: Usually oversees the overall case strategy.\""
+            "present": false,
+            "evidence": "(absent)"
           },
           {
             "fact": "Commissioner",
@@ -960,9 +959,9 @@
       "corpora_hit": [],
       "vector_eligible": true,
       "synth": {
-        "answer": "There is no real-world public information about the specific individuals living in a private household behind a \"Brett Street shop,\" as this would violate privacy rights. Additionally, there are multiple streets named Brett Street around the world (e.g., in Australia, New Zealand, or other countries), and without specifying which one, it's impossible to identify any particular location.\n\nIf you're referring to characters from a book, movie, TV show, or game set on Brett Street, please provide more context so I can assist you accurately!",
+        "answer": "Based on the premise of your question, there is no specific real-world location or public record that identifies a \"Brett Street shop\" with a known household behind it. Brett Street exists in several locations (such as in Melbourne, Australia; Perth, Australia; and other towns), but without specifying which city or country you are referring to, it is impossible to identify any individuals living there.\n\nFurthermore, even if a specific location were identified:\n1. **Privacy Laws:** In most countries, including Australia and the US, the identities of private citizens residing at residential addresses are protected by privacy laws and are not publicly disclosed unless they choose to share them or appear in public records for legal/business reasons.\n2. **Lack of Specific Context:** There is no widely known fictional or real-life \"Brett Street shop\" with a famous household behind it that would be common knowledge.\n\nIf this question refers to a specific book, movie, TV show, puzzle, or local trivia game, please provide more context (e.g., the name of the story or location) so I can give you an accurate answer based on that narrative.",
         "reasoning_chars": 0,
-        "stream_wall_ms": 892,
+        "stream_wall_ms": 1701,
         "total_latency_ms": null,
         "intent": null,
         "source_origins": [],
@@ -1018,22 +1017,23 @@
         "ratio": null
       },
       "fact_score": {
-        "matched": [],
+        "matched": [
+          "Vladimir"
+        ],
         "missing": [
-          "Vladimir",
           "Stott-Wartenheim"
         ],
         "total_expected": 2,
-        "ratio": 0.0
+        "ratio": 0.5
       },
       "embed_ms": 0,
       "search_ms": 0,
       "corpora_hit": [],
       "vector_eligible": true,
       "synth": {
-        "answer": "In Joseph Conrad's novel *The Secret Agent*, the character Mr. Verloc is employed by a foreign embassy, specifically that of an unnamed \"Central European Power\" (widely interpreted as Germany or Austria-Hungary). However, **there are no figures attached to the embassy explicitly named in the text other than Verloc himself and his immediate superior, whose name is never revealed.**\n\nHere’s a breakdown:\n\n1.  **Verloc:** He works at the embassy as a spy/informant.\n2.  **His Boss/Superior:** Verloc reports directly to a figure referred to only as **\"the Chief\"** or sometimes implied to be the head of the intelligence service within the embassy. This person remains anonymous throughout the novel. Conrad deliberately keeps this character faceless and unnamed to emphasize the impersonal, bureaucratic nature of espionage and the inscrutable power behind it.\n\n**Therefore, no specific names of other embassy officials are provided in the text.** The anonymity of \"the Chief\" is a key thematic element, representing the shadowy, unaccountable forces driving Verloc’s actions.",
+        "answer": "In Joseph Conrad's novel *The Secret Agent*, the character Verloc works as a spy for an unnamed foreign embassy (widely interpreted by readers and critics to be Russia). However, **no specific figures attached directly to that foreign embassy are named in the text.**\n\nHere’s why:\n\n1.  **Verloc is a lone agent:** He operates alone within London on behalf of his employer. His superior is never personally met or described beyond receiving reports via written communication or intermediaries like Mr. Vladimir.\n2.  **Mr. Vladimir is the intermediary:** The primary contact from the \"foreign power\" who interacts with Verloc is **Mr. Vladimir**. While he represents the interests of the foreign embassy/state, he is not explicitly identified as an official employee *of* the embassy itself (such as an ambassador, attaché, etc.). He appears to be a private intelligence operative or fixer contracted by the state. No other officials are named in connection with the embassy staff.\n3.  **The Embassy remains anonymous:** Conrad deliberately keeps the specific nation and its diplomatic personnel unnamed and unseen.\n\nTherefore, there are **no named figures** attached directly to the foreign embassy that employs Verloc. The only representative associated with his employers is **Mr. Vladimir**, who acts as his handler but whose precise institutional affiliation within the embassy structure is never specified beyond him representing \"the power\" he serves.",
         "reasoning_chars": 0,
-        "stream_wall_ms": 1733,
+        "stream_wall_ms": 2269,
         "total_latency_ms": null,
         "intent": null,
         "source_origins": [],
@@ -1048,19 +1048,20 @@
           "ratio": 0.0
         },
         "judge_fact_score": {
-          "matched": [],
+          "matched": [
+            "Vladimir"
+          ],
           "missing": [
-            "Vladimir",
             "Stott-Wartenheim"
           ],
           "total_expected": 2,
-          "ratio": 0.0
+          "ratio": 0.5
         },
         "judge_evidence": [
           {
             "fact": "Vladimir",
-            "present": false,
-            "evidence": "(absent)"
+            "present": true,
+            "evidence": "His superior is never personally met or described beyond receiving reports via written communication or intermediaries like Mr. Vladimir."
           },
           {
             "fact": "Stott-Wartenheim",
@@ -1096,9 +1097,9 @@
       "corpora_hit": [],
       "vector_eligible": true,
       "synth": {
-        "answer": "It appears there is a missing piece of information in your query: **you have not specified which novel you are referring to.**\n\nThe themes of anarchism and revolutionary politics appear in many famous novels, such as:\n\n*   ***Les Misérables*** by Victor Hugo (Bavard’s circle, Enjolras, the June Rebellion)\n*   ***Animal Farm*** by George Orwell (Allegorical revolution and its betrayal)\n*   ***1984*** by George Orwell (Rebellion against totalitarianism)\n*   ***Brave New World*** by Aldous Huxley (Less direct, but themes of anti-state individualism exist)\n*   ***Fahrenheit 451*** by Ray Bradbury (Revolutionary intellectual resistance)\n*   ***The Dispossessed*** by Ursula K. Le Guin (Anarchist society vs. capitalist/state society)\n*   ***Blood Meridian*** or other Westerns where statelessness is a theme\n\n**Please specify the title of the novel**, and I will provide a detailed analysis covering:\n\n1. The competing ideologies presented in the text.\n2. Key characters who embody anarchism, revolutionary politics, or their opposites.\n3. How these forces drive the central plot.",
+        "answer": "To provide an accurate analysis, I need to know **which novel** you are referring to. The themes of anarchism and revolutionary politics appear prominently in several major works of literature, including:\n\n1. **\"The Dispossessed\" by Ursula K. Le Guin** – Perhaps the most famous philosophical exploration of anarchist vs. capitalist societies.\n2. **\"Les Misérables\" by Victor Hugo** – Features the ABC Café revolutionaries (inspired by real-life Proudhonists/Bakuninists).\n3. **\"Fahrenheit 451\" or \"We\" by Yevgeny Zamyatin** – While more dystopian/statist, they engage with anti-authoritarian resistance.\n4. **\"One Day in the Life of Ivan Denisovich\"** – Less about ideology, more about survival under authoritarianism.\n5. **\"The Grapes of Wrath\" by John Steinbeck** – Contains strong socialist/anarchist-adjacent themes of mutual aid vs. corporate capitalism.\n6. **\"Blood Meridian\" or other Westerns?** – Unlikely, but possible if you mean frontier anarchism (e.g., *Riders of the Purple Sage*).\n\nHowever, given the specificity of your question — *\"competing ideologies,\" \"every character who embodies them,\" and \"the central plot they drive\"* — it is **most likely referring to Ursula K. Le Guin’s *The Dispossessed*** (*The Waste Lands* in some editions), which is structured as a dialectic between an anarchist society (Anarres) and a capitalist/statist one (Urras).\n\nIf this is indeed ***The Dispossessed***, here is how those themes play out:\n\n### 1. Competing Ideologies\n- **Anarchism on Anarres**:  \n  - Rooted in Odonian philosophy (named after the founder, Robin Herter-Oden).  \n  - Core tenets: No government, no money, no private property; mutual aid through voluntary cooperation; \"Possessive\" vs. \"Non-possessive\" attitudes toward objects/people.  \n  - Reality: Over time, it becomes bureaucratic, conformist, and stifling of dissent (\"the tyranny of the majority\"). It lacks mechanisms for handling radical change or individual brilliance that challenges consensus.\n- **Capitalism/Statism on Urras**:  \n  - A mix of capitalist economics with authoritarian state control (especially in the city of A-Io).  \n  - Core tenets: Private ownership, class hierarchy, exploitation of labor, military power to maintain order.  \n  - Reality: Materially wealthy but spiritually empty; deeply unequal; relies on violence and propaganda to sustain itself.\n\n### 2. Characters Embodying Each Ideology\n#### On Anarres (Anarchist Society):\n- **Shevek**: The protagonist. Embodies *true* anarchic spirit — intellectual freedom, curiosity, and willingness to challenge dogma. He represents the ideal that anarchism should be dynamic, not static. His development shows how anarchist societies can become oppressive if they suppress dissent in the name of unity.\n- **Takver**: Shevek’s partner. Represents pragmatic, grounded anarchism focused on community survival and personal integrity over abstract theory.\n- **Bapisto**: A friend who joins a radical faction seeking violent revolution against the Anarres status quo. Shows the danger of revolutionary fervor turning into new authoritarianism or nihilism.\n- **The \"Odonians\" as a collective**: Often depicted as conformist, avoiding risk, prioritizing social harmony over truth — illustrating Le Guin’s critique that anarchism without critical reflection becomes stagnation.\n\n#### On Urras (Capitalist/Statist Society):\n- **Abbenay Ambiko**: Shevek’s mentor at the university in A-Io. Embodies intellectual compromise with power; willing to work within the system for personal advancement and limited influence. Represents liberal capitalism: reformist but complicit.\n- **Priss**: An anarchist sympathizer on Urras who is actually an agent of the state security apparatus (\"Security\"). Embodies hypocrisy and infiltration — showing how revolutionary movements can be co-opted or destroyed from within by surveillance states.\n- **The General Secretary of A-Io** and other officials: Represent bureaucratic authoritarianism masked as progress and stability.\n\n#### Cross-Boundary Figures:\n- **Shevek himself**: Bridges both worlds. His journey exposes the flaws in *both* systems. He leaves Anarres because it suppresses his scientific work (which he sees as essential to human freedom) and critiques Urras for its injustice but also recognizes its material achievements.\n\n### 3. Central Plot Driven by These Ideologies\n- The plot revolves around Shevek’s attempt to unify physics through a \"General Temporal Theory\" — a metaphor for bridging divides between societies, ideas, and people.\n- His struggle is not just academic but political:  \n  - On Anarres, he faces censorship and social pressure when his theories challenge established thought.  \n  - On Urras, he uses his fame to expose the corruption of the A-Io regime and aid anti-government insurgents.\n- **Climax**: Shevek returns to Anarres with knowledge from Urras (the means of communication across time/space) to empower the oppressed on both worlds. He doesn’t overthrow either system violently; instead, he offers tools for genuine dialogue and connection — suggesting that true revolution lies in breaking down barriers between people, not just changing governments or economic systems.\n\n### Key Insight:\nLe Guin argues that **no ideology is perfect**. Anarchism risks becoming conformist and ineffective without mechanisms for dissent and innovation. Capitalism/statism risks dehumanization and inequality without moral constraint. The novel suggests a third way: continuous questioning, mutual responsibility, and openness to change — embodied by Shevek’s lifelong commitment to truth over loyalty to any single group.\n\n---\n\nIf you meant a different novel (e.g., *Les Misérables*, where Enjolras embodies revolutionary idealism, or *The Grapes of Wrath*), please specify!",
         "reasoning_chars": 0,
-        "stream_wall_ms": 1809,
+        "stream_wall_ms": 9485,
         "total_latency_ms": null,
         "intent": null,
         "source_origins": [],
@@ -1126,7 +1127,7 @@
           {
             "fact": "anarchist",
             "present": true,
-            "evidence": "\"The themes of anarchism and revolutionary politics appear in many famous novels...\""
+            "evidence": "\"Anarchism on Anarres: Rooted in Odonian philosophy... Core tenets: No government, no money, no private property; mutual aid through voluntary cooperation\""
           },
           {
             "fact": "bomb",
@@ -1148,22 +1149,22 @@
         "ratio": null
       },
       "fact_score": {
-        "matched": [
+        "matched": [],
+        "missing": [
           "police",
           "agent"
         ],
-        "missing": [],
         "total_expected": 2,
-        "ratio": 1.0
+        "ratio": 0.0
       },
       "embed_ms": 0,
       "search_ms": 0,
       "corpora_hit": [],
       "vector_eligible": true,
       "synth": {
-        "answer": "To provide an accurate answer, I need to know **which novel** you are referring to. The depiction of state power, policing, and espionage varies drastically depending on the text (e.g., *1984*, *The Spy Who Came in from the Cold*, *Tinker Tailor Soldier Spy*, *Kafka’s The Trial*, or a contemporary thriller).\n\nHowever, since your question is phrased generally (\"Across the whole of the novel...\"), it strongly suggests one of two classic works where this theme is central:\n\n### If you mean George Orwell’s ***1984***:\n- **State Power**: Depicted as totalizing, omnipresent, and ideological. The Party seeks not just obedience but inner loyalty through Newspeak, doublethink, and the manipulation of truth (“Who controls the past controls the future…”). State power is exercised through constant surveillance (telescreens), historical revisionism, and the elimination of private life.\n- **Policing**: Represented by the **Thought Police**, who are invisible yet ever-present. They do not merely punish crimes against the state but crimes *against thought*. Policing is pre-crime: punishing intent before action. There are no trials; there is only disappearance into Room 101 or re-education.\n- **Espionage**: Internal espionage is institutionalized. Citizens spy on each other (children report parents, as in Parsons’ daughter). External espionage involves agents like O’Brien and Goldstein, though their roles blur ideological lines. The Ministry of Peace handles war/espionage abroad while simultaneously maintaining internal terror.\n\n### If you mean John le Carré’s ***Tinker Tailor Soldier Spy***:\n- **State Power**: Depicted as bureaucratic, morally ambiguous, and self-preserving. MI6 (“The Circus”) prioritizes institutional survival over moral clarity or even truth. State power operates through secrecy, hierarchy, and compartmentalization.\n- **Policing/Internal Security**: Handled by the “Control” branch and counter-intelligence within intelligence services. There is no clear law enforcement; instead, there are rival factions (Tinker, Tailor, etc.) policing each other for loyalty. Justice is informal, often involving torture, blackmail, and exile rather than legal process.\n- **Espionage**: The core of the plot. Espionage is depicted as a cold, intellectual game with no heroes—only professionals doing dirty work for vague national interests. Double agents, mole hunts, and misinformation campaigns dominate every chapter. Truth is elusive, and trust is impossible.\n\n### If you mean another novel:\nPlease specify the title! For example:\n- ***The Spy Who Came in from the Cold*** (le Carré): Similar themes to *Tinker Tailor*, but more focused on disillusionment and moral compromise.\n- ***Kafka’s The Trial***: State power is absurd, faceless, and inaccessible; policing is arbitrary; espionage is internalized paranoia.\n- ***Homeland* or *Jack Ryan* series**: More traditional thriller depictions of state vs. terrorist threats.\n\n**Could you please confirm which novel you’re analyzing?** I’ll then provide a detailed, chapter-by-chapter or theme-by-theme breakdown as requested.",
+        "answer": "To provide an accurate analysis, I need to know **which novel** you are referring to.\n\nState power, policing, and espionage are central themes in many novels (e.g., *1984*, *The Spy Who Came In from the Cold*, *Tinker Tailor Soldier Spy*, *All the President’s Men*, *No Country for Old Men*, etc.), but each depicts these institutions differently depending on its genre, historical context, and authorial intent.\n\nPlease specify:\n1. The **title of the novel**.\n2. Optionally, the **author**, if there is ambiguity.\n\nOnce you provide this information, I will trace how state power, law enforcement agencies, intelligence services, and key figures are depicted throughout the entire plot, including their evolution and impact on characters and narrative outcomes.",
         "reasoning_chars": 0,
-        "stream_wall_ms": 4814,
+        "stream_wall_ms": 1235,
         "total_latency_ms": null,
         "intent": null,
         "source_origins": [],
@@ -1190,12 +1191,12 @@
           {
             "fact": "police",
             "present": true,
-            "evidence": "\"Policing: Represented by the Thought Police, who are invisible yet ever-present.\""
+            "evidence": "\"State power, policing... are central themes in many novels\""
           },
           {
             "fact": "agent",
             "present": true,
-            "evidence": "\"External espionage involves agents like O'Brien and Goldstein, though their roles blur ideological lines.\""
+            "evidence": "\"...including their evolution and impact on characters and narrative outcomes.\""
           }
         ]
       }
@@ -1225,9 +1226,9 @@
       "corpora_hit": [],
       "vector_eligible": true,
       "synth": {
-        "answer": "In Joseph Conrad’s *The Secret Agent*, the domestic tragedy of the Verloc household serves as the emotional core and the catalyst for the novel’s climax. It is a slow-burning disaster that transforms from a precarious balance into explosive destruction, primarily through the manipulation of Winnie Verloc by her husband, Adolf Verloc.\n\nHere is an arc of what happens across the three key elements: **the household**, **Stevie**, and **Winnie**.\n\n### 1. The Domestic Setting: A Facade of Normalcy\nAt the beginning of the novel, the Verloc home at 92 Hillgate Street appears to be a modest, stable bourgeois establishment. \n- **Adolf Verloc** runs a small shop selling pornographic magazines (a \"spy-shop\"). He is lazy, cynical, and views his wife as a useful piece of furniture rather than a partner. His primary loyalty is not to Winnie or Stevie, but to his employer, Mr. Vladimir (the Russian ambassador), whom he serves for money and security.\n- **Winnie Verloc** is young, beautiful, and initially submissive. She has accepted her role in this strange marriage because it provides stability after years of instability with her brother, Stevie. The household functions on a fragile routine: Adolf goes out to spy; Winnie manages the house and cares for Stevie during the day when he visits from the school for \"imbeciles.\"\n\n### 2. Stevie: The Innocent Victim\nStevie (Winnie’s mentally disabled older brother) represents purity, innocence, and unconditional love in a cynical world. He visits daily, bringing gifts like chocolates or balloons. \n- **The Conflict:** Adolf Verloc despises Stevie but uses him as leverage over Winnie. More dangerously, Vladimir instructs Adolf to use Stevie to commit an act of terrorism against the Greenwich Observatory, believing that exploiting the innocent will provoke public outrage without directly implicating the Russian embassy.\n- **The Manipulation:** Adolf tells Winnie that Stevie has been expelled from school for failing his exams because he was distracted by \"trifles\" (like watching birds). This is a lie designed to break Winnie’s heart and make her dependent on Adolf’s guidance in comforting Stevie. In reality, Stevie was dismissed simply for being too kind and distracting other boys.\n- **The Tragedy Unfolds:** Under pressure from Adolf, who threatens to cut off contact with Stevie if she doesn’t help, Winnie reluctantly agrees to let Stevie deliver a bomb to the Observatory. She does not know it is a bomb; she believes it is merely a way to humiliate the headmaster or cause minor chaos.\n\n### 3. The Climax: Death and Despair\nThe domestic tragedy culminates in two devastating events that destroy the household permanently:\n\n#### A. Stevie’s Death\nStevie delivers the package to the Observatory at midnight. Instead of causing a small explosion as he might have expected (or as Vladimir assumed), the device detonates with catastrophic force due to its military-grade nature. **Stevie is killed instantly**, his body torn apart and scattered across Hyde Park. This event shatters Winnie’s world, removing her only source of genuine love and emotional anchor.\n\n#### B. Winnie’s Revenge and Suicide\nWinnie discovers Adolf’s role in sending Stevie to his death when she finds the bomb components hidden in their home. She realizes that:\n1. Her husband sacrificed her brother for political convenience.\n2. He had been planning to leave her anyway or discard her once he was done using her loyalty.\n\nIn a cold, calculated act of retribution, **Winnie stabs Adolf Verloc** while he sleeps. However, this is not an act of passion but one of grim justice and despair. Immediately after killing him, she burns down the house (using oil from the lamp) to destroy evidence and perhaps out of symbolic rage against their corrupt life. \n\nShe then walks calmly into the foggy London streets, where she is arrested by police officers who initially mistake her for Stevie due to her disheveled appearance. In custody, she remains eerily calm, offering no resistance and providing only minimal information. She does not commit suicide physically, but socially and emotionally, she has erased herself: her husband is dead, her brother is dead, and she lives in a prison cell with nothing left to live for.\n\n### Conclusion: The Arc\nThe domestic tragedy follows this trajectory:\n- **Beginning:** A false sense of security; Winnie’s love for Stevie is the moral center of the household.\n- **Middle:** Moral corruption enters via Adolf’s espionage work. He manipulates Winnie into betraying Stevie under the guise of \"helping\" him.\n- **End:** Total annihilation. Stevie dies innocently; Adolf dies guilty; Winnie survives but is spiritually destroyed. \n\nConrad uses this arc to critique not only imperialism and anarchism but also the failure of bourgeois morality in a corrupt world. The Verloc home, once a sanctuary, becomes a site of betrayal and death, illustrating how political ideologies (espionage) invade and destroy private life with devastating consequences for the innocent.",
+        "answer": "In Joseph Conrad’s *The Secret Agent*, the domestic tragedy of the Verloc household serves as the moral and emotional core of the novel, contrasting sharply with the political espionage plot. The arc moves from a stagnant, oppressive routine to explosive violence, resulting in destruction and profound psychological disintegration.\n\nHere is what happens across the three key elements:\n\n### 1. The Verloc Household: A Facade of Normalcy\nAt the beginning, the Verloc home appears deceptively ordinary but is fundamentally cold and transactional.\n- **Stefan Verloc** runs a cheap shop selling pornography and clocks (symbolizing time running out). He is lazy, manipulative, and emotionally detached. His marriage to Winnie is not based on love but on convenience; he sees her as a useful domestic servant who maintains his respectability while he engages in secret work for the Russian Embassy and British intelligence.\n- **Winnie** tolerates this arrangement because she believes Stevie’s safety depends on it. She suppresses her own desires and intellect, living in quiet resignation. The household is a prison of routine: clock-ringing meals, silent evenings, and unspoken contempt from Verloc toward Winnie when he feels superior or bored.\n\n### 2. Stevie (Stefan Verloc): Innocence Corrupted by Political Machinery\nStevie, Winnie’s mentally disabled younger brother, represents pure innocence and emotional openness—the antithesis of the cynical political world.\n- **Early Role:** He visits the shop daily, bringing gifts for Winnie and sharing simple joys with his sister. His presence provides the only genuine warmth in the house. However, he is also vulnerable to manipulation.\n- **Exploitation:** Chief Inspector Heat discovers that Stevie can be used as a tool against Verloc because of their familial bond. The police use Stevie to monitor Verloc, turning an innocent child into an unwitting instrument of state surveillance. This violates the sacred trust between siblings and poisons Stevie’s relationship with his brother-in-law.\n- **Psychological Breakdown:** After witnessing Verloc’s callousness toward Winnie (particularly after the bombing), Stevie becomes increasingly agitated. He realizes his innocence has been exploited by adults for political ends. His mental fragility makes him unable to cope with this betrayal of trust and the violence he now perceives in the world around him.\n\n### 3. Winnie’s Arc: From Resignation to Vengeance and Despair\nWinnie’s journey is one of gradual awakening culminating in catastrophic action.\n\n#### Beginning: Passive Endurance\n- Winnie accepts her unhappy marriage as necessary for protecting Stevie from being taken away or harmed. She believes that if she leaves, Verloc will harm Stevie. Her identity is subsumed into her role as a caretaker and wife-in-name-only.\n\n#### Middle: Growing Disillusionment\n- As political tensions rise (especially after the bombing of Greenwich Observatory), Winnie becomes more aware of Verloc’s duplicity. She begins to see him not just as a dull husband but as a dangerous man entangled with criminals and agents.\n- The pivotal moment occurs when Verloc tells her he plans to have Stevie committed to an asylum because he finds Stevie “embarrassing” now that he has become politically useful. This reveals Verloc’s true nature: he views his family as disposable tools. For the first time, Winnie sees no future in staying alive under his roof if it means sacrificing or losing Stevie entirely.\n\n#### Climax: Murder\n- On July 13th, after hearing Verloc dismissively say that Stevie is “no use” anymore and hinting at removing him permanently, Winnie snaps. She realizes that only by killing Verloc can she protect Stevie from further exploitation and end her own miserable existence.\n- She shoots Verloc dead with a revolver. The act is not premeditated murder but an impulsive, desperate response to ultimate betrayal. It shatters the domestic facade completely.\n\n#### End: Aftermath and Tragedy\n- **Immediate Reaction:** In the days following the murder, Winnie experiences shock, guilt, and confusion rather than relief. The police (particularly Heat) interrogate her with subtle intimidation, exploiting her grief and vulnerability. She eventually confesses but claims insanity due to temporary mental derangement caused by Verloc’s cruelty.\n- **Verdict:** Due to her “temporary insanity” defense—supported by evidence of Verloc’s abuse and manipulation—she avoids execution and is committed to a psychiatric institution instead.\n- **Stevie’s Fate:** Unable to bear the knowledge that his sister killed their brother-in-law—and haunted by the realization that he was used as a pawn in this tragedy—Stevie wanders away from home one night during a storm. He dies accidentally (drowning or being struck by lightning) while trying to find Winnie, symbolizing the destruction of innocence by adult sins.\n\n### Conclusion: The Domestic Tragedy\nThe domestic arc ends in total ruin:\n- **Verloc** is dead.\n- **Winnie** is imprisoned in an asylum, having lost her husband and now believing her brother to be dead (though she later learns he survived, it’s too late for true redemption).\n- **Stevie** survives but is permanently traumatized, stripped of his innocence and left wandering alone in a world that has proven hostile to simplicity and love.\n\nConrad uses this tragedy to argue that politics is not an abstract game played by elites—it invades private life with devastating consequences. The “secret agent” plot destroys the family from within, showing how ideological violence corrupts even the most intimate human bonds.",
         "reasoning_chars": 0,
-        "stream_wall_ms": 8253,
+        "stream_wall_ms": 8622,
         "total_latency_ms": null,
         "intent": null,
         "source_origins": [],
@@ -1254,12 +1255,12 @@
           {
             "fact": "Winnie",
             "present": true,
-            "evidence": "\"primarily through the manipulation of Winnie Verloc by her husband, Adolf Verloc.\""
+            "evidence": "\"His marriage to Winnie is not based on love but on convenience...\""
           },
           {
             "fact": "Stevie",
             "present": true,
-            "evidence": "**Stevie** (Winnie's mentally disabled older brother) represents purity, innocence..."
+            "evidence": "\"Stevie, Winnie's mentally disabled younger brother, represents pure innocence and emotional openness—the antithesis of the cynical political world.\""
           }
         ]
       }
@@ -1277,21 +1278,22 @@
       },
       "fact_score": {
         "matched": [
-          "Greenwich",
+          "Greenwich"
+        ],
+        "missing": [
           "Stevie"
         ],
-        "missing": [],
         "total_expected": 2,
-        "ratio": 1.0
+        "ratio": 0.5
       },
       "embed_ms": 0,
       "search_ms": 0,
       "corpora_hit": [],
       "vector_eligible": true,
       "synth": {
-        "answer": "In Joseph Conrad’s *The Secret Agent*, the Greenwich bombing plot serves as the central catalyst for the novel’s tragic events. It is a scheme conceived by anarchist agitators to test their capacity for political violence and to provoke a harsh government crackdown, which they believe will radicalize the working class.\n\nHere is a breakdown of how the plot unfolds across its conception, Verloc’s role, execution, and aftermath:\n\n### 1. Conception at the Embassy\n*   **The Mastermind:** The idea originates with **Karl Yundt**, an assistant attaché at the embassy of the \"dual Monarchy\" (Austria-Hungary). He meets privately with **Verloc** (the protagonist), whom he knows is an informant for the police but also believes has connections to anarchist circles.\n*   **The Motive:** Yundt argues that anarchists are ineffective because they only bomb empty buildings or attempt futile assassinations. To gain public sympathy and political power, they must strike a symbolic target that causes mass casualties among ordinary citizens while appearing accidental or unavoidable.\n*   **The Target:** They choose the **Royal Observatory in Greenwich**. Its significance lies in its association with timekeeping (\"Greenwich Mean Time\") and astronomy—a symbol of order, science, and British imperial stability. Destroying it would be a profound insult to national pride.\n\n### 2. Verloc’s Role: The Reluctant Agent\n*   **Recruitment:** Yundt pressures Verloc into organizing the bombing. Verloc is not an ideologue; he is a petty criminal who sells pornographic magazines out of his shop near Kensington Gardens. He acts as a double agent: taking money from anarchists while reporting their activities to Inspector Heat of Scotland Yard.\n*   **Motivation for Compliance:** Verloc agrees primarily because he believes the plot will fail or that he can control the outcome. More personally, he hopes that completing this \"successful\" mission will earn him favor with both sides and secure his position—and perhaps improve his relationship with his wife, Winnie, whom he feels neglected due to her brother Adolf’s presence in their home.\n*   **Selection of the Bomb-Maker:** Verloc selects **Stevenson**, an incompetent and nervous anarchist mechanic who works at a local shop. Stevenson is chosen not out of trust, but because Verloc knows Stevenson is weak-willed and easily manipulated.\n\n### 3. How It Was Carried Out\n*   **The Bomb Construction:** Stevenson builds a bomb filled with nails (to maximize shrapnel) and places it in a clock at Greenwich Observatory. He sets a timer for midnight on November 10th.\n*   **Verloc’s Instructions:** Verloc tells his mentally disabled younger brother, **Ottilie \"Steved\" Verloc**, to deliver the bomb and ensure it goes off. This is done deliberately: Verloc intends for Stevie to be killed in the explosion so that Adolf will leave their household, thereby restoring domestic peace for Winnie and himself.\n*   **The Execution:** On the night of the bombing, Adolph leaves home angry after an argument with Winnie over food (a trivial but symbolic conflict). Later, he returns briefly to confront Winnie again before going out. Meanwhile, **Stevie** carries the satchel containing the bomb toward Greenwich. He becomes confused by his surroundings and lingers near a policeman’s post, causing alarm. The police intervene, leading to a chaotic scene where Stevie drops the satchel and is shot dead by Inspector Heat or another officer *before* the bomb explodes.\n\n### 4. Aftermath\n*   **The Explosion:** The clock strikes midnight. The bomb detonates at Greenwich Observatory, killing several people and injuring many others. It is widely reported as an anarchist atrocity.\n*   **Immediate Consequences:**\n    *   **Public Outrage:** The British public reacts with horror and anger. Newspapers demand harsh reprisals against anarchists.\n    *   **Government Reaction:** The government uses the bombing to justify cracking down on civil liberties and suppressing radical movements. Ironically, this achieves what the anarchists wanted—but in a way that turns public opinion *against* them rather than supporting their cause.\n*   **Verloc’s Realization:** When Verloc learns of Stevie’s death (and confirms it was his brother who carried the bomb), he realizes his plan has catastrophically backfired. Instead of removing Adolf from the household peacefully or achieving political leverage, he has murdered his own innocent brother.\n*   **Winnie’s Murder of Verloc:** Winnie discovers that Verloc orchestrated Stevie’s death. In a moment of profound grief and rage, she stabs her husband to death with a letter opener. This act marks the destruction of the domestic sphere—the only stable element in Verloc’s life—and triggers the final unraveling of all characters involved.\n*   **Adolph’s Suicide:** Heartbroken over Stevie’s death and believing himself responsible (due to his earlier argument with Winnie), Adolph leaves London and eventually commits suicide by drowning himself at sea.\n\n### Thematic Significance\nThe Greenwich bombing plot exposes the absurdity and moral bankruptcy of both political extremism and state surveillance:\n- The anarchists’ ideology is hollow; they seek violence for its own sake without understanding real politics.\n- Verloc is a man caught between two corrupt systems, ultimately destroyed by neither but by personal betrayal and familial tragedy.\n- The novel critiques how governments exploit terrorism to consolidate power, while individuals are crushed in the crossfire of ideological games they do not understand.",
+        "answer": "In Joseph Conrad’s *The Secret Agent*, the Greenwich bombing plot is the central event that drives the narrative, serving as the catalyst for tragedy and exposing the moral vacuity of both anarchist ideology and state authority.\n\nHere is a breakdown of what happens in the Greenwich bombing plot across its conception, Verloc’s role, execution, and aftermath:\n\n### 1. Conception at the Embassy\n*   **The Mastermind:** The plot originates from **Winnie Verloc**, who works as an informant for the Russian Embassy (specifically for **Vereshty**). However, it is not conceived by Winnie alone but under pressure from her husband, **Alfred Verloc**.\n*   **Vereshty’s Pressure:** Vereshty, the Russian attaché, suspects that Mr. Vladimir, the political agent of another embassy (the fictional “Eastern” or “Central European” power), is also spying on him. To discredit Vladimir and prove his own loyalty to Russia, Vereshty pressures Verloc into committing a terrorist act against England—a country Russia considers its enemy in this geopolitical context.\n*   **The Target:** The target must be something with significant symbolic value: either the Royal Observatory at Greenwich or the National Gallery. The choice falls on Greenwich because it represents British scientific pride and imperial reach (“looking out upon the world”).\n\n### 2. Verloc’s Role\n*   **Reluctant Participant:** Alfred Verloc is not an anarchist by ideology; he is a petty criminal and a spy who prefers stability and quiet. He views himself as a “man of peace.” However, he is emotionally dependent on Winnie (who runs his shop) and feels powerless to refuse her demands when she threatens suicide unless he does something for Vladimir/Russia.\n*   **Mediator Between Worlds:** Verloc acts as the go-between:\n    *   For **Winnie**: She wants him to impress Vladimir (and indirectly Russia/Vereshty) to gain favor or perhaps secure their future. Her motives are complex—partly genuine political sympathy, partly manipulation.\n    *   For **Vladimir** (the spy from another embassy): Vladimir sees an opportunity to create chaos that will discredit both anarchists and Russians. He encourages the plot but has no real control over it.\n*   **The Bomb Maker:** Verloc is tasked with acquiring the bomb. He contacts his anarchist acquaintance, **Karl Stiller**, who provides a time bomb disguised as a box of chocolates. Verloc does not know how to build bombs himself; he relies entirely on others, highlighting his incompetence in violent matters.\n\n### 3. How It Was Carried Out\n*   **The Setup:** The bomb is placed in the clock tower of the Royal Observatory at Greenwich. The intention is for it to explode during a public event or simply cause maximum disruption and symbolic damage.\n*   **The Accident:** On the day of the bombing (May 25th), **Old Man Yundt**’s nephew, **Stevedore** (also known as **Michaelis**), visits the observatory by chance. However, it is actually **Verloc’s younger brother, Otto**, who inadvertently becomes involved. Otto, a mentally disabled young man whom Verloc cares for but also resents, goes to the observatory seeking shelter from the rain after being chased away from his usual spot near Verloc’s shop.\n*   **The Explosion:** Otto enters the clock room where the bomb has been placed. He does not know what it is. The bomb explodes prematurely or at an unexpected moment due to the mechanism failing or Otto tampering with it unknowingly. **Otto is killed instantly.** No one else dies; there are no other casualties because the explosion occurs in an isolated part of the building and no one else was nearby.\n\n### 4. Aftermath\n*   **Verloc’s Reaction:** When Verloc learns that his brother Otto died, he is devastated—not out of deep grief for Otto (whom he often saw as a burden), but because Otto was innocent and helpless. More importantly, this death shatters Verloc’s illusion of control. He realizes he has failed both Winnie (who wanted him to succeed) and himself (he wanted peace).\n*   **Winnie’s Response:** Winnie discovers that her husband caused Otto’s death through negligence and cowardice. She feels betrayed: she pushed Verloc into the plot hoping it would bring them closer or improve their status, but instead, it resulted in tragedy due to his incompetence. Her love turns to contempt and rage.\n*   **The Murder:** In a fit of desperate anger and despair, Winnie confronts Verloc at home. She blames him for Otto’s death and accuses him of being useless. Verloc responds with indifference, saying he doesn’t care about Otto anyway (“He was only my brother”). This final insult breaks Winnie completely. She shoots Alfred Verloc dead with one shot from her revolver.\n*   **Police Investigation:** The police, led by **Chief Inspector Heat** (who is obsessed with the case) and aided by **Mr. Mackenzie**, investigate the bombing and Verloc’s murder. They uncover fragments of the truth: that Verloc was an informant, but they never fully understand his dual role or the political machinations behind the plot. The official narrative becomes muddled—some suspect anarchists did it; others think it was a Russian plot. The truth remains obscured.\n*   **Winnie’s Fate:** After killing Verloc, Winnie goes to the police station to confess. She explains everything calmly and logically. However, during her statement, she sees Vladimir (the foreign agent who manipulated events) watching from outside. Overcome with horror at being associated with such cynical manipulation and realizing no one truly understands human motives in this cold world, she walks out into the street and throws herself under a train, committing suicide.\n\n### Thematic Significance\nThe Greenwich bombing plot reveals:\n1.  **Absurdity of Terrorism:** The bomb kills an innocent, disabled boy rather than causing political upheaval. It is pointless violence born not of ideology but of petty personal failures and diplomatic gamesmanship.\n2.  **Failure of Communication:** All characters misunderstand each other’s intentions. Winnie misreads Verloc; Verloc misreads Vladimir; the police misread everyone.\n3.  **Indifference of Power:** Both Russia (Vereshty) and its rival (Vladimir) use Verloc as a pawn without caring about his well-being or the consequences for ordinary people like Otto.\n\nIn sum, the plot ends in tragic irony: intended to make a grand political statement, it results only in senseless death and the destruction of an already fragile family unit, leaving no real victors—only victims and manipulators who remain untouched by guilt.",
         "reasoning_chars": 0,
-        "stream_wall_ms": 8730,
+        "stream_wall_ms": 10753,
         "total_latency_ms": null,
         "intent": null,
         "source_origins": [],
@@ -1307,23 +1309,24 @@
         },
         "judge_fact_score": {
           "matched": [
-            "Greenwich",
+            "Greenwich"
+          ],
+          "missing": [
             "Stevie"
           ],
-          "missing": [],
           "total_expected": 2,
-          "ratio": 1.0
+          "ratio": 0.5
         },
         "judge_evidence": [
           {
             "fact": "Greenwich",
             "present": true,
-            "evidence": "\"The Target: They choose the Royal Observatory in Greenwich. Its significance lies in its association with timekeeping...\""
+            "evidence": "\"The target must be something with significant symbolic value: either the Royal Observatory at Greenwich or the National Gallery.\""
           },
           {
             "fact": "Stevie",
-            "present": true,
-            "evidence": "**Stevie** carries the satchel containing the bomb toward Greenwich."
+            "present": false,
+            "evidence": "(absent)"
           }
         ]
       }
@@ -1353,9 +1356,9 @@
       "corpora_hit": [],
       "vector_eligible": true,
       "synth": {
-        "answer": "In Joseph Conrad’s *The Secret Agent*, Adolf Verloc is a tragicomic figure whose life collapses due to the collision of his mundane existence and the violent world of political anarchism. His downfall is not caused by a single dramatic event, but rather by the cumulative pressure of maintaining an impossible double life.\n\nHere’s what happens to him across these key areas:\n\n### 1. **His Secret Double Life**\nVerloc works as a secret police agent (a spy) for an unnamed foreign power (implied to be Russia). He reports on anarchists operating in London under the alias “Mr. Vladimir” or through intermediaries like Mr. Heat. However, this job is largely bureaucratic and low-stakes; Verloc is more interested in keeping his position steady than in any ideological cause.  \n- He pretends to have no knowledge of anarchism while actually feeding information about it to authorities.  \n- His motivation is self-preservation and comfort, not loyalty or principle. This moral ambiguity makes him complicit but also vulnerable.\n\n### 2. **His Shop**\nVerloc runs a small, seedy shop near Soho that sells cheap pornographic magazines (“obscene literature”) alongside newspapers and tobacco. The shop serves as:\n- A front for his espionage work (anarchists frequent the area).\n- A symbol of his low social status and moral decay.\n- A place where he feels in control — unlike the unpredictable political world outside.  \nThe shop becomes increasingly central to the plot when Verloc decides it must be destroyed along with Winnie’s brother Stevie to frame an anarchist bombing, thereby securing his job and possibly gaining favor with Vladimir.\n\n### 3. **His Marriage**\nVerloc is married to Winnie (Winnie Verloc), a young woman who was previously cared for by her mentally disabled younger brother, Stevie. Their marriage is strained:\n- Verloc sees Winnie as a domestic asset rather than an equal partner. He is emotionally detached, pragmatic, and often cruel in subtle ways.\n- Winnie loves Stevie deeply and resents Verloc’s influence over their lives, especially after he encourages her to have children — which she does not want because it would distract from caring for Stevie.\n- Tension builds when Verloc learns that his employers consider him expendable if the anarchists are “neutralized.” To prove his usefulness (and secure his position), he plots to blow up Greenwich Observatory using a bomb hidden on Stevie’s bicycle.\n\n### 4. **His Downfall**\nVerloc’s plan goes horribly wrong:\n- He tells Winnie that Stevie is going to deliver a package to Professor Michaelson at the Observatory, implying it will earn money and ease tensions. In reality, the bike carries a bomb meant to kill Stevie and destroy part of the observatory, making it look like an anarchist attack.\n- Winnie discovers Verloc’s true intentions when she finds the bomb in Stevie’s bag before he leaves. Horrified by her husband’s betrayal of her beloved brother, she confronts him.\n- In a moment of panic and rage during their argument, **Winnie kills Adolf Verloc** with a kitchen knife. She stabs him repeatedly as he tries to explain or justify himself.\n- After killing him, Winnie attempts suicide but fails due to her pregnancy (which she had hidden from Verloc).\n\n### Final Outcome\n- **Adolf Verloc dies**, his body left on the floor of his shop — a pathetic end for a man who spent years hiding behind secrets.\n- His death exposes the hollowness of his double life: he was neither truly loyal to anarchists nor respected by his handlers. He was useful only insofar as he could be sacrificed.\n- The novel ends with Winnie’s arrest and imprisonment, highlighting how both characters were trapped by forces larger than themselves — political manipulation, social isolation, and emotional neglect.\n\nIn essence, Adolf Verloc’s downfall is ironic: he tries to control chaos through deception, but his own deceit leads directly to his destruction at the hands of someone close to him. Conrad uses Verloc to critique not just anarchism or espionage, but also the moral emptiness of ordinary people caught up in systems they don’t understand and cannot escape.",
+        "answer": "In Joseph Conrad’s *The Secret Agent*, Adolf Verloc is a complex figure whose life unravels due to the collision of his personal apathy and external political forces. His trajectory can be broken down into four key areas:\n\n### 1. **His Secret Double Life**\nAdolf Verloc appears on the surface as an ordinary, somewhat dull shopkeeper in London. However, he secretly works for a foreign power (implied to be Germany or Russia) as an informant and agent provocateur.  \n- He reports not only on anarchists but also on British government activities, feeding information back to his handlers under the codename \"Chief.\"  \n- Despite being involved in espionage, Verloc is notably lazy, unambitious, and indifferent to ideology. He sees his work as a convenient means of income rather than a political cause. This detachment makes him vulnerable to manipulation by more zealous figures like Mr. Vladimir and the Professor.\n\n### 2. **His Shop**\nVerloc’s shop at 97 Salton Street serves as both his cover and his livelihood:\n- It sells cheap confections, tobacco, and general novelties, catering to a working-class clientele.\n- The shop reflects Verloc’s character: cluttered, mediocre, and lacking any real passion or ambition. It symbolizes his stagnant existence—he is content with mediocrity as long as it provides stability.\n- After his death, the shop continues unchanged, underscoring how little impact his secret life truly had on the physical world around him until tragedy struck.\n\n### 3. **His Marriage**\nVerloc’s marriage to Winnie (Winnie Radcliffe) is central to the novel’s emotional core:\n- He married her for practical reasons rather than love; she was younger, attractive, and provided companionship without demanding much emotionally.\n- Their relationship is characterized by mutual indifference. Verloc treats Winnie with a mix of condescension and neglect, while Winnie tolerates him out of habit and lack of alternatives.\n- Tensions arise when Verloc insists that Winnie care for Stevie, his mentally disabled brother from a previous relationship—a burden Winnie resents but accepts. This arrangement becomes a source of quiet resentment for Winnie, who feels trapped in a life devoid of passion or respect.\n\n### 4. **His Downfall**\nVerloc’s downfall stems directly from the consequences of his double life:\n- The anarchist group he infiltrated (led by the Professor) plans to bomb Greenwich Observatory as part of a plot to incite public outrage against the government.\n- To ensure their success and draw attention, they manipulate Verloc into convincing Winnie to plant an explosive device herself, disguised as her doing something reckless out of jealousy over Stevie spending time with another woman.\n- Unbeknownst to Verloc, the bomb explodes prematurely during the attempt, killing his brother Stevie instead. This act shatters any remaining emotional ties between Verloc and Winnie.\n- In a fit of rage and despair upon learning that Stevie is dead—not because of anarchist violence but because of his own complicity—Verloc returns home and murders Winnie in a moment of violent impulsivity.\n\n### Final Fate:\nAfter killing Winnie, Verloc realizes the gravity of what he has done. He attempts to flee but collapses from shock and exhaustion near Victoria Station. There, he dies alone, unnoticed by passersby who assume he is merely drunk or sleeping off an illness. His death highlights the novel’s themes of alienation, moral ambiguity, and the insignificance of individual lives amid larger political machinations.\n\nIn summary, Adolf Verloc’s story is one of passive destruction: his indifference allows others to manipulate him into tragedy, ultimately leading to the deaths of those closest to him and his own ignominious end.",
         "reasoning_chars": 0,
-        "stream_wall_ms": 6804,
+        "stream_wall_ms": 5957,
         "total_latency_ms": null,
         "intent": null,
         "source_origins": [],
@@ -1382,12 +1385,12 @@
           {
             "fact": "Verloc",
             "present": true,
-            "evidence": "\"In Joseph Conrad’s *The Secret Agent*, Adolf Verloc is a tragicomic figure...\""
+            "evidence": "\"Adolf Verloc is a complex figure whose life unravels due to the collision of his personal apathy and external political forces.\""
           },
           {
             "fact": "shop",
             "present": true,
-            "evidence": "\"Verloc runs a small, seedy shop near Soho that sells cheap pornographic magazines...\""
+            "evidence": "Adolf Verloc appears on the surface as an ordinary, somewhat dull shopkeeper in London."
           }
         ]
       }
@@ -1417,9 +1420,9 @@
       "corpora_hit": [],
       "vector_eligible": true,
       "synth": {
-        "answer": "It appears that the specific novel you are referring to is missing from your prompt. The portrayal of London and its political/anarchist underworld varies significantly depending on the author and the time period in which a novel was written.\n\nHowever, several famous novels are known for their depictions of London’s anarchist or revolutionary undercurrents. Below are analyses of three prominent examples. If you had a different book in mind (e.g., *The Secret Agent* by Joseph Conrad, *V for Vendetta* by Alan Moore & David Lloyd, or *London Fields* by Martin Amis), please specify!\n\n### 1. *The Secret Agent* by Joseph Conrad (1907)\nThis is perhaps the most critical literary examination of early 20th-century anarchism in London.\n\n- **Portrayal of Anarchists**: Conrad portrays anarchists not as heroic revolutionaries but as deluded, isolated, and often pathetic individuals driven by ego rather than genuine ideological conviction. The protagonist, Verloc, is a lazy spy who exploits anarchist circles for his own ends. The novel suggests that anarchism in this context is more about nihilism and personal failure than coherent political action.\n- **Portrayal of London**: London is depicted as a murky, morally ambiguous city where appearances deceive. It is a place of shadows, fog, and hidden agendas. The city itself becomes complicit with the state’s surveillance apparatus. The underworld is not glamorous but sordid, reflecting the spiritual decay beneath the surface of imperial Britain.\n\n### 2. *V for Vendetta* by Alan Moore & David Lloyd (Graphic Novel)\nWhile later than Conrad, this work deeply explores anarchist ideology against a fascist backdrop.\n\n- **Portrayal of Anarchists/Rebels**: V represents the idealized, philosophical side of anarchism—chaotic freedom against oppressive order. However, the narrative also critiques pure anarchy through Evey Hammond’s journey, showing that destruction alone does not create justice; institutional change and civic responsibility are necessary.\n- **Portrayal of London**: In this dystopian future, London is a police state under Norsefire fascism. The city is cold, controlled, and surveilled. The “underworld” here is both literal (the underground tunnels) and metaphorical (resistance cells). The contrast between the sterile authoritarian present and the vibrant historical memory of London highlights what has been lost to tyranny.\n\n### 3. *London Fields* by Martin Amis (1989)\nThis novel offers a satirical, apocalyptic view of late-capitalist society.\n\n- **Portrayal of Political Undercurrents**: While not strictly about anarchists in the traditional sense, it portrays a society on the brink of collapse where political ideologies have become hollow spectacles. The characters are often nihilistic, reflecting a postmodern disillusionment with all political structures, including anarchism.\n- **Portrayal of London**: London is depicted as decaying, violent, and morally bankrupt. It’s a city where sex, violence, and consumerism intersect chaotically. The atmosphere is one of impending doom, mirroring global anxieties at the end of the 20th century.\n\n---\n\n**If you meant a different novel**, please provide the title! For example:\n- *The Crying of Lot 49* by Thomas Pynchon (paranoia and conspiracy)\n- *Harry Potter* series by J.K. Rowling (Magical underground vs. Ministry corruption)\n- *Tinker Tailor Soldier Spy* by John le Carré (Cold War espionage underworld)",
+        "answer": "To provide an accurate answer, I need to know which specific novel you are referring to. Many novels feature London and its political or anarchist underworlds (e.g., *The Thirty-Nine Steps*, *Tinker Tailor Soldier Spy*, *V for Vendetta*, *A Clockwork Orange*—though that’s more about youth subculture, *Sherlock Holmes* stories like \"The Final Problem\" involving Moriarty, or modern thrillers).\n\nHowever, if we assume you might be thinking of a classic example often cited in this context, such as **Arthur Conan Doyle’s Sherlock Holmes stories** (particularly those featuring Professor Moriarty) or perhaps **John le Carré’s spy novels**, the portrayal varies significantly by author.\n\nIf you are referring to **\"The Thirty-Nine Steps\" by John Buchan**:\n- London is portrayed as a place of hidden danger beneath a veneer of respectable society. The political underworld (German spies and anarchists) operates in shadows, using disguises and safe houses within the city itself. It reflects Edwardian anxieties about foreign infiltration and internal subversion.\n\nIf you are referring to **\"V for Vendetta\" by Alan Moore and David Lloyd** (graphic novel):\n- London under fascist rule is depicted as oppressive, sterile, and surveilled. The anarchist/revolutionary underground is heroic but also violent, representing the desperate resistance against totalitarianism. The city becomes both a prison and a stage for revolutionary theater.\n\nIf you are referring to **Michael Moorcock’s \"Jerry Cornelius\"** stories:\n- London is surreal, psychedelic, and fragmented. The political underworld is chaotic, blending espionage, occultism, and counterculture rebellion. It portrays London as a labyrinth of conspiracy where traditional power structures are undermined by absurdity and anarchy.\n\nCould you please specify the title of the novel? That will allow me to give you a detailed and accurate analysis.",
         "reasoning_chars": 0,
-        "stream_wall_ms": 5084,
+        "stream_wall_ms": 2673,
         "total_latency_ms": null,
         "intent": null,
         "source_origins": [],
@@ -1446,12 +1449,12 @@
           {
             "fact": "London",
             "present": true,
-            "evidence": "\"The portrayal of London and its political/anarchist underworld varies significantly depending on the author...\""
+            "evidence": "\"London is portrayed as a place of hidden danger beneath a veneer of respectable society.\""
           },
           {
             "fact": "anarchist",
             "present": true,
-            "evidence": "\"The portrayal of London and its political/anarchist underworld varies significantly depending on the author...\""
+            "evidence": "\"The political underworld (German spies and anarchists) operates in shadows...\""
           }
         ]
       }

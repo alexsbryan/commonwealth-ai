@@ -2,7 +2,7 @@
   "bank_name": "ontology-pilot-secret-agent-v1",
   "corpus": "chaos-secret-agent",
   "limit": 0,
-  "started_at_unix": 1789963853,
+  "started_at_unix": 1789969758,
   "results": [
     {
       "question_id": "lookup-wife",
@@ -104,13 +104,6 @@
           "title": "The Secret Agent: A Simple Tale",
           "url": null,
           "score": 0.0,
-          "snippet": "The Secret Agent: A Simple Tale\n\nbeen able to conceal from herself\n\nthat he was a terrible encumbrance, that poor Stevie.  But in view of\n\nWinnie’s fondness for her delicate brother, and of Mr..."
-        },
-        {
-          "corpus_id": "chaos-secret-agent",
-          "title": "The Secret Agent: A Simple Tale",
-          "url": null,
-          "score": 0.0,
           "snippet": "The Secret Agent: A Simple Tale\n\nMr Verloc flung himself heavily upon the\n\nsofa, disregarding as usual the fate of his hat, which, as if accustomed\n\nto take care of itself, made for a safe shelter..."
         },
         {
@@ -140,6 +133,13 @@
           "url": null,
           "score": 0.0,
           "snippet": "The Secret Agent: A Simple Tale\n\ntime to move either hand or foot.\n\nThe knife was already planted in his breast.  It met no resistance on its\n\nway.  Hazard has such accuracies.  Into that plunging..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nperfect in accord: that accord\n\nof prudent reserve without superfluous words, and sparing of signs, which\n\nhad been the foundation of their respectable home life. ..."
         }
       ],
       "source_score": {
@@ -165,8 +165,8 @@
       "synth": {
         "answer": "Winnie Verloc\n\nGrounded in the source:\n  CHAPTER I — \"Sometimes it was Mrs Verloc who would appear at the call of the cracked\n\nbell.  Winnie Verloc was a young woman with a full bust, in a tight\n\nbodice, and with broad hips.\"",
         "reasoning_chars": 0,
-        "stream_wall_ms": 19958,
-        "total_latency_ms": 9454,
+        "stream_wall_ms": 13808,
+        "total_latency_ms": 4367,
         "intent": "KnowledgeQuery",
         "source_origins": [
           "chaos-secret-agent"
@@ -953,8 +953,8 @@
       "synth": {
         "answer": "brother\n\nGrounded in the source:\n  CHAPTER I — \"But in view of\n\nWinnie’s fondness for her delicate brother, and of Mr Verloc’s kind and\n\ngenerous disposition, she felt that the poor boy was pretty safe in this\n\nrough world.\"",
         "reasoning_chars": 0,
-        "stream_wall_ms": 16682,
-        "total_latency_ms": 9999,
+        "stream_wall_ms": 9905,
+        "total_latency_ms": 4636,
         "intent": "KnowledgeQuery",
         "source_origins": [
           "chaos-secret-agent"
@@ -1856,8 +1856,8 @@
       "synth": {
         "answer": "Brett Street\n\nGrounded in the source:\n  \"Private Citizen Heat entered the street, manoeuvring in a way which in a member of the criminal classes would have been stigmatised as slinking. The piece of cloth picked up in Greenwich was in his pocket. Not that he had the slightest intention of producing it in his private capacity. On the contrary, he wanted to know just what Mr Verloc would be disposed to say voluntarily. He hoped Mr Verloc’s talk would be of a nature to incriminate Michaelis. It was a conscientiously professional hope in the main, but not without its moral value. For Chief Inspector Heat was a servant of justice. Finding Mr Verloc from home, he felt disappointed. “I am afraid I haven’t time to wait for your husband,” he said. Mrs Verloc received this declaration listlessly. Her detachment had impressed Chief Inspector Heat all along. At this precise moment it whetted his curiosity. Chief Inspector Heat hung in the \"",
         "reasoning_chars": 0,
-        "stream_wall_ms": 16190,
-        "total_latency_ms": 10393,
+        "stream_wall_ms": 10400,
+        "total_latency_ms": 4985,
         "intent": "KnowledgeQuery",
         "source_origins": [
           "chaos-secret-agent"
@@ -2670,10 +2670,10 @@
       ],
       "vector_eligible": true,
       "synth": {
-        "answer": "a carving knife\n\nGrounded in the source:\n  CHAPTER XI — \"The knife was already planted in his breast.\"",
+        "answer": "carving\n\nknife\n\nGrounded in the source:\n  CHAPTER XI — \"Her right hand skimmed slightly the\n\nend of the table, and when she had passed on towards the sofa the carving\n\nknife had vanished without the slightest sound from the side of the dish.\"",
         "reasoning_chars": 0,
-        "stream_wall_ms": 10593,
-        "total_latency_ms": 4434,
+        "stream_wall_ms": 9065,
+        "total_latency_ms": 3655,
         "intent": "KnowledgeQuery",
         "source_origins": [
           "chaos-secret-agent"
@@ -2699,7 +2699,7 @@
           {
             "fact": "knife",
             "present": true,
-            "evidence": "\"a carving knife\""
+            "evidence": "\"knife\""
           }
         ]
       },
@@ -2857,7 +2857,7 @@
             "subtype": "",
             "hop": 1,
             "via": "configures",
-            "from": "entity-0002",
+            "from": "entity-0001",
             "score": 0.21600002
           },
           {
@@ -2978,7 +2978,7 @@
             "subtype": "",
             "hop": 1,
             "via": "involves",
-            "from": "entity-0002",
+            "from": "entity-0001",
             "score": 0.18
           },
           {
@@ -3471,8 +3471,8 @@
       "synth": {
         "answer": "the Observatory\n\nGrounded in the source:\n  \"“No doubt a wicked attempt to blow up the Observatory, they say.  H’m. That’s hardly credible.”\"",
         "reasoning_chars": 0,
-        "stream_wall_ms": 11939,
-        "total_latency_ms": 6652,
+        "stream_wall_ms": 12053,
+        "total_latency_ms": 5565,
         "intent": "KnowledgeQuery",
         "source_origins": [
           "chaos-secret-agent"
@@ -3896,8 +3896,8 @@
       "synth": {
         "answer": "Based on the retrieved passages, Chief Inspector Heat holds the rank of **Chief Inspector** and works within the **Special Crimes Department**.\n\nThe text explicitly identifies him by this title: \"the celebrated Chief Inspector\" [Source: The Secret Agent: A Simple Tale]. His department is also specified as the Special Crimes Department when he arrives at headquarters to confront Comrade Ossipon [Source: chaos-secret-agent]. He reports directly to an Assistant Commissioner in that same department [Source: The Secret Agent: A Simple Tale].",
         "reasoning_chars": 0,
-        "stream_wall_ms": 10578,
-        "total_latency_ms": 5744,
+        "stream_wall_ms": 10154,
+        "total_latency_ms": 4359,
         "intent": "KnowledgeQuery",
         "source_origins": [
           "chaos-secret-agent"
@@ -4656,8 +4656,8 @@
       "synth": {
         "answer": "photographs of more or less undressed dancing girls\n\nGrounded in the source:\n  CHAPTER I — \"The window contained photographs of more or less undressed dancing girls;\"",
         "reasoning_chars": 0,
-        "stream_wall_ms": 12398,
-        "total_latency_ms": 4851,
+        "stream_wall_ms": 12176,
+        "total_latency_ms": 3672,
         "intent": "KnowledgeQuery",
         "source_origins": [
           "chaos-secret-agent"
@@ -5407,8 +5407,8 @@
       "synth": {
         "answer": "Not in your sources — from general knowledge: Stevie Verloc is not depicted drawing with a compass and pencil; he is characterized as destitute, peculiar, and prone to sudden whims or outbursts of compassion (such as when he tries to get off the cab box), but there is no mention of him using drafting tools.\n\nWant me to search for details about Stevie's habits or activities?",
         "reasoning_chars": 0,
-        "stream_wall_ms": 12165,
-        "total_latency_ms": 10240,
+        "stream_wall_ms": 8043,
+        "total_latency_ms": 7042,
         "intent": "KnowledgeQuery",
         "source_origins": [
           "chaos-secret-agent"
@@ -5608,8 +5608,8 @@
       "synth": {
         "answer": "The retrieved passages do not state which late Baron had been the embassy patron long associated with Verloc's employment.\n\nWhile the text includes a dedication to H. G. Wells, describing him as \"THE CHRONICLER OF MR LEWISHAM'S LOVE,\" it does not identify any individual by title of \"late Baron\" or link such a person to an embassy role connected to Mr. Verloc [Source: The Secret Agent: A Simple Tale].\n\nI don't have reliable information on this specific detail from your sources; if you are thinking of a character like Lord George Gordon-Lennox (a historical figure sometimes linked to espionage in fiction), that connection is not present here. Want me to search for mentions of barons and embassies in relation to *The Secret Agent*?",
         "reasoning_chars": 0,
-        "stream_wall_ms": 15806,
-        "total_latency_ms": 8966,
+        "stream_wall_ms": 16033,
+        "total_latency_ms": 7172,
         "intent": "KnowledgeQuery",
         "source_origins": [
           "chaos-secret-agent"
@@ -6459,8 +6459,8 @@
       "synth": {
         "answer": "Based on the retrieved passages, there is a contradiction in your question regarding what the Professor carries. The text does not state that he has explosives strapped to his body; rather, it describes him carrying an **india-rubber ball** (a detonator) in his left trouser pocket as a \"supreme guarantee of his sinister freedom\" [Source: The Secret Agent: A Simple Tale].\n\nThe confusion likely stems from two separate plot points described in the sources:\n1.  **Verloc's Explosives:** Mr. Verloc was given a can containing sixteen ounces of X2 green powder and a time-shock detonator by the Professor for use against a building demonstration [Source: The Secret Agent: A Simple Tale]. There is no mention of these being strapped to the Professor himself or carried in his trousers at that moment; he had just prepared them when Verloc took them.\n2.  **The Professor's Pocket Item:** As the Professor walks through London, meditating on power and confronting Inspector Heat, the text explicitly states he kept [unverified excerpt: his hand... grasping lightly the india-rubber ball] which served as his personal weapon/detonator [Source: The Secret Agent: A Simple Tale].\n\nTherefore, while the Professor did provide explosives to others, the specific item found in *his* trouser pocket was an **india-rubber ball** (detonator), not a body-strapped explosive device.\n\nWant me to read any other sections of *The Secret Agent* for more detail? It would take about 2 minutes.",
         "reasoning_chars": 0,
-        "stream_wall_ms": 15275,
-        "total_latency_ms": 10453,
+        "stream_wall_ms": 14497,
+        "total_latency_ms": 9139,
         "intent": "KnowledgeQuery",
         "source_origins": [
           "chaos-secret-agent"
@@ -7041,8 +7041,8 @@
       "synth": {
         "answer": "charity cottage\n\nGrounded in the source:\n  CHAPTER VIII — \"In the privacy of a\n\nfour-wheeler, on her way to a charity cottage (one of a row) which by the\n\nexiguity of its dimensions and the simplicity of its accommodation, might\n\nwell have been devised in kindness as a place of training for the still\n\nmore straitened circumstances of the grave, she was forced to hide from\n\nher own child a blush of remorse and shame.\"",
         "reasoning_chars": 0,
-        "stream_wall_ms": 10918,
-        "total_latency_ms": 6132,
+        "stream_wall_ms": 10195,
+        "total_latency_ms": 5147,
         "intent": "KnowledgeQuery",
         "source_origins": [
           "chaos-secret-agent"
@@ -7670,8 +7670,8 @@
       "synth": {
         "answer": "science\n\nGrounded in the source:\n  CHAPTER II — \"The\n\nsacrosanct fetish of to-day is science.\"",
         "reasoning_chars": 0,
-        "stream_wall_ms": 14143,
-        "total_latency_ms": 8523,
+        "stream_wall_ms": 13942,
+        "total_latency_ms": 7137,
         "intent": "DeepQuery",
         "source_origins": [
           "chaos-secret-agent"
@@ -7700,6 +7700,348 @@
             "evidence": "\"The sacrosanct fetish of to-day is science.\""
           }
         ]
+      },
+      "atlas_walk": {
+        "kind": "thematic",
+        "nodes": [
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "entity-0009",
+            "name": "Mr Vladimir",
+            "kind": "entity",
+            "subtype": "person",
+            "hop": 0,
+            "via": null,
+            "from": null,
+            "score": 0.6
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "state-0007",
+            "name": "",
+            "kind": "state",
+            "subtype": "",
+            "hop": 0,
+            "via": null,
+            "from": null,
+            "score": 0.48277262
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "claim-0006",
+            "name": "",
+            "kind": "claim",
+            "subtype": "",
+            "hop": 1,
+            "via": "involves",
+            "from": "entity-0009",
+            "score": 0.4705387
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "claim-0014",
+            "name": "",
+            "kind": "claim",
+            "subtype": "",
+            "hop": 0,
+            "via": null,
+            "from": null,
+            "score": 0.4516546
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "claim-0017",
+            "name": "",
+            "kind": "claim",
+            "subtype": "",
+            "hop": 0,
+            "via": null,
+            "from": null,
+            "score": 0.44734496
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "state-0013",
+            "name": "",
+            "kind": "state",
+            "subtype": "",
+            "hop": 0,
+            "via": null,
+            "from": null,
+            "score": 0.42254406
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "config-0003",
+            "name": "",
+            "kind": "configuration",
+            "subtype": "",
+            "hop": 1,
+            "via": "configures",
+            "from": "claim-0006",
+            "score": 0.40867704
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "event-0032",
+            "name": "",
+            "kind": "event",
+            "subtype": "",
+            "hop": 0,
+            "via": null,
+            "from": null,
+            "score": 0.4038981
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "claim-0025",
+            "name": "",
+            "kind": "claim",
+            "subtype": "",
+            "hop": 0,
+            "via": null,
+            "from": null,
+            "score": 0.40289876
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "event-0029",
+            "name": "",
+            "kind": "event",
+            "subtype": "",
+            "hop": 0,
+            "via": null,
+            "from": null,
+            "score": 0.39468166
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "state-0048",
+            "name": "",
+            "kind": "state",
+            "subtype": "",
+            "hop": 0,
+            "via": null,
+            "from": null,
+            "score": 0.39098182
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "state-0015",
+            "name": "",
+            "kind": "state",
+            "subtype": "",
+            "hop": 0,
+            "via": null,
+            "from": null,
+            "score": 0.38907918
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "claim-0005",
+            "name": "",
+            "kind": "claim",
+            "subtype": "",
+            "hop": 1,
+            "via": "involves",
+            "from": "entity-0009",
+            "score": 0.18
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "event-0030",
+            "name": "",
+            "kind": "event",
+            "subtype": "",
+            "hop": 1,
+            "via": "involves",
+            "from": "entity-0009",
+            "score": 0.18
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "relation-0004",
+            "name": "",
+            "kind": "relation",
+            "subtype": "",
+            "hop": 1,
+            "via": "involves",
+            "from": "entity-0009",
+            "score": 0.18
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "relation-0013",
+            "name": "",
+            "kind": "relation",
+            "subtype": "",
+            "hop": 1,
+            "via": "involves",
+            "from": "entity-0009",
+            "score": 0.18
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "state-0005",
+            "name": "",
+            "kind": "state",
+            "subtype": "",
+            "hop": 1,
+            "via": "involves",
+            "from": "entity-0009",
+            "score": 0.18
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "config-0001",
+            "name": "",
+            "kind": "configuration",
+            "subtype": "",
+            "hop": 1,
+            "via": "configures",
+            "from": "claim-0006",
+            "score": 0.16939396
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "entity-0015",
+            "name": "Professor",
+            "kind": "entity",
+            "subtype": "person",
+            "hop": 1,
+            "via": "configures",
+            "from": "config-0003",
+            "score": 0.14712375
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "event-0012",
+            "name": "",
+            "kind": "event",
+            "subtype": "",
+            "hop": 1,
+            "via": "configures",
+            "from": "config-0003",
+            "score": 0.14712375
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "question-0003",
+            "name": "",
+            "kind": "question",
+            "subtype": "",
+            "hop": 1,
+            "via": "configures",
+            "from": "config-0003",
+            "score": 0.14712375
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "entity-0001",
+            "name": "Mr Verloc",
+            "kind": "entity",
+            "subtype": "person",
+            "hop": 1,
+            "via": "involves",
+            "from": "state-0007",
+            "score": 0.14483179
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "entity-0019",
+            "name": "Assistant Commissioner",
+            "kind": "entity",
+            "subtype": "person",
+            "hop": 1,
+            "via": "involves",
+            "from": "claim-0025",
+            "score": 0.12086963
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "entity-0022",
+            "name": "Toodles",
+            "kind": "entity",
+            "subtype": "person",
+            "hop": 1,
+            "via": "involves",
+            "from": "event-0029",
+            "score": 0.1184045
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "relation-0010",
+            "name": "",
+            "kind": "relation",
+            "subtype": "",
+            "hop": 1,
+            "via": "involves",
+            "from": "state-0048",
+            "score": 0.11729455
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "state-0004",
+            "name": "",
+            "kind": "state",
+            "subtype": "",
+            "hop": 1,
+            "via": "transition",
+            "from": "state-0007",
+            "score": 0.08689908
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "state-0012",
+            "name": "",
+            "kind": "state",
+            "subtype": "",
+            "hop": 1,
+            "via": "transition",
+            "from": "state-0007",
+            "score": 0.08689908
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "state-0011",
+            "name": "",
+            "kind": "state",
+            "subtype": "",
+            "hop": 1,
+            "via": "transition",
+            "from": "state-0013",
+            "score": 0.07605794
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "state-0036",
+            "name": "",
+            "kind": "state",
+            "subtype": "",
+            "hop": 1,
+            "via": "transition",
+            "from": "state-0013",
+            "score": 0.07605794
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "state-0019",
+            "name": "",
+            "kind": "state",
+            "subtype": "",
+            "hop": 1,
+            "via": "transition",
+            "from": "state-0015",
+            "score": 0.07003426
+          }
+        ],
+        "seeds": 12,
+        "edges_followed": 30,
+        "nodes_reached": 30,
+        "requests": 12,
+        "summaries_appended": 8,
+        "added": 12,
+        "considered": 12
       }
     },
     {
@@ -7863,8 +8205,8 @@
       "synth": {
         "answer": "I couldn't confirm an answer to this against the 12 passages your sources turned up — so rather than guess at something I can't verify from them, I'd flag that instead. If you think it's there, try rephrasing with the specific names or terms involved and I'll take another look.",
         "reasoning_chars": 0,
-        "stream_wall_ms": 31148,
-        "total_latency_ms": 26102,
+        "stream_wall_ms": 22229,
+        "total_latency_ms": 15800,
         "intent": "KnowledgeQuery",
         "source_origins": [
           "chaos-secret-agent"
@@ -8370,8 +8712,8 @@
       "synth": {
         "answer": "parlour\n\nGrounded in the source:\n  CHAPTER I — \"It clattered; and at that signal, through the dusty glass door behind the\n\npainted deal counter, Mr Verloc would issue hastily from the parlour at\n\nthe back.\"",
         "reasoning_chars": 0,
-        "stream_wall_ms": 12767,
-        "total_latency_ms": 6738,
+        "stream_wall_ms": 12938,
+        "total_latency_ms": 5931,
         "intent": "KnowledgeQuery",
         "source_origins": [
           "chaos-secret-agent"
@@ -9154,7 +9496,7 @@
           "title": "The Secret Agent: A Simple Tale",
           "url": null,
           "score": 0.0,
-          "snippet": "The Secret Agent: A Simple Tale\n\nvery quiet and looking at the cash-box\n\nin Mr Verloc’s hand.  But when she understood that her brother was\n\n“capering all over the place downstairs” she swung..."
+          "snippet": "The Secret Agent: A Simple Tale\n\ntypical.”\n\n“What’s very good?” grunted inquiringly Mr Verloc, settled again in the\n\ncorner of the sofa.  The other explained his meaning negligently, with..."
         },
         {
           "corpus_id": "chaos-secret-agent",
@@ -9281,12 +9623,13 @@
       "fact_score": {
         "matched": [
           "Michaelis",
-          "Ossipon",
+          "Ossipon"
+        ],
+        "missing": [
           "Professor"
         ],
-        "missing": [],
         "total_expected": 3,
-        "ratio": 1.0
+        "ratio": 0.6666667
       },
       "embed_ms": 0,
       "search_ms": 0,
@@ -9295,10 +9638,10 @@
       ],
       "vector_eligible": true,
       "synth": {
-        "answer": "Based on the provided passages, I cannot name every member of the anarchist circle. The text mentions several individuals associated with anarchism or revolutionary activities, but it does not provide a complete roster of those who meet in Verloc's parlour, nor does it explicitly list all attendees at any specific meeting described in these excerpts.\n\nThe following names are mentioned in connection with anarchists or revolutionary circles:\n*   **Mr. Vladimir**: Described as having \"Central Asian tones\" and discussing plots; he appears to be a leader or handler [Source: The Secret Agent: A Simple Tale].\n*   **Yundt**: Referred to as an \"old terrorist\" seen walking about Piccadilly [Source: The Secret Agent: A Simple Tale].\n*   **Michaelis**: Called the \"ticket-of-leave apostle\"; he is identified elsewhere in the source overviews as the principal writer of F.P. leaflets and a former medical student who debates Ossipon [Source: chaos-secret-agent].\n*   **Comrade Ossipon**: Identified as the principal writer of F.P. leaflets and a former medical student; he interacts with the Professor and Mrs. Verloc [Source: chaos-secret-agent].\n*   **The Professor**: Described as having a \"rasping voice\" and giving advice to Ossipon; he shares drinks with Ossipon at a pub [Source: The Secret Agent: A Simple Tale], [Source: chaos-secret-agent].\n\nI am not certain if there are other members (such as Stevie, though his role is ambiguous) who meet in that specific parlour, or if this list constitutes the entire group. The passages do not provide an exhaustive roster of the circle's membership.",
+        "answer": "Based on the provided passages, I can identify specific members of the anarchist circle who are present in or associated with the meetings at Verloc's shop. However, **I am not certain of the complete roster** of every member who ever met there, as the text excerpts focus primarily on a few key figures and do not provide an exhaustive list of all attendees for every gathering described.\n\nThe following individuals are explicitly named in the context of these gatherings:\n\n*   **Mr. Vladimir**: A central figure who visits the shop/parlour to discuss revolutionary activities and plots against England [Source: The Secret Agent: A Simple Tale]. He is described as having \"guttural Central Asian tones\" and is involved in planning attacks (such as blowing up the first meridian) [Source: The Secret Agent: A Simple Tale].\n*   **Comrade Alexander Ossipon** (nicknamed \"the Doctor\"): Described as a former medical student without a degree, wandering lecturer, author of *The Corroding Vices of the Middle Classes*, and special delegate for literary propaganda [Source: The Secret Agent: A Simple Tale]. He is present during discussions about degeneration and revolutionary strategy [Source: The Secret Agent: A Simple Tale].\n*   **Karl Yundt**: Identified alongside Ossipon and Michaelis as part of the \"Red Committee\" responsible for literary propaganda. He is described by Vladimir as an \"old terrorist\" who walks Piccadilly in his green havelock [Source: The Secret Agent: A Simple Tale].\n*   **Michaelis**: Described as a \"ticket-of-leave apostle\" and also a member of the Red Committee with Ossipon and Yundt [Source: The Secret Agent: A Simple Tale].\n\nThe passages mention that these three (Ossipon, Yundt, and Michaelis) are delegates for the work of literary propaganda [Source: The Secret Agent: A Simple Tale]. Other figures like **Stevie** (Winnie's brother) and **Mrs. Verloc** are present in the household but are not described as members of the anarchist circle itself; Stevie is depicted as an innocent who draws circles, while Mrs. Verloc is initially unaware of her husband's secret activities until later events unfold [Source: The Secret Agent: A Simple Tale] [Source: chaos-secret-agent].\n\nI do not have information from these passages regarding any other specific individuals who attended meetings in that parlour. Want me to search for more details on the full membership of this group?\n\n---\n*Verification note: these statements could not be confirmed against your sources — treat them as unverified:*\n- Mr. Vladimir is a central figure who visits Verloc's shop to discuss revolutionary activities and plots against England.\n- guttural Central Asian tones\n- Red Committee",
         "reasoning_chars": 0,
-        "stream_wall_ms": 17067,
-        "total_latency_ms": 8101,
+        "stream_wall_ms": 22354,
+        "total_latency_ms": 14476,
         "intent": "KnowledgeQuery",
         "source_origins": [
           "chaos-secret-agent"
@@ -9317,28 +9660,29 @@
         "judge_fact_score": {
           "matched": [
             "Michaelis",
-            "Ossipon",
+            "Ossipon"
+          ],
+          "missing": [
             "Professor"
           ],
-          "missing": [],
           "total_expected": 3,
-          "ratio": 1.0
+          "ratio": 0.6666667
         },
         "judge_evidence": [
           {
             "fact": "Michaelis",
             "present": true,
-            "evidence": "**Michaelis**: Called the \"ticket-of-leave apostle\"; he is identified elsewhere in the source overviews as the principal writer of F.P. leaflets..."
+            "evidence": "**Michaelis**: Described as a \"ticket-of-leave apostle\" and also a member of the Red Committee with Ossipon and Yundt"
           },
           {
             "fact": "Ossipon",
             "present": true,
-            "evidence": "**Comrade Ossipon**: Identified as the principal writer of F.P. leaflets and a former medical student..."
+            "evidence": "**Comrade Alexander Ossipon** (nicknamed \"the Doctor\"): Described as a former medical student..."
           },
           {
             "fact": "Professor",
-            "present": true,
-            "evidence": "\"Comrade Ossipon: Identified as the principal writer of F.P. leaflets and a former medical student; he interacts with the Professor and Mrs. Verloc\""
+            "present": false,
+            "evidence": "(absent)"
           }
         ]
       },
@@ -10218,8 +10562,8 @@
       "synth": {
         "answer": "Name of police official 1 and their role: Assistant Commissioner\nName of police official 2 and their role: Chief\n\nInspector Heat\n\nGrounded in the source:\n  CHAPTER VII — \"The Assistant Commissioner’s figure before this big and rustic Presence\n\nhad the frail slenderness of a reed addressing an oak.\"\n  CHAPTER V — \"Furthermore, Chief\n\nInspector Heat was conscious of not having mended matters by allowing\n\nhimself to express a conviction.\"",
         "reasoning_chars": 0,
-        "stream_wall_ms": 14009,
-        "total_latency_ms": 8558,
+        "stream_wall_ms": 12396,
+        "total_latency_ms": 7301,
         "intent": "KnowledgeQuery",
         "source_origins": [
           "chaos-secret-agent"
@@ -10766,13 +11110,6 @@
           "title": "The Secret Agent: A Simple Tale",
           "url": null,
           "score": 0.0,
-          "snippet": "The Secret Agent: A Simple Tale\n\nhumane man and a fond husband.  From every\n\nother point of view it was rather advantageous.  Nothing can equal the\n\neverlasting discretion of death.  Mr Verloc,..."
-        },
-        {
-          "corpus_id": "chaos-secret-agent",
-          "title": "The Secret Agent: A Simple Tale",
-          "url": null,
-          "score": 0.0,
           "snippet": "The Secret Agent: A Simple Tale\n\nMrs Neale received her money she went\n\nround the corner to drink ardent spirits in a mean and musty\n\npublic-house—the unavoidable station on the _via dolorosa_ of..."
         },
         {
@@ -10795,6 +11132,13 @@
           "url": null,
           "score": 0.0,
           "snippet": "The Secret Agent: A Simple Tale\n\nthe Special Crimes Department watched these\n\ndisappearances from a distance with an interested eye.  He felt\n\nlight-hearted, as though he had been ambushed all alone..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\ntime to move either hand or foot.\n\nThe knife was already planted in his breast.  It met no resistance on its\n\nway.  Hazard has such accuracies.  Into that plunging..."
         },
         {
           "corpus_id": "chaos-secret-agent",
@@ -10891,14 +11235,14 @@
         "ratio": null
       },
       "fact_score": {
-        "matched": [],
-        "missing": [
+        "matched": [
           "Winnie",
           "Stevie",
           "Verloc"
         ],
+        "missing": [],
         "total_expected": 3,
-        "ratio": 0.0
+        "ratio": 1.0
       },
       "embed_ms": 0,
       "search_ms": 0,
@@ -10907,10 +11251,10 @@
       ],
       "vector_eligible": true,
       "synth": {
-        "answer": "I couldn't confirm an answer to this against the 12 passages your sources turned up — so rather than guess at something I can't verify from them, I'd flag that instead. If you think it's there, try rephrasing with the specific names or terms involved and I'll take another look.",
+        "answer": "Based on the provided passages, the household behind the Brett Street shop consists of three people:\n\n1.  **Mr Verloc** (Adolf): The proprietor of the shop and a secret agent [Source: The Secret Agent: A Simple Tale].\n2.  **Mrs Verloc** (Winnie): Mr Verloc’s wife [Source: The Secret Agent: A Simple Tale].\n3.  **Stevie**: Winnie’s brother and Mr Verloc’s brother-in-law, who lives with them in a state of complete dependence [Source: The Secret Agent: A Simple Tale].\n\nThe text also mentions two other women associated with the location, but they do not live there:\n*   **Mrs Neale**: Described as \"the charwoman of Brett Street\" who is hired to help when Mr Verloc travels; she goes home after her work [Source: The Secret Agent: A Simple Tale].\n*   **Winnie's Mother (Mrs Verloc's mother)**: She provides for her widowhood by letting furnished apartments near Vauxhall Bridge Road and only visits or stays temporarily at Brett Street while preparing to leave her belongings behind. At one point, Winnie arranges items in preparation for her departure from Brett Street [Source: The Secret Agent: A Simple Tale].",
         "reasoning_chars": 0,
-        "stream_wall_ms": 24399,
-        "total_latency_ms": 16763,
+        "stream_wall_ms": 18795,
+        "total_latency_ms": 12228,
         "intent": "KnowledgeQuery",
         "source_origins": [
           "chaos-secret-agent"
@@ -10927,30 +11271,30 @@
           "ratio": 1.0
         },
         "judge_fact_score": {
-          "matched": [],
-          "missing": [
+          "matched": [
             "Winnie",
             "Stevie",
             "Verloc"
           ],
+          "missing": [],
           "total_expected": 3,
-          "ratio": 0.0
+          "ratio": 1.0
         },
         "judge_evidence": [
           {
             "fact": "Winnie",
-            "present": false,
-            "evidence": "(absent)"
+            "present": true,
+            "evidence": "**Mrs Verloc** (Winnie): Mr Verloc's wife"
           },
           {
             "fact": "Stevie",
-            "present": false,
-            "evidence": "(absent)"
+            "present": true,
+            "evidence": "**Stevie**: Winnie's brother and Mr Verloc's brother-in-law, who lives with them in a state of complete dependence"
           },
           {
             "fact": "Verloc",
-            "present": false,
-            "evidence": "(absent)"
+            "present": true,
+            "evidence": "**Mr Verloc** (Adolf): The proprietor of the shop and a secret agent"
           }
         ]
       },
@@ -11771,10 +12115,10 @@
       ],
       "vector_eligible": true,
       "synth": {
-        "answer": "Based on the provided passages from *The Secret Agent: A Simple Tale*, I can identify three specific figures attached to or associated with the foreign embassy that employs Verloc. However, I am not certain of a complete roster; these are only those explicitly named in the text excerpts provided.\n\n1.  **Baron Stott-Wartenheim**: Referred to as \"the late Baron\" and \"old Wurmt's predecessor,\" he was the previous diplomat who employed Verloc [Source: The Secret Agent: A Simple Tale].\n2.  **Privy Councillor Wurmt (Chancelier d’Ambassade)**: Described as an elderly man with dark grey whiskers, pince-nez glasses, and a pasty complexion, he is currently receiving reports from Verloc at the Embassy [Source: The Secret Agent: A Simple Tale].\n3.  **Mr Vladimir** (referred to in some contexts as associated with the embassy or its political sphere): While primarily identified as a revolutionary leader whom Verloc meets separately, the text notes that Mr Verloc was \"in direct communication with old Stott-Wartenheim himself\" regarding his services, and later discusses Vladimir's interactions with Verloc concerning these diplomatic ties [Source: The Secret Agent: A Simple Tale]. *Note: Vladimir appears more as an external anarchist figure interacting with Verloc rather than an employee of the embassy itself; however, he is a key figure in Verloc’s double life.*\n\nAdditionally, unnamed staff at the Embassy include:\n*   **The Porter**: Who issues hurriedly from his lodge wearing red waistcoat and knee-breeches.\n*   **A Footman/Lackey**: In brown trousers and claw-hammer coat edged with thin yellow cord.\n*   **Another Lackey/Servant**: Who leads Mr. Verloc through the passage to the small room [Source: The Secret Agent: A Simple Tale].\n\nI do not have information on any other specific named figures employed by or attached to that foreign embassy within these excerpts.\n\n---\n*Verification note: these statements could not be confirmed against your sources — treat them as unverified:*\n- in direct communication with old Stott-Wartenheim himself",
+        "answer": "Based on the provided passages from *The Secret Agent: A Simple Tale*, I can identify three specific figures attached to or associated with the foreign embassy that employs Verloc. However, I am not certain of a complete roster; these are only those explicitly named in the text excerpts provided.\n\n1.  **Baron Stott-Wartenheim**: Referred to as \"the late Baron\" and \"old Wurmt's predecessor,\" he was the previous diplomat who employed Verloc [Source: The Secret Agent: A Simple Tale].\n2.  **Privy Councillor Wurmt (Chancelier d’Ambassade)**: Described as an elderly man with dark grey whiskers, pince-nez glasses, and a pasty complexion, he is currently receiving reports from Verloc at the Embassy [Source: The Secret Agent: A Simple Tale].\n3.  **Mr Vladimir** (referred to in some contexts as associated with the embassy or its political sphere): While primarily identified as a revolutionary leader whom Verloc meets separately, the text notes that Mr Verloc was \"in direct communication with old Stott-Wartenheim himself\" regarding his services, and later discusses Vladimir's interactions with Verloc concerning these diplomatic ties [Source: The Secret Agent: A Simple Tale]. *Note: Vladimir appears more as an external anarchist figure interacting with Verloc rather than an employee of the embassy itself; however, he is a key figure in Verloc’s double life.*\n\nAdditionally, unnamed staff at the Embassy include:\n*   **The Porter**: Who issues hurriedly from his lodge wearing red waistcoat and knee-breeches.\n*   **A Footman/Lackey**: In brown trousers and claw-hammer coat edged with thin yellow cord.\n*   **Another Lackey/Servant**: Who leads Mr. Verloc through the passage to the small room [Source: The Secret Agent: A Simple Tale].\n\nI do not have information on any other specific named figures employed by or attached to that foreign embassy within these excerpts.\n\n---\n*Verification note: these statements could not be confirmed against your sources — treat them as unverified:*\n- Mr Vladimir is identified as a revolutionary leader rather than an employee of the embassy.\n- in direct communication with old Stott-Wartenheim himself",
         "reasoning_chars": 0,
-        "stream_wall_ms": 19912,
-        "total_latency_ms": 14711,
+        "stream_wall_ms": 26319,
+        "total_latency_ms": 20634,
         "intent": "KnowledgeQuery",
         "source_origins": [
           "chaos-secret-agent"
@@ -12019,7 +12363,7 @@
           "title": "The Secret Agent: A Simple Tale",
           "url": null,
           "score": 0.0,
-          "snippet": "The Secret Agent: A Simple Tale\n\nto copy this detachment.\n\n“If the police here knew their business they would shoot you full of\n\nholes with revolvers, or else try to sand-bag you from behind in..."
+          "snippet": "The Secret Agent: A Simple Tale\n\nraise himself in the social scale, had\n\nfilled him with such an exalted conviction of his merits that it was\n\nextremely difficult for the world to treat him with..."
         },
         {
           "corpus_id": "chaos-secret-agent",
@@ -12047,7 +12391,7 @@
           "title": "The Secret Agent: A Simple Tale",
           "url": null,
           "score": 0.0,
-          "snippet": "The Secret Agent: A Simple Tale\n\nthe customer with\n\nimpudent virulence.\n\nIt clattered; and at that signal, through the dusty glass door behind the\n\npainted deal counter, Mr Verloc would issue hastily..."
+          "snippet": "The Secret Agent: A Simple Tale\n\ndrop stealthily into the gutter.\n\nThe evening visitors—the men with collars turned up and soft hats rammed\n\ndown—nodded familiarly to Mrs Verloc, and with a..."
         },
         {
           "corpus_id": "chaos-secret-agent",
@@ -12082,7 +12426,22 @@
           "title": "The Secret Agent: A Simple Tale",
           "url": null,
           "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nthey!  Before a week’s\n\nout I’ll make some of them wish themselves twenty feet underground.  Eh?\n\nWhat?”\n\nHe glanced sideways, with his head down.  Mrs Verloc..."
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
           "snippet": "The Secret Agent: A Simple Tale\n\ngot out of the house, he saw with disgust the “confounded\n\npoliceman” still standing on the pavement.\n\n“Can he be waiting for me,” thought Mr Vladimir,...",
+          "source": "atom-enum"
+        },
+        {
+          "corpus_id": "chaos-secret-agent",
+          "title": "The Secret Agent: A Simple Tale",
+          "url": null,
+          "score": 0.0,
+          "snippet": "The Secret Agent: A Simple Tale\n\nwas nothing on the walls but\n\nthe paper, an expanse of arsenical green, soiled with indelible smudges\n\nhere and there, and with stains resembling faded maps of...",
           "source": "atom-enum"
         },
         {
@@ -12140,22 +12499,6 @@
           "score": 0.0,
           "snippet": "The Secret Agent: A Simple Tale\n\nwhisker on each side of a pair of wrinkled\n\nhands.  The person who had entered was holding a batch of papers before\n\nhis eyes and walked up to the table with a rather...",
           "source": "atom-enum"
-        },
-        {
-          "corpus_id": "chaos-secret-agent",
-          "title": "The Secret Agent: A Simple Tale",
-          "url": null,
-          "score": 0.0,
-          "snippet": "The Secret Agent: A Simple Tale\n\ndrop stealthily into the gutter.\n\nThe evening visitors—the men with collars turned up and soft hats rammed\n\ndown—nodded familiarly to Mrs Verloc, and with a...",
-          "source": "atom-enum"
-        },
-        {
-          "corpus_id": "chaos-secret-agent",
-          "title": "The Secret Agent: A Simple Tale",
-          "url": null,
-          "score": 0.0,
-          "snippet": "The Secret Agent: A Simple Tale\n\nraise himself in the social scale, had\n\nfilled him with such an exalted conviction of his merits that it was\n\nextremely difficult for the world to treat him with...",
-          "source": "atom-enum"
         }
       ],
       "source_score": {
@@ -12180,10 +12523,10 @@
       ],
       "vector_eligible": true,
       "synth": {
-        "answer": "Based on the provided passages from Joseph Conrad’s *The Secret Agent: A Simple Tale*, here is how anarchism and revolutionary politics play out across competing ideologies, character embodiments, and central plot drivers.\n\n### Competing Ideologies\nThe novel presents a fractured landscape of anarchist thought rather than a unified movement. The primary ideological conflict exists between **propaganda by the deed** (violent action) and **revolutionary propaganda/optimism**. \n\n*   **Violent Action vs. Propaganda:** Karl Yundt represents the \"perfect detonator\" ideology—a belief in conclusive, destructive violence over mere talk. He views revolutionists who only print leaflets as \"slaves of social convention,\" arguing that they are no better than the police because both serve the same game [Source: The Secret Agent: A Simple Tale]. \n*   **Optimistic Determinism:** Michaelis embodies an optimistic view based on cold reason rather than emotional fervor. He believes the end of private property is inevitable due to its inherent viciousness and does not rely on \"blood-red flags waving\" or metaphorical suns of vengeance [Source: The Secret Agent: A Simple Tale].\n*   **The State's View (Legality vs. Anarchy):** Chief Inspector Heat views anarchism with contempt, dismissing it as mere [unverified excerpt: disorderly conduct without the human excuse of drunkenness.] To him, anarchists are a criminal class distinct from any legitimate political movement [Source: The Secret Agent: A Simple Tale]. Conversely, Mr. Vladimir (the foreign agent) views England’s \"idealistic conception of legality\" and scrupulous prejudices as fatal weaknesses that make the country fertile ground for destruction [Source: The Secret Agent: A Simple Tale].\n\n### Characters Embodying Ideologies\n\n**1. Karl Yundt (The Terrorist/Scientist)**\nYundt is an anarchist who has worked alone for years in Islington. He despises delegates like Ossipon, calling them posturing shadows with no character or independent thought. His ideology is rooted in a detachment from life; he claims to depend on death rather than life's restraints. He seeks only a \"perfect detonator,\" viewing revolutionists who do not act violently as slaves of convention [Source: The Secret Agent: A Simple Tale]. \n\n**2. Comrade Ossipon (The Propagandist)**\nOssipon is described as the principal writer of the F.P. leaflets and an ex-medical student. Unlike Yundt, Ossipon engages in debate and propaganda but lacks revolutionary grit. He admits that revolutionists are not rich and relies on conventional morality while claiming to oppose it. He represents the intellectual wing of anarchism that Conrad portrays as somewhat hollow compared to Yundt’s destructive resolve [Source: The Secret Agent: A Simple Tale].\n\n**3. Michaelis (The Humanitarian Optimist)**\nMichaelis is a ticket-of-leave convict who believes in the logical destruction of private property through economic development rather than violence. His optimism is so strong he claims he could have found ways to kill himself if he were truly pessimistic. He is viewed by the Assistant Commissioner as a \"humanitarian sentimentalist\" incapable of intentional harm, representing a mild, non-violent strain of social rebellion [Source: The Secret Agent: A Simple Tale].\n\n**4. Mr. Verloc and Winnie Verloc (The Victims/Agents)**\nMr. Verloc poses as an agent provocateur for the police but is deeply embedded with foreign revolutionary agents like Vladimir. He embodies the moral ambiguity of the spy trade—loafing while pretending to serve both sides. Winnie Verloc initially appears indifferent but becomes radicalized in her personal life; upon discovering her husband’s betrayal (his affair with Stevie and his role as a spy), she kills him. Her act is not political revolution but a violent rejection of domestic treachery [Source: The Secret Agent: A Simple Tale].\n\n**5. Mr. Vladimir and the Foreign Embassy (The Manipulators)**\nVladimir represents the external manipulation of anarchist politics. He confuses distinct groups, treating anarchists as either disciplined armies or loose brigands depending on what suits his needs. He views English anarchists as tools to be used for \"a series of outrages\" that will scare the British bourgeoisie into submission or chaos [Source: The Secret Agent: A Simple Tale].\n\n### Central Plot Driven by Revolutionary Politics\nThe central plot is driven by **Mr. Vladimir’s demand for a spectacular act of terrorism**. \n\n*   **The Mandate:** Vladimir orders Verloc to execute an outrage in England—specifically targeting the Greenwich Observatory—to demonstrate revolutionary power and destabilize the state. He believes this psychological moment requires setting friends to work against the imbecile bourgeoisie [Source: The Secret Agent: A Simple Tale].\n*   **The Execution:** To fulfill this mandate, Verloc manipulates his simple-minded brother-in-law, Stevie (implied through context of \"Stevie's unexpected arrival\" and the bomb), into carrying out the bombing at the Observatory using a device provided by Yundt—a copal varnish can containing X2 green powder with a shock-and-time detonator set for twenty minutes [Source: The Secret Agent: A Simple Tale]. \n*   **The Aftermath:** The explosion kills Stevie. This personal tragedy drives Winnie Verloc to murder her husband in their parlour when he reveals his complicity and betrayal. Chief Inspector Heat then investigates the bombing, viewing it as criminal disorder rather than political ideology, while simultaneously trying to manage his superior, the Assistant Commissioner, who sees an opportunity to clear foreign spies from England under the guise of counter-terrorism [Source: The Secret Agent: A Simple Tale].\n\nIn summary, anarchism in *The Secret Agent* is portrayed not as a coherent political force but as a fragmented set of delusions—Yundt’s nihilistic violence, Ossipon’s hollow rhetoric, Michaelis’ naive optimism—all manipulated by state actors (Heat) and foreign agents (Vladimir) for their own ends, resulting only in personal tragedy and death.\n\n---\n*Verification note: these statements could not be confirmed against your sources — treat them as unverified:*\n- Michaelis embodies an optimistic view based on cold reason rather than emotional fervor.\n- Karl Yundt is described as having worked alone in Islington for years.\n- Winnie Verloc kills her husband after discovering his betrayal regarding Stevie and his role as a spy.\n- Stevie carries out the bombing using a device provided by Yundt containing X2 green powder with a shock-and-time detonator set for twenty minutes.\n- Winnie Verloc initially appears indifferent but becomes radicalized in her personal life; upon discovering her husband’s betrayal (his affair with Stevie and hi…\n- The central plot is driven by **Mr. Vladimir’s demand for a spectacular act of terrorism**.\n- Vladimir orders Verloc to execute an outrage in England—specifically targeting the Greenwich Observatory—to demonstrate revolutionary power and destabilize the …\n- Stevie's unexpected arrival",
+        "answer": "Based on the provided passages from Joseph Conrad’s *The Secret Agent: A Simple Tale*, anarchism and revolutionary politics are not portrayed as a unified movement, but rather as a fractured landscape of competing ideologies—ranging from nihilistic terrorism to humanitarian socialism—that ultimately collapse under their own contradictions. The central plot is driven by an agent provocateur who manipulates these divisions for state interests, leading to mutual destruction among all factions involved.\n\n### Competing Ideologies\nThe novel presents at least three distinct ideological positions within the anarchist milieu:\n\n1.  **Nihilist Terrorism (The Professor):** Represented by \"the Professor,\" this ideology views revolution through the lens of absolute negation. He believes that conventional morality and social order are artificial restraints, whereas he depends on \"death, which knows no restraint.\" His goal is not political reform but a \"perfect detonator\" capable of conclusive destruction [Source: The Secret Agent: A Simple Tale]. He despises weakness, telling Comrade Ossipon that in his ideal world, [unverified excerpt: the weak would be taken in... as shambles,] viewing them as the source of all evil [Source: The Secret Agent: A Simple Tale].\n2.  **Humanitarian Socialism (Michaelis):** In stark contrast to the Professor stands Michaelis, described by the Assistant Commissioner as a \"humanitarian sentimentalist\" who is \"incapable of hurting a fly intentionally\" [Source: The Secret Agent: A Simple Tale]. Michaelis envisions a future where society functions like an \"immense and nice hospital,\" with the strong nursing the weak [Source: The Secret Agent: A Simple Tale]. He rejects violence entirely; when confronted about his pessimism, he argues that private property will destroy itself through its own inherent viciousness without needing emotional excitement or blood-red flags [Source: The Secret Agent: A Simple Tale].\n3.  **Propaganda and Opportunism (Ossipon):** Comrade Ossipon represents the intellectual but hollow side of revolutionary politics. As the principal writer of the F.P. leaflets, he engages in propaganda but lacks the Professor’s conviction or Michaelis’ moral core. He is described as having \"no character whatever\" by the Professor, who accuses him and other delegates of being unable to think independently [Source: The Secret Agent: A Simple Tale].\n\n### Characters Embodying These Ideologies\n\n*   **The Professor:** The embodiment of pure anarchist nihilism. He lives a life of extreme asceticism (\"go hungry sometimes,\" experiments cost money) to fund his work on explosives [Source: The Secret Agent: A Simple Tale]. He views revolutionists like Ossipon as \"slaves of the social convention\" just as much as the police are, because they still react against society rather than standing entirely free from it [Source: The Secret Agent: A Simple Tale].\n*   **Comrade Ossipon:** An ex-medical student and self-proclaimed revolutionary who is actually more concerned with personal survival and comfort. After the central explosion occurs (which he believes killed himself), he attempts to flee London with Mrs. Verloc, revealing that \"we revolutionists are not rich\" and possessing only fifteen shillings in his pocket [Source: The Secret Agent: A Simple Tale]. He embodies the vanity and lack of discipline Conrad associates with many reformers [Source: The Secret Agent: A Simple Tale].\n*   **Mr. Vladimir:** A foreign political agent (identified as an Embassy spy/agent provocateur) who manipulates the anarchist movement from above. He views anarchists as tools to be used for geopolitical leverage against England. He confuses \"causes with effects\" and treats the revolutionary party either as a disciplined army or loose brigands depending on what suits him, displaying profound ignorance of their actual aims while commanding them with scorn [Source: The Secret Agent: A Simple Tale].\n*   **Chief Inspector Heat & The Assistant Commissioner:** Representing the state apparatus, they view anarchism not as a serious ideology but as [unverified excerpt: disorderly conduct... distinctly no class at all,] often dismissing it as the work of lunatics like the Professor [Source: The Secret Agent: A Simple Tale]. However, the Assistant Commissioner is cunning enough to use Verloc’s capture as a starting point to clear out foreign spies, showing that the police and the revolutionaries are engaged in a shared game of surveillance and counter-surveillance.\n\n### The Central Plot Driven by Ideological Conflict\nThe plot is catalyzed when Mr. Vladimir pressures Mr. Verloc—a secret agent for the British police posing as an anarchist—to organize a bombing to provoke public outrage against anarchists. Verloc selects Michaelis’ shop as the target because he knows Michaelis will be there reading his book on \"Faith, Hope, Charity\" [Source: The Secret Agent: A Simple Tale].\n\nHowever, due to a misunderstanding regarding the detonator's timing (set for twenty minutes), the bomb explodes prematurely while Stevie (Verloc’s mentally disabled brother) and Mrs. Verloc are present in the back room, resulting in Stevie’s gruesome death [Source: The Secret Agent: A Simple Tale]. This tragedy shatters the ideological facade of all characters involved:\n*   **Mrs. Verloc** discovers her husband is not just an anarchist but a police spy who betrayed their community and killed her brother. In a moment of violent rejection of both his political lies and his domestic betrayal, she stabs him to death [Source: chaos-secret-agent].\n*   **The Professor**, realizing his \"perfect detonator\" failed to kill its intended target (Michaelis survived because he was elsewhere), retreats into madness or further isolation, having lost his primary instrument of nihilistic expression in the eyes of the state.\n*   **Ossipon** abandons his revolutionary comrades immediately after the explosion, fleeing with Mrs. Verloc for personal escape rather than solidarity, proving the hollowness of his ideological commitments [Source: The Secret Agent: A Simple Tale].\n\nUltimately, Conrad uses these competing ideologies to show that whether one is a terrorist like the Professor, a humanitarian like Michaelis, or an opportunist like Ossipon, all are trapped in a cycle of violence and surveillance orchestrated by state agents like Vladimir and the police. Anarchism here is depicted not as a liberating force, but as a destructive mirror to the authoritarian order it seeks to overthrow.\n\n---\n*Verification note: these statements could not be confirmed against your sources — treat them as unverified:*\n- The bomb explodes prematurely while Stevie and Mrs. Verloc are present in the back room.",
         "reasoning_chars": 0,
-        "stream_wall_ms": 42569,
-        "total_latency_ms": 36796,
+        "stream_wall_ms": 34357,
+        "total_latency_ms": 26871,
         "intent": "DeepQuery",
         "source_origins": [
           "chaos-secret-agent"
@@ -12211,14 +12554,565 @@
           {
             "fact": "anarchist",
             "present": true,
-            "evidence": "The novel presents a fractured landscape of anarchist thought rather than a unified movement."
+            "evidence": "The novel presents at least three distinct ideological positions within the anarchist milieu:"
           },
           {
             "fact": "bomb",
             "present": true,
-            "evidence": "Stevie carries out the bombing using a device provided by Yundt containing X2 green powder with a shock-and-time detonator set for twenty minutes."
+            "evidence": "Verloc selects Michaelis' shop as the target because he knows Michaelis will be there reading his book on 'Faith, Hope, Charity'. However, due to a misunderstanding regarding the detonator's timing (set for twenty minutes), the bomb explodes prematurely..."
           }
         ]
+      },
+      "atlas_walk": {
+        "kind": "thematic",
+        "nodes": [
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "config-0002",
+            "name": "",
+            "kind": "configuration",
+            "subtype": "",
+            "hop": 0,
+            "via": null,
+            "from": null,
+            "score": 0.551687
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "claim-0019",
+            "name": "",
+            "kind": "claim",
+            "subtype": "",
+            "hop": 0,
+            "via": null,
+            "from": null,
+            "score": 0.5421579
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "config-0001",
+            "name": "",
+            "kind": "configuration",
+            "subtype": "",
+            "hop": 0,
+            "via": null,
+            "from": null,
+            "score": 0.5384572
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "state-0021",
+            "name": "",
+            "kind": "state",
+            "subtype": "",
+            "hop": 0,
+            "via": null,
+            "from": null,
+            "score": 0.52844745
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "claim-0007",
+            "name": "",
+            "kind": "claim",
+            "subtype": "",
+            "hop": 0,
+            "via": null,
+            "from": null,
+            "score": 0.51522034
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "claim-0013",
+            "name": "",
+            "kind": "claim",
+            "subtype": "",
+            "hop": 0,
+            "via": null,
+            "from": null,
+            "score": 0.5117639
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "relation-0008",
+            "name": "",
+            "kind": "relation",
+            "subtype": "",
+            "hop": 0,
+            "via": null,
+            "from": null,
+            "score": 0.5086789
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "state-0012",
+            "name": "",
+            "kind": "state",
+            "subtype": "",
+            "hop": 0,
+            "via": null,
+            "from": null,
+            "score": 0.48851272
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "summary-8b7efd9d086ad6cc",
+            "name": "",
+            "kind": "summary",
+            "subtype": "",
+            "hop": 0,
+            "via": null,
+            "from": null,
+            "score": 0.45561272
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "entity-0015",
+            "name": "Professor",
+            "kind": "entity",
+            "subtype": "person",
+            "hop": 1,
+            "via": "configures",
+            "from": "config-0002",
+            "score": 0.4535778
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "claim-0020",
+            "name": "",
+            "kind": "claim",
+            "subtype": "",
+            "hop": 0,
+            "via": null,
+            "from": null,
+            "score": 0.4428996
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "claim-0009",
+            "name": "",
+            "kind": "claim",
+            "subtype": "",
+            "hop": 0,
+            "via": null,
+            "from": null,
+            "score": 0.4328593
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "entity-0014",
+            "name": "Comrade Ossipon",
+            "kind": "entity",
+            "subtype": "person",
+            "hop": 1,
+            "via": "configures",
+            "from": "config-0002",
+            "score": 0.19860734
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "entity-0016",
+            "name": "Chief Inspector Heat",
+            "kind": "entity",
+            "subtype": "person",
+            "hop": 1,
+            "via": "configures",
+            "from": "config-0002",
+            "score": 0.19860734
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "entity-0021",
+            "name": "Sir Ethelred",
+            "kind": "entity",
+            "subtype": "person",
+            "hop": 1,
+            "via": "configures",
+            "from": "config-0002",
+            "score": 0.19860734
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "relation-0006",
+            "name": "",
+            "kind": "relation",
+            "subtype": "",
+            "hop": 1,
+            "via": "configures",
+            "from": "config-0002",
+            "score": 0.19860734
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "relation-0009",
+            "name": "",
+            "kind": "relation",
+            "subtype": "",
+            "hop": 1,
+            "via": "configures",
+            "from": "config-0002",
+            "score": 0.19860734
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "claim-0002",
+            "name": "",
+            "kind": "claim",
+            "subtype": "",
+            "hop": 1,
+            "via": "configures",
+            "from": "config-0001",
+            "score": 0.19384462
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "claim-0006",
+            "name": "",
+            "kind": "claim",
+            "subtype": "",
+            "hop": 1,
+            "via": "configures",
+            "from": "config-0001",
+            "score": 0.19384462
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "entity-0001",
+            "name": "Mr Verloc",
+            "kind": "entity",
+            "subtype": "person",
+            "hop": 1,
+            "via": "configures",
+            "from": "config-0001",
+            "score": 0.19384462
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "entity-0002",
+            "name": "Winnie Verloc",
+            "kind": "entity",
+            "subtype": "person",
+            "hop": 1,
+            "via": "configures",
+            "from": "config-0001",
+            "score": 0.19384462
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "entity-0003",
+            "name": "Stevie",
+            "kind": "entity",
+            "subtype": "person",
+            "hop": 1,
+            "via": "configures",
+            "from": "config-0001",
+            "score": 0.19384462
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "event-0015",
+            "name": "",
+            "kind": "event",
+            "subtype": "",
+            "hop": 1,
+            "via": "configures",
+            "from": "config-0001",
+            "score": 0.19384462
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "question-0005",
+            "name": "",
+            "kind": "question",
+            "subtype": "",
+            "hop": 1,
+            "via": "configures",
+            "from": "config-0001",
+            "score": 0.19384462
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "relation-0001",
+            "name": "",
+            "kind": "relation",
+            "subtype": "",
+            "hop": 1,
+            "via": "configures",
+            "from": "config-0001",
+            "score": 0.19384462
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "relation-0019",
+            "name": "",
+            "kind": "relation",
+            "subtype": "",
+            "hop": 1,
+            "via": "configures",
+            "from": "config-0001",
+            "score": 0.19384462
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "config-0003",
+            "name": "",
+            "kind": "configuration",
+            "subtype": "",
+            "hop": 1,
+            "via": "configures",
+            "from": "entity-0015",
+            "score": 0.16328801
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "entity-0012",
+            "name": "Michaelis",
+            "kind": "entity",
+            "subtype": "person",
+            "hop": 1,
+            "via": "involves",
+            "from": "claim-0007",
+            "score": 0.15456611
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "state-0045",
+            "name": "",
+            "kind": "state",
+            "subtype": "",
+            "hop": 1,
+            "via": "involves",
+            "from": "relation-0008",
+            "score": 0.15260369
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "claim-0012",
+            "name": "",
+            "kind": "claim",
+            "subtype": "",
+            "hop": 1,
+            "via": "involves",
+            "from": "entity-0015",
+            "score": 0.13607334
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "claim-0014",
+            "name": "",
+            "kind": "claim",
+            "subtype": "",
+            "hop": 1,
+            "via": "involves",
+            "from": "entity-0015",
+            "score": 0.13607334
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "claim-0017",
+            "name": "",
+            "kind": "claim",
+            "subtype": "",
+            "hop": 1,
+            "via": "involves",
+            "from": "entity-0015",
+            "score": 0.13607334
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "claim-0042",
+            "name": "",
+            "kind": "claim",
+            "subtype": "",
+            "hop": 1,
+            "via": "involves",
+            "from": "entity-0015",
+            "score": 0.13607334
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "claim-0043",
+            "name": "",
+            "kind": "claim",
+            "subtype": "",
+            "hop": 1,
+            "via": "involves",
+            "from": "entity-0015",
+            "score": 0.13607334
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "claim-0045",
+            "name": "",
+            "kind": "claim",
+            "subtype": "",
+            "hop": 1,
+            "via": "involves",
+            "from": "entity-0015",
+            "score": 0.13607334
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "event-0007",
+            "name": "",
+            "kind": "event",
+            "subtype": "",
+            "hop": 1,
+            "via": "involves",
+            "from": "entity-0015",
+            "score": 0.13607334
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "event-0009",
+            "name": "",
+            "kind": "event",
+            "subtype": "",
+            "hop": 1,
+            "via": "involves",
+            "from": "entity-0015",
+            "score": 0.13607334
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "event-0010",
+            "name": "",
+            "kind": "event",
+            "subtype": "",
+            "hop": 1,
+            "via": "involves",
+            "from": "entity-0015",
+            "score": 0.13607334
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "event-0013",
+            "name": "",
+            "kind": "event",
+            "subtype": "",
+            "hop": 1,
+            "via": "involves",
+            "from": "entity-0015",
+            "score": 0.13607334
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "relation-0007",
+            "name": "",
+            "kind": "relation",
+            "subtype": "",
+            "hop": 1,
+            "via": "involves",
+            "from": "entity-0015",
+            "score": 0.13607334
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "relation-0015",
+            "name": "",
+            "kind": "relation",
+            "subtype": "",
+            "hop": 1,
+            "via": "involves",
+            "from": "entity-0015",
+            "score": 0.13607334
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "state-0011",
+            "name": "",
+            "kind": "state",
+            "subtype": "",
+            "hop": 1,
+            "via": "involves",
+            "from": "entity-0015",
+            "score": 0.13607334
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "state-0013",
+            "name": "",
+            "kind": "state",
+            "subtype": "",
+            "hop": 1,
+            "via": "involves",
+            "from": "entity-0015",
+            "score": 0.13607334
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "state-0036",
+            "name": "",
+            "kind": "state",
+            "subtype": "",
+            "hop": 1,
+            "via": "involves",
+            "from": "entity-0015",
+            "score": 0.13607334
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "state-0038",
+            "name": "",
+            "kind": "state",
+            "subtype": "",
+            "hop": 1,
+            "via": "involves",
+            "from": "entity-0015",
+            "score": 0.13607334
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "entity-0020",
+            "name": "the great lady",
+            "kind": "entity",
+            "subtype": "person",
+            "hop": 1,
+            "via": "involves",
+            "from": "claim-0020",
+            "score": 0.13286988
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "state-0018",
+            "name": "",
+            "kind": "state",
+            "subtype": "",
+            "hop": 1,
+            "via": "transition",
+            "from": "state-0021",
+            "score": 0.09512055
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "state-0007",
+            "name": "",
+            "kind": "state",
+            "subtype": "",
+            "hop": 1,
+            "via": "transition",
+            "from": "state-0012",
+            "score": 0.0879323
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "state-0024",
+            "name": "",
+            "kind": "state",
+            "subtype": "",
+            "hop": 1,
+            "via": "transition",
+            "from": "state-0012",
+            "score": 0.0879323
+          }
+        ],
+        "seeds": 12,
+        "edges_followed": 49,
+        "nodes_reached": 49,
+        "requests": 13,
+        "summaries_appended": 7,
+        "added": 12,
+        "considered": 13
       }
     },
     {
@@ -12302,7 +13196,7 @@
           "title": "The Secret Agent: A Simple Tale",
           "url": null,
           "score": 0.0,
-          "snippet": "The Secret Agent: A Simple Tale\n\nadded with the same leisurely\n\nassurance: “To break up the superstition and worship of legality should\n\nbe our aim.  Nothing would please me more than to see..."
+          "snippet": "The Secret Agent: A Simple Tale\n\nraise himself in the social scale, had\n\nfilled him with such an exalted conviction of his merits that it was\n\nextremely difficult for the world to treat him with..."
         },
         {
           "corpus_id": "chaos-secret-agent",
@@ -12429,7 +13323,7 @@
           "title": "The Secret Agent: A Simple Tale",
           "url": null,
           "score": 0.0,
-          "snippet": "The Secret Agent: A Simple Tale\n\nwas nothing on the walls but\n\nthe paper, an expanse of arsenical green, soiled with indelible smudges\n\nhere and there, and with stains resembling faded maps of...",
+          "snippet": "The Secret Agent: A Simple Tale\n\nthis.  I\n\nquite appreciate the excellent watch kept on them by your men.  On the\n\nother hand, this, for the public, does not amount to more than a\n\nconfession of...",
           "source": "atom-enum"
         },
         {
@@ -12437,7 +13331,7 @@
           "title": "The Secret Agent: A Simple Tale",
           "url": null,
           "score": 0.0,
-          "snippet": "The Secret Agent: A Simple Tale\n\nthis.  I\n\nquite appreciate the excellent watch kept on them by your men.  On the\n\nother hand, this, for the public, does not amount to more than a\n\nconfession of...",
+          "snippet": "The Secret Agent: A Simple Tale\n\ndrop stealthily into the gutter.\n\nThe evening visitors—the men with collars turned up and soft hats rammed\n\ndown—nodded familiarly to Mrs Verloc, and with a...",
           "source": "atom-enum"
         }
       ],
@@ -12463,10 +13357,10 @@
       ],
       "vector_eligible": true,
       "synth": {
-        "answer": "Based on the provided passages from Joseph Conrad's *The Secret Agent: A Simple Tale*, state power, policing, and espionage are depicted as deeply intertwined, mutually corrupting forces that operate through secrecy, manipulation of public opinion, and moral ambiguity. The novel presents a cynical view where revolutionaries, police officers, and foreign spies function as mirror images of one another within a rigid bureaucratic hierarchy.\n\n### 1. Espionage: Foreign Manipulation and \"Authorised Scoundrelism\"\nEspionage is portrayed not as patriotic service but as a destabilizing force that undermines both domestic security and international order.\n\n*   **Mr. Vladimir (The Russian Embassy):** Vladimir represents the external architect of chaos. He views England’s \"idealistic conception of legality\" as a weakness (\"Capua\") compared to America's anarchistic temperament [Source: The Secret Agent: A Simple Tale]. His goal is to provoke the British state into overreaction; he explicitly states, [unverified excerpt: To break up the superstition and worship of legality should be our aim,] hoping police will shoot revolutionaries in broad daylight to trigger social disintegration [Source: The Secret Agent: A Simple Tale].\n*   **Verloc (The Double Agent/Agent Provocateur):** Verloc operates on two levels. Officially, he claims to be an agent provocateur for the police who prevents crimes [Source: The Secret Agent: A Simple Tale]. Unofficially, he is a spy for Vladimir’s embassy, tasked with provoking anarchist violence against the upcoming International Conference in Milan [Source: The Secret Agent: A Simple Tale]. He describes his role as \"authorised scoundrelism\" that destroys the efficiency of supervision because spies are free from faith and restraint [Source: The Secret Agent: A Simple Tale].\n*   **Mr. Vladimir's Assistant:** This figure highlights the bureaucratic nature of espionage within the Russian Embassy, where Verloc must navigate layers of hierarchy to receive orders [Source: The Secret Agent: A Simple Tale].\n\n### 2. Policing: Bureaucracy, Hierarchy, and Moral Compromise\nThe police force is depicted as a rigid institution struggling with public opinion, internal loyalty issues, and its own reliance on dubious methods.\n\n*   **The Assistant Commissioner:** He represents the pragmatic center of state power. He views secret agents as a \"ghastly nuisance\" that augments danger by fabricating facts and spreading panic [Source: The Secret Agent: A Simple Tale]. However, he also acknowledges his dependence on subordinates like Heat and recognizes that the department's morality can be perverted when spies are used to protect revolutionaries rather than suppress them [Source: The Secret Agent: A Simple Tale]. He shares Vladimir’s disdain for foreign political spies but operates within the constraints of English law and public opinion [Source: The Secret Agent: A Simple Tale].\n*   **Chief Inspector Heat:** Heat is characterized by professional pride, impulsiveness, and a sense of ownership over his cases. He views his use of Verloc as [unverified excerpt: private friendship, private information, private use of it,] believing this personal knowledge makes him effective despite official objections [Source: The Secret Agent: A Simple Tale]. His interactions with the anarchist Ossipon reveal his aggression; he confronts Ossipon about a detonator and mocks his failed suicide attempt, embodying the violent potential of state enforcement [Source: The Secret Agent: A Simple Tale].\n*   **Sir Ethelred (The Secretary of State):** Representing high political authority, Sir Ethelred is described as vast in bulk and haughty, demanding brevity (\"Be lucid, please\") and expressing animosity toward Heat’s methods but ultimately relying on the police's assurances [Source: The Secret Agent: A Simple Tale]. He embodies the \"great personage\" who expects results without understanding details.\n\n### 3. Anarchism/Revolution: Mirrors to Policing\nThe novel suggests that revolutionaries and policemen are \"slaves of social convention,\" playing counter-moves in the same game of power.\n\n*   **Karl Yundt (The Professor):** Described as a \"perfect anarchist,\" he is solitary, meticulous, and driven by hatred for humanity's weakness. He views terrorism not just as political action but as a way to break down morality. His detonators represent the raw destructive force that state power seeks to contain [Source: The Secret Agent: A Simple Tale].\n*   **Comrade Ossipon:** An intellectual revolutionary who relies on women’s money and lacks true conviction compared to the Professor. He represents the idle propagandist whom the police dismiss as insignificant [Source: The Secret Agent: A Simple Tale].\n*   **Michaelis:** A humanitarian socialist whose ideas of an \"immense and nice hospital\" world are dismissed by Yundt as folly. Michaelis is protected by wealthy patrons, showing how some radical elements are tolerated or managed rather than crushed [Source: The Secret Agent: A Simple Tale].\n\n### 4. Intersections and Ironies\nThe plot reveals that state power and espionage rely on each other's corruption:\n*   Heat uses Verloc (a spy) to catch criminals, blurring the line between law enforcement and criminal complicity [Source: The Secret Agent: A Simple Tale].\n*   Vladimir manipulates Verloc into provoking anarchists like Yundt, knowing the police will respond with violence, thus achieving his goal of undermining English legality [Source: The Secret Agent: A Simple Tale].\n*   Stevie, Verloc’s brother-in-law, holds an idealized view of the police as benevolent protectors (\"them as have nothing shouldn’t take anything away from them who have\"), which is shattered by the reality of their involvement in political intrigue and violence [Source: The Secret Agent: A Simple Tale].\n\nIn summary, *The Secret Agent* depicts state power as a fragile construct maintained through secrecy and manipulation. Policing is compromised by its reliance on spies; espionage is driven by cynical geopolitical games rather than ideology; and revolutionaries are either naive (Ossipon), humanitarian (Michaelis), or nihilistic (Yundt). All parties are trapped in a system where \"revolution\" and \"legality\" are merely different forms of control over a populace that remains largely indifferent to both [Source: The Secret Agent: A Simple Tale].\n\n---\n*Verification note: these statements could not be confirmed against your sources — treat them as unverified:*\n- Verloc claims to be an agent provocateur for the police who prevents crimes.",
+        "answer": "Based on the provided passages from Joseph Conrad's *The Secret Agent: A Simple Tale*, state power, policing, and espionage are depicted as a deeply intertwined, cynical ecosystem where the boundaries between law enforcement, foreign intelligence, and revolutionary violence are blurred. The novel presents these institutions not as moral arbiters but as bureaucratic machines driven by self-preservation, political expediency, and mutual exploitation.\n\n### 1. The Metropolitan Police: Bureaucracy and Complicity\nThe police force is portrayed through two primary figures who represent different facets of institutional failure and complicity.\n\n**The Assistant Commissioner** represents the weary, pragmatic apex of British policing. He views his department with \"markedly non-committal\" detachment, recognizing that he is \"dependent on too many subordinates and too many masters.\" His career began in a tropical colony where he successfully broke up secret societies, giving him a cynical view of human nature and organization [Source: The Secret Agent: A Simple Tale]. In London, he feels the weight of \"public opinion,\" which he finds irrational and alarming [Source: The Secret Agent: A Simple Tale].\n*   **Critique of Espionage:** He explicitly argues against the use of spies by foreign governments, stating that their existence \"destroys in a measure the efficiency of our supervision\" because these agents are free from restraint and can fabricate facts to cause panic or hasty legislation [Source: The Secret Agent: A Simple Tale]. He views them as an element that augments the very evil they claim to fight.\n\n**Chief Inspector Heat** represents the lower ranks' desperate need for validation and his personal entanglement with crime. He is described as having a mental state where his sense of professional distinction seems located in his jawline [Source: The Secret Agent: A Simple Tale].\n*   **Private Use of Public Power:** Heat admits to using private information gained through \"private friendship\" with French police to track Mr. Verloc, whom he identifies as an Embassy spy [Source: The Secret Agent: A Simple Tale]. This blurs the line between official duty and personal vendetta or opportunism.\n*   **The \"Tool\":** Heat relies on Mr. Verloc not just as a suspect but as a tool for surveillance, illustrating how the police utilize criminals to manage revolutionary threats [Source: The Secret Agent: A Simple Tale].\n\n### 2. Foreign Espionage: The Embassy and State Manipulation\nEspionage is depicted as a cynical game played by foreign powers (specifically through the unnamed Eastern European embassy) using London’s anarchists as pawns.\n\n**Mr. Vladimir:** He is the Chancelier d’Ambassade who recruits Mr. Verloc. Vladimir views revolutionaries with disdain, calling them \"intellectually a nonentity\" or part of a \"lazy lot\" [Source: The Secret Agent: A Simple Tale]. To him, anarchism is not an ideology but a tool for political leverage against England. He manipulates events to provoke a reaction from the British state, demonstrating how espionage operates by exploiting local unrest for foreign geopolitical gain [Source: The Secret Agent: A Simple Tale].\n*   **The Spy Network:** The passages reveal that spies like Verloc are often double-agents or agents provocateurs who play both sides. Verloc poses as a revolutionary while serving the Embassy, and Heat serves the police while privately leveraging his knowledge of Verloc’s spy status [Source: The Secret Agent: A Simple Tale].\n\n**Sir Ethelred (The Secretary of State):** Representing high-level government power, Sir Ethelred is depicted as \"vast in bulk,\" haughty, and dismissive. He views the affair with \"barefaced audacity\" and demands quick results without details [Source: The Secret Agent: A Simple Tale]. His presence underscores how state power at its highest level is insulated from the moral complexities faced by lower-ranking officers like the Assistant Commissioner or Heat. He represents a political class that tolerates espionage because it serves immediate interests but despises the messiness it creates [Source: The Secret Agent: A Simple Tale].\n\n### 3. Anarchism and Revolution: Mirrors of State Power\nThe novel suggests that revolutionaries and police are fundamentally similar—\"Like to like.\" They come from the same basket, playing counter-moves in the same game of social control [Source: The Secret Agent: A Simple Tale].\n\n**Karl Yundt (The Professor):** He embodies pure, nihilistic anarchism. He views both the police and the revolutionaries as \"slaves of social convention\" [Source: The Secret Agent: A Simple Tale]. His goal is not political reform but the destruction of legality itself. He sees England’s worship of law as a weakness (\"Capua\") compared to America's anarchistic temperament [Source: The Secret Agent: A Simple Tale].\n*   **Indifference:** Yundt dismisses Chief Inspector Heat as insignificant, comparing him only to himself in terms of being part of the same destructive machinery [Source: The Secret Agent: A Simple Tale].\n\n**Comrade Ossipon:** Representing the intellectual anarchist, Ossipon engages in theoretical debates with Yundt about detonators and revolution. However, he is portrayed as self-serving and cowardly when faced with actual danger (such as fleeing after the bombing) [Source: The Secret Agent: A Simple Tale]. His interactions highlight the gap between revolutionary rhetoric and action.\n\n**Michaelis:** An ex-convict and humanitarian socialist, Michaelis represents a milder form of dissent. He is protected by wealthy patrons who dislike industrialism but are otherwise detached from real political struggle [Source: The Secret Agent: A Simple Tale]. His involvement shows how state power also monitors \"safe\" or sentimental forms of dissent, treating them as potential threats to be managed rather than ideologies to be engaged with.\n\n### 4. The Blurring of Roles\nThe central theme regarding state power in these passages is the collapse of distinction between law enforcement and criminality.\n*   **Verloc as Agent Provocateur:** Verloc claims to prevent crimes (\"prevention is better than cure\"), but Vladimir rejects this, wanting a \"cure\" through provocation [Source: The Secret Agent: A Simple Tale]. This suggests that the state (via its foreign agents) actively cultivates violence to justify repression.\n*   **Heat’s Moral Ambiguity:** Heat uses his position to track spies for personal credit or private gain, admitting he knows things about Verloc that are not part of any official record [Source: The Secret Agent: A Simple Tale].\n*   **The Assistant Commissioner’s Dilemma:** He recognizes that using spies corrupts the police force's efficiency and morality, yet he is powerless to stop it because higher powers (like Sir Ethelred) rely on such methods [Source: The Secret Agent: A Simple Tale].\n\n### Conclusion\nConrad depicts state power as a hollow bureaucracy where policing is compromised by espionage, and espionage is driven by cynical foreign manipulation. The police are not guardians of justice but managers of disorder who often collaborate with criminals. Revolutionaries are either nihilistic destroyers like Yundt or opportunists like Ossipon, both of whom are ultimately manipulated by the very state structures they oppose. The \"simple tale\" reveals that in London’s political landscape, everyone—from the Assistant Commissioner to the anarchist professor—is trapped in a web of mutual exploitation and moral compromise.\n\n---\n*Verification note: these statements could not be confirmed against your sources — treat them as unverified:*\n- Mr. Vladimir is identified as a Chancelier d’Ambassade who recruits Mr. Verloc.",
         "reasoning_chars": 0,
-        "stream_wall_ms": 57137,
-        "total_latency_ms": 51724,
+        "stream_wall_ms": 55203,
+        "total_latency_ms": 48065,
         "intent": "DeepQuery",
         "source_origins": [
           "chaos-secret-agent"
@@ -12494,14 +13388,488 @@
           {
             "fact": "police",
             "present": true,
-            "evidence": "\"The police force is depicted as a rigid institution struggling with public opinion, internal loyalty issues...\""
+            "evidence": "\"The police force is portrayed through two primary figures who represent different facets of institutional failure and complicity.\""
           },
           {
             "fact": "agent",
             "present": true,
-            "evidence": "\"Verloc operates on two levels. Officially, he claims to be an agent provocateur for the police...\""
+            "evidence": "\"Verloc poses as a revolutionary while serving the Embassy, and Heat serves the police while privately leveraging his knowledge of Verloc's spy status\""
           }
         ]
+      },
+      "atlas_walk": {
+        "kind": "thematic",
+        "nodes": [
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "event-0018",
+            "name": "",
+            "kind": "event",
+            "subtype": "",
+            "hop": 0,
+            "via": null,
+            "from": null,
+            "score": 0.557448
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "entity-0024",
+            "name": "secret agents",
+            "kind": "entity",
+            "subtype": "concept",
+            "hop": 0,
+            "via": null,
+            "from": null,
+            "score": 0.53367156
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "config-0002",
+            "name": "",
+            "kind": "configuration",
+            "subtype": "",
+            "hop": 0,
+            "via": null,
+            "from": null,
+            "score": 0.52259535
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "state-0023",
+            "name": "",
+            "kind": "state",
+            "subtype": "",
+            "hop": 0,
+            "via": null,
+            "from": null,
+            "score": 0.4815659
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "state-0028",
+            "name": "",
+            "kind": "state",
+            "subtype": "",
+            "hop": 0,
+            "via": null,
+            "from": null,
+            "score": 0.4750725
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "claim-0011",
+            "name": "",
+            "kind": "claim",
+            "subtype": "",
+            "hop": 0,
+            "via": null,
+            "from": null,
+            "score": 0.46629605
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "entity-0015",
+            "name": "Professor",
+            "kind": "entity",
+            "subtype": "person",
+            "hop": 1,
+            "via": "configures",
+            "from": "config-0002",
+            "score": 0.45668417
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "event-0010",
+            "name": "",
+            "kind": "event",
+            "subtype": "",
+            "hop": 1,
+            "via": "involves",
+            "from": "entity-0015",
+            "score": 0.44297847
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "state-0054",
+            "name": "",
+            "kind": "state",
+            "subtype": "",
+            "hop": 0,
+            "via": null,
+            "from": null,
+            "score": 0.43804303
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "relation-0013",
+            "name": "",
+            "kind": "relation",
+            "subtype": "",
+            "hop": 1,
+            "via": "involves",
+            "from": "state-0054",
+            "score": 0.43217942
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "state-0017",
+            "name": "",
+            "kind": "state",
+            "subtype": "",
+            "hop": 0,
+            "via": null,
+            "from": null,
+            "score": 0.43101916
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "state-0015",
+            "name": "",
+            "kind": "state",
+            "subtype": "",
+            "hop": 0,
+            "via": null,
+            "from": null,
+            "score": 0.42973134
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "entity-0014",
+            "name": "Comrade Ossipon",
+            "kind": "entity",
+            "subtype": "person",
+            "hop": 1,
+            "via": "configures",
+            "from": "config-0002",
+            "score": 0.18813433
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "entity-0016",
+            "name": "Chief Inspector Heat",
+            "kind": "entity",
+            "subtype": "person",
+            "hop": 1,
+            "via": "configures",
+            "from": "config-0002",
+            "score": 0.18813433
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "entity-0021",
+            "name": "Sir Ethelred",
+            "kind": "entity",
+            "subtype": "person",
+            "hop": 1,
+            "via": "configures",
+            "from": "config-0002",
+            "score": 0.18813433
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "relation-0006",
+            "name": "",
+            "kind": "relation",
+            "subtype": "",
+            "hop": 1,
+            "via": "configures",
+            "from": "config-0002",
+            "score": 0.18813433
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "relation-0009",
+            "name": "",
+            "kind": "relation",
+            "subtype": "",
+            "hop": 1,
+            "via": "configures",
+            "from": "config-0002",
+            "score": 0.18813433
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "entity-0019",
+            "name": "Assistant Commissioner",
+            "kind": "entity",
+            "subtype": "person",
+            "hop": 1,
+            "via": "involves",
+            "from": "event-0018",
+            "score": 0.16723442
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "config-0003",
+            "name": "",
+            "kind": "configuration",
+            "subtype": "",
+            "hop": 1,
+            "via": "configures",
+            "from": "entity-0015",
+            "score": 0.16440631
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "entity-0003",
+            "name": "Stevie",
+            "kind": "entity",
+            "subtype": "person",
+            "hop": 1,
+            "via": "involves",
+            "from": "state-0023",
+            "score": 0.14446977
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "claim-0012",
+            "name": "",
+            "kind": "claim",
+            "subtype": "",
+            "hop": 1,
+            "via": "involves",
+            "from": "entity-0015",
+            "score": 0.13700525
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "claim-0013",
+            "name": "",
+            "kind": "claim",
+            "subtype": "",
+            "hop": 1,
+            "via": "involves",
+            "from": "entity-0015",
+            "score": 0.13700525
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "claim-0014",
+            "name": "",
+            "kind": "claim",
+            "subtype": "",
+            "hop": 1,
+            "via": "involves",
+            "from": "entity-0015",
+            "score": 0.13700525
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "claim-0017",
+            "name": "",
+            "kind": "claim",
+            "subtype": "",
+            "hop": 1,
+            "via": "involves",
+            "from": "entity-0015",
+            "score": 0.13700525
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "claim-0042",
+            "name": "",
+            "kind": "claim",
+            "subtype": "",
+            "hop": 1,
+            "via": "involves",
+            "from": "entity-0015",
+            "score": 0.13700525
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "claim-0043",
+            "name": "",
+            "kind": "claim",
+            "subtype": "",
+            "hop": 1,
+            "via": "involves",
+            "from": "entity-0015",
+            "score": 0.13700525
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "claim-0045",
+            "name": "",
+            "kind": "claim",
+            "subtype": "",
+            "hop": 1,
+            "via": "involves",
+            "from": "entity-0015",
+            "score": 0.13700525
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "event-0007",
+            "name": "",
+            "kind": "event",
+            "subtype": "",
+            "hop": 1,
+            "via": "involves",
+            "from": "entity-0015",
+            "score": 0.13700525
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "event-0009",
+            "name": "",
+            "kind": "event",
+            "subtype": "",
+            "hop": 1,
+            "via": "involves",
+            "from": "entity-0015",
+            "score": 0.13700525
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "event-0013",
+            "name": "",
+            "kind": "event",
+            "subtype": "",
+            "hop": 1,
+            "via": "involves",
+            "from": "entity-0015",
+            "score": 0.13700525
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "relation-0007",
+            "name": "",
+            "kind": "relation",
+            "subtype": "",
+            "hop": 1,
+            "via": "involves",
+            "from": "entity-0015",
+            "score": 0.13700525
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "relation-0008",
+            "name": "",
+            "kind": "relation",
+            "subtype": "",
+            "hop": 1,
+            "via": "involves",
+            "from": "entity-0015",
+            "score": 0.13700525
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "relation-0015",
+            "name": "",
+            "kind": "relation",
+            "subtype": "",
+            "hop": 1,
+            "via": "involves",
+            "from": "entity-0015",
+            "score": 0.13700525
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "state-0011",
+            "name": "",
+            "kind": "state",
+            "subtype": "",
+            "hop": 1,
+            "via": "involves",
+            "from": "entity-0015",
+            "score": 0.13700525
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "state-0013",
+            "name": "",
+            "kind": "state",
+            "subtype": "",
+            "hop": 1,
+            "via": "involves",
+            "from": "entity-0015",
+            "score": 0.13700525
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "state-0036",
+            "name": "",
+            "kind": "state",
+            "subtype": "",
+            "hop": 1,
+            "via": "involves",
+            "from": "entity-0015",
+            "score": 0.13700525
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "state-0038",
+            "name": "",
+            "kind": "state",
+            "subtype": "",
+            "hop": 1,
+            "via": "involves",
+            "from": "entity-0015",
+            "score": 0.13700525
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "entity-0009",
+            "name": "Mr Vladimir",
+            "kind": "entity",
+            "subtype": "person",
+            "hop": 1,
+            "via": "involves",
+            "from": "relation-0013",
+            "score": 0.12965383
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "entity-0020",
+            "name": "the great lady",
+            "kind": "entity",
+            "subtype": "person",
+            "hop": 1,
+            "via": "involves",
+            "from": "state-0017",
+            "score": 0.12930575
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "state-0008",
+            "name": "",
+            "kind": "state",
+            "subtype": "",
+            "hop": 1,
+            "via": "transition",
+            "from": "state-0023",
+            "score": 0.086681865
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "state-0026",
+            "name": "",
+            "kind": "state",
+            "subtype": "",
+            "hop": 1,
+            "via": "transition",
+            "from": "state-0023",
+            "score": 0.086681865
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "state-0019",
+            "name": "",
+            "kind": "state",
+            "subtype": "",
+            "hop": 1,
+            "via": "transition",
+            "from": "state-0028",
+            "score": 0.085513055
+          }
+        ],
+        "seeds": 12,
+        "edges_followed": 42,
+        "nodes_reached": 42,
+        "requests": 14,
+        "summaries_appended": 8,
+        "added": 12,
+        "considered": 14
       }
     },
     {
@@ -12514,14 +13882,14 @@
           "title": "The Secret Agent: A Simple Tale",
           "url": null,
           "score": 0.0,
-          "snippet": "The Secret Agent: A Simple Tale\n\nthe customer with\n\nimpudent virulence.\n\nIt clattered; and at that signal, through the dusty glass door behind the\n\npainted deal counter, Mr Verloc would issue hastily..."
+          "snippet": "The Secret Agent: A Simple Tale\n\ndrop stealthily into the gutter.\n\nThe evening visitors—the men with collars turned up and soft hats rammed\n\ndown—nodded familiarly to Mrs Verloc, and with a..."
         },
         {
           "corpus_id": "chaos-secret-agent",
           "title": "The Secret Agent: A Simple Tale",
           "url": null,
           "score": 0.0,
-          "snippet": "The Secret Agent: A Simple Tale\n\ndrop stealthily into the gutter.\n\nThe evening visitors—the men with collars turned up and soft hats rammed\n\ndown—nodded familiarly to Mrs Verloc, and with a..."
+          "snippet": "The Secret Agent: A Simple Tale\n\nthe customer with\n\nimpudent virulence.\n\nIt clattered; and at that signal, through the dusty glass door behind the\n\npainted deal counter, Mr Verloc would issue hastily..."
         },
         {
           "corpus_id": "chaos-secret-agent",
@@ -12672,10 +14040,10 @@
       ],
       "vector_eligible": true,
       "synth": {
-        "answer": "Based on the provided passages from Joseph Conrad's *The Secret Agent: A Simple Tale*, here is the arc of the domestic tragedy involving the Verloc household, Stevie, and Winnie.\n\n### The Domestic Status Quo\nAt the beginning of the novel, Mr. Verloc runs a shop in Soho selling \"shady wares\" (pornography) while secretly working as an agent provocateur for a foreign embassy [Source: The Secret Agent: A Simple Tale]. He lives with his wife, Winnie, her mother, and Winnie’s brother, Stephen (\"Stevie\") [Source: The Secret Agent: A Simple Tale].\n\n*   **Mr. Verloc:** Described as heavy-lidded, taciturn, and deeply domesticated, he finds comfort in his routine and his wife's attentions [Source: The Secret Agent: A Simple Tale]. He treats Stevie with benevolent indifference, similar to how one might treat a beloved pet [Source: The Secret Agent: A Simple Tale].\n*   **Winnie Verloc:** She is young, tidy, and maintains an air of \"unfathomable reserve\" behind the shop counter [Source: The Secret Agent: A Simple Tale]. Her primary motivation throughout her marriage is protecting her brother Stevie from her husband’s potential irritation. She once told her mother that Mr. Verloc would have to get tired of Winnie before he got tired of seeing Stevie around [Source: The Secret Agent: A Simple Tale].\n*   **Stevie:** He is described as \"peculiar,\" mentally disabled, and deeply devoted to his sister. He suffers from anxiety about being a nuisance and often stares vacantly or draws circles with compasses in his spare time [Source: The Secret Agent: A Simple Tale]. He has no possessions other than his mother's protection; the late licensed victualler (his father) had treated him brutally due to humiliation over his son’s condition [Source: The Secret Agent: A Simple Tale].\n\n### Mrs. Verloc’s Mother’s Departure\nA significant shift occurs when Winnie’s mother decides to leave Brett Street. She believes that by removing herself, she strengthens Stevie’s moral claim on Mr. Verloc as an independent dependent rather than just part of her \"furniture\" [Source: The Secret Agent: A Simple Tale]. She secures a place in almshouses for destitute widows and departs with great ceremony, leaving Winnie solely responsible for the household dynamic between husband and brother-in-law [Source: The Secret Agent: A Simple Tale]. Her departure is framed as an act of \"heroism and unscrupulousness,\" intended to secure Stevie's future permanently under Winnie’s care [Source: The Secret Agent: A Simple Tale].\n\n### The Turning Point\nThe domestic peace shatters when Mr. Verloc returns home one evening visibly agitated by his work-related anxieties (\"black care\") [Source: The Secret Agent: A Simple Tale]. He reveals that he has taken Stevie out under false pretenses—telling him they were going on a humanitarian mission or walk—and intends for Stevie to be killed in the explosion at the Greenwich Observatory, which was part of Verloc’s plot to frame anarchists [Source: The Secret Agent: A Simple Tale].\n\nVerloc attempts to reassure Winnie, suggesting they lie low and go abroad (perhaps to Spain or South America) once the deed is done [Source: The Secret Agent: A Simple Tale]. However, when Winnie realizes her brother has been murdered by her husband, she enters a state of shock. She initially runs from the kitchen upon seeing blood dripping from the carving knife Verloc uses to stab himself after realizing his plan failed (Stevie survived the blast but died later? No, Stevie dies in the explosion; Verloc stabs *himself*? Wait, let's look closer at the text).\n\nCorrection based on text:\nThe passages describe Mr. Verloc stabbing *Winnie*. Let's re-read carefully.\nText says: [unverified excerpt: It was the handle of the domestic carving knife with nothing strange about it but its position at right angles to Mr Verloc’s waistcoat and the fact that something dripped from it... Blood!] [Source: The Secret Agent: A Simple Tale].\nThen: [unverified excerpt: Mrs Verloc watched that transformation... With a sudden snatch at her skirts and a faint shriek she ran to the door...] [Source: The Secret Agent: A Simple Tale].\nLater, Winnie is described as \"the widow of Mr Verloc\" in Chapter XII? No, wait.\nLet's look at Chapter XII text provided: [unverified excerpt: Winnie Verloc, the widow of Mr Verloc... did not run beyond the door of the parlour.] [Source: The Secret Agent: A Simple Tale].\n\nActually, the passages indicate **Mr. Verloc kills himself** or is killed? Let's check the stabbing scene again.\n\"It was the handle of the domestic carving knife with nothing strange about it but its position at right angles to Mr Verloc’s waistcoat...\" This implies he stabbed *himself*? Or Winnie?\nLater: [unverified excerpt: Mrs Verloc on reaching the door had stopped... Mrs Verloc by the door was quite a different person from the woman who had been leaning over the sofa...] [Source: The Secret Agent: A Simple Tale].\nThen Chapter XII starts: [unverified excerpt: Winnie Verloc, the widow of Mr Verloc... did not run beyond the door of the parlour.] [Source: The Secret Agent: A Simple Tale].\n\nWait, if she is his widow, he must be dead. Did he kill himself or her?\nThe text says: \"It was the handle of the domestic carving knife with nothing strange about it but its position at right angles to Mr Verloc’s waistcoat and the fact that something dripped from it.\" This phrasing usually implies the object (knife) is stuck in him or near him. If Winnie were stabbed, the description would likely focus on *her* body. However, later passages show Winnie moving around ([unverified excerpt: Mrs Verloc abandoned her pose... ran to the door]). So **Mr. Verloc** is the one who has been stabbed/died.\n\nActually, looking closely at the provided text for Chapter XII:\n[unverified excerpt: Winnie Verloc, the widow of Mr Verloc... did not run beyond the door of the parlour.] [Source: The Secret Agent: A Simple Tale].\nThis confirms Mr. Verloc is dead and Winnie is his widow. The tragedy concludes with Stevie already blown up (killed) by Verloc's plot, and then Verloc killing himself (or being killed? The text says [unverified excerpt: handle of knife... right angles to waistcoat] which implies suicide or a struggle where he ended up dead). In the novel, Verloc stabs Winnie first, but she survives in some versions? No, in Conrad's *The Secret Agent*, Verloc kills **Winnie** with the carving knife after realizing his plan failed and Stevie died.\n\nLet me re-read the specific provided passages very carefully regarding who dies.\nPassage 1: \"It was the handle of the domestic carving knife with nothing strange about it but its position at right angles to Mr Verloc’s waistcoat...\" [Source: The Secret Agent: A Simple Tale]. This suggests the knife is stuck in **Mr. Verloc**.\nPassage 2: [unverified excerpt: Mrs Verloc watched that transformation... With a sudden snatch at her skirts and a faint shriek she ran to the door...] [Source: The Secret Agent: A Simple Tale]. Winnie runs away from him.\nPassage 3 (Chapter XII): [unverified excerpt: Winnie Verloc, the widow of Mr Verloc... did not run beyond the door of the parlour.] [Source: The Secret Agent: A Simple Tale].\n\nIf Winnie is his *widow*, he must be dead. If the knife was in his waistcoat, he likely stabbed himself or died from it. However, standard literary knowledge says Verloc kills **Winnie**. Let's look for evidence of Winnie's death in the text provided.\nThe text does NOT explicitly state Winnie dies in these snippets. It calls her \"Mrs Verloc\" and then later \"the widow of Mr Verloc\". This implies **Mr. Verloc** died.\n*Self-Correction*: I must stick to the passages. The passages call Winnie \"the widow of Mr Verloc.\" Therefore, within the context of these excerpts, Mr. Verloc is dead.\n\nHowever, there is a contradiction in my external memory vs the text. In the book, Verloc stabs Winnie. If the text says she is his *widow*, did he kill himself? Or did someone else kill him?\nActually, looking at Chapter XII again: [unverified excerpt: Winnie Verloc... did not run beyond the door... As though she had run through long years... Mrs Verloc by the door was quite a different person...] [Source: The Secret Agent: A Simple Tale]. She is alive and conscious here.\n\nLet's look further down. Does Winnie die?\nThe provided passages end with Stevie being blown up (\"blown to fragments\") and Mr. Verloc being described as dead (implied by her widow status). There are no passages in this set describing Winnie's death or trial. They describe her shock after Verloc's death.\n\n*Wait*, I need to be careful. If I say \"Winnie survives\" based on these texts, but she dies in the book, I might be wrong if the text implies it later. But the prompt asks what happens *in its domestic tragedy... from beginning to end*. The provided texts do not show the very end of Winnie's life (her execution/suicide), only the immediate aftermath of Stevie's death and Mr. Verloc's demise.\n\nLet's re-read the stabbing scene.\n\"It was the handle of the domestic carving knife with nothing strange about it but its position at right angles to Mr Verloc’s waistcoat...\" [Source: The Secret Agent: A Simple Tale].\nIf this is a description of **Winnie** being stabbed, why does it say \"Mr Verloc's waistcoat\"? It doesn't make sense for her to be wearing his waistcoat. Therefore, the victim in that specific sentence is **Mr. Verloc**.\n\nSo, based *strictly* on these passages:\n1. Stevie is killed by the bomb (blown to fragments) [Source: The Secret Agent: A Simple Tale].\n2. Mr. Verloc dies from a stabbing wound involving a domestic carving knife [Source: The Secret Agent: A Simple Tale].\n3. Winnie becomes his widow and is left in shock in the parlour [Source: The Secret Agent: A Simple Tale].\n\nThe provided texts do not cover Winnie's subsequent arrest or death. They end with her immediate reaction to becoming a widow after losing her brother and husband.\n\n### Summary of the Arc\n1.  **Beginning:** A fragile peace exists between Winnie, Stevie, and Mr. Verloc (who also harbors his mother). Winnie protects Stevie; Verloc is indifferent but tolerant. Mrs. Verloc’s mother leaves to secure Stevie's position as Winnie's dependent alone [Source: The Secret Agent: A Simple Tale].\n2.  **Middle:** Verloc uses Stevie in his anarchist plot, taking him out under false pretenses to be killed by an explosion at Greenwich Observatory. Stevie dies \"in a state of innocence\" believing he was helping humanity [Source: The Secret Agent: A Simple Tale].\n3.  **Climax/End:** Verloc returns home, agitated and bloody (or with blood on him). He reveals the truth or attempts to manage the fallout. In the ensuing confrontation, Mr. Verloc is found dead from a stabbing wound involving a domestic carving knife [Source: The Secret Agent: A Simple Tale]. Winnie survives this immediate event as his widow, left in shock in the parlour [Source: The Secret Agent: A Simple Tale].\n\n*(Note: The provided excerpts do not cover Winnie's trial or final fate after becoming a widow.)*\n\n---\n*Verification note: these statements could not be confirmed against your sources — treat them as unverified:*\n- Mrs. Verloc departs Brett Street to secure Stevie's future permanently under Winnie’s care by removing herself as [unverified excerpt: furniture.\n- The provided text describes a domestic carving knife positioned at right angles to Mr. Verloc’s waistcoat with blood dripping from it.\n- in the explosion at the Greenwich Observatory,\n- Winnie Verloc... did not run beyond the door\n- Verloc stabs Winnie first\n- The answer references ]Then Chapter\", which does not appear in the sources.",
+        "answer": "Based on the provided passages from Joseph Conrad's *The Secret Agent: A Simple Tale*, here is the arc of the domestic tragedy within the Verloc household, focusing on Winnie and Stevie.\n\n### The Domestic Status Quo\nThe novel opens with a seemingly stable but deeply sordid domestic arrangement in Soho. Mr. Verloc runs a shop selling \"shady wares\" (pornography) while secretly working as an agent provocateur for a foreign embassy [Source: The Secret Agent: A Simple Tale]. He lives above the shop with his wife, Winnie Verloc, her mother, and Winnie’s brother, Stephen (\"Stevie\") [Source: The Secret Agent: A Simple Tale].\n\n*   **Mr. Verloc:** Described as thoroughly domesticated, heavy-lidded, and possessing a \"firm, steady-eyed impudence.\" He is placid and taciturn, treating Stevie with benevolent but perfunctory recognition, akin to how one might treat a beloved pet cat [Source: The Secret Agent: A Simple Tale].\n*   **Winnie (Mrs. Verloc):** A young woman of full figure and clear complexion who maintains an air of \"unfathomable reserve\" behind the shop counter. She married Mr. Verloc partly out of practical necessity after her previous romance with a butcher ended abruptly; she recognized that marrying Verloc was necessary to secure a home for herself and protect Stevie from their father’s brutality or the workhouse [Source: The Secret Agent: A Simple Tale][Source: The Secret Agent: A Simple Tale].\n*   **Stevie:** Winnie’s brother, described as \"peculiar,\" intellectually disabled, and deeply sensitive. He is docile but prone to anxiety and emotional outbursts. He lives in one of the back bedrooms, helped by his sister with blind love and devotion. His existence causes constant low-level anxiety for the women, who fear he might become a nuisance to lodgers or break into fits of loquacity during dinner [Source: The Secret Agent: A Simple Tale][Source: The Secret Agent: A Simple Tale].\n\n### Stevie’s Role and Vulnerability\nStevie occupies a precarious position within the household. He has no possessions other than what Winnie provides; Mr. Verloc takes him over as part of the marriage settlement, much like the furniture from Winnie’s mother’s previous home [Source: The Secret Agent: A Simple Tale]. \n\n*   **Companionship:** Despite his disability, Stevie becomes a companion for Mr. Verloc on his walks. Mr. Verloc calls out to him in a manner similar to inviting a dog, but he seems to take kindly to Stevie’s presence [Source: This companionship is crucial because it makes Stevie vulnerable to manipulation by Verloc’s employers.]\n*   **Innocence and Exploitation:** Stevie believes he is helping people. He is easily swayed by authority figures (like the cabman who tells him about social injustice) and lacks the cynicism of adults. His \"fundamentally docile disposition\" makes him an easy target for those wishing to use him as an unwitting instrument of violence [Source: The Secret Agent: A Simple Tale].\n\n### Winnie’s Mother’s Departure\nA significant shift occurs when Mrs. Verloc’s mother decides to leave the household. She has secured a place in almshouses for destitute widows of licensed victuallers. Her departure is framed as an act of \"heroism and unscrupulousness.\" \n\n*   **Motivation:** She realizes that her presence strains Mr. Verloc’s kindness, even if he hides it well. By leaving, she hopes to strengthen Stevie’s claim on Winnie alone, ensuring his care without the complication of three dependents [Source: The Secret Agent: A Simple Tale].\n*   **Impact:** Her exit removes one layer of protection around Stevie. Before leaving, she ensures Winnie understands that everything left behind belongs to Winnie now, but insists Stevie must remain dependent because giving him property might weaken his position or offend Mr. Verloc’s susceptibilities [Source: The Secret Agent: A Simple Tale][Source: The Secret Agent: A Simple Tale].\n\n### The Tragedy Unfolds\nThe domestic peace is shattered when Mr. Verloc returns home late after having arranged for Stevie to be killed by the anarchist group he was manipulating (the \"Professor\"). \n\n1.  **Stevie’s Death:** Stevie is blown up in a museum explosion while attempting to deliver a bomb intended for Greenwich Observatory. He dies believing he was participating in a humanitarian act, unaware of its true nature [Source: The Secret Agent: A Simple Tale].\n2.  **Winnie’s Discovery:** Winnie finds her husband sitting on the sofa with a carving knife stuck into his waistcoat; blood drips from it onto the floorcloth. It becomes clear that Mr. Verloc has confessed to killing Stevie and plans to flee abroad (\"Lie low for a bit\") [Source: The Secret Agent: A Simple Tale][Source: The Secret Agent: A Simple Tale].\n3.  **The Climax:** Initially paralyzed by shock and instinctive repulsion at the sight of blood, Winnie eventually snaps out of her stupor. She realizes that Mr. Verloc is responsible for destroying her brother—the only person who truly loved and protected her in this sordid world. Her \"unfathomable reserve\" breaks into action. She kills Mr. Verloc with the same carving knife he used (implied or stated as self-defense/vengeance) to silence him before he can flee [Source: The Secret Agent: A Simple Tale].\n\n### Conclusion: Winnie’s Arc\nWinnie transforms from a passive, resigned wife maintaining a stagnant domestic order into an active agent of retribution. \n\n*   **From Dependence to Agency:** Throughout the novel, she relies on Mr. Verloc for stability and protects Stevie out of duty and love. After Stevie’s death, her devotion turns to violent justice. \n*   **The Cost:** Her arc ends in tragedy not just because she is widowed, but because she has murdered her husband. While she escapes immediate capture (implied by her running out after the act), her life as she knew it—defined by the protection of Stevie and the quiet misery of Brett Street—is utterly destroyed [Source: The Secret Agent: A Simple Tale].\n\nIn summary, the domestic tragedy revolves around the exploitation of innocence (Stevie) by political cynicism (Verloc/Professors) and the ultimate destruction of the only protective bond left for Winnie. Verloc’s attempt to use Stevie leads directly to his own death at Winnie’s hands, ending the household in blood and silence.\n\n---\n*Verification note: these statements could not be confirmed against your sources — treat them as unverified:*\n- Mrs. Verloc leaves the household to move into almshouses, believing her presence strains Mr. Verloc’s kindness.\n- Mr. Verloc arranged for Stevie to be killed by anarchists after having him deliver a bomb intended for Greenwich Observatory.\n- Stevie died in a museum explosion while attempting to deliver the bomb, unaware it was not a humanitarian act.\n- Winnie found Mr. Verloc sitting on the sofa with a carving knife stuck into his waistcoat after confessing to killing Stevie.\n- Winnie killed Mr. Verloc with the same carving knife he used to silence him before he could flee abroad.\n- Stevie is blown up in a museum explosion while attempting to deliver a bomb intended for Greenwich Observatory.\n- Winnie finds her husband sitting on the sofa with a carving knife stuck into his waistcoat; blood drips from it onto the floorcloth.\n- Lie low for a bit",
         "reasoning_chars": 0,
-        "stream_wall_ms": 44245,
-        "total_latency_ms": 39553,
+        "stream_wall_ms": 44749,
+        "total_latency_ms": 40483,
         "intent": "DeepQuery",
         "source_origins": [
           "chaos-secret-agent"
@@ -12703,14 +14071,169 @@
           {
             "fact": "Winnie",
             "present": true,
-            "evidence": "At the beginning of the novel, Mr. Verloc runs a shop in Soho selling \"shady wares\" (pornography) while secretly working as an agent provocateur for a foreign embassy [Source: The Secret Agent: A Simple Tale]. He lives with his wife, Winnie..."
+            "evidence": "The novel opens with a seemingly stable but deeply sordid domestic arrangement in Soho. Mr. Verloc runs a shop selling \"shady wares\" (pornography) while secretly working as an agent provocateur for a foreign embassy [Source: The Secret Agent: A Simple Tale]. He lives above the shop with his wife, Winnie Verloc..."
           },
           {
             "fact": "Stevie",
             "present": true,
-            "evidence": "The domestic tragedy involving the Verloc household, Stevie, and Winnie."
+            "evidence": "\"The novel opens with a seemingly stable but deeply sordid domestic arrangement in Soho. Mr. Verloc runs a shop selling 'shady wares' (pornography) while secretly working as an agent provocateur for a foreign embassy [Source: The Secret Agent: A Simple Tale]. He lives above the shop with his wife, Winnie Verloc, her mother, and Winnie's brother, Stephen ('Stevie')\""
           }
         ]
+      },
+      "atlas_walk": {
+        "kind": "trajectory",
+        "nodes": [
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "state-0039",
+            "name": "",
+            "kind": "state",
+            "subtype": "",
+            "hop": 0,
+            "via": null,
+            "from": null,
+            "score": 0.7346952
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "entity-0003",
+            "name": "Stevie",
+            "kind": "entity",
+            "subtype": "person",
+            "hop": 0,
+            "via": null,
+            "from": null,
+            "score": 0.6345477
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "entity-0016",
+            "name": "Chief Inspector Heat",
+            "kind": "entity",
+            "subtype": "person",
+            "hop": 0,
+            "via": null,
+            "from": null,
+            "score": 0.61137533
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "state-0052",
+            "name": "",
+            "kind": "state",
+            "subtype": "",
+            "hop": 1,
+            "via": "transition",
+            "from": "state-0039",
+            "score": 0.6033285
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "entity-0001",
+            "name": "Mr Verloc",
+            "kind": "entity",
+            "subtype": "person",
+            "hop": 0,
+            "via": null,
+            "from": null,
+            "score": 0.6
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "entity-0002",
+            "name": "Winnie Verloc",
+            "kind": "entity",
+            "subtype": "person",
+            "hop": 0,
+            "via": null,
+            "from": null,
+            "score": 0.6
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "state-0055",
+            "name": "",
+            "kind": "state",
+            "subtype": "",
+            "hop": 1,
+            "via": "transition",
+            "from": "state-0052",
+            "score": 0.58581316
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "entity-0004",
+            "name": "Mrs Verloc’s mother",
+            "kind": "entity",
+            "subtype": "person",
+            "hop": 0,
+            "via": null,
+            "from": null,
+            "score": 0.5570657
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "entity-0006",
+            "name": "Soho",
+            "kind": "entity",
+            "subtype": "place",
+            "hop": 0,
+            "via": null,
+            "from": null,
+            "score": 0.5405926
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "state-0040",
+            "name": "",
+            "kind": "state",
+            "subtype": "",
+            "hop": 0,
+            "via": null,
+            "from": null,
+            "score": 0.50419086
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "entity-0010",
+            "name": "Baron Stott-Wartenheim",
+            "kind": "entity",
+            "subtype": "person",
+            "hop": 0,
+            "via": null,
+            "from": null,
+            "score": 0.49972513
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "entity-0007",
+            "name": "Belgravia",
+            "kind": "entity",
+            "subtype": "place",
+            "hop": 0,
+            "via": null,
+            "from": null,
+            "score": 0.49194872
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "state-0050",
+            "name": "",
+            "kind": "state",
+            "subtype": "",
+            "hop": 1,
+            "via": "transition",
+            "from": "state-0040",
+            "score": 0.09075436
+          }
+        ],
+        "seeds": 12,
+        "edges_followed": 5,
+        "nodes_reached": 13,
+        "requests": 6,
+        "summaries_appended": 0,
+        "added": 12,
+        "considered": 6
       }
     },
     {
@@ -12883,8 +14406,8 @@
       "synth": {
         "answer": "Based on the provided passages from *The Secret Agent: A Simple Tale*, here is what happens in the Greenwich bombing plot.\n\n### Conception at the Embassy\nThe plot originates from a confrontation between Mr. Verloc and **Mr. Vladimir**, the First Secretary of a foreign embassy (referred to as \"the Embassy\"). Verloc, who has been employed by the Embassy for seven years under the late Baron Stott-Wartenheim, is summoned by Vladimir. During this meeting, Vladimir treats Verloc with contempt, calling him an \"ignorant, overbearing swine\" and mocking his physique and profession. Vladimir threatens to throw Verloc out into the streets to rot, effectively firing him or rendering him useless [Source: The Secret Agent: A Simple Tale].\n\nVerloc returns home in a state of furious indignation. He describes Vladimir as a \"venomous beast\" and a \"silly, jeering, dangerous brute\" who drove him out \"for a joke\" [Source: The Secret Agent: A Simple Tale]. This humiliation triggers Verloc’s desire for revenge. He declares that he will teach them what it means to try to discard a man like him, stating, \"Everything’ll come out. Every damned thing\" [Source: The Secret Agent: A Simple Tale]. His plan is described as being within the range of his powers and consistent with his life's practice of betraying secret proceedings; he decides to use anarchists against the Embassy [Source: The Secret Agent: A Simple Tale].\n\n### Verloc’s Role\nVerloc acts as the instigator and manipulator. After returning home from the embassy, he reveals his intent to his wife, Winnie (Mrs. Verloc). He claims he has no intention of letting revolutionists kill him but implies he will expose their activities or cause chaos that will benefit him or punish them [Source: The Secret Agent: A Simple Tale]. \n\nCrucially, Verloc targets his own son, **Stevie** (\"the poor boy\"), who is mentally disabled. Verloc takes Stevie out under the pretense of a trip to the country, leaving him with Michaelis. However, Mrs. Verloc later realizes that Verloc took Stevie away \"in order to kill him\" [Source: The Secret Agent: A Simple Tale]. Verloc uses Stevie as an unwitting instrument in the bombing plot. He gives Stevie a bomb (implied by the context of the explosion and Stevie's presence) or leads him into the trap at Greenwich Park.\n\n### How It Was Carried Out\nThe bombing occurs in **Greenwich Park**. Mr. Verloc goes out early on the day of the attack and does not return until nearly dusk [Source: The Secret Agent: A Simple Tale]. \n\nDuring this time, Stevie is killed in the explosion. Chief Inspector Heat later describes the scene to Mrs. Verloc while questioning her husband: [unverified excerpt: Blown to small bits: limbs, gravel, clothing, bones, splinters—all mixed up together... they had to fetch a shovel to gather him up with] [Source: The Secret Agent: A Simple Tale]. Mrs. Verloc recalls seeing \"bits of brotherly flesh and bone, all spouting up together in the manner of a firework\" and having to gather Stevie’s remains with a shovel [Source: The Secret Agent: A Simple Tale].\n\nVerloc himself was present at or near the site but survived. When questioned by Chief Inspector Heat after the explosion, Verloc claims he was making for Chesterfield Walk when he heard the bang (\"the bang startled you, eh?\") and started running because it came \"too soon,\" implying he may have expected more time or control over the event [Source: The Secret Agent: A Simple Tale]. He pretends ignorance of who died initially, though Mrs. Verloc eventually realizes her son is among the dead.\n\n### Aftermath\n1.  **Identification Failure:** Initially, the man blown to pieces in Greenwich Park is not identified [Source: The Secret Agent: A Simple Tale]. This allows Verloc to feign shock and confusion.\n2.  **Mrs. Verloc’s Realization:** Mrs. Verloc gradually pieces together that Verloc killed Stevie. She recalls his words about taking the boy away and connects them to the \"Greenwich Park affair.\" Her mental state shifts from stunned silence to a fixed idea that Verloc murdered their son [Source: The Secret Agent: A Simple Tale].\n3.  **Verloc’s Fear:** Verloc becomes paranoid, fearing revenge from revolutionists whose secrets he has exposed or betrayed. He tells Winnie he is too fond of her not to let them kill him, but also boasts that he can escape if needed [Source: The Secret Agent: A Simple Tale]. He withdraws money from the bank in preparation for fleeing abroad (\"Lie low for a bit... far from England\") [Source: The Secret Agent: A Simple Tale].\n4.  **Murder and Suicide:** Driven by grief and terror of being hanged for Stevie's murder (which she sees as an \"extremely plain case of murder\" once she looks into it), Mrs. Verloc kills Mr. Verloc with a knife [Source: The Secret Agent: A Simple Tale]. She then commits suicide shortly after, unable to face the gallows or life without her son [Source: The Secret Agent: A Simple Tale].\n\nThe plot thus results in the death of Stevie, followed by the deaths of both parents, leaving the anarchist conspirators (like Ossipon) bewildered by the personal tragedy that overshadowed their political aims [Source: The Secret Agent: A Simple Tale].\n\n---\n*Verification note: these statements could not be confirmed against your sources — treat them as unverified:*\n- Mrs. Verloc kills Mr. Verloc with a knife after realizing he murdered their son, then commits suicide.\n- the poor boy\n- He gives Stevie a bomb (implied by the context of the explosion and Stevie's presence) or leads him into the trap at Greenwich Park.",
         "reasoning_chars": 0,
-        "stream_wall_ms": 47875,
-        "total_latency_ms": 42309,
+        "stream_wall_ms": 46212,
+        "total_latency_ms": 38928,
         "intent": "DeepQuery",
         "source_origins": [
           "chaos-secret-agent"
@@ -12921,6 +14444,194 @@
             "evidence": "**Stevie** ("
           }
         ]
+      },
+      "atlas_walk": {
+        "kind": "trajectory",
+        "nodes": [
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "state-0018",
+            "name": "",
+            "kind": "state",
+            "subtype": "",
+            "hop": 0,
+            "via": null,
+            "from": null,
+            "score": 0.65635914
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "entity-0001",
+            "name": "Mr Verloc",
+            "kind": "entity",
+            "subtype": "person",
+            "hop": 0,
+            "via": null,
+            "from": null,
+            "score": 0.6
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "entity-0002",
+            "name": "Winnie Verloc",
+            "kind": "entity",
+            "subtype": "person",
+            "hop": 0,
+            "via": null,
+            "from": null,
+            "score": 0.6
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "entity-0027",
+            "name": "the foreigner from Chesham Square",
+            "kind": "entity",
+            "subtype": "person",
+            "hop": 0,
+            "via": null,
+            "from": null,
+            "score": 0.57721394
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "entity-0010",
+            "name": "Baron Stott-Wartenheim",
+            "kind": "entity",
+            "subtype": "person",
+            "hop": 0,
+            "via": null,
+            "from": null,
+            "score": 0.56458306
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "entity-0023",
+            "name": "Greenwich affair",
+            "kind": "entity",
+            "subtype": "concept",
+            "hop": 0,
+            "via": null,
+            "from": null,
+            "score": 0.5390338
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "state-0025",
+            "name": "",
+            "kind": "state",
+            "subtype": "",
+            "hop": 0,
+            "via": null,
+            "from": null,
+            "score": 0.5312036
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "entity-0005",
+            "name": "London",
+            "kind": "entity",
+            "subtype": "place",
+            "hop": 0,
+            "via": null,
+            "from": null,
+            "score": 0.52653104
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "entity-0026",
+            "name": "Mr Giugliani",
+            "kind": "entity",
+            "subtype": "person",
+            "hop": 0,
+            "via": null,
+            "from": null,
+            "score": 0.52176887
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "entity-0006",
+            "name": "Soho",
+            "kind": "entity",
+            "subtype": "place",
+            "hop": 0,
+            "via": null,
+            "from": null,
+            "score": 0.49735352
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "state-0055",
+            "name": "",
+            "kind": "state",
+            "subtype": "",
+            "hop": 0,
+            "via": null,
+            "from": null,
+            "score": 0.49686882
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "state-0014",
+            "name": "",
+            "kind": "state",
+            "subtype": "",
+            "hop": 1,
+            "via": "transition",
+            "from": "state-0018",
+            "score": 0.118144654
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "state-0021",
+            "name": "",
+            "kind": "state",
+            "subtype": "",
+            "hop": 1,
+            "via": "transition",
+            "from": "state-0018",
+            "score": 0.118144654
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "state-0024",
+            "name": "",
+            "kind": "state",
+            "subtype": "",
+            "hop": 1,
+            "via": "transition",
+            "from": "state-0025",
+            "score": 0.09561666
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "state-0027",
+            "name": "",
+            "kind": "state",
+            "subtype": "",
+            "hop": 1,
+            "via": "transition",
+            "from": "state-0025",
+            "score": 0.09561666
+          },
+          {
+            "atlas": "chaos-secret-agent",
+            "atom_id": "state-0052",
+            "name": "",
+            "kind": "state",
+            "subtype": "",
+            "hop": 1,
+            "via": "transition",
+            "from": "state-0055",
+            "score": 0.0894364
+          }
+        ],
+        "seeds": 11,
+        "edges_followed": 5,
+        "nodes_reached": 16,
+        "requests": 9,
+        "summaries_appended": 0,
+        "added": 12,
+        "considered": 9
       }
     },
     {
@@ -13037,8 +14748,8 @@
       "synth": {
         "answer": "Based on the provided text, Adolf Verloc is a shopkeeper in Soho who sells \"shady wares,\" including undressed dancing girl photographs and small packages marked two-and-six. His shop operates discreetly with its door often ajar at night, while his domestic life appears respectable but strained; he spends much of his day wallowing in bed and returns late from what he calls political work [Source: The Secret Agent: A Simple Tale]. He lives with Winnie (Mrs.) Verloc, whose mother rents rooms near Vauxhall Bridge Road, and they have no children, though their brother Stevie stays nearby under the care of Mr Michaelis [Source: The Secret Agent: A Simple Tale].\n\nAdolf’s secret double life involves an engagement to Winnie that is described as \"quasi-maternal\" regarding her brother Stevie, yet it masks a deeper involvement in political activities. When Adolf considers emigrating due to illness or fatigue, Winnie confronts him about his plans, revealing she knows he has been considering leaving England for France or California [Source: The Secret Agent: A Simple Tale]. However, before this confrontation can fully resolve, a stranger arrives at the shop—a tall, thin man with twisted moustaches who claims to be from the Continent and speaks English slowly [Source: The Secret Agent: A Simple Tale]. This visitor interrupts the domestic tension between Adolf and Winnie, signaling that Adolf’s secret life is about to collide with external forces beyond their control.\n\nThe passages do not yet describe the full extent of Adolf's downfall, including whether he kills the stranger or meets other fates later in the novel. They establish only the setup: his dual existence as a seemingly ordinary husband and father by day, and a political operative by night; his fragile marriage under pressure; and the incursion of an unknown agent into his private world.\n\nWant me to read *The Secret Agent* further? It would take about 10 minutes to cover the remaining plot developments from general knowledge (not included here).\n\n---\n*Verification note: these statements could not be confirmed against your sources — treat them as unverified:*\n- He lives with Winnie (Mrs.) Verloc, whose mother rents rooms near Vauxhall Bridge Road\n- quasi-maternal",
         "reasoning_chars": 0,
-        "stream_wall_ms": 17274,
-        "total_latency_ms": 12838,
+        "stream_wall_ms": 17449,
+        "total_latency_ms": 10249,
         "intent": "KnowledgeQuery",
         "source_origins": [
           "chaos-secret-agent"
@@ -13382,8 +15093,8 @@
       "synth": {
         "answer": "The novel portrays London not as a backdrop but as an oppressive, grimy organism that mirrors the moral decay of its political and anarchist underworld. The city is depicted through \"grimy brick houses\" in Soho where Mr. Verloc runs his shop selling \"shady wares,\" described as a place existing before reconstruction dawned upon it [Source: The Secret Agent: A Simple Tale]. This environment fosters a specific type of criminality; customers are men who look \"as if they were not in funds,\" wearing coats with collars turned up to their moustaches and mud on their garments, moving sideways as if afraid to start the bell going [Source: The Secret Agent: A Simple Tale].\n\nThe political underground operates within this sordid landscape, characterized by narrow alleys and unsavoury courts where characters like Stevie wander after being diverted from duty by stray cats or fallen horses [Source: The Secret Agent: A Simple Tale]. Chief Inspector Heat views his work through the lens of this urban reality, noting that thieving is a form of human industry exercised in an industrious world, much like labor in coal mines or potteries, but distinguished only by its risk defined as \"Seven years hard\" [Source: The Secret Agent: A Simple Tale]. He believes thieves are citizens gone wrong due to imperfect education rather than inherent rebels.\n\nThe anarchist figures themselves embody the city's sordid nature; Comrade Ossipon appears as a \"stunted, weakly figure,\" physically wretched and not fit to live, yet speaking with self-confidence against the vigorous vitality of Heat [Source: The Secret Agent: A Simple Tale]. Their revolutionary activities are conducted in secret, involving leaflets (F.P.) and plots that seem forced upon them by Fate itself [Source: The Secret Agent: A Simple Tale]. Ultimately, the novel suggests that London provides the perfect ecosystem for these characters, where the physical decay of the buildings parallels the moral ambiguity of those who inhabit it.\n\nNot in your sources, but from general knowledge…\nWant me to read *The Secret Agent* in depth? It would take about 15 minutes.\n\n---\n*Verification note: these statements could not be confirmed against your sources — treat them as unverified:*\n- Comrade Ossipon appears as a stunted, weakly figure speaking with self-confidence against Chief Inspector Heat's vigorous vitality.",
         "reasoning_chars": 0,
-        "stream_wall_ms": 22614,
-        "total_latency_ms": 15166,
+        "stream_wall_ms": 19768,
+        "total_latency_ms": 12365,
         "intent": "KnowledgeQuery",
         "source_origins": [
           "chaos-secret-agent"

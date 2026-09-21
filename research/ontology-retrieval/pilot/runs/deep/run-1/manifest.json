@@ -42,9 +42,9 @@
   "verdict": null,
   "never_ran_reasons": [],
   "provenance": {
-    "commit": "45d00f35354d8c025047d89b50bc9667a51c2768",
+    "commit": "40c08e08c1aecb96331767413b2ac0e5c51bb77b",
     "dirty": true,
-    "started_at_unix": 1789963850,
+    "started_at_unix": 1789969753,
     "paths": {
       "index_dir": "/Users/alexsbryan/.svrnmesh/indexes/chaos-secret-agent",
       "recipe": "sovereign-recipes/chaos-secret-agent/recipe.toml"
