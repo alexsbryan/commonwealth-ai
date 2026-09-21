@@ -205,7 +205,7 @@ fn new_tools_advertise_canonical_ids() {
     // drift → SPEC_GATED tier (atos-gated tool).
     #[cfg(feature = "atos")]
     {
-        let drift = sovereign_code::DriftTool::new().declared();
+        let drift = sovereign_atos::tools::DriftTool::new().declared();
         assert_eq!(drift.descriptor().id, "drift");
         assert!(MCP_TOOLS_SPEC_GATED.contains(&"drift"));
     }

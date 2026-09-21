@@ -322,7 +322,7 @@ pub async fn build_tool_registry(
     if let Ok(ds) =
         corpus_engine_notes::ProjectDocsStore::open(&indexes_dir.join("project_docs.db"))
     {
-        tools.register(Box::new(sovereign_code::ProjectContextTool::new(
+        tools.register(Box::new(sovereign_atos::tools::ProjectContextTool::new(
             Arc::new(ds),
         )));
     }
@@ -342,7 +342,9 @@ pub async fn build_tool_registry(
     // `with_project_root` in the daemon context because the daemon
     // doesn't know which project the caller means. ATOS-gated.
     #[cfg(feature = "atos")]
-    tools.register(Box::new(sovereign_code::DesignSignalsExtractTool::new()));
+    tools.register(Box::new(
+        sovereign_atos::tools::DesignSignalsExtractTool::new(),
+    ));
 
     // B:P9d — the corpus/atlas plane (corpus_store, corpus_search, atlas_gaps,
     // atlas_tensions, + the document ExtractTool). `standard_registry` dropped

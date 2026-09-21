@@ -78,10 +78,13 @@ impl DesignSignalsExtractTool {
     pub fn declared(self) -> DeclaredTool {
         let state = Arc::new(self);
         let run_state = Arc::clone(&state);
-        sovereign_contracts::tool_manifest::declared("design_signals_extract", move |params, ctx| {
-            let state = Arc::clone(&run_state);
-            async move { state.run(&params, &ctx).await }
-        })
+        sovereign_contracts::tool_manifest::declared(
+            "design_signals_extract",
+            move |params, ctx| {
+                let state = Arc::clone(&run_state);
+                async move { state.run(&params, &ctx).await }
+            },
+        )
         .with_validate({
             let state = Arc::clone(&state);
             Arc::new(move |p: &serde_json::Value| state.validate_extra(p))

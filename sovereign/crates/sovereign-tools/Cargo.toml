@@ -220,7 +220,14 @@ corpus-engine-scip = { workspace = true }
 # TEST-ONLY edge: the MCP surface list is this crate's, the tools it classifies
 # are sovereign-code's, so the cross-check has to see both. Dev-only keeps the
 # PRODUCTION graph free of svrn -> code (FIVE_PROGRAMS §4 rule 6).
-sovereign-code = { workspace = true, features = ["atos", "dev-tools"] }
+sovereign-code = { workspace = true, features = ["dev-tools"] }
+# TEST-ONLY, same shape as the line above and for the same one assertion: the
+# SPEC_GATED tier list is this crate's, and `drift` — the tool it classifies —
+# moved to `sovereign_atos::tools` on 2026-09-21 when `svrn code`'s package
+# stopped naming ATOS (FIVE_PROGRAMS §5, "deleted, not migrated"). The
+# cross-check has to construct the tool to read its declared id; asserting on
+# the string "drift" alone would check the list against itself.
+sovereign-atos = { workspace = true }
 tokio = { workspace = true, features = ["test-util"] }
 filetime = "0.2"
 # axum is the HTTP stub harness for `notes::diff_extract_backend`

@@ -570,7 +570,7 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
     ));
     if let Some(ref ds) = docs_store {
         tools.register(Box::new(
-            sovereign_code::ProjectContextTool::new(Arc::clone(ds))
+            sovereign_atos::tools::ProjectContextTool::new(Arc::clone(ds))
                 .with_features(Arc::clone(&features_store))
                 .declared(),
         ));
@@ -578,10 +578,10 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
 
     // ── ATOS feature management ─────────────────────────────────
     tools.register(Box::new(
-        sovereign_code::ProvisionFeatureTool::new(Arc::clone(&features_store)).declared(),
+        sovereign_atos::tools::ProvisionFeatureTool::new(Arc::clone(&features_store)).declared(),
     ));
     tools.register(Box::new(
-        sovereign_code::ArchiveFeatureTool::new(Arc::clone(&features_store)).declared(),
+        sovereign_atos::tools::ArchiveFeatureTool::new(Arc::clone(&features_store)).declared(),
     ));
     tools.register(Box::new(
         sovereign_code::ReadNoteByIdTool::new(Arc::clone(&notes_store)).declared(),
@@ -598,7 +598,7 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
         sovereign_code::ReadNoteDigestTool::new(Arc::clone(&notes_store)).declared(),
     ));
     tools.register(Box::new(
-        sovereign_code::RecordAtosEventTool::new(Arc::clone(&features_store)).declared(),
+        sovereign_atos::tools::RecordAtosEventTool::new(Arc::clone(&features_store)).declared(),
     ));
     // atos_plan_emit intentionally NOT registered — see runtime
     // tools_cmd/registry.rs for rationale (markdown plan path
@@ -619,7 +619,7 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
     // right file. Absolute paths still work — the tool resolves them
     // verbatim, bypassing project_root.
     tools.register(Box::new(
-        sovereign_code::DesignSignalsExtractTool::new()
+        sovereign_atos::tools::DesignSignalsExtractTool::new()
             .with_project_root(repo_root.clone())
             .declared(),
     ));

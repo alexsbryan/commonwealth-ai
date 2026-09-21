@@ -33,8 +33,8 @@ use std::path::{Path, PathBuf};
 
 use serde_json::json;
 
-use sovereign_contracts::frame::{Frame, FrameSchema};
 use sovereign_contracts::error::{Error, Result};
+use sovereign_contracts::frame::{Frame, FrameSchema};
 use sovereign_contracts::tool_manifest::DeclaredTool;
 use sovereign_contracts::types::{StepOutput, ToolContext};
 use std::sync::Arc;

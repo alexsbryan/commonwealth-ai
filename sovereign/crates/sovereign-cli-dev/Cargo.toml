@@ -82,7 +82,7 @@ sovereign-store = { workspace = true, optional = true }
 # `dev-tools` (git archaeology in BriefTool) and the code-intel `atos` tools
 # travel with `sovereign-code` since the 2026-09-21 lift; sovereign-tools keeps
 # only the `atos` axis its own knowledge_view splice needs.
-sovereign-code = { workspace = true, features = ["treesitter", "atos", "dev-tools"] }
+sovereign-code = { workspace = true, features = ["treesitter", "dev-tools"] }
 sovereign-tools = { workspace = true, features = [
     "treesitter",
     "atos",

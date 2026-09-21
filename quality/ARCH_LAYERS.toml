@@ -911,14 +911,18 @@ name = "arch-layers"
 # internal deps, and a third-party budget of `serde` + `toml`, both already
 # inside admitted leaves. All three filesystem rules pass — no `build.rs`, no
 # `include_str!`, no `CARGO_MANIFEST_DIR` and no `Command::new` anywhere in
-# `src/` (checked, not assumed).
+# `src/` (checked, not assumed). The one `allow` entry is `workspace-hack`,
+# the generated unifier that has its own leaf row above; most leaves here do
+# not carry it and so declare `allow = []`. Declaring it empty here cost a
+# self-inflicted violation on the very run that promoted the crate — caught by
+# reading the gate output per package rather than only its total.
 #
 # WHY IT IS A LEAF RATHER THAN A FIX. `arch_report` and `arch_posture`
 # evaluate `quality/ARCH_LAYERS.toml` itself and share this parser with the
 # xtask gates, so the DECLARED half (CI) and the OBSERVED half (arch_report)
 # cannot drift — ARCH principle 8. Making the code tools stop naming it would
 # mean a second parser, which is the defect the sharing exists to prevent.
-allow = []
+allow = ["workspace-hack"]
 
 [[package_leaf]]
 name = "oplog"

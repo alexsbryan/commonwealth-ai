@@ -39,6 +39,7 @@ pub mod local;
 pub mod middleware;
 pub mod report;
 pub mod session;
+pub mod tools;
 
 pub use charter::{parse as parse_charter, CharterParse, MilestoneSpec};
 pub use local::LocalAtosOrchestrator;

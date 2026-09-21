@@ -29,8 +29,8 @@
 //! - `unapproved` — spec exists in `.sovereign/features/<id>/` but
 //!   has never been committed (no approval anchor yet).
 //!
-//! Internally calls [`sovereign_atos::approval::find_approval`] and
-//! [`sovereign_atos::approval::detect_drift`] — the same primitives
+//! Internally calls [`crate::approval::find_approval`] and
+//! [`crate::approval::detect_drift`] — the same primitives
 //! the daemon's `approval_gate` middleware uses, so the tool's
 //! verdict matches the gate's verdict.
 
@@ -41,7 +41,7 @@ use serde_json::json;
 use sovereign_contracts::error::{Error, Result};
 use sovereign_contracts::types::*;
 
-use sovereign_atos::approval::{current_spec_hash, detect_drift, find_approval};
+use crate::approval::{current_spec_hash, detect_drift, find_approval};
 use sovereign_contracts::tool_manifest::DeclaredTool;
 use std::sync::Arc;
 

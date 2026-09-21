@@ -13,12 +13,10 @@ license.workspace = true
 [dependencies]
 sovereign-contracts = { workspace = true }
 sovereign-time = { workspace = true }
-sovereign-atos = { workspace = true, optional = true }
 sovereign-work-atlas = { workspace = true }
 corpus-engine = { workspace = true }
 corpus-engine-scip = { workspace = true }
 corpus-engine-notes = { workspace = true }
-corpus-engine-atos = { workspace = true, optional = true }
 corpus-engine-archaeology = { workspace = true, optional = true }
 corpus-engine-watchers = { workspace = true }
 code-facts = { workspace = true }
@@ -44,7 +42,6 @@ workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 # the lift and the gates travel with the code, not with the old home.
 default = ["treesitter"]
 treesitter = ["corpus-engine/treesitter"]
-atos = ["dep:sovereign-atos", "dep:corpus-engine-atos"]
 dev-tools = ["dep:corpus-engine-archaeology"]
 
 [dev-dependencies]

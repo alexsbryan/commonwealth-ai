@@ -399,13 +399,13 @@ pub(super) async fn open_tools_registry() -> Result<ToolsEnv, String> {
         sovereign_code::ReadNoteDigestTool::new(Arc::clone(&notes_store)).declared(),
     ));
     tools.register(Box::new(
-        sovereign_code::ProvisionFeatureTool::new(Arc::clone(&features_store)).declared(),
+        sovereign_atos::tools::ProvisionFeatureTool::new(Arc::clone(&features_store)).declared(),
     ));
     tools.register(Box::new(
-        sovereign_code::ArchiveFeatureTool::new(Arc::clone(&features_store)).declared(),
+        sovereign_atos::tools::ArchiveFeatureTool::new(Arc::clone(&features_store)).declared(),
     ));
     tools.register(Box::new(
-        sovereign_code::RecordAtosEventTool::new(Arc::clone(&features_store)).declared(),
+        sovereign_atos::tools::RecordAtosEventTool::new(Arc::clone(&features_store)).declared(),
     ));
     // `atos_plan_emit` was added then withdrawn the same session
     // after a first-principles check: forcing the agent through a
@@ -426,7 +426,7 @@ pub(super) async fn open_tools_registry() -> Result<ToolsEnv, String> {
     // Project context + doc health — both require the docs store.
     if let Some(ref ds) = docs_store {
         tools.register(Box::new(
-            sovereign_code::ProjectContextTool::new(Arc::clone(ds))
+            sovereign_atos::tools::ProjectContextTool::new(Arc::clone(ds))
                 .with_features(Arc::clone(&features_store))
                 .declared(),
         ));
@@ -445,7 +445,7 @@ pub(super) async fn open_tools_registry() -> Result<ToolsEnv, String> {
     }
     // `drift` — calls `sovereign_atos::approval::detect_drift`
     // for every feature directory. Stateless; no store needed.
-    tools.register(Box::new(sovereign_code::DriftTool::new().declared()));
+    tools.register(Box::new(sovereign_atos::tools::DriftTool::new().declared()));
 
     Ok(ToolsEnv { registry: tools })
 }
