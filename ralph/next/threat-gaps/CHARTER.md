@@ -98,6 +98,6 @@ wrong resolution.
   `mp-*` bars are regression gates; their campaign files are never edited from
   this queue.
 - Ledger entries go AFTER the previous one in `ralph/DECISIONS.md` (the last is
-  A65, which sits above the older A44 block — insert below A65, not at the end
+  A66, which sits above the older A44 block — insert below A66, not at the end
   of the ledger list), with the appendix of the same number at EOF. Next id:
-  **A66**.
+  **A67**.

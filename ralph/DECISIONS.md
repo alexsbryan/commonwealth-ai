@@ -313,6 +313,10 @@ exactly it. `FLAG` marks a reading of a bar or a clause the operator may revert.
 - Needed: the inventory row (`f74b6333f`, `985dfe8e3`) watched all five bars FAIL, the first of them live: on the stand-in's plain-IP pair an uncredentialed POST to `/internal/mesh/quiesce` from a container outside the mesh answered 200 and flipped `quiesced` False -> True, with the members' gossip and a cold join still working in the same run. That reading is the campaign's reason to exist and the seat accepts it. One falsifier reading is overclaimed: the row says all 23 address records on THIS host's deployed mesh are plain `ip:port` with zero iroh forms, "a plain-IP mesh is the live case".
 - Chose: not the live case HERE. Seat-measured 2026-09-21: `~/.svrnmesh/meshes/27ba8166…/mesh.json` has `require_encryption = true` (11 members); `ss -ltn` shows `127.0.0.1:9741` and `127.0.0.1:9742` only; `curl http://192.168.1.12:9742/internal/mesh/quiesce` is connection-refused (exit 7). Address records are strings a member advertised, not listeners that answer; mesh-principal's inventory (`08e709ccc` (ii)) measured the same posture from the routing policy. So falsifier 1 is UNREAD for this mesh, not confirming: what would read it is the `transport: resolved` debug lines, which the deployed daemon's stdout discards. `tg-2` stands on the stand-in's live reproduction and on the shipped default being `0.0.0.0` for any mesh created without `--encrypt`, not on this host. No row is edited; the audit reads this entry.
 - Because: a count of advertised addresses is not a measurement of what carries traffic (ARCH 7 — validate the instrument before the result), and THREAT_MODEL entry 2 should not come to say the maintainer's own mesh is exposed when it is not.
+**A66 · 2026-09-21 · tg-2-strangers-are-refused · director (seat), operator stop at a row boundary** — this commit
+- Needed: `530db2bb2` built A64's design exactly (a valid proof attaches `ProvedMeshMember`, the principal stays `Anonymous`, no `x-node-id` read, `mesh_principal_gate` untouched; both plants red) and stamped four `:9742`-reaching call sites. It DISCLOSED five it could not reach from its named files — the auto-ingest pull loop, the corpus queue, model transfer, warm-RPC, and `sovereign-grants`' `ShardManager` — and named the next row as owner. The next row's text predated that finding and did not mention them. Its gate defaults to `member`. Its bar's clause (c) checks gossip and ring sync only.
+- Chose: `touch ralph/STOP` at the boundary (the gate row's session was 30 s old, nothing committed, tree clean; supervisor logged `operator STOP — leaving it stopped`, no resolution dispatched). The row now opens with STAMP BEFORE YOU REFUSE: the five builders take the header pair, one test each, one gate-level test over the routes they hit, a PLANT that drops one stamp, and a §6 stop — not a `perimeter` default — if a builder cannot be reached. No bar text changed.
+- Because: the operator's standing criterion (A54) is that security must not cost the 0→1 path, and a mesh created without `--encrypt` is the 0→1 path. A gate that breaks corpus pull on it while its bar reads PASSED is the exact failure ARCH 5 and the bar's own goodhart line describe. TO THE OPERATOR, not decided: whether `tg-stranger-refused-9742` clause (c) should name these callers too; the row tests them either way.
 
 **A44 · 2026-09-19 · rr-2-gossip-claim-one-decider · director (supervisor resolution, attempt 1)** — commit: this one
 - Needed: A43 wrote the row on the premise that a SECOND site builds the claim gossip sends. The worker measured the send path and found one, stopped at the premise check without improvising a target, and asked whether to rewrite or strike the row.
@@ -7728,5 +7732,14 @@ Other contradictions the draft found in the order, now in the rows: no `x-mesh-p
 <details>
 
 Also accepted from the row, unchanged: tg-3's drop falsifier and the mesh-secret falsifier are UNREADABLE, not fired — `client_principal::fingerprint` is traced nowhere and `has_mesh_secret` is surfaced by nothing — so neither row is dropped and neither §6 stop fired; four dead citations in THREAT_MODEL, not two; no first-party mesh-app calls outside the bridge's 18; every first-party non-peer caller of `:9742` is loopback.
+
+</details>
+
+
+## A66 · 2026-09-21 — stamp before you refuse
+
+<details>
+
+Not verified by the seat: the five sites are the worker's classing in `530db2bb2`; the amended row re-measures them. The unstamped-by-design sites it listed (inference and status probes rewritten to `:9741`, iroh-only RPC and media, gossip's body-borne proof) are accepted as classed.
 
 </details>
