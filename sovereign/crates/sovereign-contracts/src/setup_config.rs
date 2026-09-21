@@ -393,6 +393,14 @@ pub struct SharedModelSection {
     /// wins if pre-set.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub headroom: Option<f64>,
+    /// Acknowledge that this node's tensor-split RPC port may be bound where
+    /// other hosts can reach it. The worker authenticates nothing and
+    /// encrypts nothing, so a non-loopback `SOVEREIGN_RPC_SERVE` is REFUSED
+    /// unless this is `true` — members already reach the worker over the
+    /// encrypted mesh tunnel, which needs no LAN bind. Env
+    /// `SOVEREIGN_RPC_ALLOW_PLAINTEXT_LAN` wins if pre-set.
+    #[serde(default)]
+    pub allow_plaintext_lan: bool,
     /// How anchors fetch their shard of the model — the host emits this as
     /// `SOVEREIGN_RPC_SHARD_FETCH`. Defaults to [`ShardFetch::Ranges`] (each
     /// node pulls only its slice), which is required whenever no single node

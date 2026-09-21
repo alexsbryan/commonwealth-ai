@@ -179,7 +179,7 @@ No download. This stage exists to protect the download.
    1. Point `[models] primary` at shard `00001` (path above) and restart the
       host daemon with `SOVEREIGN_RPC_DISCOVER=1`.
    2. Confirm BeefyMac does **not** hold any `Qwen3.5-4B-SplitTest` file, then
-      (re)start its worker (`SOVEREIGN_RPC_SERVE=0.0.0.0:50052`) — the
+      (re)start its worker (`SOVEREIGN_RPC_SERVE=127.0.0.1:50052`) — the
       worker-set change triggers the redistribute.
    3. `scripts/rpc-distributed-e2e.sh --model commonwealth/primary` watches the
       warm → `-ot` overrides → tokens chain and verdicts PASS/FAIL. The decisive
@@ -591,7 +591,7 @@ before committing to A.
 Once running (either route), point at the model the
 [RUN_A_BIGGER_MODEL](./RUN_A_BIGGER_MODEL.md) way — `[models] primary =
 ".../UD-IQ3_XXS/...-00001-of-00004.gguf"`, Strix host `SOVEREIGN_RPC_DISCOVER=1`,
-Mac worker `SOVEREIGN_RPC_SERVE=0.0.0.0:50052` — and run **both daemons under
+Mac worker `SOVEREIGN_RPC_SERVE=127.0.0.1:50052` — and run **both daemons under
 `sovereign install-service`**: a worker dying mid-answer triggers an uncatchable
 `GGML_ABORT` that can take the host down (upstream limitation, mitigated by the
 eligibility gate + supervised restart).

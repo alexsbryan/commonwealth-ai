@@ -2271,7 +2271,7 @@ pub fn pin_shard_plan(model_path: &Path, endpoints: &[String], plan: Vec<NodeSha
 /// One-shot guard so the in-process RPC worker starts at most once.
 static RPC_SERVE_STARTED: std::sync::Once = std::sync::Once::new();
 
-/// If `SOVEREIGN_RPC_SERVE` is set (e.g. `0.0.0.0:50052`), start an in-process
+/// If `SOVEREIGN_RPC_SERVE` is set (e.g. `127.0.0.1:50052`), start an in-process
 /// llama.cpp RPC server on a background thread exposing this node's local GPU
 /// device(s) to mesh peers — the **distributable** counterpart of running a
 /// standalone `rpc-server` binary, with **no separate build**: the daemon

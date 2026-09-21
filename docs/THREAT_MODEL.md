@@ -124,7 +124,7 @@ Three zones, from most to least trusted:
 | Internal mesh API `:9742` (gossip, join, scheduling, corpus collaboration) | `0.0.0.0` in trusted-network mode; `127.0.0.1` in encrypted mode | **None blanket** — perimeter-trusted; join itself is key+proof gated and gossip carries a mesh proof; **the other routes, admin ones included, have no guard of their own** (corrected 2026-09-20: this row said they were per-handler loopback-only, and no handler reads the caller's address) | **Encrypted-QUIC-first**; in trusted-network mode it falls back to cleartext HTTP on your perimeter, and encrypted mode (below) makes iroh QUIC/TLS the sole path |
 | `sovereign-server` `:8080` (multi-tenant REST/WS, mobile-facing) | `127.0.0.1` (`sovereign/crates/sovereign-server/src/config.rs`) | API-key → tenant middleware. **Startup refuses a non-loopback bind with auth disabled** unless `allow_unauthenticated_remote = true` is set explicitly (`validate_exposure`). `/health` + `/status` unauthenticated by design. | Plain HTTP on the perimeter; iroh dial-by-key optional (`[iroh] enabled`) |
 | Worker-pod daemon `:9742` (rented/cloud worker) | `0.0.0.0` | Owner-only routes; client pins the worker's certificate thumbprint from the bootstrap seed | rustls TLS (`sovereign/crates/sovereign-pods/src/worker_daemon.rs`) |
-| Tensor-split RPC `:50051/:50052` (`llama-server` ↔ `rpc-server`) | `127.0.0.1` locally; `0.0.0.0` for multi-host via `SOVEREIGN_RPC_SERVE` | **None** | **None — raw TCP.** See Known gaps |
+| Tensor-split RPC `:50051/:50052` (`llama-server` ↔ `rpc-server`) | `127.0.0.1` — including `--rpc-worker` and `role = "anchor"`, which took `0.0.0.0` until 2026-09-20. A non-loopback `SOVEREIGN_RPC_SERVE` is refused unless `SOVEREIGN_RPC_ALLOW_PLAINTEXT_LAN=1` (or `[shared_model] allow_plaintext_lan = true`) acknowledges it (`sovereign-contracts/src/launch.rs`) | **None** | **None — raw TCP.** Members reach the worker over the member-only `RPC_ALPN` tunnel (`sovereign/crates/sovereign-mesh/src/iroh_access.rs`), which needs no LAN bind. See Known gaps |
 | Desktop command bridge `:9745` (test automation) | `127.0.0.1` | Debug builds only, opt-in via `SOVEREIGN_COMMAND_BRIDGE=1`; must never ship enabled in release (`sovereign/crates/sovereign-desktop/src-tauri/src/command_bridge.rs`) | — |
 
 Browser CORS: the `:9741` client surface deliberately ships **no** CORS
@@ -201,8 +201,12 @@ it.
    *Closes when:* the RPC stream rides an authenticated, encrypted transport
    (the iroh path the rest of the mesh uses) or the port refuses a peer it
    cannot verify. *Owner:* campaign `threat-gaps` (order `threat-gaps-close`), approved 2026-09-20, next in the queue (`mesh-principal` finished 2026-09-21). Measured for that order: the member-only encrypted
-   tunnel for this traffic already exists and is in use; what is open is the
-   `0.0.0.0` default bind.
+   tunnel for this traffic already exists and is in use. The `0.0.0.0` default
+   bind is closed as of 2026-09-20 (`DEFAULT_RPC_BIND` is loopback and a
+   non-loopback bind is refused without `SOVEREIGN_RPC_ALLOW_PLAINTEXT_LAN`),
+   but the entry STAYS OPEN: the stream is still plaintext wherever it runs,
+   and that the split completes over the tunnel on a direct path has not been
+   measured on two machines (owed to `HUMAN-tg-rpc-two-machines`).
 2. **The internal API `:9742` has no blanket auth, in either mode.** Join
    is key-and-proof gated and gossip carries a mesh proof; the remaining
    routes, including ones that change state (`/internal/mesh/quiesce`,

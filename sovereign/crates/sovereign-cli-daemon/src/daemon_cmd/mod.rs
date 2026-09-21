@@ -134,7 +134,7 @@ const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help 
         ),
         sovereign_cli_shared::help::HelpSection::Flags(&[
             ("--setup-only", "Run the first-boot wizard (hardware detect + model pick + config) and exit without binding the listener."),
-            ("--rpc-worker[=<bind>]", "Lend this node's GPU to the mesh: serve an llama.cpp RPC worker so peers can place layers here. Default bind 0.0.0.0:50052. Works on `run`, `start` and `restart`. This only OFFERS the GPU — unlike `[shared_model] role = \"anchor\"`, it does not also turn on peer discovery or enter the host election."),
+            ("--rpc-worker[=<bind>]", "Lend this node's GPU to the mesh: serve an llama.cpp RPC worker so peers can place layers here. Default bind 127.0.0.1:50052 — members reach the worker over the encrypted mesh tunnel, so no LAN bind is needed; a non-loopback bind is refused unless SOVEREIGN_RPC_ALLOW_PLAINTEXT_LAN=1 acknowledges it. Works on `run`, `start` and `restart`. This only OFFERS the GPU — unlike `[shared_model] role = \"anchor\"`, it does not also turn on peer discovery or enter the host election."),
         ]),
         sovereign_cli_shared::help::HelpSection::Subcommands(&[
             ("(bare)",  "Run the daemon in the foreground. On first boot inlines the setup wizard; subsequent runs just load config and start. Equivalent to `daemon run`."),

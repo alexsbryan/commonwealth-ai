@@ -295,7 +295,7 @@ fn peak_rss_mb() -> Option<u64> {
 }
 
 /// The TCP port this node's in-process RPC inference worker is serving, parsed
-/// from `SOVEREIGN_RPC_SERVE` (e.g. `0.0.0.0:50052` → 50052) **and only when a
+/// from `SOVEREIGN_RPC_SERVE` (e.g. `127.0.0.1:50052` → 50052) **and only when a
 /// worker is actually accepting on it**. `None` when this node is not configured
 /// as a worker, or is configured but the worker isn't live — e.g. ggml tore its
 /// accept loop down on a transient `accept()` error and the supervisor hasn't

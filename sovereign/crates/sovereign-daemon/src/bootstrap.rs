@@ -321,10 +321,19 @@ pub fn build_folder_tiered_deps(
     )
 }
 
-/// Default bind for an anchor's in-process RPC worker — the value the
-/// distributed-inference docs use. Applied only when a `[shared_model]`
-/// role asks to serve but no explicit `SOVEREIGN_RPC_SERVE` is set.
-const DEFAULT_RPC_BIND: &str = "0.0.0.0:50052";
+/// Default bind for an anchor's in-process RPC worker. Applied only when a
+/// `[shared_model]` role asks to serve but no explicit `SOVEREIGN_RPC_SERVE`
+/// is set.
+///
+/// LOOPBACK, not `0.0.0.0`. The ggml rpc-server authenticates nothing and
+/// encrypts nothing, so a node that only set `role = "anchor"` used to offer
+/// its GPU and the tensors crossing it to every host on its network. Members
+/// reach this worker through the encrypted mesh tunnel instead — the
+/// `RPC_ALPN` splice in `sovereign_mesh::iroh_access`, which admits members
+/// only — and that path needs no LAN bind. An operator who genuinely wants the
+/// plaintext LAN bind sets it and acknowledges it; see
+/// [`sovereign_contracts::launch::RpcServe`].
+const DEFAULT_RPC_BIND: &str = "127.0.0.1:50052";
 
 /// `--rpc-worker[=<bind>]` → the address this node should serve its GPU on.
 ///
@@ -415,6 +424,23 @@ pub fn apply_shared_model_role_to_env(cfg: &sovereign_core::setup_config::Shared
     // distribute) until this node is the host. So "discover" now means
     // "participates in the host election", which every anchor does.
     let discover = serve;
+    // The plaintext-LAN acknowledgement, carried into the env contract BEFORE
+    // any bind is resolved — `RpcServe` is the one decider and it reads the
+    // env half, so a config that acknowledges must be visible to it whether
+    // the bind came from the role below or from an explicit variable. Env wins
+    // if pre-set, matching every other key in this section.
+    if cfg.allow_plaintext_lan
+        && std::env::var_os(sovereign_contracts::launch::RPC_ALLOW_PLAINTEXT_LAN_ENV).is_none()
+    {
+        std::env::set_var(
+            sovereign_contracts::launch::RPC_ALLOW_PLAINTEXT_LAN_ENV,
+            "1",
+        );
+        tracing::warn!(
+            "shared-model: `[shared_model] allow_plaintext_lan = true` — a non-loopback \
+             RPC bind will be accepted; the ggml worker authenticates nothing"
+        );
+    }
     if serve && std::env::var_os("SOVEREIGN_RPC_SERVE").is_none() {
         std::env::set_var("SOVEREIGN_RPC_SERVE", DEFAULT_RPC_BIND);
         tracing::info!(
@@ -2716,6 +2742,28 @@ mod rpc_worker_flag_tests {
 
     fn args(v: &[&str]) -> Vec<String> {
         v.iter().map(|s| (*s).to_string()).collect()
+    }
+
+    /// Clause (a) of `tg-rpc-port-not-on-lan`: a node that sets NOTHING — no
+    /// env, no bind on the flag, only `role = "anchor"` — must not offer its
+    /// tensor port to the network. This is the default every other path in
+    /// this module falls back to, so it is asserted on the constant itself
+    /// rather than on one caller.
+    #[test]
+    fn the_default_bind_is_loopback_only() {
+        let serve =
+            sovereign_contracts::launch::RpcServe::resolve(Some(DEFAULT_RPC_BIND), false);
+        assert!(
+            serve.is_serving(),
+            "the default must SERVE with no acknowledgement, not be refused: \
+             {DEFAULT_RPC_BIND}"
+        );
+        assert!(
+            DEFAULT_RPC_BIND.starts_with("127.0.0.1:"),
+            "the default RPC bind must be loopback — the ggml worker \
+             authenticates nothing, so {DEFAULT_RPC_BIND} would hand this \
+             node's GPU to every host on its network"
+        );
     }
 
     #[test]

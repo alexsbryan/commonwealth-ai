@@ -171,7 +171,7 @@ async fn build_mesh_endpoint(
 }
 
 /// The local ggml rpc-server port when this node is configured to serve
-/// one (`SOVEREIGN_RPC_SERVE`, e.g. `0.0.0.0:50052` — same parse shape as
+/// one (`SOVEREIGN_RPC_SERVE`, e.g. `127.0.0.1:50052` — same parse shape as
 /// `routes_status::rpc_worker_port`). `None` = not an RPC worker; the
 /// acceptor then neither advertises nor routes [`RPC_ALPN`].
 fn rpc_serve_port() -> Option<u16> {
