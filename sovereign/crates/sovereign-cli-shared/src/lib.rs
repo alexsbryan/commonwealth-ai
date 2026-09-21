@@ -49,6 +49,7 @@ pub mod deprecation;
 pub mod dirs;
 pub mod dispatcher;
 pub mod flag_surface;
+pub mod guest_link;
 pub mod help;
 pub mod host_load;
 pub mod lane_verdict;
