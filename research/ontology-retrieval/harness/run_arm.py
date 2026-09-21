@@ -57,7 +57,8 @@ EVAL_BASE_FLAGS = ["--synth", "--isolate", "--format", "json"]
 DAEMON_URL_KEYS = ("SOVEREIGN_DAEMON_URL", "SVRNMESH_DAEMON_URL")
 DAEMON_DEFAULT = "http://localhost:9741"
 
-# Synthesis runs on the daemon's primary slot (no arm passes `--chat-model`);
+# Synthesis runs on the daemon's primary slot: `run` passes the id that alias
+# resolves to as `--chat-model`, the same id the manifest records;
 # the in-loop judge is a fast-slot call (eval_cmd/runner.rs:220, :1575). Both
 # are read back from the daemon rather than assumed, because the aliases move.
 SYNTH_ALIAS = "primary"
@@ -287,6 +288,12 @@ def run(args):
 
     out_run.mkdir(parents=True, exist_ok=True)
     models = daemon_models(base)
+    # The id the manifest records is the id the eval asks for. With no
+    # `--chat-model` the CLI sends THIS host's configured id, which a daemon
+    # elsewhere refuses (pod window 20260921T034847Z: 24/24 turns, IQ4_NL asked
+    # of a Q6_K pod). Unresolved stays unpassed: that run is never-ran below.
+    if models["synth"]:
+        argv += ["--chat-model", models["synth"]]
 
     print(f"arm {args.arm} run {args.run} -> {out_run}", file=sys.stderr)
     print(f"  host {base}  synth {models['synth']}  judge {models['judge']}",
