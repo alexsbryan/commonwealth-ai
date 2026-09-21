@@ -4,6 +4,16 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
+# The assembled-host process (docs/FIVE_PROGRAMS.md §11 step 10) — the
+# run path the `svrn daemon` verb `exec`s into, and the process
+# launchd/systemd units point at. `treesitter` because `daemon_cmd`
+# mounts `bootstrap` and `tool_registry`, both gated on the feature the
+# daemon binary enables unconditionally (see lib.rs).
+[[bin]]
+name = "sovereign-daemon"
+path = "src/bin/sovereign-daemon.rs"
+required-features = ["treesitter"]
+
 [dependencies]
 # Commonwealth crates (embedded as library)
 commonwealth-core = { path = "../../../commonwealth/crates/commonwealth-core" }
@@ -77,6 +87,13 @@ sovereign-pods = { path = "../sovereign-pods" }
 sovereign-workflow = { workspace = true }
 sovereign-workflow-host = { workspace = true }
 sovereign-enrichment-build = { workspace = true }
+# The run path (`daemon_cmd`) commissions the ONE Runtime through the
+# shared recipe — the same one `svrn chat` uses, so the daemon cannot
+# acquire a private dialect of the retrieval stack — and names the
+# loopback knowledge source through the turn client. Neither depends on
+# this crate (leaf/tier below `mesh-api`), so the edges stay acyclic.
+sovereign-runtime-recipe = { workspace = true }
+sovereign-turn-client = { workspace = true }
 
 async-trait = { workspace = true }
 bytes = { workspace = true }
@@ -90,6 +107,9 @@ thiserror = { workspace = true }
 toml = { workspace = true }
 uuid = { workspace = true }
 tracing = { workspace = true }
+# The bin's subscriber bootstrap (`init_tracing` twin) — the daemon
+# verb's filter allowlist, EnvFilter-driven.
+tracing-subscriber = { workspace = true }
 hex = "0.4"
 hostname = { workspace = true }
 reqwest = { workspace = true }

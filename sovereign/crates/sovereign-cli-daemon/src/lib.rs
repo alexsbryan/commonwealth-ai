@@ -5,15 +5,17 @@
 //! The library face exists for the desktop's supervised child-process
 //! mode (DAEMON_RESILIENCE.md P0.1): the desktop binary detects a
 //! `--daemon-child` argv and calls [`daemon_child_main`], so ONE daemon
-//! bootstrap serves the CLI binary and the desktop child alike — no
-//! ~241 MB sidecar duplicated into the installer, and the child
-//! inherits every daemon defense (panic hook, supervised background
-//! tasks, RAM-derived OOM limits, run lock, listener watchdog).
+//! serves the CLI binary and the desktop child alike — no ~241 MB
+//! sidecar duplicated into the installer. Since the de-embed
+//! (docs/FIVE_PROGRAMS.md §11 step 10) the daemon body itself lives in
+//! the `sovereign-daemon` binary; the child arm execs it, keeping the
+//! same pid (and so the same supervisor handle) while inheriting every
+//! daemon defense from the sibling.
 
+mod daemon_bin;
 mod daemon_cmd;
 mod doctor_cmd;
 mod install_service_cmd;
-pub(crate) mod log_rotation;
 mod memory_watch;
 mod model_cmd;
 mod panic_hook;

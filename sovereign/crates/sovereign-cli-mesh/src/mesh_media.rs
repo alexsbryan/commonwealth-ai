@@ -102,7 +102,10 @@ pub(crate) async fn cmd_media(args: &[String]) -> i32 {
         );
         return 1;
     }
-    let reach: sovereign_daemon::media_reach::MediaReach = match serde_json::from_str(&body) {
+    // `commonwealth_media::MediaReach`, not the daemon's
+    // `media_reach::MediaReach`: same type (the daemon re-exports it), and
+    // the package leaf is the layer this client is allowed to name.
+    let reach: commonwealth_media::MediaReach = match serde_json::from_str(&body) {
         Ok(r) => r,
         Err(e) => {
             eprintln!("mesh media: response shape mismatch ({e}): {body}");
@@ -233,7 +236,7 @@ async fn list_offers(client: &reqwest::Client, url: &str, json_out: bool) -> i32
     }
     #[derive(serde::Deserialize)]
     struct Offers {
-        offering: Vec<sovereign_daemon::media_reach::MediaOffer>,
+        offering: Vec<commonwealth_media::MediaOffer>,
     }
     let offers: Offers = match serde_json::from_str(&body) {
         Ok(o) => o,

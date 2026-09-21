@@ -489,15 +489,37 @@ core 39, corpus-mcp 16, meshapp 10.
 - [ ] Decide: a new thin reader leaf, or widen `understanding-vocab`
       (already a leaf) / lift from `understanding-atlas` (an ingest member).
 
-### Step 10, the de-embed — 40 edges, the biggest single item
+### Step 10, the de-embed — EXECUTED 2026-09-21 (the shape the scouts measured)
 
-- [ ] Fourteen `EmbeddedDaemon` construction sites become one dial.
-      **Unblocked 2026-09-21:** `sovereign-turn-client` became a
-      `[[package_leaf]]`, so the dial is now nameable from every package —
-      before that, step 10 had nowhere to dial from.
-- [ ] Sources: daemon 18, cli-llm 11, cli-daemon 4, cli-dev 3, cli 2.
-- [ ] Done when `grep -rn EmbeddedDaemon sovereign/crates --include=*.rs`
-      returns only the `cmnwlth` binary's own main.
+Scouts found only TWO production construction sites (the "fourteen" was edge
+counts, not sites): `cli-daemon daemon_cmd/mod.rs:1224` (the `daemon run` verb)
+and `setup_cmd/terminal.rs:319` (wizard MeshAdmin one-shot), plus two cli-mesh
+fallbacks. The cut that landed:
+
+- [x] `sovereign-daemon` gained its own `[[bin]]` (`sovereign-daemon`, the
+      cmnwlth binary's main) — the run body forked from cli-daemon's
+      daemon_cmd, `[[package]]` membership moved svrn → cmnwlth in
+      ARCH_LAYERS.toml (~25 edges became intra-package).
+- [x] `svrn daemon run` execs the sibling (agent-bench pattern,
+      `SOVEREIGN_DAEMON_BIN` override; pid preserved through exec(2)).
+- [x] cli-mesh create/join fallbacks dial: `ServingHost::ensure_reachable` +
+      `TurnClient` mesh create/join over HTTP; no bundled spawn.
+- [x] cli-daemon dropped 8 emptied serving deps + 4 pre-existing zeros.
+- [ ] **terminal.rs wizard seam**: `find_holders` needs
+      `peer_inference_endpoints()` (roster + TrafficClass::Inference rewrite);
+      no HTTP equivalent — `/v1/mesh/status` `MemberDto.addresses` would dial
+      the wrong port class. Until the daemon exposes it, the wizard keeps its
+      in-process construction (cli-daemon → sovereign-daemon edge).
+- [ ] **cli-llm wire types**: 4 uses (`corpus_watch_http::RegisterRequest` —
+      blocked on `WatchedFolderConfig`'s home — and `reading_http::{AtomCard,
+      AtomSpan, SectionRef}`, clean DTOs) belong in `contracts::daemon_wire`;
+      until they move, cli-llm → sovereign-daemon is red.
+- [ ] **mesh test tree**: ~60 `EmbeddedDaemon::new` sites in
+      `sovereign-mesh/tests/**` are the parked daemon tests; moving them to
+      `sovereign-daemon/tests` also closes the two `[[forbid]]` dev edges.
+      Census tests hard-coding construction lists (mesh
+      `daemon_variant_census.rs:214`, desktop `attach_construction_census`)
+      must move/update with them.
 
 ### The cli-llm split — 23 edges, unblocked by the de-embed
 

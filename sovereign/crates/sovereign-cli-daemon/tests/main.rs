@@ -20,8 +20,15 @@
 
 #[path = "main/compute_child_e2e.rs"]
 mod compute_child_e2e;
-#[path = "main/containment_guard_e2e.rs"]
-mod containment_guard_e2e;
+// containment_guard_e2e.rs was deleted at the de-embed
+// (docs/FIVE_PROGRAMS.md §11 step 10): it ran `BIN daemon run` against a
+// hazardous config and asserted the boot-time containment refusal, and
+// that boot path now lives in the `sovereign-daemon` binary this crate
+// execs. The assertion belongs beside the guard it pins — the sibling
+// crate's own suite, where it is in-process again — not here, where it
+// would gate on a sibling artifact a `--package`-scoped test run never
+// builds (the exec would answer 127 and the test would fail on
+// environment, not on behavior).
 #[path = "main/distributed_primary_respawn_e2e.rs"]
 mod distributed_primary_respawn_e2e;
 #[path = "main/named_model_routes_after_child_serves_e2e.rs"]

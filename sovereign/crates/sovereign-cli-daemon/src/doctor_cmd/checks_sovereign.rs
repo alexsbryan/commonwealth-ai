@@ -882,7 +882,8 @@ pub(super) fn check_log_dir_size() -> CheckResult {
             status: CheckStatus::Warning,
             message: format!(
                 "{} holds {total_mb} MiB — rotation should keep this bounded; \
-                 the rotation loop may be broken (see log_rotation.rs contract)",
+                 the rotation loop may be broken (see the daemon's log_rotation \
+                 contract, in sovereign-daemon since the de-embed)",
                 log_dir.display()
             ),
             repair: Repair::Manual(

@@ -3,66 +3,26 @@
 //! `corpus_cmd` in the §3.2 split that fixed the dispatch naming lie).
 //!
 //! These are lightweight commands that don't require loading a full model
-//! or database — they manage the embedded Commonwealth daemon.
+//! or database — they drive the RUNNING Commonwealth daemon over HTTP
+//! (`sovereign-turn-client`), never an in-process one (FIVE_PROGRAMS §11
+//! step 10: a mesh verb that embedded a daemon left its state in a
+//! process that exits when the command does).
 
 use std::path::PathBuf;
+use std::time::Duration;
 
 use sovereign_cli_shared::dirs::sovereign_root;
-use sovereign_daemon::EmbeddedDaemon;
+use sovereign_contracts::setup_config::{client_daemon_base, client_daemon_base_for};
 use sovereign_mesh::deep_link::{build_https_join_link, parse_join_argument};
+use sovereign_turn_client::reach::ServingHost;
+use sovereign_turn_client::TurnClient;
 
-/// The `SetupConfig` a `svrn mesh` one-shot binds with.
-///
-/// A missing `config.toml` is the ordinary first-run state and
-/// [`SetupConfig::unconfigured`] is its honest value: default ports, loopback
-/// client bind. A config that EXISTS but will not parse is not that state, and
-/// the substitution is named on stderr rather than applied silently — before
-/// this the daemon reached the same defaults through internal `None` fallbacks
-/// and said nothing, so a typo in `[daemon] client_port` looked like the port
-/// simply not taking effect (ARCH §18.3).
-/// The `DaemonServices` a `svrn mesh create` / `svrn mesh join` one-shot
-/// assembles — obtained from THE assembler, not named here.
-///
-/// `sovereign_daemon::assemble` is the one exhaustive match over `Launch` that
-/// constructs anything (`quality/TOPOLOGY.md` §10, Falsifier 3). These two
-/// sites used to name `DaemonServices::MeshAdmin` directly, which is a fourth
-/// place answering "what does this invocation assemble". They now supply
-/// parts and let the match answer — so a mesh verb that somehow ran under a
-/// different launch mode is refused rather than quietly given a daemon.
-///
-/// `Launch::parse` is called here rather than threaded because this binary is
-/// `exec`d by the dispatcher and its argv IS the verb invocation; parse is the
-/// one sanctioned reader of that (Falsifier 1 forbids OTHER code deciding what
-/// the process is, not calling the decider).
-fn mesh_admin_services() -> sovereign_daemon::DaemonServices {
-    let args: Vec<String> = std::env::args().skip(1).collect();
-    let launch = sovereign_contracts::launch::Launch::parse(
-        &args,
-        // A mesh verb reaching this code path IS a verb invocation; `Bare` is
-        // the honest default for "argv named nothing this parser knows".
-        sovereign_contracts::launch::Launch::Verb {
-            name: "mesh".to_string(),
-            args: args.clone(),
-        },
-    );
-    match sovereign_daemon::assemble(&launch, sovereign_daemon::LaunchParts::Admin) {
-        Ok(services) => services,
-        Err(refusal) => {
-            eprintln!("error: {refusal}");
-            std::process::exit(1);
-        }
-    }
-}
-
-fn one_shot_setup_config() -> sovereign_contracts::setup_config::SetupConfig {
-    match sovereign_contracts::setup_config::SetupConfig::load() {
-        Ok(cfg) => cfg,
-        Err(e) => {
-            eprintln!("(no usable ~/.svrnmesh/config.toml: {e} — binding the default :9741/:9742)");
-            sovereign_contracts::setup_config::SetupConfig::unconfigured()
-        }
-    }
-}
+/// How long `create`/`join` will wait for a daemon to come up before
+/// reporting that none is reachable. Not zero: an operator's concurrent
+/// `svrn daemon start` (or a service manager's) should be caught by the
+/// wait rather than raced by the user. Not minutes: a daemon that is not
+/// coming up is a fact to report, not a hang to sit through.
+const REACH_WINDOW: Duration = Duration::from_secs(5);
 
 /// Run a mesh subcommand. Returns the exit code.
 pub async fn run_mesh(args: &[String]) -> i32 {
@@ -2598,7 +2558,10 @@ const HELP_MESH_CREATE: sovereign_cli_shared::help::Help = sovereign_cli_shared:
             ),
         ]),
         sovereign_cli_shared::help::HelpSection::Notes(
-            "Errors if a mesh already exists (e.g. from `svrn setup`'s silent solo mesh).\n\
+            "Needs a RUNNING daemon (`svrn daemon start`): the create happens in the\n\
+             daemon that keeps serving after this command exits, not in this process.\n\
+             \n\
+             Errors if a mesh already exists (e.g. from `svrn setup`'s silent solo mesh).\n\
              In that case, run `svrn mesh rotate` to generate a new shareable key instead.\n\
              \n\
              `--encrypt` is inherited: every joiner picks it up from the join snapshot and \
@@ -2628,6 +2591,10 @@ const HELP_MESH_JOIN: sovereign_cli_shared::help::Help = sovereign_cli_shared::h
                 "Native app deep link",
             ),
         ]),
+        sovereign_cli_shared::help::HelpSection::Notes(
+            "Needs a RUNNING daemon (`svrn daemon start`). The daemon performs the join;\n\
+             a join run in this CLI process would evaporate with it.",
+        ),
     ],
 };
 
@@ -2704,22 +2671,28 @@ async fn cmd_create(args: &[String]) -> i32 {
     });
     let node_name = hostname().unwrap_or_else(|| "sovereign-node".to_string());
 
-    let daemon = EmbeddedDaemon::new(
-        sovereign_root(),
-        one_shot_setup_config(),
-        mesh_admin_services(),
-    );
-    // Explicit create = serve remote peers → expose the client API
-    // (bind non-loopback + require a bearer token).
-    daemon.expose_client_api();
-    // `create_mesh_with`, not `create_mesh`: the latter hardcodes
-    // `require_encryption = false`, so until now the CLI could not create the
-    // posture this fleet actually runs — only the desktop could pass `true`.
-    // A policy the operator cannot reach from the command line is a policy
-    // nobody can test from the command line, which is how "terminals work on
-    // an encrypted mesh" stayed an untested claim.
-    match daemon
-        .create_mesh_with(&mesh_name, &node_name, require_encryption)
+    // The daemon this command drives must already be running — reached,
+    // never constructed here. An in-process `EmbeddedDaemon` built by a
+    // one-shot CLI evaporates with the process, taking the mesh it just
+    // founded with it; the daemon that survives is the one that answers.
+    // `ensure_reachable` probes and waits out a concurrent start; this
+    // build ships no backend it can bring up, and absence is REPORTED
+    // with the start guidance rather than papered over.
+    let base = client_daemon_base();
+    if let Err(why) = ServingHost::at(&base).ensure_reachable(REACH_WINDOW).await {
+        eprintln!("Cannot create a mesh without a running daemon: {why}");
+        eprintln!("Start it with `svrn daemon start`, then re-run.");
+        return 1;
+    }
+    // `mesh_create`, not a bare POST: the route defaults `name`/`node_name`
+    // on the HOST side and carries `encrypt` — the one flag here whose
+    // absence cannot be corrected afterwards (the help says the posture is
+    // fixed for the life of the mesh), so it is passed through verbatim.
+    // The host also runs `expose_client_api()` as part of the create
+    // handler: an explicit create IS the opt-in to serving remote peers,
+    // and that decision is the daemon's, not a step this caller performs.
+    match TurnClient::new(&base)
+        .mesh_create::<CreatedMesh>(Some(&mesh_name), Some(&node_name), require_encryption)
         .await
     {
         Ok(result) => {
@@ -2747,6 +2720,22 @@ async fn cmd_create(args: &[String]) -> i32 {
             1
         }
     }
+}
+
+/// `POST /v1/mesh/create`'s answer, as this CLIENT parses it. The
+/// daemon's `CreateResponse` is `Serialize`-only (it is the serving
+/// side's shape); the parse shape is the client's to own, and
+/// [`TurnClient::mesh_create`] is generic over it by design — the
+/// turn-client crate cannot name daemon types without linking a daemon.
+#[derive(Debug, serde::Deserialize)]
+struct CreatedMesh {
+    mesh_name: String,
+    join_key: String,
+    join_link: String,
+    /// `None` when the daemon stayed loopback-only. Skipped on the wire
+    /// rather than nulled, so the default must be here too.
+    #[serde(default)]
+    client_token: Option<String>,
 }
 
 /// Spec-format banner for a freshly-created or freshly-rotated mesh.
@@ -2834,8 +2823,8 @@ async fn cmd_join(args: &[String]) -> i32 {
 
     let node_name = hostname().unwrap_or_else(|| "sovereign-node".to_string());
 
-    // Prefer the running daemon's HTTP endpoint when it's reachable.
-    // Why: building a fresh `EmbeddedDaemon` from the CLI process
+    // The join goes to the RUNNING daemon over HTTP, always. Why never
+    // in-process: building a fresh `EmbeddedDaemon` from the CLI process
     // creates a SEPARATE in-memory `AppState`. Its `start_daemon`
     // fails silently to bind :9741/:9742 (the running daemon already
     // owns them, the bind error is swallowed by a `warn!` + `return`
@@ -2851,33 +2840,58 @@ async fn cmd_join(args: &[String]) -> i32 {
     // serves gossip is the one that gets the adopted mesh.
     println!();
     println!("Joining mesh...");
-    // `daemon_client_port()`, never a literal. This file already had that
-    // accessor and three other call sites already used it; THIS one — the only
-    // command here that mutates mesh membership — did not. On a box whose
-    // config names another port (a second daemon, a sandboxed data dir, the
-    // fleet's own `:9744` node) the probe below answered for a DIFFERENT
-    // daemon, and the join was then POSTed to it: the wrong process adopts the
-    // mesh, parks the one it was in, and gossips the change. One accessor per
-    // path (ARCH §10.6), and the consequence of the exception was the loudest.
-    let port = daemon_client_port();
-    if daemon_listening_on(port).await {
-        return join_via_running_daemon(arg, &node_name, port).await;
-    }
-
-    eprintln!("(no daemon detected on :{port} — running the join in-process)");
-    let daemon = EmbeddedDaemon::new(
-        sovereign_root(),
-        one_shot_setup_config(),
-        mesh_admin_services(),
-    );
-    daemon.expose_client_api();
-    let Some(link) = parse_join_argument(arg) else {
-        // Pre-validated above, so this is unreachable. Bail
-        // defensively rather than panic.
-        eprintln!("Invalid join argument: {arg}");
+    // `client_daemon_base()`, never a literal port. This file learned
+    // this the hard way (ARCH §10.6): on a box whose config names
+    // another port (a second daemon, a sandboxed data dir, the fleet's
+    // own `:9744` node) a probe against a hardcoded port answered for
+    // a DIFFERENT daemon, and the join was then POSTed to it: the wrong
+    // process adopts the mesh, parks the one it was in, and gossips
+    // the change. The decider honors the env override and the config's
+    // client port, as every other dial here must.
+    let base = client_daemon_base();
+    // Probe, and wait out a daemon that may be mid-start (an operator's
+    // concurrent `svrn daemon start`, a service manager). This build
+    // ships no backend it can bring up, so an absent daemon is REPORTED
+    // with start guidance — a one-shot in-process join is not a
+    // fallback this command offers, for the reason above.
+    if let Err(why) = ServingHost::at(&base).ensure_reachable(REACH_WINDOW).await {
+        eprintln!("Cannot join without a running daemon: {why}");
+        eprintln!("Start it with `svrn daemon start`, then re-run.");
         return 1;
-    };
-    match daemon.join_mesh(&link, &node_name).await {
+    }
+    join_via_running_daemon(&TurnClient::new(&base), arg, &node_name).await
+}
+
+/// `POST /v1/mesh/join`'s answer, as this CLIENT parses it — see
+/// [`CreatedMesh`] for why the parse shape lives on the client side.
+#[derive(Debug, serde::Deserialize)]
+struct JoinedMesh {
+    mesh_name: String,
+    node_id: String,
+}
+
+/// Is a daemon serving on `<port>`? Delegates to
+/// `sovereign_turn_client::reach` — the one decider for "is a serving
+/// host answering" (its module doc counts the thirteen probe copies it
+/// retired, and this used to be one of them: a private reqwest loop
+/// over `/v1/models`). The ready door is still `/v1/models` — the
+/// daemon's root route 405s a GET — but the verdict is now "2xx on the
+/// ready door", TIGHTER than this helper's old "any response counts".
+/// A listener that answers 404 there is not this daemon, and callers
+/// that dial on a `true` would have failed one request later anyway.
+pub(crate) async fn daemon_listening_on(port: u16) -> bool {
+    ServingHost::at(client_daemon_base_for(port))
+        .is_serving()
+        .await
+}
+
+/// Ask the running daemon to join (`TurnClient::mesh_join` →
+/// `POST /v1/mesh/join`) and surface the response. The HOST parses
+/// `key_or_url` — any of the three invite forms — and performs the join
+/// in the AppState that actually serves gossip; this client holds no
+/// mesh state of its own.
+async fn join_via_running_daemon(client: &TurnClient, arg: &str, node_name: &str) -> i32 {
+    match client.mesh_join::<JoinedMesh>(arg, Some(node_name)).await {
         Ok(result) => {
             println!();
             println!("\u{2713} Connected to \"{}\"", result.mesh_name);
@@ -2887,90 +2901,14 @@ async fn cmd_join(args: &[String]) -> i32 {
             println!();
             0
         }
+        // The error text carries the host's own words for a refusal —
+        // an invite it cannot read, a mesh that requires encryption —
+        // which is the sentence the operator needs, not a status code.
         Err(e) => {
             eprintln!();
             eprintln!("Failed to join mesh: {e}");
             1
         }
-    }
-}
-
-/// Probe `127.0.0.1:<port>` for an HTTP listener. Used to decide
-/// between the in-process `EmbeddedDaemon` path and the
-/// daemon-HTTP-endpoint path in `cmd_join`. We hit `/v1/models` rather
-/// than `/` because the daemon's root route returns 405 for GET and
-/// reqwest's `.send()` succeeds against 405 just as well as 200 — the
-/// goal is "is anything listening", not "is the response 2xx".
-pub(crate) async fn daemon_listening_on(port: u16) -> bool {
-    let url = format!("http://127.0.0.1:{port}/v1/models");
-    let Ok(client) = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_millis(500))
-        .build()
-    else {
-        return false;
-    };
-    client.get(&url).send().await.is_ok()
-}
-
-/// POST `arg` to the running daemon's `/v1/mesh/join` endpoint and
-/// surface the response. Mirrors the success / failure output of the
-/// in-process path so the user can't tell which one ran (and shouldn't
-/// have to).
-async fn join_via_running_daemon(arg: &str, node_name: &str, port: u16) -> i32 {
-    let url = format!("http://127.0.0.1:{port}/v1/mesh/join");
-    let body = serde_json::json!({
-        "key_or_url": arg,
-        "node_name": node_name,
-    });
-    let client = match reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(30))
-        .build()
-    {
-        Ok(c) => c,
-        Err(e) => {
-            eprintln!("Failed to build HTTP client: {e}");
-            return 1;
-        }
-    };
-    let resp = match client.post(&url).json(&body).send().await {
-        Ok(r) => r,
-        Err(e) => {
-            eprintln!("Failed to reach running daemon at {url}: {e}");
-            return 1;
-        }
-    };
-    let status = resp.status();
-    let payload: serde_json::Value = match resp.json().await {
-        Ok(v) => v,
-        Err(e) => {
-            eprintln!("Daemon returned non-JSON response (status={status}): {e}");
-            return 1;
-        }
-    };
-    if status.is_success() {
-        let mesh_name = payload
-            .get("mesh_name")
-            .and_then(|v| v.as_str())
-            .unwrap_or("(unknown)");
-        let node_id = payload
-            .get("node_id")
-            .and_then(|v| v.as_str())
-            .unwrap_or("(unknown)");
-        println!();
-        println!("\u{2713} Connected to \"{mesh_name}\"");
-        println!("  Your node id: {node_id}");
-        println!();
-        println!("Shared compute is now available.");
-        println!();
-        0
-    } else {
-        let err = payload
-            .get("error")
-            .and_then(|v| v.as_str())
-            .unwrap_or("(no error message)");
-        eprintln!();
-        eprintln!("Failed to join mesh (daemon returned {status}): {err}");
-        1
     }
 }
 

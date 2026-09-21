@@ -52,9 +52,10 @@ pub mod auto_resume;
 /// (DAEMON_CORE.md §4.1 row 4), moved whole at domains
 /// `dm-daemon-cli-composition` (2026-09-17): the bootstrap phases, the
 /// build/preflight pair, the tool registry, the solve surface, the
-/// work-atlas wiring and the runtime-support leaves. `run_daemon` itself
-/// stays with the binary — it owns log rotation, the memory watchdog and
-/// the process exit code (DC §4 preamble), and calls these.
+/// work-atlas wiring and the runtime-support leaves. `run_daemon`
+/// followed at the `dm-daemon-assembled-bin` cut (2026-09-21) — it
+/// lives in [`daemon_cmd`] now, beside the leaves it owns (log
+/// rotation, the memory watchdog, the process exit code).
 ///
 /// `bootstrap` and `tool_registry` are gated on `treesitter`: the bootstrap
 /// mounts `project_http` and the registry registers `sovereign-tools`' code
@@ -67,6 +68,15 @@ pub mod corpus_catalog_http;
 pub mod corpus_maintenance;
 pub mod corpus_watch_http;
 pub mod daemon;
+/// The assembled-host process's run path (the `sovereign-daemon` bin's
+/// core, moved from `sovereign-cli-daemon/src/daemon_cmd/` at the
+/// `dm-daemon-assembled-bin` cut): `run_daemon`, `shutdown_daemon`,
+/// `vram-plan` and the runtime-support leaves (log rotation, the memory
+/// watchdog, the panic hook). `pub` because the bin links this crate as
+/// an external library — every other consumer is inside the crate.
+/// Gated with `bootstrap`/`tool_registry`, which `run_daemon` mounts.
+#[cfg(feature = "treesitter")]
+pub mod daemon_cmd;
 pub mod daemon_services;
 pub mod discovery_policy;
 pub mod documents_http;

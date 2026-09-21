@@ -13,7 +13,16 @@ commonwealth-media = { workspace = true }
 sovereign-inference = { workspace = true }
 oicp-types = { workspace = true }
 sovereign-mesh = { workspace = true, features = ["treesitter"] }
+# Still linked: the meshapp dev server reuses `meshapp_http`'s clamps and
+# `guest_door`'s bundle-escape guard, and the status/member parse shapes
+# (`mesh_http::StatusResponse`, `MemberDto`, `roster_repair::ForgottenMember`)
+# have no contracts-layer equivalents yet (FIVE_PROGRAMS §11 step 10 named
+# seams). No `EmbeddedDaemon` construction remains in this crate.
 sovereign-daemon = { workspace = true }
+# The client half of the daemon's HTTP surface: `ServingHost` decides "is a
+# daemon answering", `TurnClient` speaks `/v1/mesh/*` (create/join). Added
+# when the last in-process daemon constructions left this crate.
+sovereign-turn-client = { workspace = true }
 sovereign-meshapp = { workspace = true }
 sovereign-cli-shared = { workspace = true, features = ["scip", "mcp-client", "rail-client"] }
 commonwealth-core = { path = "../../../commonwealth/crates/commonwealth-core" }

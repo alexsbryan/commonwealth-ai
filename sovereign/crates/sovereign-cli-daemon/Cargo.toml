@@ -11,6 +11,10 @@ description = "Long-running daemon + setup + service install binary."
 #   sovereign install-service                — launchd / systemd register
 #   sovereign doctor                         — health check + integrity probe
 #
+# Since the de-embed (docs/FIVE_PROGRAMS.md §11 step 10) `daemon run`
+# itself execs the `sovereign-daemon` sibling binary (src/daemon_bin.rs);
+# this crate keeps the verb surface, the wizard, and the pidfile plumbing.
+#
 # Lives apart from sovereign-cli-dev (workspace tooling) and
 # sovereign-cli-llm (model interaction) because the daemon binary
 # has a very different cadence: it's the long-running host process,
@@ -34,14 +38,15 @@ sovereign-compute = { workspace = true }
 # `sv-no-daemon-management` bar. The daemon is its first consumer, not its
 # owner (ARCH §10.6).
 sovereign-service = { workspace = true }
-sovereign-store = { workspace = true }
-sovereign-tools = { workspace = true, features = ["treesitter"] }
 sovereign-mesh = { workspace = true, features = ["treesitter"] }
-# The dial: `knowledge_client::daemon_knowledge_source` (shared leaf).
-sovereign-turn-client = { workspace = true }
-# The mesh host cluster (domains dm-daemon-mesh-edge): the assembly root, the
-# route shells and the edge. `treesitter` because `bootstrap.rs` mounts
-# `project_router`, which reads `sovereign_mesh::reindexer`.
+# The daemon crate, post-de-embed (docs/FIVE_PROGRAMS.md §11 step 10): no
+# longer the in-process run body (that forked to its own `[[bin]]`, which
+# `daemon_bin.rs` execs). The residue this crate still links: the wizard's
+# in-process EmbeddedDaemon (a NAMED SEAM — terminal.rs:575 needs
+# `peer_inference_endpoints`, which no HTTP route exposes), the pidfile
+# path + rpc-worker flag parser (`startup`, `bootstrap`), doctor's
+# containment guard (`build::containment`), and the
+# `spawn_self_manifest_refresh` re-export the named-model e2e drives.
 sovereign-daemon = { workspace = true, features = ["treesitter"] }
 # The rented-pod modules lifted out of sovereign-mesh (domains REVIEW-audit-3);
 # reached directly rather than through sovereign-mesh's shim.
@@ -49,49 +54,26 @@ sovereign-daemon = { workspace = true, features = ["treesitter"] }
 # the daemon's slot-alias resolution reaches it directly rather than through
 # sovereign-mesh's shim (domains REVIEW-build-sched-repoint-daemon).
 # The serving host lifted out of sovereign-mesh (domains
-# REVIEW-build-serving-move-*); the daemon reaches the router and the ports
-# directly rather than through sovereign-mesh's shim (domains
-# REVIEW-build-serving-repoint-daemon).
+# REVIEW-build-serving-move-*); the daemon reached the router and the ports
+# directly rather than through sovereign-mesh's shim
+# (domains REVIEW-build-serving-repoint-daemon). Since the de-embed the only
+# consumer left in this crate is tests/main/named_model_routes_after_child_
+# serves_e2e.rs (the InferenceRouter/VenueHost harness) — kept as a main dep
+# because the integration test binary links against it.
 sovereign-serving-host = { path = "../sovereign-serving-host" }
-# THE `Runtime` recipe (TOPOLOGY.md §10 phase 5c) — the router classifier
-# stack, the turn tool registry and the enrichment lane. This is what lets
-# `sovereign daemon run` be the process that assembles a Runtime rather
-# than the process that has every ingredient for one. Capabilities — down.
-sovereign-runtime-recipe = { workspace = true }
-sovereign-workflow-host = { workspace = true }
 sovereign-cli-shared = { workspace = true, features = ["scip"] }
-# The atlas build orchestrator. The daemon runs `enrich build` in-process for
-# an `[enrichment] type = "atlas"` recipe, because a shipped desktop bundle
-# carries no `sovereign-cli` to shell out to (every such build exited 127).
-#
-# This was `sovereign-cli-llm` until 2026-09-01 — host to host, layer-legal but
-# dragging `bench_cmd`'s grandfathered `sovereign-eval` edge into this binary
-# and into the desktop bundle that embeds it. That was a NAMED substitution
-# (ARCH §18.3) with a §10.1e ledger row, and the operator funded the split
-# rather than keeping it. Now a capability, one layer down, and the interface
-# is two names: `build_with_progress_with_embedder` and `ParsedBuild`.
-# `commonwealth-state`, `commonwealth-core` and `commonwealth-api` (now
-# `sovereign-api`) WERE HERE,
-# and cw-lift rung 3b deleted all three. The whole coupling was eleven lines in
-# two files: `NodeId` reached through `commonwealth_core::ids`'s re-export of
-# the kernel type (ARCH §8.3), one call to the pure `partition::should_host`,
-# and the two real types — `MeshStore` and `ConvergenceRecord`.
-#
-# What replaced them: `kernel-types` for `NodeId` directly;
-# `EmbeddedDaemon::host_role` for the host decision, asked of the handle that
-# owns both its inputs; and `sovereign-contracts::peer`'s two narrow ports for
-# the store and the convergence stamps, with `sovereign-mesh::peer_adapter`
-# supplying the mesh implementations. The mesh-of-one is untouched at RUNTIME —
-# the solo adapters are the honest N=1 answers, not skips — and what changed is
-# that a daemon with no mesh configured no longer LINKS the mesh substrate to
-# say so.
-#
-# `NodeId` straight from the neutral kernel, not through a re-export.
+# Dep-history note (kept from the atlas/enrich era): `commonwealth-state`,
+# `commonwealth-core` and `commonwealth-api` (now `sovereign-api`) WERE HERE
+# and cw-lift rung 3b deleted all three — the coupling was eleven lines in
+# two files, replaced by `kernel-types` for `NodeId` and
+# `sovereign-contracts::peer`'s narrow ports. The atlas builder itself
+# (`in_process_atlas_builder`) forked to `sovereign-daemon` with the run
+# body at the de-embed (docs/FIVE_PROGRAMS.md §11 step 10); corpus-engine's
+# remaining consumers here are doctor's SovereignConfig reads and
+# corpus-index/scip below.
 corpus-engine = { workspace = true, features = ["treesitter"] }
 corpus-index = { workspace = true }
-corpus-engine-notes = { workspace = true }
 corpus-engine-scip = { workspace = true }
-corpus-engine-watchers = { workspace = true }
 async-trait = { workspace = true }
 axum = { workspace = true }
 futures = { workspace = true }
@@ -99,15 +81,10 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }
 toml = { workspace = true }
-tower-http = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 reqwest = { workspace = true }
-uuid = { workspace = true }
-arc-swap = { workspace = true }
 dirs = "5"
-chrono = { workspace = true }
-sha2 = { workspace = true }
 hostname = { workspace = true }
 which = "7"
 tempfile = "3"
