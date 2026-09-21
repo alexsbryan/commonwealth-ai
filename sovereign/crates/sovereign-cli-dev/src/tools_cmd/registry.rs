@@ -324,7 +324,9 @@ pub(super) async fn open_tools_registry() -> Result<ToolsEnv, String> {
     // the displayed scope) is correct per tool — the heartbeat is shared
     // across lint+test, so a live coordinator alone doesn't tell us
     // whether THIS tool's runner exists.
-    let sov_cfg = corpus_engine::SovereignConfig::load_or_default(&repo_root.join(".sovereign"));
+    let sov_cfg = sovereign_contracts::config::SovereignConfig::load_or_default(
+        &repo_root.join(".sovereign"),
+    );
     let lint_scope = sov_cfg.lint_runner.as_ref().map(|c| c.command.clone());
     let test_scope = sov_cfg.test_runner.as_ref().map(|c| c.command.clone());
     let mut lint_status = sovereign_code::LintStatusTool::new(Arc::clone(&lint_store))

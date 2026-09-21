@@ -50,7 +50,6 @@ sovereign-enrichment-catalog = { workspace = true }
 # calls down; five modules with no CLI half are re-exported wholesale from
 # `enrich_cmd/mod.rs`.
 sovereign-enrichment-build = { workspace = true }
-sovereign-code = { workspace = true }
 sovereign-contracts = { workspace = true }
 # `declare`: write this node's own origin credential to the 0600 secret
 # store. One implementation of where a declaration lives, shared with the

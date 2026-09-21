@@ -12188,7 +12188,6 @@ version = "0.7.0"
 dependencies = [
  "async-trait",
  "axum",
- "corpus-engine",
  "corpus-engine-scip",
  "corpus-index",
  "dirs 5.0.1",
@@ -12294,7 +12293,6 @@ dependencies = [
  "sovereign-authoring-harness",
  "sovereign-cli-mesh",
  "sovereign-cli-shared",
- "sovereign-code",
  "sovereign-contracts",
  "sovereign-core",
  "sovereign-daemon",
@@ -12782,7 +12780,6 @@ dependencies = [
  "serde_json",
  "serving-policy",
  "sovereign-contracts",
- "sovereign-core",
  "sovereign-time",
  "sysinfo 0.34.2",
  "tempfile",

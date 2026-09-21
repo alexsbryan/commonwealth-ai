@@ -659,11 +659,11 @@ pub(super) const WATCHERS_OFF_MSG: &str =
      scripts/sovereign-lint.sh and scripts/sovereign-test.sh are the gate";
 
 pub(super) fn watchers_opted_out(sovereign_dir: &std::path::Path) -> bool {
-    corpus_engine::SovereignConfig::load_or_default(sovereign_dir).watchers_disabled()
+    sovereign_contracts::config::SovereignConfig::load_or_default(sovereign_dir).watchers_disabled()
 }
 
 pub(super) fn check_test_runner(sovereign_dir: &std::path::Path) -> CheckResult {
-    let cfg = corpus_engine::SovereignConfig::load_or_default(sovereign_dir);
+    let cfg = sovereign_contracts::config::SovereignConfig::load_or_default(sovereign_dir);
     if cfg.test_runner.is_some() {
         CheckResult {
             name: "test_runner",
@@ -692,7 +692,7 @@ pub(super) fn check_test_runner(sovereign_dir: &std::path::Path) -> CheckResult 
 }
 
 pub(super) fn check_lint_runner(sovereign_dir: &std::path::Path) -> CheckResult {
-    let cfg = corpus_engine::SovereignConfig::load_or_default(sovereign_dir);
+    let cfg = sovereign_contracts::config::SovereignConfig::load_or_default(sovereign_dir);
     if cfg.lint_runner.is_some() {
         CheckResult {
             name: "lint_runner",

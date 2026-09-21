@@ -31,7 +31,7 @@ use super::capability_doc::{impl_type, load_caps, method_name, Cap};
 use super::config::EnrichConfig;
 use super::inference_client::{probe_daemon, DaemonInferenceClient};
 use sovereign_cli_shared::help::{self, Help, HelpSection};
-use sovereign_code::drift_posture::write_fingerprint;
+use sovereign_contracts::drift_fingerprint::write_fingerprint;
 
 const LLM_CONCURRENCY: usize = 8;
 const RETRIEVE_K: usize = 6;

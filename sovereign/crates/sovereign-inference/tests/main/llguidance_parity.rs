@@ -666,7 +666,8 @@ fn additional_properties_walker_does_not_rescue_a_broken_oneof() {
 
 // ─── F3 — the planner's plan schema ────────────────────────────────────
 //
-// `sovereign_core::planner::plan_schema` is the newest live
+// `sovereign_contracts::planner_schema::plan_schema` (re-exported from
+// sovereign-core's planner at its historical path) is the newest live
 // `structured_output` site and the first one built dynamically (the
 // `tool_id` enum is the caller's tool list). A schema that fails to
 // compile no longer degrades to free-form prose — since F1 it refuses
@@ -712,7 +713,7 @@ fn tool_with(
 }
 
 fn plan_schema(t: &[sovereign_contracts::types::ToolDescriptor]) -> serde_json::Value {
-    sovereign_core::planner::plan_schema(t).expect("plan_schema must build")
+    sovereign_contracts::planner_schema::plan_schema(t).expect("plan_schema must build")
 }
 
 /// Drive a byte prefix in and return the matcher, without asserting the

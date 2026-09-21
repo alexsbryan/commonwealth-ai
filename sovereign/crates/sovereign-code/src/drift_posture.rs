@@ -34,7 +34,6 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use sha2::{Digest, Sha256};
 
 use sovereign_contracts::error::Result;
 use sovereign_contracts::tool_manifest::DeclaredTool;
@@ -48,28 +47,17 @@ pub const DEFAULT_NARRATIVES: &[&str] = &[
     "sovereign/ARCH_PRINCIPLES.md",
 ];
 
-/// File name of the fingerprint sidecar. Lives alongside
-/// `latest.md` / `latest.md.json` so all drift state co-locates.
-pub const FINGERPRINT_FILE: &str = ".fingerprint";
-
 /// Default markdown output of `sovereign drift detect`.
 pub const DEFAULT_REPORT_NAME: &str = "latest.md";
 
-/// On-disk shape of the fingerprint sidecar. Schema-versioned so
-/// future readers can detect format drift cleanly.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DriftFingerprint {
-    pub schema_version: u32,
-    pub generated_at_unix: u64,
-    /// Map from absolute narrative path → SHA-256 hex.
-    pub narrative_hashes: std::collections::BTreeMap<String, String>,
-    /// Where the markdown report landed.
-    pub output_path: String,
-}
-
-impl DriftFingerprint {
-    pub const SCHEMA_VERSION: u32 = 1;
-}
+// shim: the fingerprint codec (`FINGERPRINT_FILE`, `DriftFingerprint`,
+// `write_fingerprint`, `hash_file`) moved to `sovereign-contracts`
+// (`sovereign_contracts::drift_fingerprint`); re-exported here so the
+// historical `sovereign_code::drift_posture::*` / `sovereign_code::*` importers
+// are unchanged.
+pub use sovereign_contracts::drift_fingerprint::{
+    hash_file, write_fingerprint, DriftFingerprint, FINGERPRINT_FILE,
+};
 
 /// Computed freshness state. Returned by [`compute_posture`] and
 /// rendered by the MCP tool / the brief / the pre-push hook.
@@ -187,51 +175,6 @@ pub fn compute_posture(drift_dir: &Path, narrative_paths: &[PathBuf]) -> DriftPo
         stale_paths,
         output_path,
     }
-}
-
-/// Write the fingerprint sidecar. Called by `sovereign drift detect`
-/// on successful render. Returns the path written.
-pub fn write_fingerprint(
-    drift_dir: &Path,
-    narrative_paths: &[PathBuf],
-    output_path: &Path,
-) -> std::io::Result<PathBuf> {
-    std::fs::create_dir_all(drift_dir)?;
-    let mut hashes = std::collections::BTreeMap::new();
-    for path in narrative_paths {
-        let h = hash_file(path)?;
-        hashes.insert(path.to_string_lossy().into_owned(), h);
-    }
-    let generated_at_unix = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
-    let fp = DriftFingerprint {
-        schema_version: DriftFingerprint::SCHEMA_VERSION,
-        generated_at_unix,
-        narrative_hashes: hashes,
-        output_path: output_path.to_string_lossy().into_owned(),
-    };
-    let out = drift_dir.join(FINGERPRINT_FILE);
-    let body = serde_json::to_string_pretty(&fp).map_err(std::io::Error::other)?;
-    std::fs::write(&out, body)?;
-    Ok(out)
-}
-
-/// SHA-256 of a file's bytes, hex-encoded.
-///
-/// Public because the drift orchestrator needs the SAME hash to decide
-/// whether a cached narrative atlas was built from the document it is
-/// about to be reported against. Two implementations of one key is the
-/// §10.6 smell, and here it would be worse than untidy: the fingerprint
-/// written at the end of a run and the staleness check made at the start
-/// must agree on what "this document changed" means, or the report can
-/// assert it analysed a document it skipped.
-pub fn hash_file(path: &Path) -> std::io::Result<String> {
-    let bytes = std::fs::read(path)?;
-    let mut h = Sha256::new();
-    h.update(&bytes);
-    Ok(format!("{:x}", h.finalize()))
 }
 
 fn sidecar_for(md: &Path) -> PathBuf {

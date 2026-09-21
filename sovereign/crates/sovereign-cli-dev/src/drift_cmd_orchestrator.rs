@@ -614,7 +614,11 @@ pub async fn cmd_detect(args: &[String]) -> i32 {
         .iter()
         .map(|p| std::fs::canonicalize(p).unwrap_or_else(|_| p.clone()))
         .collect();
-    match sovereign_code::write_fingerprint(&drift_dir, &narrative_abs, &output_path) {
+    match sovereign_contracts::drift_fingerprint::write_fingerprint(
+        &drift_dir,
+        &narrative_abs,
+        &output_path,
+    ) {
         Ok(fp_path) => {
             info!(
                 fingerprint = %fp_path.display(),
@@ -702,7 +706,11 @@ fn mirror_to_canonical(
     // `drift_posture::compute_posture(~/.svrnmesh/drift/, ...)`
     // reads. Using `dest_md` as the recorded `output_path` so
     // the posture report points at the canonical mirror.
-    let _ = sovereign_code::write_fingerprint(canonical_dir, narrative_abs, &dest_md)?;
+    let _ = sovereign_contracts::drift_fingerprint::write_fingerprint(
+        canonical_dir,
+        narrative_abs,
+        &dest_md,
+    )?;
     Ok(dest_md)
 }
 

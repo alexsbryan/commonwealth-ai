@@ -187,9 +187,9 @@ windows-vulkan = ["llama-cpp-4/vulkan"]
 windows-cuda = ["llama-cpp-4/cuda"]
 
 [dev-dependencies]
-# TEST-ONLY, one site: `llguidance_parity`'s F3 fixture proves
-# `sovereign_core::planner::plan_schema` compiles under the real engine.
-sovereign-core = { workspace = true }
+# `llguidance_parity`'s F3 fixture proves the plan schema compiles under the
+# real engine; the schema moved to `sovereign-contracts::planner_schema`
+# 2026-09-21, so the dev-dep on the runtime hub is gone.
 tempfile = "3"
 
 [[example]]

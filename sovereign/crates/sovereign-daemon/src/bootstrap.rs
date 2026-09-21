@@ -2579,7 +2579,8 @@ pub fn setup_watchers_and_work_atlas(
     let mut work_atlas_branch: Option<String> = None;
 
     if let Some(ref ws) = workspace_dir {
-        let sov_cfg = corpus_engine::SovereignConfig::load_or_default(&ws.join(".sovereign"));
+        let sov_cfg =
+            sovereign_contracts::config::SovereignConfig::load_or_default(&ws.join(".sovereign"));
         // Single-permit semaphore shared by the lint + test watchers so
         // their cargo subprocesses serialize instead of compounding
         // memory pressure. Without this, both fire concurrent cargo

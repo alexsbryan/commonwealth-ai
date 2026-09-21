@@ -18,6 +18,12 @@
 /// `crate::oicp::*` exactly as they did inside `sovereign-core`.
 pub use oicp_types as oicp;
 
+/// `.sovereign/sovereign.toml` — the per-project watcher configuration. Moved
+/// down from `corpus-engine` so a caller that only reads the operator's
+/// watcher posture does not link the knowledge engine; corpus-engine
+/// re-exports it at `sovereign_config`.
+pub mod config;
+
 // Wire shapes the daemon's HTTP routes answer with. Here rather than beside
 // the routes because a client that only parses an answer should not have to
 // link the serving host to name it — `sovereign-desktop` named eight of
@@ -26,6 +32,11 @@ pub use oicp_types as oicp;
 // path, so the routes are unchanged.
 pub mod daemon_wire;
 pub mod data_roots;
+/// The drift fingerprint sidecar codec (`write_fingerprint` / `hash_file` /
+/// `DriftFingerprint`). Moved down from `sovereign-code` so the reconcile
+/// commands in `sovereign-cli-llm` stamp the same fingerprint without linking
+/// the code-intelligence crate.
+pub mod drift_fingerprint;
 pub mod engine_config;
 // The egress boundary — the ONE choke point for remote-model calls and
 // search-query egress (order deep-research-t2a, R10; moved down from
@@ -98,6 +109,12 @@ pub mod peer_work;
 // `sovereign-cli-daemon` declares them, `sovereign-work-atlas` consumes one,
 // and `sovereign-mesh` supplies the mesh-backed adapter for each (cw-lift 3b).
 pub mod peer;
+/// The JSON Schema the planner decodes under — the `structured_output`
+/// constraint, one `oneOf` branch per step kind. Moved down from
+/// `sovereign-core::planner::schema`; the leaf already owns `ToolDescriptor`,
+/// so the schema's only input is vocabulary. `sovereign-core` re-exports it at
+/// its historical path.
+pub mod planner_schema;
 /// Who is asking — the identity a request resolves to before admission, and
 /// the key of the daemon's one `principal -> Scope` table. Published language
 /// rather than the daemon's, because Serving's package and Answering both key
