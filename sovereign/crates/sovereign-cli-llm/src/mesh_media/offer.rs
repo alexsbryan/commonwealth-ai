@@ -334,7 +334,7 @@ fn write_offer(
 fn reload_daemon() -> i32 {
     let dispatcher = match std::env::current_exe()
         .map_err(|e| e.to_string())
-        .and_then(|exe| crate::bench_cmd::ablate::dispatcher_exe(&exe))
+        .and_then(|exe| sovereign_cli_shared::dispatcher::dispatcher_exe(&exe))
     {
         Ok(d) => d,
         Err(e) => {

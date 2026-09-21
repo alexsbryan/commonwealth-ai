@@ -1095,14 +1095,14 @@ async fn async_main() {
             "claim" => {
                 // Moved to sovereign-cli-llm (uses sovereign-mesh +
                 // sovereign-work-atlas, both heavy).
-                let code = llm_bin::exec("claim", &raw_args[1..]);
+                let code = dev_bin::exec("claim", &raw_args[1..]);
                 std::process::exit(code);
             }
             "solve" => {
                 // Daemon-hosted TDD solver client (docs/specs/SOLVE_UX.md).
                 // Lives in sovereign-cli-llm with the other daemon-HTTP
                 // clients (chat, claim).
-                let code = llm_bin::exec("solve", &raw_args[1..]);
+                let code = dev_bin::exec("solve", &raw_args[1..]);
                 std::process::exit(code);
             }
             "amend" => {
@@ -1214,10 +1214,15 @@ async fn async_main() {
                 std::process::exit(code);
             }
             // ── LLM cluster (continued) → sovereign-cli-llm ──
-            "backlog" | "enrich" | "atlas" | "eval" | "voice" | "bench" | "search-gym"
-            | "knowledge-gym" | "chat" | "reading-diag" | "newsworthy" | "govern"
-            | "router-cache" | "proxy" | "portfolio" | "workflow" => {
+            "enrich" | "atlas" | "eval" | "voice" | "bench" | "search-gym" | "knowledge-gym"
+            | "chat" | "reading-diag" | "newsworthy" | "govern" | "router-cache" | "proxy"
+            | "portfolio" | "workflow" => {
                 let code = llm_bin::exec(first, &raw_args[1..]);
+                std::process::exit(code);
+            }
+            // `backlog` is `svrn code`'s: its items are notes-store todos.
+            "backlog" => {
+                let code = dev_bin::exec("backlog", &raw_args[1..]);
                 std::process::exit(code);
             }
             #[cfg(feature = "dev-tools")]

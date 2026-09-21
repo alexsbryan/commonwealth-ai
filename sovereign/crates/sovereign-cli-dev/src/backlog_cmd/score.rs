@@ -2,7 +2,7 @@
 //! One scoring call against the resident daemon model.
 //!
 //! Reuse, not machinery (ARCH §19): this is
-//! [`DaemonInferenceClient`](crate::enrich_cmd::inference_client) — the
+//! [`DaemonInferenceClient`](sovereign_enrichment_build::inference_client) — the
 //! same HTTP path `svrn enrich` uses — with the ruler as the system
 //! prompt and a JSON schema for grammar-constrained output. No in-process
 //! model, no session bootstrap, no new inference path.
@@ -16,7 +16,7 @@ use corpus_engine::enrichment::pipeline::ChatPrompt;
 use serde::Deserialize;
 
 use super::ruler::Ruler;
-use crate::enrich_cmd::inference_client::{
+use sovereign_enrichment_build::inference_client::{
     probe_daemon, resolve_default_models, DaemonInferenceClient,
 };
 

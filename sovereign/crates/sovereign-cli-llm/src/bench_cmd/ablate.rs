@@ -343,31 +343,7 @@ fn daemon_lock_path() -> PathBuf {
 /// dispatcher. Handing `daemon run` to our own exe fails with
 /// "unknown subcommand 'daemon'" (observed 2026-08-03). Look for the
 /// dispatcher beside us first, then the deployed symlink.
-pub(crate) fn dispatcher_exe(current: &std::path::Path) -> Result<PathBuf, String> {
-    if let Some(dir) = current.parent() {
-        for name in ["sovereign-cli", "svrn"] {
-            let c = dir.join(name);
-            if c.exists() {
-                return Ok(c);
-            }
-        }
-    }
-    for c in [
-        dirs_home().join(".local/bin/sovereign"),
-        dirs_home().join(".local/bin/svrn"),
-    ] {
-        if c.exists() {
-            return Ok(c);
-        }
-    }
-    Err(
-        "cannot find the `sovereign-cli` dispatcher (needed for `daemon` — this \
-         binary does not own that verb). Build it: \
-         cargo build -p sovereign-cli --features dev-tools"
-            .to_string(),
-    )
-}
-
+use sovereign_cli_shared::dispatcher::dispatcher_exe;
 fn dirs_home() -> PathBuf {
     std::env::var_os("HOME")
         .map(PathBuf::from)

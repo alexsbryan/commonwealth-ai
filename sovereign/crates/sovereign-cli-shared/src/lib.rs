@@ -47,6 +47,7 @@ pub mod code_index;
 pub mod code_index_incremental;
 pub mod deprecation;
 pub mod dirs;
+pub mod dispatcher;
 pub mod flag_surface;
 pub mod help;
 pub mod host_load;

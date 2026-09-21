@@ -88,6 +88,8 @@ sovereign-tools = { workspace = true, features = [
     "atos",
 ], optional = true }
 sovereign-atos = { workspace = true, optional = true }
+sovereign-enrichment-build = { workspace = true }
+sovereign-contracts = { workspace = true }
 sovereign-mesh = { workspace = true, features = ["treesitter"], optional = true }
 # The mesh host cluster (domains dm-daemon-mesh-edge): `project_cmd::serve`
 # mounts `mcp_router`, so it rides the same `workbench` gate as the mesh dep.

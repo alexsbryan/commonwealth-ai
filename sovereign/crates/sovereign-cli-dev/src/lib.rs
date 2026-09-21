@@ -47,9 +47,12 @@
 // Nothing below may reference a `workbench`-gated dependency. That rule is
 // what keeps `sovereign-cli` free of the workbench's dependency tree, and the
 // build breaks loudly if it is broken.
+mod backlog_cmd;
+mod claim_cmd;
 mod converge_baseline;
 mod converge_cmd;
 mod repo;
+mod solve_cmd;
 
 // ── The workbench proper — `workbench` feature ──────────────────────
 #[cfg(feature = "workbench")]
@@ -269,6 +272,9 @@ async fn async_main() -> i32 {
         "project" => project_cmd::run_project(rest).await,
         "code" => code_cmd::run_code(rest).await,
         "tools" => tools_cmd::run_tools(rest).await,
+        "backlog" => backlog_cmd::run_backlog(rest).await,
+        "claim" => claim_cmd::run(rest).await,
+        "solve" => solve_cmd::run(rest).await,
 
         // ── Hidden arms invoked by sovereign-cli delegators ────────
         // ATOS sub-handlers (from notes/audit/drift/milestone stubs).

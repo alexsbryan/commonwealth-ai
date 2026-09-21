@@ -49,10 +49,8 @@ mod atlas_cmd;
 // all for three months. ONE gate, and it is the inner one. See
 // `awareness_cmd/mod.rs`.
 pub mod awareness_cmd;
-mod backlog_cmd;
 mod bench_cmd;
 mod chat_cmd;
-mod claim_cmd;
 mod corpus_catalog_cmd;
 mod corpus_cmd;
 mod corpus_extract_entities_cmd;
@@ -107,7 +105,6 @@ mod router_cache_cmd;
 mod router_fit_cmd;
 pub mod run_cmd;
 mod search_gym_cmd;
-mod solve_cmd;
 mod turn_sink;
 mod voice_eval;
 mod worker_pod_provider;
@@ -199,14 +196,11 @@ async fn async_main() {
     }
 
     let code: i32 = match cmd {
-        "backlog" => backlog_cmd::run_backlog(rest).await,
         "bench" => bench_cmd::run_bench(rest).await,
         "chat" => chat_cmd::run_chat(rest).await,
         "govern" => govern_cmd::run_govern(rest).await,
         "proxy" => proxy_cmd::run_proxy(rest).await,
         "portfolio" => portfolio_cmd::run_portfolio(rest).await,
-        "claim" => claim_cmd::run(rest).await,
-        "solve" => solve_cmd::run(rest).await,
         "eval" => eval_cmd::run_eval(rest).await,
         "voice" => voice_eval::run_voice_eval(rest).await,
         "reading-diag" => reading_diag_cmd::run(rest).await,
