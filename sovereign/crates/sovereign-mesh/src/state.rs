@@ -59,7 +59,7 @@ impl MeshState {
                     hw_fingerprint: if m.capabilities.hardware.gpus.is_empty() {
                         None
                     } else {
-                        Some(sovereign_core::mesh_measurements::hardware_fingerprint(
+                        Some(crate::mesh_measurements::hardware_fingerprint(
                             m.capabilities.hardware.cpu_cores,
                             m.capabilities.hardware.system_ram_gb,
                             &m.capabilities

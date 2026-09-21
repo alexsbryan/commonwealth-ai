@@ -104,8 +104,8 @@ mod tests {
     use std::sync::Arc;
     use std::time::Duration;
 
-    const PUBLIC: &str = sovereign_work_atlas::model::APP_ID_PUBLIC;
-    const PRIVATE: &str = sovereign_work_atlas::model::APP_ID_PRIVATE;
+    const PUBLIC: &str = sovereign_contracts::peer::WORK_ATLAS_APP_ID_PUBLIC;
+    const PRIVATE: &str = sovereign_contracts::peer::WORK_ATLAS_APP_ID_PRIVATE;
 
     /// A node whose rail derives its roster from its own membership — the same
     /// three calls `ring_sync`'s tests make and the daemon makes.

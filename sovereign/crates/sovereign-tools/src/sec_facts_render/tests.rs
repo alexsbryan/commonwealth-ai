@@ -64,7 +64,7 @@ fn load_map() -> ConceptMap {
     // The SHIPPED registry, not a test copy: a concept map that drifted
     // from the product's would make this test agree with nothing.
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../../sovereign-recipes/sec-filings-company/concept-map.toml");
+        .join("data/sec-filings-company/concept-map.toml");
     ConceptMap::from_toml(&std::fs::read_to_string(&path).expect("concept map is committed"))
         .expect("concept map parses")
 }

@@ -69,7 +69,7 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ADAPTER="${SCRIPT_DIR}/../sovereign/crates/sovereign-tools/src/code/test_adapters/sovereign-cargo-check-adapter"
+ADAPTER="${SCRIPT_DIR}/../sovereign/crates/sovereign-code/src/test_adapters/sovereign-cargo-check-adapter"
 REPO_ROOT="$(dirname "$SCRIPT_DIR")"
 # shellcheck source=lib/cargo-scope.sh
 source "${SCRIPT_DIR}/lib/cargo-scope.sh"

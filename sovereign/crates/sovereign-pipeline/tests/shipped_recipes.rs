@@ -8,22 +8,36 @@ use std::path::PathBuf;
 
 use sovereign_pipeline::recipe::Recipe;
 
-fn repo_root() -> PathBuf {
-    // CARGO_MANIFEST_DIR points at sovereign/crates/sovereign-pipeline.
-    let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    manifest.join("..").join("..").join("..")
+/// Names the canonical recipes tree — the SAME knob `corpus-engine/build.rs`
+/// vendors from, so the two readings cannot point at different trees.
+const RECIPES_DIR_ENV: &str = "CORPUS_ENGINE_RECIPES_DIR";
+
+/// The recipes tree, from a knob rather than a climb out of the crate root: a
+/// third party who lifts this package carries this test and has no such tree
+/// (boundary-gate rule 3c). Absence panics naming the knob.
+fn recipes_root() -> PathBuf {
+    let raw = std::env::var(RECIPES_DIR_ENV).unwrap_or_else(|_| {
+        panic!("{RECIPES_DIR_ENV} is unset — point it at a sovereign-recipes checkout")
+    });
+    let path = PathBuf::from(raw);
+    assert!(
+        path.is_dir(),
+        "{RECIPES_DIR_ENV} points at {} — no sovereign-recipes tree there",
+        path.display()
+    );
+    path
 }
 
 #[test]
 fn sep_core_v1_recipe_parses() {
-    let path = repo_root().join("sovereign-recipes/sep/pipelines/sep-core-v1.toml");
-    // Skip silently if the recipe was renamed/moved — failing here
-    // would block unrelated work. The grep above commit history will
-    // surface the rename if it happens.
-    if !path.exists() {
-        eprintln!("skipping: recipe not at {}", path.display());
-        return;
-    }
+    let path = recipes_root().join("sep/pipelines/sep-core-v1.toml");
+    // A moved recipe FAILS here. Skipping was a gate that could not fail (§18.1).
+    assert!(
+        path.is_file(),
+        "sep-core-v1 not at {} — the recipe moved, or {RECIPES_DIR_ENV} points at \
+         the wrong tree; repoint the knob or update this path, do not skip",
+        path.display()
+    );
     let recipe = Recipe::load(&path).expect("sep-core-v1 must parse");
     assert_eq!(recipe.recipe.id, "sep-core-v1");
     assert!(

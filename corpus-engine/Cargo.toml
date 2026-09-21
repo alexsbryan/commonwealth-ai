@@ -33,11 +33,11 @@ understanding-vocab = { workspace = true }
 # in the monorepo changed when it was carved out (domains
 # REVIEW-build-index-read-port, DE "The read-port leaf, measured again").
 corpus-index = { workspace = true }
-# The code-intel package's fact base — `facts`/`facts_check`/`facts_store`
-# moved out at domains REVIEW-build-code-facts (docs/CODE_TOOLING_BOUNDARY.md §2
-# Phase 2) and re-exported at their historical paths here, so no in-monorepo
-# importer changed. The `stores`/`treesitter` features forward below, keeping
-# the engine's build contract identical.
+# The code-intel package's fact base. The re-export shims are GONE (zero
+# in-monorepo importers); what is left is the FEATURE FORWARD below —
+# `sovereign-cli-dev` and `sovereign-code` take `code-facts` plain and get its
+# `treesitter`/`stores` through the engine's features of the same name. Declare
+# them there (as `corpus-engine-watchers` already does) and this edge closes.
 code-facts = { workspace = true }
 # Understanding's pure tier — a temporary shim edge: the pure files that leave
 # `corpus-engine` for `understanding-atlas` are re-exported at their historical
@@ -229,19 +229,12 @@ pulldown-cmark         = { version = "0.12", default-features = false, features 
 # carry.
 corpus-engine-scip     = { workspace = true, optional = true }
 
-# NoteStore + project_docs + notes_sync — also carved out 2026-05-23.
-# corpus-engine still references the NoteStore from `alignment_projector`,
-# `extractors::alignment_workspace`, and `update::project_index_watcher`,
-# so pull it back in behind the `stores` feature (same gate the modules
-# used to carry).
-corpus-engine-notes    = { workspace = true, optional = true }
 workspace-hack = { version = "0.1", path = "../workspace-hack" }
 
 [features]
 # `stores` is in the default set because every downstream sovereign +
 # commonwealth crate touches at least one rusqlite-backed module
-# (wikipedia_graph + the notes_sync bridge here; NoteStore /
-# ProjectDocsStore reached through the pulled-in `corpus-engine-notes`).
+# (wikipedia_graph + the notes_sync bridge here).
 # Pre-2026-05-22 these lived under `treesitter` because rusqlite happened
 # to be declared there — that wart forced 5 tree-sitter grammar crates
 # into every binary that only needed a notes table. The two are split
@@ -250,10 +243,9 @@ workspace-hack = { version = "0.1", path = "../workspace-hack" }
 default = ["markdown", "stores"]
 markdown = ["dep:pulldown-cmark"]
 # `stores` unlocks the remaining rusqlite-backed modules in this crate
-# (wikipedia_graph, wikipedia_columnar, notes_sync) and pulls in
-# `corpus-engine-notes` for the internal NoteStore users. Cheap to
-# enable — rusqlite is bundled (no system dep) and SQLite is small.
-stores = ["dep:rusqlite", "dep:notify", "dep:walkdir", "dep:corpus-engine-notes", "code-facts/stores"]
+# (wikipedia_graph, wikipedia_columnar, notes_sync). Cheap to enable —
+# rusqlite is bundled (no system dep) and SQLite is small.
+stores = ["dep:rusqlite", "dep:notify", "dep:walkdir", "code-facts/stores"]
 treesitter = [
     "stores",
     "dep:tree-sitter",

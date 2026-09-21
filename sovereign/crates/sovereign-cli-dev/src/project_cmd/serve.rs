@@ -156,9 +156,9 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
     eprintln!("  Call graph:");
 
     let (initial_graph, _summary) = load_merged_graph(&data_dir, true).await;
-    let merged_graph: sovereign_tools::ScipGraphHandle =
+    let merged_graph: sovereign_code::ScipGraphHandle =
         Arc::new(ArcSwap::from_pointee(initial_graph));
-    let health_checker = Arc::new(sovereign_tools::IndexHealthChecker::new(Arc::clone(
+    let health_checker = Arc::new(sovereign_code::IndexHealthChecker::new(Arc::clone(
         &merged_graph,
     )));
 
@@ -404,38 +404,53 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
 
     let mut tools = sovereign_core::ToolRegistry::new();
     tools.register(Box::new(
-        sovereign_tools::SymbolLookupTool::new(Arc::clone(&engine), Arc::clone(&merged_graph))
-            .with_health_checker(Arc::clone(&health_checker))
-            .declared(),
+        sovereign_code::SymbolLookupTool::new(
+            Arc::clone(&engine) as std::sync::Arc<dyn sovereign_code::CodeIndexSource>,
+            Arc::clone(&merged_graph),
+        )
+        .with_health_checker(Arc::clone(&health_checker))
+        .declared(),
     ));
     tools.register(Box::new(
-        sovereign_tools::CodeSearchTool::new(Arc::clone(&engine)).declared(),
+        sovereign_code::CodeSearchTool::new(
+            Arc::clone(&engine) as std::sync::Arc<dyn sovereign_code::CodeIndexSource>
+        )
+        .declared(),
     ));
     tools.register(Box::new(
-        sovereign_tools::RecentChangesTool::new(Arc::clone(&engine)).declared(),
+        sovereign_code::RecentChangesTool::new(
+            Arc::clone(&engine) as std::sync::Arc<dyn sovereign_code::CodeIndexSource>
+        )
+        .declared(),
     ));
     tools.register(Box::new(
-        sovereign_tools::FindCalleesTool::new(Arc::clone(&engine), Arc::clone(&merged_graph))
-            .with_health_checker(Arc::clone(&health_checker))
-            .declared(),
+        sovereign_code::FindCalleesTool::new(
+            Arc::clone(&engine) as std::sync::Arc<dyn sovereign_code::CodeIndexSource>,
+            Arc::clone(&merged_graph),
+        )
+        .with_health_checker(Arc::clone(&health_checker))
+        .declared(),
     ));
     tools.register(Box::new(
-        sovereign_tools::FindCallersTool::new(Arc::clone(&engine), Arc::clone(&merged_graph))
-            .with_health_checker(Arc::clone(&health_checker))
-            .declared(),
+        sovereign_code::FindCallersTool::new(
+            Arc::clone(&engine) as std::sync::Arc<dyn sovereign_code::CodeIndexSource>,
+            Arc::clone(&merged_graph),
+        )
+        .with_health_checker(Arc::clone(&health_checker))
+        .declared(),
     ));
     // Capability map — derived "what the codebase does" overview.
     tools.register(Box::new(
-        sovereign_tools::CapabilityMapTool::new().declared(),
+        sovereign_code::CapabilityMapTool::new().declared(),
     ));
     // Architecture observability (quality program) — report + posture.
-    tools.register(Box::new(sovereign_tools::ArchReportTool::new().declared()));
-    tools.register(Box::new(sovereign_tools::ArchPostureTool::new().declared()));
+    tools.register(Box::new(sovereign_code::ArchReportTool::new().declared()));
+    tools.register(Box::new(sovereign_code::ArchPostureTool::new().declared()));
 
     // ── Test / lint watcher tools ───────────────────────────────
 
     {
-        let mut tool = sovereign_tools::TestStatusTool::new(Arc::clone(&test_store))
+        let mut tool = sovereign_code::TestStatusTool::new(Arc::clone(&test_store))
             .with_watcher_active(Arc::clone(&watcher_active_flag));
         if let Some(scope) = test_watched_scope {
             tool = tool.with_watched_scope(scope);
@@ -444,15 +459,15 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
     }
     if let Some(ref watcher) = test_watcher {
         tools.register(Box::new(
-            sovereign_tools::RunTestsTool::new(Arc::clone(watcher)).declared(),
+            sovereign_code::RunTestsTool::new(Arc::clone(watcher)).declared(),
         ));
     }
     tools.register(Box::new(
-        sovereign_tools::GetRunOutputTool::new(Arc::clone(&test_store)).declared(),
+        sovereign_code::GetRunOutputTool::new(Arc::clone(&test_store)).declared(),
     ));
 
     {
-        let mut tool = sovereign_tools::LintStatusTool::new(Arc::clone(&lint_store))
+        let mut tool = sovereign_code::LintStatusTool::new(Arc::clone(&lint_store))
             .with_watcher_active(Arc::clone(&watcher_active_flag))
             .with_workspace_root(repo_root.clone());
         if let Some(scope) = lint_watched_scope {
@@ -461,24 +476,24 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
         tools.register(Box::new(tool.declared()));
     }
     tools.register(Box::new(
-        sovereign_tools::DriftPostureTool::new()
+        sovereign_code::DriftPostureTool::new()
             .with_workspace_root(repo_root.clone())
             .declared(),
     ));
     tools.register(Box::new(
-        sovereign_tools::GetLintOutputTool::new(Arc::clone(&lint_store)).declared(),
+        sovereign_code::GetLintOutputTool::new(Arc::clone(&lint_store)).declared(),
     ));
 
     // ── Agent partnership tools (notes, blast radius, project context) ──
 
     tools.register(Box::new(
-        sovereign_tools::WriteNoteTool::new(Arc::clone(&notes_store)).declared(),
+        sovereign_code::WriteNoteTool::new(Arc::clone(&notes_store)).declared(),
     ));
     tools.register(Box::new(
-        sovereign_tools::ReadNotesTool::new(Arc::clone(&notes_store)).declared(),
+        sovereign_code::ReadNotesTool::new(Arc::clone(&notes_store)).declared(),
     ));
     tools.register(Box::new(
-        sovereign_tools::DeleteNoteTool::new(Arc::clone(&notes_store)).declared(),
+        sovereign_code::DeleteNoteTool::new(Arc::clone(&notes_store)).declared(),
     ));
     // Work atlas — coordination layer for agents sharing this repo.
     // The serve path runs the GC loop and exposes the three claim
@@ -562,15 +577,15 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
             .spawn();
 
     tools.register(Box::new(
-        sovereign_tools::BlastRadiusTool::new(Arc::clone(&merged_graph))
+        sovereign_code::BlastRadiusTool::new(Arc::clone(&merged_graph))
             .with_project_root(repo_root.clone())
             .with_health_checker(Arc::clone(&health_checker))
-            .with_atlas(Arc::clone(&atlas_store))
+            .with_atlas(Arc::clone(&atlas_store) as std::sync::Arc<dyn sovereign_code::PeerWork>)
             .declared(),
     ));
     if let Some(ref ds) = docs_store {
         tools.register(Box::new(
-            sovereign_tools::ProjectContextTool::new(Arc::clone(ds))
+            sovereign_atos::tools::ProjectContextTool::new(Arc::clone(ds))
                 .with_features(Arc::clone(&features_store))
                 .declared(),
         ));
@@ -578,16 +593,16 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
 
     // ── ATOS feature management ─────────────────────────────────
     tools.register(Box::new(
-        sovereign_tools::ProvisionFeatureTool::new(Arc::clone(&features_store)).declared(),
+        sovereign_atos::tools::ProvisionFeatureTool::new(Arc::clone(&features_store)).declared(),
     ));
     tools.register(Box::new(
-        sovereign_tools::ArchiveFeatureTool::new(Arc::clone(&features_store)).declared(),
+        sovereign_atos::tools::ArchiveFeatureTool::new(Arc::clone(&features_store)).declared(),
     ));
     tools.register(Box::new(
-        sovereign_tools::ReadNoteByIdTool::new(Arc::clone(&notes_store)).declared(),
+        sovereign_code::ReadNoteByIdTool::new(Arc::clone(&notes_store)).declared(),
     ));
     tools.register(Box::new(
-        sovereign_tools::PromoteNoteTool::new(Arc::clone(&notes_store)).declared(),
+        sovereign_code::PromoteNoteTool::new(Arc::clone(&notes_store)).declared(),
     ));
     // ReadNoteDigestTool runs in fallback (header-only) mode here —
     // `svrn project serve` doesn't load a model, so the Fast-slot
@@ -595,21 +610,21 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
     // digest makes the degraded state visible to agents. The daemon
     // binary wires inference in via `.with_inference(...)`.
     tools.register(Box::new(
-        sovereign_tools::ReadNoteDigestTool::new(Arc::clone(&notes_store)).declared(),
+        sovereign_code::ReadNoteDigestTool::new(Arc::clone(&notes_store)).declared(),
     ));
     tools.register(Box::new(
-        sovereign_tools::RecordAtosEventTool::new(Arc::clone(&features_store)).declared(),
+        sovereign_atos::tools::RecordAtosEventTool::new(Arc::clone(&features_store)).declared(),
     ));
     // atos_plan_emit intentionally NOT registered — see runtime
     // tools_cmd/registry.rs for rationale (markdown plan path
     // replaced structured-JSON path).
     tools.register(Box::new(
-        sovereign_tools::WriteRedteamFindingTool::new(Arc::clone(&notes_store)).declared(),
+        sovereign_code::WriteRedteamFindingTool::new(Arc::clone(&notes_store)).declared(),
     ));
 
     // ── Session reflection (feedback loop) ─────────────────────────────
     tools.register(Box::new(
-        sovereign_tools::SessionReflectionTool::new(Arc::clone(&notes_store)).declared(),
+        sovereign_code::SessionReflectionTool::new(Arc::clone(&notes_store)).declared(),
     ));
 
     // ── DESIGN.md structural signals ────────────────────────────────────
@@ -619,7 +634,7 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
     // right file. Absolute paths still work — the tool resolves them
     // verbatim, bypassing project_root.
     tools.register(Box::new(
-        sovereign_tools::DesignSignalsExtractTool::new()
+        sovereign_atos::tools::DesignSignalsExtractTool::new()
             .with_project_root(repo_root.clone())
             .declared(),
     ));
@@ -765,7 +780,7 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
 /// change, rebuild the merged graph out-of-band and atomically swap it
 /// into `handle`. Tools (FindCalleesTool, FindCallersTool) pick up the
 /// new graph on their next `load_full()`.
-async fn scip_graph_reloader(handle: sovereign_tools::ScipGraphHandle, data_dir: PathBuf) {
+async fn scip_graph_reloader(handle: sovereign_code::ScipGraphHandle, data_dir: PathBuf) {
     const POLL_INTERVAL: Duration = Duration::from_secs(30);
 
     let mut last_seen = snapshot_graph_mtimes(&data_dir);

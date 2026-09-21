@@ -677,7 +677,7 @@ fn additional_properties_walker_does_not_rescue_a_broken_oneof() {
 /// Descriptors shaped like the real registry: `plan_schema` embeds each
 /// tool's `parameters` verbatim, so a fixture of bare ids would prove
 /// nothing about the thing under test.
-fn tools(ids: &[&str]) -> Vec<sovereign_core::types::ToolDescriptor> {
+fn tools(ids: &[&str]) -> Vec<sovereign_contracts::types::ToolDescriptor> {
     ids.iter()
         .map(|id| {
             tool_with(
@@ -692,8 +692,11 @@ fn tools(ids: &[&str]) -> Vec<sovereign_core::types::ToolDescriptor> {
         .collect()
 }
 
-fn tool_with(id: &str, parameters: serde_json::Value) -> sovereign_core::types::ToolDescriptor {
-    use sovereign_core::types::*;
+fn tool_with(
+    id: &str,
+    parameters: serde_json::Value,
+) -> sovereign_contracts::types::ToolDescriptor {
+    use sovereign_contracts::types::*;
     ToolDescriptor {
         id: id.to_string(),
         name: id.to_string(),
@@ -708,7 +711,7 @@ fn tool_with(id: &str, parameters: serde_json::Value) -> sovereign_core::types::
     }
 }
 
-fn plan_schema(t: &[sovereign_core::types::ToolDescriptor]) -> serde_json::Value {
+fn plan_schema(t: &[sovereign_contracts::types::ToolDescriptor]) -> serde_json::Value {
     sovereign_core::planner::plan_schema(t).expect("plan_schema must build")
 }
 

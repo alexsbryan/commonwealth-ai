@@ -558,7 +558,7 @@ async fn mesh_status(
 //
 // Symmetric with the rest of this module: localhost-only, and shaped like the
 // CLI subcommand that drives it. Both are deliberately thin. The policy lives in
-// `sovereign_core::mesh_measurements` (what may travel, under what key, in what
+// `sovereign_mesh::mesh_measurements` (what may travel, under what key, in what
 // envelope) so that the CLI and the daemon cannot disagree about it.
 
 /// Result of `POST /v1/mesh/measurements`.
@@ -590,7 +590,7 @@ pub struct MemberMeasurementDto {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub origin_name: Option<String>,
     /// What they measured.
-    pub record: sovereign_core::mesh_measurements::MeasurementRecord,
+    pub record: sovereign_mesh::mesh_measurements::MeasurementRecord,
 }
 
 /// Query for `GET /v1/mesh/measurements`.
@@ -658,7 +658,7 @@ pub struct MemberMeasurementsResponse {
 async fn publish_measurement(
     _: LocalOnly,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
-    Json(record): Json<sovereign_core::mesh_measurements::MeasurementRecord>,
+    Json(record): Json<sovereign_mesh::mesh_measurements::MeasurementRecord>,
 ) -> impl IntoResponse {
     let refuse = |why: String| {
         (
@@ -681,7 +681,7 @@ async fn publish_measurement(
     let Some(rail) = app_state.ring_rail() else {
         return refuse("this daemon keeps no ring journal".into());
     };
-    let journal = match rail.journal(sovereign_core::mesh_measurements::MEASUREMENTS_APP_ID) {
+    let journal = match rail.journal(sovereign_mesh::mesh_measurements::MEASUREMENTS_APP_ID) {
         Ok(j) => j,
         Err(e) => return refuse(format!("the ring journal could not be opened: {e}")),
     };
@@ -768,7 +768,7 @@ async fn peer_measurements(
     let Some(rail) = app_state.ring_rail() else {
         return empty();
     };
-    let journal = match rail.journal(sovereign_core::mesh_measurements::MEASUREMENTS_APP_ID) {
+    let journal = match rail.journal(sovereign_mesh::mesh_measurements::MEASUREMENTS_APP_ID) {
         Ok(j) => j,
         Err(e) => {
             tracing::warn!(error = %e, "mesh-measurements: ring journal unavailable");

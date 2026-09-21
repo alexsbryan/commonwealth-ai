@@ -50,7 +50,7 @@ use serde::{Deserialize, Serialize};
 use super::config::EnrichConfig;
 use super::inference_client::{probe_daemon, DaemonInferenceClient};
 use sovereign_cli_shared::help::{self, Help, HelpSection};
-use sovereign_tools::code::drift_posture::write_fingerprint;
+use sovereign_code::drift_posture::write_fingerprint;
 
 /// Top functions by cosine per claim (prototype `K = 8`).
 const K: usize = 8;

@@ -41,16 +41,13 @@
 //! |---|------|------|--------|
 //! | 1 | `entity_boost` | entities found | comparison-aware extractor + higher per-entity K when `is_comparison` (KQ-only intent); plain question-entity extraction otherwise |
 //! | 2 | `meta_atlas_boost` | registry present | `meta_atlas_boost` |
-//! | 3 | `query_decomp` | `SOVEREIGN_QUERY_DECOMP=1` | `decompose_question` → `fan_out_decomposed_queries` |
-//! | 4 | `title_expand` | `SOVEREIGN_TITLE_EXPAND=1` | `expand_question_to_titles` → fan-out; titles kept for reserve |
-//! | 5 | `noise_floor` | — | `drop_no_overlap_chunks` |
-//! | 6 | `searched_corpora_snapshot` | — | records the corpora SEARCH reached, for the bleed audit; must precede every injector |
-//! | 8 | `atlas_grounding` | `SOVEREIGN_ATLAS_GROUNDING` (default on) | `apply_atlas_grounding` + per-corpus trace |
-//! | 9 | `reweight_and_sort` | — | `reweight_by_query_relevance` + `cross_corpus_sort_cmp` |
-//! | 10 | `atom_enum` | `SOVEREIGN_ATOM_ENUM=1` | `enumerate_typed_atom_chunks`. AFTER the reweight on purpose (2026-08-05, audit D1): this is the first stage whose ranking separates on-topic (~0.70) from off-topic (~0.035), and the injector scopes itself from it. Ahead of it, scope came from RRF-fused noise where everything scored ~0.03 |
-//! | 11 | `graph_neighbor_expand` | `SOVEREIGN_GRAPH_NEIGHBOR_EXPAND=1` | `expand_via_wikipedia_graph` (+ re-reweight/sort) |
-//! | 12 | `dedupe_merged` | — | retain on first `(corpus_id, content)` |
-//! | 13 | `cap_and_reserve` | — | `cap_chunks_per_article` + comparison (KQ-only) / title / atom-enum / raptor reserves |
+//! | 3 | `noise_floor` | — | `drop_no_overlap_chunks` |
+//! | 4 | `searched_corpora_snapshot` | — | records the corpora SEARCH reached, for the bleed audit; must precede every injector |
+//! | 5 | `atlas_grounding` | `SOVEREIGN_ATLAS_GROUNDING` (default on) | `apply_atlas_grounding` + per-corpus trace |
+//! | 6 | `reweight_and_sort` | — | `reweight_by_query_relevance` + `cross_corpus_sort_cmp` |
+//! | 7 | `atom_enum` | `SOVEREIGN_ATOM_ENUM=1` | `enumerate_typed_atom_chunks`. AFTER the reweight on purpose (2026-08-05, audit D1): this is the first stage whose ranking separates on-topic (~0.70) from off-topic (~0.035), and the injector scopes itself from it. Ahead of it, scope came from RRF-fused noise where everything scored ~0.03 |
+//! | 8 | `dedupe_merged` | — | retain on first `(corpus_id, content)` |
+//! | 9 | `cap_and_reserve` | — | `cap_chunks_per_article` + comparison (KQ-only) / title / atom-enum / raptor reserves |
 //!
 //! On attached-document turns the deep pipeline drops the two grounding
 //! steps from the core (no query embedding exists) along with its head.
@@ -167,41 +164,10 @@ const FLAG_ATLAS_GROUNDING: EnvFlag = EnvFlag {
     default: "on",
     purpose: "Atlas graph-walk grounding (cosine seeds → BFS over typed edges → FTS-fetch evidence chunks). =0/false/off/no disables.",
 };
-const FLAG_QUERY_DECOMP: EnvFlag = EnvFlag {
-    name: "SOVEREIGN_QUERY_DECOMP",
-    default: "off",
-    purpose:
-        "Pure-Rust question decomposition; each sub-query gets its own focused retrieval pass.",
-};
-const FLAG_DEMAND_PLAN: EnvFlag = EnvFlag {
-    name: "SOVEREIGN_DEMAND_PLAN",
-    default: "off",
-    purpose: "One Housekeep fast-slot structured-output call plans the turn's demands (sub_queries, entities, optional stance contrast + section terms). Entities merge into entity_boost; the plan feeds the epistemic demand set (EPISTEMIC_STATE.md P1b / RETRIEVAL_REDESIGN S2) — the cheap ledger effect. The sub_query fan-out is a SEPARATE knob (SOVEREIGN_DEMAND_PLAN_FANOUT), default off, after the 2026-07-19 A/B found it net-neutral-to-negative and 2-3x slower (it displaced load-bearing chunks under the merge limit).",
-};
-const FLAG_DEMAND_PLAN_FANOUT: EnvFlag = EnvFlag {
-    name: "SOVEREIGN_DEMAND_PLAN_FANOUT",
-    default: "off",
-    purpose: "When the demand planner is on, ALSO fan the plan's sub_queries out into corpus search. Default off: the 2026-07-19 A/B showed the fan-out costs 2-3x retrieval latency for flat recall (displacement). Pair with SOVEREIGN_DECOMP_DECAY<1 so fanned hits augment rather than displace. Kept as an independently-tunable lever.",
-};
-const FLAG_TITLE_EXPAND: EnvFlag = EnvFlag {
-    name: "SOVEREIGN_TITLE_EXPAND",
-    default: "off",
-    purpose: "Fast-slot LLM names explicit article titles for abstract questions; titles are fan-out-searched and reserved through the merge.",
-};
 const FLAG_ATOM_ENUM: EnvFlag = EnvFlag {
     name: "SOVEREIGN_ATOM_ENUM",
     default: "off",
     purpose: "Enumeration-class questions get the corpus's top-degree typed atoms injected as virtual chunks (post-floor).",
-};
-const FLAG_GRAPH_NEIGHBOR_EXPAND: EnvFlag = EnvFlag {
-    name: "SOVEREIGN_GRAPH_NEIGHBOR_EXPAND",
-    default: "off",
-    purpose: "Axis-aware structural-graph one-hop expansion (per-entity axis neighbors + co-citation bridges).",
-};
-const FLAG_META_BRIDGE: EnvFlag = EnvFlag {
-    name: "SOVEREIGN_META_BRIDGE",
-    default: "off",
-    purpose: "Cross-corpus bridge boost: question entities matching a bridge topic pull the LINKED corpus's framing via typed edges (the 'stereo' view). Built by `sovereign meta-atlas align`.",
 };
 const FLAG_PPR_EXPAND: EnvFlag = EnvFlag {
     name: "SOVEREIGN_PPR_EXPAND",
@@ -218,11 +184,6 @@ const FLAG_PPR_EXPAND: EnvFlag = EnvFlag {
 pub fn retrieval_pipeline_flags() -> Vec<(&'static str, EnvFlag)> {
     vec![
         ("atlas_grounding", FLAG_ATLAS_GROUNDING),
-        ("demand_plan", FLAG_DEMAND_PLAN),
-        ("demand_plan", FLAG_DEMAND_PLAN_FANOUT),
-        ("query_decomp", FLAG_QUERY_DECOMP),
-        ("query_decomp", EnvFlag { name: "SOVEREIGN_DECOMP_DECAY", default: "1.0", purpose: "Score decay applied to fanned-out sub-query hits (<1 = augment, never displace)." }),
-        ("title_expand", FLAG_TITLE_EXPAND),
         ("atom_enum", FLAG_ATOM_ENUM),
         ("atom_enum", EnvFlag { name: "SOVEREIGN_ATOM_ENUM_TOPK", default: "see helper", purpose: "How many enumerated atoms become virtual chunks." }),
         ("atom_enum", EnvFlag { name: "SOVEREIGN_ATOM_ENUM_POOL", default: "see helper", purpose: "Candidate-pool cap before ranking." }),
@@ -231,18 +192,13 @@ pub fn retrieval_pipeline_flags() -> Vec<(&'static str, EnvFlag)> {
         ("atom_enum", EnvFlag { name: "SOVEREIGN_ATOM_ENUM_NOFILTER", default: "off", purpose: "Disable the enumeration-question classifier filter." }),
         ("atom_enum", EnvFlag { name: "SOVEREIGN_ATOM_ENUM_RELATIONS", default: "off", purpose: "Include relation atoms in the enumeration." }),
         ("atom_enum", EnvFlag { name: "SOVEREIGN_ATOM_ENUM_OVERVIEW", default: "on", purpose: "Overview/summary questions (\"most important thing in X\", \"summarize X\") inject the scoped corpus's atlas Claim atoms as virtual chunks (the corpus's key points) so the answer grounds on them instead of abstaining over an anchorless pool. Default ON (set =0 to disable). Independent of SOVEREIGN_ATOM_ENUM; detected by question shape (no LLM call)." }),
-        ("graph_neighbor_expand", FLAG_GRAPH_NEIGHBOR_EXPAND),
         ("ppr_struct_spawn", FLAG_PPR_EXPAND),
         ("ppr_struct_expand", FLAG_PPR_EXPAND),
         ("cap_and_reserve", EnvFlag { name: "SOVEREIGN_MERGE_SELECT", default: "on", purpose: "Demand-aware merge composition: entity fetch-obligations + ONE facility-style selector (pins + per-named-entity demand slots + greedy diminishing-returns-per-article with within-article strength floor) replacing the cap/reserve/truncate heuristic pile. =0/false/off/no restores the legacy stack." }),
-        ("bridge_boost", FLAG_META_BRIDGE),
-        ("-", EnvFlag { name: "SOVEREIGN_CONV_PPR_WEIGHT", default: "off (0.0)", purpose: "Post-pipeline: PPR rerank weight for conversation-corpus chunks. DEPRECATED — default flipped 0.25 -> 0.0 on 2026-08-04; a 180-question paired bank could not separate it from off (p=0.0567 alone, p=0.0527 under the strongest config). Code kept; set a non-zero weight to re-enable." }),
         ("-", EnvFlag { name: "SOVEREIGN_EXPANSION_SCOPE", default: "on", purpose: "Scope every expansion fan-out (entity boost, decomp, title, demand-plan, graph-neighbor, and the spawned PPR + entity-obligations lanes) to the corpora the MAIN fan-out ranked highest, via PipelineState::expansion_corpora(). Not a step gate — it narrows what the expansion steps search. Also collapses the corpus prefilter from one pass per fan-out to one per turn, since a scoped fan-out skips it. Default ON since 2026-08-13 (verdict 94f01eb2) on measured numbers: retrieval slope 2.183 -> 0.849 s per 100 corpora (2.57x), SEP anchor byte-identical, banks within noise (§8.4). =0/false/off/no disables." }),
         ("-", EnvFlag { name: "SOVEREIGN_EXPANSION_SCOPE_CORPORA", default: "8", purpose: "How many CORPORA an expansion fan-out may search when SOVEREIGN_EXPANSION_SCOPE is on — the scale-vs-recall dial. The unit is corpora, not chunks: a chunk budget let one corpus monopolise the scope (14 of 20 wikipedia questions scoped to `sf-assessor-roll` alone) and cost that bank 3 sources / 4 facts." }),
-        ("-", EnvFlag { name: "SOVEREIGN_CORPUS_PREFILTER_TOPK", default: "off (unset); 12 when set", purpose: "Prune an UNSCOPED turn to the top-K query-relevant corpora before the fan-out (nearest-chunk cosine). Measured at 1000 corpora it is a 35% REGRESSION when it runs per-fan-out; pair with SOVEREIGN_EXPANSION_SCOPE, which cuts it to one pass per turn." }),
         ("-", EnvFlag { name: "SOVEREIGN_HISTORY_RETRIEVAL", default: "on", purpose: "History layer: retrieval over prior conversation turns (=0 disables)." }),
         ("-", EnvFlag { name: "SOVEREIGN_COMPACTION_DISABLE", default: "off", purpose: "History layer: =1 disables dropped-history compaction." }),
-        ("-", EnvFlag { name: "SOVEREIGN_FORENSIC", default: "off", purpose: "=1 enables audit_pipeline_stage composition snapshots between steps." }),
         ("-", EnvFlag { name: "SOVEREIGN_EPISTEMIC_STATE", default: "on", purpose: "Post-pipeline: assemble the per-turn epistemic ledger (EPISTEMIC_STATE.md) into message metadata. Pure collation, no model calls; =0 disables." }),
         ("-", EnvFlag { name: "SOVEREIGN_COVERAGE_PROBE", default: "on", purpose: "Post-pipeline, gap/abstain turns only: cross-corpus nearest-chunk-cosine probe classifying a gap as TopicUncovered vs ClaimUncovered. =0 disables." }),
         ("-", EnvFlag { name: "SOVEREIGN_COVERAGE_NEAR_SIM", default: "0.49", purpose: "Similarity floor for the coverage probe's TopicUncovered/ClaimUncovered split (calibrated 2026-09-09 on the secret_agent bank; the boundary is the top of the observed off-topic band across both calibration runs)." }),
@@ -352,12 +308,6 @@ pub struct PipelineState<'ctx> {
     pub hot_corpora: HashMap<String, usize>,
     pub entities: Vec<String>,
     pub is_comparison: bool,
-    /// The demand planner's output (I4-A, `SOVEREIGN_DEMAND_PLAN`). `None`
-    /// when the planner is off or the turn skipped it (simple/factual).
-    /// The `title_expand_titles` precedent: a step product retained on the
-    /// state for downstream consumers (entity_boost merge + the epistemic
-    /// demand set).
-    pub demand_plan: Option<DemandPlan>,
     /// Corpora that actual retrieval reached, snapshotted after the noise
     /// floor and BEFORE the first injector. The baseline for the scope audit
     /// (`step_scope_audit`): any corpus in the final pool that is not here was
@@ -398,7 +348,6 @@ pub struct PipelineState<'ctx> {
     /// `nodes` means it ran and reached nothing, which is a different fact and
     /// must not be collapsed into the first (principle 6).
     pub atlas_walk: Option<AtlasWalkEcho>,
-    pub title_expand_titles: Option<Vec<String>>,
     pub meta_atlas_hits: Vec<MetaAtlasHitRecord>,
     /// In-flight PPR structural-expansion lane (spawned right after
     /// `entity_boost`, joined at `ppr_struct_expand`) — the lane is
@@ -468,12 +417,10 @@ impl<'ctx> PipelineState<'ctx> {
             hot_corpora: HashMap::new(),
             entities: Vec::new(),
             is_comparison: matches!(intent, Intent::ComparisonQuery),
-            demand_plan: None,
             searched_corpora: Vec::new(),
             unavailable_corpora: Vec::new(),
             atlas_summaries: Vec::new(),
             atlas_walk: None,
-            title_expand_titles: None,
             meta_atlas_hits: Vec::new(),
             ppr_pending: None,
             obligations_pending: None,
@@ -970,16 +917,6 @@ fn drop_dead_law_chunks(
 
 fn shared_core_steps() -> Vec<RetrievalStep> {
     vec![
-        // I4-A: the demand planner runs FIRST in the core so its
-        // sub-queries fan out into the pool and its entities are on the
-        // state before `entity_boost` merges them. Dark until
-        // `SOVEREIGN_DEMAND_PLAN=1`; skips simple/factual turns.
-        step(
-            "demand_plan",
-            StepKind::Injector,
-            Some(FLAG_DEMAND_PLAN),
-            step_demand_plan,
-        ),
         // Spawned FIRST in the core (the lane extracts its own
         // entities from the message and seeds from head-pool titles —
         // it does not need `entity_boost`'s products) and joined at
@@ -999,24 +936,6 @@ fn shared_core_steps() -> Vec<RetrievalStep> {
             StepKind::Injector,
             None,
             step_meta_atlas_boost,
-        ),
-        step(
-            "bridge_boost",
-            StepKind::Injector,
-            Some(FLAG_META_BRIDGE),
-            step_bridge_boost,
-        ),
-        step(
-            "query_decomp",
-            StepKind::Injector,
-            Some(FLAG_QUERY_DECOMP),
-            step_query_decomp,
-        ),
-        step(
-            "title_expand",
-            StepKind::Injector,
-            Some(FLAG_TITLE_EXPAND),
-            step_title_expand,
         ),
         step(
             "noise_floor",
@@ -1053,12 +972,6 @@ fn shared_core_steps() -> Vec<RetrievalStep> {
             StepKind::Injector,
             Some(FLAG_ATOM_ENUM),
             step_atom_enum,
-        ),
-        step(
-            "graph_neighbor_expand",
-            StepKind::Injector,
-            Some(FLAG_GRAPH_NEIGHBOR_EXPAND),
-            step_graph_neighbor_expand,
         ),
         step(
             "ppr_struct_expand",
@@ -1164,9 +1077,6 @@ pub fn deep_pipeline(include_corpus_search: bool) -> RetrievalPipeline {
                 // weight on attached-doc turns.
                 && s.name != "ppr_struct_spawn"
                 && s.name != "ppr_struct_expand"
-                // I4-A: the demand planner fans sub-queries into corpus
-                // indexes — inert on attached-doc turns (no corpus pool).
-                && s.name != "demand_plan"
         });
     }
     steps.extend(core);
@@ -1191,30 +1101,6 @@ pub fn deep_pipeline(include_corpus_search: bool) -> RetrievalPipeline {
 }
 
 // ─── Shared steps (identical on both paths, modulo the label) ────
-
-fn step_bridge_boost<'a, 'ctx>(rt: &'a Runtime, st: &'a mut PipelineState<'ctx>) -> StepFuture<'a> {
-    Box::pin(async move {
-        // Cross-corpus stereo view (Phase 6, gated SOVEREIGN_META_BRIDGE,
-        // default off). For each question entity matching a bridge topic,
-        // pull the linked corpus's framing through the typed edge. No-op
-        // when the gate is off or the bridge index is empty.
-        let added = rt
-            .bridge_boost(
-                &mut st.chunks,
-                &st.entities,
-                st.message,
-                &st.embedding,
-                st.enabled_corpora,
-                st.corpus_ceiling,
-                &st.lane,
-            )
-            .await;
-        StepOutcome {
-            note: (added > 0).then(|| format!("bridge: +{added} cross-corpus chunks")),
-            ..Default::default()
-        }
-    })
-}
 
 fn step_meta_atlas_boost<'a, 'ctx>(
     rt: &'a Runtime,
@@ -1244,147 +1130,6 @@ fn step_meta_atlas_boost<'a, 'ctx>(
                 st.label
             );
         }
-        StepOutcome::default()
-    })
-}
-
-/// `SOVEREIGN_DEMAND_PLAN=1` opts into the LLM demand planner (I4-A).
-/// Default OFF — dark until the A/B swing promotes it (RETRIEVAL_REDESIGN
-/// §7 measurement discipline).
-pub(crate) fn demand_plan_enabled() -> bool {
-    std::env::var("SOVEREIGN_DEMAND_PLAN").ok().as_deref() == Some("1")
-}
-
-/// `SOVEREIGN_DEMAND_PLAN_FANOUT=1` additionally fans the plan's
-/// sub-queries out into corpus search. Default OFF (round 2, 2026-07-19):
-/// the A/B found the fan-out net-neutral-to-negative and 2-3x slower, so
-/// the planner's default effect is ledger-only (plan → epistemic demand
-/// set + entity merge), with the expensive fan-out an opt-in lever.
-pub(crate) fn demand_plan_fanout_enabled() -> bool {
-    std::env::var("SOVEREIGN_DEMAND_PLAN_FANOUT")
-        .ok()
-        .as_deref()
-        == Some("1")
-}
-
-fn step_demand_plan<'a, 'ctx>(rt: &'a Runtime, st: &'a mut PipelineState<'ctx>) -> StepFuture<'a> {
-    Box::pin(async move {
-        // Dark-first: no work unless explicitly enabled. Simple/factual
-        // turns skip the ~0.3–0.8s planner call — the router already sends
-        // them elsewhere, but the deep pipeline also carries SimpleQuery,
-        // so gate it here too (synthesis-shaped turns only).
-        if !demand_plan_enabled() || matches!(st.intent, Intent::SimpleQuery) {
-            return StepOutcome::default();
-        }
-        let Some(plan) = rt
-            .formulate_demand_plan(st.message, &st.chunks, st.context)
-            .await
-        else {
-            return StepOutcome::default();
-        };
-        // Sub-query fan-out is the expensive, opt-in effect (round 2). By
-        // default the planner is ledger-only: the plan feeds the epistemic
-        // demand set + the entity merge (entity_boost), at just the planner
-        // call's cost — no per-sub-query corpus searches. The fan-out (5×
-        // full corpus search) only runs under SOVEREIGN_DEMAND_PLAN_FANOUT.
-        let fanout = demand_plan_fanout_enabled();
-        let scope: Option<Vec<String>> = st.expansion_corpora().map(<[String]>::to_vec);
-        let added = if fanout && !plan.sub_queries.is_empty() {
-            rt.fan_out_decomposed_queries(
-                &plan.sub_queries,
-                &mut st.chunks,
-                "DemandPlan",
-                scope.as_deref(),
-                st.corpus_ceiling,
-                &st.lane,
-            )
-            .await
-        } else {
-            0
-        };
-        tracing::info!(
-            sub_queries = plan.sub_queries.len(),
-            entities = plan.entities.len(),
-            has_stance = plan.stance_contrast.is_some(),
-            section_terms = plan.section_terms.len(),
-            fanout,
-            chunks_added = added,
-            "{}: demand-plan ({})",
-            st.label,
-            if fanout { "fan-out" } else { "ledger-only" }
-        );
-        // Retained for entity_boost's merge + the epistemic demand set.
-        st.demand_plan = Some(plan);
-        StepOutcome {
-            note: Some(if fanout {
-                format!("demand plan (fan-out) → +{added} chunks")
-            } else {
-                "demand plan (ledger-only)".to_string()
-            }),
-            ..Default::default()
-        }
-    })
-}
-
-fn step_query_decomp<'a, 'ctx>(rt: &'a Runtime, st: &'a mut PipelineState<'ctx>) -> StepFuture<'a> {
-    Box::pin(async move {
-        // Optional question decomposition (gated by env flag). Catches
-        // concept axes that proper-noun extraction misses and gives
-        // each side of a comparison its own focused pass.
-        if let Some(sub_queries) = rt.decompose_question(st.message, st.intent) {
-            let scope: Option<Vec<String>> = st.expansion_corpora().map(<[String]>::to_vec);
-            let added = rt
-                .fan_out_decomposed_queries(
-                    &sub_queries,
-                    &mut st.chunks,
-                    "QueryDecomp",
-                    scope.as_deref(),
-                    st.corpus_ceiling,
-                    &st.lane,
-                )
-                .await;
-            tracing::info!(
-                sub_queries = sub_queries.len(),
-                chunks_added = added,
-                "{}: query-decomp retrieval",
-                st.label
-            );
-        }
-        StepOutcome::default()
-    })
-}
-
-fn step_title_expand<'a, 'ctx>(rt: &'a Runtime, st: &'a mut PipelineState<'ctx>) -> StepFuture<'a> {
-    Box::pin(async move {
-        // Optional title expansion (gated by SOVEREIGN_TITLE_EXPAND=1).
-        // Targets the abstract-question failure mode entity boost +
-        // comparison decomp don't reach: questions with zero
-        // extractable entities whose answer lives in an article keyed
-        // by a concrete noun the question never says. Titles are kept
-        // on the state so `cap_and_reserve` can pin their chunks
-        // through the merge truncate.
-        let titles = rt.expand_question_to_titles(st.message, st.context).await;
-        if let Some(t) = &titles {
-            let scope: Option<Vec<String>> = st.expansion_corpora().map(<[String]>::to_vec);
-            let added = rt
-                .fan_out_decomposed_queries(
-                    t,
-                    &mut st.chunks,
-                    "TitleExpand",
-                    scope.as_deref(),
-                    st.corpus_ceiling,
-                    &st.lane,
-                )
-                .await;
-            tracing::info!(
-                titles = ?t,
-                chunks_added = added,
-                "{}: title-expand retrieval",
-                st.label
-            );
-        }
-        st.title_expand_titles = titles;
-        audit_pipeline_stage(&st.chunks, "after_title_expand", st.message);
         StepOutcome::default()
     })
 }
@@ -1660,43 +1405,6 @@ fn step_reweight_and_sort<'a, 'ctx>(
     })
 }
 
-fn step_graph_neighbor_expand<'a, 'ctx>(
-    rt: &'a Runtime,
-    st: &'a mut PipelineState<'ctx>,
-) -> StepFuture<'a> {
-    Box::pin(async move {
-        // Optional structural-graph expansion (env-gated inside the
-        // helper). Axis-aware: co-citation between two named entities
-        // is exactly the bridge-concept signal a comparative answer
-        // needs.
-        let scope: Option<Vec<String>> = st.expansion_corpora().map(<[String]>::to_vec);
-        if let Some(neighbors) = rt
-            .expand_via_wikipedia_graph(
-                &st.chunks,
-                st.message,
-                scope.as_deref(),
-                st.corpus_ceiling,
-                &st.lane,
-            )
-            .await
-        {
-            if !neighbors.is_empty() {
-                let added = neighbors.len();
-                st.chunks.extend(neighbors);
-                reweight_by_query_relevance(&mut st.chunks, st.message);
-                st.chunks.sort_by(cross_corpus_sort_cmp);
-                tracing::info!(
-                    added,
-                    total = st.chunks.len(),
-                    label = st.label,
-                    "retrieval: graph neighbor expansion"
-                );
-            }
-        }
-        StepOutcome::default()
-    })
-}
-
 fn step_ppr_spawn<'a, 'ctx>(rt: &'a Runtime, st: &'a mut PipelineState<'ctx>) -> StepFuture<'a> {
     Box::pin(async move {
         // Spawn the pool-independent lanes (each env-gated inside its
@@ -1918,18 +1626,6 @@ fn step_entity_boost<'a, 'ctx>(rt: &'a Runtime, st: &'a mut PipelineState<'ctx>)
         } else {
             extract_question_entities(st.message)
         };
-        // I4-A: merge the demand planner's entities (LLM producer) with the
-        // deterministic extractor's (one demand model, two producers). The
-        // combined set feeds both these per-entity searches and the later
-        // merge selector's demand slots.
-        if let Some(plan) = &st.demand_plan {
-            for e in &plan.entities {
-                let e = e.trim();
-                if !e.is_empty() && !st.entities.iter().any(|x| x.eq_ignore_ascii_case(e)) {
-                    st.entities.push(e.to_string());
-                }
-            }
-        }
         let entity_query_limit = if st.is_comparison {
             COMPARISON_ENTITY_QUERY_LIMIT
         } else {
@@ -2008,18 +1704,6 @@ fn step_cap_and_reserve<'a, 'ctx>(
                 &st.entities,
                 COMPARISON_PER_ENTITY_RESERVE,
             );
-        }
-        // Title-expand reservation: the upstream step made an
-        // intentional source selection the cross-corpus sort must not
-        // silently demote (v21b audit: T0/T3/T8).
-        if let Some(titles) = &st.title_expand_titles {
-            if !titles.is_empty() {
-                st.chunks = reserve_chunks_per_entity(
-                    take(&mut st.chunks),
-                    titles,
-                    COMPARISON_PER_ENTITY_RESERVE,
-                );
-            }
         }
         // Atlas-directed reservation: atom-enum chunks carry no query
         // embedding, sort below every cosine-scored base chunk, and a
@@ -2743,44 +2427,6 @@ mod tests {
         );
     }
 
-    /// I4-A dark-first: the demand planner must be OFF unless explicitly
-    /// enabled — every existing surface + bench changes behaviour only by
-    /// opt-in (RETRIEVAL_REDESIGN §7).
-    #[test]
-    fn demand_plan_default_off() {
-        std::env::remove_var("SOVEREIGN_DEMAND_PLAN");
-        assert!(!super::demand_plan_enabled());
-    }
-
-    /// Round 2: the expensive sub-query fan-out is a SEPARATE opt-in from
-    /// the planner itself — default OFF so the planner's default effect is
-    /// the cheap ledger path (no per-sub-query corpus searches).
-    #[test]
-    fn demand_plan_fanout_default_off() {
-        std::env::remove_var("SOVEREIGN_DEMAND_PLAN_FANOUT");
-        assert!(!super::demand_plan_fanout_enabled());
-    }
-
-    /// Every flag this table declares must ALSO be declared in the
-    /// workspace env-knob registry (`quality/env-flags.toml`) — the
-    /// env-gate's map and this runtime-facing table must not drift.
-    #[test]
-    fn flags_table_is_declared_in_env_registry() {
-        let toml_text = std::fs::read_to_string(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/../../../quality/env-flags.toml"
-        ))
-        .expect("quality/env-flags.toml readable from sovereign-core");
-        for (_, f) in retrieval_pipeline_flags() {
-            assert!(
-                toml_text.contains(&format!("name = \"{}\"", f.name)),
-                "`{}` is in retrieval_pipeline_flags() but not declared in \
-                 quality/env-flags.toml — add a [[flag]] entry",
-                f.name
-            );
-        }
-    }
-
     // ── expansion scope (mesh-scale Tier 1, order mesh-scale-t1-retrieval) ──
 
     fn ids(v: &[&str]) -> Vec<String> {
@@ -2980,14 +2626,10 @@ mod tests {
         // Every step that fans out to corpora through
         // `PipelineState::expansion_corpora()`.
         let expansions = [
-            "demand_plan",
             // Spawns the PPR + entity-obligations lanes, which are expansion
             // fan-outs too and read the scope at spawn time.
             "ppr_struct_spawn",
             "entity_boost",
-            "query_decomp",
-            "title_expand",
-            "graph_neighbor_expand",
         ];
         for (name, steps) in [
             ("kq", kq_pipeline().step_names()),
@@ -3019,13 +2661,9 @@ mod tests {
                 "main_retrieval_mesh",
                 "scope_personal_filter",
                 "store_search",
-                "demand_plan",
                 "ppr_struct_spawn",
                 "entity_boost",
                 "meta_atlas_boost",
-                "bridge_boost",
-                "query_decomp",
-                "title_expand",
                 "noise_floor",
                 "searched_corpora_snapshot",
                 "atlas_grounding",
@@ -3034,7 +2672,6 @@ mod tests {
                 // first stage whose ranking can tell on-topic from off-topic.
                 // Audit D1; moving it back re-opens that defect.
                 "atom_enum",
-                "graph_neighbor_expand",
                 "ppr_struct_expand",
                 "dedupe_merged",
                 "cap_and_reserve",
@@ -3056,13 +2693,9 @@ mod tests {
                 "main_retrieval_mesh",
                 "scope_personal_filter",
                 "store_search",
-                "demand_plan",
                 "ppr_struct_spawn",
                 "entity_boost",
                 "meta_atlas_boost",
-                "bridge_boost",
-                "query_decomp",
-                "title_expand",
                 "noise_floor",
                 "searched_corpora_snapshot",
                 "atlas_grounding",
@@ -3071,7 +2704,6 @@ mod tests {
                 // first stage whose ranking can tell on-topic from off-topic.
                 // Audit D1; moving it back re-opens that defect.
                 "atom_enum",
-                "graph_neighbor_expand",
                 "ppr_struct_expand",
                 "dedupe_merged",
                 "cap_and_reserve",
@@ -3090,10 +2722,9 @@ mod tests {
     fn kq_and_deep_share_head_and_core() {
         let kq = kq_pipeline().step_names();
         let deep = deep_pipeline(true).step_names();
-        // Shared 3-step head + shared 17-step core (`demand_plan` is the
-        // first core step, I4-A); the pipelines differ ONLY in their tails
-        // (KQ: audited truncate; deep: plain truncate + strategy-driven
-        // top-sources expansion).
+        // Shared head + shared core; the pipelines differ ONLY in their
+        // tails (KQ: audited truncate; deep: plain truncate +
+        // strategy-driven top-sources expansion).
         //
         // The core gained `searched_corpora_snapshot` on 2026-08-05 when
         // `atom_enum` moved after `reweight_and_sort` (audit D1): the
@@ -3113,12 +2744,12 @@ mod tests {
         // implementation outside corpus-engine — and whole-work summaries
         // reach the pool through `atlas_grounding`'s walk now, appended at the
         // late position by the handlers rather than injected at rung 13.
-        assert_eq!(&kq[..20], &deep[..20]);
-        assert_eq!(kq.len(), 22);
-        assert_eq!(deep.len(), 23);
-        assert_eq!(&kq[20..], &["truncate_merged", "scope_audit"]);
+        assert_eq!(&kq[..15], &deep[..15]);
+        assert_eq!(kq.len(), 17);
+        assert_eq!(deep.len(), 18);
+        assert_eq!(&kq[15..], &["truncate_merged", "scope_audit"]);
         assert_eq!(
-            &deep[20..],
+            &deep[15..],
             &["truncate_merged", "top_sources_expand", "scope_audit"]
         );
         // BOTH tails must END with the audit: it audits the final pool, so a
@@ -3141,11 +2772,8 @@ mod tests {
         assert!(!names.contains(&"atlas_grounding"));
         assert!(!names.contains(&"ppr_struct_spawn"));
         assert!(!names.contains(&"ppr_struct_expand"));
-        // I4-A: the demand planner is inert without a corpus pool.
-        assert!(!names.contains(&"demand_plan"));
-        // Head (3) + demand_plan + the 3 corpus-only core steps = 7 fewer.
-        // Was 8 until ei-5c retired `raptor_grounding_early`, the fourth.
-        assert_eq!(names.len(), deep_pipeline(true).step_names().len() - 7);
+        // Head (3) + the 3 corpus-only core steps = 6 fewer.
+        assert_eq!(names.len(), deep_pipeline(true).step_names().len() - 6);
     }
 
     /// The personal-scope retain predicate: metadata stamp first,

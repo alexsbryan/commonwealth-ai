@@ -249,14 +249,14 @@ impl MeshRoster {
 pub const REGISTERED_NAMESPACES: &[&str] = &[
     // The daemon's own measurements, on the rail since cw-lift 2d. Not
     // KV-shaped — see `crate::rail_kv_pump::projector_for`.
-    sovereign_core::mesh_measurements::MEASUREMENTS_APP_ID,
+    crate::mesh_measurements::MEASUREMENTS_APP_ID,
     // The five KV namespaces gossip Step 4 replicated, plus the tracked-article
     // watcher's. Each is a `MeshStore` app_id with a real cross-peer consumer.
     commonwealth_state::store_adapter::INFERENCE_APP_ID,
     commonwealth_state::CONTRIBUTIONS_APP_ID,
     commonwealth_state::PROCESSED_SHARDS_APP_ID,
-    corpus_engine_notes::NOTES_APP_ID,
-    sovereign_work_atlas::model::APP_ID_PUBLIC,
+    sovereign_contracts::peer::NOTES_APP_ID,
+    sovereign_contracts::peer::WORK_ATLAS_APP_ID_PUBLIC,
     corpus_engine::update::newsworthy_watcher::APP_ID_TRACKED,
 ];
 

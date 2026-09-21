@@ -36,7 +36,6 @@ pub mod url_constraint;
 pub mod vocab_cache;
 
 pub use gguf_validator::{validate_gguf, GgufExpectation, GgufValidationError};
-pub use sovereign_core;
 
 /// Terminate the process with `code`, skipping C/C++ static destructors on
 /// macOS. ggml-metal registers a device sweeper as a `__cxa_finalize_ranges`

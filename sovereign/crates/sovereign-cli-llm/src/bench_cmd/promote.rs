@@ -330,7 +330,10 @@ async fn run(args_in: &[String]) -> i32 {
                     return 1;
                 }
             };
-            let n = budget.burn(reason, git_commit_hash());
+            let n = budget.burn(
+                reason,
+                sovereign_cli_shared::repo::head_short_in(&args.bench_root),
+            );
             if let Err(e) = budget.save(&peek_path) {
                 eprintln!("error: could not persist peek budget: {e}");
                 return 1;
@@ -518,17 +521,6 @@ fn settings_value_for(param: &ScaffoldingParam, s: &RerankSettings) -> String {
         "rerank.candidates_k" => s.candidates_k.to_string(),
         _ => String::new(),
     }
-}
-
-fn git_commit_hash() -> Option<String> {
-    let out = std::process::Command::new("git")
-        .args(["rev-parse", "--short", "HEAD"])
-        .output()
-        .ok()?;
-    if !out.status.success() {
-        return None;
-    }
-    Some(String::from_utf8_lossy(&out.stdout).trim().to_string())
 }
 
 #[cfg(test)]

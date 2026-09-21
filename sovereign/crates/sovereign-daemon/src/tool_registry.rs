@@ -35,7 +35,7 @@ pub async fn build_tool_registry(
     // symbols/callers/blast without a daemon restart. Before this was shared,
     // the tools read a frozen startup snapshot while the reindexer updated an
     // orphan graph nothing queried — the root of "always stale."
-    merged_graph_handle: sovereign_tools::ScipGraphHandle,
+    merged_graph_handle: sovereign_code::ScipGraphHandle,
 ) -> ToolRegistry {
     let indexes_dir = data_dir.join("indexes");
 
@@ -61,54 +61,70 @@ pub async fn build_tool_registry(
     let graph_handle = merged_graph_handle;
 
     // Code intelligence — scoped to discovered corpora under indexes_dir.
-    let health_checker = Arc::new(sovereign_tools::IndexHealthChecker::new(Arc::clone(
+    let health_checker = Arc::new(sovereign_code::IndexHealthChecker::new(Arc::clone(
         &graph_handle,
     )));
     tools.register(Box::new(
-        sovereign_tools::SymbolLookupTool::new(Arc::clone(&engine), Arc::clone(&graph_handle))
+        sovereign_code::SymbolLookupTool::new(
+            Arc::clone(&engine) as std::sync::Arc<dyn sovereign_code::CodeIndexSource>,
+            Arc::clone(&graph_handle),
+        )
+        .with_health_checker(Arc::clone(&health_checker))
+        .declared(),
+    ));
+    tools.register(Box::new(
+        sovereign_code::CodeSearchTool::new(
+            Arc::clone(&engine) as std::sync::Arc<dyn sovereign_code::CodeIndexSource>
+        )
+        .declared(),
+    ));
+    tools.register(Box::new(
+        sovereign_code::RecentChangesTool::new(
+            Arc::clone(&engine) as std::sync::Arc<dyn sovereign_code::CodeIndexSource>
+        )
+        .declared(),
+    ));
+    tools.register(Box::new(
+        sovereign_code::FindCallersTool::new(
+            Arc::clone(&engine) as std::sync::Arc<dyn sovereign_code::CodeIndexSource>,
+            Arc::clone(&graph_handle),
+        )
+        .with_health_checker(Arc::clone(&health_checker))
+        .declared(),
+    ));
+    tools.register(Box::new(
+        sovereign_code::FindCalleesTool::new(
+            Arc::clone(&engine) as std::sync::Arc<dyn sovereign_code::CodeIndexSource>,
+            Arc::clone(&graph_handle),
+        )
+        .with_health_checker(Arc::clone(&health_checker))
+        .declared(),
+    ));
+    tools.register(Box::new(
+        sovereign_code::BlastRadiusTool::new(Arc::clone(&graph_handle))
             .with_health_checker(Arc::clone(&health_checker))
-            .declared(),
-    ));
-    tools.register(Box::new(
-        sovereign_tools::CodeSearchTool::new(Arc::clone(&engine)).declared(),
-    ));
-    tools.register(Box::new(
-        sovereign_tools::RecentChangesTool::new(Arc::clone(&engine)).declared(),
-    ));
-    tools.register(Box::new(
-        sovereign_tools::FindCallersTool::new(Arc::clone(&engine), Arc::clone(&graph_handle))
-            .with_health_checker(Arc::clone(&health_checker))
-            .declared(),
-    ));
-    tools.register(Box::new(
-        sovereign_tools::FindCalleesTool::new(Arc::clone(&engine), Arc::clone(&graph_handle))
-            .with_health_checker(Arc::clone(&health_checker))
-            .declared(),
-    ));
-    tools.register(Box::new(
-        sovereign_tools::BlastRadiusTool::new(Arc::clone(&graph_handle))
-            .with_health_checker(Arc::clone(&health_checker))
-            .with_atlas(Arc::clone(&work_atlas_store))
+            .with_atlas(Arc::clone(&work_atlas_store)
+                as std::sync::Arc<dyn sovereign_contracts::peer_work::PeerWork>)
             .declared(),
     ));
     // Capability map — derived "what the codebase does" overview. Resolves
     // the per-corpus SCIP graph itself (same indexes dir the runtime uses).
     tools.register(Box::new(
-        sovereign_tools::CapabilityMapTool::new().declared(),
+        sovereign_code::CapabilityMapTool::new().declared(),
     ));
     // Architecture observability (quality program) — the SCIP-observed half
     // of the layer-map story (arch_report) + the cheap persisted-posture
     // reader (arch_posture). The workspace root unlocks the declared-deps /
     // layer-map / filesystem sections and the posture freshness check.
     {
-        let mut tool = sovereign_tools::ArchReportTool::new();
+        let mut tool = sovereign_code::ArchReportTool::new();
         if let Some(ws) = workspace_dir.clone() {
             tool = tool.with_project_root(ws);
         }
         tools.register(Box::new(tool.declared()));
     }
     {
-        let mut tool = sovereign_tools::ArchPostureTool::new();
+        let mut tool = sovereign_code::ArchPostureTool::new();
         if let Some(ws) = workspace_dir.clone() {
             tool = tool.with_project_root(ws);
         }
@@ -174,7 +190,7 @@ pub async fn build_tool_registry(
     // empty), the tools report `never_run` / `watcher_active: false`
     // — accurate, not silently-missing.
     {
-        let mut tool = sovereign_tools::LintStatusTool::new(Arc::clone(&lint_store))
+        let mut tool = sovereign_code::LintStatusTool::new(Arc::clone(&lint_store))
             .with_heartbeat(Arc::clone(&watcher_heartbeat));
         if let Some(scope) = watched_lint_scope.clone() {
             tool = tool.with_watched_scope(scope);
@@ -185,7 +201,7 @@ pub async fn build_tool_registry(
         tools.register(Box::new(tool.declared()));
     }
     {
-        let mut tool = sovereign_tools::DriftPostureTool::new();
+        let mut tool = sovereign_code::DriftPostureTool::new();
         if let Some(ws) = workspace_dir.clone() {
             tool = tool.with_workspace_root(ws);
         }
@@ -199,29 +215,29 @@ pub async fn build_tool_registry(
     // bare `::new()` is correct — mirroring the CapabilityFindingsTool
     // registration below (a posture/findings pair that was wired symmetrically).
     tools.register(Box::new(
-        sovereign_tools::DriftFindingsTool::new().declared(),
+        sovereign_code::DriftFindingsTool::new().declared(),
     ));
     // Code facts — the embed-free structural fact base (tree-sitter fn defs /
     // config construction-fields / string literals), read from
     // `<indexes_dir>/<corpus>/facts.json`. Read-only and model-free, so it never
     // contends with agent inference; every response is freshness-stamped.
     tools.register(Box::new(
-        sovereign_tools::FactsTool::new(indexes_dir.clone()).declared(),
+        sovereign_code::FactsTool::new(indexes_dir.clone()).declared(),
     ));
     // Capability-reconciliation freshness + findings — siblings to drift_*,
     // over the `enrich capability-reconcile` artifact.
     {
-        let mut tool = sovereign_tools::CapabilityPostureTool::new();
+        let mut tool = sovereign_code::CapabilityPostureTool::new();
         if let Some(ws) = workspace_dir.clone() {
             tool = tool.with_workspace_root(ws);
         }
         tools.register(Box::new(tool.declared()));
     }
     tools.register(Box::new(
-        sovereign_tools::CapabilityFindingsTool::new().declared(),
+        sovereign_code::CapabilityFindingsTool::new().declared(),
     ));
     {
-        let mut tool = sovereign_tools::BuildTool::new(Arc::clone(&lint_store))
+        let mut tool = sovereign_code::BuildTool::new(Arc::clone(&lint_store))
             .with_heartbeat(Arc::clone(&watcher_heartbeat));
         if let Some(scope) = watched_lint_scope {
             tool = tool.with_watched_scope(scope);
@@ -229,10 +245,10 @@ pub async fn build_tool_registry(
         tools.register(Box::new(tool.declared()));
     }
     tools.register(Box::new(
-        sovereign_tools::GetLintOutputTool::new(Arc::clone(&lint_store)).declared(),
+        sovereign_code::GetLintOutputTool::new(Arc::clone(&lint_store)).declared(),
     ));
     {
-        let mut tool = sovereign_tools::TestStatusTool::new(Arc::clone(&test_store))
+        let mut tool = sovereign_code::TestStatusTool::new(Arc::clone(&test_store))
             .with_heartbeat(Arc::clone(&watcher_heartbeat));
         if let Some(scope) = watched_test_scope {
             tool = tool.with_watched_scope(scope);
@@ -240,14 +256,14 @@ pub async fn build_tool_registry(
         tools.register(Box::new(tool.declared()));
     }
     tools.register(Box::new(
-        sovereign_tools::GetRunOutputTool::new(Arc::clone(&test_store)).declared(),
+        sovereign_code::GetRunOutputTool::new(Arc::clone(&test_store)).declared(),
     ));
     // `run_tests` is only registered when there's a live test watcher
     // to dispatch into. Without it, agents calling `run_tests` would
     // get a confusing no-op; the absence is the honest signal.
     if let Some(ref w) = test_watcher {
         tools.register(Box::new(
-            sovereign_tools::RunTestsTool::new(Arc::clone(w)).declared(),
+            sovereign_code::RunTestsTool::new(Arc::clone(w)).declared(),
         ));
     }
 
@@ -267,8 +283,9 @@ pub async fn build_tool_registry(
     // actionable set-SOVEREIGN_WORKSPACE_DIR message the watcher
     // tools use, rather than being silently absent.
     {
-        let mut tool = sovereign_tools::BriefingTool::new(Arc::clone(&notes))
-            .with_atlas(Arc::clone(&work_atlas_store));
+        let mut tool = sovereign_code::BriefingTool::new(Arc::clone(&notes))
+            .with_atlas(Arc::clone(&work_atlas_store)
+                as std::sync::Arc<dyn sovereign_contracts::peer_work::PeerWork>);
         if let Some(ws) = workspace_dir.clone() {
             tool = tool.with_workspace_root(ws);
         }
@@ -279,7 +296,7 @@ pub async fn build_tool_registry(
     // 1). Workspace optional — without it the frame just skips the
     // head_at_end/branch git stamps.
     {
-        let mut tool = sovereign_tools::SessionStateTool::new();
+        let mut tool = sovereign_code::SessionStateTool::new();
         if let Some(ws) = workspace_dir.clone() {
             tool = tool.with_workspace_root(ws);
         }
@@ -288,32 +305,32 @@ pub async fn build_tool_registry(
 
     // Notes tools work regardless of indexing state.
     tools.register(Box::new(
-        sovereign_tools::WriteNoteTool::new(Arc::clone(&notes)).declared(),
+        sovereign_code::WriteNoteTool::new(Arc::clone(&notes)).declared(),
     ));
     {
         // Workspace optional — without it the operational-anchors
         // registry loader falls back to SOVEREIGN_WORKSPACE_DIR, the
         // ~/.svrnmesh/workspace file, then an ascent from the cwd,
         // then the compiled-in floor (read_notes.rs).
-        let mut tool = sovereign_tools::ReadNotesTool::new(Arc::clone(&notes));
+        let mut tool = sovereign_code::ReadNotesTool::new(Arc::clone(&notes));
         if let Some(ws) = workspace_dir.clone() {
             tool = tool.with_workspace_root(ws);
         }
         tools.register(Box::new(tool.declared()));
     }
     tools.register(Box::new(
-        sovereign_tools::DeleteNoteTool::new(Arc::clone(&notes)).declared(),
+        sovereign_code::DeleteNoteTool::new(Arc::clone(&notes)).declared(),
     ));
     tools.register(Box::new(
-        sovereign_tools::RetireNoteTool::new(Arc::clone(&notes)).declared(),
+        sovereign_code::RetireNoteTool::new(Arc::clone(&notes)).declared(),
     ));
     tools.register(Box::new(
-        sovereign_tools::SessionReflectionTool::new(Arc::clone(&notes)).declared(),
+        sovereign_code::SessionReflectionTool::new(Arc::clone(&notes)).declared(),
     ));
 
     // ATOS step verification — runs verify commands with
     // hollow/untouched gates to catch silent agent no-ops.
-    tools.register(Box::new(sovereign_tools::AtosVerifyTool::new().declared()));
+    tools.register(Box::new(sovereign_code::AtosVerifyTool::new().declared()));
 
     // Project context — served from `indexes/project_docs.db` if a
     // project has been init'd. Absent on a bare-setup daemon; that's
@@ -322,7 +339,7 @@ pub async fn build_tool_registry(
     if let Ok(ds) =
         corpus_engine_notes::ProjectDocsStore::open(&indexes_dir.join("project_docs.db"))
     {
-        tools.register(Box::new(sovereign_tools::ProjectContextTool::new(
+        tools.register(Box::new(sovereign_atos::tools::ProjectContextTool::new(
             Arc::new(ds),
         )));
     }
@@ -342,7 +359,9 @@ pub async fn build_tool_registry(
     // `with_project_root` in the daemon context because the daemon
     // doesn't know which project the caller means. ATOS-gated.
     #[cfg(feature = "atos")]
-    tools.register(Box::new(sovereign_tools::DesignSignalsExtractTool::new()));
+    tools.register(Box::new(
+        sovereign_atos::tools::DesignSignalsExtractTool::new(),
+    ));
 
     // B:P9d — the corpus/atlas plane (corpus_store, corpus_search, atlas_gaps,
     // atlas_tensions, + the document ExtractTool). `standard_registry` dropped

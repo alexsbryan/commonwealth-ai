@@ -355,7 +355,7 @@ async fn cmd_run(args: &[String]) -> Result<i32, String> {
                 parsed.corpus,
                 parsed.policy.as_str()
             ),
-            git_head_short(),
+            sovereign_cli_shared::repo::head_short_in(&parsed.bench_dir),
         );
         budget
             .save(&budget_path)
@@ -747,22 +747,6 @@ fn compute_delta_from_floor(bench_dir: &Path, tuned_f1: f64) -> Option<f64> {
 
 fn default_private_holdout_path() -> PathBuf {
     sovereign_contracts::rebrand::svrnmesh_root().join("bench/enron/holdout.jsonl")
-}
-
-fn git_head_short() -> Option<String> {
-    let out = std::process::Command::new("git")
-        .args(["rev-parse", "--short", "HEAD"])
-        .output()
-        .ok()?;
-    if !out.status.success() {
-        return None;
-    }
-    let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
-    if s.is_empty() {
-        None
-    } else {
-        Some(s)
-    }
 }
 
 use sovereign_core::time::unix_now as now_secs;

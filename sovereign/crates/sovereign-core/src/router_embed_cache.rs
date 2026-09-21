@@ -75,7 +75,7 @@ const PROBE_TEXT: &str = "sovereign router embed cache — sentinel probe v1";
 /// needs to accept the *identical* model).
 const PROBE_MIN_COSINE: f32 = 0.98;
 
-/// The committed/baked exemplar embedding cache (`sovereign/router/
+/// The committed/baked exemplar embedding cache (`sovereign/crates/sovereign-core/data/router/
 /// router-embed-cache.json`), vendored into the binary so a shipped `.app` —
 /// or any first launch with an empty `~/.svrnmesh` — validates it against the
 /// live embed model (the sentinel probe) and HITS instead of re-embedding
@@ -84,7 +84,7 @@ const PROBE_MIN_COSINE: f32 = 0.98;
 /// committed placeholder (empty `entries`, `built_for: null`) degrades
 /// gracefully: the probe rejects it and the classifiers embed exactly as they
 /// did before this existed.
-pub const BAKED_ROUTER_EMBED_CACHE: &str = include_str!("../../../router/router-embed-cache.json");
+pub const BAKED_ROUTER_EMBED_CACHE: &str = include_str!("../data/router/router-embed-cache.json");
 
 #[derive(serde::Serialize, serde::Deserialize)]
 struct CacheFile {

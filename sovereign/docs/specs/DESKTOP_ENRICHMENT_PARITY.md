@@ -173,7 +173,7 @@ Desktop build (`state.rs`, in the `.with_*` chain after
   wiring does). Both attach-safe (local probe / build artifact).
 - Flip `SOVEREIGN_ATOM_ENUM_OVERVIEW` default-on (gate in
   `retrieval.rs::enumerate_typed_atom_chunks` → `!= Some("0")`; registry
-  `default:"on"`; regen `docs/retrieval-pipeline.md`).
+  `default:"on"`; regen `sovereign-core/docs/retrieval-pipeline.md`).
 
 ### Phase 2 — Attach-mode field_model digests
 Mount/confirm the daemon `/v1/knowledge/landscape_digest` handler so
@@ -213,7 +213,7 @@ unit test: desktop wired-seam set ⊇ bench's.
   system_message.rs}`.
 - Attach endpoint: `sovereign-daemon/src/landscape_digest_http.rs`.
 - Flags/docs: `sovereign-core/src/runtime/{retrieval.rs, retrieval_pipeline.rs}`,
-  `sovereign/docs/retrieval-pipeline.md`.
+  `sovereign/crates/sovereign-core/docs/retrieval-pipeline.md`.
 
 ## Verification
 1. **Freshness first**: re-sync SEP (or scope the bank to maple-house [atlas],

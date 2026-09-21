@@ -50,6 +50,7 @@ sovereign-enrichment-catalog = { workspace = true }
 # calls down; five modules with no CLI half are re-exported wholesale from
 # `enrich_cmd/mod.rs`.
 sovereign-enrichment-build = { workspace = true }
+sovereign-code = { workspace = true }
 sovereign-contracts = { workspace = true }
 # `declare`: write this node's own origin credential to the 0600 secret
 # store. One implementation of where a declaration lives, shared with the
@@ -96,6 +97,7 @@ sovereign-eval = { workspace = true }
 # `meshapp dev` serves a bundle + proxies the explorer ops to this shared lib.
 sovereign-meshapp = { workspace = true }
 sovereign-cli-shared = { workspace = true, features = ["scip", "mcp-client", "rail-client"] }
+sovereign-cli-mesh = { path = "../sovereign-cli-mesh" }
 # The neutral kernel — `quality lane` rows are `Judgement`s, so the lane and
 # the runner that reads its trailing line speak one verdict vocabulary rather
 # than two (noun-convergence rung nc-10-judgement). Layer 0, edge points DOWN.

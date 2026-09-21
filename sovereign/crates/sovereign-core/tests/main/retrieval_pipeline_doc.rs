@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign/docs/retrieval-pipeline.md` is GENERATED from the live
+//! `sovereign-core/docs/retrieval-pipeline.md` is GENERATED from the live
 //! pipeline definitions (`kq_pipeline` / `deep_pipeline` /
 //! `retrieval_pipeline_flags`) so the doc cannot drift from the code —
 //! same contract as sovereign-recipes/SCHEMA.md (`recipe_schema` test).
@@ -75,13 +75,10 @@ fn render() -> String {
            (both A/B-validated 2026-06-09). Disable only for A/B runs.\n\
          - **Experimental, opt-in (default OFF)** — `SOVEREIGN_ATOM_ENUM`\n\
            (net-negative on focused enumeration per the 2026-06-04\n\
-           bench; keep gated), `SOVEREIGN_TITLE_EXPAND` (see\n\
-           wikipedia_learn/V36_FINDINGS.md), `SOVEREIGN_QUERY_DECOMP`,\n\
-           `SOVEREIGN_GRAPH_NEIGHBOR_EXPAND`, `SOVEREIGN_COMPACTION_DISABLE`.\n\
+           bench; keep gated), `SOVEREIGN_COMPACTION_DISABLE`.\n\
            Flipping one ON in prod requires its own bench A/B.\n\
-         - **Tunable parameters** — the `_TOPK/_POOL/_RANK/_SCORE`,\n\
-           `DECOMP_DECAY`, `CONV_PPR_WEIGHT` family. Sub-knobs of their\n\
-           parent feature.\n\
+         - **Tunable parameters** — the `_TOPK/_POOL/_RANK/_SCORE`\n\
+           family. Sub-knobs of their parent feature.\n\
          - **Retired** — the `SOVEREIGN_RAPTOR_*` family (2026-09-07,\n\
            order ei-5c). The retrieval-time summary injector they gated\n\
            was a second grounding implementation outside corpus-engine;\n\
@@ -90,9 +87,8 @@ fn render() -> String {
            (`svrn enrich summary-atoms <corpus>`), not a knob. Setting\n\
            any of the five has no effect. See\n\
            `sovereign/DEFAULTS_LEDGER.md`.\n\
-         - **Debug / escape hatches** — `SOVEREIGN_FORENSIC` (audit\n\
-           snapshots), `SOVEREIGN_ATOM_ENUM_NOFILTER` (ablation).\n\
-           Never set in normal operation.\n",
+         - **Debug / escape hatches** — `SOVEREIGN_ATOM_ENUM_NOFILTER`\n\
+           (ablation). Never set in normal operation.\n",
     );
     md
 }
@@ -124,7 +120,7 @@ fn render_pipeline(p: &RetrievalPipeline, title: &str) -> String {
 #[test]
 fn retrieval_pipeline_doc_is_fresh() {
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let out_path = manifest.join("../../docs/retrieval-pipeline.md");
+    let out_path = manifest.join("docs/retrieval-pipeline.md");
     let generated = render();
 
     if std::env::var("UPDATE_RETRIEVAL_PIPELINE_DOC").is_ok() {
@@ -136,7 +132,7 @@ fn retrieval_pipeline_doc_is_fresh() {
     let committed = std::fs::read_to_string(&out_path).unwrap_or_default();
     assert_eq!(
         committed, generated,
-        "sovereign/docs/retrieval-pipeline.md is stale — the pipelines or the \
+        "sovereign-core/docs/retrieval-pipeline.md is stale — the pipelines or the \
          flag registry changed. Regenerate with:\n  \
          UPDATE_RETRIEVAL_PIPELINE_DOC=1 cargo test -p sovereign-core --test main retrieval_pipeline_doc"
     );

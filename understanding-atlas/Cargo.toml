@@ -18,7 +18,6 @@ description = "Understanding's pure tier — the arithmetic over the published l
 [dependencies]
 understanding-vocab = { workspace = true }
 corpus-index = { workspace = true }
-kernel-types = { workspace = true }
 oplog = { workspace = true }
 chrono = { workspace = true }
 regex = { workspace = true }

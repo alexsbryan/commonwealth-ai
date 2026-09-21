@@ -316,3 +316,28 @@ impl WorkInFlightTool {
 }
 
 use sovereign_core::time::unix_now_u64 as now_secs;
+
+impl sovereign_contracts::peer_work::PeerWork for WorkAtlasStore {
+    fn in_flight(
+        &self,
+        scope: &str,
+        kind: sovereign_contracts::peer_work::ScopeKind,
+        caller_token: Option<&str>,
+    ) -> sovereign_contracts::peer_work::InFlightView {
+        use sovereign_contracts::peer_work::{InFlightView, ScopeKind};
+        let m = match kind {
+            ScopeKind::Symbol => ScopeMatch::Symbol,
+            ScopeKind::File => ScopeMatch::File,
+        };
+        match collect_in_flight(self, scope, m, caller_token, false) {
+            Ok(f) => InFlightView {
+                claims: f.claims,
+                observations: f.observations,
+            },
+            Err(e) => {
+                tracing::debug!(target: "work_atlas.in_flight", scope, error = %e, "atlas read failed");
+                InFlightView::default()
+            }
+        }
+    }
+}

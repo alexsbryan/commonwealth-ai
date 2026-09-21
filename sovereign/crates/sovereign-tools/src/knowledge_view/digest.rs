@@ -9,8 +9,8 @@
 
 use corpus_engine::enrichment::skeleton::FieldSkeleton;
 
-use super::tokens::{estimate_tokens, is_settled_status};
 use super::view_kind::ViewKind;
+use sovereign_contracts::tokens::{estimate_tokens, is_settled_status};
 
 /// Human-readable heading for an arbitrary view id. Falls back to a
 /// generic label for any id not matching a known `ViewKind` so

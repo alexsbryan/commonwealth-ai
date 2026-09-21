@@ -8,7 +8,6 @@
 //! | arm             | change vs baseline                                  |
 //! |-----------------|-----------------------------------------------------|
 //! | baseline        | shipped defaults (env force-cleared for isolation)  |
-//! | conv_ppr_off    | `SOVEREIGN_CONV_PPR_WEIGHT=0`                       |
 //! | with_atlas      | `--with-atlas <ids>` (only when `--atlas` given)    |
 //!
 //! There was a `raptor_off` arm here (`SOVEREIGN_RAPTOR_GROUNDING=0`) until
@@ -77,7 +76,6 @@ const SEPARATION_FLOOR: f64 = 0.02;
 /// environment (then selectively set) so an operator's ambient shell
 /// exports cannot contaminate the baseline.
 const MATRIX_ENV: &[&str] = &[
-    "SOVEREIGN_CONV_PPR_WEIGHT",
     "SOVEREIGN_PREFIX_STATE",
     // The whole rerank family, not just the two the `--rerank` arms set.
     // `rerank_config_from_env` (sovereign-tools/src/corpus/mod.rs:82)
@@ -345,31 +343,7 @@ fn daemon_lock_path() -> PathBuf {
 /// dispatcher. Handing `daemon run` to our own exe fails with
 /// "unknown subcommand 'daemon'" (observed 2026-08-03). Look for the
 /// dispatcher beside us first, then the deployed symlink.
-pub(crate) fn dispatcher_exe(current: &std::path::Path) -> Result<PathBuf, String> {
-    if let Some(dir) = current.parent() {
-        for name in ["sovereign-cli", "svrn"] {
-            let c = dir.join(name);
-            if c.exists() {
-                return Ok(c);
-            }
-        }
-    }
-    for c in [
-        dirs_home().join(".local/bin/sovereign"),
-        dirs_home().join(".local/bin/svrn"),
-    ] {
-        if c.exists() {
-            return Ok(c);
-        }
-    }
-    Err(
-        "cannot find the `sovereign-cli` dispatcher (needed for `daemon` — this \
-         binary does not own that verb). Build it: \
-         cargo build -p sovereign-cli --features dev-tools"
-            .to_string(),
-    )
-}
-
+use sovereign_cli_shared::dispatcher::dispatcher_exe;
 fn dirs_home() -> PathBuf {
     std::env::var_os("HOME")
         .map(PathBuf::from)
@@ -640,13 +614,7 @@ async fn run(rest: &[String]) -> i32 {
         }
     }
 
-    let mut arms: Vec<ArmSpec> = vec![
-        ArmSpec::retrieval("baseline", vec![]),
-        ArmSpec::retrieval(
-            "conv_ppr_off",
-            vec![("SOVEREIGN_CONV_PPR_WEIGHT", "0".into())],
-        ),
-    ];
+    let mut arms: Vec<ArmSpec> = vec![ArmSpec::retrieval("baseline", vec![])];
     // The cross-encoder pair. Opt-in via `--rerank <gguf>` for the same
     // reason `--atlas` is: the arm needs an artifact the repo does not
     // vendor, and an arm whose knob does nothing is the worst outcome an

@@ -488,8 +488,10 @@ mod tests {
     use super::*;
 
     fn repo_spec(rel: &str) -> RefactorSpec {
-        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../..")
+        // The subject is `load_spec` against the LIVE spec, so a copy inside
+        // the crate would drift and the test would stop meaning anything.
+        let path = crate::repo::repo_root_here()
+            .expect("this test reads the repo's own refactor specs")
             .join(rel);
         load_spec(&path).expect("control spec must load")
     }

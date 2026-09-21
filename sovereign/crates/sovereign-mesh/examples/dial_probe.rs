@@ -128,7 +128,7 @@ async fn main() {
 
     // This host's own iroh posture, so a probe from a sovereign-mode box does
     // not silently reach for n0 when the daemon beside it would not.
-    let (relay_urls, discovery) = sovereign_core::setup_config::SetupConfig::load()
+    let (relay_urls, discovery) = sovereign_contracts::setup_config::SetupConfig::load()
         .map(|c| (c.iroh.relay_urls.clone(), c.iroh.discovery.clone()))
         .unwrap_or_default();
     let relay_cfg = RelayConfig::from_parts(relay_urls, discovery.as_deref());

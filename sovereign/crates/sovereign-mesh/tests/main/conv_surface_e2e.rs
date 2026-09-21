@@ -39,10 +39,9 @@ use std::sync::Arc;
 
 use corpus_engine::index::InsertChunk;
 use corpus_engine::{CorpusEngine, EmbedFn};
-use sovereign_core::conv_tiered::{
-    ChunkEntityProgressRow, ChunkEntityRow, ConvRaptorNodeRow, ConvSkeletonRow, ConvTieredReader,
-};
-use sovereign_core::setup_config::SetupConfig;
+use sovereign_contracts::daemon_wire::conv_tiered::{ChunkEntityProgressRow, ChunkEntityRow};
+use sovereign_contracts::setup_config::SetupConfig;
+use sovereign_core::conv_tiered::{ConvRaptorNodeRow, ConvSkeletonRow, ConvTieredReader};
 use sovereign_daemon::atlas_http::atlas_router;
 use sovereign_daemon::daemon::EmbeddedDaemon;
 use sovereign_store::sqlite::SqliteStateStore;
@@ -233,7 +232,7 @@ async fn build_conv_daemon() -> (Arc<EmbeddedDaemon>, tempfile::TempDir) {
         SetupConfig::unconfigured(),
         common::desktop_services_with_conv_reader(
             engine,
-            store as Arc<dyn sovereign_core::traits::StateStore>,
+            store as Arc<dyn sovereign_contracts::traits::StateStore>,
             conv,
         ),
     );

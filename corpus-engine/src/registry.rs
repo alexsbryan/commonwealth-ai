@@ -640,22 +640,6 @@ mod resolution_policy_tests {
     }
 }
 
-// ── Path helper (used by engine and xtask) ───────────────────────────────────
-
-/// Resolve the path to the canonical registry catalog
-/// (`sovereign-recipes/registry.toml`, the single source of truth that
-/// build.rs vendors into the bundled snapshot). Returns `None` outside a
-/// cargo workspace (e.g. when installed as a standalone binary).
-pub fn snapshot_path_in_workspace() -> Option<PathBuf> {
-    // CARGO_MANIFEST_DIR is set at build time; use it at runtime via env! fallback.
-    // corpus-engine/ → ../sovereign-recipes/registry.toml.
-    option_env!("CARGO_MANIFEST_DIR").and_then(|d| {
-        Path::new(d)
-            .parent()
-            .map(|ws| ws.join("sovereign-recipes").join("registry.toml"))
-    })
-}
-
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]

@@ -20,7 +20,7 @@
 //! route still returns 200. That is this system's characteristic
 //! failure (ARCH §18.3): a well-formed, exit-0 result that is wrong.
 //!
-//! The pack is five predicates over the nine committed `gym/fixtures`,
+//! The pack is five predicates over the nine committed gym turns,
 //! each with a falsifier in [`falsifiers`] proving it can fail for the
 //! reason it claims, and a tripwire so a tenth frontdoor pass cannot be
 //! wired into the inference route uncontrolled. It needs no model, no
@@ -96,8 +96,9 @@ const DECLARED_ROUTE_CALLS: [&str; 9] = [
 
 /// One committed gym fixture: the name, and the request a real client
 /// sent. These are the same `input.json` files the Codex/opencode gym
-/// replays, so the pack is pinned to turns that actually occurred
-/// rather than to turns invented to make an assertion pass.
+/// replays (`gym/run.sh` reads this same directory), so the pack is pinned
+/// to turns that actually occurred rather than to turns invented to make an
+/// assertion pass.
 struct Fixture {
     name: String,
     request: ChatCompletionRequest,
@@ -105,9 +106,9 @@ struct Fixture {
 
 /// The nine committed gym turns.
 fn gym_fixtures() -> Vec<Fixture> {
-    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../gym/fixtures");
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/gym");
     let mut dirs: Vec<_> = std::fs::read_dir(&root)
-        .unwrap_or_else(|e| panic!("gym/fixtures must be readable at {}: {e}", root.display()))
+        .unwrap_or_else(|e| panic!("the gym turns must be readable at {}: {e}", root.display()))
         .filter_map(|e| e.ok())
         .map(|e| e.path())
         .filter(|p| p.is_dir())
@@ -131,7 +132,7 @@ fn gym_fixtures() -> Vec<Fixture> {
     // zero-test trap the test wrapper exits 4 for (ARCH §18.1).
     assert!(
         fixtures.len() >= 9,
-        "gym/fixtures held {} turns; the pack is calibrated against 9 and a shrinking \
+        "tests/fixtures/gym held {} turns; the pack is calibrated against 9 and a shrinking \
          corpus silently weakens every predicate below",
         fixtures.len()
     );
@@ -188,7 +189,7 @@ fn chat_with_a_repeated_successful_command() -> ChatCompletionRequest {
 
 /// The nine gym turns plus the witnesses that cover what they cannot.
 ///
-/// Witnesses are built here rather than committed under `gym/fixtures`
+/// Witnesses are built here rather than committed under `tests/fixtures/gym`
 /// on purpose: that directory is the Codex gym's replay corpus and
 /// adding turns to it changes what the gym measures. A turn that exists
 /// only to give a predicate a failing input belongs with the predicate.

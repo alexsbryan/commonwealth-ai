@@ -40,7 +40,7 @@ const NS_FILE: &str = "house-expenses";
 const NS_OPEN: &str = "house-photos";
 /// A REGISTERED namespace: membership answers it and no file may narrow it
 /// (`ring_roster::REGISTERED_NAMESPACES`).
-const NS_REGISTERED: &str = sovereign_core::mesh_measurements::MEASUREMENTS_APP_ID;
+const NS_REGISTERED: &str = sovereign_mesh::mesh_measurements::MEASUREMENTS_APP_ID;
 
 const MESH_ID: u128 = 71;
 const INVITE_HASH: [u8; 32] = [29u8; 32];

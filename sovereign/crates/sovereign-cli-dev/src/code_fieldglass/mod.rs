@@ -32,10 +32,8 @@ use std::path::{Path, PathBuf};
 
 use corpus_engine_archaeology::git_archaeology::batch_harvest_all_commits;
 use corpus_engine_scip::ScipGraph;
-use sovereign_tools::code::arch_report::{
-    build_arch_report, declared_deps_from_cargo, ArchReportInputs,
-};
-use sovereign_tools::code::dry_report::{build_dry_report, DryInputs};
+use sovereign_code::arch_report::{build_arch_report, declared_deps_from_cargo, ArchReportInputs};
+use sovereign_code::dry_report::{build_dry_report, DryInputs};
 
 const TEMPLATE: &str = include_str!("fieldglass.html");
 
@@ -393,8 +391,8 @@ pub(crate) async fn run(args: &[String]) -> i32 {
         match build_dry_report(DryInputs {
             index_path: &indexes_dir.join(&corpus_id),
             corpus_id: &corpus_id,
-            min_lines: sovereign_tools::code::dry_report::DEFAULT_MIN_LINES,
-            near_threshold: sovereign_tools::code::dry_report::DEFAULT_NEAR_THRESHOLD,
+            min_lines: sovereign_code::dry_report::DEFAULT_MIN_LINES,
+            near_threshold: sovereign_code::dry_report::DEFAULT_NEAR_THRESHOLD,
             scope: None,
         })
         .await
@@ -547,8 +545,8 @@ pub(crate) async fn run(args: &[String]) -> i32 {
             temporal_window_days: SRP_WINDOW_DAYS,
             srp_correlation: SRP_CORRELATION,
             srp_min_joint: SRP_MIN_JOINT,
-            dry_threshold: sovereign_tools::code::dry_report::DEFAULT_NEAR_THRESHOLD,
-            dry_min_lines: sovereign_tools::code::dry_report::DEFAULT_MIN_LINES,
+            dry_threshold: sovereign_code::dry_report::DEFAULT_NEAR_THRESHOLD,
+            dry_min_lines: sovereign_code::dry_report::DEFAULT_MIN_LINES,
             files_walked: walked.len(),
             files_outside_crates: outside,
             communities: n_communities,

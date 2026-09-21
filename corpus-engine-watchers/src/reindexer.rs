@@ -47,7 +47,7 @@ use crate::projects::{ProjectEntry, ProjectState, WatcherKind, WatcherStatus};
 
 /// An `ArcSwap`-backed handle the daemon and MCP tools share to
 /// access a project's SCIP graph. Matches the type alias used by
-/// the existing tool crates (`sovereign_tools::ScipGraphHandle`).
+/// the existing tool crates (`sovereign_code::ScipGraphHandle`).
 pub type ScipGraphHandle = Arc<ArcSwap<ScipGraph>>;
 
 /// Why a rebuild was enqueued. Surfaced in logs and persisted into

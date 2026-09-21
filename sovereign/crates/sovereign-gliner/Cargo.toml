@@ -19,7 +19,8 @@ license.workspace = true
 workspace = true
 
 [dependencies]
-sovereign-core = { workspace = true }
+sovereign-contracts = { workspace = true }
+sovereign-time = { workspace = true }
 sovereign-store = { workspace = true }
 corpus-engine = { workspace = true }
 async-trait = { workspace = true }

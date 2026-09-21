@@ -19,7 +19,8 @@
 //!
 //! Runs against the live local daemon (the same stem the hand-run chat
 //! used). `#[ignore]`d: invoke with
-//! `cargo test -p sovereign-core --test main fr6_decorrelation -- --ignored --nocapture`
+//! `FR6_BANK=research/deep-research/bank/labeled/claims.jsonl cargo test -p sovereign-core
+//! --test main fr6_decorrelation -- --ignored --nocapture`
 //! with the daemon up. Writes `fr6-report.json` beside the labeled set.
 
 use std::path::PathBuf;
@@ -366,12 +367,17 @@ fn collapse_ws(s: &str) -> String {
 }
 
 fn bank_path() -> PathBuf {
-    // sovereign/crates/sovereign-core -> repo root -> research/...
-    let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    manifest
-        .join("../../../research/deep-research/bank/labeled/claims.jsonl")
+    let raw = std::env::var("FR6_BANK").unwrap_or_else(|_| {
+        panic!(
+            "FR6_BANK is required — the labeled bank lives in the research tree, which this \
+             crate does not own. Re-run as:\n  \
+             FR6_BANK=research/deep-research/bank/labeled/claims.jsonl \\\n  \
+             cargo test -p sovereign-core --test main fr6_decorrelation -- --ignored --nocapture"
+        )
+    });
+    PathBuf::from(&raw)
         .canonicalize()
-        .expect("labeled bank must exist (committed with bank v0 mint)")
+        .unwrap_or_else(|e| panic!("FR6_BANK={raw} is not readable: {e}"))
 }
 
 fn now_iso() -> String {

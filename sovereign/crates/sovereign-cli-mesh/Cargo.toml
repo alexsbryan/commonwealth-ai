@@ -1,0 +1,54 @@
+[package]
+name = "sovereign-cli-mesh"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "cmnwlth's CLI verbs: mesh, ring, job, media, meshapp, run, publish."
+
+[dependencies]
+clap = { workspace = true }
+sovereign-contracts = { workspace = true }
+sovereign-time = { workspace = true }
+commonwealth-media = { workspace = true }
+sovereign-inference = { workspace = true }
+oicp-types = { workspace = true }
+sovereign-mesh = { workspace = true, features = ["treesitter"] }
+sovereign-daemon = { workspace = true }
+sovereign-meshapp = { workspace = true }
+sovereign-cli-shared = { workspace = true, features = ["scip", "mcp-client", "rail-client"] }
+commonwealth-core = { path = "../../../commonwealth/crates/commonwealth-core" }
+commonwealth-rail = { workspace = true }
+commonwealth-work = { workspace = true, features = ["process"] }
+commonwealth-transport = { path = "../../../commonwealth/crates/commonwealth-transport" }
+bytes = { workspace = true }
+axum = { workspace = true }
+futures = { workspace = true }
+serde = { workspace = true }
+tokio = { workspace = true }
+toml = { workspace = true }
+tracing = { workspace = true }
+reqwest = { workspace = true, features = ["stream"] }
+uuid = { workspace = true }
+dirs = "5"
+sha2 = { workspace = true }
+tar = "0.4"
+zstd = "0.13"
+which = "7"
+hostname = { workspace = true }
+hex = "0.4"
+workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
+libc = "0.2"
+rqrr = { version = "=0.11.0", default-features = false }
+serde_json = { workspace = true }
+toml_edit = { workspace = true }
+sovereign-pods = { path = "../sovereign-pods" }
+chrono = { workspace = true }
+rand = "0.9"
+fast_qr = { version = "=0.14.0", default-features = false, features = ["svg"] }
+tempfile = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[lints]
+workspace = true

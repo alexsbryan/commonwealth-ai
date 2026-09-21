@@ -187,7 +187,7 @@ answer-quality regression.**
 
 **Configuration & state, in one breath.** Everything mutable lives on four
 roots: committed contracts in the repo (`quality/*.toml`,
-`sovereign/docs/cli-contract.toml`, `sovereign/models.toml` — reviewed like
+`sovereign/docs/cli-contract.toml`, `sovereign/crates/sovereign-contracts/data/models.toml` — reviewed like
 code, several machine-enforced); the per-checkout `.sovereign/` dir (project
 identity, notes, ATOS state); the per-user root `~/.svrnmesh` (legacy
 `~/.svrnmesh` symlink) holding `config.toml` and every index, model, and

@@ -157,7 +157,7 @@ pub enum SkillRegister {
 // splice block; that splice was removed when the skills-as-menu
 // UI retired. The wisdom in the retired skills' `trigger_phrases`
 // lists migrated into the router's embed-exemplar bank
-// (`sovereign/router/exemplars.toml`); see the migration commit
+// (`sovereign/crates/sovereign-core/data/router/exemplars.toml`); see the migration commit
 // for the audit. The surviving modes (inner-work, recipe-author)
 // do not need router hints because the user explicitly enters
 // their surfaces.

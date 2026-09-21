@@ -478,22 +478,6 @@ mod pool_scale {
 
 // ─── Wikipedia link-graph one-hop expansion (Atlas Layer 0) ──
 
-/// One-hop neighbor cap per seed title. Higher values pull in
-/// less-relevant neighbors and inflate latency.
-pub(crate) const GRAPH_NEIGHBORS_PER_HIT: usize = 5;
-
-/// Per-title chunk pull from each LanceDB corpus when fetching a
-/// neighbor's content. Small — enough to seed the article-deepening
-/// expansion that already happens downstream.
-pub(crate) const GRAPH_NEIGHBOR_LIMIT: usize = 5;
-
-/// Score-decay factor applied to graph-expanded neighbor chunks.
-/// At 0.6 a one-hop neighbor of the top hit (parent score 1.0)
-/// starts at 0.6 — well below the original top hit but above noise-
-/// floor cutoffs. Re-weighting and the cap can promote a neighbor
-/// that the query genuinely matches.
-pub(crate) const GRAPH_NEIGHBOR_DECAY: f32 = 0.6;
-
 // ─── PPR structural expansion, cross-encoder gated (S4+S3) ───
 //
 // The walk proposes; the gate disposes. Walk params bound the sqlite
@@ -588,12 +572,6 @@ pub(crate) const PPR_MAX_ADMITTED: usize = 4;
 /// Upper bound on sub-queries the decomposer may emit. Higher values
 /// inflate latency without lifting the bench in early prototyping.
 pub(crate) const DECOMP_MAX_QUERIES: usize = 4;
-
-/// Per-sub-query chunk pull from each corpus. Smaller than
-/// [`KQ_PER_CORPUS_LIMIT`] because the merge already has the full
-/// bag-of-words query's hits — sub-queries are supplementary depth,
-/// not a replacement.
-pub(crate) const DECOMP_QUERY_LIMIT: usize = 5;
 
 /// Fast-path output budget. Enough for a focused summary with citations,
 /// not enough to invite the model to ramble.

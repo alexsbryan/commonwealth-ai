@@ -53,7 +53,7 @@
 
 use std::sync::Arc;
 
-use sovereign_core::setup_config::SetupConfig;
+use sovereign_contracts::setup_config::SetupConfig;
 use sovereign_daemon::corpus_catalog_http::corpus_catalog_router;
 use sovereign_daemon::daemon::EmbeddedDaemon;
 
@@ -344,7 +344,7 @@ async fn install_a_manager_if_none() {
     // The singleton holds paths into this dir for the process
     // lifetime; dropping the guard would pull them out from under it.
     std::mem::forget(tmp);
-    let store: Arc<dyn sovereign_core::traits::StateStore> =
+    let store: Arc<dyn sovereign_contracts::traits::StateStore> =
         Arc::new(sovereign_store::memory::InMemoryStateStore::new());
     let engine = Arc::new(corpus_engine::CorpusEngine::new(
         data_dir.join("recipes"),

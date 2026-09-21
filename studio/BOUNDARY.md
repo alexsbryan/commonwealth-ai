@@ -1,5 +1,16 @@
 # The studio package boundary
 
+> **The `[[package]] name = "studio"` row was deleted 2026-09-21** when
+> `quality/ARCH_LAYERS.toml` was rewritten to declare the five programs
+> (`docs/FIVE_PROGRAMS.md` §9). Studio is not one of the five, and §5 lists its
+> surface under "deleted, not migrated" unless a §7 journey reaches it — so
+> `sovereign-studio`, `sovereign-workflow` and `sovereign-workflow-host` are in
+> NO package and NOTHING enforces the boundary this document describes.
+> `sovereign-tools-base` went to `svrn` and `sovereign-recipe-author` to
+> `ingest`. The row was green with zero exceptions on the day it was dropped;
+> that is the enforcement this change spends. If the studio surface survives
+> the cut, the row comes back.
+
 `studio/crates/` holds the **workflow + recipe authoring package** — the stack a
 third party could lift out of this monorepo and run against any host that speaks
 the OICP contract (the OICP manifest + an OpenAI-compatible HTTP surface). For

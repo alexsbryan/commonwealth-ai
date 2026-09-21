@@ -41,7 +41,8 @@ use corpus_engine::Recipe;
 const UPDATE_ENV: &str = "UPDATE_ONTOLOGY_SNAPSHOTS";
 
 /// The recipe under test — the only shipped version-0 custom ontology.
-const MAPLE_HOUSE_RECIPE: &str = "../sovereign-recipes/maple-house/recipe.toml";
+/// Recipes-tree-relative: `source_tree::recipes_root()` supplies the base.
+const MAPLE_HOUSE_RECIPE: &str = "maple-house/recipe.toml";
 
 fn fixtures_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/ontology_snapshots")
@@ -183,7 +184,7 @@ fn fixed_candidate() -> CandidateContent {
 /// The maple-house pipeline exactly as `enrich init` builds it: recipe →
 /// `Recipe::custom_atlas_spec` → `with_custom_ontology`.
 fn maple_house_pipeline() -> LiteraryAtlasPipeline {
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(MAPLE_HOUSE_RECIPE);
+    let path = crate::source_tree::recipes_root().join(MAPLE_HOUSE_RECIPE);
     let recipe =
         Recipe::from_file(&path).unwrap_or_else(|e| panic!("parse {}: {e}", path.display()));
     let spec = recipe
@@ -224,7 +225,7 @@ fn maple_house_phase6_classifier_matches_golden() {
 /// `OntologyPolicies::has_declarations()`, which is false here.
 #[test]
 fn maple_house_v1_without_declarations_matches_v0_goldens() {
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(MAPLE_HOUSE_RECIPE);
+    let path = crate::source_tree::recipes_root().join(MAPLE_HOUSE_RECIPE);
     let v0 =
         std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
     let migrated = Recipe::migrate_ontology_version(&v0, 1)

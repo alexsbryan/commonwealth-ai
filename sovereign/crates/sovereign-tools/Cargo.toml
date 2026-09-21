@@ -23,26 +23,16 @@ sovereign-recipe-author = { workspace = true }
 # vector, MCP client) were extracted here; re-exported at their old paths
 # (`sovereign_tools::{shell, web, mcp, rag::chunk, ...}`).
 sovereign-tools-base = { workspace = true }
-# Atlas peer-advice (Phase C3) consumes `CorpusShardInfo` from
-# commonwealth-core's gossip schema. One-way dep: sovereign-tools
-# never re-enters commonwealth-* (path break is enforced by
-# rustc, not just convention).
-commonwealth-core = { workspace = true }
-# `DriftTool` calls `sovereign_atos::approval::{find_approval,
-# detect_drift, current_spec_hash}` so its verdict matches the
-# daemon's approval_gate middleware exactly. The dep is one-way
-# (sovereign-atos depends on sovereign-core only); no cycle.
-sovereign-atos = { workspace = true, optional = true }
-# Work atlas — `blast` queries it to surface concurrent claims in
-# the same response (§8 of the spec). One-way dep: work-atlas does
-# not depend on sovereign-tools.
-sovereign-work-atlas = { workspace = true }
+# Atlas peer-advice (Phase C3) reads `CorpusShardInfo`, the gossip capability
+# report's corpus-shard schema. It lived in `commonwealth-core` until
+# 2026-09-21; both sides name it, so it is in the protocol leaf now and this
+# crate no longer reaches into a cmnwlth package (quality/ARCH_LAYERS.toml).
+oicp-types = { workspace = true }
 corpus-engine = { workspace = true }
 # The atlas vocabulary + its read door (`read_atlas_atoms`/`read_atlas_edges`)
 # — a two-crate leaf closure, so a reader of atoms.json need not name the
 # engine that writes it (domains dm-vocab-bypass-tools).
 understanding-vocab = { workspace = true }
-corpus-engine-archaeology = { workspace = true, optional = true }
 corpus-engine-notes = { workspace = true }
 # The section detectors `rag::section` runs — a `regex` + `tracing` leaf. The
 # module came back from `sovereign-tools-base` at sv-surface svt-7 and brought
@@ -50,21 +40,7 @@ corpus-engine-notes = { workspace = true }
 # edge costs nothing new here (it cost a thin surface's whole exception row
 # there — see `src/rag/mod.rs`).
 corpus-engine-sections = { workspace = true }
-corpus-engine-watchers = { workspace = true }
-# SCIP call graph types — carved out of corpus-engine 2026-05-23.
-# Used by code/{callers,callees,blast_radius,symbol_lookup,index_health}.
-corpus-engine-scip = { workspace = true }
-# The code-intel package's fact base (`facts`/`facts_store`), moved out of
-# corpus-engine at domains REVIEW-build-code-facts; `code/facts_tool.rs` names
-# `code_facts::*` directly. The `stores` feature arrives through corpus-engine.
-code-facts = { workspace = true }
-# Layer-map schema/evaluator (quality/ARCH_LAYERS.toml) shared with the
-# xtask layer-gate — one parser, so the declared (CI) and observed
-# (arch_report) enforcement halves can't drift.
-arch-layers = { workspace = true }
-corpus-engine-atos = { workspace = true, optional = true }
 async-trait = { workspace = true }
-csv = "1.3"
 serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }
@@ -80,17 +56,9 @@ toml = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 uuid = { workspace = true }
-arc-swap = { workspace = true }
 lettre = { version = "0.11", features = ["tokio1-rustls-tls", "smtp-transport"], optional = true }
 # Code Intelligence tools (symbol_lookup / code_search / recent_changes)
 chrono = { version = "0.4", features = ["clock"] }
-# Resolve `~` for `~/.svrnmesh/enrichment/<corpus>/config.json`
-# in the watched-folder enrichment driver. Same pattern the CLI's
-# enrich_cmd uses; pinning `dirs` here keeps the resolver
-# colocated with its only caller.
-dirs = "5"
-lancedb = { workspace = true }
-arrow-array = { workspace = true }
 # Document parsing (RAG pipeline)
 pdf-extract = "0.7"
 # `pdf-extract 0.7.12` writes "unknown glyph name" / "Unicode mismatch"
@@ -198,9 +166,8 @@ ndarray = { version = "0.16", optional = true }
 # DBNet detection post-processing: `find_contours` on the binarized
 # probability map. Same CV lib the off-the-shelf `oar-ocr` crate uses.
 imageproc = { version = "0.26", optional = true }
-# Polygon offset ("unclip") for detection boxes. Already in the tree
-# transitively (4.0.7); pinning `4` here resolves the single version.
-i_overlay = { version = "4", optional = true }
+# `i_overlay` (polygon offset for detection boxes) was declared here and never
+# named in code; `workspace-hack` already pins it at `4` for every member.
 workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 
 [features]
@@ -215,20 +182,16 @@ email = ["lettre"]
 treesitter = ["corpus-engine/treesitter"]
 # `atos` is the experimental agent feature-lifecycle subsystem (charter →
 # milestones → approval-gate → drift). It is OFF by default so product builds
-# carry zero ATOS; it pulls the two ATOS crates and unlocks the ATOS code-intel
-# tools (DriftTool, Provision/Archive/RecordAtosEvent/ProjectContext/
-# DesignSignalsExtract) and the KnowledgeView strategic ATOS splice. Orthogonal
-# to `treesitter` — the code-intel ATOS tools need both axes.
-atos = ["dep:sovereign-atos", "dep:corpus-engine-atos"]
-# `dev-tools` is the developer workbench surface. Today it gates the
-# git-archaeology rendering in BriefTool (principles-as-inquiries + recent
-# commit activity). OFF by default so product builds (server/desktop/daemon)
-# drop `corpus-engine-archaeology`; the `sovereign-cli-dev` workbench enables it.
-dev-tools = ["dep:corpus-engine-archaeology"]
+# carry zero ATOS; here it unlocks the KnowledgeView strategic ATOS splice.
+# Orthogonal to `treesitter` — the strategic splice needs both axes.
+#
+# A pure CODE gate since the FIVE_PROGRAMS cut: the splice takes an injected
+# `knowledge_view::timeline::FeatureCatalog`, so no ATOS crate is named here.
+atos = []
 # PaddleOCR (ONNX) OCR engine. Off by default so headless/default builds
 # don't pull the OCR inference surface; the desktop enables it once the
 # bake-off greenlights swapping it in for tesseract.
-paddle-ocr = ["dep:ort", "dep:ndarray", "dep:imageproc", "dep:i_overlay"]
+paddle-ocr = ["dep:ort", "dep:ndarray", "dep:imageproc"]
 
 [dev-dependencies]
 # Zip writer for hand-building minimal DOCX fixtures in
@@ -260,10 +223,6 @@ tracing-subscriber = { workspace = true }
 # feature is on. Declaring `required-features` lets `cargo test`
 # / `cargo check` skip them under the default feature set instead
 # of failing the workspace build.
-[[example]]
-name = "exercise_code_tools"
-required-features = ["treesitter"]
-
 # Tesseract-vs-PaddleOCR bake-off harness. Compiles only with the
 # `paddle-ocr` feature; runs both engines on a scanned PDF and emits a
 # side-by-side quality/latency comparison (+ CER/WER if a ground-truth

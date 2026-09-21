@@ -283,9 +283,10 @@ crates/
 └── sovereign-tdd            # Unified TDD solver loop (HTTP + MCP transports)
 ```
 
-Top-level: `modes/` (skills — recipe-author, inner-work),
-`models.toml`, `models/`, `bench/`, `inquiries/`, `router/`,
-`sovereign-server.toml`.
+Top-level: `modes/` (skills — recipe-author, inner-work), `models/`,
+`bench/`, `inquiries/`, `sovereign-server.toml`. `models.toml` and the
+router exemplar banks are baked data and live with the crate that bakes
+them: `crates/sovereign-core/data/`.
 
 ### commonwealth
 
@@ -342,7 +343,7 @@ with the crate instead, and the tracking field now names the condition that
 actually discharges them — the harness simulating a node against `oicp-types`
 alone.
 
-`contrib/` ships `install.sh`, systemd unit, launchd plist.
+`crates/sovereign-service/data/` ships the systemd unit, launchd plist, Windows task XML.
 `docs/oicp-v0.4.md` is the canonical OICP spec (v0.4 extends v0.3
 additively; `oicp-v0.3.md` remains the documented fallback path).
 `oicp-conformance` (a repo-root sibling of `oicp-types`) is the
@@ -466,7 +467,8 @@ naming both, recording the resident company in
 through `scripts/setup-sec-corpus.sh`, which materializes CIK-keyed
 `sec-cik<10-digit>` overrides with a `local_file` acquire, so the two
 paths' namespaces cannot collide; the
-concept-normalization registry is `concept-map.toml` beside the recipe, its
+concept-normalization registry is `sovereign-tools/data/sec-filings-company/
+concept-map.toml`, its
 one decider is `sovereign-tools/src/sec_facts_render.rs` — a PURE
 `render(RenderRequest) -> RenderOutput` that turns raw companyfacts + the
 registry into the ingested `facts/*.txt` lines, the `sec_facts.json`
@@ -702,7 +704,7 @@ The SEC filings corpora reuse that same guarantee contract
 `reproduce`, computes ratios and year-over-year changes in Rust, and
 refuses first-class naming what IS available (coverage, freshness, and
 the consolidated-only source limit). The `concept` vocabulary is FIXED
-at compile time, not per corpus: `sovereign-recipes/sec-filings-company/
+at compile time, not per corpus: `sovereign-tools/data/sec-filings-company/
 concept-map.toml` holds the 20 canonical ids and is `include_str!`'d into
 the binary (`sec_edgar.rs` `CONCEPT_MAP_TOML`), so `concept_vocabulary()`
 derives BOTH the schema's `enum` and the tool's own acceptance check from
@@ -2418,7 +2420,7 @@ the handler trace label, the OICP `(capability hint, latency class)` default,
 the retrieval slot with and without evidence, the output-budget depth floor,
 the referential `Operation` with and without an atom-enum pin, and `ToolAccess`
 — the catalog filter. **Adding an intent is a variant, a row, and exemplars in
-`sovereign/router/exemplars.toml`.** `IntentRow` has no `Default`, so a row
+`sovereign/crates/sovereign-core/data/router/exemplars.toml`.** `IntentRow` has no `Default`, so a row
 that omits a column does not compile. Until 2026-08-20 these lived in ten
 `match`es across four crates, three ending in a `_ =>` catch-all — a
 fourteenth intent compiled clean and silently inherited `Speed::Slow`, a
@@ -2515,7 +2517,7 @@ time-sensitive queries), and the **archive** classifier (past chats vs this
 thread — see below). All five are assembled by the single helper
 `sovereign-core/src/router_bootstrap.rs::build_llm_router`, which **every**
 surface calls — CLI/bench, desktop, and the served daemon. Exemplars are baked
-into the binary (`include_str!` of `sovereign/router/*.toml`), so the stack
+into the binary (`include_str!` of `sovereign/crates/sovereign-core/data/router/*.toml`), so the stack
 works regardless of CWD or `.app`-bundle layout; a `SOVEREIGN_*` env var or
 repo-relative file overrides the baked default. This is **parity by
 construction**: every surface gets the same stack because there is only one
@@ -2639,7 +2641,7 @@ in place, with its still-valid half (a topical twin is still coaching) kept.
 **The locator axis — "is this question about our conversation?"
 (2026-07-26).** A third orthogonal axis on the exemplar bank, alongside
 `scope`. Rows tagged `locator = "conversation"` in
-`sovereign/router/exemplars.toml` are scored **one-vs-rest**
+`sovereign/crates/sovereign-core/data/router/exemplars.toml` are scored **one-vs-rest**
 (`EmbedRouter::locator_from_embedding`): best similarity to a tagged row
 minus best similarity to every other row in the bank, gated on its own
 floor + margin, decided **independently of the intent gate**. It exists
@@ -2686,7 +2688,7 @@ own topic and 0.531 on a different one), and a rule over the existing
 axes (cells_v1's own metalingual row scores *more* negative on the
 locator axis than the archive query does, so any threshold catching one
 flips the other). So archive-vs-thread gets its own centroid classifier
-(`archive_classifier.rs`, `sovereign/router/archive_examples.toml`) in
+(`archive_classifier.rs`, `sovereign/crates/sovereign-core/data/router/archive_examples.toml`) in
 the shape that worked for `scope`, and runs as **Pre-check -2.4** —
 *after* the locator axis, so the older and more heavily swept gate wins
 any disagreement. Firing hard-commits `KnowledgeQuery` **plus
@@ -2996,7 +2998,7 @@ where it exists, by `router fit`.
 classifiers embed ~350 static exemplars at every process start — ~5.7s on Apple
 Silicon, *minutes* on a CPU-only embed slot (Intel Macs, which `embed_slot.rs`
 gates off Metal). So the embeddings are pre-computed for the prescribed embed
-model and committed at `sovereign/router/router-embed-cache.json`, baked into
+model and committed at `sovereign/crates/sovereign-core/data/router/router-embed-cache.json`, baked into
 the binary (`BAKED_ROUTER_EMBED_CACHE`) and loaded as the fallback when
 `~/.svrnmesh/router-embed-cache.json` is absent — first launch HITS instead of
 re-embedding. A sentinel cosine probe validates it against the live model, so a
@@ -4625,7 +4627,7 @@ handler.
 | Features overview | [`docs/FEATURES.md`](./docs/FEATURES.md) |
 | FAQ / troubleshooting / dev | [`docs/FAQ.md`](./docs/FAQ.md), [`docs/HAVING_TROUBLE.md`](./docs/HAVING_TROUBLE.md) (end users, no terminal), [`docs/TROUBLESHOOTING.md`](./docs/TROUBLESHOOTING.md) (maintainers), [`docs/DEVELOPMENT.md`](./docs/DEVELOPMENT.md) |
 | **On-call runbook** (incident decision tree, supervision, memory budget, glassbox map, bench noise bands, sibling-rebuild map) | [`docs/RUNBOOK.md`](./docs/RUNBOOK.md) |
-| Retrieval pipeline steps + env-knob registry (GENERATED, freshness-gated) | [`docs/retrieval-pipeline.md`](./docs/retrieval-pipeline.md) |
+| Retrieval pipeline steps + env-knob registry (GENERATED, freshness-gated) | [`crates/sovereign-core/docs/retrieval-pipeline.md`](./crates/sovereign-core/docs/retrieval-pipeline.md) |
 
 ### Notable in-tree invariants
 
@@ -6980,7 +6982,7 @@ daemon lifecycle under `svrn daemon`.
 
 ### Deployment
 
-`contrib/`: `install.sh` (curl installer),
+`crates/sovereign-service/data/`: the service templates,
 `systemd/commonwealth.service`,
 `launchd/com.commonwealth.daemon.plist`.
 
@@ -8142,7 +8144,7 @@ Default ports:
 | Add an `http_api` recipe (REST source)           | See `corpus-engine/src/recipe.rs` round-trip tests                  |
 | Add an investigation recipe                      | `enrichment.type = "investigation"` + `[[entity_types]]` + `[[relationship_types]]` + `[[patterns]]`; run via `svrn enrich investigation build <id>` |
 | Write a skill                                    | `sovereign/modes/<id>/skill.toml`                                   |
-| Tune model selection per hardware                | `sovereign/models.toml`                                             |
+| Tune model selection per hardware                | `sovereign/crates/sovereign-contracts/data/models.toml`                                             |
 | Understand the SCIP call graph                   | `corpus-engine-scip/` (`scip_graph.rs`, `scip_export.rs`)           |
 | Classify a symbol / detect trait dispatch        | `corpus-engine-scip/src/descriptor.rs` — the ONE decider. Derives kind + dispatch from the descriptor, which is 100% populated. Do NOT read `symbols.kind` (88.7% `unknown`, and every top-level type descriptor is mislabelled) or `refs.ref_kind` (100% `direct`, the `dynamic` constant is never written) |
 | Find duplicated concept IDENTITY (a name typed in >1 crate) | `svrn code converge census` / `noun <Name>` / `status`, over `corpus-engine-scip/src/converge.rs`. Also computes the canonical owner from the observed crate DAG and names the users that cannot reach it. **Since 2026-08-21 a name counts only when >=2 crates each hold a definition another crate ALREADY references** (`cross_crate_reached`) — a collision whose every definition is `pub(crate)`, module-private, or declared inside a function body has nothing to import, so no amount of adoption retires it. Measured at `b325f22c`: 239 of 275 rows (87%) were exactly that, and an order target had already been derived from the wide number and was unreachable when written. At `4f64bdb2` the census reads 255 colliding names, 33 countable, and `quality/baselines/concepts.txt` was re-minted 279 -> 33 in the same commit. Of the 222 set aside, 92 still have exactly ONE reached definition — the local copies could still fold into it, and the >=2 rule does not count them; the census prints that number too. Both numbers always print; `--local` lists the rows set aside. Duplicated BEHAVIOUR is a different verb — `svrn code dry-report`; oversized FILES are `svrn code suggest-seams`; duplicated ROLE is `svrn code converge roles`; duplicated SHAPE is `svrn code converge shape` |
@@ -8178,7 +8180,7 @@ Default ports:
 | See where KnowledgeView is injected              | `traits.rs::LandscapeDigestProvider::splice_landscape_digests`; call sites in `runtime/streaming.rs` + `runtime/turn.rs` |
 | Understand ATOS lifecycle                        | `sovereign-atos/src/local/orchestrator.rs`, `sovereign-atos/src/{charter,approval}.rs`, and [`docs/ATOS.md`](./docs/ATOS.md) |
 | See the ATOS CLI surface                         | `sovereign-cli-dev/src/atos_cmd/` + `project_cmd/` (`cmd_found` in `mod.rs`, `cmd_amend` in `charter_amend.rs`, `cmd_phase` in `phase.rs`, `cmd_audit` in `audit/`) |
-| Run the long-running Sovereign daemon            | `sovereign-cli-daemon/src/daemon_cmd/` + `contrib/launchd` + `contrib/systemd` |
+| Run the long-running Sovereign daemon            | `sovereign-cli-daemon/src/daemon_cmd/` + `sovereign-service/data/` |
 | Rotate daemon logs                               | `sovereign-cli-daemon/src/log_rotation.rs`                          |
 | Understand the loopback guard                    | `sovereign-daemon/src/loopback_guard.rs` + `admin_http::tests::loopback_guard_works_under_production_listener_shape` |
 | Serve something a desktop command used to compute in-process | the client-router families in `sovereign-daemon/src/{reading,atlas,meshapp,lc,governance,insight,notes,features,recipe_project,mcp_config,turn_extras}_http.rs` — table in §5, "What the host mounts on that router"; parity audited by `sovereign-mesh/tests/loopback_parity.rs` |

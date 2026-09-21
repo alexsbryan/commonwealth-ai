@@ -14,9 +14,9 @@
 use std::path::{Path, PathBuf};
 
 use futures::StreamExt;
-use sovereign_core::setup_config::EditSection;
-use sovereign_core::traits::InferenceProvider;
-use sovereign_core::types::{CompletionRequest, PromptShape, SamplingMode, StreamFrame};
+use sovereign_contracts::setup_config::EditSection;
+use sovereign_contracts::traits::InferenceProvider;
+use sovereign_contracts::types::{CompletionRequest, PromptShape, SamplingMode, StreamFrame};
 use sovereign_inference::embedded::{EmbeddedLlamaCpp, SlotWindows};
 use sovereign_inference::fim::build_fim_prompt;
 
@@ -28,7 +28,7 @@ fn gated_gguf() -> Option<PathBuf> {
 
 async fn run_fim(
     engine: &EmbeddedLlamaCpp,
-    info: &sovereign_core::types::EditSlotInfo,
+    info: &sovereign_contracts::types::EditSlotInfo,
     prefix: &str,
     suffix: &str,
 ) -> String {

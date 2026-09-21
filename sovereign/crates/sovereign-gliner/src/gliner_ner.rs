@@ -41,8 +41,8 @@ use gliner::model::params::Parameters;
 use gliner::model::pipeline::span::SpanMode;
 use gliner::model::GLiNER;
 use regex::Regex;
-use sovereign_core::conv_tiered::ChunkEntityRow;
-use sovereign_core::error::{Error, Result};
+use sovereign_contracts::daemon_wire::conv_tiered::ChunkEntityRow;
+use sovereign_contracts::error::{Error, Result};
 
 /// Default extraction threshold. Below this, GliNER's softmax score
 /// is too low to trust — most below-threshold "mentions" in
@@ -57,7 +57,7 @@ pub const DEFAULT_THRESHOLD: f32 = 0.6;
 pub const DEFAULT_LABELS: &[&str] = &["Person", "Organization", "Work", "Location", "Event"];
 
 /// Label set for the retrieval-side CONCEPT extraction pass (see
-/// [`EntityExtractor::extract_concepts`](sovereign_core::traits::EntityExtractor::extract_concepts)).
+/// [`EntityExtractor::extract_concepts`](sovereign_contracts::traits::EntityExtractor::extract_concepts)).
 /// Deliberately a SEPARATE, single-label pass rather than an addition to
 /// [`DEFAULT_LABELS`]: GLiNER does joint inference over the provided
 /// labels, so folding `Concept` into the 5-label set would shift the
@@ -166,7 +166,7 @@ pub fn models_root() -> PathBuf {
     if let Ok(p) = std::env::var("SOVEREIGN_GLINER_MODEL_DIR") {
         return PathBuf::from(p);
     }
-    sovereign_core::rebrand::svrnmesh_root()
+    sovereign_contracts::rebrand::svrnmesh_root()
         .join("models")
         .join("gliner")
 }
@@ -478,7 +478,7 @@ impl crate::labeled::LabeledEntityExtractor for GlinerExtractor {
     }
 }
 
-/// Implementation of the `sovereign-core::traits::EntityExtractor`
+/// Implementation of the `sovereign-contracts::traits::EntityExtractor`
 /// trait. Wraps `GlinerExtractor::extract` and dedupes by entity
 /// text (lower-cased). The trait elides the label because
 /// retrieval-side scoring only needs the entity STRING for
@@ -489,7 +489,7 @@ impl crate::labeled::LabeledEntityExtractor for GlinerExtractor {
 /// to pure cosine on that turn instead of crashing the synthesis
 /// path. The retrieval call sites already log soft-failures via
 /// `tracing::debug!`.
-impl sovereign_core::traits::EntityExtractor for GlinerExtractor {
+impl sovereign_contracts::traits::EntityExtractor for GlinerExtractor {
     fn extract_entities(&self, text: &str) -> Vec<String> {
         dedup_mention_texts(self.extract(text).ok())
     }
@@ -581,7 +581,7 @@ impl LazyGlinerExtractor {
     }
 }
 
-impl sovereign_core::traits::EntityExtractor for LazyGlinerExtractor {
+impl sovereign_contracts::traits::EntityExtractor for LazyGlinerExtractor {
     fn extract_entities(&self, text: &str) -> Vec<String> {
         match self.inner.get() {
             Some(g) => g.extract_entities(text),
@@ -610,7 +610,7 @@ pub(crate) fn normalize_mention_text(raw: &str) -> String {
     raw.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
-pub use sovereign_core::time::unix_now as now_unix;
+pub use sovereign_time::unix_now as now_unix;
 
 /// Probe-style helper: returns true if the configured model is
 /// installed and the extractor can be loaded. Useful for CLI

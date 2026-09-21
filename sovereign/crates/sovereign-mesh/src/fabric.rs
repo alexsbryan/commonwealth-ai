@@ -24,8 +24,8 @@ use commonwealth_media::fanout::{FanoutRequest, FanoutResponse};
 use commonwealth_media::{MediaOffer, MediaReach, MediaReachRefusal, PeerTransportPath};
 use commonwealth_state::{ContributionEmitter, MeshStore};
 use commonwealth_transport::PeerTransport;
-use sovereign_core::identity::IdentityReader;
-use sovereign_core::peer::ConvergenceRecord;
+use sovereign_contracts::identity::IdentityReader;
+use sovereign_contracts::peer::ConvergenceRecord;
 use sovereign_meshapp_registry::proxy::AppPortMap;
 use sovereign_meshapp_registry::registry::AppRegistry;
 
@@ -227,7 +227,7 @@ pub struct FabricSeed {
 /// Fabric's twenty fields, held as `AppStateInner::fabric`.
 pub struct FabricPart {
     /// This node's identity, published as a **watch** rather than copied as a
-    /// value (`sovereign_core::identity::IdentityReader`, a re-export of the
+    /// value (`sovereign_contracts::identity::IdentityReader`, a re-export of the
     /// contract type; DC §4.2
     /// "Identity is a reader, not a value"). `join_mesh` swaps the placeholder
     /// id for the founder-assigned one atomically after the handshake, and a

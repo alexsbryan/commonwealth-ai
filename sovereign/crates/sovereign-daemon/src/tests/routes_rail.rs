@@ -277,7 +277,7 @@ fn a_wall_grant_is_refused_a_namespace_nobody_declared() {
 /// is not the only guard (ARCH 5).
 #[test]
 fn a_daemon_owned_namespace_is_refused_even_when_the_registry_declares_it() {
-    let owned = sovereign_core::mesh_measurements::MEASUREMENTS_APP_ID;
+    let owned = sovereign_mesh::mesh_measurements::MEASUREMENTS_APP_ID;
     let pages = wall_of(&[(owned, open("/a")), ("work", open("/b"))]);
     let g = grant_with(vec![Scope::Wall]);
     for ns in [owned, "work"] {

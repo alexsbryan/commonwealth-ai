@@ -7,7 +7,7 @@
 //! Run with:
 //!   cargo run --example gliner_smoke -p sovereign-gliner
 
-fn main() -> sovereign_core::error::Result<()> {
+fn main() -> sovereign_contracts::error::Result<()> {
     use sovereign_gliner::gliner_ner::GlinerExtractor;
     eprintln!("Loading GliNER (this is the first-call cost)…");
     let start = std::time::Instant::now();

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! `svrn router-cache {check,rebuild}` — manage the pre-built router
-//! exemplar embedding cache (`sovereign/router/router-embed-cache.json`).
+//! exemplar embedding cache (`sovereign/crates/sovereign-core/data/router/router-embed-cache.json`).
 //!
 //! - `check`  — pure, no-inference freshness gate over the WORKING TREE
 //!   (exemplars + models.toml + the committed cache). Exit 0 = fresh, 3 = stale,
@@ -28,9 +28,9 @@ use sovereign_core::scope_classifier::PersonalScopeClassifier;
 use sovereign_core::traits::InferenceProvider;
 use sovereign_inference::embedded::EmbedOnlyProvider;
 
-const CACHE_REL: &str = "sovereign/router/router-embed-cache.json";
-const MODELS_REL: &str = "sovereign/models.toml";
-const ROUTER_DIR: &str = "sovereign/router";
+const CACHE_REL: &str = "sovereign/crates/sovereign-core/data/router/router-embed-cache.json";
+const MODELS_REL: &str = "sovereign/crates/sovereign-contracts/data/models.toml";
+const ROUTER_DIR: &str = "sovereign/crates/sovereign-core/data/router";
 
 const HELP: &str = "\
 sovereign router-cache — pre-built router exemplar embedding cache
@@ -60,7 +60,7 @@ pub async fn run(args: &[String]) -> i32 {
     }
 }
 
-/// Walk up from CWD to the repo root (the dir holding `sovereign/models.toml`).
+/// Walk up from CWD to the repo root (the dir holding the bundled `models.toml`).
 pub(crate) fn repo_root() -> Option<PathBuf> {
     let mut dir = std::env::current_dir().ok()?;
     loop {

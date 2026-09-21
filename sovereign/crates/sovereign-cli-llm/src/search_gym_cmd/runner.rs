@@ -646,10 +646,7 @@ mod tests {
         // Walk every fixture under sovereign/bench/search-gym/fixtures/.
         // Find the path the same way the gym does (workspace root +
         // fixed offset) so tests run from any cwd.
-        let workspace_root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../../..")
-            .canonicalize()
-            .expect("workspace root resolvable");
+        let workspace_root = super::super::workspace_root().expect("workspace root resolvable");
         let fixtures_dir = workspace_root.join("sovereign/bench/search-gym/fixtures");
 
         let mut mismatches: Vec<String> = Vec::new();
@@ -730,10 +727,7 @@ mod tests {
 
         const INTENTIONAL_FORKS: &[&str] = &[];
 
-        let workspace_root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../../..")
-            .canonicalize()
-            .expect("workspace root resolvable");
+        let workspace_root = super::super::workspace_root().expect("workspace root resolvable");
         let fixtures_dir = workspace_root.join("sovereign/bench/search-gym/fixtures");
 
         let mut mismatches: Vec<String> = Vec::new();

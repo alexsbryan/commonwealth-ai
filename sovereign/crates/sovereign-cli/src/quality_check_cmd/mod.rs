@@ -893,8 +893,9 @@ on_could_not_judge = "block"
     /// nobody has watched read the real file.
     #[test]
     fn the_shipped_registry_parses_and_every_trigger_selects_something() {
-        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../../quality/instruments.toml");
+        let path = crate::posture_cmd::find_repo_root()
+            .expect("this test runs inside the checkout that ships quality/instruments.toml")
+            .join("quality/instruments.toml");
         let text = std::fs::read_to_string(&path).expect("quality/instruments.toml");
         let r = match Registry::parse(&text) {
             Ok(r) => r,

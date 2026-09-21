@@ -4208,11 +4208,11 @@ impl Runtime {
         // retrieval); KnowledgeQuery's own ground-or-abstain handles the rest, so
         // an over-escalation degrades to a normal grounded answer, never a leak.
         if matches!(intent, Intent::MetalingualQuery)
-            && (crate::runtime::evidence_loop::compute_entity_anchored(
+            && (crate::runtime::anchoring::compute_entity_anchored(
                 message,
                 context.conversation.enabled_corpora.as_deref(),
                 &[],
-            ) || crate::runtime::evidence_loop::question_is_corpus_deictic(message))
+            ) || crate::runtime::anchoring::question_is_corpus_deictic(message))
         {
             tracing::info!(
                 from = ?intent,

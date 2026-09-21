@@ -86,7 +86,7 @@ fn the_un_namespaced_page_is_still_served_at_the_bare_prefix() {
 #[test]
 fn a_daemon_owned_namespace_cannot_be_declared_open_to_guests() {
     for owned in [
-        sovereign_core::mesh_measurements::MEASUREMENTS_APP_ID,
+        sovereign_mesh::mesh_measurements::MEASUREMENTS_APP_ID,
         "work",
     ] {
         let mut d = sovereign_core::setup_config::DaemonSection::default();

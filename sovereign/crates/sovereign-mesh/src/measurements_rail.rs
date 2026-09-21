@@ -48,11 +48,11 @@
 //! spelling of a rate is a second identity for one measurement. One
 //! representation, and it is the one both the file and the wire already use.
 
+use crate::mesh_measurements as mm;
 use commonwealth_rail::{
     Admission, Ed25519Verifier, Op, Payload, Person, RailAct, RingJournal, RingSigner, Roster,
     SignedOp,
 };
-use sovereign_core::mesh_measurements as mm;
 
 /// What a `mesh-measurements` journal line says it is. Present so a reader —
 /// `svrn ring log`, a future second act on this namespace — can tell the act

@@ -30,13 +30,13 @@ use crate::skills::SkillRegistry;
 use crate::traits::{InferenceProvider, StateStore};
 
 /// Baked exemplar defaults — the same bytes as the editable on-disk files under
-/// `sovereign/router/`, vendored at compile time so every binary has them.
-pub const BAKED_ROUTER_EXEMPLARS: &str = include_str!("../../../router/exemplars.toml");
-pub const BAKED_SCOPE_EXAMPLES: &str = include_str!("../../../router/scope_examples.toml");
-pub const BAKED_EFFORT_EXAMPLES: &str = include_str!("../../../router/effort_examples.toml");
+/// `sovereign/crates/sovereign-core/data/router/`, vendored at compile time so every binary has them.
+pub const BAKED_ROUTER_EXEMPLARS: &str = include_str!("../data/router/exemplars.toml");
+pub const BAKED_SCOPE_EXAMPLES: &str = include_str!("../data/router/scope_examples.toml");
+pub const BAKED_EFFORT_EXAMPLES: &str = include_str!("../data/router/effort_examples.toml");
 pub const BAKED_CURRENT_INFO_EXAMPLES: &str =
-    include_str!("../../../router/current_info_examples.toml");
-pub const BAKED_ARCHIVE_EXAMPLES: &str = include_str!("../../../router/archive_examples.toml");
+    include_str!("../data/router/current_info_examples.toml");
+pub const BAKED_ARCHIVE_EXAMPLES: &str = include_str!("../data/router/archive_examples.toml");
 
 /// Every `(method, text)` pair the five boot classifiers embed, in boot order.
 /// `method` is the embed-cache key space, resolved for each classifier's axis
@@ -122,29 +122,29 @@ pub struct ExemplarOverrides {
 
 impl ExemplarOverrides {
     /// Resolve each set from its `SOVEREIGN_*` env var, then a repo-relative
-    /// `sovereign/router/*.toml` (present in a dev checkout, absent in a
+    /// `sovereign/crates/sovereign-core/data/router/*.toml` (present in a dev checkout, absent in a
     /// packaged app). Anything unresolved stays `None` → the baked default.
     pub fn from_env_and_repo() -> Self {
         Self {
             router: resolve(
                 "SOVEREIGN_ROUTER_EXEMPLARS",
-                "sovereign/router/exemplars.toml",
+                "sovereign/crates/sovereign-core/data/router/exemplars.toml",
             ),
             scope: resolve(
                 "SOVEREIGN_SCOPE_EXAMPLES",
-                "sovereign/router/scope_examples.toml",
+                "sovereign/crates/sovereign-core/data/router/scope_examples.toml",
             ),
             effort: resolve(
                 "SOVEREIGN_EFFORT_EXAMPLES",
-                "sovereign/router/effort_examples.toml",
+                "sovereign/crates/sovereign-core/data/router/effort_examples.toml",
             ),
             current_info: resolve(
                 "SOVEREIGN_CURRENT_INFO_EXAMPLES",
-                "sovereign/router/current_info_examples.toml",
+                "sovereign/crates/sovereign-core/data/router/current_info_examples.toml",
             ),
             archive: resolve(
                 "SOVEREIGN_ARCHIVE_EXAMPLES",
-                "sovereign/router/archive_examples.toml",
+                "sovereign/crates/sovereign-core/data/router/archive_examples.toml",
             ),
         }
     }

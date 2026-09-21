@@ -28,8 +28,6 @@
 //   corpus_watch_cmd, worker_pod_provider, REPL Runtime construction.
 
 mod amend_cmd;
-#[cfg(feature = "dev-tools")]
-mod archaeology_eval_cmd;
 mod audit_cmd;
 // `awareness_cmd` is NOT here any more (nc-26, 2026-08-21). It lives in
 // `sovereign-cli-llm`, which owns the `enrich_cmd::inference_client` two of
@@ -52,6 +50,8 @@ mod code_refresh;
 // init's whole job is to produce a corpus, so a build that cannot index has
 // nothing to offer it.
 #[cfg(feature = "dev-tools")]
+#[cfg(feature = "dev-tools")]
+mod agent_bench_bin;
 mod conformance_cmd;
 mod contract_cmd;
 mod daemon_bin;
@@ -60,12 +60,11 @@ mod deep_research_cmd;
 mod design_cmd;
 mod dev_bin;
 mod drift_cmd;
-#[cfg(feature = "dev-tools")]
-mod git_archaeology_cmd;
 mod init;
 mod journal_cmd;
 mod llm_bin;
 mod memory_cmd;
+mod mesh_bin;
 mod milestone_cmd;
 mod notes_cmd;
 mod notes_retrieval_cmd;
@@ -86,8 +85,6 @@ mod project_registry;
 mod reflect_cmd;
 mod refresh_cmd;
 mod report_audit;
-#[cfg(feature = "dev-tools")]
-mod rough_edges_cmd;
 mod seat_cmd;
 mod serve_cmd;
 mod session_cmd;
@@ -884,10 +881,14 @@ async fn async_main() {
             // execs into it without setting up a tracing subscriber —
             // the sibling's main() installs the appropriate filter for
             // each verb.
-            "mesh" | "meshapp" | "ring" | "job" | "mobile" | "alignment" | "corpus"
-            | "meta-atlas" | "mcp" | "recipe" | "pipeline" | "recipe-agent" | "maintainer"
-            | "publish" | "unpublish" | "run" => {
+            "mobile" | "alignment" | "corpus" | "meta-atlas" | "mcp" | "recipe" | "pipeline"
+            | "recipe-agent" | "maintainer" => {
                 let code = llm_bin::exec(first, &raw_args[1..]);
+                std::process::exit(code);
+            }
+            // cmnwlth's verbs — the mesh sibling (FIVE_PROGRAMS §9).
+            "mesh" | "meshapp" | "ring" | "job" | "publish" | "unpublish" | "run" => {
+                let code = mesh_bin::exec(first, &raw_args[1..]);
                 std::process::exit(code);
             }
             "code" => {
@@ -1075,17 +1076,17 @@ async fn async_main() {
             }
             #[cfg(feature = "dev-tools")]
             "rough-edges" => {
-                let code = rough_edges_cmd::run(&raw_args[1..]).await;
+                let code = dev_bin::exec("rough-edges", &raw_args[1..]);
                 std::process::exit(code);
             }
             #[cfg(feature = "dev-tools")]
             "git-archaeology" => {
-                let code = git_archaeology_cmd::run(&raw_args[1..]).await;
+                let code = dev_bin::exec("git-archaeology", &raw_args[1..]);
                 std::process::exit(code);
             }
             #[cfg(feature = "dev-tools")]
             "archaeology-eval" => {
-                let code = archaeology_eval_cmd::run(&raw_args[1..]).await;
+                let code = dev_bin::exec("archaeology-eval", &raw_args[1..]);
                 std::process::exit(code);
             }
             "charter" => {
@@ -1095,14 +1096,14 @@ async fn async_main() {
             "claim" => {
                 // Moved to sovereign-cli-llm (uses sovereign-mesh +
                 // sovereign-work-atlas, both heavy).
-                let code = llm_bin::exec("claim", &raw_args[1..]);
+                let code = dev_bin::exec("claim", &raw_args[1..]);
                 std::process::exit(code);
             }
             "solve" => {
                 // Daemon-hosted TDD solver client (docs/specs/SOLVE_UX.md).
                 // Lives in sovereign-cli-llm with the other daemon-HTTP
                 // clients (chat, claim).
-                let code = llm_bin::exec("solve", &raw_args[1..]);
+                let code = dev_bin::exec("solve", &raw_args[1..]);
                 std::process::exit(code);
             }
             "amend" => {
@@ -1214,10 +1215,15 @@ async fn async_main() {
                 std::process::exit(code);
             }
             // ── LLM cluster (continued) → sovereign-cli-llm ──
-            "backlog" | "enrich" | "atlas" | "eval" | "voice" | "bench" | "search-gym"
-            | "knowledge-gym" | "chat" | "reading-diag" | "newsworthy" | "govern"
-            | "router-cache" | "proxy" | "portfolio" | "workflow" => {
+            "enrich" | "atlas" | "eval" | "voice" | "bench" | "search-gym" | "knowledge-gym"
+            | "chat" | "reading-diag" | "newsworthy" | "govern" | "router-cache" | "proxy"
+            | "portfolio" | "workflow" => {
                 let code = llm_bin::exec(first, &raw_args[1..]);
+                std::process::exit(code);
+            }
+            // `backlog` is `svrn code`'s: its items are notes-store todos.
+            "backlog" => {
+                let code = dev_bin::exec("backlog", &raw_args[1..]);
                 std::process::exit(code);
             }
             #[cfg(feature = "dev-tools")]
@@ -1225,8 +1231,8 @@ async fn async_main() {
                 // Eleven-problem coding battery; subprocess-driven
                 // pi / opencode / codex runners. See SYSTEM_OVERVIEW §4
                 // and `sovereign/crates/sovereign-agent-bench/`.
-                let code = sovereign_agent_bench::run_agent_bench(&raw_args[1..]).await;
-                std::process::exit(code as i32);
+                let code = agent_bench_bin::exec(&raw_args[1..]);
+                std::process::exit(code);
             }
             "nudge" => {
                 let code = run_nudge(&raw_args[1..]).await;

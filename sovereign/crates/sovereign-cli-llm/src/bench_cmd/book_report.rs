@@ -37,7 +37,12 @@ use sovereign_cli_shared::help::{self, Help, HelpSection};
 /// Bench configuration baked in at compile time. Changing the questions
 /// requires rebuilding the CLI; that's intentional — the bench is
 /// versioned with the codebase, not authored at runtime.
-const BENCH_TOML: &str = include_str!("../../../../bench/book-report/bench.toml");
+///
+/// It lives INSIDE this crate: an embed reaching into `sovereign/bench/`
+/// made the monorepo's directory shape a build requirement for the whole
+/// `svrn` package (boundary-gate rule 3b). The prose half of the bench —
+/// README + reference passages — stays at `sovereign/bench/book-report/`.
+const BENCH_TOML: &str = include_str!("book_report_bank/bench.toml");
 
 /// Gutenberg URL for The Secret Agent (book id 974). Pinned to the
 /// canonical UTF-8 plaintext mirror; the SHA-256 in `bench.toml` locks

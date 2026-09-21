@@ -4,8 +4,9 @@
 //! The registry is DECLARATION, not plumbing: `std::env::var` read sites stay
 //! exactly where they are. This gate censuses them — Rust literals
 //! (`env::var`/`var_os`/`set_var`/`remove_var`), the `svrnmesh_env` suffix
-//! wrapper, and `${SOVEREIGN_*}` expansions/assignments in `scripts/` +
-//! `.claude/hooks/` — and diffs the observed names against the declared map.
+//! wrapper, `EnvFlag { name: … }` table literals, and `${SOVEREIGN_*}`
+//! expansions/assignments in `scripts/` + `.claude/hooks/` — and diffs the
+//! observed names against the declared map.
 //! A NEW name that is neither registered, third-party-allowlisted, nor in the
 //! legacy baseline fails the gate with the exact fix; the pre-existing debt
 //! rides the shrink-only baseline (`quality/baselines/env_unregistered.txt`,
@@ -14,7 +15,7 @@
 //!
 //! `docs/ENV_FLAGS.md` is rendered from the registry and freshness-checked
 //! here (regenerate: `--update-doc`) — same generated-doc contract as
-//! `sovereign/docs/retrieval-pipeline.md`, with xtask as the renderer because
+//! `sovereign-core/docs/retrieval-pipeline.md`, with xtask as the renderer because
 //! the source of truth is repo data, not crate code.
 //!
 //! `SVRNMESH_*` observations canonicalize to `SOVEREIGN_*`: the rebrand
@@ -141,6 +142,23 @@ pub fn run(args: &[String]) -> i32 {
             "  Declare each in {REGISTRY_PATH} (a [[flag]] entry with cluster/default/purpose/status,\n  \
              or `third_party_allowlist` for vars owned by other software). To accept as legacy debt instead:\n  \
              cargo run -p xtask -- env-gate --update-baseline"
+        );
+    }
+
+    let undeclared = flag_literals(&root, &scope)
+        .into_iter()
+        .filter(|(name, _)| !registered.contains(name.as_str()))
+        .collect::<BTreeMap<_, _>>();
+    for (name, sites) in &undeclared {
+        failures += 1;
+        eprintln!("env-gate: `EnvFlag` literal `{name}` is not declared in {REGISTRY_PATH}:");
+        for site in sites.iter().take(3) {
+            eprintln!("    {site}");
+        }
+    }
+    if !undeclared.is_empty() {
+        eprintln!(
+            "  A runtime flag table and the registry must not drift. Add a [[flag]] entry\n               (cluster/default/purpose/status) for each — the baseline does NOT cover these."
         );
     }
 
@@ -335,6 +353,37 @@ fn census(root: &Path, scope: &common::SourceTree) -> BTreeMap<String, Vec<Strin
     }
 
     observed
+}
+
+/// Declared flag name -> `file:line` sites, from the `EnvFlag { name: "…" }`
+/// literals the runtime flag tables are built out of.
+///
+/// This is the half `census` cannot see: `SOVEREIGN_GROUNDING_GATE_<SURFACE>`
+/// is an override GRAMMAR, never an `env::var` literal, so a table row for it
+/// could drift from the registry with every read site still declared. Lived in
+/// two copy-pasted `flags_table_is_declared_in_env_registry` tests inside
+/// sovereign-core until 2026-09-21; they read `quality/env-flags.toml` through
+/// `CARGO_MANIFEST_DIR` and climbed out of the crate (`boundary-gate` rule 3c).
+// Static regex literal + guaranteed capture group.
+#[allow(clippy::expect_used)]
+fn flag_literals(root: &Path, scope: &common::SourceTree) -> BTreeMap<String, Vec<String>> {
+    let re = regex::Regex::new(r#"EnvFlag\s*\{[^}]*?name:\s*"([A-Z0-9_<>]+)""#)
+        .expect("flag literal regex");
+    let mut out: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    for file in rust_files(root, scope) {
+        let Ok(content) = std::fs::read_to_string(&file) else {
+            continue;
+        };
+        for cap in re.captures_iter(&content) {
+            let m = cap.get(1).expect("group 1");
+            let line = content[..m.start()].matches('\n').count() + 1;
+            let rel = file.strip_prefix(root).unwrap_or(&file);
+            out.entry(m.as_str().to_string())
+                .or_default()
+                .push(format!("{}:{line}", rel.display()));
+        }
+    }
+    out
 }
 
 /// Every `.rs` file in THIS REPO'S SOURCE. Censusing a vendored dependency

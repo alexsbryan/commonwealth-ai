@@ -40,7 +40,7 @@
 //!   `Restart=on-failure`.
 //!
 //! Templates are bundled at compile time via `include_str!` — see
-//! `contrib/launchd/` and `contrib/systemd/`. `{BINARY}` and `{HOME}`
+//! `data/launchd/` and `data/systemd/`. `{BINARY}` and `{HOME}`
 //! placeholders are substituted with absolute paths.
 //!
 //! All install/uninstall operations are best-effort: failures return
@@ -51,13 +51,14 @@
 use std::path::{Path, PathBuf};
 
 #[cfg(target_os = "macos")]
-const LAUNCHD_TEMPLATE: &str = include_str!("../../../contrib/launchd/com.svrnmesh.daemon.plist");
+const LAUNCHD_TEMPLATE: &str = include_str!("../data/launchd/com.svrnmesh.daemon.plist");
 
 #[cfg(target_os = "linux")]
-const SYSTEMD_TEMPLATE: &str = include_str!("../../../contrib/systemd/svrnmesh.service");
+const SYSTEMD_TEMPLATE: &str = include_str!("../data/systemd/svrnmesh.service");
 
-#[cfg(target_os = "windows")]
-const SCHTASKS_TEMPLATE: &str = include_str!("../../../contrib/windows/SvrnmeshDaemon.xml");
+// `test` too: `service_ownership_tests` (linux/macOS) asserts this template.
+#[cfg(any(target_os = "windows", test))]
+const SCHTASKS_TEMPLATE: &str = include_str!("../data/windows/SvrnmeshDaemon.xml");
 
 /// The Scheduled Task name on Windows — the analogue of the launchd label
 /// and the systemd unit name, and it must match `CANDIDATE_SERVICES`.
@@ -1536,7 +1537,7 @@ mod service_ownership_tests {
     /// backend nobody here can run.
     #[test]
     fn the_windows_task_template_is_a_daemon_registration() {
-        let xml = include_str!("../../../contrib/windows/SvrnmeshDaemon.xml");
+        let xml = SCHTASKS_TEMPLATE;
         assert!(xml.contains("{BINARY}"), "installer substitutes the binary");
         assert!(
             xml.contains("{WORKDIR}"),

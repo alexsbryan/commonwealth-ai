@@ -193,6 +193,16 @@ fn parse_args(args: &[String]) -> Result<Args, String> {
 }
 
 fn default_bench_dir() -> PathBuf {
+    // One env decider, shared with sovereign-eval's bank tests. The cwd walk
+    // below stays because a user typing `svrn bench uap` has no knob set.
+    if let Some(root) = sovereign_eval::bench_root::bench_root() {
+        let candidate = root.join("uap");
+        if candidate.exists() {
+            tracing::debug!(target: "bench.root", source = "env", dir = %candidate.display());
+            return candidate;
+        }
+        tracing::debug!(target: "bench.root", source = "env", miss = %candidate.display());
+    }
     if let Ok(cwd) = std::env::current_dir() {
         let candidate = cwd.join("sovereign/bench/uap");
         if candidate.exists() {
@@ -209,17 +219,6 @@ fn default_bench_dir() -> PathBuf {
 }
 
 use sovereign_core::time::unix_now as now_secs;
-
-fn git_head_short() -> Option<String> {
-    std::process::Command::new("git")
-        .args(["rev-parse", "--short", "HEAD"])
-        .output()
-        .ok()
-        .filter(|o| o.status.success())
-        .and_then(|o| String::from_utf8(o.stdout).ok())
-        .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty())
-}
 
 // ── outcome record ───────────────────────────────────────────────────
 
@@ -443,7 +442,7 @@ async fn cmd_run(args: &[String]) -> Result<i32, String> {
         let mut budget = PeekBudget::load(&budget_path).map_err(|e| format!("peek budget: {e}"))?;
         let n = budget.burn(
             "--unseal-holdout from `svrn bench uap run`",
-            git_head_short(),
+            sovereign_cli_shared::repo::head_short_in(&parsed.bench_dir),
         );
         budget
             .save(&budget_path)

@@ -40,11 +40,11 @@ use std::sync::Arc;
 
 use corpus_engine::CorpusEngine;
 use corpus_engine_notes::NoteStore;
-use sovereign_core::setup_config::SetupConfig;
+use sovereign_contracts::setup_config::SetupConfig;
 use sovereign_daemon::daemon::EmbeddedDaemon;
 use sovereign_daemon::features_http::features_router;
 use sovereign_daemon::notes_http::notes_router;
-use sovereign_store::recipe_project_store::RecipeProjectStore;
+use sovereign_tools::recipe_author::recipe_project_store::RecipeProjectStore;
 
 use crate::common;
 use crate::common::spawn_router;

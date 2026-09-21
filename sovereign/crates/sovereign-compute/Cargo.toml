@@ -20,11 +20,9 @@ license.workspace = true
 # the child server wraps an `Arc<dyn InferenceProvider>`.
 sovereign-contracts = { workspace = true }
 # The compute child embeds the real engine: EmbeddedLlamaCpp (generate) /
-# EmbedOnlyProvider (embed), plus fast_exit_skip_destructors on the abort
-# path. sovereign-core supplies ModelFamily. Both are runtime-layer (same
-# layer as this crate), so the dependency direction is legal.
+# EmbedOnlyProvider (embed), plus fast_exit_skip_destructors on the abort path.
+# Runtime-layer, same layer as this crate, so the direction is legal.
 sovereign-inference = { workspace = true }
-sovereign-core = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }

@@ -25,14 +25,14 @@ use crate::llama::cpp::sampling::LlamaSampler;
 use crate::llama::cpp::token::LlamaToken;
 use crate::llama::{LlamaContextExt, LlamaModelExt};
 
-use sovereign_core::error::Error;
-use sovereign_core::model_family::{
+use sovereign_contracts::error::Error;
+use sovereign_contracts::model_family::{
     EmbedQuirks, ModelFamily, ModelQuirks, PoolingStrategy, RerankQuirks, ThinkingControl,
 };
-use sovereign_core::setup_config::{fim_defaults, EditSection};
-use sovereign_core::traits::{frames_to_text_stream, InferenceProvider, ResidentSlot};
-use sovereign_core::types::*;
-use sovereign_core::Result;
+use sovereign_contracts::setup_config::{fim_defaults, EditSection};
+use sovereign_contracts::traits::{frames_to_text_stream, InferenceProvider, ResidentSlot};
+use sovereign_contracts::types::*;
+use sovereign_contracts::Result;
 
 use super::idle_slot::IdleSlot;
 use crate::hardware::{detect_hardware, HardwareProfile};
@@ -877,7 +877,7 @@ pub(crate) fn pick_slot(
         .oicp
         .as_ref()
         .and_then(|o| o.capability_hint.as_ref())
-        .map(|h| h.as_str() == sovereign_core::oicp::CapabilityHint::CODE)
+        .map(|h| h.as_str() == oicp_types::CapabilityHint::CODE)
         .unwrap_or(false);
     if wants_code && has_code {
         return SlotTarget::Code;
@@ -2268,7 +2268,7 @@ impl EmbeddedLlamaCpp {
     async fn acquire_lazy(
         &self,
         phase: &'static str,
-        admission: Option<&sovereign_core::types::TurnAdmission>,
+        admission: Option<&sovereign_contracts::types::TurnAdmission>,
     ) -> Result<super::model_slot::SlotPermit> {
         super::model_slot::acquire_with_queue_gauge(&self.lazy_queue, phase, admission).await
     }
@@ -2940,8 +2940,8 @@ mod fast_alias_guard_tests {
 #[cfg(test)]
 mod edit_lane_tests {
     use super::edit_lanes;
-    use sovereign_core::setup_config::fim_defaults;
-    use sovereign_core::types::{FimStyle, NextEditFormat};
+    use sovereign_contracts::setup_config::fim_defaults;
+    use sovereign_contracts::types::{FimStyle, NextEditFormat};
 
     /// Next-edit needs only a prompt dialect, so it is available on any
     /// loaded model. This is the whole basis of graceful degradation:

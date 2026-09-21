@@ -219,7 +219,11 @@ pub async fn responses(
         ResponsesInput::Text(_) => 1,
     };
 
-    let frontdoor_on = frontdoor::is_enabled();
+    // The `SOVEREIGN_FRONTDOOR` alias this used to read was cut 2026-09-21
+    // (default off, never set outside its own tests). The harness profile is
+    // the decider now, and `runs_catalog_filter()` is the same predicate
+    // `translate_request` binds as `frontdoor_on` — ONE decider, not two.
+    let frontdoor_on = harness.runs_catalog_filter();
 
     // ── Inbound telemetry record ─────────────────────────────────────
     write_session_telemetry(serde_json::json!({
@@ -350,7 +354,7 @@ fn translate_request(
     // deterministic half of the frontdoor (see `frontdoor` module
     // docs). When off, all tools pass through.
     //
-    // Caller (`responses()`) reads `frontdoor::is_enabled()` once and
+    // Caller (`responses()`) derives the harness once and
     // passes it down so unit tests can drive both paths without
     // racing on a shared env var.
     let tools = req.tools.map(|tools_in| {

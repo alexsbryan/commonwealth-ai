@@ -253,7 +253,7 @@ async fn a_peers_seal_prunes_this_nodes_disk_in_the_round_it_arrives() {
 async fn a_peers_seal_prunes_the_daemons_own_namespace_whose_roster_is_derived() {
     use sovereign_mesh::ring_roster::tests::{member, mesh_of, pubkey_of};
     use sovereign_mesh::ring_roster::MeshRosterSource;
-    const OWN: &str = sovereign_core::mesh_measurements::MEASUREMENTS_APP_ID;
+    const OWN: &str = sovereign_mesh::mesh_measurements::MEASUREMENTS_APP_ID;
     let key = SigningKey::from_bytes(&[1u8; 32]);
     let me = NodeId::from_u128(1);
 

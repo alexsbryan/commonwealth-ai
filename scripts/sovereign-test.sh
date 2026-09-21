@@ -152,8 +152,8 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ADAPTER="${SCRIPT_DIR}/../sovereign/crates/sovereign-tools/src/code/test_adapters/sovereign-cargo-test-adapter"
-NEXTEST_ADAPTER="${SCRIPT_DIR}/../sovereign/crates/sovereign-tools/src/code/test_adapters/sovereign-nextest-junit-adapter"
+ADAPTER="${SCRIPT_DIR}/../sovereign/crates/sovereign-code/src/test_adapters/sovereign-cargo-test-adapter"
+NEXTEST_ADAPTER="${SCRIPT_DIR}/../sovereign/crates/sovereign-code/src/test_adapters/sovereign-nextest-junit-adapter"
 REPO_ROOT="$(dirname "$SCRIPT_DIR")"
 
 # crate_for_path / keep_members / resolve_features — shared with nextest.sh so

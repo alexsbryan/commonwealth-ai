@@ -375,11 +375,10 @@ mod tests {
     /// mirror tests together pin all three copies).
     #[test]
     fn default_anchors_mirror_the_registry_file() {
-        let registry = concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/../../../quality/operational-anchors.toml"
-        );
-        let text = std::fs::read_to_string(registry)
+        let registry = crate::posture_cmd::find_repo_root()
+            .expect("this test runs inside the checkout that ships quality/")
+            .join("quality/operational-anchors.toml");
+        let text = std::fs::read_to_string(&registry)
             .expect("quality/operational-anchors.toml must exist (repo layout)");
         for name in DEFAULT_WATCH_ANCHORS {
             assert!(

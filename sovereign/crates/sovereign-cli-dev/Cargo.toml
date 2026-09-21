@@ -47,7 +47,6 @@ required-features = ["workbench"]
 # `corpus-engine` drags the tree-sitter grammars. Linking those into a
 # dispatcher to move a metric is the failure this split refuses.
 [dependencies]
-serving-policy = { workspace = true }
 # ── Always-on: the thin, linkable surface ──
 # `converge_cmd`'s entire dependency surface. Read-only SQLite over the SCIP
 # graph; no grammars, no model, no daemon.
@@ -79,12 +78,17 @@ sovereign-store = { workspace = true, optional = true }
 # The dev workbench drives the ATOS code-intel tools (project_context,
 # provision/archive/record-atos-event, design-signals, drift), so it enables
 # the `atos` feature; product builds (daemon/desktop/server) leave it off.
+# `dev-tools` (git archaeology in BriefTool) and the code-intel `atos` tools
+# travel with `sovereign-code` since the 2026-09-21 lift; sovereign-tools keeps
+# only the `atos` axis its own knowledge_view splice needs.
+sovereign-code = { workspace = true, features = ["treesitter", "dev-tools"] }
 sovereign-tools = { workspace = true, features = [
     "treesitter",
     "atos",
-    "dev-tools",
 ], optional = true }
 sovereign-atos = { workspace = true, optional = true }
+sovereign-enrichment-build = { workspace = true }
+sovereign-contracts = { workspace = true }
 sovereign-mesh = { workspace = true, features = ["treesitter"], optional = true }
 # The mesh host cluster (domains dm-daemon-mesh-edge): `project_cmd::serve`
 # mounts `mcp_router`, so it rides the same `workbench` gate as the mesh dep.

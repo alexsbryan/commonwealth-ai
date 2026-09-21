@@ -802,7 +802,8 @@ impl EmbeddedDaemon {
     /// `features_http` renders that as a named 503, not as a missing route.
     pub fn features_store(
         &self,
-    ) -> Option<&Arc<sovereign_store::recipe_project_store::RecipeProjectStore>> {
+    ) -> Option<&Arc<sovereign_tools::recipe_author::recipe_project_store::RecipeProjectStore>>
+    {
         self.services
             .serving()
             .and_then(|s| s.core.features.as_ref())

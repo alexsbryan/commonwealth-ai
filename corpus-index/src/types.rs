@@ -478,7 +478,7 @@ impl IndexInfo {
     ///
     /// This lives on `IndexInfo` rather than in a consumer crate because
     /// it previously existed as three copies that disagreed
-    /// (`sovereign_tools::code::has_code_graph`,
+    /// (`sovereign_code::has_code_graph`,
     /// `Runtime::code_corpus_ids`, and the metalingual handler's tag
     /// filter). `sovereign-core` carries `sovereign-tools` only as a
     /// dev-dependency, so the runtime could not reach the corrected

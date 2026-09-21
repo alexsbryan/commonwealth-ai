@@ -32,9 +32,9 @@ use serde_json::{json, Value};
 use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::mesh::Mesh;
 use commonwealth_state::MeshStore;
-use sovereign_core::error::Result as SovResult;
-use sovereign_core::traits::InferenceProvider;
-use sovereign_core::types::{
+use sovereign_contracts::error::Result as SovResult;
+use sovereign_contracts::traits::InferenceProvider;
+use sovereign_contracts::types::{
     CompletionRequest, CompletionResponse, ProviderCapabilities, Speed, StreamFrame,
 };
 use sovereign_daemon::server::client_router;

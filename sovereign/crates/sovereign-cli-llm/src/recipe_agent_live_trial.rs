@@ -67,7 +67,7 @@ use sovereign_core::traits::{InferenceProvider, Tool};
 use sovereign_core::types::{ConversationId, StepOutput, ToolContext};
 use sovereign_core::ToolRegistry;
 use sovereign_inference::remote::RemoteApiProvider;
-use sovereign_store::recipe_project_store::RecipeProjectStore;
+use sovereign_tools::recipe_author::recipe_project_store::RecipeProjectStore;
 use sovereign_tools::recipe_author::{
     situated_context, CapabilityRequestTool, CheckpointTool, DecisionLogTool, ProbeUrlTool,
     RecipeProject, RecipeReadTool, RecipeTestTool, RecipeValidateTool, RecipeWriteStructuredTool,

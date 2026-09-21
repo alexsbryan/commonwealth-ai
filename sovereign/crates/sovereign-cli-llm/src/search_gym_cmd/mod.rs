@@ -180,7 +180,7 @@ struct RunOpts {
 
 fn parse_run_args(args: &[String]) -> Result<RunOpts, String> {
     // Workspace-root anchors so the gym works from any subdir.
-    let workspace_root = workspace_root();
+    let workspace_root = workspace_root()?;
     let mut opts = RunOpts {
         fixtures: Vec::new(),
         replays: 10,
@@ -456,7 +456,7 @@ struct CalibrateOpts {
 }
 
 fn parse_calibrate_args(args: &[String]) -> Result<CalibrateOpts, String> {
-    let workspace_root = workspace_root();
+    let workspace_root = workspace_root()?;
     let mut opts = CalibrateOpts {
         base_url: "http://localhost:9741".to_string(),
         judge_model: "commonwealth/fast".to_string(),
@@ -578,21 +578,13 @@ async fn execute_calibrate(opts: CalibrateOpts) -> i32 {
     }
 }
 
-fn workspace_root() -> PathBuf {
-    // The CLI binary lives at <root>/target/release/sovereign-cli post-
-    // monorepo. Walk up from CARGO_MANIFEST_DIR at compile time, then
-    // at runtime prefer the current working directory if it contains
-    // a `sovereign-recipes` dir (which means the user invoked us from
-    // the workspace root and that's the most reliable anchor).
-    if let Ok(cwd) = std::env::current_dir() {
-        if cwd.join("sovereign-recipes").is_dir() {
-            return cwd;
-        }
-    }
-    // Fallback: hard-coded relative to the CLI crate. Two-deep
-    // (sovereign/crates/sovereign-cli/) → workspace root is `../../..`.
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../..")
-        .canonicalize()
-        .unwrap_or_else(|_| PathBuf::from("."))
+/// The checkout the gym's fixtures, mock corpus and calibration cases live in,
+/// resolved from the INVOCATION so the gym works from any subdirectory.
+fn workspace_root() -> Result<PathBuf, String> {
+    sovereign_cli_shared::repo::find_checkout_root().ok_or_else(|| {
+        "search-gym: the CWD is not inside a sovereign checkout, and the gym's fixtures, \
+         mock corpus and judge-calibration cases all live in the tree. Run it from the \
+         checkout."
+            .to_string()
+    })
 }

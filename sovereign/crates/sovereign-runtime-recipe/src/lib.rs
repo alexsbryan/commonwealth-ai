@@ -48,13 +48,15 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use sovereign_contracts::skills::SkillRegistry;
 use sovereign_contracts::tool_bundle::{ToolBundle, Withheld};
+use sovereign_contracts::traits::{ApprovalChannel, InferenceProvider, StateStore};
+use sovereign_contracts::types::InferenceConfig;
+use sovereign_contracts::ToolRegistry;
 use sovereign_core::planner::LlmPlanner;
 use sovereign_core::runtime::lane::LaneSources;
 use sovereign_core::runtime::Runtime;
-use sovereign_core::traits::{ApprovalChannel, InferenceProvider, StateStore};
-use sovereign_core::types::InferenceConfig;
-use sovereign_core::{RuntimeParts, SkillRegistry, ToolRegistry};
+use sovereign_core::RuntimeParts;
 use sovereign_tools::atlas_context_manager::AtlasContextManager;
 use sovereign_tools::bundles::{
     CoreTurnTools, KnowledgeFrontDoor, WebEscalation, WebReach, WebTools,
@@ -541,7 +543,7 @@ async fn build_tools(
     // Tier 4 — shared tool-result cache. Per-conversation cache slices, 5-turn
     // TTL. Idempotent tools (knowledge_lookup, code-intel reads) hit the cache
     // when the model re-calls with the same args within the window.
-    let tool_cache = Arc::new(sovereign_core::tool_result_cache::ToolResultCache::new());
+    let tool_cache = Arc::new(sovereign_contracts::tool_result_cache::ToolResultCache::new());
     let mut tools = ToolRegistry::new().with_cache(Arc::clone(&tool_cache));
     match switches {
         ToolSwitches::Chosen(permitted) => {
@@ -609,7 +611,7 @@ async fn build_router_and_planner(
     skills: &Arc<SkillRegistry>,
     tools: Arc<ToolRegistry>,
     progress: &dyn RecipeProgress,
-) -> (Box<dyn sovereign_core::traits::Router>, LlmPlanner) {
+) -> (Box<dyn sovereign_contracts::traits::Router>, LlmPlanner) {
     // Built through the shared `router_bootstrap` helper so every host wires
     // the SAME classifiers (parity by construction). `from_env_and_repo` keeps
     // the `$SOVEREIGN_*` overlay + repo-relative exemplars for dev tuning; a
@@ -632,7 +634,7 @@ async fn build_router_and_planner(
     ));
     // Authority probe (FINANCIAL_CORPORA §7.3): the router consults the
     // registry's deterministic claims before intent classification.
-    let router: Box<dyn sovereign_core::traits::Router> =
+    let router: Box<dyn sovereign_contracts::traits::Router> =
         Box::new(llm_router.with_authority_probe(tools));
     let planner = LlmPlanner::new(Arc::clone(inference), Arc::clone(skills));
     (router, planner)
@@ -744,21 +746,6 @@ fn load_cross_corpus_members(
     // Cross-corpus meta-atlas (Move 5). Empty / absent file → the boost is a
     // no-op and retrieval falls back to cosine + existing entity-boost.
     load_meta_atlas(lane, warmth, progress);
-
-    // Cross-corpus bridge edges (Phase 6). Empty/absent → bridge_boost is a
-    // no-op; the boost only runs at all when `SOVEREIGN_META_BRIDGE` is set.
-    let bridge_index = match corpus_engine::meta_atlas::BridgeIndex::load(None) {
-        Ok(idx) => Arc::new(idx),
-        Err(e) => {
-            progress.note(&format!("Bridge: load failed ({e}); bridge boost disabled"));
-            Arc::new(corpus_engine::meta_atlas::BridgeIndex::empty())
-        }
-    };
-    progress.note(&format!(
-        "Bridge:      {} cross-corpus edges",
-        bridge_index.len()
-    ));
-    lane.bridge = Some(Arc::clone(&bridge_index));
 }
 
 /// Fill (or arrange to fill) `lane.meta_atlas` — see [`LaneWarmth`] for why
@@ -842,7 +829,9 @@ fn load_meta_atlas(lane: &LaneSources, warmth: LaneWarmth, progress: &dyn Recipe
 ///
 /// This is also what lets the desktop stop hand-rolling its own bootstrap: its
 /// wiring WAS the deferred arm, written out by hand.
-fn load_gliner(warmth: LaneWarmth) -> Option<Arc<dyn sovereign_core::traits::EntityExtractor>> {
+fn load_gliner(
+    warmth: LaneWarmth,
+) -> Option<Arc<dyn sovereign_contracts::traits::EntityExtractor>> {
     let model_id = sovereign_gliner::gliner_ner::DEFAULT_MODEL_ID;
     if !sovereign_gliner::gliner_ner::probe_model_available(model_id) {
         tracing::debug!(
@@ -864,7 +853,7 @@ fn load_gliner(warmth: LaneWarmth) -> Option<Arc<dyn sovereign_core::traits::Ent
             );
             Some(
                 Arc::new(sovereign_gliner::gliner_ner::LazyGlinerExtractor::new_default_deferred())
-                    as Arc<dyn sovereign_core::traits::EntityExtractor>,
+                    as Arc<dyn sovereign_contracts::traits::EntityExtractor>,
             )
         }
         LaneWarmth::Eager => match sovereign_gliner::gliner_ner::GlinerExtractor::new_default() {
@@ -873,7 +862,7 @@ fn load_gliner(warmth: LaneWarmth) -> Option<Arc<dyn sovereign_core::traits::Ent
                     model = model_id,
                     "runtime_recipe: GLiNER entity extractor loaded"
                 );
-                Some(Arc::new(g) as Arc<dyn sovereign_core::traits::EntityExtractor>)
+                Some(Arc::new(g) as Arc<dyn sovereign_contracts::traits::EntityExtractor>)
             }
             Err(e) => {
                 tracing::warn!(error = %e, "runtime_recipe: GLiNER probe ok but load failed; entity-aware retrieval disabled");

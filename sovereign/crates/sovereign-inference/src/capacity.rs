@@ -399,7 +399,9 @@ pub fn check_fit(slots: &[SlotPlan], hw: &HardwareProfile) -> CapacityReport {
 /// sovereign-inference rather than sovereign-mesh because the
 /// dependency arrow runs core ← inference ← mesh; reaching the
 /// other way would cycle.
-pub fn build_slots_from_config(cfg: &sovereign_core::setup_config::SetupConfig) -> Vec<SlotPlan> {
+pub fn build_slots_from_config(
+    cfg: &sovereign_contracts::setup_config::SetupConfig,
+) -> Vec<SlotPlan> {
     // A node with no `[models]` loads no slots, so it plans none. Empty is the
     // whole answer for a `terminal`: `check_fit` over zero slots requires zero
     // bytes and therefore FITS, which is what lets the daemon boot on a machine

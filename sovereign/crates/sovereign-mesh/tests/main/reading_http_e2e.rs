@@ -36,7 +36,7 @@ use sovereign_daemon::reading_http::reading_router;
 
 use crate::common;
 use crate::common::spawn_router;
-use sovereign_core::setup_config::SetupConfig;
+use sovereign_contracts::setup_config::SetupConfig;
 
 const EMBED_DIM: usize = 8;
 const CHUNK_TEXT: &str = "Compatibilism: free will is compatible with determinism.";

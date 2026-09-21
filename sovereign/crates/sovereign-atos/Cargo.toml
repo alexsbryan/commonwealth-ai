@@ -20,6 +20,12 @@ corpus-engine-notes = { workspace = true }
 # (`sovereign-contracts`) and the `.sovereign/` path conventions the
 # middlewares in `src/middleware/` name.
 sovereign-core = { workspace = true }
+# The tool ABI (`Tool`, `ToolContext`, `DeclaredTool`, `error`) the
+# `tools/` module implements. Reached transitively through `sovereign-core`
+# until 2026-09-21; direct now that this crate declares tools of its own.
+# `sovereign-contracts` is a shared `[[package_leaf]]`, so the edge costs no
+# package boundary anywhere (quality/ARCH_LAYERS.toml).
+sovereign-contracts = { workspace = true }
 
 # The ATOS middlewares build and inspect `ChatCompletionRequest` /
 # `ToolDescriptor`; the wire vocabulary lives on the family-neutral floor.

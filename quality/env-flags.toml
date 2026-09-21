@@ -40,6 +40,20 @@ third_party_allowlist = []
 # ── grounding ───────────────────────────────────────────────────────
 
 [[flag]]
+name = "SOVEREIGN_WORKSPACE_ROOT"
+cluster = "dev-gates"
+default = "the repo root (set by the workspace .cargo/config.toml)"
+purpose = "Root of the monorepo source tree corpus-engine's workspace-wide gates parse; a lifted package sets it or they panic naming it."
+status = "shipped"
+
+[[flag]]
+name = "SOVEREIGN_BENCH_ROOT"
+cluster = "bench"
+default = "sovereign/bench (set by the workspace .cargo/config.toml)"
+purpose = "Root of the bank/baseline tree sovereign-eval reads; a lifted bench sets it."
+status = "shipped"
+
+[[flag]]
 name = "SOVEREIGN_TENSOR_BUFT_OVERRIDE"
 cluster = "inference"
 default = "unset"
@@ -215,20 +229,6 @@ status = "guard"
 purpose = "The share of a longform draft's AUDITED claims that may fail and still be repaired by targeted surgery instead of a full 35B re-synthesis. 0.5 is derived, not tuned: the rule is 'surgery unless MOST claims fail', and a majority is more than half. Replaces SOVEREIGN_SURGICAL_MAX_FAILURES (absolute count, default 3) on 2026-08-13 — claim_budget scales the audited count with answer length, so an absolute cap inverted with length and structurally excluded longform (measured 51.2s fallback on a real desktop turn vs 1.7-2.7s when surgery engaged; NATIVE_GROUNDING_ECONOMY.md 7.3.1). Read in exactly one place (grounding/mod.rs surgical_max_failed_ratio); 0.0 forces full re-synthesis, 1.0 forces surgery, and those are the two positions the surgical calibration harness uses. Unparseable or out-of-range values warn and fall back to 0.5. Measured yield of the change over 8 warm desktop turns: 0 ms — it makes the code agree with its rationale, it did not make the query faster (ECONOMY 7.3.2)."
 
 [[flag]]
-name = "SOVEREIGN_AGENTIC_KQ"
-cluster = "grounding"
-default = "off"
-status = "experiment"
-purpose = "Round-0 → sufficiency-judge → sub-query formulation → round-2 retrieval loop on KnowledgeQuery (the agentic evidence loop)."
-
-[[flag]]
-name = "SOVEREIGN_AGENTIC_KQ_THRESHOLD"
-cluster = "grounding"
-default = "0.5"
-status = "experiment"
-purpose = "Insufficiency probability above which the agentic loop's round-2 formulation fires."
-
-[[flag]]
 name = "SOVEREIGN_SUFFICIENCY_CHUNKS"
 cluster = "grounding"
 default = "12"
@@ -264,41 +264,6 @@ cluster = "retrieval"
 default = "off"
 status = "experiment"
 purpose = "Admit Claim atoms whose `claim_kind` names a DECLARED claim type into the atlas embedding bag. Narrower than SOVEREIGN_ATLAS_INCLUDE_CLAIMS; inert for a corpus that declares nothing. Flip conditions: sovereign/DEFAULTS_LEDGER.md."
-
-[[flag]]
-name = "SOVEREIGN_DEMAND_PLAN"
-cluster = "retrieval"
-default = "off"
-status = "experiment"
-purpose = "One fast-slot structured-output call plans the turn's demands (sub_queries, entities, stance contrast); feeds the epistemic demand set."
-
-[[flag]]
-name = "SOVEREIGN_DEMAND_PLAN_FANOUT"
-cluster = "retrieval"
-default = "off"
-status = "experiment"
-purpose = "Fan the demand plan's sub_queries out into corpus search. Off after the 2026-07-19 A/B (2-3x slower for flat recall)."
-
-[[flag]]
-name = "SOVEREIGN_QUERY_DECOMP"
-cluster = "retrieval"
-default = "off"
-status = "experiment"
-purpose = "Pure-Rust question decomposition; each sub-query gets its own focused retrieval pass."
-
-[[flag]]
-name = "SOVEREIGN_DECOMP_DECAY"
-cluster = "retrieval"
-default = "1.0"
-status = "experiment"
-purpose = "Score decay applied to fanned-out sub-query hits (<1 = augment, never displace)."
-
-[[flag]]
-name = "SOVEREIGN_TITLE_EXPAND"
-cluster = "retrieval"
-default = "off"
-status = "experiment"
-purpose = "Fast-slot LLM names explicit article titles for abstract questions; titles are fan-out-searched and reserved through the merge."
 
 [[flag]]
 name = "SOVEREIGN_ATOM_ENUM"
@@ -469,13 +434,6 @@ status = "experiment"
 purpose = "How many CORPORA an expansion fan-out may search when SOVEREIGN_EXPANSION_SCOPE is on. The scale-vs-recall dial: lower is cheaper and narrower, higher is closer to unscoped. The unit is corpora, not chunks — a chunk budget let one corpus monopolise the scope and cost the wikipedia bank 3 sources / 4 facts."
 
 [[flag]]
-name = "SOVEREIGN_GRAPH_NEIGHBOR_EXPAND"
-cluster = "retrieval"
-default = "off"
-status = "experiment"
-purpose = "Axis-aware structural-graph one-hop expansion (per-entity axis neighbors + co-citation bridges). Wikipedia-specific, never promoted."
-
-[[flag]]
 name = "SOVEREIGN_PPR_EXPAND"
 cluster = "retrieval"
 default = "on (dark without a reranker)"
@@ -488,20 +446,6 @@ cluster = "retrieval"
 default = "on"
 status = "shipped"
 purpose = "Demand-aware merge composition (pins + per-entity demand slots + greedy diminishing-returns selector) replacing the cap/reserve/truncate heuristic pile. =0 restores the legacy stack."
-
-[[flag]]
-name = "SOVEREIGN_META_BRIDGE"
-cluster = "retrieval"
-default = "off"
-status = "experiment"
-purpose = "Cross-corpus bridge boost: question entities matching a bridge topic pull the linked corpus's framing via typed edges. Built by `sovereign meta-atlas align`."
-
-[[flag]]
-name = "SOVEREIGN_CONV_PPR_WEIGHT"
-cluster = "retrieval"
-default = "off (0.0)"
-status = "deprecated"
-purpose = "Post-pipeline PPR rerank weight for conversation-corpus chunks. DEFAULT FLIPPED 0.25 -> 0.0 (OFF) 2026-08-04: a 180-question paired bank could not separate it from off (49-31 p=0.0567 alone; 64-43 p=0.0527 under the strongest retrieval config). It re-ranks in place and never adds a document — B-in-pool and source_ratio were identical to 4dp with it on and off — while rebuilding a per-conversation entity graph from SQL on every query and forcing GLiNER to run eagerly at ingest. Code kept and working; set a non-zero weight to re-enable. See DEFAULTS_LEDGER.md."
 
 [[flag]]
 name = "SOVEREIGN_GATE_SUMMARY_EVIDENCE"
@@ -1228,6 +1172,20 @@ status = "shipped"
 purpose = "Path override for the sovereign-cli-daemon sibling."
 
 [[flag]]
+name = "SOVEREIGN_CLI_MESH_BIN"
+cluster = "cli-binaries"
+default = "sibling of dispatcher"
+status = "shipped"
+purpose = "Path override for the sovereign-cli-mesh sibling, lifted out of sovereign-cli-llm 2026-09-21."
+
+[[flag]]
+name = "SOVEREIGN_AGENT_BENCH_BIN"
+cluster = "cli-binaries"
+default = "sibling of dispatcher"
+status = "shipped"
+purpose = "Path override for the sovereign-agent-bench sibling. `svrn agent-bench` execs it rather than linking the crate, which is how a bench-package crate left the svrn dispatcher."
+
+[[flag]]
 name = "SOVEREIGN_CLI_PATH"
 cluster = "cli-binaries"
 default = "unset"
@@ -1263,14 +1221,6 @@ cluster = "bench"
 default = "unset"
 status = "shipped"
 purpose = "Bench harness selector."
-
-[[flag]]
-name = "SOVEREIGN_FRONTDOOR"
-cluster = "bench"
-default = "unset"
-status = "deprecated"
-alias_of = "SOVEREIGN_HARNESS"
-purpose = "Backwards-compat alias for SOVEREIGN_HARNESS (tested + documented; the one legacy duplicate the 2026-07-13 audit named)."
 
 [[flag]]
 name = "SOVEREIGN_FRONTDOOR_AUTO_ALLOWLIST"

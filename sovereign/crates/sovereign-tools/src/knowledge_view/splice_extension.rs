@@ -13,7 +13,7 @@
 //!      notes are anchored to this entity name" for the relational
 //!      block; the `goal`-kind variant feeds the strategic block.
 //!   3. **AtosLookup** — composes the `Initiative` entity name against
-//!      the local `project.toml` + `FeatureStore` so the strategic
+//!      the local `project.toml` + `FeatureCatalog` so the strategic
 //!      digest can render "ATOS project phase 2/4 (drift)".
 //!   4. **in-conversation predicate** — checks whether an entity name
 //!      appears in any message of the current `ConversationContext`.
@@ -37,8 +37,6 @@ use std::sync::Arc;
 
 use corpus_engine::enrichment::atlas::atoms::AtomEnvelope;
 use corpus_engine::enrichment::atlas::writer::{read_atlas_atoms, ATLAS_DIRNAME};
-#[cfg(feature = "atos")]
-use corpus_engine_atos::features::FeatureStore;
 use corpus_engine_notes::notes::NoteStore;
 use rusqlite::{Connection, OpenFlags};
 #[cfg(feature = "atos")]
@@ -48,7 +46,9 @@ use sovereign_core::memory::EntityInventory;
 use crate::knowledge_view::relational::{RelationalNote, RelationalNoteKind};
 use crate::knowledge_view::strategic::StrategicGoal;
 #[cfg(feature = "atos")]
-use crate::knowledge_view::timeline::{AtosLink, AtosLinkKind, AtosLookup, CharterStatus};
+use crate::knowledge_view::timeline::{
+    AtosLink, AtosLinkKind, AtosLookup, CharterStatus, FeatureCatalog,
+};
 
 // ── Chunk-timestamp resolver ────────────────────────────────────
 
@@ -185,8 +185,8 @@ fn shorten_summary(content: &str) -> String {
 // ── ATOS lookup composition ─────────────────────────────────────
 
 #[cfg(feature = "atos")]
-/// Concrete `AtosLookup` built from a snapshot of the local
-/// `FeatureStore` + `project.toml` lifecycle state.
+/// Concrete `AtosLookup` built from a snapshot of the injected
+/// [`FeatureCatalog`] + `project.toml` lifecycle state.
 ///
 /// The snapshot is rebuilt per splice (cheap — a single SELECT on
 /// `features` + per-feature SELECT on `feature_milestones`). We
@@ -227,17 +227,17 @@ impl AtosSnapshot {
     /// Build a snapshot. `project_toml_path` may point at a missing
     /// file (e.g. the user hasn't run `sovereign project init`); the
     /// snapshot then carries no project entry but still surfaces any
-    /// features. `features` is the live FeatureStore handle (already
+    /// features. `features` is the injected catalog handle (already
     /// async-compatible — caller awaits the listing).
     pub async fn build(
-        features: Option<&Arc<FeatureStore>>,
+        features: Option<&Arc<dyn FeatureCatalog>>,
         project_toml_path: Option<&Path>,
     ) -> Self {
         let project = project_toml_path.and_then(load_project_match);
 
         let mut feature_matches = Vec::new();
         if let Some(store) = features {
-            if let Ok(rows) = store.list(false).await {
+            if let Ok(rows) = store.list_features().await {
                 for row in rows {
                     let milestones = store.list_milestones(&row.id).await.unwrap_or_default();
                     let total = if milestones.is_empty() {

@@ -53,12 +53,6 @@ const MANUFACTURED: &[(&str, &str)] = &[
         "atlas_context_entity",
         "a derived atlas surface, not an indexed row",
     ),
-    // A knowledge-atlas record composed from a corpus description plus
-    // previews, inside the evidence loop.
-    (
-        "atlas_atom",
-        "composed in-process from a corpus description",
-    ),
     // A rendered turn from the current conversation, presented as a chunk so
     // the metalingual handler can cite 'this conversation'.
     ("conversation_turn", "conversation text, not corpus content"),
@@ -384,7 +378,7 @@ fn an_unstamped_pool_leaves_the_custody_machinery_disengaged() {
     use corpus_engine::index::ChunkProvenance;
     use kernel_types::Custody;
 
-    let manufactured = ChunkProvenance::manufactured("atlas_atom");
+    let manufactured = ChunkProvenance::manufactured("atlas_context_entity");
     assert_eq!(manufactured.stamped_custody(), None);
     // …while the question "what class is this content" still answers with the
     // refusing value, because those are different questions.

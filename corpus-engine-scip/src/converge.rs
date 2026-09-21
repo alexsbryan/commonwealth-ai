@@ -2,7 +2,7 @@
 //! Concept convergence over the SCIP graph — duplicated *identity*, the
 //! half `dry_report` structurally cannot see.
 //!
-//! `sovereign_tools::code::dry_report` finds duplicated BEHAVIOUR: function
+//! `sovereign_code::dry_report` finds duplicated BEHAVIOUR: function
 //! bodies that hash alike or embed alike. That is blind to the disease this
 //! module measures, because six `ChatMessage` structs declared in six crates
 //! have no bodies to compare — they are pure identity duplication, and the

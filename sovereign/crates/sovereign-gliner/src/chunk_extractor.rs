@@ -148,7 +148,8 @@ impl GlinerChunkExtractor {
                     continue;
                 }
             };
-            let mut conv_rows: Vec<sovereign_core::conv_tiered::ChunkEntityRow> = Vec::new();
+            let mut conv_rows: Vec<sovereign_contracts::daemon_wire::conv_tiered::ChunkEntityRow> =
+                Vec::new();
             for (chunk, mentions) in delta.iter().zip(mention_batches) {
                 for m in mentions {
                     conv_rows.push(m.into_row(corpus_id, chunk.id, Some(conv_uuid), now));
@@ -208,7 +209,7 @@ impl GlinerChunkExtractor {
             let started_at = existing.as_ref().map(|p| p.started_at).unwrap_or(now);
             let last_chunk_id =
                 high_chunk_id.or_else(|| existing.as_ref().and_then(|p| p.last_chunk_id));
-            let row = sovereign_core::conv_tiered::ChunkEntityProgressRow {
+            let row = sovereign_contracts::daemon_wire::conv_tiered::ChunkEntityProgressRow {
                 corpus_id: corpus_id.to_string(),
                 chunks_processed: prior_processed + new_chunks_processed as i64,
                 chunks_total: total_chunks as i64,
@@ -312,7 +313,8 @@ impl ChunkEntityExtractor for GlinerChunkExtractor {
                 )));
             }
         };
-        let mut rows: Vec<sovereign_core::conv_tiered::ChunkEntityRow> = Vec::new();
+        let mut rows: Vec<sovereign_contracts::daemon_wire::conv_tiered::ChunkEntityRow> =
+            Vec::new();
         for (chunk, mentions) in chunks.iter().zip(mention_batches) {
             for m in mentions {
                 rows.push(m.into_row(corpus_id, chunk.id, Some(conv_uuid), extracted_at));

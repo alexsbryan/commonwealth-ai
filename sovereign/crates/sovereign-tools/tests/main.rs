@@ -18,24 +18,18 @@
 //! need process isolation, or a `.config/nextest.toml` override keys on
 //! their binary name. Do not fold those in.
 
-#[path = "main/brief_fixtures.rs"]
-mod brief_fixtures;
 #[path = "main/corpus_store_readiness.rs"]
 mod corpus_store_readiness;
 #[path = "main/delegate_browser_worker.rs"]
 mod delegate_browser_worker;
 #[path = "main/duckduckgo_real_e2e.rs"]
 mod duckduckgo_real_e2e;
-#[path = "main/e2e_code_intel.rs"]
-mod e2e_code_intel;
 #[path = "main/enrichment_health_e2e.rs"]
 mod enrichment_health_e2e;
 #[path = "main/knowledge_view_e2e.rs"]
 mod knowledge_view_e2e;
 #[path = "main/local_corpus_e2e.rs"]
 mod local_corpus_e2e;
-#[path = "main/mcp_surface_e2e.rs"]
-mod mcp_surface_e2e;
 #[path = "main/obsidian_live_sync_e2e.rs"]
 mod obsidian_live_sync_e2e;
 #[path = "main/playwright_actuator.rs"]

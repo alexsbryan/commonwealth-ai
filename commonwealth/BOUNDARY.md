@@ -1,5 +1,18 @@
 # The commonwealth package boundary
 
+> **The `[[package]] name = "commonwealth"` row became `cmnwlth` on
+> 2026-09-21** (`docs/FIVE_PROGRAMS.md` §9, the five-program declaration). All
+> nine crates carried over unchanged and their internal surface is still
+> `commonwealth-core` plus the `oplog` / `kernel-types` / `oicp-types` leaves —
+> folding them into the wider row introduced no edge among them. What the row
+> DOES now admit as siblings is `sovereign-mesh`, the serving cluster
+> (`sovereign-scheduler`, `sovereign-serving-host`, `serving-policy`),
+> `sovereign-inference` and `sovereign-compute`, because §2 gives `cmnwlth` the
+> serving cluster. The zero-exception property this document defends therefore
+> covers a bigger closure and is no longer green: `cmnwlth` carries 17 of the
+> 232 violations the declaration produced, and 14 of those are
+> `sovereign-mesh`'s and its neighbours', not the nine crates'.
+
 `commonwealth/crates/` holds the **mesh substrate** — the crate set a third
 party could lift out of this monorepo and build a peer against, with no
 sovereign runtime, no corpus engine and no model.

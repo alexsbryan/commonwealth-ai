@@ -15,7 +15,7 @@ activation_kind = "workspace"
 # read; the situated witness path activates because the user
 # explicitly entered the inner-work mode, not because any
 # specific phrase appeared. Personal-recall router exemplars
-# (sovereign/router/exemplars.toml) already cover the in-default-
+# (sovereign/crates/sovereign-core/data/router/exemplars.toml) already cover the in-default-
 # chat detection of relational-shape messages for the corpus
 # memory recall path.
 

@@ -93,8 +93,8 @@ pub use ingest::{
     RecipeTestRequest,
 };
 pub use knowledge::{
-    KnowledgeResult, KnowledgeSearchRequest, KnowledgeSearchResponse, LandscapeDigestEntry,
-    LandscapeDigestRequest, LandscapeDigestResponse,
+    ChunkRange, CorpusShardInfo, KnowledgeResult, KnowledgeSearchRequest, KnowledgeSearchResponse,
+    LandscapeDigestEntry, LandscapeDigestRequest, LandscapeDigestResponse,
 };
 pub use manifest::{
     features, CorpusDescriptor, EmbedModelInfo, FederatedMeshDescriptor, FederationManifest,

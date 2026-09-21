@@ -116,8 +116,8 @@ impl DistributionHandoff {
     /// is `REGISTERED_RPC[i]`", RPC workers first and the host last), and the
     /// child derives its own `-ot` overrides from the identical rule. A shard
     /// holding no blocks contributes nothing, matching `summarize_placement`.
-    pub fn placement(&self) -> sovereign_core::traits::SlotPlacement {
-        use sovereign_core::traits::{SlotPlacement, WorkerPlacement};
+    pub fn placement(&self) -> sovereign_contracts::traits::SlotPlacement {
+        use sovereign_contracts::traits::{SlotPlacement, WorkerPlacement};
         let (mut total, mut local) = (0u32, 0u32);
         let mut workers = Vec::new();
         for shard in &self.plan {

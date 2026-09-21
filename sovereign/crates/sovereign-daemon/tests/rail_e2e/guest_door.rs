@@ -685,7 +685,7 @@ async fn under_the_strict_binding_the_second_app_asks_again() {
 async fn one_wall_bearer_reaches_every_declared_app_and_is_refused_the_rest() {
     let dir = tempfile::tempdir().unwrap();
     let key = SigningKey::from_bytes(&[1u8; 32]);
-    let owned = sovereign_core::mesh_measurements::MEASUREMENTS_APP_ID;
+    let owned = sovereign_mesh::mesh_measurements::MEASUREMENTS_APP_ID;
     let a = with_guest(
         state_with_wall(
             dir.path(),

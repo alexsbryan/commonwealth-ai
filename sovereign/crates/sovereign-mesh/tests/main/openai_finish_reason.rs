@@ -17,8 +17,8 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use futures::Stream;
 use oicp_types::openai_types::ChatCompletionRequest;
-use sovereign_core::traits::InferenceProvider;
-use sovereign_core::types::{
+use sovereign_contracts::traits::InferenceProvider;
+use sovereign_contracts::types::{
     CompletionRequest, CompletionResponse, Depth, FinishReason, ProviderCapabilities, Speed,
 };
 use sovereign_daemon::slot_manifest::CoreSlotManifest;
@@ -34,7 +34,7 @@ impl InferenceProvider for Fixed {
     async fn complete(
         &self,
         _req: &CompletionRequest,
-    ) -> sovereign_core::Result<CompletionResponse> {
+    ) -> sovereign_contracts::Result<CompletionResponse> {
         Ok(CompletionResponse {
             text: "hello".into(),
             tokens_used: 24,
@@ -50,12 +50,13 @@ impl InferenceProvider for Fixed {
     async fn complete_stream(
         &self,
         _req: &CompletionRequest,
-    ) -> sovereign_core::Result<Pin<Box<dyn Stream<Item = sovereign_core::Result<String>> + Send>>>
-    {
+    ) -> sovereign_contracts::Result<
+        Pin<Box<dyn Stream<Item = sovereign_contracts::Result<String>> + Send>>,
+    > {
         unimplemented!("not on this path")
     }
 
-    async fn embed(&self, _text: &str) -> sovereign_core::Result<Vec<f32>> {
+    async fn embed(&self, _text: &str) -> sovereign_contracts::Result<Vec<f32>> {
         unimplemented!("not on this path")
     }
 

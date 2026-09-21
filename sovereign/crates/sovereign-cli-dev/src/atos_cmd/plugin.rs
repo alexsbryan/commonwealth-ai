@@ -51,12 +51,5 @@ pub(crate) async fn cmd_install_plugin(_args: &[String]) -> i32 {
 }
 
 pub(super) fn find_repo_root() -> Option<PathBuf> {
-    let out = std::process::Command::new("git")
-        .args(["rev-parse", "--show-toplevel"])
-        .output()
-        .ok()?;
-    if !out.status.success() {
-        return None;
-    }
-    Some(PathBuf::from(String::from_utf8_lossy(&out.stdout).trim()))
+    crate::repo::repo_root_here().ok()
 }

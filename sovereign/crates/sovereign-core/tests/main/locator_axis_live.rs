@@ -8,7 +8,7 @@
 //! cannot — does the gate separate real questions in the real
 //! embedding space, with the real exemplar bank as the negative set?
 //!
-//! Run it after touching `sovereign/router/exemplars.toml`, the
+//! Run it after touching `sovereign/crates/sovereign-core/data/router/exemplars.toml`, the
 //! locator thresholds, or the embedding model:
 //!
 //! ```text

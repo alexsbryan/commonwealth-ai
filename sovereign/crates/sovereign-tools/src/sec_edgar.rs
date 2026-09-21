@@ -91,25 +91,20 @@ const TICKERS_URL: &str = "https://www.sec.gov/files/company_tickers.json";
 /// the same string for the script path.
 const DEFAULT_USER_AGENT: &str = "commonwealth-ai/0.1 (sec-filings-corpus; alexbryan01@gmail.com)";
 
-/// The concept-normalization registry, compiled in from the CANONICAL
-/// `sovereign-recipes/sec-filings-company/concept-map.toml`.
+/// The concept-normalization registry — the ONE copy, owned by this crate.
 ///
-/// Vendored rather than read from disk for the same reason corpus-engine
-/// vendors `registry.toml` into its bundled snapshot (`corpus-engine/build.rs`):
-/// an end user installs from the catalog, which fetches `recipe.toml`
-/// alone — the recipe's sibling data files never reach their machine. A
-/// runtime path lookup here would therefore work in the repo and refuse
-/// in the product, which is the one failure mode this corpus exists to
-/// avoid. `include_str!` registers the file as a rebuild dependency, so
-/// the canonical tree and this snapshot cannot drift.
+/// Compiled in rather than read from disk: an end user installs from the
+/// catalog, which fetches `recipe.toml` alone, so a runtime path lookup
+/// would work in the repo and refuse in the product — the one failure mode
+/// this corpus exists to avoid.
 ///
-/// There is still exactly ONE registry: this is a copy of the same
-/// bytes, not a second map. `scripts/setup-sec-corpus.sh` passes the
-/// canonical file to the `sec_facts_render` example by path.
-const CONCEPT_MAP_TOML: &str = include_str!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/../../../sovereign-recipes/sec-filings-company/concept-map.toml"
-));
+/// It sat in `sovereign-recipes/sec-filings-company/` until 2026-09-21.
+/// Nothing in the recipes tree read it — `corpus-engine/build.rs` vendors
+/// `recipe.toml` and `truth.json` only — so the file's sole readers are this
+/// crate and `scripts/setup-sec-corpus.sh`, which passes it to the
+/// `sec_facts_render` example by path. The climb out of the crate root was
+/// boundary-gate rule 3b; moving the file, not copying it, is the fix.
+const CONCEPT_MAP_TOML: &str = include_str!("../data/sec-filings-company/concept-map.toml");
 
 /// The concept vocabulary, derived ONCE from [`CONCEPT_MAP_TOML`].
 ///
@@ -1200,23 +1195,6 @@ mod tests {
 
     // ── the rendered figures reach the corpus ───────────────────────────
 
-    /// The one place the bundled snapshot and the canonical registry are
-    /// compared. Structural, not remembered (principle 10): edit
-    /// `sovereign-recipes/sec-filings-company/concept-map.toml` and this
-    /// fails at the next build unless the snapshot rebuilt with it.
-    #[test]
-    fn the_bundled_concept_map_is_byte_identical_to_the_canonical_registry() {
-        let canonical = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../../sovereign-recipes/sec-filings-company/concept-map.toml");
-        let on_disk = std::fs::read_to_string(&canonical).expect("the canonical map is committed");
-        assert_eq!(
-            CONCEPT_MAP_TOML,
-            on_disk,
-            "the compiled-in map drifted from {}",
-            canonical.display()
-        );
-    }
-
     fn aapl_companyfacts() -> serde_json::Value {
         let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("tests/fixtures/sec_facts/aapl-companyfacts.json");
@@ -1225,9 +1203,7 @@ mod tests {
     }
 
     fn render_aapl() -> RenderOutput {
-        // Through the BUNDLED map, so this exercises the constant the
-        // product actually installs with — not a second copy read from
-        // disk that could be fine while the binary's is not.
+        // Through the BUNDLED map: the constant the product installs with.
         let cmap = crate::sec_facts_render::ConceptMap::from_toml(CONCEPT_MAP_TOML)
             .expect("the bundled map parses");
         crate::sec_facts_render::render(crate::sec_facts_render::RenderRequest {

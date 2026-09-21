@@ -13,7 +13,7 @@ use crate::common;
 use crate::common::mesh_admin_services;
 
 use commonwealth_core::mesh::Mesh;
-use sovereign_core::setup_config::SetupConfig;
+use sovereign_contracts::setup_config::SetupConfig;
 use sovereign_daemon::daemon::{EmbeddedDaemon, MeshError};
 use sovereign_mesh::persist;
 

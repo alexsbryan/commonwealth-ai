@@ -10,7 +10,7 @@ use std::path::PathBuf;
 
 use sovereign_core::setup_config::SetupConfig;
 
-use crate::guest_link::{self, GuestLink};
+use sovereign_cli_shared::guest_link::{self, GuestLink};
 
 /// Shared config resolved once per subcommand invocation. Subcommands
 /// pass this to `bootstrap::build_runtime` and consult it for output-
@@ -312,7 +312,7 @@ pub async fn parse_globals_for_chat(args: &[String]) -> Result<(ChatGlobals, Vec
     // to the local daemon: answering a guest's question with a different
     // machine's model and not saying so is the §18.3 substitution this whole
     // surface refuses.
-    let base = guest_link::open_route(&link).await?;
+    let base = sovereign_cli_mesh::guest_route::open_route(&link).await?;
     apply_guest_link(&mut globals, Some(link), base);
     Ok((globals, rest))
 }

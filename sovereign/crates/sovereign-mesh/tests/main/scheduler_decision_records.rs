@@ -42,12 +42,12 @@ use axum::routing::{get, post};
 use axum::{Json, Router};
 use commonwealth_core::ids::NodeId;
 use futures::StreamExt;
-use sovereign_core::oicp::{
+use oicp_types::{
     BenchmarkResult, CapabilityClaim, CapabilityHint, InferenceRequirements, LatencyClass,
     ModelStatus, ProviderManifest, ProviderModel, ShardingPrivacy, OICP_VERSION,
 };
-use sovereign_core::traits::InferenceProvider;
-use sovereign_core::types::{CompletionRequest, Speed};
+use sovereign_contracts::traits::InferenceProvider;
+use sovereign_contracts::types::{CompletionRequest, Speed};
 use sovereign_daemon::daemon::InferenceVenue;
 use sovereign_mesh::decision_log::{
     CandidateKind, CaptureDecisionSink, DecisionEvent, DecisionPath, DecisionSink, ExclusionReason,

@@ -11,6 +11,7 @@
 //! Operator-driven — no daemon source changes.
 
 pub mod audit_trail;
+pub mod bench_root;
 // The authoring-harness verdict policy was extracted into its own light crate
 // (`sovereign-authoring-harness`, deps: corpus-engine + serde only) so the
 // desktop can consume it without dragging sovereign-eval's heavy deps

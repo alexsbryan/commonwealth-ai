@@ -35,7 +35,7 @@ use serde::{Deserialize, Serialize};
 
 use corpus_engine::Recipe;
 use sovereign_contracts::recipe::notes::{Note, NoteScope, RecipeNotes, ScopeFilter};
-use sovereign_store::recipe_project_store::{RecipeProjectRow, RecipeProjectStore};
+use sovereign_tools::recipe_author::recipe_project_store::{RecipeProjectRow, RecipeProjectStore};
 use sovereign_tools::recipe_author::{
     self, checkpoint::restore_checkpoint as do_restore_checkpoint, ArtifactKind, CheckpointMeta,
     ProjectSummary, RecipeProject,

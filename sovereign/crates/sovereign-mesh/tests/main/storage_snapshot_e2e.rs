@@ -33,7 +33,7 @@ use crate::common::mesh_admin_services;
 use commonwealth_core::contributions::LedgerEventKind;
 use corpus_engine::index::{CorpusIndex, InsertChunk};
 use corpus_engine::{CorpusEngine, EmbedFn};
-use sovereign_core::setup_config::SetupConfig;
+use sovereign_contracts::setup_config::SetupConfig;
 use sovereign_daemon::daemon::EmbeddedDaemon;
 
 const EMBED_DIM: usize = 8;

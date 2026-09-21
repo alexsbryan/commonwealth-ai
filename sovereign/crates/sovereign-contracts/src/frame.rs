@@ -6,7 +6,7 @@
 //!
 //! Two callers arrived at the same problem from opposite ends:
 //!
-//! * **Session frames** (`sovereign_tools::code::session_state`): a
+//! * **Session frames** (`sovereign_code::session_state`): a
 //!   coding agent records what it is doing so a successor session can
 //!   resume without re-reading the repo.
 //! * **Conversation frames** (`sovereign_core::conv_frame`): the chat

@@ -84,7 +84,7 @@ struct Finding {
 
 // ─── output shapes (inlined into the HTML as JSON) ─────────────────────────
 
-/// NOT `sovereign_tools::code::suggest_seams::Member`, which carries SCIP
+/// NOT `sovereign_code::suggest_seams::Member`, which carries SCIP
 /// spans for a seam proposal; this is the render shape inlined into the
 /// HTML as JSON.
 #[derive(Serialize)]

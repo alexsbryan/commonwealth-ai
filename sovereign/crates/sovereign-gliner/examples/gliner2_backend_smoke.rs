@@ -23,7 +23,7 @@
 //!   research/enrichment-spikes/data/chunks_50.jsonl
 //! ```
 
-use sovereign_core::traits::EntityExtractor;
+use sovereign_contracts::traits::EntityExtractor;
 use sovereign_gliner::gliner2::{Gliner2Extractor, GLINER2_DEFAULT_THRESHOLD};
 use sovereign_gliner::gliner_ner::{DEFAULT_LABELS, GLINER2_MODEL_ID};
 use std::collections::BTreeMap;

@@ -221,7 +221,8 @@ pub struct ServingCore {
     /// route is not mounted" (ARCH §18.3). The store itself is
     /// `sovereign-recipe-author`'s, reached through `sovereign-store`;
     /// this field is the door, not a second decider.
-    pub features: Option<Arc<sovereign_store::recipe_project_store::RecipeProjectStore>>,
+    pub features:
+        Option<Arc<sovereign_tools::recipe_author::recipe_project_store::RecipeProjectStore>>,
 }
 
 /// **Ring 2 — CAPABILITY.** What the daemon can *do* beyond answering: the

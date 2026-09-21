@@ -49,10 +49,8 @@ mod atlas_cmd;
 // all for three months. ONE gate, and it is the inner one. See
 // `awareness_cmd/mod.rs`.
 pub mod awareness_cmd;
-mod backlog_cmd;
 mod bench_cmd;
 mod chat_cmd;
-mod claim_cmd;
 mod corpus_catalog_cmd;
 mod corpus_cmd;
 mod corpus_extract_entities_cmd;
@@ -63,7 +61,6 @@ mod corpus_watch_cmd;
 mod enrich_cmd;
 mod eval_cmd;
 mod govern_cmd;
-mod guest_link;
 mod gym_judge;
 mod inner_chaos;
 // `svrn job` — the work plane's operator surface. Sits beside `ring_cmd`
@@ -71,43 +68,23 @@ mod inner_chaos;
 // deploys an app to a trust ring, `job` hands that ring a unit of compute.
 // It reaches `ring_cmd::rail_append`, which is the ONE append client
 // (ARCH §10.6).
-mod job_cmd;
 mod knowledge_gym_cmd;
 mod mcp_cmd;
 mod mcp_demo_server;
-mod mesh_app;
-mod mesh_bench;
-mod mesh_cmd;
-mod mesh_guest;
-mod mesh_guest_link;
-mod mesh_media;
-mod mesh_member_cmd;
-mod mesh_offers;
-mod mesh_skew;
-mod mesh_soak;
-mod mesh_token;
-mod mesh_travel;
-mod meshapp_cmd;
-mod meshapp_registry;
 mod meta_atlas_cmd;
 mod mobile_cmd;
 mod newsworthy_cmd;
 mod pipeline_cmd;
 mod portfolio_cmd;
 mod proxy_cmd;
-pub mod publish_cmd;
 mod quality_lane_cmd;
 mod reading_diag_cmd;
 mod recipe_agent_cmd;
 mod recipe_agent_live_trial;
 mod recipe_cmd;
-mod remote_gguf;
-mod ring_cmd;
 mod router_cache_cmd;
 mod router_fit_cmd;
-pub mod run_cmd;
 mod search_gym_cmd;
-mod solve_cmd;
 mod turn_sink;
 mod voice_eval;
 mod worker_pod_provider;
@@ -199,14 +176,11 @@ async fn async_main() {
     }
 
     let code: i32 = match cmd {
-        "backlog" => backlog_cmd::run_backlog(rest).await,
         "bench" => bench_cmd::run_bench(rest).await,
         "chat" => chat_cmd::run_chat(rest).await,
         "govern" => govern_cmd::run_govern(rest).await,
         "proxy" => proxy_cmd::run_proxy(rest).await,
         "portfolio" => portfolio_cmd::run_portfolio(rest).await,
-        "claim" => claim_cmd::run(rest).await,
-        "solve" => solve_cmd::run(rest).await,
         "eval" => eval_cmd::run_eval(rest).await,
         "voice" => voice_eval::run_voice_eval(rest).await,
         "reading-diag" => reading_diag_cmd::run(rest).await,
@@ -214,9 +188,6 @@ async fn async_main() {
         "knowledge-gym" => knowledge_gym_cmd::run_knowledge_gym(rest).await,
         "atlas" => atlas_cmd::run_atlas(rest).await,
         "meta-atlas" => meta_atlas_cmd::run_meta_atlas(rest).await,
-        "meshapp" => meshapp_cmd::run(rest).await,
-        "ring" => ring_cmd::run(rest).await,
-        "job" => job_cmd::run(rest).await,
         "enrich" => enrich_cmd::run_enrich(rest).await,
         "newsworthy" => newsworthy_cmd::run(rest).await,
         "recipe" => recipe_cmd::run_recipe(rest).await,
@@ -228,10 +199,6 @@ async fn async_main() {
         "workflow" => workflow_cmd::run_workflow(rest).await,
         "mcp" => mcp_cmd::run_mcp(rest).await,
         "alignment" => alignment_cmd::run_alignment(rest).await,
-        "mesh" => mesh_cmd::run_mesh(rest).await,
-        "publish" => publish_cmd::run(rest).await,
-        "unpublish" => publish_cmd::run_unpublish(rest).await,
-        "run" => run_cmd::run(rest).await,
         "mobile" => mobile_cmd::run_mobile(rest).await,
         "corpus" => corpus_cmd::run_corpus(rest).await,
         // One lane of `svrn quality check`. The runner lives in

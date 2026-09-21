@@ -76,9 +76,10 @@ sovereign/
 │   ├── TROUBLESHOOTING.md     # Common issues + diagnostics
 │   ├── FAQ.md                 # Quick answers
 │   └── specs/oicp.md          # OICP protocol specification
-├── contrib/
+├── crates/sovereign-service/data/
 │   ├── launchd/               # macOS service template
-│   └── systemd/               # Linux user-service template
+│   ├── systemd/               # Linux user-service template
+│   └── windows/               # Task Scheduler template
 ├── models/                    # GGUF model files (not committed)
 └── sovereign-server.toml      # Example server configuration
 ```

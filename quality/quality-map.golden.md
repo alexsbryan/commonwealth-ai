@@ -40,6 +40,7 @@
 | `lifecycle-gate` | `cargo xtask lifecycle-gate` | hard | F0 | 0.10s | yes |
 | `lint-gate` | `cargo run -p xtask -- lint-gate --from /tmp/clippy.json` | advisory | F0 | unmeasured | **no** |
 | `lock-gate` | `cargo xtask lock-gate` | hard | F0 | 0.10s | yes |
+| `ralph-decisions` | `python3 scripts/ralph-decisions.py --check` | hard | F0 | 0.02s | yes |
 | `rustfmt` | `cargo fmt --all --check` | hard | F0 | 6s | yes |
 | `size-gate` | `cargo xtask size-gate` | advisory | F0 | 4s | yes |
 | `sovereign-lint` | `./scripts/sovereign-lint.sh --human --full` | hard | F0 | 27s | **no** |
@@ -173,7 +174,7 @@
 
 | | meaning | instruments |
 |---|---|---|
-| F0 | unit — no process boundary, no backend | `api-gate`, `arch-gate`, `bench-compile`, `boundary-gate`, `build-timings`, `check-desktop-version`, `clippy-json`, `clock-gate`, `co-lineage`, `co-sweep`, `concept-gate`, `daemon-concurrency-soak-selftest`, `daemon-soak-report`, `daemon-soak-report-selftest`, `deletion-manifest`, `desktop-check`, `desktop-invoke-coverage`, `desktop-invoke-coverage-gate`, `desktop-invoke-coverage-real`, `desktop-report-breaker`, `desktop-report-journeys`, `desktop-report-soak`, `desktop-report-ttfi`, `desktop-vitest`, `dm-census-atom-outside`, `dm-census-congestion`, `dm-census-crate-lines`, `dm-census-liftable`, `dm-census-misnamed`, `dm-census-peer-outside`, `dm-census-plan`, `dm-census-predicate`, `dm-census-queue`, `dm-census-shared-edges`, `dm-census-word-owners`, `doc-coverage`, `docs-gate`, `domains-census-self-test`, `env-gate`, `evidence-verdict`, `feature-matrix`, `feature-powerset`, `hakari-verify`, `hook-selftests`, `hook-wiring`, `instrument-gate`, `judge-funnel-gate`, `judge-replay-bank`, `judge-replay-control`, `judge-replay-report`, `layer-gate`, `layout-gate`, `lifecycle-gate`, `lint-gate`, `lock-gate`, `mesh-soak-gate`, `module-cycles`, `nc-thesis`, `pre-commit`, `pre-push`, `run-if-stale`, `rustfmt`, `rustsec-advisories`, `sabotage`, `settings-wiring-self-test`, `shell-selftests`, `size-gate`, `sovereign-lint`, `sovereign-lint-scoped`, `sovereign-test`, `twin-census`, `windows-crosscheck`, `xtask-quality` |
+| F0 | unit — no process boundary, no backend | `api-gate`, `arch-gate`, `bench-compile`, `boundary-gate`, `build-timings`, `check-desktop-version`, `clippy-json`, `clock-gate`, `co-lineage`, `co-sweep`, `concept-gate`, `daemon-concurrency-soak-selftest`, `daemon-soak-report`, `daemon-soak-report-selftest`, `deletion-manifest`, `desktop-check`, `desktop-invoke-coverage`, `desktop-invoke-coverage-gate`, `desktop-invoke-coverage-real`, `desktop-report-breaker`, `desktop-report-journeys`, `desktop-report-soak`, `desktop-report-ttfi`, `desktop-vitest`, `dm-census-atom-outside`, `dm-census-congestion`, `dm-census-crate-lines`, `dm-census-liftable`, `dm-census-misnamed`, `dm-census-peer-outside`, `dm-census-plan`, `dm-census-predicate`, `dm-census-queue`, `dm-census-shared-edges`, `dm-census-word-owners`, `doc-coverage`, `docs-gate`, `domains-census-self-test`, `env-gate`, `evidence-verdict`, `feature-matrix`, `feature-powerset`, `hakari-verify`, `hook-selftests`, `hook-wiring`, `instrument-gate`, `judge-funnel-gate`, `judge-replay-bank`, `judge-replay-control`, `judge-replay-report`, `layer-gate`, `layout-gate`, `lifecycle-gate`, `lint-gate`, `lock-gate`, `mesh-soak-gate`, `module-cycles`, `nc-thesis`, `pre-commit`, `pre-push`, `ralph-decisions`, `run-if-stale`, `rustfmt`, `rustsec-advisories`, `sabotage`, `settings-wiring-self-test`, `shell-selftests`, `size-gate`, `sovereign-lint`, `sovereign-lint-scoped`, `sovereign-test`, `twin-census`, `windows-crosscheck`, `xtask-quality` |
 | F1 | mocked backend — real caller, fabricated answers | `cli-journey-selftest`, `desktop-a11y`, `desktop-e2e-synthetic`, `desktop-sabotage`, `desktop-ttfi`, `dst-scenarios` |
 | F2 | real binary against a fixture daemon | `arch-report`, `capability-map`, `desktop-e2e-real`, `desktop-journeys`, `enrichment-f1`, `pre-push-fail-closed`, `routing-replay` |
 | F3 | real daemon, real models | `chaos-monkey`, `chat-ask`, `ci-bench`, `cli-contract-live-verify`, `cli-journey-sandbox`, `cli-journey-verify`, `co-drift`, `co-liveness`, `contract-nightly`, `cw-work-lift`, `daemon-concurrency-soak`, `daemon-concurrency-soak-control`, `daemon-soak`, `desktop-breaker`, `desktop-chaos`, `desktop-demo`, `desktop-demo-export`, `desktop-judge-calibration`, `desktop-soak`, `desktop-soak-py`, `drift-detect`, `inner-chaos-calibrate`, `inner-chaos-soak`, `judge-replay`, `judge-replay-bank-feed`, `knowledge-gym`, `mesh-live-probe`, `mesh-soak`, `mtp-probe`, `oicp-conformance`, `quality-check`, `retrieval-prod`, `routing`, `smoke-attach-mode`, `synth`, `throughput`, `throughput-probe` |
@@ -284,11 +285,11 @@ A flag here is one whose absence does not fail anything; it just makes the green
 | `ci:desktop` | `desktop-check`, `desktop-e2e-synthetic`, `desktop-invoke-coverage-gate`, `desktop-sabotage`, `desktop-vitest` |
 | `ci:desktop-release` | `check-desktop-version` |
 | `ci:fmt` | `rustfmt` |
-| `ci:gates` | `arch-gate`, `boundary-gate`, `clock-gate`, `deletion-manifest`, `docs-gate`, `env-gate`, `instrument-gate`, `judge-funnel-gate`, `judge-replay-control`, `layer-gate`, `layout-gate`, `lifecycle-gate`, `lock-gate`, `size-gate` |
+| `ci:gates` | `arch-gate`, `boundary-gate`, `clock-gate`, `deletion-manifest`, `docs-gate`, `env-gate`, `instrument-gate`, `judge-funnel-gate`, `judge-replay-control`, `layer-gate`, `layout-gate`, `lifecycle-gate`, `lock-gate`, `ralph-decisions`, `size-gate` |
 | `ci:suites` | `hook-selftests`, `pre-push-fail-closed`, `settings-wiring-self-test`, `shell-selftests` |
 | `ci:test` | `bench-compile`, `cli-journey-selftest`, `dst-scenarios`, `sovereign-test` |
 | `nightly` | `contract-nightly` |
-| `prepush` | `arch-gate`, `boundary-gate`, `clock-gate`, `concept-gate`, `deletion-manifest`, `docs-gate`, `env-gate`, `hakari-verify`, `hook-wiring`, `instrument-gate`, `judge-funnel-gate`, `judge-replay-control`, `layer-gate`, `layout-gate`, `lifecycle-gate`, `lock-gate`, `rustfmt`, `size-gate`, `sovereign-lint-scoped` |
+| `prepush` | `arch-gate`, `boundary-gate`, `clock-gate`, `concept-gate`, `deletion-manifest`, `docs-gate`, `env-gate`, `hakari-verify`, `hook-wiring`, `instrument-gate`, `judge-funnel-gate`, `judge-replay-control`, `layer-gate`, `layout-gate`, `lifecycle-gate`, `lock-gate`, `ralph-decisions`, `rustfmt`, `size-gate`, `sovereign-lint-scoped` |
 | `run-if-stale` | `co-sweep`, `contract-nightly`, `daemon-concurrency-soak`, `daemon-concurrency-soak-control`, `daemon-concurrency-soak-selftest`, `daemon-soak-report`, `daemon-soak-report-selftest`, `judge-replay-bank`, `judge-replay-bank-feed`, `oicp-conformance` |
 | `smoke:0` | `desktop-check`, `desktop-e2e-synthetic`, `desktop-vitest`, `sovereign-lint`, `sovereign-test` |
 | `smoke:1` | `desktop-ttfi`, `mtp-probe`, `smoke-attach-mode`, `throughput-probe` |
@@ -305,7 +306,7 @@ A flag here is one whose absence does not fail anything; it just makes the green
 | `weekly:soak` | `mesh-soak`, `mesh-soak-gate` |
 | `weekly:timings` | `build-timings` |
 
-### What CI does not run (98 of 127)
+### What CI does not run (98 of 128)
 
 - `api-gate` — .github/workflows/weekly.yml (header) · runs in: weekly:api-surface
 - `arch-report` — sovereign/crates/sovereign-cli/src/posture_cmd.rs (arch_row) · runs in: by-hand
@@ -414,5 +415,5 @@ Nothing is on no map. Check that before believing it.
 
 ---
 
-**127 instruments, 24 with a negative control, 55 unmeasured cost, 55 by-hand only.** (0 run nowhere at all.)
+**128 instruments, 24 with a negative control, 55 unmeasured cost, 55 by-hand only.** (0 run nowhere at all.)
 

@@ -11,6 +11,10 @@ re-asserted by the fitter on every run:
 | `h1_rerank_margin.overall.curve.json` | `eb1b00657d8571e96d32cd323e8b608544a8a9cabddd13cdff676564ca2116ac` |
 | `FINDINGS.md` | `e05da2351463e173ab1f9af6d7a96e6940d13ae1d606250af1695111fe9431cd` |
 
+`h1_scores.jsonl` and `h1_admission_calibration.json` live at
+`sovereign/crates/sovereign-core/data/calibration/` — the runtime bakes both
+and a crate may not reach outside its own root (`cargo xtask boundary-gate`).
+
 `h1_top_cosine.overall.curve.json` came along as the comparator the
 verdict is stated against. The per-family curves did not: FINDINGS is
 explicit that the 19-pair literary row "is not a measurement and must not

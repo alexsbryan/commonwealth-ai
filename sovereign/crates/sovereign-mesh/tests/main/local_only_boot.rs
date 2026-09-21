@@ -58,7 +58,7 @@ use crate::common::mesh_admin_services;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
-use sovereign_core::setup_config::{
+use sovereign_contracts::setup_config::{
     DaemonSection, DataSection, DiscoverySection, IrohSection, ModelsSection, SetupConfig,
     WorkOfferSection,
 };

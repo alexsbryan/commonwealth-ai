@@ -104,25 +104,6 @@ const TURN_REGISTRIES: &[(&str, &str, Extraction)] = &[
             "sovereign/crates/sovereign-cli-llm/src/chat_cmd/bootstrap.rs",
         ]),
     ),
-    // Composed since 2026-08-26 (TOPOLOGY phase 7). Before that this row was
-    // 23 `tools.register` calls in a 1,659-line function; the span scanner
-    // that read them found NO span the moment the desktop adopted the recipe,
-    // which is the instrument guard doing its job rather than a regression.
-    // The DESKTOP ROW LEFT 2026-09-11 (504c6b6d3, svt-3b). It commissions no
-    // `Runtime` and composes no bundle — a turn reaches it over
-    // `sovereign-turn-client`, so the registry it uses IS the recipe row's.
-    // Kept as a comment rather than deleted silently: the extractor returned
-    // 0 for it the day the commission site went, and this census's guard
-    // (`every_host_yields_a_registry`) refused to read that as agreement.
-    // Composed since 2026-08-26 as well, which leaves NO host on the direct
-    // path. `Extraction::Direct` is kept because the next host to appear will
-    // arrive that way, and deleting the arm would make the census silently
-    // wrong about it rather than loudly.
-    (
-        "server",
-        "sovereign/crates/sovereign-server/src/main.rs",
-        Extraction::Bundles(&["sovereign/crates/sovereign-server/src/main.rs"]),
-    ),
 ];
 
 /// How a host's turn tools are read off its source.

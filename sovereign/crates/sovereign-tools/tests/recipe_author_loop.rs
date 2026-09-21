@@ -251,7 +251,7 @@ fn tool_descriptors_carry_recipe_authoring_permission() {
 async fn recipe_author_project_lifecycle_end_to_end() {
     use corpus_engine_notes::NoteStore;
     use sovereign_contracts::recipe::notes::{NoteScope, RecipeNotes, ScopeFilter};
-    use sovereign_store::recipe_project_store::RecipeProjectStore;
+    use sovereign_tools::recipe_author::recipe_project_store::RecipeProjectStore;
     use sovereign_tools::recipe_author::{
         capability_request::CapabilityRequest,
         checkpoint::{do_create as checkpoint_create, restore_checkpoint},

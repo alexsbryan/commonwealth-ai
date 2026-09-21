@@ -1,9 +1,13 @@
 # Five programs — the idiomatic design, and the cut that gets there
 
-> **DRAFT — not in force (2026-09-17).** The `domains` campaign continues to
-> completion; this document supersedes nothing until then, and the banner it
-> briefly put on `quality/DOMAINS.md` was reverted (operator: the edit was
-> premature). Kept as the design record for the cut that follows.
+> **IN FORCE since 2026-09-21, on branch `cut` (tag `pre-cut` = 6bda3417a).**
+> The `domains` campaign is superseded. Two parts of §7 were dropped as
+> ceremony by operator direction: the coverage apparatus (steps 1-4 and 8 —
+> llvm-cov, the twelve-row instrument table, `cut-report.py`, the
+> pre-registered ratio bar) and the prose rules that went with it. The gate is
+> the compiler plus `scripts/sovereign-lint.sh` and `scripts/sovereign-test.sh`.
+> What remains in force is §9, and §9 now runs FIRST rather than as the
+> fallback it was drafted to be — see the note at its head.
 
 Drafted 2026-09-17. Intended to supersede the ten-context decomposition in
 `quality/DOMAINS.md` §4 and the `domains` campaign's relocation plan. Keeps
@@ -266,14 +270,59 @@ exit 0.
 A lane that moved from `passed` names its functions; restore per the rule;
 repeat. Done when every lane's verdict equals its step 3 verdict.
 
-**Step 9 — boundaries.** In `quality/ARCH_LAYERS.toml`: five `[[package]]`
-rows, `svrn`, `ingest`, `cmnwlth`, `code`, `bench`; `[[forbid]]` rows
-`cmnwlth -> svrn`, `svrn -> cmnwlth`, `svrn -> code`, `bench -> *` except
-`oicp-types` and `sovereign-contracts`. `sovereign-tools` and
-`sovereign-cli-llm` split by program before their rows land, each split done
-when its in-crate containment test passes. Each red edge is one task: a
-trait in a shared leaf or a wire call, done when green. Step done when
-`cd corpus-engine && cargo xtask boundary-gate` exits 0.
+**Step 9 — boundaries. LANDED 2026-09-21; this is now the first step, not the
+last.** In `quality/ARCH_LAYERS.toml`: five `[[package]]` rows, `svrn`,
+`ingest`, `cmnwlth`, `code`, `bench`, replacing the six packages that were
+there (`studio`, `code-intel`, `corpus-mcp`, `commonwealth`, `serving`,
+`understanding`) — the validator refuses a crate in two packages, so the six
+could not nest inside the five. Every `[[exception]]` scoped to a package was
+deleted with them, eleven rows, and none was written in their place. Each red
+line is one task: a trait in a shared leaf or a wire call, done when green.
+Step done when `cd corpus-engine && cargo xtask boundary-gate` exits 0.
+
+**Why it moved to the front.** Operator direction 2026-09-21, correcting nine
+commits of incremental cutting on this branch: "I don't want the fuzzy grep and
+chase stuff. I want the define statically the endstate, break everything red,
+let the initiative be a return to green." The session being corrected had also
+scored itself with a scratchpad Python script carrying its own crate-to-program
+map and its own forbid matrix — a second implementation of the question this
+gate answers, and a tunable one. The script is deleted; `boundary-gate`'s
+violation count is the only burn-down number this initiative reports.
+
+**Three departures from the paragraph above, each deliberate.** (1) The four
+`[[forbid]]` rows are NOT added. Three of them — `cmnwlth -> svrn`,
+`svrn -> cmnwlth`, `svrn -> code` — are already exactly what a `[[package]]`
+row says, so spelling them again would be two implementations of one rule. The
+fourth is real and not expressible today: `bench -> *` except `oicp-types` and
+`sovereign-contracts` narrows the leaf budget for one package, and the
+`[[package_leaf]]` set is global. The fix is a per-package leaf budget in
+`quality/arch-layers/src/packages.rs`, not a hand-copy of the membership list.
+(2) `sovereign-tools` and `sovereign-cli-llm` are claimed by `svrn` rather than
+held back until their splits. Unclaimed, every edge INTO them from all five
+programs would go red, which measures the absence of a decision rather than a
+boundary; claimed, the edges OUT of them are the split task, and that is the
+red the gate now shows. (3) The shared-leaf set is unchanged at ten. §4 rule 6
+("shared types live in `oicp-types` and `sovereign-contracts` only") is a
+tightening of the leaf list, a different dimension from the program partition,
+and mixing the two would make the burn-down number unreadable.
+
+**The number, measured on the commit that declared it.** `boundary-gate` fails
+with **232** violations: 141 normal dependency escapes, 4 dev, 2 forbidden by a
+`[[forbid]]` row that now reaches the package pass (`sovereign-mesh` and
+`sovereign-mesh-test-harness` → `sovereign-daemon`, dev edges), and 85 from the
+three filesystem rules a manifest cannot express — 2 `build.rs` (`corpus-engine`,
+`sovereign-pods`), 33 `include_str!` escaping a crate root, 50 runtime
+reach-outs (`CARGO_MANIFEST_DIR` climbs and `git` shelled with no
+`current_dir`). By package: `svrn` 162, `code` 24, `ingest` 20, `cmnwlth` 17,
+`bench` 7. By source crate, the dependency escapes concentrate:
+`sovereign-daemon` 35, `sovereign-cli-llm` 26, `sovereign-cli-dev` 14,
+`sovereign-cli-daemon` 11, `sovereign-cli` 10, `sovereign-mesh` 10,
+`sovereign-tools` 9, `sovereign-code` 6.
+
+§6 measured 118 cross-program crate edges under a four-way grouping; the
+five-way partition plus the filesystem rules gives 232. The earlier figure was
+not wrong so much as narrower — it counted normal dependency edges only, which
+is the same undercount the deleted script carried.
 
 **Step 10 — de-embed.** Fourteen construction sites of `EmbeddedDaemon`
 outside `sovereign-daemon` become one dial through `sovereign-turn-client`.

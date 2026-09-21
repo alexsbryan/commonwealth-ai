@@ -24,7 +24,7 @@
 //! ## Iteration loop
 //!
 //! Exemplars live in a TOML file (path from `$SOVEREIGN_ROUTER_EXEMPLARS`
-//! env var, or the default `sovereign/router/exemplars.toml` relative
+//! env var, or the default `sovereign/crates/sovereign-core/data/router/exemplars.toml` relative
 //! to the cwd). Add a misroute to the TOML → next process picks it
 //! up. No rebuild required.
 //!

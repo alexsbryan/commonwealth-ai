@@ -57,7 +57,7 @@
 
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use sovereign_core::error::Error;
+use sovereign_contracts::error::Error;
 
 use crate::llama::cpp::context::LlamaContext;
 

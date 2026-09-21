@@ -42,8 +42,8 @@ use super::digest::format_landscape;
 use super::recipes::{
     conversation_history_recipe, institutional_notes_recipe, personal_knowledge_recipe,
 };
-use super::tokens::estimate_tokens;
 use super::view_kind::ViewKind;
+use sovereign_contracts::tokens::estimate_tokens;
 
 #[cfg(feature = "treesitter")]
 use super::relational::{format_relational, RelationalNote};
@@ -58,8 +58,6 @@ use super::splice_extension::{
 use super::strategic::{format_strategic, StrategicGoal};
 #[cfg(feature = "treesitter")]
 use super::timeline::assemble_timelines_from_atlas;
-#[cfg(all(feature = "treesitter", feature = "atos"))]
-use corpus_engine_atos::features::FeatureStore;
 #[cfg(feature = "treesitter")]
 use corpus_engine_notes::notes::NoteStore;
 
@@ -114,12 +112,15 @@ pub struct KnowledgeViewManager {
     /// commitment / follow_up / goal notes by `related_entity` to
     /// the relational and strategic blocks.
     notes_db_path: PathBuf,
-    /// ATOS feature DB path (typically `~/.svrnmesh/features.db`).
-    /// `None` = no feature lookup; the strategic block falls back to
-    /// initiative names without phase / drift annotation. Only read when
-    /// the `atos` feature is on (the strategic ATOS splice).
+    /// Injected ATOS feature catalog. `None` = no feature lookup; the
+    /// strategic block falls back to initiative names without phase / drift
+    /// annotation. Only read when the `atos` feature is on (the strategic
+    /// ATOS splice). Injected rather than opened here so this crate names
+    /// only the trait, never `corpus-engine-atos` — see [`FeatureCatalog`].
+    ///
+    /// [`FeatureCatalog`]: super::timeline::FeatureCatalog
     #[cfg_attr(not(feature = "atos"), allow(dead_code))]
-    features_db_path: Option<PathBuf>,
+    feature_catalog: Option<Arc<dyn super::timeline::FeatureCatalog>>,
     /// `.sovereign/project.toml` path. `None` = no project name in
     /// scope; initiatives can still surface from atoms but they
     /// won't link to a local project.
@@ -132,10 +133,6 @@ pub struct KnowledgeViewManager {
     /// itself is sharable across threads, so we hold an Arc.
     #[cfg(feature = "treesitter")]
     notes_handle: Arc<tokio::sync::Mutex<Option<Arc<NoteStore>>>>,
-    /// Lazy FeatureStore handle, opened on first splice when
-    /// `features_db_path` is set.
-    #[cfg(all(feature = "treesitter", feature = "atos"))]
-    features_handle: Arc<tokio::sync::Mutex<Option<Arc<FeatureStore>>>>,
 }
 
 /// One row of the digest cache. Stored body is the exact string
@@ -276,13 +273,11 @@ impl KnowledgeViewManager {
             digest_cache: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
             db_path,
             notes_db_path,
-            features_db_path: None,
+            feature_catalog: None,
             project_toml_path: None,
             mem_atlas_handles,
             #[cfg(feature = "treesitter")]
             notes_handle: Arc::new(tokio::sync::Mutex::new(None)),
-            #[cfg(all(feature = "treesitter", feature = "atos"))]
-            features_handle: Arc::new(tokio::sync::Mutex::new(None)),
         }
     }
 
@@ -303,18 +298,21 @@ impl KnowledgeViewManager {
         *slot = Some(crate::mem_atlas::MemAtlasHandles { store, inference });
     }
 
-    /// Set the ATOS feature DB path. When set + `with_project_toml_path`
+    /// Install the ATOS feature catalog. When set + `with_project_toml_path`
     /// is also set, the strategic digest will surface phase + drift
     /// annotations on initiatives that match a local project or
-    /// feature. Caller chains this on the constructor:
+    /// feature. Caller owns the store and passes only the read door:
     ///
     /// ```ignore
     /// let mgr = KnowledgeViewManager::new(...).await
-    ///     .with_features_db_path(features_db_path)
+    ///     .with_feature_catalog(Arc::new(FeatureStoreCatalog::new(store)))
     ///     .with_project_toml_path(project_toml_path);
     /// ```
-    pub fn with_features_db_path(mut self, path: PathBuf) -> Self {
-        self.features_db_path = Some(path);
+    pub fn with_feature_catalog(
+        mut self,
+        catalog: Arc<dyn super::timeline::FeatureCatalog>,
+    ) -> Self {
+        self.feature_catalog = Some(catalog);
         self
     }
 
@@ -686,14 +684,15 @@ impl KnowledgeViewManager {
         let chunk_ts = |id: &str| timestamps.get(id).copied();
 
         // 2. Build the ATOS snapshot (feature `atos`, off by default). When
-        //    on, timelines get phase/drift annotation from the FeatureStore +
+        //    on, timelines get phase/drift annotation from the FeatureCatalog +
         //    project.toml. When off, a `NoAtosLookup` means no annotation —
         //    the strategic block still renders from NoteStore-backed goals.
         #[cfg(feature = "atos")]
-        let atos = {
-            let features = self.features_store_handle().await;
-            AtosSnapshot::build(features.as_ref(), self.project_toml_path.as_deref()).await
-        };
+        let atos = AtosSnapshot::build(
+            self.feature_catalog.as_ref(),
+            self.project_toml_path.as_deref(),
+        )
+        .await;
         #[cfg(not(feature = "atos"))]
         let atos = super::timeline::NoAtosLookup;
 
@@ -838,32 +837,6 @@ impl KnowledgeViewManager {
                     path = %self.notes_db_path.display(),
                     error = %e,
                     "splice: NoteStore::open failed; relational annotations skipped"
-                );
-                None
-            }
-        }
-    }
-
-    /// Lazy FeatureStore opener. Returns `None` when no
-    /// `features_db_path` is configured or the file can't be opened.
-    #[cfg(all(feature = "treesitter", feature = "atos"))]
-    async fn features_store_handle(&self) -> Option<Arc<FeatureStore>> {
-        let path = self.features_db_path.as_ref()?;
-        let mut guard = self.features_handle.lock().await;
-        if let Some(h) = guard.as_ref() {
-            return Some(h.clone());
-        }
-        match FeatureStore::open(path) {
-            Ok(store) => {
-                let arc = Arc::new(store);
-                *guard = Some(arc.clone());
-                Some(arc)
-            }
-            Err(e) => {
-                tracing::debug!(
-                    path = %path.display(),
-                    error = %e,
-                    "splice: FeatureStore::open failed; ATOS phases skipped"
                 );
                 None
             }

@@ -236,9 +236,15 @@ fn include_escapes(dir: &Path, crate_name: &str, scope: &str, fails: &mut Vec<St
             .unwrap_or_default()
             .to_string_lossy()
             .to_string();
-        for e in scan_include_escapes(&text) {
+        let rel_dir = path
+            .parent()
+            .and_then(|p| p.strip_prefix(dir).ok())
+            .unwrap_or(Path::new("src"))
+            .to_path_buf();
+        for e in scan_include_escapes(&text, &rel_dir) {
             fails.push(format!(
-                "[{scope}] {crate_name}: src/{name}:{} {}",
+                "[{scope}] {crate_name}: {}:{} {}",
+                path.strip_prefix(dir).unwrap_or(&path).display(),
                 e.line,
                 e.describe()
             ));
@@ -284,7 +290,56 @@ impl IncludeEscape {
 ///
 /// The window is the STATEMENT rather than a fixed lookahead, so one embed
 /// cannot hide the next.
-fn scan_include_escapes(text: &str) -> Vec<IncludeEscape> {
+/// Lexically normalise `base/rel`, returning None when it climbs past the root.
+fn resolves_inside(base: &Path, rel: &str) -> bool {
+    let mut depth: i32 = base
+        .components()
+        .filter(|c| !c.as_os_str().is_empty())
+        .count() as i32;
+    for part in rel.split('/') {
+        match part {
+            "" | "." => {}
+            ".." => {
+                depth -= 1;
+                if depth < 0 {
+                    return false;
+                }
+            }
+            _ => depth += 1,
+        }
+    }
+    true
+}
+
+/// The `"..."` literals in one window, in order.
+fn string_literals(window: &[&str]) -> Vec<String> {
+    let joined = window.join("\n");
+    let mut out = Vec::new();
+    let b: Vec<char> = joined.chars().collect();
+    let mut i = 0;
+    while i < b.len() {
+        if b[i] == '"' {
+            let mut j = i + 1;
+            let mut lit = String::new();
+            while j < b.len() && b[j] != '"' {
+                if b[j] == '\\' {
+                    j += 1;
+                }
+                if j < b.len() {
+                    lit.push(b[j]);
+                }
+                j += 1;
+            }
+            out.push(lit);
+            i = j + 1;
+        } else {
+            i += 1;
+        }
+    }
+    out
+}
+
+fn scan_include_escapes(text: &str, rel_dir: &Path) -> Vec<IncludeEscape> {
     /// How far a macro invocation may run before this rule stops looking for
     /// the `;` that ends it. The shipped shapes use four lines.
     const FWD: usize = 8;
@@ -310,11 +365,28 @@ fn scan_include_escapes(text: &str) -> Vec<IncludeEscape> {
         let window = &lines[i..hi];
         examined_through = Some(hi.saturating_sub(1));
 
+        // RESOLVE, do not pattern-match. `../..` in the text is not an escape:
+        // `corpus-engine/src/extractors/code/mod.rs` embeds
+        // `../../../queries/rust/symbols.scm`, which lands on
+        // `corpus-engine/queries/` — INSIDE the crate root. That false positive
+        // stood as six red lines and as burn-down item (2) on the
+        // `corpus-mcp -> corpus-engine` exception, for work already done.
+        let base: &Path = if window.iter().any(|l| l.contains("CARGO_MANIFEST_DIR")) {
+            Path::new("")
+        } else {
+            rel_dir
+        };
         if let Some(hop) = window.iter().find(|l| l.contains("../..")) {
-            out.push(IncludeEscape {
-                line: i + 1,
-                evidence: hop.trim().to_string(),
-            });
+            let escapes = string_literals(window)
+                .iter()
+                .filter(|l| l.contains("../.."))
+                .any(|l| !resolves_inside(base, l.trim_start_matches('/')));
+            if escapes {
+                out.push(IncludeEscape {
+                    line: i + 1,
+                    evidence: hop.trim().to_string(),
+                });
+            }
         }
     }
     out
@@ -335,14 +407,14 @@ fn runtime_root_escapes(dir: &Path, crate_name: &str, scope: &str, fails: &mut V
             let Ok(text) = std::fs::read_to_string(&path) else {
                 continue;
             };
-            let name = path
-                .file_name()
-                .unwrap_or_default()
-                .to_string_lossy()
+            let rel = path
+                .strip_prefix(dir)
+                .unwrap_or(&path)
+                .display()
                 .to_string();
             for e in scan_runtime_escapes(&text) {
                 fails.push(format!(
-                    "[{scope}] {crate_name}: {sub}/{name}:{} {}",
+                    "[{scope}] {crate_name}: {rel}:{} {}",
                     e.line,
                     e.describe()
                 ));
@@ -466,7 +538,22 @@ fn scan_runtime_escapes(text: &str) -> Vec<RuntimeEscape> {
 
         if line.contains(r#"Command::new("git")"#) {
             let hi = (i + GIT_FWD + 1).min(lines.len());
-            if !lines[i..hi].iter().any(|l| l.contains("current_dir(")) {
+            // TWO spellings of the same property, because the property is
+            // "the repo path came from the CALLER", not "this builder names
+            // `current_dir`". `git -C <path>` is git's own flag for it and is
+            // what `sovereign-code` uses at all four of its sites; reading only
+            // `current_dir(` made this rule fire on four call sites that already
+            // take a `&Path` argument — exactly the shape the doc above says it
+            // deliberately does NOT flag. Watched failing on those four
+            // (2026-09-21) before it was fixed. Widened the same day from
+            // `arg("-C")` to the bare literal: `sovereign-eval`'s `git_head`
+            // spells it `.args(["-C"]).arg(root)` and was flagged while taking
+            // the root as an argument. The property is the flag, not the
+            // builder method that carries it.
+            let caller_directed = lines[i..hi]
+                .iter()
+                .any(|l| l.contains("current_dir(") || l.contains(r#""-C""#));
+            if !caller_directed {
                 out.push(RuntimeEscape {
                     line: i + 1,
                     kind: EscapeKind::AmbientGit,
@@ -645,7 +732,7 @@ pub const OTHER_TOML: &str = include_str!(concat!(
     "/../../../elsewhere/registry.toml"
 ));
 "#;
-        let hits = scan_include_escapes(wrapped);
+        let hits = scan_include_escapes(wrapped, Path::new("src"));
         assert_eq!(hits.len(), 1, "the three-line embed must be seen");
         assert!(hits[0].evidence.contains("elsewhere/registry.toml"));
     }
@@ -662,7 +749,7 @@ pub const RECIPE_REGISTRY_TOML: &str = include_str!(concat!(
     "/../../../sovereign-recipes/registry.toml"
 ));
 "#;
-        let hits = scan_include_escapes(recipe_embed);
+        let hits = scan_include_escapes(recipe_embed, Path::new("src"));
         assert_eq!(hits.len(), 1, "a sovereign-recipes embed must now be seen");
         assert!(hits[0].evidence.contains("sovereign-recipes/registry.toml"));
     }
@@ -670,9 +757,9 @@ pub const RECIPE_REGISTRY_TOML: &str = include_str!(concat!(
     #[test]
     fn include_scan_still_sees_a_single_line_embed() {
         let inline = r#"const X: &str = include_str!("../../elsewhere/x.json");"#;
-        assert_eq!(scan_include_escapes(inline).len(), 1);
+        assert_eq!(scan_include_escapes(inline, Path::new("src")).len(), 1);
         let bytes = r#"const X: &[u8] = include_bytes!("../../elsewhere/x.bin");"#;
-        assert_eq!(scan_include_escapes(bytes).len(), 1);
+        assert_eq!(scan_include_escapes(bytes, Path::new("src")).len(), 1);
     }
 
     /// Rule 3b's negative controls — the embeds that lift fine because they
@@ -682,9 +769,23 @@ pub const RECIPE_REGISTRY_TOML: &str = include_str!(concat!(
         // Inside the crate, and one level up from a file in `src/` is still
         // the crate root — only a two+ level climb leaves.
         let local = r#"const X: &str = include_str!("fixtures/x.json");"#;
-        assert!(scan_include_escapes(local).is_empty());
+        assert!(scan_include_escapes(local, Path::new("src")).is_empty());
         let crate_root = r#"const X: &[u8] = include_bytes!("../README.md");"#;
-        assert!(scan_include_escapes(crate_root).is_empty());
+        assert!(scan_include_escapes(crate_root, Path::new("src")).is_empty());
+    }
+
+    /// The false positive this rule carried until 2026-09-21: a climb that
+    /// LANDS inside the crate root. corpus-engine's tree-sitter queries live
+    /// at `corpus-engine/queries/` and are embedded from
+    /// `src/extractors/code/mod.rs`, so the literal reads `../../../queries/…`
+    /// and resolves to the crate root — six red lines, and a burn-down item on
+    /// the `corpus-mcp -> corpus-engine` exception, for work already done.
+    #[test]
+    fn include_scan_resolves_a_climb_that_lands_inside_the_crate() {
+        let inside = r#"const Q: &str = include_str!("../../../queries/rust/symbols.scm");"#;
+        assert!(scan_include_escapes(inside, Path::new("src/extractors/code")).is_empty());
+        // Same literal from a shallower file DOES leave.
+        assert_eq!(scan_include_escapes(inside, Path::new("src")).len(), 1);
     }
 
     /// The window is a statement and not a fixed lookahead, so the embed above
@@ -702,7 +803,7 @@ pub const SECOND: &str = include_str!(concat!(
     "/../../../sovereign-recipes/b.toml"
 ));
 "#;
-        let hits = scan_include_escapes(two);
+        let hits = scan_include_escapes(two, Path::new("src"));
         assert_eq!(hits.len(), 2, "both embeds escape");
         assert!(hits[0].evidence.contains("elsewhere/a.toml"));
         assert!(hits[1].evidence.contains("sovereign-recipes/b.toml"));
@@ -785,6 +886,53 @@ fn head() -> String {
         assert_eq!(hits.len(), 1);
         assert!(matches!(hits[0].kind, EscapeKind::AmbientGit));
         assert!(hits[0].describe().contains("no `.git` at all"));
+    }
+
+    /// `git -C <path>` is the SAME property as `.current_dir(path)` — the repo
+    /// came from the caller — and the rule must read both spellings. It read
+    /// only `current_dir(` until 2026-09-21 and fired on four `sovereign-code`
+    /// sites that all take a `&Path` argument, which is the shape the rule's
+    /// own doc says it deliberately does not flag.
+    ///
+    /// The pair is the point: the `-C` form passes, the form that names
+    /// neither still fails (`runtime_scan_flags_git_that_never_says_where`
+    /// above). Loosening a rule without a control is how a gate stops being one.
+    /// The plural spelling. `sovereign-eval::manifest::git_head` writes
+    /// `.args(["-C"]).arg(root)`, which carries the identical property and was
+    /// flagged because the matcher read `arg("-C")` only.
+    #[test]
+    fn runtime_scan_accepts_the_args_slice_spelling_of_git_dash_c() {
+        let plural = r#"
+fn git_head(root: &std::path::Path) -> Option<String> {
+    let out = std::process::Command::new("git")
+        .args(["-C"])
+        .arg(root)
+        .args(["rev-parse", "HEAD"])
+        .output()
+        .ok()?;
+    Some(String::from_utf8_lossy(&out.stdout).trim().to_string())
+}
+"#;
+        assert!(scan_runtime_escapes(plural).is_empty());
+    }
+
+    #[test]
+    fn runtime_scan_accepts_git_dash_c_as_caller_directed() {
+        let dash_c = r#"
+fn current_branch(repo_root: &std::path::Path) -> Option<String> {
+    let out = std::process::Command::new("git")
+        .arg("-C")
+        .arg(repo_root)
+        .args(["rev-parse", "--abbrev-ref", "HEAD"])
+        .output()
+        .ok()?;
+    Some(String::from_utf8_lossy(&out.stdout).to_string())
+}
+"#;
+        assert!(
+            scan_runtime_escapes(dash_c).is_empty(),
+            "`git -C <caller path>` is caller-directed, not ambient"
+        );
     }
 
     /// Rule 3c's negative controls — every shape that is in a governed crate

@@ -314,8 +314,6 @@ impl Runtime {
             // conversation corpus. No-op when no reader wired or no
             // conv-category chunks present. Spec
             // `sovereign/docs/specs/CONV_TIERED_PORT.md`.
-            self.rerank_conv_chunks_via_ppr(message, &mut all_chunks, &display_categories, &lane)
-                .await;
             // Whole-work summaries, at the LATE position — appended
             // post-rerank so leaf ranking is untouched, then reserved to the
             // head of the pool. Both halves are load-bearing and were learnt

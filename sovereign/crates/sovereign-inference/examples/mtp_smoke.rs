@@ -42,8 +42,8 @@
 use std::path::PathBuf;
 use std::time::Instant;
 
-use sovereign_core::traits::InferenceProvider;
-use sovereign_core::types::CompletionRequest;
+use sovereign_contracts::traits::InferenceProvider;
+use sovereign_contracts::types::CompletionRequest;
 use sovereign_inference::embedded::ffi_trace::{self, FfiCall};
 use sovereign_inference::embedded::{EmbeddedLlamaCpp, SlotWindows};
 
@@ -61,7 +61,7 @@ fn request_for(prompt: &str) -> CompletionRequest {
         admission: None,
         prompt: prompt.to_string(),
         system_message: None,
-        preferred_speed: sovereign_core::types::Speed::Slow,
+        preferred_speed: sovereign_contracts::types::Speed::Slow,
         max_tokens: Some(96),
         // Greedy. A stale-draft desync should not be maskable as an
         // unlucky sample, and run-to-run comparison should be honest.

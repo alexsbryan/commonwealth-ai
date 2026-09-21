@@ -106,8 +106,6 @@ pub struct Lane {
     /// `RwLock` at lane-build time — see the module docs on why a per-stage
     /// read is a bug and not merely a cost.
     pub meta_atlas: Option<Arc<corpus_engine::meta_atlas::MetaAtlasIndex>>,
-    /// Cross-corpus bridge edges (typed topic-to-topic alignment).
-    pub bridge: Option<Arc<corpus_engine::meta_atlas::BridgeIndex>>,
     /// The cross-encoder pass.
     pub rerank: Rerank,
     /// Entity extractor for entity-aware history retrieval and hybrid
@@ -158,7 +156,6 @@ pub struct LaneSources {
     /// `RwLock<Option<_>>` because every turn reads it and only one writer
     /// ever fires.
     pub meta_atlas: Arc<arc_swap::ArcSwapOption<corpus_engine::meta_atlas::MetaAtlasIndex>>,
-    pub bridge: Option<Arc<corpus_engine::meta_atlas::BridgeIndex>>,
     pub rerank: Rerank,
     pub gliner: Option<Arc<dyn crate::traits::EntityExtractor>>,
     pub conv_tiered: Option<Arc<dyn crate::conv_tiered::ConvTieredReader>>,
@@ -184,7 +181,6 @@ impl LaneSources {
             atlas_context: self.atlas_context.clone(),
             wikipedia_graph: self.wikipedia_graph.clone(),
             meta_atlas: self.meta_atlas.load_full(),
-            bridge: self.bridge.clone(),
             rerank: self.rerank.clone(),
             gliner: self.gliner.clone(),
             conv_tiered: self.conv_tiered.clone(),

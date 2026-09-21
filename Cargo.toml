@@ -99,6 +99,7 @@ members = [
     "sovereign/crates/sovereign-store",
     "sovereign/crates/sovereign-time",
     "sovereign/crates/sovereign-tools",
+    "sovereign/crates/sovereign-code",
     # GLiNER (ONNX) per-chunk entity extraction — carved out of sovereign-tools
     # 2026-07-17 so the fragile ort=rc.9 stack is a mandatory dep of only the
     # four binaries that need it, not an optional feature on a shared crate
@@ -131,10 +132,10 @@ members = [
     # catalog, hoisted out of the CLI so the daemon can run workflows (the living
     # trigger's prerequisite).
     "studio/crates/sovereign-workflow-host",
+    "studio/crates/sovereign-studio",
     # Headless studio CLI — authors + tests recipes and runs workflows against any
     # OICP daemon, linking ONLY the studio crates + shared leaves (no corpus-engine,
     # no sovereign-core). The proof the studio package is independently usable.
-    "studio/crates/sovereign-studio",
     # MeshApp explorer ops — pure path-in/DTO-out projections shared by the
     # desktop Tauri host and the `sovereign meshapp dev` CLI server.
     "sovereign/crates/sovereign-meshapp",
@@ -165,8 +166,8 @@ members = [
     "sovereign/crates/sovereign-scheduler",
     "sovereign/crates/sovereign-serving-host",
     "sovereign/crates/sovereign-service",
-    "sovereign/crates/sovereign-server",
     "sovereign/crates/sovereign-desktop/src-tauri",
+    "sovereign-mobile/src-tauri",
     # The phone surface. Promoted into the workspace 2026-09-10 (sv-surface R6):
     # it was detached so that unverified mobile deps could not break the main
     # build, for as long as it hand-rolled its OWN copy of the turn protocol. It now
@@ -174,12 +175,12 @@ members = [
     # from growing back is a gate that actually compiles and tests it. `tauri`
     # was already a workspace dependency via sovereign-desktop, so this adds no
     # new third-party tree.
-    "sovereign-mobile/src-tauri",
     "sovereign/crates/sovereign-cli",
     "sovereign/crates/sovereign-cli-shared",
     "sovereign/crates/sovereign-cli-dev",
     "sovereign/crates/sovereign-cli-daemon",
     "sovereign/crates/sovereign-cli-llm",
+    "sovereign/crates/sovereign-cli-mesh",
     "sovereign/crates/sovereign-atos",
     "sovereign/crates/sovereign-eval",
     "sovereign/crates/sovereign-authoring-harness",
@@ -335,6 +336,8 @@ sovereign-scheduler = { path = "sovereign/crates/sovereign-scheduler" }
 sovereign-store = { path = "sovereign/crates/sovereign-store" }
 sovereign-time = { path = "sovereign/crates/sovereign-time" }
 sovereign-tools = { path = "sovereign/crates/sovereign-tools" }
+sovereign-code = { path = "sovereign/crates/sovereign-code" }
+sovereign-studio = { path = "studio/crates/sovereign-studio" }
 sovereign-gliner = { path = "sovereign/crates/sovereign-gliner" }
 sovereign-enrichment-catalog = { path = "sovereign/crates/sovereign-enrichment-catalog" }
 sovereign-enrichment-build = { path = "sovereign/crates/sovereign-enrichment-build" }
@@ -344,7 +347,6 @@ sovereign-tools-base = { path = "studio/crates/sovereign-tools-base" }
 sovereign-recipe-author = { path = "studio/crates/sovereign-recipe-author" }
 sovereign-workflow = { path = "studio/crates/sovereign-workflow" }
 sovereign-workflow-host = { path = "studio/crates/sovereign-workflow-host" }
-sovereign-studio = { path = "studio/crates/sovereign-studio" }
 sovereign-meshapp = { path = "sovereign/crates/sovereign-meshapp" }
 sovereign-mesh = { path = "sovereign/crates/sovereign-mesh" }
 sovereign-daemon = { path = "sovereign/crates/sovereign-daemon" }

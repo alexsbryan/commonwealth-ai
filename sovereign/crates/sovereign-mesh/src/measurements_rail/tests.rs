@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+use crate::mesh_measurements as mm;
 use commonwealth_core::ids::NodeId;
 use commonwealth_rail::{Ed25519Verifier, Payload, Person, RingJournal, RingSigner};
-use sovereign_core::mesh_measurements as mm;
 
 use super::{publish, read, republish, to_payload};
 use crate::ring_roster::tests::{key, member, mesh_of, pubkey_of};

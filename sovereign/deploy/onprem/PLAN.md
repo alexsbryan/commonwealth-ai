@@ -240,7 +240,7 @@ firm. Rather than inventing defaults, the kit ships the template and `acceptance
 | `EGRESS.md` | Every outbound call in the tree with its kill switch. The artifact that wins the security review. |
 | `daemon-config.toml` | `~/.svrnmesh/config.toml` |
 | `server-config.toml` | `sovereign-server`'s `--config` (a *different* schema — see appendix) |
-| `systemd/*.service` | Two **system** units with `User=`, `NoNewPrivileges`, `ProtectSystem=strict`. The repo only ships a `--user` unit (`sovereign/contrib/systemd/svrnmesh.service`). |
+| `systemd/*.service` | Two **system** units with `User=`, `NoNewPrivileges`, `ProtectSystem=strict`. The repo only ships a `--user` unit (`sovereign/crates/sovereign-service/data/systemd/svrnmesh.service`). |
 | `nginx/firm-rag.conf` | TLS + allowlist of exactly the client routes; everything else 404s. |
 | `install.sh` | Untar, stage models + OCR assets, restore the `us-code` snapshot, write both configs, enable units. |
 | `acceptance.sh` | The checks below, non-zero exit on any. |

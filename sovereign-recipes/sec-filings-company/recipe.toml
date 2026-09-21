@@ -40,7 +40,8 @@
 #             the http_api acquirer for EDGAR documents.
 #   facts/  — per-concept XBRL fact files rendered by sec_facts_render
 #             (THE one decider) from data.sec.gov companyfacts via the
-#             concept-map.toml registry. Rendered, not extracted in-engine:
+#             concept-map.toml registry (sovereign/crates/sovereign-tools/
+#             data/sec-filings-company/). Rendered, not extracted in-engine:
 #             the `json` extractor cannot carry companyfacts (content_field
 #             must be a string field on each matched object; a fact's `val`
 #             is a number and its concept id is a parent map key), and the

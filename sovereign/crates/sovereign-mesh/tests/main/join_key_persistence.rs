@@ -32,7 +32,7 @@ use crate::common::mesh_admin_services;
 
 use std::time::Duration;
 
-use sovereign_core::setup_config::SetupConfig;
+use sovereign_contracts::setup_config::SetupConfig;
 use sovereign_daemon::daemon::EmbeddedDaemon;
 use sovereign_mesh::persist;
 

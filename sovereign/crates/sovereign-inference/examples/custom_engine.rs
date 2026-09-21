@@ -36,13 +36,13 @@ use async_trait::async_trait;
 use futures::Stream;
 
 // The crate's `Result<T>` is single-generic (error is always
-// `sovereign_core::Error`). Aliased so std's two-generic `Result`
+// `sovereign_contracts::Error`). Aliased so std's two-generic `Result`
 // stays available for `EngineBuilder::build`, which reports a plain
 // operator-facing `String`.
-use sovereign_core::error::Result as SovResult;
-use sovereign_core::setup_config::{EngineSection, SetupConfig};
-use sovereign_core::traits::InferenceProvider;
-use sovereign_core::types::{
+use sovereign_contracts::error::Result as SovResult;
+use sovereign_contracts::setup_config::{EngineSection, SetupConfig};
+use sovereign_contracts::traits::InferenceProvider;
+use sovereign_contracts::types::{
     CompletionRequest, CompletionResponse, Depth, FinishReason, ProviderCapabilities, Speed,
     StreamFrame,
 };

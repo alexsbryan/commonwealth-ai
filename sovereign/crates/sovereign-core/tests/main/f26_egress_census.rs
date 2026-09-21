@@ -234,7 +234,14 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     // `sovereign_mesh` build). The census scans production `src/` only, so those
     // sites are out of scope now and their rows are removed, not re-keyed —
     // the files still hold 9/4/3 sites, but no longer as production code.
-    ("sovereign/crates/sovereign-daemon/src/rpc_warm_http.rs", Class::Mesh, 7),
+    ("sovereign/crates/sovereign-daemon/src/rpc_warm_http.rs", Class::Mesh, 2),
+    // The 2026-09 split of rpc_warm_http.rs moved sites into a sibling
+    // orchestrator and a test module; neither had a row, so this census was
+    // already red on main before the FIVE_PROGRAMS cut touched it.
+    ("sovereign/crates/sovereign-daemon/src/rpc_warm_http/orchestrator.rs", Class::Mesh, 2),
+    ("sovereign/crates/sovereign-daemon/src/tests/rpc_warm_http.rs", Class::TestOnly, 4),
+    // `#[cfg(test)] mod` at mesh_proof_outbound.rs:59 — the stamp fixture.
+    ("sovereign/crates/sovereign-daemon/src/mesh_proof_outbound.rs", Class::TestOnly, 1),
     // 5 -> 7 (2026-08-23): the two reload-diff regression tests
     // (`reload_applies_a_context_size_change_without_a_restart`,
     // `reload_applies_a_code_slot_change_without_a_restart`) each build a
@@ -308,7 +315,7 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     // re-baselines the whole file, not to a row being added.
     ("sovereign/crates/sovereign-daemon/src/assets_http.rs", Class::Mesh, 4),
     ("sovereign/crates/sovereign-daemon/src/project_http.rs", Class::Mesh, 4),
-    ("sovereign/crates/sovereign-serving-host/src/model_fetch.rs", Class::Mesh, 4),
+    ("sovereign/crates/sovereign-serving-host/src/model_fetch.rs", Class::Mesh, 5),
     ("sovereign/crates/sovereign-daemon/src/loopback_guard.rs", Class::Mesh, 3),
     ("sovereign/crates/sovereign-serving-host/src/peer_inference.rs", Class::Mesh, 2),
     // setup_cmd/terminal.rs (2026-08-30, the `terminal` node class; 1 -> 3 on
@@ -739,10 +746,6 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     ("sovereign/crates/sovereign-tools/src/catalog_ingest.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-tools/src/calendar.rs", Class::OperatorSurface, 1),
 
-    // ---- sovereign-server (LocalDaemon — API server → host daemon) ----
-    ("sovereign/crates/sovereign-server/src/startup.rs", Class::LocalDaemon, 1),
-    ("sovereign/crates/sovereign-server/src/reciprocity.rs", Class::LocalDaemon, 1),
-    ("sovereign/crates/sovereign-server/src/activity.rs", Class::LocalDaemon, 1),
 
     // ---- sovereign-inference (InboundOnly: range-resumed model downloads) ----
     ("sovereign/crates/sovereign-inference/src/setup_planner.rs", Class::InboundOnly, 1),

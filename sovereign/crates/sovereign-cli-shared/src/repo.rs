@@ -72,6 +72,49 @@ pub fn find_repo_root_in(start: &Path) -> Option<PathBuf> {
     }
 }
 
+/// Walk up from the CWD to the enclosing checkout: the directory holding both
+/// `quality/` and `sovereign/`.
+///
+/// The repo root taken from the INVOCATION, not from where the crate was
+/// compiled. `find_repo_root` above asks git and answers "which git repo";
+/// this asks the filesystem and answers "which checkout of THIS monorepo" —
+/// it is the one that still works in an unpacked source tarball with no
+/// `.git`, which is why the repo-scoped gates and banks resolve through it.
+///
+/// `None` when the CWD is not inside a checkout. Callers report that; none of
+/// them defaults (ARCH §6).
+pub fn find_checkout_root() -> Option<PathBuf> {
+    let mut dir = std::env::current_dir().ok()?;
+    loop {
+        if dir.join("quality").is_dir() && dir.join("sovereign").is_dir() {
+            return Some(dir);
+        }
+        if !dir.pop() {
+            return None;
+        }
+    }
+}
+
+/// `git rev-parse --short HEAD` evaluated *from `dir`* — the caller says which
+/// tree. `None` on unborn HEAD, git failure, or a `dir` outside any repo, so a
+/// record stamped with this carries an absent commit rather than a guessed one.
+pub fn head_short_in(dir: &Path) -> Option<String> {
+    let out = std::process::Command::new("git")
+        .args(["rev-parse", "--short", "HEAD"])
+        .current_dir(dir)
+        .output()
+        .ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    if s.is_empty() {
+        None
+    } else {
+        Some(s)
+    }
+}
+
 /// `git rev-parse --abbrev-ref HEAD` for the given repo. `None` on
 /// unborn HEAD, detached HEAD, or git failure. Best-effort: callers
 /// just leave the field empty when this returns `None`.

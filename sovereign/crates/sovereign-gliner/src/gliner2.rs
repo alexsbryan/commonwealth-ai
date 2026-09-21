@@ -41,7 +41,7 @@ use std::sync::Mutex;
 use ort::session::Session;
 use ort::value::Tensor;
 use regex::Regex;
-use sovereign_core::error::{Error, Result};
+use sovereign_contracts::error::{Error, Result};
 use tokenizers::Tokenizer;
 
 use crate::gliner_ner::{
@@ -445,7 +445,7 @@ impl crate::labeled::LabeledEntityExtractor for Gliner2Extractor {
     }
 }
 
-impl sovereign_core::traits::EntityExtractor for Gliner2Extractor {
+impl sovereign_contracts::traits::EntityExtractor for Gliner2Extractor {
     fn extract_entities(&self, text: &str) -> Vec<String> {
         match self.extract(text) {
             Ok(hits) => {

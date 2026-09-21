@@ -839,8 +839,8 @@ const REFLECT_HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::hel
 // and as the offline fallback when the daemon isn't reachable.
 
 async fn cmd_brief(args: &[String]) -> i32 {
-    use sovereign_tools::code::brief::{assemble_brief, BriefInputs};
-    use sovereign_tools::code::working_set::{detect_working_set, Strategy};
+    use sovereign_code::brief::{assemble_brief, BriefInputs};
+    use sovereign_code::working_set::{detect_working_set, Strategy};
 
     if matches!(
         args.first().map(String::as_str),
@@ -1750,7 +1750,7 @@ async fn cmd_search(args: &[String]) -> i32 {
 async fn collect_brief_overlaps(
     repo_root: &Path,
     working_set: &[PathBuf],
-) -> Vec<sovereign_tools::code::brief::WorkInFlightEntry> {
+) -> Vec<sovereign_code::brief::WorkInFlightEntry> {
     if let Some(entries) = daemon_brief_overlaps(repo_root, working_set).await {
         return entries;
     }
@@ -1765,7 +1765,7 @@ async fn collect_brief_overlaps(
 async fn daemon_brief_overlaps(
     repo_root: &Path,
     working_set: &[PathBuf],
-) -> Option<Vec<sovereign_tools::code::brief::WorkInFlightEntry>> {
+) -> Option<Vec<sovereign_code::brief::WorkInFlightEntry>> {
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(3))
         .build()
@@ -1799,7 +1799,7 @@ async fn daemon_brief_overlaps(
         .iter()
         .map(|p| p.to_string_lossy().into_owned())
         .collect();
-    let mut acc = sovereign_tools::OverlapAccumulator::new(repo_root);
+    let mut acc = sovereign_code::OverlapAccumulator::new(repo_root);
     for c in payload["claims"].as_array()? {
         // Claims are repo-scoped signals; a live claim anywhere in
         // the repo is orientation-relevant, so no working-set filter.
@@ -1828,7 +1828,7 @@ async fn daemon_brief_overlaps(
 fn local_brief_overlaps(
     repo_root: &Path,
     working_set: &[PathBuf],
-) -> Vec<sovereign_tools::code::brief::WorkInFlightEntry> {
+) -> Vec<sovereign_code::brief::WorkInFlightEntry> {
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     let Some(sovereign_dir) = sovereign_cli_shared::repo::find_sovereign_dir(&cwd) else {
         return Vec::new();
@@ -1842,5 +1842,5 @@ fn local_brief_overlaps(
     };
     let node_id = crate::atlas_identity::atlas_node_id();
     let store = sovereign_work_atlas::WorkAtlasStore::new(Arc::new(mesh_store), node_id);
-    sovereign_tools::overlaps_for_working_set(&store, repo_root, working_set, None)
+    sovereign_code::overlaps_for_working_set(&store, repo_root, working_set, None)
 }

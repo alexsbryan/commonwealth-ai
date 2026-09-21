@@ -123,7 +123,7 @@ if ! (( UPLOAD_ONLY )); then
     set -e
     case "$ROUTER_RC" in
         0) ;;
-        3) die "router-embed cache is STALE — run: cargo run --release -p sovereign-cli-llm -- router-cache rebuild, commit sovereign/router/router-embed-cache.json, and re-run" ;;
+        3) die "router-embed cache is STALE — run: cargo run --release -p sovereign-cli-llm -- router-cache rebuild, commit sovereign/crates/sovereign-core/data/router/router-embed-cache.json, and re-run" ;;
         *) die "router-cache check errored (exit $ROUTER_RC) — fix before releasing" ;;
     esac
 fi

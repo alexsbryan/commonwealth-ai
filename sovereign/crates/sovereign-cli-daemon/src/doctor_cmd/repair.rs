@@ -26,8 +26,7 @@ timeout_secs = 60
 debounce_ms = 800
 "#;
 
-pub(super) const SKILL_MD_TEMPLATE: &str =
-    include_str!("../../../../.opencode/skills/sovereign-code/SKILL.md");
+pub(super) const SKILL_MD_TEMPLATE: &str = include_str!("skill_template/SKILL.md");
 
 // ── Inline repair helpers ─────────────────────────────────────────────────────
 

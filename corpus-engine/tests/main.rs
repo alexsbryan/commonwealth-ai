@@ -86,6 +86,9 @@ mod reindex_stamps_freshness;
 mod sharding_round_trip_e2e;
 #[path = "main/snapshot_restore_e2e.rs"]
 mod snapshot_restore_e2e;
+// Not a test file: the two source-tree deciders the gates below share.
+#[path = "main/source_tree.rs"]
+mod source_tree;
 #[path = "main/tiered_entity_extractor_seam.rs"]
 mod tiered_entity_extractor_seam;
 #[path = "main/watcher_e2e.rs"]
