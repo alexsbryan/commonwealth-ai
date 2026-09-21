@@ -7461,27 +7461,41 @@ work pins the GPU while the user is chatting. Components:
   §3.3).
   **One canonical wire form (order commons-fluency fix 7):** the header
   value is `NodeId::to_hex()` — exactly 32 lowercase hex chars, the
-  encoding of the 16-byte id; `crate::headers::parse_x_node_id` accepts
-  nothing else (`node-<16hex>` strings from `/status` rows are the
-  DISPLAY form and must never be echoed back as a header). A present-
-  but-malformed value is still gated and tallied under the zero node,
-  and the `/status` zero-bucket row names the rejected raw value, when
-  it was last seen, and the expected wire form.
+  encoding of the 16-byte id; `sovereign_contracts::principal::claimed_node_id`
+  accepts nothing else (`node-<16hex>` strings from `/status` rows are the
+  DISPLAY form and must never be echoed back as a header). That function is
+  the ONE production read of the header anywhere under `sovereign/crates`,
+  enforced by a test that greps for it and for the literal header
+  (`sovereign-daemon/src/mesh_principal_gate.rs`, order
+  `mesh-verified-principal`): every decider reads the `Principal` a resolver
+  attached, never the wire. A present-but-malformed value resolves to
+  `Principal::Unverified` and is REFUSED by the peer gate — a ceiling keyed on
+  an id nobody proved is a ceiling any caller can pick — while the `/status`
+  zero-bucket row still names the rejected raw value, when it was last seen,
+  and the expected wire form.
+  **On the INTERNAL plane the header is not an identity at all.** A request
+  that crossed the iroh acceptor carries the Ed25519 key the QUIC handshake
+  proved (`internal_principal.rs`); a request that reached `:9742` some other
+  way has its `x-mesh-*` stripped and resolves `Unverified`, and any
+  `x-node-id` on it is ignored. The four senders still STAMP the header for
+  one release, because a receiver on an older build routes on its presence.
   **Per-principal client fairness (order `serve50-identity`, 2026-08-13):**
   the gate above rations traffic that NAMES a node; its sibling
   `client_fairness_layer` rations traffic that does not. The two are
-  disjoint by construction — the client layer returns early when
-  `X-Node-Id` is present — so a request meets exactly one of them and
-  is never double-gated. It keys the same policy core as
+  disjoint by construction — both split on one predicate,
+  `claims_peer_identity`, over the resolved `Principal` — so a request meets
+  exactly one of them and is never double-gated. It keys the same policy core as
   **`SchedCore<Principal>`** (`AppStateInner.serving.client_sched`), where
   the principal comes from `sovereign-daemon/src/client_principal.rs`: the ONE
   resolver, `AppState::resolve(headers, peer, policy)`, which covers all
   five arms of the published `Principal` — a live guest grant →
   `Guest` (the grant store decides; the key is a fingerprint); another
-  presented `Authorization: Bearer` → `RemoteClient` (a `WorkerToken`
-  rides this branch, it is a plain bearer); a readable `X-Node-Id` →
-  `Member` (read BEFORE the loopback branch, because a mesh peer arrives
-  on the trusting listener over loopback); `X-Principal` from a
+  readable `X-Node-Id` → `Member`, an unreadable one → `Unverified` (read
+  BEFORE the loopback branch, because a mesh peer arrives on the trusting
+  listener over loopback, and BEFORE the non-guest bearer, because peers
+  present both and the bearer is the same daemon-wide bytes for all of them);
+  another presented `Authorization: Bearer` → `RemoteClient` (a `WorkerToken`
+  rides this branch, it is a plain bearer); `X-Principal` from a
   **loopback** caller on a listener that trusts a loopback peer address →
   `LocalOwner`; else `Anonymous`. It is the one resolution at the edge:
   `client_auth_layer`'s credential/grant decision, the host's

@@ -228,9 +228,9 @@ fn apply_v04_enrichment(state: &AppState, embedded: bool, manifest: &mut Provide
 /// and routes elsewhere on its own.
 pub async fn capabilities(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    attached: Option<axum::Extension<sovereign_serving_host::admission::AttachedPrincipal>>,
 ) -> Json<ProviderManifest> {
-    let requester = crate::headers::parse_x_node_id(&headers);
+    let requester = crate::admission::requester(attached);
 
     // If we have a local inference service (Sovereign's
     // EmbeddedLlamaCpp), prefer its manifest — that's the one
@@ -492,7 +492,7 @@ mod tests {
     }
 
     // Parser tests live alongside the parser itself in
-    // `crate::headers::tests` — DRY-out, no duplication.
+    // `sovereign_contracts::principal`'s tests — DRY-out, no duplication.
 
     #[tokio::test]
     async fn apply_peer_preference_scales_all_claim_affinities() {

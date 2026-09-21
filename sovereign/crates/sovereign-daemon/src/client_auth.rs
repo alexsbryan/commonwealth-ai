@@ -8,8 +8,20 @@
 //! alpha but breaks the moment the daemon runs on a routable address
 //! someone untrusted can reach (a VPS, shared wifi, a tailnet with
 //! guests). This layer is the **B** tier of the 2026-06 auth plan
-//! (localhost-default + bearer token); node-identity auth for mesh
-//! peers is a later milestone.
+//! (localhost-default + bearer token).
+//!
+//! **Node-identity auth for mesh peers is no longer "a later milestone" on
+//! every surface, and this one is not the surface that has it.** On the
+//! INTERNAL router (`:9742`) a peer's identity is the Ed25519 key the iroh
+//! handshake proved, forwarded by this daemon's own acceptor and resolved by
+//! [`crate::internal_principal`] — a header claiming otherwise is stripped
+//! before a handler sees it. HERE, on the client surface, the acceptor does
+//! not yet append a verified identity to `CLIENT_ALPN`, so a peer is still
+//! identified by the `x-node-id` it TYPES. That claim is read exactly once —
+//! by [`crate::client_principal`], through the one canonical wire parser —
+//! and every decider downstream reads the [`Principal`] it produces rather
+//! than the header (`crate::mesh_principal_gate` is the ratchet). A claim that
+//! does not parse is [`Principal::Unverified`], and the peer gate refuses it.
 //!
 //! ## Decision (per connection, not per header)
 //!
@@ -45,7 +57,8 @@
 //! fairness and peer-admission middlewares read it rather than resolving a
 //! second time (`DAEMON_CORE.md` §3.3, "authenticates a request once and
 //! attaches a `Principal`"). The internal router carries no `client_auth_layer`
-//! and keeps its own resolver fallback.
+//! — it runs [`crate::internal_principal::internal_principal_layer`], which
+//! attaches the same extension from the acceptor's verified key.
 //!
 //! ## Loopback is a property of the LISTENER, not of the layer
 //!

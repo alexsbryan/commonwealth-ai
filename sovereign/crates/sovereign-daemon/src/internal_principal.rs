@@ -43,11 +43,16 @@
 //!
 //! ## An untied connection resolves to a VALUE
 //!
-//! [`Principal::Unverified`], never `None` and never a local caller. "I was
-//! asked to believe something and I cannot" is a different answer from
-//! "nothing was presented" (ARCH principle 6), and it is the answer a decider
-//! needs in order to refuse. Its `x-mesh-*` headers are stripped on the way
-//! through, so no handler downstream can reach the claim this module declined.
+//! [`Principal::Unverified`], never `None` and never a local caller — when it
+//! CLAIMED something. "I was asked to believe something and I cannot" is a
+//! different answer from "nothing was presented" (ARCH principle 6), and it is
+//! the answer a decider needs in order to refuse. An untied caller that
+//! presented no `x-mesh-*` at all claimed nothing, so it is
+//! [`Principal::Anonymous`] — the same principle read the other way, and what
+//! keeps this port's perimeter-trusted local callers from being refused for a
+//! claim they never made. Either way the `x-mesh-*` headers are stripped on
+//! the way through, so no handler downstream can reach the claim this module
+//! declined.
 //!
 //! ## The member comes from the KEY, not from `X-Mesh-Node`
 //!
@@ -151,15 +156,28 @@ impl AppState {
     ) -> Principal {
         if !tied_to_our_acceptor(headers, peer) {
             let stripped = strip_mesh_headers(headers);
+            // An untied caller that presented NOTHING claimed nothing, and
+            // `Anonymous` is what "nothing was presented" means. Only a caller
+            // that DID present an identity this daemon cannot tie to its own
+            // acceptor is `Unverified` — that is the arm a decider refuses, so
+            // widening it to every local process would refuse the daemon's own
+            // perimeter-trusted callers for a claim they never made (ARCH
+            // principle 6, both directions).
+            let claimed = stripped > 0;
             tracing::debug!(
                 target: "transport",
                 peer = ?peer,
                 stripped,
+                claimed,
                 "internal: connection not tied to this daemon's acceptor — \
                  any x-mesh-* was typed by the caller, not proved by a handshake, \
                  so it is stripped and the caller is unverified"
             );
-            return Principal::Unverified;
+            return if claimed {
+                Principal::Unverified
+            } else {
+                Principal::Anonymous
+            };
         }
         headers.remove(ACCEPTOR_MARK_HEADER);
 
@@ -379,6 +397,18 @@ mod tests {
                 && h.get("x-mesh-pubkey").is_none(),
             "the declined claim must not survive for a handler to read: {h:?}"
         );
+    }
+
+    /// An untied caller that claimed NOTHING is anonymous, not unverified.
+    /// The peer gate refuses `Unverified`, so widening that arm to every
+    /// local process would close this perimeter-trusted port to the daemon's
+    /// own callers for a claim they never made.
+    #[tokio::test]
+    async fn an_untied_caller_that_presented_nothing_is_anonymous() {
+        let state = state_with_member(NodeId::from_u128(0xBEEF));
+        let mut h = HeaderMap::new();
+        let p = state.resolve_internal(&mut h, loopback()).await;
+        assert_eq!(p, Principal::Anonymous, "nothing was presented");
     }
 
     /// A wrong mark is no mark. This is the branch a leaked-then-rotated

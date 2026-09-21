@@ -233,7 +233,7 @@ fn compose(input: &ChatCompletionRequest, passes: &[Pass]) -> ChatCompletionRequ
 async fn served(input: &ChatCompletionRequest) -> ChatCompletionRequest {
     let svc = CapturesRequest::default();
     let state = solo_state(Arc::new(svc.clone()));
-    let _ = chat_completions(State(state), HeaderMap::new(), None, Json(input.clone())).await;
+    let _ = chat_completions(State(state), HeaderMap::new(), None, None, Json(input.clone())).await;
     svc.seen()
 }
 
@@ -630,7 +630,7 @@ async fn served_response(
     canned: &ChatCompletionResponse,
 ) -> ChatCompletionResponse {
     let state = solo_state(Arc::new(RespondsWith(canned.clone())));
-    let resp = chat_completions(State(state), HeaderMap::new(), None, Json(request.clone())).await;
+    let resp = chat_completions(State(state), HeaderMap::new(), None, None, Json(request.clone())).await;
     let bytes = resp
         .into_body()
         .collect()

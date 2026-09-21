@@ -15,6 +15,13 @@ use tower::ServiceExt;
 
 const VALID: &str = "0000000000000000000000000000002a";
 
+/// The member a resolved peer request carries.
+fn a_member() -> Principal {
+    Principal::Member {
+        node_id: NodeId::from_u128(0x2a),
+    }
+}
+
 /// A lease that records nothing — the stub's stand-in for a daemon guard.
 struct Lease;
 impl AdmissionLease for Lease {}
@@ -27,18 +34,25 @@ struct StubHost {
     admit: bool,
     admits: Arc<AtomicU32>,
     tallies: Arc<AtomicU32>,
-    rejected: Arc<Mutex<Option<String>>>,
     principal: Principal,
     last_principal: Arc<Mutex<Option<Principal>>>,
 }
 
 impl StubHost {
+    /// A host that resolves every caller to `who` — the stand-in for a real
+    /// surface's resolver, which is the ONLY input the two gates now split on.
+    fn resolving(admit: bool, who: Principal) -> Self {
+        Self {
+            principal: who,
+            ..Self::new(admit)
+        }
+    }
+
     fn new(admit: bool) -> Self {
         Self {
             admit,
             admits: Arc::new(AtomicU32::new(0)),
             tallies: Arc::new(AtomicU32::new(0)),
-            rejected: Arc::new(Mutex::new(None)),
             principal: Principal::Anonymous,
             last_principal: Arc::new(Mutex::new(None)),
         }
@@ -50,10 +64,6 @@ impl StubHost {
 
     fn tallies(&self) -> u32 {
         self.tallies.load(Ordering::Relaxed)
-    }
-
-    fn rejected(&self) -> Option<String> {
-        self.rejected.lock().unwrap().clone()
     }
 
     fn last_principal(&self) -> Option<Principal> {
@@ -90,25 +100,9 @@ impl AdmissionHost for StubHost {
         self.principal.clone()
     }
 
-    fn parse_node_id(&self, headers: &HeaderMap) -> Option<NodeId> {
-        // The real parser lives with the daemon (`headers::parse_x_node_id`,
-        // tagged FE-99); this stub only has to distinguish the canonical
-        // 32-hex form from a malformed one so the adapter's refusal branch
-        // is reachable.
-        let raw = headers
-            .get("x-node-id")
-            .or_else(|| headers.get("X-Node-Id"))?;
-        let s = raw.to_str().ok()?;
-        (s.len() == 32 && s.chars().all(|c| c.is_ascii_hexdigit())).then(|| NodeId::from_u128(0x2a))
-    }
-
     fn peer_tally(&self, _node: &NodeId) -> Box<dyn AdmissionLease> {
         self.tallies.fetch_add(1, Ordering::Relaxed);
         Box::new(Lease)
-    }
-
-    fn record_rejected_node_id(&self, raw: &str) {
-        *self.rejected.lock().unwrap() = Some(raw.to_string());
     }
 }
 
@@ -140,7 +134,7 @@ fn request(header: Option<&str>) -> Request<Body> {
 
 #[tokio::test]
 async fn a_peer_request_is_admitted_and_tallied_once() {
-    let state = StubHost::new(true);
+    let state = StubHost::resolving(true, a_member());
     let resp = peer_router(state.clone())
         .oneshot(request(Some(VALID)))
         .await
@@ -152,7 +146,7 @@ async fn a_peer_request_is_admitted_and_tallied_once() {
 
 #[tokio::test]
 async fn a_refused_peer_is_503_with_retry_after_and_is_not_tallied() {
-    let state = StubHost::new(false);
+    let state = StubHost::resolving(false, a_member());
     let resp = peer_router(state.clone())
         .oneshot(request(Some(VALID)))
         .await
@@ -166,18 +160,38 @@ async fn a_refused_peer_is_503_with_retry_after_and_is_not_tallied() {
     );
 }
 
+/// covers: mp-principal-is-the-verified-key
+///
+/// THE failing input for clause (d): a caller claims a peer identity this node
+/// could not verify. There is no ceiling to charge it to — a ceiling keyed on
+/// an id nobody proved is a ceiling any caller can pick — so it is REFUSED
+/// with a sentence, not bucketed under node zero and served.
+///
+/// Before 2026-09-20 this read `x-node-id` directly and admitted the request
+/// under the zero bucket; the raw value is now recorded by the resolver that
+/// read it, so `/status` still names it on that row.
 #[tokio::test]
-async fn a_malformed_header_is_recorded_and_still_gated() {
-    let state = StubHost::new(true);
+async fn an_unverified_peer_claim_is_refused_with_a_sentence_not_bucketed() {
+    let state = StubHost::resolving(true, Principal::Unverified);
     let resp = peer_router(state.clone())
         .oneshot(request(Some("not-a-node-id")))
         .await
         .unwrap();
-    // Still gated (zero bucket), so it is admitted by this host rather than
-    // bypassing the ceiling.
-    assert_eq!(resp.status(), StatusCode::OK);
-    assert_eq!(state.admits(), 1, "a malformed id must not bypass the gate");
-    assert_eq!(state.rejected().as_deref(), Some("not-a-node-id"));
+    assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+    assert_eq!(
+        state.admits(),
+        0,
+        "an unverifiable claim must not reach a ceiling at all"
+    );
+    assert_eq!(state.tallies(), 0, "and must not open a tally row");
+    let body = axum::body::to_bytes(resp.into_body(), 64 * 1024)
+        .await
+        .unwrap();
+    let text = String::from_utf8_lossy(&body);
+    assert!(
+        text.contains("/v1/chat/completions") && text.contains("not verified"),
+        "the refusal must name the route and say why: {text}"
+    );
 }
 
 #[tokio::test]
@@ -188,7 +202,11 @@ async fn a_non_peer_request_passes_the_peer_layer_untouched() {
         .await
         .unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
-    assert_eq!(state.admits(), 0, "no X-Node-Id means not peer traffic");
+    assert_eq!(
+        state.admits(),
+        0,
+        "a principal that claims no peer identity is not peer traffic"
+    );
 }
 
 #[tokio::test]
@@ -215,7 +233,7 @@ async fn a_refused_client_is_503_with_retry_after() {
 
 #[tokio::test]
 async fn a_peer_request_passes_the_client_layer_untouched() {
-    let state = StubHost::new(false);
+    let state = StubHost::resolving(false, a_member());
     let resp = client_router(state.clone())
         .oneshot(request(Some(VALID)))
         .await
@@ -247,31 +265,37 @@ fn with_attached(router: Router, attached: Principal) -> Router {
 /// resolution at the edge, one value").
 ///
 /// Positive: with the extension present, the decision sees the attached
-/// principal — here a `Member` the stub's own `resolve` would never return
-/// (it returns `Anonymous`). Negative control: with no extension, the
-/// fallback resolution is what reaches the decision.
+/// principal — one the stub's own `resolve` would never return (it returns
+/// `Anonymous`). Each layer is fed a principal of ITS kind, because the two
+/// split on `claims_peer_identity` and a `Member` handed to the client layer
+/// is correctly passed straight through to the peer gate.
+/// Negative control: with no extension, the fallback resolution is what
+/// reaches the decision.
 #[tokio::test]
 async fn the_attached_principal_is_used_instead_of_a_second_resolution() {
     let attached = Principal::Member {
         node_id: NodeId::from_u128(0xBEEF),
     };
+    let client_attached = Principal::RemoteClient {
+        credential: "cafef00d".into(),
+    };
 
     // Positive, client layer: the attached value reaches `admit`.
     let state = StubHost::new(true);
     assert_eq!(state.principal, Principal::Anonymous);
-    let resp = with_attached(client_router(state.clone()), attached.clone())
+    let resp = with_attached(client_router(state.clone()), client_attached.clone())
         .oneshot(request(None))
         .await
         .unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
     assert_eq!(
         state.last_principal(),
-        Some(attached.clone()),
+        Some(client_attached),
         "the edge's value must reach the decision, not a fresh resolution"
     );
 
-    // Positive, peer layer: the attached `Member` keys the tally, and the
-    // header parse is not consulted.
+    // Positive, peer layer: the attached `Member` keys the tally, and no
+    // header is consulted.
     let state = StubHost::new(true);
     let resp = with_attached(peer_router(state.clone()), attached.clone())
         .oneshot(request(Some(VALID)))

@@ -61,6 +61,13 @@ base64 = "0.22"
 rand = "0.9"
 hex = "0.4"
 
+# `principal::claimed_node_id`: the ONE production read of the `x-node-id`
+# header lives with the key it produces, and two crates resolve requests to a
+# `Principal` (`sovereign-daemon`, `sovereign-server`). `http` is the types
+# crate `axum` itself re-exports, so this adds no version and no layer edge —
+# `HeaderMap` is vocabulary, not a server.
+http = "1"
+
 # `run_lock`: flock(2) for the single-writer claim on a data root. A leaf
 # third-party crate, so it adds no workspace layer edge — and unix-gated,
 # because the lock has no enforcement to offer anywhere else

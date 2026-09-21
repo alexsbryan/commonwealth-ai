@@ -308,7 +308,7 @@ async fn desktop_topology_serving_a_peer_request_does_not_publish_in_flight() {
 
     let resp = reqwest::Client::new()
         .post(format!("http://{addr}/v1/chat/completions"))
-        // 32 hex chars, big-endian u128 — `headers::parse_x_node_id`'s
+        // 32 hex chars, big-endian u128 — `sovereign_contracts::principal::claimed_node_id`'s
         // shape. A different id than `self_id`: this is peer traffic.
         .header("X-Node-Id", format!("{:032x}", 0xBEEF_u128))
         .json(&serde_json::json!({

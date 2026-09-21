@@ -129,7 +129,7 @@ pub struct RejectedNodeIdHeader {
 
 impl RejectedNodeIdHeader {
     /// The canonical wire form the header must match — the inverse of
-    /// `sovereign_daemon::headers::parse_x_node_id` (which accepts exactly this).
+    /// `sovereign_contracts::principal::claimed_node_id` (which accepts exactly this).
     pub fn expected_wire_form() -> &'static str {
         "exactly 32 lowercase hex chars — NodeId::to_hex(), e.g. \
          0123456789abcdef0123456789abcdef"
@@ -305,7 +305,7 @@ pub struct ServingPart {
 
     /// The most recent present-but-malformed `X-Node-Id` header value
     /// (order commons-fluency fix 7). A peer request whose header
-    /// fails `sovereign_daemon::headers::parse_x_node_id` still gets gated and
+    /// fails `sovereign_contracts::principal::claimed_node_id` is refused and
     /// tallied under the zero node, and `/status` must NAME the
     /// rejected value and the expected wire form instead of showing an
     /// opaque `node-0000000000000000` row — absence is reported, never

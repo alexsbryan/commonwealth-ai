@@ -2788,6 +2788,10 @@ pub(crate) async fn apply_distiller(
     let response = chat_completions(
         State(state.clone()),
         headers.clone(),
+        // No peer: this is the daemon calling its OWN pipeline for its own
+        // post-processing, so there is nobody to attribute the work to and
+        // `None` says exactly that.
+        None,
         // Not a guest request. This is the daemon calling its OWN pipeline for
         // its own post-processing, with a request it built itself — the model
         // is the node's choice, not the caller's, so there is no guest scope
@@ -3308,6 +3312,10 @@ async fn summarise_block(
     let response = chat_completions(
         State(state.clone()),
         headers.clone(),
+        // No peer: this is the daemon calling its OWN pipeline for its own
+        // post-processing, so there is nobody to attribute the work to and
+        // `None` says exactly that.
+        None,
         // Not a guest request. This is the daemon calling its OWN pipeline for
         // its own post-processing, with a request it built itself — the model
         // is the node's choice, not the caller's, so there is no guest scope

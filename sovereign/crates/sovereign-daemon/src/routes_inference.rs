@@ -32,6 +32,7 @@ const LOCAL_HOLDER: &str = "local";
 pub async fn chat_completions(
     State(state): State<AppState>,
     headers: HeaderMap,
+    attached: Option<axum::Extension<sovereign_serving_host::admission::AttachedPrincipal>>,
     guest: Option<axum::Extension<crate::client_auth::Guest>>,
     Json(mut request): Json<ChatCompletionRequest>,
 ) -> Response {
@@ -281,7 +282,7 @@ pub async fn chat_completions(
             has_oicp = request.oicp.is_some(),
             "chat_completions: serving via local_inference"
         );
-        let requester = crate::headers::parse_x_node_id(&headers);
+        let requester = crate::admission::requester(attached);
         let model_id = request.model.clone().unwrap_or_else(|| "local".into());
         if want_stream {
             return serve_local_stream(
@@ -609,14 +610,14 @@ async fn forward_to_llama_server(
 /// chat_completions does.
 pub async fn embeddings(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    attached: Option<axum::Extension<sovereign_serving_host::admission::AttachedPrincipal>>,
     Json(request): Json<EmbeddingRequest>,
 ) -> Response {
     // Who is this for? A peer with no embed model of its own (driving
-    // ingestion via `http_embed_fn`) carries `X-Node-Id`; a local
-    // OpenAI-API client does not. Either way it's real embedding work
-    // this daemon performed — recorded on the Activity ledger below.
-    let requester = crate::headers::parse_x_node_id(&headers);
+    // ingestion via `http_embed_fn`) resolves to a verified member; a
+    // local OpenAI-API client does not. Either way it's real embedding
+    // work this daemon performed — recorded on the Activity ledger below.
+    let requester = crate::admission::requester(attached);
     let Some(service) = state.inner.serving.local_inference.as_ref() else {
         return (
             StatusCode::SERVICE_UNAVAILABLE,

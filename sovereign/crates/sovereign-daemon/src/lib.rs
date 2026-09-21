@@ -163,8 +163,9 @@ pub mod client_auth;
 pub mod client_principal;
 pub mod client_surface;
 pub mod frontdoor;
-pub mod headers;
 pub mod internal_principal;
+/// The test that keeps `x-node-id` out of every decider — see the module.
+pub mod mesh_principal_gate;
 pub mod middleware;
 pub mod reshaping;
 pub mod routes_apps;

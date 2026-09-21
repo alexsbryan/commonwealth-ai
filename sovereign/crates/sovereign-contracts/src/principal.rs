@@ -49,7 +49,10 @@
 //! itself**. The resolver is what fingerprints; the field contract is stated
 //! here so the next resolver cannot get it wrong silently.
 
-use kernel_types::NodeId;
+/// Re-exported: [`NodeId`] is in this module's public signature
+/// ([`Principal::Member`], [`ClaimedNodeId::Readable`]), so a crate that names
+/// a principal can name its key without a second Cargo edge to `kernel-types`.
+pub use kernel_types::NodeId;
 
 /// Who is asking.
 ///
@@ -172,6 +175,86 @@ impl std::fmt::Display for Principal {
     }
 }
 
+/// The [`Principal`] a request resolved to, attached to the request by the one
+/// resolver that surface has.
+///
+/// Every decider downstream reads THIS, never the headers the resolver read.
+/// It lives beside [`Principal`] rather than with either HTTP surface because
+/// two crates attach it — the daemon's `client_auth`/`internal_principal`
+/// layers and `sovereign-server`'s `auth` layer — and a second type of the
+/// same shape would be a second identity scheme (ARCH principle 8).
+#[derive(Clone, Debug)]
+pub struct AttachedPrincipal(pub Principal);
+
+/// What a request CLAIMS about its origin node, read from the wire.
+///
+/// A closed set of three, because the caller's next decision has three cases
+/// and folding any two loses the one a decider needs: a claim that was never
+/// made is not a claim that could not be read (ARCH principle 6).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ClaimedNodeId {
+    /// No peer identity was claimed. The caller is whatever the rest of the
+    /// resolution says — a local owner, a bearer, or anonymous.
+    Absent,
+    /// A claim in the canonical wire form. Whether it is BELIEVED is the
+    /// resolver's question, not this parser's.
+    Readable(NodeId),
+    /// Present and not the canonical wire form, carrying the raw value so
+    /// `/status` can NAME it on its zero-bucket row rather than render an
+    /// opaque placeholder. Resolves to [`Principal::Unverified`].
+    Unreadable(String),
+}
+
+/// **The one production read of the `x-node-id` header in `sovereign/crates`.**
+///
+/// The header is what a peer TYPES about itself, so it is evidence of a claim
+/// and never of an identity: on a surface the iroh acceptor fronts, the
+/// acceptor's verified key outranks it; on a surface nothing fronts, a claim
+/// that does not resolve is [`Principal::Unverified`], not a member.
+///
+/// It lives here, with the key it produces, so that a grep for the literal
+/// header finds exactly one file (`sovereign-daemon/src/mesh_principal_gate.rs`
+/// is the test that enforces it). Two crates resolve requests to a principal —
+/// `sovereign-daemon` and `sovereign-server` — and neither may hold the wire
+/// form privately without the two drifting.
+///
+/// ## The one canonical wire form
+///
+/// Exactly 32 lowercase hex chars, the encoding of the 16-byte id — nothing
+/// else is accepted (no `node-` prefix, no truncated hex, no uppercase value
+/// re-read as hex). Both header spellings (`x-node-id` and `X-Node-Id`) are
+/// read, because a header NAME is case-insensitive on the wire and a header
+/// VALUE is not.
+pub fn claimed_node_id(headers: &http::HeaderMap) -> ClaimedNodeId {
+    let Some(raw) = headers
+        .get("x-node-id")
+        .or_else(|| headers.get("X-Node-Id"))
+    else {
+        return ClaimedNodeId::Absent;
+    };
+    let Ok(s) = raw.to_str() else {
+        return ClaimedNodeId::Unreadable("<non-ascii header value>".to_string());
+    };
+    match parse_canonical_node_id(s) {
+        Some(id) => ClaimedNodeId::Readable(id),
+        None => ClaimedNodeId::Unreadable(s.to_string()),
+    }
+}
+
+/// The canonical wire form, parsed. `None` on anything else — a longer value
+/// is REFUSED, never truncated into a valid id.
+fn parse_canonical_node_id(s: &str) -> Option<NodeId> {
+    if s.len() != 32 {
+        return None;
+    }
+    let mut bytes = [0u8; 16];
+    for (i, b) in bytes.iter_mut().enumerate() {
+        let pair = s.get(i * 2..i * 2 + 2)?;
+        *b = u8::from_str_radix(pair, 16).ok()?;
+    }
+    Some(NodeId::from_u128(u128::from_be_bytes(bytes)))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -179,6 +262,72 @@ mod tests {
 
     fn node(n: u128) -> NodeId {
         NodeId::from_u128(n)
+    }
+
+    fn headers(pairs: &[(&str, &str)]) -> http::HeaderMap {
+        let mut h = http::HeaderMap::new();
+        for (k, v) in pairs {
+            h.insert(
+                http::HeaderName::from_bytes(k.as_bytes()).unwrap(),
+                v.parse().unwrap(),
+            );
+        }
+        h
+    }
+
+    /// covers: FE-99
+    ///
+    /// Both header spellings, one wire form. Moved here from the daemon's
+    /// `headers.rs` when the parser converged onto the key it produces.
+    #[test]
+    fn either_header_spelling_reads_the_one_wire_form() {
+        let id = node(0x42);
+        for name in ["x-node-id", "X-Node-Id"] {
+            let h = headers(&[(name, &id.to_hex())]);
+            assert_eq!(claimed_node_id(&h), ClaimedNodeId::Readable(id), "{name}");
+        }
+    }
+
+    /// An absent claim is its own answer — the branch that lets a local
+    /// caller stay a local caller rather than becoming an unverified peer.
+    #[test]
+    fn no_header_is_an_absent_claim_not_an_unreadable_one() {
+        assert_eq!(
+            claimed_node_id(&http::HeaderMap::new()),
+            ClaimedNodeId::Absent
+        );
+    }
+
+    /// covers: FE-99
+    ///
+    /// "Exactly one canonical wire form", and the half that had no witness: a
+    /// value LONGER than the wire form must be refused, not truncated to it.
+    /// The short case is caught by the slice bound rather than by the length
+    /// check, so deleting `if s.len() != 32` left the old file green — a
+    /// 34-hex-char value parsed its first 32 chars and silently became a valid
+    /// node id. That is a display form accepted as a wire form.
+    #[test]
+    fn a_wrong_length_claim_is_unreadable_and_keeps_its_raw_value() {
+        for bad in ["abcd", "0000000000000000000000000000002aff"] {
+            assert_eq!(
+                claimed_node_id(&headers(&[("x-node-id", bad)])),
+                ClaimedNodeId::Unreadable(bad.to_string()),
+                "{bad} must be REFUSED, never truncated into a valid id — and \
+                 its raw value kept so /status can name it"
+            );
+        }
+    }
+
+    /// covers: FE-99
+    ///
+    /// Right length, wrong alphabet — the other half of the parser contract.
+    #[test]
+    fn a_non_hex_claim_is_unreadable() {
+        let bad = "z".repeat(32);
+        assert_eq!(
+            claimed_node_id(&headers(&[("x-node-id", &bad)])),
+            ClaimedNodeId::Unreadable(bad)
+        );
     }
 
     /// The six arms are six distinct keys — the union, never a collapse.

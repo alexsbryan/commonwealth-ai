@@ -358,6 +358,7 @@ async fn chat_as_guest(model: Option<&str>, granted: &[&str]) -> (StatusCode, se
     let resp = chat_completions(
         State(state),
         HeaderMap::new(),
+        None,
         guest_for(granted),
         Json(request),
     )

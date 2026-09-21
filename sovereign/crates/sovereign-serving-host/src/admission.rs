@@ -49,19 +49,7 @@ use serde::Serialize;
 // returns it and `Admission::admit` keys on it — and the daemon reaching the
 // type through the module that publishes it is what keeps the direct
 // `sovereign-contracts` fan-in from growing (layer-gate's ratchet).
-pub use sovereign_contracts::principal::Principal;
-
-/// The edge-resolved [`Principal`], attached to the request by the daemon's
-/// `client_auth_layer` and read by the two admission middlewares.
-///
-/// One resolution per request (`DAEMON_CORE.md` §3.3, "authenticates a request
-/// once and attaches a `Principal`"): the edge resolves the caller once and
-/// puts the value here, so neither middleware answers "who is asking" a second
-/// time. The internal router (`sovereign-api/src/server.rs`) carries no
-/// `client_auth_layer`, so [`principal_of`] falls back to
-/// [`AdmissionHost::resolve`] when the extension is absent.
-#[derive(Clone)]
-pub struct AttachedPrincipal(pub Principal);
+pub use sovereign_contracts::principal::{AttachedPrincipal, Principal};
 
 /// Why a request was rejected. Serialised in the 503 body and in tracing
 /// spans so contention triage doesn't require log spelunking.
@@ -321,24 +309,12 @@ pub trait AdmissionHost: Admission + Send + Sync {
     /// [`Principal::Anonymous`].
     fn resolve(&self, headers: &HeaderMap, peer: Option<SocketAddr>) -> Principal;
 
-    /// Parse the optional `X-Node-Id` header, the canonical wire form.
-    ///
-    /// The parser and its conformance claims stay with the daemon until the
-    /// host owns the HTTP edge, so this is a port method rather than a local
-    /// function: two implementations of the one canonical wire form is exactly
-    /// the `FE-99` clause this parser is tagged for (ARCH principle 8).
-    fn parse_node_id(&self, headers: &HeaderMap) -> Option<NodeId>;
-
     /// Open the per-peer tally row for `node`; the lease closes it on drop.
     ///
     /// The tally follows the response BODY's lifetime (so `/status`'s `active`
     /// counter is truthful for a streamed turn), which is why it is a separate
     /// lease from the admission slot.
     fn peer_tally(&self, node: &NodeId) -> Box<dyn AdmissionLease>;
-
-    /// Record a present-but-unparseable `X-Node-Id` so `/status` can name it on
-    /// the zero-bucket row (ARCH principle 6: absence is reported).
-    fn record_rejected_node_id(&self, raw: &str);
 }
 
 /// Response-body wrapper that holds an RAII guard for the whole streaming
@@ -436,6 +412,40 @@ pub fn client_fairness_enabled_from_env() -> bool {
     }
 }
 
+/// Does this principal CLAIM a peer identity?
+///
+/// The one question that splits the two gates, asked in one place so they
+/// cannot disagree (ARCH principle 8). [`Principal::Member`] is a claim this
+/// daemon verified; [`Principal::Unverified`] is a claim it could not — both
+/// are the peer gate's to answer, and neither is a client-fairness caller.
+/// Every other arm named nothing about a peer and belongs to client fairness.
+fn claims_peer_identity(who: &Principal) -> bool {
+    matches!(who, Principal::Member { .. } | Principal::Unverified)
+}
+
+/// The refusal a caller gets when it claimed a peer identity this daemon could
+/// not verify. A sentence, not a code: the caller has to be able to tell this
+/// apart from a ceiling (which is a 503 with `Retry-After`) — retrying will
+/// never help, because nothing about the claim is transient.
+fn unverified_peer_response(route: &str) -> Response {
+    (
+        StatusCode::FORBIDDEN,
+        Json(oicp_types::openai_types::ErrorResponse {
+            error: ErrorDetail {
+                message: format!(
+                    "{route}: this request claims a peer identity that was not \
+                     verified by this node's iroh acceptor. A peer route is \
+                     served to a verified mesh member; reach it over the mesh \
+                     transport, not by dialling this port directly."
+                ),
+                error_type: "unverified_peer".to_string(),
+                code: Some("unverified_peer".to_string()),
+            },
+        }),
+    )
+        .into_response()
+}
+
 /// The request's principal: the value the edge attached, or — where no edge
 /// layer ran (the internal router) — a resolution here.
 ///
@@ -469,9 +479,9 @@ fn principal_of<S: AdmissionHost>(
 /// [`Admission::admit`] whether that principal is already holding its equal
 /// share.
 ///
-/// **Peer traffic passes straight through.** A request carrying `X-Node-Id` is
-/// already rationed per node by [`peer_admission_layer`]. Gating it here too
-/// would be exactly the double-gate the order forbids.
+/// **Peer traffic passes straight through.** A request whose principal claims a
+/// peer identity is already the peer gate's ([`peer_admission_layer`]) business.
+/// Gating it here too would be exactly the double-gate the order forbids.
 pub async fn client_fairness_layer<S>(
     State(state): State<S>,
     headers: HeaderMap,
@@ -481,14 +491,16 @@ pub async fn client_fairness_layer<S>(
 where
     S: AdmissionHost + Clone + Send + Sync + 'static,
 {
-    // Peer requests are the peer gate's business. One decider each.
-    if headers.get("x-node-id").is_some() {
+    // The edge resolved once and attached the value; only a router with no
+    // principal layer reaches the resolver fallback.
+    let principal = principal_of(&state, &req, &headers);
+
+    // Peer requests are the peer gate's business. One decider each, and the
+    // two gates split on the SAME question — `claims_peer_identity` — so a
+    // request cannot fall through both or be caught by both.
+    if claims_peer_identity(&principal) {
         return next.run(req).await;
     }
-
-    // The edge resolved once and attached the value; only the internal router,
-    // which has no `client_auth_layer`, reaches the resolver fallback.
-    let principal = principal_of(&state, &req, &headers);
 
     match state.admit(&principal, sovereign_time::unix_millis()) {
         AdmissionVerdict::Admitted(lease) => {
@@ -548,29 +560,30 @@ async fn peer_gate<S>(
 where
     S: AdmissionHost + Clone + Send + Sync + 'static,
 {
-    if headers.get("x-node-id").is_none() {
-        return next.run(req).await;
-    }
-    // Peer request: key the fair scheduler on the origin node. The one edge
-    // resolver assigns the `Member` arm — it reads `X-Node-Id` before the
-    // loopback branch, so a peer on the trusting listener is a member and not
-    // a local owner. A present-but-unparseable id does not resolve to a
-    // member: its raw value is recorded and it buckets under the zero node, so
-    // it is still gated and never silently bypasses the ceiling. Recording the
-    // raw value is what lets /status NAME it on the zero-bucket row (order
-    // commons-fluency fix 7) — an opaque `node-0000000000000000` row would
-    // default the absence instead of reporting it (ARCH §18.3).
-    let node = match principal_of(&state, &req, &headers) {
+    // Peer request: key the fair scheduler on the origin node. The principal
+    // the edge resolved is the whole input — this gate does not re-read the
+    // wire, so it cannot disagree with the resolver about who is asking.
+    let principal = principal_of(&state, &req, &headers);
+    let node = match principal {
         Principal::Member { node_id } => node_id,
-        _ => {
-            let raw = headers
-                .get("x-node-id")
-                .or_else(|| headers.get("X-Node-Id"))
-                .and_then(|v| v.to_str().ok())
-                .unwrap_or("<unreadable header>");
-            state.record_rejected_node_id(raw);
-            NodeId::from_u128(0)
+        // An identity was claimed and this daemon could not verify it. There
+        // is no ceiling to charge it to, so it is REFUSED rather than bucketed
+        // under node zero: a ceiling keyed on an id nobody proved is a ceiling
+        // any caller can pick (bar `mp-principal-is-the-verified-key` clause
+        // (d)). The raw value was recorded by the resolver that read it, so
+        // /status still NAMES it on the zero-bucket row.
+        Principal::Unverified => {
+            tracing::info!(
+                target: "transport",
+                route = %req.uri().path(),
+                "admission: 403 — this request claims a peer identity this \
+                 daemon could not verify, and a peer ceiling needs a verified \
+                 node id, so it is refused rather than charged to node zero"
+            );
+            return unverified_peer_response(req.uri().path());
         }
+        // Not peer traffic at all: the client fairness gate's business.
+        _ => return next.run(req).await,
     };
     let who = Principal::Member { node_id: node };
     let now = sovereign_time::unix_millis();

@@ -23,10 +23,9 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use arc_swap::ArcSwap;
-use axum::http::HeaderMap;
 use serving_policy::fair_sched::reciprocity_weight;
 
-use crate::auth::TenantId;
+use crate::auth::{Principal, TenantId};
 use crate::scheduler::UserKey;
 
 /// How often the background task refreshes the weight table. Contribution
@@ -62,15 +61,26 @@ impl ReciprocityTable {
     }
 }
 
-/// Map a request's identity to a scheduler [`UserKey`]. A mesh-routed request
-/// carries the origin node in `X-Node-Id` (the established mesh convention) —
-/// key on that so reciprocity and the per-origin cap apply to the *true*
-/// origin, not the local default tenant the auth layer assigned. Otherwise
-/// key on the tenant.
-pub fn user_key(tenant: &TenantId, headers: &HeaderMap) -> UserKey {
-    match headers.get("x-node-id").and_then(|v| v.to_str().ok()) {
-        Some(hex) if !hex.is_empty() => UserKey::Node(hex.to_string()),
-        _ => UserKey::Tenant(tenant.to_string()),
+/// Map a request's [`Principal`] to a scheduler [`UserKey`]. A mesh-routed
+/// request resolves to [`Principal::Member`] — key on that node so reciprocity
+/// and the per-origin cap apply to the *true* origin, not the local default
+/// tenant the auth layer assigned. Every other identity keys on the tenant.
+///
+/// It reads the principal `auth_middleware` resolved, never the header: a key
+/// taken straight off the wire is a key any caller can choose, and choosing
+/// another node's key is choosing another node's reciprocity weight and
+/// another node's share of the per-origin cap.
+///
+/// [`Principal::Unverified`] keys on the TENANT, not on a placeholder node: a
+/// claim this surface could not read is not a node, and bucketing it under one
+/// would be exactly the substitution ARCH principle 6 forbids. It loses no
+/// gate — the tenant key is the same bucket the caller would have had with no
+/// claim at all — and it is narrower than what stood here before, which
+/// accepted ANY non-empty header value as a node key.
+pub fn user_key(tenant: &TenantId, who: &Principal) -> UserKey {
+    match who.node_id() {
+        Some(node_id) => UserKey::Node(node_id.to_hex()),
+        None => UserKey::Tenant(tenant.to_string()),
     }
 }
 
@@ -206,20 +216,42 @@ mod tests {
         );
     }
 
+    /// covers: mp-principal-is-the-verified-key
+    ///
+    /// The scheduler key follows the PRINCIPAL. The failing input this
+    /// replaces: `user_key` read `x-node-id` directly and accepted any
+    /// non-empty value, so `x-node-id: deadbeef` — eight characters, not a
+    /// node id at all — minted a scheduler key of the caller's choosing, and
+    /// a well-formed one minted another node's.
     #[test]
-    fn user_key_prefers_x_node_id() {
+    fn user_key_follows_the_principal_and_never_the_wire() {
         let tenant = TenantId::default_tenant();
-        let mut headers = HeaderMap::new();
         assert_eq!(
-            user_key(&tenant, &headers),
+            user_key(&tenant, &Principal::Anonymous),
             UserKey::Tenant("default".to_string()),
-            "no header → tenant"
+            "no claim → tenant"
         );
-        headers.insert("x-node-id", "deadbeef".parse().unwrap());
+        let node = sovereign_contracts::principal::NodeId::from_u128(0xDEADBEEF);
         assert_eq!(
-            user_key(&tenant, &headers),
-            UserKey::Node("deadbeef".to_string()),
-            "header present → node origin"
+            user_key(&tenant, &Principal::Member { node_id: node }),
+            UserKey::Node(node.to_hex()),
+            "a verified member keys on its node"
+        );
+        assert_eq!(
+            user_key(&tenant, &Principal::Unverified),
+            UserKey::Tenant("default".to_string()),
+            "a claim this surface could not read is NOT a node key — it must \
+             not land in another node's reciprocity bucket"
+        );
+        assert_eq!(
+            user_key(
+                &tenant,
+                &Principal::LocalOwner {
+                    sub_identity: None
+                }
+            ),
+            UserKey::Tenant("default".to_string()),
+            "a local owner is not a peer"
         );
     }
 }
