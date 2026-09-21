@@ -763,9 +763,15 @@ change was made AFTER the pod table was read; it is a correction of a false
 premise about the product, made in neither arm's favour, and no score was read
 to make it.
 
-**What it does not change.** I2 and its 50% floor. Those four K4 `DeepQuery`
-rows carry no `atlas_walk`, so `full` is `bare` on them by construction, and I2
-still reads 3/8 (38%), never-ran. With the set corrected they are no longer
-excluded from the study either, so a K4 delta would be diluted by them until
-DeepQuery runs the walk. That is product work with its own order, and stage 0
-does not proceed past the pilot until I2 passes.
+**What it does not change.** I2 and its 50% floor.
+
+**CORRECTION, same day.** This record first said the four K4 `DeepQuery` rows
+"carry no `atlas_walk`, so `full` is `bare` on them by construction". The first
+half is true and the inference is false. `deep_pipeline` runs the same
+`atlas_grounding` step as `kq_pipeline` (`runtime/retrieval_pipeline.rs:971`,
+`:1154`), and the pod runs show it: in `full`, the five `DeepQuery` rows carry
+`raptor`-sourced chunks on three (7-8 each) and `atom-enum` chunks on two; in
+`bare`, none. The walk ran; `handle_simple` drops the `atlas_walk` echo instead
+of writing it to the message (`turn-pipeline-1` inventory 6 names this). So I2's
+3/8 is a RECORDING gap on four rows, not a treatment gap, and the fix is to
+write the key. I2's reader and floor stay as registered.
