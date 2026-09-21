@@ -3742,7 +3742,11 @@ impl EmbeddedDaemon {
             for router in mounted {
                 client_router = client_router.merge(router);
             }
-            let internal_router = crate::server::internal_router(app_state_clone.clone());
+            // ConnectInfo: `internal_principal_layer` reads the peer address as
+            // half the "is this my own acceptor's hop" tie, and fails closed
+            // without it. Same requirement the client listeners document above.
+            let internal_router = crate::server::internal_router(app_state_clone.clone())
+                .into_make_service_with_connect_info::<SocketAddr>();
             let peer_router = crate::server::client_router_for(
                 app_state_clone.clone(),
                 crate::server::ClientSurface::Peer,
@@ -4260,16 +4264,9 @@ impl EmbeddedDaemon {
             let app_state = app_state.clone();
             Arc::new(move |dialer: commonwealth_core::ids::NodePubkey| {
                 let app_state = app_state.clone();
-                Box::pin(async move {
-                    let mesh = app_state.inner.fabric.mesh.read().await;
-                    mesh.members
-                        .values()
-                        .find(|m| m.removed_at.is_none() && m.node_pubkey == Some(dialer))
-                        .map(|m| sovereign_mesh::iroh_access::MemberIdentity {
-                            name: m.name.clone(),
-                            node_id: m.node_id,
-                        })
-                })
+                // ONE roster read, shared with the internal resolver that must
+                // agree with it: `AppState::member_by_pubkey`.
+                Box::pin(async move { app_state.member_by_pubkey(dialer).await })
             })
         };
         // A MEDIA ORIGIN A MEMBER MAY REACH, when the operator declared one.

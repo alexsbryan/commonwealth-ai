@@ -164,6 +164,7 @@ pub mod client_principal;
 pub mod client_surface;
 pub mod frontdoor;
 pub mod headers;
+pub mod internal_principal;
 pub mod middleware;
 pub mod reshaping;
 pub mod routes_apps;

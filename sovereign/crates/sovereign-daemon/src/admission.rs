@@ -252,11 +252,15 @@ impl Admission for AppState {
             Principal::Member { node_id } => {
                 admit_member(self, *node_id, now_unix_ms, PeerWork::Inference)
             }
-            // Every other arm is a client: the fair share.
+            // Every other arm is a client: the fair share. `Unverified` rides
+            // here too — it is not a member, so it gets no peer ceiling and no
+            // reciprocity weight. Whether a given ROUTE serves it at all is the
+            // route's question, not this gate's.
             Principal::LocalOwner { .. }
             | Principal::RemoteClient { .. }
             | Principal::Guest { .. }
-            | Principal::Anonymous => admit_client(self, who),
+            | Principal::Anonymous
+            | Principal::Unverified => admit_client(self, who),
         }
     }
 

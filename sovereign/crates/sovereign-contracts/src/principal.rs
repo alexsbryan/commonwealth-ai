@@ -18,7 +18,7 @@
 //!
 //! # The shape is the union, never a narrowing
 //!
-//! The five identities today's resolvers distinguish, each an arm here:
+//! The six identities today's resolvers distinguish, each an arm here:
 //!
 //! - [`Principal::LocalOwner`] — a caller on this machine, carrying the
 //!   declared sub-identity the client fairness gate buckets on;
@@ -26,7 +26,9 @@
 //!   presented;
 //! - [`Principal::Member`] — a verified mesh member, by node id;
 //! - [`Principal::Guest`] — a caller holding a live guest grant;
-//! - [`Principal::Anonymous`] — nothing was presented.
+//! - [`Principal::Anonymous`] — nothing was presented;
+//! - [`Principal::Unverified`] — an identity was presented and could not be
+//!   verified, which is not the same absence.
 //!
 //! `SERVING_BOUNDARY.md`'s earlier `Local | Member` sketch is withdrawn: it
 //! folded the fairness buckets into one arm and had no guest.
@@ -53,7 +55,7 @@ use kernel_types::NodeId;
 ///
 /// The key of `DAEMON_CORE.md` §1's one table `principal -> Scope` and of
 /// admission's inflight guard and tally. `Eq + Hash` because a peer's row and
-/// a local caller's row are the same shape: one key type, five arms, never a
+/// a local caller's row are the same shape: one key type, six arms, never a
 /// parallel identity scheme (ARCH principle 8).
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Principal {
@@ -105,6 +107,25 @@ pub enum Principal {
     /// Nothing was presented. Every such caller shares this one bucket, which
     /// is what they are today: the no-change arm, not a new grouping.
     Anonymous,
+    /// An identity was presented and this daemon could not verify it.
+    ///
+    /// The internal surface's arm. A request that crossed the iroh acceptor
+    /// carries a key the QUIC handshake proved; a request that reached the
+    /// internal port by some other route carries whatever its sender typed,
+    /// and the two are indistinguishable once the headers are read. This arm
+    /// is the second case, named.
+    ///
+    /// It is deliberately NOT [`Anonymous`](Self::Anonymous): anonymous is
+    /// "nothing was presented", this is "I was asked to believe something and
+    /// I cannot" — "did not answer" is not "answered: no" (ARCH principle 6).
+    /// Folding them would make a caller that claimed membership on an
+    /// unverifiable connection read exactly like a caller that claimed
+    /// nothing, which is the one distinction a decider needs.
+    ///
+    /// Nor is it a local caller: an untied connection may be a local process,
+    /// but it may equally be a LAN caller on a plaintext mesh, and the daemon
+    /// cannot tell. A decider that needs an identity refuses this arm.
+    Unverified,
 }
 
 impl Principal {
@@ -120,7 +141,8 @@ impl Principal {
             Self::LocalOwner { .. }
             | Self::RemoteClient { .. }
             | Self::Guest { .. }
-            | Self::Anonymous => None,
+            | Self::Anonymous
+            | Self::Unverified => None,
         }
     }
 
@@ -139,6 +161,7 @@ impl Principal {
             Self::Member { node_id } => format!("member:{}", node_id.to_hex()),
             Self::Guest { grant } => format!("guest:{grant}"),
             Self::Anonymous => "anon".to_string(),
+            Self::Unverified => "unverified".to_string(),
         }
     }
 }
@@ -158,11 +181,11 @@ mod tests {
         NodeId::from_u128(n)
     }
 
-    /// The five arms are five distinct keys — the union, never a collapse.
+    /// The six arms are six distinct keys — the union, never a collapse.
     /// A narrowing here is exactly the defect `DAEMON_CORE.md` §3.3 measured:
     /// ten callers treated as one.
     #[test]
-    fn the_five_identities_are_five_distinct_keys() {
+    fn the_six_identities_are_six_distinct_keys() {
         let all = [
             Principal::LocalOwner {
                 sub_identity: Some("desktop".into()),
@@ -175,12 +198,30 @@ mod tests {
                 grant: "cafef00dcafef00d".into(),
             },
             Principal::Anonymous,
+            Principal::Unverified,
         ];
         let distinct: HashSet<&Principal> = all.iter().collect();
         assert_eq!(
             distinct.len(),
             all.len(),
             "each identity must be its own key: {all:?}"
+        );
+    }
+
+    /// An unverifiable claim is its own answer, never the absence of one.
+    /// ARCH principle 6: "did not answer" is not "answered: no". A caller
+    /// that claimed membership on a connection the daemon could not tie to
+    /// its own acceptor must not read like a caller that claimed nothing.
+    #[test]
+    fn an_unverified_claim_is_not_an_absent_one() {
+        assert_ne!(Principal::Unverified, Principal::Anonymous);
+        assert_eq!(Principal::Unverified.node_id(), None, "not a peer key");
+        assert_ne!(
+            Principal::Unverified,
+            Principal::LocalOwner {
+                sub_identity: None
+            },
+            "an untied connection may be a LAN caller, not only a local one"
         );
     }
 
@@ -281,6 +322,7 @@ mod tests {
             "guest:cafe"
         );
         assert_eq!(Principal::Anonymous.label(), "anon");
+        assert_eq!(Principal::Unverified.label(), "unverified");
         let member = Principal::Member { node_id: node(7) };
         assert_eq!(member.label(), format!("member:{}", node(7).to_hex()));
         assert_eq!(member.to_string(), member.label());

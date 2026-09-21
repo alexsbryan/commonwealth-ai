@@ -6407,7 +6407,15 @@ project is a 501 rather than an unvalidated write).
 **Internal API — :9742, plaintext (perimeter-trust)**
 
 No per-request auth: the internal routes (gossip, scheduling, model/index
-transfer, knowledge fan-out) trust the network boundary. Binds `0.0.0.0`
+transfer, knowledge fan-out) trust the network boundary. Since 2026-09-20 it
+does carry a PRINCIPAL, resolved once at the edge by
+`sovereign-daemon/src/internal_principal.rs` and attached as
+`AttachedPrincipal`, exactly as `client_auth_layer` does on `:9741`: a hop
+this daemon can tie to its own iroh acceptor (loopback peer + the per-process
+acceptor mark) resolves to the `Member` its verified Ed25519 key names, and
+every other connection has its `x-mesh-*` STRIPPED and resolves
+`Principal::Unverified`. The layer refuses nothing yet — which routes may
+serve an unverified caller is each route's own question. Binds `0.0.0.0`
 by default — set `[daemon] internal_bind` to pin it to a private interface,
 or create the mesh with `require_encryption` to force all traffic onto the
 iroh QUIC transport (which binds the internal router loopback-only). The

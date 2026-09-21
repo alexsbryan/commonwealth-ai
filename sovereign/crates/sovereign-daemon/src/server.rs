@@ -639,6 +639,12 @@ pub fn internal_router(state: AppState) -> Router {
             REQUEST_BODY_READ_TIMEOUT,
         ))
         .layer(axum::extract::DefaultBodyLimit::max(MAX_REQUEST_BODY_BYTES))
+        // OUTERMOST: no handler reads `x-mesh-*` before this decides whether
+        // the connection is this daemon's own acceptor's (`internal_principal`).
+        .layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            crate::internal_principal::internal_principal_layer,
+        ))
         .with_state(state)
 }
 
@@ -658,7 +664,11 @@ pub async fn serve(
     // path. Same requirement the loopback guard documents.)
     let client_app =
         client_router(state.clone()).into_make_service_with_connect_info::<SocketAddr>();
-    let internal_app = internal_router(state);
+    // ConnectInfo on the internal listener too: `internal_principal_layer`
+    // decides "is this hop my own acceptor's" partly from the peer address,
+    // and a missing one resolves every caller `Unverified` (fail closed).
+    let internal_app =
+        internal_router(state).into_make_service_with_connect_info::<SocketAddr>();
 
     let client_listener = TcpListener::bind(client_addr).await?;
     let internal_listener = TcpListener::bind(internal_addr).await?;

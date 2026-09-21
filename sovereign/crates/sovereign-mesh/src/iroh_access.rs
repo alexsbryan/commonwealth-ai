@@ -449,7 +449,17 @@ impl AcceptorRoutes {
                  (no member named means the roster does not know this key — \
                  admitted anyway, as a joiner must be)"
             );
-            let headers = commonwealth_media::verified_headers(who.as_ref(), dialer);
+            let mut headers = commonwealth_media::verified_headers(who.as_ref(), dialer);
+            // The internal origin is THIS process, and it reads the identity as
+            // an identity rather than logging it, so it needs to know the hop is
+            // its own acceptor's — a caller that reaches `self.internal`
+            // directly can type `x-mesh-*` just as a viewer can. The mark says
+            // so. It goes on this arm alone: a media, app or offer origin is
+            // somebody else's software and must never be handed it.
+            headers.push((
+                commonwealth_transport::iroh_identity_forward::ACCEPTOR_MARK_HEADER.to_string(),
+                commonwealth_transport::iroh_identity_forward::acceptor_mark().to_string(),
+            ));
             return Some(Forward::Http {
                 origin: self.internal,
                 headers,

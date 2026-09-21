@@ -31,6 +31,51 @@ use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt};
 /// module exists for is a forged `X-Mesh-Member` reaching the origin.
 pub const MESH_HEADER_PREFIX: &str = "x-mesh-";
 
+/// The header an acceptor stamps on a forward to a listener that will READ the
+/// verified identity as an identity, rather than merely log it.
+///
+/// A forwarded request arrives at a local port, and a caller that reaches that
+/// port without the acceptor in front can type `x-mesh-*` exactly as a viewer
+/// can. So a reader that authorizes on the identity needs one more fact than
+/// the headers carry: *this hop is my own acceptor's*. This header is that
+/// fact. It lives under [`MESH_HEADER_PREFIX`], so a client-supplied one is
+/// stripped by the same [`rewrite_head`] pass that strips a forged
+/// `X-Mesh-Member` — the guard needs no second implementation.
+///
+/// It is deliberately NOT part of the `X-Mesh-*` identity triple a media or
+/// app origin is told (`commonwealth_media::verified_headers`): those origins
+/// are somebody else's software, and handing them the mark would let one of
+/// them speak to this daemon's internal port as the acceptor. The acceptor
+/// adds it on the arm whose origin is THIS process, and nowhere else.
+pub const ACCEPTOR_MARK_HEADER: &str = "X-Mesh-Acceptor";
+
+/// This process's acceptor mark — 32 random bytes, hex, minted once on first
+/// use and never persisted, never logged, never sent to a foreign origin.
+///
+/// Per PROCESS rather than per mesh or per node: the only claim it makes is
+/// "the acceptor that stamped this is the one running in the same process as
+/// the listener reading it", which is exactly the tie a reader needs and is
+/// the shortest-lived secret that establishes it. A restart mints a fresh one
+/// and both halves move together, so there is nothing to rotate.
+pub fn acceptor_mark() -> &'static str {
+    static MARK: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    MARK.get_or_init(|| {
+        let mut bytes = [0u8; 32];
+        getrandom::fill(&mut bytes).expect("failed to generate the acceptor mark");
+        hex::encode(bytes)
+    })
+}
+
+/// Whether `presented` is this process's [`acceptor_mark`], compared in
+/// constant time so the check cannot be turned into an oracle by timing.
+///
+/// A `false` here is "I cannot tie this connection to my acceptor", never
+/// "this caller is hostile" — the caller decides what an untied connection
+/// means, and the distinction is why this returns a bool rather than refusing.
+pub fn is_acceptor_mark(presented: &str) -> bool {
+    commonwealth_core::ct::constant_time_eq(presented.as_bytes(), acceptor_mark().as_bytes())
+}
+
 /// A request head larger than this is not a media request; the connection is
 /// closed rather than buffered without bound.
 const HEAD_CAP: usize = 64 * 1024;
