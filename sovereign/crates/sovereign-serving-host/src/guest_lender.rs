@@ -30,7 +30,7 @@
 //!
 //! [`StoredGuestLink`] resolves a granted id by reading the holder's link file
 //! and, when the link names an iroh endpoint, opening a mesh tunnel. Neither
-//! the file (`sovereign_core::guest_link` — the holder's credential, which
+//! the file (`sovereign_contracts::guest_link` — the holder's credential, which
 //! Serving only consumes; ARCH 12) nor the tunnel (`sovereign_mesh::
 //! guest_tunnel`, Fabric reach) is the package's to name, so both arrive
 //! through ports: [`GuestLinkReader`] and [`GuestTunnelOpener`], both
@@ -158,7 +158,7 @@ impl GuestLenderSource for NoGuestLenders {
 /// A live guest link, projected to the fields the resolver reads.
 ///
 /// The stored form — the file, its location, its expiry semantics — is the
-/// holder's own (`sovereign_core::guest_link`). Serving only consumes it, so
+/// holder's own (`sovereign_contracts::guest_link`). Serving only consumes it, so
 /// it arrives through [`GuestLinkReader`] rather than being named here
 /// (ARCH 12: the credential is the holder's, not Serving's). `expires_at` and
 /// `summary` are absent on purpose: the reader returns only links within
@@ -175,7 +175,7 @@ pub struct LiveGuestLink {
 }
 
 /// Reads this node's live guest link. The daemon implements it over
-/// `sovereign_core::guest_link`.
+/// `sovereign_contracts::guest_link`.
 pub trait GuestLinkReader: Send + Sync + std::fmt::Debug {
     /// The link when one is present AND within its stated window; `None`
     /// otherwise.
@@ -255,7 +255,7 @@ pub struct StoredGuestLink {
     /// re-issued after a lender restart carries NEW ephemeral ports, so the
     /// key is what makes a stale tunnel get replaced instead of reused.
     tunnel: RwLock<Option<(String, Arc<dyn GuestTunnelHandle>)>>,
-    /// Reads the holder's link file — `sovereign_core::guest_link`, reached
+    /// Reads the holder's link file — `sovereign_contracts::guest_link`, reached
     /// through the daemon (ARCH 12).
     links: Arc<dyn GuestLinkReader>,
     /// Opens the mesh tunnel — `sovereign_mesh::guest_tunnel`, Fabric reach.

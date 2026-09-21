@@ -278,7 +278,7 @@ pub struct RecipeInputs {
     /// The corpus engine this process retrieves through.
     pub corpus_engine: Arc<corpus_engine::CorpusEngine>,
     /// Backing store for the per-conversation `tool_decision` write hook.
-    pub note_store: Option<Arc<corpus_engine_notes::NoteStore>>,
+    pub note_store: Option<Arc<dyn sovereign_contracts::notes::AgentNotes>>,
     /// The skill registry the router and planner classify against.
     pub skills: Arc<SkillRegistry>,
     /// How a step that needs a human answer gets one.
@@ -521,7 +521,7 @@ pub struct BaselineDeps<'a> {
     /// The open note store, when this host has one. Wires
     /// `knowledge_lookup`'s third evidence channel; `None` is reported as a
     /// withholding rather than passed over in silence.
-    pub note_store: Option<&'a Arc<corpus_engine_notes::NoteStore>>,
+    pub note_store: Option<&'a Arc<dyn sovereign_contracts::notes::AgentNotes>>,
     /// Whether this host may reach the open internet, and if not, why.
     pub web: WebReach,
     /// Whether thin local results may escalate to a web search on their own.

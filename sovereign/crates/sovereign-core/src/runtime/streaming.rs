@@ -1334,7 +1334,7 @@ impl Runtime {
         // `tool_decision` outcome note after refinement
         // resolves. Soft-fail when no NoteStore is wired
         // (test harnesses): `record_tool_outcome` no-ops.
-        let notes_for_outcome: Option<Arc<corpus_engine_notes::NoteStore>> =
+        let notes_for_outcome: Option<Arc<dyn sovereign_contracts::notes::AgentNotes>> =
             self.note_store.clone();
         // Cloned into the outer spawn so the post-stream gap-
         // check can emit narration chips that reach the desktop
@@ -2998,7 +2998,7 @@ impl Runtime {
         // handle ride into the spawn for the post-gate transform,
         // metadata, and whisper-once stamping.
         let lessons = kc.lessons;
-        let notes_for_lessons: Option<Arc<corpus_engine_notes::NoteStore>> =
+        let notes_for_lessons: Option<Arc<dyn sovereign_contracts::notes::AgentNotes>> =
             self.note_store.clone();
         // Answerable-context gate for the refusal-retry: only retry a refusal
         // when evidence WAS retrieved (a genuine "no sources" must still be an

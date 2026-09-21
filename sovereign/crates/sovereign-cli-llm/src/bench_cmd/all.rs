@@ -34,7 +34,8 @@ use crate::eval_cmd::runner::EvalRun;
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 use super::baselines::{read_latest, write_dated_and_update_latest};
-use super::discover::{discover_benches, BenchSurface, CorpusState, DiscoveredBench};
+use super::discover::{discover_benches, BenchSurface, DiscoveredBench};
+use sovereign_contracts::index_layout::{inspect_corpus_index_state, CorpusIndexState};
 
 const HELP: Help = Help {
     command: "svrn bench all",
@@ -500,7 +501,7 @@ async fn run_one(bench: &DiscoveredBench, opts: &Opts) -> BenchOutcome {
         // scores as Stale even though `enrich build` succeeded, and the
         // weekly rebuild tier can never gate (found by the P0.1 canary
         // control run, 2026-07-31).
-        bench.corpus_state = super::discover::inspect_corpus_state(&bench.corpus_id);
+        bench.corpus_state = inspect_corpus_index_state(&bench.corpus_id);
     } else if opts.rebuild {
         eprintln!(
             "warn: --rebuild has no effect on retrieval-lane bench {}/{} \
@@ -1315,25 +1316,25 @@ fn mean_score(run: &EvalRun, use_answer_equiv: bool) -> f32 {
     sum / run.results.len() as f32
 }
 
-fn corpus_state_tag(s: CorpusState) -> &'static str {
+fn corpus_state_tag(s: CorpusIndexState) -> &'static str {
     match s {
-        CorpusState::Ready => "ready",
-        CorpusState::IndexedNoAtlas => "indexed, no atlas",
-        CorpusState::Unindexed => "unindexed",
+        CorpusIndexState::Ready => "ready",
+        CorpusIndexState::IndexedNoAtlas => "indexed, no atlas",
+        CorpusIndexState::Unindexed => "unindexed",
     }
 }
 
 fn stale_hint(bench: &DiscoveredBench) -> String {
     match bench.corpus_state {
-        CorpusState::Unindexed => format!(
+        CorpusIndexState::Unindexed => format!(
             "corpus `{}` not installed locally. Run `svrn corpus install {}` (or sync from a mesh peer).",
             bench.corpus_id, bench.corpus_id
         ),
-        CorpusState::IndexedNoAtlas => format!(
+        CorpusIndexState::IndexedNoAtlas => format!(
             "corpus `{}` indexed but no atlas. Run `svrn enrich build {}` to extract.",
             bench.corpus_id, bench.corpus_id
         ),
-        CorpusState::Ready => format!("corpus `{}` ready but bench errored", bench.corpus_id),
+        CorpusIndexState::Ready => format!("corpus `{}` ready but bench errored", bench.corpus_id),
     }
 }
 

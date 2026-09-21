@@ -15493,12 +15493,6 @@ lines = 101
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-tools/src/recipe_notes_adapter.rs"
-context = "unknown"
-lines = 275
-note = ""
-
-[[module]]
 path = "sovereign/crates/sovereign-tools/src/recipe_tester_adapter.rs"
 context = "unknown"
 lines = 91

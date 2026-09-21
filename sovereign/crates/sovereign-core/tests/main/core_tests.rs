@@ -2274,7 +2274,10 @@ impl InferenceProvider for RecordingInference {
 
 async fn lesson_note_store(
     payloads: &[serde_json::Value],
-) -> (tempfile::TempDir, Arc<corpus_engine_notes::NoteStore>) {
+) -> (
+    tempfile::TempDir,
+    Arc<dyn sovereign_contracts::notes::AgentNotes>,
+) {
     let dir = tempfile::tempdir().unwrap();
     let store =
         Arc::new(corpus_engine_notes::NoteStore::open(&dir.path().join("notes.db")).unwrap());

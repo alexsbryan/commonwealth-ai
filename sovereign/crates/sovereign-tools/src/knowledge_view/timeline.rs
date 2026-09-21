@@ -153,7 +153,7 @@ pub struct FeatureMilestone {
 /// `splice_extension::AtosSnapshot` makes. The store itself lives in
 /// `corpus-engine-atos`; naming only this trait is what keeps that
 /// crate out of this package's dependency graph, the same seam shape as
-/// `recipe_notes_adapter` (a foreign store bound to a trait the consumer owns).
+/// the note port (a foreign store bound to a trait the consumer owns).
 ///
 /// Both methods are a field-for-field pass-through — the phase fold stays in
 /// the consumer, so a second implementor cannot derive a different phase.

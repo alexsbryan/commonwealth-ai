@@ -5,7 +5,7 @@
 //! Lives here (not in the recipe-author package) because it is the one piece
 //! that must touch `corpus-engine`. The authoring tools depend only on the
 //! `RecipeTester` contract; this adapter is injected at their construction
-//! sites, exactly like [`crate::recipe_notes_adapter::NoteStoreRecipeNotes`].
+//! sites, exactly like the note port `corpus_engine_notes::port` implements.
 //!
 //! It is a faithful in-process stand-in for the future daemon test endpoint:
 //! same recipe + params → the same diagnostics. It maps the engine's rich

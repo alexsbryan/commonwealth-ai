@@ -17,6 +17,10 @@
 //! - [`notes`] — `NoteStore`, the SQLite-backed working memory store.
 //!   Tracks kind/scope/source provenance for every note, plus tool-call
 //!   logs and re-rank fingerprints.
+//! - [`port`] — `NoteStore`'s impls of the `sovereign-contracts`
+//!   note ports (`RecipeNotes`, `AgentNotes`). The ONE implementation:
+//!   programs outside `code/` take `Arc<dyn AgentNotes>` and never name
+//!   this crate.
 //! - [`project_docs`] — `ProjectDocsStore` indexing DESIGN.md / RFC
 //!   markdown files for the project-status surface.
 //! - [`response_mine`] — the regex response miner (Phase 7.2); scans an
@@ -54,6 +58,7 @@ pub mod error;
 pub mod note;
 pub mod notes;
 mod notes_schema;
+pub mod port;
 pub mod project_docs;
 pub mod response_mine;
 

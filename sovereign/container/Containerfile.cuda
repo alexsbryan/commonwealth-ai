@@ -92,10 +92,12 @@ ENV PATH="/root/.cargo/bin:${PATH}"
 ARG CUDA_ARCHITECTURES="80;86;89;90"
 ENV CUDA_PATH=/usr/local/cuda
 ENV CMAKE_CUDA_ARCHITECTURES=${CUDA_ARCHITECTURES}
-# Git short-SHA stamp for sovereign-mesh's build.rs (`.git` is not in
-# the build context). The daemon logs it at startup, so a pod running a
-# stale image self-identifies instead of masquerading as a fresh bug
-# (2026-05-16 incident). Pass: --build-arg GIT_SHA=$(git rev-parse --short HEAD)
+# Git short-SHA stamp read by `sovereign-pods`'s worker daemon (`.git` is not
+# in the build context, and the crate no longer carries a build.rs to shell
+# git). It logs it at startup, so a pod running a stale image self-identifies
+# instead of masquerading as a fresh bug (2026-05-16 incident). Absent, the log
+# says `git_sha=unset-at-build` rather than inventing one.
+# Pass: --build-arg GIT_SHA=$(git rev-parse --short HEAD)
 ARG GIT_SHA=unknown
 ENV SOVEREIGN_GIT_SHA=${GIT_SHA}
 # Link-time discovery of `libcuda.so` (the CUDA driver stub). The

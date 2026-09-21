@@ -684,9 +684,9 @@ async fn ingest_row(
         return false;
     }
 
-    let state = sovereign_enrichment_catalog::corpus_state::inspect_corpus_state(corpus);
+    let state = sovereign_contracts::index_layout::inspect_corpus_index_state(corpus);
     let chunks = corpus_engine::engine::status::corpus_chunk_count(
-        &sovereign_enrichment_catalog::paths::index_root(corpus),
+        &sovereign_contracts::index_layout::index_root(corpus),
     );
     let searchable = crate::corpus_cmd::search::search_titles(corpus, &bank.search_probe, 5).await;
 
@@ -701,7 +701,7 @@ async fn ingest_row(
         )),
         None => faults.push("the corpus meta reports no chunk count".into()),
     }
-    if state == sovereign_enrichment_catalog::corpus_state::CorpusState::Unindexed {
+    if state == sovereign_contracts::index_layout::CorpusIndexState::Unindexed {
         faults.push("the corpus is not on disk after ingest".into());
     }
     match &searchable {

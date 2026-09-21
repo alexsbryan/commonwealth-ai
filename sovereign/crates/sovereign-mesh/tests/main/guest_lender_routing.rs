@@ -24,9 +24,9 @@ use axum::extract::State as AxumState;
 use axum::http::HeaderMap;
 use axum::routing::{get, post};
 use axum::{Json, Router};
+use sovereign_contracts::guest_link::{save_in, GuestLink};
 use sovereign_contracts::traits::InferenceProvider;
 use sovereign_contracts::types::CompletionRequest;
-use sovereign_core::guest_link::{save_in, GuestLink};
 use sovereign_daemon::daemon::InferenceVenue;
 use sovereign_mesh::guest_source::stored_guest_source_in;
 use sovereign_mesh::peer_inference::{InferenceRouter, VenueHost, VenueSource};
@@ -144,7 +144,7 @@ fn store_link(root: &std::path::Path, url: &str) {
             token: TOKEN.into(),
             url: url.to_string(),
             dial: None,
-            expires_at: sovereign_core::guest_link::now_secs() + 3_600,
+            expires_at: sovereign_contracts::guest_link::now_secs() + 3_600,
             summary: Some(GRANTED.into()),
         },
     )

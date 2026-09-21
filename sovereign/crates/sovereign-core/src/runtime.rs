@@ -290,7 +290,7 @@ pub struct Runtime {
     /// Consumed by `handle_commissive_query` to write `kind="commitment"`
     /// and `kind="todo"` notes anchored to `working_memory.current_goal`
     /// (or honestly anchorless when no situated goal is loaded).
-    pub note_store: Option<Arc<corpus_engine_notes::NoteStore>>,
+    pub note_store: Option<Arc<dyn sovereign_contracts::notes::AgentNotes>>,
     /// Optional rolling-summary compaction worker. When present,
     /// `end_conversation` notifies it after writing extracted
     /// memories so a conversation that crossed the threshold gets
@@ -455,7 +455,7 @@ pub struct RuntimeParts {
     /// The turn's enrichment stack, in one value (Phase 4b).
     pub lane: lane::LaneSources,
     pub corpus_engine: Option<Arc<corpus_engine::CorpusEngine>>,
-    pub note_store: Option<Arc<corpus_engine_notes::NoteStore>>,
+    pub note_store: Option<Arc<dyn sovereign_contracts::notes::AgentNotes>>,
     pub compaction: Option<Arc<crate::memory_compaction::CompactionWorker>>,
     pub mesh_knowledge: Option<Arc<dyn crate::traits::MeshKnowledgeSource>>,
     pub landscape_digests: Option<Arc<dyn crate::traits::LandscapeDigestProvider>>,

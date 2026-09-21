@@ -275,7 +275,7 @@ impl ToolBundle for ShellTools {
 pub struct KnowledgeFrontDoor {
     store: Arc<dyn StateStore>,
     inference: Arc<dyn InferenceProvider>,
-    notes: Option<Arc<corpus_engine_notes::NoteStore>>,
+    notes: Option<Arc<dyn sovereign_contracts::notes::AgentNotes>>,
     escalation: WebEscalation,
 }
 
@@ -288,7 +288,7 @@ impl KnowledgeFrontDoor {
     pub fn new(
         store: Arc<dyn StateStore>,
         inference: Arc<dyn InferenceProvider>,
-        notes: Option<Arc<corpus_engine_notes::NoteStore>>,
+        notes: Option<Arc<dyn sovereign_contracts::notes::AgentNotes>>,
         escalation: WebEscalation,
     ) -> Self {
         Self {

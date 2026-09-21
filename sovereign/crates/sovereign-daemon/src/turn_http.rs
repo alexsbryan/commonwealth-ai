@@ -857,7 +857,7 @@ async fn record_tool_outcome(
         );
     };
     sovereign_core::dossier::record_tool_outcome(
-        Some(notes),
+        Some(&**notes as &dyn sovereign_contracts::notes::AgentNotes),
         &body.session_id,
         body.conversation_id.as_deref(),
         &body.tool_id,

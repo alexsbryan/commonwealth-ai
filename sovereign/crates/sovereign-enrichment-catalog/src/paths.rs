@@ -76,8 +76,13 @@ pub fn runs_dir(corpus_id: &str) -> PathBuf {
 }
 
 /// `<data-root>/indexes` — the parent of every corpus index.
+///
+/// Delegates to [`sovereign_contracts::index_layout::indexes_dir`]. The
+/// derivation moved DOWN to that leaf so `svrn quality check` and the bench
+/// lanes could name it without an edge into this package; keeping a second
+/// `data_root().join("indexes")` here is the split this crate exists to refuse.
 pub fn indexes_dir() -> PathBuf {
-    data_root().join("indexes")
+    sovereign_contracts::index_layout::indexes_dir()
 }
 
 /// `<data-root>/recipes` — where the recipe registry's step-1 lookup reads a
@@ -94,7 +99,7 @@ pub fn recipes_dir() -> PathBuf {
 /// `<data-root>/indexes/<corpus-id>/` — where the chapter manifest
 /// lives (and where a future LanceDB index would, too).
 pub fn index_root(corpus_id: &str) -> PathBuf {
-    indexes_dir().join(corpus_id)
+    sovereign_contracts::index_layout::index_root(corpus_id)
 }
 
 pub fn chapters_manifest_path(corpus_id: &str) -> PathBuf {

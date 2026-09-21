@@ -24,7 +24,7 @@ use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 
-use corpus_engine_notes::NoteStore;
+use sovereign_contracts::notes::AgentNotes;
 
 use sovereign_core::error::{Error, Result};
 use sovereign_core::memory;
@@ -172,7 +172,7 @@ const MAX_EVIDENCE_RETURNED: usize = 12;
 pub struct KnowledgeLookupTool {
     store: Arc<dyn StateStore>,
     inference: Arc<dyn InferenceProvider>,
-    notes: Option<Arc<NoteStore>>,
+    notes: Option<Arc<dyn AgentNotes>>,
     /// Tier 3: optional web-search orchestrator. When `Some` AND
     /// `auto_escalate_to_web` is true AND the local channels return
     /// thin/empty results, the tool internally calls web search and
@@ -183,8 +183,8 @@ pub struct KnowledgeLookupTool {
 
 impl KnowledgeLookupTool {
     /// Construct a corpus+memory-only knowledge_lookup (no notes
-    /// channel). Useful for the test/CLI paths where a `NoteStore`
-    /// isn't wired.
+    /// channel). Useful for the test/CLI paths where no note store
+    /// is wired.
     pub fn new(store: Arc<dyn StateStore>, inference: Arc<dyn InferenceProvider>) -> Self {
         Self {
             store,
@@ -220,10 +220,10 @@ impl KnowledgeLookupTool {
         self
     }
 
-    /// Add a `NoteStore` so the third evidence channel (notes) is
+    /// Add a note store so the third evidence channel (notes) is
     /// queried. Without this, the tool returns corpus + memory
     /// evidence only.
-    pub fn with_notes(mut self, notes: Arc<NoteStore>) -> Self {
+    pub fn with_notes(mut self, notes: Arc<dyn AgentNotes>) -> Self {
         self.notes = Some(notes);
         self
     }

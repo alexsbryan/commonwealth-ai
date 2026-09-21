@@ -3,7 +3,7 @@
 //!
 //! `StoredGuestLink` (now in `sovereign-serving-host`) resolves a granted id
 //! through two ports — `GuestLinkReader` and `GuestTunnelOpener` — because
-//! neither the holder's link file (`sovereign_core::guest_link`, the holder's
+//! neither the holder's link file (`sovereign_contracts::guest_link`, the holder's
 //! credential) nor the tunnel (`crate::guest_tunnel`, Fabric reach) is the
 //! serving package's to name (`sovereign/SERVING_BOUNDARY.md` "The five
 //! entries" (a)). This module implements both over the mesh's own readers,
@@ -23,7 +23,7 @@ use sovereign_serving_host::guest_lender::{
     StoredGuestLink,
 };
 
-/// Reads `<root>/guest.json` through `sovereign_core::guest_link`.
+/// Reads `<root>/guest.json` through `sovereign_contracts::guest_link`.
 #[derive(Debug)]
 pub struct GuestLinkFileReader {
     root: PathBuf,
@@ -49,9 +49,9 @@ impl Default for GuestLinkFileReader {
 
 impl GuestLinkReader for GuestLinkFileReader {
     fn live_link(&self) -> Option<LiveGuestLink> {
-        let link = sovereign_core::guest_link::load_live_in(
+        let link = sovereign_contracts::guest_link::load_live_in(
             &self.root,
-            sovereign_core::guest_link::now_secs(),
+            sovereign_contracts::guest_link::now_secs(),
         )?;
         Some(LiveGuestLink {
             token: link.token,
@@ -119,7 +119,7 @@ mod tests {
              configurable data dir is NOT that place"
         );
         assert_eq!(
-            sovereign_core::guest_link::path_in(&GuestLinkFileReader::new().root)
+            sovereign_contracts::guest_link::path_in(&GuestLinkFileReader::new().root)
                 .file_name()
                 .unwrap(),
             "guest.json"
@@ -140,9 +140,9 @@ mod tests {
     #[test]
     fn an_expired_link_resolves_to_nothing() {
         let dir = tempfile::tempdir().unwrap();
-        sovereign_core::guest_link::save_in(
+        sovereign_contracts::guest_link::save_in(
             dir.path(),
-            &sovereign_core::guest_link::GuestLink {
+            &sovereign_contracts::guest_link::GuestLink {
                 token: "t".into(),
                 // Unroutable on purpose: if expiry were not checked FIRST this
                 // would hang or error rather than returning a clean None.
@@ -163,13 +163,13 @@ mod tests {
     #[test]
     fn a_live_link_is_projected_to_the_dispatch_fields() {
         let dir = tempfile::tempdir().unwrap();
-        sovereign_core::guest_link::save_in(
+        sovereign_contracts::guest_link::save_in(
             dir.path(),
-            &sovereign_core::guest_link::GuestLink {
+            &sovereign_contracts::guest_link::GuestLink {
                 token: "tok".into(),
                 url: "http://lender:9741".into(),
                 dial: Some("beef@127.0.0.1:9999".into()),
-                expires_at: sovereign_core::guest_link::now_secs() + 3_600,
+                expires_at: sovereign_contracts::guest_link::now_secs() + 3_600,
                 summary: Some("a-model".into()),
             },
         )

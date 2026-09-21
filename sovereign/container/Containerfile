@@ -105,6 +105,10 @@ ENV hipblaslt_ROOT=/opt/rocm
 #
 # `-fuse-ld=lld` swaps the slow GNU bfd linker for LLVM lld on the
 # final sovereign-cli link.
+# Same stamp as Containerfile.cuda: `sovereign-pods`'s worker daemon logs it at
+# startup. Pass: --build-arg GIT_SHA=$(git rev-parse --short HEAD)
+ARG GIT_SHA=unknown
+ENV SOVEREIGN_GIT_SHA=${GIT_SHA}
 ENV RUSTFLAGS="-C link-arg=-no-pie -C link-arg=-fuse-ld=lld"
 
 # sccache wiring. CARGO_INCREMENTAL=0 mandatory — see Containerfile.cuda.

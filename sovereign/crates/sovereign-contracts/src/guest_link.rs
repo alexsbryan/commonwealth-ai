@@ -13,7 +13,8 @@
 //! The daemon half is the reason for the move. `svrn chat ask` is a surface —
 //! the turn runs on the daemon — so a guest's CONVERSATION must stay on their
 //! own machine while only the completion crosses. That means the daemon needs
-//! the link, and a daemon cannot depend on a CLI crate.
+//! the link, and a daemon cannot depend on a CLI crate — so the format sits
+//! in this contracts leaf, which both of them may name.
 //!
 //! # What is deliberately not here
 //!
@@ -78,7 +79,7 @@ impl GuestLink {
 /// Unix seconds. One reader of the clock so the CLI and the daemon cannot
 /// disagree about what "now" is.
 pub fn now_secs() -> u64 {
-    crate::time::unix_now_u64()
+    sovereign_time::unix_now_u64()
 }
 
 /// Where `guest.json` lives under a sovereign root.

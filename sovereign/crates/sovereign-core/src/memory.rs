@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use corpus_engine_notes::{NoteScope, NoteSource, NoteStore};
 use serde::{Deserialize, Serialize};
+use sovereign_contracts::notes::AgentNotes;
+use sovereign_contracts::recipe::notes::{NoteScope, NoteSource, RecipeNotes};
 
-use crate::error::{Error, Result};
+use crate::error::Result;
 use crate::skills::{MergedMemoryConfig, SkillRegister};
 use crate::slot_policy::Workload;
 use crate::traits::{InferenceProvider, MemoryScope, StateStore};
@@ -1581,7 +1582,7 @@ pub struct ToolDecisionPayload {
 /// without parsing JSON; structured fields ride in `payload_json`
 /// so the dossier reader doesn't have to re-parse free text.
 pub async fn write_tool_decision(
-    notes: &NoteStore,
+    notes: &dyn AgentNotes,
     session_id: &str,
     conversation_id: Option<&str>,
     tool_id: &str,
@@ -1624,7 +1625,6 @@ pub async fn write_tool_decision(
             Some(&payload_json),
         )
         .await
-        .map_err(|e| Error::Storage(e.to_string()))
 }
 
 /// Read recent tool-decision payloads. When `conversation_id` is
@@ -1634,7 +1634,7 @@ pub async fn write_tool_decision(
 /// so a sparse conversation still has a chance of returning
 /// `limit` matches without paging.
 pub async fn read_recent_tool_decisions(
-    notes: &NoteStore,
+    notes: &dyn AgentNotes,
     conversation_id: Option<&str>,
     limit: usize,
 ) -> Result<Vec<ToolDecisionPayload>> {
@@ -1652,8 +1652,7 @@ pub async fn read_recent_tool_decisions(
             fetch_cap,
             false,
         )
-        .await
-        .map_err(|e| Error::Storage(e.to_string()))?;
+        .await?;
 
     let mut decisions: Vec<ToolDecisionPayload> = rows
         .into_iter()
@@ -1677,6 +1676,7 @@ pub async fn read_recent_tool_decisions(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::error::Error;
 
     fn mem_with_content(content: &str) -> Memory {
         Memory {
@@ -2020,7 +2020,6 @@ mod tests {
 
     // ─── R3: Temporal-tension detection ───────────────────────
 
-    use crate::error::Error;
     use crate::traits::InferenceProvider;
     use crate::types::{CompletionResponse, Depth, ProviderCapabilities, Speed};
     use async_trait::async_trait;
@@ -2339,10 +2338,10 @@ mod tests {
 
     // ─── tool_decision memory ─────────────────────────────────
 
-    async fn fresh_note_store() -> NoteStore {
+    async fn fresh_note_store() -> corpus_engine_notes::NoteStore {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("notes.db");
-        let store = NoteStore::open(&path).unwrap();
+        let store = corpus_engine_notes::NoteStore::open(&path).unwrap();
         // Leak the tempdir so it outlives the store handle (each test
         // builds its own; this isn't a daemon). Without this the
         // tempdir drops at scope-exit and the underlying SQLite file

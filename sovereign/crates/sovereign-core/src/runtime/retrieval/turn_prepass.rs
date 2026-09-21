@@ -17,7 +17,7 @@ impl Runtime {
         &self,
         conversation_id: &str,
     ) -> Option<Vec<String>> {
-        let notes = self.note_store.as_ref()?;
+        let notes = self.note_store.as_deref()?;
         let payloads = crate::memory::read_recent_tool_decisions(notes, Some(conversation_id), 32)
             .await
             .ok()?;

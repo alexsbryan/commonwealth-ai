@@ -120,8 +120,9 @@ pub fn write_dated_and_update_latest<T: Serialize>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::bench_cmd::discover::{BenchSurface, CorpusIdSource, CorpusState, DiscoveredBench};
+    use crate::bench_cmd::discover::{BenchSurface, CorpusIdSource, DiscoveredBench};
     use serde::{Deserialize, Serialize};
+    use sovereign_contracts::index_layout::CorpusIndexState;
     use tempfile::TempDir;
 
     fn fixture_bench() -> DiscoveredBench {
@@ -132,7 +133,7 @@ mod tests {
             bench_path: PathBuf::from("/dev/null"),
             corpus_id: "obsidian-vault".into(),
             corpus_id_source: CorpusIdSource::Explicit,
-            corpus_state: CorpusState::Ready,
+            corpus_state: CorpusIndexState::Ready,
             levers: vec!["mechanism".into()],
         }
     }

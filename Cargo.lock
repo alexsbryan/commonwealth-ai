@@ -12220,7 +12220,6 @@ dependencies = [
  "sovereign-cli-shared",
  "sovereign-contracts",
  "sovereign-core",
- "sovereign-enrichment-catalog",
  "sovereign-store",
  "tempfile",
  "tokio",
@@ -13092,7 +13091,6 @@ name = "sovereign-runtime-recipe"
 version = "0.7.0"
 dependencies = [
  "corpus-engine",
- "corpus-engine-notes",
  "sovereign-contracts",
  "sovereign-core",
  "sovereign-gliner",

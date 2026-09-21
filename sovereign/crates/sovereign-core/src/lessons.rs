@@ -23,6 +23,7 @@
 use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
+use sovereign_contracts::notes::AgentNotes;
 
 use crate::slot_policy::Workload;
 use crate::title::strip_think_blocks;
@@ -614,9 +615,7 @@ impl ActiveLessonSet {
 /// (newest-first, retired excluded — supersede is honored by
 /// construction; disabled and malformed rows are skipped). `None`
 /// store (CLI paths without notes wired) → empty set.
-pub async fn load_active_lessons(
-    store: Option<&corpus_engine_notes::NoteStore>,
-) -> ActiveLessonSet {
+pub async fn load_active_lessons(store: Option<&dyn AgentNotes>) -> ActiveLessonSet {
     let Some(store) = store else {
         return ActiveLessonSet::default();
     };
@@ -689,7 +688,7 @@ pub fn render_lesson_block(prompt_form: &str) -> String {
 /// turn. A failed stamp is traced and the whisper may repeat next
 /// turn (accepted: single-user desktop, one-UPDATE window).
 pub(crate) async fn note_first_applications(
-    store: Option<&corpus_engine_notes::NoteStore>,
+    store: Option<&dyn AgentNotes>,
     applied: &[&ActiveLesson],
     now: i64,
 ) -> Option<serde_json::Value> {

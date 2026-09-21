@@ -49,6 +49,8 @@ pub mod fim;
 pub mod frame;
 pub mod gguf_validator;
 pub mod git;
+/// A guest grant the holder has accepted — `guest.json`, read by both the CLI and the daemon.
+pub mod guest_link;
 pub mod guest_pages;
 pub mod health;
 /// This node's identity, published as a watch over `kernel_types::NodeId` —
@@ -64,6 +66,11 @@ pub mod identity;
 /// carries it and `sovereign-api` holds it
 /// (`quality/DAEMON_CORE.md` §4.2 "Where an install slot breaks a cycle").
 pub mod in_flight;
+/// Where corpus indexes live on this host, and how far indexing got for
+/// one corpus. A `[[package_leaf]]` home for the two questions three
+/// packages ask (`svrn quality check`, `svrn bench all`, the chat-ask
+/// lane) about a tree the `ingest` package writes — see the module doc.
+pub mod index_layout;
 pub mod intent_policy;
 pub mod launch;
 pub mod lessons;
@@ -79,6 +86,10 @@ pub mod middleware;
 pub mod mobile_host;
 pub mod model_family;
 pub mod models_manifest;
+/// The agent working-memory port — `AgentNotes`, the widened sibling of
+/// `recipe::notes::RecipeNotes`, so a program outside `code/` reads and writes
+/// notes without naming `corpus-engine-notes`.
+pub mod notes;
 pub mod observer;
 pub mod peer_work;
 // The two ports a daemon speaks to its peers through — a replicated KV store

@@ -362,12 +362,48 @@ exercised, not unnecessary; step 7's reached-caller rule and step 3's failure
 journeys are the only protection, and they are named so nobody believes the
 cut proved more than it did.
 
-## 11. The burn-down, as a checklist
+## 11. The method, and the standing worklist
 
-Written 2026-09-21 at `boundary-gate` **121** (from 232 at declaration, 199 at the
+Written 2026-09-21, at `boundary-gate` **119** (from 232 at declaration, 199 at the
 start of that day's session). Every number here was measured on the tree at
 `f92667f5e`, not estimated. `boundary-gate 0` is necessary and **not**
 sufficient — the three finish conditions are at the bottom.
+
+### The method — this is the part to follow
+
+Operator direction 2026-09-21, and the correction that produced this section:
+**do not run this as phases.** A phase plan invents an order the evidence already
+carries, and it licenses "we are in phase 3, so we cannot touch that" — which is
+the fuzzy plan-and-chase this initiative replaced. The loop below is what has
+actually been moving the number; the worklist after it is evidence, not a
+schedule.
+
+1. **Measure.** `cd corpus-engine && cargo xtask boundary-gate` (inside the
+   toolbox). Group the output BY TARGET, not by source — per-source it reads as
+   N problems when it is often one.
+2. **Fan out three cutters on disjoint crate paths.** Each is told: never run
+   `cargo`, never touch git state, edit only inside your paths, and report what
+   you changed plus the NAMED SEAM for what you could not. Read-only search
+   agents map a crate before a cutter touches it.
+3. **This session holds the single compile and every commit.** Cutters never
+   build; the orchestrator runs `sovereign-lint.sh --human --full`, fixes the
+   integration errors, and commits.
+4. **A cutter that cannot close a line cleanly reports the blocker instead.**
+   Half a port that does not compile is worse than a smaller honest cut, and a
+   line closed by teaching something to skip is worse than the line.
+5. **Repeat.** Each pass re-measures, so the ordering falls out of what the last
+   pass learned rather than out of a plan written before it.
+
+Only two things gate on order, and both are facts rather than policy: the
+corpus-index sweep comes first because nothing else can be priced until it has
+run, and the cli-llm split waits on the de-embed because its blocker is the dial
+the de-embed creates. Everything else can be picked up whenever a cutter is free.
+
+**Decisions are meant to be rare.** The whole list of them so far is: cut atos,
+place `sovereign-work-atlas` or delete it, `corpus-mcp`'s membership, `bench`'s
+leaf budget, and the three trades already priced and refused below. If a session
+finds itself making a sixth, that is the signal something is being decided that
+should have been measured.
 
 **Read the remaining lines by TARGET, not by source.** Per-source the list says
 `sovereign-daemon` 32, which reads like 32 problems; 18 of those are one
@@ -399,7 +435,7 @@ spelling. Engine-owned and therefore real: `CorpusEngine`, `enrichment::*`,
 `CorpusSpec`, `IngestResult`, `SovereignConfig`, `InferenceFn`, `ChatPrompt`,
 `progress`, `update`, `snapshot`, the canonical-merge functions.
 
-### Phase 1 — the corpus-index sweep (mechanical, 3 cutters, no decisions)
+### The corpus-index sweep — mechanical, no decisions, do it first
 
 Do this FIRST, not for the edge count but because phases 3 and 6 cannot be
 priced until it has run.
@@ -412,14 +448,14 @@ priced until it has run.
 - [ ] Report the per-crate residue for the five deep consumers: core 290,
       tools 339, cli-llm 396, daemon 135, mesh 85.
 
-### Phase 2 — the recipes tree (mechanical, 1 cutter, 1 pass)
+### The recipes tree — mechanical, one cutter, one pass
 
 - [ ] `sovereign-recipes/` → `corpus-engine/recipes/`: **106 files, 1.7 MB,
       54 recipes, 145 files outside the tree citing the path.**
 - [ ] Delete `corpus-engine/build.rs`; `include_str!` directly instead of via `OUT_DIR`.
 - [ ] Closes the last rule-3a violation in the workspace.
 
-### Phase 3 — the atlas read surface (the long pole; a campaign)
+### The atlas read surface — the long pole
 
 After phase 1 the residue across three packages is ONE module:
 `corpus_engine::enrichment`, **~490 references** — tools 171, cli-llm 214,
@@ -431,7 +467,7 @@ core 39, corpus-mcp 16, meshapp 10.
 - [ ] Decide: a new thin reader leaf, or widen `understanding-vocab`
       (already a leaf) / lift from `understanding-atlas` (an ingest member).
 
-### Phase 4 — step 10, the de-embed (40 edges, the biggest single win)
+### Step 10, the de-embed — 40 edges, the biggest single item
 
 - [ ] Fourteen `EmbeddedDaemon` construction sites become one dial.
       **Unblocked 2026-09-21:** `sovereign-turn-client` became a
@@ -441,19 +477,63 @@ core 39, corpus-mcp 16, meshapp 10.
 - [ ] Done when `grep -rn EmbeddedDaemon sovereign/crates --include=*.rs`
       returns only the `cmnwlth` binary's own main.
 
-### Phase 5 — the cli-llm split (23 edges; phase 4 unblocks it)
+### The cli-llm split — 23 edges, unblocked by the de-embed
 
 - [ ] 60.6k lines of bench, 44.7k of ingest, 18.8k of svrn in one crate.
 - [ ] The blocker was always `chat_cmd/bootstrap.rs`'s `build_session`, which
       §2 says should be a dialled URL — after phase 4 it IS a dial, so the
       split stops needing a new mechanism and becomes `git mv` waves.
 
-### Phase 6 — the ports (independent of each other; 3 cutters in parallel)
+### The ports — independent of each other
 
-- [ ] NoteStore, 8 edges. `sovereign_contracts::recipe::notes::RecipeNotes` is
-      the partial port that already exists. The blocker is the three
-      `NoteStore::open` sites in `sovereign-tools`: construction moves up to
-      whichever bootstrap already knows the data root.
+- [x] NoteStore — **the port is BUILT** (2026-09-21). `sovereign-contracts/src/notes.rs`
+      declares `trait AgentNotes: RecipeNotes` — the supertrait means
+      `write_note_full`/`read_notes_scoped` keep ONE declaration — plus eight
+      methods (`read_notes`, `read_notes_by_related_entity`,
+      `has_active_note_with_content`, `write_note_with_source`,
+      `write_note_with_relation`, `update_note_payload`, `log_tool_call`,
+      `tool_call_log_rows`) and one new DTO, `ToolCallLogRow`. The DTOs are the
+      existing `contracts::recipe::notes::{Note, NoteScope, NoteSource,
+      ScopeFilter}`, reused rather than re-declared. The single implementation
+      lives in the OWNING crate — `corpus-engine-notes/src/port.rs`, with five
+      drift tests that walk `NoteScope::ALL`/`NoteSource::ALL` and cross every
+      field — which let `sovereign-tools/src/recipe_notes_adapter.rs` (275 lines,
+      an orphan-rule newtype) be deleted outright: from inside the owning crate
+      the type is local, so the newtype had no reason to exist and leaving it
+      would have been a second `RecipeNotes` impl over one store.
+      Closed: `[ingest] sovereign-runtime-recipe → corpus-engine-notes`.
+      `sovereign_core::{memory, dossier, lessons}` and `Runtime`/`RuntimeParts`
+      now take `&dyn AgentNotes` / `Option<Arc<dyn AgentNotes>>`.
+- [ ] The five NoteStore edges that remain are NOT more porting. Every method
+      each crate calls is already on the port; what is left is **construction and
+      three decisions**:
+      - `sovereign-core` — production is 100% on the port. Three TEST sites keep
+        the edge (`src/lessons.rs:1061,1063`, `src/memory.rs:2342,2345`,
+        `tests/main/core_tests.rs:2279`). Faking them swaps real-SQL proof for a
+        green gate (§5). Decide where those tests live.
+      - `sovereign-tools` — blocked on `knowledge_view/manager.rs:829`
+        `NoteStore::open`: construction must move into
+        `KnowledgeViewManager::new`'s caller, and one caller is
+        `sovereign-mesh/tests/main/landscape_digest_http_e2e.rs:66` — i.e. it is
+        gated behind the mesh test-tree move. Also `src/notes/mod.rs:37`
+        `pub use corpus_engine_notes::response_mine;`, a module re-export with
+        its own downstream importers, which needs a home decision.
+      - `sovereign-cli-daemon` and `sovereign-cli-llm` — pure construction
+        (`NoteStore::open` at `daemon_cmd/mod.rs:538`,
+        `awareness_cmd/store_open.rs:19,86`, `chat_cmd/bootstrap.rs:276`,
+        `recipe_agent_cmd.rs:286`, `recipe_agent_live_trial.rs:1279`). Both need
+        the opener reachable without naming the crate, i.e. a factory in the
+        `code` package (`sovereign_code::open_agent_notes(path)`), which trades
+        these two edges for `svrn → code`. A boundary decision, not a refactor.
+      - `sovereign-daemon` — the widest and the RIGHT owner of construction:
+        16 store methods plus eight types the port deliberately does not carry
+        (`EmbedFn`, `GlinerFn`, `PropagationSinkFn`, `NodeRoster`, `RosterEntry`,
+        `NotePropagationEvent`, `ProjectDocsStore`, and the `decision_extractor`
+        middleware re-export at `src/middleware/mod.rs:53`).
+- [ ] `corpus_engine_notes::Note` still mirrors the contracts `Note`, and that is
+      NOT closable by a move: unifying means repointing the whole `code` package
+      (`notes.rs` 7,800 lines, `sovereign-code` 15 files, `sovereign-cli-dev` 20)
+      and closes no red line. `port.rs`'s drift tests are the guard instead.
 - [ ] SCIP, 8 edges. Two cheap pieces first: `sovereign_cli_shared::scip`
       (109 lines) has **exactly one consumer workspace-wide** —
       `sovereign-cli-dev/src/project_cmd/mod.rs:410`, in the package that owns
@@ -480,7 +560,7 @@ core 39, corpus-mcp 16, meshapp 10.
       ~2.4k lines, spans three packages and belongs to none: `code_index` +
       `code_index_incremental`, `scip`, `observation`, `rail`.
 
-### Phase 6a — the mesh test tree (diagnosed 2026-09-21; not a port job)
+### The mesh test tree — diagnosed 2026-09-21, not a port job
 
 `sovereign-mesh`'s six DEV lines — `→ sovereign-daemon` (forbidden), `→ sovereign-store`,
 `→ sovereign-tools`, `→ corpus-engine-scip`, `→ sovereign-enrichment-catalog`, and
@@ -562,7 +642,7 @@ from `[dependencies]` to `[dev-dependencies]` makes the line re-read as DEV
 rather than closing it. It is still worth doing: it removes the edge from the
 shipped closure, which is what liftability actually means.
 
-### Phase 7 — decisions, not cuts
+### The decisions — these are the operator's, and they are meant to be few
 
 - [x] **`atos` is CUT COMPLETELY** (operator, 2026-09-21). Footprint:
       `sovereign-atos` 6,467 lines + `corpus-engine-atos` 2,850 +
@@ -622,7 +702,7 @@ shipped closure, which is what liftability actually means.
       fix it. One red line is cheaper than a stale mandatory gate; grandfather
       it if the count matters.
 
-### Phase 8 — singletons
+### Singletons
 
 - [ ] `sovereign-core/src/router_calibration.rs:1253` embeds
       `bench/routing/calibration/axes_v1.toml`. Moving the bank breaks
@@ -648,13 +728,7 @@ shipped closure, which is what liftability actually means.
       Closing condition: route init's index step through the daemon, as
       `project register` already does.
 
-### Dependency order
-
-Phase 1 before everything — it reprices 3 and 6. Phase 4 before 5. Phases 2, 6,
-7 and 8 are independent. Phase 3 is the long pole and should not start until
-phase 1 has re-measured it.
-
-### The risk this checklist has to hold
+### The risk the worklist has to hold
 
 The shared-leaf set went from **10 at declaration to 15 on 2026-09-21**
 (`sovereign-turn-client`, `sovereign-workflow`, `corpus-engine-atos` — that last

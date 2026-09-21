@@ -40,7 +40,6 @@ use sovereign_tools::recipe_author::{
     self, checkpoint::restore_checkpoint as do_restore_checkpoint, ArtifactKind, CheckpointMeta,
     ProjectSummary, RecipeProject,
 };
-use sovereign_tools::recipe_notes_adapter::NoteStoreRecipeNotes;
 
 use crate::daemon::EmbeddedDaemon;
 use crate::http_response::{internal_error, not_found, Absence};
@@ -761,9 +760,7 @@ fn handles(
             "this daemon has no recipe-author store (features.db did not open)",
         ));
     };
-    // Wrap the concrete NoteStore in the seam adapter so the recipe-author
-    // crate sees the contract, not corpus-engine.
-    let notes: Arc<dyn RecipeNotes> = Arc::new(NoteStoreRecipeNotes::new(note_store));
+    let notes: Arc<dyn RecipeNotes> = note_store;
     Ok((notes, features))
 }
 

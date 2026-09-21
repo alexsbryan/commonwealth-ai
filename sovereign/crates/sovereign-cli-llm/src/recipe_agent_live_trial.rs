@@ -73,7 +73,6 @@ use sovereign_tools::recipe_author::{
     RecipeProject, RecipeReadTool, RecipeTestTool, RecipeValidateTool, RecipeWriteStructuredTool,
     RecipeWriteTool, RegistryBrowseTool, ResearchFindingTool,
 };
-use sovereign_tools::recipe_notes_adapter::NoteStoreRecipeNotes;
 use sovereign_tools::recipe_tester_adapter::CorpusEngineRecipeTester;
 
 // ─── OpenAI-style wire types ────────────────────────────────────
@@ -1277,7 +1276,7 @@ pub async fn run_live_trial(argv: &[String]) -> i32 {
     // session. To sandbox, point HOME at a tempdir before invoking.
     let dotsovereign = sovereign_contracts::rebrand::svrnmesh_root();
     let notes: Arc<dyn RecipeNotes> = match NoteStore::open(&dotsovereign.join("notes.db")) {
-        Ok(s) => Arc::new(NoteStoreRecipeNotes::new(Arc::new(s))),
+        Ok(s) => Arc::new(s),
         Err(e) => {
             eprintln!("live-trial: notes store: {e}");
             return 2;

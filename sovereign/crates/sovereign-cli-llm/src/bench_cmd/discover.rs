@@ -22,6 +22,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use corpus_engine::enrichment::atlas::axis_catalog::{all_axes, TypedAxis};
+use sovereign_contracts::index_layout::{inspect_corpus_index_state, CorpusIndexState};
 
 /// Which scoring surface a discovered bench belongs to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -54,25 +55,19 @@ impl BenchSurface {
     }
 }
 
-/// Atlas / index state for a discovered bench's corpus. Drives the
-/// report's stale-vs-ready grading.
+/// Can a corpus in `state` be scored on `surface`?
 ///
-/// The type and its probe moved DOWN to `sovereign-enrichment-catalog`
-/// (2026-09-04): `svrn quality check`'s `CorpusInstalled` precondition asks
-/// the same question from `sovereign-cli`, which cannot see this crate. Same
-/// answer, one implementation — see that module for why the alternative was
-/// a re-derived path.
-pub use sovereign_enrichment_catalog::corpus_state::{inspect_corpus_state, CorpusState};
-
-/// Can `state` be scored on `surface`?
-///
-/// A free function rather than an inherent method: [`CorpusState`] is a
-/// foreign type now, and [`BenchSurface`] is a bench concept that has no
+/// A free function rather than an inherent method: [`CorpusIndexState`] is a
+/// foreign type, and [`BenchSurface`] is a bench concept that has no
 /// business travelling down with it.
-pub fn is_ready_for(state: CorpusState, surface: BenchSurface) -> bool {
+pub fn is_ready_for(state: CorpusIndexState, surface: BenchSurface) -> bool {
     matches!(
         (state, surface),
-        (CorpusState::Ready, _) | (CorpusState::IndexedNoAtlas, BenchSurface::RetrievalJudge)
+        (CorpusIndexState::Ready, _)
+            | (
+                CorpusIndexState::IndexedNoAtlas,
+                BenchSurface::RetrievalJudge
+            )
     )
 }
 
@@ -97,7 +92,7 @@ pub struct DiscoveredBench {
     /// silence the inference.
     pub corpus_id_source: CorpusIdSource,
     /// Atlas / index state for `corpus_id`.
-    pub corpus_state: CorpusState,
+    pub corpus_state: CorpusIndexState,
     /// Levers this bench covers. For Enrichment, the
     /// `expected_*_atoms` field names mapped to axis keys (catalog
     /// keys when known, raw kind name otherwise). For
@@ -202,7 +197,7 @@ fn classify(path: &Path, group: &str) -> Option<DiscoveredBench> {
             bench_path,
             corpus_id: corpus_id.clone(),
             corpus_id_source,
-            corpus_state: inspect_corpus_state(&corpus_id),
+            corpus_state: inspect_corpus_index_state(&corpus_id),
             levers: categories.into_iter().collect(),
         });
     }
@@ -229,7 +224,7 @@ fn classify(path: &Path, group: &str) -> Option<DiscoveredBench> {
         bench_path,
         corpus_id: corpus_id.clone(),
         corpus_id_source,
-        corpus_state: inspect_corpus_state(&corpus_id),
+        corpus_state: inspect_corpus_index_state(&corpus_id),
         levers,
     })
 }

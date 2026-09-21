@@ -33,7 +33,6 @@ use sovereign_tools::recipe_author::recipe_project_store::{RecipeProjectRow, Rec
 use sovereign_tools::recipe_author::{
     capability_request::CapabilityRequest, maintainer_inbox_dir, situated_context, RecipeProject,
 };
-use sovereign_tools::recipe_notes_adapter::NoteStoreRecipeNotes;
 
 fn print_help() {
     eprintln!(
@@ -284,7 +283,7 @@ fn open_stores() -> std::result::Result<(Arc<dyn RecipeNotes>, Arc<RecipeProject
     let notes_path = sov.join("notes.db");
     let features_path = sov.join("features.db");
     let notes: Arc<dyn RecipeNotes> = match NoteStore::open(&notes_path) {
-        Ok(s) => Arc::new(NoteStoreRecipeNotes::new(Arc::new(s))),
+        Ok(s) => Arc::new(s),
         Err(e) => {
             eprintln!(
                 "recipe-agent: failed to open NoteStore at {}: {e}",

@@ -978,6 +978,9 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
     //   * `mesh_knowledge` is the loopback §3.5 names: this daemon's own
     //     `/v1/knowledge/search`. It was left at the recipe's `None` until
     //     2026-09-18, and no daemon-served turn fanned out to a peer.
+    // The turn path and the baseline bundles name the PORT, not the store's
+    // crate — one coercion here is the whole seam.
+    let notes_port: Arc<dyn sovereign_contracts::notes::AgentNotes> = notes_store.clone();
     let common = sovereign_runtime_recipe::common_parts(
         sovereign_runtime_recipe::RecipeInputs {
             inference: Arc::clone(&routed_provider),
@@ -985,7 +988,7 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
             conv_tiered: Some(Arc::clone(&state_store_concrete)
                 as Arc<dyn sovereign_core::conv_tiered::ConvTieredReader>),
             corpus_engine: Arc::clone(&engine),
-            note_store: Some(Arc::clone(&notes_store)),
+            note_store: Some(Arc::clone(&notes_port)),
             // The same compiled-in skill set the desktop ships (rung 6
             // commit B) — built just above from the ONE shared home, so a
             // tagged conversation routes the same agent loop whichever
@@ -1016,7 +1019,7 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
                         // gives `knowledge_lookup` its notes channel. It ran
                         // with that channel dark until 2026-08-26 while the
                         // desktop, which wired it by hand, did not.
-                        note_store: Some(&notes_store),
+                        note_store: Some(&notes_port),
                         web: sovereign_tools::bundles::WebReach::Granted(
                             sovereign_core::egress::search_client()
                                 .expect("egress boundary search client build"),
@@ -1038,11 +1041,7 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
                 b.push(Box::new({
                     let mut ra = sovereign_tools::bundles::RecipeAuthoringTools::new();
                     if let Some(fs) = features_store.as_ref() {
-                        ra = ra.with_notes(Arc::new(
-                            sovereign_tools::recipe_notes_adapter::NoteStoreRecipeNotes::new(
-                                Arc::clone(&notes_store),
-                            ),
-                        )
+                        ra = ra.with_notes(Arc::clone(&notes_store)
                             as Arc<dyn sovereign_contracts::recipe::notes::RecipeNotes>);
                         ra = ra.with_features(Arc::clone(fs));
                     }

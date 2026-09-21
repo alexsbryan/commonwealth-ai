@@ -470,7 +470,7 @@ mod tests {
     ///
     /// A measured throughput number is a legitimate goal, and the
     /// capability-oracle work exists to produce one. It carries its own
-    /// type in `sovereign-core::mesh_measurements`, keyed to the exact
+    /// type in `crate::mesh_measurements`, keyed to the exact
     /// model and split it was measured on, and it reaches a human
     /// reading `svrn mesh plan` — not the scheduler's ranked dispatch,
     /// which is the consumer §4.5 measured. Route it through here and
@@ -483,7 +483,7 @@ mod tests {
             "build_local_capabilities set NodeCapabilities.benchmark. That arms the \
              size-ratio extrapolation at oicp-types/src/scoring.rs:384, which \
              SCHEDULER_QUALITY.md §4.5 measured at −56% and filed DO-NOT-BUILD. If you \
-             have a real measurement, it belongs in sovereign-core::mesh_measurements \
+             have a real measurement, it belongs in sovereign_mesh::mesh_measurements \
              keyed to the model and split it was taken on — not on the gossip path."
         );
     }

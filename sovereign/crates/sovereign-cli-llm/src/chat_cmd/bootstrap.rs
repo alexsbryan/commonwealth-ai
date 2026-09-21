@@ -272,17 +272,18 @@ async fn build_session_scoped(
     //    `tool_decision` write hook. Same path the daemon uses, so the chat
     //    REPL and bench surfaces share one outcome log.
     let notes_path = globals.data_dir.join("notes.db");
-    let note_store = match corpus_engine_notes::NoteStore::open(&notes_path) {
-        Ok(s) => Some(Arc::new(s)),
-        Err(e) => {
-            eprintln!(
-                "warn: NoteStore open failed at {} ({e}); tool-decision \
-                 writes will no-op this session",
-                notes_path.display()
-            );
-            None
-        }
-    };
+    let note_store: Option<Arc<dyn sovereign_contracts::notes::AgentNotes>> =
+        match corpus_engine_notes::NoteStore::open(&notes_path) {
+            Ok(s) => Some(Arc::new(s)),
+            Err(e) => {
+                eprintln!(
+                    "warn: NoteStore open failed at {} ({e}); tool-decision \
+                     writes will no-op this session",
+                    notes_path.display()
+                );
+                None
+            }
+        };
 
     // ── The shared recipe ────────────────────────────────────────────────
     //

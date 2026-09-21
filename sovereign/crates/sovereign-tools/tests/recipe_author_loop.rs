@@ -258,7 +258,6 @@ async fn recipe_author_project_lifecycle_end_to_end() {
         decision_log::{DecisionAttribution, DecisionKind, DecisionPayload},
         situated_context, CapabilityRequestTool, DecisionLogTool,
     };
-    use sovereign_tools::recipe_notes_adapter::NoteStoreRecipeNotes;
     use sovereign_tools::RecipeProject;
 
     let home = tempfile::tempdir().unwrap();
@@ -266,9 +265,8 @@ async fn recipe_author_project_lifecycle_end_to_end() {
     let recipes_dir = home.path().join(".sovereign/recipes");
     std::fs::create_dir_all(&recipes_dir).unwrap();
 
-    let notes: Arc<dyn RecipeNotes> = Arc::new(NoteStoreRecipeNotes::new(Arc::new(
-        NoteStore::open(&home.path().join("notes.db")).unwrap(),
-    )));
+    let notes: Arc<dyn RecipeNotes> =
+        Arc::new(NoteStore::open(&home.path().join("notes.db")).unwrap());
     let features = Arc::new(RecipeProjectStore::open(&home.path().join("features.db")).unwrap());
 
     let project = RecipeProject::new(

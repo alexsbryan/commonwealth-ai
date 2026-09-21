@@ -52,10 +52,8 @@ sovereign-gliner = { workspace = true }
 # `CorpusEngine`, `open_wikipedia_graph`, `MetaAtlasIndex`, `BridgeIndex`,
 # `RerankConfig`. Knowledge layer — down.
 corpus-engine = { workspace = true }
-# `NoteStore` — the per-conversation tool-decision write hook's backing store,
-# passed in by the host rather than opened here (one writer per data root,
-# TOPOLOGY phase 1). Knowledge layer — down.
-corpus-engine-notes = { workspace = true }
+# The tool-decision write hook's backing store is NOT a dependency: the host
+# hands it in as `sovereign_contracts::notes::AgentNotes` (RecipeInputs.note_store).
 tracing = { workspace = true }
 # `LaneWarmth::Deferred` spawns the meta-atlas warm on a blocking thread so a
 # service's boot does not block on a ~1 GB JSON parse.

@@ -43,7 +43,7 @@ use std::io;
 
 use crate::dirs::sovereign_root;
 
-// The TYPE and its file format live in `sovereign-core`, because the DAEMON
+// The TYPE and its file format live in `sovereign-contracts`, because the DAEMON
 // reads this file too: `svrn chat ask` is a surface, so a guest's turn runs on
 // their own daemon and it is the daemon that must resolve a granted model id
 // to the lender (`sovereign_serving_host::guest_lender`). A daemon cannot depend on a
@@ -51,7 +51,7 @@ use crate::dirs::sovereign_root;
 //
 // What stays here is the CLI's own half: the well-known root, and the stderr
 // wording a person reads. A library must not print to stderr.
-pub use sovereign_core::guest_link::{
+pub use sovereign_contracts::guest_link::{
     forget_in, load_in, load_live_in, now_secs, path_in, save_in, GuestLink, GUEST_LINK_FILE,
 };
 

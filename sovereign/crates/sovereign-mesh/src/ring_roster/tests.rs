@@ -5,6 +5,9 @@ use commonwealth_core::capabilities::{AvailableResources, HardwareProfile, NodeC
 use commonwealth_core::ids::{MeshId, NodeId, NodePubkey};
 use commonwealth_core::mesh::{MemberRecord, Mesh, NodeStatus};
 use commonwealth_rail::{Person, RingSigner, SigningKey};
+use sovereign_contracts::identity::IdentityReader;
+use std::sync::Arc;
+use tokio::sync::RwLock;
 
 use super::MeshRoster;
 
@@ -56,6 +59,18 @@ pub fn member(node_id: NodeId, name: &str, pubkey: Option<NodePubkey>) -> Member
         dial_info_sig: None,
         removed_at: None,
     }
+}
+
+/// Returns the mesh Arc BY VALUE: `install` keeps only a weak ref, so the caller must hold it.
+fn fabric_handles(me: NodeId, k: &SigningKey) -> (Arc<RwLock<Mesh>>, IdentityReader) {
+    (
+        Arc::new(RwLock::new(mesh_of(vec![member(
+            me,
+            "alex",
+            Some(pubkey_of(k)),
+        )]))),
+        IdentityReader::new(me),
+    )
 }
 
 pub fn mesh_of(members: Vec<MemberRecord>) -> Mesh {
@@ -217,19 +232,10 @@ fn a_blank_name_falls_back_to_the_node_id_rather_than_dropping_the_key() {
 async fn a_namespace_never_written_to_answers_with_the_mesh_roster_on_first_touch() {
     let me = NodeId::from_u128(1);
     let k = key(21);
-    let state = sovereign_daemon::state::AppState::new(
-        me,
-        mesh_of(vec![member(me, "alex", Some(pubkey_of(&k)))]),
-    );
+    let (mesh, identity) = fabric_handles(me, &k);
     let dir = tempfile::tempdir().unwrap();
-    let rail = commonwealth_rail::RingRail::new(dir.path(), std::sync::Arc::new(k.clone()));
-    super::MeshRosterSource::install(
-        &rail,
-        &state.inner.fabric.mesh,
-        &state.inner.fabric.identity,
-        state.self_node_pubkey(),
-    )
-    .unwrap();
+    let rail = commonwealth_rail::RingRail::new(dir.path(), Arc::new(k.clone()));
+    super::MeshRosterSource::install(&rail, &mesh, &identity, None).unwrap();
 
     let journal = rail.journal("fresh-app").unwrap();
     assert!(!journal.dir().exists(), "never written to");
@@ -253,19 +259,10 @@ async fn a_namespace_never_written_to_answers_with_the_mesh_roster_on_first_touc
 async fn a_registered_namespace_ignores_a_hand_roster() {
     let me = NodeId::from_u128(1);
     let k = key(22);
-    let state = sovereign_daemon::state::AppState::new(
-        me,
-        mesh_of(vec![member(me, "alex", Some(pubkey_of(&k)))]),
-    );
+    let (mesh, identity) = fabric_handles(me, &k);
     let dir = tempfile::tempdir().unwrap();
-    let rail = commonwealth_rail::RingRail::new(dir.path(), std::sync::Arc::new(k.clone()));
-    super::MeshRosterSource::install(
-        &rail,
-        &state.inner.fabric.mesh,
-        &state.inner.fabric.identity,
-        state.self_node_pubkey(),
-    )
-    .unwrap();
+    let rail = commonwealth_rail::RingRail::new(dir.path(), Arc::new(k.clone()));
+    super::MeshRosterSource::install(&rail, &mesh, &identity, None).unwrap();
 
     for ns in super::REGISTERED_NAMESPACES {
         let journal = rail.journal(ns).unwrap();
@@ -294,19 +291,10 @@ async fn a_registered_namespace_ignores_a_hand_roster() {
 async fn a_stray_roster_file_narrows_an_app_ring_but_not_a_daemon_ring() {
     let me = NodeId::from_u128(1);
     let k = key(23);
-    let state = sovereign_daemon::state::AppState::new(
-        me,
-        mesh_of(vec![member(me, "alex", Some(pubkey_of(&k)))]),
-    );
+    let (mesh, identity) = fabric_handles(me, &k);
     let dir = tempfile::tempdir().unwrap();
-    let rail = commonwealth_rail::RingRail::new(dir.path(), std::sync::Arc::new(k.clone()));
-    super::MeshRosterSource::install(
-        &rail,
-        &state.inner.fabric.mesh,
-        &state.inner.fabric.identity,
-        state.self_node_pubkey(),
-    )
-    .unwrap();
+    let rail = commonwealth_rail::RingRail::new(dir.path(), Arc::new(k.clone()));
+    super::MeshRosterSource::install(&rail, &mesh, &identity, None).unwrap();
 
     let stray = commonwealth_rail::Roster::new(std::collections::BTreeMap::from([(
         Person::from("someone-else"),

@@ -123,9 +123,6 @@ understanding-vocab = { workspace = true }
 # stopped being something the desktop ran in-process; same layer as this
 # crate, and `sovereign-cli-llm` already names it.
 
-# `mesh_measurements` + `guest_link` (core's own); `identity`/`peer`/`setup_config`
-# are contracts re-exports — repointing those leaves the first two as the edge.
-sovereign-core = { workspace = true }
 # The Tier-0 wall-clock leaf, named directly rather than reached through the
 # `sovereign_core::time` re-export (domains row dm-time-repoint-mesh).
 sovereign-time = { workspace = true }
@@ -283,6 +280,12 @@ iroh-relay-only = ["commonwealth-transport/iroh-relay-only"]
 # `loopback_parity` mounts `project_router`, which reads
 # `sovereign_mesh::reindexer`.
 sovereign-daemon = { path = "../sovereign-daemon", features = ["treesitter"] }
+# TEST-ONLY since `guest_link` moved to the `sovereign-contracts` leaf (cut): no
+# `src/` file names this crate. What the tests name is the assembled-host fixture —
+# `runtime::{Runtime, RuntimeParts, lane::LaneSources, TurnProvenance}`, `insight`,
+# `stubs::{PassthroughRouter, NoOpPlanner}`, `executor::AutoApprovalChannel`,
+# `conv_tiered` and `deep_research::icd::Charter` in tests/main/*.
+sovereign-core = { workspace = true }
 # `auto_recover` moved to `sovereign-grants` at domains `dm-auto-recover-move`;
 # the fold-ingest integration tests read it there. The ring's live-lane
 # namespace tests (`tests/main/ring_live_non_durable.rs`) also issue real rail
