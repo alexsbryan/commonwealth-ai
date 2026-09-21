@@ -289,8 +289,13 @@ it.
    (ledger A58): `:9742` defaults to member-only, a plain-IP member proves
    membership with the mesh proof gossip already carries, so a plaintext mesh
    keeps working, and `internal_auth = "perimeter"` restores today's
-   behaviour. Its clause (c) is that a member's ring sync completes unchanged
-   in the same run that refuses the stranger.
+   behaviour. That NARROWS this entry and does not close it: the mesh proof
+   proves the group, not which member is calling, so after it lands an
+   unkeyed asker must at least hold the mesh secret, and a member who is on
+   no roster for a ring can still read it over plain IP. Only the encrypted
+   posture, where the handshake proves the key, closes that half; refusing it
+   on a plaintext mesh would stop file-rostered rings replicating there, and
+   that decision has not been taken.
 9. **The internal API's other 54 routes still answer an unverified caller.**
    `internal_principal_layer` resolves a principal for every request on
    `:9742`, but `/internal/ring/sync` is the only route that refuses on it.
