@@ -216,8 +216,12 @@ The stand-in cannot be the last word, and the queue's final row,
 walking the six steps with a real phone. What the stand-in's config tells you
 about setting that up:
 
-BeefyMac and LittleMac need to be members again first; as of 2026-09-19 the
-mesh reads BeefyMac as retired and LittleMac as offline. BeefyMac goes on a
+BeefyMac and LittleMac need to be members again first. Re-checked 2026-09-21
+with `svrn mesh status` on the Halo: BeefyMac still reads retired and LittleMac
+offline, two of eleven members are online, and the second one is a member named
+from a MacBook's hostname advertising the tailnet address BeefyMac's retired
+row carries — which looks like BeefyMac rejoined under a new key, and should be
+confirmed on that machine before the walk rather than assumed. BeefyMac goes on a
 WiFi that is not the tailnet, with the Halo elsewhere, because the scan bar's
 goodhart clause says a run over a VPN proves nothing about the room's WiFi.
 
@@ -261,6 +265,57 @@ will: whether the iroh path between the room and the Halo is direct or relayed
 on a real venue network (the ask bar records it, and a relayed run is the one
 that counts), and what a real uplink outage looks like to the phones, since a
 real outage is rarely shorter than a minute.
+
+### A second app on the wall
+
+Added 2026-09-21. ring-guest finished after this document was written, and its
+last row, `HUMAN-rg-the-wall` in `ralph/next/ring-guest-substrate/STATE.md`, is
+the same six steps with one change: a second app stands on the wall beside the
+doc, and it is one you scaffolded, not one written for the demo.
+
+```bash
+svrn ring new ./house-expenses
+```
+
+Then one more line under `[daemon.guest_pages]` pointing at that directory, a
+daemon restart, and the SAME `--wall` QR as above. What to watch for is the
+claim the campaign makes: the scaffold has no guest code of its own, so a phone
+that typed its name on the doc is that same person on the expenses page, every
+act it makes there reads "<name>, guest of BeefyMac" on the wall and on the
+Halo's replica, and you edited nothing in the scaffold to get it. If you have
+to touch one line of the scaffold for a guest to be named, the campaign's
+kill condition fired; record that, do not fix it in place.
+
+The stand-in runs both walks together: `RING_ROOM_TOPOLOGY=room` judges eleven
+bars, the six above and ring-guest's five. It has come back eleven PASSED, cold,
+three times (two runs at `3ebada3e4`, one at `37f931985`). The older
+three-machine sitting, `RING_ROOM_TOPOLOGY=three`, reproduces the same two
+failures every time. `ra-room-plug-in-live` reads 0.0 because the joiner's
+answer does not name them, the other three sub-legs true, and
+`docs/RING_ROOM_DEMO.md` has the account of why. `ra-room-answer-names-the-machine`
+reads 0.8, four of five questions grounded (`ralph/REVIEW_FINDINGS.md`); that
+document recorded it at 1.0, and why it has read 0.8 since has not been
+investigated. Expect both on a three-machine walk.
+
+### Defaults that changed underneath a walk
+
+Added 2026-09-21. Three security defaults landed after the last stand-in run,
+and no walk has been done on a build that carries them:
+
+- The internal port `:9742` now refuses a caller that is not a member
+  (`[daemon] internal_auth`, default `"member"`). A plain-IP member proves
+  membership with the mesh proof gossip already carried, so a mesh made without
+  `--encrypt` keeps working; join and gossip are exempt. If a member that
+  worked before is refused on the walk, `internal_auth = "perimeter"` restores
+  the old behaviour and tells you the gate is what changed — write down which
+  route refused before you set it.
+- Tensor-split RPC binds loopback unless told otherwise, and a non-loopback
+  bind is refused without `SOVEREIGN_RPC_ALLOW_PLAINTEXT_LAN`. None of the six
+  steps uses the split. It matters only if the Halo is serving a model split
+  across machines during the sitting.
+- A remote client can hold a credential of its own:
+  `svrn mesh token --new <label>`, `--list`, `--revoke <label>`. Guests are
+  unaffected — the wall QR is a guest grant, not a client token.
 
 ## Known limits
 
