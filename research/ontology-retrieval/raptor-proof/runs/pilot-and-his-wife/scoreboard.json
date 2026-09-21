@@ -1,0 +1,154 @@
+{
+  "schema": "ei7-scoreboard/v1",
+  "runs": "research/ontology-retrieval/raptor-proof/runs/pilot-and-his-wife",
+  "generated_at_unix": 1790010890,
+  "verdict": null,
+  "refusal": null,
+  "identity": {
+    "recipe_sha256": "56443189f059779158cc11b5e6b46f3878e5db728464d9a16ba8cab44654b050",
+    "synth_model": "Qwen3.6-35B-A3B-MTP-UD-Q6_K",
+    "judge_model": "Qwen3.5-4B-UD-Q6_K_XL",
+    "host": "http://127.0.0.1:9841",
+    "ontology_sha256": "338dc0a6eac98f157feae794a30231d8ab18a559f905257dd7e7f33f28873d9b"
+  },
+  "i3_ablation_vs_full": {
+    "verdict": "never-ran",
+    "reason": "no ablation arm under the runs dir"
+  },
+  "arms": {
+    "bare": [
+      1,
+      2,
+      3
+    ],
+    "closed-book": [
+      1
+    ],
+    "deep": [
+      1,
+      2,
+      3
+    ],
+    "full": [
+      1,
+      2,
+      3
+    ]
+  },
+  "incomplete": [],
+  "unmeasured_rows": {
+    "bare": 0,
+    "closed-book": 0,
+    "deep": 0,
+    "full": 0
+  },
+  "closed_book": {
+    "verdict": "passed",
+    "count": 12,
+    "excluded": [
+      "nqa-pilot-and-his-wife-07",
+      "nqa-pilot-and-his-wife-14",
+      "nqa-pilot-and-his-wife-15",
+      "nqa-pilot-and-his-wife-16",
+      "nqa-pilot-and-his-wife-17",
+      "nqa-pilot-and-his-wife-18",
+      "nqa-pilot-and-his-wife-21",
+      "nqa-pilot-and-his-wife-23",
+      "nqa-pilot-and-his-wife-24",
+      "nqa-pilot-and-his-wife-27",
+      "nqa-pilot-and-his-wife-28",
+      "nqa-pilot-and-his-wife-30"
+    ],
+    "unmeasured": [],
+    "runs": 1,
+    "reason": null
+  },
+  "ungrounded_route": {
+    "verdict": "passed",
+    "count": 2,
+    "excluded": [
+      "nqa-pilot-and-his-wife-05",
+      "nqa-pilot-and-his-wife-19"
+    ],
+    "routes": {
+      "nqa-pilot-and-his-wife-05": [
+        "bare:ExpressiveQuery",
+        "deep:ExpressiveQuery",
+        "full:ExpressiveQuery"
+      ],
+      "nqa-pilot-and-his-wife-19": [
+        "bare:ExpressiveQuery",
+        "deep:ExpressiveQuery",
+        "full:ExpressiveQuery"
+      ]
+    },
+    "unrouted": [],
+    "per_category": {
+      "k4_whole_story": 2
+    },
+    "arms": [
+      "bare",
+      "deep",
+      "full"
+    ],
+    "reason": null
+  },
+  "band_arm": {
+    "verdict": "passed",
+    "runs": 3
+  },
+  "min_n": 20,
+  "categories": {
+    "k4_whole_story": {
+      "n": 16,
+      "band": {
+        "band": 0.05,
+        "raw": 0.010416666249999929,
+        "runs": 3,
+        "floored": true,
+        "verdict": "passed"
+      },
+      "arms": {
+        "closed-book": {
+          "judge": 0.02083333375,
+          "kw": 0.0625,
+          "runs_scored": 1,
+          "runs": 1,
+          "found": 1,
+          "missed": 29,
+          "verdict": "passed"
+        },
+        "bare": {
+          "judge": 0.5451388895833333,
+          "kw": 0.23958333375,
+          "runs_scored": 3,
+          "runs": 3,
+          "found": 41,
+          "missed": 49,
+          "verdict": "passed"
+        },
+        "deep": {
+          "judge": 0.56250000125,
+          "kw": 0.23958333375,
+          "runs_scored": 3,
+          "runs": 3,
+          "found": 42,
+          "missed": 48,
+          "verdict": "passed"
+        },
+        "full": {
+          "judge": 0.548611115,
+          "kw": 0.30902777958333333,
+          "runs_scored": 3,
+          "runs": 3,
+          "found": 46,
+          "missed": 44,
+          "verdict": "passed"
+        }
+      },
+      "excluded_ungrounded_route": 2,
+      "judgeable": "could-not-judge",
+      "reason": "n = 16 < 20 after closed-book exclusions"
+    }
+  }
+}

@@ -1,7 +1,7 @@
 {
   "schema": "ei7-arm-manifest/v1",
   "identity": {
-    "arm": "closed-book",
+    "arm": "bare",
     "corpus": "raptor-pilot-and-his-wife",
     "host": "http://127.0.0.1:9841",
     "synth_model": "Qwen3.6-35B-A3B-MTP-UD-Q6_K",
@@ -12,7 +12,11 @@
   },
   "variant": "both",
   "run": 1,
-  "env": {},
+  "env": {
+    "SOVEREIGN_ATLAS_GROUNDING": "0",
+    "SOVEREIGN_ATOM_ENUM": "0",
+    "SOVEREIGN_ATOM_ENUM_OVERVIEW": "0"
+  },
   "argv": [
     "/Users/alexsbryan/.local/bin/sovereign",
     "eval",
@@ -24,8 +28,7 @@
     "--format",
     "json",
     "--output",
-    "research/ontology-retrieval/raptor-proof/runs/pilot-and-his-wife/closed-book/run-1/eval.json",
-    "--closed-book",
+    "research/ontology-retrieval/raptor-proof/runs/pilot-and-his-wife/bare/run-1/eval.json",
     "--chat-model",
     "Qwen3.6-35B-A3B-MTP-UD-Q6_K"
   ],
@@ -40,7 +43,7 @@
   "provenance": {
     "commit": "c715bf8ce491820c5b3251c9d31393b36eb683d8",
     "dirty": true,
-    "started_at_unix": 1790005625,
+    "started_at_unix": 1790006759,
     "paths": {
       "index_dir": "/Users/alexsbryan/.svrnmesh/indexes/raptor-pilot-and-his-wife",
       "recipe": "research/ontology-retrieval/raptor-proof/recipes/pilot-and-his-wife/recipe.toml"

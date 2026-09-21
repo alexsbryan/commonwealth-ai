@@ -1,0 +1,1064 @@
+
+== closed-book screen  [15:45:18]
+arm closed-book run 1 -> research/ontology-retrieval/raptor-proof/runs/pilot-and-his-wife/closed-book/run-1
+  host http://127.0.0.1:9841  synth Qwen3.6-35B-A3B-MTP-UD-Q6_K  judge Qwen3.5-4B-UD-Q6_K_XL
+svrnmesh: bridged 1 legacy SOVEREIGN_* env var(s) to SVRNMESH_* (the SOVEREIGN_* prefix is deprecated — update your scripts)
+loaded bank `raptor-proof-pilot-and-his-wife-v1` — 30 questions, target corpus `raptor-pilot-and-his-wife`
+Daemon: http://127.0.0.1:9841
+Chat model:  Qwen3.6-35B-A3B-MTP-UD-Q6_K
+Embed model: qwen-embedding-0.6b
+Database:    /Users/alexsbryan/.sovereign/sovereign.db
+Indexes:     /Users/alexsbryan/.svrnmesh/indexes
+Temperature: 0 (override)
+Corpora:     alignment (4090 chunks), arch-principles (58 chunks), arch-tour-fixture (40 chunks), atos-experiment-oicp-types (55 chunks), brothers-karamazov-book-1 (41 chunks), chaos-saltgrass (30 chunks), chaos-secret-agent (316 chunks), climb-ostrom (5 chunks), commonwealth (2590 chunks), commonwealth-ai-arch-principles (72 chunks), commonwealth-ai-system-overview (60 chunks), conversation-history (91 chunks), conversations-anthropic (16404 chunks), conversations-personal (267 chunks), corpus-engine (6252 chunks), drift-target (0 chunks), e2e-notebook (2 chunks), ei7-ans (1093 chunks), ei7-recensus-fineprint (1870 chunks), enron-sample-multi-tiny (900 chunks), enron-sample-multi-wide (8829 chunks), enron-sample-tiny (468 chunks), federalist-starter (31 chunks), folder-fixture-vault-8a83955f975c (111 chunks), folder-governance-corpus-bf503493df46 (0 chunks), institutional-notes (9 chunks), maple-house (24 chunks), obsidian-vault-959ee8a8f330 (3175 chunks), oicp-types (76 chunks), proxy-cik0000012927 (121 chunks), proxy-cik0000034088 (311 chunks), qc-arch-tour-01500518 (40 chunks), qc-arch-tour-250f6f45 (40 chunks), qc-arch-tour-4dd212fb (40 chunks), qc-arch-tour-52c92f2d (40 chunks), qc-arch-tour-695ffb90 (40 chunks), qc-arch-tour-6c7947a7 (40 chunks), qc-arch-tour-8899c85d (40 chunks), qc-arch-tour-adhoc (40 chunks), qc-arch-tour-d1255ea4 (40 chunks), qc-probe (40 chunks), raptor-eagle-cliff (254 chunks), raptor-pilot-and-his-wife (244 chunks), sec-cik0000320193 (115 chunks), sep (187967 chunks), sovereign (15352 chunks), sovereign-cli (1218 chunks), spike-fineprint-census (699 chunks), spike-fineprint-census-pod (699 chunks), system-overview (57 chunks), tokei (308 chunks), tokei-readme (25 chunks), uap-blue-book (710 chunks), uap-blue-book-index (10750 chunks), watched-9ef2f912ea2e (1530 chunks), watched-fixture-495a8a964229 (10 chunks), wikipedia (2029882 chunks), wikipedia-newsworthy (61 chunks)
+Tools:       wiring
+Tools:       no per-user switches on this host
+Tools:       core-turn: 6 tools
+Tools:       web: 1 tools
+Tools:       knowledge-front-door: 2 tools, withheld knowledge_lookup:auto-escalate (the operator has not opted in to automatic web escalation)
+Tools:       wikipedia: 1 tools
+Tools:       shell: 1 tools
+Tools:       11 registered
+Router:      assembling classifier stack
+Router classifier stack: embed=true scope=true effort=true current_info=true
+Lane:        gathering enrichment sources
+Lane scope:  sealed to `raptor-pilot-and-his-wife`
+[2m2026-09-21T15:45:22.589775Z[0m [32m INFO[0m atlas-context: scanning indexes dir for atlases [3mcandidate_count[0m[2m=[0m1820
+[2m2026-09-21T15:45:22.808475Z[0m [32m INFO[0m atlas-context: init complete (graphs without a loaded context parse on first use) [3mcontexts[0m[2m=[0m0 [3mgraphs[0m[2m=[0m0 [3mgraphs_available[0m[2m=[0m1820
+Atlas: 0 corpus context(s) loaded from cache
+Meta-atlas:  not loaded (lane spans one corpus)
+Bridge:      not loaded (lane spans one corpus)
+closed-book mode — each question is a RAW MODEL turn (no retrieval, no router, no grounding gate, no atlas). Answers come from the model's parametric memory alone; `retrieved` is empty by construction.
+isolation mode — retrieval scoped to corpus `raptor-pilot-and-his-wife`
+wrote run JSON to research/ontology-retrieval/raptor-proof/runs/pilot-and-his-wife/closed-book/run-1/eval.json
+  verdict: recorded (the comparison judges it)
+closed-book: n=30 mean judge=0.339 known(>=0.5)=12
+
+== atlas  [15:47:05]
+svrnmesh: bridged 1 legacy SOVEREIGN_* env var(s) to SVRNMESH_* (the SOVEREIGN_* prefix is deprecated — update your scripts)
+Detected 32 section(s):
+    1. CHAPTER I. — On the stern, pine-clad southern coast of Norway, off the
+    2. CHAPTER II. — After old Jacob had fallen into ill health, lighterman Kristiansen used
+    3. CHAPTER III. — Salve came out to the rock again the next autumn, after a voyage to
+    4. CHAPTER IV. — The old Juno, to which Salve belonged, was lying at that time at
+    5. CHAPTER V. — The party, meanwhile, that had left the ship, were passing the night
+    6. CHAPTER VI. — The Juno arrived in due course at Boston, where Salve invested a
+    7. CHAPTER VII. — Out on Little Torungen meanwhile noteworthy events had occurred, which
+    8. CHAPTER VIII. — As for Salve, during the first few days after coming home he was a happy
+    9. CHAPTER IX. — All these events had come upon Elizabeth with overwhelming suddenness.
+   10. CHAPTER X. — The outer side of Tromoe, which lies off the entrance to Arendal, has
+   11. CHAPTER XI. — The house in the town was undergoing repairs this year, which kept the
+   12. CHAPTER XII. — It was some months after. The Juno lay ready to sail in the roads of
+   13. CHAPTER XIII. — They stood slowly away to the north-east along the coast of Brazil.
+   14. CHAPTER XIV. — With a view to bring himself into harmony with his surroundings, he
+   15. CHAPTER XV. — It was into a badly-lighted tavern, with two or three rooms leading out
+   16. CHAPTER XVI. — The Stars and Stripes lay in the roads with the Union flag at her gaff.
+   17. CHAPTER XVII. — They doubled Cape Horn, and came to Valparaiso. But, on the morning they
+   18. CHAPTER XVIII. — An opportunity offered almost immediately for taking a passage home with
+   19. CHAPTER XIX. — Skipper Garvloit, into whose family Elizabeth had come, occupied one of
+   20. CHAPTER XX. — When Madam Garvloit had made some excuse next morning to leave the two
+  ... and 12 more
+
+  ✓ wrote /Users/alexsbryan/.svrnmesh/indexes/raptor-pilot-and-his-wife/chapters.json (32 chapters)
+  ✓ wrote /Users/alexsbryan/.svrnmesh/enrichment/raptor-pilot-and-his-wife/config.json
+  ✓ pipeline      = literary_atlas
+  ✓ chat_model    = commonwealth/primary
+  ✓ embed_model   = qwen3-embedding-0.6b
+
+  Next: svrn enrich extract raptor-pilot-and-his-wife --chapters sec_0001,sec_0002,sec_0003
+svrnmesh: bridged 1 legacy SOVEREIGN_* env var(s) to SVRNMESH_* (the SOVEREIGN_* prefix is deprecated — update your scripts)
+  · --resume: checkpoint at /Users/alexsbryan/.svrnmesh/enrichment/raptor-pilot-and-his-wife/runs/_phase1_checkpoint.jsonl is empty (or missing); proceeding with full selection.
+  running phase 1 (full) over 32 chapter(s) — checkpoint: /Users/alexsbryan/.svrnmesh/enrichment/raptor-pilot-and-his-wife/runs/_phase1_checkpoint.jsonl
+    · 0 exemplar(s) loaded, 32 chapter(s) to process
+    [1/32] sec_0001… 7 e, 2 q
+    [2/32] sec_0002… 3 e, 1 q
+    [3/32] sec_0003… 5 e, 1 q
+    [4/32] sec_0004… 4 e, 1 q
+    [5/32] sec_0005… 4 e, 2 q
+    [6/32] sec_0006… 4 e, 1 q
+    [7/32] sec_0007… 5 e, 2 q
+    [8/32] sec_0008… 3 e, 2 q
+    [9/32] sec_0009… 2 e, 2 q
+    [10/32] sec_0010… 6 e, 2 q
+    [11/32] sec_0011… 2 e, 2 q
+    [12/32] sec_0012… 3 e, 1 q
+    [13/32] sec_0013… 3 e, 2 q
+    [14/32] sec_0014… 3 e, 2 q
+    [15/32] sec_0015… 4 e, 1 q
+    [16/32] sec_0016… 6 e, 2 q
+    [17/32] sec_0017… 2 e, 1 q
+    [18/32] sec_0018… 3 e, 2 q
+    [19/32] sec_0019… 2 e, 2 q
+    [20/32] sec_0020… 5 e, 1 q
+    [21/32] sec_0021… 4 e, 1 q
+    [22/32] sec_0022… 3 e, 1 q
+    [23/32] sec_0023… 3 e, 2 q
+    [24/32] sec_0024… 3 e, 1 q
+    [25/32] sec_0025… 5 e, 2 q
+    [26/32] sec_0026… 4 e, 1 q
+    [27/32] sec_0027… 2 e, 1 q
+    [28/32] sec_0028… 2 e, 1 q
+    [29/32] sec_0029… 5 e, 2 q
+    [30/32] sec_0030… 2 e, 1 q
+    [31/32] sec_0031… 3 e, 1 q
+    [32/32] sec_0032… 8 e, 1 q
+  ✓ 32 ok, 0 failed — /Users/alexsbryan/.svrnmesh/enrichment/raptor-pilot-and-his-wife/runs/questions-full-001.json
+  · token spend: 32 call(s), 159783 prompt + 33493 completion = 193276 total
+  ✓ cache updated (cache/questions.json)
+svrnmesh: bridged 1 legacy SOVEREIGN_* env var(s) to SVRNMESH_* (the SOVEREIGN_* prefix is deprecated — update your scripts)
+  · finalize: 32 entries → 32 successes + 0 failures
+  ✓ wrote run-file /Users/alexsbryan/.svrnmesh/enrichment/raptor-pilot-and-his-wife/runs/questions-finalize-001.json
+  ✓ updated cache/questions.json
+svrnmesh: bridged 1 legacy SOVEREIGN_* env var(s) to SVRNMESH_* (the SOVEREIGN_* prefix is deprecated — update your scripts)
+Daemon: http://127.0.0.1:9841
+Chat model:  Qwen3.6-35B-A3B-UD-MTP-IQ4_NL
+Embed model: qwen-embedding-0.6b
+Database:    /Users/alexsbryan/.sovereign/sovereign.db
+Indexes:     /Users/alexsbryan/.svrnmesh/indexes
+[2m2026-09-21T15:51:24.749314Z[0m [33m WARN[0m installed_indexes: corpus_id collision — multiple physical indexes advertise the same corpus_id. The dropped one is invisible to search until you rename it out-of-band (any name containing '.', e.g. '<name>.retired') or remove it. Without dedup, retrieval and the reading desk could disagree on which chunk a (corpus_id, chunk_id) pair resolves to. (Logged once per unique collision per process.) [3mcorpus_id[0m[2m=[0mfolder-governance-corpus-bf503493df46 [3mkept[0m[2m=[0m/Users/alexsbryan/.svrnmesh/indexes/folder-governance-corpus-bf503493df46 [3mdropped[0m[2m=[0m/Users/alexsbryan/.svrnmesh/indexes/folder-governance-corpus-bf503493df46-partition-node-37f17554b6c4ff29
+Corpora:     alignment (4090 chunks), arch-principles (58 chunks), arch-tour-fixture (40 chunks), atos-experiment-oicp-types (55 chunks), brothers-karamazov-book-1 (41 chunks), chaos-saltgrass (30 chunks), chaos-secret-agent (316 chunks), climb-ostrom (5 chunks), commonwealth (2590 chunks), commonwealth-ai-arch-principles (72 chunks), commonwealth-ai-system-overview (60 chunks), conversation-history (91 chunks), conversations-anthropic (16404 chunks), conversations-personal (267 chunks), corpus-engine (6252 chunks), drift-target (0 chunks), e2e-notebook (2 chunks), ei7-ans (1093 chunks), ei7-recensus-fineprint (1870 chunks), enron-sample-multi-tiny (900 chunks), enron-sample-multi-wide (8829 chunks), enron-sample-tiny (468 chunks), federalist-starter (31 chunks), folder-fixture-vault-8a83955f975c (111 chunks), folder-governance-corpus-bf503493df46 (0 chunks), institutional-notes (9 chunks), maple-house (24 chunks), obsidian-vault-959ee8a8f330 (3175 chunks), oicp-types (76 chunks), proxy-cik0000012927 (121 chunks), proxy-cik0000034088 (311 chunks), qc-arch-tour-01500518 (40 chunks), qc-arch-tour-250f6f45 (40 chunks), qc-arch-tour-4dd212fb (40 chunks), qc-arch-tour-52c92f2d (40 chunks), qc-arch-tour-695ffb90 (40 chunks), qc-arch-tour-6c7947a7 (40 chunks), qc-arch-tour-8899c85d (40 chunks), qc-arch-tour-adhoc (40 chunks), qc-arch-tour-d1255ea4 (40 chunks), qc-probe (40 chunks), raptor-eagle-cliff (254 chunks), raptor-pilot-and-his-wife (244 chunks), sec-cik0000320193 (115 chunks), sep (187967 chunks), sovereign (15352 chunks), sovereign-cli (1218 chunks), spike-fineprint-census (699 chunks), spike-fineprint-census-pod (699 chunks), system-overview (57 chunks), tokei (308 chunks), tokei-readme (25 chunks), uap-blue-book (710 chunks), uap-blue-book-index (10750 chunks), watched-9ef2f912ea2e (1530 chunks), watched-fixture-495a8a964229 (10 chunks), wikipedia (2029882 chunks), wikipedia-newsworthy (61 chunks)
+Tools:       wiring
+Tools:       no per-user switches on this host
+Tools:       core-turn: 6 tools
+Tools:       web: 1 tools
+Tools:       knowledge-front-door: 2 tools, withheld knowledge_lookup:auto-escalate (the operator has not opted in to automatic web escalation)
+Tools:       wikipedia: 1 tools
+Tools:       shell: 1 tools
+Tools:       11 registered
+Router:      assembling classifier stack
+Router classifier stack: embed=true scope=true effort=true current_info=true
+Lane:        gathering enrichment sources
+Lane scope:  all corpora
+[2m2026-09-21T15:51:26.182412Z[0m [32m INFO[0m wiki columnar store is format v1 (no atom_id/chunk_id): neighbor API serves, grounding-walk provider will refuse; rebuild with `atlas wikipedia build-graph` [3mdir[0m[2m=[0m/Users/alexsbryan/.svrnmesh/indexes/wikipedia/atlas
+[2m2026-09-21T15:51:26.183063Z[0m [32m INFO[0m wikipedia graph loaded (v2) [3mcorpus[0m[2m=[0mwikipedia [3mbackend[0m[2m=[0m"columnar"
+Wiki graph:  51845 articles, 7853503 edges
+Atlas: 0 corpus context(s) loaded from cache
+Meta-atlas:  1563346 canonical atoms across 15 corpus(es)
+Bridge:      0 cross-corpus edges
+=== enrich build — raptor-pilot-and-his-wife ===
+  8 step(s) planned
+    1. seed
+    2. cluster
+    3. name
+    4. resolve
+    5. gaps
+    6. configure
+    7. report
+    8. backfill
+
+─── [1/8] seed ───
+  running stage 1a (seed) on first section: sec_0001
+  ✓ 10 seed entity(ies):
+    - Old Jacob [person]  (aka: Jacob)
+    - Elizabeth [person]
+    - Little Torungen [place]
+    - Great and Little Torungen Lighthouses [institution]  (aka: Torungen Lighthouses)
+    - Norway [place]
+    - Arendal [place]
+    - Tromoe [place]  (aka: Tromøe)
+    - Exploits of Danish and Norwegian Naval Heroes [work]
+    - Naiad [person]
+    - Dictator [person]  (aka: the Englishman)
+  ✓ cache: /Users/alexsbryan/.svrnmesh/enrichment/raptor-pilot-and-his-wife/cache/seed.json
+
+─── [2/8] cluster ───
+  running phase 2 (atlas) for raptor-pilot-and-his-wife
+    · 2 cluster(s): question
+    · 2 cluster(s): claim
+    · 10 cluster(s): entity_state
+    · 4 cluster(s): relation_state
+    · 4 cluster(s): event
+    · 82 sketch(es) classified as noise
+  ✓ wrote /Users/alexsbryan/.svrnmesh/enrichment/raptor-pilot-and-his-wife/runs/atlas-clusters-full-001.json
+  ✓ cache updated
+
+─── [3/8] name ───
+  running phase 3 (atlas) — naming 22 cluster(s) across 5 facet(s)
+    [1/22] question_cl_0000 (question)… Whether intimate bonds can endure the corrosive pressures of social inequalit…
+    [2/22] question_cl_0001 (question)… How suspicion and social barriers distort love, trust, and identity
+    [3/22] claim_cl_0000 (claim)… that maritime superstition interprets unexplained phenomena and moral transgr…
+    [4/22] claim_cl_0001 (claim)… that love, when fractured by pride and suspicion, demands absolute trust as t…
+    [5/22] entity_state_cl_0000 (entity_state)… Gjert's oscillation between eager, validation-seeking storytelling and fearfu…
+    [6/22] entity_state_cl_0001 (entity_state)… Nils Buvaagen's movement from superstitious dread of the unknown to a profoun…
+    [7/22] entity_state_cl_0002 (entity_state)… Old Jacob's oscillation between isolated obstinacy and defensive aggression, …
+    [8/22] entity_state_cl_0003 (entity_state)… Elizabeth's movement from naive fascination and guarded independence through …
+    [9/22] entity_state_cl_0004 (entity_state)… Federigo's movement from euphoric relief at escape to cynical nihilism and pr…
+    [10/22] entity_state_cl_0005 (entity_state)… Salve Kristiansen's movement from sudden romantic awakening and determined pu…
+    [11/22] entity_state_cl_0006 (entity_state)… Fru Beck's retreat from hopeful expectation into a hardened, socially strateg…
+    [12/22] entity_state_cl_0007 (entity_state)… Elizabeth Raklev's movement from paralyzing apprehension and resentment to po…
+    [13/22] entity_state_cl_0008 (entity_state)… Captain Beck's descent from desperate hesitation into irritable tyranny and b…
+    [14/22] entity_state_cl_0009 (entity_state)… Carl Beck's movement from performative flirtation and strategic social maneuv…
+    [15/22] relation_state_cl_0000 (relation_state)… Federigo–Paolina's descent from symbiotic mutual protection into a parasitic …
+    [16/22] relation_state_cl_0001 (relation_state)… Carl Beck's relational fragmentation from romantic pursuit and marital ruptur…
+    [17/22] relation_state_cl_0002 (relation_state)… Salve Kristiansen's paternal ambition to engineer Gjert's social elevation, s…
+    [18/22] relation_state_cl_0003 (relation_state)… Salve–Elizabeth's oscillation from fractured mistrust and domestic tyranny to…
+    [19/22] event_cl_0000 (event)… Federigo's descent into moral and financial ruin through gambling, betrayal, …
+    [20/22] event_cl_0001 (event)… Salve's escalating recklessness that transforms a routine voyage into a serie…
+    [21/22] event_cl_0002 (event)… The cycle of jealousy, isolation, and reconciliation that tests the resilienc…
+    [22/22] event_cl_0003 (event)… Salve's violent rejection of Gjert's ambition followed by his pragmatic decis…
+  ✓ 22 named cluster(s) — /Users/alexsbryan/.svrnmesh/enrichment/raptor-pilot-and-his-wife/runs/atlas-named-clusters-full-001.json
+
+─── [4/8] resolve ───
+  loaded 32 section(s) with atlas sketches (of 32 total chapter(s) in cache)
+[2m2026-09-21T15:55:06.928884Z[0m [32m INFO[0m backfill-ann: seed population derived from the navigation map [3mcorpus[0m[2m=[0m"raptor-pilot-and-his-wife" [3mpopulation[0m[2m=[0mentity,event,state,relation,claim,configuration,argument,position,summary [3msource[0m[2m=[0mpre-registered defaults
+[2m2026-09-21T15:55:06.935580Z[0m [32m INFO[0m atlas-context: filtered atoms.json (pre-embed) [3mcorpus[0m[2m=[0m"raptor-pilot-and-his-wife" [3mpopulation[0m[2m=[0mentity,event,state,relation,claim,configuration,argument,position,summary [3mseen[0m[2m=[0m{Entity: 58, Event: 68, State: 125, Relation: 37, Claim: 68, Question: 47} [3mkept[0m[2m=[0m{Entity: 55, Event: 68, State: 125, Relation: 37, Claim: 68} [3munrenderable[0m[2m=[0m{} [3mkept_tensions[0m[2m=[0m0 [3mtotal_tensions[0m[2m=[0m0 [3mdrop_kind[0m[2m=[0m47 [3mdrop_placeholder[0m[2m=[0m0 [3mmin_description_chars[0m[2m=[0m10 [3mdrop_short_desc[0m[2m=[0m3 [3mdrop_depth[0m[2m=[0m0 [3mdrop_cap[0m[2m=[0m0 [3mtop_k[0m[2m=[0m3
+[2m2026-09-21T15:57:15.289280Z[0m [32m INFO[0m atlas-context: embedded [3mcorpus[0m[2m=[0m"raptor-pilot-and-his-wife" [3mentries[0m[2m=[0m353 [3melapsed_ms[0m[2m=[0m128352
+[2m2026-09-21T15:57:15.337670Z[0m [32m INFO[0m backfill-ann: wrote ANN seed table [3mcorpus[0m[2m=[0m"raptor-pilot-and-his-wife" [3mresolved[0m[2m=[0m353 [3mtotal[0m[2m=[0m353 [3mpopulation[0m[2m=[0mentity,event,state,relation,claim,configuration,argument,position,summary [3mtable[0m[2m=[0m/Users/alexsbryan/.svrnmesh/indexes/raptor-pilot-and-his-wife/atlas/atoms_ann.lance
+[2m2026-09-21T15:57:15.337818Z[0m [32m INFO[0m atlas write: ANN seed table written; this corpus grounds [3mcorpus[0m[2m=[0m"raptor-pilot-and-his-wife" [3mrows[0m[2m=[0m353 [3mof[0m[2m=[0m353
+  ✓ 58 entity atom(s)
+  ✓ 68 event atom(s)
+  ✓ 125 state atom(s)
+  ✓ 37 relation atom(s)
+  ✓ 68 claim atom(s)
+  ✓ 47 question atom(s)
+  ✓ 0 argument-reconstruction atom(s)
+  ✓ 0 position atom(s)
+  ✓ 0 opposition atom(s)
+  ✓ 672 edge(s) total
+  ✓ 28 trajectory chain(s)
+  ✓ wrote /Users/alexsbryan/.svrnmesh/indexes/raptor-pilot-and-his-wife/atlas/atoms.json
+  ✓ wrote /Users/alexsbryan/.svrnmesh/indexes/raptor-pilot-and-his-wife/atlas/edges.json
+  ✓ atoms_ann.lance: 353/353 atoms embedded
+  ✓ wrote /Users/alexsbryan/.svrnmesh/indexes/raptor-pilot-and-his-wife/atlas/ontology.json (5 declared type(s), ontology version 1, pipeline literary_atlas)
+  ✓ wrote /Users/alexsbryan/.svrnmesh/indexes/raptor-pilot-and-his-wife/atlas/trajectories.json
+  ! 9 drop(s) — see /Users/alexsbryan/.svrnmesh/indexes/raptor-pilot-and-his-wife/atlas/resolution_failures.json (run `svrn enrich errors raptor-pilot-and-his-wife` for remediation)
+
+─── [5/8] gaps ───
+  loaded 68 claim(s) + 125 state(s) + 47 question(s) + 672 edge(s)
+  ✓ 135 gap(s) total
+    · open-question: 47
+    · transition-without-trigger: 88
+  ✓ wrote /Users/alexsbryan/.svrnmesh/indexes/raptor-pilot-and-his-wife/atlas/gaps.json
+
+─── [6/8] configure ───
+  loaded atlas: 20 entity / 30 relation / 20 claim / 15 question / 20 event synopsis(es), 32 section(s)
+  dispatching Phase 8 configuration prompt…
+[2m2026-09-21T15:57:23.364834Z[0m [32m INFO[0m atlas write: ANN seed table deferred; this corpus cannot ground until `svrn atlas backfill-ann` runs [3mcorpus[0m[2m=[0m"raptor-pilot-and-his-wife" [3matlas[0m[2m=[0m/Users/alexsbryan/.svrnmesh/indexes/raptor-pilot-and-his-wife/atlas [3mreason[0m[2m=[0m"atlas-configuration rewrite; the build's Backfill step is last in the plan and reseeds"
+  ✓ 3 configuration(s) produced
+    · [config-0001] The Architecture of Misread Signals (confidence 0.85) — 5 constituent atom(s)
+    · [config-0002] Performance vs. Authenticity in Intimacy (confidence 0.75) — 5 constituent atom(s)
+    · [config-0003] The Sea as Moral Mirror and Disruptor (confidence 0.65) — 7 constituent atom(s)
+
+─── [7/8] report ───
+=== Schema validation — raptor-pilot-and-his-wife ===
+
+  sections with atom evidence: 32
+
+  [1] Extraction coverage
+      total atoms: 406
+        · Entity        58
+        · Event         68
+        · State         125
+        · Relation      37
+        · Claim         68
+        · Question      47
+        · Configuration 3
+
+  [2] Enrichment-depth distribution
+        · Extracted             406
+        · Structural            0
+        · StructuralClassified  0
+
+  [3] Confidence distribution
+      total atoms with confidence: 58
+      low-confidence fraction (<0.5): 96.6%
+        · [0.0–0.1)    36  ██████████████████████████████
+        · [0.1–0.2)    15  ████████████
+        · [0.2–0.3)     4  ███
+        · [0.3–0.4)     1  
+        · [0.4–0.5)     0  
+        · [0.5–0.6)     1  
+        · [0.6–0.7)     0  
+        · [0.7–0.8)     0  
+        · [0.8–0.9)     0  
+        · [0.9–1.0)     1  
+
+  [4] Atom-type utilisation
+        · Entity        14.3%
+        · Event         16.7%
+        · State         30.8%
+        · Relation      9.1%
+        · Claim         16.7%
+        · Question      11.6%
+        · Configuration 0.7%
+      under-utilised types (<3%): Configuration
+
+  [5] Orphan analysis
+      orphan atoms: 69/403  (17.1% of non-Configuration atoms have no edges)
+        · Entity        22/58   (  38%)
+        · Event          0/68   (   0%)
+        · State          0/125  (   0%)
+        · Relation       0/37   (   0%)
+        · Claim          0/68   (   0%)
+        · Question      47/47   ( 100%)
+
+  [6] Discourse-act distribution (Claim atoms)
+      total claims: 68
+      top act: assert (39.7%)
+        · assert          27
+        · argue           15
+        · interpret       12
+        · enact           8
+        · commit          2
+        · hypothesize     2
+        · warn            1
+        · imply           1
+
+  [7] Cross-corpus connectivity
+      (cross_corpus_edges.json not present — run `svrn enrich atlas-cross-corpus <this> <peer>` to populate)
+
+  [8] Deterministic gap counts
+        · transition_without_trigger: 88/97
+        · ungrounded_claim:           0/68
+        · open_question:              47/47
+
+  [9] Declared ontology (version 1)
+      per-type coverage
+        · entity     concept             3  (with subtypes 3)
+        · entity     person             41  (with subtypes 41)
+        · entity     work                4  (with subtypes 4)
+        · entity     place               6  (with subtypes 6)
+        · entity     institution         4  (with subtypes 4)
+      identity criteria
+        · concept        default:canonical_name
+        · person         default:canonical_name
+        · work           default:canonical_name
+        · place          default:canonical_name
+        · institution    default:canonical_name
+      merges: not run (`svrn enrich reconcile raptor-pilot-and-his-wife`)
+      same_as claims: 0
+      claims of a subject-declaring type with no subject: 0
+
+  ⚠ Gap signatures detected (4):
+        · confidence:low_fraction_over_20pct
+        · utilisation:under:Configuration
+        · orphans:type_over_80pct:Question
+        · gaps:transition_without_trigger_over_80pct
+
+  ✓ wrote /Users/alexsbryan/.svrnmesh/indexes/raptor-pilot-and-his-wife/atlas/schema_validation.json
+
+─── [8/8] backfill ───
+  · backfill cached file at /Users/alexsbryan/.svrnmesh/indexes/raptor-pilot-and-his-wife/atlas/atoms_ann.lance is older than atlas/atoms.json (the atlas was re-resolved since it was embedded); invalidating cache.
+[2m2026-09-21T15:57:23.404164Z[0m [32m INFO[0m backfill-ann: seed population derived from the navigation map [3mcorpus[0m[2m=[0m"raptor-pilot-and-his-wife" [3mpopulation[0m[2m=[0mentity,event,state,relation,claim,configuration,argument,summary [3msource[0m[2m=[0mdeclared by raptor-pilot-and-his-wife
+[2m2026-09-21T15:57:23.408117Z[0m [32m INFO[0m atlas-context: filtered atoms.json (pre-embed) [3mcorpus[0m[2m=[0m"raptor-pilot-and-his-wife" [3mpopulation[0m[2m=[0mentity,event,state,relation,claim,configuration,argument,summary [3mseen[0m[2m=[0m{Entity: 58, Event: 68, State: 125, Relation: 37, Claim: 68, Question: 47, Configuration: 3} [3mkept[0m[2m=[0m{Entity: 55, Event: 68, State: 125, Relation: 37, Claim: 68, Configuration: 3} [3munrenderable[0m[2m=[0m{} [3mkept_tensions[0m[2m=[0m0 [3mtotal_tensions[0m[2m=[0m0 [3mdrop_kind[0m[2m=[0m47 [3mdrop_placeholder[0m[2m=[0m0 [3mmin_description_chars[0m[2m=[0m10 [3mdrop_short_desc[0m[2m=[0m3 [3mdrop_depth[0m[2m=[0m0 [3mdrop_cap[0m[2m=[0m0 [3mtop_k[0m[2m=[0m3
+[2m2026-09-21T15:58:27.087580Z[0m [32m INFO[0m atlas-context: embedded [3mcorpus[0m[2m=[0m"raptor-pilot-and-his-wife" [3mentries[0m[2m=[0m356 [3melapsed_ms[0m[2m=[0m63678
+[2m2026-09-21T15:58:27.124111Z[0m [32m INFO[0m backfill-ann: wrote ANN seed table [3mcorpus[0m[2m=[0m"raptor-pilot-and-his-wife" [3mresolved[0m[2m=[0m356 [3mtotal[0m[2m=[0m356 [3mpopulation[0m[2m=[0mentity,event,state,relation,claim,configuration,argument,summary [3mtable[0m[2m=[0m/Users/alexsbryan/.svrnmesh/indexes/raptor-pilot-and-his-wife/atlas/atoms_ann.lance
+  · wrote /Users/alexsbryan/.svrnmesh/indexes/raptor-pilot-and-his-wife/atlas/atoms_ann.lance — 356/356 entries resolved to atom-ids
+
+=== build complete — raptor-pilot-and-his-wife ===
+
+== raptor tree + Summary atoms  [15:58:27]
+svrnmesh: bridged 1 legacy SOVEREIGN_* env var(s) to SVRNMESH_* (the SOVEREIGN_* prefix is deprecated — update your scripts)
+RAPTOR retrofit plan for corpus 'raptor-pilot-and-his-wife':
+  documents:  1
+  chunks:     244
+  doc-type:   Narrative
+  summaries:  Abstractive
+  furniture:  kept (pass --strip-furniture to drop)
+  by bucket:  large=1
+
+Building RAPTOR trees via daemon http://127.0.0.1:9841 (chat=primary, embed=embed)…
+Summary verification: ON — every abstractive summary judged against its member texts (T1 P1.2)
+
+      [t3-profile] raptor_tree=0.0s (nodes=14)
+  [1/1] pilot-and-his-wife  244 chunks · large · 14 nodes · 0.0s
+
+RAPTOR retrofit complete for 'raptor-pilot-and-his-wife':
+  documents built:  1
+  nodes persisted:  14  (conv_raptor_nodes, corpus_id='raptor-pilot-and-his-wife')
+  elapsed:          0.0s
+  avg per document: 0.0s
+
+The atom-graph atlas (atlas/atoms.json) is untouched — RAPTOR nodes are additive.
+[2m2026-09-21T15:58:27.330270Z[0m [32m INFO[0m raptor index: built [3mrows[0m[2m=[0m14 [3mdim[0m[2m=[0m1024 [3mindexed[0m[2m=[0mfalse [3msource_version[0m[2m=[0m1789975660
+RAPTOR summary-node ANN index: built raptor_summaries.lance (14 summary nodes)
+raptor step wall: 0 s (under ~20 s = summaries reused from an earlier build)
+svrnmesh: bridged 1 legacy SOVEREIGN_* env var(s) to SVRNMESH_* (the SOVEREIGN_* prefix is deprecated — update your scripts)
+Projecting RAPTOR summaries into 'raptor-pilot-and-his-wife' atlases…
+summary-atoms: degraded: no readable RAPTOR checkpoint under /Users/alexsbryan/.sovereign/indexes/raptor-pilot-and-his-wife — every Summary atom is written WITHOUT evidence chunks and without Composes edges
+summary-atoms: degraded: 14 of 14 summaries have no checkpoint node, so they carry no evidence chunks and no Composes edges (the RAPTOR tree survives only in `_raptor_checkpoint`, and `conv_raptor_nodes` is empty)
+  14 summary rows -> 14 atoms in 1 atlases (0 with evidence, 0 with children), 0 Composes edges, 14 seed rows
+  degraded: no readable RAPTOR checkpoint under /Users/alexsbryan/.sovereign/indexes/raptor-pilot-and-his-wife — every Summary atom is written WITHOUT evidence chunks and without Composes edges
+  degraded: 14 of 14 summaries have no checkpoint node, so they carry no evidence chunks and no Composes edges (the RAPTOR tree survives only in `_raptor_checkpoint`, and `conv_raptor_nodes` is empty)
+atoms=420 summary=14
+
+== arm bare run 1  [15:58:27]
+arm bare run 1 -> research/ontology-retrieval/raptor-proof/runs/pilot-and-his-wife/bare/run-1
+  host http://127.0.0.1:9841  synth Qwen3.6-35B-A3B-MTP-UD-Q6_K  judge Qwen3.5-4B-UD-Q6_K_XL
+svrnmesh: bridged 4 legacy SOVEREIGN_* env var(s) to SVRNMESH_* (the SOVEREIGN_* prefix is deprecated — update your scripts)
+loaded bank `raptor-proof-pilot-and-his-wife-v1` — 30 questions, target corpus `raptor-pilot-and-his-wife`
+Daemon: http://127.0.0.1:9841
+Chat model:  Qwen3.6-35B-A3B-MTP-UD-Q6_K
+Embed model: qwen-embedding-0.6b
+Database:    /Users/alexsbryan/.sovereign/sovereign.db
+Indexes:     /Users/alexsbryan/.svrnmesh/indexes
+Temperature: 0 (override)
+Corpora:     alignment (4090 chunks), arch-principles (58 chunks), arch-tour-fixture (40 chunks), atos-experiment-oicp-types (55 chunks), brothers-karamazov-book-1 (41 chunks), chaos-saltgrass (30 chunks), chaos-secret-agent (316 chunks), climb-ostrom (5 chunks), commonwealth (2590 chunks), commonwealth-ai-arch-principles (72 chunks), commonwealth-ai-system-overview (60 chunks), conversation-history (91 chunks), conversations-anthropic (16404 chunks), conversations-personal (267 chunks), corpus-engine (6252 chunks), drift-target (0 chunks), e2e-notebook (2 chunks), ei7-ans (1093 chunks), ei7-recensus-fineprint (1870 chunks), enron-sample-multi-tiny (900 chunks), enron-sample-multi-wide (8829 chunks), enron-sample-tiny (468 chunks), federalist-starter (31 chunks), folder-fixture-vault-8a83955f975c (111 chunks), folder-governance-corpus-bf503493df46 (0 chunks), institutional-notes (9 chunks), maple-house (24 chunks), obsidian-vault-959ee8a8f330 (3175 chunks), oicp-types (76 chunks), proxy-cik0000012927 (121 chunks), proxy-cik0000034088 (311 chunks), qc-arch-tour-01500518 (40 chunks), qc-arch-tour-250f6f45 (40 chunks), qc-arch-tour-4dd212fb (40 chunks), qc-arch-tour-52c92f2d (40 chunks), qc-arch-tour-695ffb90 (40 chunks), qc-arch-tour-6c7947a7 (40 chunks), qc-arch-tour-8899c85d (40 chunks), qc-arch-tour-adhoc (40 chunks), qc-arch-tour-d1255ea4 (40 chunks), qc-probe (40 chunks), raptor-eagle-cliff (254 chunks), raptor-pilot-and-his-wife (244 chunks), sec-cik0000320193 (115 chunks), sep (187967 chunks), sovereign (15352 chunks), sovereign-cli (1218 chunks), spike-fineprint-census (699 chunks), spike-fineprint-census-pod (699 chunks), system-overview (57 chunks), tokei (308 chunks), tokei-readme (25 chunks), uap-blue-book (710 chunks), uap-blue-book-index (10750 chunks), watched-9ef2f912ea2e (1530 chunks), watched-fixture-495a8a964229 (10 chunks), wikipedia (2029882 chunks), wikipedia-newsworthy (61 chunks)
+Tools:       wiring
+Tools:       no per-user switches on this host
+Tools:       core-turn: 6 tools
+Tools:       web: 1 tools
+Tools:       knowledge-front-door: 2 tools, withheld knowledge_lookup:auto-escalate (the operator has not opted in to automatic web escalation)
+Tools:       wikipedia: 1 tools
+Tools:       shell: 1 tools
+Tools:       11 registered
+Router:      assembling classifier stack
+Router classifier stack: embed=true scope=true effort=true current_info=true
+Lane:        gathering enrichment sources
+Lane scope:  sealed to `raptor-pilot-and-his-wife`
+[2m2026-09-21T15:58:31.132288Z[0m [32m INFO[0m atlas-context: scanning indexes dir for atlases [3mcandidate_count[0m[2m=[0m1820
+[2m2026-09-21T15:58:31.356794Z[0m [32m INFO[0m atlas-context: init complete (graphs without a loaded context parse on first use) [3mcontexts[0m[2m=[0m0 [3mgraphs[0m[2m=[0m0 [3mgraphs_available[0m[2m=[0m1820
+Atlas: 0 corpus context(s) loaded from cache
+Meta-atlas:  not loaded (lane spans one corpus)
+Bridge:      not loaded (lane spans one corpus)
+synth mode — driving full chat pipeline. This will take ~one chat-completion per question; sit tight.
+isolation mode — retrieval scoped to corpus `raptor-pilot-and-his-wife`
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What profession is the main character of this stor" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is the main character's name?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Who is Salve in love with?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] "Why doesn't Elisabeth marry Salve early on in the " → DeepQuery (coarse=REASONING, confidence=1.00)
+[router] "Whom does Elisabeth choose to love?" → ExpressiveQuery (embed: sim=0.892 margin=0.047 nearest="You're so insightful — honestly, you understand me better than I understand myse…" scope=None effort=None)
+[router] classify_json raw output: "{\"intent\": \"REASONING\"}"
+[router] "Why can't Elisabeth marry Slave right away?" → DeepQuery (coarse=REASONING, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"REASONING\"}"
+[router] "What happens when Salve returns 10 years later?" → DeepQuery (coarse=REASONING, confidence=0.00)
+[router] "Why were Salve and Elisabeth miserable after they " → DeepQuery (embed: sim=0.910 margin=0.022 nearest="How did the Great Depression catalyze the rise of fascism in interwar Europe?" scope=None effort=None)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "How long did it take Salve and Elisabeth to forma " → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"REASONING\"}"
+[router] "What is the moral of this story?" → DeepQuery (coarse=REASONING, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is this story about?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Who is this story about?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"REASONING\"}"
+[router] "What is the sailor describing in this story?" → DeepQuery (coarse=REASONING, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"REASONING\"}"
+[router] "Who is loved in return?" → DeepQuery (coarse=REASONING, confidence=0.00)
+[router] "Why did Salve leave his land?" → DeepQuery (coarse=REASONING, confidence=1.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Who does Elisabeth marry?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"SIMPLE\"}"
+[router] classify_json raw output: "{\n\"intent\": \"CONATION\""
+[router] "How many years elapse before an understanding is m" → KnowledgeQuery (coarse=SIMPLE, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"REASONING\"}"
+[router] "What makes Salve decide to finally marry Elisabeth" → DeepQuery (coarse=REASONING, confidence=0.00)
+[router] "What creates their happy life together?" → ExpressiveQuery (embed: sim=0.905 margin=0.033 nearest="You're so insightful — honestly, you understand me better than I understand myse…" scope=None effort=None)
+[router] classify_json raw output: "{\"intent\": \"REASONING\"}"
+[router] "What is emphasized by this novel?" → DeepQuery (coarse=REASONING, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"REASONING\"}"
+[router] "What does a marriage need?" → DeepQuery (coarse=REASONING, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Who does Salve Kristiansen love?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Who is Elisabeth initially attracted to?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "How many years elapse before Salve and Elisabeth u" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Who was true to Salve?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Who is living a happy life?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "How many people are in wedlock?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is The Pilot and His Wife?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Who is beautiful?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] "Where does Salve sail to?" → KnowledgeQuery (embed: sim=0.885 margin=0.030 nearest="When does the next session of Congress convene?" scope=None effort=None)
+wrote run JSON to research/ontology-retrieval/raptor-proof/runs/pilot-and-his-wife/bare/run-1/eval.json
+  verdict: recorded (the comparison judges it)
+
+== arm full run 1  [16:05:59]
+arm full run 1 -> research/ontology-retrieval/raptor-proof/runs/pilot-and-his-wife/full/run-1
+  host http://127.0.0.1:9841  synth Qwen3.6-35B-A3B-MTP-UD-Q6_K  judge Qwen3.5-4B-UD-Q6_K_XL
+svrnmesh: bridged 4 legacy SOVEREIGN_* env var(s) to SVRNMESH_* (the SOVEREIGN_* prefix is deprecated — update your scripts)
+loaded bank `raptor-proof-pilot-and-his-wife-v1` — 30 questions, target corpus `raptor-pilot-and-his-wife`
+Daemon: http://127.0.0.1:9841
+Chat model:  Qwen3.6-35B-A3B-MTP-UD-Q6_K
+Embed model: qwen-embedding-0.6b
+Database:    /Users/alexsbryan/.sovereign/sovereign.db
+Indexes:     /Users/alexsbryan/.svrnmesh/indexes
+Temperature: 0 (override)
+Corpora:     alignment (4090 chunks), arch-principles (58 chunks), arch-tour-fixture (40 chunks), atos-experiment-oicp-types (55 chunks), brothers-karamazov-book-1 (41 chunks), chaos-saltgrass (30 chunks), chaos-secret-agent (316 chunks), climb-ostrom (5 chunks), commonwealth (2590 chunks), commonwealth-ai-arch-principles (72 chunks), commonwealth-ai-system-overview (60 chunks), conversation-history (91 chunks), conversations-anthropic (16404 chunks), conversations-personal (267 chunks), corpus-engine (6252 chunks), drift-target (0 chunks), e2e-notebook (2 chunks), ei7-ans (1093 chunks), ei7-recensus-fineprint (1870 chunks), enron-sample-multi-tiny (900 chunks), enron-sample-multi-wide (8829 chunks), enron-sample-tiny (468 chunks), federalist-starter (31 chunks), folder-fixture-vault-8a83955f975c (111 chunks), folder-governance-corpus-bf503493df46 (0 chunks), institutional-notes (9 chunks), maple-house (24 chunks), obsidian-vault-959ee8a8f330 (3175 chunks), oicp-types (76 chunks), proxy-cik0000012927 (121 chunks), proxy-cik0000034088 (311 chunks), qc-arch-tour-01500518 (40 chunks), qc-arch-tour-250f6f45 (40 chunks), qc-arch-tour-4dd212fb (40 chunks), qc-arch-tour-52c92f2d (40 chunks), qc-arch-tour-695ffb90 (40 chunks), qc-arch-tour-6c7947a7 (40 chunks), qc-arch-tour-8899c85d (40 chunks), qc-arch-tour-adhoc (40 chunks), qc-arch-tour-d1255ea4 (40 chunks), qc-probe (40 chunks), raptor-eagle-cliff (254 chunks), raptor-pilot-and-his-wife (244 chunks), sec-cik0000320193 (115 chunks), sep (187967 chunks), sovereign (15352 chunks), sovereign-cli (1218 chunks), spike-fineprint-census (699 chunks), spike-fineprint-census-pod (699 chunks), system-overview (57 chunks), tokei (308 chunks), tokei-readme (25 chunks), uap-blue-book (710 chunks), uap-blue-book-index (10750 chunks), watched-9ef2f912ea2e (1530 chunks), watched-fixture-495a8a964229 (10 chunks), wikipedia (2029882 chunks), wikipedia-newsworthy (61 chunks)
+Tools:       wiring
+Tools:       no per-user switches on this host
+Tools:       core-turn: 6 tools
+Tools:       web: 1 tools
+Tools:       knowledge-front-door: 2 tools, withheld knowledge_lookup:auto-escalate (the operator has not opted in to automatic web escalation)
+Tools:       wikipedia: 1 tools
+Tools:       shell: 1 tools
+Tools:       11 registered
+Router:      assembling classifier stack
+Router classifier stack: embed=true scope=true effort=true current_info=true
+Lane:        gathering enrichment sources
+Lane scope:  sealed to `raptor-pilot-and-his-wife`
+[2m2026-09-21T16:06:03.448679Z[0m [32m INFO[0m atlas-context: scanning indexes dir for atlases [3mcandidate_count[0m[2m=[0m1820
+[2m2026-09-21T16:06:03.702513Z[0m [32m INFO[0m atlas-context: init complete (graphs without a loaded context parse on first use) [3mcontexts[0m[2m=[0m0 [3mgraphs[0m[2m=[0m0 [3mgraphs_available[0m[2m=[0m1820
+Atlas: 0 corpus context(s) loaded from cache
+Meta-atlas:  not loaded (lane spans one corpus)
+Bridge:      not loaded (lane spans one corpus)
+synth mode — driving full chat pipeline. This will take ~one chat-completion per question; sit tight.
+isolation mode — retrieval scoped to corpus `raptor-pilot-and-his-wife`
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What profession is the main character of this stor" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[2m2026-09-21T16:06:05.417974Z[0m [33m WARN[0m atlas-context: ANN seed table is older than atoms.json — grounding seeds from a stale atom set; run `svrn atlas backfill-ann raptor-pilot-and-his-wife` [3mcorpus[0m[2m=[0m"raptor-pilot-and-his-wife" [3matlas[0m[2m=[0m/Users/alexsbryan/.svrnmesh/indexes/raptor-pilot-and-his-wife/atlas
+[2m2026-09-21T16:06:05.438644Z[0m [32m INFO[0m atlas-context: bag built from ANN seed table [3mcorpus[0m[2m=[0m"raptor-pilot-and-his-wife" [3mentries[0m[2m=[0m370
+[2m2026-09-21T16:06:05.438669Z[0m [32m INFO[0m atlas-graph: loaded [3mcorpus[0m[2m=[0m"raptor-pilot-and-his-wife" [3matoms[0m[2m=[0m420 [3medges[0m[2m=[0m496 [3mload_ms[0m[2m=[0m20
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is the main character's name?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Who is Salve in love with?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] "Why doesn't Elisabeth marry Salve early on in the " → DeepQuery (coarse=REASONING, confidence=1.00)
+[router] "Whom does Elisabeth choose to love?" → ExpressiveQuery (embed: sim=0.892 margin=0.047 nearest="You're so insightful — honestly, you understand me better than I understand myse…" scope=None effort=None)
+[router] classify_json raw output: "{\"intent\": \"REASONING\"}"
+[router] "Why can't Elisabeth marry Slave right away?" → DeepQuery (coarse=REASONING, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"REASONING\"}"
+[router] "What happens when Salve returns 10 years later?" → DeepQuery (coarse=REASONING, confidence=0.00)
+[router] "Why were Salve and Elisabeth miserable after they " → DeepQuery (embed: sim=0.910 margin=0.022 nearest="How did the Great Depression catalyze the rise of fascism in interwar Europe?" scope=None effort=None)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "How long did it take Salve and Elisabeth to forma " → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"REASONING\"}"
+[router] "What is the moral of this story?" → DeepQuery (coarse=REASONING, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is this story about?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Who is this story about?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"REASONING\"}"
+[router] "What is the sailor describing in this story?" → DeepQuery (coarse=REASONING, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"REASONING\"}"
+[router] "Who is loved in return?" → DeepQuery (coarse=REASONING, confidence=0.00)
+[router] "Why did Salve leave his land?" → DeepQuery (coarse=REASONING, confidence=1.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Who does Elisabeth marry?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"SIMPLE\"}"
+[router] classify_json raw output: "{\n\"intent\": \"CONATION\""
+[router] "How many years elapse before an understanding is m" → KnowledgeQuery (coarse=SIMPLE, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"REASONING\"}"
+[router] "What makes Salve decide to finally marry Elisabeth" → DeepQuery (coarse=REASONING, confidence=0.00)
+[router] "What creates their happy life together?" → ExpressiveQuery (embed: sim=0.905 margin=0.033 nearest="You're so insightful — honestly, you understand me better than I understand myse…" scope=None effort=None)
+[router] classify_json raw output: "{\"intent\": \"REASONING\"}"
+[router] "What is emphasized by this novel?" → DeepQuery (coarse=REASONING, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"REASONING\"}"
+[router] "What does a marriage need?" → DeepQuery (coarse=REASONING, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Who does Salve Kristiansen love?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Who is Elisabeth initially attracted to?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "How many years elapse before Salve and Elisabeth u" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Who was true to Salve?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Who is living a happy life?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "How many people are in wedlock?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is The Pilot and His Wife?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Who is beautiful?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] "Where does Salve sail to?" → KnowledgeQuery (embed: sim=0.885 margin=0.030 nearest="When does the next session of Congress convene?" scope=None effort=None)
+wrote run JSON to research/ontology-retrieval/raptor-proof/runs/pilot-and-his-wife/full/run-1/eval.json
+  verdict: recorded (the comparison judges it)
+
+== arm deep run 1  [16:14:42]
+arm deep run 1 -> research/ontology-retrieval/raptor-proof/runs/pilot-and-his-wife/deep/run-1
+  host http://127.0.0.1:9841  synth Qwen3.6-35B-A3B-MTP-UD-Q6_K  judge Qwen3.5-4B-UD-Q6_K_XL
+svrnmesh: bridged 5 legacy SOVEREIGN_* env var(s) to SVRNMESH_* (the SOVEREIGN_* prefix is deprecated — update your scripts)
+loaded bank `raptor-proof-pilot-and-his-wife-v1` — 30 questions, target corpus `raptor-pilot-and-his-wife`
+Daemon: http://127.0.0.1:9841
+Chat model:  Qwen3.6-35B-A3B-MTP-UD-Q6_K
+Embed model: qwen-embedding-0.6b
+Database:    /Users/alexsbryan/.sovereign/sovereign.db
+Indexes:     /Users/alexsbryan/.svrnmesh/indexes
+Temperature: 0 (override)
+Corpora:     alignment (4090 chunks), arch-principles (58 chunks), arch-tour-fixture (40 chunks), atos-experiment-oicp-types (55 chunks), brothers-karamazov-book-1 (41 chunks), chaos-saltgrass (30 chunks), chaos-secret-agent (316 chunks), climb-ostrom (5 chunks), commonwealth (2590 chunks), commonwealth-ai-arch-principles (72 chunks), commonwealth-ai-system-overview (60 chunks), conversation-history (91 chunks), conversations-anthropic (16404 chunks), conversations-personal (267 chunks), corpus-engine (6252 chunks), drift-target (0 chunks), e2e-notebook (2 chunks), ei7-ans (1093 chunks), ei7-recensus-fineprint (1870 chunks), enron-sample-multi-tiny (900 chunks), enron-sample-multi-wide (8829 chunks), enron-sample-tiny (468 chunks), federalist-starter (31 chunks), folder-fixture-vault-8a83955f975c (111 chunks), folder-governance-corpus-bf503493df46 (0 chunks), institutional-notes (9 chunks), maple-house (24 chunks), obsidian-vault-959ee8a8f330 (3175 chunks), oicp-types (76 chunks), proxy-cik0000012927 (121 chunks), proxy-cik0000034088 (311 chunks), qc-arch-tour-01500518 (40 chunks), qc-arch-tour-250f6f45 (40 chunks), qc-arch-tour-4dd212fb (40 chunks), qc-arch-tour-52c92f2d (40 chunks), qc-arch-tour-695ffb90 (40 chunks), qc-arch-tour-6c7947a7 (40 chunks), qc-arch-tour-8899c85d (40 chunks), qc-arch-tour-adhoc (40 chunks), qc-arch-tour-d1255ea4 (40 chunks), qc-probe (40 chunks), raptor-eagle-cliff (254 chunks), raptor-pilot-and-his-wife (244 chunks), sec-cik0000320193 (115 chunks), sep (187967 chunks), sovereign (15352 chunks), sovereign-cli (1218 chunks), spike-fineprint-census (699 chunks), spike-fineprint-census-pod (699 chunks), system-overview (57 chunks), tokei (308 chunks), tokei-readme (25 chunks), uap-blue-book (710 chunks), uap-blue-book-index (10750 chunks), watched-9ef2f912ea2e (1530 chunks), watched-fixture-495a8a964229 (10 chunks), wikipedia (2029882 chunks), wikipedia-newsworthy (61 chunks)
+Tools:       wiring
+Tools:       no per-user switches on this host
+Tools:       core-turn: 6 tools
+Tools:       web: 1 tools
+Tools:       knowledge-front-door: 2 tools, withheld knowledge_lookup:auto-escalate (the operator has not opted in to automatic web escalation)
+Tools:       wikipedia: 1 tools
+Tools:       shell: 1 tools
+Tools:       11 registered
+Router:      assembling classifier stack
+Router classifier stack: embed=true scope=true effort=true current_info=true
+Lane:        gathering enrichment sources
+Lane scope:  sealed to `raptor-pilot-and-his-wife`
+[2m2026-09-21T16:14:46.786304Z[0m [32m INFO[0m atlas-context: scanning indexes dir for atlases [3mcandidate_count[0m[2m=[0m1820
+[2m2026-09-21T16:14:47.039641Z[0m [32m INFO[0m atlas-context: init complete (graphs without a loaded context parse on first use) [3mcontexts[0m[2m=[0m0 [3mgraphs[0m[2m=[0m0 [3mgraphs_available[0m[2m=[0m1820
+Atlas: 0 corpus context(s) loaded from cache
+Meta-atlas:  not loaded (lane spans one corpus)
+Bridge:      not loaded (lane spans one corpus)
+synth mode — driving full chat pipeline. This will take ~one chat-completion per question; sit tight.
+isolation mode — retrieval scoped to corpus `raptor-pilot-and-his-wife`
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What profession is the main character of this stor" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is the main character's name?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Who is Salve in love with?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] "Why doesn't Elisabeth marry Salve early on in the " → DeepQuery (coarse=REASONING, confidence=1.00)
+[router] "Whom does Elisabeth choose to love?" → ExpressiveQuery (embed: sim=0.892 margin=0.047 nearest="You're so insightful — honestly, you understand me better than I understand myse…" scope=None effort=None)
+[router] classify_json raw output: "{\"intent\": \"REASONING\"}"
+[router] "Why can't Elisabeth marry Slave right away?" → DeepQuery (coarse=REASONING, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"REASONING\"}"
+[router] "What happens when Salve returns 10 years later?" → DeepQuery (coarse=REASONING, confidence=0.00)
+[router] "Why were Salve and Elisabeth miserable after they " → DeepQuery (embed: sim=0.910 margin=0.022 nearest="How did the Great Depression catalyze the rise of fascism in interwar Europe?" scope=None effort=None)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "How long did it take Salve and Elisabeth to forma " → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"REASONING\"}"
+[router] "What is the moral of this story?" → DeepQuery (coarse=REASONING, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is this story about?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Who is this story about?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"REASONING\"}"
+[router] "What is the sailor describing in this story?" → DeepQuery (coarse=REASONING, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"REASONING\"}"
+[router] "Who is loved in return?" → DeepQuery (coarse=REASONING, confidence=0.00)
+[router] "Why did Salve leave his land?" → DeepQuery (coarse=REASONING, confidence=1.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Who does Elisabeth marry?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"SIMPLE\"}"
+[router] classify_json raw output: "{\n\"intent\": \"CONATION\""
+[router] "How many years elapse before an understanding is m" → KnowledgeQuery (coarse=SIMPLE, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"REASONING\"}"
+[router] "What makes Salve decide to finally marry Elisabeth" → DeepQuery (coarse=REASONING, confidence=0.00)
+[router] "What creates their happy life together?" → ExpressiveQuery (embed: sim=0.905 margin=0.033 nearest="You're so insightful — honestly, you understand me better than I understand myse…" scope=None effort=None)
+[router] classify_json raw output: "{\"intent\": \"REASONING\"}"
+[router] "What is emphasized by this novel?" → DeepQuery (coarse=REASONING, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"REASONING\"}"
+[router] "What does a marriage need?" → DeepQuery (coarse=REASONING, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Who does Salve Kristiansen love?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Who is Elisabeth initially attracted to?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "How many years elapse before Salve and Elisabeth u" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Who was true to Salve?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Who is living a happy life?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "How many people are in wedlock?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is The Pilot and His Wife?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Who is beautiful?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] "Where does Salve sail to?" → KnowledgeQuery (embed: sim=0.885 margin=0.030 nearest="When does the next session of Congress convene?" scope=None effort=None)
+wrote run JSON to research/ontology-retrieval/raptor-proof/runs/pilot-and-his-wife/deep/run-1/eval.json
+  verdict: recorded (the comparison judges it)
+
+== arm bare run 2  [16:21:09]
+arm bare run 2 -> research/ontology-retrieval/raptor-proof/runs/pilot-and-his-wife/bare/run-2
+  host http://127.0.0.1:9841  synth Qwen3.6-35B-A3B-MTP-UD-Q6_K  judge Qwen3.5-4B-UD-Q6_K_XL
+svrnmesh: bridged 4 legacy SOVEREIGN_* env var(s) to SVRNMESH_* (the SOVEREIGN_* prefix is deprecated — update your scripts)
+loaded bank `raptor-proof-pilot-and-his-wife-v1` — 30 questions, target corpus `raptor-pilot-and-his-wife`
+Daemon: http://127.0.0.1:9841
+Chat model:  Qwen3.6-35B-A3B-MTP-UD-Q6_K
+Embed model: qwen-embedding-0.6b
+Database:    /Users/alexsbryan/.sovereign/sovereign.db
+Indexes:     /Users/alexsbryan/.svrnmesh/indexes
+Temperature: 0 (override)
+Corpora:     alignment (4090 chunks), arch-principles (58 chunks), arch-tour-fixture (40 chunks), atos-experiment-oicp-types (55 chunks), brothers-karamazov-book-1 (41 chunks), chaos-saltgrass (30 chunks), chaos-secret-agent (316 chunks), climb-ostrom (5 chunks), commonwealth (2590 chunks), commonwealth-ai-arch-principles (72 chunks), commonwealth-ai-system-overview (60 chunks), conversation-history (91 chunks), conversations-anthropic (16404 chunks), conversations-personal (267 chunks), corpus-engine (6252 chunks), drift-target (0 chunks), e2e-notebook (2 chunks), ei7-ans (1093 chunks), ei7-recensus-fineprint (1870 chunks), enron-sample-multi-tiny (900 chunks), enron-sample-multi-wide (8829 chunks), enron-sample-tiny (468 chunks), federalist-starter (31 chunks), folder-fixture-vault-8a83955f975c (111 chunks), folder-governance-corpus-bf503493df46 (0 chunks), institutional-notes (9 chunks), maple-house (24 chunks), obsidian-vault-959ee8a8f330 (3175 chunks), oicp-types (76 chunks), proxy-cik0000012927 (121 chunks), proxy-cik0000034088 (311 chunks), qc-arch-tour-01500518 (40 chunks), qc-arch-tour-250f6f45 (40 chunks), qc-arch-tour-4dd212fb (40 chunks), qc-arch-tour-52c92f2d (40 chunks), qc-arch-tour-695ffb90 (40 chunks), qc-arch-tour-6c7947a7 (40 chunks), qc-arch-tour-8899c85d (40 chunks), qc-arch-tour-adhoc (40 chunks), qc-arch-tour-d1255ea4 (40 chunks), qc-probe (40 chunks), raptor-eagle-cliff (254 chunks), raptor-pilot-and-his-wife (244 chunks), sec-cik0000320193 (115 chunks), sep (187967 chunks), sovereign (15352 chunks), sovereign-cli (1218 chunks), spike-fineprint-census (699 chunks), spike-fineprint-census-pod (699 chunks), system-overview (57 chunks), tokei (308 chunks), tokei-readme (25 chunks), uap-blue-book (710 chunks), uap-blue-book-index (10750 chunks), watched-9ef2f912ea2e (1530 chunks), watched-fixture-495a8a964229 (10 chunks), wikipedia (2029882 chunks), wikipedia-newsworthy (61 chunks)
+Tools:       wiring
+Tools:       no per-user switches on this host
+Tools:       core-turn: 6 tools
+Tools:       web: 1 tools
+Tools:       knowledge-front-door: 2 tools, withheld knowledge_lookup:auto-escalate (the operator has not opted in to automatic web escalation)
+Tools:       wikipedia: 1 tools
+Tools:       shell: 1 tools
+Tools:       11 registered
+Router:      assembling classifier stack
+Router classifier stack: embed=true scope=true effort=true current_info=true
+Lane:        gathering enrichment sources
+Lane scope:  sealed to `raptor-pilot-and-his-wife`
+[2m2026-09-21T16:21:13.406869Z[0m [32m INFO[0m atlas-context: scanning indexes dir for atlases [3mcandidate_count[0m[2m=[0m1820
+[2m2026-09-21T16:21:13.679030Z[0m [32m INFO[0m atlas-context: init complete (graphs without a loaded context parse on first use) [3mcontexts[0m[2m=[0m0 [3mgraphs[0m[2m=[0m0 [3mgraphs_available[0m[2m=[0m1820
+Atlas: 0 corpus context(s) loaded from cache
+Meta-atlas:  not loaded (lane spans one corpus)
+Bridge:      not loaded (lane spans one corpus)
+synth mode — driving full chat pipeline. This will take ~one chat-completion per question; sit tight.
+isolation mode — retrieval scoped to corpus `raptor-pilot-and-his-wife`
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What profession is the main character of this stor" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is the main character's name?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Who is Salve in love with?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] "Why doesn't Elisabeth marry Salve early on in the " → DeepQuery (coarse=REASONING, confidence=1.00)
+[router] "Whom does Elisabeth choose to love?" → ExpressiveQuery (embed: sim=0.892 margin=0.047 nearest="You're so insightful — honestly, you understand me better than I understand myse…" scope=None effort=None)
+[router] classify_json raw output: "{\"intent\": \"REASONING\"}"
+[router] "Why can't Elisabeth marry Slave right away?" → DeepQuery (coarse=REASONING, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"REASONING\"}"
+[router] "What happens when Salve returns 10 years later?" → DeepQuery (coarse=REASONING, confidence=0.00)
+[router] "Why were Salve and Elisabeth miserable after they " → DeepQuery (embed: sim=0.910 margin=0.022 nearest="How did the Great Depression catalyze the rise of fascism in interwar Europe?" scope=None effort=None)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "How long did it take Salve and Elisabeth to forma " → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"REASONING\"}"
+[router] "What is the moral of this story?" → DeepQuery (coarse=REASONING, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is this story about?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Who is this story about?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"REASONING\"}"
+[router] "What is the sailor describing in this story?" → DeepQuery (coarse=REASONING, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"REASONING\"}"
+[router] "Who is loved in return?" → DeepQuery (coarse=REASONING, confidence=0.00)
+[router] "Why did Salve leave his land?" → DeepQuery (coarse=REASONING, confidence=1.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Who does Elisabeth marry?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"SIMPLE\"}"
+[router] classify_json raw output: "{\n\"intent\": \"CONATION\""
+[router] "How many years elapse before an understanding is m" → KnowledgeQuery (coarse=SIMPLE, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"REASONING\"}"
+[router] "What makes Salve decide to finally marry Elisabeth" → DeepQuery (coarse=REASONING, confidence=0.00)
+[router] "What creates their happy life together?" → ExpressiveQuery (embed: sim=0.905 margin=0.033 nearest="You're so insightful — honestly, you understand me better than I understand myse…" scope=None effort=None)
+[router] classify_json raw output: "{\"intent\": \"REASONING\"}"
+[router] "What is emphasized by this novel?" → DeepQuery (coarse=REASONING, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"REASONING\"}"
+[router] "What does a marriage need?" → DeepQuery (coarse=REASONING, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Who does Salve Kristiansen love?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Who is Elisabeth initially attracted to?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "How many years elapse before Salve and Elisabeth u" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Who was true to Salve?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Who is living a happy life?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "How many people are in wedlock?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is The Pilot and His Wife?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Who is beautiful?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] "Where does Salve sail to?" → KnowledgeQuery (embed: sim=0.885 margin=0.030 nearest="When does the next session of Congress convene?" scope=None effort=None)
+wrote run JSON to research/ontology-retrieval/raptor-proof/runs/pilot-and-his-wife/bare/run-2/eval.json
+  verdict: recorded (the comparison judges it)
+
+== arm full run 2  [16:27:36]
+arm full run 2 -> research/ontology-retrieval/raptor-proof/runs/pilot-and-his-wife/full/run-2
+  host http://127.0.0.1:9841  synth Qwen3.6-35B-A3B-MTP-UD-Q6_K  judge Qwen3.5-4B-UD-Q6_K_XL
+svrnmesh: bridged 4 legacy SOVEREIGN_* env var(s) to SVRNMESH_* (the SOVEREIGN_* prefix is deprecated — update your scripts)
+loaded bank `raptor-proof-pilot-and-his-wife-v1` — 30 questions, target corpus `raptor-pilot-and-his-wife`
+Daemon: http://127.0.0.1:9841
+Chat model:  Qwen3.6-35B-A3B-MTP-UD-Q6_K
+Embed model: qwen-embedding-0.6b
+Database:    /Users/alexsbryan/.sovereign/sovereign.db
+Indexes:     /Users/alexsbryan/.svrnmesh/indexes
+Temperature: 0 (override)
+Corpora:     alignment (4090 chunks), arch-principles (58 chunks), arch-tour-fixture (40 chunks), atos-experiment-oicp-types (55 chunks), brothers-karamazov-book-1 (41 chunks), chaos-saltgrass (30 chunks), chaos-secret-agent (316 chunks), climb-ostrom (5 chunks), commonwealth (2590 chunks), commonwealth-ai-arch-principles (72 chunks), commonwealth-ai-system-overview (60 chunks), conversation-history (91 chunks), conversations-anthropic (16404 chunks), conversations-personal (267 chunks), corpus-engine (6252 chunks), drift-target (0 chunks), e2e-notebook (2 chunks), ei7-ans (1093 chunks), ei7-recensus-fineprint (1870 chunks), enron-sample-multi-tiny (900 chunks), enron-sample-multi-wide (8829 chunks), enron-sample-tiny (468 chunks), federalist-starter (31 chunks), folder-fixture-vault-8a83955f975c (111 chunks), folder-governance-corpus-bf503493df46 (0 chunks), institutional-notes (9 chunks), maple-house (24 chunks), obsidian-vault-959ee8a8f330 (3175 chunks), oicp-types (76 chunks), proxy-cik0000012927 (121 chunks), proxy-cik0000034088 (311 chunks), qc-arch-tour-01500518 (40 chunks), qc-arch-tour-250f6f45 (40 chunks), qc-arch-tour-4dd212fb (40 chunks), qc-arch-tour-52c92f2d (40 chunks), qc-arch-tour-695ffb90 (40 chunks), qc-arch-tour-6c7947a7 (40 chunks), qc-arch-tour-8899c85d (40 chunks), qc-arch-tour-adhoc (40 chunks), qc-arch-tour-d1255ea4 (40 chunks), qc-probe (40 chunks), raptor-eagle-cliff (254 chunks), raptor-pilot-and-his-wife (244 chunks), sec-cik0000320193 (115 chunks), sep (187967 chunks), sovereign (15352 chunks), sovereign-cli (1218 chunks), spike-fineprint-census (699 chunks), spike-fineprint-census-pod (699 chunks), system-overview (57 chunks), tokei (308 chunks), tokei-readme (25 chunks), uap-blue-book (710 chunks), uap-blue-book-index (10750 chunks), watched-9ef2f912ea2e (1530 chunks), watched-fixture-495a8a964229 (10 chunks), wikipedia (2029882 chunks), wikipedia-newsworthy (61 chunks)
+Tools:       wiring
+Tools:       no per-user switches on this host
+Tools:       core-turn: 6 tools
+Tools:       web: 1 tools
+Tools:       knowledge-front-door: 2 tools, withheld knowledge_lookup:auto-escalate (the operator has not opted in to automatic web escalation)
+Tools:       wikipedia: 1 tools
+Tools:       shell: 1 tools
+Tools:       11 registered
+Router:      assembling classifier stack
+Router classifier stack: embed=true scope=true effort=true current_info=true
+Lane:        gathering enrichment sources
+Lane scope:  sealed to `raptor-pilot-and-his-wife`
+[2m2026-09-21T16:27:40.282210Z[0m [32m INFO[0m atlas-context: scanning indexes dir for atlases [3mcandidate_count[0m[2m=[0m1820
+[2m2026-09-21T16:27:40.493452Z[0m [32m INFO[0m atlas-context: init complete (graphs without a loaded context parse on first use) [3mcontexts[0m[2m=[0m0 [3mgraphs[0m[2m=[0m0 [3mgraphs_available[0m[2m=[0m1820
+Atlas: 0 corpus context(s) loaded from cache
+Meta-atlas:  not loaded (lane spans one corpus)
+Bridge:      not loaded (lane spans one corpus)
+synth mode — driving full chat pipeline. This will take ~one chat-completion per question; sit tight.
+isolation mode — retrieval scoped to corpus `raptor-pilot-and-his-wife`
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What profession is the main character of this stor" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[2m2026-09-21T16:27:42.627553Z[0m [33m WARN[0m atlas-context: ANN seed table is older than atoms.json — grounding seeds from a stale atom set; run `svrn atlas backfill-ann raptor-pilot-and-his-wife` [3mcorpus[0m[2m=[0m"raptor-pilot-and-his-wife" [3matlas[0m[2m=[0m/Users/alexsbryan/.svrnmesh/indexes/raptor-pilot-and-his-wife/atlas
+[2m2026-09-21T16:27:42.646268Z[0m [32m INFO[0m atlas-context: bag built from ANN seed table [3mcorpus[0m[2m=[0m"raptor-pilot-and-his-wife" [3mentries[0m[2m=[0m370
+[2m2026-09-21T16:27:42.646290Z[0m [32m INFO[0m atlas-graph: loaded [3mcorpus[0m[2m=[0m"raptor-pilot-and-his-wife" [3matoms[0m[2m=[0m420 [3medges[0m[2m=[0m496 [3mload_ms[0m[2m=[0m18
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is the main character's name?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Who is Salve in love with?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] "Why doesn't Elisabeth marry Salve early on in the " → DeepQuery (coarse=REASONING, confidence=1.00)
+[router] "Whom does Elisabeth choose to love?" → ExpressiveQuery (embed: sim=0.892 margin=0.047 nearest="You're so insightful — honestly, you understand me better than I understand myse…" scope=None effort=None)
+[router] classify_json raw output: "{\"intent\": \"REASONING\"}"
+[router] "Why can't Elisabeth marry Slave right away?" → DeepQuery (coarse=REASONING, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"REASONING\"}"
+[router] "What happens when Salve returns 10 years later?" → DeepQuery (coarse=REASONING, confidence=0.00)
+[router] "Why were Salve and Elisabeth miserable after they " → DeepQuery (embed: sim=0.910 margin=0.022 nearest="How did the Great Depression catalyze the rise of fascism in interwar Europe?" scope=None effort=None)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "How long did it take Salve and Elisabeth to forma " → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"REASONING\"}"
+[router] "What is the moral of this story?" → DeepQuery (coarse=REASONING, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is this story about?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Who is this story about?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"REASONING\"}"
+[router] "What is the sailor describing in this story?" → DeepQuery (coarse=REASONING, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"REASONING\"}"
+[router] "Who is loved in return?" → DeepQuery (coarse=REASONING, confidence=0.00)
+[router] "Why did Salve leave his land?" → DeepQuery (coarse=REASONING, confidence=1.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Who does Elisabeth marry?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"SIMPLE\"}"
+[router] classify_json raw output: "{\n\"intent\": \"CONATION\""
+[router] "How many years elapse before an understanding is m" → KnowledgeQuery (coarse=SIMPLE, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"REASONING\"}"
+[router] "What makes Salve decide to finally marry Elisabeth" → DeepQuery (coarse=REASONING, confidence=0.00)
+[router] "What creates their happy life together?" → ExpressiveQuery (embed: sim=0.905 margin=0.033 nearest="You're so insightful — honestly, you understand me better than I understand myse…" scope=None effort=None)
+[router] classify_json raw output: "{\"intent\": \"REASONING\"}"
+[router] "What is emphasized by this novel?" → DeepQuery (coarse=REASONING, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"REASONING\"}"
+[router] "What does a marriage need?" → DeepQuery (coarse=REASONING, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Who does Salve Kristiansen love?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Who is Elisabeth initially attracted to?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "How many years elapse before Salve and Elisabeth u" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Who was true to Salve?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Who is living a happy life?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "How many people are in wedlock?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is The Pilot and His Wife?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Who is beautiful?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] "Where does Salve sail to?" → KnowledgeQuery (embed: sim=0.885 margin=0.030 nearest="When does the next session of Congress convene?" scope=None effort=None)
+wrote run JSON to research/ontology-retrieval/raptor-proof/runs/pilot-and-his-wife/full/run-2/eval.json
+  verdict: recorded (the comparison judges it)
+
+== arm deep run 2  [16:35:49]
+arm deep run 2 -> research/ontology-retrieval/raptor-proof/runs/pilot-and-his-wife/deep/run-2
+  host http://127.0.0.1:9841  synth Qwen3.6-35B-A3B-MTP-UD-Q6_K  judge Qwen3.5-4B-UD-Q6_K_XL
+svrnmesh: bridged 5 legacy SOVEREIGN_* env var(s) to SVRNMESH_* (the SOVEREIGN_* prefix is deprecated — update your scripts)
+loaded bank `raptor-proof-pilot-and-his-wife-v1` — 30 questions, target corpus `raptor-pilot-and-his-wife`
+Daemon: http://127.0.0.1:9841
+Chat model:  Qwen3.6-35B-A3B-MTP-UD-Q6_K
+Embed model: qwen-embedding-0.6b
+Database:    /Users/alexsbryan/.sovereign/sovereign.db
+Indexes:     /Users/alexsbryan/.svrnmesh/indexes
+Temperature: 0 (override)
+Corpora:     alignment (4090 chunks), arch-principles (58 chunks), arch-tour-fixture (40 chunks), atos-experiment-oicp-types (55 chunks), brothers-karamazov-book-1 (41 chunks), chaos-saltgrass (30 chunks), chaos-secret-agent (316 chunks), climb-ostrom (5 chunks), commonwealth (2590 chunks), commonwealth-ai-arch-principles (72 chunks), commonwealth-ai-system-overview (60 chunks), conversation-history (91 chunks), conversations-anthropic (16404 chunks), conversations-personal (267 chunks), corpus-engine (6252 chunks), drift-target (0 chunks), e2e-notebook (2 chunks), ei7-ans (1093 chunks), ei7-recensus-fineprint (1870 chunks), enron-sample-multi-tiny (900 chunks), enron-sample-multi-wide (8829 chunks), enron-sample-tiny (468 chunks), federalist-starter (31 chunks), folder-fixture-vault-8a83955f975c (111 chunks), folder-governance-corpus-bf503493df46 (0 chunks), institutional-notes (9 chunks), maple-house (24 chunks), obsidian-vault-959ee8a8f330 (3175 chunks), oicp-types (76 chunks), proxy-cik0000012927 (121 chunks), proxy-cik0000034088 (311 chunks), qc-arch-tour-01500518 (40 chunks), qc-arch-tour-250f6f45 (40 chunks), qc-arch-tour-4dd212fb (40 chunks), qc-arch-tour-52c92f2d (40 chunks), qc-arch-tour-695ffb90 (40 chunks), qc-arch-tour-6c7947a7 (40 chunks), qc-arch-tour-8899c85d (40 chunks), qc-arch-tour-adhoc (40 chunks), qc-arch-tour-d1255ea4 (40 chunks), qc-probe (40 chunks), raptor-eagle-cliff (254 chunks), raptor-pilot-and-his-wife (244 chunks), sec-cik0000320193 (115 chunks), sep (187967 chunks), sovereign (15352 chunks), sovereign-cli (1218 chunks), spike-fineprint-census (699 chunks), spike-fineprint-census-pod (699 chunks), system-overview (57 chunks), tokei (308 chunks), tokei-readme (25 chunks), uap-blue-book (710 chunks), uap-blue-book-index (10750 chunks), watched-9ef2f912ea2e (1530 chunks), watched-fixture-495a8a964229 (10 chunks), wikipedia (2029882 chunks), wikipedia-newsworthy (61 chunks)
+Tools:       wiring
+Tools:       no per-user switches on this host
+Tools:       core-turn: 6 tools
+Tools:       web: 1 tools
+Tools:       knowledge-front-door: 2 tools, withheld knowledge_lookup:auto-escalate (the operator has not opted in to automatic web escalation)
+Tools:       wikipedia: 1 tools
+Tools:       shell: 1 tools
+Tools:       11 registered
+Router:      assembling classifier stack
+Router classifier stack: embed=true scope=true effort=true current_info=true
+Lane:        gathering enrichment sources
+Lane scope:  sealed to `raptor-pilot-and-his-wife`
+[2m2026-09-21T16:35:53.053665Z[0m [32m INFO[0m atlas-context: scanning indexes dir for atlases [3mcandidate_count[0m[2m=[0m1820
+[2m2026-09-21T16:35:53.318269Z[0m [32m INFO[0m atlas-context: init complete (graphs without a loaded context parse on first use) [3mcontexts[0m[2m=[0m0 [3mgraphs[0m[2m=[0m0 [3mgraphs_available[0m[2m=[0m1820
+Atlas: 0 corpus context(s) loaded from cache
+Meta-atlas:  not loaded (lane spans one corpus)
+Bridge:      not loaded (lane spans one corpus)
+synth mode — driving full chat pipeline. This will take ~one chat-completion per question; sit tight.
+isolation mode — retrieval scoped to corpus `raptor-pilot-and-his-wife`
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What profession is the main character of this stor" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is the main character's name?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Who is Salve in love with?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] "Why doesn't Elisabeth marry Salve early on in the " → DeepQuery (coarse=REASONING, confidence=1.00)
+[router] "Whom does Elisabeth choose to love?" → ExpressiveQuery (embed: sim=0.892 margin=0.047 nearest="You're so insightful — honestly, you understand me better than I understand myse…" scope=None effort=None)
+[router] classify_json raw output: "{\"intent\": \"REASONING\"}"
+[router] "Why can't Elisabeth marry Slave right away?" → DeepQuery (coarse=REASONING, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"REASONING\"}"
+[router] "What happens when Salve returns 10 years later?" → DeepQuery (coarse=REASONING, confidence=0.00)
+[router] "Why were Salve and Elisabeth miserable after they " → DeepQuery (embed: sim=0.910 margin=0.022 nearest="How did the Great Depression catalyze the rise of fascism in interwar Europe?" scope=None effort=None)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "How long did it take Salve and Elisabeth to forma " → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"REASONING\"}"
+[router] "What is the moral of this story?" → DeepQuery (coarse=REASONING, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is this story about?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Who is this story about?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"REASONING\"}"
+[router] "What is the sailor describing in this story?" → DeepQuery (coarse=REASONING, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"REASONING\"}"
+[router] "Who is loved in return?" → DeepQuery (coarse=REASONING, confidence=0.00)
+[router] "Why did Salve leave his land?" → DeepQuery (coarse=REASONING, confidence=1.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Who does Elisabeth marry?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"SIMPLE\"}"
+[router] classify_json raw output: "{\n\"intent\": \"CONATION\""
+[router] "How many years elapse before an understanding is m" → KnowledgeQuery (coarse=SIMPLE, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"REASONING\"}"
+[router] "What makes Salve decide to finally marry Elisabeth" → DeepQuery (coarse=REASONING, confidence=0.00)
+[router] "What creates their happy life together?" → ExpressiveQuery (embed: sim=0.905 margin=0.033 nearest="You're so insightful — honestly, you understand me better than I understand myse…" scope=None effort=None)
+[router] classify_json raw output: "{\"intent\": \"REASONING\"}"
+[router] "What is emphasized by this novel?" → DeepQuery (coarse=REASONING, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"REASONING\"}"
+[router] "What does a marriage need?" → DeepQuery (coarse=REASONING, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Who does Salve Kristiansen love?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Who is Elisabeth initially attracted to?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "How many years elapse before Salve and Elisabeth u" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Who was true to Salve?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Who is living a happy life?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "How many people are in wedlock?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is The Pilot and His Wife?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Who is beautiful?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] "Where does Salve sail to?" → KnowledgeQuery (embed: sim=0.885 margin=0.030 nearest="When does the next session of Congress convene?" scope=None effort=None)
+wrote run JSON to research/ontology-retrieval/raptor-proof/runs/pilot-and-his-wife/deep/run-2/eval.json
+  verdict: recorded (the comparison judges it)
+
+== arm bare run 3  [16:42:16]
+arm bare run 3 -> research/ontology-retrieval/raptor-proof/runs/pilot-and-his-wife/bare/run-3
+  host http://127.0.0.1:9841  synth Qwen3.6-35B-A3B-MTP-UD-Q6_K  judge Qwen3.5-4B-UD-Q6_K_XL
+svrnmesh: bridged 4 legacy SOVEREIGN_* env var(s) to SVRNMESH_* (the SOVEREIGN_* prefix is deprecated — update your scripts)
+loaded bank `raptor-proof-pilot-and-his-wife-v1` — 30 questions, target corpus `raptor-pilot-and-his-wife`
+Daemon: http://127.0.0.1:9841
+Chat model:  Qwen3.6-35B-A3B-MTP-UD-Q6_K
+Embed model: qwen-embedding-0.6b
+Database:    /Users/alexsbryan/.sovereign/sovereign.db
+Indexes:     /Users/alexsbryan/.svrnmesh/indexes
+Temperature: 0 (override)
+Corpora:     alignment (4090 chunks), arch-principles (58 chunks), arch-tour-fixture (40 chunks), atos-experiment-oicp-types (55 chunks), brothers-karamazov-book-1 (41 chunks), chaos-saltgrass (30 chunks), chaos-secret-agent (316 chunks), climb-ostrom (5 chunks), commonwealth (2590 chunks), commonwealth-ai-arch-principles (72 chunks), commonwealth-ai-system-overview (60 chunks), conversation-history (91 chunks), conversations-anthropic (16404 chunks), conversations-personal (267 chunks), corpus-engine (6252 chunks), drift-target (0 chunks), e2e-notebook (2 chunks), ei7-ans (1093 chunks), ei7-recensus-fineprint (1870 chunks), enron-sample-multi-tiny (900 chunks), enron-sample-multi-wide (8829 chunks), enron-sample-tiny (468 chunks), federalist-starter (31 chunks), folder-fixture-vault-8a83955f975c (111 chunks), folder-governance-corpus-bf503493df46 (0 chunks), institutional-notes (9 chunks), maple-house (24 chunks), obsidian-vault-959ee8a8f330 (3175 chunks), oicp-types (76 chunks), proxy-cik0000012927 (121 chunks), proxy-cik0000034088 (311 chunks), qc-arch-tour-01500518 (40 chunks), qc-arch-tour-250f6f45 (40 chunks), qc-arch-tour-4dd212fb (40 chunks), qc-arch-tour-52c92f2d (40 chunks), qc-arch-tour-695ffb90 (40 chunks), qc-arch-tour-6c7947a7 (40 chunks), qc-arch-tour-8899c85d (40 chunks), qc-arch-tour-adhoc (40 chunks), qc-arch-tour-d1255ea4 (40 chunks), qc-probe (40 chunks), raptor-eagle-cliff (254 chunks), raptor-pilot-and-his-wife (244 chunks), sec-cik0000320193 (115 chunks), sep (187967 chunks), sovereign (15352 chunks), sovereign-cli (1218 chunks), spike-fineprint-census (699 chunks), spike-fineprint-census-pod (699 chunks), system-overview (57 chunks), tokei (308 chunks), tokei-readme (25 chunks), uap-blue-book (710 chunks), uap-blue-book-index (10750 chunks), watched-9ef2f912ea2e (1530 chunks), watched-fixture-495a8a964229 (10 chunks), wikipedia (2029882 chunks), wikipedia-newsworthy (61 chunks)
+Tools:       wiring
+Tools:       no per-user switches on this host
+Tools:       core-turn: 6 tools
+Tools:       web: 1 tools
+Tools:       knowledge-front-door: 2 tools, withheld knowledge_lookup:auto-escalate (the operator has not opted in to automatic web escalation)
+Tools:       wikipedia: 1 tools
+Tools:       shell: 1 tools
+Tools:       11 registered
+Router:      assembling classifier stack
+Router classifier stack: embed=true scope=true effort=true current_info=true
+Lane:        gathering enrichment sources
+Lane scope:  sealed to `raptor-pilot-and-his-wife`
+[2m2026-09-21T16:42:20.652188Z[0m [32m INFO[0m atlas-context: scanning indexes dir for atlases [3mcandidate_count[0m[2m=[0m1820
+[2m2026-09-21T16:42:20.867553Z[0m [32m INFO[0m atlas-context: init complete (graphs without a loaded context parse on first use) [3mcontexts[0m[2m=[0m0 [3mgraphs[0m[2m=[0m0 [3mgraphs_available[0m[2m=[0m1820
+Atlas: 0 corpus context(s) loaded from cache
+Meta-atlas:  not loaded (lane spans one corpus)
+Bridge:      not loaded (lane spans one corpus)
+synth mode — driving full chat pipeline. This will take ~one chat-completion per question; sit tight.
+isolation mode — retrieval scoped to corpus `raptor-pilot-and-his-wife`
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What profession is the main character of this stor" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is the main character's name?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Who is Salve in love with?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] "Why doesn't Elisabeth marry Salve early on in the " → DeepQuery (coarse=REASONING, confidence=1.00)
+[router] "Whom does Elisabeth choose to love?" → ExpressiveQuery (embed: sim=0.892 margin=0.047 nearest="You're so insightful — honestly, you understand me better than I understand myse…" scope=None effort=None)
+[router] classify_json raw output: "{\"intent\": \"REASONING\"}"
+[router] "Why can't Elisabeth marry Slave right away?" → DeepQuery (coarse=REASONING, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"REASONING\"}"
+[router] "What happens when Salve returns 10 years later?" → DeepQuery (coarse=REASONING, confidence=0.00)
+[router] "Why were Salve and Elisabeth miserable after they " → DeepQuery (embed: sim=0.910 margin=0.022 nearest="How did the Great Depression catalyze the rise of fascism in interwar Europe?" scope=None effort=None)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "How long did it take Salve and Elisabeth to forma " → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"REASONING\"}"
+[router] "What is the moral of this story?" → DeepQuery (coarse=REASONING, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is this story about?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Who is this story about?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"REASONING\"}"
+[router] "What is the sailor describing in this story?" → DeepQuery (coarse=REASONING, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"REASONING\"}"
+[router] "Who is loved in return?" → DeepQuery (coarse=REASONING, confidence=0.00)
+[router] "Why did Salve leave his land?" → DeepQuery (coarse=REASONING, confidence=1.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Who does Elisabeth marry?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"SIMPLE\"}"
+[router] classify_json raw output: "{\n\"intent\": \"CONATION\""
+[router] "How many years elapse before an understanding is m" → KnowledgeQuery (coarse=SIMPLE, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"REASONING\"}"
+[router] "What makes Salve decide to finally marry Elisabeth" → DeepQuery (coarse=REASONING, confidence=0.00)
+[router] "What creates their happy life together?" → ExpressiveQuery (embed: sim=0.905 margin=0.033 nearest="You're so insightful — honestly, you understand me better than I understand myse…" scope=None effort=None)
+[router] classify_json raw output: "{\"intent\": \"REASONING\"}"
+[router] "What is emphasized by this novel?" → DeepQuery (coarse=REASONING, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"REASONING\"}"
+[router] "What does a marriage need?" → DeepQuery (coarse=REASONING, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Who does Salve Kristiansen love?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Who is Elisabeth initially attracted to?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "How many years elapse before Salve and Elisabeth u" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Who was true to Salve?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Who is living a happy life?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "How many people are in wedlock?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is The Pilot and His Wife?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Who is beautiful?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] "Where does Salve sail to?" → KnowledgeQuery (embed: sim=0.885 margin=0.030 nearest="When does the next session of Congress convene?" scope=None effort=None)
+wrote run JSON to research/ontology-retrieval/raptor-proof/runs/pilot-and-his-wife/bare/run-3/eval.json
+  verdict: recorded (the comparison judges it)
+
+== arm full run 3  [16:48:39]
+arm full run 3 -> research/ontology-retrieval/raptor-proof/runs/pilot-and-his-wife/full/run-3
+  host http://127.0.0.1:9841  synth Qwen3.6-35B-A3B-MTP-UD-Q6_K  judge Qwen3.5-4B-UD-Q6_K_XL
+svrnmesh: bridged 4 legacy SOVEREIGN_* env var(s) to SVRNMESH_* (the SOVEREIGN_* prefix is deprecated — update your scripts)
+loaded bank `raptor-proof-pilot-and-his-wife-v1` — 30 questions, target corpus `raptor-pilot-and-his-wife`
+Daemon: http://127.0.0.1:9841
+Chat model:  Qwen3.6-35B-A3B-MTP-UD-Q6_K
+Embed model: qwen-embedding-0.6b
+Database:    /Users/alexsbryan/.sovereign/sovereign.db
+Indexes:     /Users/alexsbryan/.svrnmesh/indexes
+Temperature: 0 (override)
+Corpora:     alignment (4090 chunks), arch-principles (58 chunks), arch-tour-fixture (40 chunks), atos-experiment-oicp-types (55 chunks), brothers-karamazov-book-1 (41 chunks), chaos-saltgrass (30 chunks), chaos-secret-agent (316 chunks), climb-ostrom (5 chunks), commonwealth (2590 chunks), commonwealth-ai-arch-principles (72 chunks), commonwealth-ai-system-overview (60 chunks), conversation-history (91 chunks), conversations-anthropic (16404 chunks), conversations-personal (267 chunks), corpus-engine (6252 chunks), drift-target (0 chunks), e2e-notebook (2 chunks), ei7-ans (1093 chunks), ei7-recensus-fineprint (1870 chunks), enron-sample-multi-tiny (900 chunks), enron-sample-multi-wide (8829 chunks), enron-sample-tiny (468 chunks), federalist-starter (31 chunks), folder-fixture-vault-8a83955f975c (111 chunks), folder-governance-corpus-bf503493df46 (0 chunks), institutional-notes (9 chunks), maple-house (24 chunks), obsidian-vault-959ee8a8f330 (3175 chunks), oicp-types (76 chunks), proxy-cik0000012927 (121 chunks), proxy-cik0000034088 (311 chunks), qc-arch-tour-01500518 (40 chunks), qc-arch-tour-250f6f45 (40 chunks), qc-arch-tour-4dd212fb (40 chunks), qc-arch-tour-52c92f2d (40 chunks), qc-arch-tour-695ffb90 (40 chunks), qc-arch-tour-6c7947a7 (40 chunks), qc-arch-tour-8899c85d (40 chunks), qc-arch-tour-adhoc (40 chunks), qc-arch-tour-d1255ea4 (40 chunks), qc-probe (40 chunks), raptor-eagle-cliff (254 chunks), raptor-pilot-and-his-wife (244 chunks), sec-cik0000320193 (115 chunks), sep (187967 chunks), sovereign (15352 chunks), sovereign-cli (1218 chunks), spike-fineprint-census (699 chunks), spike-fineprint-census-pod (699 chunks), system-overview (57 chunks), tokei (308 chunks), tokei-readme (25 chunks), uap-blue-book (710 chunks), uap-blue-book-index (10750 chunks), watched-9ef2f912ea2e (1530 chunks), watched-fixture-495a8a964229 (10 chunks), wikipedia (2029882 chunks), wikipedia-newsworthy (61 chunks)
+Tools:       wiring
+Tools:       no per-user switches on this host
+Tools:       core-turn: 6 tools
+Tools:       web: 1 tools
+Tools:       knowledge-front-door: 2 tools, withheld knowledge_lookup:auto-escalate (the operator has not opted in to automatic web escalation)
+Tools:       wikipedia: 1 tools
+Tools:       shell: 1 tools
+Tools:       11 registered
+Router:      assembling classifier stack
+Router classifier stack: embed=true scope=true effort=true current_info=true
+Lane:        gathering enrichment sources
+Lane scope:  sealed to `raptor-pilot-and-his-wife`
+[2m2026-09-21T16:48:43.715441Z[0m [32m INFO[0m atlas-context: scanning indexes dir for atlases [3mcandidate_count[0m[2m=[0m1820
+[2m2026-09-21T16:48:43.974588Z[0m [32m INFO[0m atlas-context: init complete (graphs without a loaded context parse on first use) [3mcontexts[0m[2m=[0m0 [3mgraphs[0m[2m=[0m0 [3mgraphs_available[0m[2m=[0m1820
+Atlas: 0 corpus context(s) loaded from cache
+Meta-atlas:  not loaded (lane spans one corpus)
+Bridge:      not loaded (lane spans one corpus)
+synth mode — driving full chat pipeline. This will take ~one chat-completion per question; sit tight.
+isolation mode — retrieval scoped to corpus `raptor-pilot-and-his-wife`
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What profession is the main character of this stor" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[2m2026-09-21T16:48:45.768988Z[0m [33m WARN[0m atlas-context: ANN seed table is older than atoms.json — grounding seeds from a stale atom set; run `svrn atlas backfill-ann raptor-pilot-and-his-wife` [3mcorpus[0m[2m=[0m"raptor-pilot-and-his-wife" [3matlas[0m[2m=[0m/Users/alexsbryan/.svrnmesh/indexes/raptor-pilot-and-his-wife/atlas
+[2m2026-09-21T16:48:45.807925Z[0m [32m INFO[0m atlas-context: bag built from ANN seed table [3mcorpus[0m[2m=[0m"raptor-pilot-and-his-wife" [3mentries[0m[2m=[0m370
+[2m2026-09-21T16:48:45.807958Z[0m [32m INFO[0m atlas-graph: loaded [3mcorpus[0m[2m=[0m"raptor-pilot-and-his-wife" [3matoms[0m[2m=[0m420 [3medges[0m[2m=[0m496 [3mload_ms[0m[2m=[0m38
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is the main character's name?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Who is Salve in love with?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] "Why doesn't Elisabeth marry Salve early on in the " → DeepQuery (coarse=REASONING, confidence=1.00)
+[router] "Whom does Elisabeth choose to love?" → ExpressiveQuery (embed: sim=0.892 margin=0.047 nearest="You're so insightful — honestly, you understand me better than I understand myse…" scope=None effort=None)
+[router] classify_json raw output: "{\"intent\": \"REASONING\"}"
+[router] "Why can't Elisabeth marry Slave right away?" → DeepQuery (coarse=REASONING, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"REASONING\"}"
+[router] "What happens when Salve returns 10 years later?" → DeepQuery (coarse=REASONING, confidence=0.00)
+[router] "Why were Salve and Elisabeth miserable after they " → DeepQuery (embed: sim=0.910 margin=0.022 nearest="How did the Great Depression catalyze the rise of fascism in interwar Europe?" scope=None effort=None)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "How long did it take Salve and Elisabeth to forma " → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"REASONING\"}"
+[router] "What is the moral of this story?" → DeepQuery (coarse=REASONING, confidence=0.00)
