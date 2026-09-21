@@ -100,4 +100,4 @@ wrong resolution.
 - Ledger entries go AFTER the previous one in `ralph/DECISIONS.md` (the last is
   A63, which sits above the older A44 block — insert below A63, not at the end
   of the ledger list), with the appendix of the same number at EOF. Next id:
-  **A64**.
+  **A65**.
