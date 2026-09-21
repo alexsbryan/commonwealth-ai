@@ -446,15 +446,11 @@ pub async fn meshapp_list_installs(
 /// the manifest's request, is what the bridge enforces.
 #[tauri::command]
 pub async fn meshapp_record_install(
-    webview: WebviewWindow,
     state: State<'_, Arc<AppState>>,
     app_id: String,
     name: String,
     granted: MeshAppPermissions,
 ) -> Result<crate::meshapp::MeshAppInstall, String> {
-    if app_id_from_label(webview.label()).is_some() {
-        return Err("install management is host-only".into());
-    }
     let recorded_at_unix = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs() as i64)
@@ -477,13 +473,9 @@ pub async fn meshapp_record_install(
 /// `meshapp_uninstall(appId)` — remove an install, revoking every grant.
 #[tauri::command]
 pub async fn meshapp_uninstall(
-    webview: WebviewWindow,
     state: State<'_, Arc<AppState>>,
     app_id: String,
 ) -> Result<(), String> {
-    if app_id_from_label(webview.label()).is_some() {
-        return Err("install management is host-only".into());
-    }
     let mut cfg = state.config.write().await;
     let before = cfg.meshapp_installs.len();
     cfg.meshapp_installs.retain(|i| i.app_id != app_id);
@@ -504,13 +496,9 @@ pub async fn meshapp_uninstall(
 /// the `corpus_id` is slug-validated to keep the write inside the recipes dir.
 #[tauri::command]
 pub async fn meshapp_stage_corpus_recipe(
-    webview: WebviewWindow,
     corpus_id: String,
     recipe_toml: String,
 ) -> Result<(), String> {
-    if app_id_from_label(webview.label()).is_some() {
-        return Err("staging a corpus recipe is host-only".into());
-    }
     if corpus_id.is_empty()
         || !corpus_id
             .chars()
@@ -565,11 +553,12 @@ pub async fn meshapp_installed_apps() -> Result<Vec<serde_json::Value>, String> 
 
 /// The `window.meshApp` shim injected into every mesh-app window before
 /// its own scripts run. The bundle calls these instead of touching
-/// `invoke` directly. (Trusted-first-party model: a hostile bundle could
-/// still reach `window.__TAURI__` since Tauri v2 doesn't gate app
-/// commands per-window — tauri#9227 — so true isolation for untrusted
-/// apps is the deferred no-IPC bridge milestone. For first-party apps
-/// this shim is the clean, intended surface.)
+/// `invoke` directly, and since `crate::meshapp::bridge_refusal` landed
+/// it is also all a bundle CAN reach: a bundle that goes around the shim
+/// to the IPC primitive still gets refused at the invoke closure for any
+/// command outside these names. (Tauri v2 does not gate app commands
+/// per-window — tauri#9227 — so the closure, not the capability, is what
+/// enforces that.)
 // Embedded from a shared `.js` file so the Playwright wiring test injects
 // the EXACT same source (single source of truth) — the mocked-`meshApp`
 // specs don't exercise this shim→IPC path, which is where the
@@ -718,5 +707,52 @@ mod tests {
         let apps = scan_installed_apps(d);
         assert_eq!(apps.len(), 1);
         assert_eq!(apps[0]["id"], "enron");
+    }
+
+    /// Every command name the shim's `window.meshApp` spells, read back
+    /// out of the shim source itself.
+    fn shim_invoked_commands(shim: &str) -> std::collections::BTreeSet<String> {
+        const NEEDLE: &str = "invoke(\"";
+        let mut out = std::collections::BTreeSet::new();
+        for (idx, _) in shim.match_indices(NEEDLE) {
+            let rest = &shim[idx + NEEDLE.len()..];
+            if let Some(end) = rest.find('"') {
+                out.insert(rest[..end].to_string());
+            }
+        }
+        out
+    }
+
+    /// The allowlist the invoke closure decides with is exactly what the
+    /// shim offers — never a hand-kept copy of it.
+    ///
+    /// Two failures this catches, both of which a reviewer reading either
+    /// file alone would pass: a command added to
+    /// `MESHAPP_BRIDGE_COMMANDS` that `window.meshApp` never exposes
+    /// (the allowlist is now wider than the bridge), and a method added
+    /// to the shim that the closure will refuse at runtime (the app's
+    /// call fails in front of a user with the gate's sentence).
+    #[test]
+    fn the_bridge_allowlist_is_exactly_the_shims_commands() {
+        let from_shim = shim_invoked_commands(MESHAPP_SHIM);
+        // A scanner that matched nothing would make the set-equality
+        // below trivially satisfiable by emptying the const.
+        assert!(
+            from_shim.len() >= 18,
+            "parsed only {} invoke(\"…\") names out of the shim; it defines at least 18, \
+             so the scanner is reading a shape the shim no longer uses and this check \
+             proves nothing",
+            from_shim.len()
+        );
+        let allowed: std::collections::BTreeSet<String> = crate::meshapp::MESHAPP_BRIDGE_COMMANDS
+            .iter()
+            .map(|c| (*c).to_string())
+            .collect();
+        assert_eq!(
+            from_shim, allowed,
+            "`MESHAPP_BRIDGE_COMMANDS` and `meshapp_shim.js` disagree about what the \
+             mesh-app bridge offers. The shim is the source of truth: the const must \
+             list exactly the names `window.meshApp` invokes."
+        );
     }
 }

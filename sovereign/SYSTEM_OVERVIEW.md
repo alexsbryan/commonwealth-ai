@@ -7738,11 +7738,15 @@ enumerates them via `meshapp_installed_apps()`; in-window opening of an installe
 integration. End-to-end runbooks: `docs/MESHAPP_CONSUMER.md` (replicate a demo) and
 `docs/MESHAPP_AUTHORING.md` (recipe → corpus → app → publish). **Isolation caveat:**
 Tauri v2 does not gate app
-commands per-window (tauri#9227) — a webview with IPC can invoke any
-registered command — so `capabilities/meshapp.json` only narrows the
-core/plugin surface; true isolation for UNTRUSTED third-party apps needs a
-no-IPC bridge (custom protocol / postMessage), a deferred platform
-milestone. The bundles are verified headlessly by
+commands per-window (tauri#9227), so `capabilities/meshapp.json` only narrows
+the core/plugin surface. Since 2026-09-20 the app-command half is decided in
+the host instead: `meshapp::bridge_refusal` (label and command in, refusal out)
+runs in the ONE invoke closure in `main.rs` before dispatch, and a `meshapp-*`
+window may invoke only the eighteen `MESHAPP_BRIDGE_COMMANDS` — parsed back out
+of `meshapp_shim.js` by a set-equality test, so the allowlist is never hand-kept
+beside the shim. That bounds the surface to the bridge; the bridge itself is
+still reached over IPC, so full isolation for UNTRUSTED third-party apps remains
+the deferred no-IPC-bridge milestone (custom protocol / postMessage). The bundles are verified headlessly by
 `tests/e2e/specs/meshapp-{lvt,uap,enron}.spec.ts` (Playwright, a11y
 locators), each mocking `window.meshApp` + one real-shim→IPC wiring test.
 

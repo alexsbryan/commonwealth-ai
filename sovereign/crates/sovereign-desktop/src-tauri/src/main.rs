@@ -880,6 +880,26 @@ fn main() -> ExitCode {
             // it. That breaks the BUILD, loudly, which is the acceptable
             // failure mode — it cannot silently stop recording.
             move |invoke: tauri::ipc::Invoke<tauri::Wry>| {
+                // Tauri 2.11 does not gate app commands per window (the ACL
+                // check needs an app manifest this crate's bare `build.rs`
+                // does not produce), so `capabilities/meshapp.json` cannot
+                // keep a mesh-app window off the host's other ~250 commands.
+                // This closure is the one chokepoint every invoke passes
+                // through, so the decider goes here — before `handler`.
+                let refusal = meshapp::bridge_refusal(
+                    invoke.message.webview_ref().label(),
+                    invoke.message.command(),
+                );
+                if let Some(refusal) = refusal {
+                    tracing::warn!(
+                        target: "sovereign::desktop::meshapp",
+                        label = invoke.message.webview_ref().label(),
+                        command = invoke.message.command(),
+                        "{refusal}"
+                    );
+                    invoke.resolver.reject(refusal);
+                    return true;
+                }
                 invoke_coverage::record(invoke.message.command());
                 handler(invoke)
             }

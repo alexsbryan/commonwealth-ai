@@ -309,6 +309,19 @@ it.
 10. **A compromised node can serve bad inference.** Not defended. *By design:*
    the social trust model, documented since the first architecture draft —
    you mesh with machines whose owners you trust.
+11. **The desktop app's own window runs with no Content-Security-Policy.**
+   `sovereign/crates/sovereign-desktop/src-tauri/tauri.conf.json` sets
+   `app.security.csp` to `null`, so the main window — the one holding your
+   conversations, corpora and mesh controls — is under no restraint on where
+   it may load script from or where it may send a request. Mesh-app windows
+   are not covered by this: each is built with the strict `MESHAPP_CSP`
+   (`src/commands/meshapp.rs`), which is `'self'` for script and limits
+   `connect-src` to the IPC scheme. This is the host half that has no such
+   clamp, so any injection reaching the main window's DOM — a rendered
+   model answer, a corpus document, an imported conversation — has an open
+   egress path. *Closes when:* the main window carries a CSP the app's real
+   asset and connection needs are measured against, rather than `null`.
+   *Owner:* unowned.
 
 ## Reporting
 

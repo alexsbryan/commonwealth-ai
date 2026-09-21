@@ -402,6 +402,50 @@ fn strip_comments(text: &str) -> String {
     out
 }
 
+/// The invoke closure in `main.rs` consults the mesh-app bridge decider
+/// before it dispatches.
+///
+/// This is a SOURCE census, not a live call: the desktop crate has no
+/// mock-runtime harness (`tauri::test` appears nowhere under
+/// `src-tauri`), so nothing here can drive a real invoke from a
+/// `meshapp-*` window and watch it be refused. What this can do is fail
+/// if the call is deleted — the mode that would silently reopen the
+/// whole ~260-command surface to every mesh app while
+/// `bridge_refusal`'s own unit tests stayed green, because the decider
+/// would still be correct and simply never asked. The live half is owed
+/// to a human run in a real mesh-app window's devtools.
+#[test]
+fn the_invoke_closure_consults_the_bridge_decider() {
+    let main_rs = tauri_src().join("main.rs");
+    let text = std::fs::read_to_string(&main_rs)
+        .unwrap_or_else(|e| panic!("read {}: {e}", main_rs.display()));
+    let code = strip_comments(&text);
+
+    assert!(
+        code.contains("meshapp::bridge_refusal("),
+        "{} no longer calls `meshapp::bridge_refusal` in its invoke closure. Nothing \
+         then keeps a `meshapp-*` window off the host's other commands: Tauri 2.11 \
+         does not gate app commands per window, and this crate ships no app ACL \
+         manifest, so that closure is the only place the question is asked.",
+        main_rs.display()
+    );
+
+    // And the call has to run BEFORE the handler, or a refused command
+    // has already done its work by the time anyone objects.
+    let decider = code
+        .find("meshapp::bridge_refusal(")
+        .expect("checked above");
+    let dispatch = code
+        .find("handler(invoke)")
+        .expect("the invoke closure dispatches through `handler(invoke)`");
+    assert!(
+        decider < dispatch,
+        "`meshapp::bridge_refusal` is consulted after `handler(invoke)` in {}; the \
+         command has already run by then",
+        main_rs.display()
+    );
+}
+
 // ── falsifiers ────────────────────────────────────────────────────
 
 /// The name scanner must find a name that is not registered. A scanner
