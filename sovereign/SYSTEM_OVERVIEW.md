@@ -14,9 +14,7 @@ measurements, the orders — is
 numbering, so `§4` here is `§4` there. Open it before changing something, to
 learn what already went wrong. Also [`HISTORY.md`](./HISTORY.md) (how the
 shape came to be), [`DEFAULTS_LEDGER.md`](./DEFAULTS_LEDGER.md) (everything
-shipped default-off or dark, with its flip condition and review-by date), and
-[`../quality/SIZE_DEBT_LEDGER.md`](../quality/SIZE_DEBT_LEDGER.md) (the
-arch-gate acceptance record).
+shipped default-off or dark, with its flip condition and review-by date).
 
 **This file has a ceiling and it is deliberate.** It reached 10.4k lines by
 accreting an incident log inside a map — single table cells ran three thousand
@@ -4212,11 +4210,12 @@ two advisory size ratchets. Install via `scripts/install-git-hooks.sh`, which
 points `core.hooksPath` at the version-controlled `.githooks/`. It fails
 closed: a push range it cannot diff gates everything.
 
-**A ratchet failure is not fixed by `--update-baseline` on your working tree**
-— that absorbs your own growth along with everything else. Re-pin at
-`origin/main` and ledger the acceptance in
-[`../quality/SIZE_DEBT_LEDGER.md`](../quality/SIZE_DEBT_LEDGER.md).
-`--tighten` is always safe.
+**A file over its size ceiling is SPLIT, by whoever pushed it over, in the
+same piece of work — never re-pinned, never an operator question.** For any
+OTHER ratchet failure, `--update-baseline` on your working tree absorbs your
+own growth along with everyone else's: re-pin at `origin/main` instead, and
+say in the commit body what the lines bought. The baseline diff is the record;
+there is no ledger to append to. `--tighten` is always safe.
 
 Concurrent agents serialize on `scripts/with-cargo-lock.sh`: cargo's package
 lock makes parallel gate runs BLOCK, and two concurrent nextest runs overwrite
@@ -4396,19 +4395,12 @@ than a surprise. A big file or a documented gap without an entry is a bug; one
 with an entry is sequenced work. When an entry completes its chronicle moves
 to [`HISTORY.md`](./HISTORY.md) and the row is dropped.
 
-**The live deferral tables and the full acceptance ledger are
-[`../quality/SIZE_DEBT_LEDGER.md`](../quality/SIZE_DEBT_LEDGER.md).** They
-left this file because they are an append-only record keyed to the arch-gate
-workflow — the gate tells you to add a row, and the rows accumulate forever —
-which is a ledger's job and not a map's. `quality/` is where the gate
-baselines already live.
-
-When `cargo xtask arch-gate` reports a NEW oversized file, add a row there and
-re-baseline, or split the file. Three standing classes live in that ledger:
-**Sovereign deferrals** (per-file split debt), **corpus-engine deferrals**
-(files that shrink by carve-out under `corpus-engine/DECOMPOSITION.md` rather
-than by a local split), and the dated **size / fan-in acceptance** rows, each
-naming what the lines bought.
+**The list of oversized files is `quality/baselines/oversized.txt`, and the
+gate reads it every run.** There is no companion document: a record of
+exceptions to a rule only ever grows, and the answer to an oversized file is
+to split it, not to justify it. `corpus-engine`'s files shrink by carve-out
+under `corpus-engine/DECOMPOSITION.md` rather than by a local split, which is
+the one case where the fix is somebody else's sequencing rather than yours.
 
 Doc posture: this file states what IS and is gated by `cargo xtask docs-gate`,
 which resolves every repo path it cites. The narrative reconciliation above

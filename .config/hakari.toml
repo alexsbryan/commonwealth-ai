@@ -51,7 +51,8 @@ workspace-members = [
     "oicp-types",
     "kernel-types",
     "corpus-engine-sections",
-    "corpus-engine-vocab",
+    # Renamed from `corpus-engine-vocab` by domains `dm-understanding-vocab-rename`.
+    "understanding-vocab",
     "sovereign-time",
     "oplog",
     "oicp-client",

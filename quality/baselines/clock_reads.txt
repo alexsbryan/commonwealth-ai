@@ -4,7 +4,7 @@
 # Bank improvements only (never adds, never raises — safe to run anytime):
 #   cargo run -p xtask -- clock-gate --tighten
 1	commonwealth/crates/commonwealth-media/src/apps.rs
-1	commonwealth/crates/commonwealth-rail/src/lib.rs
+1	commonwealth/crates/commonwealth-rail/src/journal.rs
 1	commonwealth/crates/commonwealth-state/src/activity.rs
 1	commonwealth/crates/commonwealth-state/src/contributions.rs
 1	commonwealth/crates/commonwealth-state/src/peer_preferences.rs
