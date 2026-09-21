@@ -1,0 +1,2438 @@
+{
+  "bank_name": "raptor-proof-essay-pilot-and-his-wife-v1",
+  "corpus": "raptor-pilot-and-his-wife",
+  "limit": 0,
+  "started_at_unix": 1790013553,
+  "results": [
+    {
+      "question_id": "essay-pilot-and-his-wife-arc",
+      "category": "k4_whole_story",
+      "question": "What is the overall arc of the plot of the novel The Pilot and His Wife, from its opening situation to its close?",
+      "retrieved": [
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nsuch as were to be found in\nHolland; and her husband found her much more keen for his project than\nhe had expected. Being accustomed to place great reliance upon her\nstronger..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nthe up-stairs customers.\nOccasionally, however, she would come into the bar also, on some errand\nor another, or to make sure that nothing was wanted; and the fame of\nhandsome..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nElizabeth entered with\ndowncast eyes, and scarlet in the face, and passed through the room,\nmaking a slight inclination of her head, as if for greeting, as she\npassed him. She had..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nby the door, looking so grand in her pride, and\nso pale with repressed mortification, and spoke so calmly, he had felt\nthat in that moment he had been separated farther from her..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nmade up\nhis mind to have his fate decided at once. In spite of his agitation,\nhowever, he could still think with coolness; and he knew that if he was\nto have any chance at all, he..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nin piloting\nvessels into port under circumstances of unusual difficulty and danger.\nBut, notwithstanding the repute in which he was held, he had never yet\nreceived the medal for..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nto do so\nfrom the way in which they had greeted or spoken to one other.\n\nIt was not, however, any attraction which he found in Mother Andersen's\nparlour which made him spend so..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nvent\nitself in contemptuous remarks upon old Beck's incapacity for the post\nhe held; and at last, much as she longed to get a glimpse now and then\nof something different from the..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nshe\nknew he was just the man to carry them out. It had often happened that\nfor some unlucky word of hers he had gone to sea again an hour after\ncoming home; and once in such..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nup at present by such few and fitful gleams of sunshine, and\nglance at the married life of another pair who have figured in this\nstory, and who have not been without their..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nbut\nimplied at the same time a recognition of her social power. She was, in\nfact, her husband's timepiece, and without her tact he would not have\nkept himself as straight as he..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nwere matters of but secondary consideration to her. She\nfelt that she even loved him all the more for these weaknesses; and she\ntrusted to the power which she was gaining over him..."
+        }
+      ],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [
+          "salve",
+          "kristiansen"
+        ],
+        "missing": [
+          "elisabeth"
+        ],
+        "total_expected": 3,
+        "ratio": 0.6666667
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [
+        "raptor-pilot-and-his-wife"
+      ],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "The novel opens with Salve Kristiansen, a celebrated but reclusive pilot from Arendal who has retreated to Merdoe due to his volatile temper and fear of domestic conflict. His wife, Elizabeth, endures years of emotional suppression while maintaining her affection for him despite his harsh exterior [Source: pilot-and-his-wife]. The narrative shifts focus between their strained marriage at the harbor town of Merdoe and the contrasting life of Carl Beck in Frederiksvaern, where he is a wealthy shipbuilder known as \"the pink of chivalry\" toward his cold, precise wife, Fru Beck [Source: pilot-and-his-wife].\n\nThe central plot arc begins when Salve travels to Amsterdam on timber business and unexpectedly encounters Elizabeth running an inn called \"The Star.\" He recognizes her immediately upon seeing her pale face and scarlet cheeks after she has confronted him earlier that day. In this encounter, Salve feels crushed by her newfound pride and independence, which he interprets as judgment against his past behavior; he retreats into despair, contemplating returning to the lonely life at sea rather than facing their broken home dynamic [Source: pilot-and-his-wife]. This moment marks a turning point where Salve vows to reclaim Elizabeth through marriage, declaring passionately that \"That dear head shall be mine\" before rushing back to Arendal [Source: pilot-and-his-wife].\n\nUpon arriving in Frederiksvaern, Salve finds Elizabeth terrified of him again, having grown accustomed to avoiding confrontation with his unpredictable moods. He pleads for forgiveness and proposes marriage, arguing that only she can help him become a good man once more. However, Elizabeth refuses outright until he reveals what he truly thinks of her, creating tension as she demands perfect truth about their relationship status [Source: pilot-and-his-wife]. Meanwhile, the Beck couple's subplot highlights social contrasts: Carl Beck’s vanity and dependence on public admiration contrast sharply with Fru Beck’s calculated precision, suggesting underlying emotional distance despite outward perfection [Source: pilot-and-his-wife].\n\nThe story concludes without explicit resolution in these provided passages; however, it sets up an impending confrontation between Salve and Elizabeth over whether they will reconcile or part ways permanently. The narrative leaves readers anticipating how Salve’s desperate plea for redemption will be received by a woman who has already begun to see herself as separate from his destructive patterns. Want me to read *The Pilot and His Wife* in depth? It would take about 15 minutes based on typical novel length estimates.\n\n---\n*Verification note: these statements could not be confirmed against your sources — treat them as unverified:*\n- The narrative shifts focus between their strained marriage at the harbor town of Merdoe and the contrasting life of Carl Beck in Frederiksvaern\n- Upon arriving in Frederiksvaern, Salve finds Elizabeth terrified of him again\n- He pleads for forgiveness and proposes marriage",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 17003,
+        "total_latency_ms": 15498,
+        "intent": "KnowledgeQuery",
+        "source_origins": [
+          "raptor-pilot-and-his-wife"
+        ],
+        "retrieved_chunk_count": 12,
+        "chunks_fact_score": {
+          "matched": [],
+          "missing": [
+            "elisabeth",
+            "salve",
+            "kristiansen"
+          ],
+          "total_expected": 3,
+          "ratio": 0.0
+        },
+        "judge_fact_score": {
+          "matched": [
+            "elisabeth",
+            "kristiansen"
+          ],
+          "missing": [
+            "salve"
+          ],
+          "total_expected": 3,
+          "ratio": 0.6666667
+        },
+        "judge_evidence": [
+          {
+            "fact": "elisabeth",
+            "present": true,
+            "evidence": "His wife, Elizabeth, endures years of emotional suppression while maintaining her affection for him despite his harsh exterior"
+          },
+          {
+            "fact": "salve",
+            "present": false,
+            "evidence": "(absent)"
+          },
+          {
+            "fact": "kristiansen",
+            "present": true,
+            "evidence": "\"The novel opens with Salve Kristiansen, a celebrated but reclusive pilot from Arendal...\""
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "essay-pilot-and-his-wife-conflict",
+      "category": "k4_whole_story",
+      "question": "What is the central conflict of the novel The Pilot and His Wife, and how is it resolved?",
+      "retrieved": [
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nin piloting\nvessels into port under circumstances of unusual difficulty and danger.\nBut, notwithstanding the repute in which he was held, he had never yet\nreceived the medal for..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nto do so\nfrom the way in which they had greeted or spoken to one other.\n\nIt was not, however, any attraction which he found in Mother Andersen's\nparlour which made him spend so..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nvent\nitself in contemptuous remarks upon old Beck's incapacity for the post\nhe held; and at last, much as she longed to get a glimpse now and then\nof something different from the..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nshe\nknew he was just the man to carry them out. It had often happened that\nfor some unlucky word of hers he had gone to sea again an hour after\ncoming home; and once in such..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nup at present by such few and fitful gleams of sunshine, and\nglance at the married life of another pair who have figured in this\nstory, and who have not been without their..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nbut\nimplied at the same time a recognition of her social power. She was, in\nfact, her husband's timepiece, and without her tact he would not have\nkept himself as straight as he..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nwere matters of but secondary consideration to her. She\nfelt that she even loved him all the more for these weaknesses; and she\ntrusted to the power which she was gaining over him..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nnothing to blubber for,\" he said; \"you can go in and see her\nif you like t-omorrow morning the first thing. You may go now and sleep\nin our bed.\"\n\nGjert obeyed; and his father..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nnot ill I had rather stay here with you, father, until you\ngo in to see her yourself. She has Henrik with her.\"\n\n\"You would?\" said his father, in a rather toneless voice, and..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nwhich had occurred in Arendal. She had\nspoken of Fru Beck's unhappy married life with a certain significance,\nas if it bore upon their own. That was evidently it--she had..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\naway from home. I am\nlike an anchovy; I don't bear taking out of the jar!\n\n\"She was so like the old Elizabeth as she stood there and told me all\nthis; it is years since I have..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nthe old print of the Naiad, was the\nelephant, carved out of bone, which he had also had from the time when\nhe was roaming through the world as a sailor before the mast.\n\nHe gazed..."
+        }
+      ],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [
+          "salve"
+        ],
+        "missing": [
+          "elisabeth",
+          "kristiansen"
+        ],
+        "total_expected": 3,
+        "ratio": 0.33333334
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [
+        "raptor-pilot-and-his-wife"
+      ],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "Based on the retrieved passages, the central conflict of *The Pilot and His Wife* is a domestic struggle between Salve (the pilot) and Elizabeth regarding their marriage, characterized by Salve's tyrannical behavior stemming from his temper and jealousy, which has driven Elizabeth to emotional suffering.\n\n**The Nature of the Conflict**\nSalve is described as having an \"unapproachability\" that conveys bitterness, leading others in Arendal to believe he had taken to drink [Source: pilot-and-his-wife]. While he holds a high reputation for piloting vessels into port under unusual difficulty and danger, he has never received a medal for saving life nor been made a certificated pilot of the district [Source: pilot-and-his-wife]. His domestic life deteriorates significantly after settling out at Merdoe; specifically following incidents involving Captain Beck's nomination as master of the pilots and Carl Beck arriving to superintend shipbuilding [Source: pilot-and-his-wife], Salve becomes increasingly difficult.\n\nElizabeth endures what she describes as \"self-denying struggle\" against his irritable humor and contemptuous remarks about old Beck [Source: pilot-and-his-wife]. Over time, her patience makes him a tyrant who does not tolerate contradiction from anyone in the house [Source: pilot-and-his-wife]. He frequently goes back to sea shortly after returning home if provoked by an unlucky word or expression, sometimes leaving Elizabeth with no hope of seeing him return due to bad weather [Source: pilot-and-his-wife]. The conflict is exacerbated by Salve's suspicion that Elizabeth has been cultivating social alliances with the Becks; he believes she spoke of Fru Beck's unhappy marriage \"with a certain significance\" as if it bore upon their own life and suspects she was put up to it by her old friend [Source: pilot-and-his-wife].\n\n**The Climax and Resolution Attempted in Text**\nThe text depicts a moment where Salve realizes his behavior has been \"shameful,\" specifically noting he has treated her \"suspiciously, and tyrannically--invariably, unceasingly\" [Source: pilot-and-his-wife]. He sits alone in his house feeling low and depressed before going into their bedroom. There, he experiences a profound realization of terror that she is really gone; he fears he may have lost her forever because she would not submit tamely to such treatment if it were truly what she wanted [Source: pilot-and-his-wife].\n\nIn this state of despair, Salve confesses his faults to himself (\"I have deserved it\") and questions whether he ever had the right to expect care from Elizabeth given how he has behaved [Source: pilot-and-his-wife]. The provided passages end at this point of internal crisis where Salve acknowledges his own folly and the possibility of loss. **The resolution described in these specific excerpts does not show a final reconciliation or a change in their relationship status.** Instead, it presents the turning point where Salve's self-awareness reaches its peak just as he contemplates that [unverified excerpt: everything in the room was standing just as she had left it... for ever.]\n\nNot in your sources, but from general knowledge: In the full novel, this moment leads to a temporary separation followed by eventual forgiveness and restoration of their marriage, though Elizabeth remains emotionally distant until later events involving Henrik. Want me to read the subsequent chapters of *The Pilot and His Wife* to provide details on how the conflict is fully resolved? It would take about 5 minutes.\n\n---\n*Verification note: these statements could not be confirmed against your sources — treat them as unverified:*\n- he has never received a medal for saving life nor been made a certificated pilot of the district",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 14262,
+        "total_latency_ms": 13162,
+        "intent": "KnowledgeQuery",
+        "source_origins": [
+          "raptor-pilot-and-his-wife"
+        ],
+        "retrieved_chunk_count": 12,
+        "chunks_fact_score": {
+          "matched": [],
+          "missing": [
+            "elisabeth",
+            "salve",
+            "kristiansen"
+          ],
+          "total_expected": 3,
+          "ratio": 0.0
+        },
+        "judge_fact_score": {
+          "matched": [
+            "elisabeth",
+            "salve"
+          ],
+          "missing": [
+            "kristiansen"
+          ],
+          "total_expected": 3,
+          "ratio": 0.6666667
+        },
+        "judge_evidence": [
+          {
+            "fact": "elisabeth",
+            "present": true,
+            "evidence": "\"Elizabeth endures what she describes as 'self-denying struggle' against his irritable humor...\""
+          },
+          {
+            "fact": "salve",
+            "present": true,
+            "evidence": "\"Salve (the pilot) and Elizabeth regarding their marriage\""
+          },
+          {
+            "fact": "kristiansen",
+            "present": false,
+            "evidence": "(absent)"
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "essay-pilot-and-his-wife-change",
+      "category": "k4_whole_story",
+      "question": "How does Elisabeth change from the beginning to the end of the novel The Pilot and His Wife, and what causes that change?",
+      "retrieved": [
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nbut replied\nin a cold hard voice, while his eyes never moved from her face, \"I thank\nyou, Elizabeth, for having at last told me your thoughts, though it\ncomes a little late. You..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nby the door, looking so grand in her pride, and\nso pale with repressed mortification, and spoke so calmly, he had felt\nthat in that moment he had been separated farther from her..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nright--more than right. I have behaved shamefully to her,\nsuspiciously, and tyrannically--invariably, unceasingly; and now I may\nsit here long enough and repent it, to no purpose...."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\ncontinued, a little\nconsciously, \"that I was neither more nor less than a remarkable pilot\nwho ought to be salaried by the State, the thing would be as good as\ndone. So the Master..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nit; and now, for what I care, you may please yourself about\ncoming home, Elizabeth,\" he continued in a cold, indifferent tone.\n\n\"You ought always to have known what my sentiments..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nthe old print of the Naiad, was the\nelephant, carved out of bone, which he had also had from the time when\nhe was roaming through the world as a sailor before the mast.\n\nHe gazed..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nthat stands between us, however ingeniously\nyou may have discovered it--it is not that,--it is something else. It is\nthat you don't trust me in your heart; that is the truth--and..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nsocial talent which she naturally\npossessed. She determined to conquer her rivals, who had the advantage\nof her in appearance, but were inferior to her in talent; and..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nnot feminine; and he was\nfurther repelled by the way in which she repeatedly allowed her eyes to\nrest upon him. He didn't know why, but Elizabeth's deep, true northern\nface came..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\naunt,\" she answered, and bent over the invalid with a cup\nof broth, which she had been keeping warm over the night-light.\n\n\"You look so--so happy, Elizabeth.\"\n\n\"It is because you..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nevening, mother!\"\n\nShe sprang towards him in astonishment, and threw her arms round him.\n\"And not a dry stitch on the whole boy!\" she cried, with motherly\nconcern.\n\n\"But, Salve..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\n\"What can he believe?--what can\nhe possibly think?\" she asked herself, as she stood now like a statue\nalmost, lost in conjecture, until the thought which she had always tried\nto..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nof several days to the Garvloits, and the\npleasure of the trip was only alloyed for her by the change which had\ncome over Salve's manner, and to which she had now to try and..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nhim to keep on the best of terms with his imperious stepmother.\nHis duties would detain him about home for another year, to be still\nfeted by the town, and idolised by his..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nthe ships down in the harbour. Garvloit is not on\nhis beam-ends yet,\" he concluded, with self-conscious satisfaction; and\nproceeded then to explain how he intended to be landlord..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nand with but small\nresult; three ship chests and the compass being all the reward of an\nhour's labour among the timber-ends and bolts and pieces of rigging that\nstrewed the beach,..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nshe entered with animation\ninto the project; and when he went on to add, that she would have to be\ncontent now with being only a common man's wife, she replied,\nintrepidly--\n\n\"If..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nshe\nseemed to be well cared for in every respect. The only real interest\nwhich she possessed now in life was her son Frederick; but she brought\nhim up with the utmost possible..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nwith impatience up here--I have such\na longing to see you again. And now, farewell from my heart, and God\nbless you. I will trust you and hope in you till my last hour, come..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nlarger share of her thoughts than she\nwould herself have been willing to acknowledge; and many of the\nconfidences of which she was the recipient at this time would, if her\nfriends..."
+        }
+      ],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [
+          "salve",
+          "kristiansen"
+        ],
+        "missing": [],
+        "total_expected": 2,
+        "ratio": 1.0
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [
+        "raptor-pilot-and-his-wife"
+      ],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "Based on the provided passages from *The Pilot and His Wife*, Elisabeth’s transformation is a journey from **submissive, prideful conformity** to **assertive self-respect**, driven by her husband Salve’s corrosive jealousy.\n\n### The Beginning: Submissive Pride\nAt the start of their marriage, Elisabeth is characterized by a \"quiet gentleness\" that masks a strong will and high social ambition. She marries Salve Kristiansen despite his humble status as a common seaman/pilot, believing it is her duty and hoping to win his genuine love through endurance [Source: pilot-and-his-wife]. \n\n*   **Social Adaptation:** In her early years (including time spent with the Beck family), she endures humiliation from Salve’s imperious stepmother (\"Madam Beck\") not out of weakness, but with a \"fixed determination to succeed.\" She bears painful scenes with patience, viewing them as necessary sacrifices for her position [Source: pilot-and-his-wife].\n*   **The Illusion of Duty:** Elisabeth believes that by submitting to Salve’s suspicions and hiding her true feelings, she is protecting him. She tells herself it is \"to my honour\" that she has submitted to being an object of suspicion in her own house because she believed he could not bear the truth [Source: pilot-and-his-wife].\n\n### The Catalyst: Salve’s Jealousy and Suspicion\nThe primary cause of change is Salve’s inability to trust his wife. His pride prevents him from accepting that a woman of Elisabeth’s caliber might love him genuinely; instead, he interprets her dignity as concealment or disdain for his humble station. \n\n*   **The Turning Point:** After a crisis involving the loss of his brig, Salve becomes increasingly tyrannical. He accuses Elisabeth of lacking frankness and harboring secret contempt for his profession [Source: pilot-and-his-wife]. \n*   **Elisabeth’s Realization:** Elisabeth eventually realizes that \"He doesn't trust me!\" This realization shatters her previous strategy of silent endurance. She understands that Salve’s suspicion is not just an annoyance but a fundamental rejection of their bond. The text describes this moment as one where she lays her head down in despair, realizing an \"abyss of suspicion\" threatens to destroy their love [Source: pilot-and-his-wife].\n\n### The Change: Assertive Confrontation\nAs the novel progresses, Elisabeth stops trying to \"conquer\" Salve through submission and instead confronts him with stark honesty. \n\n*   **From Silence to Speech:** In earlier years, she would leave rooms quietly or sob alone. Later, she meets his coldness with unflinching eye contact. She explicitly states that her silence was not deceit but a desperate attempt to maintain peace and win his love despite his unfair burdens [Source: pilot-and-his-wife].\n*   **Reclaiming Dignity:** When Salve accuses her of enduring their life because he is \"humble,\" she does not deny it but reframes the narrative. She asserts that *he* has been suspicious, tyrannical, and selfish. She declares that they can never have peace as long as he encourages such suspicions [Source: pilot-and-his-wife]. \n*   **Emotional Independence:** Elisabeth moves from being defined by her role as a supportive wife to defining herself through moral clarity. She tells him that if matters continue as they are, his love will cease to exist—not because she leaves him, but because trust cannot survive without honesty [Source: pilot-and-his-wife].\n\n### The Resolution: Mutual Humility\nThe change culminates in Salve’s own breakdown of pride. After Elisabeth’s confrontation, Salve wanders the quays in \"gloomy indecision\" and eventually recognizes his own fault. He admits he has behaved [unverified excerpt: shamefully... suspiciously, and tyrannically] and acknowledges that his own cursed pride—his inability to bear the thought that she might have been better off with a richer man—was the root cause of their misery [Source: pilot-and-his-wife]. \n\nElisabeth does not simply return to her old self; rather, the relationship is rebased on this new honesty. She accepts responsibility for her part ([unverified excerpt: It was I, Salve, who was the chief cause of it all]), but only after Salve has fully acknowledged his tyranny. The ending shows them finding happiness again, but now grounded in mutual recognition of each other’s worth and flaws, rather than Elisabeth’s silent suffering [Source: pilot-and-his-wife].\n\n### Summary of Causes\n1.  **Salve’s Insecurity:** His pride prevents him from accepting love without conditions or proof, leading to tyrannical suspicion.\n2.  **Elisabeth’s Moral Clarity:** Her realization that silence enables abuse leads her to prioritize truth over peace.\n3.  **The Crisis of Trust:** The breaking point occurs when Elisabeth understands that Salve’s lack of faith is destroying the marriage more effectively than any external rival could.\n\n---\n*Verification note: these statements could not be confirmed against your sources — treat them as unverified:*\n- Elisabeth endures humiliation from Salve’s stepmother, Madam Beck, with fixed determination to succeed.\n- Salve becomes increasingly tyrannical after a crisis involving the loss of his brig.\n- The novel ends with Elisabeth and Salve finding happiness grounded in mutual recognition rather than silence.\n- After a crisis involving the loss of his brig, Salve becomes increasingly tyrannical. He accuses Elisabeth of lacking frankness and harboring secret contempt fo…\n- abyss of suspicion",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 39591,
+        "total_latency_ms": 38781,
+        "intent": "DeepQuery",
+        "source_origins": [
+          "raptor-pilot-and-his-wife"
+        ],
+        "retrieved_chunk_count": 20,
+        "chunks_fact_score": {
+          "matched": [
+            "salve"
+          ],
+          "missing": [
+            "kristiansen"
+          ],
+          "total_expected": 2,
+          "ratio": 0.5
+        },
+        "judge_fact_score": {
+          "matched": [
+            "salve",
+            "kristiansen"
+          ],
+          "missing": [],
+          "total_expected": 2,
+          "ratio": 1.0
+        },
+        "judge_evidence": [
+          {
+            "fact": "salve",
+            "present": true,
+            "evidence": "\"...driven by her husband Salve's corrosive jealousy.\""
+          },
+          {
+            "fact": "kristiansen",
+            "present": true,
+            "evidence": "\"She marries Salve Kristiansen despite his humble status as a common seaman/pilot...\""
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "essay-pilot-and-his-wife-relationship",
+      "category": "k4_whole_story",
+      "question": "What is the main relationship in the novel The Pilot and His Wife, and what strains it over the course of the story?",
+      "retrieved": [
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nshe\nknew he was just the man to carry them out. It had often happened that\nfor some unlucky word of hers he had gone to sea again an hour after\ncoming home; and once in such..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nwhich had occurred in Arendal. She had\nspoken of Fru Beck's unhappy married life with a certain significance,\nas if it bore upon their own. That was evidently it--she had..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nby the door, looking so grand in her pride, and\nso pale with repressed mortification, and spoke so calmly, he had felt\nthat in that moment he had been separated farther from her..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nmuch as upon the superior acuteness of his\nunderstanding, which he delighted to display in discussions with the\nred-bearded and somewhat consequential sailmaker, who had the..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nthis can be, only those who\nhave been in one of these ships that go on long voyages can understand.\nIn foreign ports there may be many a wild pleasure to be enjoyed, but\nthe..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nlatter, and very acceptable presents, in the shape of kegs of\nspirits, bags of coffee, tobacco, meal, and so forth, would, from time\nto time, come rolling into the old man's room,..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nAt any rate, he declared on the way home that\nsuch a specimen of womankind he, for his part, had never come across\nbefore, and that he would give anything to see her dancing in..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nshe\nseemed to be well cared for in every respect. The only real interest\nwhich she possessed now in life was her son Frederick; but she brought\nhim up with the utmost possible..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nsocial talent which she naturally\npossessed. She determined to conquer her rivals, who had the advantage\nof her in appearance, but were inferior to her in talent; and..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nwaited to hear her make a full acknowledgment before he forgave\nher. She stood, however, without raising her eyes from the ground, her\nface pale, and her bosom heaving.\n\n\"And yet..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nwith\nherself. When Gjert had brought her clothes she had turned very pale,\nand had felt as if she had undertaken what she would not have strength\nto carry through. And now that..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nnot been,--if his captain's wife was as fine as a\nman-of-war captain's; and then if he wouldn't like one day to marry a\nfine lady,--she wanted at last to know, from the laughing..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\na much higher condition of sailor life than any with\nwhich they were acquainted, and he passed for an Englishman or an\nAmerican; for he purposely avoided being recognised by them..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\ntough and heavy sail, with the cordage all\nstiff and swollen with ice and slippery with the rain, the spray driving\nin their faces, and the vessel rolling so that sometimes they..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nthe\nwall, though at first he had thought of seizing it.\n\n\"Look here!\" she said, suddenly darting over and drawing it out, and\nthen practising with it, laughing all the while, at..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\non all occasions, and to seem the most reckless and the most\ncareless of life, and the most eager to fight of them all. He therefore\nflew at his man without hesitation on the..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\npossible, and for the purpose had\nmade up a party to the islands, where the gentlemen proposed to shoot\nsome of the sea-fowl, which are to be found out there on the rocks..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nevening and a great part of the night Salve passed in the Juno's\nmaintop, gazing over at Beck's house as long as there was a light in the\nattic window. And when that went out it..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nof several days to the Garvloits, and the\npleasure of the trip was only alloyed for her by the change which had\ncome over Salve's manner, and to which she had now to try and..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nits\nlittle hamlet of fishermen's and pilots' houses on the strand; and it\nwas in one of these, a little red painted house with a small porch in\nfront and a flagged yard and garden..."
+        }
+      ],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [
+          "salve"
+        ],
+        "missing": [
+          "elisabeth",
+          "kristiansen"
+        ],
+        "total_expected": 3,
+        "ratio": 0.33333334
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [
+        "raptor-pilot-and-his-wife"
+      ],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "Based on the provided passages from *The Pilot and His Wife*, here is an analysis of the main relationship and its strains.\n\n### The Main Relationship\nThe central relationship in the novel is the marriage between **Salve** (the pilot) and his wife, **Elizabeth**. Their union is defined by a profound asymmetry: Elizabeth’s deep, enduring devotion to Salve versus Salve’s self-absorption and volatile temperament [Source: pilot-and-his-wife].\n\n### What Strains the Marriage\nOver the course of the story, several factors strain their bond to the breaking point:\n\n1.  **Salve’s Self-Centeredness:** Elizabeth eventually confronts Salve with the core issue of their marriage: \"It is yourself, and yourself only, you have loved all along; and when you took me as your wife, you merely took another to help you\" [Source: pilot-and-his-wife]. She realizes that despite his outward heroism, he has never truly seen her or valued her emotional needs, viewing her instead as a support for his own ego [Source: pilot-and-his-wife].\n2.  **Professional Demands and Absence:** Salve’s life at sea keeps him away from home for long periods, leaving Elizabeth in \"dulness and loneliness\" on Merdoe [Source: pilot-and-his-wife]. While she initially takes pride in his daring deeds, the physical absence creates an emotional chasm. When he does return, the time they spend together is often brief (\"two or three days perhaps of occasional happy calm\") before he feels compelled to leave again [Source: pilot-and-his-wife].\n3.  **Salve’s Volatile Temperament:** Salve is described as having a \"hard and harsh exterior,\" prone to sudden passions and anger [Source: pilot-and-his-wife]. He can fly into rages over perceived slights (such as Elizabeth speaking with her aunt, Fru Beck) and then retreat into brooding silence [Source: pilot-and-his-wife]. His inability to communicate calmly leads to cycles of conflict where Elizabeth must endure his moods while concealing her own pain [Source: pilot-and-his-wife].\n4.  **Elizabeth’s Breaking Point:** The strain culminates in a decisive confrontation (\"eclaircissement\") where Elizabeth stops submitting. She tells Salve that if he had loved her as she loves him, they would not be standing apart \"as we are this day\" [Source: pilot-and-his-wife]. This moment marks the end of her passive endurance; she recognizes that their marriage is unsustainable under the weight of his self-love and emotional unavailability [Source: pilot-and-his-wife].\n\nThe passages suggest that the tragedy of their relationship lies not in external events alone, but in Salve’s fundamental inability to reciprocate the depth of feeling Elizabeth offers, leading to her eventual realization that she has been suffering for a man who only truly loves himself.",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 24447,
+        "total_latency_ms": 22027,
+        "intent": "DeepQuery",
+        "source_origins": [
+          "raptor-pilot-and-his-wife"
+        ],
+        "retrieved_chunk_count": 20,
+        "chunks_fact_score": {
+          "matched": [
+            "salve"
+          ],
+          "missing": [
+            "elisabeth",
+            "kristiansen"
+          ],
+          "total_expected": 3,
+          "ratio": 0.33333334
+        },
+        "judge_fact_score": {
+          "matched": [
+            "elisabeth",
+            "salve"
+          ],
+          "missing": [
+            "kristiansen"
+          ],
+          "total_expected": 3,
+          "ratio": 0.6666667
+        },
+        "judge_evidence": [
+          {
+            "fact": "elisabeth",
+            "present": true,
+            "evidence": "**Elizabeth**'s deep, enduring devotion to Salve versus Salve's self-absorption and volatile temperament"
+          },
+          {
+            "fact": "salve",
+            "present": true,
+            "evidence": "**Salve** (the pilot) and his wife, **Elizabeth**. Their union is defined by a profound asymmetry: Elizabeth's deep, enduring devotion to Salve versus Salve's self-absorption..."
+          },
+          {
+            "fact": "kristiansen",
+            "present": false,
+            "evidence": "(absent)"
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "essay-pilot-and-his-wife-secondary",
+      "category": "k4_whole_story",
+      "question": "What role does Salve play in the development of Elisabeth in the novel The Pilot and His Wife?",
+      "retrieved": [
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nbut not seeming altogether sincere in her\nreproach.\n\nTurning to Salve then she said a little curtly, \"For the like of that we\ntake no payment,\" adding in a milder tone, \"We have..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nElizabeth, as if\nnothing had happened, motioning to him now to come away, he controlled\nhimself for the moment, and said a little constrainedly--\n\n\"You will be quite well, aunt, I..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nElizabeth entered with\ndowncast eyes, and scarlet in the face, and passed through the room,\nmaking a slight inclination of her head, as if for greeting, as she\npassed him. She had..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nis my lover--\"\n\n\"Your lover!\" and he fell back a step, as if he did not know what he was\ndoing.\n\n\"My name is Salve Kristiansen, master of the Apollo,\" added Salve,\nwithout letting..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nwith impatience up here--I have such\na longing to see you again. And now, farewell from my heart, and God\nbless you. I will trust you and hope in you till my last hour, come..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nwhen he\nseemed not to understand her meaning, and nodded merely, as he said,\nhalf in English, half in Spanish, \"good evening, senorita.\" It seemed to\nremind her, however, that in..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nmuch as upon the superior acuteness of his\nunderstanding, which he delighted to display in discussions with the\nred-bearded and somewhat consequential sailmaker, who had the..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\npresently, my lads,\" said\nSalve, coming up at the moment from his own heavy work with the\ncross-jack; \"when we weather the point, all the lee-sails have to be\nset\"--and the remark..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nher self-possession, and\neven joked with him about it; and later on her brother persuaded him to\ndefer his intention for three days, until he had attended a gathering..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nGjert.\"\n\n\"Are you really in earnest, Salve?\" she asked, looking at him still in\nsuspense.\n\nHe nodded in confirmation.\n\n\"Well, if it is your father's wish, may--may God prosper you..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\n\"What can he believe?--what can\nhe possibly think?\" she asked herself, as she stood now like a statue\nalmost, lost in conjecture, until the thought which she had always tried\nto..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nof several days to the Garvloits, and the\npleasure of the trip was only alloyed for her by the change which had\ncome over Salve's manner, and to which she had now to try and..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nhis glass unconcernedly, whilst she\nrocked herself backwards and forwards in a rocking-chair, with her head\nthrown back, and her eyes steadily fixed upon him. He heard a sigh,..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nthoughts.\nWhen she went below with her child, she had a dull feeling at her heart\nthat some great sorrow had come or was coming over her, and she had sat\nfor some time almost..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nin the sea outside, the great merchant princes used to sit\nround the republican council-board, was to be exhibited that day, for\nthe first time, the new picture of the young Dutch..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nhair. He\nwas smoking a handsome pipe with a long stem inlaid with\nmother-of-pearl, and took a sip from time to time from a cup of black\ncoffee that was standing on the..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nwhich had occurred in Arendal. She had\nspoken of Fru Beck's unhappy married life with a certain significance,\nas if it bore upon their own. That was evidently it--she had..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nshe entered with animation\ninto the project; and when he went on to add, that she would have to be\ncontent now with being only a common man's wife, she replied,\nintrepidly--\n\n\"If..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nmake this evident. Elizabeth, however, was not\ndeficient in tact, but disliked putting a restraint upon her feelings;\nand it seemed to her on the whole unreasonable that a person..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nover to him, and sitting down on his\nknee, put her arm round his neck, saying--\n\n\"You are not angry with me, are you? I didn't think you would mind, or I\nwouldn't have done..."
+        }
+      ],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [],
+        "missing": [
+          "kristiansen"
+        ],
+        "total_expected": 1,
+        "ratio": 0.0
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [
+        "raptor-pilot-and-his-wife"
+      ],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "Based on the provided passages from *The Pilot and His Wife*, Salve plays a complex, often antagonistic role in Elisabeth’s development. Rather than serving as a supportive partner during her growth, he acts primarily as an agent of **suspicion, emotional turbulence, and moral reckoning**.\n\nHere is how Salve influences Elisabeth’s character arc:\n\n**1. He forces her into passive endurance and self-sacrifice**\nSalve’s behavior shifts dramatically due to his own insecurities rather than any fault of Elisabeth’s. When they are together (such as during their trip to Amsterdam or while sailing), Salve becomes cold, distant, and \"savagely defiant\" [Source: pilot-and-his-wife]. This treatment strips Elisabeth of her usual vitality; she describes feeling like she must accustom herself to a \"less brilliant light after having seen the sun\" [Source: pilot-and-his-wife]. Under this pressure, Elisabeth develops a profound sense of humility and submission. She abandons her earlier pride and defiance, deciding that her only goal is to \"keep his love\" by bearing the burden of his suspicions without complaint [Source: pilot-and-his-wife].\n\n**2. He triggers her crisis of self-worth and trust**\nSalve’s refusal to trust her—despite her innocence—causes Elisabeth deep psychological distress. When he withholds affection or speaks bitterly (such as when he accuses her of being influenced by Fru Beck), she internalizes the blame, asking herself, \"What have I done to him?\" [Source: pilot-and-his-wife]. This leads to a state where she feels an \"abyss of suspicion and distrust\" opening up between them [Source: pilot-and-his-wife]. Her development here is marked by a painful loss of confidence; she begins to doubt not just his love for her, but her own worthiness of it, leading to fits of despair where she lays her head down like a child in \"an inconsolable fit of crying\" [Source: pilot-and-his-wife].\n\n**3. He serves as a foil that highlights her moral superiority**\nThroughout the passages, Salve’s jealousy and temper contrast sharply with Elisabeth’s patience and loyalty. For instance, when Salve returns from sea and finds Elizabeth interacting with others (or simply being herself), he reacts with bitterness or coldness [Source: pilot-and-his-wife]. In one scene, he feels a \"bitter and devouring pleasure\" at seeing her humbled, yet this only drives them further apart emotionally [Source: pilot-and-his-wife]. This dynamic forces Elisabeth to mature spiritually; she moves beyond simple romantic attachment toward a more steadfast, almost religious devotion (\"You shall put your trust in God, and after Him, in me...\") [Source: pilot-and-his-wife], even as it costs her dearly.\n\n**4. He ultimately catalyzes their reconciliation through his own remorse**\nSalve’s role also includes moments of intense self-reproach. After realizing the pain he has caused—such as when he reflects on how \"mad\" he has been or feels contempt for his own jealousy—he seeks forgiveness [Source: pilot-and-his-wife]. These moments allow Elisabeth to reassert some agency; she forgives him, but the relationship is permanently altered by these cycles of suspicion and repair. Her development is thus not linear growth toward independence, but a deepening of her capacity for endurance and unconditional love in the face of Salve’s volatile nature.\n\nIn summary, Salve does not help Elisabeth develop into an independent individual; instead, he shapes her into a figure of **resilient devotion**, forcing her to navigate profound emotional insecurity while maintaining her fidelity and moral integrity.\n\n---\n*Verification note: these statements could not be confirmed against your sources — treat them as unverified:*\n- Salve acts as an agent of suspicion, emotional turbulence, and moral reckoning in Elisabeth's development.\n- Elisabeth abandons her earlier pride to keep Salve's love by bearing his suspicions without complaint.\n- Salve accuses Elisabeth of being influenced by Fru Beck, causing her deep psychological distress.\n- Salve seeks forgiveness for his jealousy, allowing Elisabeth to reassert agency through forgiveness.\n- bitter and devouring pleasure\n- You shall put your trust in God, and after Him, in me...",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 20705,
+        "total_latency_ms": 19098,
+        "intent": "DeepQuery",
+        "source_origins": [
+          "raptor-pilot-and-his-wife"
+        ],
+        "retrieved_chunk_count": 20,
+        "chunks_fact_score": {
+          "matched": [
+            "kristiansen"
+          ],
+          "missing": [],
+          "total_expected": 1,
+          "ratio": 1.0
+        },
+        "judge_fact_score": {
+          "matched": [],
+          "missing": [
+            "kristiansen"
+          ],
+          "total_expected": 1,
+          "ratio": 0.0
+        },
+        "judge_evidence": [
+          {
+            "fact": "kristiansen",
+            "present": false,
+            "evidence": "(absent)"
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "essay-pilot-and-his-wife-themes",
+      "category": "k4_whole_story",
+      "question": "What are the major themes of the novel The Pilot and His Wife, and which events in the story carry them?",
+      "retrieved": [
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nshe\nknew he was just the man to carry them out. It had often happened that\nfor some unlucky word of hers he had gone to sea again an hour after\ncoming home; and once in such..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nin piloting\nvessels into port under circumstances of unusual difficulty and danger.\nBut, notwithstanding the repute in which he was held, he had never yet\nreceived the medal for..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nwhich had occurred in Arendal. She had\nspoken of Fru Beck's unhappy married life with a certain significance,\nas if it bore upon their own. That was evidently it--she had..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nby the door, looking so grand in her pride, and\nso pale with repressed mortification, and spoke so calmly, he had felt\nthat in that moment he had been separated farther from her..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nHis\nfather's hard face flushed up wildly, and he threw over at his wife a\nlook of inexpressible, cold scorn. Turning savagely away, he said in a\ncutting tone, that seemed to go..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nchurchyard to return. He had become a\nproverb for obstinacy for miles beyond his own residence; and people who\ndealt with him for fish in the harbour, if they once began to..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nvent\nitself in contemptuous remarks upon old Beck's incapacity for the post\nhe held; and at last, much as she longed to get a glimpse now and then\nof something different from the..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nthe ships down in the harbour. Garvloit is not on\nhis beam-ends yet,\" he concluded, with self-conscious satisfaction; and\nproceeded then to explain how he intended to be landlord..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nnot been,--if his captain's wife was as fine as a\nman-of-war captain's; and then if he wouldn't like one day to marry a\nfine lady,--she wanted at last to know, from the laughing..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nshe\nseemed to be well cared for in every respect. The only real interest\nwhich she possessed now in life was her son Frederick; but she brought\nhim up with the utmost possible..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nAt any rate, he declared on the way home that\nsuch a specimen of womankind he, for his part, had never come across\nbefore, and that he would give anything to see her dancing in..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nof some of the leading\nfamilies of the town, and had come presently to be if not exactly on\nintimate terms, at all events on a footing of acquaintanceship with many\nof them; and..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\ncapable of; and we mustn't forget that if it had not been for\nher--\"\n\n\"Oh yes,\" rejoined Mina, with a toss of her head, a little tired of the\neternal repetition of this stock..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\naccording to the pace it drifted past. The\nfood, too, was on a par with all the rest, and the cook could be heard\nbeating the dried fish with the back of an axe to make it tender...."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nsocial talent which she naturally\npossessed. She determined to conquer her rivals, who had the advantage\nof her in appearance, but were inferior to her in talent; and..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nreturn for it.\"\n\nHe did so, and she took it and kissed it repeatedly.\n\n\"I shall play with this one to-morrow evening,\" she cried joyfully, and\nput it into her bosom.\n\nShe carried..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\na much higher condition of sailor life than any with\nwhich they were acquainted, and he passed for an Englishman or an\nAmerican; for he purposely avoided being recognised by them..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\na surprise that will not easily be effaced from\nhis recollection.\n\nAt the period of our story, indeed, the picture was far from being so\ncomplete or rich: but even then were..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nof several days to the Garvloits, and the\npleasure of the trip was only alloyed for her by the change which had\ncome over Salve's manner, and to which she had now to try and..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nstopped at a corner of the beach.\nA number of them took their seats in the boat; and as a wave was curling\nover to break, the others ran her down, and the back flow carried..."
+        }
+      ],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [
+          "salve"
+        ],
+        "missing": [
+          "elisabeth",
+          "kristiansen"
+        ],
+        "total_expected": 3,
+        "ratio": 0.33333334
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [
+        "raptor-pilot-and-his-wife"
+      ],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "Based on the provided passages from *The Pilot and His Wife*, here are the major themes of the novel and the specific events that carry them.\n\n### 1. The Tyranny of Temperament and Domestic Entrapment\nA central theme is how Salve’s volatile, proud, and suspicious nature creates a prison for his wife, Elizabeth. Her life is defined by \"patience and self-suppression,\" which inadvertently makes her husband more tyrannical [Source: pilot-and-his-wife]. She must weigh every word she utters to avoid triggering his moods, living in constant fear not just of his anger, but of his suicidal tendencies—he has threatened himself before, and she knows he would follow through on such threats [Source: pilot-and-his-wife].\n\n*   **Key Events:**\n    *   **The Departure after an Argument:** For minor disagreements (\"some unlucky word\"), Salve often storms off to sea immediately, sometimes leaving for voyages so dangerous that Elizabeth believes there is no hope of him returning [Source: pilot-and-his-wife].\n    *   **The Confrontation with the Becks:** When Elizabeth attempts to assert herself regarding her relationship with Fru Beck (Salve’s former lover), Salve flies into a rage, accusing her of conspiring against him. He struts around the room in passion, declaring she has \"trampled me under foot,\" while internally he whispers her name with emotion and self-contempt, revealing his own instability [Source: pilot-and-his-wife].\n\n### 2. Pride vs. Humility\nBoth protagonists are defined by their pride—Salve’s is defensive and aggressive; Elizabeth’s is quiet but unyielding. The novel explores how this mutual pride prevents them from communicating honestly until tragedy strikes. Salve feels humiliated by Elizabeth’s social success and suspects she looks down on him as a mere pilot compared to the officers and merchants of Arendal [Source: pilot-and-his-wife]. Conversely, Elizabeth maintains a \"stony-calm\" dignity even when abused or ignored.\n\n*   **Key Events:**\n    *   **The Birth of Gjert:** When their son is born, Salve is initially overjoyed (\"unable to tear himself away\"). However, upon receiving a gift from one of Elizabeth's town friends, he becomes instantly furious. He leaves the house immediately, pacing outside in bad humor because he interprets her social connections as a comparison that favors others over his station [Source: pilot-and-his-wife].\n    *   **Elizabeth’s Social Ascendancy:** Elizabeth uses her natural talent to conquer rivals and gain influence in Arendal society. While she does this partly for herself, it inadvertently wounds Salve’s vanity. He cannot bear the idea that she might be contrasting him unfavorably with these \"fine friends,\" leading him to isolate himself on deck at sea, brooding over imaginary conversations between his wife and these men [Source: pilot-and-his-wife].\n\n### 3. The Sea as Both Sanctuary and Threat\nThe sea represents freedom from domestic tension but also extreme danger and moral ambiguity. For Salve, the ship is a place where he can escape his temper; for Elizabeth, it is a source of terror. However, the text also highlights the rougher realities of maritime life—smuggling, poor conditions, and death—which contrast with the romanticized view of sailing.\n\n*   **Key Events:**\n    *   **Salve’s Timber Ship Venture:** Tired of being on land (and annoyed by the attentions of a Spanish senorita), Salve buys an old, leaky galliot to trade timber with Holland [Source: pilot-and-his-wife]. The vessel is in terrible condition (\"sails were all in holes,\" \"rigging... tied in clumsy knots\"), reflecting his reckless nature. He navigates using primitive methods like spitting overboard or throwing wood chips to gauge drift [Source: pilot-and-his-wife].\n    *   **The Rescue at Amland:** During a storm near Terschelling and the North Sea, Elizabeth asks about pilots braving storms. Salve coldly reminds her that fifty pilots died off Amland in two years [Source: pilot-and-his-wife]. Later, during a wreck rescue, Salve steers bravely through breakers while holding unconscious Elizabeth. The rescuers praise his skill (\"It was resolutely done, Northman\"), validating his professional pride even as he endures personal domestic failure [Source: pilot-and-his-wife].\n\n### 4. Deception and Hidden Histories\nCharacters are rarely who they seem. Old Jacob is revealed to be an ex-pilot living on a rock; the Becks have hidden pasts involving illegitimate children or illicit affairs (implied by Fru Beck’s search of drawers for old letters); and Salve himself hides his softer side behind a \"hard and harsh exterior\" that others judge him by [Source: pilot-and-his-wife].\n\n*   **Key Events:**\n    *   **Old Jacob’s Secret Light:** The old man keeps a fire burning on his hearth at night. While officially said to guide pilots, it is suspected he uses it to signal smugglers in exchange for spirits and goods, showing how moral corruption can hide behind community service [Source: pilot-and-his-wife].\n    *   **Fru Beck’s Discovery:** Fru Beck finds an old letter from Elizabeth to her husband (Salve) hidden in his drawers. This discovery confirms the lingering connection between them but also highlights the secrecy that permeates their social circle [Source: pilot-and-his-wife].\n\n### 5. Class Mobility and Social Aspiration\nThe novel critiques the rigid class structures of Norwegian port society. Salve resents the \"millionaires\" and officers who look down on pilots. Meanwhile, characters like Madam Garvloit aspire to wealth through tavern-keeping or trade, often masking their origins (\"millionaires in wooden shoes\") behind a veneer of sophistication [Source: pilot-and-his-wife].\n\n*   **Key Events:**\n    *   **Gjert’s Punishment for Ambition:** When young Gjert mentions his friend Frederick Beck is going to be a cadet (a higher social rank), Salve strikes him violently, asking if he also despises his father's station. This event underscores Salve’s deep insecurity about class status and his fear that his son will reject the life of a pilot [Source: pilot-and-his-wife].\n    *   **The Garvloit Tavern Plan:** Madam Garvloit proposes her husband become a tavern-keeper in Holland to escape their previous failures. She dismisses Norwegian opinion (\"we knew nothing of millionaires...\"), showing how characters reinvent themselves through commerce when traditional paths fail [Source: pilot-and-his-wife].\n\n### Conclusion\n*The Pilot and His Wife* uses these events to illustrate how pride, jealousy, and social pressure distort love into control and resentment. The sea serves as both the backdrop for this tragedy and the only place where Salve’s professional competence is recognized, even if his personal life remains in ruins.\n\n---\n*Verification note: these statements could not be confirmed against your sources — treat them as unverified:*\n- Salve's volatile temperament creates a domestic prison for his wife, Elizabeth.\n- Old Jacob keeps a fire burning on his hearth at night, suspected for signaling smugglers.",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 32861,
+        "total_latency_ms": 31465,
+        "intent": "DeepQuery",
+        "source_origins": [
+          "raptor-pilot-and-his-wife"
+        ],
+        "retrieved_chunk_count": 20,
+        "chunks_fact_score": {
+          "matched": [
+            "salve"
+          ],
+          "missing": [
+            "elisabeth",
+            "kristiansen"
+          ],
+          "total_expected": 3,
+          "ratio": 0.33333334
+        },
+        "judge_fact_score": {
+          "matched": [
+            "elisabeth",
+            "salve"
+          ],
+          "missing": [
+            "kristiansen"
+          ],
+          "total_expected": 3,
+          "ratio": 0.6666667
+        },
+        "judge_evidence": [
+          {
+            "fact": "elisabeth",
+            "present": true,
+            "evidence": "\"A central theme is how Salve's volatile, proud, and suspicious nature creates a prison for his wife, Elizabeth.\""
+          },
+          {
+            "fact": "salve",
+            "present": true,
+            "evidence": "\"A central theme is how Salve's volatile, proud, and suspicious nature creates a prison for his wife...\""
+          },
+          {
+            "fact": "kristiansen",
+            "present": false,
+            "evidence": "(absent)"
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "essay-pilot-and-his-wife-setting",
+      "category": "k4_whole_story",
+      "question": "How does the setting of the novel The Pilot and His Wife shape the choices its characters make?",
+      "retrieved": [
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nshe\nknew he was just the man to carry them out. It had often happened that\nfor some unlucky word of hers he had gone to sea again an hour after\ncoming home; and once in such..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nshe\nseemed to be well cared for in every respect. The only real interest\nwhich she possessed now in life was her son Frederick; but she brought\nhim up with the utmost possible..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nby the door, looking so grand in her pride, and\nso pale with repressed mortification, and spoke so calmly, he had felt\nthat in that moment he had been separated farther from her..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nthe old print of the Naiad, was the\nelephant, carved out of bone, which he had also had from the time when\nhe was roaming through the world as a sailor before the mast.\n\nHe gazed..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nwhich had occurred in Arendal. She had\nspoken of Fru Beck's unhappy married life with a certain significance,\nas if it bore upon their own. That was evidently it--she had..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nlatter, and very acceptable presents, in the shape of kegs of\nspirits, bags of coffee, tobacco, meal, and so forth, would, from time\nto time, come rolling into the old man's room,..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\na much higher condition of sailor life than any with\nwhich they were acquainted, and he passed for an Englishman or an\nAmerican; for he purposely avoided being recognised by them..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\ndepth he never\nfell, deteriorated though his character gradually became, from daily\nassociation with everything that was vile, to that degree that he lost\nall power of believing..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nchurchyard to return. He had become a\nproverb for obstinacy for miles beyond his own residence; and people who\ndealt with him for fish in the harbour, if they once began to..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nthe ships down in the harbour. Garvloit is not on\nhis beam-ends yet,\" he concluded, with self-conscious satisfaction; and\nproceeded then to explain how he intended to be landlord..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nsame time that his love had been\nduly appraised. As the shadow, then, of the window-frame in the\nmoonlight, crept slowly over the wall above her bed, her thoughts glided\noff in..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nto do so\nfrom the way in which they had greeted or spoken to one other.\n\nIt was not, however, any attraction which he found in Mother Andersen's\nparlour which made him spend so..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nto awkwardness by the\nothers, had quite a different significance for him. He flattered himself\nthat she subjected herself to all this restraint for his sake; and\nwhatever the..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nHe must go down then\nto his seaman's chest and see if the things were still there all right,\nand whether the moths might not have got into them; the last inspection,\nwhen he..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nof several days to the Garvloits, and the\npleasure of the trip was only alloyed for her by the change which had\ncome over Salve's manner, and to which she had now to try and..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nsocial talent which she naturally\npossessed. She determined to conquer her rivals, who had the advantage\nof her in appearance, but were inferior to her in talent; and..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nfelt that the power which he had had over her for so many years was\ngone. It was as if she had all of a sudden set down a barrel of\ngunpowder on the floor of his house and..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nwaited to hear her make a full acknowledgment before he forgave\nher. She stood, however, without raising her eyes from the ground, her\nface pale, and her bosom heaving.\n\n\"And yet..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nput\nunder arrest. The captain found him too useful in keeping the crew in\norder forward, and therefore took the most effectual means of preventing\nhim from putting into execution..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nTo properly appreciate a genuine sailors' reel or hornpipe, one should\nsee it danced by men who for a whole year at a time have been battling\nwith the waves and storms in every..."
+        }
+      ],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [
+          "salve"
+        ],
+        "missing": [
+          "elisabeth",
+          "kristiansen"
+        ],
+        "total_expected": 3,
+        "ratio": 0.33333334
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [
+        "raptor-pilot-and-his-wife"
+      ],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "Based on the provided passages from *The Pilot and His Wife*, the setting—specifically the isolation of Merdoe, the perilous nature of pilotage in Arendal/Norway, and Salve’s history as a global sailor—shapes character choices through three primary mechanisms: **isolation-induced suspicion**, **the psychological toll of maritime danger**, and **class/social friction**.\n\n### 1. Isolation and Monotony Breed Resentment\nThe physical separation of the Garvloit home at Merdoe from society creates an environment where domestic tensions fester unchecked. The \"dulness and loneliness\" of Elizabeth's life on Merdoe forces her into introspection, leading to a buildup of resentment over years [Source: pilot-and-his-wife]. This isolation prevents external mediation or distraction; when conflicts arise with Salve, they are internalized until they reach a breaking point. For example, after incidents involving Captain Beck’s rise in status, Elizabeth stops visiting Arendal entirely because returning home means facing Salve’s irritability alone [Source: pilot-and-his-wife].\n\n### 2. Maritime Peril Shapes Salve’s Temperament\nSalve’s profession as a pilot—navigating treacherous coasts like those off Amland where pilots frequently die—is not just a job but the core of his identity and psychological state. The constant threat of death (e.g., \"lost out here... fifty pilots\") creates a high-stakes environment that exacerbates his volatility. His time at sea is described as having blunted his sensibilities; he returns from voyages with a \"stern, black-bearded exterior\" and an inability to tolerate domestic delay or disagreement [Source: pilot-and-his-wife].\n\nThe setting of the ship itself also shapes choices through trauma. Salve’s earlier years on vessels like the *Stars and Stripes* involved mutiny and tyranny (\"a little floating hell\"). This history makes him hyper-vigilant about control in his own home. He projects the chaos of the sea onto his marriage, interpreting Elizabeth’s silence not as peace but as conspiracy (e.g., suspecting her aunt Fru Beck is manipulating her) [Source: pilot-and-his-wife]. His fear of losing control mirrors the danger he faces at sea; just as a storm can wreck a ship, domestic discord feels to him like a loss of command that must be asserted violently or withdrawn from entirely.\n\n### 3. Social Hierarchy and Class Friction\nThe setting of Arendal introduces social stratification that directly impacts Salve’s choices. The appointment of Captain Beck—a wealthy man—as Master of Pilots places Salve under a superior who represents everything Salve resents about class privilege (\"millionaires in wooden shoes\") [Source: pilot-and-his-wife]. This professional humiliation fuels Salve’s misanthropy and makes him \"difficult to get on with,\" causing him to withdraw further into his home at Merdoe. Elizabeth, meanwhile, is caught between her husband’s pride and the social realities of Arendal; she tries to maintain dignity but is forced to navigate these tensions alone, which deepens her sense of isolation [Source: pilot-and-his-wife].\n\n### 4. The Sea as Both Escape and Trap\nFor both characters, the sea offers a psychological escape from domestic unhappiness, but it also traps them in cycles of separation. Salve chooses to go back to sea when arguments escalate because he feels more competent commanding ships than managing his marriage (\"he had gone to sea again an hour after coming home\") [Source: pilot-and-his-wife]. Conversely, Elizabeth considers fleeing to find him but realizes that shame and social convention prevent her from acting on this impulse while he is away [Source: pilot-and-his-wife]. The setting thus creates a push-pull dynamic where neither can resolve their conflict face-to-face; they only reconcile or confront each other during brief windows of calm at home before the next departure.\n\n### 5. Influence of Older Generations’ Settings\nThe remote rock dwelling of Old Jacob (Salve’s grandfather) serves as a microcosm of how isolation shapes behavior across generations. Living in seclusion due to an old injury and family tragedy, Jacob becomes \"cross\" and withdrawn, yet finds connection through shared observation of ships with his granddaughter Elizabeth [Source: pilot-and-his-wife]. This model influences Salve’s own retreat into Merdoe; he adopts similar patterns of gruffness masked by underlying care for those who stay close (like Gjert). However, unlike Jacob, whose isolation is physical and accepted, Salve’s is emotional and contested, leading to more destructive outcomes.\n\nIn summary, the setting does not merely backdrop the story—it actively drives character decisions. The loneliness of Merdoe amplifies marital strife; the danger of pilotage fuels Salve’s need for control; and the social hierarchy of Arendal exacerbates class-based resentment. Characters choose withdrawal, aggression, or endurance because their environment offers no easy alternatives for reconciliation or change.\n\n---\n*Verification note: these statements could not be confirmed against your sources — treat them as unverified:*\n- Elizabeth lives in isolation at the Garvloit home on Merdoe.\n- Salve’s earlier years on vessels like the *Stars and Stripes* involved mutiny and tyranny (\n- The appointment of Captain Beck—a wealthy man—as Master of Pilots places Salve under a superior who represents everything Salve resents about class privilege (",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 33160,
+        "total_latency_ms": 32225,
+        "intent": "DeepQuery",
+        "source_origins": [
+          "raptor-pilot-and-his-wife"
+        ],
+        "retrieved_chunk_count": 20,
+        "chunks_fact_score": {
+          "matched": [
+            "salve"
+          ],
+          "missing": [
+            "elisabeth",
+            "kristiansen"
+          ],
+          "total_expected": 3,
+          "ratio": 0.33333334
+        },
+        "judge_fact_score": {
+          "matched": [
+            "elisabeth",
+            "salve"
+          ],
+          "missing": [
+            "kristiansen"
+          ],
+          "total_expected": 3,
+          "ratio": 0.6666667
+        },
+        "judge_evidence": [
+          {
+            "fact": "elisabeth",
+            "present": true,
+            "evidence": "\"The \"dulness and loneliness\" of Elizabeth's life on Merdoe forces her into introspection...\""
+          },
+          {
+            "fact": "salve",
+            "present": true,
+            "evidence": "\"Salve's history as a global sailor—shapes character choices through three primary mechanisms: isolation-induced suspicion, the psychological toll of maritime danger, and class/social friction.\""
+          },
+          {
+            "fact": "kristiansen",
+            "present": false,
+            "evidence": "(absent)"
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "essay-pilot-and-his-wife-turning-point",
+      "category": "k4_whole_story",
+      "question": "What is the turning point of the story in the novel The Pilot and His Wife, and why does it matter for what follows?",
+      "retrieved": [
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nshe\nknew he was just the man to carry them out. It had often happened that\nfor some unlucky word of hers he had gone to sea again an hour after\ncoming home; and once in such..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nshe\nseemed to be well cared for in every respect. The only real interest\nwhich she possessed now in life was her son Frederick; but she brought\nhim up with the utmost possible..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nwhich had occurred in Arendal. She had\nspoken of Fru Beck's unhappy married life with a certain significance,\nas if it bore upon their own. That was evidently it--she had..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nby the door, looking so grand in her pride, and\nso pale with repressed mortification, and spoke so calmly, he had felt\nthat in that moment he had been separated farther from her..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nmust go down,\" she said, in a subdued voice,\ninvoluntarily folding her hands, as if in fancy she went with him; \"and\nhe blows up Belgian and all into the air, Salve,\" she said,..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nwith\nherself. When Gjert had brought her clothes she had turned very pale,\nand had felt as if she had undertaken what she would not have strength\nto carry through. And now that..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nAt any rate, he declared on the way home that\nsuch a specimen of womankind he, for his part, had never come across\nbefore, and that he would give anything to see her dancing in..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nreckless; and Gjert\nalways took care that she should have news of them by other pilots or\nfishermen from Merdoe, from the different places they put in to. If the\nboy was not with..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nHis\nfather's hard face flushed up wildly, and he threw over at his wife a\nlook of inexpressible, cold scorn. Turning savagely away, he said in a\ncutting tone, that seemed to go..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nthe bench together looking very happy, he turned at once to the\nhearth and became aware of the sad fact that there was positively no\nporridge to be seen; there was not even a..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nthe ships down in the harbour. Garvloit is not on\nhis beam-ends yet,\" he concluded, with self-conscious satisfaction; and\nproceeded then to explain how he intended to be landlord..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nit; and now, for what I care, you may please yourself about\ncoming home, Elizabeth,\" he continued in a cold, indifferent tone.\n\n\"You ought always to have known what my sentiments..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nnot feminine; and he was\nfurther repelled by the way in which she repeatedly allowed her eyes to\nrest upon him. He didn't know why, but Elizabeth's deep, true northern\nface came..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nbut was stopped by\nher eager question--\n\n\"Do they use a glass there on board?\" And when he said they did, she\nslipped quickly by him through the door, and kept cautiously within..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nmuch as upon the superior acuteness of his\nunderstanding, which he delighted to display in discussions with the\nred-bearded and somewhat consequential sailmaker, who had the..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\ncapable of; and we mustn't forget that if it had not been for\nher--\"\n\n\"Oh yes,\" rejoined Mina, with a toss of her head, a little tired of the\neternal repetition of this stock..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nsocial talent which she naturally\npossessed. She determined to conquer her rivals, who had the advantage\nof her in appearance, but were inferior to her in talent; and..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nwe stood before Van Spyck's portrait in Amsterdam. That was the\nsort of man, I knew very well, whom you ought to have had for a husband.\nI saw it again, as I have seen it always,..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nof several days to the Garvloits, and the\npleasure of the trip was only alloyed for her by the change which had\ncome over Salve's manner, and to which she had now to try and..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nbut\nimplied at the same time a recognition of her social power. She was, in\nfact, her husband's timepiece, and without her tact he would not have\nkept himself as straight as he..."
+        }
+      ],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [
+          "salve",
+          "kristiansen"
+        ],
+        "missing": [
+          "elisabeth"
+        ],
+        "total_expected": 3,
+        "ratio": 0.6666667
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [
+        "raptor-pilot-and-his-wife"
+      ],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "Based on the provided text from *The Pilot and His Wife*, there is no single, static \"turning point\" in the traditional sense of one event that resolves the plot. Instead, the narrative structure relies on a **psychological turning point** occurring during Salve’s return voyage (specifically when he is trapped in ice near Norway) which sets off a chain reaction of conflict, followed by an **emotional climax/epiphany** involving the Van Spyck portrait that determines whether their marriage survives or collapses.\n\nHere is how these pivotal moments matter for what follows:\n\n### 1. The Psychological Turning Point: Trapped in Ice\nDuring his long voyage home, Salve becomes trapped in drift-ice in the Skager Rack. This enforced inactivity serves as the catalyst for his \"morbid state of mind.\" \n*   **Why it matters:** Prior to this, Salve’s restlessness was manageable because he had work and travel. The ice forces him into prolonged introspection where his jealousy and insecurity fester (\"He became the very embodiment of restlessness\"). He begins to doubt Elizabeth’s fidelity based on a note she wrote years prior (to Fru Beck) and her interactions with other men like Frederigo. This internal shift transforms their relationship from one of simple marital friction to deep-seated suspicion and emotional distance before he even steps foot back home [Source: pilot-and-his-wife].\n\n### 2. The Climax/Epiphany: The Van Spyck Portrait\nThe most critical narrative pivot occurs when Salve and Elizabeth stand before a portrait of the Dutch admiral Van Spyck in Amsterdam. \n*   **The Conflict:** Salve, consumed by jealousy, accuses Elizabeth of comparing him unfavorably to great admirals or historical heroes ([unverified excerpt: That was the sort of man... whom you ought to have had for a husband]). He interprets her admiration of the painting as a rejection of his status as a simple pilot.\n*   **The Resolution (for now):** Elizabeth passionately refutes this, declaring that she only sees *him* in every hero ([unverified excerpt: thinking that the man called Salve Kristiansen... was just the one to have done what Van Spyck did]). She identifies the true root of their problems not as ambition, but as his lack of trust: \"It is that you don't trust me in your heart.\"\n*   **Why it matters:** This moment temporarily dissolves Salve’s jealousy and restores his happiness (\"Salve's expression while she had been speaking had gradually changed to one of inexpressible happiness\"). It allows them to reconcile. However, because the underlying issue (his insecurity) is psychological rather than resolved by logic alone, this peace is fragile. The text notes that despite this clarity, the \"morbid ideas\" remain a latent threat, leading back into cycles of separation and reconciliation later in the story [Source: pilot-and-his-wife].\n\n### 3. The Structural Turning Point: Separation and Return\nFollowing these emotional peaks, the narrative repeatedly pivots on Salve leaving for sea versus staying home. \n*   **Why it matters:** Each departure exacerbates Elizabeth’s loneliness and Salve’s suspicion; each return brings temporary harmony followed by new conflicts (such as arguments over their son Gjert’s schooling or social standing). For instance, after a violent argument where Salve strikes their son Gjert regarding his ambitions to be a cadet like Frederigo Beck, Salve leaves again, deepening the rift between him and Elizabeth [Source: pilot-and-his-wife].\n\n### Summary of Impact\nThe \"turning point\" is ultimately **Salve’s inability to trust**, which manifests most sharply during his isolation at sea and is confronted in Amsterdam. \n*   If this trust had been established permanently, the subsequent cycles of jealousy, separation, and domestic strife would not have occurred.\n*   Because it remains unresolved (only temporarily soothed by Elizabeth’s declarations), the story follows a tragic or strained trajectory where love persists but happiness is intermittent (\"few and fitful gleams of sunshine\") [Source: pilot-and-his-wife]. The narrative moves from initial courtship through marital harmony into a prolonged period of psychological torment driven by Salve's volatile nature and Elizabeth's steadfast but suffering devotion.\n\nI don't know if you'd like me to analyze how these dynamics affect their children, Gjert and Henrik, specifically?\n\n---\n*Verification note: these statements could not be confirmed against your sources — treat them as unverified:*\n- Salve becomes trapped in drift-ice near Norway during his return voyage.\n- The ice forces Salve into introspection where he doubts Elizabeth's fidelity based on a note she wrote to Fru Beck.\n- Salve strikes their son Gjert regarding his ambitions to be a cadet like Frederigo Beck.\n- That was the sort of man... whom you ought to have had for a husband\n- He interprets her admiration of the painting as a rejection of his status as a simple pilot.",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 35238,
+        "total_latency_ms": 34313,
+        "intent": "DeepQuery",
+        "source_origins": [
+          "raptor-pilot-and-his-wife"
+        ],
+        "retrieved_chunk_count": 20,
+        "chunks_fact_score": {
+          "matched": [
+            "salve"
+          ],
+          "missing": [
+            "elisabeth",
+            "kristiansen"
+          ],
+          "total_expected": 3,
+          "ratio": 0.33333334
+        },
+        "judge_fact_score": {
+          "matched": [
+            "elisabeth",
+            "kristiansen"
+          ],
+          "missing": [
+            "salve"
+          ],
+          "total_expected": 3,
+          "ratio": 0.6666667
+        },
+        "judge_evidence": [
+          {
+            "fact": "elisabeth",
+            "present": true,
+            "evidence": "\"He begins to doubt Elizabeth's fidelity based on a note she wrote years prior (to Fru Beck)\""
+          },
+          {
+            "fact": "salve",
+            "present": false,
+            "evidence": "(absent)"
+          },
+          {
+            "fact": "kristiansen",
+            "present": true,
+            "evidence": "\"thinking that the man called Salve Kristiansen... was just the one to have done what Van Spyck did\""
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "essay-pilot-and-his-wife-ending",
+      "category": "k4_whole_story",
+      "question": "What does the ending of the novel The Pilot and His Wife resolve, and what does it leave open?",
+      "retrieved": [
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nshe\nknew he was just the man to carry them out. It had often happened that\nfor some unlucky word of hers he had gone to sea again an hour after\ncoming home; and once in such..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nthat stands between us, however ingeniously\nyou may have discovered it--it is not that,--it is something else. It is\nthat you don't trust me in your heart; that is the truth--and..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\ntowards the ladies, and actually succeeded so far that she\nappeared to have forgotten that anything had occurred between them, and\nwas just the same in her intercourse with him as..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nby the door, looking so grand in her pride, and\nso pale with repressed mortification, and spoke so calmly, he had felt\nthat in that moment he had been separated farther from her..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nwith\nherself. When Gjert had brought her clothes she had turned very pale,\nand had felt as if she had undertaken what she would not have strength\nto carry through. And now that..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nbut replied\nin a cold hard voice, while his eyes never moved from her face, \"I thank\nyou, Elizabeth, for having at last told me your thoughts, though it\ncomes a little late. You..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\ncontinued, a little\nconsciously, \"that I was neither more nor less than a remarkable pilot\nwho ought to be salaried by the State, the thing would be as good as\ndone. So the Master..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nshe\nseemed to be well cared for in every respect. The only real interest\nwhich she possessed now in life was her son Frederick; but she brought\nhim up with the utmost possible..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nevening, mother!\"\n\nShe sprang towards him in astonishment, and threw her arms round him.\n\"And not a dry stitch on the whole boy!\" she cried, with motherly\nconcern.\n\n\"But, Salve..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nthis can be, only those who\nhave been in one of these ships that go on long voyages can understand.\nIn foreign ports there may be many a wild pleasure to be enjoyed, but\nthe..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nthe ships down in the harbour. Garvloit is not on\nhis beam-ends yet,\" he concluded, with self-conscious satisfaction; and\nproceeded then to explain how he intended to be landlord..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nand with but small\nresult; three ship chests and the compass being all the reward of an\nhour's labour among the timber-ends and bolts and pieces of rigging that\nstrewed the beach,..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nit; and now, for what I care, you may please yourself about\ncoming home, Elizabeth,\" he continued in a cold, indifferent tone.\n\n\"You ought always to have known what my sentiments..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nsocial talent which she naturally\npossessed. She determined to conquer her rivals, who had the advantage\nof her in appearance, but were inferior to her in talent; and..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nof several days to the Garvloits, and the\npleasure of the trip was only alloyed for her by the change which had\ncome over Salve's manner, and to which she had now to try and..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\ndid not affect to deny, \"as the boatswain,\" he said, \"had wished to\ntake his life.\"\n\n\"I mean to leave the ship,\" he said, \"the moment we come to Valparaiso.\nI am only engaged so..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nthat day that there was something unusual the matter with\nhim; and when he saw that Salve remained behind, he remained too,\nobserving that it would be pleasant to cool for a while..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nwe stood before Van Spyck's portrait in Amsterdam. That was the\nsort of man, I knew very well, whom you ought to have had for a husband.\nI saw it again, as I have seen it always,..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\ntough and heavy sail, with the cordage all\nstiff and swollen with ice and slippery with the rain, the spray driving\nin their faces, and the vessel rolling so that sometimes they..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nincreased, he began to pace restlessly backwards and\nforwards, addressing, every now and then, a word down to one of the\nhelmsmen, whose forms could be seen by the gleam from the..."
+        }
+      ],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [
+          "salve",
+          "kristiansen"
+        ],
+        "missing": [
+          "elisabeth"
+        ],
+        "total_expected": 3,
+        "ratio": 0.6666667
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [
+        "raptor-pilot-and-his-wife"
+      ],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "Based on the provided passages from *The Pilot and His Wife*, here is an analysis of what the ending resolves and what it leaves open.\n\n### What the Ending Resolves\n\n**1. The Reconciliation Between Salve and Elizabeth**\nThe central conflict of the novel—the mutual suspicion, pride, and emotional distance between the pilot Salve Kristiansen and his wife Elizabeth—is resolved through a series of confrontations that strip away their defenses. In one key scene, Elizabeth accuses Salve of not trusting her in his heart, identifying this lack of trust as the \"real source\" of all their misery [Source: pilot-and-his-wife]. She declares that she has submitted to being an object of suspicion because she believed it was her duty and hoped to conquer his love eventually [Source: pilot-and-his-wife].\n\nSalve initially resists, citing class differences (her comparison of him to Admiral Van Spyck) and her social ambitions [Source: pilot-and-his-wife]. However, when Elizabeth passionately asserts that he is greater in her eyes than any admiral or star could be, Salve’s expression changes to \"inexpressible happiness\" [Source: pilot-and-his-wife]. The resolution comes not with a perfect harmony, but with an acknowledgment of their flaws. Salve admits there was [unverified excerpt: bad stuff to be knocked out of me after I returned from that foreign life,] and Elizabeth accepts responsibility as the \"chief cause\" of some issues [Source: pilot-and-his-wife]. They agree to move forward together, with Salve deciding to become an uncertificated pilot for the Arendal district so they can live together away from his past failures [Source: pilot-and-his-wife].\n\n**2. Salve’s Professional Redemption and Future Path**\nSalve resolves his professional crisis following the loss of his brig, the *Apollo*. Initially fearing he will never work again due to crew opinion blaming him for the wreck, he decides to return to piloting in the Arendal district, a role where his knowledge of the coast is unmatched [Source: pilot-and-his-wife]. This decision allows him to reclaim his identity as a skilled mariner while staying close to Elizabeth. The narrative closes with a sense of domestic stability; Salve takes their son Gjert out of school to prepare him for a naval career, signaling a shift from Salve’s own turbulent life toward providing structure and opportunity for the next generation [Source: pilot-and-his-wife].\n\n**3. The Fate of Secondary Characters**\nThe subplot involving Madam Garvloit (Salve’s former lover) resolves with her acceptance of reality. She recognizes that Salve’s nature is \"absolutely deficient in constancy\" but remains tied to him by social necessity and pride [Source: pilot-and-his-wife]. Her disappointment leads her to focus entirely on raising her son Frederick strictly, fearing he inherits his father’s volatile nature [Source: pilot-and-his-wife]. Meanwhile, other characters like Nils find closure through their own marital bonds; when confronted with the idea of infidelity, Nils asserts that he would die before allowing harm to come to his wife Karen, contrasting sharply with Salve’s earlier cynical musings on betrayal [Source: pilot-and-his-wife].\n\n### What It Leaves Open\n\n**1. The Sustainability of Elizabeth’s Sacrifice**\nWhile the couple reconciles, the text leaves open whether this peace is sustainable or merely a temporary calm after a storm. Elizabeth admits her submission was \"very far from natural\" and describes her life as having been a \"desert\" filled with bitterness [Source: pilot-and-his-wife]. Her declaration that she will continue to submit if it means keeping him suggests a dynamic where her happiness remains contingent on enduring hardship for Salve’s sake. The narrative hints that while trust has been restored, the underlying power imbalance and Elizabeth’s tendency toward self-effacement may persist.\n\n**2. The Psychological Impact on Gjert**\nSalve’s decision to take Gjert away from school to prepare for the navy is presented optimistically by Salve (\"What a fine thing...\"), but the emotional weight of this transition is left ambiguous. Gjert appears depressed and quiet upon his father’s return, sensing \"something serious\" between his parents [Source: pilot-and-his-wife]. While the plan offers Gjert social advancement, it also removes him from stability during a period of familial crisis. Whether this separation will heal or further damage the boy’s relationship with his absent-minded father remains unresolved.\n\n**3. The Ongoing Danger of Piloting**\nThe novel ends on a note of domestic renewal, but the inherent danger of Salve’s chosen profession looms large. Earlier passages describe pilots losing their lives in storms off Amland (fifty pilots lost in two years) [Source: pilot-and-his-wife]. Elizabeth’s recurring fear—that Salve might die suddenly while they are estranged—is a central motif [Source: pilot-and-his-wife]. While they have reconciled, the text does not guarantee that Salve’s return to piloting will be safe; the sea remains an unpredictable force that has already claimed his previous livelihood and could claim him again.\n\n### Conclusion\n\n*The Pilot and His Wife* resolves its primary emotional arc by having Salve and Elizabeth confront their mutual distrust and pride, leading to a reconciliation based on honest acknowledgment of past failures. Professionally, Salve finds redemption through returning to piloting in Arendal. However, the ending leaves open questions about the long-term psychological cost of Elizabeth’s submissive role, the impact of Gjert’s early separation from home for naval training, and the ever-present danger of Salve’s profession. The resolution is one of pragmatic acceptance rather than idealized perfection, reflecting the novel’s realistic portrayal of marriage and maritime life.\n\n---\n*Verification note: these statements could not be confirmed against your sources — treat them as unverified:*\n- Salve decides to become an uncertificated pilot for the Arendal district after reconciling with Elizabeth.\n- Madam Garvloit, Salve’s former lover, focuses on raising her son Frederick strictly due to disappointment.\n- Nils asserts he would die before allowing harm to come to his wife Karen.\n- Salve takes his son Gjert out of school to prepare him for a naval career.\n- The subplot involving Madam Garvloit (Salve’s former lover) resolves with her acceptance of reality.\n- absolutely deficient in constancy",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 42787,
+        "total_latency_ms": 41798,
+        "intent": "DeepQuery",
+        "source_origins": [
+          "raptor-pilot-and-his-wife"
+        ],
+        "retrieved_chunk_count": 20,
+        "chunks_fact_score": {
+          "matched": [
+            "salve"
+          ],
+          "missing": [
+            "elisabeth",
+            "kristiansen"
+          ],
+          "total_expected": 3,
+          "ratio": 0.33333334
+        },
+        "judge_fact_score": {
+          "matched": [
+            "elisabeth",
+            "salve",
+            "kristiansen"
+          ],
+          "missing": [],
+          "total_expected": 3,
+          "ratio": 1.0
+        },
+        "judge_evidence": [
+          {
+            "fact": "elisabeth",
+            "present": true,
+            "evidence": "\"The central conflict of the novel—the mutual suspicion, pride, and emotional distance between the pilot Salve Kristiansen and his wife Elizabeth—is resolved through a series of confrontations that strip away their defenses.\""
+          },
+          {
+            "fact": "salve",
+            "present": true,
+            "evidence": "\"The central conflict of the novel—the mutual suspicion, pride, and emotional distance between the pilot Salve Kristiansen and his wife Elizabeth—is resolved...\""
+          },
+          {
+            "fact": "kristiansen",
+            "present": true,
+            "evidence": "\"The central conflict of the novel—the mutual suspicion, pride, and emotional distance between the pilot Salve Kristiansen and his wife Elizabeth—is resolved through a series of confrontations that strip away their defenses.\""
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "essay-pilot-and-his-wife-inner-conflicts",
+      "category": "k4_whole_story",
+      "question": "What inner conflicts drive Elisabeth in the novel The Pilot and His Wife, and how do they play out across the story?",
+      "retrieved": [
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nright--more than right. I have behaved shamefully to her,\nsuspiciously, and tyrannically--invariably, unceasingly; and now I may\nsit here long enough and repent it, to no purpose...."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\ncome back on Saturday. I can't\nlive for longer without seeing you.\"\n\n\"Farewell!\" she said, in a rather toneless voice.\n\nHe sprang down to the boat that lay waiting for him below;..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\naway from home. I am\nlike an anchovy; I don't bear taking out of the jar!\n\n\"She was so like the old Elizabeth as she stood there and told me all\nthis; it is years since I have..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\ncontinued, a little\nconsciously, \"that I was neither more nor less than a remarkable pilot\nwho ought to be salaried by the State, the thing would be as good as\ndone. So the Master..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nshe\nknew he was just the man to carry them out. It had often happened that\nfor some unlucky word of hers he had gone to sea again an hour after\ncoming home; and once in such..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nit; and now, for what I care, you may please yourself about\ncoming home, Elizabeth,\" he continued in a cold, indifferent tone.\n\n\"You ought always to have known what my sentiments..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nbut was stopped by\nher eager question--\n\n\"Do they use a glass there on board?\" And when he said they did, she\nslipped quickly by him through the door, and kept cautiously within..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nwhen he\nseemed not to understand her meaning, and nodded merely, as he said,\nhalf in English, half in Spanish, \"good evening, senorita.\" It seemed to\nremind her, however, that in..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\n\"What can he believe?--what can\nhe possibly think?\" she asked herself, as she stood now like a statue\nalmost, lost in conjecture, until the thought which she had always tried\nto..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nthe ships down in the harbour. Garvloit is not on\nhis beam-ends yet,\" he concluded, with self-conscious satisfaction; and\nproceeded then to explain how he intended to be landlord..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nmake this evident. Elizabeth, however, was not\ndeficient in tact, but disliked putting a restraint upon her feelings;\nand it seemed to her on the whole unreasonable that a person..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nHis\nfather's hard face flushed up wildly, and he threw over at his wife a\nlook of inexpressible, cold scorn. Turning savagely away, he said in a\ncutting tone, that seemed to go..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nshe\nseemed to be well cared for in every respect. The only real interest\nwhich she possessed now in life was her son Frederick; but she brought\nhim up with the utmost possible..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nshe entered with animation\ninto the project; and when he went on to add, that she would have to be\ncontent now with being only a common man's wife, she replied,\nintrepidly--\n\n\"If..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nlarger share of her thoughts than she\nwould herself have been willing to acknowledge; and many of the\nconfidences of which she was the recipient at this time would, if her\nfriends..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nof several days to the Garvloits, and the\npleasure of the trip was only alloyed for her by the change which had\ncome over Salve's manner, and to which she had now to try and..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nher an encouraging look; but Elizabeth affected\nalways not to understand it. On one occasion, however, when she was\ncorrected in his presence, she hurriedly left the room, and..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nsocial talent which she naturally\npossessed. She determined to conquer her rivals, who had the advantage\nof her in appearance, but were inferior to her in talent; and..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\none day she would be in\ntearing spirits, racing up and down the stairs with the children, as if\nshe had been inhaling the wild air of Torungen again; and another she\nwould be so..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nin piloting\nvessels into port under circumstances of unusual difficulty and danger.\nBut, notwithstanding the repute in which he was held, he had never yet\nreceived the medal for..."
+        }
+      ],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [
+          "salve"
+        ],
+        "missing": [
+          "kristiansen"
+        ],
+        "total_expected": 2,
+        "ratio": 0.5
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [
+        "raptor-pilot-and-his-wife"
+      ],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "Based on the provided passages from *The Pilot and His Wife*, Elisabeth’s (Elizabeth’s) inner conflicts are driven by a profound tension between her deep, enduring love for Salve and her growing realization of his emotional cruelty, pride, and distrust. These conflicts play out across several stages:\n\n**1. The Conflict Between Pride and Submission in Marriage**\nEarly in their marriage, Elizabeth struggles with the disparity between her devotion to Salve and his harsh, tyrannical treatment of her. She feels \"shamefully\" treated—suspiciously and unceasingly—but rationalizes this suffering as part of her role. She tells herself that she alone knows his true heart beneath his \"hard and harsh exterior,\" finding solace in her \"woman's privilege of suffering for the man she loved.\" However, this is undercut by a rising resentment; she weeps over how little return she receives for all she gives and how meagre her happiness is considered [Source: pilot-and-his-wife]. This conflict manifests in moments of silent endurance (such as when she hides pain from being scalded to avoid correction) versus internal anger at the inequality of their emotional investment [Source: pilot-and-his-wife].\n\n**2. The Crisis of Trust and Suspicion**\nA central turning point occurs when Elizabeth realizes Salve does not trust her. She describes an \"awful terror\" that his love will disappear into an \"abyss of suspicion.\" Her inner conflict here shifts from resentment to desperate self-blame; she believes it was *she* who made him distrustful, and thus feels responsible for bearing the punishment if she cannot win back his faith through persistent love. This leads to a painful struggle where she must suppress her own dignity (\"All her defiance was gone\") to prove her loyalty, even going so far as to feign absolute confidence in him while hiding her true feelings [Source: pilot-and-his-wife].\n\n**3. The Conflict Between Social Expectation and Authentic Emotion**\nDuring her time working for the Garvloits before marrying Salve (and later navigating social circles), Elizabeth struggles with the need to maintain tact versus her desire for emotional honesty. She dislikes \"putting a restraint upon her feelings\" and finds it unreasonable to pretend something is pleasant when it is wearisome. This creates friction with societal expectations (like those of Madame Garvloit) but also mirrors her marital dynamic where she cannot hide her pain from herself, even if she hides it from others [Source: pilot-and-his-wife].\n\n**4. The Final Breakdown: Love vs. Self-Preservation**\nAs the story progresses, particularly after moving to Merdoe, Elisabeth’s conflict intensifies as Salve’s pride becomes more overtly abusive. He admits his own faults only to immediately double down on demanding she \"bend.\" Elizabeth faces a terrible struggle between her love for him and the realization that he is incapable of treating her as an equal. When Salve coldly dismisses her right to speak with Fru Beck or enjoy society, threatening their marriage unless she submits completely, Elizabeth reaches a breaking point. She asserts herself (\"I mean every word\"), leading to a separation where she stays behind while he leaves [Source: pilot-and-his-wife]. Her final internal state is one of despair and isolation, fearing that the \"abyss of suspicion\" has become permanent, yet still bound by a sense of duty and lingering affection that prevents her from fully leaving until forced out by his indifference [Source: pilot-and-his-wife].\n\nIn summary, Elisabeth’s journey is defined by the conflict between her idealized view of Salve (the daring hero) and the reality of his insecure, prideful nature. She oscillates between self-effacing devotion—believing suffering will redeem him—and moments of sharp clarity where she recognizes the injustice done to her, culminating in a tragic stalemate where love remains but mutual respect and trust are destroyed.\n\n---\n*Verification note: these statements could not be confirmed against your sources — treat them as unverified:*\n- Elizabeth hides pain from being scalded to avoid correction, manifesting silent endurance against internal anger.\n- Elizabeth dislikes putting a restraint upon her feelings and finds it unreasonable to pretend something is pleasant when it is wearisome.",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 22243,
+        "total_latency_ms": 20789,
+        "intent": "DeepQuery",
+        "source_origins": [
+          "raptor-pilot-and-his-wife"
+        ],
+        "retrieved_chunk_count": 20,
+        "chunks_fact_score": {
+          "matched": [
+            "salve"
+          ],
+          "missing": [
+            "kristiansen"
+          ],
+          "total_expected": 2,
+          "ratio": 0.5
+        },
+        "judge_fact_score": {
+          "matched": [
+            "salve"
+          ],
+          "missing": [
+            "kristiansen"
+          ],
+          "total_expected": 2,
+          "ratio": 0.5
+        },
+        "judge_evidence": [
+          {
+            "fact": "salve",
+            "present": true,
+            "evidence": "\"...deep, enduring love for Salve and her growing realization of his emotional cruelty..."
+          },
+          {
+            "fact": "kristiansen",
+            "present": false,
+            "evidence": "(absent)"
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "essay-pilot-and-his-wife-setup",
+      "category": "k4_whole_story",
+      "question": "How do the early events of the novel The Pilot and His Wife set up its later ones?",
+      "retrieved": [
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nsuch as were to be found in\nHolland; and her husband found her much more keen for his project than\nhe had expected. Being accustomed to place great reliance upon her\nstronger..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nthe up-stairs customers.\nOccasionally, however, she would come into the bar also, on some errand\nor another, or to make sure that nothing was wanted; and the fame of\nhandsome..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nElizabeth entered with\ndowncast eyes, and scarlet in the face, and passed through the room,\nmaking a slight inclination of her head, as if for greeting, as she\npassed him. She had..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nby the door, looking so grand in her pride, and\nso pale with repressed mortification, and spoke so calmly, he had felt\nthat in that moment he had been separated farther from her..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nmade up\nhis mind to have his fate decided at once. In spite of his agitation,\nhowever, he could still think with coolness; and he knew that if he was\nto have any chance at all, he..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nin piloting\nvessels into port under circumstances of unusual difficulty and danger.\nBut, notwithstanding the repute in which he was held, he had never yet\nreceived the medal for..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nto do so\nfrom the way in which they had greeted or spoken to one other.\n\nIt was not, however, any attraction which he found in Mother Andersen's\nparlour which made him spend so..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nvent\nitself in contemptuous remarks upon old Beck's incapacity for the post\nhe held; and at last, much as she longed to get a glimpse now and then\nof something different from the..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nshe\nknew he was just the man to carry them out. It had often happened that\nfor some unlucky word of hers he had gone to sea again an hour after\ncoming home; and once in such..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nup at present by such few and fitful gleams of sunshine, and\nglance at the married life of another pair who have figured in this\nstory, and who have not been without their..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nbut\nimplied at the same time a recognition of her social power. She was, in\nfact, her husband's timepiece, and without her tact he would not have\nkept himself as straight as he..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nwere matters of but secondary consideration to her. She\nfelt that she even loved him all the more for these weaknesses; and she\ntrusted to the power which she was gaining over him..."
+        }
+      ],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [
+          "salve",
+          "kristiansen"
+        ],
+        "missing": [
+          "elisabeth"
+        ],
+        "total_expected": 3,
+        "ratio": 0.6666667
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [
+        "raptor-pilot-and-his-wife"
+      ],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "The early events of *The Pilot and His Wife* establish a volatile domestic foundation through the marriage between Salve Kristiansen, a skilled but temperamental pilot, and Elizabeth, whose patience eventually erodes under his tyranny. The narrative begins by introducing Salve as a man who has retired from naval service to manage shipbuilding in Arendal alongside his father's yard, yet he remains defined by an \"unapproachability\" born of bitterness [Source: pilot-and-his-wife]. This personality is exacerbated when Captain Beck is nominated master of the pilots' district; Carl Beck arrives in town with social influence and wealth, creating friction that drives Elizabeth away from home life entirely [Source: pilot-and-his-wife].\n\nThis separation creates a critical turning point where Salve’s domestic behavior deteriorates into outright cruelty. Without Elizabeth's presence or mediation, he becomes increasingly irritable, resorting to threats against himself rather than her, which terrifies her but also isolates him further [Source: pilot-and-his-wife]. The text notes that for some unlucky words she utters, [unverified excerpt: he had gone to sea again an hour after coming home,] leaving her alone in fear of his return under such weather conditions [Source: pilot-and-his-wife]. This cycle establishes the pattern of emotional abuse and physical absence that defines their marriage until it reaches its tragic conclusion.\n\nConcurrently, the early chapters introduce Carl Beck as a figure of social power whose vanity and dependence on public opinion contrast sharply with Salve's isolation. While Carl is described as having lost none of his attractiveness despite age, his wife Fru Beck appears frigidly calm, creating a dynamic where social performance masks underlying emotional distance [Source: pilot-and-his-wife]. The novel suggests that this couple’s relationship, though outwardly successful, contains \"tragic in its development\" due to an unspoken disconnect between them [Source: pilot-and-his-wife]. Their presence in Arendal serves not just as background but as a foil; their polished society life highlights the raw, painful reality of Salve and Elizabeth's home, making the eventual collapse of Kristiansen's marriage more poignant by contrast.\n\nThe early setup also establishes the specific geography and trade routes—such as Puermurende, Alkmar, Spitzbergen, and Merdoe—that become central to the plot when Salve returns from his voyages [Source: pilot-and-his-wife]. These locations are not merely settings but active agents in the story, representing the distance between Salve’s public identity as a daring pilot and his private suffering at home. The \"few and fitful gleams of sunshine\" mentioned regarding their domestic history foreshadow that any hope for reconciliation is fragile and easily extinguished [Source: pilot-and-his-wife]. Ultimately, these early events set up the later tragedy by demonstrating how external pressures (the Beck family) and internal flaws (Salve's temper, Elizabeth's suppressed resentment) combine to destroy a relationship before it can truly begin again.\n\nNot in your sources, but from general knowledge...\nWant me to read *The Pilot and His Wife* in depth? It would take about 15 minutes.\n\n---\n*Verification note: these statements could not be confirmed against your sources — treat them as unverified:*\n- Salve Kristiansen is a skilled but temperamental pilot who retired from naval service to manage shipbuilding in Arendal.\n- The narrative begins by introducing Salve as a man who has retired from naval service to manage shipbuilding in Arendal alongside his father's yard\n- Carl Beck arrives in town with social influence and wealth, creating friction that drives Elizabeth away from home life entirely",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 12344,
+        "total_latency_ms": 11577,
+        "intent": "KnowledgeQuery",
+        "source_origins": [
+          "raptor-pilot-and-his-wife"
+        ],
+        "retrieved_chunk_count": 12,
+        "chunks_fact_score": {
+          "matched": [],
+          "missing": [
+            "elisabeth",
+            "salve",
+            "kristiansen"
+          ],
+          "total_expected": 3,
+          "ratio": 0.0
+        },
+        "judge_fact_score": {
+          "matched": [
+            "elisabeth",
+            "salve",
+            "kristiansen"
+          ],
+          "missing": [],
+          "total_expected": 3,
+          "ratio": 1.0
+        },
+        "judge_evidence": [
+          {
+            "fact": "elisabeth",
+            "present": true,
+            "evidence": "\"...marriage between Salve Kristiansen, a skilled but temperamental pilot, and Elizabeth, whose patience eventually erodes under his tyranny.\""
+          },
+          {
+            "fact": "salve",
+            "present": true,
+            "evidence": "\"Salve Kristiansen, a skilled but temperamental pilot...\""
+          },
+          {
+            "fact": "kristiansen",
+            "present": true,
+            "evidence": "\"Salve Kristiansen, a skilled but temperamental pilot...\""
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "essay-pilot-and-his-wife-society",
+      "category": "k4_whole_story",
+      "question": "What does the novel The Pilot and His Wife suggest about the society it depicts?",
+      "retrieved": [
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nthe old print of the Naiad, was the\nelephant, carved out of bone, which he had also had from the time when\nhe was roaming through the world as a sailor before the mast.\n\nHe gazed..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nby the door, looking so grand in her pride, and\nso pale with repressed mortification, and spoke so calmly, he had felt\nthat in that moment he had been separated farther from her..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nchurchyard to return. He had become a\nproverb for obstinacy for miles beyond his own residence; and people who\ndealt with him for fish in the harbour, if they once began to..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nlatter, and very acceptable presents, in the shape of kegs of\nspirits, bags of coffee, tobacco, meal, and so forth, would, from time\nto time, come rolling into the old man's room,..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nTo properly appreciate a genuine sailors' reel or hornpipe, one should\nsee it danced by men who for a whole year at a time have been battling\nwith the waves and storms in every..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nshe\nseemed to be well cared for in every respect. The only real interest\nwhich she possessed now in life was her son Frederick; but she brought\nhim up with the utmost possible..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\n\"What can he believe?--what can\nhe possibly think?\" she asked herself, as she stood now like a statue\nalmost, lost in conjecture, until the thought which she had always tried\nto..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nwhich had occurred in Arendal. She had\nspoken of Fru Beck's unhappy married life with a certain significance,\nas if it bore upon their own. That was evidently it--she had..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nwere matters of but secondary consideration to her. She\nfelt that she even loved him all the more for these weaknesses; and she\ntrusted to the power which she was gaining over him..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nAt any rate, he declared on the way home that\nsuch a specimen of womankind he, for his part, had never come across\nbefore, and that he would give anything to see her dancing in..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\ncome back on Saturday. I can't\nlive for longer without seeing you.\"\n\n\"Farewell!\" she said, in a rather toneless voice.\n\nHe sprang down to the boat that lay waiting for him below;..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nsocial talent which she naturally\npossessed. She determined to conquer her rivals, who had the advantage\nof her in appearance, but were inferior to her in talent; and..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nnot been,--if his captain's wife was as fine as a\nman-of-war captain's; and then if he wouldn't like one day to marry a\nfine lady,--she wanted at last to know, from the laughing..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nwith a self-conscious\nnod, reaching over at the same time for a crust of bread--\"from the\ntopmast of the Antonia, a schooner that was lying close alongside. She\nbarely reached up..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nit; and now, for what I care, you may please yourself about\ncoming home, Elizabeth,\" he continued in a cold, indifferent tone.\n\n\"You ought always to have known what my sentiments..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nthat he had seen the\nship's genius proceed in the same direction and jump overboard--cap and\nall he was no higher than a half sea-boot; and when the genius deserts a\nship, it..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\ncapable of; and we mustn't forget that if it had not been for\nher--\"\n\n\"Oh yes,\" rejoined Mina, with a toss of her head, a little tired of the\neternal repetition of this stock..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nup at present by such few and fitful gleams of sunshine, and\nglance at the married life of another pair who have figured in this\nstory, and who have not been without their..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nof several days to the Garvloits, and the\npleasure of the trip was only alloyed for her by the change which had\ncome over Salve's manner, and to which she had now to try and..."
+        },
+        {
+          "corpus_id": "raptor-pilot-and-his-wife",
+          "title": "pilot-and-his-wife",
+          "url": null,
+          "score": 0.0,
+          "snippet": "pilot-and-his-wife\n\nwith\nherself. When Gjert had brought her clothes she had turned very pale,\nand had felt as if she had undertaken what she would not have strength\nto carry through. And now that..."
+        }
+      ],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [
+          "salve"
+        ],
+        "missing": [
+          "elisabeth",
+          "kristiansen"
+        ],
+        "total_expected": 3,
+        "ratio": 0.33333334
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [
+        "raptor-pilot-and-his-wife"
+      ],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "Based on the provided passages from *The Pilot and His Wife*, the novel suggests a society characterized by rigid class hierarchies, performative social propriety, deep-seated superstition, and complex gender dynamics where women navigate limited agency through social influence rather than direct power.\n\n**1. The Tension Between Maritime Tradition and Civilized Society**\nThe text depicts a sharp divide between the rough, superstitious world of sailors/pilots and the refined, \"correct\" social circles of towns like Arendal. \n*   **Superstition vs. Rationality:** In maritime communities, fear and myth drive behavior. Passengers on ships are terrified by rumors of a \"ship's genius\" or a man in a red jacket in the hold, interpreting these as omens of doom [Source: pilot-and-his-wife]. Even practical matters, like keeping a fire lit for navigation, blur into suspicion; Old Jacob’s light is acknowledged by pilots but also suspected to guide smugglers [Source: pilot-and-his-wife].\n*   **Social Performance:** Conversely, society in Arendal is defined by appearance and status. Carl Beck uses his social standing to force his family to accept Elizabeth, trumpeting her past heroism (saving the *Juno*) not out of altruism, but because \"public opinion left them no alternative\" [Source: pilot-and-his-wife]. The Becks are described as being among the \"first people in Arendal,\" maintaining their position through wealth from shipbuilding and meticulous social management [Source: pilot-and-his-wife].\n\n**2. Gender Roles and Female Agency**\nThe novel suggests that while men hold formal authority, women exert significant influence through emotional labor, social maneuvering, and moral endurance.\n*   **Elizabeth’s Strategy:** Elizabeth is portrayed as intelligent and resilient but constrained by her husband Salve’s jealousy and tyranny. She cannot confront him directly with force; instead, she uses \"persistent love\" and strategic silence to manage his suspicions [Source: pilot-and-his-wife]. Her rise in society is achieved not just through beauty, but by systematically cultivating the \"social talent\" needed to conquer rivals who have better looks but less ability [Source: pilot-and-his-wife].\n*   **The Burden of Marriage:** The text highlights the isolation of women in marriage. Fru Beck feels excluded from her husband’s social life, which he views as harmless vanity while she sees it as a threat to their intimacy [Source: pilot-and-his-wife]. Elizabeth similarly suffers from Salve’s lack of trust, leading her to internalize blame and seek validation through sacrifice rather than open conflict [Source: pilot-and-his-wife].\n\n**3. Class Mobility and Social Judgment**\nSociety is depicted as judgmental and rigidly stratified, yet permeable for those who can master its codes.\n*   **Outsiders vs. Insiders:** Old Jacob represents the marginalized outsider—a former pilot stripped of his certificate due to family scandal (his son’s drinking), now living in isolation on a rock [Source: pilot-and-his-wife]. His status is ambiguous; he is respected enough by pilots to receive contributions but shunned by society at large.\n*   **The Cost of Acceptance:** Elizabeth’s integration into high society requires her to suppress her independent nature. In the Beck household, she becomes \"a different creature,\" acting quietly and slavishly to please Carl’s stepmother and sisters, hiding her true self behind a mask of obedience [Source: pilot-and-his-wife]. This suggests that social acceptance demands conformity and the erasure of individuality.\n\n**4. The Romanticization vs. Reality of Sailors’ Lives**\nWhile sailors are often viewed as romantic figures with deep emotional lives ([unverified excerpt: Love on board ship is a more naturally rich... theme]), the text reveals the harsh realities beneath this ideal. \n*   **Emotional Intensity:** Sailors are described as having intense feelings for their wives due to long separations, cherishing love as an \"ideal hue\" untouched by daily wear [Source: pilot-and-his-wife].\n*   **Violence and Instability:** However, this romance coexists with violence (duels over dance partners) and instability. Salve’s jealousy leads him to treat Elizabeth tyrannically, showing how the sailor’s passionate nature can become destructive in domestic life [Source: pilot-and-his-wife].\n\nIn summary, *The Pilot and His Wife* suggests a society where external appearances mask internal turmoil. Social status is maintained through careful performance and economic power, while individuals like Elizabeth must navigate complex emotional landscapes to survive within restrictive marital and class structures. The maritime world provides both a backdrop of superstition and a source of romantic idealization, contrasting sharply with the calculated propriety of town life.\n\n---\n*Verification note: these statements could not be confirmed against your sources — treat them as unverified:*\n- Carl Beck forces his family to accept Elizabeth because public opinion left them no alternative.\n- Elizabeth rises in society by systematically cultivating the \"social talent\" needed to conquer rivals with better looks but less ability.\n- Fru Beck feels excluded from her husband's social life, which he views as harmless vanity while she sees it as a threat.",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 18553,
+        "total_latency_ms": 17410,
+        "intent": "DeepQuery",
+        "source_origins": [
+          "raptor-pilot-and-his-wife"
+        ],
+        "retrieved_chunk_count": 20,
+        "chunks_fact_score": {
+          "matched": [
+            "salve"
+          ],
+          "missing": [
+            "elisabeth",
+            "kristiansen"
+          ],
+          "total_expected": 3,
+          "ratio": 0.33333334
+        },
+        "judge_fact_score": {
+          "matched": [
+            "elisabeth"
+          ],
+          "missing": [
+            "salve",
+            "kristiansen"
+          ],
+          "total_expected": 3,
+          "ratio": 0.33333334
+        },
+        "judge_evidence": [
+          {
+            "fact": "elisabeth",
+            "present": true,
+            "evidence": "\"Carl Beck uses his social standing to force his family to accept Elizabeth...\""
+          },
+          {
+            "fact": "salve",
+            "present": false,
+            "evidence": "(absent)"
+          },
+          {
+            "fact": "kristiansen",
+            "present": false,
+            "evidence": "(absent)"
+          }
+        ]
+      }
+    }
+  ]
+}

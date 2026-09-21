@@ -1,0 +1,53 @@
+{
+  "schema": "ei7-arm-manifest/v1",
+  "identity": {
+    "arm": "deep",
+    "corpus": "raptor-pilot-and-his-wife",
+    "host": "http://127.0.0.1:9841",
+    "synth_model": "Qwen3.6-35B-A3B-MTP-UD-Q6_K",
+    "judge_model": "Qwen3.5-4B-UD-Q6_K_XL",
+    "recipe_sha256": "56443189f059779158cc11b5e6b46f3878e5db728464d9a16ba8cab44654b050",
+    "ontology_sha256": "338dc0a6eac98f157feae794a30231d8ab18a559f905257dd7e7f33f28873d9b",
+    "chunks_listing_sha256": "ba155d7221891c9e05a6b45aed1f997586ba142325e7e0d57d8a69533396340c"
+  },
+  "variant": "both",
+  "run": 3,
+  "env": {
+    "SOVEREIGN_ATLAS_GROUNDING": "0",
+    "SOVEREIGN_ATOM_ENUM": "0",
+    "SOVEREIGN_ATOM_ENUM_OVERVIEW": "0",
+    "SOVEREIGN_KQ_POOL_SCALE": "2"
+  },
+  "argv": [
+    "/Users/alexsbryan/.local/bin/sovereign",
+    "eval",
+    "run",
+    "--bank",
+    "research/ontology-retrieval/raptor-proof/essay/bank-pilot-and-his-wife.toml",
+    "--synth",
+    "--isolate",
+    "--format",
+    "json",
+    "--output",
+    "research/ontology-retrieval/raptor-proof/runs-essay/pilot-and-his-wife/deep/run-3/eval.json",
+    "--chat-model",
+    "Qwen3.6-35B-A3B-MTP-UD-Q6_K"
+  ],
+  "eval_exit": 0,
+  "daemon_refusals": {
+    "count": 0,
+    "sample": []
+  },
+  "models_source": "http://127.0.0.1:9841/v1/models",
+  "verdict": null,
+  "never_ran_reasons": [],
+  "provenance": {
+    "commit": "797375b1dc0a6bd0338b3d5e45cd3bdc856a70f9",
+    "dirty": true,
+    "started_at_unix": 1790016217,
+    "paths": {
+      "index_dir": "/Users/alexsbryan/.svrnmesh/indexes/raptor-pilot-and-his-wife",
+      "recipe": "research/ontology-retrieval/raptor-proof/recipes/pilot-and-his-wife/recipe.toml"
+    }
+  }
+}
