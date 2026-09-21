@@ -1,0 +1,69 @@
+# Essay-level question templates: what a college course would set on a novel.
+# FIXED and book-agnostic: written before any book's text or answers were read,
+# never edited per book. make_essay_bank.py fills the slots mechanically.
+#
+# Every template is a QUESTION. The router is embedding-based and a writing
+# command ("Write an essay on ...") lands on a handler that retrieves nothing.
+# Every template carries <title> exactly once, so closed-book knows which book
+# is meant and the title token's pull on retrieval is constant across the bank.
+# Slots: <title>, <protagonist>, <second_character>.
+
+[[template]]
+id = "arc"
+aspect = "the overall arc of the plot"
+question = "What is the overall arc of the plot of the novel <title>, from its opening situation to its close?"
+
+[[template]]
+id = "conflict"
+aspect = "the central conflict and how it resolves"
+question = "What is the central conflict of the novel <title>, and how is it resolved?"
+
+[[template]]
+id = "change"
+aspect = "how the protagonist changes and what causes it"
+question = "How does <protagonist> change from the beginning to the end of the novel <title>, and what causes that change?"
+
+[[template]]
+id = "relationship"
+aspect = "the main relationship and what strains it"
+question = "What is the main relationship in the novel <title>, and what strains it over the course of the story?"
+
+[[template]]
+id = "secondary"
+aspect = "a secondary character's role in the protagonist's development"
+question = "What role does <second_character> play in the development of <protagonist> in the novel <title>?"
+
+[[template]]
+id = "themes"
+aspect = "the major themes and which events carry them"
+question = "What are the major themes of the novel <title>, and which events in the story carry them?"
+
+[[template]]
+id = "setting"
+aspect = "how the setting shapes the characters' choices"
+question = "How does the setting of the novel <title> shape the choices its characters make?"
+
+[[template]]
+id = "turning-point"
+aspect = "the turning point of the story and why it matters"
+question = "What is the turning point of the story in the novel <title>, and why does it matter for what follows?"
+
+[[template]]
+id = "ending"
+aspect = "what the ending resolves and what it leaves open"
+question = "What does the ending of the novel <title> resolve, and what does it leave open?"
+
+[[template]]
+id = "inner-conflicts"
+aspect = "the protagonist's inner conflicts across the novel"
+question = "What inner conflicts drive <protagonist> in the novel <title>, and how do they play out across the story?"
+
+[[template]]
+id = "setup"
+aspect = "how early events set up later ones"
+question = "How do the early events of the novel <title> set up its later ones?"
+
+[[template]]
+id = "society"
+aspect = "what the novel suggests about its society"
+question = "What does the novel <title> suggest about the society it depicts?"
