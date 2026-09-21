@@ -5647,6 +5647,8 @@ beyond it is not.
 
 **Recovered without a second rental.** `--finalize` exit 0 locally; sketches copied to `<window>/runs/`; build ran on the local daemon (same model id, `base_url` re-pointed, named here), exit 0 in 1,268 s, 6,399 atoms. D3/D4/D5 and attribution measure EXTRACTION, which ran on the pod under lane X, so they stand. D8 (pod vs local pilot latency) is could-not-judge; re-renting is the operator's call — the one-window rule was spent.
 
+**CORRECTION 2026-09-21 — "same model id" above is wrong.** The local build did not run on the pod's `Qwen3.6-35B-A3B-MTP-UD-Q6_K`. `~/.svrnmesh/enrichment/ei7-recensus-fineprint/config.json` pins `chat_model: commonwealth/primary` at `:9741`, and that daemon (pid 7675, up since 2026-09-18, loadout unchanged) resolves the alias to `Qwen3.6-35B-A3B-UD-MTP-IQ4_NL`; the Q6_K id in its `/v1/models` is a mesh peer's row, which is what the seat read. Reach: cluster NAMES from the build only. D3/D4/D5 and attribution measure extraction, which ran on the pod, and stand.
+
 **For the operator.** Should a too-short skip make `enrich extract` exit non-zero? "Skipped" reported as "failed" is what turned a complete extraction into a failed batch line (ARCH 6). And the ralph library needs a row-level session timeout: inventory item 12 for `ralph-lib`.
 
 </details>
