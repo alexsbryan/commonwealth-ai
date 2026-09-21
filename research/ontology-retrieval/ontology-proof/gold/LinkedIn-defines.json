@@ -1,0 +1,36 @@
+{
+ "service": "LinkedIn",
+ "list": "defines",
+ "source": "spikes/fineprint-data/ota-pga-versions/LinkedIn/Developer Terms.md",
+ "headings": [],
+ "items": [
+  {
+   "item": "APIs",
+   "line": 41,
+   "from": "definition"
+  },
+  {
+   "item": "Content",
+   "line": 47,
+   "from": "definition"
+  },
+  {
+   "item": "LinkedIn Services",
+   "line": 47,
+   "from": "definition"
+  },
+  {
+   "item": "Access Credentials",
+   "line": 84,
+   "from": "definition"
+  },
+  {
+   "item": "Profile Data",
+   "line": 170,
+   "from": "definition"
+  }
+ ],
+ "dropped": [],
+ "verdict": "built",
+ "reason": "5 published items, 0 prose dropped"
+}

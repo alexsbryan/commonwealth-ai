@@ -1,0 +1,181 @@
+{
+ "service": "X",
+ "list": "defines",
+ "source": "spikes/fineprint-data/ota-pga-versions/X/Developer Terms.md",
+ "headings": [],
+ "items": [
+  {
+   "item": "Developer Site",
+   "line": 8,
+   "from": "definition"
+  },
+  {
+   "item": "Direct Message",
+   "line": 9,
+   "from": "definition"
+  },
+  {
+   "item": "Intellectual Property Rights",
+   "line": 10,
+   "from": "definition"
+  },
+  {
+   "item": "Licensed Material",
+   "line": 11,
+   "from": "definition"
+  },
+  {
+   "item": "Paid Service",
+   "line": 12,
+   "from": "definition"
+  },
+  {
+   "item": "Payment Portal",
+   "line": 13,
+   "from": "definition"
+  },
+  {
+   "item": "Services",
+   "line": 14,
+   "from": "definition"
+  },
+  {
+   "item": "Post",
+   "line": 15,
+   "from": "definition"
+  },
+  {
+   "item": "X API",
+   "line": 17,
+   "from": "definition"
+  },
+  {
+   "item": "X Applications",
+   "line": 18,
+   "from": "definition"
+  },
+  {
+   "item": "X Content",
+   "line": 19,
+   "from": "definition"
+  },
+  {
+   "item": "X Marks",
+   "line": 20,
+   "from": "definition"
+  },
+  {
+   "item": "Users",
+   "line": 21,
+   "from": "definition"
+  },
+  {
+   "item": "Commercial Use",
+   "line": 39,
+   "from": "definition"
+  },
+  {
+   "item": "Affiliate",
+   "line": 341,
+   "from": "definition"
+  },
+  {
+   "item": "Campaign",
+   "line": 357,
+   "from": "definition"
+  },
+  {
+   "item": "Client",
+   "line": 357,
+   "from": "definition"
+  },
+  {
+   "item": "Company Marks",
+   "line": 357,
+   "from": "definition"
+  },
+  {
+   "item": "Company Materials",
+   "line": 357,
+   "from": "definition"
+  },
+  {
+   "item": "Company Service",
+   "line": 357,
+   "from": "definition"
+  },
+  {
+   "item": "Data",
+   "line": 357,
+   "from": "definition"
+  },
+  {
+   "item": "End Users",
+   "line": 357,
+   "from": "definition"
+  },
+  {
+   "item": "Marks",
+   "line": 357,
+   "from": "definition"
+  },
+  {
+   "item": "Materials",
+   "line": 357,
+   "from": "definition"
+  },
+  {
+   "item": "Personal Data",
+   "line": 357,
+   "from": "definition"
+  },
+  {
+   "item": "X Ads",
+   "line": 357,
+   "from": "definition"
+  },
+  {
+   "item": "X Code",
+   "line": 357,
+   "from": "definition"
+  },
+  {
+   "item": "X Materials",
+   "line": 357,
+   "from": "definition"
+  },
+  {
+   "item": "X Network",
+   "line": 357,
+   "from": "definition"
+  },
+  {
+   "item": "X Marketing Partners Program",
+   "line": 357,
+   "from": "definition"
+  },
+  {
+   "item": "X Service",
+   "line": 357,
+   "from": "definition"
+  },
+  {
+   "item": "X Conversion Tracking Partner",
+   "line": 631,
+   "from": "definition"
+  },
+  {
+   "item": "Credits",
+   "line": 761,
+   "from": "definition"
+  },
+  {
+   "item": "Pricing Schedule",
+   "line": 763,
+   "from": "definition"
+  }
+ ],
+ "dropped": [],
+ "verdict": "built",
+ "reason": "34 published items, 0 prose dropped"
+}

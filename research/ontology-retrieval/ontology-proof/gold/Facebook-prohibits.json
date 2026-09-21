@@ -1,0 +1,10 @@
+{
+ "service": "Facebook",
+ "list": "prohibits",
+ "source": "spikes/fineprint-data/ota-pga-versions/Facebook/Advertising Content Policy.md",
+ "headings": [],
+ "items": [],
+ "dropped": [],
+ "verdict": "absent",
+ "reason": "0 items under 0 matching heading(s); a list needs 5"
+}

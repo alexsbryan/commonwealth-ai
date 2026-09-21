@@ -1,0 +1,93 @@
+{
+ "service": "Spotify",
+ "list": "uses",
+ "source": "spikes/fineprint-data/ota-pga-versions/Spotify/Privacy Policy.md",
+ "headings": [
+  {
+   "line": 173,
+   "text": "4\\. Our purpose for using your personal data",
+   "span_ends_line": 198
+  }
+ ],
+ "items": [
+  {
+   "item": "our purpose for processing your personal data",
+   "line": 178,
+   "from": "list-item"
+  }
+ ],
+ "dropped": [
+  {
+   "item": "categories of personal data which we use for each purpose. See more about these categories in Section 3 ‘Personal data we collect about you’",
+   "line": 179,
+   "from": "list-item"
+  },
+  {
+   "item": "To provide the Spotify Service. For example, when we use your personal data to: set up an account for you personalize your account including your content recommendations, or provide the Spotify app when you download it onto your device, enable you to share a link to Spotify content with someone else, or provide an age-appropriate experience, or provide various optional features of the Spotify Service",
+   "line": 185,
+   "from": "table-cell"
+  },
+  {
+   "item": "To improve our personalized recommendations and to improve the Spotify experience for all users, based on precise location data  . For example, we can provide better personalized concert and event recommendations or let you know what is trending at your specific location. What we learn from your streaming at one location, could be used to suggest similar content to other users close to that location",
+   "line": 186,
+   "from": "table-cell"
+  },
+  {
+   "item": "To diagnose, troubleshoot, and fix issues with the Spotify Service",
+   "line": 187,
+   "from": "table-cell"
+  },
+  {
+   "item": "To evaluate and develop new features, technologies, and improvements to the Spotify Service. This includes development and training of algorithmic and machine learning models, which help us to keep our service safe and enhance our users’ experience. For example: For example: to help us develop and improve our personalized recommendations to help analyze how our users react to a particular new feature and see whether we should make any changes so we can build AI features such as AI DJ and AI playlist to help us enforce our User Guidelines, Platform Rules and Spotify for Creators Community Guidelines",
+   "line": 188,
+   "from": "table-cell"
+  },
+  {
+   "item": "For marketing or advertising purposes. For example: when we use your personal data to tailor advertising to your interests, or when we send you email marketing",
+   "line": 189,
+   "from": "table-cell"
+  },
+  {
+   "item": "To comply with a legal obligation that we are subject to. This might be: an obligation under the law of the country/region you are in Swedish law  , or EU law that applies to us For example, when we use your date of birth when required for age assurance purposes",
+   "line": 190,
+   "from": "table-cell"
+  },
+  {
+   "item": "To fulfill contractual obligations with third parties. For example, when we provide pseudonymized data about our users’ listening because we have an agreement with a Spotify rightsholder to do so. Pseudonymized data means that your data is identified by a code rather than your name or other directly identifying information",
+   "line": 191,
+   "from": "table-cell"
+  },
+  {
+   "item": "To detect, investigate and take appropriate action on reports of possible inappropriate content or violation of our Terms of Use or other Spotify terms, policies, rules or guidelines",
+   "line": 192,
+   "from": "table-cell"
+  },
+  {
+   "item": "To establish, exercise, or defend legal claims. For example, if we are involved in litigation, we need to provide information to our lawyers in relation to that legal case",
+   "line": 193,
+   "from": "table-cell"
+  },
+  {
+   "item": "To conduct business planning, reporting, and forecasting. For example, when we look at aggregated user data like the number of new sign ups in a country in order to plan new locations to launch our products and features in",
+   "line": 194,
+   "from": "table-cell"
+  },
+  {
+   "item": "To process your payment. For example, when we use your personal data to let you purchase a Spotify subscription",
+   "line": 195,
+   "from": "table-cell"
+  },
+  {
+   "item": "To keep the Spotify Service secure and to detect and prevent fraud. For example, when we analyze Usage Data to check for fraudulent use of the Spotify Service",
+   "line": 196,
+   "from": "table-cell"
+  },
+  {
+   "item": "To conduct research and surveys. For example, when we contact our users to ask for your feedback",
+   "line": 197,
+   "from": "table-cell"
+  }
+ ],
+ "verdict": "absent",
+ "reason": "1 items under 1 matching heading(s); a list needs 5"
+}

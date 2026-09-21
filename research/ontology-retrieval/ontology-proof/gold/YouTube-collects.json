@@ -1,0 +1,133 @@
+{
+ "service": "YouTube",
+ "list": "collects",
+ "source": "spikes/fineprint-data/ota-pga-versions/YouTube/Privacy Policy.md",
+ "headings": [
+  {
+   "line": 58,
+   "text": "We want you to understand the types of information we collect as you use our services",
+   "span_ends_line": 66
+  },
+  {
+   "line": 74,
+   "text": "Information we collect as you use our services",
+   "span_ends_line": 122
+  },
+  {
+   "line": 180,
+   "text": "You have choices regarding the information we collect and how it's used",
+   "span_ends_line": 186
+  },
+  {
+   "line": 768,
+   "text": "use the information we collect across our services",
+   "span_ends_line": 777
+  }
+ ],
+ "items": [
+  {
+   "item": "Your apps, browsers & devices",
+   "line": 77,
+   "from": "sub-heading"
+  },
+  {
+   "item": "Your activity",
+   "line": 85,
+   "from": "sub-heading"
+  },
+  {
+   "item": "Terms you search for",
+   "line": 89,
+   "from": "list-item"
+  },
+  {
+   "item": "Videos you watch",
+   "line": 90,
+   "from": "list-item"
+  },
+  {
+   "item": "Views and interactions with content and ads",
+   "line": 91,
+   "from": "list-item"
+  },
+  {
+   "item": "Voice and audio information",
+   "line": 92,
+   "from": "list-item"
+  },
+  {
+   "item": "Purchase activity",
+   "line": 93,
+   "from": "list-item"
+  },
+  {
+   "item": "People with whom you communicate or share content",
+   "line": 94,
+   "from": "list-item"
+  },
+  {
+   "item": "Your location information",
+   "line": 104,
+   "from": "sub-heading"
+  },
+  {
+   "item": "GPS and other sensor data from your device",
+   "line": 110,
+   "from": "list-item"
+  },
+  {
+   "item": "IP address",
+   "line": 111,
+   "from": "list-item"
+  }
+ ],
+ "dropped": [
+  {
+   "item": "Activity on third-party sites and apps that use our services",
+   "line": 95,
+   "from": "list-item"
+  },
+  {
+   "item": "Chrome browsing history you’ve synced with your Google Account",
+   "line": 96,
+   "from": "list-item"
+  },
+  {
+   "item": "Activity on Google services, such as from your searches or places you label like home or work",
+   "line": 112,
+   "from": "list-item"
+  },
+  {
+   "item": "Information about things near your device, such as Wi-Fi access points, cell towers, and Bluetooth-enabled devices",
+   "line": 113,
+   "from": "list-item"
+  },
+  {
+   "item": "When you’re signed in to your Google Account and search on Google, you can see search results from the public web, along with relevant information from the content you have in other Google products, like Gmail or Google Calendar. This can include things like the status of your upcoming flights, restaurant, and hotel reservations, or your photos. Learn more",
+   "line": 772,
+   "from": "list-item"
+  },
+  {
+   "item": "If you have communicated with someone via Gmail and want to add them to a Google Doc or an event in Google Calendar, Google makes it easy to do so by autocompleting their email address when you start to type in their name. This feature makes it easier to share things with people you know. Learn more",
+   "line": 773,
+   "from": "list-item"
+  },
+  {
+   "item": "The Google app can use data that you have stored in other Google products to show you personalized content, depending on your settings. For example, if you have searches stored in your Web & App Activity, the Google app can show you news articles and other information about your interests, like sports scores, based on your activity",
+   "line": 774,
+   "from": "list-item"
+  },
+  {
+   "item": "If you connect your Google Account to your Google Home, you can manage your information and get things done through the Google Assistant. For example, you can add events to your Google Calendar or get your schedule for the day, ask for status updates on your upcoming flight, or send information like driving directions to your phone. Learn more",
+   "line": 775,
+   "from": "list-item"
+  },
+  {
+   "item": "If you’re a user in the EU, the decisions you make on linking services will affect how certain Google services can use the data across our services",
+   "line": 776,
+   "from": "list-item"
+  }
+ ],
+ "verdict": "built",
+ "reason": "11 published items, 9 prose dropped"
+}

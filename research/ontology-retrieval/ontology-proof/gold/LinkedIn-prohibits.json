@@ -1,0 +1,122 @@
+{
+ "service": "LinkedIn",
+ "list": "prohibits",
+ "source": "spikes/fineprint-data/ota-pga-versions/LinkedIn/Advertising Content Policy.md",
+ "headings": [
+  {
+   "line": 23,
+   "text": "4\\. Prohibited Content",
+   "span_ends_line": 69
+  }
+ ],
+ "items": [
+  {
+   "item": "Professional Community Policies",
+   "line": 26,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Illegal Products, Services and Activities",
+   "line": 28,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Discrimination",
+   "line": 30,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Offensive to Good Taste",
+   "line": 32,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Fraud and Deception",
+   "line": 34,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Trademark Infringement",
+   "line": 36,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Copyright Infringement",
+   "line": 38,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Fake Documents and Related Services",
+   "line": 40,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Tobacco Products",
+   "line": 42,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Illicit or Recreational Drugs",
+   "line": 44,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Weapons, Fireworks and Other Violent Products or Services",
+   "line": 46,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Adult Content",
+   "line": 48,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Counterfeit",
+   "line": 50,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Gambling and Sweepstakes",
+   "line": 52,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Occult Pursuits",
+   "line": 54,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Health Matters",
+   "line": 56,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Affiliate Advertising",
+   "line": 58,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Political",
+   "line": 60,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Sensitive Events",
+   "line": 64,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Hacking, Cracking and Circumvention",
+   "line": 66,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Incomplete Ad",
+   "line": 68,
+   "from": "bold-lead-in"
+  }
+ ],
+ "dropped": [],
+ "verdict": "built",
+ "reason": "21 published items, 0 prose dropped"
+}

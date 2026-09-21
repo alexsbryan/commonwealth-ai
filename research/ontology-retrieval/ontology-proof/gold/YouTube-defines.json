@@ -1,0 +1,76 @@
+{
+ "service": "YouTube",
+ "list": "defines",
+ "source": "spikes/fineprint-data/ota-pga-versions/YouTube/Developer Terms.md",
+ "headings": [],
+ "items": [
+  {
+   "item": "Agreement",
+   "line": 494,
+   "from": "definition"
+  },
+  {
+   "item": "API Client",
+   "line": 496,
+   "from": "definition"
+  },
+  {
+   "item": "API Credentials",
+   "line": 498,
+   "from": "definition"
+  },
+  {
+   "item": "API Data",
+   "line": 500,
+   "from": "definition"
+  },
+  {
+   "item": "API Project",
+   "line": 502,
+   "from": "definition"
+  },
+  {
+   "item": "Authorized Data",
+   "line": 504,
+   "from": "definition"
+  },
+  {
+   "item": "Google Applications",
+   "line": 506,
+   "from": "definition"
+  },
+  {
+   "item": "Non-Authorized Data",
+   "line": 508,
+   "from": "definition"
+  },
+  {
+   "item": "Terms of Service",
+   "line": 510,
+   "from": "definition"
+  },
+  {
+   "item": "User Credentials",
+   "line": 512,
+   "from": "definition"
+  },
+  {
+   "item": "YouTube API Services",
+   "line": 514,
+   "from": "definition"
+  },
+  {
+   "item": "YouTube Applications",
+   "line": 516,
+   "from": "definition"
+  },
+  {
+   "item": "YouTube Brand Features",
+   "line": 518,
+   "from": "definition"
+  }
+ ],
+ "dropped": [],
+ "verdict": "built",
+ "reason": "13 published items, 0 prose dropped"
+}

@@ -1,0 +1,10 @@
+{
+ "service": "Spotify",
+ "list": "defines",
+ "source": "spikes/fineprint-data/ota-pga-versions/Spotify/Developer Terms.md",
+ "headings": [],
+ "items": [],
+ "dropped": [],
+ "verdict": "absent",
+ "reason": "Spotify publishes no Developer Terms.md in this corpus"
+}

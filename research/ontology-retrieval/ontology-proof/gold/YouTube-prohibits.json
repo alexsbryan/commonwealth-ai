@@ -1,0 +1,10 @@
+{
+ "service": "YouTube",
+ "list": "prohibits",
+ "source": "spikes/fineprint-data/ota-pga-versions/YouTube/Advertising Content Policy.md",
+ "headings": [],
+ "items": [],
+ "dropped": [],
+ "verdict": "absent",
+ "reason": "YouTube publishes no Advertising Content Policy.md in this corpus"
+}
