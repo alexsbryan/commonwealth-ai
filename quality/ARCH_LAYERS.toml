@@ -924,246 +924,257 @@ name = "oplog"
 allow = ["kernel-types"]
 
 # ── The packages ─────────────────────────────────────────────────────────────
+#
+# THE FIVE PROGRAMS, DECLARED AS THE ENDSTATE (2026-09-21, docs/FIVE_PROGRAMS.md
+# §9 / step 9). Until this commit there were six packages — `studio`,
+# `code-intel`, `corpus-mcp`, `commonwealth`, `serving`, `understanding` — each
+# declared where a carve-out happened to reach, and together they answered a
+# different question from the one the design asks. The design's question is
+# "which of the five programs owns this crate", and the validator already
+# refuses a crate in two packages, so the six could not be nested inside the
+# five: they are REPLACED by them.
+#
+# WHY THE WHOLE SET LANDS AT ONCE, MAXIMALLY RED, WITH NO [[exception]] ROW.
+# Operator direction 2026-09-21, correcting how this branch had been worked:
+# "I don't want the fuzzy grep and chase stuff. I want the define statically
+# the endstate, break everything red, let the initiative be a return to green."
+# The session before this one cut incrementally and scored itself with a
+# scratchpad Python script carrying its own crate-to-program map and its own
+# forbid matrix — a second implementation of the question this gate already
+# answers (ARCH §10.6), and one the author could tune, which he caught himself
+# considering. The script is deleted. THIS TABLE IS THE ONLY MAP, and
+# `cargo xtask boundary-gate`'s violation count is the only burn-down number:
+# derived from data a reviewer reads in one diff, and no edge argued away
+# without editing a declared row.
+#
+# The script also UNDERCOUNTED, which is the second reason not to keep it. It
+# saw normal dependency edges; this gate's closure also carries dev and build
+# edges, and the three filesystem rules a manifest cannot express (3a build.rs,
+# 3b crate-escaping include_str!, 3c runtime reach-out). Registering
+# `sovereign-code` alone produced TEN violations where the script showed a
+# handful (ef227581f).
+#
+# HOW A RED LINE IS CLOSED. Each is one task: the edge becomes a wire call, or
+# the type it reaches moves to a shared leaf, or the crate moves to the program
+# that actually owns it. Done when the line is gone. An [[exception]] row is
+# available and is deliberately unused here — the mechanism exists (see the
+# burn-down list below) and going red WITHOUT it is the instruction, because a
+# ledger written on day one is a ledger nobody reads on day thirty.
+#
+# WHAT IS NOT IN ANY PACKAGE, and why each absence is a decision rather than an
+# oversight — the crates here are UNCHECKED by this rule, and an edge INTO one
+# from a member is a violation:
+#   clients (§2 "Clients are not programs") — sovereign-desktop,
+#     sovereign-mobile, sovereign-turn-client. The browser is the reference
+#     client (§2a) and the phone is the same served UI; turn-client is the SDK
+#     they dial with. If a program links one, that is the finding.
+#   build tooling — arch-layers, xtask. Neither ships.
+#   protocol conformance — oicp-conformance. A test suite over `oicp-types`.
+#   §5 "deleted, not migrated" — sovereign-studio, sovereign-workflow,
+#     sovereign-workflow-host (the studio surface), sovereign-atos,
+#     corpus-engine-atos (atos), sovereign-work-atlas (the work atlas). Each is
+#     kept unless a §7 journey reaches it. Declaring a package for a crate set
+#     slated for deletion would be enforcing a boundary around something that
+#     should not exist.
+#
+# WHAT THE SIX REPLACED PACKAGES BOUGHT, so the loss is stated and not
+# discovered: `commonwealth` (9 crates) and `studio` (5) were GREEN with zero
+# exception rows, and that enforcement is now folded into `cmnwlth` (which is
+# wider, so the property is weaker) and dropped entirely for studio (§5). The
+# commonwealth crates stay together and their zero-exception property is still
+# readable in the gate output; if it breaks, it breaks visibly.
+#
+# §9 also names four `[[forbid]]` rows (`cmnwlth -> svrn`, `svrn -> cmnwlth`,
+# `svrn -> code`, `bench -> *`). Three of the four are ALREADY what a package
+# row says — a member may reach its own package and the shared leaves and
+# nothing else — so spelling them again would be two implementations of one
+# rule, the defect ARCH §10.6 names. They are not added. The fourth is real and
+# is NOT expressible today: `bench -> *` except `oicp-types` and
+# `sovereign-contracts` narrows the leaf budget for one package, and the
+# `[[package_leaf]]` set is GLOBAL. Recorded here as the open item; the fix is
+# a per-package leaf budget in `quality/arch-layers/src/packages.rs`, not a
+# hand-copy of the membership list into forbid rows.
 
 [[package]]
-name = "studio"
-doc = "studio/BOUNDARY.md"
-# The workflow + recipe authoring package. Green and blocking since the gate
-# was written; the closure was physically lifted once (2026-07-21) and built in
-# 36 seconds cold with zero source edits. The one snag that lift surfaced is
-# not a dependency edge at all — `sovereign-contracts` carries an `include_str!`
-# escaping its crate root into `sovereign-recipes/`, so the sandbox had to
-# preserve the monorepo's directory shape to compile. A green gate is not a
-# proven lift; see the note in studio/BOUNDARY.md.
-crates = [
-    "sovereign-tools-base",
-    "sovereign-workflow",
-    "sovereign-workflow-host",
-    "sovereign-recipe-author",
-    "sovereign-studio",
-]
-
-[[package]]
-name = "code-intel"
-doc = "docs/CODE_TOOLING_BOUNDARY.md"
-# The code intelligence package — designed 2026-07-27, registered here
-# 2026-09-03 as Phase 0 of its own phase queue ("generalise boundary_gate.rs
-# from one PACKAGE_SET to N named packages").
+name = "svrn"
+doc = "docs/FIVE_PROGRAMS.md"
+# The knowledge server (§2): MCP `ask`, `search`, `atoms_lookup`; HTTP
+# `/v1/chat/completions`. Owns corpus indexes and conversations on disk.
 #
-# THESE FIVE ARE THE CRATES THAT EXIST. The package's target shape is nine
-# (CODE_TOOLING_BOUNDARY.md §2); the other four — `code-facts`, `code-enrich`,
-# `code-tools`, `code-intel-cli` — are still modules inside `corpus-engine`,
-# `sovereign-tools` and the CLI siblings, and arrive with Phases 2, 4 and 6.
-# Registering the five that are already carved out is what stops the ~22k lines
-# of finished extraction from silently re-acquiring an edge while the remaining
-# 29k is being moved.
+# The turn path plus the daemon that serves it plus the frontdoor CLI. It is
+# the widest of the five and that is the shape of the thing, not a failure to
+# draw a line: §6 measured `sovereign-tools` at 800 references into runtime and
+# corpus across 183 files, and the 187 that belonged to `code/` already left as
+# `sovereign-code` (822681564).
 #
-# The `corpus-engine-` prefix is carve-out history and actively misleads; the
-# rename is Phase 5, and the crates.io names are unverified (§9 open items) —
-# resolve before the rename, not after.
-crates = [
-    "corpus-engine-yield",
-    "corpus-engine-scip",
-    "corpus-engine-notes",
-    "corpus-engine-watchers",
-    "corpus-engine-archaeology",
-    # The package's TENTH crate and the first §2's table does not name — the
-    # next-edit half of sovereign-api's workbench cluster (domains
-    # REVIEW-build-next-edit-crate; `quality/DOMAINS.md` §4 calls next-edit
-    # "Workbench's clearest lost child"). A stub until dm-next-edit-move lands
-    # the five pure modules; `routes_edit_predictions.rs` is a route shell and
-    # goes to sovereign-daemon instead (DAEMON_CORE.md §4.1).
-    "code-next-edit",
-    # The package's §2 `code-facts` — the deterministic tree-sitter fact base
-    # (`facts` + `facts_check` + `facts_store`), moved out of `corpus-engine` by
-    # domains REVIEW-build-code-facts (Phase 2). `corpus-engine` re-exports the
-    # three modules at their historical paths.
-    "code-facts",
-    # `svrn code` itself — the 18,431 lines lifted out of
-    # `sovereign-tools/src/code/` on 2026-09-21 (FIVE_PROGRAMS §2). Registering
-    # it here is what makes the lift's boundary a GATE rather than a claim: it
-    # names no svrn-side crate in production, and this row is what refuses the
-    # first edge that would put one back.
-    "sovereign-code",
-]
-
-[[package]]
-name = "corpus-mcp"
-doc = "corpus-mcp/README.md"
-# The thin knowledge host (enrichment-as-plugin Step 5, 2026-09-03): the proof
-# that a third party can search a corpus-engine index — and read what its
-# enrichment produced — against a plain `llama-server`, with nothing that
-# carries llama.cpp, ort or iroh. ONE crate, deliberately: the engine it reads
-# with is not liftable yet (a `build.rs` that vendors recipes, tree-sitter
-# queries `include_str!`'d from outside the crate root, and an optional edge to
-# `corpus-engine-scip`), so putting `corpus-engine` inside the package would
-# fail three filesystem rules the package cannot grandfather. Instead the edge
-# corpus-mcp → corpus-engine is the single grandfathered row below, and the
-# gate enforces what the binary itself may reach: the shared leaves and nothing
-# else. A `sovereign-core` or `sovereign-tools` dep added to this host fails
-# here on day one; the third-party half (llama.cpp / ort / iroh) is pinned by
-# `corpus-mcp/tests/no_inference_stack.rs` against `cargo tree`.
+# TWO CRATES ARE HERE THAT §9 SAYS SHOULD BE SPLIT FIRST — `sovereign-tools`
+# and `sovereign-cli-llm`, each "two programs in one crate" (§6). Leaving them
+# unclaimed until the split would be worse, not better: every edge INTO them
+# from all five programs would go red, which measures the absence of a decision
+# rather than a boundary. They are claimed by the program whose verbs dominate
+# them (`ask`/`search` for tools; `chat`/`corpus`/`mcp` for cli-llm), and the
+# edges OUT of them into the other four are the split task, stated as red lines
+# in the only place that counts.
 #
-# `sovereign-enrichment-build` joined 2026-09-04 (order ei-5a-build-cut). It is
-# the atlas `enrich build` orchestrator — the crate that WRITES what this host
-# reads — and it sat on `sovereign-core`, `sovereign-tools` and
-# `sovereign-inference` for eight import sites, none of which turned out to be
-# inference: the embedder was one `embed_query` behind a twelve-method trait,
-# `fetch_manifest` was reached through a crate whose `remote` module is nothing
-# but `pub use oicp_client::*`, and the rest were types that already lived in
-# `sovereign-contracts` or `corpus-engine`. Its closure went 695 → 590 crates
-# with llama.cpp gone. Listing it here is what stops it coming back: the gate
-# refuses a `sovereign-core` / `sovereign-tools` edge on this package, and the
-# third-party half is pinned by the same `cargo tree` test as the host.
-# `sovereign-enrichment-catalog` joined in the same commit, and on the same
-# evidence: it is the enrichment store's layout + `config.json` schema, the
-# orchestrator's one way to find an atlas on disk, and its LAST non-leaf edge
-# (`sovereign_core::setup_config::client_daemon_base()`, one line) was the
-# eighth site this order cut. What it depends on now is `corpus-engine` and
-# `sovereign-contracts` — the same two the rest of this package stands on.
+# `sovereign-cli` is the dispatcher and its siblings are the programs; it is
+# here because `svrn` is the name a user types. `sovereign-service` is the OS
+# service wrapper — §2a's "the daemon is an OS service and is present when no
+# window is".
 crates = [
     "corpus-mcp",
-    "sovereign-enrichment-build",
-    "sovereign-enrichment-catalog",
+    "sovereign-core",
+    "sovereign-daemon",
+    "sovereign-tools",
+    "sovereign-tools-base",
+    "sovereign-store",
+    "sovereign-service",
+    "sovereign-cli",
+    "sovereign-cli-shared",
+    "sovereign-cli-daemon",
+    "sovereign-cli-llm",
 ]
 
 [[package]]
-name = "commonwealth"
-doc = "commonwealth/BOUNDARY.md"
-# The mesh substrate — declared 2026-09-03, BEFORE the work that moves code
-# into and out of it, because no gate in this repo can tell "the files moved"
-# from "the boundary holds". layer-gate's "no sovereign" property is seven
-# hand-enumerated [[forbid]] blocks above (:305-341); a crate added to the
-# mesh-foundation layer list gets no forbid rule and prints green. ARCH §18.1.
+name = "ingest"
+doc = "docs/FIVE_PROGRAMS.md"
+# `svrn ingest` (§2): the recipe pipeline. CLI only, no wire. Owns the index
+# directory it writes.
 #
-# Green on the day it is declared, with zero [[exception]] rows: the four
-# crates' entire internal dependency surface is commonwealth-core plus the
-# kernel-types / oicp-types leaves. That is a property to hold, not one to
-# reach — a new row here is a regression, not bookkeeping.
+# `corpus-engine` is the member that makes this package red on the FILESYSTEM
+# rules before a single dependency edge is read: a `build.rs` that vendors
+# recipes (3a) and tree-sitter queries `include_str!`d from `queries/` outside
+# the crate root (3b). Both are already named as the burn-down behind the
+# `corpus-mcp -> corpus-engine` row this commit retires, and both are now
+# stated where they cost something rather than where they were grandfathered.
 #
-# WHAT IS NOT IN IT. commonwealth-{knowledge,inference,api} are applications on
-# this substrate (577-690-crate closures, all three name corpus-engine), and so
-# is sovereign-mesh. sovereign-mesh holds substrate-SHAPED code — a MeshStore
-# replication path, a founder/joiner handshake — whose external consumers are
-# ~15 of ~234 crossing refs. Extracting it as a peer of these four would fork
-# the deciders this package owns: two replication paths, two orderings, two
-# admission rules. §10.6 at crate scale. Substrate found elsewhere is rehomed
-# HERE or deleted, never mirrored.
+# Understanding — the atlas: `understanding-atlas` (the pure tier) and
+# `understanding-host` (ports, writers, the phase runner) — is INGEST, not
+# `svrn`. The atlas is written here and read there, through the index, under §4
+# rule 1 (one data directory, one owner). Enrichment (`sovereign-enrichment-
+# build` orchestrates, `-catalog` is the store layout) is the same argument:
+# these are atlas WRITERS.
+#
+# `sovereign-gliner` (entity extraction) and `sovereign-runtime-recipe` (the
+# daemon-side recipe runner) are here for what they do, and both reach `svrn`
+# crates today — two red lines that say the ingest work is still running inside
+# the knowledge server's process.
+crates = [
+    "corpus-engine",
+    "sovereign-pipeline",
+    "sovereign-recipe-author",
+    "sovereign-runtime-recipe",
+    "sovereign-gliner",
+    "sovereign-enrichment-build",
+    "sovereign-enrichment-catalog",
+    "understanding-atlas",
+    "understanding-host",
+]
+
+[[package]]
+name = "cmnwlth"
+doc = "docs/FIVE_PROGRAMS.md"
+# The endpoint router with a roster (§2): HTTP `/v1/*` proxied, the OICP
+# manifest. Owns the roster, the adverts and the decision log.
+#
+# The nine `commonwealth-*` crates are the substrate, carried over whole from
+# the `commonwealth` package this row replaces (declared 2026-09-03, green with
+# zero exceptions on the day, and green every day since). Their internal
+# surface is `commonwealth-core` plus the `oplog` / `kernel-types` /
+# `oicp-types` leaves, so folding them into a wider package does not introduce
+# a single new edge among them — what it DOES do is admit `sovereign-mesh` and
+# the serving cluster as siblings, and those two are where the red is.
+#
+# THE SERVING CLUSTER IS HERE BECAUSE INFERENCE IS. §2 gives `cmnwlth` "the
+# serving cluster", and a router with a roster that cannot run a model is a
+# proxy, not a program: `sovereign-scheduler` (arithmetic over the published
+# language), `sovereign-serving-host` (the ports and the knot), `serving-policy`
+# (the admission decider), `sovereign-inference` (the provider layer) and
+# `sovereign-compute` (one supervised child per slot). The consequence is the
+# largest single red edge in this table and it is the correct one: `svrn` reads
+# `sovereign-inference` today and under the design it dials `/v1/*` instead.
+#
+# `sovereign-mesh` holds substrate-shaped code whose external consumers are ~15
+# of ~234 crossing references (the `commonwealth` block's own finding, kept
+# here). It is a member rather than a peer package for exactly that reason —
+# extracting it as a peer would fork the deciders this package owns.
 crates = [
     "commonwealth-core",
     "commonwealth-transport",
     "commonwealth-state",
     "commonwealth-discovery",
-    # The rail, admitted 2026-09-04 at cw-lift 1b/1d. The fold (rail-core:
-    # vocabulary, Ed25519 authorship, admission into one total order, the sync
-    # digest, zero I/O) and the journal (rail: the JSONL log under
-    # <root>/rings/<ns>/). Their whole internal surface is commonwealth-core
-    # plus the `oplog` and `kernel-types` leaves, so the zero-exception
-    # property above still holds — which is the ONLY reason they are in here.
     "commonwealth-rail-core",
     "commonwealth-rail",
-    # The work plane, admitted 2026-09-09 at cw-lift 5c. Six crates -> seven,
-    # and the zero-exception property still holds: its entire internal surface
-    # is `commonwealth-core` + `commonwealth-rail-core` + the `oicp-types` and
-    # `kernel-types` leaves already in this list, so the widening admits NO new
-    # leaf at all -- cheaper than the `oplog` admission the rail cost.
-    #
-    # It is here BEFORE it has a consumer, and that is the point: cw-lift 5f
-    # lifts this closure out of the monorepo and builds a third-party peer
-    # against it, and every gate in the repo would be green on a
-    # `sovereign-*` dep acquired the day before that lift.
     "commonwealth-work",
-    # Federated media, admitted 2026-09-11 at cw-lift D1. Seven crates -> eight
-    # and the zero-exception property still holds: its entire internal surface
-    # is `commonwealth-core` + `commonwealth-transport`, both already members,
-    # so the widening admits no new leaf at all.
-    #
-    # Here the day it is registered, and for the same reason the work plane
-    # was: `commonwealth-rails` is being written against it, and the two
-    # [[forbid]] rows above are what keep the closure liftable between now and
-    # then.
     "commonwealth-media",
-    # The rails daemon, admitted the same day and against the same property:
-    # eight crates -> nine, and its entire internal surface is
-    # `commonwealth-{core,transport,media,discovery}`, every one already a
-    # member. The widening admits no new leaf.
-    #
-    # It is the first BINARY in this package, which is the point. A gate that
-    # counted crate names would stay green through a `build.rs`, a
-    # hand-spelled `path = "../.."`, or an `include_str!` escaping the crate
-    # root — none of which `cargo tree` can see. `scripts/cw-rails-lift.sh
-    # --sandbox` reads those by copying this closure out of the repository,
-    # building it against a synthesised workspace and RUNNING it against a
-    # live mesh; this row is what stops the edge being acquired between lifts.
     "commonwealth-rails",
-]
-
-[[package]]
-name = "serving"
-doc = "sovereign/SERVING_BOUNDARY.md"
-# The serving package — declared 2026-09-14 by rung domains-9, BEFORE the work
-# that moves code into it, for the reason the `commonwealth` block above gives:
-# no gate here can tell "the files moved" from "the boundary holds". Unlike
-# commonwealth, this one was RED the day it was declared, and that was the point
-# (ARCH §18.1). The scheduler half (seven modules, 6,559 lines) and the knot now
-# live in `sovereign-scheduler` and `sovereign-serving-host`; the peg
-# `sovereign-serving` emptied to zero at REVIEW-build-serving-empty-peg
-# (2026-09-15) — its two live modules moved to `commonwealth-state` and its
-# re-exports went to `oicp-types`/`commonwealth-core`, so the crate was deleted.
-#
-# THE TWO TIERS (SERVING_BOUNDARY.md "The two tiers"). `sovereign-scheduler` is
-# arithmetic over the published language — the ranking decision reads no clock
-# and does no I/O; `sovereign-serving-host` is the ports and the knot — it opens
-# connections and receives every candidate through a port. `serving-policy` is
-# the tier-0 leaf the admission decider already lives in (`fair_sched` left
-# commonwealth-core 2026-09-03) and it is the precedent this package copies; it
-# is a MEMBER here rather than a shared leaf, because a crate cannot be both.
-# The peg `sovereign-serving` emptied to zero at REVIEW-build-serving-empty-peg.
-#
-# The shared leaves the package reaches are the GLOBAL [[package_leaf]] set —
-# `oicp-types`, `kernel-types`, `sovereign-contracts`. "And nothing else in this
-# repo" is what the five [[forbid]] rows above make structural, per target.
-# `sovereign-compute` is Serving's local engine and is deliberately OUTSIDE this
-# closure (DOMAINS.md §11): one supervised child per slot behind the daemon's
-# provider facade, which a lift carries no need for.
-crates = [
+    "sovereign-mesh",
+    "sovereign-mesh-test-harness",
     "sovereign-scheduler",
     "sovereign-serving-host",
     "serving-policy",
+    "sovereign-inference",
+    "sovereign-compute",
+    "sovereign-peer-wire",
+    "sovereign-pods",
+    "sovereign-meshapp",
+    "sovereign-meshapp-registry",
+    "sovereign-grants",
 ]
 
 [[package]]
-name = "understanding"
-doc = "corpus-engine/DECOMPOSITION.md"
-# The Understanding context's package (DE "Step 7, redrawn"; quality/DOMAINS.toml
-# [[context]] understanding). Declared 2026-09-18 by domains
-# REVIEW-build-understanding-tier-crates, BEFORE the work that fills it, for the
-# reason the `commonwealth` block above gives: no gate here can tell "the files
-# moved" from "the boundary holds". RED the day it is declared (ARCH §18.1): the
-# two tiers are empty stubs, so the one grandfathered edge below is STALE until
-# the host half names `corpus-engine`.
+name = "code"
+doc = "docs/FIVE_PROGRAMS.md"
+# `svrn code` (§2): the LSP for agents. MCP `symbols`, `callers`, `blast`, …;
+# HTTP `/v1/completions` (FIM). Owns the SCIP index and notes on disk.
 #
-# THE TWO TIERS (DE "The shape"). `understanding-atlas` is arithmetic over the
-# published language — analysis, resolution by name, classification, the ground
-# walk, domains, ontology, reconciliation, the pipeline types and schemas, the
-# meta-atlas and traversal logic — and may name the language
-# (`understanding-vocab`, a shared leaf below), `kernel-types` and the row types
-# the `corpus-index` leaf publishes; it carries `no async fn`.
-# `understanding-host` is the ports and the knot — stores and the ANN, writers,
-# the field engine, entity extraction, the phase runner — and reaches
-# `corpus-engine`, the `corpus-index` leaf, the pure tier and the language.
+# The `code-intel` package this row replaces, plus `sovereign-cli-dev` — the
+# sibling that owns the `tools`, `code`, `project` and `atos` verbs (AGENTS.md
+# "Code Intelligence", the verb → binary map). A package that holds the library
+# but not the binary the user runs is enforcing half a program.
 #
-# WHY A PACKAGE, NOT `corpus-mcp` GROWING. DE "This is the `corpus-mcp` package
-# growing, not a second package" reads the tiers as members of `corpus-mcp`; the
-# registry and the campaign's own note say otherwise — quality/DOMAINS.toml
-# "understanding (package, SERVING_BOUNDARY shape)", the cluster note "a
-# two-tier PACKAGE, not a crate", and quality/campaigns/domains.toml's
-# floor_basis ("corpus-mcp, which is a HOST that reads Understanding's output
-# rather than Understanding's crate"). Resolved for the registry, the campaign's
-# data; the DECISIONS entry is in ralph/DECISIONS.md 2026-09-18.
+# The six [[exception]] rows written with the `sovereign-code` registration a
+# few hours ago (ef227581f) are DELETED by this commit, not migrated. They were
+# honest and each named its closing condition; they are also the shape the
+# operator's correction is aimed at, so `sovereign-code -> corpus-engine`,
+# `-> sovereign-atos`, `-> corpus-engine-atos`, `-> sovereign-work-atlas`,
+# `-> commonwealth-core` and `-> arch-layers` are red lines now. Their closing
+# conditions are not lost — they are in ef227581f's diff and in
+# docs/CODE_TOOLING_BOUNDARY.md.
 crates = [
-    "understanding-atlas",
-    "understanding-host",
+    "sovereign-code",
+    "sovereign-cli-dev",
+    "corpus-engine-scip",
+    "corpus-engine-notes",
+    "corpus-engine-watchers",
+    "corpus-engine-archaeology",
+    "corpus-engine-yield",
+    "code-facts",
+    "code-next-edit",
+]
+
+[[package]]
+name = "bench"
+doc = "docs/FIVE_PROGRAMS.md"
+# `svrn bench` (§2): the evaluator. Serves no wire and dials a URL. Owns banks,
+# baselines and verdict tables.
+#
+# The tightest of the five by design — §9 wants it reaching `oicp-types` and
+# `sovereign-contracts` and nothing else, because an evaluator that links the
+# thing it measures can be tuned by the same edit that fixes a bug. It cannot
+# be spelled that tightly yet (the leaf set is global; see the header), so the
+# package rule is what holds until a per-package leaf budget exists.
+#
+# `sovereign-eval` is here "minus its product links" (§2) — the links are
+# `corpus-engine` and `sovereign-authoring-harness`, and they are red lines,
+# which is the whole point of the row. `sovereign-authoring-harness` is the
+# verdict layer over the harness runner's `StageOutput`s: a judge, so it is
+# bench's, and the `svrn` daemon reaching it is a finding.
+crates = [
+    "sovereign-eval",
+    "sovereign-authoring-harness",
+    "sovereign-agent-bench",
+    "sovereign-agent-tools",
+    "sovereign-tdd",
 ]
 
 # ── THE THIN-SURFACE RULE — can this client BECOME what it talks to? ─────────
@@ -1294,7 +1305,26 @@ reason = "`kickstart_daemon` — `id -u`, then `launchctl kickstart -k gui/<uid>
 
 
 # ── Grandfathered violations (the burn-down list) ────────────────────────────
-
+#
+# EMPTY OF PACKAGE ROWS AS OF 2026-09-21, and that is the instruction, not an
+# accident. Eleven `package = "…"` entries were deleted with the six packages
+# that scoped them — three on `corpus-mcp`, six on `code-intel` (written hours
+# earlier at ef227581f), one on `serving`, one on `understanding`. Every edge
+# they named still exists; each is now a RED LINE in
+# `cargo xtask boundary-gate` instead of a row in a ledger, per the operator's
+# 2026-09-21 direction quoted in the packages header above.
+#
+# The mechanism is unchanged and still available: an `[[exception]]` carrying
+# `package = "<name>"` grandfathers an edge out of that package's closure, and
+# a STALE one (the edge is gone) fails the gate until it is deleted. Reach for
+# it when an edge is genuinely permanent and the reason names what would change
+# that. Do not reach for it to lower the burn-down number, which is the failure
+# mode this file has now watched twice.
+#
+# The closing conditions those eleven rows carried are not lost: they are in
+# the diffs that deleted them, in docs/CODE_TOOLING_BOUNDARY.md, in
+# sovereign/SERVING_BOUNDARY.md and in corpus-engine/DECOMPOSITION.md.
+#
 # `sovereign-mesh-test-harness -> sovereign-api` retired at
 # REVIEW-build-harness-oicp-seam (2026-09-17). The harness's simulated node is
 # now generic over the node state (the OICP/contracts seam) and its `src/`
@@ -1302,114 +1332,6 @@ reason = "`kickstart_daemon` — `id -u`, then `launchctl kickstart -k gui/<uid>
 # integration tests that assemble the real node bind `AppState` through a
 # test-only (dev) edge, which layer-gate never enforces.
 
-[[exception]]
-package = "corpus-mcp"
-from = "sovereign-enrichment-catalog"
-to = "corpus-engine"
-reason = "the same unliftable `corpus-engine` named in the row below, reached by the third member of this package. The catalog reads the enrichment store's `config.json` and resolves index paths, which are corpus-engine's own; it clears when the row below does."
-tracking = "enrichment-as-plugin follow-up (index-read leaf)"
-
-[[exception]]
-package = "corpus-mcp"
-from = "sovereign-enrichment-build"
-to = "corpus-engine"
-reason = "the same unliftable `corpus-engine` named in the row below, reached by the other member of this package. The orchestrator IS an atlas writer — atoms, edges, the pipeline registry and the ANN seed table are all corpus-engine's — so this edge is the crate's purpose, not an accident, and it clears when the row below does."
-tracking = "enrichment-as-plugin follow-up (index-read leaf)"
-
-[[exception]]
-package = "corpus-mcp"
-from = "corpus-mcp"
-to = "corpus-engine"
-reason = "the host does the engine's own work through corpus-engine — the `ingest` verb, the pull-if-absent prebuilt restore in `serve`, recipe install, and the atlas reads — and corpus-engine cannot join a liftable package yet: it carries a `build.rs` (recipe vendoring), `include_str!`s tree-sitter queries from `queries/` outside its crate root, and an optional edge to `corpus-engine-scip`. Burn-down: (1) the read-only index surface the host needs — open + hybrid search over LanceDB/Tantivy — LANDED 2026-09-18 as the `corpus-index` leaf (domains REVIEW-build-index-read-port), and the host's read-only sites (`serve`, `ask`, `host`, the `corpus_search` tool) now reach it directly, so the read surface is no longer why this row exists; (2) the tree-sitter queries moved inside the crate or behind the code-intel seam; (3) the recipe vendoring build.rs replaced by the checked-in artifact. The row stays for the engine work that genuinely ingests and for the atlas reads Understanding still owns; it retires when (2) and (3) land and those reads move."
-tracking = "corpus-engine lift: (2) tree-sitter queries inside the crate, (3) recipe vendoring build.rs"
-
-
-# ── code-intel exceptions: what `sovereign-code` still reaches ───────────────
-# Declared 2026-09-21 with the `sovereign-code` row above. The lift
-# (FIVE_PROGRAMS §2) made `svrn code` a crate and removed every svrn-side
-# crate's production edge INTO it; these six are the edges that still run the
-# other way, out of it. They were invisible while the code lived inside
-# `sovereign-tools` — the gate's unit is the crate, and there was no crate.
-# Each is a real dependency, not an accident, and each names what closes it.
-
-[[exception]]
-package = "code-intel"
-from = "sovereign-code"
-to = "corpus-engine"
-reason = "the code tools query LanceDB code corpora through the engine — `query_all_code_indexes`, the `has_code_graph` screen, and every chunk the symbol/search tools return. The same unliftable `corpus-engine` the corpus-mcp rows name: build.rs recipe vendoring, `include_str!` escaping the crate root for tree-sitter queries. The read-only half it actually needs is the `corpus-index` leaf, already a shared leaf here."
-tracking = "move the code tools' reads onto `corpus-index`, as corpus-mcp's read-only sites did at domains REVIEW-build-index-read-port"
-
-[[exception]]
-package = "code-intel"
-from = "sovereign-code"
-to = "sovereign-atos"
-reason = "`DriftTool` calls `sovereign_atos::approval::{find_approval, detect_drift, current_spec_hash}` so its verdict matches the daemon's approval-gate middleware exactly — one decider, not a second copy of the hash rule. Feature-gated (`atos`, off by default), so a product build carries neither the edge nor the tools."
-tracking = "ATOS is an experimental subsystem; this row retires with it, or with the approval predicate moving to a shared leaf"
-
-[[exception]]
-package = "code-intel"
-from = "sovereign-code"
-to = "corpus-engine-atos"
-reason = "the ATOS store behind the same feature axis as the row above; `atos_plan_emit` and `atos_utils` read it directly."
-tracking = "same as sovereign-atos"
-
-[[exception]]
-package = "code-intel"
-from = "sovereign-code"
-to = "sovereign-work-atlas"
-reason = "`blast` surfaces concurrent peer claims in the same response (work-atlas spec §8), so the impact answer and the collision warning are one call rather than two the caller must correlate. One-way: work-atlas does not depend on the code tools."
-tracking = "work-atlas is mesh-side state; the edge closes when `blast` reads claims over the wire instead of linking the store"
-
-[[exception]]
-package = "code-intel"
-from = "sovereign-code"
-to = "commonwealth-core"
-reason = "ONE reference. Atlas peer-advice consumes `CorpusShardInfo` from commonwealth-core's gossip schema — a wire type, not behaviour."
-tracking = "move `CorpusShardInfo` to `oicp-types`, which is already a shared leaf, and this row goes with it"
-
-[[exception]]
-package = "code-intel"
-from = "sovereign-code"
-to = "arch-layers"
-reason = "`arch_report` and `arch_posture` evaluate `quality/ARCH_LAYERS.toml` itself, and share the parser with the xtask layer-gate so the declared (CI) and observed (arch_report) halves cannot drift — ARCH principle 8. arch-layers is a schema+evaluator leaf with no reverse reach."
-tracking = "promote `arch-layers` to a [[package_leaf]]; it is leaf-shaped already, and widening a leaf budget widens every package, so it is a deliberate decision rather than a fix"
-
-# ── Serving package exceptions (the burn-down list) ──────────────────────────
-# Declared 2026-09-14 with the [[package]] row above, per SERVING_BOUNDARY.md
-# "Grandfathered": at most two, and a third means the boundary is drawn in the
-# wrong place (the campaign's K4) — move the line, do not widen the ledger. Each
-# carries the `tracking` condition that retires it, and a stale one (the edge is
-# gone) fails the gate until it is deleted.
-#
-# ONE LEFT. The `sovereign-serving-host -> sovereign-inference` row was retired
-# 2026-09-15 by domains REVIEW-build-serving-drop-inference: the remote provider
-# is reached through `oicp-client` now (its `RemoteApiProvider`/`EndpointResolver`
-# are `pub use oicp_client::*`), the tool-call parser moved down to `oicp-types`,
-# the FIM prompt/stop text to `sovereign-contracts`, and the host's
-# `sovereign-inference` dep is gone — so the edge is gone and the row went with
-# it (removals are the celebration).
-
-[[exception]]
-package = "serving"
-from = "sovereign-serving-host"
-to = "commonwealth-core"
-reason = "quarantine state (`PeerHealthTracker`), identity (`ids::NodeId`) and the model wire types `model_fetch` reads (`commonwealth_core::model::*`) are reached from the host; each belongs on the host's own side of the seam rather than the mesh foundation."
-tracking = "clears when quarantine state is the host's own, identity is `kernel_types::NodeId`, and `model_fetch`'s model wire types have a leaf of their own (the third reason was unnamed until the move materialized, §10.1z 2026-09-15)"
-
-# ── Understanding package exceptions (the burn-down list) ────────────────────
-# Declared 2026-09-18 with the [[package]] row above, per DE "Direction:
-# Understanding reads Ingest and Retrieval, never the reverse": the pure tier
-# may NOT name `corpus-engine`, the host MAY. The host's edge is the one
-# grandfathered row. STALE-by-construction today — `understanding-host` is an
-# empty stub, so the gate reports the row STALE rather than silent until the
-# host half names the engine (ARCH §18.1).
-
-[[exception]]
-package = "understanding"
-from = "understanding-host"
-to = "corpus-engine"
-reason = "the host does the engine's own work through `corpus-engine` — the field engine, the atlas writers, entity extraction and the phase runner are the engine's pipeline — and `corpus-engine` cannot join a liftable package yet (its `build.rs`, its `include_str!`d tree-sitter queries and its optional `corpus-engine-scip` edge). The pure tier may NOT name it; the host MAY (DE \"Direction: Understanding reads Ingest and Retrieval, never the reverse\")."
-tracking = "clears when the enrichment pipeline is reachable through a port or the `corpus-index` leaf, the same burn-down the `corpus-mcp -> corpus-engine` exception tracks"
 
 # Populated by the first layer-gate census, 2026-07-11. Removing an entry —
 # with its edge — is the win condition; see the remediation roadmap (R6).

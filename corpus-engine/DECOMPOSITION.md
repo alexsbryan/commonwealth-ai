@@ -1,5 +1,16 @@
 # corpus-engine Decomposition Plan
 
+> **The `[[package]] name = "understanding"` row was deleted 2026-09-21** when
+> `quality/ARCH_LAYERS.toml` was rewritten to declare the five programs
+> (`docs/FIVE_PROGRAMS.md` §9). `understanding-atlas` and `understanding-host`
+> are members of `ingest`: the atlas is WRITTEN by the pipeline and READ by
+> `svrn` through the index, which is §4 rule 1 (one data directory, one owner).
+> `understanding-vocab` stays a shared leaf. The
+> `understanding-host -> corpus-engine` exception went with the row, and it is
+> not a violation any more either — `corpus-engine` is a sibling member of
+> `ingest`. What IS red there is `corpus-engine` itself: its `build.rs` and its
+> crate-escaping tree-sitter `include_str!`s, stated where they cost something.
+
 A forward-looking plan-of-record for splitting `corpus-engine` (currently a
 ~121k-LOC god-crate of 41 public modules) into a layered set of focused
 crates with one-way dep arrows. Authored 2026-05-23 after the first carve-out
