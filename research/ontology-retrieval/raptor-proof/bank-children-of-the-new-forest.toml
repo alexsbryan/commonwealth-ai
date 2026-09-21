@@ -1,0 +1,316 @@
+[bank]
+name = "raptor-proof-children-of-the-new-forest-v1"
+corpus = "raptor-children-of-the-new-forest"
+description = "All 39 NarrativeQA test-split questions for 'The Children of the New Forest' (http://www.gutenberg.org/ebooks/21558.txt.utf-8), verbatim. Questions were written from the Wikipedia plot summary, not the book, so every row is k4_whole_story by construction. expected_facts by the one mechanical rule in make_bank.py.\n"
+
+[[questions]]
+id = "nqa-children-of-the-new-forest-01"
+category = "k4_whole_story"
+question = "What is the title of this story?"
+expected_facts = ["children", "new", "forest"]
+answer1 = "The Children of the New Forest"
+notes = "narrativeqa 04d0a3d1 row 1; answer2: The Childeren of the New Forest."
+
+[[questions]]
+id = "nqa-children-of-the-new-forest-02"
+category = "k4_whole_story"
+question = "Who saves the 4 orphans; Edward, Humphrey, Alice and Edith?"
+expected_facts = ["jacob", "armitage"]
+answer1 = "Jacob Armitage"
+notes = "narrativeqa 04d0a3d1 row 2; answer2: Jacob Armitage"
+
+[[questions]]
+id = "nqa-children-of-the-new-forest-03"
+category = "k4_whole_story"
+question = "Where did Jacob hide the 4 orphans?"
+expected_facts = ["isolated", "cottage"]
+answer1 = "In his isolated cottage"
+notes = "narrativeqa 04d0a3d1 row 3; answer2: In his cottage"
+
+[[questions]]
+id = "nqa-children-of-the-new-forest-04"
+category = "k4_whole_story"
+question = "What is the name of the hostile Puritan gamekeeper?"
+expected_facts = ["corbould"]
+answer1 = "Corbould"
+notes = "narrativeqa 04d0a3d1 row 4; answer2: Corbould"
+
+[[questions]]
+id = "nqa-children-of-the-new-forest-05"
+category = "k4_whole_story"
+question = "Who been awarded the old Arnwood estate?"
+expected_facts = ["heatherstone"]
+answer1 = "Heatherstone"
+notes = "narrativeqa 04d0a3d1 row 5; answer2: Heatherstone"
+
+[[questions]]
+id = "nqa-children-of-the-new-forest-06"
+category = "k4_whole_story"
+question = "Why were Edward's sisters sent away?"
+expected_facts = ["brought", "aristocratic", "ladies"]
+answer1 = "To be brought up as aristocratic ladies"
+notes = "narrativeqa 04d0a3d1 row 6; answer2: To be taught to be proper ladies"
+
+[[questions]]
+id = "nqa-children-of-the-new-forest-07"
+category = "k4_whole_story"
+question = "Who eventually falls in love with Edward?"
+expected_facts = ["patience"]
+answer1 = "Patience"
+notes = "narrativeqa 04d0a3d1 row 7; answer2: Patience."
+
+[[questions]]
+id = "nqa-children-of-the-new-forest-08"
+category = "k4_whole_story"
+question = "What relation do Edward and his siblings pretend to be towards Jacob Armitage?"
+expected_facts = ["grandchildren"]
+answer1 = "His grandchildren"
+notes = "narrativeqa 04d0a3d1 row 8; answer2: His grandchildren"
+
+[[questions]]
+id = "nqa-children-of-the-new-forest-09"
+category = "k4_whole_story"
+question = "What was Edward's job title while working for Heatherstone?"
+expected_facts = ["secretary"]
+answer1 = "Secretary"
+notes = "narrativeqa 04d0a3d1 row 9; answer2: secretary"
+
+[[questions]]
+id = "nqa-children-of-the-new-forest-10"
+category = "k4_whole_story"
+question = "Who are the four orphan children of the Arnwood house?"
+expected_facts = ["edward", "humphrey", "alice"]
+answer1 = "Edward, Humphrey, Alice and Edith"
+notes = "narrativeqa 04d0a3d1 row 10; answer2: William Humphrey Alice Edith"
+
+[[questions]]
+id = "nqa-children-of-the-new-forest-11"
+category = "k4_whole_story"
+question = "Who rescues the children from fire at Arnwood?"
+expected_facts = ["jacob", "armitage"]
+answer1 = "Jacob Armitage"
+notes = "narrativeqa 04d0a3d1 row 11; answer2: Jacob Armitage"
+
+[[questions]]
+id = "nqa-children-of-the-new-forest-12"
+category = "k4_whole_story"
+question = "Who does Edward work for as a secretary?"
+expected_facts = ["heatherstone"]
+answer1 = "Heatherstone"
+notes = "narrativeqa 04d0a3d1 row 12; answer2: Heatherstone"
+
+[[questions]]
+id = "nqa-children-of-the-new-forest-13"
+category = "k4_whole_story"
+question = "Where are Humphrey live after Edward leaves?"
+expected_facts = ["new", "forest"]
+answer1 = "New Forest"
+notes = "narrativeqa 04d0a3d1 row 13; answer2: New Forest"
+
+[[questions]]
+id = "nqa-children-of-the-new-forest-14"
+category = "k4_whole_story"
+question = "After Edward leaves who raises his sisters Alice and Edith?"
+expected_facts = ["aristocratic", "ladies"]
+answer1 = "Aristocratic ladies"
+notes = "narrativeqa 04d0a3d1 row 14; answer2: Aristocrats"
+
+[[questions]]
+id = "nqa-children-of-the-new-forest-15"
+category = "k4_whole_story"
+question = "What is the name of the antagonist Puritan gamekeeper?"
+expected_facts = ["corbould"]
+answer1 = "Corbould"
+notes = "narrativeqa 04d0a3d1 row 15; answer2: Corbould"
+
+[[questions]]
+id = "nqa-children-of-the-new-forest-16"
+category = "k4_whole_story"
+question = "When does the story begin?"
+expected_facts = ["1647"]
+answer1 = "1647"
+notes = "narrativeqa 04d0a3d1 row 16; answer2: 1647."
+
+[[questions]]
+id = "nqa-children-of-the-new-forest-17"
+category = "k4_whole_story"
+question = "What is believed to have happen to Edward, Humphrey, Alice and Edith?"
+expected_facts = ["died", "flames", "arnwood"]
+answer1 = "They were believed to have died in the flames at Arnwood."
+notes = "narrativeqa 04d0a3d1 row 17; answer2: Died in a fire"
+
+[[questions]]
+id = "nqa-children-of-the-new-forest-18"
+category = "k4_whole_story"
+question = "Who does Edward love?"
+expected_facts = ["patience"]
+answer1 = "Patience"
+notes = "narrativeqa 04d0a3d1 row 18; answer2: Patience."
+
+[[questions]]
+id = "nqa-children-of-the-new-forest-19"
+category = "k4_whole_story"
+question = "Who does Edward feel betrayed by and why?"
+expected_facts = ["feels", "heatherstone", "learns"]
+answer1 = "Edward feels betrayed by Heatherstone when he learns that Heatherstone was awarded the Arnwood estate."
+notes = "narrativeqa 04d0a3d1 row 19; answer2: Patience, because she supposedly does not return his feelings of love."
+
+[[questions]]
+id = "nqa-children-of-the-new-forest-20"
+category = "k4_whole_story"
+question = "Where does Jacob Armitage hide the four orphan children when he saves them from the fire?"
+expected_facts = ["isolated", "cottage"]
+answer1 = "his isolated cottage"
+notes = "narrativeqa 04d0a3d1 row 20; answer2: His isolated cottage."
+
+[[questions]]
+id = "nqa-children-of-the-new-forest-21"
+category = "k4_whole_story"
+question = "What are the children disquised as by Jacob Armitage?"
+expected_facts = ["grandchildren"]
+answer1 = "his grandchildren"
+notes = "narrativeqa 04d0a3d1 row 21; answer2: His grandchildren"
+
+[[questions]]
+id = "nqa-children-of-the-new-forest-22"
+category = "k4_whole_story"
+question = "Who takes charge of the children after Armitage's death?"
+expected_facts = ["edward"]
+answer1 = "Edward"
+notes = "narrativeqa 04d0a3d1 row 22; answer2: Edward"
+
+[[questions]]
+id = "nqa-children-of-the-new-forest-23"
+category = "k4_whole_story"
+question = "What is Pablo rescued from?"
+expected_facts = ["pitfall", "trap"]
+answer1 = "a pitfall trap"
+notes = "narrativeqa 04d0a3d1 row 23; answer2: Trap"
+
+[[questions]]
+id = "nqa-children-of-the-new-forest-24"
+category = "k4_whole_story"
+question = "What is the name of Heatherstone's daughter?"
+expected_facts = ["patience"]
+answer1 = "Patience"
+notes = "narrativeqa 04d0a3d1 row 24; answer2: Patience"
+
+[[questions]]
+id = "nqa-children-of-the-new-forest-25"
+category = "k4_whole_story"
+question = "What is Heatherstone's daughter rescued from by Armitage?"
+expected_facts = ["house", "fire"]
+answer1 = "a house fire"
+notes = "narrativeqa 04d0a3d1 row 25; answer2: A house-fire."
+
+[[questions]]
+id = "nqa-children-of-the-new-forest-26"
+category = "k4_whole_story"
+question = "What two things cause Edward distress and forces him to flee to France?"
+expected_facts = ["heatherstone", "awarded", "old"]
+answer1 = "Heatherstone has been awarded the old Arnwood estate and Patience's apparent rejection of his love"
+notes = "narrativeqa 04d0a3d1 row 26; answer2: Royalist defeat at the battle of Worcester and Patience's rejection of his love"
+
+[[questions]]
+id = "nqa-children-of-the-new-forest-27"
+category = "k4_whole_story"
+question = "Why did Heatherstone acquire the Arnwood estate?"
+expected_facts = ["give", "edward"]
+answer1 = "To give to Edward"
+notes = "narrativeqa 04d0a3d1 row 27; answer2: For william"
+
+[[questions]]
+id = "nqa-children-of-the-new-forest-28"
+category = "k4_whole_story"
+question = "What job did Edward do for Heatherstone?"
+expected_facts = ["secretary"]
+answer1 = "He was his secretary"
+notes = "narrativeqa 04d0a3d1 row 28; answer2: Secretary"
+
+[[questions]]
+id = "nqa-children-of-the-new-forest-29"
+category = "k4_whole_story"
+question = "Who was originally defeated that caused the soldiers to first search for the New Forest?"
+expected_facts = ["king", "charles"]
+answer1 = "King Charles I"
+notes = "narrativeqa 04d0a3d1 row 29; answer2: King Charles I"
+
+[[questions]]
+id = "nqa-children-of-the-new-forest-30"
+category = "k4_whole_story"
+question = "What king has just been defeated when the story begins?"
+expected_facts = ["charles"]
+answer1 = "King Charles I."
+notes = "narrativeqa 04d0a3d1 row 30; answer2: Charles I"
+
+[[questions]]
+id = "nqa-children-of-the-new-forest-31"
+category = "k4_whole_story"
+question = "Who lives in Arnwood?"
+expected_facts = ["colonel", "beverly"]
+answer1 = "Colonel Beverly."
+notes = "narrativeqa 04d0a3d1 row 31; answer2: Colnel Beverly's Children"
+
+[[questions]]
+id = "nqa-children-of-the-new-forest-32"
+category = "k4_whole_story"
+question = "Who are the orphans in the house saved by?"
+expected_facts = ["jacob", "armitage"]
+answer1 = "Jacob Armitage."
+notes = "narrativeqa 04d0a3d1 row 32; answer2: Jacob Armitage"
+
+[[questions]]
+id = "nqa-children-of-the-new-forest-33"
+category = "k4_whole_story"
+question = "Who does Jacob disguise the children as?"
+expected_facts = ["grandchildren"]
+answer1 = "His grandchildren."
+notes = "narrativeqa 04d0a3d1 row 33; answer2: grandchildren"
+
+[[questions]]
+id = "nqa-children-of-the-new-forest-34"
+category = "k4_whole_story"
+question = "Who do the children rescue from a trap?"
+expected_facts = ["pablo"]
+answer1 = "Pablo."
+notes = "narrativeqa 04d0a3d1 row 34; answer2: A gypsy kid"
+
+[[questions]]
+id = "nqa-children-of-the-new-forest-35"
+category = "k4_whole_story"
+question = "Who wants to harm the family?"
+expected_facts = ["corbould"]
+answer1 = "Corbould."
+notes = "narrativeqa 04d0a3d1 row 35; answer2: Parliamentary soldiers"
+
+[[questions]]
+id = "nqa-children-of-the-new-forest-36"
+category = "k4_whole_story"
+question = "Who does Edward work for?"
+expected_facts = ["heatherstone"]
+answer1 = "Heatherstone."
+notes = "narrativeqa 04d0a3d1 row 36; answer2: Heatherstone"
+
+[[questions]]
+id = "nqa-children-of-the-new-forest-37"
+category = "k4_whole_story"
+question = "What is Edward's job?"
+expected_facts = ["secretary"]
+answer1 = "He is a secretary."
+notes = "narrativeqa 04d0a3d1 row 37; answer2: secretary"
+
+[[questions]]
+id = "nqa-children-of-the-new-forest-38"
+category = "k4_whole_story"
+question = "Who joins the army of King Charles II?"
+expected_facts = ["edward"]
+answer1 = "Edward."
+notes = "narrativeqa 04d0a3d1 row 38; answer2: Edward"
+
+[[questions]]
+id = "nqa-children-of-the-new-forest-39"
+category = "k4_whole_story"
+question = "Who acquired the estate for Edward?"
+expected_facts = ["heatherwood"]
+answer1 = "Heatherwood."
+notes = "narrativeqa 04d0a3d1 row 39; answer2: Heatherstone"

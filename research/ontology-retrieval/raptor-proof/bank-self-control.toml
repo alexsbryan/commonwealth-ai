@@ -1,0 +1,244 @@
+[bank]
+name = "raptor-proof-self-control-v1"
+corpus = "raptor-self-control"
+description = "All 30 NarrativeQA test-split questions for 'Self-Control (novel)' (http://www.gutenberg.org/ebooks/41196.txt.utf-8), verbatim. Questions were written from the Wikipedia plot summary, not the book, so every row is k4_whole_story by construction. expected_facts by the one mechanical rule in make_bank.py.\n"
+
+[[questions]]
+id = "nqa-self-control-01"
+category = "k4_whole_story"
+question = "Whate is Hargrave's military rank?"
+expected_facts = ["colonel"]
+answer1 = "Colonel"
+notes = "narrativeqa a2cb171c row 1; answer2: colonel"
+
+[[questions]]
+id = "nqa-self-control-02"
+category = "k4_whole_story"
+question = "Who pursues Laura Montreville?"
+expected_facts = ["colonel", "hargrave"]
+answer1 = "Colonel Hargrave"
+notes = "narrativeqa a2cb171c row 2; answer2: Colonel Hargrave"
+
+[[questions]]
+id = "nqa-self-control-03"
+category = "k4_whole_story"
+question = "Why does Laura refuse Hargrave's marriage proposal?"
+expected_facts = ["grounds", "moral", "incompatibility"]
+answer1 = "On the grounds of moral incompatibility"
+notes = "narrativeqa a2cb171c row 3; answer2: She cites moral incompatibility"
+
+[[questions]]
+id = "nqa-self-control-04"
+category = "k4_whole_story"
+question = "By reefusing the marriage proposal, what does Laura miss out on?"
+expected_facts = ["hargrave", "title", "fortune"]
+answer1 = "Hargrave's title and fortune"
+notes = "narrativeqa a2cb171c row 4; answer2: rape"
+
+[[questions]]
+id = "nqa-self-control-05"
+category = "k4_whole_story"
+question = "Where does Laura's father take her?"
+expected_facts = ["london"]
+answer1 = "London"
+notes = "narrativeqa a2cb171c row 5; answer2: London"
+
+[[questions]]
+id = "nqa-self-control-06"
+category = "k4_whole_story"
+question = "What does Laura do in order to support her ailing father?"
+expected_facts = ["sell", "sketches"]
+answer1 = "sell sketches"
+notes = "narrativeqa a2cb171c row 6; answer2: Sells sketches."
+
+[[questions]]
+id = "nqa-self-control-07"
+category = "k4_whole_story"
+question = "What does Hargrave do after meeting Laura in London?"
+expected_facts = ["follows", "home", "harrasses"]
+answer1 = "follows her home and harrasses her"
+notes = "narrativeqa a2cb171c row 7; answer2: Follows her home and harrasses her."
+
+[[questions]]
+id = "nqa-self-control-08"
+category = "k4_whole_story"
+question = "After Hargrave's affairs husband finds out  about their affair, what do the 2 men do?"
+expected_facts = ["duel"]
+answer1 = "duel"
+notes = "narrativeqa a2cb171c row 8; answer2: they duel"
+
+[[questions]]
+id = "nqa-self-control-09"
+category = "k4_whole_story"
+question = "Why does Laura faint?"
+expected_facts = ["hargrave", "threatens", "kill"]
+answer1 = "Hargrave threatens to kill himself"
+notes = "narrativeqa a2cb171c row 9; answer2: Hargrave threatens to kill himself."
+
+[[questions]]
+id = "nqa-self-control-10"
+category = "k4_whole_story"
+question = "What does Hargrave do to the husband in the duel?"
+expected_facts = ["injures"]
+answer1 = "injures him"
+notes = "narrativeqa a2cb171c row 10; answer2: Wounds him"
+
+[[questions]]
+id = "nqa-self-control-11"
+category = "k4_whole_story"
+question = "What did Laura Monreville tell Colonel Hargrave he must do in order for her to marry him?"
+expected_facts = ["reform", "two", "years"]
+answer1 = "Reform himself in two years"
+notes = "narrativeqa a2cb171c row 11; answer2: Reform himself in two years."
+
+[[questions]]
+id = "nqa-self-control-12"
+category = "k4_whole_story"
+question = "What does Laura sell to financially support her ailing father?"
+expected_facts = ["sketches"]
+answer1 = "Sketches"
+notes = "narrativeqa a2cb171c row 12; answer2: her sketches"
+
+[[questions]]
+id = "nqa-self-control-13"
+category = "k4_whole_story"
+question = "What was the name of the man that began to fall in love with Laura during her time in London?"
+expected_facts = ["montague", "courcy"]
+answer1 = "Montague De Courcy"
+notes = "narrativeqa a2cb171c row 13; answer2: Montague De Courcy"
+
+[[questions]]
+id = "nqa-self-control-14"
+category = "k4_whole_story"
+question = "What did Hargrave become involved in when he followed Laura to London?"
+expected_facts = ["affair", "married", "woman"]
+answer1 = "An affair with a married woman"
+notes = "narrativeqa a2cb171c row 14; answer2: an affair with a married woman"
+
+[[questions]]
+id = "nqa-self-control-15"
+category = "k4_whole_story"
+question = "What was Hargrave urging Laura to do before she found out about the affair he was having?"
+expected_facts = ["marry"]
+answer1 = "Marry him"
+notes = "narrativeqa a2cb171c row 15; answer2: Marry him"
+
+[[questions]]
+id = "nqa-self-control-16"
+category = "k4_whole_story"
+question = "Who did Laura go live with after Captain Montreville dies from his illness?"
+expected_facts = ["lady", "pelham"]
+answer1 = "Lady Pelham"
+notes = "narrativeqa a2cb171c row 16; answer2: Lady Pelham"
+
+[[questions]]
+id = "nqa-self-control-17"
+category = "k4_whole_story"
+question = "What were two of the more drastic measures Hargrave took to attempt to persuade Laura to marry him?"
+expected_facts = ["arrested", "under", "false"]
+answer1 = "Had her arrested under false pretenses and tricked her into joining a gambling party"
+notes = "narrativeqa a2cb171c row 17; answer2: kidnapping and having her arrested"
+
+[[questions]]
+id = "nqa-self-control-18"
+category = "k4_whole_story"
+question = "Where does Hargrave take Laura after kidnapping her?"
+expected_facts = ["wilderness", "america"]
+answer1 = "A wilderness in America"
+notes = "narrativeqa a2cb171c row 18; answer2: america wilderness"
+
+[[questions]]
+id = "nqa-self-control-19"
+category = "k4_whole_story"
+question = "What two things did Hargrave plan to do after kidnapping Laura?"
+expected_facts = ["rape", "force", "marriage"]
+answer1 = "Rape Laura and force her into marriage"
+notes = "narrativeqa a2cb171c row 19; answer2: rape and marry"
+
+[[questions]]
+id = "nqa-self-control-20"
+category = "k4_whole_story"
+question = "How does Laura fake her own death?"
+expected_facts = ["tying", "bottom", "canoe"]
+answer1 = "By tying herself to the bottom of a canoe and escaping down the river"
+notes = "narrativeqa a2cb171c row 20; answer2: she tied herself in a canoe escaping the rapids"
+
+[[questions]]
+id = "nqa-self-control-21"
+category = "k4_whole_story"
+question = "What does Laura sell to support her father?"
+expected_facts = ["sketches"]
+answer1 = "Sketches."
+notes = "narrativeqa a2cb171c row 21; answer2: Sketches"
+
+[[questions]]
+id = "nqa-self-control-22"
+category = "k4_whole_story"
+question = "Why does Laura refuse Hargrave's proposal?"
+expected_facts = ["moral", "incompatibility"]
+answer1 = "moral incompatibility."
+notes = "narrativeqa a2cb171c row 22; answer2: Because he has offended her, she cites moral incompatability."
+
+[[questions]]
+id = "nqa-self-control-23"
+category = "k4_whole_story"
+question = "What does Hargrave have to do to convince Laura to marry him?"
+expected_facts = ["reform", "two", "years"]
+answer1 = "reform himself in two years"
+notes = "narrativeqa a2cb171c row 23; answer2: He has her arrested, tricks her into joining a gambling party, kidnaps her and takes her to America"
+
+[[questions]]
+id = "nqa-self-control-24"
+category = "k4_whole_story"
+question = "Who does Laura go to live with when her father dies?"
+expected_facts = ["lady", "pelham", "aunt"]
+answer1 = "Lady Pelham/her aunt"
+notes = "narrativeqa a2cb171c row 24; answer2: Lady Pelham"
+
+[[questions]]
+id = "nqa-self-control-25"
+category = "k4_whole_story"
+question = "What does Laura find out about Hargrave that convinces her to not marry him?"
+expected_facts = ["affair", "married", "woman"]
+answer1 = "He had an affair with a married woman"
+notes = "narrativeqa a2cb171c row 25; answer2: his affair"
+
+[[questions]]
+id = "nqa-self-control-26"
+category = "k4_whole_story"
+question = "What does Hargrave trick Laura into doing?"
+expected_facts = ["joining", "gambling", "party"]
+answer1 = "Joining a gambling party."
+notes = "narrativeqa a2cb171c row 26; answer2: becoming member of a gambling group"
+
+[[questions]]
+id = "nqa-self-control-27"
+category = "k4_whole_story"
+question = "Where does Hargrave take Laura when he kidnaps her?"
+expected_facts = ["american", "wilderness"]
+answer1 = "The American wilderness"
+notes = "narrativeqa a2cb171c row 27; answer2: The wilderness of America"
+
+[[questions]]
+id = "nqa-self-control-28"
+category = "k4_whole_story"
+question = "How does Laura escape Hargrave?"
+expected_facts = ["faking", "death"]
+answer1 = "by faking her death"
+notes = "narrativeqa a2cb171c row 28; answer2: she fakes her own death"
+
+[[questions]]
+id = "nqa-self-control-29"
+category = "k4_whole_story"
+question = "How does Hargrave die?"
+expected_facts = ["suicide"]
+answer1 = "suicide."
+notes = "narrativeqa a2cb171c row 29; answer2: he commits suicide"
+
+[[questions]]
+id = "nqa-self-control-30"
+category = "k4_whole_story"
+question = "Who does Laura finally marry?"
+expected_facts = ["montague", "courcy"]
+answer1 = "Montague De Courcy"
+notes = "narrativeqa a2cb171c row 30; answer2: Montague De Courcy"

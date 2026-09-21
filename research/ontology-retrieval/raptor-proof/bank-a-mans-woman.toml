@@ -1,0 +1,244 @@
+[bank]
+name = "raptor-proof-a-mans-woman-v1"
+corpus = "raptor-a-mans-woman"
+description = "All 30 NarrativeQA test-split questions for \"A Man's Woman\" (http://www.gutenberg.org/ebooks/16096.txt.utf-8), verbatim. Questions were written from the Wikipedia plot summary, not the book, so every row is k4_whole_story by construction. expected_facts by the one mechanical rule in make_bank.py.\n"
+
+[[questions]]
+id = "nqa-a-mans-woman-01"
+category = "k4_whole_story"
+question = "What are Bennett and his men attempting to do?"
+expected_facts = ["trying", "reach", "north"]
+answer1 = "Trying to reach the North Pole."
+notes = "narrativeqa d5a2d9f1 row 1; answer2: To reach the North Pole."
+
+[[questions]]
+id = "nqa-a-mans-woman-02"
+category = "k4_whole_story"
+question = "What kind of welcoming do the survivors get when they return home?"
+expected_facts = ["hero", "welcome"]
+answer1 = "A hero's welcome."
+notes = "narrativeqa d5a2d9f1 row 2; answer2: heros welcome"
+
+[[questions]]
+id = "nqa-a-mans-woman-03"
+category = "k4_whole_story"
+question = "What kind of feelings do Lloyd and Bennett have for each other?"
+expected_facts = ["mutual", "feeling", "another"]
+answer1 = "They both have mutual feeling for one another."
+notes = "narrativeqa d5a2d9f1 row 3; answer2: mutual love"
+
+[[questions]]
+id = "nqa-a-mans-woman-04"
+category = "k4_whole_story"
+question = "What is intriguing about Lloyd being a nurse?"
+expected_facts = ["doesn", "work", "wealthy"]
+answer1 = "She doesn't have to work as she is wealthy."
+notes = "narrativeqa d5a2d9f1 row 4; answer2: Lloyed is a young and attractive girl."
+
+[[questions]]
+id = "nqa-a-mans-woman-05"
+category = "k4_whole_story"
+question = "What does Bennett refuse of Lloyd to do?"
+expected_facts = ["near", "ferris"]
+answer1 = "Not to go near Ferris."
+notes = "narrativeqa d5a2d9f1 row 5; answer2: Let Lloyd come close to Ferriss to nurse him."
+
+[[questions]]
+id = "nqa-a-mans-woman-06"
+category = "k4_whole_story"
+question = "What happens to the couple's carrer after they marry?"
+expected_facts = ["quit", "work"]
+answer1 = "They both quit their work."
+notes = "narrativeqa d5a2d9f1 row 6; answer2: it stalls until the man rethinks things"
+
+[[questions]]
+id = "nqa-a-mans-woman-07"
+category = "k4_whole_story"
+question = "Who inspires Bennett to continue to be an explorer?"
+expected_facts = ["alder"]
+answer1 = "Alder inspires him to continue."
+notes = "narrativeqa d5a2d9f1 row 7; answer2: Lloyd"
+
+[[questions]]
+id = "nqa-a-mans-woman-08"
+category = "k4_whole_story"
+question = "What does Bennett discover is his calling?"
+expected_facts = ["first", "explorer", "lead"]
+answer1 = "To be the first explorer to lead an expedition to the North Pole."
+notes = "narrativeqa d5a2d9f1 row 8; answer2: Leading the first American team to explore the north pole."
+
+[[questions]]
+id = "nqa-a-mans-woman-09"
+category = "k4_whole_story"
+question = "How does Bennett's wife feel about Bennett going to the expedition?"
+expected_facts = ["feels", "proud"]
+answer1 = "She feels proud."
+notes = "narrativeqa d5a2d9f1 row 9; answer2: she is proud"
+
+[[questions]]
+id = "nqa-a-mans-woman-10"
+category = "k4_whole_story"
+question = "Who nurses Bennett back to health?"
+expected_facts = ["wife", "lloyd"]
+answer1 = "His wife, Lloyd."
+notes = "narrativeqa d5a2d9f1 row 10; answer2: Lloyd Searight"
+
+[[questions]]
+id = "nqa-a-mans-woman-11"
+category = "k4_whole_story"
+question = "Why does Bennett refuse to allow Lloyd near his friend Ferriss?"
+expected_facts = ["afraid", "contract", "typhoid"]
+answer1 = "Bennett is afraid Lloyd will contract typhoid from Ferriss"
+notes = "narrativeqa d5a2d9f1 row 11; answer2: Because of fearing that Lloyd will be infected by the disease."
+
+[[questions]]
+id = "nqa-a-mans-woman-12"
+category = "k4_whole_story"
+question = "What is Lloyd Searight's profession?"
+expected_facts = ["nurse"]
+answer1 = "She is a nurse"
+notes = "narrativeqa d5a2d9f1 row 12; answer2: Nurse"
+
+[[questions]]
+id = "nqa-a-mans-woman-13"
+category = "k4_whole_story"
+question = "What destination does Ward Bennett and his crew attempt to reach?"
+expected_facts = ["north", "pole"]
+answer1 = "The North Pole"
+notes = "narrativeqa d5a2d9f1 row 13; answer2: The North Pole."
+
+[[questions]]
+id = "nqa-a-mans-woman-14"
+category = "k4_whole_story"
+question = "What event causes Lloyd to stop speaking to Bennett?"
+expected_facts = ["refuses", "allow", "treat"]
+answer1 = "Bennett refuses to allow Lloyd to treat Ferriss, resulting in Ferriss' death"
+notes = "narrativeqa d5a2d9f1 row 14; answer2: He refused to let her help Ferris."
+
+[[questions]]
+id = "nqa-a-mans-woman-15"
+category = "k4_whole_story"
+question = "What forces Lloyd and Bennett to reconcile?"
+expected_facts = ["nurses", "health", "contracts"]
+answer1 = "Lloyd nurses Bennett to health after he contracts typhoid fever"
+notes = "narrativeqa d5a2d9f1 row 15; answer2: Bennett becoming ill."
+
+[[questions]]
+id = "nqa-a-mans-woman-16"
+category = "k4_whole_story"
+question = "After marrying Lloyd and giving up exploring, how does Bennett spend his time?"
+expected_facts = ["writing", "book"]
+answer1 = "Writing a book"
+notes = "narrativeqa d5a2d9f1 row 16; answer2: he writes a book"
+
+[[questions]]
+id = "nqa-a-mans-woman-17"
+category = "k4_whole_story"
+question = "Who makes Lloyd realize that exploring is Bennett's calling?"
+expected_facts = ["alder"]
+answer1 = "Alder"
+notes = "narrativeqa d5a2d9f1 row 17; answer2: Talking with Bennets man"
+
+[[questions]]
+id = "nqa-a-mans-woman-18"
+category = "k4_whole_story"
+question = "How are Bennett and some of his men saved from death on their way to the North Pole?"
+expected_facts = ["boat", "stumbles", "across"]
+answer1 = "A boat stumbles across them"
+notes = "narrativeqa d5a2d9f1 row 18; answer2: they run across a boat"
+
+[[questions]]
+id = "nqa-a-mans-woman-19"
+category = "k4_whole_story"
+question = "How are Bennett and his men greeted by the public when they return from their attempt to reach the North Pole?"
+expected_facts = ["heroes"]
+answer1 = "As heroes"
+notes = "narrativeqa d5a2d9f1 row 19; answer2: like heroes"
+
+[[questions]]
+id = "nqa-a-mans-woman-20"
+category = "k4_whole_story"
+question = "Where do Bennett and Lloyd go to live after they are married?"
+expected_facts = ["country"]
+answer1 = "The country"
+notes = "narrativeqa d5a2d9f1 row 20; answer2: In the country"
+
+[[questions]]
+id = "nqa-a-mans-woman-21"
+category = "k4_whole_story"
+question = "What destination is the group attempting to reach?"
+expected_facts = ["north", "pole"]
+answer1 = "The North Pole"
+notes = "narrativeqa d5a2d9f1 row 21; answer2: The North Pole."
+
+[[questions]]
+id = "nqa-a-mans-woman-22"
+category = "k4_whole_story"
+question = "What is the name of the nurse that becomes Bennett's love interest?"
+expected_facts = ["lloyd", "searight"]
+answer1 = "Lloyd Searight"
+notes = "narrativeqa d5a2d9f1 row 22; answer2: Lloyd Searight"
+
+[[questions]]
+id = "nqa-a-mans-woman-23"
+category = "k4_whole_story"
+question = "What is Bennett's calling in life?"
+expected_facts = ["lead", "first", "expedition"]
+answer1 = "To lead the first expedition to the North Pole"
+notes = "narrativeqa d5a2d9f1 row 23; answer2: To be an explorer."
+
+[[questions]]
+id = "nqa-a-mans-woman-24"
+category = "k4_whole_story"
+question = "What disease does Ferris contract?"
+expected_facts = ["typhoid", "fever"]
+answer1 = "Typhoid Fever"
+notes = "narrativeqa d5a2d9f1 row 24; answer2: Typhoid Fever."
+
+[[questions]]
+id = "nqa-a-mans-woman-25"
+category = "k4_whole_story"
+question = "What happened to Ferris as a result of Bennett not allowing the nurse to treat him?"
+expected_facts = ["dies"]
+answer1 = "Ferris dies"
+notes = "narrativeqa d5a2d9f1 row 25; answer2: He died."
+
+[[questions]]
+id = "nqa-a-mans-woman-26"
+category = "k4_whole_story"
+question = "Why does Bennett refuse to let the nurse help Ferris?"
+expected_facts = ["afraid", "contract", "typhoid"]
+answer1 = "He is afraid that she will contract Typhoid Fever as well"
+notes = "narrativeqa d5a2d9f1 row 26; answer2: He is afraid she will contract typhoid fever from Ferriss."
+
+[[questions]]
+id = "nqa-a-mans-woman-27"
+category = "k4_whole_story"
+question = "What is the name of the man who convinces Bennett's wife to allow him to follow his dreams?"
+expected_facts = ["alder"]
+answer1 = "Alder"
+notes = "narrativeqa d5a2d9f1 row 27; answer2: Alder."
+
+[[questions]]
+id = "nqa-a-mans-woman-28"
+category = "k4_whole_story"
+question = "During the expedition, what helped Bennett and his men escape certain death?"
+expected_facts = ["boat", "showed"]
+answer1 = "A boat showed up"
+notes = "narrativeqa d5a2d9f1 row 28; answer2: A boat"
+
+[[questions]]
+id = "nqa-a-mans-woman-29"
+category = "k4_whole_story"
+question = "After the nurse treats Bennett for his illness and they reconcile, what happens to the both of them?"
+expected_facts = ["married"]
+answer1 = "They get married"
+notes = "narrativeqa d5a2d9f1 row 29; answer2: They get married."
+
+[[questions]]
+id = "nqa-a-mans-woman-30"
+category = "k4_whole_story"
+question = "How are Bennett and his group of survising explorers treated when they arrive back home?"
+expected_facts = ["heroes"]
+answer1 = "As heroes"
+notes = "narrativeqa d5a2d9f1 row 30; answer2: like heros"

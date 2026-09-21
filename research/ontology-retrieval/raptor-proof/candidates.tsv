@@ -1,0 +1,17 @@
+pick	pg_id	document_id	title	author	true_words	dataset_words	questions	summary_words	pg_downloads_30d	author_top_work_downloads_30d	why_not
+1	15588	e034bde5	The Pilot and His Wife	Lie, Jonas	67639	80971	30	225	356	830	
+1	16096	d5a2d9f1	A man's woman	Norris, Frank	75667	92908	30	262	369	1838	
+1	23373	9e20fe26	The Eagle Cliff	Ballantyne, R. M. (Robert Michael)	71188	88039	30	487	374	3197	
+0	24103	485b86c3	Cousin Henry	Trollope, Anthony	70806	84148	30	495	381	21750	author_top>=5000
+0	3475	2a798779	The Efficiency Expert	Burroughs, Edgar Rice	49283	60201	30	377	383		true_words<60000
+0	5076	0d0bc014	The Spoilers	Beach, Rex	85170	104972	29	272	393	10550	author_top>=5000
+0	39229	f8544c95	The Mardi Gras Mystery	Bedford-Jones, H. (Henry)	56284	71241	29	283	402		true_words<60000
+0	7401	c3ad97ba	A Crystal Age	Hudson, W. H. (William Henry)	59512	71933	30	764	436		true_words<60000
+1	35447	6e7da219	Comrades: A Story of Social Adventure in California	Dixon, Thomas, Jr.	62705	76590	30	252	439	1360	
+0	17028	84a16d3e	Eastern Standard Tribe	Doctorow, Cory	53343	67633	28	297	514		true_words<60000
+0	50022	fe1cd0e9	The Wailing Asteroid	Leinster, Murray	56441	69074	30	559	555		true_words<60000
+0	24010	bc42c0d6	The Gods are Athirst	France, Anatole	75692	90503	30	213	594	21996	author_top>=5000
+1	21558	04d0a3d1	The Children of the New Forest	Marryat, Frederick	113706	136274	39	330	598	1227	
+1	41196	a2cb171c	Self-control: A Novel	Brunton, Mary	184606	220118	30	391	616	604	
+0	12352	bb6376e3	Iola Leroy; Or, Shadows Uplifted	Harper, Frances Ellen Watkins	74321	91124	30	338	630	700	rank 7+
+0	4223	6b92f005	The Mystery of a Hansom Cab	Hume, Fergus	87923	108767	30	204	644		author_page_fetch_failed

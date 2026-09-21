@@ -1,0 +1,4 @@
+# refetched by make_bank.py (pinned NQA_REV / dataset story_url); 22MB of CSV and the PG-licence-bearing raw texts stay out of git
+narrativeqa/qaps.csv
+narrativeqa/third_party/wikipedia/summaries.csv
+books/raw/

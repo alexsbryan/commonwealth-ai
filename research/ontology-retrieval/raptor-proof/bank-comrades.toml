@@ -1,0 +1,244 @@
+[bank]
+name = "raptor-proof-comrades-v1"
+corpus = "raptor-comrades"
+description = "All 30 NarrativeQA test-split questions for 'Comrades: A Story of Social Adventure in California' (http://www.gutenberg.org/ebooks/35447.txt.utf-8), verbatim. Questions were written from the Wikipedia plot summary, not the book, so every row is k4_whole_story by construction. expected_facts by the one mechanical rule in make_bank.py.\n"
+
+[[questions]]
+id = "nqa-comrades-01"
+category = "k4_whole_story"
+question = "What flag does Norman try to hang?"
+expected_facts = ["red"]
+answer1 = "The Red Flag"
+notes = "narrativeqa 6e7da219 row 1; answer2: red flag"
+
+[[questions]]
+id = "nqa-comrades-02"
+category = "k4_whole_story"
+question = "What kind of meeting does Norman attend?"
+expected_facts = ["socialist"]
+answer1 = "A socialist meeting"
+notes = "narrativeqa 6e7da219 row 2; answer2: Socialist"
+
+[[questions]]
+id = "nqa-comrades-03"
+category = "k4_whole_story"
+question = "What island does Colonel Worth buy?"
+expected_facts = ["ventura"]
+answer1 = "Ventura"
+notes = "narrativeqa 6e7da219 row 3; answer2: Ventura"
+
+[[questions]]
+id = "nqa-comrades-04"
+category = "k4_whole_story"
+question = "Why does Colonel Worth buy the island?"
+expected_facts = ["norman", "set", "socialist"]
+answer1 = "So Norman can set up a socialist commune"
+notes = "narrativeqa 6e7da219 row 4; answer2: So his son could start a socialist commune on it."
+
+[[questions]]
+id = "nqa-comrades-05"
+category = "k4_whole_story"
+question = "Who takes over the commune?"
+expected_facts = ["herman", "catherine", "wolf"]
+answer1 = "Herman and Catherine Wolf"
+notes = "narrativeqa 6e7da219 row 5; answer2: Herman and Catherine Wolf."
+
+[[questions]]
+id = "nqa-comrades-06"
+category = "k4_whole_story"
+question = "How many hours a day does each person have to work on the island?"
+expected_facts = ["nine"]
+answer1 = "Nine"
+notes = "narrativeqa 6e7da219 row 6; answer2: nine"
+
+[[questions]]
+id = "nqa-comrades-07"
+category = "k4_whole_story"
+question = "Who discovers gold on the coast of the island?"
+expected_facts = ["norman"]
+answer1 = "Norman"
+notes = "narrativeqa 6e7da219 row 7; answer2: Norman"
+
+[[questions]]
+id = "nqa-comrades-08"
+category = "k4_whole_story"
+question = "Who liberates the island?"
+expected_facts = ["colonel", "worth", "governor"]
+answer1 = "Colonel Worth and the Governor of California"
+notes = "narrativeqa 6e7da219 row 8; answer2: Colonel Worth and the Governor of California"
+
+[[questions]]
+id = "nqa-comrades-09"
+category = "k4_whole_story"
+question = "What flag replaces the Red Flag on the the island of Ventura?"
+expected_facts = ["american"]
+answer1 = "The American Flag"
+notes = "narrativeqa 6e7da219 row 9; answer2: American"
+
+[[questions]]
+id = "nqa-comrades-10"
+category = "k4_whole_story"
+question = "Who is the confederate veteran in this story?"
+expected_facts = ["colonel", "worth"]
+answer1 = "Colonel Worth"
+notes = "narrativeqa 6e7da219 row 10; answer2: Colonel Worth."
+
+[[questions]]
+id = "nqa-comrades-11"
+category = "k4_whole_story"
+question = "Where does Colonel Worth live?"
+expected_facts = ["san", "francisco", "california"]
+answer1 = "San Francisco, California."
+notes = "narrativeqa 6e7da219 row 11; answer2: San Francisco"
+
+[[questions]]
+id = "nqa-comrades-12"
+category = "k4_whole_story"
+question = "What war did Colonel Worth fight in?"
+expected_facts = ["revolutionary"]
+answer1 = "The Revolutionary War."
+notes = "narrativeqa 6e7da219 row 12; answer2: Spanish-American war"
+
+[[questions]]
+id = "nqa-comrades-13"
+category = "k4_whole_story"
+question = "Who  else resides with Colonel Worth?"
+expected_facts = ["guardian", "elena", "son"]
+answer1 = "His guardian Elena and his son Norman."
+notes = "narrativeqa 6e7da219 row 13; answer2: elena and norman"
+
+[[questions]]
+id = "nqa-comrades-14"
+category = "k4_whole_story"
+question = "What war is Colonel Worth recounting at the beginning of the story?"
+expected_facts = ["battle", "manilla", "spanish"]
+answer1 = "The Battle of Manilla during the Spanish-American War."
+notes = "narrativeqa 6e7da219 row 14; answer2: Spanish-American War."
+
+[[questions]]
+id = "nqa-comrades-15"
+category = "k4_whole_story"
+question = "What type of meeting do Elena and Norman go to?"
+expected_facts = ["socialist"]
+answer1 = "A socialist meeting."
+notes = "narrativeqa 6e7da219 row 15; answer2: A socialist meeting."
+
+[[questions]]
+id = "nqa-comrades-16"
+category = "k4_whole_story"
+question = "What happens to Norman following that meeting?"
+expected_facts = ["infatuated", "barbara", "bozenta"]
+answer1 = "He becomes infatuated with Barbara Bozenta, a socialist figure."
+notes = "narrativeqa 6e7da219 row 16; answer2: His father buys him an island."
+
+[[questions]]
+id = "nqa-comrades-17"
+category = "k4_whole_story"
+question = "What happens on American Independence Day?"
+expected_facts = ["socialist", "meeting", "norman"]
+answer1 = "The socialist meeting Norman tries to hold gets cancelled when he tries to hang the red flag as opposed to the American flag."
+notes = "narrativeqa 6e7da219 row 17; answer2: There's a socialist meeting"
+
+[[questions]]
+id = "nqa-comrades-18"
+category = "k4_whole_story"
+question = "What does Colonel Worth buy for Norman?"
+expected_facts = ["island", "coast", "santa"]
+answer1 = "An island off of the coast of Santa Barbara to act as a commune."
+notes = "narrativeqa 6e7da219 row 18; answer2: The island of Ventura."
+
+[[questions]]
+id = "nqa-comrades-19"
+category = "k4_whole_story"
+question = "What happens on the island to Norman?"
+expected_facts = ["sentenced", "work", "stables"]
+answer1 = "He is sentenced to work at the stables under threat of being lashed."
+notes = "narrativeqa 6e7da219 row 19; answer2: failed productivity"
+
+[[questions]]
+id = "nqa-comrades-20"
+category = "k4_whole_story"
+question = "What happens to workers on the island?"
+expected_facts = ["eventually", "deterred", "nine"]
+answer1 = "Eventually, they are deterred by nine hour work days and Norman asks for the island to be liberated by his father and Governor of California."
+notes = "narrativeqa 6e7da219 row 20; answer2: they are forced to work long hours"
+
+[[questions]]
+id = "nqa-comrades-21"
+category = "k4_whole_story"
+question = "What did Col. Worth buy for his son?"
+expected_facts = ["island"]
+answer1 = "An island."
+notes = "narrativeqa 6e7da219 row 21; answer2: an island"
+
+[[questions]]
+id = "nqa-comrades-22"
+category = "k4_whole_story"
+question = "Who was Col. Worth's son?"
+expected_facts = ["norman"]
+answer1 = "Norman"
+notes = "narrativeqa 6e7da219 row 22; answer2: Norman"
+
+[[questions]]
+id = "nqa-comrades-23"
+category = "k4_whole_story"
+question = "Where was the island that Norman moved to?"
+expected_facts = ["coast", "santa", "barbara"]
+answer1 = "Off the coast of Santa Barbara."
+notes = "narrativeqa 6e7da219 row 23; answer2: Off the coast of Santa Barbara."
+
+[[questions]]
+id = "nqa-comrades-24"
+category = "k4_whole_story"
+question = "What kind of commune did Norman attempt to make the island?"
+expected_facts = ["socialist"]
+answer1 = "Socialist."
+notes = "narrativeqa 6e7da219 row 24; answer2: A socialist commune."
+
+[[questions]]
+id = "nqa-comrades-25"
+category = "k4_whole_story"
+question = "Why did Norman's idea fail?"
+expected_facts = ["people", "work"]
+answer1 = "The people did not want to work."
+notes = "narrativeqa 6e7da219 row 25; answer2: His friends won't work."
+
+[[questions]]
+id = "nqa-comrades-26"
+category = "k4_whole_story"
+question = "What kind of community did the island eventually become?"
+expected_facts = ["liberal"]
+answer1 = "Liberal."
+notes = "narrativeqa 6e7da219 row 26; answer2: A socialist commune."
+
+[[questions]]
+id = "nqa-comrades-27"
+category = "k4_whole_story"
+question = "What did Norman find on the beach?"
+expected_facts = ["gold"]
+answer1 = "Gold."
+notes = "narrativeqa 6e7da219 row 27; answer2: gold"
+
+[[questions]]
+id = "nqa-comrades-28"
+category = "k4_whole_story"
+question = "Who helped Norman fix the problem with his island?"
+expected_facts = ["father", "governor", "california"]
+answer1 = "His father and the governor of California."
+notes = "narrativeqa 6e7da219 row 28; answer2: his father and the california governor"
+
+[[questions]]
+id = "nqa-comrades-29"
+category = "k4_whole_story"
+question = "Who took Norman to a socialist meeting at the beginning of the story?"
+expected_facts = ["elena"]
+answer1 = "Elena."
+notes = "narrativeqa 6e7da219 row 29; answer2: Colonel Worth's guardian"
+
+[[questions]]
+id = "nqa-comrades-30"
+category = "k4_whole_story"
+question = "How many hours a day were the citizens of the island supposed to work?"
+expected_facts = ["nine"]
+answer1 = "Nine."
+notes = "narrativeqa 6e7da219 row 30; answer2: nine"

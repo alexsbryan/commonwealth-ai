@@ -1,0 +1,244 @@
+[bank]
+name = "raptor-proof-eagle-cliff-v1"
+corpus = "raptor-eagle-cliff"
+description = "All 30 NarrativeQA test-split questions for 'The Eagle Cliff' (http://www.gutenberg.org/ebooks/23373.txt.utf-8), verbatim. Questions were written from the Wikipedia plot summary, not the book, so every row is k4_whole_story by construction. expected_facts by the one mechanical rule in make_bank.py.\n"
+
+[[questions]]
+id = "nqa-eagle-cliff-01"
+category = "k4_whole_story"
+question = "What causes Barrett to flee the scene of the accident after he hits the old lady?"
+expected_facts = ["afraid", "arrested"]
+answer1 = "He is afraid he will be arrested"
+notes = "narrativeqa 9e20fe26 row 1; answer2: his fear of being arressted"
+
+[[questions]]
+id = "nqa-eagle-cliff-02"
+category = "k4_whole_story"
+question = "At the beginning of the story, why is Barrett racing through the streets on his bicycle?"
+expected_facts = ["answer", "telegraph"]
+answer1 = "to answer a telegraph"
+notes = "narrativeqa 9e20fe26 row 2; answer2: He waned to respond to a school mate's telegram"
+
+[[questions]]
+id = "nqa-eagle-cliff-03"
+category = "k4_whole_story"
+question = "What is the relationship between Milly and the old lady?"
+expected_facts = ["daughter"]
+answer1 = "Milly is the old lady's daughter"
+notes = "narrativeqa 9e20fe26 row 3; answer2: Mother and daughter"
+
+[[questions]]
+id = "nqa-eagle-cliff-04"
+category = "k4_whole_story"
+question = "Barrett and Milly share what hobby in common?"
+expected_facts = ["botany"]
+answer1 = "botany"
+notes = "narrativeqa 9e20fe26 row 4; answer2: Botany"
+
+[[questions]]
+id = "nqa-eagle-cliff-05"
+category = "k4_whole_story"
+question = "What happens to Barrett Jackman's boat when they meet a steamer?"
+expected_facts = ["collide", "splits", "half"]
+answer1 = "they collide and the boat splits in half"
+notes = "narrativeqa 9e20fe26 row 5; answer2: It was split down the middle"
+
+[[questions]]
+id = "nqa-eagle-cliff-06"
+category = "k4_whole_story"
+question = "How did Barrett end up on the island?"
+expected_facts = ["boat", "destroyed"]
+answer1 = "his boat was destroyed"
+notes = "narrativeqa 9e20fe26 row 6; answer2: His ship was sunk by a steamer"
+
+[[questions]]
+id = "nqa-eagle-cliff-07"
+category = "k4_whole_story"
+question = "Where did Barrett find Milly?"
+expected_facts = ["lying", "road"]
+answer1 = "lying on the road"
+notes = "narrativeqa 9e20fe26 row 7; answer2: On a road."
+
+[[questions]]
+id = "nqa-eagle-cliff-08"
+category = "k4_whole_story"
+question = "How did Milly get injured?"
+expected_facts = ["fell", "cliff"]
+answer1 = "She fell off a cliff"
+notes = "narrativeqa 9e20fe26 row 8; answer2: She accidentally fell from a cliff."
+
+[[questions]]
+id = "nqa-eagle-cliff-09"
+category = "k4_whole_story"
+question = "What caused everyone to go searching for Barrett?"
+expected_facts = ["missed", "supper"]
+answer1 = "He missed supper"
+notes = "narrativeqa 9e20fe26 row 9; answer2: He didn't return home for dinner"
+
+[[questions]]
+id = "nqa-eagle-cliff-10"
+category = "k4_whole_story"
+question = "How did Barrett get injured?"
+expected_facts = ["fell", "cliff"]
+answer1 = "he fell off a cliff"
+notes = "narrativeqa 9e20fe26 row 10; answer2: He fell from a cliff."
+
+[[questions]]
+id = "nqa-eagle-cliff-11"
+category = "k4_whole_story"
+question = "How does the Eagle Cliff begin?"
+expected_facts = ["john", "barret", "racing"]
+answer1 = "John Barret racing through the streets of London to respond to Bob Mabberly's telegram."
+notes = "narrativeqa 9e20fe26 row 11; answer2: With Barrett racing through the streets of London"
+
+[[questions]]
+id = "nqa-eagle-cliff-12"
+category = "k4_whole_story"
+question = "Who is Bob Mabberly?"
+expected_facts = ["john", "barret", "old"]
+answer1 = "John Barret's old schoolmate."
+notes = "narrativeqa 9e20fe26 row 12; answer2: An old schoolmate"
+
+[[questions]]
+id = "nqa-eagle-cliff-13"
+category = "k4_whole_story"
+question = "What did Barrett do after running into an old lady?"
+expected_facts = ["fled", "first", "later"]
+answer1 = "He fled at first but later returned anyway."
+notes = "narrativeqa 9e20fe26 row 13; answer2: He fled the scene"
+
+[[questions]]
+id = "nqa-eagle-cliff-14"
+category = "k4_whole_story"
+question = "What did Mabberly intend to do with Barrett, Giles, and the yacht and his crew the next morning?"
+expected_facts = ["sail", "without", "fail"]
+answer1 = "Sail, without fail."
+notes = "narrativeqa 9e20fe26 row 14; answer2: 'Sail without fail'"
+
+[[questions]]
+id = "nqa-eagle-cliff-15"
+category = "k4_whole_story"
+question = "What misfortune befell the group not long after sailing?"
+expected_facts = ["collided", "passing", "steamer"]
+answer1 = "They collided with a passing steamer, causing the vessel to split down the middle."
+notes = "narrativeqa 9e20fe26 row 15; answer2: They collide with a steamer."
+
+[[questions]]
+id = "nqa-eagle-cliff-16"
+category = "k4_whole_story"
+question = "Who was tasked to find habitation in the island?"
+expected_facts = ["barrett"]
+answer1 = "Barrett."
+notes = "narrativeqa 9e20fe26 row 16; answer2: Barrett"
+
+[[questions]]
+id = "nqa-eagle-cliff-17"
+category = "k4_whole_story"
+question = "What was the skin color of the people Barrett discovered on the island?"
+expected_facts = ["white"]
+answer1 = "White."
+notes = "narrativeqa 9e20fe26 row 17; answer2: White"
+
+[[questions]]
+id = "nqa-eagle-cliff-18"
+category = "k4_whole_story"
+question = "How did Milly injure her arm?"
+expected_facts = ["fell", "cliff"]
+answer1 = "She fell off a cliff."
+notes = "narrativeqa 9e20fe26 row 18; answer2: By falling from a cliff."
+
+[[questions]]
+id = "nqa-eagle-cliff-19"
+category = "k4_whole_story"
+question = "What do Barrett and Milly both have a passion for?"
+expected_facts = ["botany"]
+answer1 = "Botany."
+notes = "narrativeqa 9e20fe26 row 19; answer2: Botany"
+
+[[questions]]
+id = "nqa-eagle-cliff-20"
+category = "k4_whole_story"
+question = "What did Mrs. Moss agree to do with Barrett?"
+expected_facts = ["forgave"]
+answer1 = "She forgave him."
+notes = "narrativeqa 9e20fe26 row 20; answer2: To forgive him for running into her and leaving."
+
+[[questions]]
+id = "nqa-eagle-cliff-21"
+category = "k4_whole_story"
+question = "Who is John responding to a telegram from?"
+expected_facts = ["old", "schoolmate"]
+answer1 = "An old schoolmate."
+notes = "narrativeqa 9e20fe26 row 21; answer2: Bob Mabberly"
+
+[[questions]]
+id = "nqa-eagle-cliff-22"
+category = "k4_whole_story"
+question = "How does John get around in London?"
+expected_facts = ["cyclist"]
+answer1 = "He is a cyclist."
+notes = "narrativeqa 9e20fe26 row 22; answer2: A bicycle."
+
+[[questions]]
+id = "nqa-eagle-cliff-23"
+category = "k4_whole_story"
+question = "Who does John hit with his bicycle?"
+expected_facts = ["old", "woman"]
+answer1 = "An old woman."
+notes = "narrativeqa 9e20fe26 row 23; answer2: Mrs. Moss"
+
+[[questions]]
+id = "nqa-eagle-cliff-24"
+category = "k4_whole_story"
+question = "Why does he flee the scene when he hits the old woman with his bicycle?"
+expected_facts = ["doesnt", "arrested"]
+answer1 = "He doesnt want to be arrested."
+notes = "narrativeqa 9e20fe26 row 24; answer2: He is scared of being arrested"
+
+[[questions]]
+id = "nqa-eagle-cliff-25"
+category = "k4_whole_story"
+question = "How does Milly get injured?"
+expected_facts = ["falls", "cliff"]
+answer1 = "She falls from a cliff."
+notes = "narrativeqa 9e20fe26 row 25; answer2: She fell from a cliff."
+
+[[questions]]
+id = "nqa-eagle-cliff-26"
+category = "k4_whole_story"
+question = "Why does John and hit party make their way to the island?"
+expected_facts = ["collide", "passing", "passenger"]
+answer1 = "They collide with a passing passenger steamer."
+notes = "narrativeqa 9e20fe26 row 26; answer2: To get out of the water"
+
+[[questions]]
+id = "nqa-eagle-cliff-27"
+category = "k4_whole_story"
+question = "What science does John and Milly share a love for?"
+expected_facts = ["botany"]
+answer1 = "Botany."
+notes = "narrativeqa 9e20fe26 row 27; answer2: They share the love of Botany"
+
+[[questions]]
+id = "nqa-eagle-cliff-28"
+category = "k4_whole_story"
+question = "Who does Mrs Moss end up being?"
+expected_facts = ["person", "john", "hit"]
+answer1 = "The person John hit with his bike."
+notes = "narrativeqa 9e20fe26 row 28; answer2: The woman he hit with his bicycle"
+
+[[questions]]
+id = "nqa-eagle-cliff-29"
+category = "k4_whole_story"
+question = "Why is John able to hide his identity from Mrs Moss?"
+expected_facts = ["injuries", "fall"]
+answer1 = "Because of the injuries he gets from the fall."
+notes = "narrativeqa 9e20fe26 row 29; answer2: His bruising and head dressing makes him unrecognizable"
+
+[[questions]]
+id = "nqa-eagle-cliff-30"
+category = "k4_whole_story"
+question = "What is the name of John's old schoolmate?"
+expected_facts = ["bob", "mabberly"]
+answer1 = "Bob Mabberly."
+notes = "narrativeqa 9e20fe26 row 30; answer2: Bob Mabberly"

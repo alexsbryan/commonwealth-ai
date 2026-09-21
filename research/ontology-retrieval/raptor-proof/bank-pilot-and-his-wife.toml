@@ -1,0 +1,244 @@
+[bank]
+name = "raptor-proof-pilot-and-his-wife-v1"
+corpus = "raptor-pilot-and-his-wife"
+description = "All 30 NarrativeQA test-split questions for 'The Pilot and His Wife' (http://www.gutenberg.org/ebooks/15588.txt.utf-8), verbatim. Questions were written from the Wikipedia plot summary, not the book, so every row is k4_whole_story by construction. expected_facts by the one mechanical rule in make_bank.py.\n"
+
+[[questions]]
+id = "nqa-pilot-and-his-wife-01"
+category = "k4_whole_story"
+question = "What profession is the main character of this story?"
+expected_facts = ["sailor"]
+answer1 = "a sailor"
+notes = "narrativeqa e034bde5 row 1; answer2: a \"pilot\" of a boat"
+
+[[questions]]
+id = "nqa-pilot-and-his-wife-02"
+category = "k4_whole_story"
+question = "What is the main character's name?"
+expected_facts = ["salve", "kristiansen"]
+answer1 = "Salve Kristiansen"
+notes = "narrativeqa e034bde5 row 2; answer2: Salve Kristiansen"
+
+[[questions]]
+id = "nqa-pilot-and-his-wife-03"
+category = "k4_whole_story"
+question = "Who is Salve in love with?"
+expected_facts = ["elisabeth"]
+answer1 = "Elisabeth"
+notes = "narrativeqa e034bde5 row 3; answer2: Elisabeth"
+
+[[questions]]
+id = "nqa-pilot-and-his-wife-04"
+category = "k4_whole_story"
+question = "Why doesn't Elisabeth marry Salve early on in the story?"
+expected_facts = ["attracted", "young", "officer"]
+answer1 = "Elisabeth is also attracted to a young officer who wants to marry her"
+notes = "narrativeqa e034bde5 row 4; answer2: She is attracted to an officer."
+
+[[questions]]
+id = "nqa-pilot-and-his-wife-05"
+category = "k4_whole_story"
+question = "Whom does Elisabeth choose to love?"
+expected_facts = ["chooses", "salve", "officer"]
+answer1 = "She chooses Salve over the officer"
+notes = "narrativeqa e034bde5 row 5; answer2: Salve."
+
+[[questions]]
+id = "nqa-pilot-and-his-wife-06"
+category = "k4_whole_story"
+question = "Why can't Elisabeth marry Slave right away?"
+expected_facts = ["sailed", "without"]
+answer1 = "because he has sailed away without her"
+notes = "narrativeqa e034bde5 row 6; answer2: She is attracted to a young officer"
+
+[[questions]]
+id = "nqa-pilot-and-his-wife-07"
+category = "k4_whole_story"
+question = "What happens when Salve returns 10 years later?"
+expected_facts = ["marries", "elisabeth"]
+answer1 = "He marries Elisabeth"
+notes = "narrativeqa e034bde5 row 7; answer2: They come to a clear understanding and appreciation."
+
+[[questions]]
+id = "nqa-pilot-and-his-wife-08"
+category = "k4_whole_story"
+question = "Why were Salve and Elisabeth miserable after they married?"
+expected_facts = ["forgive", "hesitating", "marry"]
+answer1 = "Salve did not forgive Elisabeth for hesitating to marry him"
+notes = "narrativeqa e034bde5 row 8; answer2: Salve's thought of Elisabeth's momentary hesitation."
+
+[[questions]]
+id = "nqa-pilot-and-his-wife-09"
+category = "k4_whole_story"
+question = "How long did it take Salve and Elisabeth to forma a happy life together?"
+expected_facts = ["years"]
+answer1 = "10 years"
+notes = "narrativeqa e034bde5 row 9; answer2: ten years"
+
+[[questions]]
+id = "nqa-pilot-and-his-wife-10"
+category = "k4_whole_story"
+question = "What is the moral of this story?"
+expected_facts = ["confidence", "trust", "needed"]
+answer1 = "Confidence and trust are needed to create a happy life together"
+notes = "narrativeqa e034bde5 row 10; answer2: The need of trust in marriage."
+
+[[questions]]
+id = "nqa-pilot-and-his-wife-11"
+category = "k4_whole_story"
+question = "What is this story about?"
+expected_facts = ["married", "life"]
+answer1 = "This is a story about married life."
+notes = "narrativeqa e034bde5 row 11; answer2: Love and fidelity"
+
+[[questions]]
+id = "nqa-pilot-and-his-wife-12"
+category = "k4_whole_story"
+question = "Who is this story about?"
+expected_facts = ["pilot", "wife"]
+answer1 = "This story is about a Pilot and his wife."
+notes = "narrativeqa e034bde5 row 12; answer2: Love"
+
+[[questions]]
+id = "nqa-pilot-and-his-wife-13"
+category = "k4_whole_story"
+question = "What is the sailor describing in this story?"
+expected_facts = ["experiences", "stormy", "deep"]
+answer1 = "He is describing experiences from the stormy deep sea."
+notes = "narrativeqa e034bde5 row 13; answer2: varied experiences"
+
+[[questions]]
+id = "nqa-pilot-and-his-wife-14"
+category = "k4_whole_story"
+question = "Who is loved in return?"
+expected_facts = ["elisabeth"]
+answer1 = "Elisabeth is."
+notes = "narrativeqa e034bde5 row 14; answer2: Salve Kristiansen"
+
+[[questions]]
+id = "nqa-pilot-and-his-wife-15"
+category = "k4_whole_story"
+question = "Why did Salve leave his land?"
+expected_facts = ["leaves", "desperation"]
+answer1 = "He leaves it in desperation."
+notes = "narrativeqa e034bde5 row 15; answer2: desperation"
+
+[[questions]]
+id = "nqa-pilot-and-his-wife-16"
+category = "k4_whole_story"
+question = "Who does Elisabeth marry?"
+expected_facts = ["marries", "salve"]
+answer1 = "She marries Salve."
+notes = "narrativeqa e034bde5 row 16; answer2: Salve"
+
+[[questions]]
+id = "nqa-pilot-and-his-wife-17"
+category = "k4_whole_story"
+question = "How many years elapse before an understanding is made?"
+expected_facts = ["years"]
+answer1 = "It is 10 years that go by."
+notes = "narrativeqa e034bde5 row 17; answer2: Ten"
+
+[[questions]]
+id = "nqa-pilot-and-his-wife-18"
+category = "k4_whole_story"
+question = "What makes Salve decide to finally marry Elisabeth?"
+expected_facts = ["true"]
+answer1 = "She was true to him."
+notes = "narrativeqa e034bde5 row 18; answer2: He returns to find she has been true."
+
+[[questions]]
+id = "nqa-pilot-and-his-wife-19"
+category = "k4_whole_story"
+question = "What creates their happy life together?"
+expected_facts = ["foundation"]
+answer1 = "A foundation creates this life."
+notes = "narrativeqa e034bde5 row 19; answer2: They are enabled to lay the foundation."
+
+[[questions]]
+id = "nqa-pilot-and-his-wife-20"
+category = "k4_whole_story"
+question = "What is emphasized by this novel?"
+expected_facts = ["confidence", "trust"]
+answer1 = "Confidence and trust."
+notes = "narrativeqa e034bde5 row 20; answer2: You need to understand, trust and openly communicate with your partner"
+
+[[questions]]
+id = "nqa-pilot-and-his-wife-21"
+category = "k4_whole_story"
+question = "What does a marriage need?"
+expected_facts = ["implicit", "confidence", "trust"]
+answer1 = "Implicit confidence and trust."
+notes = "narrativeqa e034bde5 row 21; answer2: happiness, trust and confidence in one another"
+
+[[questions]]
+id = "nqa-pilot-and-his-wife-22"
+category = "k4_whole_story"
+question = "Who does Salve Kristiansen love?"
+expected_facts = ["elisabeth"]
+answer1 = "Elisabeth."
+notes = "narrativeqa e034bde5 row 22; answer2: Elisabeth."
+
+[[questions]]
+id = "nqa-pilot-and-his-wife-23"
+category = "k4_whole_story"
+question = "Who is Elisabeth initially attracted to?"
+expected_facts = ["young", "officer"]
+answer1 = "A young officer."
+notes = "narrativeqa e034bde5 row 23; answer2: Salve Kristianson"
+
+[[questions]]
+id = "nqa-pilot-and-his-wife-24"
+category = "k4_whole_story"
+question = "How many years elapse before Salve and Elisabeth understand each other?"
+expected_facts = ["ten"]
+answer1 = "Ten years."
+notes = "narrativeqa e034bde5 row 24; answer2: Ten"
+
+[[questions]]
+id = "nqa-pilot-and-his-wife-25"
+category = "k4_whole_story"
+question = "Who was true to Salve?"
+expected_facts = ["elisabeth"]
+answer1 = "Elisabeth."
+notes = "narrativeqa e034bde5 row 25; answer2: Elisabeth"
+
+[[questions]]
+id = "nqa-pilot-and-his-wife-26"
+category = "k4_whole_story"
+question = "Who is living a happy life?"
+expected_facts = ["salve", "elisabeth"]
+answer1 = "Salve and Elisabeth."
+notes = "narrativeqa e034bde5 row 26; answer2: Salve and Elisabeth."
+
+[[questions]]
+id = "nqa-pilot-and-his-wife-27"
+category = "k4_whole_story"
+question = "How many people are in wedlock?"
+expected_facts = ["two"]
+answer1 = "Two."
+notes = "narrativeqa e034bde5 row 27; answer2: 2"
+
+[[questions]]
+id = "nqa-pilot-and-his-wife-28"
+category = "k4_whole_story"
+question = "What is The Pilot and His Wife?"
+expected_facts = ["story"]
+answer1 = "A story."
+notes = "narrativeqa e034bde5 row 28; answer2: The title"
+
+[[questions]]
+id = "nqa-pilot-and-his-wife-29"
+category = "k4_whole_story"
+question = "Who is beautiful?"
+expected_facts = ["elisabeth"]
+answer1 = "Elisabeth."
+notes = "narrativeqa e034bde5 row 29; answer2: Elisabeth"
+
+[[questions]]
+id = "nqa-pilot-and-his-wife-30"
+category = "k4_whole_story"
+question = "Where does Salve sail to?"
+expected_facts = ["distant", "shores"]
+answer1 = "Distant shores."
+notes = "narrativeqa e034bde5 row 30; answer2: foreign shores"
