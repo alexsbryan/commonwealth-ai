@@ -501,7 +501,7 @@ mod tests {
         assert_eq!(r, Principal::Member { node_id: id });
     }
 
-    /// covers: mp-principal-is-the-verified-key
+    /// bar `mp-principal-is-the-verified-key`:
     ///
     /// Present but unreadable is `Unverified`, not `Anonymous`: the caller
     /// named itself and failed, which is a different answer from naming
@@ -512,7 +512,7 @@ mod tests {
         assert_eq!(r, Principal::Unverified);
     }
 
-    /// covers: mp-principal-is-the-verified-key
+    /// bar `mp-principal-is-the-verified-key`:
     ///
     /// A mesh peer presents the daemon-wide bearer AND its node id on the
     /// same request (`oicp_client::RemoteApiProvider::stamped`). The node

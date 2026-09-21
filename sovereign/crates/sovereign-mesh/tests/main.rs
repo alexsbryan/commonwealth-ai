@@ -86,6 +86,8 @@ mod injection_order;
 mod iroh_dialer_admission_e2e;
 #[path = "main/iroh_transport_e2e.rs"]
 mod iroh_transport_e2e;
+#[path = "main/iroh_verified_principal_e2e.rs"]
+mod iroh_verified_principal_e2e;
 #[path = "main/join_handshake.rs"]
 mod join_handshake;
 #[path = "main/join_key_persistence.rs"]

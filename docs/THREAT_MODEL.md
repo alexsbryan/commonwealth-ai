@@ -214,8 +214,9 @@ it.
    `/internal/join`, and forwards it to that listener
    (`sovereign/crates/sovereign-mesh/src/iroh_access.rs`, `forward_for`).
    Since `e8f7f0520` that hop carries the dialer's verified key, and its
-   member name when the roster has one; no route behind it refuses on that
-   yet, which is the rest of campaign `mesh-principal`.
+   member name when the roster has one. Since `0f190bc47` exactly one route
+   behind it refuses on that — `/internal/ring/sync`, by roster. The other 54
+   do not; see entry 9.
    Corrected 2026-09-20: this entry said encrypted mode "already closes it",
    and the surfaces table said admin routes were loopback-only per handler;
    neither was true. Until closed: keep `:9742` off any network you do not
@@ -241,17 +242,59 @@ it.
    allowlist. *Owner:* campaign `threat-gaps` (order `threat-gaps-close`), approved 2026-09-20, queued behind `mesh-principal`. Measured for that order: the
    desktop ships no app-command manifest, so a mesh-app window can invoke
    every host command, not only the bridge's.
-6. **A mesh member can act as any other member on the call plane.** The
-   node's Ed25519 key is verified in the iroh handshake and signs every rail
-   op, but knowledge search, the capabilities fetch, the admission tally and
-   the reciprocity ledger decide on `x-node-id`, a header the caller
-   supplies. *Closes when:* those deciders read the verified key and an
-   unverified principal is refused. *Owner:* campaign `mesh-principal`
-   (`.sovereign/features/mesh-verified-principal/order.md`), queued.
-7. **Ring sync ships every namespace to every online member**, whatever the
-   ring's roster says, so a ring shared among a few machines is readable by
-   the whole mesh. *Closes when:* ring sync reads by roster. *Owner:* campaign `mesh-principal`, queued.
-8. **A compromised node can serve bad inference.** Not defended. *By design:*
+6. **A mesh member can act as any other member on the CLIENT plane** —
+   narrowed 2026-09-21, not closed. On the internal plane (`:9742`) the nine
+   deciders that read `x-node-id` now read a principal resolved from the key
+   the iroh handshake proved (`8f1ca8a0a`), the header's parser is gone with
+   its file (`sovereign-daemon/src/headers.rs`, deleted), and a test in the
+   normal run fails on any production read of the literal that returns
+   (`sovereign-daemon/src/mesh_principal_gate.rs`). What remains is one plane
+   over: `CLIENT_ALPN` is spliced to the peer router with NO identity after
+   the acceptor has verified the dialer is a member
+   (`sovereign-mesh/src/iroh_access.rs`, `forward_for`), so
+   `client_principal::resolve` still mints `Principal::Member` from a readable
+   `x-node-id` — and member B, verified as B in the handshake, can still type
+   C on an inference or embedding turn and move C's peer ceiling, admission
+   tally and reciprocity key. Measured from the resolver and the splice, not
+   from a test (ledger A61). *Closes when:* the `CLIENT_ALPN` member arm
+   forwards the verified identity the way `cwth/http/0` does since
+   `e8f7f0520`, and `client_principal` prefers a tied verified key over the
+   typed claim. *Owner:* unowned — proposed to the operator at A61 as one more
+   row on campaign `mesh-principal` plus a fifth clause on
+   `mp-principal-is-the-verified-key`; neither is approved yet.
+7. ~~**Ring sync ships every namespace to every online member**, whatever the
+   ring's roster says.~~ Closed 2026-09-21 by `0f190bc47`: both halves of
+   `/internal/ring/sync` test the asker's verified key against the ring's
+   roster through one decider (`sovereign_mesh::ring_roster::roster_names`) —
+   the sender before it offers a namespace, the server before it ingests or
+   selects — and a refusal names the namespace and the asker. A ring with no
+   `roster.json` is still answered by membership, which is the rail's
+   documented default and what the seven `REGISTERED_NAMESPACES` rely on; the
+   file-rostered work plane narrows. See entry 8 for the posture this depends
+   on.
+8. **An asker with no verified key is served every ring on a plaintext
+   mesh.** The roster filter in entry 7 decides on the key the iroh handshake
+   proved. A caller that presents no `x-mesh-*` at all is
+   `Principal::Anonymous` and is served without a roster check — on the
+   encrypted posture that is a local process reaching a loopback-only
+   `:9742`, and on a plaintext mesh it is every peer that can route to the
+   host. (A caller that presents an identity the daemon cannot tie to its own
+   acceptor is `Principal::Unverified` and is refused every namespace; this
+   entry is about the one that claims nothing.) Disclosed in the route's own
+   module header. *Closes when:* a plaintext mesh either carries a per-caller
+   identity on the internal port or the roster filter refuses an unkeyed
+   asker there too — which is a product decision, because it breaks a
+   deployed plaintext mesh. *Owner:* unowned.
+9. **The internal API's other 54 routes still answer an unverified caller.**
+   `internal_principal_layer` resolves a principal for every request on
+   `:9742`, but `/internal/ring/sync` is the only route that refuses on it.
+   Everything else — `/internal/models/load`, `/internal/ring/live`, the
+   corpus grant issue/revoke pair, the model-file routes, scheduling intent
+   and plan — is reached by any caller that reaches the port, exactly as
+   entry 2 says. What changed is that the principal now EXISTS for those
+   routes to read. *Closes when:* entry 2 closes. *Owner:* campaign
+   `threat-gaps` (order `threat-gaps-close`), approved 2026-09-20.
+10. **A compromised node can serve bad inference.** Not defended. *By design:*
    the social trust model, documented since the first architecture draft —
    you mesh with machines whose owners you trust.
 

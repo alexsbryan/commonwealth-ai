@@ -1797,3 +1797,174 @@ Recorded and not acted on: the rr-1 `ra-room-nothing-typed` row lists the
 Jellyfin `demo / demo` credential twice in `excluded` where the room run lists
 it once — a duplicate in the census's excluded list, not a second credential in
 the walk (`walk count: 0` on that run). It predates this campaign.
+
+## mesh-principal — REVIEW-audit-mp (2026-09-21)
+
+Campaign range `36dca4ffb..HEAD` (base = the parent of the inventory row's
+commit `08e709ccc`).
+
+### Gates
+
+TESTALL, first run: `pass: 13567 fail: 3` (exit 100). All three triaged, one
+of them this campaign's and fixed here.
+
+| failure | verdict | why |
+|---|---|---|
+| `xtask::conformance_tags::conformance_tags_are_fresh` | THIS CAMPAIGN — fixed | two separate defects, below |
+| `sovereign-cli::main cli_contract_journeys::every_journey_cites_a_doc_that_exists` | pre-existing, not fixable here | the citation landed `a3bd715f5` (2026-09-13, ring-apps); the doc it names, `docs/internal/RING_APPLICATIONS.md`, is GITIGNORED per-host and `quality/campaigns/ring-apps.toml:8` records it ABSENT on the Halo. This campaign's diff touches neither `sovereign/docs/cli-contract.toml` nor `docs/internal/` (`git diff --stat` on both paths: empty) |
+| `sovereign-mesh::main local_only_boot::a_local_only_daemon_spawns_no_network_service` | load flake, not a regression | the 10 s bound on a daemon booting under a 13570-test parallel run. `--package sovereign-mesh` alone: `pass: 604 fail: 0`, twice. Worth a bound that scales with load; not this campaign's and not tuned here |
+
+PREPUSH: exit 1, blocking on `arch-gate`. See the size section below for what
+of that is this campaign's. The other 17 lanes: 15 passed, `concept-gate`
+could-not-judge (the SCIP graph is indexed at `36dca4ff`, which it says), and
+`hakari-verify` failed advisory with a panic backtrace and no finding — both
+pre-existing and neither attributable to this diff.
+
+### Findings against ARCH's twelve, and the fixes
+
+**1 · principle 8 (one decider, one name) — `covers:` is a reserved
+vocabulary and the campaign minted campaign-bar ids into it.** Eleven doc
+comments across six files read `/// covers: mp-principal-is-the-verified-key`
+or `mp-no-decider-reads-the-header`. `covers:` is harvested by
+`corpus-engine/xtask/tests/conformance_tags.rs`, whose registry is
+`quality/requirements.toml` — GENERATED from `research/clean-room/REQUIREMENTS.md`
+and not hand-editable — so every one of them was a claim about nothing and the
+first was a hard test failure. No other campaign in the tree does this: the
+existing convention for a campaign bar in source is prose (``Bar
+`ra-room-answer-names-the-machine`: …``, `sovereign-core/src/runtime/grounding/tests.rs:2735`;
+``quality/campaigns/ring-doc.toml`` bar …, `routes_internal/ring_live.rs:20`).
+Fixed to that form; no claim was lost, because none of these ids was ever
+joinable. Fixed in this commit.
+
+**2 · principle 5 (a gate you have not watched fail is not a gate) — the
+campaign added three valid `covers: FE-99` tags and never regenerated the
+manifest they generate.** `sovereign/crates/sovereign-contracts/src/principal.rs`
+picked up FE-99 from the deleted `headers.rs` in `c4077023c`, so
+`quality/conformance/sovereign-contracts.toml` did not exist and
+`quality/conformance/sovereign-daemon.toml` still pointed FE-99 at two tests
+in a file that is gone. Regenerated with
+`UPDATE_CONFORMANCE_TAGS=1 cargo test -p xtask --test conformance_tags`
+(4 passed). Neither defect was visible to any row's own checks: the rows ran
+`TEST(sovereign-daemon)` / `TEST(sovereign-mesh)`, and this test lives in
+`xtask`. That is the audit row earning its place.
+
+**3 · ARCH §3.2 (file ceiling) — `iroh_dialer_admission_e2e.rs` went
+926 → 1304 lines, a NEW oversized file entirely of this campaign's making.**
+Split: the 378-line block `mp-1` appended is now
+`sovereign/crates/sovereign-mesh/tests/main/iroh_verified_principal_e2e.rs`
+(401 lines), wired in `tests/main.rs` the way that crate's
+`every_test_module_is_wired_to_its_own_file` gate demands, reusing the
+parent's lender/dialer helpers (now `pub(crate)`) rather than copying them.
+Parent back to 926 — exactly its pre-campaign length, so it adds nothing to
+the approach band either. Test count unchanged at 604 before and after, so
+nothing was dropped in the move.
+
+### Size, apart from the rr-2 growth the row expects (ledger A51)
+
+`arch-gate` is red on three findings after the split. Attribution, measured
+file by file across the campaign range:
+
+- `sovereign-daemon/src/server.rs` 1303 → 1312. **This campaign's, 9 lines**,
+  all of them the `internal_principal_layer` mount and its two comments. The
+  baseline pinned at 1259 is 44 lines stale from BEFORE this campaign, and
+  slack is 50, so the +9 is what tips it. Not accepted and not shaved: a
+  re-pin is the operator's call (never `--update-baseline` on a working
+  tree), and shaving a load-bearing comment to clear a ratchet is the cheap
+  repair the ratchet exists to catch.
+- approach band, files 207 → 212 and lines 202703 → 207932. **Not this
+  campaign's.** No file this campaign touched crossed 800 from below, and no
+  band FILE is new here — the split put the parent back at its baseline 926
+  and the new sibling at 401, under the line. This campaign's contribution to
+  the band's line count is `iroh_identity_forward.rs` +45,
+  `sovereign-mesh/tests/main/common/mod.rs` +50, `turn_reshape_fidelity.rs`
+  +14 and `admission.rs` +43 — about 152 of the 5229. The rest is the rr-2
+  growth ledger A51 already names.
+
+### The diff beside O §Predictions, line by line
+
+`git diff --numstat 36dca4ffb..HEAD`. Caveat: this repo puts most unit tests
+in inline `#[cfg(test)]` modules, so "src" below includes them; the "test
+files" column is only `tests/` trees and fixtures.
+
+| crate | predicted | src | test files | reading |
+|---|---|---|---|---|
+| `commonwealth-transport` | ~40, corrected by the inventory to ~0 | +45 −0 | — | the acceptor mark and its constant-time check; the inventory's correction was right that the ALPN decision is not here |
+| `sovereign-daemon` | under ~200, NET NEGATIVE in `headers.rs` | +1068 −217 | +18 −3 | **5× over.** `headers.rs` is not net negative, it is DELETED (−122, file gone) ✓. The overshoot is two new files, `internal_principal.rs` (509, of which 228 are its test module) and `mesh_principal_gate.rs` (181, of which 99 are its test module) — 327 of the 690 is test, and the rest is the resolver plus its module doc. The prediction priced "a principal resolver that reads the acceptor's headers" and did not price the acceptor-mark tie the plaintext posture forced |
+| `sovereign-mesh` | ~60 | +126 −6 | +1041 −681 | 2× over in src; the test movement is the roster suite (`ring_sync_by_roster.rs`, 419 new) plus the split above |
+| `sovereign-server` | ~20 | +105 −21 | — | 4× over; `reciprocity.rs` gained the `UserKey` derivation and its tests |
+| `oicp-types` | negative | +65 −0 | +85 −0 | **inverted, and knowingly.** `mp-4` found the premise false on all three fields and shipped a wire-tolerance fixture instead of a deletion; ledgered A62 |
+| `commonwealth-rail*` | 0 | 0 | 0 | ✓ |
+| `sovereign-contracts` | not predicted | +203 −7 | — | not in O §Scope. It is where `Principal`, `AttachedPrincipal` and the one `claimed_node_id` reader now live, which is the convergence the order asked for, in a crate the order did not name |
+| `sovereign-serving-host` | not predicted | +134 −97 | — | not in O §Scope either; the inventory added it, naming the three literal reads at `:485,551,567` |
+
+**The three named findings, checked.** A new trait: none — `git diff | grep
+'^+.*pub trait'` is empty. A new principal type beside `Principal`: none of
+substance — the two new types are `AttachedPrincipal` (the axum extension
+newtype, one per repo by construction, and its own doc says why) and
+`ClaimedNodeId` (a closed three-arm read of what the wire CLAIMS, which is not
+a principal). A second identity header scheme: **judgment call, reported not
+ruled.** `X-Mesh-Acceptor` (`iroh_identity_forward.rs:50`) is new. It carries
+no identity — it is a 32-byte per-process secret that says "the acceptor in
+this process put these headers here", checked in constant time and stripped
+before any handler — and the identity headers are still the three `X-Mesh-*`
+the media path already used. It is a new header, not a new scheme, but the
+order's prediction said "header scheme" and an operator reading that line
+should see this one.
+
+### What each row reused (O §Less)
+
+- `iroh_identity_forward`'s strip-and-append and its failing-input test —
+  `mp-1` reused both; the internal arm returns `Forward::Http` and
+  `rewrite_head` does the strip, with no second implementation.
+- `Forward`'s existing identity slot — reused; no new variant.
+- `client_principal`'s `Principal` and its one resolver — reused, and
+  CONVERGED: `Principal` and `AttachedPrincipal` moved to
+  `sovereign-contracts` so the daemon's two layers and `sovereign-server`'s
+  share one type rather than three of the same shape.
+- `RingRail::roster` — reused, read-only; the rail crates are 0 lines.
+- `sovereign_mesh::ring_roster::roster_names` — one decider, called by the
+  sender (`ring_sync.rs:321`) and the server (`routes_internal/ring_sync.rs:175`).
+- the sync round's skipped-peers line (58d754d2d) — reused as the shape for
+  `skipped_not_on_roster` (`ring_sync.rs:335`), a third list beside exchanged
+  and offline.
+- the room instrument — reused for the regression at `REVIEW-DEMO-mp-run`.
+
+### THREAT_MODEL — the two questions this row was told to answer
+
+**What can an `unverified` caller still reach?** Every internal route but
+one. `internal_principal_layer` is the internal router's outermost layer, so
+all 55 routes on `:9742` now have a principal to read; `/internal/ring/sync`
+is the only one that refuses on it. `/internal/models/load`,
+`/internal/ring/live`, `/internal/corpus/grant` and `/revoke`, the model-file
+routes, scheduling intent and plan and the rest answer any caller that reaches
+the port, exactly as `THREAT_MODEL` entry 2 has said since before this
+campaign. Written up as entry 9, owner `threat-gaps`.
+
+**What does a non-roster member still learn about a ring — its name, its size,
+its members?** Nothing it did not supply. The refusal is
+`"{asker} is not on {namespace}'s roster"` — it echoes the namespace the
+caller asked for and the caller's own id, and carries no digest, no op count
+and no roster contents. It is not an existence oracle either:
+`RingRail::journal` opens lazily for any well-formed name, so a namespace this
+host has never held refuses identically to one it holds. The rail read routes
+(`/v1/rail/log`, `/v1/rail/append`, `/v1/rail/live`) are absent from the Peer
+surface (`ClientSurface::serves_rail_routes`), so there is no second door.
+Two residues, both recorded rather than fixed: (i) the roster test runs AFTER
+`rail.journal(&req.namespace)`, which creates the journal directory, so a
+caller that will be refused can still make an empty namespace appear on this
+host's disk — pre-existing, unchanged by `mp-2`, and bounded by
+`MeshStore::apply_projection` refusing an excluded namespace; (ii) a ring with
+no `roster.json` is answered by membership, which is the rail's documented
+default and what the seven `REGISTERED_NAMESPACES` rely on, so "a non-roster
+member" only exists for a ring that has a roster file — the work plane, and
+whatever the operator writes one for.
+
+Both answers, plus the plaintext-posture `Anonymous` gap the route's own
+module header discloses, are now entries 6–9 of `docs/THREAT_MODEL.md`
+§Known gaps, each with a closing condition and an owner (ledger A56). Entry 7
+(ring sync ships every namespace) is struck, citing `0f190bc47`. Entry 6 is
+NARROWED rather than struck: the internal plane is closed, and ledger A61's
+finding — `CLIENT_ALPN` splices with no identity, so `client_principal` still
+mints `Principal::Member` from a typed `x-node-id` and member B can still
+spend C's reciprocity on an inference turn — is the half that remains. It is
+written as unowned, because the row A61 proposed is not approved.

@@ -160,7 +160,7 @@ async fn a_refused_peer_is_503_with_retry_after_and_is_not_tallied() {
     );
 }
 
-/// covers: mp-principal-is-the-verified-key
+/// bar `mp-principal-is-the-verified-key`:
 ///
 /// THE failing input for clause (d): a caller claims a peer identity this node
 /// could not verify. There is no ceiling to charge it to — a ceiling keyed on

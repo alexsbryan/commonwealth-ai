@@ -216,7 +216,7 @@ mod tests {
         );
     }
 
-    /// covers: mp-principal-is-the-verified-key
+    /// bar `mp-principal-is-the-verified-key`:
     ///
     /// The scheduler key follows the PRINCIPAL. The failing input this
     /// replaces: `user_key` read `x-node-id` directly and accepted any

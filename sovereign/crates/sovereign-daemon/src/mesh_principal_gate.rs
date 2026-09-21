@@ -115,7 +115,7 @@ mod tests {
         dir
     }
 
-    /// covers: mp-no-decider-reads-the-header
+    /// bar `mp-no-decider-reads-the-header`:
     ///
     /// THE failing input: restore any production read of `x-node-id` outside
     /// the one allowed path and this goes red, naming the file and the line.

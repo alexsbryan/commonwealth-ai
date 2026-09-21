@@ -1143,7 +1143,7 @@ mod tests {
     /// and the raw value is recorded with its timestamp so /status can name it
     /// instead of showing an opaque `node-0000000000000000` row (ARCH §18.3 —
     /// absence is reported, never defaulted).
-    /// covers: mp-principal-is-the-verified-key
+    /// bar `mp-principal-is-the-verified-key`:
     ///
     /// A present-but-malformed claim is REFUSED, and its raw value is still
     /// named on `/status`'s zero-bucket row.

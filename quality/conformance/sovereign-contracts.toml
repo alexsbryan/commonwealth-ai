@@ -1,0 +1,32 @@
+# Conformance tags in `sovereign-contracts` — GENERATED. DO NOT EDIT BY HAND.
+#
+#   UPDATE_CONFORMANCE_TAGS=1 cargo test -p xtask --test conformance_tags
+#
+# Each claim maps a requirement id from research/clean-room/REQUIREMENTS.md
+# to the test that proves it. `test` is `<junit classname>::<junit name>`, so
+# `svrn conformance` can join a claim to a real per-test verdict without
+# guessing.
+#
+# `asserts` counts falsifiable exits in the test body. It is never zero: a
+# covers: tag over a body that cannot fail is refused by the generator.
+
+[[claim]]
+requirement = "FE-99"
+test = "sovereign-contracts::principal::tests::a_non_hex_claim_is_unreadable"
+file = "sovereign/crates/sovereign-contracts/src/principal.rs"
+line = 325
+asserts = 1
+
+[[claim]]
+requirement = "FE-99"
+test = "sovereign-contracts::principal::tests::a_wrong_length_claim_is_unreadable_and_keeps_its_raw_value"
+file = "sovereign/crates/sovereign-contracts/src/principal.rs"
+line = 310
+asserts = 1
+
+[[claim]]
+requirement = "FE-99"
+test = "sovereign-contracts::principal::tests::either_header_spelling_reads_the_one_wire_form"
+file = "sovereign/crates/sovereign-contracts/src/principal.rs"
+line = 283
+asserts = 1
