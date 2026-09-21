@@ -26,6 +26,8 @@ mod control_plane_not_shed;
 mod corpus_lifecycle;
 #[path = "main/gossip_route.rs"]
 mod gossip_route;
+#[path = "main/internal_gate_e2e.rs"]
+mod internal_gate_e2e;
 #[path = "main/join_route.rs"]
 mod join_route;
 #[path = "main/knowledge_fanout.rs"]

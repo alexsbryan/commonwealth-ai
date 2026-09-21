@@ -270,7 +270,7 @@ async fn the_merge_dedupes_a_row_two_donors_both_contributed() {
     let info = f
         .manager
         .merge_participants(MergePlan {
-        mesh_proof: None,
+            mesh_proof: None,
             handoff_id: HandoffId::from_u128(0xC0FFEE),
             corpus_id: CORPUS,
             local_node_id: f.local,

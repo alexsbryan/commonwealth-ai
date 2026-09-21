@@ -701,8 +701,7 @@ async fn post(
         .await
         .map_err(|e| ExchangeStop::Failed(e.to_string()))?;
     let status = resp.status();
-    if status == reqwest::StatusCode::PAYLOAD_TOO_LARGE
-        || status == reqwest::StatusCode::FORBIDDEN
+    if status == reqwest::StatusCode::PAYLOAD_TOO_LARGE || status == reqwest::StatusCode::FORBIDDEN
     {
         return Err(ExchangeStop::Refused {
             sent_bytes,

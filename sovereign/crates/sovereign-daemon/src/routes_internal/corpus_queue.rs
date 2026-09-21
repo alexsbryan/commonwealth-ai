@@ -593,11 +593,11 @@ pub fn spawn_queue_merge(state: AppState, handoff_id: commonwealth_core::ids::Ha
 
         match shard_mgr
             .coordinate_merge(
-                        handoff_id,
-                        local_node_id,
-                        &peer_urls,
-                        merge_proof.as_ref().map(|(n, v)| (n.as_str(), v.as_str())),
-                    )
+                handoff_id,
+                local_node_id,
+                &peer_urls,
+                merge_proof.as_ref().map(|(n, v)| (n.as_str(), v.as_str())),
+            )
             .await
         {
             Ok(Some(info)) => {

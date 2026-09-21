@@ -300,7 +300,9 @@ pub async fn merge_from_fold_coverage(
         local_node_id,
         participants,
         peer_shard_base_urls: peer_urls,
-        mesh_proof: node_mesh_proof.as_ref().map(|(n, v)| (n.as_str(), v.as_str())),
+        mesh_proof: node_mesh_proof
+            .as_ref()
+            .map(|(n, v)| (n.as_str(), v.as_str())),
         // The fold carries no ephemeral flag. An ephemeral grant is the corpus
         // OWNER's lifecycle and lives in `EphemeralGrantStore`, which cw-lift
         // 5g part 1 established the consent pair does not speak for.

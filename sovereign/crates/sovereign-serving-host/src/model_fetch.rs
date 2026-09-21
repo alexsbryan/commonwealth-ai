@@ -246,6 +246,58 @@ mod tests {
         (base, handle)
     }
 
+    /// A server that records the mesh-proof header of every request, so the
+    /// assertion is about what went ON THE WIRE and not about what the caller
+    /// meant to send.
+    async fn spawn_header_recorder() -> (String, std::sync::Arc<std::sync::Mutex<Vec<Option<String>>>>)
+    {
+        let seen: std::sync::Arc<std::sync::Mutex<Vec<Option<String>>>> = Default::default();
+        let sink = seen.clone();
+        let handler = move |headers: axum::http::HeaderMap| {
+            let sink = sink.clone();
+            async move {
+                sink.lock().unwrap().push(
+                    headers
+                        .get("x-mesh-proof")
+                        .and_then(|v| v.to_str().ok())
+                        .map(str::to_string),
+                );
+                axum::Json(ModelFileListing { files: Vec::new() })
+            }
+        };
+        let app = Router::new().route("/internal/v1/models/list", get(handler));
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr: SocketAddr = listener.local_addr().unwrap();
+        let base = format!("http://{}", addr);
+        tokio::spawn(async move {
+            let _ = axum::serve(listener, app).await;
+        });
+        (base, seen)
+    }
+
+    /// `tg-2-strangers-are-refused`, this builder's half: the request carries
+    /// the pair when one is handed in, and carries NOTHING when it is not.
+    ///
+    /// The absent case is the failing input that matters. A peer running the
+    /// default `internal_auth = "member"` answers 401 to an unstamped call on a
+    /// plain-IP hop, and an unstamped call is exactly what this crate built
+    /// before the pair existed.
+    #[tokio::test]
+    async fn a_listing_request_carries_the_pair_it_is_given_and_nothing_otherwise() {
+        let (base, seen) = spawn_header_recorder().await;
+        let client = reqwest::Client::new();
+
+        list_peer_files(&client, &base, Some(("x-mesh-proof", "abc.def")))
+            .await
+            .unwrap();
+        list_peer_files(&client, &base, None).await.unwrap();
+
+        assert_eq!(
+            *seen.lock().unwrap(),
+            vec![Some("abc.def".to_string()), None]
+        );
+    }
+
     #[tokio::test]
     async fn list_peer_files_returns_dir_contents() {
         let tmp = tempfile::tempdir().unwrap();
@@ -331,10 +383,16 @@ mod tests {
         let (base, _h) = spawn_test_server(src.path()).await;
 
         let client = reqwest::Client::new();
-        let err =
-            fetch_named_model_from_peer(&client, &base, "missing.gguf", dest.path(), None, |_, _| {})
-                .await
-                .unwrap_err();
+        let err = fetch_named_model_from_peer(
+            &client,
+            &base,
+            "missing.gguf",
+            dest.path(),
+            None,
+            |_, _| {},
+        )
+        .await
+        .unwrap_err();
         assert!(matches!(err, FetchError::NotAdvertised(ref n) if n == "missing.gguf"));
     }
 }

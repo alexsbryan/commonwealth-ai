@@ -208,11 +208,9 @@ mod tests {
         // and says the local address the real listener would.
         internal_router(state.clone()).layer(axum::middleware::from_fn(
             |mut req: axum::extract::Request, next: axum::middleware::Next| async move {
-                req.extensions_mut()
-                    .insert(axum::extract::ConnectInfo(std::net::SocketAddr::from((
-                        [127, 0, 0, 1],
-                        54321,
-                    ))));
+                req.extensions_mut().insert(axum::extract::ConnectInfo(
+                    std::net::SocketAddr::from(([127, 0, 0, 1], 54321)),
+                ));
                 next.run(req).await
             },
         ))

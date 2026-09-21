@@ -9,6 +9,8 @@
 
 #[path = "main/coordinate_merge_installs_the_canonical.rs"]
 mod coordinate_merge_installs_the_canonical;
+#[path = "main/mesh_proof_on_the_wire.rs"]
+mod mesh_proof_on_the_wire;
 #[path = "main/merge_participants_coverage.rs"]
 mod merge_participants_coverage;
 #[path = "main/merge_participants_idempotence.rs"]

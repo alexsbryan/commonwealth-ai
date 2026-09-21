@@ -6423,11 +6423,27 @@ call sites in `sovereign-mesh` — every writer is CLI-side, so a
 `Option` with `validation_unavailable` stated and a `PUT …/toml` on a workflow
 project is a 501 rather than an unvalidated write).
 
-**Internal API — :9742, plaintext (perimeter-trust)**
+**Internal API — :9742, plaintext, MEMBER-gated since 2026-09-21**
 
-No per-request auth: the internal routes (gossip, scheduling, model/index
-transfer, knowledge fan-out) trust the network boundary. Since 2026-09-20 it
-does carry a PRINCIPAL, resolved once at the edge by
+The internal routes (gossip, scheduling, model/index transfer, knowledge
+fan-out) trusted the network boundary until 2026-09-21. They no longer do:
+`sovereign-daemon/src/internal_gate.rs` runs in front of every route but
+`/internal/join` and `/internal/gossip` — both of which carry their own
+credential check and are how a caller BECOMES something the gate can admit —
+and answers 401 unless the caller is a verified `Principal::Member`, carries a
+`ProvedMeshMember` marker (a holder of this mesh's secret on a plain-IP hop),
+or is a process on this machine. The reach is therefore "any holder of the mesh
+secret, plus anything local", not "any peer that can route here"; on a
+plaintext mesh nothing can tell one member from another, so one leaked secret
+is still every member. `[daemon] internal_auth = "perimeter"` restores the old
+posture wholesale and logs one warning at startup saying so; the default is
+`"member"` and an unknown spelling refuses to start. Every first-party
+non-peer caller (the desktop's one `internal_base_url()` accessor, the CLI's
+`/internal/*` reaches, the demo scripts' own nodes) arrives over loopback and
+is unaffected; peer callers carry the stamp (`AppState::stamped`, and the
+header pair for the two crates that cannot name the minting type).
+
+It also carries a PRINCIPAL. Since 2026-09-20, resolved once at the edge by
 `sovereign-daemon/src/internal_principal.rs` and attached as
 `AttachedPrincipal`, exactly as `client_auth_layer` does on `:9741`: a hop
 this daemon can tie to its own iroh acceptor (loopback peer + the per-process
@@ -6440,8 +6456,13 @@ every other connection has its `x-mesh-*` STRIPPED and resolves
 accepts attaches a `ProvedMeshMember` marker BESIDE the principal and changes
 the principal not at all, because any holder of the secret can mint a proof
 naming any sender — it proves the GROUP, never which member. A present proof
-that fails is `Unverified`. The layer refuses nothing yet — which routes may
-serve an unverified caller is each route's own question. Binds `0.0.0.0`
+that fails is `Unverified`. The resolver itself refuses nothing — that is
+`internal_gate`'s job, above — and `routes_internal::ring_sync` additionally
+refuses an unmarked non-loopback asker BY NAME rather than depending on the
+layer, which narrows §"Known gaps" entry 8 from "every peer that can route to
+the host" to "every holder of the mesh secret". A MARKED asker is still served
+without a roster check: refusing it would stop every file-rostered ring
+replicating on a plaintext mesh, and that is the operator's call. Binds `0.0.0.0`
 by default — set `[daemon] internal_bind` to pin it to a private interface,
 or create the mesh with `require_encryption` to force all traffic onto the
 iroh QUIC transport (which binds the internal router loopback-only). The

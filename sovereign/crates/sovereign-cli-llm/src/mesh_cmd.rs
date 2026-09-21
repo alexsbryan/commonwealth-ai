@@ -3746,13 +3746,14 @@ async fn cmd_fetch_model(args: &[String]) -> i32 {
         // Probe the peer's listing first so we can pick the one
         // that actually advertises `name` before committing to
         // the download.
-        let listing = match sovereign_mesh::model_fetch::list_peer_files(&client, peer_url, None).await {
-            Ok(l) => l,
-            Err(e) => {
-                eprintln!("  ✗ {peer_url}: list failed ({e})");
-                continue;
-            }
-        };
+        let listing =
+            match sovereign_mesh::model_fetch::list_peer_files(&client, peer_url, None).await {
+                Ok(l) => l,
+                Err(e) => {
+                    eprintln!("  ✗ {peer_url}: list failed ({e})");
+                    continue;
+                }
+            };
         let Some(info) = listing.files.into_iter().find(|f| f.name == name) else {
             println!("  · {peer_url}: doesn't have it");
             continue;

@@ -1047,6 +1047,95 @@ mod tests {
         )
     }
 
+    /// `tg-2-strangers-are-refused`, the range warm's half: every range GET
+    /// carries the pair it was handed, and none carries anything when it was
+    /// handed none.
+    ///
+    /// The source is a PEER's `/internal/v1/models/file/*`, so the absent case
+    /// is a 401 on the default `internal_auth` — and an unstamped range warm is
+    /// what this function built before the pair existed.
+    #[tokio::test]
+    async fn every_range_get_carries_the_pair_it_was_given() {
+        let seen: Arc<std::sync::Mutex<Vec<Option<String>>>> = Default::default();
+        let sink = Arc::clone(&seen);
+        let data: Vec<u8> = (0u8..=255).cycle().take(2048).collect();
+        let body = Arc::new(data.clone());
+        let handler = move |headers: axum::http::HeaderMap| {
+            let sink = Arc::clone(&sink);
+            let body = Arc::clone(&body);
+            async move {
+                sink.lock().unwrap().push(
+                    headers
+                        .get("x-mesh-proof")
+                        .and_then(|v| v.to_str().ok())
+                        .map(str::to_string),
+                );
+                let (s, e) = headers
+                    .get(axum::http::header::RANGE)
+                    .and_then(|v| v.to_str().ok())
+                    .and_then(|h| {
+                        let spec = h.trim().strip_prefix("bytes=")?;
+                        let (a, b) = spec.split_once('-')?;
+                        Some((a.parse::<usize>().ok()?, b.parse::<usize>().ok()?))
+                    })
+                    .expect("the warm always sends a range");
+                (
+                    axum::http::StatusCode::PARTIAL_CONTENT,
+                    body[s..=e].to_vec(),
+                )
+            }
+        };
+        let app = Router::new().route("/internal/v1/models/file/m.gguf", get(handler));
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr: SocketAddr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            let _ = axum::serve(listener, app).await;
+        });
+        let url = format!("http://{addr}/internal/v1/models/file/m.gguf");
+
+        let mk = |off: usize, len: usize| {
+            let mut h = Fnv1a::new();
+            h.update(&data[off..off + len]);
+            TensorRange {
+                gguf_offset: off as u64,
+                nbytes: len as u64,
+                hash: h.finish(),
+                file_idx: 0,
+            }
+        };
+        let tensors = vec![mk(0, 64), mk(128, 32)];
+        let http = reqwest::Client::new();
+
+        let stamped = tempfile::tempdir().unwrap();
+        warm_cache_from_ranges(
+            &http,
+            &[url.clone()],
+            &tensors,
+            stamped.path(),
+            &[],
+            Some(("x-mesh-proof", "feed.face")),
+        )
+        .await
+        .expect("stamped warm");
+
+        let bare = tempfile::tempdir().unwrap();
+        warm_cache_from_ranges(&http, &[url], &tensors, bare.path(), &[], None)
+            .await
+            .expect("unstamped warm");
+
+        let seen = seen.lock().unwrap().clone();
+        assert_eq!(
+            seen,
+            vec![
+                Some("feed.face".to_string()),
+                Some("feed.face".to_string()),
+                None,
+                None
+            ],
+            "one entry per tensor per run: both stamped, then both bare"
+        );
+    }
+
     #[tokio::test]
     async fn warm_from_ranges_writes_hash_named_cache_files() {
         // A fake "GGUF": two distinct tensor regions in one buffer.
@@ -1071,9 +1160,10 @@ mod tests {
 
         let cache = tempfile::tempdir().unwrap();
         let http = reqwest::Client::new();
-        let stats = warm_cache_from_ranges(&http, &[url.clone()], &tensors, cache.path(), &[], None)
-            .await
-            .expect("warm");
+        let stats =
+            warm_cache_from_ranges(&http, &[url.clone()], &tensors, cache.path(), &[], None)
+                .await
+                .expect("warm");
         assert_eq!(stats.written, 2);
         assert_eq!(stats.bytes_written, 3000);
 

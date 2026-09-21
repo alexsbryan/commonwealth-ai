@@ -924,3 +924,120 @@ async fn a_member_dialing_a_node_with_no_offer_origin_is_closed_not_misrouted() 
         outcome.map(|r| r.status())
     );
 }
+
+// ---------------------------------------------------------------------------
+// `tg-stranger-refused-9742` clause (b) — the internal ALPN refuses a
+// non-member
+// ---------------------------------------------------------------------------
+//
+// It belongs in THIS file because "who may dial what" is already decided here,
+// one test per ALPN, over a real handshake — and the internal ALPN was the one
+// row with no refusal to name.
+//
+// The edge this closes is NOT the acceptor's. `forward_for`'s internal arm
+// forwards ANY dialer on purpose: a joiner has to reach `/internal/join` before
+// anybody can name it. So the acceptor proves the key and refuses nothing,
+// `internal_principal` turns a key the roster does not name into
+// `Principal::Unverified`, and the refusal is `internal_gate`'s, at the route.
+
+/// A stand-in internal router: one gated route, carrying the same two layers
+/// `server::internal_router` mounts and in the same order — the gate applied
+/// first, so tower runs the resolver OUTERMOST.
+///
+/// `/internal/mesh/quiesce` by name, because the route a caller is refused on
+/// is what the bar names and a made-up path would not be one.
+async fn gated_internal_probe(state: sovereign_daemon::state::AppState) -> std::net::SocketAddr {
+    use axum::routing::get;
+    let served = || async move { "served" };
+    let router = axum::Router::new()
+        .route("/internal/mesh/quiesce", get(served))
+        .layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            sovereign_daemon::internal_gate::internal_gate_layer,
+        ))
+        .layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            sovereign_daemon::internal_principal::internal_principal_layer,
+        ))
+        .with_state(state);
+    spawn_router(router).await
+}
+
+/// A lender whose internal forward is the probe above, and whose roster names
+/// the MEMBER dialer by the key the handshake will prove — so the two dialers
+/// below differ in exactly one thing: whether this roster knows them.
+async fn lender_with_gated_internal() -> (Endpoint, IrohAcceptor) {
+    let state = client_app_state(NodeId::from_u128(0xA11CE), Some(TOKEN), true);
+    common::name_member_with_key(
+        &state,
+        member_identity().node_id,
+        &member_identity().name,
+        member_pubkey().0,
+    )
+    .await;
+    let internal = gated_internal_probe(state.clone()).await;
+
+    let routes = AcceptorRoutes {
+        apps: Default::default(),
+        internal,
+        rpc: None,
+        peer: Some(spawn_router(client_router_for(state.clone(), ClientSurface::Peer)).await),
+        guest: Some(spawn_router(client_router_for(state, ClientSurface::Guest)).await),
+        media: MediaRoute::fixed(None, Vec::new()),
+        offer: Default::default(),
+    };
+    let endpoint = lender_endpoint(vec![ALPN.to_vec()]).await;
+    let check = only_the_member();
+    let acceptor = IrohAcceptor::spawn_admitting_forward(endpoint.clone(), move |alpn, dialer| {
+        let check = check.clone();
+        let routes = routes.clone();
+        async move { routes.forward_for(&alpn, dialer, &check).await }
+    });
+    (endpoint, acceptor)
+}
+
+/// GET the gated route as `seed` over `alpn`, and give back the status the
+/// daemon answered with. The ALPN is an argument so each test below says which
+/// tunnel it dialed.
+async fn quiesce_over(lender: &Endpoint, seed: u8, alpn: &'static [u8]) -> u16 {
+    let dialer = dialer_endpoint(seed).await;
+    let bridge = HttpBridge::spawn(dialer, dialable(lender), alpn)
+        .await
+        .expect("bridge binds");
+    let resp = reqwest::Client::new()
+        .get(format!(
+            "http://{}/internal/mesh/quiesce",
+            bridge.local_addr()
+        ))
+        .timeout(Duration::from_secs(10))
+        .send()
+        .await
+        .expect("the dial is forwarded");
+    let status = resp.status().as_u16();
+    drop(bridge);
+    status
+}
+
+/// THE failing input. A key this roster does not name crosses the internal
+/// tunnel — the acceptor forwards it, because that arm must stay open for
+/// joiners — and the route refuses it 401.
+#[tokio::test]
+async fn a_non_member_key_over_the_internal_alpn_is_refused() {
+    let (lender, _acceptor) = lender_with_gated_internal().await;
+    assert_eq!(
+        quiesce_over(&lender, STRANGER_SEED, ALPN).await,
+        401,
+        "a key the roster does not name resolves Unverified over ALPN, and \
+         Unverified is the arm a decider refuses"
+    );
+}
+
+/// The negative control, and the one that matters most: the SAME tunnel, the
+/// same route, a key the roster DOES name. Without it the refusal above could
+/// be a gate that refuses every iroh caller — which would close the mesh's own
+/// control plane on exactly the encrypted posture the room runs.
+#[tokio::test]
+async fn a_member_key_over_the_internal_alpn_is_served() {
+    let (lender, _acceptor) = lender_with_gated_internal().await;
+    assert_eq!(quiesce_over(&lender, MEMBER_SEED, ALPN).await, 200);
+}

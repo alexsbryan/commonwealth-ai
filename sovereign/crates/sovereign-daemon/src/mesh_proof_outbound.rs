@@ -55,3 +55,74 @@ impl AppState {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::state::AppState;
+    use commonwealth_core::ids::{MeshId, NodeId};
+    use commonwealth_core::mesh::{Mesh, MESH_SECRET_UNSET};
+    use std::collections::HashMap;
+
+    fn state_with(secret: [u8; 32]) -> AppState {
+        AppState::new(
+            NodeId::from_u128(5),
+            Mesh {
+                mesh_secret: secret,
+                invite_expires_at: None,
+                id: MeshId::from_u128(11),
+                name: "Applier Test".into(),
+                invite_key_hash: [0u8; 32],
+                invite_version: 0,
+                require_encryption: false,
+                members: HashMap::new(),
+                peers: vec![],
+            },
+        )
+    }
+
+    /// The request the applier hands back, as a header map. The applier is the
+    /// step every daemon-side builder shares — `auto_ingest`'s three pull-loop
+    /// requests and the rpc-warm orchestrator's POST all go through it — so
+    /// this is where "carries the stamp / carries nothing" is pinned once.
+    async fn headers_of(state: &AppState) -> reqwest::header::HeaderMap {
+        let client = reqwest::Client::new();
+        state
+            .stamped(client.post("http://127.0.0.1:1/internal/corpus/next_unit"))
+            .await
+            .build()
+            .expect("build the request")
+            .headers()
+            .clone()
+    }
+
+    #[tokio::test]
+    async fn a_daemon_holding_the_mesh_secret_stamps_the_request_it_builds() {
+        let state = state_with([3u8; 32]);
+        let headers = headers_of(&state).await;
+        let raw = headers
+            .get("x-mesh-proof")
+            .expect("a member's request carries the proof")
+            .to_str()
+            .unwrap()
+            .to_string();
+        // Verifiable against the same secret, and keyed to the sender it names
+        // — not merely present.
+        let (sender_hex, proof) = raw.split_once('.').expect("<sender>.<proof>");
+        let sender = NodeId::from_hex(sender_hex).expect("full hex");
+        let mesh = state.inner.fabric.mesh.read().await;
+        let now = {
+            use commonwealth_core::Clock;
+            state.clock().now_unix_secs()
+        };
+        assert!(mesh.verify_mesh_proof(proof, sender, now));
+    }
+
+    /// THE failing input for the arm above: no credential, no header. An
+    /// offered-and-failed proof is a refusal at the receiver, so a node with
+    /// nothing to prove must send nothing rather than something.
+    #[tokio::test]
+    async fn a_daemon_with_no_mesh_secret_sends_no_header_at_all() {
+        let state = state_with(MESH_SECRET_UNSET);
+        assert!(headers_of(&state).await.get("x-mesh-proof").is_none());
+    }
+}
