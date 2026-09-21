@@ -53,10 +53,7 @@ fn state() -> AppState {
 }
 
 fn now_secs() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_secs()
+    sovereign_time::unix_now_u64()
 }
 
 /// The header pair a member of this mesh would carry on a plain-IP hop. Minted

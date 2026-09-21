@@ -589,12 +589,13 @@ impl ShardManager {
                         // plan, which does not outlive this function.
                         let proof = mesh_proof.map(|(n, v)| (n.to_string(), v.to_string()));
                         tokio::spawn(async move {
-                            let mut request = reqwest::Client::new()
-                                .post(&evict_url)
-                                .json(&serde_json::json!({
-                                    "corpus_id": corpus,
-                                    "handoff_id": hid,
-                                }));
+                            let mut request =
+                                reqwest::Client::new()
+                                    .post(&evict_url)
+                                    .json(&serde_json::json!({
+                                        "corpus_id": corpus,
+                                        "handoff_id": hid,
+                                    }));
                             if let Some((name, value)) = &proof {
                                 request = request.header(name, value);
                             }
