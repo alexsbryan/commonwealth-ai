@@ -1,0 +1,67 @@
+{
+ "id": "list-igch1668-mints",
+ "igch": 1668,
+ "uri": "http://coinhoards.org/id/igch1668",
+ "findspot": "Egypt",
+ "name": "Egypt",
+ "kind": "mints",
+ "works": {
+  "nnan49322": [
+   "H1"
+  ]
+ },
+ "members": [
+  "Alexandria",
+  "Amathus",
+  "Amphipolis",
+  "Aradus",
+  "Babylon",
+  "Byblus",
+  "Citium",
+  "Lampsacus",
+  "Ptolemais-Ake",
+  "Side",
+  "Sidon"
+ ],
+ "facts": [
+  "Alexandria",
+  "Amathus",
+  "Amphipolis",
+  "Aradus",
+  "Babylon",
+  "Byblus",
+  "Citium",
+  "Lampsacus",
+  "Ptolemais-Ake",
+  "Side",
+  "Sidon"
+ ],
+ "members_in_corpus": [
+  "Alexandria",
+  "Amathus",
+  "Amphipolis",
+  "Aradus",
+  "Babylon",
+  "Byblus",
+  "Citium",
+  "Lampsacus",
+  "Side",
+  "Sidon"
+ ],
+ "members_local": [
+  "Amathus",
+  "Amphipolis",
+  "Lampsacus",
+  "Sidon"
+ ],
+ "hoard_paragraphs": 12,
+ "paragraphs_with_a_member": 4,
+ "cover": 3,
+ "works_naming_hoard": [
+  "nnan174624",
+  "nnan49322",
+  "nnan98007"
+ ],
+ "single_passage": false,
+ "question": "Which mints are represented among the coins of the Egypt hoard, found 1912, buried about 310 B.C.?"
+}

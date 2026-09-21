@@ -1,0 +1,70 @@
+{
+ "id": "list-igch0095-mints",
+ "igch": 95,
+ "uri": "http://coinhoards.org/id/igch0095",
+ "findspot": "Messene",
+ "name": "Messene",
+ "kind": "mints",
+ "works": {
+  "nnan174624": [
+   "H1"
+  ]
+ },
+ "members": [
+  "Alexandria",
+  "Amphipolis",
+  "Aradus",
+  "Babylon",
+  "Byblus",
+  "Myriandrus",
+  "Ptolemais-Ake",
+  "Salamis",
+  "Side",
+  "Sidon",
+  "Susa",
+  "Tarsus"
+ ],
+ "facts": [
+  "Alexandria",
+  "Amphipolis",
+  "Aradus",
+  "Babylon",
+  "Byblus",
+  "Myriandrus",
+  "Ptolemais-Ake",
+  "Salamis",
+  "Side",
+  "Sidon",
+  "Susa",
+  "Tarsus"
+ ],
+ "members_in_corpus": [
+  "Alexandria",
+  "Amphipolis",
+  "Aradus",
+  "Babylon",
+  "Byblus",
+  "Myriandrus",
+  "Salamis",
+  "Side",
+  "Sidon",
+  "Susa",
+  "Tarsus"
+ ],
+ "members_local": [
+  "Amphipolis",
+  "Babylon",
+  "Byblus",
+  "Side"
+ ],
+ "hoard_paragraphs": 5,
+ "paragraphs_with_a_member": 3,
+ "cover": 2,
+ "works_naming_hoard": [
+  "nnan174624",
+  "nnan40403",
+  "nnan73727"
+ ],
+ "single_passage": false,
+ "question": "Which mints are represented among the coins of the Messene hoard, found before 1922?"
+}

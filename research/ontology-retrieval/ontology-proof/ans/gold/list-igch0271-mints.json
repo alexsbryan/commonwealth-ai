@@ -1,0 +1,74 @@
+{
+ "id": "list-igch0271-mints",
+ "igch": 271,
+ "uri": "http://coinhoards.org/id/igch0271",
+ "findspot": "Agrinion, Aetolia",
+ "name": "Agrinion",
+ "kind": "mints",
+ "works": {
+  "nnan73727": [
+   "H2"
+  ]
+ },
+ "members": [
+  "Aenianes",
+  "Argos",
+  "Athens",
+  "Chalcis",
+  "Cyme",
+  "Histiaea",
+  "Lamia",
+  "Megalopolis",
+  "Messene",
+  "Oeta",
+  "Sicyon"
+ ],
+ "facts": [
+  "Aenianes",
+  "Argos",
+  "Athens",
+  "Chalcis",
+  "Cyme",
+  "Histiaea",
+  "Lamia",
+  "Megalopolis",
+  "Messene",
+  "Oeta",
+  "Sicyon"
+ ],
+ "members_in_corpus": [
+  "Aenianes",
+  "Argos",
+  "Athens",
+  "Chalcis",
+  "Cyme",
+  "Histiaea",
+  "Lamia",
+  "Megalopolis",
+  "Messene",
+  "Oeta",
+  "Sicyon"
+ ],
+ "members_local": [
+  "Aenianes",
+  "Argos",
+  "Athens",
+  "Chalcis",
+  "Cyme",
+  "Histiaea",
+  "Lamia",
+  "Megalopolis",
+  "Messene",
+  "Oeta",
+  "Sicyon"
+ ],
+ "hoard_paragraphs": 2170,
+ "paragraphs_with_a_member": 110,
+ "cover": 2,
+ "works_naming_hoard": [
+  "nnan51012",
+  "nnan73727"
+ ],
+ "single_passage": false,
+ "question": "Which mints are represented among the coins of the Agrinion hoard, found 1959?"
+}

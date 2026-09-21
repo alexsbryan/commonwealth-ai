@@ -1,0 +1,68 @@
+{
+ "id": "list-igch0081-mints",
+ "igch": 81,
+ "uri": "http://coinhoards.org/id/igch0081",
+ "findspot": "Greece, central",
+ "name": "Greece",
+ "kind": "mints",
+ "works": {
+  "nnan174624": [
+   "H1"
+  ]
+ },
+ "members": [
+  "Amphipolis",
+  "Aradus",
+  "Athens",
+  "Babylon",
+  "Citium",
+  "Pella",
+  "Sicyon",
+  "Side"
+ ],
+ "facts": [
+  "Amphipolis",
+  "Aradus",
+  "Athens",
+  "Babylon",
+  "Citium",
+  "Pella",
+  "Sicyon",
+  "Side"
+ ],
+ "members_in_corpus": [
+  "Amphipolis",
+  "Aradus",
+  "Athens",
+  "Babylon",
+  "Citium",
+  "Pella",
+  "Sicyon",
+  "Side"
+ ],
+ "members_local": [
+  "Amphipolis",
+  "Athens",
+  "Babylon",
+  "Pella",
+  "Sicyon",
+  "Side"
+ ],
+ "hoard_paragraphs": 30,
+ "paragraphs_with_a_member": 9,
+ "cover": 4,
+ "works_naming_hoard": [
+  "nnan131509",
+  "nnan174624",
+  "nnan23257",
+  "nnan28180",
+  "nnan49321",
+  "nnan51012",
+  "nnan73727",
+  "nnan818",
+  "nnan96021",
+  "nnan98007"
+ ],
+ "single_passage": false,
+ "question": "Which mints are represented among the coins of the Greece hoard, found 1911, buried about 319 B.C.?"
+}

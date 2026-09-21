@@ -1,0 +1,105 @@
+{
+ "id": "list-igch1678-mints",
+ "igch": 1678,
+ "uri": "http://coinhoards.org/id/igch1678",
+ "findspot": "Phacous (= Fâqus), 30 km. NE of Zagazig",
+ "name": "Phacous",
+ "kind": "mints",
+ "works": {
+  "nnan174624": [
+   "H1"
+  ],
+  "nnan49321": [
+   "H1"
+  ],
+  "nnan49322": [
+   "H1"
+  ]
+ },
+ "members": [
+  "Alexandria",
+  "Amathus",
+  "Amphipolis",
+  "Aradus",
+  "Babylon",
+  "Byblus",
+  "Citium",
+  "Damascus",
+  "Lampsacus",
+  "Marathus",
+  "Miletus",
+  "Myriandrus",
+  "Pella",
+  "Ptolemais-Ake",
+  "Salamis",
+  "Sardis",
+  "Side",
+  "Sidon",
+  "Susa",
+  "Tarsus"
+ ],
+ "facts": [
+  "Alexandria",
+  "Amathus",
+  "Amphipolis",
+  "Aradus",
+  "Babylon",
+  "Byblus",
+  "Citium",
+  "Damascus",
+  "Lampsacus",
+  "Marathus",
+  "Miletus",
+  "Myriandrus",
+  "Pella",
+  "Ptolemais-Ake",
+  "Salamis",
+  "Sardis",
+  "Side",
+  "Sidon",
+  "Susa",
+  "Tarsus"
+ ],
+ "members_in_corpus": [
+  "Alexandria",
+  "Amathus",
+  "Amphipolis",
+  "Aradus",
+  "Babylon",
+  "Byblus",
+  "Citium",
+  "Damascus",
+  "Lampsacus",
+  "Marathus",
+  "Miletus",
+  "Myriandrus",
+  "Pella",
+  "Salamis",
+  "Sardis",
+  "Side",
+  "Sidon",
+  "Susa",
+  "Tarsus"
+ ],
+ "members_local": [
+  "Amphipolis",
+  "Babylon",
+  "Byblus",
+  "Lampsacus",
+  "Miletus",
+  "Salamis",
+  "Sidon",
+  "Tarsus"
+ ],
+ "hoard_paragraphs": 30,
+ "paragraphs_with_a_member": 8,
+ "cover": 4,
+ "works_naming_hoard": [
+  "nnan174624",
+  "nnan23257",
+  "nnan49321",
+  "nnan49322"
+ ],
+ "single_passage": false,
+ "question": "Which mints are represented among the coins of the Phacous hoard, found 1956, buried about 283 B.C.?"
+}

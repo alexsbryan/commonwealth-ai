@@ -1,0 +1,82 @@
+{
+ "id": "list-igch1669-mints",
+ "igch": 1669,
+ "uri": "http://coinhoards.org/id/igch1669",
+ "findspot": "Egypt",
+ "name": "Egypt",
+ "kind": "mints",
+ "works": {
+  "nnan174624": [
+   "H1"
+  ],
+  "nnan49321": [
+   "H1"
+  ],
+  "nnan49322": [
+   "H1"
+  ]
+ },
+ "members": [
+  "Alexandria",
+  "Amphipolis",
+  "Babylon",
+  "Citium",
+  "Lampsacus",
+  "Marathus",
+  "Myriandrus",
+  "Salamis",
+  "Sardis",
+  "Side",
+  "Sidon",
+  "Susa",
+  "Tarsus"
+ ],
+ "facts": [
+  "Alexandria",
+  "Amphipolis",
+  "Babylon",
+  "Citium",
+  "Lampsacus",
+  "Marathus",
+  "Myriandrus",
+  "Salamis",
+  "Sardis",
+  "Side",
+  "Sidon",
+  "Susa",
+  "Tarsus"
+ ],
+ "members_in_corpus": [
+  "Alexandria",
+  "Amphipolis",
+  "Babylon",
+  "Citium",
+  "Lampsacus",
+  "Marathus",
+  "Myriandrus",
+  "Salamis",
+  "Sardis",
+  "Side",
+  "Sidon",
+  "Susa",
+  "Tarsus"
+ ],
+ "members_local": [
+  "Amphipolis",
+  "Babylon",
+  "Lampsacus",
+  "Sidon",
+  "Susa"
+ ],
+ "hoard_paragraphs": 17,
+ "paragraphs_with_a_member": 8,
+ "cover": 4,
+ "works_naming_hoard": [
+  "nnan174624",
+  "nnan49321",
+  "nnan49322",
+  "nnan98007"
+ ],
+ "single_passage": false,
+ "question": "Which mints are represented among the coins of the Egypt hoard, found 1894, buried about 310 B.C.?"
+}

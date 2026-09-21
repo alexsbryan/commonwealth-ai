@@ -1,0 +1,54 @@
+{
+ "id": "list-igch0091-mints",
+ "igch": 91,
+ "uri": "http://coinhoards.org/id/igch0091",
+ "findspot": "Siphnos",
+ "name": "Siphnos",
+ "kind": "mints",
+ "works": {
+  "nnan49321": [
+   "H1"
+  ],
+  "nnan50879": [
+   "H2"
+  ]
+ },
+ "members": [
+  "Athens",
+  "Miletus",
+  "Rhodes",
+  "Siphnos"
+ ],
+ "facts": [
+  "Athens",
+  "Miletus",
+  "Rhodes",
+  "Siphnos"
+ ],
+ "members_in_corpus": [
+  "Athens",
+  "Miletus",
+  "Rhodes",
+  "Siphnos"
+ ],
+ "members_local": [
+  "Athens",
+  "Miletus",
+  "Rhodes",
+  "Siphnos"
+ ],
+ "hoard_paragraphs": 173,
+ "paragraphs_with_a_member": 29,
+ "cover": 2,
+ "works_naming_hoard": [
+  "nnan23257",
+  "nnan40931",
+  "nnan49321",
+  "nnan50879",
+  "nnan96021",
+  "nnan97809",
+  "nnan97810"
+ ],
+ "single_passage": false,
+ "question": "Which mints are represented among the coins of the Siphnos hoard, found 1930?"
+}

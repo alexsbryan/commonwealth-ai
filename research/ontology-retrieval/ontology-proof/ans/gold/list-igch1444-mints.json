@@ -1,0 +1,58 @@
+{
+ "id": "list-igch1444-mints",
+ "igch": 1444,
+ "uri": "http://coinhoards.org/id/igch1444",
+ "findspot": "Asia Minor",
+ "name": "Asia Minor",
+ "kind": "mints",
+ "works": {
+  "nnan49321": [
+   "H1"
+  ],
+  "nnan49322": [
+   "H1"
+  ]
+ },
+ "members": [
+  "Abydus",
+  "Cius",
+  "Colophon",
+  "Magnesia ad Maeandrum",
+  "Teos"
+ ],
+ "facts": [
+  "Abydus",
+  "Cius",
+  "Colophon",
+  "Magnesia ad Maeandrum",
+  "Teos"
+ ],
+ "members_in_corpus": [
+  "Abydus",
+  "Cius",
+  "Colophon",
+  "Magnesia ad Maeandrum",
+  "Teos"
+ ],
+ "members_local": [
+  "Abydus",
+  "Cius",
+  "Colophon",
+  "Teos"
+ ],
+ "hoard_paragraphs": 136,
+ "paragraphs_with_a_member": 9,
+ "cover": 1,
+ "works_naming_hoard": [
+  "nnan131509",
+  "nnan174624",
+  "nnan23257",
+  "nnan28180",
+  "nnan49321",
+  "nnan49322",
+  "nnan50879",
+  "nnan98007"
+ ],
+ "single_passage": true,
+ "question": "Which mints are represented among the coins of the Asia Minor hoard, found 1961, buried about 300 B.C.?"
+}

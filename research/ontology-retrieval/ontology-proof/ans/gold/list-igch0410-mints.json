@@ -1,0 +1,77 @@
+{
+ "id": "list-igch0410-mints",
+ "igch": 410,
+ "uri": "http://coinhoards.org/id/igch0410",
+ "findspot": "Paeonia",
+ "name": "Paeonia",
+ "kind": "mints",
+ "works": {
+  "nnan174624": [
+   "H1"
+  ],
+  "nnan49321": [
+   "H1"
+  ],
+  "nnan49322": [
+   "H1"
+  ]
+ },
+ "members": [
+  "Abydus",
+  "Amphipolis",
+  "Babylon",
+  "Lampsacus",
+  "Magnesia ad Maeandrum",
+  "Miletus",
+  "Ptolemais-Ake",
+  "Sardis",
+  "Sicyon",
+  "Side",
+  "Sidon"
+ ],
+ "facts": [
+  "Abydus",
+  "Amphipolis",
+  "Babylon",
+  "Lampsacus",
+  "Magnesia ad Maeandrum",
+  "Miletus",
+  "Ptolemais-Ake",
+  "Sardis",
+  "Sicyon",
+  "Side",
+  "Sidon"
+ ],
+ "members_in_corpus": [
+  "Abydus",
+  "Amphipolis",
+  "Babylon",
+  "Lampsacus",
+  "Magnesia ad Maeandrum",
+  "Miletus",
+  "Sardis",
+  "Sicyon",
+  "Side",
+  "Sidon"
+ ],
+ "members_local": [
+  "Abydus",
+  "Amphipolis",
+  "Babylon",
+  "Lampsacus",
+  "Miletus",
+  "Sicyon",
+  "Side",
+  "Sidon"
+ ],
+ "hoard_paragraphs": 59,
+ "paragraphs_with_a_member": 15,
+ "cover": 5,
+ "works_naming_hoard": [
+  "nnan174624",
+  "nnan49321",
+  "nnan49322"
+ ],
+ "single_passage": false,
+ "question": "Which mints are represented among the coins of the Paeonia hoard, found 1968?"
+}

@@ -1,0 +1,1122 @@
+{
+ "http://nomisma.org/id/2-shekel": {
+  "label": "Double shekel",
+  "source": "nomisma",
+  "nuds_inline": "Double shekel"
+ },
+ "http://nomisma.org/id/abdashtart_ii_sidon": {
+  "label": "Abdashtart II, King of Sidon",
+  "source": "nomisma",
+  "nuds_inline": "Abdashtart II, King of Sidon"
+ },
+ "http://nomisma.org/id/abydus": {
+  "label": "Abydus",
+  "source": "nomisma",
+  "nuds_inline": "Abydus"
+ },
+ "http://nomisma.org/id/ace_ptolemais": {
+  "label": "Ptolemais-Ake",
+  "source": "nomisma",
+  "nuds_inline": "Ptolemais-Ake"
+ },
+ "http://nomisma.org/id/achaean_league": {
+  "label": "Achaean League",
+  "source": "nomisma",
+  "nuds_inline": "Achaean League"
+ },
+ "http://nomisma.org/id/ae": {
+  "label": "Bronze",
+  "source": "nomisma",
+  "nuds_inline": "Bronze"
+ },
+ "http://nomisma.org/id/aegina": {
+  "label": "Aegina",
+  "source": "nomisma",
+  "nuds_inline": "Aegina"
+ },
+ "http://nomisma.org/id/aegina_aegina": {
+  "label": "Aegina",
+  "source": "nomisma",
+  "nuds_inline": "Aegina"
+ },
+ "http://nomisma.org/id/aenianes": {
+  "label": "Aenianes",
+  "source": "nomisma",
+  "nuds_inline": "Aenianes"
+ },
+ "http://nomisma.org/id/aenus": {
+  "label": "Aenus",
+  "source": "nomisma",
+  "nuds_inline": "Aenus"
+ },
+ "http://nomisma.org/id/aetolia": {
+  "label": "Aetolia",
+  "source": "nomisma",
+  "nuds_inline": "Aetolia"
+ },
+ "http://nomisma.org/id/aetolian_league": {
+  "label": "Aetolian League",
+  "source": "nomisma",
+  "nuds_inline": "Aetolian League"
+ },
+ "http://nomisma.org/id/alabanda": {
+  "label": "Alabanda",
+  "source": "nomisma",
+  "nuds_inline": "Alabanda"
+ },
+ "http://nomisma.org/id/alexander_i_balas": {
+  "label": "Alexander I Balas",
+  "source": "nomisma",
+  "nuds_inline": "Alexander I Balas"
+ },
+ "http://nomisma.org/id/alexander_iii": {
+  "label": "Alexander III of Macedon",
+  "source": "nomisma",
+  "nuds_inline": "Alexander III of Macedon"
+ },
+ "http://nomisma.org/id/alexandreia_egypt": {
+  "label": "Alexandria",
+  "source": "nomisma",
+  "nuds_inline": "Alexandria"
+ },
+ "http://nomisma.org/id/alexandreia_troas": {
+  "label": "Alexandreia Troas",
+  "source": "nomisma",
+  "nuds_inline": "Alexandreia Troas"
+ },
+ "http://nomisma.org/id/amathus": {
+  "label": "Amathus",
+  "source": "nomisma",
+  "nuds_inline": "Amathus"
+ },
+ "http://nomisma.org/id/amphipolis": {
+  "label": "Amphipolis",
+  "source": "nomisma",
+  "nuds_inline": "Amphipolis"
+ },
+ "http://nomisma.org/id/andros": {
+  "label": "Andros",
+  "source": "nomisma",
+  "nuds_inline": "Andros"
+ },
+ "http://nomisma.org/id/antigonus_ii": {
+  "label": "Antigonus II Gonatas",
+  "source": "nomisma",
+  "nuds_inline": "Antigonus II Gonatas"
+ },
+ "http://nomisma.org/id/antigonus_iii": {
+  "label": "Antigonus III Doson",
+  "source": "nomisma",
+  "nuds_inline": "Antigonus III Doson"
+ },
+ "http://nomisma.org/id/antiocheia_syria": {
+  "label": "Antioch, Syria",
+  "source": "nomisma",
+  "nuds_inline": "Antioch"
+ },
+ "http://nomisma.org/id/antiochus_hierax": {
+  "label": "Antiochus Hierax",
+  "source": "nomisma",
+  "nuds_inline": "Antiochus Hierax"
+ },
+ "http://nomisma.org/id/antiochus_i": {
+  "label": "Antiochus I Soter",
+  "source": "nomisma",
+  "nuds_inline": "Antiochus I Soter"
+ },
+ "http://nomisma.org/id/antiochus_ii": {
+  "label": "Antiochus II Theos",
+  "source": "nomisma",
+  "nuds_inline": "Antiochus II Theos"
+ },
+ "http://nomisma.org/id/antiochus_iii": {
+  "label": "Antiochus III the Great",
+  "source": "nomisma",
+  "nuds_inline": "Antiochus III the Great"
+ },
+ "http://nomisma.org/id/apameia_syria": {
+  "label": "Apameia in Syria",
+  "source": "nomisma",
+  "nuds_inline": "Apameia"
+ },
+ "http://nomisma.org/id/ar": {
+  "label": "Silver",
+  "source": "nomisma",
+  "nuds_inline": "Silver"
+ },
+ "http://nomisma.org/id/aradus": {
+  "label": "Aradus",
+  "source": "nomisma",
+  "nuds_inline": "Aradus"
+ },
+ "http://nomisma.org/id/arcadia": {
+  "label": "Arcadia",
+  "source": "nomisma",
+  "nuds_inline": "Arcadia"
+ },
+ "http://nomisma.org/id/argos_argolis": {
+  "label": "Argos",
+  "source": "nomisma",
+  "nuds_inline": "Argos"
+ },
+ "http://nomisma.org/id/asia_minor": {
+  "label": "Asia Minor",
+  "source": "nomisma",
+  "nuds_inline": "Asia Minor"
+ },
+ "http://nomisma.org/id/athens": {
+  "label": "Athens",
+  "source": "nomisma",
+  "nuds_inline": "Athens"
+ },
+ "http://nomisma.org/id/athens_city": {
+  "label": "Athens",
+  "source": "nomisma",
+  "nuds_inline": "Athens"
+ },
+ "http://nomisma.org/id/attalid_dynasty": {
+  "label": "Attalid Dynasty",
+  "source": "nomisma",
+  "nuds_inline": "Attalid Dynasty"
+ },
+ "http://nomisma.org/id/attalus_i": {
+  "label": "Attalus I",
+  "source": "nomisma",
+  "nuds_inline": "Attalus I"
+ },
+ "http://nomisma.org/id/audoleon_paeonia": {
+  "label": "Audoleon of Paeonia",
+  "source": "nomisma",
+  "nuds_inline": "Audoleon of Paeonia"
+ },
+ "http://nomisma.org/id/av": {
+  "label": "Gold",
+  "source": "nomisma",
+  "nuds_inline": "Gold"
+ },
+ "http://nomisma.org/id/babylon": {
+  "label": "Babylon",
+  "source": "nomisma",
+  "nuds_inline": "Babylon"
+ },
+ "http://nomisma.org/id/berenice_ii": {
+  "label": "Berenice II Euergetis",
+  "source": "nomisma",
+  "nuds_inline": "Berenice II Euergetis"
+ },
+ "http://nomisma.org/id/berytus": {
+  "label": "Berytus",
+  "source": "nomisma",
+  "nuds_inline": "Berytus"
+ },
+ "http://nomisma.org/id/bishapur": {
+  "label": "Bishapur",
+  "source": "nomisma",
+  "nuds_inline": "Bishapur"
+ },
+ "http://nomisma.org/id/boeotia": {
+  "label": "Boeotia",
+  "source": "nomisma",
+  "nuds_inline": "Boeotia"
+ },
+ "http://nomisma.org/id/byblus": {
+  "label": "Byblus",
+  "source": "nomisma",
+  "nuds_inline": "Byblus"
+ },
+ "http://nomisma.org/id/byzantium": {
+  "label": "Byzantium",
+  "source": "nomisma",
+  "nuds_inline": "Byzantium"
+ },
+ "http://nomisma.org/id/calchedon": {
+  "label": "Calchedon",
+  "source": "nomisma",
+  "nuds_inline": "Calchedon"
+ },
+ "http://nomisma.org/id/callatis": {
+  "label": "Callatis",
+  "source": "nomisma",
+  "nuds_inline": "Callatis"
+ },
+ "http://nomisma.org/id/caria": {
+  "label": "Caria",
+  "source": "nomisma",
+  "nuds_inline": "Caria"
+ },
+ "http://nomisma.org/id/carne": {
+  "label": "Carne",
+  "source": "nomisma",
+  "nuds_inline": "Carne"
+ },
+ "http://nomisma.org/id/carrhae": {
+  "label": "Carrhae",
+  "source": "nomisma",
+  "nuds_inline": "Carrhae"
+ },
+ "http://nomisma.org/id/carystus": {
+  "label": "Carystus",
+  "source": "nomisma",
+  "nuds_inline": "Carystus"
+ },
+ "http://nomisma.org/id/caunus": {
+  "label": "Caunus",
+  "source": "nomisma",
+  "nuds_inline": "Caunus"
+ },
+ "http://nomisma.org/id/chalcis": {
+  "label": "Chalcis",
+  "source": "nomisma",
+  "nuds_inline": "Chalcis"
+ },
+ "http://nomisma.org/id/chalkous": {
+  "label": "Chalkous",
+  "source": "nomisma",
+  "nuds_inline": "Chalkous"
+ },
+ "http://nomisma.org/id/charax_spasinou": {
+  "label": "Charax Spasinou",
+  "source": "nomisma",
+  "nuds_inline": "Charax Spasinou"
+ },
+ "http://nomisma.org/id/chios": {
+  "label": "Chios",
+  "source": "nomisma",
+  "nuds_inline": "Chios"
+ },
+ "http://nomisma.org/id/cilicia": {
+  "label": "Cilicia",
+  "source": "nomisma",
+  "nuds_inline": "Cilicia"
+ },
+ "http://nomisma.org/id/citium": {
+  "label": "Citium",
+  "source": "nomisma",
+  "nuds_inline": "Citium"
+ },
+ "http://nomisma.org/id/cius": {
+  "label": "Cius",
+  "source": "nomisma",
+  "nuds_inline": "Cius"
+ },
+ "http://nomisma.org/id/classical_greece": {
+  "label": "Classical Greece",
+  "source": "nomisma",
+  "nuds_inline": "Classical Greece"
+ },
+ "http://nomisma.org/id/clazomenae": {
+  "label": "Clazomenae",
+  "source": "nomisma",
+  "nuds_inline": "Clazomenae"
+ },
+ "http://nomisma.org/id/cleonae": {
+  "label": "Cleonae",
+  "source": "nomisma",
+  "nuds_inline": "Cleonae"
+ },
+ "http://nomisma.org/id/colophon": {
+  "label": "Colophon",
+  "source": "nomisma",
+  "nuds_inline": "Colophon"
+ },
+ "http://nomisma.org/id/corinth": {
+  "label": "Corinth",
+  "source": "nomisma",
+  "nuds_inline": "Corinth"
+ },
+ "http://nomisma.org/id/cyme_aeolis": {
+  "label": "Cyme",
+  "source": "nomisma",
+  "nuds_inline": "Cyme"
+ },
+ "http://nomisma.org/id/cyprus": {
+  "label": "Cyprus",
+  "source": "nomisma",
+  "nuds_inline": "Cyprus"
+ },
+ "http://nomisma.org/id/cyrene": {
+  "label": "Cyrene",
+  "source": "nomisma",
+  "nuds_inline": "Cyrene"
+ },
+ "http://nomisma.org/id/cyzicus": {
+  "label": "Cyzicus",
+  "source": "nomisma",
+  "nuds_inline": "Cyzicus"
+ },
+ "http://nomisma.org/id/damascus": {
+  "label": "Damascus",
+  "source": "nomisma",
+  "nuds_inline": "Damascus"
+ },
+ "http://nomisma.org/id/damastium": {
+  "label": "Damastium",
+  "source": "nomisma",
+  "nuds_inline": "Damastium"
+ },
+ "http://nomisma.org/id/demetrius_i": {
+  "label": "Demetrius I Poliorcetes",
+  "source": "nomisma",
+  "nuds_inline": "Demetrius I Poliorcetes"
+ },
+ "http://nomisma.org/id/demetrius_i_soter": {
+  "label": "Demetrius I Soter",
+  "source": "nomisma",
+  "nuds_inline": "Demetrius I Soter"
+ },
+ "http://nomisma.org/id/demetrius_ii_nicator": {
+  "label": "Demetrius II Nicator",
+  "source": "nomisma",
+  "nuds_inline": "Demetrius II Nicator"
+ },
+ "http://nomisma.org/id/denarius": {
+  "label": "Denarius",
+  "source": "nomisma",
+  "nuds_inline": "Denarius"
+ },
+ "http://nomisma.org/id/didrachm": {
+  "label": "Didrachm",
+  "source": "nomisma",
+  "nuds_inline": "Didrachm"
+ },
+ "http://nomisma.org/id/dilepton": {
+  "label": "Dilepton",
+  "source": "nomisma",
+  "nuds_inline": "Dilepton"
+ },
+ "http://nomisma.org/id/distater": {
+  "label": "Distater",
+  "source": "nomisma",
+  "nuds_inline": "Distater"
+ },
+ "http://nomisma.org/id/dodekadrachm": {
+  "label": "Dodekadrachm",
+  "source": "nomisma",
+  "nuds_inline": "Dodekadrachm"
+ },
+ "http://nomisma.org/id/drachma": {
+  "label": "Drachma",
+  "source": "nomisma",
+  "nuds_inline": "Drachma"
+ },
+ "http://nomisma.org/id/dyrrhachium": {
+  "label": "Dyrrhachium",
+  "source": "nomisma",
+  "nuds_inline": "Dyrrhachium"
+ },
+ "http://nomisma.org/id/ecbatana": {
+  "label": "Ecbatana",
+  "source": "nomisma",
+  "nuds_inline": "Ecbatana"
+ },
+ "http://nomisma.org/id/elis": {
+  "label": "Elis",
+  "source": "nomisma",
+  "nuds_inline": "Elis"
+ },
+ "http://nomisma.org/id/ephesus": {
+  "label": "Ephesus",
+  "source": "nomisma",
+  "nuds_inline": "Ephesus"
+ },
+ "http://nomisma.org/id/epidaurus": {
+  "label": "Epidaurus",
+  "source": "nomisma",
+  "nuds_inline": "Epidaurus"
+ },
+ "http://nomisma.org/id/epirus": {
+  "label": "Epirus",
+  "source": "nomisma",
+  "nuds_inline": "Epirus"
+ },
+ "http://nomisma.org/id/eretria": {
+  "label": "Eretria",
+  "source": "nomisma",
+  "nuds_inline": "Eretria"
+ },
+ "http://nomisma.org/id/euagoras_ii_salamis": {
+  "label": "Euagoras II of Salamis",
+  "source": "nomisma",
+  "nuds_inline": "Euagoras II of Salamis"
+ },
+ "http://nomisma.org/id/euboea": {
+  "label": "Euboea",
+  "source": "nomisma",
+  "nuds_inline": "Euboea"
+ },
+ "http://nomisma.org/id/euboean_league": {
+  "label": "Euboean League",
+  "source": "nomisma",
+  "nuds_inline": "Euboean League"
+ },
+ "http://nomisma.org/id/eumenes_i_pergamum": {
+  "label": "Eumenes I of Pergamum",
+  "source": "nomisma",
+  "nuds_inline": "Eumenes I of Pergamum"
+ },
+ "http://nomisma.org/id/euxine_region": {
+  "label": "Euxine",
+  "source": "nomisma",
+  "nuds_inline": "Euxine"
+ },
+ "http://nomisma.org/id/fraction": {
+  "label": "Fraction",
+  "source": "nomisma",
+  "nuds_inline": "Fraction"
+ },
+ "http://nomisma.org/id/gaza": {
+  "label": "Gaza",
+  "source": "nomisma",
+  "nuds_inline": "Gaza"
+ },
+ "http://nomisma.org/id/greece": {
+  "label": "Greece",
+  "source": "nomisma",
+  "nuds_inline": "Greece"
+ },
+ "http://nomisma.org/id/greek_syria": {
+  "label": "Syria",
+  "source": "nomisma",
+  "nuds_inline": "Syria"
+ },
+ "http://nomisma.org/id/half-stater": {
+  "label": "Half-stater",
+  "source": "nomisma",
+  "nuds_inline": "Half-stater"
+ },
+ "http://nomisma.org/id/half-victoriatus": {
+  "label": "Half victoriatus",
+  "source": "nomisma",
+  "nuds_inline": "Half victoriatus"
+ },
+ "http://nomisma.org/id/haliartus": {
+  "label": "Haliartus",
+  "source": "nomisma",
+  "nuds_inline": "Haliartus"
+ },
+ "http://nomisma.org/id/hellenistic_greece": {
+  "label": "Hellenistic Period",
+  "source": "nomisma",
+  "nuds_inline": "Hellenistic Period"
+ },
+ "http://nomisma.org/id/hemidrachm": {
+  "label": "Hemidrachm",
+  "source": "nomisma",
+  "nuds_inline": "Hemidrachm"
+ },
+ "http://nomisma.org/id/hemiobol": {
+  "label": "Hemiobol",
+  "source": "nomisma",
+  "nuds_inline": "Hemiobol"
+ },
+ "http://nomisma.org/id/heraclea_ad_latmum": {
+  "label": "Herakleia ad Latmum",
+  "source": "nomisma",
+  "nuds_inline": "Herakleia ad Latmum"
+ },
+ "http://nomisma.org/id/heracleia_pontica": {
+  "label": "Heracleia Pontica",
+  "source": "nomisma",
+  "nuds_inline": "Heracleia Pontica"
+ },
+ "http://nomisma.org/id/hermione": {
+  "label": "Hermione",
+  "source": "nomisma",
+  "nuds_inline": "Hermione"
+ },
+ "http://nomisma.org/id/hierapolis_bambyce": {
+  "label": "Hierapolis Bambyce",
+  "source": "nomisma",
+  "nuds_inline": "Hierapolis Bambyce"
+ },
+ "http://nomisma.org/id/histiaea": {
+  "label": "Histiaea",
+  "source": "nomisma",
+  "nuds_inline": "Histiaea"
+ },
+ "http://nomisma.org/id/idalium": {
+  "label": "Idalium",
+  "source": "nomisma",
+  "nuds_inline": "Idalium"
+ },
+ "http://nomisma.org/id/istrus": {
+  "label": "Istrus",
+  "source": "nomisma",
+  "nuds_inline": "Istrus"
+ },
+ "http://nomisma.org/id/lacedaemon": {
+  "label": "Lacedaemon",
+  "source": "nomisma",
+  "nuds_inline": "Lacedaemon"
+ },
+ "http://nomisma.org/id/lachares": {
+  "label": "Lachares",
+  "source": "nomisma",
+  "nuds_inline": "Lachares"
+ },
+ "http://nomisma.org/id/lamia": {
+  "label": "Lamia",
+  "source": "nomisma",
+  "nuds_inline": "Lamia"
+ },
+ "http://nomisma.org/id/lampsacus": {
+  "label": "Lampsacus",
+  "source": "nomisma",
+  "nuds_inline": "Lampsacus"
+ },
+ "http://nomisma.org/id/laodiceia_ad_mare": {
+  "label": "Laodicea ad Mare",
+  "source": "nomisma",
+  "nuds_inline": "Laodicea ad Mare"
+ },
+ "http://nomisma.org/id/lapethus": {
+  "label": "Lapethus",
+  "source": "nomisma",
+  "nuds_inline": "Lapethus"
+ },
+ "http://nomisma.org/id/larissa_thessaly": {
+  "label": "Larissa, Thessaly",
+  "source": "nomisma",
+  "nuds_inline": "Larissa"
+ },
+ "http://nomisma.org/id/lebedus": {
+  "label": "Lebedus",
+  "source": "nomisma",
+  "nuds_inline": "Lebedus"
+ },
+ "http://nomisma.org/id/locri_opuntii": {
+  "label": "Locri Opuntii (Opus)",
+  "source": "nomisma",
+  "nuds_inline": "Locri Opuntii (Opus)"
+ },
+ "http://nomisma.org/id/locris": {
+  "label": "Locris",
+  "source": "nomisma",
+  "nuds_inline": "Locris"
+ },
+ "http://nomisma.org/id/lycceius_paeonia": {
+  "label": "Lycceius of Paeonia",
+  "source": "nomisma",
+  "nuds_inline": "Lycceius of Paeonia"
+ },
+ "http://nomisma.org/id/lycia": {
+  "label": "Lycia",
+  "source": "nomisma",
+  "nuds_inline": "Lycia"
+ },
+ "http://nomisma.org/id/lysimachia": {
+  "label": "Lysimachia",
+  "source": "nomisma",
+  "nuds_inline": "Lysimachia"
+ },
+ "http://nomisma.org/id/lysimachus": {
+  "label": "Lysimachus",
+  "source": "nomisma",
+  "nuds_inline": "Lysimachus"
+ },
+ "http://nomisma.org/id/lyttus": {
+  "label": "Lyttus",
+  "source": "nomisma",
+  "nuds_inline": "Lyttus"
+ },
+ "http://nomisma.org/id/macedon": {
+  "label": "Macedon",
+  "source": "nomisma",
+  "nuds_inline": "Macedon"
+ },
+ "http://nomisma.org/id/magnesia_ad_maeandrum": {
+  "label": "Magnesia ad Maeandrum",
+  "source": "nomisma",
+  "nuds_inline": "Magnesia ad Maeandrum"
+ },
+ "http://nomisma.org/id/marathus": {
+  "label": "Marathus",
+  "source": "nomisma",
+  "nuds_inline": "Marathus"
+ },
+ "http://nomisma.org/id/marium": {
+  "label": "Marium",
+  "source": "nomisma",
+  "nuds_inline": "Marium"
+ },
+ "http://nomisma.org/id/mazaeus_satrap": {
+  "label": "Mazaeus",
+  "source": "nomisma",
+  "nuds_inline": "Mazaeus"
+ },
+ "http://nomisma.org/id/megalopolis": {
+  "label": "Megalopolis",
+  "source": "nomisma",
+  "nuds_inline": "Megalopolis"
+ },
+ "http://nomisma.org/id/megara": {
+  "label": "Megara",
+  "source": "nomisma",
+  "nuds_inline": "Megara"
+ },
+ "http://nomisma.org/id/mesembria": {
+  "label": "Mesembria",
+  "source": "nomisma",
+  "nuds_inline": "Mesembria"
+ },
+ "http://nomisma.org/id/messene": {
+  "label": "Messene",
+  "source": "nomisma",
+  "nuds_inline": "Messene"
+ },
+ "http://nomisma.org/id/messenia": {
+  "label": "Messenia",
+  "source": "nomisma",
+  "nuds_inline": "Messenia"
+ },
+ "http://nomisma.org/id/miletus": {
+  "label": "Miletus",
+  "source": "nomisma",
+  "nuds_inline": "Miletus"
+ },
+ "http://nomisma.org/id/mithradates_ii_parthia": {
+  "label": "Mithradates II of Parthia",
+  "source": "nomisma",
+  "nuds_inline": "Mithradates II of Parthia"
+ },
+ "http://nomisma.org/id/mylasa": {
+  "label": "Mylasa",
+  "source": "nomisma",
+  "nuds_inline": "Mylasa"
+ },
+ "http://nomisma.org/id/myriandrus": {
+  "label": "Myriandrus",
+  "source": "nomisma",
+  "nuds_inline": "Myriandrus"
+ },
+ "http://nomisma.org/id/myrina_aeolis": {
+  "label": "Myrina",
+  "source": "nomisma",
+  "nuds_inline": "Myrina"
+ },
+ "http://nomisma.org/id/mytilene": {
+  "label": "Mytilene",
+  "source": "nomisma",
+  "nuds_inline": "Mytilene"
+ },
+ "http://nomisma.org/id/naxos": {
+  "label": "Naxos, Aegean",
+  "source": "nomisma",
+  "nuds_inline": "Naxos"
+ },
+ "http://nomisma.org/id/nisibis": {
+  "label": "Nisibis",
+  "source": "nomisma",
+  "nuds_inline": "Nisibis"
+ },
+ "http://nomisma.org/id/obol": {
+  "label": "Obol",
+  "source": "nomisma",
+  "nuds_inline": "Obol"
+ },
+ "http://nomisma.org/id/octadrachm": {
+  "label": "Octadrachm",
+  "source": "nomisma",
+  "nuds_inline": "Octadrachm"
+ },
+ "http://nomisma.org/id/odessus": {
+  "label": "Odessus",
+  "source": "nomisma",
+  "nuds_inline": "Odessus"
+ },
+ "http://nomisma.org/id/oeta": {
+  "label": "Oeta",
+  "source": "nomisma",
+  "nuds_inline": "Oeta"
+ },
+ "http://nomisma.org/id/orchomenus_boeotia": {
+  "label": "Orchomenus",
+  "source": "nomisma",
+  "nuds_inline": "Orchomenus"
+ },
+ "http://nomisma.org/id/pamphylia": {
+  "label": "Pamphylia",
+  "source": "nomisma",
+  "nuds_inline": "Pamphylia"
+ },
+ "http://nomisma.org/id/panticapaeum": {
+  "label": "Panticapaeum",
+  "source": "nomisma",
+  "nuds_inline": "Panticapaeum"
+ },
+ "http://nomisma.org/id/paphus": {
+  "label": "Paphos",
+  "source": "nomisma",
+  "nuds_inline": "Paphos"
+ },
+ "http://nomisma.org/id/parium": {
+  "label": "Parium",
+  "source": "nomisma",
+  "nuds_inline": "Parium"
+ },
+ "http://nomisma.org/id/paros": {
+  "label": "Paros",
+  "source": "nomisma",
+  "nuds_inline": "Paros"
+ },
+ "http://nomisma.org/id/patrae": {
+  "label": "Patrae",
+  "source": "nomisma",
+  "nuds_inline": "Patrae"
+ },
+ "http://nomisma.org/id/patraus": {
+  "label": "Patraus",
+  "source": "nomisma",
+  "nuds_inline": "Patraus"
+ },
+ "http://nomisma.org/id/pella_macedon": {
+  "label": "Pella",
+  "source": "nomisma",
+  "nuds_inline": "Pella"
+ },
+ "http://nomisma.org/id/peloponnesus": {
+  "label": "Peloponnesus",
+  "source": "nomisma",
+  "nuds_inline": "Peloponnesus"
+ },
+ "http://nomisma.org/id/pentadrachm": {
+  "label": "Pentadrachm",
+  "source": "nomisma",
+  "nuds_inline": "Pentadrachm"
+ },
+ "http://nomisma.org/id/pergamene_kingdom": {
+  "label": "Kingdom of Pergamum",
+  "source": "nomisma",
+  "nuds_inline": "Kingdom of Pergamum"
+ },
+ "http://nomisma.org/id/pergamum": {
+  "label": "Pergamum",
+  "source": "nomisma",
+  "nuds_inline": "Pergamum"
+ },
+ "http://nomisma.org/id/perinthus": {
+  "label": "Perinthus",
+  "source": "nomisma",
+  "nuds_inline": "Perinthus"
+ },
+ "http://nomisma.org/id/perseus": {
+  "label": "Perseus",
+  "source": "nomisma",
+  "nuds_inline": "Perseus"
+ },
+ "http://nomisma.org/id/pharae": {
+  "label": "Pharae",
+  "source": "nomisma",
+  "nuds_inline": "Pharae"
+ },
+ "http://nomisma.org/id/phaselis": {
+  "label": "Phaselis",
+  "source": "nomisma",
+  "nuds_inline": "Phaselis"
+ },
+ "http://nomisma.org/id/philip_ii": {
+  "label": "Philip II",
+  "source": "nomisma",
+  "nuds_inline": "Philip II"
+ },
+ "http://nomisma.org/id/philip_iii_arrhidaeus": {
+  "label": "Philip III Arrhidaeus",
+  "source": "nomisma",
+  "nuds_inline": "Philip III Arrhidaeus"
+ },
+ "http://nomisma.org/id/philip_v_macedon": {
+  "label": "Philip V",
+  "source": "nomisma",
+  "nuds_inline": "Philip V"
+ },
+ "http://nomisma.org/id/philippi": {
+  "label": "Philippi",
+  "source": "nomisma",
+  "nuds_inline": "Philippi"
+ },
+ "http://nomisma.org/id/philisto-arabian": {
+  "label": "Philisto-Arabian issues",
+  "source": "nomisma",
+  "nuds_inline": "Philisto-Arabian issues"
+ },
+ "http://nomisma.org/id/phocis": {
+  "label": "Phocis",
+  "source": "nomisma",
+  "nuds_inline": "Phocis"
+ },
+ "http://nomisma.org/id/phoenicia": {
+  "label": "Phoenicia",
+  "source": "nomisma",
+  "nuds_inline": "Phoenicia"
+ },
+ "http://nomisma.org/id/pnytagoras_salamis": {
+  "label": "Pnytagoras of Salamis",
+  "source": "nomisma",
+  "nuds_inline": "Pnytagoras of Salamis"
+ },
+ "http://nomisma.org/id/priene": {
+  "label": "Priene",
+  "source": "nomisma",
+  "nuds_inline": "Priene"
+ },
+ "http://nomisma.org/id/prusias_i_bithynia": {
+  "label": "Prusias I of Bithynia",
+  "source": "nomisma",
+  "nuds_inline": "Prusias I of Bithynia"
+ },
+ "http://nomisma.org/id/ptolemy_i": {
+  "label": "Ptolemy I Soter",
+  "source": "nomisma",
+  "nuds_inline": "Ptolemy I Soter"
+ },
+ "http://nomisma.org/id/ptolemy_ii": {
+  "label": "Ptolemy II Philadelphus",
+  "source": "nomisma",
+  "nuds_inline": "Ptolemy II Philadelphus"
+ },
+ "http://nomisma.org/id/ptolemy_iii": {
+  "label": "Ptolemy III Euergetes",
+  "source": "nomisma",
+  "nuds_inline": "Ptolemy III Euergetes"
+ },
+ "http://nomisma.org/id/ptolemy_iv": {
+  "label": "Ptolemy IV Philopator",
+  "source": "nomisma",
+  "nuds_inline": "Ptolemy IV Philopator"
+ },
+ "http://nomisma.org/id/ptolemy_vi": {
+  "label": "Ptolemy VI Philometor",
+  "source": "nomisma",
+  "nuds_inline": "Ptolemy VI Philometor"
+ },
+ "http://nomisma.org/id/ptolemy_vii": {
+  "label": "Ptolemy VII Neos Philopator",
+  "source": "nomisma",
+  "nuds_inline": "Ptolemy VII Neos Philopator"
+ },
+ "http://nomisma.org/id/ptolemy_viii": {
+  "label": "Ptolemy VIII Physcon",
+  "source": "nomisma",
+  "nuds_inline": "Ptolemy VIII Physcon"
+ },
+ "http://nomisma.org/id/quarter-stater": {
+  "label": "Tetarte",
+  "source": "nomisma",
+  "nuds_inline": "Tetarte"
+ },
+ "http://nomisma.org/id/rhodes": {
+  "label": "Rhodes",
+  "source": "nomisma",
+  "nuds_inline": "Rhodes"
+ },
+ "http://nomisma.org/id/roman_republic": {
+  "label": "Roman Republic",
+  "source": "nomisma",
+  "nuds_inline": "Roman Republic"
+ },
+ "http://nomisma.org/id/sabaces_satrap": {
+  "label": "Sabaces",
+  "source": "nomisma",
+  "nuds_inline": "Sabaces"
+ },
+ "http://nomisma.org/id/salamis_cyprus": {
+  "label": "Salamis",
+  "source": "nomisma",
+  "nuds_inline": "Salamis"
+ },
+ "http://nomisma.org/id/sardes": {
+  "label": "Sardis",
+  "source": "nomisma",
+  "nuds_inline": "Sardis"
+ },
+ "http://nomisma.org/id/seleuceia_ad_tigrim": {
+  "label": "Seleuceia ad Tigrim",
+  "source": "nomisma",
+  "nuds_inline": "Seleuceia ad Tigrim"
+ },
+ "http://nomisma.org/id/seleuceia_pieria": {
+  "label": "Seleuceia Pieria",
+  "source": "nomisma",
+  "nuds_inline": "Seleuceia Pieria"
+ },
+ "http://nomisma.org/id/seleucid_dynasty": {
+  "label": "Seleucid Dynasty",
+  "source": "nomisma",
+  "nuds_inline": "Seleucid Dynasty"
+ },
+ "http://nomisma.org/id/seleucid_empire": {
+  "label": "Seleucid Empire",
+  "source": "nomisma",
+  "nuds_inline": "Seleucid Empire"
+ },
+ "http://nomisma.org/id/seleucus_i": {
+  "label": "Seleucus I Nicator",
+  "source": "nomisma",
+  "nuds_inline": "Seleucus I Nicator"
+ },
+ "http://nomisma.org/id/seleucus_ii": {
+  "label": "Seleucus II Callinicus",
+  "source": "nomisma",
+  "nuds_inline": "Seleucus II Callinicus"
+ },
+ "http://nomisma.org/id/seleucus_iii": {
+  "label": "Seleucus III Ceraunus",
+  "source": "nomisma",
+  "nuds_inline": "Seleucus III Ceraunus"
+ },
+ "http://nomisma.org/id/sestus": {
+  "label": "Sestos",
+  "source": "nomisma",
+  "nuds_inline": "Sestos"
+ },
+ "http://nomisma.org/id/sicyon": {
+  "label": "Sicyon",
+  "source": "nomisma",
+  "nuds_inline": "Sicyon"
+ },
+ "http://nomisma.org/id/side": {
+  "label": "Side",
+  "source": "nomisma",
+  "nuds_inline": "Side"
+ },
+ "http://nomisma.org/id/sidon": {
+  "label": "Sidon",
+  "source": "nomisma",
+  "nuds_inline": "Sidon"
+ },
+ "http://nomisma.org/id/sinope": {
+  "label": "Sinope",
+  "source": "nomisma",
+  "nuds_inline": "Sinope"
+ },
+ "http://nomisma.org/id/siphnos": {
+  "label": "Siphnos",
+  "source": "nomisma",
+  "nuds_inline": "Siphnos"
+ },
+ "http://nomisma.org/id/smyrna": {
+  "label": "Smyrna",
+  "source": "nomisma",
+  "nuds_inline": "Smyrna"
+ },
+ "http://nomisma.org/id/soli_cyprus": {
+  "label": "Soli",
+  "source": "nomisma",
+  "nuds_inline": "Soli"
+ },
+ "http://nomisma.org/id/stater": {
+  "label": "Stater",
+  "source": "nomisma",
+  "nuds_inline": "Stater"
+ },
+ "http://nomisma.org/id/stratoniceia": {
+  "label": "Stratoniceia",
+  "source": "nomisma",
+  "nuds_inline": "Stratoniceia"
+ },
+ "http://nomisma.org/id/susa": {
+  "label": "Susa",
+  "source": "nomisma",
+  "nuds_inline": "Susa"
+ },
+ "http://nomisma.org/id/syros": {
+  "label": "Syros",
+  "source": "nomisma",
+  "nuds_inline": "Syros"
+ },
+ "http://nomisma.org/id/tanagra": {
+  "label": "Tanagra",
+  "source": "nomisma",
+  "nuds_inline": "Tanagra"
+ },
+ "http://nomisma.org/id/tarsus": {
+  "label": "Tarsus",
+  "source": "nomisma",
+  "nuds_inline": "Tarsus"
+ },
+ "http://nomisma.org/id/tegea": {
+  "label": "Tegea",
+  "source": "nomisma",
+  "nuds_inline": "Tegea"
+ },
+ "http://nomisma.org/id/tenedos": {
+  "label": "Tenedos",
+  "source": "nomisma",
+  "nuds_inline": "Tenedos"
+ },
+ "http://nomisma.org/id/tennes_sidon": {
+  "label": "Tennes, King of Sidon",
+  "source": "nomisma",
+  "nuds_inline": "Tennes, King of Sidon"
+ },
+ "http://nomisma.org/id/teos": {
+  "label": "Teos",
+  "source": "nomisma",
+  "nuds_inline": "Teos"
+ },
+ "http://nomisma.org/id/tetradrachm": {
+  "label": "Tetradrachm",
+  "source": "nomisma",
+  "nuds_inline": "Tetradrachm"
+ },
+ "http://nomisma.org/id/tetrobol": {
+  "label": "Tetrobol",
+  "source": "nomisma",
+  "nuds_inline": "Tetrobol"
+ },
+ "http://nomisma.org/id/thebae": {
+  "label": "Thebae",
+  "source": "nomisma",
+  "nuds_inline": "Thebae"
+ },
+ "http://nomisma.org/id/thebes": {
+  "label": "Thebes",
+  "source": "nomisma",
+  "nuds_inline": "Thebes"
+ },
+ "http://nomisma.org/id/thessalian_league": {
+  "label": "Thessalian League",
+  "source": "nomisma",
+  "nuds_inline": "Thessalian League"
+ },
+ "http://nomisma.org/id/thessaly": {
+  "label": "Thessaly",
+  "source": "nomisma",
+  "nuds_inline": "Thessaly"
+ },
+ "http://nomisma.org/id/thrace": {
+  "label": "Thrace",
+  "source": "nomisma",
+  "nuds_inline": "Thrace"
+ },
+ "http://nomisma.org/id/tomis": {
+  "label": "Tomis",
+  "source": "nomisma",
+  "nuds_inline": "Tomis"
+ },
+ "http://nomisma.org/id/triobol": {
+  "label": "Triobol",
+  "source": "nomisma",
+  "nuds_inline": "Triobol"
+ },
+ "http://nomisma.org/id/twoandahalf-drachm": {
+  "label": "2 1/2 drachm",
+  "source": "nomisma",
+  "nuds_inline": "2 1/2 drachm"
+ },
+ "http://nomisma.org/id/tyre": {
+  "label": "Tyre",
+  "source": "nomisma",
+  "nuds_inline": "Tyre"
+ },
+ "http://nomisma.org/id/uncertain_value": {
+  "label": "Uncertain value",
+  "source": "nomisma",
+  "nuds_inline": "Uncertain value"
+ },
+ "http://nomisma.org/id/victoriatus": {
+  "label": "Victoriatus",
+  "source": "nomisma",
+  "nuds_inline": "Victoriatus"
+ }
+}

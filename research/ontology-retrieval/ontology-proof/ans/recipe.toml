@@ -1,0 +1,110 @@
+# ANS Alexander-era monographs — DRAFT, not installed, not built.
+# From the ontology-v1 `numismatics` template
+# (sovereign-recipes/_templates/ontology-v1/numismatics/recipe.toml) in the shape of
+# research/ontology-retrieval/recensus/recipe.toml: every list the bank asks for hangs off
+# an entity by a `ref` attribute, the one shape that recipe has proven on this engine.
+# Added to the template: `hoard`, and `coin.hoard`. Dropped from it: `sceatta` (an
+# Anglo-Saxon specialization; no such coin is in this corpus).
+#
+# The bank (bank.src.toml) asks which mints / rulers / denominations a hoard holds. Its
+# truth is CoinHoards IGCH and is NOT in this text: build_text.py strips the TEI header and
+# every nomisma / coinhoards / PELLA link before this file's source is written.
+#
+#   svrn recipe validate recipe.toml
+#   svrn corpus install ei7-ans
+#   svrn enrich init ei7-ans --from-corpus ei7-ans
+#   svrn enrich build ei7-ans --full
+
+[corpus]
+id = "ei7-ans"
+name = "ANS monographs: Alexander-era and Hellenistic hoards and mints"
+description = "25 American Numismatic Society monographs (Newell, Thompson, Troxell, Bellinger, Noe), extracted as hoards, coins, mints, rulers and dated attributions."
+# The text is CC BY-NC 4.0 (ANS Digital Library): local use only, never shared.
+license = "private"
+mesh_sharing = false
+schema_version = 1
+
+# One markdown file: each work under a `# <Title> (<Author>, <year>)` heading, its own
+# headings beneath it (build_text.py writes it; it is gitignored).
+[acquire]
+type = "local_file"
+path = "/Users/alexsbryan/dev/commonwealth-ai/research/ontology-retrieval/ontology-proof/ans/text/ans.md"
+
+[extract]
+type = "markdown"
+
+[chunk]
+type = "paragraph"
+max_chars = 2000
+overlap_chars = 200
+
+[index]
+fts = true
+vector = true
+
+[enrichment]
+enabled = true
+type = "atlas"
+domain = "numismatics"
+
+[enrichment.ontology]
+version = 1
+guidance = """
+This corpus is numismatic scholarship on the coinage of Alexander the Great and the
+Hellenistic kingdoms: hoard reports, mint studies and dating arguments. A hoard is a
+group of coins buried together and found together; the books name a hoard by where and
+when it was found (the Demanhur hoard, Asia Minor 1964, Armenak) and the later books add
+an IGCH number. A hoard report lists the coins the hoard held, mint by mint. Each coin or
+group of coins is a thing in its own right: the ruler in whose name it was struck, the
+mint that struck it, its denomination (stater, tetradrachm, drachm), metal, weight, when
+it was struck, and the hoard it came from when the text says so. A mint is a city where
+coins were struck. A ruler is the king or dynast named on the coin. Attributions are
+claims a scholar makes about a coin's mint or date, graded by the kind of evidence
+offered; a later book may dispute an earlier attribution, and the dispute is worth
+surfacing.
+"""
+
+[[enrichment.ontology.types]]
+name = "hoard"
+kind = "entity"
+description = "A group of coins buried and found together, named by findspot and year of discovery: the Demanhur hoard, Asia Minor 1964."
+attributes = [
+  { name = "findspot", type = "text" },
+  { name = "found",    type = "time" },
+  { name = "buried",   type = "time", range = true },
+]
+
+[[enrichment.ontology.types]]
+name = "coin"
+kind = "entity"
+description = "A coin type or group of coins: ruler, mint, denomination, metal, and the hoard it came from."
+attributes = [
+  { name = "ruler",        type = "ref",      of = "ruler" },
+  { name = "mint",         type = "ref",      of = "mint" },
+  { name = "hoard",        type = "ref",      of = "hoard" },
+  { name = "denomination", type = "text" },
+  { name = "metal",        type = "text",     values = ["gold", "silver", "billon", "copper"] },
+  { name = "weight",       type = "quantity", unit = "g" },
+  { name = "struck",       type = "time",     range = true },
+]
+
+[[enrichment.ontology.types]]
+name = "ruler"
+kind = "entity"
+role_of = "person"
+
+[[enrichment.ontology.types]]
+name = "mint"
+kind = "entity"
+description = "A city where coins were struck: Amphipolis, Babylon, Lampsacus."
+
+[[enrichment.ontology.types]]
+name = "attribution"
+kind = "claim"
+force = "assertive"
+subject = "coin"
+attributes = [{ name = "proposed_date", type = "time", range = true }]
+grades = ["die-link", "hoard-context", "stylistic", "metrological"]
+
+[enrichment.ontology.tension]
+between = ["attribution"]

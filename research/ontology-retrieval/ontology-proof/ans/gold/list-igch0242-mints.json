@@ -1,0 +1,48 @@
+{
+ "id": "list-igch0242-mints",
+ "igch": 242,
+ "uri": "http://coinhoards.org/id/igch0242",
+ "findspot": "Arcadia",
+ "name": "Arcadia",
+ "kind": "mints",
+ "works": {
+  "nnan73727": [
+   "H2"
+  ]
+ },
+ "members": [
+  "Argos",
+  "Chalcis",
+  "Megalopolis",
+  "Rhodes",
+  "Sicyon"
+ ],
+ "facts": [
+  "Argos",
+  "Chalcis",
+  "Megalopolis",
+  "Rhodes",
+  "Sicyon"
+ ],
+ "members_in_corpus": [
+  "Argos",
+  "Chalcis",
+  "Megalopolis",
+  "Rhodes",
+  "Sicyon"
+ ],
+ "members_local": [
+  "Argos",
+  "Chalcis",
+  "Megalopolis",
+  "Sicyon"
+ ],
+ "hoard_paragraphs": 12,
+ "paragraphs_with_a_member": 2,
+ "cover": 2,
+ "works_naming_hoard": [
+  "nnan73727"
+ ],
+ "single_passage": false,
+ "question": "Which mints are represented among the coins of the Arcadia hoard, found 1929?"
+}

@@ -1,0 +1,86 @@
+{
+ "id": "list-igch1438-mints",
+ "igch": 1438,
+ "uri": "http://coinhoards.org/id/igch1438",
+ "findspot": "Asia Minor",
+ "name": "Asia Minor",
+ "kind": "mints",
+ "works": {
+  "nnan174624": [
+   "H1"
+  ],
+  "nnan49322": [
+   "H1"
+  ]
+ },
+ "members": [
+  "Abydus",
+  "Amphipolis",
+  "Aradus",
+  "Babylon",
+  "Byblus",
+  "Citium",
+  "Damascus",
+  "Lampsacus",
+  "Myriandrus",
+  "Ptolemais-Ake",
+  "Salamis",
+  "Sidon",
+  "Tarsus"
+ ],
+ "facts": [
+  "Abydus",
+  "Amphipolis",
+  "Aradus",
+  "Babylon",
+  "Byblus",
+  "Citium",
+  "Damascus",
+  "Lampsacus",
+  "Myriandrus",
+  "Ptolemais-Ake",
+  "Salamis",
+  "Sidon",
+  "Tarsus"
+ ],
+ "members_in_corpus": [
+  "Abydus",
+  "Amphipolis",
+  "Aradus",
+  "Babylon",
+  "Byblus",
+  "Citium",
+  "Damascus",
+  "Lampsacus",
+  "Myriandrus",
+  "Salamis",
+  "Sidon",
+  "Tarsus"
+ ],
+ "members_local": [
+  "Abydus",
+  "Amphipolis",
+  "Aradus",
+  "Babylon",
+  "Byblus",
+  "Lampsacus",
+  "Myriandrus",
+  "Sidon",
+  "Tarsus"
+ ],
+ "hoard_paragraphs": 214,
+ "paragraphs_with_a_member": 28,
+ "cover": 4,
+ "works_naming_hoard": [
+  "nnan131509",
+  "nnan174624",
+  "nnan23257",
+  "nnan28180",
+  "nnan49321",
+  "nnan49322",
+  "nnan50879",
+  "nnan98007"
+ ],
+ "single_passage": false,
+ "question": "Which mints are represented among the coins of the Asia Minor hoard, found 1964, buried about 320 B.C.?"
+}

@@ -1,0 +1,67 @@
+{
+ "id": "list-igch0270-mints",
+ "igch": 270,
+ "uri": "http://coinhoards.org/id/igch0270",
+ "findspot": "Olympia, Elis",
+ "name": "Olympia",
+ "kind": "mints",
+ "works": {
+  "nnan73727": [
+   "H2"
+  ]
+ },
+ "members": [
+  "Aenianes",
+  "Chalcis",
+  "Histiaea",
+  "Lamia",
+  "Megalopolis",
+  "Rhodes",
+  "Sicyon",
+  "Thebae"
+ ],
+ "facts": [
+  "Aenianes",
+  "Chalcis",
+  "Histiaea",
+  "Lamia",
+  "Megalopolis",
+  "Rhodes",
+  "Sicyon",
+  "Thebae"
+ ],
+ "members_in_corpus": [
+  "Aenianes",
+  "Chalcis",
+  "Histiaea",
+  "Lamia",
+  "Megalopolis",
+  "Rhodes",
+  "Sicyon"
+ ],
+ "members_local": [
+  "Aenianes",
+  "Chalcis",
+  "Histiaea",
+  "Lamia",
+  "Megalopolis",
+  "Rhodes",
+  "Sicyon"
+ ],
+ "hoard_paragraphs": 141,
+ "paragraphs_with_a_member": 15,
+ "cover": 2,
+ "works_naming_hoard": [
+  "nnan15879",
+  "nnan23257",
+  "nnan40931",
+  "nnan50879",
+  "nnan73727",
+  "nnan818",
+  "nnan96021",
+  "nnan97809",
+  "nnan97810"
+ ],
+ "single_passage": false,
+ "question": "Which mints are represented among the coins of the Olympia hoard, found 1939?"
+}

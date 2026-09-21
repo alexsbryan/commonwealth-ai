@@ -1,0 +1,78 @@
+{
+ "id": "list-igch0958-mints",
+ "igch": 958,
+ "uri": "http://coinhoards.org/id/igch0958",
+ "findspot": "Marasesti, c. 73 km. NW of Galati, Rumania",
+ "name": "Marasesti",
+ "kind": "mints",
+ "works": {
+  "nnan49321": [
+   "H1"
+  ],
+  "nnan49322": [
+   "H1"
+  ]
+ },
+ "members": [
+  "Abydus",
+  "Alexandreia Troas",
+  "Amphipolis",
+  "Aradus",
+  "Babylon",
+  "Byzantium",
+  "Callatis",
+  "Lampsacus",
+  "Lysimachia",
+  "Miletus",
+  "Odessus",
+  "Ptolemais-Ake",
+  "Sidon",
+  "Tomis"
+ ],
+ "facts": [
+  "Abydus",
+  "Alexandreia Troas",
+  "Amphipolis",
+  "Aradus",
+  "Babylon",
+  "Byzantium",
+  "Callatis",
+  "Lampsacus",
+  "Lysimachia",
+  "Miletus",
+  "Odessus",
+  "Ptolemais-Ake",
+  "Sidon",
+  "Tomis"
+ ],
+ "members_in_corpus": [
+  "Abydus",
+  "Alexandreia Troas",
+  "Amphipolis",
+  "Aradus",
+  "Babylon",
+  "Byzantium",
+  "Callatis",
+  "Lampsacus",
+  "Lysimachia",
+  "Miletus",
+  "Odessus",
+  "Sidon"
+ ],
+ "members_local": [
+  "Abydus",
+  "Babylon",
+  "Byzantium",
+  "Lampsacus",
+  "Miletus"
+ ],
+ "hoard_paragraphs": 35,
+ "paragraphs_with_a_member": 14,
+ "cover": 3,
+ "works_naming_hoard": [
+  "nnan49321",
+  "nnan49322"
+ ],
+ "single_passage": false,
+ "question": "Which mints are represented among the coins of the Marasesti hoard, found 1909?"
+}

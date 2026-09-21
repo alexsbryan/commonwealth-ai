@@ -1,0 +1,45 @@
+{
+ "id": "list-igch0395-mints",
+ "igch": 395,
+ "uri": "http://coinhoards.org/id/igch0395",
+ "findspot": "Samovodene, just N of Veliko Târnovo, Bulgaria",
+ "name": "Samovodene",
+ "kind": "mints",
+ "works": {
+  "nnan174624": [
+   "H1"
+  ]
+ },
+ "members": [
+  "Amphipolis",
+  "Salamis",
+  "Sidon",
+  "Tarsus"
+ ],
+ "facts": [
+  "Amphipolis",
+  "Salamis",
+  "Sidon",
+  "Tarsus"
+ ],
+ "members_in_corpus": [
+  "Amphipolis",
+  "Salamis",
+  "Sidon",
+  "Tarsus"
+ ],
+ "members_local": [
+  "Amphipolis",
+  "Salamis",
+  "Sidon",
+  "Tarsus"
+ ],
+ "hoard_paragraphs": 12,
+ "paragraphs_with_a_member": 3,
+ "cover": 3,
+ "works_naming_hoard": [
+  "nnan174624"
+ ],
+ "single_passage": false,
+ "question": "Which mints are represented among the coins of the Samovodene hoard, found 1957?"
+}

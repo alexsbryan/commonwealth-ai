@@ -1,0 +1,63 @@
+{
+ "id": "list-igch1395-mints",
+ "igch": 1395,
+ "uri": "http://coinhoards.org/id/igch1395",
+ "findspot": "Sinan Pascha near Afyon-Karahissar (20, 982) (anc. Prymnessus), Phrygia",
+ "name": "Sinan Pascha near Afyon-Karahissar",
+ "kind": "mints",
+ "works": {
+  "nnan174624": [
+   "H1"
+  ],
+  "nnan49321": [
+   "H1"
+  ],
+  "nnan49322": [
+   "H1"
+  ]
+ },
+ "members": [
+  "Abydus",
+  "Amphipolis",
+  "Colophon",
+  "Magnesia ad Maeandrum",
+  "Miletus",
+  "Sardis",
+  "Teos"
+ ],
+ "facts": [
+  "Abydus",
+  "Amphipolis",
+  "Colophon",
+  "Magnesia ad Maeandrum",
+  "Miletus",
+  "Sardis",
+  "Teos"
+ ],
+ "members_in_corpus": [
+  "Abydus",
+  "Amphipolis",
+  "Colophon",
+  "Magnesia ad Maeandrum",
+  "Miletus",
+  "Sardis",
+  "Teos"
+ ],
+ "members_local": [
+  "Abydus",
+  "Amphipolis",
+  "Colophon",
+  "Miletus",
+  "Teos"
+ ],
+ "hoard_paragraphs": 69,
+ "paragraphs_with_a_member": 10,
+ "cover": 2,
+ "works_naming_hoard": [
+  "nnan174624",
+  "nnan49321",
+  "nnan49322"
+ ],
+ "single_passage": false,
+ "question": "Which mints are represented among the coins of the Sinan Pascha near Afyon-Karahissar hoard, buried about 318 B.C.?"
+}

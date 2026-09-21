@@ -1,0 +1,79 @@
+{
+ "id": "list-igch1436-mints",
+ "igch": 1436,
+ "uri": "http://coinhoards.org/id/igch1436",
+ "findspot": "Asia Minor",
+ "name": "Asia Minor",
+ "kind": "mints",
+ "works": {
+  "nnan174624": [
+   "H1"
+  ]
+ },
+ "members": [
+  "Amphipolis",
+  "Aradus",
+  "Athens",
+  "Babylon",
+  "Byblus",
+  "Citium",
+  "Damascus",
+  "Myriandrus",
+  "Paphos",
+  "Pella",
+  "Salamis",
+  "Tarsus"
+ ],
+ "facts": [
+  "Amphipolis",
+  "Aradus",
+  "Athens",
+  "Babylon",
+  "Byblus",
+  "Citium",
+  "Damascus",
+  "Myriandrus",
+  "Paphos",
+  "Pella",
+  "Salamis",
+  "Tarsus"
+ ],
+ "members_in_corpus": [
+  "Amphipolis",
+  "Aradus",
+  "Athens",
+  "Babylon",
+  "Byblus",
+  "Citium",
+  "Damascus",
+  "Myriandrus",
+  "Paphos",
+  "Pella",
+  "Salamis",
+  "Tarsus"
+ ],
+ "members_local": [
+  "Amphipolis",
+  "Babylon",
+  "Byblus",
+  "Myriandrus",
+  "Paphos",
+  "Pella",
+  "Tarsus"
+ ],
+ "hoard_paragraphs": 24,
+ "paragraphs_with_a_member": 9,
+ "cover": 3,
+ "works_naming_hoard": [
+  "nnan131509",
+  "nnan174624",
+  "nnan23257",
+  "nnan28180",
+  "nnan49321",
+  "nnan49322",
+  "nnan50879",
+  "nnan98007"
+ ],
+ "single_passage": false,
+ "question": "Which mints are represented among the coins of the Asia Minor hoard, found 1966, buried about 323 B.C.?"
+}

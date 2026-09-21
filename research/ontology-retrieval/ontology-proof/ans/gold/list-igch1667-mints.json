@@ -1,0 +1,95 @@
+{
+ "id": "list-igch1667-mints",
+ "igch": 1667,
+ "uri": "http://coinhoards.org/id/igch1667",
+ "findspot": "Abu Hommos, 40 km. SE of Alexandria",
+ "name": "Abu Hommos",
+ "kind": "mints",
+ "works": {
+  "nnan174624": [
+   "H1"
+  ],
+  "nnan49321": [
+   "H1"
+  ],
+  "nnan49322": [
+   "H1"
+  ]
+ },
+ "members": [
+  "Alexandria",
+  "Amphipolis",
+  "Aradus",
+  "Babylon",
+  "Berytus",
+  "Byblus",
+  "Citium",
+  "Damascus",
+  "Lampsacus",
+  "Miletus",
+  "Myriandrus",
+  "Pella",
+  "Ptolemais-Ake",
+  "Salamis",
+  "Side",
+  "Sidon",
+  "Susa",
+  "Tarsus"
+ ],
+ "facts": [
+  "Alexandria",
+  "Amphipolis",
+  "Aradus",
+  "Babylon",
+  "Berytus",
+  "Byblus",
+  "Citium",
+  "Damascus",
+  "Lampsacus",
+  "Miletus",
+  "Myriandrus",
+  "Pella",
+  "Ptolemais-Ake",
+  "Salamis",
+  "Side",
+  "Sidon",
+  "Susa",
+  "Tarsus"
+ ],
+ "members_in_corpus": [
+  "Alexandria",
+  "Amphipolis",
+  "Aradus",
+  "Babylon",
+  "Berytus",
+  "Byblus",
+  "Citium",
+  "Damascus",
+  "Lampsacus",
+  "Miletus",
+  "Myriandrus",
+  "Pella",
+  "Salamis",
+  "Side",
+  "Sidon",
+  "Susa",
+  "Tarsus"
+ ],
+ "members_local": [
+  "Amphipolis",
+  "Babylon",
+  "Byblus",
+  "Lampsacus",
+  "Miletus"
+ ],
+ "hoard_paragraphs": 20,
+ "paragraphs_with_a_member": 7,
+ "cover": 3,
+ "works_naming_hoard": [
+  "nnan174624",
+  "nnan49321",
+  "nnan49322"
+ ],
+ "single_passage": false,
+ "question": "Which mints are represented among the coins of the Abu Hommos hoard, found 1919?"
+}

@@ -1,0 +1,56 @@
+{
+ "id": "list-igch0774-mints",
+ "igch": 774,
+ "uri": "http://coinhoards.org/id/igch0774",
+ "findspot": "Gîldau, 30 km. ENE of Calarasi, Rumania",
+ "name": "Gîldau",
+ "kind": "mints",
+ "works": {
+  "nnan174624": [
+   "H1"
+  ],
+  "nnan49321": [
+   "H1"
+  ],
+  "nnan49322": [
+   "H1"
+  ]
+ },
+ "members": [
+  "Amphipolis",
+  "Lampsacus",
+  "Miletus",
+  "Salamis",
+  "Tarsus"
+ ],
+ "facts": [
+  "Amphipolis",
+  "Lampsacus",
+  "Miletus",
+  "Salamis",
+  "Tarsus"
+ ],
+ "members_in_corpus": [
+  "Amphipolis",
+  "Lampsacus",
+  "Miletus",
+  "Salamis",
+  "Tarsus"
+ ],
+ "members_local": [
+  "Lampsacus",
+  "Miletus",
+  "Salamis",
+  "Tarsus"
+ ],
+ "hoard_paragraphs": 13,
+ "paragraphs_with_a_member": 5,
+ "cover": 1,
+ "works_naming_hoard": [
+  "nnan174624",
+  "nnan49321",
+  "nnan49322"
+ ],
+ "single_passage": true,
+ "question": "Which mints are represented among the coins of the Gîldau hoard, found 1960, buried about 320 B.C.?"
+}

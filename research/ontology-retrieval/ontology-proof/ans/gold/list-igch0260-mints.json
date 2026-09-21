@@ -1,0 +1,60 @@
+{
+ "id": "list-igch0260-mints",
+ "igch": 260,
+ "uri": "http://coinhoards.org/id/igch0260",
+ "findspot": "Greece, western",
+ "name": "Greece",
+ "kind": "mints",
+ "works": {
+  "nnan73727": [
+   "H2"
+  ]
+ },
+ "members": [
+  "Argos",
+  "Chalcis",
+  "Lacedaemon",
+  "Megalopolis",
+  "Messene",
+  "Patrae",
+  "Sicyon"
+ ],
+ "facts": [
+  "Argos",
+  "Chalcis",
+  "Lacedaemon",
+  "Megalopolis",
+  "Messene",
+  "Patrae",
+  "Sicyon"
+ ],
+ "members_in_corpus": [
+  "Argos",
+  "Chalcis",
+  "Megalopolis",
+  "Messene",
+  "Sicyon"
+ ],
+ "members_local": [
+  "Argos",
+  "Chalcis",
+  "Megalopolis",
+  "Sicyon"
+ ],
+ "hoard_paragraphs": 26,
+ "paragraphs_with_a_member": 3,
+ "cover": 2,
+ "works_naming_hoard": [
+  "nnan131509",
+  "nnan23257",
+  "nnan28180",
+  "nnan49321",
+  "nnan51012",
+  "nnan73727",
+  "nnan818",
+  "nnan96021",
+  "nnan98007"
+ ],
+ "single_passage": false,
+ "question": "Which mints are represented among the coins of the Greece hoard, found 1936, buried about 146 B.C.?"
+}

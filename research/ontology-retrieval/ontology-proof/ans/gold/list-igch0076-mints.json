@@ -1,0 +1,59 @@
+{
+ "id": "list-igch0076-mints",
+ "igch": 76,
+ "uri": "http://coinhoards.org/id/igch0076",
+ "findspot": "Kyparissia, Messenia",
+ "name": "Kyparissia",
+ "kind": "mints",
+ "works": {
+  "nnan118901": [
+   "H1"
+  ]
+ },
+ "members": [
+  "Amphipolis",
+  "Histiaea",
+  "Larissa, Thessaly",
+  "Ptolemais-Ake",
+  "Sicyon",
+  "Tarsus",
+  "Thebes"
+ ],
+ "facts": [
+  "Amphipolis",
+  "Histiaea",
+  "Larissa",
+  "Ptolemais-Ake",
+  "Sicyon",
+  "Tarsus",
+  "Thebes"
+ ],
+ "members_in_corpus": [
+  "Amphipolis",
+  "Histiaea",
+  "Larissa, Thessaly",
+  "Sicyon",
+  "Tarsus",
+  "Thebes"
+ ],
+ "members_local": [
+  "Amphipolis",
+  "Larissa, Thessaly",
+  "Sicyon",
+  "Tarsus"
+ ],
+ "hoard_paragraphs": 21,
+ "paragraphs_with_a_member": 9,
+ "cover": 1,
+ "works_naming_hoard": [
+  "nnan118901",
+  "nnan15879",
+  "nnan174624",
+  "nnan23257",
+  "nnan40403",
+  "nnan53903",
+  "nnan98007"
+ ],
+ "single_passage": true,
+ "question": "Which mints are represented among the coins of the Kyparissia hoard, buried about 327 B.C.?"
+}

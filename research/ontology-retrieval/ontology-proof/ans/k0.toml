@@ -1,0 +1,94 @@
+# 15 K0 lookups, hand-written. Each fact is copied from ONE line of the stripped text;
+# `notes` opens with <work>.md:<line> and make_bank.py refuses a row whose fact is not there.
+# Facts were picked to occur in one paragraph of the corpus (counted, not assumed), since
+# attest.py's k0-single rule is "exactly one attesting passage".
+
+[[questions]]
+id = "lookup-kuchuk-kohne-seized"
+question = "Who seized the Küchük Köhne hoard after it was unearthed in 1930?"
+expected_facts = ["Gendarmerie"]
+notes = "nnan117864.md:47 — 'seized by a member of the local Turkish Gendarmerie'"
+
+[[questions]]
+id = "lookup-troxell-group-e-dies"
+question = "In Troxell's study of the Amphipolis Alexander tetradrachms, how many obverse dies are known for Group E, the largest group?"
+expected_facts = ["193 dies"]
+notes = "nnan174624.md:1036 — 'Group E (605 coins, 193 dies known and 241 estimated) is clearly the largest group'"
+
+[[questions]]
+id = "lookup-agrinion-acquired"
+question = "When did the American Numismatic Society finally acquire the coins of the Agrinion hoard?"
+expected_facts = ["summer of 1962"]
+notes = "nnan73727.md:67 — 'the coins themselves were not acquired until the summer of 1962'"
+
+[[questions]]
+id = "lookup-alexander-interest"
+question = "In Bellinger's estimate, what yearly interest would Alexander have owed on his debts at the 18% Athenian rate?"
+expected_facts = ["234 talents"]
+notes = "nnan23257.md:1224 — 'he would have a yearly interest of 234 talents to pay'"
+
+[[questions]]
+id = "lookup-alexander-total-debt"
+question = "In Bellinger's reckoning, what was the combined total of Alexander's own borrowing and Philip's debt?"
+expected_facts = ["1,300 talents"]
+notes = "nnan23257.md:1224 — 'the total of 1,300 talents would be no excessive burden'"
+
+[[questions]]
+id = "lookup-abydus-asia-minor-1964"
+question = "How many drachms of Abydus did the Asia Minor 1964 hoard contain, according to Thompson?"
+expected_facts = ["32 drachms"]
+notes = "nnan49322.md:4040 — 'It contained 32 drachms of Abydus'"
+
+[[questions]]
+id = "lookup-beule-compilation"
+question = "How many New Style tetradrachms did Beulé's compilation of 1858 contain?"
+expected_facts = ["fewer than 2000"]
+notes = "nnan131509.md:90 — 'Beulé's compilation of 1858 contained fewer than 2000 tetradrachms'"
+
+[[questions]]
+id = "lookup-armenak-size"
+question = "About how many tetradrachms and drachms did the hoard said to come from near Armenak contain, in Newell's account?"
+expected_facts = ["nearly two thousand"]
+notes = "nnan28180.md:658 — 'containing nearly two thousand tetradrachms and drachms'"
+
+[[questions]]
+id = "lookup-eastern-dynasts-purchase"
+question = "When did Newell purchase in Cairo the coin that came with staters of Baalmelek I and Azbaal of Citium?"
+expected_facts = ["December, 1924"]
+notes = "nnan130195.md:99 — 'This coin was purchased by the writer in December, 1924, in Cairo, Egypt.'"
+
+[[questions]]
+id = "lookup-siphnos-ancient-name"
+question = "By what modern name does Newell call the island on which the Siphnos hoard was found?"
+expected_facts = ["Siphanto"]
+notes = "nnan50879.md:49 — 'found on the island of Siphanto—the ancient Siphnos'"
+
+[[questions]]
+id = "lookup-demanhur-jars"
+question = "In what kind of containers does Newell conclude the Demanhur coins were once held?"
+expected_facts = ["terra cotta jars"]
+notes = "nnan98007.md:121 — 'the Demanhur coins were once contained in several terra cotta jars'"
+
+[[questions]]
+id = "lookup-demanhur-toronto-curator"
+question = "Which curator purchased seventy Demanhur tetradrachms for the Toronto Archaeological Museum?"
+expected_facts = ["Curelly"]
+notes = "nnan98007.md:65 — 'purchased by the Curator, Mr. C. T. Curelly, in Egypt'"
+
+[[questions]]
+id = "lookup-demanhur-first-notice"
+question = "Who first brought the Demanhur hoard to Newell's attention?"
+expected_facts = ["Azeez Khayat"]
+notes = "nnan98007.md:63 — 'Mr. Azeez Khayat of this city ... It was Mr. Khayat who first brought the hoard to the writer’s attention.'"
+
+[[questions]]
+id = "lookup-strabo-source-floruit"
+question = "In which Olympiad was the floruit of Artemidorus of Ephesus, Strabo's source on the Lycian League?"
+expected_facts = ["169th Olympiad"]
+notes = "nnan51012.md:831 — 'Artemidorus of Ephesus, was in the 169th Olympiad, 104–100 b.c.'"
+
+[[questions]]
+id = "lookup-new-style-lederer"
+question = "In which hoard did several more specimens turn up of the New Style issue that Lederer first published in 1926?"
+expected_facts = ["Anthedon Hoard of 1935"]
+notes = "nnan131509.md:918 — 'Subsequently several specimens turned up in the Anthedon Hoard of 1935.'"

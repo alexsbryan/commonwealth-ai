@@ -1,0 +1,105 @@
+{
+ "id": "list-igch1472-mints",
+ "igch": 1472,
+ "uri": "http://coinhoards.org/id/igch1472",
+ "findspot": "Larnaca (anc. Citium)",
+ "name": "Larnaca",
+ "kind": "mints",
+ "works": {
+  "nnan174624": [
+   "H1"
+  ],
+  "nnan49321": [
+   "H1"
+  ],
+  "nnan49322": [
+   "H1"
+  ]
+ },
+ "members": [
+  "Abydus",
+  "Alexandria",
+  "Amathus",
+  "Amphipolis",
+  "Aradus",
+  "Babylon",
+  "Byblus",
+  "Citium",
+  "Colophon",
+  "Lampsacus",
+  "Magnesia ad Maeandrum",
+  "Miletus",
+  "Ptolemais-Ake",
+  "Salamis",
+  "Sardis",
+  "Sidon",
+  "Susa",
+  "Tarsus",
+  "Teos",
+  "Tyre"
+ ],
+ "facts": [
+  "Abydus",
+  "Alexandria",
+  "Amathus",
+  "Amphipolis",
+  "Aradus",
+  "Babylon",
+  "Byblus",
+  "Citium",
+  "Colophon",
+  "Lampsacus",
+  "Magnesia ad Maeandrum",
+  "Miletus",
+  "Ptolemais-Ake",
+  "Salamis",
+  "Sardis",
+  "Sidon",
+  "Susa",
+  "Tarsus",
+  "Teos",
+  "Tyre"
+ ],
+ "members_in_corpus": [
+  "Abydus",
+  "Alexandria",
+  "Amathus",
+  "Amphipolis",
+  "Aradus",
+  "Babylon",
+  "Byblus",
+  "Citium",
+  "Colophon",
+  "Lampsacus",
+  "Magnesia ad Maeandrum",
+  "Miletus",
+  "Salamis",
+  "Sardis",
+  "Sidon",
+  "Susa",
+  "Tarsus",
+  "Teos",
+  "Tyre"
+ ],
+ "members_local": [
+  "Abydus",
+  "Alexandria",
+  "Citium",
+  "Lampsacus",
+  "Miletus",
+  "Tarsus",
+  "Teos"
+ ],
+ "hoard_paragraphs": 33,
+ "paragraphs_with_a_member": 11,
+ "cover": 6,
+ "works_naming_hoard": [
+  "nnan174624",
+  "nnan49321",
+  "nnan49322",
+  "nnan50879",
+  "nnan97810"
+ ],
+ "single_passage": false,
+ "question": "Which mints are represented among the coins of the Larnaca hoard, found 1870, buried about 300 B.C.?"
+}

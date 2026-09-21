@@ -1,0 +1,71 @@
+{
+ "id": "list-igch1471-mints",
+ "igch": 1471,
+ "uri": "http://coinhoards.org/id/igch1471",
+ "findspot": "Katô Paphos (anc. Nea Paphos)",
+ "name": "Katô Paphos",
+ "kind": "mints",
+ "works": {
+  "nnan174624": [
+   "H1"
+  ],
+  "nnan49321": [
+   "H1"
+  ],
+  "nnan49322": [
+   "H1"
+  ]
+ },
+ "members": [
+  "Amphipolis",
+  "Aradus",
+  "Babylon",
+  "Colophon",
+  "Lampsacus",
+  "Miletus",
+  "Pella",
+  "Salamis",
+  "Sardis",
+  "Susa"
+ ],
+ "facts": [
+  "Amphipolis",
+  "Aradus",
+  "Babylon",
+  "Colophon",
+  "Lampsacus",
+  "Miletus",
+  "Pella",
+  "Salamis",
+  "Sardis",
+  "Susa"
+ ],
+ "members_in_corpus": [
+  "Amphipolis",
+  "Aradus",
+  "Babylon",
+  "Colophon",
+  "Lampsacus",
+  "Miletus",
+  "Pella",
+  "Salamis",
+  "Sardis",
+  "Susa"
+ ],
+ "members_local": [
+  "Amphipolis",
+  "Babylon",
+  "Lampsacus",
+  "Miletus"
+ ],
+ "hoard_paragraphs": 9,
+ "paragraphs_with_a_member": 6,
+ "cover": 3,
+ "works_naming_hoard": [
+  "nnan174624",
+  "nnan49321",
+  "nnan49322"
+ ],
+ "single_passage": false,
+ "question": "Which mints are represented among the coins of the Katô Paphos hoard, found 1965, buried about 305 B.C.?"
+}
