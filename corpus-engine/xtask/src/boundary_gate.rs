@@ -407,14 +407,14 @@ fn runtime_root_escapes(dir: &Path, crate_name: &str, scope: &str, fails: &mut V
             let Ok(text) = std::fs::read_to_string(&path) else {
                 continue;
             };
-            let name = path
-                .file_name()
-                .unwrap_or_default()
-                .to_string_lossy()
+            let rel = path
+                .strip_prefix(dir)
+                .unwrap_or(&path)
+                .display()
                 .to_string();
             for e in scan_runtime_escapes(&text) {
                 fails.push(format!(
-                    "[{scope}] {crate_name}: {sub}/{name}:{} {}",
+                    "[{scope}] {crate_name}: {rel}:{} {}",
                     e.line,
                     e.describe()
                 ));
@@ -545,10 +545,14 @@ fn scan_runtime_escapes(text: &str) -> Vec<RuntimeEscape> {
             // `current_dir(` made this rule fire on four call sites that already
             // take a `&Path` argument — exactly the shape the doc above says it
             // deliberately does NOT flag. Watched failing on those four
-            // (2026-09-21) before it was fixed.
+            // (2026-09-21) before it was fixed. Widened the same day from
+            // `arg("-C")` to the bare literal: `sovereign-eval`'s `git_head`
+            // spells it `.args(["-C"]).arg(root)` and was flagged while taking
+            // the root as an argument. The property is the flag, not the
+            // builder method that carries it.
             let caller_directed = lines[i..hi]
                 .iter()
-                .any(|l| l.contains("current_dir(") || l.contains(r#"arg("-C")"#));
+                .any(|l| l.contains("current_dir(") || l.contains(r#""-C""#));
             if !caller_directed {
                 out.push(RuntimeEscape {
                     line: i + 1,
@@ -893,6 +897,25 @@ fn head() -> String {
     /// The pair is the point: the `-C` form passes, the form that names
     /// neither still fails (`runtime_scan_flags_git_that_never_says_where`
     /// above). Loosening a rule without a control is how a gate stops being one.
+    /// The plural spelling. `sovereign-eval::manifest::git_head` writes
+    /// `.args(["-C"]).arg(root)`, which carries the identical property and was
+    /// flagged because the matcher read `arg("-C")` only.
+    #[test]
+    fn runtime_scan_accepts_the_args_slice_spelling_of_git_dash_c() {
+        let plural = r#"
+fn git_head(root: &std::path::Path) -> Option<String> {
+    let out = std::process::Command::new("git")
+        .args(["-C"])
+        .arg(root)
+        .args(["rev-parse", "HEAD"])
+        .output()
+        .ok()?;
+    Some(String::from_utf8_lossy(&out.stdout).trim().to_string())
+}
+"#;
+        assert!(scan_runtime_escapes(plural).is_empty());
+    }
+
     #[test]
     fn runtime_scan_accepts_git_dash_c_as_caller_directed() {
         let dash_c = r#"
