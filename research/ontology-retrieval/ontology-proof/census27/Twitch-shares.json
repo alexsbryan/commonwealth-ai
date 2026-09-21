@@ -1,0 +1,25 @@
+{
+ "service": "Twitch",
+ "list": "shares",
+ "source": "spikes/fineprint-data/ota-pga-versions/Twitch/Privacy Policy.md",
+ "verdict": "under-5",
+ "headings": [
+  {
+   "line": 75,
+   "text": "When Twitch Discloses Personal Information",
+   "span_ends_line": 89
+  },
+  {
+   "line": 194,
+   "text": "Additional State-Specific Privacy Disclosures",
+   "span_ends_line": 197
+  },
+  {
+   "line": 198,
+   "text": "Japan Privacy Disclosures",
+   "span_ends_line": 200
+  }
+ ],
+ "items": [],
+ "dropped": []
+}

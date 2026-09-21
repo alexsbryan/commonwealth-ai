@@ -1,0 +1,9 @@
+{
+ "service": "Twitch",
+ "list": "collects",
+ "source": "spikes/fineprint-data/ota-pga-versions/Twitch/Privacy Policy.md",
+ "verdict": "no-heading",
+ "headings": [],
+ "items": [],
+ "dropped": []
+}

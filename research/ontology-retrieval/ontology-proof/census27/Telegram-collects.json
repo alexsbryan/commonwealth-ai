@@ -1,0 +1,9 @@
+{
+ "service": "Telegram",
+ "list": "collects",
+ "source": "spikes/fineprint-data/ota-pga-versions/Telegram/Privacy Policy.md",
+ "verdict": "no-heading",
+ "headings": [],
+ "items": [],
+ "dropped": []
+}

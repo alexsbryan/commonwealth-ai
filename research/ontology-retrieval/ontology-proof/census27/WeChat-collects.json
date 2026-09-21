@@ -1,0 +1,9 @@
+{
+ "service": "WeChat",
+ "list": "collects",
+ "source": "spikes/fineprint-data/ota-pga-versions/WeChat/Privacy Policy.md",
+ "verdict": "no-heading",
+ "headings": [],
+ "items": [],
+ "dropped": []
+}

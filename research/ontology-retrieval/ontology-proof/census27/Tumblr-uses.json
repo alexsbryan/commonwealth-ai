@@ -1,0 +1,93 @@
+{
+ "service": "Tumblr",
+ "list": "uses",
+ "source": "spikes/fineprint-data/ota-pga-versions/Tumblr/Privacy Policy.md",
+ "verdict": "qualifies",
+ "headings": [
+  {
+   "line": 19,
+   "text": "What We Collect and How We Use It",
+   "span_ends_line": 71
+  }
+ ],
+ "items": [
+  {
+   "item": "Account Information",
+   "line": 22,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Email Communications with Us",
+   "line": 26,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Information about Your Accounts on Third Party Services",
+   "line": 30,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Information Obtained from Third Party Services",
+   "line": 32,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "User Content",
+   "line": 36,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Native Actions",
+   "line": 40,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Information About User Content",
+   "line": 44,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Information Related to Use of the Services",
+   "line": 50,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Information Related to Your Web Browser",
+   "line": 54,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Location Information",
+   "line": 56,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Information Related to Your Mobile Device",
+   "line": 60,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Information Collected Using Cookies and Other Technologies",
+   "line": 62,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Information About Your Contacts",
+   "line": 66,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Derived Information",
+   "line": 70,
+   "from": "bold-lead-in"
+  }
+ ],
+ "dropped": [
+  {
+   "item": "Contact and Financial Information",
+   "line": 46,
+   "from": "bold-lead-in",
+   "rule": "imperative"
+  }
+ ]
+}

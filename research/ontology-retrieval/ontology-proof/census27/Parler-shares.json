@@ -1,0 +1,15 @@
+{
+ "service": "Parler",
+ "list": "shares",
+ "source": "spikes/fineprint-data/ota-pga-versions/Parler/Privacy Policy.md",
+ "verdict": "under-5",
+ "headings": [
+  {
+   "line": 82,
+   "text": "How We Share the Information We Collect",
+   "span_ends_line": 96
+  }
+ ],
+ "items": [],
+ "dropped": []
+}

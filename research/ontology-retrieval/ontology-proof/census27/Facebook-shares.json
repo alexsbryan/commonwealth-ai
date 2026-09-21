@@ -1,0 +1,957 @@
+{
+ "service": "Facebook",
+ "list": "shares",
+ "source": "spikes/fineprint-data/ota-pga-versions/Facebook/Privacy Policy.md",
+ "verdict": "over-40",
+ "headings": [
+  {
+   "line": 805,
+   "text": "How is your information shared on Meta Products or with integrated partners?",
+   "span_ends_line": 1097
+  },
+  {
+   "line": 821,
+   "text": "People and accounts you share and communicate with",
+   "span_ends_line": 827
+  },
+  {
+   "line": 828,
+   "text": "What you share with them",
+   "span_ends_line": 838
+  },
+  {
+   "line": 867,
+   "text": "Content others share or reshare about you",
+   "span_ends_line": 869
+  },
+  {
+   "line": 879,
+   "text": "How information about you can be shared",
+   "span_ends_line": 890
+  },
+  {
+   "line": 922,
+   "text": "Where can public content be shared?",
+   "span_ends_line": 935
+  },
+  {
+   "line": 1084,
+   "text": "Sharing friends lists",
+   "span_ends_line": 1097
+  },
+  {
+   "line": 1087,
+   "text": "When you share your friends list",
+   "span_ends_line": 1093
+  },
+  {
+   "line": 1094,
+   "text": "When your friends share their friends list",
+   "span_ends_line": 1097
+  },
+  {
+   "line": 1098,
+   "text": "How do we share information with third parties?",
+   "span_ends_line": 1318
+  },
+  {
+   "line": 1337,
+   "text": "Why we share across the Meta Companies",
+   "span_ends_line": 1347
+  },
+  {
+   "line": 1363,
+   "text": "Why we share across the Meta Companies",
+   "span_ends_line": 1390
+  }
+ ],
+ "items": [
+  {
+   "item": "Remember to share only with people you trust",
+   "line": 812,
+   "from": "list-item"
+  },
+  {
+   "item": "On Meta Products",
+   "line": 816,
+   "from": "sub-heading"
+  },
+  {
+   "item": "People and accounts you share and communicate with",
+   "line": 821,
+   "from": "sub-heading"
+  },
+  {
+   "item": "What you share with them",
+   "line": 828,
+   "from": "sub-heading"
+  },
+  {
+   "item": "Share a post you’ve written",
+   "line": 833,
+   "from": "list-item"
+  },
+  {
+   "item": "Share a photo or video",
+   "line": 834,
+   "from": "list-item"
+  },
+  {
+   "item": "Share a news article",
+   "line": 836,
+   "from": "list-item"
+  },
+  {
+   "item": "Add information to your profile",
+   "line": 837,
+   "from": "list-item"
+  },
+  {
+   "item": "What you communicate with them",
+   "line": 839,
+   "from": "sub-heading"
+  },
+  {
+   "item": "Some of your activity",
+   "line": 844,
+   "from": "sub-heading"
+  },
+  {
+   "item": "Comment on or react to others’ posts",
+   "line": 849,
+   "from": "list-item"
+  },
+  {
+   "item": "When you’re active",
+   "line": 855,
+   "from": "sub-heading"
+  },
+  {
+   "item": "When you interact with a supervised user",
+   "line": 862,
+   "from": "sub-heading"
+  },
+  {
+   "item": "Content others share or reshare about you",
+   "line": 867,
+   "from": "sub-heading"
+  },
+  {
+   "item": "Who can see or reshare your content",
+   "line": 870,
+   "from": "sub-heading"
+  },
+  {
+   "item": "How information about you can be shared",
+   "line": 879,
+   "from": "sub-heading"
+  },
+  {
+   "item": "Mention you in a post or story",
+   "line": 885,
+   "from": "list-item"
+  },
+  {
+   "item": "Public content",
+   "line": 898,
+   "from": "sub-heading"
+  },
+  {
+   "item": "What content is public?",
+   "line": 901,
+   "from": "sub-heading"
+  },
+  {
+   "item": "Facebook and Instagram username",
+   "line": 907,
+   "from": "list-item"
+  },
+  {
+   "item": "Profile picture",
+   "line": 908,
+   "from": "list-item"
+  },
+  {
+   "item": "Activity on public groups, Facebook Pages and channels",
+   "line": 909,
+   "from": "list-item"
+  },
+  {
+   "item": "Who can see public content?",
+   "line": 915,
+   "from": "sub-heading"
+  },
+  {
+   "item": "Where can public content be shared?",
+   "line": 922,
+   "from": "sub-heading"
+  },
+  {
+   "item": "The media, like TV",
+   "line": 930,
+   "from": "list-item"
+  },
+  {
+   "item": "Other apps and websites connected to our Products",
+   "line": 931,
+   "from": "list-item"
+  },
+  {
+   "item": "Search engines. [Learn more\\[45\\]]",
+   "line": 932,
+   "from": "list-item"
+  },
+  {
+   "item": "With integrated partners",
+   "line": 943,
+   "from": "sub-heading"
+  },
+  {
+   "item": "Information they receive automatically",
+   "line": 953,
+   "from": "sub-heading"
+  },
+  {
+   "item": "What you use their services to do",
+   "line": 959,
+   "from": "list-item"
+  },
+  {
+   "item": "Information they receive with your permission",
+   "line": 965,
+   "from": "sub-heading"
+  },
+  {
+   "item": "How long they can access your information",
+   "line": 976,
+   "from": "sub-heading"
+  },
+  {
+   "item": "How integrated partners handle your information",
+   "line": 997,
+   "from": "sub-heading"
+  },
+  {
+   "item": "More resources",
+   "line": 1002,
+   "from": "sub-heading"
+  },
+  {
+   "item": "What Products does this Policy cover?",
+   "line": 1014,
+   "from": "sub-heading"
+  },
+  {
+   "item": "Choosing an audience",
+   "line": 1019,
+   "from": "sub-heading"
+  },
+  {
+   "item": "The public, including people on and off Facebook",
+   "line": 1024,
+   "from": "list-item"
+  },
+  {
+   "item": "A customized list of people",
+   "line": 1026,
+   "from": "list-item"
+  },
+  {
+   "item": "Audience settings are different from app permissions",
+   "line": 1037,
+   "from": "sub-heading"
+  },
+  {
+   "item": "Search engines",
+   "line": 1060,
+   "from": "sub-heading"
+  },
+  {
+   "item": "Integrated partner",
+   "line": 1069,
+   "from": "sub-heading"
+  },
+  {
+   "item": "When an integrated partner might receive your information",
+   "line": 1074,
+   "from": "sub-heading"
+  },
+  {
+   "item": "Sharing friends lists",
+   "line": 1084,
+   "from": "sub-heading"
+  },
+  {
+   "item": "When you share your friends list",
+   "line": 1087,
+   "from": "sub-heading"
+  },
+  {
+   "item": "When your friends share their friends list",
+   "line": 1094,
+   "from": "sub-heading"
+  },
+  {
+   "item": "Advertisers who show ads on our Products",
+   "line": 1106,
+   "from": "list-item"
+  },
+  {
+   "item": "Advertisers and Audience Network publishers",
+   "line": 1120,
+   "from": "sub-heading"
+  },
+  {
+   "item": "Ads people engaged with, if any",
+   "line": 1129,
+   "from": "list-item"
+  },
+  {
+   "item": "When people engaged with ads",
+   "line": 1130,
+   "from": "list-item"
+  },
+  {
+   "item": "Where that ad was shown",
+   "line": 1131,
+   "from": "list-item"
+  },
+  {
+   "item": "Audience Network publishers and their vendors",
+   "line": 1135,
+   "from": "sub-heading"
+  },
+  {
+   "item": "Partners who use our analytics services",
+   "line": 1146,
+   "from": "sub-heading"
+  },
+  {
+   "item": "Any information required by applicable regulation",
+   "line": 1170,
+   "from": "list-item"
+  },
+  {
+   "item": "Other information you choose to share with them",
+   "line": 1171,
+   "from": "list-item"
+  },
+  {
+   "item": "Integrated partners",
+   "line": 1175,
+   "from": "sub-heading"
+  },
+  {
+   "item": "Measurement vendors",
+   "line": 1183,
+   "from": "sub-heading"
+  },
+  {
+   "item": "Marketing vendors",
+   "line": 1192,
+   "from": "sub-heading"
+  },
+  {
+   "item": "Service providers",
+   "line": 1205,
+   "from": "sub-heading"
+  },
+  {
+   "item": "Investigating suspicious activity",
+   "line": 1213,
+   "from": "list-item"
+  },
+  {
+   "item": "Facilitating payments",
+   "line": 1215,
+   "from": "list-item"
+  },
+  {
+   "item": "Providing customer support",
+   "line": 1216,
+   "from": "list-item"
+  },
+  {
+   "item": "Improving the functionality of our Products",
+   "line": 1217,
+   "from": "list-item"
+  },
+  {
+   "item": "Providing technical infrastructure services",
+   "line": 1218,
+   "from": "list-item"
+  },
+  {
+   "item": "Analyzing how our Products are used",
+   "line": 1219,
+   "from": "list-item"
+  },
+  {
+   "item": "Conducting research and surveys",
+   "line": 1220,
+   "from": "list-item"
+  },
+  {
+   "item": "Marketing and promoting our Products",
+   "line": 1221,
+   "from": "list-item"
+  },
+  {
+   "item": "Third parties",
+   "line": 1223,
+   "from": "sub-heading"
+  },
+  {
+   "item": "External researchers",
+   "line": 1226,
+   "from": "sub-heading"
+  },
+  {
+   "item": "Our business or mission",
+   "line": 1233,
+   "from": "list-item"
+  },
+  {
+   "item": "Social good. Learn more",
+   "line": 1234,
+   "from": "list-item"
+  },
+  {
+   "item": "Technological advancement",
+   "line": 1235,
+   "from": "list-item"
+  },
+  {
+   "item": "Safety and security on our Products",
+   "line": 1236,
+   "from": "list-item"
+  },
+  {
+   "item": "Public interest",
+   "line": 1237,
+   "from": "list-item"
+  },
+  {
+   "item": "Health and well-being",
+   "line": 1238,
+   "from": "list-item"
+  },
+  {
+   "item": "AI integrations",
+   "line": 1242,
+   "from": "sub-heading"
+  },
+  {
+   "item": "Other third parties",
+   "line": 1251,
+   "from": "sub-heading"
+  },
+  {
+   "item": "Third party",
+   "line": 1263,
+   "from": "sub-heading"
+  },
+  {
+   "item": "General demographics and interests",
+   "line": 1268,
+   "from": "sub-heading"
+  },
+  {
+   "item": "Were women",
+   "line": 1277,
+   "from": "list-item"
+  },
+  {
+   "item": "Were between the ages of 25 and 34",
+   "line": 1278,
+   "from": "list-item"
+  },
+  {
+   "item": "Clicked on the ad from their phone",
+   "line": 1279,
+   "from": "list-item"
+  },
+  {
+   "item": "When you might give us permission",
+   "line": 1281,
+   "from": "sub-heading"
+  },
+  {
+   "item": "Transactions you might make",
+   "line": 1291,
+   "from": "sub-heading"
+  },
+  {
+   "item": "Subscribing to premium content",
+   "line": 1294,
+   "from": "list-item"
+  },
+  {
+   "item": "Buying, selling or using products",
+   "line": 1295,
+   "from": "list-item"
+  },
+  {
+   "item": "Buying, selling or using services",
+   "line": 1296,
+   "from": "list-item"
+  },
+  {
+   "item": "Donating to charities",
+   "line": 1297,
+   "from": "list-item"
+  },
+  {
+   "item": "Commerce services platforms",
+   "line": 1299,
+   "from": "sub-heading"
+  },
+  {
+   "item": "Customer engagement tools",
+   "line": 1307,
+   "from": "list-item"
+  },
+  {
+   "item": "Measurement vendor",
+   "line": 1309,
+   "from": "sub-heading"
+  },
+  {
+   "item": "Marketing vendor",
+   "line": 1314,
+   "from": "sub-heading"
+  },
+  {
+   "item": "To provide optional features and integrations",
+   "line": 1343,
+   "from": "list-item"
+  },
+  {
+   "item": "Complying with their legal obligations",
+   "line": 1370,
+   "from": "list-item"
+  },
+  {
+   "item": "Helping keep you and others safe",
+   "line": 1371,
+   "from": "list-item"
+  },
+  {
+   "item": "Performing account verification",
+   "line": 1372,
+   "from": "list-item"
+  },
+  {
+   "item": "Investigating suspicious activities",
+   "line": 1373,
+   "from": "list-item"
+  },
+  {
+   "item": "Creating analytics",
+   "line": 1374,
+   "from": "list-item"
+  },
+  {
+   "item": "Developing and providing features and integrations",
+   "line": 1378,
+   "from": "sub-heading"
+  },
+  {
+   "item": "Understanding how people use our products",
+   "line": 1387,
+   "from": "sub-heading"
+  }
+ ],
+ "dropped": [
+  {
+   "item": "You can choose to share information on our Products or with integrated partners",
+   "line": 811,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "You might decide to use a product that integrates with one of ours, like if you use Facebook Login to log into a music service or a shopping site",
+   "line": 813,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "If you do, that organization will ask you to receive some information about you, like your email address or birthday",
+   "line": 814,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Engage with ads or other sponsored or commercial content, like by commenting or liking",
+   "line": 850,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Allow content you've shared about a product in a Shop to be shared across our Products",
+   "line": 851,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Connect a new Meta device, like smart glasses, to your account",
+   "line": 853,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Share a photo or video of you in a post, comment, story, reel or message",
+   "line": 884,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Tag you in a post, comment, story or location",
+   "line": 886,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Share details about you in a post, story or message",
+   "line": 887,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Activity on content that is public. For example, your comment, rating or review on Marketplace, or on a public Instagram account",
+   "line": 910,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "When you use an integrated partner’s product or service",
+   "line": 950,
+   "from": "sub-heading",
+   "rule": "prose"
+  },
+  {
+   "item": "What you post or share from these products or services",
+   "line": 958,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Information from and about the device you’re using",
+   "line": 960,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "The language setting you’ve chosen on our Products",
+   "line": 961,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "When you interact with someone else’s content on an integrated partner’s product or service",
+   "line": 990,
+   "from": "sub-heading",
+   "rule": "prose"
+  },
+  {
+   "item": "Your friends and other connections, such as the friends of people you tag",
+   "line": 1025,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "The members of a single community, such as a group",
+   "line": 1028,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Interactions with our features that are part of AI at Meta",
+   "line": 1046,
+   "from": "sub-heading",
+   "rule": "prose"
+  },
+  {
+   "item": "Prompts that can include questions, messages, media and other information you or others share with or send to these features",
+   "line": 1053,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Responses and other information you receive from these features. Sometimes these are provided with the help of our AI integrations",
+   "line": 1054,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Information from third-party apps and services you choose to connect to these features to do things like help manage your calendar and emails",
+   "line": 1055,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Feedback you give to these features and responses to your feedback",
+   "line": 1056,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Information we collect to personalize these features. See examples",
+   "line": 1057,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Information about you and others from third party apps and services that you connect to Meta Products to enhance your experience, including our features that are part of AI at Meta. Learn more",
+   "line": 1058,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "If you post with your audience or profile set to Public",
+   "line": 1065,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "If you post on public Pages or accounts, depending on the settings of that account",
+   "line": 1066,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "If your public content is reshared by a professional account on Instagram",
+   "line": 1067,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "They can view and access a list of your Facebook friends who use the same app and have given the app permission to access their list of friends. They can’t access nonpublic information about your friends or followers through this process. Note that the app developer will receive more information about your friends if your friends choose to share it themselves. They can share it by providing the information directly or giving the developer permission to access information from their account",
+   "line": 1091,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "You’ll appear on friends lists that your Facebook friends can choose to share with the same app. You can remove this permission, or the app entirely, if you later decide that you don’t want to share your friends list with an app, or don’t want to appear on other friends lists shared with that app",
+   "line": 1092,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Businesses we hire to market our Products for us",
+   "line": 1107,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Businesses we hire to do things like offer customer service or conduct surveys",
+   "line": 1108,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Researchers who use it to do things like innovate, advance technology, or improve people’s safety",
+   "line": 1109,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "How many people see and engage with ads on publisher apps",
+   "line": 1141,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Information related to or in response to a publisher’s request to serve an ad on its app",
+   "line": 1142,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "How many people interacted with our partners' content, products or services",
+   "line": 1155,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "The [general demographics and interests\\[51\\]]  of the people who interacted with it",
+   "line": 1156,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "How people use our partners’ products and services to connect to Meta Products and the performance of their connection and networks",
+   "line": 1157,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Partners who offer goods or services on our Products and commerce services platforms",
+   "line": 1161,
+   "from": "sub-heading",
+   "rule": "prose"
+  },
+  {
+   "item": "Information to complete your transaction, like order, payment, contact and shipping information",
+   "line": 1168,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Information to help ensure the security of the transaction, like information about your device or connection",
+   "line": 1169,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Serving our advertisements across the internet, including on mobile, desktop and connected television devices",
+   "line": 1199,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Tracking and categorizing your online and mobile app activity",
+   "line": 1200,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Providing us information about your interests and community and advertising interactions",
+   "line": 1201,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Detecting and stopping threats to our personnel and property",
+   "line": 1214,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "To promote safety, security and integrity and comply with applicable laws",
+   "line": 1342,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "To understand how people use and interact with Meta Company Products",
+   "line": 1344,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Promoting safety, security and integrity and complying with applicable law",
+   "line": 1366,
+   "from": "sub-heading",
+   "rule": "prose"
+  },
+  {
+   "item": "Use your Meta Pay account to pay for things on WhatsApp",
+   "line": 1382,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Chat with your friends on other Meta Company Products, such as smart glasses, by connecting your WhatsApp account",
+   "line": 1383,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Highlights",
+   "line": 808,
+   "from": "sub-heading",
+   "rule": "one-word"
+  },
+  {
+   "item": "Create a story",
+   "line": 835,
+   "from": "list-item",
+   "rule": "imperative"
+  },
+  {
+   "item": "View their story on Facebook or Instagram",
+   "line": 852,
+   "from": "list-item",
+   "rule": "imperative"
+  },
+  {
+   "item": "Take control",
+   "line": 891,
+   "from": "sub-heading",
+   "rule": "imperative"
+  },
+  {
+   "item": "Name",
+   "line": 906,
+   "from": "list-item",
+   "rule": "one-word"
+  },
+  {
+   "item": "Avatars",
+   "line": 911,
+   "from": "list-item",
+   "rule": "one-word"
+  },
+  {
+   "item": "APIs",
+   "line": 929,
+   "from": "list-item",
+   "rule": "link-only"
+  },
+  {
+   "item": "Yourself",
+   "line": 1027,
+   "from": "list-item",
+   "rule": "one-word"
+  },
+  {
+   "item": "Supervision",
+   "line": 1041,
+   "from": "sub-heading",
+   "rule": "one-word"
+  },
+  {
+   "item": "Partners",
+   "line": 1117,
+   "from": "sub-heading",
+   "rule": "one-word"
+  },
+  {
+   "item": "Advertisers",
+   "line": 1123,
+   "from": "sub-heading",
+   "rule": "one-word"
+  },
+  {
+   "item": "Vendors",
+   "line": 1180,
+   "from": "sub-heading",
+   "rule": "one-word"
+  },
+  {
+   "item": "Partner",
+   "line": 1258,
+   "from": "sub-heading",
+   "rule": "one-word"
+  },
+  {
+   "item": "Payments",
+   "line": 1304,
+   "from": "list-item",
+   "rule": "one-word"
+  },
+  {
+   "item": "Marketing",
+   "line": 1305,
+   "from": "list-item",
+   "rule": "one-word"
+  },
+  {
+   "item": "Shipping",
+   "line": 1306,
+   "from": "list-item",
+   "rule": "one-word"
+  }
+ ]
+}

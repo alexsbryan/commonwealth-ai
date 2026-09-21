@@ -1,0 +1,73 @@
+{
+ "service": "WhatsApp",
+ "list": "collects",
+ "source": "spikes/fineprint-data/ota-pga-versions/WhatsApp/Privacy Policy.md",
+ "verdict": "qualifies",
+ "headings": [
+  {
+   "line": 46,
+   "text": "Information We Collect",
+   "span_ends_line": 55
+  },
+  {
+   "line": 56,
+   "text": "Information You Provide",
+   "span_ends_line": 78
+  }
+ ],
+ "items": [
+  {
+   "item": "Your Account Information",
+   "line": 58,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "User Content",
+   "line": 59,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Your Messages, Media within Messages, and Calls",
+   "line": 60,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Status Information",
+   "line": 67,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Precise Location Information",
+   "line": 68,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Your Connections",
+   "line": 70,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Your Community and Group Information",
+   "line": 72,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Customer Support Information And Other Communications",
+   "line": 74,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Account Access Information",
+   "line": 76,
+   "from": "bold-lead-in"
+  }
+ ],
+ "dropped": [
+  {
+   "item": "You may also provide content that is not encrypted which means that we can see it. This includes your profile picture, your \"about\" information and names and descriptions of your communities and groups. When you choose to use certain avatars features, such as using a photo to enable us to suggest an avatar that more closely resembles you, we process the photo and parts of your face or body features in the photo frame. The information we use for this process is not used to identify you",
+   "line": 69,
+   "from": "list-item",
+   "rule": "prose"
+  }
+ ]
+}

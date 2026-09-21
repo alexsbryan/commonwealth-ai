@@ -1,0 +1,178 @@
+{
+ "service": "Spotify",
+ "list": "shares",
+ "source": "spikes/fineprint-data/ota-pga-versions/Spotify/Privacy Policy.md",
+ "verdict": "qualifies",
+ "headings": [
+  {
+   "line": 199,
+   "text": "5\\. Disclosing your personal data",
+   "span_ends_line": 259
+  }
+ ],
+ "items": [
+  {
+   "item": "Information available to other Spotify users",
+   "line": 204,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "your profile name",
+   "line": 208,
+   "from": "list-item"
+  },
+  {
+   "item": "your profile",
+   "line": 216,
+   "from": "list-item"
+  },
+  {
+   "item": "Personal data you may choose to disclose",
+   "line": 222,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Support community",
+   "line": 232,
+   "from": "table-cell"
+  },
+  {
+   "item": "Other Spotify users",
+   "line": 233,
+   "from": "table-cell"
+  },
+  {
+   "item": "Artists and record labels",
+   "line": 234,
+   "from": "table-cell"
+  },
+  {
+   "item": "Information we may disclose",
+   "line": 236,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Service providers",
+   "line": 242,
+   "from": "table-cell"
+  },
+  {
+   "item": "Payment partners",
+   "line": 243,
+   "from": "table-cell"
+  },
+  {
+   "item": "Advertising partners",
+   "line": 244,
+   "from": "table-cell"
+  },
+  {
+   "item": "Marketing Partners",
+   "line": 245,
+   "from": "table-cell"
+  },
+  {
+   "item": "Ticketing and event partners",
+   "line": 246,
+   "from": "table-cell"
+  },
+  {
+   "item": "Podcast Hosting Platforms",
+   "line": 247,
+   "from": "table-cell"
+  },
+  {
+   "item": "Academic researchers",
+   "line": 248,
+   "from": "table-cell"
+  },
+  {
+   "item": "Purchasers of our business",
+   "line": 250,
+   "from": "table-cell"
+  },
+  {
+   "item": "Courts and Authorities",
+   "line": 252,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "to comply with a legal obligation",
+   "line": 254,
+   "from": "list-item"
+  },
+  {
+   "item": "to respond to a valid legal process",
+   "line": 255,
+   "from": "list-item"
+  }
+ ],
+ "dropped": [
+  {
+   "item": "your profile photo, if you choose to upload one",
+   "line": 209,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "your public playlists, and any associated titles, descriptions and images",
+   "line": 210,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "other content you post on the Spotify Service, and any associated titles, descriptions and images",
+   "line": 211,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "the number of people who you follow and the number of people who follow you on the Spotify Service",
+   "line": 212,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "any content you post on Spotify and details about that content",
+   "line": 217,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "your playlists and any associated titles, descriptions and images",
+   "line": 218,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "where you have chosen to use a Spotify Service feature, or a third party application, service or device, and we need to disclose personal data to enable this, or",
+   "line": 226,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "if you otherwise grant us your permission to disclose the personal data. For example, you can do it by selecting the appropriate setting in the Spotify Service or by giving your consent",
+   "line": 227,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Third party applications, services and devices you connect to your Spotify account",
+   "line": 231,
+   "from": "table-cell",
+   "rule": "prose"
+  },
+  {
+   "item": "Other Spotify group companies, including companies that Spotify acquires",
+   "line": 249,
+   "from": "table-cell",
+   "rule": "prose"
+  },
+  {
+   "item": "for our own or a third party's justifiable interest such as criminal investigations, litigation, protecting someone’s safety, or preventing death or imminent bodily harm",
+   "line": 256,
+   "from": "list-item",
+   "rule": "prose"
+  }
+ ]
+}

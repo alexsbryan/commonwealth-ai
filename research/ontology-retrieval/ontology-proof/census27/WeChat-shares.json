@@ -1,0 +1,87 @@
+{
+ "service": "WeChat",
+ "list": "shares",
+ "source": "spikes/fineprint-data/ota-pga-versions/WeChat/Privacy Policy.md",
+ "verdict": "under-5",
+ "headings": [
+  {
+   "line": 225,
+   "text": "5\\. WHO DO WE SHARE YOUR DATA WITH?",
+   "span_ends_line": 255
+  }
+ ],
+ "items": [
+  {
+   "item": "third party services",
+   "line": 234,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "third parties pursuant to your request",
+   "line": 254,
+   "from": "bold-lead-in"
+  }
+ ],
+ "dropped": [
+  {
+   "item": "log in to WeChat using third party authentication services",
+   "line": 235,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "log in to platforms of third party services using WeChat account",
+   "line": 238,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "access content of non-Weixin third party services from WeChat; or",
+   "line": 239,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "link your WeChat contact list with your list on third party services",
+   "line": 240,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "third parties or related group companies in the event of a merger, acquisition, restructuring, or sale of assets, or by operation of law or otherwise",
+   "line": 252,
+   "from": "bold-lead-in",
+   "rule": "prose"
+  },
+  {
+   "item": "government, public, regulatory, judicial and law enforcement bodies or authorities",
+   "line": 253,
+   "from": "bold-lead-in",
+   "rule": "prose"
+  },
+  {
+   "item": "related group companies",
+   "line": 232,
+   "from": "bold-lead-in",
+   "rule": "dangling"
+  },
+  {
+   "item": "service providers",
+   "line": 233,
+   "from": "bold-lead-in",
+   "rule": "dangling"
+  },
+  {
+   "item": "share content from WeChat to third party services",
+   "line": 236,
+   "from": "list-item",
+   "rule": "dangling"
+  },
+  {
+   "item": "share content on WeChat from third party services",
+   "line": 237,
+   "from": "list-item",
+   "rule": "dangling"
+  }
+ ]
+}

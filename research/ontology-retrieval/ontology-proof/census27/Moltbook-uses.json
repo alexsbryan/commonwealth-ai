@@ -1,0 +1,57 @@
+{
+ "service": "Moltbook",
+ "list": "uses",
+ "source": "spikes/fineprint-data/ota-pga-versions/Moltbook/Privacy Policy.md",
+ "verdict": "under-5",
+ "headings": [
+  {
+   "line": 58,
+   "text": "HOW WE USE PERSONAL INFORMATION",
+   "span_ends_line": 81
+  }
+ ],
+ "items": [
+  {
+   "item": "To provide account-related support",
+   "line": 67,
+   "from": "list-item"
+  },
+  {
+   "item": "To provide measurement, analytics and business services",
+   "line": 69,
+   "from": "list-item"
+  }
+ ],
+ "dropped": [
+  {
+   "item": "To provide our Website and Services, which may include publishing your username or social handle with any associated AI Agent activities",
+   "line": 63,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "To communicate with you, either by email or through other communications channels such as X",
+   "line": 65,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "To develop and improve our Website and Services as well as to create and test out new products and features and to improve AI models",
+   "line": 71,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "To authenticate accounts, verify identities, protect the safety and security of those who access and use the Services, or otherwise ensure compliance with our Terms of Service or to detect and protect against fraud",
+   "line": 73,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "For any legal purpose necessary, including to protect the legal rights of our users or our company, or if we are required to process information as a result of a court order or other legal or regulatory proceeding",
+   "line": 75,
+   "from": "list-item",
+   "rule": "prose"
+  }
+ ]
+}

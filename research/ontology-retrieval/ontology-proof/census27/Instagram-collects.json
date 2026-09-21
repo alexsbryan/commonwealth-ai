@@ -1,0 +1,9 @@
+{
+ "service": "Instagram",
+ "list": "collects",
+ "source": "spikes/fineprint-data/ota-pga-versions/Instagram/Privacy Policy.md",
+ "verdict": "no-heading",
+ "headings": [],
+ "items": [],
+ "dropped": []
+}

@@ -1,0 +1,9 @@
+{
+ "service": "Twitter",
+ "list": "uses",
+ "source": "spikes/fineprint-data/ota-pga-versions/Twitter/Privacy Policy.md",
+ "verdict": "no-heading",
+ "headings": [],
+ "items": [],
+ "dropped": []
+}

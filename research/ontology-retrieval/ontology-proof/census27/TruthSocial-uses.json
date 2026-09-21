@@ -1,0 +1,70 @@
+{
+ "service": "TruthSocial",
+ "list": "uses",
+ "source": "spikes/fineprint-data/ota-pga-versions/TruthSocial/Privacy Policy.md",
+ "verdict": "under-5",
+ "headings": [
+  {
+   "line": 94,
+   "text": "D. How We Use Information",
+   "span_ends_line": 110
+  }
+ ],
+ "items": [
+  {
+   "item": "To measure, analyze, and improve our services",
+   "line": 107,
+   "from": "list-item"
+  }
+ ],
+ "dropped": [
+  {
+   "item": "To facilitate the creation of and secure your Account on the Website or Apps",
+   "line": 99,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "To provide and improve the Website and Apps and to develop new products and services",
+   "line": 100,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "To customize and personalize the advertising and other content we deliver to you both on the Website and Apps and on other services offered by our publishing partners. We use this information to provide you with relevant and interesting advertising and other content",
+   "line": 101,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "To fulfill your requests for certain products and services, such as distributing electronic newsletters and enabling you to participate in surveys and public forums",
+   "line": 102,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "To send you information that you requested or agreed to receive. To alert you to the latest developments and features on our Website and Apps and to notify you of administrative information, such as security or support and maintenance advisories",
+   "line": 103,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "To invite you to participate in events or special promotions related to products we think you may like or in which you may be interested. To advertise and market to you, which includes sending promotional communications and advertisements",
+   "line": 104,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "To allow our business partners to offer you certain products, services or promotions",
+   "line": 105,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "To transfer Personal Data in the event of a merger, divestiture, restructuring, reorganization, dissolution, or other sale or transfer of some or all of our assets, whether as a going concern or as part of bankruptcy, liquidation, or similar proceeding",
+   "line": 106,
+   "from": "list-item",
+   "rule": "prose"
+  }
+ ]
+}

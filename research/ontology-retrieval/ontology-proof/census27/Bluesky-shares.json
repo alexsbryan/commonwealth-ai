@@ -1,0 +1,68 @@
+{
+ "service": "Bluesky",
+ "list": "shares",
+ "source": "spikes/fineprint-data/ota-pga-versions/Bluesky/Privacy Policy.md",
+ "verdict": "qualifies",
+ "headings": [
+  {
+   "line": 146,
+   "text": "11\\. How We Share your Personal Data",
+   "span_ends_line": 159
+  }
+ ],
+ "items": [
+  {
+   "item": "Sharing to Provide Bluesky and Services",
+   "line": 149,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Your Posts and Public Profile",
+   "line": 150,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Other Users You Share or Interact With",
+   "line": 151,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Third-party Services You Share or Interact With",
+   "line": 152,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Service Providers",
+   "line": 153,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Business Partners",
+   "line": 154,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Sharing to Protect Us or Others",
+   "line": 155,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Sharing with other Bluesky Companies",
+   "line": 156,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Sharing to obtain Professional Services",
+   "line": 157,
+   "from": "bold-lead-in"
+  }
+ ],
+ "dropped": [
+  {
+   "item": "Sharing in the Event of Merger, Sale, or Other Asset Transfers",
+   "line": 158,
+   "from": "bold-lead-in",
+   "rule": "prose"
+  }
+ ]
+}

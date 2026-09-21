@@ -1,0 +1,123 @@
+{
+ "service": "Bluesky",
+ "list": "collects",
+ "source": "spikes/fineprint-data/ota-pga-versions/Bluesky/Privacy Policy.md",
+ "verdict": "qualifies",
+ "headings": [
+  {
+   "line": 78,
+   "text": "8\\. Personal Data We Collect",
+   "span_ends_line": 104
+  }
+ ],
+ "items": [
+  {
+   "item": "Personal Data you provide",
+   "line": 83,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Account Creation",
+   "line": 84,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Your Communications with Us",
+   "line": 85,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Your Posts",
+   "line": 86,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Your Direct Messages",
+   "line": 87,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Job Applications",
+   "line": 88,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Payment Information",
+   "line": 89,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Account Recovery",
+   "line": 90,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Personal Data We Collect Automatically",
+   "line": 91,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Usage Information",
+   "line": 92,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Personal Data We Collect from Other Sources",
+   "line": 94,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Third Parties, generally",
+   "line": 95,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Third Party Age or Identity Verification",
+   "line": 96,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Government ID Verification",
+   "line": 97,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Facial Age Estimation",
+   "line": 98,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Payment Card Verification",
+   "line": 99,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Knowledge-Based Verification",
+   "line": 100,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Social Vouching",
+   "line": 101,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Mobile Phone Verification",
+   "line": 102,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Email Based Age Inference",
+   "line": 103,
+   "from": "bold-lead-in"
+  }
+ ],
+ "dropped": [
+  {
+   "item": "Cookies",
+   "line": 93,
+   "from": "bold-lead-in",
+   "rule": "one-word"
+  }
+ ]
+}

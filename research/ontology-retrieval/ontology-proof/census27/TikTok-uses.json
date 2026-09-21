@@ -1,0 +1,122 @@
+{
+ "service": "TikTok",
+ "list": "uses",
+ "source": "spikes/fineprint-data/ota-pga-versions/TikTok/Privacy Policy.md",
+ "verdict": "under-5",
+ "headings": [
+  {
+   "line": 42,
+   "text": "How We Use Your Information",
+   "span_ends_line": 63
+  },
+  {
+   "line": 376,
+   "text": "How Do We Use Your Information?",
+   "span_ends_line": 379
+  },
+  {
+   "line": 425,
+   "text": "How We Use Information of Users of This Experience",
+   "span_ends_line": 432
+  }
+ ],
+ "items": [],
+ "dropped": [
+  {
+   "item": "Provide and administer the Platform, such as enabling you to create, share, and consume content, to interact with other users and their content, and provide user support",
+   "line": 47,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Provide our shopping features   and facilitate the purchase and delivery of products, goods and services, including sharing your information with sellers, payment and transaction fulfilment providers, and other service providers in order to process your orders",
+   "line": 48,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Personalise and customise certain features and content such as providing your “For You” feed and content creation tools",
+   "line": 49,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Enforce our Terms, Guidelines, and other policies that apply to you. We review User Content and other information through a mix of technology   and human moderation to protect the safety and well-being of our community",
+   "line": 50,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Provide certain interactive features, such as enabling your content to be used in other users’ videos",
+   "line": 51,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Suggest your account to other users and suggest accounts of others to you to help connect you with other users",
+   "line": 52,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Provide and improve our advertising services, including to serve ads  . For information about how we process personal information through our advertising network, see our TikTok Ad Network Privacy Policy",
+   "line": 53,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Create analytics reports so that partners, sellers and creators can see how their content, ads or products are performing and to better understand their audience and buyers",
+   "line": 54,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Maintain and enhance the safety, security, and stability of the Platform by identifying and addressing technical or security issues or problems",
+   "line": 55,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Review, improve, and develop the Platform, including by monitoring interactions and usage across your devices, analysing how people are using it, and by training, testing, and improving our technology, such as our machine learning models and algorithms",
+   "line": 56,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Share your information with third party platforms to provide you with features, like content sharing at your request when you integrate your TikTok account with a third party service",
+   "line": 57,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Facilitate research conducted by independent researchers that meets certain criteria",
+   "line": 58,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Promote the Platform or third party services through marketing communications, contests, or promotions",
+   "line": 59,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Facilitate the sending of marketing communications by sellers to you on our Platform. We act as a joint controller with the sellers in this scenario. Learn more about our arrangements with these sellers",
+   "line": 60,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Comply with our legal obligations, or as necessary to perform tasks in the public interest, or to protect the vital interests of our users and other people",
+   "line": 61,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Protect the Platform and defend our legal rights and commercial interests, and those of our affiliates, users and the public",
+   "line": 62,
+   "from": "list-item",
+   "rule": "prose"
+  }
+ ]
+}

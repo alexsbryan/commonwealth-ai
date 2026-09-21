@@ -1,0 +1,46 @@
+{
+ "service": "TruthSocial",
+ "list": "shares",
+ "source": "spikes/fineprint-data/ota-pga-versions/TruthSocial/Privacy Policy.md",
+ "verdict": "under-5",
+ "headings": [
+  {
+   "line": 134,
+   "text": "H. Sharing Information with Others",
+   "span_ends_line": 154
+  }
+ ],
+ "items": [
+  {
+   "item": "Protect against legal liability",
+   "line": 149,
+   "from": "list-item"
+  }
+ ],
+ "dropped": [
+  {
+   "item": "Comply with a legal obligation, such as upon receipt of a duly authorized subpoena or court order or in the event of an audit",
+   "line": 145,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Protect and defend the rights or property of the Truth Social or the legal rights of third parties or our employees, agents, and contractors",
+   "line": 146,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Prevent or investigate possible wrongdoing in connection with the Website or App",
+   "line": 147,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Protect the personal safety of users of the Website or App or the public",
+   "line": 148,
+   "from": "list-item",
+   "rule": "prose"
+  }
+ ]
+}

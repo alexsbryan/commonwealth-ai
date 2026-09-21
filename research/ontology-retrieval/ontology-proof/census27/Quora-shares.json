@@ -1,0 +1,9 @@
+{
+ "service": "Quora",
+ "list": "shares",
+ "source": "spikes/fineprint-data/ota-pga-versions/Quora/Privacy Policy.md",
+ "verdict": "no-heading",
+ "headings": [],
+ "items": [],
+ "dropped": []
+}

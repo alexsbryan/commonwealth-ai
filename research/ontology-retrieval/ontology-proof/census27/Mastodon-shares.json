@@ -1,0 +1,15 @@
+{
+ "service": "Mastodon",
+ "list": "shares",
+ "source": "spikes/fineprint-data/ota-pga-versions/Mastodon/Privacy Policy.md",
+ "verdict": "under-5",
+ "headings": [
+  {
+   "line": 46,
+   "text": "Do we disclose any information to outside parties?",
+   "span_ends_line": 50
+  }
+ ],
+ "items": [],
+ "dropped": []
+}

@@ -1,0 +1,64 @@
+{
+ "service": "WhatsApp",
+ "list": "shares",
+ "source": "spikes/fineprint-data/ota-pga-versions/WhatsApp/Privacy Policy.md",
+ "verdict": "under-5",
+ "headings": [
+  {
+   "line": 115,
+   "text": "Information Shared by You and by WhatsApp with Third Parties",
+   "span_ends_line": 135
+  }
+ ],
+ "items": [
+  {
+   "item": "Third-Party Services",
+   "line": 123,
+   "from": "bold-lead-in"
+  }
+ ],
+ "dropped": [
+  {
+   "item": "Send Your Information To Those With Whom You Choose To Communicate",
+   "line": 121,
+   "from": "bold-lead-in",
+   "rule": "prose"
+  },
+  {
+   "item": "Information Associated With Your Account or Visible to Others",
+   "line": 122,
+   "from": "bold-lead-in",
+   "rule": "prose"
+  },
+  {
+   "item": "Third-Party Service Providers. We work with third-party service providers to help us provide our Services",
+   "line": 124,
+   "from": "bold-lead-in",
+   "rule": "prose"
+  },
+  {
+   "item": "telecommunications technology providers to send you SMS messages, or call you, to verify your account. To be able to provide these services, these providers receive Your Account Information   and Account Access Information  . The providers we currently use are located in Sweden, the Netherlands, the UK and the United States",
+   "line": 129,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "a content safety technology service provider that helps us to maintain the safety and integrity of the Services by detecting and helping us to prioritise harmful material for our reviewers to assess. To provide these services, this provider receives certain images from User Reports  , Your Account Information   and Your Community and Group Information  . The provider we currently use is located in the United States",
+   "line": 130,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "a digital age verification provider that uses technology to estimate your age. To do this, they receive Account Information   and delete it after estimating your age. Learn more",
+   "line": 131,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "a location data provider to enable you to share your location or a nearby place with other WhatsApp users. To be able to provide these services, this provider receives Precise Location Information  . The provider we currently use is located in the United States",
+   "line": 132,
+   "from": "list-item",
+   "rule": "prose"
+  }
+ ]
+}
