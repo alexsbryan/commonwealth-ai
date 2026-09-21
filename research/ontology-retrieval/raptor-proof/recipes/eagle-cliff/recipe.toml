@@ -1,0 +1,30 @@
+# ei7-prove-raptor candidate. Same shape as sovereign-recipes/chaos-secret-agent
+# (paragraph chunks, 2048/256); the atlas and its Summary atoms are built by
+# `svrn enrich` afterwards, as they were for that corpus.
+[corpus]
+id = "raptor-eagle-cliff"
+name = "The Eagle Cliff (Ballantyne)"
+description = "Project Gutenberg #23373, header and footer stripped. NarrativeQA test-split book; questions in research/ontology-retrieval/raptor-proof/bank-eagle-cliff.toml."
+license = "Public Domain"
+mesh_sharing = false
+size_compressed_gb = 0.001
+size_indexed_gb = 0.005
+
+[acquire]
+type = "local_file"
+path = "/Users/alexsbryan/dev/commonwealth-ai/research/ontology-retrieval/raptor-proof/books/eagle-cliff.txt"
+
+[extract]
+type = "plaintext"
+
+[chunk]
+type = "paragraph"
+max_chars = 2048
+overlap_chars = 256
+
+[index]
+fts = true
+vector = true
+
+[enrichment]
+enabled = false
