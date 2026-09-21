@@ -33,12 +33,8 @@ pub mod engine;
 pub mod enrichment;
 pub mod error;
 pub mod extractors;
-pub use code_facts::facts; // shim: moved by domains REVIEW-build-code-facts
-#[cfg(feature = "treesitter")]
-pub use code_facts::facts_check; // shim: moved by domains REVIEW-build-code-facts
-/// SQLite-backed, per-file-patchable home for the fact base (rusqlite → `stores`).
-#[cfg(feature = "stores")]
-pub use code_facts::facts_store; // shim: moved by domains REVIEW-build-code-facts
+// The `facts`/`facts_check`/`facts_store` shims are gone: zero importers reached
+// them in-monorepo, so `code-facts` is a feature-forward edge only (Cargo.toml).
 pub mod filters;
 pub mod freshness;
 pub mod harness;

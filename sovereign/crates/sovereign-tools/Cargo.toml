@@ -40,10 +40,7 @@ corpus-engine-notes = { workspace = true }
 # edge costs nothing new here (it cost a thin surface's whole exception row
 # there — see `src/rag/mod.rs`).
 corpus-engine-sections = { workspace = true }
-corpus-engine-watchers = { workspace = true }
-corpus-engine-atos = { workspace = true, optional = true }
 async-trait = { workspace = true }
-csv = "1.3"
 serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }
@@ -59,17 +56,9 @@ toml = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 uuid = { workspace = true }
-arc-swap = { workspace = true }
 lettre = { version = "0.11", features = ["tokio1-rustls-tls", "smtp-transport"], optional = true }
 # Code Intelligence tools (symbol_lookup / code_search / recent_changes)
 chrono = { version = "0.4", features = ["clock"] }
-# Resolve `~` for `~/.svrnmesh/enrichment/<corpus>/config.json`
-# in the watched-folder enrichment driver. Same pattern the CLI's
-# enrich_cmd uses; pinning `dirs` here keeps the resolver
-# colocated with its only caller.
-dirs = "5"
-lancedb = { workspace = true }
-arrow-array = { workspace = true }
 # Document parsing (RAG pipeline)
 pdf-extract = "0.7"
 # `pdf-extract 0.7.12` writes "unknown glyph name" / "Unicode mismatch"
@@ -177,9 +166,8 @@ ndarray = { version = "0.16", optional = true }
 # DBNet detection post-processing: `find_contours` on the binarized
 # probability map. Same CV lib the off-the-shelf `oar-ocr` crate uses.
 imageproc = { version = "0.26", optional = true }
-# Polygon offset ("unclip") for detection boxes. Already in the tree
-# transitively (4.0.7); pinning `4` here resolves the single version.
-i_overlay = { version = "4", optional = true }
+# `i_overlay` (polygon offset for detection boxes) was declared here and never
+# named in code; `workspace-hack` already pins it at `4` for every member.
 workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 
 [features]
@@ -194,15 +182,16 @@ email = ["lettre"]
 treesitter = ["corpus-engine/treesitter"]
 # `atos` is the experimental agent feature-lifecycle subsystem (charter →
 # milestones → approval-gate → drift). It is OFF by default so product builds
-# carry zero ATOS; it pulls the two ATOS crates and unlocks the ATOS code-intel
-# tools (DriftTool, Provision/Archive/RecordAtosEvent/ProjectContext/
-# DesignSignalsExtract) and the KnowledgeView strategic ATOS splice. Orthogonal
-# to `treesitter` — the code-intel ATOS tools need both axes.
-atos = ["dep:corpus-engine-atos"]
+# carry zero ATOS; here it unlocks the KnowledgeView strategic ATOS splice.
+# Orthogonal to `treesitter` — the strategic splice needs both axes.
+#
+# A pure CODE gate since the FIVE_PROGRAMS cut: the splice takes an injected
+# `knowledge_view::timeline::FeatureCatalog`, so no ATOS crate is named here.
+atos = []
 # PaddleOCR (ONNX) OCR engine. Off by default so headless/default builds
 # don't pull the OCR inference surface; the desktop enables it once the
 # bake-off greenlights swapping it in for tesseract.
-paddle-ocr = ["dep:ort", "dep:ndarray", "dep:imageproc", "dep:i_overlay"]
+paddle-ocr = ["dep:ort", "dep:ndarray", "dep:imageproc"]
 
 [dev-dependencies]
 # Zip writer for hand-building minimal DOCX fixtures in
@@ -211,6 +200,8 @@ paddle-ocr = ["dep:ort", "dep:ndarray", "dep:imageproc", "dep:i_overlay"]
 # breaks corpus-engine's `Attribute::unescape_value()` call via
 # workspace feature unification.
 zip = { version = "8", default-features = false, features = ["deflate"] }
+# TEST-ONLY: the ScipGraphHandle fixture in mcp_surface_e2e; no production site.
+arc-swap = { workspace = true }
 uuid = { workspace = true }
 futures = { workspace = true }
 tempfile = { workspace = true }
@@ -228,6 +219,8 @@ sovereign-code = { workspace = true, features = ["dev-tools"] }
 # cross-check has to construct the tool to read its declared id; asserting on
 # the string "drift" alone would check the list against itself.
 sovereign-atos = { workspace = true }
+# TEST-ONLY: LintResultStore fixture in mcp_surface_e2e; no production site.
+corpus-engine-watchers = { workspace = true }
 tokio = { workspace = true, features = ["test-util"] }
 filetime = "0.2"
 # axum is the HTTP stub harness for `notes::diff_extract_backend`

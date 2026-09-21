@@ -16,7 +16,7 @@
 //! ATOS composition lives behind [`AtosLookup`]: for `Initiative`
 //! entities, the assembler asks the caller "is there an ATOS project
 //! or feature whose name matches this initiative?" The caller
-//! resolves against the local FeatureStore + project state. When the
+//! resolves against a [`FeatureCatalog`] + project state. When the
 //! match is ambiguous or absent, the timeline's `atos_project` is
 //! `None` — the digest renders the conversational context alone, no
 //! "phase: n/a" filler.
@@ -85,7 +85,7 @@ pub struct Interaction {
 ///
 /// Trait, not a struct, so callers can wire whatever ATOS reader
 /// shape fits their context — sync against an in-memory ProjectState
-/// + FeatureStore handle, async against a remote, or a stub in tests.
+/// + [`FeatureCatalog`], async against a remote, or a stub in tests.
 pub trait AtosLookup {
     fn lookup(&self, initiative_name_normalised: &str) -> Option<AtosLink>;
 }
@@ -131,6 +131,39 @@ impl AtosLookup for NoAtosLookup {
     fn lookup(&self, _: &str) -> Option<AtosLink> {
         None
     }
+}
+
+/// One ATOS feature, narrowed to the two fields the strategic digest folds.
+#[derive(Debug, Clone)]
+pub struct FeatureRecord {
+    pub id: String,
+    pub title: String,
+}
+
+/// One ATOS milestone, narrowed to what fixes a feature's phase position.
+#[derive(Debug, Clone)]
+pub struct FeatureMilestone {
+    /// 1-based position within the feature's milestone list.
+    pub ordinal: i64,
+    /// Unix seconds when work began; `None` means not started.
+    pub started_at: Option<i64>,
+}
+
+/// Read door onto the ATOS feature store, narrowed to the two queries
+/// `splice_extension::AtosSnapshot` makes. The store itself lives in
+/// `corpus-engine-atos`; naming only this trait is what keeps that
+/// crate out of this package's dependency graph, the same seam shape as
+/// `recipe_notes_adapter` (a foreign store bound to a trait the consumer owns).
+///
+/// Both methods are a field-for-field pass-through — the phase fold stays in
+/// the consumer, so a second implementor cannot derive a different phase.
+#[async_trait::async_trait]
+pub trait FeatureCatalog: Send + Sync {
+    /// Non-archived features, store order. `Err` = the digest surfaces none.
+    async fn list_features(&self) -> Result<Vec<FeatureRecord>, String>;
+
+    /// Milestones for one feature. `Err` = that feature renders with no phase.
+    async fn list_milestones(&self, feature_id: &str) -> Result<Vec<FeatureMilestone>, String>;
 }
 
 // ── Assembly ────────────────────────────────────────────────────

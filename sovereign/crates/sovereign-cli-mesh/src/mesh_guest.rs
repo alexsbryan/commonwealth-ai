@@ -38,8 +38,8 @@ use sovereign_mesh::deep_link::{
     build_guest_link, build_https_guest_link, parse_deep_link, DeepLink,
 };
 
-use crate::guest_link::{self, GuestLink};
 use crate::mesh_guest_link::{wall_page_base, wall_qr_svg};
+use sovereign_cli_shared::guest_link::{self, GuestLink};
 
 /// Read the daemon's client port from `SetupConfig` rather than hardcoding
 /// 9741 — a sandbox pointed at its own daemon must not mint against the
@@ -991,7 +991,7 @@ fn describe(link: &GuestLink) -> String {
 /// never touch — the check has to exercise the path, or it is not the check.
 async fn verify_link(link: &GuestLink) -> Result<Vec<String>, String> {
     let client = http_client(10)?;
-    let base = guest_link::open_route(link).await?;
+    let base = crate::guest_route::open_route(link).await?;
     let url = format!("{base}/v1/models");
     let resp = client
         .get(&url)

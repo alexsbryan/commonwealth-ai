@@ -20,29 +20,30 @@
 //! doc-gen derives and there is no runtime cost.
 
 use quote::ToTokens;
-use std::path::PathBuf;
 use syn::{Attribute, Fields, Item};
 
 /// Source files parsed for recipe-facing config types, in render order.
+/// Workspace-relative: the generator reads three crates, so its base is the
+/// source tree (`source_tree::workspace_root`), never a climb out of this one.
 const SOURCES: &[&str] = &[
-    "src/recipe.rs",
-    "src/recipe_ontology/mod.rs",
-    "src/recipe_ontology/language.rs",
+    "corpus-engine/src/recipe.rs",
+    "corpus-engine/src/recipe_ontology/mod.rs",
+    "corpus-engine/src/recipe_ontology/language.rs",
     // The declaration types (investigation entity/relationship/pattern decls,
     // the version-1 ontology types, `OntologyVocabulary`) live in the
     // `understanding-vocab` leaf since 2026-09-03; the generator parses
     // SOURCE, so it reads them where they are declared.
-    "../understanding-vocab/src/ontology/decl.rs",
+    "understanding-vocab/src/ontology/decl.rs",
     // The navigation section (`[enrichment.ontology.navigation]`): the policy
     // struct IS the TOML shape, so it is rendered from where it is declared.
-    "../understanding-vocab/src/ontology/navigation.rs",
+    "understanding-vocab/src/ontology/navigation.rs",
     // The persisted setting types (`DisplayMeta`, `MutableMergePolicy`) and the
     // filter configs (`ComposeMode`, `FilterConfig`, `BoilerplateConfig`,
     // `KnowledgeDensityConfig`) moved to the `corpus-index` leaf (domains
     // REVIEW-build-index-read-port); the generator parses SOURCE, so it reads
     // them where they are declared.
-    "../corpus-index/src/recipe.rs",
-    "../corpus-index/src/filters.rs",
+    "corpus-index/src/recipe.rs",
+    "corpus-index/src/filters.rs",
 ];
 
 /// Deserialize-deriving types that are NOT recipe-TOML surface (runtime
@@ -79,11 +80,11 @@ acquire → extract → filter → chunk → embed → index pipeline:\n\
 
 #[test]
 fn recipe_schema_is_fresh() {
-    let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let ws = crate::source_tree::workspace_root();
     let mut md = String::from(HEADER);
 
     for rel in SOURCES {
-        let path = manifest.join(rel);
+        let path = ws.join(rel);
         let src = std::fs::read_to_string(&path)
             .unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
         let file =
@@ -125,7 +126,7 @@ fn recipe_schema_is_fresh() {
         md.push_str("\n\n");
     }
 
-    let out_path = manifest.join("../sovereign-recipes/SCHEMA.md");
+    let out_path = crate::source_tree::recipes_root().join("SCHEMA.md");
     if std::env::var("UPDATE_RECIPE_SCHEMA").is_ok() {
         std::fs::write(&out_path, &md).expect("write SCHEMA.md");
         eprintln!("wrote {}", out_path.display());
@@ -409,17 +410,16 @@ pub(crate) fn first_diff(a: &str, b: &str) -> String {
 /// `UPDATE_RECIPE_SCHEMA=1` bless as the SCHEMA.md gate above.
 #[test]
 fn recipe_schema_descriptor_is_fresh() {
-    let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let recipe_file = descriptor::parse(&manifest.join("src/recipe.rs"));
+    let ws = crate::source_tree::workspace_root();
+    let recipe_file = descriptor::parse(&ws.join("corpus-engine/src/recipe.rs"));
     // `OntologyBlock`/`OntologyVocabulary` moved to their own module (ARCH
     // §3.1 size ratchet); they are re-exported from `recipe`, but this gate
     // parses SOURCE, so it reads them where they are declared.
-    let recipe_ont_file = descriptor::parse(&manifest.join("src/recipe_ontology/mod.rs"));
-    let filters_file = descriptor::parse(&manifest.join("../corpus-index/src/filters.rs"));
+    let recipe_ont_file = descriptor::parse(&ws.join("corpus-engine/src/recipe_ontology/mod.rs"));
+    let filters_file = descriptor::parse(&ws.join("corpus-index/src/filters.rs"));
     // Every declaration type — the version-1 ontology types AND the
     // investigation decls — is in the leaf now (enrichment-as-plugin Step 3).
-    let ontology_file =
-        descriptor::parse(&manifest.join("../understanding-vocab/src/ontology/decl.rs"));
+    let ontology_file = descriptor::parse(&ws.join("understanding-vocab/src/ontology/decl.rs"));
     let registry = corpus_engine::enrichment::ontology::OntologyLanguageRegistry::builtin();
     let versions: Vec<u32> = registry.versions().map(|l| l.version()).collect();
     // The `[enrichment.ontology]` surface, for the recipe-author tool schema's
@@ -473,7 +473,7 @@ fn recipe_schema_descriptor_is_fresh() {
         crate::ontology_prompt_snapshots::canonical_json(&serde_json::to_string(&desc).unwrap())
             .expect("the descriptor is JSON");
 
-    let out_dir = manifest.join("../sovereign-recipes/schema");
+    let out_dir = crate::source_tree::recipes_root().join("schema");
     let out_path = out_dir.join("recipe_schema_descriptor.json");
     if std::env::var("UPDATE_RECIPE_SCHEMA").is_ok() {
         std::fs::create_dir_all(&out_dir).expect("create schema dir");

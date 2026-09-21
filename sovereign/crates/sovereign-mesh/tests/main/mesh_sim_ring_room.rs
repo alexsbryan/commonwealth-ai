@@ -103,11 +103,35 @@ fn the_ring_room_fleet_before_any_ranking_change() {
         shipped.records.served_by,
     ));
     out.push_str(&candidate_breakdown_text(report, 6));
-    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../target/ralph");
-    let _ = std::fs::create_dir_all(&dir);
-    let _ = std::fs::write(dir.join("ring-room-sim.txt"), &out);
+    write_ralph_artifact("ring-room-sim.txt", &out);
 
     assert_hard_invariants(&reports, &scores);
+}
+
+/// THE sink for this file's ralph artifacts. Resolves the BUILD's target root,
+/// never a path climbed out of the crate source at runtime (ARCH §18.1).
+///
+/// Panics naming the path if the directory cannot be made or the file cannot be
+/// written — a run that produced no artifact must fail, never skip quietly.
+fn write_ralph_artifact(name: &str, body: &str) {
+    let root = match std::env::var("CARGO_TARGET_DIR") {
+        Ok(v) => std::path::PathBuf::from(v),
+        // No cargo env names the target root for an integration test; the test
+        // binary's own path does — `<target>/debug/deps/<bin>`.
+        Err(_) => {
+            let exe = std::env::current_exe().expect("test binary has a path");
+            exe.ancestors()
+                .nth(3)
+                .expect("test binary sits at <target>/debug/deps/<bin>")
+                .to_path_buf()
+        }
+    };
+    let dir = root.join("ralph");
+    std::fs::create_dir_all(&dir)
+        .unwrap_or_else(|e| panic!("ralph artifact dir {} not creatable: {e}", dir.display()));
+    let path = dir.join(name);
+    std::fs::write(&path, body)
+        .unwrap_or_else(|e| panic!("ralph artifact {} not written: {e}", path.display()));
 }
 
 /// [`print_candidate_breakdown`]'s text, for the artifact. One renderer, two
@@ -219,7 +243,5 @@ fn the_other_direction_the_mixed_fleet_must_not_regress() {
         ));
     }
     println!("\n{out}");
-    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../target/ralph");
-    let _ = std::fs::create_dir_all(&dir);
-    let _ = std::fs::write(dir.join("ring-room-sim-other-direction.txt"), &out);
+    write_ralph_artifact("ring-room-sim-other-direction.txt", &out);
 }

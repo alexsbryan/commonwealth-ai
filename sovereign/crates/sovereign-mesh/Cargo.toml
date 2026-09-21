@@ -114,9 +114,6 @@ corpus-engine-notes = { workspace = true }
 # domains REVIEW-build-mesh-workbench-deferred; lib.rs shims both so the
 # daemon and cli consumers keep resolving through `sovereign_mesh::`.
 corpus-engine-watchers = { workspace = true }
-# SCIP call graph + exporter dispatch. Carved out of corpus-engine
-# 2026-05-23 — reindexer.rs uses ScipGraph + scip_export directly.
-corpus-engine-scip = { workspace = true }
 # The code-intel package's fact base (`facts`/`facts_store`), moved out of
 # corpus-engine at domains REVIEW-build-code-facts; `reindexer.rs` names
 # `code_facts::*` directly. The `stores` feature arrives through corpus-engine.
@@ -131,7 +128,8 @@ understanding-vocab = { workspace = true }
 # stopped being something the desktop ran in-process; same layer as this
 # crate, and `sovereign-cli-llm` already names it.
 
-# Sovereign core (for InferenceProvider + MeshKnowledgeSource traits)
+# `mesh_measurements` + `guest_link` (core's own); `identity`/`peer`/`setup_config`
+# are contracts re-exports — repointing those leaves the first two as the edge.
 sovereign-core = { workspace = true }
 # The Tier-0 wall-clock leaf, named directly rather than reached through the
 # `sovereign_core::time` re-export (domains row dm-time-repoint-mesh).
@@ -156,39 +154,8 @@ sovereign-peer-wire = { workspace = true }
 # RemoteApiProvider — synthesised at request time when routing to
 # a peer for federated inference.
 sovereign-inference = { workspace = true }
-# `gliner_ner::{models_root, probe_model_available, download_model}` +
-# `labeled::configured_model_id` — the four things `GET /internal/ner/model`
-# and the `kind: gliner` arm of the asset-download job call (sv-surface
-# svt-7). The extractor loads in THIS process and `models_root()` is under
-# the data root this daemon owns, so the probe and the fetch belong on the
-# side that owns the files; the desktop was doing both with its own
-# filesystem calls. Downward edge on `quality/ARCH_LAYERS.toml`
-# (runtime < mesh-api), same direction as `sovereign-inference` above.
-# `mcp_surface` — the shared MCP allowlist + alias map. The
-# embedded daemon's mcp_router and the standalone MCP server in
-# sovereign-server share this so they advertise the same surface
-# to clients without drifting.
-sovereign-tools = { workspace = true }
-# The enrichment store's inventory, served at `GET /internal/corpus/enriched`
-# (`enrich_http`, 2026-09-11) so the desktop stops reading its OWN data root's
-# `enrichment/` tree. Same layer as `sovereign-tools` above.
-sovereign-enrichment-catalog = { workspace = true }
-# The MeshApp explorer projections (`meshapp_http`, sv-surface D3). A
-# `capabilities`-layer lib the desktop already reads through; serving it
-# here is what stops the desktop opening the daemon's own index dir in a
-# second process. Downward edge on `quality/ARCH_LAYERS.toml`
-# (capabilities < mesh-api), same as `sovereign-tools` above.
-# `RecipeProjectStore` (the recipe-author `features.db` layer), reached
-# through its re-exporter rather than by a direct dep on
-# `sovereign-recipe-author` (ARCH §8.3). Was a dev-dep until sv-surface D6
-# — `InMemoryStateStore` for the corpus-watch test — and is now production:
-# `ServingCore.features` is the door `features_http` opens.
-sovereign-store = { workspace = true }
-# Work atlas — `MeshBroadcaster` adapter implements
-# `sovereign_work_atlas::tools::ClaimBroadcaster` using `AppState`
-# + `gossip::broadcast_now`. Lives here (not in work-atlas) so the
-# trait stays free of `AppState` and the cmd_serve wire-up is the
-# single place that pairs the two.
+# ONE item: `model::APP_ID_PUBLIC` in `ring_roster::REGISTERED_NAMESPACES`.
+# `MeshBroadcaster` moved to `sovereign_daemon::work_atlas_broadcaster`.
 sovereign-work-atlas = { workspace = true }
 # async_trait is needed to impl the (async) MeshKnowledgeSource
 # trait on MeshKnowledgeClient. sovereign-core already uses it.
@@ -329,6 +296,14 @@ sovereign-daemon = { path = "../sovereign-daemon", features = ["treesitter"] }
 # namespace tests (`tests/main/ring_live_non_durable.rs`) also issue real rail
 # grants through `Scope::Rails` (merged 2026-09-18).
 sovereign-grants = { workspace = true }
+# TEST-ONLY: `ScipGraph` in tests/main/loopback_parity.rs; no src/ reference.
+corpus-engine-scip = { workspace = true }
+# TEST-ONLY: `local_corpus`/`atlas_view`/`knowledge_view`/`spec_watcher` in tests/main/*.
+sovereign-tools = { workspace = true }
+# TEST-ONLY: `CONFIG_SCHEMA_VERSION` in tests/main/enrich_surface_e2e.rs.
+sovereign-enrichment-catalog = { workspace = true }
+# TEST-ONLY: `InMemoryStateStore`/`SqliteStateStore`/`RecipeProjectStore` in tests/main/*.
+sovereign-store = { workspace = true }
 tempfile = "3"
 # `ServiceExt::oneshot` lets the worker_http integration tests dispatch
 # a synthetic axum Request through the router without spinning up a

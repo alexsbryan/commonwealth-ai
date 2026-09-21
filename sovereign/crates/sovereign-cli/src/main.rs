@@ -66,6 +66,7 @@ mod init;
 mod journal_cmd;
 mod llm_bin;
 mod memory_cmd;
+mod mesh_bin;
 mod milestone_cmd;
 mod notes_cmd;
 mod notes_retrieval_cmd;
@@ -884,10 +885,14 @@ async fn async_main() {
             // execs into it without setting up a tracing subscriber —
             // the sibling's main() installs the appropriate filter for
             // each verb.
-            "mesh" | "meshapp" | "ring" | "job" | "mobile" | "alignment" | "corpus"
-            | "meta-atlas" | "mcp" | "recipe" | "pipeline" | "recipe-agent" | "maintainer"
-            | "publish" | "unpublish" | "run" => {
+            "mobile" | "alignment" | "corpus" | "meta-atlas" | "mcp" | "recipe" | "pipeline"
+            | "recipe-agent" | "maintainer" => {
                 let code = llm_bin::exec(first, &raw_args[1..]);
+                std::process::exit(code);
+            }
+            // cmnwlth's verbs — the mesh sibling (FIVE_PROGRAMS §9).
+            "mesh" | "meshapp" | "ring" | "job" | "publish" | "unpublish" | "run" => {
+                let code = mesh_bin::exec(first, &raw_args[1..]);
                 std::process::exit(code);
             }
             "code" => {

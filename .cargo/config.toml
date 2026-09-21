@@ -106,3 +106,10 @@ MACOSX_DEPLOYMENT_TARGET = { value = "10.15", force = true }
 # sovereign-eval's bank tests name their data without climbing out of the
 # crate root, which boundary-gate rule 3c forbids for a liftable package.
 SOVEREIGN_BENCH_ROOT = { value = "sovereign/bench", relative = true }
+# The monorepo source tree, absolute, so corpus-engine's workspace-wide gates
+# can name sibling-crate sources without climbing out of the crate root.
+SOVEREIGN_WORKSPACE_ROOT = { value = ".", relative = true }
+# The canonical recipes tree. build.rs already reads this name as its
+# standalone-clone escape hatch; setting it by default makes build and gates
+# resolve ONE tree.
+CORPUS_ENGINE_RECIPES_DIR = { value = "sovereign-recipes", relative = true }

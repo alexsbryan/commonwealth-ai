@@ -15,12 +15,12 @@
 //!
 //! # Where the bearer actually goes
 //!
-//! Two shapes, and [`open_route`] is the only thing that turns one into a URL.
+//! Two shapes; `sovereign_cli_mesh::guest_route::open_route` turns one into a URL.
 //! A link minted against a plaintext client API carries `url` and nothing
 //! else. A link minted on an ENCRYPTED mesh carries `dial` as well, because
 //! that mesh forces its client API loopback-only and the sole ingress is the
 //! iroh acceptor — `url` then names the lender without being reachable. When
-//! `dial` is present it IS the path: [`open_route`] tunnels, and a tunnel
+//! `dial` is present it IS the path: `open_route` tunnels, and a tunnel
 //! that fails is reported rather than downgraded to the plaintext address a
 //! mesh asking for encryption never meant to serve (§18.3).
 //!
@@ -153,13 +153,6 @@ mod tests {
         let link = load_in(dir.path()).expect("the older shape is still a link");
         assert!(link.dial.is_none());
         assert_eq!(link.url, "http://box:9741");
-    }
-
-    /// A link with no dial routes to its own `url` — the plaintext case, and
-    /// the arm that must not need a network to resolve.
-    #[tokio::test]
-    async fn a_link_without_a_dial_routes_straight_to_its_url() {
-        assert_eq!(open_route(&link(9_000)).await.unwrap(), "http://box:9741");
     }
 
     /// A corrupt file must not read as "no link" without saying so, and must

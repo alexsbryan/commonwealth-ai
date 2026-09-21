@@ -40,6 +40,13 @@ third_party_allowlist = []
 # ── grounding ───────────────────────────────────────────────────────
 
 [[flag]]
+name = "SOVEREIGN_WORKSPACE_ROOT"
+cluster = "dev-gates"
+default = "the repo root (set by the workspace .cargo/config.toml)"
+purpose = "Root of the monorepo source tree corpus-engine's workspace-wide gates parse; a lifted package sets it or they panic naming it."
+status = "shipped"
+
+[[flag]]
 name = "SOVEREIGN_BENCH_ROOT"
 cluster = "bench"
 default = "sovereign/bench (set by the workspace .cargo/config.toml)"

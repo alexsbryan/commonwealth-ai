@@ -17,6 +17,7 @@ use std::sync::Arc;
 
 use corpus_engine_atos::FeatureStore;
 use corpus_engine_notes::NoteStore;
+use sovereign_tools::knowledge_view::timeline::{FeatureCatalog, FeatureMilestone, FeatureRecord};
 
 use super::args::parse_args;
 use sovereign_cli_shared::args::Parsed;
@@ -89,12 +90,50 @@ pub(super) fn try_open_notes() -> Option<Arc<NoteStore>> {
 
 /// Open the FeatureStore. Returns `None` if `features.db` is absent
 /// (the user hasn't run `svrn atos provision`).
-pub(super) fn try_open_features() -> Option<Arc<FeatureStore>> {
+pub(super) fn try_open_features() -> Option<Arc<dyn FeatureCatalog>> {
     let path = features_db_path();
     if !path.exists() {
         return None;
     }
-    FeatureStore::open(&path).ok().map(Arc::new)
+    FeatureStore::open(&path)
+        .ok()
+        .map(|s| Arc::new(FeatureStoreCatalog(Arc::new(s))) as Arc<dyn FeatureCatalog>)
+}
+
+/// Binds the ATOS store to the read door the strategic splice owns.
+struct FeatureStoreCatalog(Arc<FeatureStore>);
+
+#[async_trait::async_trait]
+impl FeatureCatalog for FeatureStoreCatalog {
+    async fn list_features(&self) -> Result<Vec<FeatureRecord>, String> {
+        self.0
+            .list(false)
+            .await
+            .map(|rows| {
+                rows.into_iter()
+                    .map(|r| FeatureRecord {
+                        id: r.id,
+                        title: r.title,
+                    })
+                    .collect()
+            })
+            .map_err(|e| e.to_string())
+    }
+
+    async fn list_milestones(&self, feature_id: &str) -> Result<Vec<FeatureMilestone>, String> {
+        self.0
+            .list_milestones(feature_id)
+            .await
+            .map(|rows| {
+                rows.into_iter()
+                    .map(|m| FeatureMilestone {
+                        ordinal: m.ordinal,
+                        started_at: m.started_at,
+                    })
+                    .collect()
+            })
+            .map_err(|e| e.to_string())
+    }
 }
 
 #[cfg(test)]

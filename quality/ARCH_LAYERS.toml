@@ -925,6 +925,13 @@ name = "arch-layers"
 allow = ["workspace-hack"]
 
 [[package_leaf]]
+name = "corpus-engine-yield"
+# Backpressure + wall-clock utilities. Zero internal deps; 12 import sites in
+# corpus-engine and 86 use sites across engine, enrichment, meta-atlas,
+# extractors and asset-store, plus code-facts. Two packages claimed it.
+allow = ["workspace-hack"]
+
+[[package_leaf]]
 name = "oplog"
 # The append-only signed journal. Admitted 2026-09-04 (cw-lift phase 1b/1d),
 # so `commonwealth-rail{,-core}` can join the `commonwealth` package below —
@@ -1151,6 +1158,8 @@ crates = [
     "sovereign-meshapp",
     "sovereign-meshapp-registry",
     "sovereign-grants",
+    # cmnwlth's CLI, lifted out of sovereign-cli-llm 2026-09-21.
+    "sovereign-cli-mesh",
 ]
 
 [[package]]
@@ -1179,7 +1188,6 @@ crates = [
     "corpus-engine-notes",
     "corpus-engine-watchers",
     "corpus-engine-archaeology",
-    "corpus-engine-yield",
     "code-facts",
     "code-next-edit",
 ]

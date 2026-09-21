@@ -805,7 +805,7 @@ impl DynamicChildSlot {
     /// which remote worker and how many stayed local. `None` before the first
     /// respawn and once retired — in both cases there is no child holding a
     /// split, and a stated placement would be a claim about nothing.
-    pub fn placement(&self) -> Option<sovereign_core::traits::SlotPlacement> {
+    pub fn placement(&self) -> Option<sovereign_contracts::traits::SlotPlacement> {
         self.live_handoff
             .lock()
             .unwrap_or_else(|e| e.into_inner())
@@ -1258,7 +1258,7 @@ impl InferenceProvider for ComputeRoutedProvider {
         self.inner.code_model_id()
     }
 
-    fn edit_slot_info(&self) -> Option<sovereign_core::types::EditSlotInfo> {
+    fn edit_slot_info(&self) -> Option<sovereign_contracts::types::EditSlotInfo> {
         // FIM is served by the in-process engine, never fanned out
         // to compute children — forward the inner arrangement.
         self.inner.edit_slot_info()

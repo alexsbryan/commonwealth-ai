@@ -180,6 +180,7 @@ members = [
     "sovereign/crates/sovereign-cli-dev",
     "sovereign/crates/sovereign-cli-daemon",
     "sovereign/crates/sovereign-cli-llm",
+    "sovereign/crates/sovereign-cli-mesh",
     "sovereign/crates/sovereign-atos",
     "sovereign/crates/sovereign-eval",
     "sovereign/crates/sovereign-authoring-harness",

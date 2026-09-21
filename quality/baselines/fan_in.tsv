@@ -4,10 +4,10 @@
 # Bank improvements only (never adds, never raises — safe to run anytime):
 #   cargo run -p xtask -- layer-gate --tighten
 16	commonwealth-core
-8	commonwealth-state
-20	corpus-engine
-14	corpus-engine-notes
-13	corpus-engine-scip
-34	sovereign-contracts
-17	sovereign-core
-8	sovereign-tools
+6	commonwealth-state
+18	corpus-engine
+12	corpus-engine-notes
+11	corpus-engine-scip
+37	sovereign-contracts
+15	sovereign-core
+5	sovereign-tools

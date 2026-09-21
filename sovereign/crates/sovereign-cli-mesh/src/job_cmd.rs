@@ -57,7 +57,7 @@ use sovereign_cli_shared::rail::admission_from_wire;
 
 use crate::ring_cmd::{rail_append, rail_log, short_stamp};
 
-pub(crate) async fn run(args: &[String]) -> i32 {
+pub async fn run(args: &[String]) -> i32 {
     // `--help` is answered BEFORE anything is dispatched, and only when it is
     // asked of this verb rather than of the unit's own command — everything
     // after a bare `--` is the payload's argv, and a `job submit … -- svrn

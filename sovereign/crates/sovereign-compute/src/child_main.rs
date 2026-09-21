@@ -20,11 +20,11 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use futures::Stream;
+use sovereign_contracts::model_family::ModelFamily;
 use sovereign_contracts::{
     CompletionRequest, CompletionResponse, Depth, Error, FinishReason, InferenceProvider,
     ProviderCapabilities, Result, Speed, StreamFrame,
 };
-use sovereign_core::model_family::ModelFamily;
 use sovereign_inference::embedded::{EmbedOnlyProvider, EmbeddedLlamaCpp};
 use sovereign_inference::fast_exit_skip_destructors;
 use tracing::{error, info};

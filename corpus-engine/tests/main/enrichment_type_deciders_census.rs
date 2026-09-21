@@ -21,10 +21,8 @@ use std::path::{Path, PathBuf};
 /// `is_test_line` below, not by path, because `#[cfg(test)]` modules live
 /// inline in this workspace.
 fn roots() -> Vec<PathBuf> {
-    let ws = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .unwrap()
-        .to_path_buf();
+    // Workspace-wide by nature; the root is a knob, not a climb (boundary 3c).
+    let ws = crate::source_tree::workspace_root();
     let mut roots = vec![ws.join("corpus-engine/src")];
     for entry in std::fs::read_dir(ws.join("sovereign/crates")).unwrap() {
         let src = entry.unwrap().path().join("src");
