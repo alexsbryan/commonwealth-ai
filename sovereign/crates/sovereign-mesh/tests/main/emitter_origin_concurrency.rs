@@ -288,15 +288,15 @@ async fn origin_unaffected_by_a_requester_claiming_to_be_us() {
         self_id,
         SELF_KEY,
     )
-        .json(&serde_json::json!({
-            "query_embedding": vec![0.0_f32; EMBED_DIM],
-            "query_text": "content",
-            "corpora": ["sep"],
-            "limit": 10,
-        }))
-        .send()
-        .await
-        .unwrap();
+    .json(&serde_json::json!({
+        "query_embedding": vec![0.0_f32; EMBED_DIM],
+        "query_text": "content",
+        "corpora": ["sep"],
+        "limit": 10,
+    }))
+    .send()
+    .await
+    .unwrap();
     assert_eq!(resp.status(), reqwest::StatusCode::OK);
 
     let events = state.inner.fabric.contribution_emitter.events().unwrap();

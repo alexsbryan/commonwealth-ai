@@ -244,12 +244,7 @@ mod tests {
              not land in another node's reciprocity bucket"
         );
         assert_eq!(
-            user_key(
-                &tenant,
-                &Principal::LocalOwner {
-                    sub_identity: None
-                }
-            ),
+            user_key(&tenant, &Principal::LocalOwner { sub_identity: None }),
             UserKey::Tenant("default".to_string()),
             "a local owner is not a peer"
         );

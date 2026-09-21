@@ -17,8 +17,8 @@ use axum::response::Response;
 /// §8.3).
 pub use sovereign_contracts::oicp::TenantId;
 
-pub use sovereign_contracts::principal::{AttachedPrincipal, Principal};
 use sovereign_contracts::principal::{claimed_node_id, ClaimedNodeId};
+pub use sovereign_contracts::principal::{AttachedPrincipal, Principal};
 
 /// Shared auth state extracted from config.
 #[derive(Clone)]

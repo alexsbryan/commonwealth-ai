@@ -155,7 +155,14 @@ pub async fn name_member_with_key(
 ) {
     let mut rec = member(id, name, "127.0.0.1:9742".parse().unwrap());
     rec.node_pubkey = Some(commonwealth_core::ids::NodePubkey(pubkey));
-    state.inner.fabric.mesh.write().await.members.insert(id, rec);
+    state
+        .inner
+        .fabric
+        .mesh
+        .write()
+        .await
+        .members
+        .insert(id, rec);
 }
 
 /// Stamp a request exactly as this node's OWN iroh acceptor stamps an internal

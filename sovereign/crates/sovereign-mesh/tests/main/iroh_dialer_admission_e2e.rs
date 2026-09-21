@@ -1048,7 +1048,9 @@ async fn a_joiner_is_named_by_its_verified_key_and_by_no_membership_it_lacks() {
 /// Rendering `Principal::label()` rather than a header is the point: a test
 /// that read a header back would be asserting on the same bytes the forgery
 /// supplies.
-async fn internal_principal_probe(state: sovereign_daemon::state::AppState) -> std::net::SocketAddr {
+async fn internal_principal_probe(
+    state: sovereign_daemon::state::AppState,
+) -> std::net::SocketAddr {
     use axum::routing::get;
     use sovereign_serving_host::admission::AttachedPrincipal;
     let render = |attached: Option<axum::Extension<AttachedPrincipal>>| async move {

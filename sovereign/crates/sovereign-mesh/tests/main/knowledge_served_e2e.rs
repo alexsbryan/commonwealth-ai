@@ -158,15 +158,15 @@ async fn peer_request_emits_one_knowledge_query_served_per_contributing_corpus()
         requester,
         REQUESTER_KEY,
     )
-        .json(&serde_json::json!({
-            "query_embedding": vec![0.0_f32; EMBED_DIM],
-            "query_text": "compatibilism",
-            "corpora": ["sep", "wikipedia"],
-            "limit": 10,
-        }))
-        .send()
-        .await
-        .expect("/internal/knowledge/search reachable");
+    .json(&serde_json::json!({
+        "query_embedding": vec![0.0_f32; EMBED_DIM],
+        "query_text": "compatibilism",
+        "corpora": ["sep", "wikipedia"],
+        "limit": 10,
+    }))
+    .send()
+    .await
+    .expect("/internal/knowledge/search reachable");
     assert_eq!(resp.status(), reqwest::StatusCode::OK);
 
     let body: serde_json::Value = resp.json().await.unwrap();
