@@ -96,7 +96,7 @@ corpus-index = { workspace = true, optional = true }
 # moved out of corpus-engine at domains REVIEW-build-code-facts. `code_cmd`
 # names `code_facts::*` directly; the `treesitter`/`stores` features arrive
 # through corpus-engine's feature of the same name.
-code-facts = { workspace = true, optional = true }
+code-facts = { workspace = true, optional = true, features = ["treesitter", "stores"] }
 corpus-engine-notes = { workspace = true, optional = true }
 # `code_fieldglass` renders the layer-flow panel from the SAME parser/evaluator
 # the layer gate uses (one decider), and the SRP co-change communities from the

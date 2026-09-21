@@ -33,12 +33,6 @@ understanding-vocab = { workspace = true }
 # in the monorepo changed when it was carved out (domains
 # REVIEW-build-index-read-port, DE "The read-port leaf, measured again").
 corpus-index = { workspace = true }
-# The code-intel package's fact base. The re-export shims are GONE (zero
-# in-monorepo importers); what is left is the FEATURE FORWARD below —
-# `sovereign-cli-dev` and `sovereign-code` take `code-facts` plain and get its
-# `treesitter`/`stores` through the engine's features of the same name. Declare
-# them there (as `corpus-engine-watchers` already does) and this edge closes.
-code-facts = { workspace = true }
 # Understanding's pure tier — a temporary shim edge: the pure files that leave
 # `corpus-engine` for `understanding-atlas` are re-exported at their historical
 # paths here (domains REVIEW-build-understanding-crate-tree, §3a step 5) until
@@ -245,7 +239,7 @@ markdown = ["dep:pulldown-cmark"]
 # `stores` unlocks the remaining rusqlite-backed modules in this crate
 # (wikipedia_graph, wikipedia_columnar, notes_sync). Cheap to enable —
 # rusqlite is bundled (no system dep) and SQLite is small.
-stores = ["dep:rusqlite", "dep:notify", "dep:walkdir", "code-facts/stores"]
+stores = ["dep:rusqlite", "dep:notify", "dep:walkdir"]
 treesitter = [
     "stores",
     "dep:tree-sitter",
@@ -261,9 +255,6 @@ treesitter = [
     # gate keeps the corpus-engine surface backwards-compatible with
     # consumers that opt into `treesitter`.
     "dep:corpus-engine-scip",
-    # The fact base's grammars + SCIP dispatch now live in `code-facts`; the
-    # engine's `treesitter` forwards to its feature of the same name.
-    "code-facts/treesitter",
 ]
 
 [dev-dependencies]

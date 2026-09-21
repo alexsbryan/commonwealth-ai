@@ -19,7 +19,7 @@ corpus-engine-scip = { workspace = true }
 corpus-engine-notes = { workspace = true }
 corpus-engine-archaeology = { workspace = true, optional = true }
 corpus-engine-watchers = { workspace = true }
-code-facts = { workspace = true }
+code-facts = { workspace = true, features = ["treesitter", "stores"] }
 arch-layers = { workspace = true }
 
 arc-swap = { workspace = true }

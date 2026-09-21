@@ -63,3 +63,6 @@ stores = ["dep:rusqlite", "dep:tokio"]
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+sovereign-contracts = { workspace = true }
