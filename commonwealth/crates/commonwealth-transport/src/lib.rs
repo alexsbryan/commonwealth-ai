@@ -90,6 +90,10 @@ pub mod iroh;
 pub mod iroh_identity_forward;
 #[cfg(feature = "iroh")]
 mod iroh_path;
+/// The outbound mesh-proof stamp. Not behind the `iroh` feature: it is the
+/// PLAINTEXT path's credential, and the plaintext path is the one every build
+/// has.
+pub mod mesh_proof;
 /// The three origin ALPNs, beside `iroh.rs` because that file is past its
 /// ceiling. `pub` rather than private-plus-re-export: `iroh` is behind a
 /// feature, so a private module re-exported only from there is dead code in

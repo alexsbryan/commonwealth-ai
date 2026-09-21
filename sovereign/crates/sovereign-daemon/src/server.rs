@@ -98,7 +98,7 @@ pub fn client_router_for(state: AppState, surface: ClientSurface) -> Router {
     // the iroh acceptor is admitted by the loopback arm before any
     // credential is read.
     let operator_routes: Router<AppState> = if surface.serves_operator_routes() {
-        Router::new()
+        routes_internal::client_token_routes()
             .route(
                 "/internal/inference/warmup",
                 post(routes_internal::inference_warmup),
@@ -281,8 +281,33 @@ pub fn client_router_for(state: AppState, surface: ClientSurface) -> Router {
         Router::new()
     };
 
+    // The guest door's own answer route. Its own block rather than a line in
+    // `general` because the surfaces differ: `general` is everything-but-Rail,
+    // and this is Operator + Guest. See
+    // `ClientSurface::serves_guest_ask_route` for why each is what it is, and
+    // `routes_guest_ask` for what the handler refuses.
+    let guest_ask: Router<AppState> = if surface.serves_guest_ask_route() {
+        Router::new()
+            .route(
+                crate::routes_guest_ask::GUEST_ASK_PATH,
+                post(crate::routes_guest_ask::guest_ask)
+                    .layer(admission())
+                    .layer(fair_share()),
+            )
+            // And where a phone claims its NAME for the room. On the same
+            // surfaces as the ask and for the same reason; it carries no
+            // admission gate because it runs no turn — one lock, one insert.
+            .route(
+                crate::routes_guest_session::GUEST_SESSION_PATH,
+                post(crate::routes_guest_session::claim_name),
+            )
+    } else {
+        Router::new()
+    };
+
     general
         .merge(rail)
+        .merge(guest_ask)
         // OUTERMOST layer: bearer-token auth for non-loopback callers.
         // Wraps the whole client surface (including the per-route
         // admission gates), so authentication runs BEFORE load-shedding
@@ -463,10 +488,10 @@ pub fn internal_router(state: AppState) -> Router {
             axum::routing::post(routes_internal::newsworthy_tick),
         )
         // Phase 6 canonical-sync: peers fetch this node's canonical
-        // index for `<corpus_id>` as a streaming tar.zst. Loopback-
-        // gated like the other internal routes; the auth path is the
-        // same one peers already use for `/internal/knowledge/search`
-        // and friends.
+        // index for `<corpus_id>` as a streaming tar.zst. There has never
+        // been a loopback gate on this router; what admits a caller is
+        // `internal_gate` — a verified member, a plain-IP holder of the mesh
+        // secret, or a local process.
         .route(
             "/internal/corpus/canonical/{corpus_id}",
             get(routes_internal::corpus_canonical_stream),
@@ -508,7 +533,8 @@ pub fn internal_router(state: AppState) -> Router {
         //
         // Contribution controls (W2). Read by the Settings panel and
         // the tray status chip; mutated by the pause/ceiling controls.
-        // Loopback-only — the same guard that protects /internal/*.
+        // Local callers, admitted by `internal_gate` as loopback — not by a
+        // loopback-only bind, which this router has never had.
         .route(
             "/internal/contribution/status",
             get(routes_internal::contribution_status),
@@ -556,8 +582,9 @@ pub fn internal_router(state: AppState) -> Router {
             post(routes_internal::peer_preference_clear),
         )
         // Local Activity ledger — the glassbox "what is my daemon
-        // doing?" surface. Local-only namespace; loopback-only like
-        // the rest of /internal/*. `summary` is the totals card;
+        // doing?" surface. Local-only namespace, admitted as loopback by
+        // `internal_gate` — nothing binds this router loopback-only.
+        // `summary` is the totals card;
         // `recent` is the unified feed. Read by Settings → Activity &
         // Sharing.
         .route(
@@ -614,6 +641,18 @@ pub fn internal_router(state: AppState) -> Router {
             REQUEST_BODY_READ_TIMEOUT,
         ))
         .layer(axum::extract::DefaultBodyLimit::max(MAX_REQUEST_BODY_BYTES))
+        // INSIDE the resolver, so it reads what the resolver attached: whether
+        // this caller may reach the port at all (`internal_gate`).
+        .layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            crate::internal_gate::internal_gate_layer,
+        ))
+        // OUTERMOST: no handler reads `x-mesh-*` before this decides whether
+        // the connection is this daemon's own acceptor's (`internal_principal`).
+        .layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            crate::internal_principal::internal_principal_layer,
+        ))
         .with_state(state)
 }
 
@@ -633,7 +672,10 @@ pub async fn serve(
     // path. Same requirement the loopback guard documents.)
     let client_app =
         client_router(state.clone()).into_make_service_with_connect_info::<SocketAddr>();
-    let internal_app = internal_router(state);
+    // ConnectInfo on the internal listener too: `internal_principal_layer`
+    // decides "is this hop my own acceptor's" partly from the peer address,
+    // and a missing one resolves every caller `Unverified` (fail closed).
+    let internal_app = internal_router(state).into_make_service_with_connect_info::<SocketAddr>();
 
     let client_listener = TcpListener::bind(client_addr).await?;
     let internal_listener = TcpListener::bind(internal_addr).await?;
@@ -1040,6 +1082,12 @@ mod tests {
         let response = app
             .oneshot(
                 Request::get("/internal/latency/probe")
+                    // `internal_gate` reads a missing `ConnectInfo` as "not
+                    // loopback" and refuses; the real listener attaches one.
+                    .extension(axum::extract::ConnectInfo(SocketAddr::from((
+                        [127, 0, 0, 1],
+                        54321,
+                    ))))
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -1079,6 +1127,10 @@ mod tests {
             .oneshot(
                 Request::post("/internal/inference/warmup")
                     .header("content-type", "application/json")
+                    .extension(axum::extract::ConnectInfo(SocketAddr::from((
+                        [127, 0, 0, 1],
+                        54321,
+                    ))))
                     .body(Body::from("{}"))
                     .unwrap(),
             )

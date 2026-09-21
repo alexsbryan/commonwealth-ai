@@ -81,7 +81,7 @@ svrn mesh create                                  # prints a join key; "already
 
 # worker
 svrn mesh join <key>
-SOVEREIGN_RPC_SERVE=0.0.0.0:50052 svrn daemon run # lends its GPU to the mesh
+SOVEREIGN_RPC_SERVE=127.0.0.1:50052 svrn daemon run # lends its GPU to the mesh
 ```
 
 Before you download anything or commit to anything, ask what your mesh can do:

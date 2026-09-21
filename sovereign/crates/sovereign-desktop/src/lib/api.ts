@@ -1324,7 +1324,8 @@ export async function meshRelayCandidates(): Promise<
 
 /** One library a member offers on the mesh (Rust `MeshMediaOffer`).
  *  `offered_to` empty = everyone here; `player_url` null = the host
- *  refused the reach, and `unreachable` says why. */
+ *  refused the reach (and `unreachable` says why) OR the holder is using
+ *  the library themself (`media_available` 0). */
 export interface MeshMediaOffer {
   peer: string;
   node_id: string;
@@ -1332,6 +1333,8 @@ export interface MeshMediaOffer {
   offered_to: string[];
   player_url: string | null;
   unreachable: string | null;
+  /** 0 = the holder is watching it, 1 = free, null = not reported. */
+  media_available: number | null;
 }
 
 /** The libraries `svrn mesh media` lists, each with its player URL. */

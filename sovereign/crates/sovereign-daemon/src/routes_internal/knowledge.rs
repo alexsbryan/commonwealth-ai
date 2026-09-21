@@ -100,13 +100,17 @@ fn select_fanout_corpora(installed: &[(String, u64)], filter: &[String]) -> Fano
 /// wire format per peer.
 pub async fn knowledge_search(
     State(state): State<AppState>,
-    headers: axum::http::HeaderMap,
+    attached: Option<axum::Extension<sovereign_serving_host::admission::AttachedPrincipal>>,
     Json(request): Json<KnowledgeSearchRequest>,
 ) -> (StatusCode, Json<KnowledgeSearchResponse>) {
     // Identify the requester so we can stamp this on emitted ledger
-    // events. Local-origin requests (no X-Node-Id) skip emission —
-    // the dimensional ledger is intra-mesh-only per the spec scope.
-    let requester = crate::headers::parse_x_node_id(&headers);
+    // events. The requester is the member the iroh acceptor VERIFIED
+    // (`crate::internal_principal`), not a header the caller typed:
+    // attributing served work to whoever asks for it is how one node
+    // spends another's reciprocity. A caller with no verified identity
+    // is served and credited to nobody — the dimensional ledger is
+    // intra-mesh-only per the spec scope.
+    let requester = crate::admission::requester(attached);
 
     let engine = match &state.inner.node.corpus_engine {
         Some(e) => e.clone(),

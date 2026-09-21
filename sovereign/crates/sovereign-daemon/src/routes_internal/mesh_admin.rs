@@ -28,37 +28,80 @@ use super::ErrorBody;
 
 // ── Node activity reporting ─────────────────────────────────
 
-/// POST /internal/node/activity — sovereign-server reports coding activity level.
+/// POST /internal/node/activity — what this node can serve right now.
 ///
-/// sovereign-server's ActivityReporter calls this after each level transition.
-/// The level maps to an inference_availability weight that gossip carries to
-/// peers so the scheduler routes work away from busy nodes.
+/// Two independent reports ride this one route, each written only when its
+/// field is present:
 ///
-/// Levels: "hot" (0.20) | "warm" (0.65) | "cool" (0.85) | "idle" (1.00)
+/// - `level` — sovereign-server's ActivityReporter, after each level
+///   transition. The level maps to an inference_availability weight that
+///   gossip carries to peers so the scheduler routes work away from busy
+///   nodes. Levels: "hot" (0.20) | "warm" (0.65) | "cool" (0.85) |
+///   "idle" (1.00).
+/// - `media_available` — the holder's media-presence poll, `0.0` while the
+///   holder is watching their own library, `1.0` when it is free, and an
+///   explicit `null` when the origin could not be asked.
+///
+/// Neither field defaults for the other: a media report with no `level` must
+/// not advertise this node as idle, and an activity report with no
+/// `media_available` must not erase what the poll last saw (ARCH principle 6).
+/// `media_available` therefore distinguishes ABSENT (do not touch it) from
+/// `null` (nobody answered — publish nothing), which is why it is a nested
+/// `Option` rather than a plain one.
 pub async fn node_activity(
     State(state): State<AppState>,
     Json(payload): Json<NodeActivityPayload>,
 ) -> StatusCode {
-    let availability = match payload.level.as_str() {
-        "hot" => 0.20_f32,
-        "warm" => 0.65_f32,
-        "cool" => 0.85_f32,
-        _ => 1.00_f32,
-    };
-    tracing::info!(
-        level = %payload.level,
-        reason = %payload.reason,
-        availability,
-        "node_activity: inference_availability updated"
-    );
-    state.update_local_availability(availability).await;
+    if let Some(level) = &payload.level {
+        let availability = match level.as_str() {
+            "hot" => 0.20_f32,
+            "warm" => 0.65_f32,
+            "cool" => 0.85_f32,
+            _ => 1.00_f32,
+        };
+        tracing::info!(
+            level = %level,
+            reason = %payload.reason,
+            availability,
+            "node_activity: inference_availability updated"
+        );
+        state.update_local_availability(availability).await;
+    }
+    if let Some(media_available) = payload.media_available {
+        tracing::info!(
+            reason = %payload.reason,
+            ?media_available,
+            "node_activity: media_available updated"
+        );
+        state.update_local_media_available(media_available).await;
+    }
     StatusCode::NO_CONTENT
 }
 
 #[derive(Debug, Deserialize)]
 pub struct NodeActivityPayload {
-    pub level: String,
+    /// The coding-activity level, when this is an activity report. Absent on a
+    /// media report, which leaves inference availability where it was.
+    #[serde(default)]
+    pub level: Option<String>,
     pub reason: String,
+    /// What this node's media origin can serve a member right now, when this
+    /// is a media report. ABSENT on an activity report (leave it alone);
+    /// `Some(None)` — an explicit `null` — when the poll asked and got no
+    /// answer, which publishes no presence rather than a stale number.
+    #[serde(default, deserialize_with = "present_even_when_null")]
+    pub media_available: Option<Option<f32>>,
+}
+
+/// Deserialize a field that is meaningfully `null`: absent stays `None`, an
+/// explicit `null` becomes `Some(None)`. serde's own `Option` collapses the
+/// two, and collapsing them here would make "nobody answered" indistinguishable
+/// from "this report is not about media" (ARCH principle 6).
+fn present_even_when_null<'de, D>(deserializer: D) -> Result<Option<Option<f32>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    Option::<f32>::deserialize(deserializer).map(Some)
 }
 
 // ── Runtime model slot management ───────────────────────────

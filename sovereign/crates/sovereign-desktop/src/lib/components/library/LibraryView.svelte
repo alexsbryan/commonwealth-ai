@@ -81,6 +81,20 @@
     return o.offered_to.length === 0 ? "everyone here" : o.offered_to.join(", ");
   }
 
+  // The holder is watching their own library. The row already carries no
+  // `player_url` in that case, so nothing here can start a stream — this only
+  // says WHY the card will not open, instead of leaving it dead and silent.
+  function inUse(o: MeshMediaOffer): boolean {
+    // Loose `!= null` on purpose: it catches an absent field as well as an
+    // explicit null, and both mean the holder reported no presence.
+    return o.media_available != null && o.media_available <= 0;
+  }
+
+  function whyNotPlayable(o: MeshMediaOffer): string {
+    if (inUse(o)) return `${o.peer} is watching this library right now`;
+    return o.unreachable ?? `Play from ${o.peer}'s library`;
+  }
+
   onMount(() => {
     void reload();
     void reloadOffers();
@@ -226,11 +240,14 @@
                   class="card-open"
                   onclick={() => play(o)}
                   disabled={!o.player_url}
-                  title={o.unreachable ?? `Play from ${o.peer}'s library`}
+                  title={whyNotPlayable(o)}
                 >
                   <div class="card-name">{o.peer}'s library</div>
                   <div class="card-meta">
                     <span class="chip">{o.status}</span>
+                    {#if inUse(o)}
+                      <span class="chip" data-testid="mesh-library-in-use">in use right now</span>
+                    {/if}
                   </div>
                   <div class="card-fresh" data-testid="mesh-library-offered-to">
                     offered to: {offeredTo(o)}

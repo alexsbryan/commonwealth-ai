@@ -200,9 +200,11 @@ async fn push_ephemeral(state: &AppState, namespace: &str, payload: &str) -> Vec
     .expect("a struct of two Strings always serializes");
     let transport = state.peer_transport();
     let mut handles = Vec::with_capacity(peers.len());
+    let stamp = state.mesh_proof_stamp().await;
     for peer in peers {
         let client = client.clone();
         let envelope = envelope.clone();
+        let stamp = stamp.clone();
         let node = hex::encode(peer.node_id.as_bytes());
         let name = Some(peer.name.clone());
         let endpoints = transport
@@ -212,7 +214,7 @@ async fn push_ephemeral(state: &AppState, namespace: &str, payload: &str) -> Vec
             )
             .await;
         handles.push(tokio::spawn(async move {
-            offer_peer(&client, &envelope, node, name, &endpoints).await
+            offer_peer(&client, &envelope, node, name, &endpoints, stamp.as_ref()).await
         }));
     }
 
@@ -237,17 +239,21 @@ async fn offer_peer(
     node: String,
     name: Option<String>,
     endpoints: &[commonwealth_transport::PeerEndpoint],
+    // This node's proof of mesh membership, or `None` on a mesh with no
+    // credential — see `mesh_proof_outbound`.
+    stamp: Option<&commonwealth_transport::mesh_proof::MeshProofStamp>,
 ) -> PeerDelivery {
     let mut last_error = "no addresses advertised by peer".to_string();
     for ep in endpoints {
         let url = format!("{}/internal/ring/live", ep.base_url);
-        match client
+        let mut request = client
             .post(&url)
             .header(reqwest::header::CONTENT_TYPE, "application/json")
-            .body(envelope.to_string())
-            .send()
-            .await
-        {
+            .body(envelope.to_string());
+        if let Some((name, value)) = stamp.map(|s| s.pair()) {
+            request = request.header(name, value);
+        }
+        match request.send().await {
             Ok(resp) if resp.status().is_success() => {
                 return PeerDelivery {
                     node,
@@ -300,7 +306,11 @@ pub async fn live_push(
     Query(q): Query<RailQuery>,
     body: axum::body::Bytes,
 ) -> Response {
-    let namespace = match namespace_for(guest.as_ref().map(|e| &e.0), q.namespace.as_deref()) {
+    let namespace = match namespace_for(
+        &state.guest_pages(),
+        guest.as_ref().map(|e| &e.0),
+        q.namespace.as_deref(),
+    ) {
         Ok(ns) => ns,
         Err(refusal) => return refusal,
     };
@@ -362,7 +372,11 @@ pub async fn live_drain(
     guest: Option<axum::Extension<Guest>>,
     Query(q): Query<RailQuery>,
 ) -> Response {
-    let namespace = match namespace_for(guest.as_ref().map(|e| &e.0), q.namespace.as_deref()) {
+    let namespace = match namespace_for(
+        &state.guest_pages(),
+        guest.as_ref().map(|e| &e.0),
+        q.namespace.as_deref(),
+    ) {
         Ok(ns) => ns,
         Err(refusal) => return refusal,
     };

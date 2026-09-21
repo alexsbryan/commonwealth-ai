@@ -20,12 +20,16 @@
 
 #[path = "main/client_auth.rs"]
 mod client_auth;
+#[path = "main/client_tokens_e2e.rs"]
+mod client_tokens_e2e;
 #[path = "main/control_plane_not_shed.rs"]
 mod control_plane_not_shed;
 #[path = "main/corpus_lifecycle.rs"]
 mod corpus_lifecycle;
 #[path = "main/gossip_route.rs"]
 mod gossip_route;
+#[path = "main/internal_gate_e2e.rs"]
+mod internal_gate_e2e;
 #[path = "main/join_route.rs"]
 mod join_route;
 #[path = "main/knowledge_fanout.rs"]

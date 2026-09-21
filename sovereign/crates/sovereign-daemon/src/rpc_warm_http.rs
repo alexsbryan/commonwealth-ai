@@ -265,6 +265,12 @@ pub async fn warm_cache_from_ranges(
     tensors: &[TensorRange],
     cache_dir: &Path,
     file_urls: &[Vec<String>],
+    // This node's mesh-proof header pair, or `None` on a mesh with no
+    // credential. The sources are a PEER's `/internal/v1/models/file/*`, so on
+    // a plain-IP hop it is the only thing that tells the host's internal port
+    // a member is range-fetching rather than a stranger. One pair for the whole
+    // warm: a range warm is a burst, not a loop that outlives a proof window.
+    mesh_proof: Option<(&str, &str)>,
 ) -> Result<WarmRangeStats, String> {
     use futures::StreamExt;
     use tokio::io::AsyncWriteExt;
@@ -311,12 +317,13 @@ pub async fn warm_cache_from_ranges(
         let mut last_err = String::new();
         for step in 0..source_urls.len() {
             let i = (url_idx + step) % source_urls.len();
-            match http
+            let mut request = http
                 .get(&source_urls[i])
-                .header(reqwest::header::RANGE, range.as_str())
-                .send()
-                .await
-            {
+                .header(reqwest::header::RANGE, range.as_str());
+            if let Some((name, value)) = mesh_proof {
+                request = request.header(name, value);
+            }
+            match request.send().await {
                 Ok(r)
                     if r.status() == reqwest::StatusCode::PARTIAL_CONTENT
                         || r.status().is_success() =>
@@ -414,6 +421,7 @@ impl MeshRpcShardWarmer {
         model_id: &str,
         local_model_path: Option<PathBuf>,
         peer_bases: &[String],
+        mesh_proof: Option<(&str, &str)>,
     ) -> Result<PathBuf, String> {
         // Split GGUFs: the warm reader walks every `-NNNNN-of-NNNNN` sibling,
         // so ALL shard files must be local, not just the named one.
@@ -425,7 +433,7 @@ impl MeshRpcShardWarmer {
                 if already.is_file() {
                     already
                 } else {
-                    self.fetch_one(model_id, peer_bases).await?
+                    self.fetch_one(model_id, peer_bases, mesh_proof).await?
                 }
             }
         };
@@ -440,13 +448,18 @@ impl MeshRpcShardWarmer {
             // Missing sibling shard — fetch it beside the others. The warm
             // reader falls back to single-file (→ empty-warm guard on the
             // host) if any sibling is absent, so failing here is loud anyway.
-            self.fetch_one(sibling, peer_bases).await?;
+            self.fetch_one(sibling, peer_bases, mesh_proof).await?;
         }
         Ok(primary)
     }
 
     /// Fetch one named model file from the first reachable host base.
-    async fn fetch_one(&self, name: &str, peer_bases: &[String]) -> Result<PathBuf, String> {
+    async fn fetch_one(
+        &self,
+        name: &str,
+        peer_bases: &[String],
+        mesh_proof: Option<(&str, &str)>,
+    ) -> Result<PathBuf, String> {
         if peer_bases.is_empty() {
             return Err(format!(
                 "node does not hold '{name}' and the warm request carried no host base to fetch from"
@@ -459,6 +472,7 @@ impl MeshRpcShardWarmer {
                 base,
                 name,
                 &self.fetch_dir,
+                mesh_proof,
                 |_, _| {},
             )
             .await
@@ -553,6 +567,13 @@ impl RpcShardWarmer for MeshRpcShardWarmer {
         std::fs::create_dir_all(&cache_dir).map_err(|e| format!("create cache dir: {e}"))?;
 
         let transport_bases = host_transport_bases(&state, req.host_node_id.as_deref()).await;
+        // Resolved beside the bases: the fetches below leave this crate (the
+        // range warm) and this workspace crate boundary (`model_fetch`, which
+        // cannot name `AppState`), so the read is made here, once.
+        let warm_proof = state.mesh_proof_stamp().await.map(|s| {
+            let (name, value) = s.pair();
+            (name.to_string(), value.to_string())
+        });
 
         tracing::info!(
             model_id = %req.model_id,
@@ -603,6 +624,7 @@ impl RpcShardWarmer for MeshRpcShardWarmer {
                     tensors,
                     &cache_dir,
                     &merged_file_urls,
+                    warm_proof.as_ref().map(|(n, v)| (n.as_str(), v.as_str())),
                 )
                 .await?;
                 RpcWarmShardResponse {
@@ -616,7 +638,12 @@ impl RpcShardWarmer for MeshRpcShardWarmer {
             RpcWarmSource::WholeGguf { peer_bases } => {
                 let bases = merge_bases(transport_bases.iter().cloned(), peer_bases);
                 let gguf = self
-                    .resolve_whole_gguf(&req.model_id, local_model_path, &bases)
+                    .resolve_whole_gguf(
+                        &req.model_id,
+                        local_model_path,
+                        &bases,
+                        warm_proof.as_ref().map(|(n, v)| (n.as_str(), v.as_str())),
+                    )
                     .await?;
                 // `warm_cache_for_device` is synchronous file I/O — run it off the
                 // reactor. It warms exactly this device's shard (its blocks + any
@@ -879,7 +906,17 @@ async fn orchestrate_warm(
             // the working one (2026-07-29).
             let mut attempts: Vec<String> = Vec::new();
             for (url, via, ep) in &candidates {
-                match http.post(url).json(&body).send().await {
+                // Stamped: the worker is a PEER and this is its
+                // `/internal/rpc-warm`. Minted per candidate — the orchestrator
+                // fans out over minutes and the proof window is 30 s.
+                let request = match daemon.mesh_proof_stamp().await {
+                    Some(stamp) => {
+                        let (n, v) = stamp.pair();
+                        http.post(url).json(&body).header(n, v)
+                    }
+                    None => http.post(url).json(&body),
+                };
+                match request.send().await {
                     Ok(r) if r.status().is_success() => {
                         let stats = r.json::<RpcWarmShardResponse>().await.unwrap_or_default();
                         tracing::info!(
@@ -1010,6 +1047,95 @@ mod tests {
         )
     }
 
+    /// `tg-2-strangers-are-refused`, the range warm's half: every range GET
+    /// carries the pair it was handed, and none carries anything when it was
+    /// handed none.
+    ///
+    /// The source is a PEER's `/internal/v1/models/file/*`, so the absent case
+    /// is a 401 on the default `internal_auth` — and an unstamped range warm is
+    /// what this function built before the pair existed.
+    #[tokio::test]
+    async fn every_range_get_carries_the_pair_it_was_given() {
+        let seen: Arc<std::sync::Mutex<Vec<Option<String>>>> = Default::default();
+        let sink = Arc::clone(&seen);
+        let data: Vec<u8> = (0u8..=255).cycle().take(2048).collect();
+        let body = Arc::new(data.clone());
+        let handler = move |headers: axum::http::HeaderMap| {
+            let sink = Arc::clone(&sink);
+            let body = Arc::clone(&body);
+            async move {
+                sink.lock().unwrap().push(
+                    headers
+                        .get("x-mesh-proof")
+                        .and_then(|v| v.to_str().ok())
+                        .map(str::to_string),
+                );
+                let (s, e) = headers
+                    .get(axum::http::header::RANGE)
+                    .and_then(|v| v.to_str().ok())
+                    .and_then(|h| {
+                        let spec = h.trim().strip_prefix("bytes=")?;
+                        let (a, b) = spec.split_once('-')?;
+                        Some((a.parse::<usize>().ok()?, b.parse::<usize>().ok()?))
+                    })
+                    .expect("the warm always sends a range");
+                (
+                    axum::http::StatusCode::PARTIAL_CONTENT,
+                    body[s..=e].to_vec(),
+                )
+            }
+        };
+        let app = Router::new().route("/internal/v1/models/file/m.gguf", get(handler));
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr: SocketAddr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            let _ = axum::serve(listener, app).await;
+        });
+        let url = format!("http://{addr}/internal/v1/models/file/m.gguf");
+
+        let mk = |off: usize, len: usize| {
+            let mut h = Fnv1a::new();
+            h.update(&data[off..off + len]);
+            TensorRange {
+                gguf_offset: off as u64,
+                nbytes: len as u64,
+                hash: h.finish(),
+                file_idx: 0,
+            }
+        };
+        let tensors = vec![mk(0, 64), mk(128, 32)];
+        let http = reqwest::Client::new();
+
+        let stamped = tempfile::tempdir().unwrap();
+        warm_cache_from_ranges(
+            &http,
+            &[url.clone()],
+            &tensors,
+            stamped.path(),
+            &[],
+            Some(("x-mesh-proof", "feed.face")),
+        )
+        .await
+        .expect("stamped warm");
+
+        let bare = tempfile::tempdir().unwrap();
+        warm_cache_from_ranges(&http, &[url], &tensors, bare.path(), &[], None)
+            .await
+            .expect("unstamped warm");
+
+        let seen = seen.lock().unwrap().clone();
+        assert_eq!(
+            seen,
+            vec![
+                Some("feed.face".to_string()),
+                Some("feed.face".to_string()),
+                None,
+                None
+            ],
+            "one entry per tensor per run: both stamped, then both bare"
+        );
+    }
+
     #[tokio::test]
     async fn warm_from_ranges_writes_hash_named_cache_files() {
         // A fake "GGUF": two distinct tensor regions in one buffer.
@@ -1034,9 +1160,10 @@ mod tests {
 
         let cache = tempfile::tempdir().unwrap();
         let http = reqwest::Client::new();
-        let stats = warm_cache_from_ranges(&http, &[url.clone()], &tensors, cache.path(), &[])
-            .await
-            .expect("warm");
+        let stats =
+            warm_cache_from_ranges(&http, &[url.clone()], &tensors, cache.path(), &[], None)
+                .await
+                .expect("warm");
         assert_eq!(stats.written, 2);
         assert_eq!(stats.bytes_written, 3000);
 
@@ -1052,7 +1179,7 @@ mod tests {
         }
 
         // Idempotent: a second run writes nothing new.
-        let again = warm_cache_from_ranges(&http, &[url], &tensors, cache.path(), &[])
+        let again = warm_cache_from_ranges(&http, &[url], &tensors, cache.path(), &[], None)
             .await
             .unwrap();
         assert_eq!(again.written, 0);
@@ -1075,7 +1202,7 @@ mod tests {
         }];
         let cache = tempfile::tempdir().unwrap();
         let http = reqwest::Client::new();
-        let err = warm_cache_from_ranges(&http, &[url], &bad, cache.path(), &[])
+        let err = warm_cache_from_ranges(&http, &[url], &bad, cache.path(), &[], None)
             .await
             .unwrap_err();
         assert!(err.contains("hash mismatch"), "got: {err}");
@@ -1176,7 +1303,7 @@ mod tests {
 
         let cache = tempfile::tempdir().unwrap();
         let http = reqwest::Client::new();
-        let stats = warm_cache_from_ranges(&http, &[], &tensors, cache.path(), &file_urls)
+        let stats = warm_cache_from_ranges(&http, &[], &tensors, cache.path(), &file_urls, None)
             .await
             .expect("split warm");
         assert_eq!(stats.written, 2);

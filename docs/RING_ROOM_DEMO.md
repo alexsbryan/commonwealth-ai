@@ -7,6 +7,11 @@ traced to its root in a's daemon log, with the fixes ranked by how much of the
 `target/ring-room-demo/` (verdict rows in commit `85eda3e49`, per-call timings
 from `target/ring-room-demo/a/daemon.err` of the bring-up at 04:23Z).
 
+The room as it will be — rr-2's four nodes, two networks and six bars, and the
+walk on real machines — has its own run of show in
+`docs/RING_ROOM_RUN_OF_SHOW.md`. Part one here is rr-1's three-machine sitting,
+which stays the regression gate.
+
 ## Part one: the run of show
 
 A ring is a few machines that share things directly with each other, no server
@@ -40,6 +45,32 @@ From inside the `sovereign-vulkan` toolbox:
 RING_DOC_BACKEND=podman scripts/ring-room-demo.sh up
 RING_DOC_BACKEND=podman scripts/ring-room-demo.sh verdict all
 scripts/ring-room-demo.sh down
+```
+
+Since rr-2 the same two scripts also carry a SECOND topology, chosen with
+`RING_ROOM_TOPOLOGY=room`: four nodes named for the machines they stand in for
+(`ring-room-beefy`, `halo`, `little`, `phone`) on TWO podman networks — `room`
+is the venue's WiFi and is created `--internal`, `uplink` is its internet.
+What makes `room` a room is one bit netavark sets with `--internal` —
+`net.ipv4.conf.<room bridge>.forwarding = 0` — and not podman's `isolate`
+flag, which installs no rule at all on an internal network. Because a bit
+nobody reads is a poor guarantee, `up` also installs a drop each way between
+the two bridges in the rootless network namespace, and then PROVES the
+result on the wire before any leg runs: the keeper on the uplink must not
+reach the wall's page at its room address, and the phone must. With that bit
+flipped back to 1 and no rules installed, the keeper reaches it (measured
+2026-09-20: HTTP 200, 5 of 5 UDP replies), which is what the proof is
+watching for. The
+wall is the one member in the room and holds the host's render node; the keeper
+and the library holder sit behind the uplink; the phone is on the room's WiFi
+only, runs a stock node image, and has no daemon and no key. Cutting `uplink`
+from the wall is the venue's internet going down with the room still working.
+Nothing of the node door was copied to do it: the node set, the container
+prefix, the founder, the networks, the per-node image and the forwarder are
+parameters of `ring-doc-demo.sh` now, and rr-1's three-node run is unchanged.
+
+```bash
+RING_ROOM_TOPOLOGY=room scripts/ring-room-demo.sh verdict all
 ```
 
 `up` empties the run directory, starts the three nodes, joins them, and names
@@ -239,13 +270,32 @@ With both gates open the classify reaches the scorer — its decision line loses
 the `(gated)` prefix and reads `scored=3` — and then the scorer ranks local
 anyway, 38.2 s of it, inside a 60-second window. The same run shows the scorer
 sending three of five syntheses to the GPU peer and two to the CPU local, with
-nothing in the `info` line to say why either way: the decision line names the
-winner and the candidate count and no scores, so "why did this one stay home"
-cannot be answered from the artifact. Opening a gate does not make a scorer
-see. That is §4.5's finding arriving at the bar — `throughput_factor` is a
-constant for every peer, so the only thing separating a CPU node from a GPU
-node is the local candidate's own sub-reference clamp, and that margin is thin
-enough to flip between adjacent asks.
+nothing in the `info` line to say why either way. Opening a gate does not make
+a scorer see.
+
+The line now carries `scores` and `decided_by`, and the same fleet run through
+the Tier-1 simulator (`scenario::ring_room_gpu_keeper`, every rate measured on
+this host) says exactly what it could not before:
+
+```
+local          final 1.092 = claim 0.950 × obs 1.000 × load 1.000 × loc 1.150 × cold 1.000 × tput 1.000 (neutral)
+keeper-gpu     final 0.698 = claim 0.950 × obs 1.000 × load 1.000 × loc 1.050 × cold 0.700 × tput 1.000 (neutral)
+plus-one-cpu   final 0.698 = claim 0.950 × obs 1.000 × load 1.000 × loc 1.050 × cold 0.700 × tput 1.000 (neutral)
+-> local chosen; decided_by cold_start_weight(1.000>0.700) vs plus-one-cpu
+```
+
+**The GPU node and the CPU node score identically, to three decimals.** A
+machine that prefills at 2,200 tokens a second and one that manages 33 are the
+same candidate as far as the scheduler is concerned. What keeps work home is
+the peer's frozen cold-start weight (0.7, never ramping on the ranked path)
+times the local locality bonus (1.15 against 1.05) — and what eventually sends
+it away is the origin's OWN queue depth eroding `load_penalty`, 1.000 → 0.952
+→ 0.909 → …, until local finally drops below a constant 0.698. That is the
+three-two split, and it is why it looks arbitrary: it is arbitrary. Nothing in
+the decision is a measurement of the peer.
+
+On that fleet the shipped scheduler runs at **5% of the efficiency** a
+perfect-information oracle reaches (p95 2,594 s against the oracle's 37 s).
 
 Note what this fix is NOT. The scorer has no prefill rate to divide by, and
 the obvious way to get one — reviving `run_baseline_benchmark` — is a measured
@@ -272,6 +322,20 @@ the prefix cache is measured unsafe on this architecture and buys nothing here.
 Fix 3 turned out to be two gates rather than one, and is the only one that has
 shipped. Fix 2 remains real and unbuilt — sizing the prompt to the node's rate
 is a design change and a quality trade, not a latency fix to be taken quietly.
+
+A sixth fix is now named and deliberately NOT taken. **The scorer has no
+measurement of a peer at all**, and the one term that decides — the peer's
+frozen cold-start weight — was measured in both directions before anything was
+changed. Lifting it (`Arm::WarmStart`) is worth 5× on the ring-room fleet
+(efficiency 0.05 → 0.25, p95 2,594 s → 606 s) and costs 33% on `mixed-hubs`,
+the fleet the freeze exists to protect (efficiency 0.55 → 0.37, mean latency
++51%, declined upgrades 30 → 1). Opposite signs, same one-line change, so it
+is not a change anyone may make on this campaign's evidence — and it would not
+fix the room anyway: with the floor lifted the scheduler still cannot tell the
+GPU from the CPU, it merely offloads to both more often. What this fleet needs
+is a signal that does not exist, and the obvious way to mint one is the rate
+card canon forbids. That is a scheduler-design question with its own
+measurement, not a bar to be flipped.
 Fix 5 came first in practice, because without one fast machine in the room no
 scheduling change could be watched failing and then passing on the bar that
 minted it: `RING_DOC_GPU_NODES` on the podman backend passes the host's render

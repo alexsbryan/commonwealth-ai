@@ -2,17 +2,23 @@
 //! `KnowledgeQueryServed` ledger emission test.
 //!
 //! `routes_internal::knowledge_search` is the inter-node fan-out
-//! target: peers POST a `KnowledgeSearchRequest` with an `X-Node-Id`
-//! header identifying themselves, this daemon searches its
-//! installed shards and emits **one `KnowledgeQueryServed` event
-//! per corpus** that contributed at least one chunk.
+//! target: a peer POSTs a `KnowledgeSearchRequest` over the mesh
+//! transport, this daemon searches its installed shards and emits
+//! **one `KnowledgeQueryServed` event per corpus** that contributed
+//! at least one chunk.
+//!
+//! Since 2026-09-20 the requester is the member whose key the iroh
+//! acceptor VERIFIED, not an `X-Node-Id` header the caller typed —
+//! attributing served work to whoever asks for it is how one node
+//! spends another's reciprocity. `common::acceptor_stamp` is how a
+//! test speaks as a verified peer.
 //!
 //! The contract (§10 of `SYSTEM_OVERVIEW.md`):
-//!   - Local-origin requests (no `X-Node-Id`) skip emission. The
+//!   - A caller with no verified identity skips emission. The
 //!     dimensional ledger is intra-mesh-only.
 //!   - Per-corpus chunk count is post-truncation — reflects what
 //!     the requester actually sees, not the raw pre-merge size.
-//!   - `for_node` is the requester (from the header), not the
+//!   - `for_node` is the requester (the verified key), not the
 //!     local node.
 //!
 //! Three cases worth pinning:
@@ -20,9 +26,8 @@
 //! 1. **Peer request → one event per contributing corpus.** Two
 //!    corpora installed, both contribute → two events emitted with
 //!    the right `for_node` + `corpus_id` + `chunks_returned`.
-//! 2. **Local-origin request (no header) → no event.** Same
-//!    request, no `X-Node-Id` → response succeeds, ledger stays
-//!    empty.
+//! 2. **A caller with no verified identity → no event.** Same
+//!    request, unstamped → response succeeds, ledger stays empty.
 //! 3. **Empty result → no event for the empty corpus.** Filter to
 //!    a non-installed corpus → response has no results, no event.
 //!
@@ -46,7 +51,7 @@ use sovereign_meshapp_registry::registry::AppRegistry;
 use crate::common;
 use crate::common::{id_to_hex, solo_mesh, spawn_router};
 
-const EMBED_DIM: usize = 8;
+pub(crate) const EMBED_DIM: usize = 8;
 
 fn mock_embed_fn() -> EmbedFn {
     Arc::new(|_text: &str| Box::pin(async { Ok(vec![0.0_f32; EMBED_DIM]) }))
@@ -97,7 +102,7 @@ async fn install_corpus_with_chunk(
 /// Build an `AppState` with a `CorpusEngine` rooted at `tmp/indexes/`
 /// and pre-installed corpora. Returns the state and the on-disk
 /// directory (keep alive for the test's duration).
-async fn build_state_with_corpora(
+pub(crate) async fn build_state_with_corpora(
     self_id: NodeId,
     corpora: &[(&str, &str, &str)], // (id, name, chunk_content)
 ) -> (AppState, tempfile::TempDir) {
@@ -125,6 +130,9 @@ async fn build_state_with_corpora(
     (state, tmp)
 }
 
+/// The requester's verified key, as this node's roster would carry it.
+const REQUESTER_KEY: [u8; 32] = [0x5a; 32];
+
 #[tokio::test]
 async fn peer_request_emits_one_knowledge_query_served_per_contributing_corpus() {
     let self_id = NodeId::from_u128(0xAAAA_AAAA);
@@ -137,21 +145,28 @@ async fn peer_request_emits_one_knowledge_query_served_per_contributing_corpus()
         ],
     )
     .await;
+    // The requester is a MEMBER whose key this node's roster names — the
+    // only shape that can be attributed now. A typed `X-Node-Id` is a claim,
+    // not an identity, and the internal router strips it.
+    common::name_member_with_key(&state, requester, "requester", REQUESTER_KEY).await;
     let addr = spawn_router(internal_router(state.clone())).await;
 
     // Request both corpora — both should contribute one chunk each.
-    let resp = reqwest::Client::new()
-        .post(format!("http://{addr}/internal/knowledge/search"))
-        .header("X-Node-Id", id_to_hex(&requester))
-        .json(&serde_json::json!({
-            "query_embedding": vec![0.0_f32; EMBED_DIM],
-            "query_text": "compatibilism",
-            "corpora": ["sep", "wikipedia"],
-            "limit": 10,
-        }))
-        .send()
-        .await
-        .expect("/internal/knowledge/search reachable");
+    let resp = common::acceptor_stamp(
+        reqwest::Client::new().post(format!("http://{addr}/internal/knowledge/search")),
+        "requester",
+        requester,
+        REQUESTER_KEY,
+    )
+    .json(&serde_json::json!({
+        "query_embedding": vec![0.0_f32; EMBED_DIM],
+        "query_text": "compatibilism",
+        "corpora": ["sep", "wikipedia"],
+        "limit": 10,
+    }))
+    .send()
+    .await
+    .expect("/internal/knowledge/search reachable");
     assert_eq!(resp.status(), reqwest::StatusCode::OK);
 
     let body: serde_json::Value = resp.json().await.unwrap();
@@ -191,7 +206,7 @@ async fn peer_request_emits_one_knowledge_query_served_per_contributing_corpus()
     for (for_node, corpus_id, chunks) in &served {
         assert_eq!(
             for_node, &requester,
-            "for_node must be the requester (from X-Node-Id), \
+            "for_node must be the requester (the key the acceptor verified), \
              not the local node — a §10 lookup-pollution regression"
         );
         assert!(

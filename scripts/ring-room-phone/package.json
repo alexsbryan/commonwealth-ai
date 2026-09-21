@@ -1,0 +1,10 @@
+{
+  "name": "ring-room-phone",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The phone in the ring-room demo: reads the wall's QR, opens the guest link, types a name, edits the doc, asks the room.",
+  "dependencies": {
+    "jsqr": "1.4.0"
+  }
+}

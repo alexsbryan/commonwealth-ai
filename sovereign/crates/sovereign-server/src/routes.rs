@@ -260,6 +260,7 @@ pub async fn send_message(
     Extension(approval): Extension<Arc<ServerApprovalChannel>>,
     Extension(sched): Extension<FairScheduler>,
     Extension(reciprocity): Extension<Arc<ReciprocityTable>>,
+    attached: Option<Extension<crate::auth::AttachedPrincipal>>,
     headers: HeaderMap,
     Path(conversation_id): Path<String>,
     Json(body): Json<SendMessageRequest>,
@@ -267,7 +268,8 @@ pub async fn send_message(
     // Fair scheduler — REST is one-shot: grant if a slot is free, else shed
     // immediately with a queue-position hint (no long-poll). The permit is
     // held for the turn and dropped when this fn returns.
-    let key = user_key(&tenant, &headers);
+    let principal = crate::auth::principal_of(attached);
+    let key = user_key(&tenant, &principal);
     let weight = reciprocity.weight_for(&key);
     let _permit = match sched.try_grant(key, weight) {
         Ok(permit) => permit,

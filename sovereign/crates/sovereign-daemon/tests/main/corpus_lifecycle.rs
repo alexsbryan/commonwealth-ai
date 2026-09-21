@@ -228,6 +228,15 @@ async fn post_json<T: serde::Serialize>(
         .method("POST")
         .uri(path)
         .header("content-type", "application/json")
+        // Both internal listeners attach `ConnectInfo`
+        // (`daemon.rs`/`server.rs`), and `internal_gate` reads a MISSING one as
+        // "not loopback" and refuses — the same fail-closed reading
+        // `internal_principal` takes. A driver with no peer address is a shape
+        // production never has, so say the local one here.
+        .extension(axum::extract::ConnectInfo(std::net::SocketAddr::from((
+            [127, 0, 0, 1],
+            54321,
+        ))))
         .body(Body::from(serde_json::to_vec(body).unwrap()))
         .unwrap();
     let resp = app.oneshot(req).await.unwrap();
@@ -242,6 +251,10 @@ async fn post_json<T: serde::Serialize>(
 async fn get(app: Router, path: &str) -> (StatusCode, Vec<u8>) {
     let req = Request::builder()
         .method("GET")
+        .extension(axum::extract::ConnectInfo(std::net::SocketAddr::from((
+            [127, 0, 0, 1],
+            54321,
+        ))))
         .uri(path)
         .body(Body::empty())
         .unwrap();

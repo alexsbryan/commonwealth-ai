@@ -31,12 +31,14 @@ pub async fn ws_handler(
     Extension(sched): Extension<FairScheduler>,
     Extension(reciprocity): Extension<Arc<ReciprocityTable>>,
     Extension(narration_tx): Extension<broadcast::Sender<TurnNarration>>,
+    attached: Option<Extension<crate::auth::AttachedPrincipal>>,
     headers: HeaderMap,
     Path(conversation_id): Path<String>,
 ) -> Response {
     // Resolve the fairness/reciprocity key once for the socket's lifetime
     // (mesh-routed sockets carry `X-Node-Id`; local ones key on tenant).
-    let key = user_key(&tenant, &headers);
+    let principal = crate::auth::principal_of(attached);
+    let key = user_key(&tenant, &principal);
     ws.on_upgrade(move |socket| {
         handle_ws(
             socket,

@@ -652,6 +652,10 @@ struct MediaOfferRow {
     status: String,
     #[serde(default)]
     offered_to: Vec<String>,
+    /// What the holder's origin can serve right now; absent when the holder
+    /// published no presence.
+    #[serde(default)]
+    media_available: Option<f32>,
 }
 
 /// The one field of `MediaReach` the rail needs.
@@ -670,9 +674,19 @@ pub struct MeshMediaOffer {
     /// Who the holder admits; empty = everyone here.
     pub offered_to: Vec<String>,
     /// The loopback bridge the player opens (`reach.rs` `player_url`).
-    /// `None` when the host refused the reach — `unreachable` says why.
+    /// `None` when the host refused the reach — `unreachable` says why — and
+    /// `None` when the holder is using the library themself, which
+    /// [`MeshMediaOffer::media_available`] says instead.
     pub player_url: Option<String>,
     pub unreachable: Option<String>,
+    /// What the holder's origin can serve right now: `0.0` the holder is
+    /// watching it, `1.0` free, `None` the holder published no presence.
+    ///
+    /// The rail does not merely RENDER this. At `0.0` there is no
+    /// `player_url` on the row at all, so "does not start a stream" is a fact
+    /// about the row rather than a rule the view has to remember (ARCH
+    /// principle 10).
+    pub media_available: Option<f32>,
 }
 
 /// The offers `svrn mesh media` lists, each with the URL its player opens.
@@ -691,14 +705,21 @@ async fn media_offers(
         .map_err(|e| format!("mesh_media_offers: {e}"))?;
     let mut out = Vec::with_capacity(rows.len());
     for row in rows {
-        let (player_url, unreachable) = match client
-            .mesh_media_reach::<MediaReachRow>(&row.node_id)
-            .await
-        {
-            Ok(reach) => (Some(reach.url), None),
-            Err(e) => {
-                tracing::debug!(target: "mesh_state", peer = %row.peer, error = %e, "mesh_media_offers: reach refused");
-                (None, Some(e.to_string()))
+        // A library in use is not dialed at all. The holder is watching it,
+        // so a bridge to it would be a stream started over their shoulder —
+        // and the row that carries no URL cannot start one however the view
+        // is written.
+        let in_use = row.media_available.is_some_and(|v| v <= 0.0);
+        let (player_url, unreachable) = if in_use {
+            tracing::info!(target: "mesh_state", peer = %row.peer, "mesh_media_offers: in use by its holder — not reaching it");
+            (None, None)
+        } else {
+            match client.mesh_media_reach::<MediaReachRow>(&row.node_id).await {
+                Ok(reach) => (Some(reach.url), None),
+                Err(e) => {
+                    tracing::debug!(target: "mesh_state", peer = %row.peer, error = %e, "mesh_media_offers: reach refused");
+                    (None, Some(e.to_string()))
+                }
             }
         };
         out.push(MeshMediaOffer {
@@ -708,6 +729,7 @@ async fn media_offers(
             offered_to: row.offered_to,
             player_url,
             unreachable,
+            media_available: row.media_available,
         });
     }
     tracing::debug!(target: "mesh_state", offering = out.len(), "mesh_media_offers: fetched");

@@ -576,6 +576,28 @@ runs_in = ["by-hand"]
 doc = "quality/campaigns/ (the campaign files this loads and measures)"
 
 [[instrument]]
+id = "ralph-decisions"
+kind = "gate"
+claim = "invariant"
+command = "python3 scripts/ralph-decisions.py --check"
+# 0.02s, n=3 (0.03 / 0.02 / 0.02 wall), 2026-09-21 — it reads four archive
+# parts plus one file per entry and renders in memory; no process is spawned.
+cost_secs = 0.02
+enforcement = "hard"
+fidelity = "F0"
+baseline = { kind = "none" }
+negative_control = "none"
+runs_in = ["prepush", "ci:gates"]
+when_changed = "^ralph/(DECISIONS\\.md$|decisions/)"
+# HARD, and cheap enough that it costs the push nothing. It is what makes
+# `.gitattributes`' keep-ours driver on ralph/DECISIONS.md safe: that driver
+# resolves a merge by keeping OUR render, which after a merge is missing the
+# other side's entries. The entries themselves are already in the tree (one
+# decision, one file), so this refuses the push and names the one command that
+# rebuilds the render from them.
+doc = "scripts/ralph-decisions.py (module docstring); .gitattributes"
+
+[[instrument]]
 id = "nc-thesis"
 kind = "check"
 claim = "invariant"

@@ -89,11 +89,15 @@ impl Permission {
 }
 
 /// Window-label prefix for mesh-app webviews. The host creates each app's
-/// window with label `meshapp-<app_id>`, and `capabilities/meshapp.json`
-/// scopes the bridge commands to `windows: ["meshapp-*"]` — so the bridge
-/// is unreachable from the main window, and the main window's ~175
-/// commands are unreachable from a mesh app. That exclusion is the
-/// bidirectional isolation.
+/// window with label `meshapp-<app_id>`.
+///
+/// Tauri 2.11 does NOT gate app commands per window — the ACL check in
+/// `webview/mod.rs` only applies to a crate carrying an app manifest, and
+/// this crate's `build.rs` is a bare `tauri_build::build()` with no
+/// `permissions/` directory — so `capabilities/meshapp.json` cannot decide
+/// WHICH app commands a `meshapp-*` window may invoke. [`bridge_refusal`]
+/// below is what actually decides that, at the one invoke closure in
+/// `main.rs`.
 pub const MESHAPP_LABEL_PREFIX: &str = "meshapp-";
 
 /// Derive the calling app's id from its webview label. `None` for any
@@ -104,6 +108,60 @@ pub fn app_id_from_label(label: &str) -> Option<String> {
         .strip_prefix(MESHAPP_LABEL_PREFIX)
         .filter(|id| !id.is_empty())
         .map(str::to_string)
+}
+
+/// The host commands a mesh-app window may invoke: exactly the names
+/// `meshapp_shim.js` spells on `window.meshApp`, which is the only host
+/// surface a first-party bundle calls.
+///
+/// This list is never hand-kept beside the shim —
+/// `the_bridge_allowlist_is_exactly_the_shims_commands` in
+/// `commands::meshapp` parses the `meshapp_*` names back out of the shim
+/// source and asserts set-equality, so adding a command here without
+/// adding it to `window.meshApp` (or the reverse) fails the test.
+pub const MESHAPP_BRIDGE_COMMANDS: [&str; 18] = [
+    "meshapp_capabilities",
+    "meshapp_claims",
+    "meshapp_corpus_stats",
+    "meshapp_document_feed",
+    "meshapp_findings",
+    "meshapp_graph",
+    "meshapp_node",
+    "meshapp_open_outer_work",
+    "meshapp_parcel_analytics",
+    "meshapp_questions",
+    "meshapp_read_chunk",
+    "meshapp_read_corpus",
+    "meshapp_reconciliation",
+    "meshapp_search_entities",
+    "meshapp_search_parcels",
+    "meshapp_subgraph",
+    "meshapp_timeline",
+    "meshapp_wrapped_artifact",
+];
+
+/// Should this invoke be refused? Label and command in, refusal out:
+/// `None` allows, `Some(sentence)` refuses and says why.
+///
+/// A window that is not a mesh app (`main`, and every other label) is
+/// unchanged — it keeps the whole command surface. A `meshapp-*` window
+/// may invoke only a name in [`MESHAPP_BRIDGE_COMMANDS`]; every other
+/// command, including the host-only install management ones, is refused
+/// before the command body runs. This is the ONE decider for that
+/// question — the per-command hand guards that used to ask it in
+/// `commands::meshapp` were deleted when this landed.
+pub fn bridge_refusal(label: &str, command: &str) -> Option<String> {
+    if app_id_from_label(label).is_none() {
+        return None;
+    }
+    if MESHAPP_BRIDGE_COMMANDS.contains(&command) {
+        return None;
+    }
+    Some(format!(
+        "`{command}` is not one of the {} commands the mesh-app bridge offers, \
+         so the app window `{label}` may not invoke it",
+        MESHAPP_BRIDGE_COMMANDS.len()
+    ))
 }
 
 /// The installed grant for `app_id`, if any. Fail-closed: an app with no
@@ -206,6 +264,37 @@ mod tests {
         assert!(authorize(&installs, "main", Permission::MeshStoreRead).is_err());
         // (d) empty install set → everything denied.
         assert!(authorize(&[], "meshapp-com.sovereign.lvt", Permission::MeshStoreRead).is_err());
+    }
+
+    #[test]
+    fn a_mesh_app_window_may_invoke_the_bridge_and_nothing_else() {
+        // (a) a bridge command from an app window → allowed.
+        assert!(bridge_refusal("meshapp-com.sovereign.lvt", "meshapp_read_corpus").is_none());
+        // (b) a host command from an app window → refused, and the
+        // sentence names the command so the devtools error says what
+        // was asked for.
+        let refusal = bridge_refusal("meshapp-com.sovereign.lvt", "mcp_set_token")
+            .expect("a host command from an app window is refused");
+        assert!(refusal.contains("mcp_set_token"), "{refusal}");
+        // (c) install management is host-only — the three commands that
+        // used to hand-check this are now decided here.
+        for host_only in [
+            "meshapp_record_install",
+            "meshapp_uninstall",
+            "meshapp_stage_corpus_recipe",
+        ] {
+            assert!(
+                bridge_refusal("meshapp-com.sovereign.lvt", host_only).is_some(),
+                "{host_only} must not be reachable from a mesh-app window"
+            );
+        }
+        // (d) every other window is unchanged — the host's own windows
+        // keep the whole command surface. A bare `meshapp-` resolves to
+        // no app and is one of them; every mesh-app window the host
+        // opens is labelled `meshapp-<app_id>` for an app that is
+        // already installed (`meshapp_open` in `commands/meshapp.rs`).
+        assert!(bridge_refusal("main", "mcp_set_token").is_none());
+        assert!(bridge_refusal("meshapp-", "mcp_set_token").is_none());
     }
 
     #[test]

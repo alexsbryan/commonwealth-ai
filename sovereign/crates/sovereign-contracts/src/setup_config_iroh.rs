@@ -123,6 +123,30 @@ pub struct IrohSection {
     /// ```
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub media_allow: Vec<String>,
+    /// `[iroh] media_viewer_user` — the id, in the ORIGIN's own user space, of
+    /// the read-only account every member reaches this library as. Written by
+    /// `svrn mesh media offer` beside `media_origin`, from the account it
+    /// created there; absent on an offer made before that, or against an
+    /// origin with no users.
+    ///
+    /// It is here because the presence poll needs it to tell the HOLDER's
+    /// sessions from the house's: everyone on the mesh arrives as this one
+    /// user, so a playing session that is NOT this user is the holder
+    /// watching their own library (`commonwealth_media::presence`). Absent,
+    /// the poll cannot make that distinction and publishes no presence at
+    /// all rather than guessing — `media_available: None`.
+    ///
+    /// Not a secret and not in the secret store: it is an id the origin hands
+    /// out, and the token that goes with it is the thing kept apart
+    /// (`commonwealth_media::declared`).
+    ///
+    /// ```toml
+    /// [iroh]
+    /// media_origin = "127.0.0.1:8096"
+    /// media_viewer_user = "8f3c…"
+    /// ```
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub media_viewer_user: Option<String>,
     /// `[iroh.apps]` — the HTTP apps this node publishes to members BY NAME,
     /// each `name = "host:port"` on loopback. Served on one ALPN
     /// (`cwth/app/0`) and demultiplexed by the request's first path segment,

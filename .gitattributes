@@ -1,0 +1,25 @@
+# Merge behaviour for the coordination logs two campaigns append to at once.
+#
+# Minted 2026-09-21, after ralph/DECISIONS.md conflicted for the fourth time on
+# one cause: parallel campaigns append to the end of a single file, so every
+# merge collides on text neither side disagrees about (see the appendix entries
+# for dm-misnamed-coverage and dm-next-edit-move, and the A69-A75 renumber).
+
+# ralph/DECISIONS.md is GENERATED from ralph/decisions/ by
+# scripts/ralph-decisions.py. The entry files are one-per-decision and merge
+# cleanly on their own, so the render holds nothing the merge needs: keep
+# either side and re-render afterwards. `ralph-generated` is a driver, not a
+# built-in — scripts/install-git-hooks.sh registers it as `true` (git's own
+# recipe for a keep-ours driver). An unregistered clone falls back to the
+# ordinary text merge with a warning, which is exactly today's behaviour, so
+# nothing is silently worse. What makes keep-ours safe is the ratchet:
+# `ralph-decisions.py --check` runs in scripts/pre-push.sh, so a render that
+# is missing the other side's entries cannot be pushed.
+ralph/DECISIONS.md merge=ralph-generated
+
+# ralph/REVIEW_FINDINGS.md is append-only prose with no ids to collide, so
+# union is the correct resolution rather than a convenient one: both campaigns'
+# sections land in full, with no markers. Union's own failure mode — an edit to
+# an existing line landing twice — is visible on the page, which is not true of
+# a numbered ledger, and is why DECISIONS.md is handled differently above.
+ralph/REVIEW_FINDINGS.md merge=union

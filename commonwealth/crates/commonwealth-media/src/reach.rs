@@ -36,6 +36,12 @@ pub struct PeerTransportPath {
     pub relay: Option<String>,
     /// Count of active direct (IP) addresses to this peer.
     pub active_direct_addrs: usize,
+    /// Those addresses, written out. The count alone cannot name the wire a
+    /// path is riding, which is what an offline bar needs when a peer stays
+    /// reachable through a cut. Defaulted on the wire so an older peer's
+    /// status still deserializes.
+    #[serde(default)]
+    pub active_direct_socket_addrs: Vec<String>,
     /// Whether the path classification counts as "relayed" for the
     /// health term — the one reading both surfaces share.
     #[serde(default)]
@@ -53,6 +59,11 @@ pub async fn path_to(endpoint: &Endpoint, peer_pubkey: &[u8; 32]) -> Option<Peer
         path: snap.path.as_str().to_string(),
         relay: snap.relay,
         active_direct_addrs: snap.active_direct_addrs,
+        active_direct_socket_addrs: snap
+            .active_direct_socket_addrs
+            .iter()
+            .map(|a| a.to_string())
+            .collect(),
         relayed_reading: snap.path.is_relayed_reading(),
     })
 }
@@ -106,7 +117,11 @@ pub enum MediaReachRefusal {
 /// One roster row as the media questions see it — derived from a
 /// [`MemberRecord`] by [`candidate_of`], never assembled by hand outside
 /// tests, so "offers media" and "active" have one derivation.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// `Eq` came off when `media_available` landed: it is a fraction, and `f32`
+/// has no total equality. Nothing asked for `Eq`; the tests compare with
+/// `assert_eq!`, which `PartialEq` already serves.
+#[derive(Debug, Clone, PartialEq)]
 pub struct MediaCandidate {
     pub node_id: NodeId,
     pub name: String,
@@ -121,6 +136,9 @@ pub struct MediaCandidate {
     /// The member's gossiped `media_allow`: who it admits to its media
     /// origin, empty = everyone in the mesh.
     pub media_allow: Vec<String>,
+    /// The member's gossiped `media_available`: what its origin can serve
+    /// right now. `None` is "did not answer", never "free".
+    pub media_available: Option<f32>,
 }
 
 impl MediaCandidate {
@@ -139,6 +157,7 @@ pub fn candidate_of(m: &MemberRecord) -> MediaCandidate {
         active: m.is_active(),
         origins: m.capabilities.origins.clone(),
         media_allow: m.capabilities.media_allow.clone(),
+        media_available: m.capabilities.media_available,
     }
 }
 
@@ -164,6 +183,12 @@ pub struct MediaOffer {
     /// everyone here. Only the media kind gossips an allow list.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub offered_to: Vec<String>,
+    /// What the holder's origin can serve right now, from its gossiped
+    /// `media_available`: `0.0` the holder is watching it, `1.0` free.
+    /// `None` means the holder did not answer this round — a reader shows
+    /// the library and does not claim it is free.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub media_available: Option<f32>,
 }
 
 /// The members offering a media origin, other than this node, by name.
@@ -203,6 +228,13 @@ pub fn offers(
                 c.media_allow
             } else {
                 Vec::new()
+            },
+            // Only a media origin has a "someone is watching it" question;
+            // an app origin answers nothing here and says so with `None`.
+            media_available: if kind == OriginKind::Media {
+                c.media_available
+            } else {
+                None
             },
             peer: c.name,
             node_id: c.node_id.to_string(),
@@ -368,6 +400,7 @@ mod tests {
             active: true,
             origins: vec![OriginKind::Media],
             media_allow: Vec::new(),
+            media_available: None,
         }
     }
 

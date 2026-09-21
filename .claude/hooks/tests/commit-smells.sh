@@ -163,6 +163,62 @@ check "-m with a real substitution: exit 0 (clean diff)" 0 "$RC"
 has   "-m with a real substitution: the skipped check is named" "$OUT" "not recovered"
 reset_repo
 
+echo "— the STDIN heredoc form: git commit -F - <<'EOF' —"
+# The spelling sessions actually use for long bodies. Until 2026-09-20 only
+# `-m "$(cat <<EOF)"` was stashed before lexing, so this body was lexed as
+# shell: an apostrophe read "No closing quotation", and a body without one
+# had `<<`, `EOF` and every word of the message replayed as pathspecs
+# (`fatal: pathspec '<<' did not match any files`). Both left §11.1 unchecked.
+printf '\npub fn more3(n: u32) -> u32 {\n    tracing::debug!(n, "more3");\n    n\n}\n' >> "$REPO/src/clean.rs"
+git -C "$REPO" add src/clean.rs
+CMD=$'git commit -q -F - <<\'EOF\'\nfeat: more3\n\nthe row\'s fix names `no_such_fn_zq()`; it isn\'t there\nEOF'
+run_hook s11 "$CMD"
+check "stdin heredoc, apostrophes: blocks on the ghost" 2 "$RC"
+has   "stdin heredoc: names it" "$ERR" "no_such_fn_zq()"
+lacks "stdin heredoc: parsed (no 'could not parse')" "$OUT$ERR" "could not parse"
+lacks "stdin heredoc: message was recovered" "$OUT$ERR" "not recovered"
+CMD=$'git add src/clean.rs && git commit -q -F - <<EOF && git log --oneline -1\nfeat: more3\n\nplain words and `no_such_fn_qq()` with no quote in sight\nEOF'
+run_hook s12 "$CMD"
+check "stdin heredoc, no quotes, trailing && : blocks on the ghost" 2 "$RC"
+has   "stdin heredoc, no quotes: names it" "$ERR" "no_such_fn_qq()"
+lacks "stdin heredoc: the body is not replayed as pathspecs" "$OUT$ERR" "pathspec"
+lacks "stdin heredoc: no replay failure at all" "$OUT$ERR" "replay of"
+# A NEWLINE separates commands as `;` does. Lexed as whitespace, the command on
+# the line after the commit was folded into its pathspecs, the replay failed,
+# and a symbol the commit itself introduces read "not found … before or after".
+printf '\npub fn brand_new_zz(n: u32) -> u32 {\n    tracing::debug!(n, "zz");\n    n\n}\n' >> "$REPO/src/clean.rs"
+CMD=$'git commit -q -F - -- src/clean.rs <<\'EOF\'\nfeat: add `brand_new_zz`\nEOF\ngit log --oneline -1'
+run_hook s15 "$CMD"
+check "newline after the commit: exit 0 (the symbol is in the replayed index)" 0 "$RC"
+lacks "newline after the commit: the next command is not a pathspec" "$OUT$ERR" "replay of"
+lacks "newline after the commit: the new symbol is found" "$OUT$ERR" "brand_new_zz"
+CMD=$'git add src/clean.rs\ngit commit -m "feat: add `brand_new_zz`\n\na second paragraph"\necho done'
+run_hook s16 "$CMD"
+check "newline-separated add then commit, newline INSIDE the quoted message: exit 0" 0 "$RC"
+check "newline-separated: silent" "" "$OUT$ERR"
+reset_repo
+# …but a BACKSLASH-newline is a line continuation, not a separator.
+printf '\npub fn brand_new_yy(n: u32) -> u32 {\n    tracing::debug!(n, "yy");\n    n\n}\n' >> "$REPO/src/clean.rs"
+# The message names a ghost, so only a parse that carried BOTH halves across the
+# continuations can block: a mis-split drops the add and the -m and exits 0.
+CMD=$'git add \\\n  src/clean.rs && git commit \\\n  -m "feat: add `brand_new_yy` beside `no_such_fn_yy()`"'
+run_hook s17 "$CMD"
+check "line continuation: blocks on the ghost (message read across it)" 2 "$RC"
+has   "line continuation: names the ghost" "$ERR" "no_such_fn_yy()"
+lacks "line continuation: the replayed add carried the new symbol" "$ERR" "brand_new_yy\`"
+reset_repo
+# A heredoc feeding ANOTHER command in the same call must not break the parse
+# of the commit beside it (a python or cat heredoc, then `git commit -m`).
+CMD=$'python3 - <<\'PY\'\nprint("it\'s fine; git add nothing && echo")\nPY\ngit commit -m "extend `run_thing`"'
+run_hook s13 "$CMD"
+check "foreign heredoc beside the commit: exit 0 (clean diff, honest message)" 0 "$RC"
+check "foreign heredoc beside the commit: silent" "" "$OUT$ERR"
+# `-F -` with NO heredoc is stdin we cannot see: unknown, and it says so.
+run_hook s14 'echo msg | git commit -F -'
+check "-F - from a pipe: exit 0" 0 "$RC"
+has   "-F - from a pipe: the skipped check is named" "$OUT" "not recovered"
+reset_repo
+
 echo "— envelope without a session id is advisory, never blocking —"
 printf '\npub fn again(cfg: &Cfg) -> u32 { cfg.limit.unwrap_or(9) }\n' >> "$REPO/src/clean.rs"
 OUT="$(printf '{"tool_name":"Bash","cwd":"%s","tool_input":{"command":"git commit -am x"}}' "$REPO" \

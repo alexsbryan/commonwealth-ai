@@ -13,3 +13,5 @@ mod coordinate_merge_installs_the_canonical;
 mod merge_participants_coverage;
 #[path = "main/merge_participants_idempotence.rs"]
 mod merge_participants_idempotence;
+#[path = "main/mesh_proof_on_the_wire.rs"]
+mod mesh_proof_on_the_wire;

@@ -32,12 +32,12 @@ use sovereign_mesh_test_harness::mesh_sim::scenario::{self, RequestClass, Scenar
 use sovereign_mesh_test_harness::mesh_sim::scoreboard::{render, score, ArmScore};
 use sovereign_mesh_test_harness::mesh_sim::{run, run_with, Arm, RunReport, SimConfig, ALL_ARMS};
 
-const SEED: u64 = 20_260_726;
+pub(crate) const SEED: u64 = 20_260_726;
 const GOSSIP_WINDOW_MS: u64 = 10_000;
 
 /// Run every arm over one scenario and score them against the
 /// oracle's mean latency.
-fn sweep(scenario: &Scenario) -> (Vec<RunReport>, Vec<ArmScore>) {
+pub(crate) fn sweep(scenario: &Scenario) -> (Vec<RunReport>, Vec<ArmScore>) {
     let reports: Vec<RunReport> = ALL_ARMS
         .iter()
         .map(|arm| run(scenario, *arm, SEED))
@@ -67,7 +67,7 @@ fn sweep(scenario: &Scenario) -> (Vec<RunReport>, Vec<ArmScore>) {
 /// production. It exists because the first run showed a *mean
 /// eligible set of 1.00 peers*, and the only honest way to find out
 /// why is to read what the scorer saw.
-fn print_candidate_breakdown(report: &RunReport, n: usize) {
+pub(crate) fn print_candidate_breakdown(report: &RunReport, n: usize) {
     use sovereign_mesh::decision_log::DecisionEvent;
     println!("── what the scorer saw (first {n} multi-candidate decisions) ──");
     let mut shown = 0;
@@ -109,7 +109,7 @@ fn print_candidate_breakdown(report: &RunReport, n: usize) {
 }
 
 /// §5's hard invariants. Assertions, not scores.
-fn assert_hard_invariants(reports: &[RunReport], scores: &[ArmScore]) {
+pub(crate) fn assert_hard_invariants(reports: &[RunReport], scores: &[ArmScore]) {
     for (report, score) in reports.iter().zip(scores.iter()) {
         let arm = report.arm.label();
         for fact in &report.truth {

@@ -41,8 +41,11 @@ const BUDGET: Duration = Duration::from_secs(2);
 /// member needs a pubkey — see [`node`].
 fn mesh_of(a: NodeId, b: NodeId, b_addr: std::net::SocketAddr) -> Mesh {
     let mut members = HashMap::new();
-    members.insert(a, common::member(a, "a", "127.0.0.1:9742".parse().unwrap()));
-    members.insert(b, common::member(b, "b", b_addr));
+    members.insert(
+        a,
+        keyed(a, "a", &key_a(), "127.0.0.1:9742".parse().unwrap()),
+    );
+    members.insert(b, keyed(b, "b", &key_b(), b_addr));
     Mesh {
         mesh_secret: [0u8; 32],
         invite_expires_at: None,
@@ -56,8 +59,33 @@ fn mesh_of(a: NodeId, b: NodeId, b_addr: std::net::SocketAddr) -> Mesh {
     }
 }
 
+/// The two keys this file's one scenario signs with. Named once because the
+/// mesh rows and the ring roster have to agree on them: since `mp-2` a round
+/// offers a namespace only to the members its roster names, and a roster names
+/// KEYS, so a member row without `node_pubkey` is on no ring at all.
+fn key_a() -> SigningKey {
+    SigningKey::from_bytes(&[1u8; 32])
+}
+fn key_b() -> SigningKey {
+    SigningKey::from_bytes(&[2u8; 32])
+}
+
+/// A member row carrying the verified key a real join gossips.
+fn keyed(
+    id: NodeId,
+    name: &str,
+    key: &SigningKey,
+    addr: std::net::SocketAddr,
+) -> commonwealth_core::mesh::MemberRecord {
+    let mut rec = common::member(id, name, addr);
+    rec.node_pubkey = Some(commonwealth_core::ids::NodePubkey(
+        key.verifying_key().to_bytes(),
+    ));
+    rec
+}
+
 /// A daemon with ring storage under `dir`, signing as `key`, on a namespace
-/// whose roster file names that key.
+/// whose roster file names BOTH nodes' keys — the two of them are the ring.
 fn node(
     dir: &std::path::Path,
     key: &SigningKey,
@@ -69,7 +97,8 @@ fn node(
     // parts are total"); the seed-shaped entry point is the tests' door.
     let rail = Arc::new(RingRail::new(dir, Arc::new(key.clone())));
     let mut members = std::collections::BTreeMap::new();
-    members.insert(Person::from("alex"), vec![key.actor()]);
+    members.insert(Person::from("alex"), vec![key_a().actor()]);
+    members.insert(Person::from("bea"), vec![key_b().actor()]);
     rail.journal(NS)
         .unwrap()
         .set_roster(&Roster::new(members))
@@ -88,6 +117,7 @@ fn node(
         Default::default(),
         sovereign_daemon::state::node::NodeSeed {
             client_token: Some(Arc::<str>::from(TOKEN)),
+            ..Default::default()
         },
     );
     (state, rail)
@@ -106,10 +136,7 @@ fn held(rail: &RingRail) -> usize {
 /// because the only remaining wake-up is the sixty-second tick.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn an_act_appended_over_http_is_held_by_the_peer_within_two_seconds() {
-    let (ka, kb) = (
-        SigningKey::from_bytes(&[1u8; 32]),
-        SigningKey::from_bytes(&[2u8; 32]),
-    );
+    let (ka, kb) = (key_a(), key_b());
     let (a_id, b_id) = (NodeId::from_u128(1), NodeId::from_u128(2));
     let (da, db) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
 

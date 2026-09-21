@@ -1,0 +1,79 @@
+# Flight rules — read raw. Verdicts come from measurement rows, never prose here.
+#
+# CHILD of ring-apps. One identity, used for calls and reads as well as writes.
+# The node's Ed25519 key is verified by iroh in the handshake and signs every
+# rail op; the call plane and the ring's READ path still decide on a header the
+# caller supplies (`x-node-id`), which is this repo's own smell-table row: "a
+# guard asserting on a field the subject supplies" (ARCH 5). The mechanism that
+# fixes it already exists and is not used here: the iroh acceptor strips
+# client-supplied `x-mesh-*` and appends the verified identity
+# (`commonwealth-transport/src/iroh_identity_forward.rs`, test
+# `a_forged_identity_header_is_replaced_by_the_verified_one`) for the media and
+# app ALPNs. This campaign converges the internal plane onto that door (ARCH 11).
+#
+# PRE-REGISTERED 2026-09-20 by the seat, before any row ran, from an external
+# architecture review the operator brought in and the seat's spot-check of it
+# (two of its claims were wrong and are NOT bars here: gossip carries a
+# `mesh_proof`, and the node key IS already used for media and app calls).
+id        = "mesh-principal"
+parent    = "ring-apps"
+objective = "A member cannot act as another member on a call, and a mesh member who is not on a ring's roster cannot read that ring. Both follow from one fact the transport already knows: whose key is on the other end."
+spec      = ".sovereign/features/mesh-verified-principal/order.md; docs/THREAT_MODEL.md; commonwealth/crates/commonwealth-transport/src/iroh_identity_forward.rs (the door to converge on); sovereign/crates/sovereign-daemon/src/{client_principal.rs,client_auth.rs,headers.rs}"
+declared  = "2026-09-20"
+status    = "active"
+
+[predicate]
+statement = "No production decider reads `x-node-id`; a request's peer principal is the iroh-verified key or it is `unverified` and every decider that needs an identity refuses it; ring sync offers and serves a namespace to its roster only; and the six rr-2 bars, the five rg-* bars and the rr-1 baseline read as they did before."
+check     = "./scripts/sovereign-test.sh --human --package sovereign-daemon --package sovereign-mesh --package commonwealth-transport --package oicp-types"
+
+[[bar]]
+id           = "mp-principal-is-the-verified-key"
+demo         = "Node B calls node A's knowledge search claiming to be node C. A answers B, names B in its log, and C's reciprocity tally does not move."
+rung         = "mp-1"
+one_line     = "CLAIM: the peer principal on the internal plane is the key iroh verified in the handshake, and a header claiming otherwise is dropped and logged"
+derives_from = "`routes_internal/knowledge.rs:109`, `routes_oicp.rs:233`, `admission.rs:303` and `sovereign-server/src/reciprocity.rs:71` all take the requester from `headers::parse_x_node_id`; `client_auth.rs:12` says peers are 'a later milestone'; the acceptor's `Forward::Http { origin, headers }` carries an OPTIONAL identity and the internal ALPN `cwth/http/0` does not ask for it (`commonwealth-transport/src/iroh.rs:1085-1125`, measured by the inventory row)"
+floor        = 1.0
+floor_basis  = "structural: 1.0 iff in a two-daemon test over real iroh (a) B's call carrying `x-node-id: <C>` is attributed to B in A's log and in every tally it moves, (b) B's call carrying a forged `x-mesh-node: <C>` is attributed to B and the drop is logged, (c) a DIRECT TCP caller to A's internal port presenting `x-mesh-node: <C>` with no acceptor in front does not become C — it is `unverified`, (d) a call with no verified key reaches no decider that needs an identity: it is refused with a sentence that says why. Any false is 0.0."
+target       = 1.0
+direction    = "higher_is_better"
+goodhart     = "reads 1.0 while still forgeable if only the iroh path is tested and the internal port also answers plain TCP (clause (c) is that caller); reads 1.0 by renaming if `x-node-id` is replaced by another caller-supplied header (clause (b))"
+status       = "open"
+
+[[bar]]
+id           = "mp-no-decider-reads-the-header"
+demo         = "`grep` for the old header's parser finds no production caller that decides anything."
+rung         = "mp-1"
+one_line     = "CLAIM: the self-asserted header is gone from every authorization, attribution and tally path — enforced by a test that greps, not by a comment"
+derives_from = "ARCH 10: make it structural, not remembered; `admission.rs:306` already calls the header-derived id 'the verified node id', a comment asserting what the code contradicts (ARCH 3)"
+floor        = 1.0
+floor_basis  = "structural: 1.0 iff a test in the normal run fails when any non-test file under `sovereign/crates` calls `parse_x_node_id` (or reads the literal `x-node-id`) outside ONE named compatibility site that may only LABEL a log line, and the comments at `client_auth.rs:12` and `admission.rs:306` say what is now true. Any false is 0.0."
+target       = 1.0
+direction    = "higher_is_better"
+goodhart     = "reads 1.0 with the read moved behind a helper the grep does not name (the test greps the literal header too)"
+status       = "open"
+
+[[bar]]
+id           = "mp-ring-reads-by-roster"
+demo         = "Three members on a mesh, a ring with two of them on its roster. The third runs `svrn ring log` for that namespace and holds nothing; it asks a roster member for it directly and is refused by name."
+rung         = "mp-2"
+one_line     = "CLAIM: ring sync offers a namespace only to its roster and serves it only to its roster, deciding on the verified principal"
+derives_from = "`sovereign-mesh/src/ring_sync.rs:222-245` builds its peer list from every Online mesh member and reads no roster; the file's only roster read is pruning after a seal (:412-432); the serving side cannot refuse until it knows who is asking, which is why this rung follows mp-1"
+floor        = 1.0
+floor_basis  = "structural: 1.0 iff (a) the non-roster member's journal for the namespace is empty after N sync rounds while both roster members converge byte-equal, (b) the non-roster member's direct request to the sync route is refused and the refusal names the namespace and the asker, (c) a namespace whose roster is DERIVED from mesh membership (`mesh-measurements`, the work plane) still reaches every member, (d) a member added to the roster receives the full journal on the next round without a restart. Any false is 0.0."
+target       = 1.0
+direction    = "higher_is_better"
+goodhart     = "reads 1.0 on the sender's filter alone while the route still serves anyone who asks (clause (b)); reads 1.0 while breaking the daemon's own namespaces if derived rosters are not exercised (clause (c))"
+status       = "open"
+
+[[bar]]
+id           = "mp-dead-wire-is-gone"
+demo         = "The manifest a node publishes carries no field that has never held a value."
+rung         = "mp-4"
+one_line     = "CLAIM: wire fields with zero production writers are deleted, and a manifest from a node that still sends them parses"
+derives_from = "`oicp-types/src/manifest.rs:221-225` (`estimated_tokens_per_sec`, `estimated_ttft_ms`, `estimated_load_time_sec`), reviewed as always `None`; the scorer has no measurement of a peer (ledger A35); `BenchmarkResult` is read by the mesh simulator (`sovereign-mesh-test-harness/src/mesh_sim/`), and reviving it is a recorded regression (canon dc3c9856, SCHEDULER_QUALITY F10) — so the row MEASURES writers and readers before it deletes, and what has a reader with effect is reported, not removed"
+floor        = 1.0
+floor_basis  = "structural: 1.0 iff (a) the commit lists each deleted field with its grep for writers reading 0, (b) a committed fixture of a manifest WITH the old fields deserializes under the new type, (c) `cargo xtask api-gate` passes, (d) no scorer output changes on the mesh simulator's committed scenarios (the ranking is byte-equal before and after). Any false is 0.0."
+target       = 1.0
+direction    = "higher_is_better"
+goodhart     = "reads 1.0 by deleting a field a peer on an older build still sends and failing its parse (clause (b)); reads 1.0 while moving the scheduler if a deleted field was a silent default in a score term (clause (d))"
+status       = "open"

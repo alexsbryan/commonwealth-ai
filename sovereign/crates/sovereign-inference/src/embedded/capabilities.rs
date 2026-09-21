@@ -197,6 +197,24 @@ impl PartialKvVerdict {
             Self::CouldNotJudge { .. } => "could-not-judge",
         }
     }
+
+    /// WHY the probe could not judge — `None` for every verdict that did.
+    ///
+    /// [`Self::label`] collapses the three ways to be unjudgeable into one
+    /// word, and until 2026-09-19 that word was the only thing logged: the
+    /// `capability: no measurement for this slot` line read
+    /// `reason="could-not-judge"`, which names the verdict and not the cause
+    /// (ralph A35). "The operator disabled the probe", "this is a distributed
+    /// child", and "the probe aborted mid-run" call for three different
+    /// responses, and a reader could tell them apart only by reading the
+    /// source. Principle 6: the distinction exists in the type, so it is
+    /// reported rather than flattened.
+    pub fn cause(&self) -> Option<&'static str> {
+        match self {
+            Self::CouldNotJudge { reason } => Some(reason),
+            _ => None,
+        }
+    }
 }
 
 /// FastShort's continuous-batching axis — deliberately unprobed this

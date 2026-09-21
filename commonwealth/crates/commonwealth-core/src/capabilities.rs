@@ -79,6 +79,18 @@ pub struct NodeCapabilities {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub media_allow: Vec<String>,
 
+    /// What the holder's media origin can serve a member right now, `0.0`–`1.0`.
+    /// `0.0` means the holder is using the library themself, so a viewer is
+    /// shown "in use right now" and starts nothing; `1.0` means free.
+    ///
+    /// `None` is NOT "available": it is the honest answer from a node that
+    /// offers no media, from a peer whose build predates the field, and from a
+    /// holder whose origin could not be asked this round (ARCH principle 6 —
+    /// absence is reported, never defaulted). A reader that cannot tell the
+    /// three apart must not start a stream on the strength of a `None`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub media_available: Option<f32>,
+
     /// Advertised embedding model for this node. Populated when the
     /// daemon has an embed slot loaded; `None` before bootstrap
     /// completes or on nodes that run no embed model at all.
@@ -451,6 +463,7 @@ mod tests {
             loaded_models: vec![],
             origins: Vec::new(),
             media_allow: Vec::new(),
+            media_available: None,
             embed_model: Some(EmbedModelInfo {
                 model_id: "qwen3-embedding-0.6b".into(),
                 dimensions: 1024,

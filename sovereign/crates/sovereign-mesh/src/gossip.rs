@@ -40,6 +40,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use commonwealth_core::ids::{MeshId, NodeId};
+use commonwealth_core::mesh::offer_view;
 use commonwealth_core::mesh::{MemberRecord, Mesh, MeshPeering, NodeStatus};
 use commonwealth_transport::{peer_contact, PeerContact, TrafficClass};
 use corpus_engine::CorpusEngine;
@@ -484,6 +485,9 @@ pub async fn run_one_round(
     // info only when the advertised set changed (new corpus
     // installed, one removed) — the every-10s heartbeat otherwise
     // logs at debug. Same gating policy as `mesh_state: rebuilt`.
+    // What this round STAMPED on our own record, carried past the lock so the
+    // snapshot actually sent (step 3) can be read against it.
+    let mut stamped_offer_view: Option<offer_view::OfferView> = None;
     let candidates: Vec<(PeerContact, bool, u64)> = {
         let mut mesh = fabric.mesh.write().await;
         let prior_corpora: std::collections::BTreeSet<String> = mesh
@@ -517,6 +521,11 @@ pub async fn run_one_round(
         if let Some(me) = mesh.members.get_mut(&self_id) {
             me.last_seen = now;
             me.status = NodeStatus::Online;
+            // What our own record said about the library we offer BEFORE this
+            // round restamped it, compared after the stamp below so one line
+            // names the moment our own view first carries an offer — or first
+            // stops carrying one.
+            let offer_view_before = commonwealth_core::mesh::offer_view::OfferView::of(me);
             // Replace capabilities with the freshly-sampled version
             // every round. This is the mechanism by which a newly-
             // installed SEP corpus becomes visible to peers within
@@ -525,6 +534,8 @@ pub async fn run_one_round(
             // started (typically empty, since the user hasn't yet
             // run the install).
             me.capabilities = fresh_caps;
+            // The replace above blanks the offer; it is ours, not the transport's.
+            offer_view_before.restamp_onto(&mut me.capabilities);
             // Stamp our identity pubkey every round. This is how a
             // node that upgraded in place (mesh created/joined
             // before identity keys existed) publishes its key
@@ -541,7 +552,9 @@ pub async fn run_one_round(
             // pubkey, "known member" == "dialable by key". A `None`
             // provider (iroh disabled) leaves these fields at their
             // default empty, so a non-iroh node publishes nothing here.
-            if let Some(info) = fabric.self_iroh_dialinfo() {
+            let dial_info = fabric.self_iroh_dialinfo();
+            let stamped_from_dial_info = dial_info.is_some();
+            if let Some(info) = dial_info {
                 let changed =
                     me.relay_url != info.relay_url || me.iroh_direct_addrs != info.direct_addrs;
                 me.relay_url = info.relay_url;
@@ -552,6 +565,17 @@ pub async fn run_one_round(
                 // acceptor, so the origins are stamped here, after it.
                 me.capabilities.origins = info.origins;
                 me.capabilities.media_allow = info.media_allow;
+                // Presence is a claim ABOUT a library. A node that serves no
+                // media origin this round publishes none, so a reading left
+                // over from an offer since withdrawn cannot outlive the offer
+                // it described.
+                if !me
+                    .capabilities
+                    .origins
+                    .contains(&oicp_types::origin::OriginKind::Media)
+                {
+                    me.capabilities.media_available = None;
+                }
                 // WS-D anti-downgrade: SIGN our dial info so peers can
                 // verify only we changed it (a gossip-strip attacker past
                 // the join-key gate can't force us unreachable / downgrade
@@ -575,6 +599,18 @@ pub async fn run_one_round(
                     }
                 }
             }
+            // GLASSBOX: the moment our own record starts (or stops) offering
+            // a library. The peer half of the pair is logged on merge
+            // (`offer_view::log_merged`), so one run says which side held a
+            // change: a holder line with no peer line is the merge, a peer
+            // line long after the holder's is the round.
+            let offer_view_after = offer_view::OfferView::of(me);
+            commonwealth_core::mesh::offer_view::log_self_stamp(
+                &offer_view_before,
+                &offer_view_after,
+                stamped_from_dial_info,
+            );
+            stamped_offer_view = Some(offer_view_after);
         }
         for (id, m) in mesh.members.iter_mut() {
             if *id == self_id {
@@ -680,6 +716,18 @@ pub async fn run_one_round(
     // peer. Using the same snapshot across the fan-out keeps rounds
     // cheap and means every peer sees the same view of us.
     let my_snapshot = { fabric.mesh.read().await.clone() };
+    // GLASSBOX: the bytes, read where they are sent. The stamp above wrote
+    // under the write lock; this clone is taken after it was released and
+    // after the selection's `.await`s, so a writer in between shows up here
+    // and nowhere else.
+    offer_view::log_sent_snapshot(
+        stamped_offer_view.as_ref(),
+        my_snapshot
+            .members
+            .get(&self_id)
+            .map(offer_view::OfferView::of)
+            .as_ref(),
+    );
     let http = gossip_client().map_err(|e| GossipError::ClientBuild(e.to_string()))?;
 
     let transport = fabric.peer_transport();
@@ -830,17 +878,17 @@ pub async fn run_one_round(
                             "gossip: merged peer's view (last_seen refresh)"
                         );
                     }
-                    // Also bump THIS peer's last_seen in case their
-                    // view of themselves lagged — we successfully
-                    // reached them just now, so they're Online.
-                    //
-                    // Log the offline→online transition at INFO so
-                    // the operator can see "B is back" without
-                    // polling mesh_state() by hand. Symmetric to the
-                    // offline-decay log in the pass above.
+                    // Reached just now, so Online — but we do NOT write its
+                    // `last_seen`, which is self-stamped and is the LWW key
+                    // (`MemberRecord::event_time`). Writing it manufactures a
+                    // tie against the holder's own stamp of the same second and
+                    // the merge reads `local-record-not-older` until the next
+                    // round (room run B: an offer held 60 s). Liveness does not
+                    // need it: decay reads the LOCAL contact clock stamped at
+                    // `observe_peer_contact` above. The INFO line names the
+                    // edge, which (never every reach) wakes the ring sync.
                     if let Some(peer) = mesh.members.get_mut(&peer_id) {
                         let was_offline = peer.status == NodeStatus::Offline;
-                        peer.last_seen = fabric.clock().now_unix_secs();
                         peer.status = NodeStatus::Online;
                         if was_offline {
                             info!(
@@ -849,6 +897,7 @@ pub async fn run_one_round(
                                 name = %peer.name,
                                 "gossip: peer back Online"
                             );
+                            fabric.ring_write_nudge().notify_one();
                         }
                     }
                     break; // one working address is enough
@@ -863,7 +912,7 @@ pub async fn run_one_round(
                     // that, the working address goes first and the
                     // dead one is never tried again. If reachability
                     // truly breaks, every attempt fails and the peer
-                    // decays to Offline via the `last_seen` threshold,
+                    // decays to Offline via the local-contact threshold,
                     // which logs at INFO from the decay path.
                     debug!(
                         peer = %peer_id,

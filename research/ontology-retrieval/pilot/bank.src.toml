@@ -191,7 +191,7 @@ expected_facts = ["Vladimir", "Stott-Wartenheim"]
 notes = "authored; facts are gold keywords of present-vladimir-pressures and present-embassy-baron"
 
 # ── whole-story prompts, from the chaos-monkey `maximal` set ─────────────────
-# Asked as QUESTIONS, not writing commands (operator decision A39, 2026-09-20):
+# Asked as QUESTIONS, not writing commands (operator decision A73, 2026-09-20):
 # an imperative routes to GenerativeQuery, which retrieves nothing by design
 # (`sovereign/crates/sovereign-core/src/runtime/handlers/generative.rs:1-14`),
 # so the `full` arm was closed-book on these rows. `answer1` and

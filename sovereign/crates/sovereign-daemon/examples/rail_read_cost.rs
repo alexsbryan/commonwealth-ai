@@ -114,7 +114,7 @@ fn body_of_size(target: usize) -> Payload {
     let mut filler = target.saturating_sub(40);
     loop {
         let p = Payload::new(serde_json::json!({ "b": "x".repeat(filler) })).expect("payload");
-        let n = commonwealth_rail::body_json(&RailAct::Record { payload: p.clone() }).len();
+        let n = commonwealth_rail::body_json(&RailAct::Record { payload: p.clone() }, None).len();
         if n >= target || filler > target {
             return p;
         }
@@ -156,9 +156,18 @@ fn seed(j: &RingJournal, k: &SigningKey, actor: &str, n: usize, mk: &dyn Fn(usiz
         let act = RailAct::Record {
             payload: mk(seq as usize),
         };
-        let body = commonwealth_rail::body_json(&act);
+        let body = commonwealth_rail::body_json(&act, None);
         let sig = sign_ring_op(k, j.namespace(), ts, seq, &body);
-        ops.push(Op::new(SignedOp { seq, sig, act }, ts, actor.to_string()));
+        ops.push(Op::new(
+            SignedOp {
+                seq,
+                sig,
+                act,
+                on_behalf_of: None,
+            },
+            ts,
+            actor.to_string(),
+        ));
     }
     assert_eq!(j.ingest_all(&ops).expect("seed"), n, "seed short");
 }

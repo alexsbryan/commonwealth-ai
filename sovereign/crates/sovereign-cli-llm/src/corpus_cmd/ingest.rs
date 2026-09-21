@@ -196,6 +196,7 @@ mod tests {
                 in_flight: None,
                 storage_remaining: None,
                 embed_model: None,
+                media_available: None,
             }
         }
         fn record_storage_used(&self, _used: u64) {}

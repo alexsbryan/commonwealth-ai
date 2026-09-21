@@ -83,6 +83,7 @@ use crate::state::AppState;
 pub async fn responses(
     State(state): State<AppState>,
     headers: HeaderMap,
+    attached: Option<axum::Extension<sovereign_serving_host::admission::AttachedPrincipal>>,
     Json(mut req): Json<ResponsesRequest>,
 ) -> Response {
     // ── Harness-aware frontdoor passes ────────────────────────────────
@@ -262,6 +263,9 @@ pub async fn responses(
     let inner = chat_completions(
         State(state),
         headers,
+        // Straight through: `/v1/responses` translates a request, it does not
+        // re-decide who is asking.
+        attached,
         // `/v1/responses` is not a path any `Scope` names — see routes_ollama.
         None,
         Json(chat_req),

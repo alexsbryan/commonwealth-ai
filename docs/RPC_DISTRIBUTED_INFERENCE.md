@@ -11,7 +11,7 @@ binary is built or run** — a node takes a role purely by environment:
 
 | Role | Env var | What it does |
 |---|---|---|
-| **Worker** | `SOVEREIGN_RPC_SERVE=0.0.0.0:50052` | Daemon starts an RPC server exposing this node's local GPU to peers. In-process by default — see "Where the worker runs" below, and read the bind warning there before using `0.0.0.0`. |
+| **Worker** | `SOVEREIGN_RPC_SERVE=127.0.0.1:50052` | Daemon starts an RPC server exposing this node's local GPU to peers, reachable over the mesh tunnel. In-process by default — see "Where the worker runs" below. A non-loopback bind is REFUSED unless you also set `SOVEREIGN_RPC_ALLOW_PLAINTEXT_LAN=1`; read the bind warning there first. |
 | Worker isolation | `SOVEREIGN_RPC_WORKER_PROCESS=1` | Optional, **experimental**. Serve from a supervised child process instead of a daemon thread, so a peer-triggered abort kills the child. See "Where the worker runs". |
 | Worker cache | `SOVEREIGN_RPC_CACHE_DIR=<dir>` | Optional. On-disk tensor cache (default `~/.svrnmesh/rpc-cache`); set `off`/`0` to disable. See "Transfer cost" below. |
 | **Host (auto)** | `SOVEREIGN_RPC_DISCOVER=1` | **Auto-discovery + auto-reload** — the host scans peers' `/status` for advertised workers (no IP list). When the worker set **changes** — a worker joins *or dies* — and settles (~20s debounce), it **force-reloads the primary** so the model redistributes; a dead worker is pruned from the device set (ggml has no unregister, so the reload passes an explicit live-only device list). |
@@ -46,9 +46,12 @@ malformed message at all, only a graph large enough to fail allocation.
 encrypted mesh the iroh acceptor already forwards `cwth/rpc/0` to
 `127.0.0.1:<port>` **for members only**, refusing strangers outright
 (`sovereign-mesh/src/iroh_access.rs`). `SOVEREIGN_RPC_SERVE=127.0.0.1:50052`
-plus mesh membership is the authenticated topology; `0.0.0.0` is for a
-perimeter you fully control, and the examples below use it because they predate
-the iroh route.
+plus mesh membership is the authenticated topology, and it is the DEFAULT a
+node takes from `--rpc-worker` or `role = "anchor"` with nothing else set.
+`0.0.0.0` is for a perimeter you fully control, and the daemon now REFUSES it
+unless you acknowledge it with `SOVEREIGN_RPC_ALLOW_PLAINTEXT_LAN=1` (or
+`[shared_model] allow_plaintext_lan = true`) — a refusal, logged with the
+reason, never a silent "not a worker".
 
 **Two worker shapes.** Default: ggml's accept loop on a thread inside the
 daemon — an abort there takes down the process holding the mesh key, the secret
@@ -72,7 +75,10 @@ holding the port after `kill -9`, and no hybrid host+worker OOM regression).
 cargo build -p sovereign-server          # or your normal daemon build
 
 # Run the daemon as a worker — serves the Vulkan GPU to peers
-SOVEREIGN_RPC_SERVE=0.0.0.0:50052 <daemon-binary> ...
+# Loopback: members reach this worker over the mesh tunnel and no LAN bind is
+# needed. For a perimeter you control, swap in
+# `SOVEREIGN_RPC_ALLOW_PLAINTEXT_LAN=1 SOVEREIGN_RPC_SERVE=0.0.0.0:50052` and acknowledge it.
+SOVEREIGN_RPC_SERVE=127.0.0.1:50052 <daemon-binary> ...
 # Confirm it is listening:
 ss -ltnp | grep 50052           # (or: lsof -nP -iTCP:50052 -sTCP:LISTEN)
 ```

@@ -950,8 +950,17 @@ pub(crate) mod tests_fixture {
 
     pub fn signed(seed: u8, ts: i64, seq: u64, act: RailAct) -> Op<SignedOp> {
         let k = key(seed);
-        let sig = sign_ring_op(&k, WORK_NAMESPACE, ts, seq, &body_json(&act));
-        Op::new(SignedOp { seq, sig, act }, ts, actor_of(&k))
+        let sig = sign_ring_op(&k, WORK_NAMESPACE, ts, seq, &body_json(&act, None));
+        Op::new(
+            SignedOp {
+                seq,
+                sig,
+                act,
+                on_behalf_of: None,
+            },
+            ts,
+            actor_of(&k),
+        )
     }
 
     /// One work act, signed onto the rail by `seed` at second `ts`.

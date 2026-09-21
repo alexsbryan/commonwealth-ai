@@ -17,6 +17,9 @@ use axum::response::Response;
 /// §8.3).
 pub use sovereign_contracts::oicp::TenantId;
 
+use sovereign_contracts::principal::{claimed_node_id, ClaimedNodeId};
+pub use sovereign_contracts::principal::{AttachedPrincipal, Principal};
+
 /// Shared auth state extracted from config.
 #[derive(Clone)]
 pub struct AuthState {
@@ -50,6 +53,48 @@ pub fn resolve_tenant(auth: &AuthState, api_key: &str) -> Option<String> {
     auth.keys.get(api_key).cloned()
 }
 
+/// This surface's ONE request-to-principal resolver.
+///
+/// `sovereign-server` has no iroh acceptor in front of it, so the strongest
+/// thing it can say about a peer is what that peer TYPED. It says exactly
+/// that: a readable claim is [`Principal::Member`], an unreadable one is
+/// [`Principal::Unverified`] (never anonymous — the caller named itself and
+/// failed), and no claim at all leaves the caller anonymous. The deciders
+/// downstream — reciprocity's `UserKey` and the per-origin cap — read the
+/// value, never the header (`sovereign_daemon::mesh_principal_gate` is the
+/// ratchet, and it scans this crate too).
+///
+/// The wire form itself is read once, in `sovereign-contracts`, beside the key
+/// it produces: two crates resolve principals and a private copy of the parser
+/// in either is the FE-99 drift that clause forbids (ARCH principle 8).
+fn resolve_principal(headers: &axum::http::HeaderMap) -> Principal {
+    match claimed_node_id(headers) {
+        ClaimedNodeId::Readable(node_id) => Principal::Member { node_id },
+        ClaimedNodeId::Unreadable(raw) => {
+            tracing::warn!(
+                claimed = %raw,
+                "a request claimed an origin node in a form that is not the \
+                 canonical wire form — it is unverified, not anonymous, and \
+                 it keys on no node"
+            );
+            Principal::Unverified
+        }
+        ClaimedNodeId::Absent => Principal::Anonymous,
+    }
+}
+
+/// The principal a handler decides on: what [`auth_middleware`] attached, or
+/// [`Principal::Anonymous`] where no auth layer ran.
+///
+/// Absent is anonymous and never a member: a route with no resolver in front
+/// knows nothing about its caller, and "did not answer" must not become
+/// "answered: a peer" (ARCH principle 6).
+pub fn principal_of(attached: Option<axum::Extension<AttachedPrincipal>>) -> Principal {
+    attached
+        .map(|axum::Extension(a)| a.0)
+        .unwrap_or(Principal::Anonymous)
+}
+
 /// Axum middleware that validates API keys.
 /// Extracts the key from `Authorization: Bearer <key>` or `X-API-Key: <key>`.
 /// Sets the tenant_id as a request extension.
@@ -65,7 +110,11 @@ pub async fn auth_middleware(request: Request, next: Next) -> Result<Response, S
         // infallible by construction rather than a parsed literal, so this
         // path has no error arm to get wrong.
         let mut request = request;
+        let principal = resolve_principal(request.headers());
         request.extensions_mut().insert(TenantId::default_tenant());
+        request
+            .extensions_mut()
+            .insert(AttachedPrincipal(principal));
         return Ok(next.run(request).await);
     }
 
@@ -114,6 +163,10 @@ pub async fn auth_middleware(request: Request, next: Next) -> Result<Response, S
     };
 
     let mut request = request;
+    let principal = resolve_principal(request.headers());
     request.extensions_mut().insert(tenant);
+    request
+        .extensions_mut()
+        .insert(AttachedPrincipal(principal));
     Ok(next.run(request).await)
 }

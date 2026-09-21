@@ -44,6 +44,7 @@ fn mesh_with_known_key() -> (AppState, String) {
         loaded_models: vec![],
         origins: Vec::new(),
         media_allow: Vec::new(),
+        media_available: None,
 
         embed_model: None,
         benchmark: None,

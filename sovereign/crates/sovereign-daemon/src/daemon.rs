@@ -11,7 +11,7 @@ use std::sync::{Arc, Weak};
 use tokio::sync::RwLock;
 use tracing::{info, warn};
 
-use crate::state::{AppState, LocalInferenceService};
+use crate::state::{AppState, LocalInferenceService, NodeSeed};
 use commonwealth_core::ids::NodeId;
 use commonwealth_core::mesh::Mesh;
 use commonwealth_discovery::mdns::{BrowseHandle, DiscoveredPeer, MdnsDiscovery};
@@ -938,9 +938,8 @@ impl EmbeddedDaemon {
             )?;
             self.media_route.set(origin, allow);
             self.media_route
-                .set_declared(commonwealth_media::read_declared_in(
-                    &commonwealth_media::dir_under(&self.data_dir),
-                ));
+                .set_viewer_user(fresh.iroh.media_viewer_user.clone());
+            self.media_route.read_credentials_in(&self.data_dir);
             reloaded.extend(diff.media_changed.iter().map(|f| (*f).to_string()));
             info!(changed = ?diff.media_changed, "admin_reload: media route swapped live");
         }
@@ -2857,6 +2856,23 @@ impl EmbeddedDaemon {
             .await
     }
 
+    /// This daemon's own outbound mesh proof — see
+    /// [`AppState::mesh_proof_stamp`](crate::state::AppState::mesh_proof_stamp).
+    ///
+    /// Delegated rather than re-derived: the rpc-warm orchestrator holds this
+    /// handle and no `AppState`, and there is exactly one minter. `None` on a
+    /// stopped daemon or a mesh with no credential, which is the same reported
+    /// absence the accessor itself gives.
+    pub async fn mesh_proof_stamp(
+        &self,
+    ) -> Option<commonwealth_transport::mesh_proof::MeshProofStamp> {
+        let state = self.state.read().await;
+        match &*state {
+            DaemonState::Running { app_state, .. } => app_state.mesh_proof_stamp().await,
+            DaemonState::Stopped => None,
+        }
+    }
+
     /// Feedback that `endpoint` carried a successful ModelTransfer call to
     /// `node` — lets the transport promote it for future dials (the same
     /// last-working cache gossip benefits from).
@@ -3171,7 +3187,8 @@ impl EmbeddedDaemon {
         // argument of the node's part (DC §4.2 "Construction is staged, and
         // parts are total") — the layer reads it off `AppState` before the
         // listener binds, and nothing installs it afterwards. The internal
-        // port (`:9742`, mTLS) is unrelated and always binds `0.0.0.0`.
+        // port (`:9742`) is unrelated, always binds `0.0.0.0`, and is not and
+        // never was mTLS: what it requires of a caller is `internal_auth`.
         let (mut client_bind, configured_token, internal_bind) = {
             let c = self.setup_config.read().await;
             (
@@ -3206,9 +3223,9 @@ impl EmbeddedDaemon {
         client_bind = posture.bind;
         // The node's part exists before it is built, token and all (DC §4.2
         // "Construction is staged, and parts are total").
-        let node_seed = crate::state::NodeSeed {
-            client_token: posture.token.map(Into::into),
-        };
+        let node_seed = NodeSeed::resolved(posture.token, &self.data_dir, &self.setup_config)
+            .await
+            .map_err(|e| MeshError::Config(e.to_string()))?;
         // Fabric's part is constructed before `AppState` and held on the
         // daemon, so it survives `stop_inner` (DC §4.1; DC §4.2 "Construction
         // is staged, and parts are total"). The membership operations that
@@ -3347,6 +3364,8 @@ impl EmbeddedDaemon {
         // with no caller is exactly the shape that left `ingest_grant`'s
         // expiry unenforced, so it gets a caller at birth.
         let _guest_reaper = app_state.start_guest_grant_reaper();
+        // And the names claimed under those grants, for the same reason.
+        let _guest_session_reaper = app_state.start_guest_session_reaper();
 
         // Register the locally-loaded model slots so `/v1/models`
         // answers with something meaningful instead of an empty list.
@@ -3380,6 +3399,13 @@ impl EmbeddedDaemon {
             &internal_bind,
             internal_port,
         );
+
+        // The holder's media-presence poll (`crate::media_presence`): this
+        // process reporting to itself, so loopback regardless of internal_bind.
+        tokio::spawn(crate::media_presence::run(
+            self.media_route.clone(),
+            format!("http://127.0.0.1:{internal_port}"),
+        ));
 
         let mesh_state = Arc::new(RwLock::new(MeshState::from_membership(
             &*app_state.inner.fabric.mesh.read().await,
@@ -3690,10 +3716,20 @@ impl EmbeddedDaemon {
         let app_state_clone = app_state.clone();
         // The guest door — `crate::guest_door` says why it is its own bind.
         let door_state = app_state.clone();
-        let (guest_bind, guest_page_dir) = {
-            let c = self.setup_config.read().await;
-            (c.daemon.guest_bind.clone(), c.daemon.guest_page_dir.clone())
-        };
+        // The turn host for `POST /v1/guest/ask`, on both binds a guest can
+        // reach: the door and the `GUEST_ALPN` forward. `AppState` carries no
+        // `Runtime`, so the handler is built from this the way every other
+        // turn surface in this crate is. A mesh-admin daemon upgrades fine
+        // and answers 503 naming itself — the absence is reported, not
+        // dressed as a 404.
+        let turn_host = self.self_weak.upgrade();
+        let door_turn_host = turn_host.clone();
+        // The registry was resolved once, into the node's part, by
+        // `NodeSeed::resolved` — the one reader of those two config keys. The
+        // door serves what the rail route scopes by, because it is the same
+        // value and not a second read of the same config.
+        let guest_pages = door_state.guest_pages();
+        let guest_bind = self.setup_config.read().await.daemon.guest_bind.clone();
         // Each start (including an in-process re-create) answers the bind
         // question afresh; the serve task publishes the outcome below.
         self.client_listener.send_replace(ClientListener::Pending);
@@ -3724,15 +3760,22 @@ impl EmbeddedDaemon {
             for router in mounted {
                 client_router = client_router.merge(router);
             }
-            let internal_router = crate::server::internal_router(app_state_clone.clone());
+            // ConnectInfo: `internal_principal_layer` reads the peer address as
+            // half the "is this my own acceptor's hop" tie, and fails closed
+            // without it. Same requirement the client listeners document above.
+            let internal_router = crate::server::internal_router(app_state_clone.clone())
+                .into_make_service_with_connect_info::<SocketAddr>();
             let peer_router = crate::server::client_router_for(
                 app_state_clone.clone(),
                 crate::server::ClientSurface::Peer,
             );
-            let guest_router = crate::server::client_router_for(
+            let mut guest_router = crate::server::client_router_for(
                 app_state_clone.clone(),
                 crate::server::ClientSurface::Guest,
             );
+            if let Some(host) = turn_host {
+                guest_router = guest_router.layer(axum::Extension(host));
+            }
             let rail_router = crate::server::client_router_for(
                 app_state_clone,
                 crate::server::ClientSurface::Rail,
@@ -3845,7 +3888,7 @@ impl EmbeddedDaemon {
                 _ = guest_serve => {}
                 _ = peer_serve => {}
                 _ = rail_serve => {}
-                _ = crate::guest_door::serve(door_state, guest_bind, guest_page_dir) => {}
+                _ = crate::guest_door::serve(door_state, guest_bind, guest_pages, door_turn_host) => {}
                 _ = shutdown_rx => {
                     info!("Commonwealth daemon shutting down");
                 }
@@ -4239,16 +4282,9 @@ impl EmbeddedDaemon {
             let app_state = app_state.clone();
             Arc::new(move |dialer: commonwealth_core::ids::NodePubkey| {
                 let app_state = app_state.clone();
-                Box::pin(async move {
-                    let mesh = app_state.inner.fabric.mesh.read().await;
-                    mesh.members
-                        .values()
-                        .find(|m| m.removed_at.is_none() && m.node_pubkey == Some(dialer))
-                        .map(|m| sovereign_mesh::iroh_access::MemberIdentity {
-                            name: m.name.clone(),
-                            node_id: m.node_id,
-                        })
-                })
+                // ONE roster read, shared with the internal resolver that must
+                // agree with it: `AppState::member_by_pubkey`.
+                Box::pin(async move { app_state.member_by_pubkey(dialer).await })
             })
         };
         // A MEDIA ORIGIN A MEMBER MAY REACH, when the operator declared one.
@@ -4263,6 +4299,8 @@ impl EmbeddedDaemon {
             )
             .map_err(MeshError::Config)?;
             self.media_route.set(origin, allow);
+            self.media_route
+                .set_viewer_user(cfg.iroh.media_viewer_user.clone());
         }
         // AN OFFER ORIGIN A MEMBER MAY REACH — what this operator has going
         // spare. Parsed here and REFUSED by name if it does not parse, for

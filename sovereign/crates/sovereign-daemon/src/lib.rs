@@ -91,6 +91,7 @@ pub mod local_only;
 pub mod loopback_guard;
 pub mod mcp_config_http;
 pub mod mcp_router;
+pub mod media_presence;
 pub mod media_reach;
 pub mod mesh_http;
 pub mod meshapp_http;
@@ -161,13 +162,26 @@ pub mod client_auth;
 /// design's one resolver (`REVIEW-mint-principal`) collapses them.
 pub mod client_principal;
 pub mod client_surface;
+/// Named client tokens — one credential per device, revocable alone.
+pub mod client_tokens;
 pub mod frontdoor;
-pub mod headers;
+/// Whether a caller may reach `:9742` at all — the refusal
+/// [`internal_principal`] deliberately does not make.
+pub mod internal_gate;
+pub mod internal_principal;
+/// The test that keeps `x-node-id` out of every decider — see the module.
+pub mod mesh_principal_gate;
+/// The test that keeps `x-mesh-proof` to one minter and one reader.
+pub mod mesh_proof_header_gate;
+/// The outbound half of the mesh proof: `AppState` → the one stamp.
+pub mod mesh_proof_outbound;
 pub mod middleware;
 pub mod reshaping;
 pub mod routes_apps;
 pub mod routes_completions;
 pub mod routes_edit_predictions;
+pub mod routes_guest_ask;
+pub mod routes_guest_session;
 pub mod routes_inference;
 pub mod routes_internal;
 pub mod routes_knowledge;

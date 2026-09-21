@@ -14,35 +14,21 @@
 requirement = "FE-100"
 test = "sovereign-daemon::admission::tests::peer_traffic_and_client_traffic_never_consume_each_others_budget"
 file = "sovereign/crates/sovereign-daemon/src/admission.rs"
-line = 796
+line = 825
 asserts = 7
 
 [[claim]]
 requirement = "FE-99"
-test = "sovereign-daemon::admission::tests::middleware_malformed_header_buckets_zero_and_is_named"
+test = "sovereign-daemon::admission::tests::middleware_malformed_header_is_refused_and_still_named"
 file = "sovereign/crates/sovereign-daemon/src/admission.rs"
-line = 1118
+line = 1162
 asserts = 4
-
-[[claim]]
-requirement = "FE-99"
-test = "sovereign-daemon::headers::tests::non_hex_returns_none"
-file = "sovereign/crates/sovereign-daemon/src/headers.rs"
-line = 114
-asserts = 1
-
-[[claim]]
-requirement = "FE-99"
-test = "sovereign-daemon::headers::tests::wrong_length_returns_none"
-file = "sovereign/crates/sovereign-daemon/src/headers.rs"
-line = 89
-asserts = 2
 
 [[claim]]
 requirement = "FE-99"
 test = "sovereign-daemon::routes_status::process_status_tests::zero_bucket_row_names_rejected_header_and_expected_form"
 file = "sovereign/crates/sovereign-daemon/src/routes_status.rs"
-line = 693
+line = 694
 asserts = 4
 
 [[claim]]
@@ -56,5 +42,5 @@ asserts = 3
 requirement = "UI-22"
 test = "sovereign-daemon::daemon::tests::the_client_api_binds_loopback_by_default_and_never_exposes_an_unauthenticated_listener"
 file = "sovereign/crates/sovereign-daemon/src/daemon.rs"
-line = 5382
+line = 5420
 asserts = 21

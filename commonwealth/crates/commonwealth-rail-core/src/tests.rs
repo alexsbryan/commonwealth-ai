@@ -704,13 +704,14 @@ fn a_sealed_prefix_is_retired_rather_than_reported_as_a_hole() {
 #[test]
 fn a_seal_the_rail_refused_retires_nothing() {
     let act = RailAct::Seal;
-    let body = serde_json::to_string(&act).unwrap();
+    let body = body_json(&act, None);
     let forged = Op::new(
         SignedOp {
             seq: 3,
             // cy's key, over a line that claims to be alex's.
             sig: sign_ring_op(&key(3), NS, 103, 3, &body),
             act,
+            on_behalf_of: None,
         },
         103,
         actor_of(&key(1)),
@@ -762,4 +763,109 @@ fn a_seal_retires_only_the_history_of_the_key_that_signed_it() {
         ],
         "alex is sealed, bo is not"
     );
+}
+
+// ── whose words an act was ───────────────────────────────────
+
+/// The field is LAST and skipped when absent, so an act that names nobody
+/// signs the bytes it signed before the field existed. Stated here rather
+/// than trusted to serde's declaration order, because every op on every
+/// replica rests on it.
+#[test]
+fn an_act_naming_nobody_signs_the_bytes_it_always_did() {
+    let act = record("milk");
+    assert_eq!(
+        body_json(&act, None),
+        serde_json::to_string(&act).unwrap(),
+        "an absent name must not reach the signed bytes"
+    );
+    assert!(
+        body_json(&act, Some("dee")).ends_with(r#","on_behalf_of":"dee"}"#),
+        "a stated name goes last: {}",
+        body_json(&act, Some("dee"))
+    );
+}
+
+/// Ops written before `on_behalf_of` existed, captured from this crate at
+/// f51b66112 and committed verbatim. Every replica holds lines like these;
+/// if adding the field moved a byte, they would all become `BadSignature`
+/// the day a node upgraded, and no test that constructs its ops with the
+/// NEW code could ever notice.
+#[test]
+fn rail_ops_written_before_on_behalf_of_still_verify() {
+    let ops: Vec<Op<SignedOp>> = include_str!("fixtures/rail_ops_before_on_behalf_of.jsonl")
+        .lines()
+        .filter(|l| !l.trim().is_empty())
+        .map(|l| serde_json::from_str(l).expect("the fixture is a journal line"))
+        .collect();
+    assert_eq!(ops.len(), 3, "record, correct-without-replacement, seal");
+    assert!(
+        ops.iter().all(|o| o.kind.on_behalf_of.is_none()),
+        "the fixture predates the field"
+    );
+
+    let f = admitted(&ops);
+    assert!(
+        f.gaps.is_empty(),
+        "an op written before the field must still verify: {:?}",
+        f.gaps
+    );
+    assert!(
+        f.ops.iter().all(|o| o.on_behalf_of.is_none()),
+        "nothing invents a name"
+    );
+}
+
+/// The name is inside the signature, so rewriting it in flight — the only
+/// way a peer could reattribute somebody's words — is a refusal and not a
+/// silent correction. The id is re-derived from the tampered body, so the
+/// ONLY thing wrong with this op is the signature.
+#[test]
+fn a_name_rewritten_after_signing_is_refused() {
+    let honest = signed_for(NS, &key(1), 100, 0, record("milk"), Some("dee"));
+    let f = admitted(&[honest.clone()]);
+    assert!(f.gaps.is_empty(), "{:?}", f.gaps);
+    assert_eq!(
+        f.ops[0].on_behalf_of.as_deref(),
+        Some("dee"),
+        "admission carries the name through"
+    );
+
+    let mut tampered = honest.kind.clone();
+    tampered.on_behalf_of = Some("eve".to_string());
+    let reattributed = Op::new(tampered, honest.ts_unix, honest.actor.clone());
+    let f = admitted(&[reattributed]);
+    assert!(
+        matches!(f.gaps.as_slice(), [RailGap::BadSignature { .. }]),
+        "rewriting the name must not verify: {:?}",
+        f.gaps
+    );
+    assert!(f.ops.is_empty(), "nothing tampered reaches an app");
+}
+
+/// Every act kind carries it — including a correction that states no
+/// replacement, which has no payload a name could have ridden in.
+#[test]
+fn a_correction_with_no_replacement_still_names_the_guest() {
+    let first = signed_for(NS, &key(1), 100, 0, record("milk"), Some("dee"));
+    let retraction = signed_for(
+        NS,
+        &key(1),
+        101,
+        1,
+        RailAct::Correct {
+            corrects: first.id.clone(),
+            replacement: None,
+        },
+        Some("dee"),
+    );
+    let f = admitted(&[first, retraction]);
+    assert!(f.gaps.is_empty(), "{:?}", f.gaps);
+    assert!(
+        f.ops
+            .iter()
+            .all(|o| o.on_behalf_of.as_deref() == Some("dee")),
+        "a payload-less act names its guest too"
+    );
+    assert!(applied(&f).is_empty(), "the retraction voided the record");
 }

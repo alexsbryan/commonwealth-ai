@@ -11,6 +11,7 @@
 //! and the reachability watchdog's peer-path health term.
 
 use crate::iroh::{Endpoint, PublicKey, TransportAddr, TransportAddrUsage};
+use std::net::SocketAddr;
 
 /// How a peer is reachable on this endpoint RIGHT NOW, as the endpoint's
 /// `remote_info` sees it. A closed set (ARCH §2) with one spelling
@@ -77,6 +78,13 @@ pub struct PeerPathSnapshot {
     pub relay: Option<String>,
     /// Count of ACTIVE direct (IP) addresses to this peer.
     pub active_direct_addrs: usize,
+    /// The ACTIVE direct addresses themselves, in the order the endpoint
+    /// lists them. A count cannot name a wire: on 2026-09-20 the ring-room
+    /// cut leg recorded this surface hoping to learn WHICH address carried
+    /// bytes through a cut uplink, and the only reading available was "2".
+    /// `active_direct_addrs` is this vector's length, so the two cannot
+    /// disagree.
+    pub active_direct_socket_addrs: Vec<SocketAddr>,
 }
 
 /// Pure half of [`peer_path_snapshot`] — the classification, so it has
@@ -103,7 +111,7 @@ fn classify_peer_path(direct_active: bool, relay_active: bool, any_addr: bool) -
 pub async fn peer_path_snapshot(endpoint: &Endpoint, peer: PublicKey) -> Option<PeerPathSnapshot> {
     let info = endpoint.remote_info(peer).await?;
     let mut active_relay: Option<String> = None;
-    let mut active_direct = 0usize;
+    let mut active_direct: Vec<SocketAddr> = Vec::new();
     let mut any_addr = false;
     for a in info.addrs() {
         any_addr = true;
@@ -112,17 +120,29 @@ pub async fn peer_path_snapshot(endpoint: &Endpoint, peer: PublicKey) -> Option<
             TransportAddr::Relay(url) if active => {
                 active_relay.get_or_insert_with(|| url.to_string());
             }
-            TransportAddr::Ip(_) if active => {
-                active_direct += 1;
+            TransportAddr::Ip(ip) if active => {
+                active_direct.push(*ip);
             }
             _ => {}
         }
     }
-    Some(PeerPathSnapshot {
-        path: classify_peer_path(active_direct > 0, active_relay.is_some(), any_addr),
+    Some(snapshot_of(active_direct, active_relay, any_addr))
+}
+
+/// Pure half of the ASSEMBLY, for the same reason [`classify_peer_path`] is
+/// pure: the count and the address list are one fact told twice, and this is
+/// the one place that can make them disagree.
+fn snapshot_of(
+    active_direct: Vec<SocketAddr>,
+    active_relay: Option<String>,
+    any_addr: bool,
+) -> PeerPathSnapshot {
+    PeerPathSnapshot {
+        path: classify_peer_path(!active_direct.is_empty(), active_relay.is_some(), any_addr),
         relay: active_relay,
-        active_direct_addrs: active_direct,
-    })
+        active_direct_addrs: active_direct.len(),
+        active_direct_socket_addrs: active_direct,
+    }
 }
 
 #[cfg(test)]
@@ -159,6 +179,27 @@ mod tests {
                 p.as_str()
             );
         }
+    }
+
+    /// The count NAMES the list. A snapshot that says `direct=2` while
+    /// carrying no address is the reading the ring-room cut leg got on
+    /// 2026-09-20 when it needed the wire, and it is unreachable here by
+    /// construction — the length is taken from the vector itself.
+    #[test]
+    fn the_direct_count_is_the_address_list() {
+        use super::{snapshot_of, PeerPath};
+        let addrs = vec![
+            "10.89.60.11:19942".parse().unwrap(),
+            "10.89.61.11:19942".parse().unwrap(),
+        ];
+        let s = snapshot_of(addrs.clone(), None, true);
+        assert_eq!(s.path, PeerPath::Direct);
+        assert_eq!(s.active_direct_addrs, 2);
+        assert_eq!(s.active_direct_socket_addrs, addrs);
+        let empty = snapshot_of(Vec::new(), Some("relay".into()), true);
+        assert_eq!(empty.path, PeerPath::Relayed);
+        assert_eq!(empty.active_direct_addrs, 0);
+        assert!(empty.active_direct_socket_addrs.is_empty());
     }
 
     /// `is_active` is what a reachability judgement reads. A path that

@@ -464,32 +464,144 @@ pub enum RpcServe {
     Off,
     /// Accepting ggml RPC on `bind`.
     On {
-        /// The bind string as configured, trimmed (e.g. `0.0.0.0:50052`).
+        /// The bind string as configured, trimmed (e.g. `127.0.0.1:50052`).
         bind: String,
     },
+    /// Asked to serve past loopback without the acknowledgement, so this node
+    /// serves nothing — a THIRD answer, never folded into [`Self::Off`].
+    ///
+    /// The ggml rpc-server authenticates nothing and encrypts nothing: a
+    /// non-loopback bind hands every host that can reach this machine the
+    /// ability to drive its GPU and read the tensors crossing it. The
+    /// member-only encrypted tunnel (`RPC_ALPN`, spliced in `iroh_access`)
+    /// already carries the layer-split between members, so the plaintext LAN
+    /// bind is an opt-in, not the way distributed inference works.
+    ///
+    /// "Refused" and "not configured" are different answers to different
+    /// questions and must not collapse (ARCH §6): an operator who set
+    /// `SOVEREIGN_RPC_SERVE` and got `Off` would read it as "the variable did
+    /// not take". The advertising surfaces still see no worker — [`Self::bind`],
+    /// [`Self::port`] and [`Self::is_serving`] all answer as they do for
+    /// `Off` — because nothing bound.
+    Refused {
+        /// The bind that was asked for, trimmed, so the message and any
+        /// surface that reports the refusal can name it.
+        bind: String,
+    },
+}
+
+/// The acknowledgement that a plaintext, unauthenticated tensor port on the
+/// LAN is deliberate. `1`/`true`, case-insensitively — the spelling
+/// `SOVEREIGN_RPC_WORKER_PROCESS` already uses.
+pub const RPC_ALLOW_PLAINTEXT_LAN_ENV: &str = "SOVEREIGN_RPC_ALLOW_PLAINTEXT_LAN";
+
+/// THE spelling rule for the acknowledgement, separated from the environment
+/// so the accepted values are testable without racing another test's
+/// `set_var`. `1` or `true`, case-insensitively; everything else, an empty
+/// value included, leaves the refusal in place.
+pub fn accepts_plaintext_lan(raw: Option<&str>) -> bool {
+    matches!(
+        raw.map(str::trim),
+        Some(v) if v == "1" || v.eq_ignore_ascii_case("true")
+    )
+}
+
+/// Can this bind only be reached from this machine?
+///
+/// `None` when the string carries no host to judge (`"50052"`,
+/// `"not-an-address"`) — that is not a bind this node will ever listen on, so
+/// it is neither loopback nor exposed, and refusing it would report an
+/// exposure that cannot exist. An EMPTY host (`":50052"`) is every interface,
+/// same as `0.0.0.0`, and answers `Some(false)`.
+fn bind_host_is_loopback(bind: &str) -> Option<bool> {
+    if let Ok(addr) = bind.parse::<std::net::SocketAddr>() {
+        return Some(addr.ip().is_loopback());
+    }
+    let (host, port) = bind.rsplit_once(':')?;
+    // Only a real port makes this a bind; `not-an-address` is not one.
+    port.trim().parse::<u16>().ok()?;
+    let host = host.trim().trim_start_matches('[').trim_end_matches(']');
+    if host.eq_ignore_ascii_case("localhost") {
+        return Some(true);
+    }
+    if host.is_empty() {
+        return Some(false);
+    }
+    Some(
+        host.parse::<std::net::IpAddr>()
+            .map(|ip| ip.is_loopback())
+            .unwrap_or(false),
+    )
 }
 
 impl RpcServe {
     /// Resolve from the environment. **Call this once, at construction.**
     pub fn from_env() -> Self {
-        Self::resolve(std::env::var("SOVEREIGN_RPC_SERVE").ok().as_deref())
+        Self::resolve(
+            std::env::var("SOVEREIGN_RPC_SERVE").ok().as_deref(),
+            accepts_plaintext_lan(std::env::var(RPC_ALLOW_PLAINTEXT_LAN_ENV).ok().as_deref()),
+        )
     }
 
     /// THE decider, separated from the environment so the disagreement above
     /// can be tested without racing another test's `set_var`.
-    pub fn resolve(raw: Option<&str>) -> Self {
-        match raw.map(str::trim).filter(|s| !s.is_empty()) {
-            Some(bind) => Self::On {
+    ///
+    /// `allow_plaintext_lan` is the operator's acknowledgement
+    /// ([`RPC_ALLOW_PLAINTEXT_LAN_ENV`], or `[shared_model]
+    /// allow_plaintext_lan`). Without it a bind reachable from off this
+    /// machine is [`Self::Refused`] — the refusal lives HERE, at the one
+    /// decider, and not at the binding site, so every surface that asks what
+    /// this node serves gets the same answer.
+    pub fn resolve(raw: Option<&str>, allow_plaintext_lan: bool) -> Self {
+        let Some(bind) = raw.map(str::trim).filter(|s| !s.is_empty()) else {
+            return Self::Off;
+        };
+        if !allow_plaintext_lan && bind_host_is_loopback(bind) == Some(false) {
+            let refused = Self::Refused {
                 bind: bind.to_string(),
-            },
-            None => Self::Off,
+            };
+            tracing::error!(
+                bind = %bind,
+                allow_env = RPC_ALLOW_PLAINTEXT_LAN_ENV,
+                "{}",
+                refused.refusal()
+            );
+            return refused;
         }
+        Self::On {
+            bind: bind.to_string(),
+        }
+    }
+
+    /// The sentence a refusal is owed: what was asked, why it is refused, and
+    /// the one setting that allows it. `None` when nothing was refused.
+    pub fn refusal(&self) -> String {
+        match self {
+            Self::Refused { bind } => format!(
+                "refusing to serve the ggml RPC worker on {bind}: that bind is reachable \
+                 from other hosts and the rpc-server authenticates nothing and encrypts \
+                 nothing, so any host that can reach this machine could drive its GPU. \
+                 Members already reach this worker through the encrypted mesh tunnel \
+                 (RPC_ALPN), which needs no LAN bind. Fix one of: bind loopback \
+                 (SOVEREIGN_RPC_SERVE=127.0.0.1:50052, the default); or set \
+                 {RPC_ALLOW_PLAINTEXT_LAN_ENV}=1 (or `[shared_model] \
+                 allow_plaintext_lan = true`) if this network is a deliberate trust \
+                 boundary. This node is serving NO worker until then."
+            ),
+            _ => String::new(),
+        }
+    }
+
+    /// True when a bind was asked for and refused — distinct from [`Self::Off`],
+    /// which means nothing was asked for at all.
+    pub fn is_refused(&self) -> bool {
+        matches!(self, Self::Refused { .. })
     }
 
     /// The bind address, or `None` when this node serves nothing.
     pub fn bind(&self) -> Option<&str> {
         match self {
-            Self::Off => None,
+            Self::Off | Self::Refused { .. } => None,
             Self::On { bind } => Some(bind),
         }
     }
@@ -515,28 +627,107 @@ mod tests {
     /// `capabilities` gossip `can_anchor: true` while nothing bound.
     #[test]
     fn an_empty_bind_is_not_a_worker() {
-        assert_eq!(RpcServe::resolve(Some("")), RpcServe::Off);
-        assert_eq!(RpcServe::resolve(Some("   ")), RpcServe::Off);
-        assert_eq!(RpcServe::resolve(None), RpcServe::Off);
-        assert!(!RpcServe::resolve(Some("")).is_serving());
-        assert_eq!(RpcServe::resolve(Some("")).port(), None);
+        assert_eq!(RpcServe::resolve(Some(""), false), RpcServe::Off);
+        assert_eq!(RpcServe::resolve(Some("   "), false), RpcServe::Off);
+        assert_eq!(RpcServe::resolve(None, false), RpcServe::Off);
+        assert!(!RpcServe::resolve(Some(""), false).is_serving());
+        assert_eq!(RpcServe::resolve(Some(""), false).port(), None);
     }
 
     #[test]
     fn a_configured_worker_reports_its_bind_and_port() {
-        let serve = RpcServe::resolve(Some("  0.0.0.0:50052\n"));
+        let serve = RpcServe::resolve(Some("  127.0.0.1:50052\n"), false);
         assert!(serve.is_serving());
-        assert_eq!(serve.bind(), Some("0.0.0.0:50052"));
+        assert_eq!(serve.bind(), Some("127.0.0.1:50052"));
         assert_eq!(serve.port(), Some(50052));
     }
 
     /// A bind with no parseable port is serving-but-unadvertisable: the type
-    /// says so rather than publishing a port nobody listens on.
+    /// says so rather than publishing a port nobody listens on. It is also not
+    /// an EXPOSURE — there is no host in it to be reachable — so the LAN
+    /// refusal leaves it exactly as it was.
     #[test]
     fn a_portless_bind_advertises_nothing() {
-        let serve = RpcServe::resolve(Some("not-an-address"));
+        let serve = RpcServe::resolve(Some("not-an-address"), false);
         assert!(serve.is_serving());
         assert_eq!(serve.port(), None);
+    }
+
+    /// Clause (b) of `tg-rpc-port-not-on-lan`. The bind the docs spelled for a
+    /// year hands the tensor port to every host on the network, and the
+    /// rpc-server authenticates nothing, so without the acknowledgement it is
+    /// refused — and the refusal is a DIFFERENT answer from "no worker was
+    /// configured", which is the failure mode this asserts against.
+    #[test]
+    fn a_lan_bind_without_the_acknowledgement_is_refused_not_off() {
+        let serve = RpcServe::resolve(Some("0.0.0.0:50052"), false);
+        assert_eq!(
+            serve,
+            RpcServe::Refused {
+                bind: "0.0.0.0:50052".to_string()
+            }
+        );
+        assert!(serve.is_refused());
+        assert_ne!(serve, RpcServe::Off);
+        // Nothing bound, so no surface may advertise a worker.
+        assert!(!serve.is_serving());
+        assert_eq!(serve.bind(), None);
+        assert_eq!(serve.port(), None);
+        // The sentence owes the operator all three things.
+        let msg = serve.refusal();
+        assert!(msg.contains("0.0.0.0:50052"), "names what was asked: {msg}");
+        assert!(msg.contains("authenticates nothing"), "names why: {msg}");
+        assert!(
+            msg.contains(RPC_ALLOW_PLAINTEXT_LAN_ENV),
+            "names the setting that allows it: {msg}"
+        );
+        assert!(RpcServe::Off.refusal().is_empty());
+        assert!(!RpcServe::Off.is_refused());
+    }
+
+    /// Every spelling of "reachable from another host" is refused, and every
+    /// spelling of loopback is served. `:50052` is an empty host, which means
+    /// every interface exactly as `0.0.0.0` does.
+    #[test]
+    fn loopback_serves_and_every_other_reachable_host_is_refused() {
+        for bind in [
+            "127.0.0.1:50052",
+            "127.0.0.53:50052",
+            "[::1]:50052",
+            "localhost:50052",
+        ] {
+            assert!(
+                RpcServe::resolve(Some(bind), false).is_serving(),
+                "{bind} is loopback and must serve with no acknowledgement"
+            );
+        }
+        for bind in [
+            "0.0.0.0:50052",
+            "[::]:50052",
+            ":50052",
+            "192.168.1.10:50052",
+        ] {
+            assert!(
+                RpcServe::resolve(Some(bind), false).is_refused(),
+                "{bind} is reachable from another host and must be refused"
+            );
+        }
+    }
+
+    /// The acknowledgement is the one thing that turns the refusal off, and it
+    /// changes nothing about a loopback bind.
+    #[test]
+    fn the_acknowledgement_admits_the_lan_bind() {
+        let serve = RpcServe::resolve(Some("0.0.0.0:50052"), true);
+        assert!(serve.is_serving());
+        assert_eq!(serve.bind(), Some("0.0.0.0:50052"));
+        assert_eq!(serve.port(), Some(50052));
+        assert!(accepts_plaintext_lan(Some("1")));
+        assert!(accepts_plaintext_lan(Some("true")));
+        assert!(accepts_plaintext_lan(Some(" TRUE ")));
+        assert!(!accepts_plaintext_lan(Some("0")));
+        assert!(!accepts_plaintext_lan(Some("")));
+        assert!(!accepts_plaintext_lan(None));
     }
 
     /// The exact input the three divergent readers disagreed on. Two treated

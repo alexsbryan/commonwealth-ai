@@ -9,12 +9,23 @@
 //! anywhere in `server.rs`: `serve()` binds both listeners with plain
 //! `TcpListener` + `axum::serve`. What actually guards this port is
 //! the admission gate plus each handler's own mesh-id/join-key check —
-//! NOT transport authentication. So treat every route here as
-//! reachable by any peer that can route to this host, and do not mount
-//! anything whose cost an unauthenticated caller shouldn't be able to
-//! trigger. (`/internal/inference/warmup` was exactly that mistake: an
-//! 18.5 GB model load, one unauthenticated POST away, on a port
-//! described as mTLS-protected. It now lives on the client router.)
+//! NOT transport authentication. (`/internal/inference/warmup` was
+//! exactly that mistake: an 18.5 GB model load, one unauthenticated
+//! POST away, on a port described as mTLS-protected. It now lives on
+//! the client router.)
+//!
+//! Since `tg-2-strangers-are-refused` "any peer that can route to this
+//! host" is no longer the reach. `crate::internal_gate` runs in front of
+//! every route but `/internal/join` and `/internal/gossip` and admits
+//! three kinds of caller: a verified member (the acceptor proved the
+//! key), a plain-IP caller carrying a mesh proof (a holder of THIS
+//! mesh's secret — the group, never a named member), and a local
+//! process. So the reach is "any holder of the mesh secret", plus
+//! anything on this machine. Still not transport auth, and still no
+//! reason to mount something expensive here: on a plaintext mesh one
+//! leaked secret is every member, and nothing here can tell one member
+//! from another. `internal_auth = "perimeter"` restores the old reach
+//! wholesale.
 //!
 //! The four shared wire types kept here (`IngestPartitionRequest`,
 //! `IngestPartitionResponse`, `ErrorBody`, plus the submodule
@@ -28,6 +39,7 @@ use serde::{Deserialize, Serialize};
 use oicp_types::EmbedModelInfo;
 
 mod atlas_status;
+mod client_token;
 mod corpus_collaborate;
 mod corpus_grant;
 mod corpus_ingest;
@@ -47,6 +59,7 @@ mod ring_sync;
 mod rpc_warm;
 
 pub use atlas_status::{atlas_status, AtlasStatusResponse};
+pub use client_token::routes as client_token_routes;
 pub use corpus_collaborate::{corpus_collaborate, corpus_eligible_peers, CollaborateRequest};
 pub use corpus_grant::{corpus_grant_issue, corpus_grant_revoke};
 pub use corpus_ingest::{

@@ -74,6 +74,8 @@ mod fold_ingest_cross_node_merge_e2e;
 mod gossip_auth;
 #[path = "main/gossip_integration.rs"]
 mod gossip_integration;
+#[path = "main/gossip_offer_clock.rs"]
+mod gossip_offer_clock;
 #[path = "main/guest_lender_routing.rs"]
 mod guest_lender_routing;
 #[path = "main/guest_over_iroh_e2e.rs"]
@@ -84,6 +86,8 @@ mod injection_order;
 mod iroh_dialer_admission_e2e;
 #[path = "main/iroh_transport_e2e.rs"]
 mod iroh_transport_e2e;
+#[path = "main/iroh_verified_principal_e2e.rs"]
+mod iroh_verified_principal_e2e;
 #[path = "main/join_handshake.rs"]
 mod join_handshake;
 #[path = "main/join_key_persistence.rs"]
@@ -121,6 +125,8 @@ mod local_pod_smoke;
 mod loopback_parity;
 #[path = "main/manifest_fanout_concurrency.rs"]
 mod manifest_fanout_concurrency;
+#[path = "main/mesh_sim_ring_room.rs"]
+mod mesh_sim_ring_room;
 #[path = "main/mesh_sim_scoreboard.rs"]
 mod mesh_sim_scoreboard;
 #[path = "main/mesh_switch.rs"]
@@ -161,6 +167,10 @@ mod responses_adapter_e2e;
 mod ring_append_nudges_sync;
 #[path = "main/ring_live_non_durable.rs"]
 mod ring_live_non_durable;
+#[path = "main/ring_return_syncs.rs"]
+mod ring_return_syncs;
+#[path = "main/ring_sync_by_roster.rs"]
+mod ring_sync_by_roster;
 #[path = "main/ring_sync_loop_tests.rs"]
 mod ring_sync_loop_tests;
 #[path = "main/ring_sync_projection_tests.rs"]

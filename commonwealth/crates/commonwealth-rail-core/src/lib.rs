@@ -350,6 +350,23 @@ pub struct SignedOp {
     pub sig: String,
     #[serde(flatten)]
     pub act: RailAct,
+    /// Whose words this act was, when the key that signed it is not theirs —
+    /// a door that authenticated somebody the ring holds no key for. A name
+    /// and nothing else: not a key, not a role, not a scope.
+    ///
+    /// **A member's signature over somebody else's name means "this door says
+    /// so", and no more.** The rail never looks the name up in the
+    /// [`Roster`], never refuses on it and never lets it stand in for
+    /// authorship — `actor` is still the only field a writer cannot forge for
+    /// someone else. Carrying is not interpreting; what a name is allowed to
+    /// mean is the door's question, decided where the door authenticates.
+    ///
+    /// Declared LAST and skipped when absent, so every op written before this
+    /// field existed serialises to the same bytes, derives the same
+    /// [`Op::new`] id, and verifies under the same signature — which
+    /// `rail_ops_written_before_on_behalf_of_still_verify` holds to.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub on_behalf_of: Option<String>,
 }
 
 impl Journaled for SignedOp {

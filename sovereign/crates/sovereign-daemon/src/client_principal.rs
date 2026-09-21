@@ -33,20 +33,23 @@
 //! **existing** surface, never on a new identity scheme. The arms are read in
 //! this order; the order is load-bearing (see [`AppState::resolve`]).
 //!
-//! 1. **A presented `Authorization: Bearer` credential.** If the store holds a
-//!    **live guest grant** for it, the arm is [`Principal::Guest`] — the grant
-//!    bounds the caller's routes. Any other bearer is
-//!    [`Principal::RemoteClient`], keyed by a fingerprint, never by the secret
-//!    itself, so a principal key is safe to log and safe to hold in a map. The
-//!    bearer branch also covers the owner-signed `WorkerToken` the order names:
-//!    a worker token rides as a plain bearer
+//! 1. **A live guest grant** presented as `Authorization: Bearer` →
+//!    [`Principal::Guest`]. The grant is what bounds the caller's routes, so
+//!    nothing a guest also types may outrank it.
+//! 2. **`X-Node-Id`** → [`Principal::Member`], or [`Principal::Unverified`]
+//!    when it is present and not the canonical wire form. Read *before* the
+//!    loopback branch: a mesh peer arrives on the trusting listener over
+//!    loopback (`client_auth.rs:41-56`), so a loopback address is not evidence
+//!    of a local caller for a peer that named itself. It is read before the
+//!    non-guest bearer too, because peers present both and the bearer is the
+//!    same daemon-wide bytes for all of them — see the branch's own comment.
+//! 3. **Any other bearer** → [`Principal::RemoteClient`], keyed by a
+//!    fingerprint, never by the secret itself, so a principal key is safe to
+//!    log and safe to hold in a map. This covers the owner-signed
+//!    `WorkerToken` the order names: a worker token rides as a plain bearer
 //!    (`sovereign-serving-host/src/pinned_transport.rs:127`), so it needs no
 //!    branch of its own — one decider, not two.
-//! 2. **`X-Node-Id`** → [`Principal::Member`]. Read *before* the loopback
-//!    branch: a mesh peer arrives on the trusting listener over loopback
-//!    (`client_auth.rs:41-56`), so a loopback address is not evidence of a
-//!    local caller for a peer that named itself.
-//! 3. **`X-Principal`, from a loopback caller only**, and only on a listener
+//! 4. **`X-Principal`, from a loopback caller only**, and only on a listener
 //!    that trusts a loopback peer address (`ClientAuthPolicy::trust_loopback`).
 //!    The local multi-caller case: desktop, CLI and MCP all reach `127.0.0.1`
 //!    and are all auth-exempt (`client_auth.rs:143`), so a self-declared name
@@ -58,7 +61,7 @@
 //!    reading and the safe one. It is likewise **not** honoured on the guest
 //!    listener, where the loopback address is the iroh acceptor's own forward
 //!    hop and says nothing about who dialled.
-//! 4. **[`Principal::Anonymous`].** Nothing was presented. One shared
+//! 5. **[`Principal::Anonymous`].** Nothing was presented. One shared
 //!    bucket — which is exactly what these callers are *today*, so this is
 //!    the no-change branch, not a new grouping.
 //!
@@ -79,9 +82,9 @@ use std::hash::{Hash, Hasher};
 use std::net::SocketAddr;
 
 use axum::http::HeaderMap;
+use sovereign_contracts::principal::{claimed_node_id, ClaimedNodeId};
 use sovereign_serving_host::admission::Principal;
 
-use crate::admission::AdmissionHost;
 use crate::client_auth::ClientAuthPolicy;
 use crate::state::AppState;
 
@@ -102,7 +105,7 @@ pub const PRINCIPAL_HEADER: &str = "x-principal";
 /// a bucket, and that the token itself never appears in a log or a map key.
 /// `DefaultHasher` is SipHash-1-3 with fixed keys, so the value is stable for
 /// the life of a process — which is all a live fairness bucket needs.
-fn fingerprint(secret: &str) -> String {
+pub(crate) fn fingerprint(secret: &str) -> String {
     let mut h = std::collections::hash_map::DefaultHasher::new();
     secret.hash(&mut h);
     format!("{:016x}", h.finish())
@@ -168,32 +171,64 @@ impl AppState {
         peer: Option<SocketAddr>,
         policy: ClientAuthPolicy,
     ) -> Principal {
-        // 1. A presented bearer. A live guest grant is its own arm; any other
-        //    bearer is a remote client. The grant store decides which, and a
-        //    lapsed grant is simply not a grant (`GuestGrantStore::live`).
-        if let Some(token) = bearer(headers) {
+        // 1. A live GUEST grant. Read first and alone: a guest's whole
+        //    identity is its grant, and the grant is what bounds its routes,
+        //    so nothing a guest also types may outrank it. A lapsed grant is
+        //    simply not a grant (`GuestGrantStore::live`).
+        let presented = bearer(headers);
+        if let Some(token) = presented {
             let now = commonwealth_core::clock::unix_now_millis();
             if self.inner.node.guest_grants.live(token, now).is_some() {
                 return Principal::Guest {
                     grant: fingerprint(token),
                 };
             }
+        }
+
+        // 2. A mesh peer names its node id. Read BEFORE the loopback branch:
+        //    a peer arrives on the trusting listener over loopback
+        //    (`client_auth.rs:41-56`). This is the one call into the one
+        //    canonical wire parser (`sovereign_contracts::principal`, FE-99);
+        //    every decider downstream reads the value it produces, never the
+        //    header (`crate::mesh_principal_gate`).
+        //
+        //    A present-but-unreadable claim is `Unverified`, NOT `Anonymous`
+        //    and not a fall-through to the loopback branch: a caller that
+        //    named itself and failed must not read like one that named
+        //    nothing (ARCH principle 6). Recording the raw value here — at
+        //    the one site that HAS it — is what lets `/status` NAME it on the
+        //    zero-bucket row (order commons-fluency fix 7); the peer gate
+        //    then refuses it rather than charging it to node zero.
+        match claimed_node_id(headers) {
+            ClaimedNodeId::Readable(node_id) => return Principal::Member { node_id },
+            ClaimedNodeId::Unreadable(raw) => {
+                self.inner.record_rejected_x_node_id(&raw);
+                return Principal::Unverified;
+            }
+            ClaimedNodeId::Absent => {}
+        }
+
+        // 3. A non-guest bearer: a remote client, keyed by its credential.
+        //
+        //    Read AFTER the node claim, and that order is load-bearing. Mesh
+        //    peers present BOTH — `oicp_client::RemoteApiProvider::stamped`
+        //    sends the daemon-wide token and `X-Node-Id` on the same request,
+        //    and `peer_inference.rs`'s manifest GET does the same for a pinned
+        //    pod. Reading the bearer first made every such peer a
+        //    `RemoteClient`, which the peer gate then could not key a ceiling
+        //    on: it recorded the peer's perfectly valid node id as a REJECTED
+        //    one and bucketed a real member under node zero. The bearer is the
+        //    mesh's transport credential, identical for every peer that holds
+        //    it (see "Two limits" above), so it identifies strictly less than
+        //    the node claim does — the claim wins. A guest is the one caller
+        //    whose bearer means more, and it returned in step 1.
+        if let Some(token) = presented {
             return Principal::RemoteClient {
                 credential: fingerprint(token),
             };
         }
 
-        // 2. A mesh peer names its node id. Read BEFORE the loopback branch:
-        //    a peer arrives on the trusting listener over loopback
-        //    (`client_auth.rs:41-56`). `parse_node_id` is the port over the one
-        //    canonical wire parser (`headers::parse_x_node_id`, FE-99); a
-        //    present-but-unreadable value does not resolve here, which is what
-        //    lets `peer_admission_layer` keep its record-and-zero-bucket path.
-        if let Some(node_id) = self.parse_node_id(headers) {
-            return Principal::Member { node_id };
-        }
-
-        // 3. A loopback caller may name itself, on a listener that trusts a
+        // 4. A loopback caller may name itself, on a listener that trusts a
         //    loopback peer address.
         let from_loopback = peer.is_some_and(|p| p.ip().is_loopback());
         if policy.trust_loopback && from_loopback {
@@ -466,12 +501,37 @@ mod tests {
         assert_eq!(r, Principal::Member { node_id: id });
     }
 
+    /// bar `mp-principal-is-the-verified-key`:
+    ///
+    /// Present but unreadable is `Unverified`, not `Anonymous`: the caller
+    /// named itself and failed, which is a different answer from naming
+    /// nothing (ARCH principle 6) and is the answer the peer gate refuses on.
     #[test]
-    fn a_malformed_x_node_id_is_not_a_member() {
-        // Present but unreadable: it must not resolve to a Member, so
-        // `peer_admission_layer` keeps its record-and-zero-bucket path.
+    fn a_malformed_x_node_id_is_unverified_not_anonymous() {
         let r = resolve(&headers(&[("x-node-id", "not-a-node-id")]), loopback());
-        assert_eq!(r, Principal::Anonymous);
+        assert_eq!(r, Principal::Unverified);
+    }
+
+    /// bar `mp-principal-is-the-verified-key`:
+    ///
+    /// A mesh peer presents the daemon-wide bearer AND its node id on the
+    /// same request (`oicp_client::RemoteApiProvider::stamped`). The node
+    /// claim is what identifies it; the bearer is the same bytes for every
+    /// peer that holds the token. Reading the bearer first made a real member
+    /// a `RemoteClient`, which the peer gate then bucketed under node zero
+    /// while recording its VALID node id as a rejected one.
+    #[test]
+    fn a_peer_presenting_both_a_bearer_and_its_node_id_is_the_member() {
+        let id = commonwealth_core::ids::NodeId::from_u128(0xBEEF);
+        let hex: String = id.as_bytes().iter().map(|b| format!("{b:02x}")).collect();
+        let r = resolve(
+            &headers(&[
+                ("authorization", "Bearer the-daemon-wide-token"),
+                ("x-node-id", &hex),
+            ]),
+            loopback(),
+        );
+        assert_eq!(r, Principal::Member { node_id: id });
     }
 
     #[test]

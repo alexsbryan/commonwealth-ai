@@ -4,7 +4,7 @@
 # sovereign daemon links, so host↔worker speak the same RPC protocol.
 #
 # FALLBACK ONLY. The primary, distributable way to make a node a worker is
-# to run the daemon with `SOVEREIGN_RPC_SERVE=0.0.0.0:50052` — it serves the
+# to run the daemon with `SOVEREIGN_RPC_SERVE=127.0.0.1:50052` — it serves the
 # local GPU in-process, no separate binary. See docs/RPC_DISTRIBUTED_INFERENCE.md.
 # Use this script only to run a standalone worker WITHOUT the daemon.
 #

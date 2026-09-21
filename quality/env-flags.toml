@@ -1026,6 +1026,14 @@ shadows = "shared_model.role"
 purpose = "Anchor/host half of the shared-model role (env half of the config's role field)."
 
 [[flag]]
+name = "SOVEREIGN_RPC_ALLOW_PLAINTEXT_LAN"
+cluster = "mesh"
+default = "unset (a non-loopback RPC bind is refused)"
+status = "shipped"
+shadows = "shared_model.allow_plaintext_lan"
+purpose = "Acknowledge that the tensor-split ggml RPC port may bind where other hosts can reach it. The rpc-server authenticates nothing and encrypts nothing, so RpcServe refuses a non-loopback SOVEREIGN_RPC_SERVE without this; members reach the worker over the encrypted mesh tunnel (RPC_ALPN) instead. Accepts 1/true."
+
+[[flag]]
 name = "SOVEREIGN_RPC_WORKER_PROCESS"
 cluster = "mesh"
 default = "unset (in-process worker)"

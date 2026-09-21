@@ -180,7 +180,7 @@ async fn an_excluded_namespace_never_enters_the_outbox_nor_a_peers_store() {
 
     let url = serve(internal_router(b_state.clone())).await;
     let journal = a_rail.journal(KV).unwrap();
-    let out = exchange(&reqwest::Client::new(), &url, &a_rail, &journal).await;
+    let out = exchange(&reqwest::Client::new(), &url, &a_rail, &journal, None).await;
     assert!(out.stop.is_none(), "{:?}", out.stop);
     sovereign_mesh::rail_kv_pump::project_all_on_disk(&*b_state.inner.fabric).await;
 
@@ -263,7 +263,7 @@ async fn a_peers_private_namespace_is_taken_by_the_rail_and_refused_by_the_proje
     let url = serve(internal_router(b_state.clone())).await;
     let client = reqwest::Client::new();
     for journal in [&a_private, &a_public] {
-        let out = exchange(&client, &url, &a_rail, journal).await;
+        let out = exchange(&client, &url, &a_rail, journal, None).await;
         assert!(out.stop.is_none(), "{:?}", out.stop);
     }
 
@@ -396,7 +396,7 @@ async fn a_retention_sweep_is_not_undone_by_the_next_projection() {
     );
 
     let url = serve(internal_router(b_state.clone())).await;
-    let out = exchange(&reqwest::Client::new(), &url, &a_rail, &a_journal).await;
+    let out = exchange(&reqwest::Client::new(), &url, &a_rail, &a_journal, None).await;
     assert!(out.stop.is_none(), "the exchange failed: {:?}", out.stop);
     sovereign_mesh::rail_kv_pump::project_all_on_disk(&*b_state.inner.fabric).await;
     assert!(

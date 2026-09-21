@@ -198,8 +198,24 @@ pub fn spawn_ring_sync_loop(
     RingSyncHandle { _task: task }
 }
 
+/// An Online member of this mesh, as one round sees it.
+///
+/// Carries the key the roster filter decides on alongside the contact the
+/// transport dials, because the two are read from the same `MemberRecord` in
+/// the same pass and the filter runs per namespace, after the membership lock
+/// is gone.
+struct OnlinePeer {
+    contact: commonwealth_transport::PeerContact,
+    /// `None` for a member on a pre-identity build. Such a member is absent
+    /// from every DERIVED roster by construction (`ring_roster`'s
+    /// `unidentified` count), and [`crate::ring_roster::roster_names`] gives
+    /// it the same answer against a hand-written one.
+    pubkey: Option<commonwealth_core::ids::NodePubkey>,
+    name: String,
+}
+
 /// One anti-entropy pass over every namespace this node holds, against every
-/// online peer.
+/// online peer **its roster names**.
 pub async fn run_one_round(fabric: &FabricPart) -> RoundOutcome {
     let mut outcome = RoundOutcome::default();
     let Some(rail) = fabric.ring_rail() else {
@@ -224,14 +240,48 @@ pub async fn run_one_round(fabric: &FabricPart) -> RoundOutcome {
     };
 
     let self_id = fabric.identity.current();
-    let peers: Vec<commonwealth_transport::PeerContact> = {
+    let now_secs = fabric.clock().now_unix_secs();
+    let (stamp, peers, exchanged_with, skipped_offline) = {
         let mesh = fabric.mesh.read().await;
-        mesh.members
-            .values()
-            .filter(|m| m.node_id != self_id && m.status == NodeStatus::Online)
-            .map(peer_contact)
-            .collect()
+        // Minted once per round, under the lock this block already holds.
+        // `verify_mesh_proof` accepts the previous window too, so a round
+        // that outlives one `PROOF_WINDOW_SECS` is still accepted; a round
+        // that outlives two is not, and that is a round in far worse trouble
+        // than an unproved dial.
+        let stamp = commonwealth_transport::mesh_proof::mesh_proof_stamp(&mesh, self_id, now_secs);
+        let mut peers: Vec<OnlinePeer> = Vec::new();
+        let (mut online, mut offline): (Vec<String>, Vec<String>) = (Vec::new(), Vec::new());
+        for m in mesh.members.values() {
+            if m.node_id == self_id {
+                continue;
+            }
+            if m.status == NodeStatus::Online {
+                // The key travels WITH the contact because the roster filter
+                // below is per namespace: reading membership again inside that
+                // loop would be a second walk of `mesh.members` answering the
+                // same question (ARCH principle 8).
+                peers.push(OnlinePeer {
+                    contact: peer_contact(m),
+                    pubkey: m.node_pubkey,
+                    name: m.name.clone(),
+                });
+                online.push(m.name.clone());
+            } else {
+                offline.push(m.name.clone());
+            }
+        }
+        (stamp, peers, online, offline)
     };
+    // GLASSBOX: which members this round carried and which it passed over. A
+    // round that skips the only peer looks exactly like a round that had
+    // nothing to send, and room run 2 (2026-09-20) cost 85 s to a difference
+    // that was invisible in the log. Logged BEFORE the empty-peer return, so
+    // the skipped-everyone round is the one that says so.
+    info!(
+        exchanged_with = ?exchanged_with,
+        skipped_offline = ?skipped_offline,
+        "ring sync: round membership"
+    );
     if peers.is_empty() {
         return outcome;
     }
@@ -246,13 +296,60 @@ pub async fn run_one_round(fabric: &FabricPart) -> RoundOutcome {
                 continue;
             }
         };
-        for contact in &peers {
+        // ── A ring is OFFERED to its roster, and to nobody else.
+        //
+        // Per NAMESPACE and not per round: one peer may be on one ring and not
+        // another, so a round-level peer set cannot answer this. The roster is
+        // read through `RingRail::roster`, the rail's one reader — so a
+        // namespace whose roster is DERIVED from membership (every ring with no
+        // `roster.json`, and the seven `REGISTERED_NAMESPACES`) still names
+        // every member and this filter passes everyone, while the work plane,
+        // which is file-rostered on purpose, narrows.
+        //
+        // An UNREADABLE roster offers nothing for this namespace. Under-share,
+        // never over-share — the same posture `prune_what_the_peer_retired`
+        // takes when it cannot read one.
+        let roster = match rail.roster(&journal).await {
+            Ok(r) => r,
+            Err(e) => {
+                warn!(
+                    namespace,
+                    error = %e,
+                    "ring sync: this namespace's roster is unreadable, so it is \
+                     offered to nobody this round"
+                );
+                continue;
+            }
+        };
+        let (offered_to, skipped_not_on_roster): (Vec<&OnlinePeer>, Vec<&str>) = {
+            let mut on = Vec::new();
+            let mut off = Vec::new();
+            for p in &peers {
+                if crate::ring_roster::roster_names(&roster, p.pubkey) {
+                    on.push(p);
+                } else {
+                    off.push(p.name.as_str());
+                }
+            }
+            (on, off)
+        };
+        // GLASSBOX: the third list beside exchanged and offline. A namespace
+        // that reaches nobody because its roster names nobody looks exactly
+        // like a namespace with nothing to send.
+        debug!(
+            namespace,
+            offered_to = ?offered_to.iter().map(|p| p.name.as_str()).collect::<Vec<_>>(),
+            skipped_not_on_roster = ?skipped_not_on_roster,
+            "ring sync: namespace roster"
+        );
+
+        for OnlinePeer { contact, .. } in offered_to {
             let endpoints = transport.endpoints(contact, TrafficClass::Gossip).await;
             let mut reached = false;
             let mut refused = false;
             for ep in &endpoints {
                 let url = format!("{}/internal/ring/sync", ep.base_url);
-                let ex = exchange(http, &url, &rail, &journal).await;
+                let ex = exchange(http, &url, &rail, &journal, stamp.as_ref()).await;
                 // Counted BEFORE the verdict is read. `ingest_all` has already
                 // written these lines to disk, so they are progress whether or
                 // not a later call in the same exchange failed — the old shape
@@ -265,16 +362,20 @@ pub async fn run_one_round(fabric: &FabricPart) -> RoundOutcome {
                         reached = true;
                         break; // one working address is enough
                     }
-                    Some(ExchangeStop::Refused { sent_bytes }) => {
+                    Some(ExchangeStop::Refused { sent_bytes, status }) => {
                         refused = true;
                         warn!(
                             peer = %contact.node_id,
                             url = %url,
                             sent_bytes,
+                            status,
                             budget_bytes = RING_SYNC_OPS_BUDGET_BYTES,
-                            "ring sync: peer refused the body as too large — it \
-                             ANSWERED, so this is not an unreachable peer: its \
-                             body limit is below this build's exchange budget"
+                            "ring sync: peer REFUSED — it answered, so this is \
+                             not an unreachable peer. 413: its body limit is \
+                             below this build's exchange budget. 403: it does \
+                             not serve this ring to us — either this node holds \
+                             no mesh credential the peer accepts, or the ring's \
+                             roster does not name us"
                         );
                     }
                     Some(ExchangeStop::Failed(detail)) => {
@@ -326,13 +427,23 @@ pub async fn run_one_round(fabric: &FabricPart) -> RoundOutcome {
 /// Why an exchange with one peer address stopped.
 #[derive(Debug)]
 pub enum ExchangeStop {
-    /// The peer **answered**, and refused our body as too large.
+    /// The peer **answered**, and refused. Two statuses arrive here and both
+    /// are answers rather than reachability: `413`, our body was too large,
+    /// and `403`, this ring is not served to us.
     ///
     /// Its own variant because the alternative is the collapse this rung
     /// exists to undo: a 413 came back as `Err("HTTP 413")`, indistinguishable
     /// from a dead socket, and the round filed a reachable peer under
-    /// `peers_unreachable` at DEBUG.
-    Refused { sent_bytes: usize },
+    /// `peers_unreachable` at DEBUG. The 403 had exactly the same shape until
+    /// `tg-2-strangers-are-refused`, and it is the status the new internal-port
+    /// gate and `roster_refusal` both answer with — so a round refused for
+    /// identity would have read as a partitioned mesh.
+    ///
+    /// `status` is carried because the two need different sentences: a 413
+    /// names a body limit below this build's budget, a 403 names a refusal to
+    /// serve. `sent_bytes` is honest for both — it is what THIS side put on
+    /// the wire, measured before the send.
+    Refused { sent_bytes: usize, status: u16 },
     /// Everything else this address could stop on: no route, a timeout, a
     /// 5xx, an answer this build could not read, or **this node's own journal
     /// refusing to read**. They are one variant because the round does the
@@ -439,6 +550,10 @@ pub async fn exchange(
     url: &str,
     rail: &commonwealth_rail::RingRail,
     journal: &commonwealth_rail::RingJournal,
+    // This node's proof that it holds the mesh secret, or `None` on a mesh
+    // with no credential. Carried through rather than minted here: one
+    // function mints it, and it is the round that holds the mesh.
+    stamp: Option<&commonwealth_transport::mesh_proof::MeshProofStamp>,
 ) -> ExchangeOutcome {
     let namespace = journal.namespace();
     let mut out = ExchangeOutcome::default();
@@ -458,6 +573,7 @@ pub async fn exchange(
                 digest: mine,
                 ops: Vec::new(),
             },
+            stamp,
         )
         .await
         {
@@ -506,6 +622,7 @@ pub async fn exchange(
                     digest: refreshed,
                     ops: for_peer,
                 },
+                stamp,
             )
             .await
             {
@@ -560,6 +677,7 @@ async fn post(
     http: &reqwest::Client,
     url: &str,
     body: &RingSyncRequest,
+    stamp: Option<&commonwealth_transport::mesh_proof::MeshProofStamp>,
 ) -> Result<RingSyncResponse, ExchangeStop> {
     // Serialised here rather than handed to `.json(body)` so the byte count
     // the receiver's limit judges is a number THIS side can name in a log.
@@ -568,16 +686,27 @@ async fn post(
         Err(e) => return Err(ExchangeStop::Failed(format!("local encode: {e}"))),
     };
     let sent_bytes = payload.len();
-    let resp = http
+    let mut request = http
         .post(url)
         .header(reqwest::header::CONTENT_TYPE, "application/json")
-        .body(payload)
+        .body(payload);
+    // Ring sync is NOT gossip: nothing in its body proves the caller holds
+    // this mesh's secret, so on a plain-IP hop the header is the only thing
+    // that can. Absent on a mesh with no credential, never faked.
+    if let Some((name, value)) = stamp.map(|s| s.pair()) {
+        request = request.header(name, value);
+    }
+    let resp = request
         .send()
         .await
         .map_err(|e| ExchangeStop::Failed(e.to_string()))?;
     let status = resp.status();
-    if status == reqwest::StatusCode::PAYLOAD_TOO_LARGE {
-        return Err(ExchangeStop::Refused { sent_bytes });
+    if status == reqwest::StatusCode::PAYLOAD_TOO_LARGE || status == reqwest::StatusCode::FORBIDDEN
+    {
+        return Err(ExchangeStop::Refused {
+            sent_bytes,
+            status: status.as_u16(),
+        });
     }
     if !status.is_success() {
         return Err(ExchangeStop::Failed(format!("HTTP {status}")));

@@ -295,7 +295,7 @@ async fn a_queue_mode_merge_lands_a_corpus_a_user_can_reach() {
     let (handoff_id, manager) = queue_mode_handoff(&f).await;
 
     let outcome = manager
-        .coordinate_merge(handoff_id, f.local, &f.peer_urls)
+        .coordinate_merge(handoff_id, f.local, &f.peer_urls, None)
         .await;
 
     // Fixture check first, so a broken harness cannot be misread as the bar

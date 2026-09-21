@@ -252,11 +252,15 @@ impl Admission for AppState {
             Principal::Member { node_id } => {
                 admit_member(self, *node_id, now_unix_ms, PeerWork::Inference)
             }
-            // Every other arm is a client: the fair share.
+            // Every other arm is a client: the fair share. `Unverified` rides
+            // here too — it is not a member, so it gets no peer ceiling and no
+            // reciprocity weight. Whether a given ROUTE serves it at all is the
+            // route's question, not this gate's.
             Principal::LocalOwner { .. }
             | Principal::RemoteClient { .. }
             | Principal::Guest { .. }
-            | Principal::Anonymous => admit_client(self, who),
+            | Principal::Anonymous
+            | Principal::Unverified => admit_client(self, who),
         }
     }
 
@@ -287,6 +291,39 @@ impl Admission for AppState {
     }
 }
 
+/// The node a request is ATTRIBUTED to — the one reader every attribution,
+/// affinity and ledger site shares.
+///
+/// The input is the [`Principal`] the surface's resolver attached, never the
+/// headers: `x-node-id` is what a caller TYPES about itself, and four sites
+/// used to believe it (`crate::mesh_principal_gate` is the ratchet that keeps
+/// them from doing so again).
+///
+/// `None` means "attribute this to nobody" and is a reported absence, never
+/// node zero. It covers three different callers and each is correct to skip:
+/// a local client that named no peer, a caller whose claim this node could not
+/// verify, and a request that reached a route with no resolver in front. The
+/// middle one is logged, because "I was asked to believe something and I
+/// cannot" is a fact about the mesh and not a quiet default (ARCH principle 6).
+///
+/// These are attribution sites, not authorization sites: they need an identity
+/// to CREDIT one, and crediting nobody is a sound answer. The site that cannot
+/// answer without an identity is the peer ceiling, and it refuses instead
+/// (`sovereign_serving_host::admission`'s peer gate).
+pub fn requester(attached: Option<axum::Extension<AttachedPrincipal>>) -> Option<NodeId> {
+    let who = attached
+        .map(|axum::Extension(a)| a.0)
+        .unwrap_or(Principal::Anonymous);
+    if matches!(who, Principal::Unverified) {
+        tracing::debug!(
+            target: "transport",
+            "attribution: this caller claimed a peer identity the node could \
+             not verify — served, and credited to nobody"
+        );
+    }
+    who.node_id()
+}
+
 impl AdmissionHost for AppState {
     fn resolve(&self, headers: &HeaderMap, peer: Option<std::net::SocketAddr>) -> Principal {
         // The one edge resolver (`crate::client_principal::AppState::resolve`),
@@ -299,21 +336,13 @@ impl AdmissionHost for AppState {
         AppState::resolve(self, headers, peer, ClientAuthPolicy::default())
     }
 
-    fn parse_node_id(&self, headers: &HeaderMap) -> Option<NodeId> {
-        crate::headers::parse_x_node_id(headers)
-    }
-
     fn peer_tally(&self, node: &NodeId) -> Box<dyn AdmissionLease> {
-        // The port carries the verified node id (the wire fact the host
-        // parsed); the tally is keyed by the one `Principal` it forms.
+        // The node id is the one the resolver VERIFIED, not one this port
+        // parsed; the tally is keyed by the one `Principal` it forms.
         Box::new(TallyGuard::new(
             Arc::clone(&self.inner),
             Principal::Member { node_id: *node },
         ))
-    }
-
-    fn record_rejected_node_id(&self, raw: &str) {
-        self.inner.record_rejected_x_node_id(raw);
     }
 }
 
@@ -1114,11 +1143,23 @@ mod tests {
     /// and the raw value is recorded with its timestamp so /status can name it
     /// instead of showing an opaque `node-0000000000000000` row (ARCH §18.3 —
     /// absence is reported, never defaulted).
+    /// bar `mp-principal-is-the-verified-key`:
+    ///
+    /// A present-but-malformed claim is REFUSED, and its raw value is still
+    /// named on `/status`'s zero-bucket row.
+    ///
+    /// This is the half of commons-fluency fix 7 that changed on 2026-09-20.
+    /// The requirement was "must still be GATED, never bypassing the ceiling",
+    /// and the implementation met it by serving the request under node zero —
+    /// which means one unverifiable caller could spend the zero bucket that
+    /// every other unverifiable caller shares, and be SERVED while doing it.
+    /// A ceiling keyed on an id nobody proved is a ceiling any caller can
+    /// pick, so the request is now refused instead. The reporting half is
+    /// unchanged and is what this still asserts: the raw value is recorded —
+    /// by the resolver that read it — so the row names it rather than showing
+    /// an opaque `node-0000000000000000` (ARCH principle 6).
     #[tokio::test]
-    async fn middleware_malformed_header_buckets_zero_and_is_named() {
-        // Fix 7: a present-but-malformed X-Node-Id must (a) still be gated
-        // and tallied — under the ZERO node, never bypassing the ceiling —
-        // and (b) record the rejected raw value so /status can name it.
+    async fn middleware_malformed_header_is_refused_and_still_named() {
         let s = fresh_state();
         let router = tally_test_router(s.clone());
         let mut req = peer_req("/chat");
@@ -1128,13 +1169,15 @@ mod tests {
             .clone()
             .oneshot(req)
             .await
-            .expect("malformed header must still be admitted (zero bucket)");
-        assert_eq!(resp.status(), axum::http::StatusCode::OK);
+            .expect("the gate must respond");
+        assert_eq!(resp.status(), axum::http::StatusCode::FORBIDDEN);
         drop(resp);
-        assert_eq!(
-            tally_of(&s, NodeId::from_u128(0)).served_total,
-            1,
-            "the malformed request must tally under the zero node"
+        assert!(
+            s.inner.peer_tally_snapshot().is_empty(),
+            "a refused request is not served, so it must open NO tally row — \
+             not even a zero-node one, which would read on /status as a peer \
+             this node served: {:?}",
+            s.inner.peer_tally_snapshot()
         );
         let rejected = s
             .inner

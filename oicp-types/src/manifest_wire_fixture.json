@@ -1,0 +1,85 @@
+{
+  "oicp_version": "0.4.0",
+  "provider": {
+    "name": "Qwen3.6-35B-A3B-MTP-UD-Q6_K",
+    "type": "mesh"
+  },
+  "models": [
+    {
+      "id": "Qwen3.5-4B-UD-MTP-Q6_K_XL",
+      "context_tokens": 32768,
+      "status": {
+        "available": true,
+        "loaded": false
+      },
+      "size_gb": 2.83,
+      "claims": [
+        {
+          "hint": "general",
+          "latency_class": "fast",
+          "max_context": 2048,
+          "max_output": 512,
+          "affinity": 0.55
+        },
+        {
+          "hint": "general",
+          "latency_class": "fast",
+          "max_context": 8000,
+          "max_output": 24576,
+          "affinity": 0.5
+        }
+      ],
+      "fingerprint": "Qwen3.5-4B-UD-MTP-Q6_K_XL#2.830"
+    },
+    {
+      "id": "Qwen3.6-35B-A3B-MTP-UD-Q6_K",
+      "context_tokens": 32768,
+      "status": {
+        "available": true,
+        "loaded": true,
+        "estimated_tokens_per_sec": 14.75,
+        "estimated_ttft_ms": 900,
+        "estimated_load_time_sec": 37
+      },
+      "size_gb": 28.4,
+      "claims": [
+        {
+          "hint": "general",
+          "latency_class": "normal",
+          "max_context": 32768,
+          "max_output": 24576,
+          "affinity": 0.8
+        }
+      ]
+    }
+  ],
+  "knowledge": {
+    "corpora": [],
+    "search_endpoint": "/v1/knowledge/search",
+    "embed_model": {
+      "model_id": "qwen-embedding-0.6b",
+      "dimensions": 1024,
+      "pooling": "mean",
+      "normalization": "application",
+      "query_instruction_prefix": "Instruct: Given a search query, retrieve relevant passages that answer the query\nQuery: "
+    },
+    "ingest": {
+      "install_endpoint": "/oicp/v1/corpus/install",
+      "progress_endpoint": "/oicp/v1/corpus/progress",
+      "test_endpoint": "/oicp/v1/recipe/test"
+    }
+  },
+  "features": [
+    "constraint:json_schema",
+    "constraint:json_object",
+    "constraint:lark",
+    "constraint:allowlist:url",
+    "constraint:allowlist:evidence_id",
+    "constraint:allowlist:cmd_prefix",
+    "think_budget",
+    "oicp:request_properties",
+    "x:forced_choice",
+    "ingest:v1",
+    "ingest:recipe_test"
+  ]
+}

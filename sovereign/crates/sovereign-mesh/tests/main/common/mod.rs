@@ -69,6 +69,7 @@ pub fn empty_capabilities() -> NodeCapabilities {
         loaded_models: vec![],
         origins: Vec::new(),
         media_allow: Vec::new(),
+        media_available: None,
         embed_model: None,
         benchmark: None,
         current_in_flight: None,
@@ -132,9 +133,59 @@ pub fn solo_mesh(self_id: NodeId, name: &str) -> Mesh {
 }
 
 /// Hex-encode a `NodeId` for the `X-Node-Id` header. 32 hex chars,
-/// lowercase — matches `sovereign_daemon::headers::parse_x_node_id`.
+/// lowercase — matches `sovereign_contracts::principal::claimed_node_id`.
 pub fn id_to_hex(id: &NodeId) -> String {
     id.as_bytes().iter().map(|b| format!("{b:02x}")).collect()
+}
+
+// ── The verified peer identity on the internal plane ────────────
+
+/// Name `id` in `state`'s roster with a verified key, so a request stamped by
+/// [`acceptor_stamp`] with that key resolves to this member.
+///
+/// A member whose record carries no `node_pubkey` is a member this node cannot
+/// identify on the wire, and `internal_principal` resolves such a caller
+/// `Unverified` by design — so a test that wants attribution has to say which
+/// key the roster knows, exactly as a real join does.
+pub async fn name_member_with_key(
+    state: &sovereign_daemon::state::AppState,
+    id: NodeId,
+    name: &str,
+    pubkey: [u8; 32],
+) {
+    let mut rec = member(id, name, "127.0.0.1:9742".parse().unwrap());
+    rec.node_pubkey = Some(commonwealth_core::ids::NodePubkey(pubkey));
+    state
+        .inner
+        .fabric
+        .mesh
+        .write()
+        .await
+        .members
+        .insert(id, rec);
+}
+
+/// Stamp a request exactly as this node's OWN iroh acceptor stamps an internal
+/// forward: the verified identity triple plus the per-process acceptor mark.
+///
+/// This is how an internal-plane test speaks as a peer now. A bare
+/// `X-Node-Id` header is no longer an identity anywhere behind the internal
+/// router — it is what a caller TYPES, and `internal_principal` strips it —
+/// so a test that wants to be attributed has to present what the acceptor
+/// presents. The mark is this process's secret and a test runs in the same
+/// process as the router it is driving, which is what makes the tie reachable
+/// here and unreachable from outside.
+pub fn acceptor_stamp(
+    req: reqwest::RequestBuilder,
+    name: &str,
+    id: NodeId,
+    pubkey: [u8; 32],
+) -> reqwest::RequestBuilder {
+    use commonwealth_transport::iroh_identity_forward::{acceptor_mark, ACCEPTOR_MARK_HEADER};
+    req.header("X-Mesh-Member", name)
+        .header("X-Mesh-Node", id.to_string())
+        .header("X-Mesh-Pubkey", hex::encode(pubkey))
+        .header(ACCEPTOR_MARK_HEADER, acceptor_mark())
 }
 
 // ── Router spawning ─────────────────────────────────────────────
@@ -190,6 +241,7 @@ pub fn client_app_state(
         mesh,
         sovereign_daemon::state::NodeSeed {
             client_token: token.map(std::sync::Arc::<str>::from),
+            ..Default::default()
         },
     )
 }

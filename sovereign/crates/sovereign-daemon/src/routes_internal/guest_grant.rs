@@ -69,18 +69,40 @@ pub struct ScopeRequest {
     /// grant — see [`Scope::Rails`] for why it is not a list.
     #[serde(default)]
     pub rail: Option<String>,
+    /// The whole WALL: every namespace `[daemon.guest_pages]` declares. Names
+    /// no namespace, because the registry is the one that does — see
+    /// [`Scope::Wall`].
+    #[serde(default)]
+    pub wall: Option<bool>,
 }
 
 impl ScopeRequest {
-    fn into_scopes(self) -> Vec<Scope> {
+    /// The scopes this request asks for, or the sentence refusing it.
+    ///
+    /// **The wall and one namespace are two different asks, and asking for
+    /// both is a contradiction rather than a union.** `--wall --rail x` reads
+    /// as "reach everything declared, and also only x"; minting the wider of
+    /// the two would hand out reach the operator did not mean to give, and
+    /// minting the narrower would quietly ignore half of what they typed.
+    /// Refused, in the CLI and here, so neither surface is the only guard.
+    fn into_scopes(self) -> Result<Vec<Scope>, String> {
         let mut out = Vec::new();
         if let Some(models) = self.models {
             out.push(Scope::Models(models));
         }
-        if let Some(rail) = self.rail {
-            out.push(Scope::Rails(rail));
+        match (self.wall.unwrap_or(false), self.rail) {
+            (true, Some(rail)) => {
+                return Err(format!(
+                    "a grant is for the whole wall or for one app, not both — drop \
+                     `scopes.wall` to keep '{rail}', or drop `scopes.rail` to reach \
+                     every app this door registered for guests"
+                ))
+            }
+            (true, None) => out.push(Scope::Wall),
+            (false, Some(rail)) => out.push(Scope::Rails(rail)),
+            (false, None) => {}
         }
-        out
+        Ok(out)
     }
 }
 
@@ -110,7 +132,10 @@ pub async fn guest_grant_issue(
     State(state): State<AppState>,
     Json(req): Json<GuestGrantRequest>,
 ) -> Result<Json<GuestGrantResponse>, (StatusCode, Json<ErrorBody>)> {
-    let scopes = req.scopes.into_scopes();
+    let scopes = req
+        .scopes
+        .into_scopes()
+        .map_err(|error| (StatusCode::BAD_REQUEST, Json(ErrorBody { error })))?;
     if scopes.is_empty() {
         // A grant that permits nothing is a legal state in the store, but
         // minting one is always a mistake — refuse rather than hand back a
@@ -118,8 +143,8 @@ pub async fn guest_grant_issue(
         return Err((
             StatusCode::BAD_REQUEST,
             Json(ErrorBody {
-                error: "a grant must name at least one scope — pass `scopes.models` \
-                        or `scopes.rail`"
+                error: "a grant must name at least one scope — pass `scopes.models`, \
+                        `scopes.rail` or `scopes.wall`"
                     .into(),
             }),
         ));
@@ -139,7 +164,7 @@ pub async fn guest_grant_issue(
             // namespace is not an error either: a rail namespace is
             // created by its first write, so "not seen before" is the
             // normal case for the first app deployed to a ring.
-            Scope::Rails(_) => continue,
+            Scope::Rails(_) | Scope::Wall => continue,
         };
         for id in ids {
             if !dispatchable.iter().any(|d| d == id) {

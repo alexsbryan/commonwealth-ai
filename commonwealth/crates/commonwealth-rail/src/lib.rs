@@ -427,11 +427,19 @@ impl RingJournal {
     /// Refuses only what the rail can judge — see the module docs on the
     /// door. The whole operation holds the writer lock, so `seq` cannot be
     /// handed out twice.
+    ///
+    /// `on_behalf_of` states whose words the act was when the key signing it
+    /// is not theirs — see [`SignedOp::on_behalf_of`]. A parameter rather
+    /// than a second `append_*` door: the name is inside the signature, so a
+    /// caller that could sign without deciding about it would be a second
+    /// answer to what these bytes are (ARCH §10.6). `None` is every caller
+    /// that writes its own acts.
     pub fn append(
         &self,
         act: RailAct,
         signer: &dyn RingSigner,
         roster: &Roster,
+        on_behalf_of: Option<&str>,
     ) -> Result<Op<SignedOp>, RailError> {
         let actor = signer.actor();
         // Authoring under a key the ring does not carry produces an op that
@@ -476,13 +484,14 @@ impl RingJournal {
             .duration_since(UNIX_EPOCH)
             .map(|d| d.as_secs() as i64)
             .unwrap_or(0);
-        let body = body_json(&act);
+        let body = body_json(&act, on_behalf_of);
         let signature = signer.sign(&self.namespace, ts_unix, seq, &body);
         let op = Op::new(
             SignedOp {
                 seq,
                 sig: signature,
                 act,
+                on_behalf_of: on_behalf_of.map(str::to_string),
             },
             ts_unix,
             actor.clone(),
@@ -493,6 +502,7 @@ impl RingJournal {
             id = %op.id,
             actor = %actor,
             seq,
+            on_behalf_of = ?on_behalf_of,
             "ring rail: appended"
         );
         Ok(op)
@@ -622,7 +632,7 @@ impl RingJournal {
         roster: &Roster,
         verifier: &dyn RingVerifier,
     ) -> Result<Sealed, RailError> {
-        let op = self.append(RailAct::Seal, signer, roster)?;
+        let op = self.append(RailAct::Seal, signer, roster, None)?;
         let retired = self.compact(roster, verifier);
         if let Err(e) = &retired {
             tracing::warn!(

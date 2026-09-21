@@ -2,7 +2,7 @@
 //! Federated media on the mesh rails — the library half of what a
 //! Jellyswarrm-shaped shim needs, with nothing Jellyfin in it.
 //!
-//! Three questions, each answered once so the inference daemon and a
+//! Five questions, each answered once so the inference daemon and a
 //! package-only rails daemon cannot answer them differently (ARCH §10.6):
 //!
 //! - **Who is asking, and may they?** [`identity`]: the verified member behind
@@ -16,6 +16,9 @@
 //! - **What do I publish right now?** [`apps`]: the live registry behind the
 //!   named-app origins, whose claimed tier cannot outlive the process that
 //!   took it.
+//! - **Is the holder using their own library right now?** [`presence`]: the
+//!   origin's live sessions read into the one number gossip carries, where a
+//!   refusal is `None` and never "free".
 //!
 //! Everything here takes a roster snapshot and a transport; nothing here
 //! holds daemon state, opens a listener, or knows what a title is. The
@@ -26,13 +29,18 @@ pub mod apps;
 pub mod declared;
 pub mod fanout;
 pub mod identity;
+pub mod presence;
 pub mod reach;
 
 pub use apps::{valid_app_name, AppClaim, PublishRefusal, PublishedApp, PublishedApps, Tier};
-pub use declared::{dir_under, read_declared_in, valid_header_name, write_declared_in};
-pub use identity::{
-    admit_app, admit_media, admit_offer, admits_no_one, MemberCheck, MemberIdentity,
+pub use declared::{
+    dir_under, house_dir_under, read_declared_in, valid_header_name, write_declared_in,
 };
+pub use identity::{
+    admit_app, admit_media, admit_offer, admits_no_one, verified_headers, MemberCheck,
+    MemberIdentity,
+};
+pub use presence::{media_available_from_sessions, PresenceError, FREE, IN_USE};
 pub use reach::{
     candidate_of, offering_members, offers, path_to, pick_member, player_url, reach, roster_of,
     MediaCandidate, MediaOffer, MediaReach, MediaReachRefusal, PeerTransportPath,

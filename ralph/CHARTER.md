@@ -40,9 +40,12 @@ package reaches you only when a correction would weaken a bar, widen an
 
 ## Always
 
-- Record the decision in `ralph/DECISIONS.md`: date, unit, the fork, the
-  choice, the evidence (file:line or the run), what would falsify it, and the
-  commit hash(es) the decision landed in.
+- Record the decision with `scripts/ralph-decisions.py new <campaign>`: date,
+  unit, the fork, the choice, the evidence (file:line or the run), what would
+  falsify it, and the commit hash(es) the decision landed in. It prints the
+  path; fill it and run `scripts/ralph-decisions.py --write`. Do NOT append to
+  `ralph/DECISIONS.md` — that page is rendered from the entry files, one per
+  decision, so two campaigns running at once never collide (`ledger-1`).
 - **One decision, one commit** (or a tight series): never mix an unrelated
   change in, so the operator can `git revert <sha>` a decision they disagree
   with without unpicking anything else.

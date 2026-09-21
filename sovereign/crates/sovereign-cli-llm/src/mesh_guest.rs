@@ -39,11 +39,12 @@ use sovereign_mesh::deep_link::{
 };
 
 use crate::guest_link::{self, GuestLink};
+use crate::mesh_guest_link::{wall_page_base, wall_qr_svg};
 
 /// Read the daemon's client port from `SetupConfig` rather than hardcoding
 /// 9741 — a sandbox pointed at its own daemon must not mint against the
 /// operator's.
-fn daemon_client_port() -> u16 {
+pub(crate) fn daemon_client_port() -> u16 {
     sovereign_core::setup_config::SetupConfig::load()
         .map(|c| c.daemon.client_port)
         .unwrap_or(9741)
@@ -266,7 +267,7 @@ async fn resolve_guest_path(url_override: Option<&str>, port: u16) -> Result<Gue
         .unwrap_or_else(|| "this node published no address a guest could use".to_string()))
 }
 
-fn http_client(timeout_secs: u64) -> Result<reqwest::Client, String> {
+pub(crate) fn http_client(timeout_secs: u64) -> Result<reqwest::Client, String> {
     reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(timeout_secs))
         .build()
@@ -274,7 +275,7 @@ fn http_client(timeout_secs: u64) -> Result<reqwest::Client, String> {
 }
 
 /// Pull `error` out of an `ErrorBody` response, falling back to the raw text.
-async fn error_text(resp: reqwest::Response) -> String {
+pub(crate) async fn error_text(resp: reqwest::Response) -> String {
     let status = resp.status();
     match resp.text().await {
         Ok(body) => serde_json::from_str::<serde_json::Value>(&body)
@@ -298,7 +299,7 @@ pub(crate) const HELP_MESH_GRANT: Help = Help {
     summary: "Lend named models to someone who is NOT a mesh member, for a bounded window.",
     sections: &[
         HelpSection::Usage(
-            "svrn mesh grant --model <id> [--model <id>…] [--rail <ns>] [--ttl 2h] [--label <text>]\n\
+            "svrn mesh grant --model <id> [--model <id>…] [--wall | --rail <ns>] [--ttl 2h] [--label <text>]\n\
              \x20               [--url <base>] [--qr-svg <path>]\n\
              svrn mesh grant --list\n\
              svrn mesh grant --revoke <token>",
@@ -309,8 +310,12 @@ pub(crate) const HELP_MESH_GRANT: Help = Help {
                 "A model this grant may dispatch. Repeatable. Exact ids from `/v1/models`.",
             ),
             (
+                "--wall",
+                "Also reach every ring app this door registered for guests in\n                    [daemon.guest_pages]. ONE grant and ONE QR for the whole wall:\n                    the phone lands on the door's index and picks. The owner widens\n                    the wall by registering an app, not by minting another link.",
+            ),
+            (
                 "--rail <ns>",
-                "Also read and write this one ring-app rail namespace (the wall grant).",
+                "The narrowing knob: reach exactly this one rail namespace and no\n                    other. Not combinable with --wall.",
             ),
             (
                 "--ttl <dur>",
@@ -319,7 +324,7 @@ pub(crate) const HELP_MESH_GRANT: Help = Help {
             ("--label <text>", "Your own note, shown by --list. Never sent to the guest."),
             (
                 "--url <base>",
-                "Base URL the guest should reach you at. Default: this node's published address.",
+                "Base URL the guest should reach you at. Default: this node's published address.\n                    With --rail the QR link adds that app's page path at the door; with\n                    --wall it points at the door's index, which lists them all.",
             ),
             (
                 "--qr-svg <path>",
@@ -352,6 +357,7 @@ pub(crate) async fn cmd_grant(args: &[String]) -> i32 {
     let mut label: Option<String> = None;
     let mut url_override: Option<String> = None;
     let mut rail: Option<String> = None;
+    let mut wall = false;
     let mut qr_svg: Option<String> = None;
     let mut list = false;
     let mut revoke: Option<String> = None;
@@ -427,6 +433,7 @@ pub(crate) async fn cmd_grant(args: &[String]) -> i32 {
                     }
                 };
             }
+            "--wall" => wall = true,
             "--list" => list = true,
             "--revoke" => {
                 i += 1;
@@ -443,6 +450,16 @@ pub(crate) async fn cmd_grant(args: &[String]) -> i32 {
             }
         }
         i += 1;
+    }
+
+    // "Everything declared" and "exactly this one" are contradictory asks, not
+    // a union. Refused here AND at the mint route, so neither surface is the
+    // only guard (ARCH 5).
+    if wall && rail.is_some() {
+        eprintln!("--wall and --rail are two different grants: the whole wall, or one app.");
+        eprintln!("Drop one. `--wall` reaches every app in [daemon.guest_pages];");
+        eprintln!("`--rail <ns>` reaches that one and refuses the rest by name.");
+        return 2;
     }
 
     // The https link's base is the address the operator typed; there is no
@@ -509,6 +526,9 @@ pub(crate) async fn cmd_grant(args: &[String]) -> i32 {
     let mut scopes = serde_json::json!({ "models": models });
     if let Some(ns) = &rail {
         scopes["rail"] = serde_json::json!(ns);
+    }
+    if wall {
+        scopes["wall"] = serde_json::json!(true);
     }
     let body = serde_json::json!({
         "scopes": scopes,
@@ -595,7 +615,7 @@ pub(crate) async fn cmd_grant(args: &[String]) -> i32 {
     if let (Some(path), Some(base)) = (&qr_svg, &url_override) {
         let https = build_https_guest_link(
             token,
-            base,
+            &wall_page_base(base, rail.as_deref(), wall),
             expires_at_secs,
             (!summary.is_empty()).then_some(summary),
         );
@@ -621,20 +641,6 @@ pub(crate) async fn cmd_grant(args: &[String]) -> i32 {
     println!("  svrn mesh grant --revoke {token}");
     println!();
     0
-}
-
-/// The QR module margin, in modules. Four is the quiet zone the QR standard
-/// requires; a scanner cannot find the finder patterns without it.
-const QR_QUIET_ZONE: usize = 4;
-
-/// Render `link` as an SVG QR code, square modules, with the standard quiet
-/// zone.
-fn wall_qr_svg(link: &str) -> Result<String, String> {
-    use fast_qr::convert::{svg::SvgBuilder, Builder};
-    let qr = fast_qr::QRBuilder::new(link)
-        .build()
-        .map_err(|e| format!("cannot encode the link as a QR code: {e}"))?;
-    Ok(SvgBuilder::default().margin(QR_QUIET_ZONE).to_str(&qr))
 }
 
 async fn grant_list(port: u16) -> i32 {
@@ -1021,55 +1027,6 @@ async fn verify_link(link: &GuestLink) -> Result<Vec<String>, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    /// Rasterise the SVG `wall_qr_svg` writes — its `viewBox` and one
-    /// `M{x},{y}h1v1h-1` per dark module — onto a DARK surround, and decode
-    /// it. The surround is the point: on an all-white canvas rqrr decodes a
-    /// code with no quiet zone at all (measured), so only a page that is not
-    /// white shows whether the SVG carries its own.
-    #[test]
-    fn the_wall_qr_svg_decodes_back_to_the_exact_link() {
-        let link = build_https_guest_link(
-            "0123456789abcdef0123456789abcdef",
-            "http://192.168.1.10:9750/app/ring-doc/",
-            1_787_900_000,
-            Some("big, rail:wall"),
-        );
-        let svg = wall_qr_svg(&link).expect("encodes");
-        let n: usize = svg
-            .split_once(r#"viewBox="0 0 "#)
-            .and_then(|(_, rest)| rest.split(' ').next())
-            .and_then(|s| s.parse().ok())
-            .expect("a viewBox");
-        let mut dark = vec![false; n * n];
-        for cmd in svg.split('M').skip(1) {
-            let Some((xy, _)) = cmd.split_once('h') else {
-                continue;
-            };
-            let Some((x, y)) = xy.split_once(',') else {
-                continue;
-            };
-            let (x, y): (usize, usize) = (x.parse().unwrap(), y.parse().unwrap());
-            dark[y * n + x] = true;
-        }
-        const PX: usize = 4;
-        const SURROUND: usize = 4;
-        let side = (n + 2 * SURROUND) * PX;
-        let mut img = rqrr::PreparedImage::prepare_from_greyscale(side, side, |x, y| {
-            let (mx, my) = (x / PX, y / PX);
-            let inside =
-                (SURROUND..SURROUND + n).contains(&mx) && (SURROUND..SURROUND + n).contains(&my);
-            if !inside || dark[(my - SURROUND) * n + (mx - SURROUND)] {
-                0
-            } else {
-                255
-            }
-        });
-        let grids = img.detect_grids();
-        assert_eq!(grids.len(), 1, "exactly one QR code found in the SVG");
-        let (_, decoded) = grids[0].decode().expect("decodes");
-        assert_eq!(decoded, link);
-    }
 
     #[test]
     fn ttl_accepts_the_suffixes_the_help_advertises() {

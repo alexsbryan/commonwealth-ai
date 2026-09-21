@@ -151,6 +151,19 @@ impl DecisionSink for TracingDecisionSink {
                         "routing decision (gated) — stayed local before scoring"
                     );
                 } else {
+                    // `scores` and `decided_by` are RENDERED, not gathered: the
+                    // record has carried every term per candidate since the
+                    // scorer was written, and nothing put them where an
+                    // operator reads. That gap cost a measurement — ring-room's
+                    // `wl-route-06303aff` read `verdict=stay_local scored=3`
+                    // and then spent 38.2 s locally with an idle GPU peer in
+                    // the mesh, and the artifact could not say which term kept
+                    // it home (ralph A33 / A35). Principle 1.
+                    //
+                    // Cost: one short string per non-gated decision, on a line
+                    // that already exists. The full per-candidate breakdown
+                    // stays in the record for anyone collecting it.
+                    let (scores, decided_by) = score_summary(&d.candidates, &d.verdict);
                     tracing::info!(
                         target: DECISION_TRACE_TARGET,
                         decision_id = %d.decision_id,
@@ -160,6 +173,8 @@ impl DecisionSink for TracingDecisionSink {
                         winner = %winner,
                         scored = d.candidates.len(),
                         excluded = d.excluded.len(),
+                        scores = %scores,
+                        decided_by = %decided_by,
                         hint = %d.request.capability_hint,
                         latency = %d.request.latency_class,
                         "routing decision"
@@ -230,6 +245,94 @@ impl DecisionSink for TracingDecisionSink {
     }
 }
 
+/// How many candidates' scores the `routing decision` line renders, best-first.
+///
+/// Four covers the decision — a winner and the rivals that were close — on
+/// every fleet this repo runs, and bounds one `info` line at ~80 characters on
+/// a 100-node mesh rather than ~1.5 KB.
+const SCORES_RENDERED: usize = 4;
+
+/// Render the leading candidates' final scores, and name the term that carried the
+/// chosen one over its closest rival.
+///
+/// The chosen candidate is the one the cascade would try FIRST (`selected`),
+/// which on a `stay_local` verdict is the local candidate — so "why did this
+/// stay home" and "why did this peer win" are the same question and get the
+/// same answer. `decided_by` reads `tie` when no term separates them by more
+/// than `TERM_TIE_RATIO` (the scores were the same and a tie-break decided),
+/// and `n/a` when there is nothing to compare against — a one-candidate
+/// decision explains itself.
+fn score_summary(
+    candidates: &[sovereign_scheduler::decision_log::CandidateRecord],
+    verdict: &Verdict,
+) -> (String, String) {
+    // Capped, and the cap is not cosmetic. This line is emitted once per
+    // non-gated decision, and the mesh-scale target is 100 nodes: rendering
+    // every candidate would put ~1.5 KB on a per-request `info` line, which is
+    // how a glassbox field becomes a reason to turn the target off. The top
+    // few by score are what a reader needs — the decision was between those —
+    // and the count says what was elided. The FULL per-candidate breakdown is
+    // in the record for anyone collecting it.
+    let mut ranked: Vec<&sovereign_scheduler::decision_log::CandidateRecord> =
+        candidates.iter().collect();
+    ranked.sort_by(|a, b| {
+        b.score
+            .final_score
+            .partial_cmp(&a.score.final_score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    let mut scores = ranked
+        .iter()
+        .take(SCORES_RENDERED)
+        .map(|c| format!("{}={:.4}", c.name, c.score.final_score))
+        .collect::<Vec<_>>()
+        .join(" ");
+    if ranked.len() > SCORES_RENDERED {
+        scores.push_str(&format!(" (+{} more)", ranked.len() - SCORES_RENDERED));
+    }
+    // `selected` marks the first candidate the CASCADE would try, and a
+    // `StayLocal` verdict marks nobody — which is why the info line has always
+    // read `winner=<none>` for it. That is exactly the decision an operator
+    // needs explained ("why did this stay home?"), so on `StayLocal` the local
+    // candidate IS the chosen one and is named as such. Caught by the
+    // simulator, where every ring-room decision is a `StayLocal`.
+    let chosen = candidates
+        .iter()
+        .find(|c| c.selected)
+        .or_else(|| match verdict {
+            Verdict::StayLocal => candidates
+                .iter()
+                .find(|c| c.kind == sovereign_scheduler::decision_log::CandidateKind::Local),
+            _ => None,
+        });
+    let decided_by = match chosen {
+        None => "n/a".to_string(),
+        Some(win) => {
+            // Closest rival by final score — the candidate the decision was
+            // actually close to, not merely the next one in the vec.
+            let rival = candidates
+                .iter()
+                .filter(|c| !std::ptr::eq(*c, win))
+                .max_by(|a, b| {
+                    a.score
+                        .final_score
+                        .partial_cmp(&b.score.final_score)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                });
+            match rival {
+                None => "n/a".to_string(),
+                Some(r) => {
+                    match sovereign_scheduler::decision_log::deciding_term(&win.score, &r.score) {
+                        Some(t) => format!("{} vs {}", t, r.name),
+                        None => format!("tie vs {}", r.name),
+                    }
+                }
+            }
+        }
+    };
+    (scores, decided_by)
+}
+
 fn verdict_label(v: &Verdict) -> String {
     match v {
         Verdict::Gated { gate } => format!("gated:{gate}"),
@@ -287,6 +390,131 @@ mod tests {
             preferred_speed: "slow".into(),
             explicit_model_id: None,
         }
+    }
+
+    fn score(
+        final_score: f32,
+        cold: f32,
+        loc: f32,
+    ) -> sovereign_scheduler::decision_log::ScoreRecord {
+        sovereign_scheduler::decision_log::ScoreRecord {
+            claim_score: 0.95,
+            observation_mult: 1.0,
+            load_penalty: 1.0,
+            locality_bonus: loc,
+            cold_start_weight: cold,
+            throughput_factor: 1.0,
+            throughput_source: "neutral".into(),
+            availability: 1.0,
+            final_score,
+        }
+    }
+
+    fn cand(
+        name: &str,
+        kind: sovereign_scheduler::decision_log::CandidateKind,
+        s: sovereign_scheduler::decision_log::ScoreRecord,
+    ) -> sovereign_scheduler::decision_log::CandidateRecord {
+        sovereign_scheduler::decision_log::CandidateRecord {
+            kind,
+            name: name.into(),
+            node_id: None,
+            model_id: "m".into(),
+            size_gb: Some(2.0),
+            locality: "local".into(),
+            rank: None,
+            selected: false,
+            score: s,
+            inputs: sovereign_scheduler::decision_log::CandidateInputs::from_observations(
+                &oicp_types::NodeObservations::default(),
+                sovereign_scheduler::decision_log::LoadSource::Local,
+            ),
+            tier_band: None,
+        }
+    }
+
+    /// **A `StayLocal` verdict marks NO candidate `selected`** — which is why
+    /// the info line has always read `winner=<none>` for it. That is exactly
+    /// the decision an operator needs explained, and the ring-room
+    /// investigation could not: `wl-route-06303aff` read
+    /// `verdict=stay_local scored=3` and then spent 38.2 s locally with an idle
+    /// GPU peer in the mesh (ralph A33/A35).
+    ///
+    /// So on `StayLocal` the local candidate IS the chosen one, and the line
+    /// names the term that kept the work home. Caught by the simulator, where
+    /// every ring-room decision is a `StayLocal`.
+    #[test]
+    fn a_stay_local_decision_still_names_the_term_that_kept_it_home() {
+        use sovereign_scheduler::decision_log::CandidateKind;
+        // The sim's own numbers, decision `sim-0-150`.
+        let cands = vec![
+            cand("local", CandidateKind::Local, score(1.092, 1.0, 1.15)),
+            cand("keeper-gpu", CandidateKind::Peer, score(0.698, 0.7, 1.05)),
+        ];
+        let (scores, decided_by) = score_summary(&cands, &Verdict::StayLocal);
+        assert_eq!(
+            scores, "local=1.0920 keeper-gpu=0.6980",
+            "best-first, and both fit under the render cap"
+        );
+        assert!(
+            decided_by.starts_with("cold_start_weight(1.000>0.700) vs keeper-gpu"),
+            "a stay-local line must name the term, got {decided_by:?}"
+        );
+    }
+
+    /// The other direction: when a peer IS selected, that peer is the chosen
+    /// one and local is the rival — the same question, the same answer shape.
+    #[test]
+    fn a_peer_decision_names_the_term_that_carried_the_peer() {
+        use sovereign_scheduler::decision_log::CandidateKind;
+        let mut peer = cand("keeper-gpu", CandidateKind::Peer, score(0.735, 0.7, 1.05));
+        peer.selected = true;
+        let cands = vec![
+            cand("local", CandidateKind::Local, score(0.732, 1.0, 1.15)),
+            peer,
+        ];
+        let (_, decided_by) = score_summary(
+            &cands,
+            &Verdict::Peers {
+                ranked: vec!["keeper-gpu".into()],
+            },
+        );
+        assert!(
+            decided_by.contains("vs local"),
+            "the rival of a chosen peer is local, got {decided_by:?}"
+        );
+    }
+
+    /// The render cap, and why it is there: this line fires once per non-gated
+    /// decision and the mesh-scale target is 100 nodes. Best-first, capped,
+    /// and the count says what was elided — a glassbox field that turns a
+    /// per-request `info` line into 1.5 KB is one an operator switches off.
+    #[test]
+    fn the_scores_line_is_capped_best_first_and_says_what_it_elided() {
+        use sovereign_scheduler::decision_log::CandidateKind;
+        let mut cands = vec![cand("local", CandidateKind::Local, score(0.50, 1.0, 1.15))];
+        // Pushed worst-first, so a rendering that echoed vec order would fail.
+        for (i, sc) in [0.10_f32, 0.20, 0.30, 0.40, 0.60, 0.70].iter().enumerate() {
+            cands.push(cand(
+                &format!("peer-{i}"),
+                CandidateKind::Peer,
+                score(*sc, 0.7, 1.05),
+            ));
+        }
+        let (scores, _) = score_summary(&cands, &Verdict::StayLocal);
+        assert_eq!(
+            scores, "peer-5=0.7000 peer-4=0.6000 local=0.5000 peer-3=0.4000 (+3 more)",
+            "best-first, capped at {SCORES_RENDERED}, and the remainder counted"
+        );
+    }
+
+    /// A gated decision scores nothing, so there is nothing to explain and the
+    /// line must say so rather than reach into an empty vec.
+    #[test]
+    fn an_empty_candidate_set_explains_itself() {
+        let (scores, decided_by) = score_summary(&[], &Verdict::StayLocal);
+        assert_eq!(scores, "");
+        assert_eq!(decided_by, "n/a");
     }
 
     #[test]

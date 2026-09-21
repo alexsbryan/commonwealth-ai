@@ -52,13 +52,21 @@ const GUEST_TOKEN: &str = "9c1f7b2ea4d68053aa11ff7c3e5b90d4c7a2f16b8e04d93b5c7a1
 const NS: &str = "house-expenses";
 
 fn bare_state() -> AppState {
-    bare_state_with_seed(sovereign_daemon::state::FabricSeed::default())
+    bare_state_with_seed(
+        sovereign_daemon::state::FabricSeed::default(),
+        sovereign_grants::GuestSessionBinding::Door,
+        Default::default(),
+    )
 }
 
 /// [`bare_state`] with Fabric's construction seed — the rail is a construction
 /// argument now, not a post-construction install (DC §4.2 "Construction is
 /// staged, and parts are total").
-fn bare_state_with_seed(seed: sovereign_daemon::state::FabricSeed) -> AppState {
+fn bare_state_with_seed(
+    seed: sovereign_daemon::state::FabricSeed,
+    sessions: sovereign_grants::GuestSessionBinding,
+    pages: sovereign_daemon::guest_door::GuestPages,
+) -> AppState {
     let node = NodeId::from_u128(1);
     let mesh = Mesh {
         mesh_secret: [0u8; 32],
@@ -82,13 +90,56 @@ fn bare_state_with_seed(seed: sovereign_daemon::state::FabricSeed) -> AppState {
         sovereign_daemon::state::ServingSeed::default(),
         sovereign_daemon::state::NodeSeed {
             client_token: Some(Arc::<str>::from(TOKEN)),
+            guest_sessions: sessions,
+            guest_pages: pages,
+            internal_auth: Default::default(),
+            ..Default::default()
         },
     )
 }
 
 /// A daemon with ring storage under `root`, signing as `key`, and a roster
-/// that says that key is Alex.
+/// that says that key is Alex. Its door binds guest sessions the default way:
+/// a name claimed on one of this wall's links is the same person on the next.
 fn state_with_rail(root: &std::path::Path, key: &SigningKey) -> AppState {
+    state_with_rail_sessions(
+        root,
+        key,
+        sovereign_grants::GuestSessionBinding::Door,
+        Default::default(),
+    )
+}
+
+/// [`state_with_rail`] on a wall whose owner DECLARED `pages` — what a wall
+/// grant is scoped by. A test that mints `Scope::Wall` against a state with no
+/// registry is testing a door with nothing on it.
+fn state_with_wall(
+    root: &std::path::Path,
+    key: &SigningKey,
+    pages: &[(&str, sovereign_core::guest_pages::GuestPage)],
+) -> AppState {
+    state_with_rail_sessions(
+        root,
+        key,
+        sovereign_grants::GuestSessionBinding::Door,
+        sovereign_daemon::guest_door::GuestPages::new(
+            None,
+            pages
+                .iter()
+                .map(|(ns, p)| ((*ns).to_string(), p.clone()))
+                .collect(),
+        ),
+    )
+}
+
+/// [`state_with_rail`] with the session binding named — the `[daemon]
+/// guest_sessions` knob, so both settings are driven by a test.
+fn state_with_rail_sessions(
+    root: &std::path::Path,
+    key: &SigningKey,
+    sessions: sovereign_grants::GuestSessionBinding,
+    pages: sovereign_daemon::guest_door::GuestPages,
+) -> AppState {
     let rail = Arc::new(RingRail::new(root, Arc::new(key.clone())));
     let mut members = std::collections::BTreeMap::new();
     members.insert(Person::from("alex"), vec![key.actor()]);
@@ -100,10 +151,14 @@ fn state_with_rail(root: &std::path::Path, key: &SigningKey) -> AppState {
         .unwrap()
         .set_roster(&Roster::new(members))
         .unwrap();
-    bare_state_with_seed(sovereign_daemon::state::FabricSeed {
-        ring_rail: Some(rail),
-        ..Default::default()
-    })
+    bare_state_with_seed(
+        sovereign_daemon::state::FabricSeed {
+            ring_rail: Some(rail),
+            ..Default::default()
+        },
+        sessions,
+        pages,
+    )
 }
 
 fn with_guest(state: AppState, scopes: Vec<Scope>) -> AppState {
@@ -519,6 +574,10 @@ async fn sync_raw(
         .method("POST")
         .uri("/internal/ring/sync")
         .header(axum::http::header::CONTENT_TYPE, "application/json")
+        // `internal_gate` reads a MISSING `ConnectInfo` as "not loopback" and
+        // refuses. Both internal listeners attach one in production, so a
+        // driver without it is a shape that never occurs; say the local one.
+        .extension(ConnectInfo(SocketAddr::from(([127, 0, 0, 1], 54321))))
         .body(Body::from(serde_json::to_vec(req).unwrap()))
         .unwrap();
     let resp = sovereign_daemon::server::internal_router(responder)
@@ -573,10 +632,14 @@ async fn two_nodes_converge_through_the_sync_route() {
     let build = |dir: &std::path::Path, key: &SigningKey| {
         let rail = Arc::new(RingRail::new(dir, Arc::new(key.clone())));
         rail.journal(NS).unwrap().set_roster(&roster).unwrap();
-        let state = bare_state_with_seed(sovereign_daemon::state::FabricSeed {
-            ring_rail: Some(rail.clone()),
-            ..Default::default()
-        });
+        let state = bare_state_with_seed(
+            sovereign_daemon::state::FabricSeed {
+                ring_rail: Some(rail.clone()),
+                ..Default::default()
+            },
+            sovereign_grants::GuestSessionBinding::Door,
+            Default::default(),
+        );
         (state, rail)
     };
     let (state_a, rail_a) = build(dir_a.path(), &key_a);
@@ -591,6 +654,7 @@ async fn two_nodes_converge_through_the_sync_route() {
             },
             &key_a,
             &roster,
+            None,
         )
         .unwrap();
     led_b
@@ -600,6 +664,7 @@ async fn two_nodes_converge_through_the_sync_route() {
             },
             &key_b,
             &roster,
+            None,
         )
         .unwrap();
     assert_ne!(
@@ -664,6 +729,7 @@ async fn a_node_without_ring_storage_refuses_the_exchange() {
         .method("POST")
         .uri("/internal/ring/sync")
         .header(axum::http::header::CONTENT_TYPE, "application/json")
+        .extension(ConnectInfo(SocketAddr::from(([127, 0, 0, 1], 54321))))
         .body(Body::from(
             serde_json::to_vec(&serde_json::json!({ "namespace": NS })).unwrap(),
         ))
@@ -754,6 +820,10 @@ async fn an_app_seals_through_the_append_door_and_the_journal_shrinks() {
 }
 
 mod ceiling;
+
+// The ring-sync route's OWN refusal, driven at the handler because the gate in
+// front never lets the case reach the mounted route.
+mod roster_refusal;
 
 // The guest door rides the same helpers: the rail on a LAN-reachable bind.
 mod guest_door;

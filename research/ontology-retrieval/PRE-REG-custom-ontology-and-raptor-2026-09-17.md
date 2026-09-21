@@ -700,7 +700,7 @@ corpus's, not the instrument's.
 Four records, all pre-dating any delta being read. None of them changes a bar.
 
 **1. The six imperative K4 prompts are now asked as questions** (`040e5a826`,
-operator decision A39). A writing command routes to `GenerativeQuery`, which
+operator decision A73). A writing command routes to `GenerativeQuery`, which
 retrieves nothing by design (`sovereign/crates/sovereign-core/src/runtime/handlers/generative.rs:1-14`),
 so the retrieving arms were closed-book on 6 of the 8 `k4_whole_story` rows and
 I2 abstained correctly. The rule applied, once, without running anything first
@@ -746,7 +746,7 @@ slot is healthy (0.85 s for a small completion) and the committed pilot record
 is the earlier one, unchanged. A second rental, and the daemon's state, are the
 operator's call; the measurements are in `ralph/NEEDS_HUMAN.md`.
 
-### 2026-09-21 — I7's grounded set was wrong about DeepQuery (operator decision A41)
+### 2026-09-21 — I7's grounded set was wrong about DeepQuery (operator decision A75)
 
 **What was wrong.** Record 2 above calls a row grounded when its route is
 `knowledge_query` or `comparison_query`, on the premise that every other route

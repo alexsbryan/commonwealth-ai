@@ -25,6 +25,14 @@ check     = "./scripts/sovereign-test.sh --human --package sovereign-api --packa
 # OWED by rr-1-instrument; until it exists every bar below reads
 # could-not-judge, never a fabricated verdict (ARCH 5, ARCH 6).
 
+# ── THE CAP ──────────────────────────────────────────────────────────────────
+# Default is 9 (co-lineage.py MAX_BARS). The operator accepted 11 here; the
+# loader refuses this table unless `ledger` names an OPERATOR entry.
+[cap]
+accepted = 11
+ledger   = "A56"
+why      = "rr-1's five demo bars and rr-2's six room bars are one sitting on one wall; splitting them would make two campaigns share one instrument and one run."
+
 # ── BARS ─────────────────────────────────────────────────────────────────────
 
 [[bar]]
@@ -122,7 +130,7 @@ rung         = "rr-2"
 one_line     = "CLAIM: a phone with no app scans the QR BeefyMac renders, opens a page served by BeefyMac over the room's WiFi, types a name and nothing else, and that name is in the doc's roster on the wall within 5 s on BeefyMac's clock - the QR is a GUEST grant of one member, never the mesh invite"
 derives_from = "guest grants exist and are strictly weaker than membership (docs/THREAT_MODEL.md 'Guests'; sovereign-grants/src/guest_grant.rs: bearer, revocable, TTL <= 24 h, never in Mesh.members, never the invite key, `Scope::Rails` unlocks /v1/rail/append|log|live for ONE namespace); the guest deep link already has the QR shape (`build_guest_link`, commonwealth-discovery/src/deep_link.rs:195); a non-loopback caller must carry Authorization (THREAT_MODEL.md, client API row) and the bearer IS that header. NOT in the repo: a QR renderer (fast_qr per the shelf), a page BeefyMac serves to a guest browser, a guest label on a roster entry. The join link a prints today (222 chars, sovereign://join/...) is a MEMBER invite and is inert to a phone camera without the app - this bar is what rr-1's plug-in leg becomes when the joiner is a person, not a container."
 floor        = 1.0
-floor_basis  = "structural: 1.0 iff (a) the QR payload parses as a guest grant minted by BeefyMac (`Scope::Rails(ring-doc)` + `Scope::Models`, expiry within the sitting), and `svrn mesh status` on BeefyMac shows Mesh.members UNCHANGED after the scan, (b) BeefyMac's access log shows the phone's requests under that bearer and NO other node's log shows the phone at all, (c) the name the person typed appears in the wall page's roster within 5 s on BeefyMac's clock from the tap, (d) the phone's typed census is exactly one string, the name. Any false is 0.0."
+floor_basis  = "structural: 1.0 iff (a) the QR payload parses as a guest grant minted by BeefyMac whose scope REACHES this app and carries a model scope, expiry within the sitting [CORRECTED 2026-09-20 AFTER DATA EXISTED, ledger A58/A60, operator: this clause named `Scope::Rails(ring-doc)` + `Scope::Models`. Operator decision A55 made the wall ONE grant reaching every app its owner registered, so the grant's summary reads 'the wall' and no longer names one rail. rr-2's passing data was read under the old text; ring-guest's two cold runs of 2026-09-20 were read under this one, and the instrument said so in each verdict row], and `svrn mesh status` on BeefyMac shows Mesh.members UNCHANGED after the scan, (b) BeefyMac's access log shows the phone's requests under that bearer and NO other node's log shows the phone at all, (c) the name the person typed appears in the wall page's roster within 5 s on BeefyMac's clock from the tap, (d) the phone's typed census is exactly one string, the name. Any false is 0.0."
 target       = 1.0
 direction    = "higher_is_better"
 # instrument   = (none yet) — owed by the rr-2 order: `scripts/ring-room-demo.sh verdict ra-room-scan-to-name` with a `--room` topology (real machines, no podman)
@@ -152,7 +160,7 @@ rung         = "rr-2"
 one_line     = "CLAIM: a guest's ask through BeefyMac is answered on the phone within 60 s with released evidence naming RuggedFox, the corpus absent on BeefyMac, and BeefyMac's decision log naming which node served each call and by which path (direct or relayed) - the phone never runs a model"
 derives_from = "the answer leg of rr-1 (`ra-room-answer-names-the-machine`, 5/5 named Bo across podman nodes on one host); the fan-out reads hosted corpora from gossip (routes_knowledge.rs) and the scheduler scores local vs peers with the decision log naming the winner (decision_log.rs); the iroh path is known per peer (`PeerPath::Relayed`, iroh_access.rs). The CPU-node finding (docs/RING_ROOM_DEMO.md part two: ~7,400 prompt tokens, ~33 tok/s, ~250 s per ask) does not apply to a GUEST - the guest has no node, so BeefyMac's M-series serves classify and judges and the scorer decides whether synthesis crosses to the Halo. The relay round-trip per call is the new cost and is measured, not assumed. A34 (operator 2026-09-19): a guest's `Scope::Models` reaches only `/v1/chat/completions`, which runs no retrieval - so the ask goes to ONE id-less `POST /v1/guest/ask` on the door, the door runs the grounded turn as itself with one conversation per grant, and returns answer + epistemic_state only; THREAT_MODEL.md names it."
 floor        = 1.0
-floor_basis  = "structural: 1.0 iff (a) `svrn corpus list` on BeefyMac never held the corpus (recorded before the ask), (b) the released answer on the phone carries a citation or a verified holding whose member is RuggedFox, (c) first token on the phone within 60 s of the tap on BeefyMac's clock, (d) BeefyMac's decision log for that ask names served_by and the iroh path for every model call and for the fan-out. A release with claims_checked 0 is 0.0 (rr-1's rule). Any false is 0.0."
+floor_basis  = "structural: 1.0 iff (a) `svrn corpus list` on BeefyMac never held the corpus (recorded before the ask), (b) the released answer on the phone carries a citation or a verified holding whose member is RuggedFox, (c) first token on the phone within 60 s of the tap on BeefyMac's clock, (d) BeefyMac's decision log for that ask names served_by for every model call and for the fan-out, and the iroh path (direct/relayed) of the peer that served is read from the daemon's existing peer-path observation (`observe_peer_paths`, sovereign-mesh/src/iroh_access.rs:232) during the ask and recorded beside the row - A36: the outcome record sits below the transport layer, so the path is not a field on it. A release with claims_checked 0 is 0.0 (rr-1's rule). Any false is 0.0."
 target       = 1.0
 direction    = "higher_is_better"
 # instrument   = (none yet) — owed by the rr-2 order

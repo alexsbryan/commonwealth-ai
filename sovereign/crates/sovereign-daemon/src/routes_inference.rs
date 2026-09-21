@@ -32,6 +32,7 @@ const LOCAL_HOLDER: &str = "local";
 pub async fn chat_completions(
     State(state): State<AppState>,
     headers: HeaderMap,
+    attached: Option<axum::Extension<sovereign_serving_host::admission::AttachedPrincipal>>,
     guest: Option<axum::Extension<crate::client_auth::Guest>>,
     Json(mut request): Json<ChatCompletionRequest>,
 ) -> Response {
@@ -48,7 +49,7 @@ pub async fn chat_completions(
     // for a guest would mean: asked for the model they were granted, got a
     // different one, HTTP 200, no way to tell. That is §18.3's `d45489a3`
     // verbatim — same model string, seconds apart, served by something else.
-    if let Some(axum::Extension(crate::client_auth::Guest(grant))) = guest.as_ref() {
+    if let Some(axum::Extension(crate::client_auth::Guest { grant, .. })) = guest.as_ref() {
         let named = request.model.as_deref().map(str::trim).unwrap_or("");
         if !grant.allows_model(named) {
             let asked = if named.is_empty() {
@@ -281,7 +282,7 @@ pub async fn chat_completions(
             has_oicp = request.oicp.is_some(),
             "chat_completions: serving via local_inference"
         );
-        let requester = crate::headers::parse_x_node_id(&headers);
+        let requester = crate::admission::requester(attached);
         let model_id = request.model.clone().unwrap_or_else(|| "local".into());
         if want_stream {
             return serve_local_stream(
@@ -609,14 +610,14 @@ async fn forward_to_llama_server(
 /// chat_completions does.
 pub async fn embeddings(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    attached: Option<axum::Extension<sovereign_serving_host::admission::AttachedPrincipal>>,
     Json(request): Json<EmbeddingRequest>,
 ) -> Response {
     // Who is this for? A peer with no embed model of its own (driving
-    // ingestion via `http_embed_fn`) carries `X-Node-Id`; a local
-    // OpenAI-API client does not. Either way it's real embedding work
-    // this daemon performed — recorded on the Activity ledger below.
-    let requester = crate::headers::parse_x_node_id(&headers);
+    // ingestion via `http_embed_fn`) resolves to a verified member; a
+    // local OpenAI-API client does not. Either way it's real embedding
+    // work this daemon performed — recorded on the Activity ledger below.
+    let requester = crate::admission::requester(attached);
     let Some(service) = state.inner.serving.local_inference.as_ref() else {
         return (
             StatusCode::SERVICE_UNAVAILABLE,
@@ -785,7 +786,7 @@ pub async fn list_models(
     // refused reintroduces exactly the defect this endpoint was rewritten to
     // remove, in a new place: the list would advertise, and the request would
     // refuse, and the refusal would point back at the list.
-    if let Some(axum::Extension(crate::client_auth::Guest(grant))) = guest.as_ref() {
+    if let Some(axum::Extension(crate::client_auth::Guest { grant, .. })) = guest.as_ref() {
         data.retain(|m| grant.allows_model(&m.id));
     }
     // Stable order, and the dedup key is the id a caller would actually

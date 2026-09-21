@@ -169,12 +169,13 @@ pub(crate) fn sign(seed: u8, ts: i64, seq: u64, act: &WorkAct) -> Op<SignedOp> {
     let inner = RailAct::Record {
         payload: commonwealth_work::to_payload(act).expect("a well-formed work act"),
     };
-    let sig = sign_ring_op(&k, WORK_NAMESPACE, ts, seq, &body_json(&inner));
+    let sig = sign_ring_op(&k, WORK_NAMESPACE, ts, seq, &body_json(&inner, None));
     Op::new(
         SignedOp {
             seq,
             sig,
             act: inner,
+            on_behalf_of: None,
         },
         ts,
         actor_of(&k),

@@ -244,9 +244,12 @@ both files owe a fix in the same commit (§1.1).
   `oicp-types/src/requirements.rs:16-39`; `PrivacyRequirements` at `:119-122`). The corpus↔tenant
   seam that does exist is retrieval-side: `PrincipalResolver` / `SensitiveCorpusOracle`
   (`sovereign-contracts/src/traits.rs:75-111`, consumed at `corpus_search.rs:189`).
-- ggml-RPC worker: `--rpc-worker` and `role = "anchor"` default the bind to `0.0.0.0:50052`
-  (`bootstrap.rs:268`, `:362-367`); the listener is `ggml_backend_rpc_start_server` on the raw env
-  string (`rpc_distribution.rs:2011-2075`). Plaintext, no auth (`docs/THREAT_MODEL.md:63`,
+- ggml-RPC worker: `--rpc-worker` and `role = "anchor"` default the bind to `127.0.0.1:50052`
+  (`bootstrap.rs`, `DEFAULT_RPC_BIND`; loopback since 2026-09-20). A non-loopback bind is REFUSED
+  by `RpcServe::resolve` (`sovereign-contracts/src/launch.rs`) unless
+  `SOVEREIGN_RPC_ALLOW_PLAINTEXT_LAN=1` or `[shared_model] allow_plaintext_lan = true` acknowledges
+  it — a third answer, not a silent `Off`. The listener is `ggml_backend_rpc_start_server` on the
+  raw env string (`rpc_distribution.rs:2011-2075`). Plaintext, no auth (`docs/THREAT_MODEL.md:63`,
   `:126-129`). The iroh ALPN forward dials the same listener over loopback — an *additional* path,
   not containment (`iroh_access.rs:265-296`); the LAN fast path prefers direct TCP
   (`daemon.rs:2074-2087`). The loopback-only posture is documented at `docs/CLOUD_TENSOR_PEER.md:79`.

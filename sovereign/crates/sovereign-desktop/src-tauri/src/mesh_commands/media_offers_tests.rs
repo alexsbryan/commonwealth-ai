@@ -74,7 +74,84 @@ async fn the_rail_lists_every_offer_with_its_player_url_or_its_refusal() {
         "offered_to",
         "player_url",
         "unreachable",
+        "media_available",
     ] {
         assert!(wire.get(key).is_some(), "LibraryView reads `{key}`");
     }
+}
+
+/// A library its holder is watching is a row the rail can render and CANNOT
+/// play: `media_available` 0.0 carries the reason and `player_url` is absent,
+/// so "does not start a stream" is a fact about the row rather than a rule
+/// the view has to remember. The route is asserted too — the reach is never
+/// requested for that peer, so the bridge is not even built.
+#[tokio::test]
+async fn a_library_in_use_by_its_holder_is_shown_and_not_reachable() {
+    let reached = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let seen = reached.clone();
+    let app = Router::new().route(
+        "/v1/mesh/media",
+        get(move |Query(q): Query<HashMap<String, String>>| {
+            let seen = seen.clone();
+            async move {
+                match q.get("peer").map(String::as_str) {
+                    None => (
+                        axum::http::StatusCode::OK,
+                        axum::Json(serde_json::json!({ "offering": [
+                            {"peer":"little","node_id":"llll","status":"online",
+                             "media_available": 0.0},
+                            {"peer":"free","node_id":"ffff","status":"online",
+                             "media_available": 1.0}
+                        ]})),
+                    ),
+                    Some(_) => {
+                        seen.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                        (
+                            axum::http::StatusCode::OK,
+                            axum::Json(serde_json::json!({
+                                "peer":"x","node_id":"xxxx",
+                                "url":"http://127.0.0.1:41231","via":"iroh"
+                            })),
+                        )
+                    }
+                }
+            }
+        }),
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.ok();
+    });
+    tokio::time::sleep(Duration::from_millis(50)).await;
+
+    let got = media_offers(&sovereign_turn_client::TurnClient::new(base))
+        .await
+        .expect("the route's own answers parse");
+    assert_eq!(got.len(), 2, "an in-use library is still a row");
+
+    assert_eq!(got[0].peer, "little");
+    assert_eq!(got[0].media_available, Some(0.0));
+    assert_eq!(
+        got[0].player_url, None,
+        "an in-use library must carry no URL for the view to open"
+    );
+    assert_eq!(
+        got[0].unreachable, None,
+        "in use is not a refusal to reach — the view says why from media_available"
+    );
+
+    assert_eq!(got[1].peer, "free");
+    assert_eq!(got[1].media_available, Some(1.0));
+    assert_eq!(
+        got[1].player_url.as_deref(),
+        Some("http://127.0.0.1:41231"),
+        "a free library still plays"
+    );
+
+    assert_eq!(
+        reached.load(std::sync::atomic::Ordering::SeqCst),
+        1,
+        "the in-use holder must not be dialed at all; only the free one was"
+    );
 }

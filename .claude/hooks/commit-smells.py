@@ -61,6 +61,17 @@ COMMIT_RX = re.compile(
 HEREDOC_RX = re.compile(
     r"\$\(\s*cat\s*<<-?\s*['\"]?(\w+)['\"]?[ \t]*\n(.*?)\n[ \t]*\1[ \t]*\n?\s*\)", re.S)
 STASH_RX = re.compile(r"__COMMIT_SMELLS_HEREDOC_(\d+)__")
+# ANY other heredoc in the call — `git commit -F - <<'EOF' … EOF`, the spelling
+# sessions use for long bodies, and a `python3 - <<'PY'` beside the commit
+# alike. The redirect and its body leave the command line and one marker token
+# stays where the redirect was, so whatever followed `<<'EOF'` on that line
+# (`&& git log -1`) still lexes as shell. Unstashed, the body was lexed as
+# shell: an apostrophe read "No closing quotation", and a body without one had
+# `<<`, `EOF` and every word of the message replayed as pathspecs. `(?<!<)`
+# keeps a here-STRING (`<<<word`) out of it.
+STDIN_HEREDOC_RX = re.compile(
+    r"(?<!<)<<-?[ \t]*(['\"]?)(\w+)\1([^\n]*)\n(.*?)\n[ \t]*\2[ \t]*(?=\n|$)", re.S)
+STDIN_RX = re.compile(r"__COMMIT_SMELLS_STDIN_(\d+)__")
 OPERATORS = {"&&", "||", ";", ";;", "|", "|&", "&", "(", ")"}
 GIT_OPTS_WITH_ARG = {"-C", "-c", "--git-dir", "--work-tree"}
 COMMIT_LONG_WITH_ARG = {"--author", "--date", "--cleanup", "--fixup", "--squash",
@@ -98,8 +109,9 @@ def parse_command(cmd: str) -> dict:
     """The `git add` segments before the commit, `-a`, pathspecs, and the
     message (from -m, -F, or the stashed heredoc form)."""
     plan = {"adds": [], "all": False, "paths": [], "message": "",
-            "message_known": True, "note": None}
+            "message_known": True, "note": None, "stdin": None}
     bodies: list[str] = []
+    stdins: list[str] = []
 
     def stash(m):
         bodies.append(m.group(2))
@@ -109,9 +121,24 @@ def parse_command(cmd: str) -> dict:
         m = STASH_RX.fullmatch(v or "")
         return bodies[int(m.group(1))] if m else v
 
-    flat = HEREDOC_RX.sub(stash, cmd)
+    def stash_stdin(m):
+        stdins.append(m.group(4))
+        return f" __COMMIT_SMELLS_STDIN_{len(stdins) - 1}__ {m.group(3)}"
+
+    # `$(cat <<EOF)` first: it is the narrower form and its body may itself
+    # contain text that looks like a bare redirect.
+    flat = STDIN_HEREDOC_RX.sub(stash_stdin, HEREDOC_RX.sub(stash, cmd))
+    # The shell deletes a backslash-newline before it reads anything else; with
+    # newlines now separators, a continuation left in would split one command.
+    flat = flat.replace("\\\n", "")
     try:
-        lex = shlex.shlex(flat, posix=True, punctuation_chars=True)
+        # A newline ends a command as `;` does. Left in shlex's whitespace it
+        # vanished, and the command on the line AFTER the commit was folded
+        # into its pathspecs. As a punctuation char it arrives as its own token
+        # (or glued to a neighbour: `&&\n`), and a newline inside quotes is
+        # still the quoted token's — the message keeps its paragraphs.
+        lex = shlex.shlex(flat, posix=True, punctuation_chars="();<>|&\n")
+        lex.whitespace = " \t\r"
         lex.whitespace_split = True
         toks = list(lex)
     except ValueError as e:
@@ -123,7 +150,7 @@ def parse_command(cmd: str) -> dict:
     segs: list[list[str]] = []
     cur: list[str] = []
     for t in toks:
-        if t in OPERATORS:
+        if t in OPERATORS or t.replace("\n", "") in OPERATORS | {""}:
             if cur:
                 segs.append(cur)
             cur = []
@@ -133,6 +160,11 @@ def parse_command(cmd: str) -> dict:
         segs.append(cur)
 
     for seg in segs:
+        # A marker is this segment's stdin, never an argument: it must not
+        # reach `git add`'s replay or the commit's pathspecs.
+        marks = [STDIN_RX.fullmatch(t) for t in seg]
+        fed = [stdins[int(m.group(1))] for m in marks if m]
+        seg = [t for t, m in zip(seg, marks) if not m]
         i = 0
         while i < len(seg) and re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", seg[i]):
             i += 1                                   # FOO=bar git …
@@ -147,14 +179,19 @@ def parse_command(cmd: str) -> dict:
         if verb == "add":
             plan["adds"].append(args)
         elif verb == "commit":
+            plan["stdin"] = fed[0] if fed else None
             _parse_commit_args(args, plan, unstash)
             break                                    # later segments run after it
     return plan
 
 
 def _read_message_file(val: str, plan: dict):
-    if val in ("", "-"):
-        return None                                  # stdin: not recoverable here
+    if val == "-":
+        # The heredoc that fed THIS commit, when the call spelled one; a pipe
+        # or the terminal is stdin we cannot see, and that stays unknown.
+        return plan.get("stdin")
+    if val == "":
+        return None
     try:
         return Path(val).read_text(encoding="utf-8")
     except OSError:

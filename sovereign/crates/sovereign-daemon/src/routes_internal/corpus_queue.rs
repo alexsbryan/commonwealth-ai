@@ -58,6 +58,18 @@ pub async fn peer_control_urls(state: &AppState, local_node_id: NodeId) -> Vec<(
     urls
 }
 
+/// This node's mesh-proof header pair, owned so it can cross into
+/// `sovereign-grants`, which cannot name the minting type. `None` on a mesh
+/// with no credential — a reported absence: an unstamped request is refused by
+/// a peer running the default `internal_auth`, and that is the honest outcome
+/// for a node holding no mesh secret.
+async fn owned_mesh_proof(state: &AppState) -> Option<(String, String)> {
+    state.mesh_proof_stamp().await.map(|s| {
+        let (name, value) = s.pair();
+        (name.to_string(), value.to_string())
+    })
+}
+
 /// Gather the node-side inputs [`FoldRecovery`] carries, from the daemon
 /// state. `merge_from_fold_coverage` moved to `sovereign-grants`, which cannot
 /// name `AppState`, so the reads it used to make for itself are made here, on
@@ -71,6 +83,7 @@ pub async fn fold_recovery(state: &AppState) -> FoldRecovery {
         contribution_emitter: state.inner.fabric.contribution_emitter.clone(),
         local_node_id,
         peer_shard_base_urls,
+        mesh_proof: owned_mesh_proof(state).await,
     }
 }
 
@@ -136,6 +149,9 @@ pub async fn corpus_ingest_partition(
     let state_clone = state.clone();
     // Snapshot peer base URLs now — we can't hold the mesh lock across an async task.
     let peer_urls: Vec<(NodeId, String)> = peer_control_urls(&state, local_node_id).await;
+    // Resolved beside the URLs and for the same reason: `ShardManager` cannot
+    // name `AppState`, so every read it needs is made here.
+    let merge_proof = owned_mesh_proof(&state).await;
 
     // Guard: insert into active_ingests BEFORE spawning so there is no
     // window between the 202 response and the task's first async yield
@@ -225,7 +241,12 @@ pub async fn corpus_ingest_partition(
                 )
                 .with_emitter(state_clone.inner.fabric.contribution_emitter.clone());
                 match shard_mgr
-                    .coordinate_merge(handoff_id, local_node_id, &peer_urls)
+                    .coordinate_merge(
+                        handoff_id,
+                        local_node_id,
+                        &peer_urls,
+                        merge_proof.as_ref().map(|(n, v)| (n.as_str(), v.as_str())),
+                    )
                     .await
                 {
                     Ok(Some(info)) => tracing::info!(
@@ -560,6 +581,7 @@ pub fn spawn_queue_merge(state: AppState, handoff_id: commonwealth_core::ids::Ha
         let mesh_store = Arc::clone(&state.inner.fabric.mesh_store);
         let local_node_id = state.inner.fabric.identity.current();
         let peer_urls: Vec<(NodeId, String)> = peer_control_urls(&state, local_node_id).await;
+        let merge_proof = owned_mesh_proof(&state).await;
 
         let shard_mgr = ShardManager::new(
             Arc::clone(&engine),
@@ -570,7 +592,12 @@ pub fn spawn_queue_merge(state: AppState, handoff_id: commonwealth_core::ids::Ha
         .with_work_queue(Arc::clone(&state.inner.ingest.work_queue));
 
         match shard_mgr
-            .coordinate_merge(handoff_id, local_node_id, &peer_urls)
+            .coordinate_merge(
+                handoff_id,
+                local_node_id,
+                &peer_urls,
+                merge_proof.as_ref().map(|(n, v)| (n.as_str(), v.as_str())),
+            )
             .await
         {
             Ok(Some(info)) => {

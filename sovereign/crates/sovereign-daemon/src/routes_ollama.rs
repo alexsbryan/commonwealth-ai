@@ -227,6 +227,7 @@ fn build_openai_request(
 async fn run_and_frame(
     state: AppState,
     headers: HeaderMap,
+    attached: Option<axum::Extension<sovereign_serving_host::admission::AttachedPrincipal>>,
     oai: ChatCompletionRequest,
     model: String,
     want_stream: bool,
@@ -235,6 +236,10 @@ async fn run_and_frame(
     let inner = routes_inference::chat_completions(
         State(state),
         headers,
+        // The shim decides nothing about identity: it hands the principal its
+        // own resolver attached straight through, so a peer reaching the
+        // Ollama surface is attributed exactly as it is on `/v1`.
+        attached,
         // `/api/chat` is not a path any `Scope` names, so no guest can reach
         // this shim — the caller here is always loopback or full-token.
         None,
@@ -441,6 +446,7 @@ pub(crate) async fn show(
 pub(crate) async fn chat(
     State(state): State<AppState>,
     headers: HeaderMap,
+    attached: Option<axum::Extension<sovereign_serving_host::admission::AttachedPrincipal>>,
     Json(req): Json<OllamaChatRequest>,
 ) -> Response {
     // Ollama defaults `stream` to true.
@@ -463,7 +469,7 @@ pub(crate) async fn chat(
         Ok(r) => r,
         Err(e) => return err(StatusCode::BAD_REQUEST, e),
     };
-    run_and_frame(state, headers, oai, req.model, want_stream, false).await
+    run_and_frame(state, headers, attached, oai, req.model, want_stream, false).await
 }
 
 /// `POST /api/generate` — single-prompt completion. The optional `system`
@@ -471,6 +477,7 @@ pub(crate) async fn chat(
 pub(crate) async fn generate(
     State(state): State<AppState>,
     headers: HeaderMap,
+    attached: Option<axum::Extension<sovereign_serving_host::admission::AttachedPrincipal>>,
     Json(req): Json<OllamaGenerateRequest>,
 ) -> Response {
     let want_stream = req.stream.unwrap_or(true);
@@ -494,14 +501,14 @@ pub(crate) async fn generate(
         Ok(r) => r,
         Err(e) => return err(StatusCode::BAD_REQUEST, e),
     };
-    run_and_frame(state, headers, oai, req.model, want_stream, true).await
+    run_and_frame(state, headers, attached, oai, req.model, want_stream, true).await
 }
 
 /// Shared embedding delegation: build an OpenAI `EmbeddingRequest`, call the
 /// inner handler, return the parsed `EmbeddingResponse` (or a forwarded error).
 async fn run_embeddings(
     state: AppState,
-    headers: HeaderMap,
+    attached: Option<axum::Extension<sovereign_serving_host::admission::AttachedPrincipal>>,
     model: String,
     input: EmbeddingInput,
 ) -> Result<EmbeddingResponse, Response> {
@@ -510,7 +517,7 @@ async fn run_embeddings(
         input,
         encoding_format: None,
     };
-    let inner = routes_inference::embeddings(State(state), headers, Json(er)).await;
+    let inner = routes_inference::embeddings(State(state), attached, Json(er)).await;
     let (status, raw) = body_bytes(inner).await?;
     if !status.is_success() {
         let msg = String::from_utf8_lossy(&raw).to_string();
@@ -528,7 +535,7 @@ async fn run_embeddings(
 /// strings; response is `{ model, embeddings: [[…], …] }`.
 pub(crate) async fn embed(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    attached: Option<axum::Extension<sovereign_serving_host::admission::AttachedPrincipal>>,
     Json(req): Json<OllamaEmbedRequest>,
 ) -> Response {
     let input = match req.input {
@@ -546,7 +553,7 @@ pub(crate) async fn embed(
         }
     };
     let model = req.model.clone();
-    match run_embeddings(state, headers, req.model, input).await {
+    match run_embeddings(state, attached, req.model, input).await {
         Ok(resp) => {
             let embeddings: Vec<Vec<f32>> = resp.data.into_iter().map(|d| d.embedding).collect();
             Json(json!({ "model": model, "embeddings": embeddings })).into_response()
@@ -559,11 +566,11 @@ pub(crate) async fn embed(
 /// legacy `{ "embedding": [...] }` shape.
 pub(crate) async fn embeddings(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    attached: Option<axum::Extension<sovereign_serving_host::admission::AttachedPrincipal>>,
     Json(req): Json<OllamaEmbeddingsRequest>,
 ) -> Response {
     let input = EmbeddingInput::Single(req.prompt.unwrap_or_default());
-    match run_embeddings(state, headers, req.model, input).await {
+    match run_embeddings(state, attached, req.model, input).await {
         Ok(resp) => {
             let embedding = resp
                 .data

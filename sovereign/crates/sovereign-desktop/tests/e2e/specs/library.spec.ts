@@ -154,6 +154,7 @@ test.describe("Library shelf", () => {
           offered_to: ["a", "c"],
           player_url: "http://127.0.0.1:41231",
           unreachable: null,
+          media_available: 1,
         },
       ]);
       w.__sovereign_test__.setHandler("plugin:shell|open", (args) => {
@@ -176,6 +177,51 @@ test.describe("Library shelf", () => {
         ),
       )
       .toEqual(["http://127.0.0.1:41231"]);
+  });
+
+  test("a library its holder is watching says so and starts nothing", async ({
+    sovereignPage: page,
+    chat,
+  }) => {
+    await bootToChat(page, chat);
+    await seedNotebooks(page, NOTEBOOKS);
+    await page.evaluate(() => {
+      const w = window as unknown as {
+        __sovereign_test__: {
+          setHandler: (cmd: string, fn: (args: unknown) => unknown) => void;
+          _opened?: string[];
+        };
+      };
+      w.__sovereign_test__._opened = [];
+      w.__sovereign_test__.setHandler("mesh_media_offers", () => [
+        {
+          peer: "little",
+          node_id: "llll",
+          status: "online",
+          offered_to: [],
+          // In use, so the command carries no URL: the card has nothing to
+          // open however hard the person clicks it.
+          player_url: null,
+          unreachable: null,
+          media_available: 0,
+        },
+      ]);
+      w.__sovereign_test__.setHandler("plugin:shell|open", (args) => {
+        w.__sovereign_test__._opened!.push((args as { path: string }).path);
+      });
+    });
+    await page.getByTestId("nav-library").click();
+
+    const lib = page.getByTestId("mesh-library");
+    await expect(lib).toHaveCount(1, { timeout: 15_000 });
+    await expect(lib.getByTestId("mesh-library-in-use")).toHaveText("in use right now");
+    await expect(lib.getByRole("button")).toBeDisabled();
+    expect(
+      await page.evaluate(
+        () => (window as unknown as { __sovereign_test__: { _opened: string[] } })
+          .__sovereign_test__._opened,
+      ),
+    ).toEqual([]);
   });
 
   test("Libraries on the mesh says so when no member offers one", async ({

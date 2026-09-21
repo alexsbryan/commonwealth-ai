@@ -1,11 +1,19 @@
 # cmnwlth — a general compute rail, extracted from the mesh
 
+> **Naming, 2026-09-20.** This document called its two traits by a `…Rail` name until
+> today. "Rail" now names ONE thing in this repo: the signed, per-actor log under
+> `commonwealth/crates/commonwealth-rail*` that ring apps, the work plane, KV and the work
+> atlas ride. What is sketched here is a ROUTER — it picks an endpoint and forwards a call —
+> so the traits read `CallRouter` and `JobRouter`. Nothing in code carried the old names
+> (a grep over `*.rs` read 0), so this is the whole rename.
+
+
 > **SUPERSEDED as a design, 2026-09-09 (cw-lift 5a). Kept as the ontology.**
 >
 > The live design for the work plane is
 > [`sovereign/deploy/mesh/WORK_PLANE.md`](../sovereign/deploy/mesh/WORK_PLANE.md).
 > This document's ontology survives that rewrite — the nouns below map one-to-one
-> onto it — but its *mechanism* does not: `JobRail` here is a trait over an HTTP
+> onto it — but its *mechanism* does not: `JobRouter` here is a trait over an HTTP
 > submit/lease/heartbeat/complete cycle, and the work plane now rides the ring
 > journal, where those four verbs are signed acts in a `work` namespace and the
 > queue is a fold over admission. Nothing in this file was ever implemented; read
@@ -16,9 +24,9 @@
 > | `Job { unit_id, kind, payload, needs }` | `JobUnit { envelope, kind, unit_hash, payload, requirements, tenant }` — identity from the payload's content hash, never a counter (§7.5) |
 > | `Executor` (trait, `kinds()`/`tier()`/`run()`) | `JobExecutor` (trait, `descriptor()`/`validate()`/`execute()`) — `ExecTier` becomes the ordered `Isolation` enum |
 > | `Claim` (what a member advertises) | `WorkOffer { kinds, max_concurrent, yield_to_foreground, isolation, os, arch, repos, accept_from }`, published as an `Offer` act |
-> | `Lease` (returned by `JobRail::lease`) | the `Lease` act, admitted by the rail; a second lease on a held unit is a reported `lost_leases` row, never a silent overwrite |
+> | `Lease` (returned by `JobRouter::lease`) | the `Lease` act, admitted by the rail; a second lease on a held unit is a reported `lost_leases` row, never a silent overwrite |
 > | `Selector` (scored choice among claimants) | `may_take(&proj, self_key, &offer, unit, now) -> Result<(), WorkRefusal>` — a **refusal predicate, not a scorer**. v0 has no fair-share ordering, and that is the one place the ontology narrowed rather than mapped |
-> | `JobRail` (trait; submit/lease/heartbeat/complete) | the `work` namespace itself — the same four verbs as `Submit`/`Lease`/`Renew`/`Complete` acts, no trait and no new HTTP route |
+> | `JobRouter` (trait; submit/lease/heartbeat/complete) | the `work` namespace itself — the same four verbs as `Submit`/`Lease`/`Renew`/`Complete` acts, no trait and no new HTTP route |
 > | `Grant` (TTL'd allowlist) | no `Grant` noun: `Submit.allowed ∩ Offer.accept_from` **is** the grant |
 > | `Verifier` (submitter-supplied `fn(&Job,&Artifact)->Verdict`) | `kernel_types::Judgement` carried on `Complete`, one outcome vocabulary for the whole workspace (§10.6) |
 >
@@ -218,14 +226,14 @@ pub trait Selector {
     // Decision carries the full scored trace — glassbox, always.
 }
 
-pub trait CallRail {                           // sync work
+pub trait CallRouter {                           // sync work
     async fn call(&self, to: MemberId, class: TrafficClass, req: Request, budget: Budget)
         -> Result<Response>;
     async fn scatter(&self, to: &[MemberId], req: Request, budget: Budget)
         -> Vec<(MemberId, Result<Response>)>;  // partial results are the contract
 }
 
-pub trait JobRail {                            // async leased work
+pub trait JobRouter {                            // async leased work
     async fn submit(&self, jobs: Vec<Job>, grant: GrantId) -> HandoffId;
     async fn lease(&self, handoff: HandoffId) -> Option<Lease>;      // pull-based, coordinator-local
     async fn heartbeat(&self, lease: &Lease) -> Result<()>;

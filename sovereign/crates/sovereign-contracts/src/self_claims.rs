@@ -6,7 +6,8 @@
 //! storage budget, the in-flight gauge) to build its own advertisement — the
 //! `fabric -> host` backflow in the cluster graph. It inverts into one port
 //! Fabric declares and the daemon implements, answering what this node claims
-//! right now: availability, in-flight, storage remaining and embed model.
+//! right now: availability, in-flight, storage remaining, embed model and
+//! media availability.
 //! Fabric publishes the claims and does not know who computed them.
 //!
 //! It lives here, beside the rest of the daemon↔package contract, for the same
@@ -25,7 +26,7 @@ use async_trait::async_trait;
 
 use crate::oicp::manifest::EmbedModelInfo;
 
-/// The four answers `capabilities::build_local_capabilities` publishes to the
+/// The five answers `capabilities::build_local_capabilities` publishes to the
 /// mesh as this node's `NodeCapabilities`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct LocalClaims {
@@ -41,6 +42,11 @@ pub struct LocalClaims {
     /// The embed model this node serves; `None` when none is loaded, which the
     /// collaborative-ingestion planner reads as "don't include me".
     pub embed_model: Option<EmbedModelInfo>,
+    /// What this node's media origin can serve a member right now, `0.0`–`1.0`;
+    /// `None` when this node offers no media or its origin could not be asked.
+    /// Published as `NodeCapabilities::media_available`, where `None` means
+    /// "did not answer" and never "free".
+    pub media_available: Option<f32>,
 }
 
 /// The node's answer to "what do you claim about yourself right now?".
@@ -73,7 +79,7 @@ mod tests {
 
     use super::*;
 
-    /// A stand-in for the daemon's implementation: the four answers are seeded
+    /// A stand-in for the daemon's implementation: the five answers are seeded
     /// and `storage_remaining` is derived from the recorded usage — which is
     /// exactly the write-back contract `record_storage_used` carries.
     struct FakeClaims {
@@ -94,6 +100,7 @@ mod tests {
                     .budget
                     .map(|b| b.saturating_sub(self.used.load(Ordering::Relaxed))),
                 embed_model: self.embed_model.clone(),
+                media_available: None,
             }
         }
 

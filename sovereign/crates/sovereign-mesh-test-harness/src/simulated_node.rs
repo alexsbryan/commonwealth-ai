@@ -130,6 +130,7 @@ impl SimulatedNodeBuilder {
             loaded_models: vec![],
             origins: Vec::new(),
             media_allow: Vec::new(),
+            media_available: None,
 
             embed_model: None,
             benchmark: None,
@@ -236,6 +237,7 @@ impl<S> SimulatedNode<S> {
             loaded_models: vec![],
             origins: Vec::new(),
             media_allow: Vec::new(),
+            media_available: None,
 
             embed_model: None,
             benchmark: None,

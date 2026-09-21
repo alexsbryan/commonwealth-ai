@@ -72,7 +72,7 @@ walk: read the host's join key with `svrn mesh status`, `svrn mesh join
 **4. Start each lending machine as a worker.**
 
 ```bash
-SOVEREIGN_RPC_SERVE=0.0.0.0:50052 svrn daemon run
+SOVEREIGN_RPC_SERVE=127.0.0.1:50052 svrn daemon run
 ```
 
 **5. Start the host.**

@@ -822,6 +822,10 @@ pub async fn corpus_collaborate(
     // hook), which stitches remote shards in and renames to canonical.
     {
         let transport = state.peer_transport();
+        // Minted BEFORE the membership read below: the accessor takes the
+        // same lock, and a second read while one is held can deadlock behind
+        // a queued writer.
+        let stamp = state.mesh_proof_stamp().await;
         let mesh = state.inner.fabric.mesh.read().await;
         if let Some(local_partition) = handoff.partitions.iter().find(|p| p.node_id == self_id) {
             tracing::info!(
@@ -871,6 +875,7 @@ pub async fn corpus_collaborate(
                 embed_model: handoff.embed_model.clone(),
             };
             let node_id = partition.node_id;
+            let stamp = stamp.clone();
             tokio::spawn(async move {
                 let client = match reqwest::Client::builder()
                     .timeout(std::time::Duration::from_secs(10))
@@ -889,7 +894,13 @@ pub async fn corpus_collaborate(
                 let mut accepted = false;
                 for ep in &endpoints {
                     let peer_url = format!("{}/internal/corpus/ingest_partition", ep.base_url);
-                    match client.post(&peer_url).json(&payload).send().await {
+                    let mut request = client.post(&peer_url).json(&payload);
+                    // Proof of membership for a plain-IP hop, minted once
+                    // outside this loop — see `mesh_proof_outbound`.
+                    if let Some((name, value)) = stamp.as_ref().map(|s| s.pair()) {
+                        request = request.header(name, value);
+                    }
+                    match request.send().await {
                         Ok(resp) if resp.status().is_success() => {
                             tracing::info!(
                                 node = %node_id,

@@ -83,6 +83,7 @@ Manage the local Commonwealth mesh.
 | `media fanout <path> [--peers a,b] [--method M] [--timeout-ms N] [--json]` | Ask every member that offers a media origin the same request through its own mesh bridge, concurrently, and print one row per member — what its origin answered (status, bytes, type), or why it was not asked. Bodies capped, never merged; play a title through `media <peer>` |
 | `app [<peer>] [<app>] [--json] [--no-probe]` | With no peer: list the members publishing named apps. With a peer: the base URL that reaches its apps, each named by the first path segment under it. With both: that app's own URL, probed once so you see an HTTP status rather than a port |
 | `app fanout <app> <path> [--peers a,b] [--method M] [--timeout-ms N] [--json]` | Ask every member publishing `<app>` the same request, concurrently, one attributed row each. The app form of `media fanout`, on the same route and the same row shape |
+| `token --new <label> \| --list \| --revoke <label>` | Give one machine its own client-API bearer, revocable without rotating the shared `[daemon] client_token`. Labels only in `--list`; the token prints once at mint. See [INTEROP.md](../../docs/INTEROP.md#four-facts-before-you-start) |
 | `balance` | Render the dimensional contribution ledger (inference / knowledge / network, never collapsed) |
 | `leave` | Leave the current mesh |
 | `logs` | Show mesh daemon logs |

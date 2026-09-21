@@ -125,19 +125,26 @@ async fn concurrent_serves_stamp_origin_as_self_for_every_event() {
         .map(|i| NodeId::from_u128(0xBBBB_0000_0000_0000 + i as u128))
         .collect();
 
+    // Each requester is a MEMBER whose key this node's roster names. A typed
+    // `X-Node-Id` is a claim, not an identity: the internal router strips it
+    // and the caller is attributed to nobody, so a test that wants N distinct
+    // `for_node` values has to present N distinct VERIFIED keys.
+    for (i, requester) in requesters.iter().enumerate() {
+        common::name_member_with_key(&state, *requester, "requester", requester_key(i)).await;
+    }
+
     // Fire N concurrent requests. `tokio::join!` won't scale to 50;
     // spawn each into a task and join.
     let client = reqwest::Client::new();
     let url = format!("http://{addr}/internal/knowledge/search");
     let mut handles = Vec::with_capacity(requesters.len());
-    for requester in &requesters {
+    for (i, requester) in requesters.iter().enumerate() {
         let client = client.clone();
         let url = url.clone();
-        let hex = id_to_hex(requester);
+        let requester = *requester;
+        let key = requester_key(i);
         handles.push(tokio::spawn(async move {
-            client
-                .post(&url)
-                .header("X-Node-Id", hex)
+            common::acceptor_stamp(client.post(&url), "requester", requester, key)
                 .json(&serde_json::json!({
                     "query_embedding": vec![0.0_f32; EMBED_DIM],
                     "query_text": "content",
@@ -228,17 +235,27 @@ async fn concurrent_serves_stamp_origin_as_self_for_every_event() {
     );
 }
 
+/// One distinct verified key per requester, derived from its index — the
+/// roster tells two requesters apart by key, so the keys must differ.
+/// The key the header-swap test's self-member is verified by.
+const SELF_KEY: [u8; 32] = [0xc3; 32];
+
+fn requester_key(i: usize) -> [u8; 32] {
+    let mut k = [0x5a; 32];
+    k[0] = i as u8;
+    k[1] = (i >> 8) as u8;
+    k
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn origin_unaffected_by_requester_header_swap() {
-    // Tighter invariant: even if a requester sends an `X-Node-Id`
-    // matching our own self_id (a hostile header injection
-    // scenario, or a daemon that didn't realize it was talking to
-    // itself), the recorded origin must still be self — the
-    // header drives `for_node`, never `node_id`. The aggregation
-    // path (`current_contributions`) groups by `node_id` to
-    // attribute "who served"; a header swap that polluted origin
-    // would let an external caller masquerade as a different
-    // serving node in our local view.
+async fn origin_unaffected_by_a_requester_claiming_to_be_us() {
+    // Tighter invariant: even when the VERIFIED requester is a member whose
+    // node id is our own self_id (a daemon that did not realise it was
+    // talking to itself), the recorded origin must still be self — the
+    // requester drives `for_node`, never `node_id`. The aggregation path
+    // (`current_contributions`) groups by `node_id` to attribute "who
+    // served"; a requester that polluted origin would let an external caller
+    // masquerade as a different serving node in our local view.
     let self_id = NodeId::from_u128(0xDEADBEEF_DEADBEEF);
 
     let tmp = tempfile::tempdir().unwrap();
@@ -261,23 +278,25 @@ async fn origin_unaffected_by_requester_header_swap() {
     );
     let addr = spawn_router(internal_router(state.clone())).await;
 
-    // Send a request whose X-Node-Id IS our own self_id. The
-    // route should still treat it as "a peer claiming to be us"
-    // (the header drives for_node, no checking it doesn't match
-    // self), so the emission still fires, but origin stays self.
-    let hostile_header = id_to_hex(&self_id);
-    let resp = reqwest::Client::new()
-        .post(format!("http://{addr}/internal/knowledge/search"))
-        .header("X-Node-Id", &hostile_header)
-        .json(&serde_json::json!({
-            "query_embedding": vec![0.0_f32; EMBED_DIM],
-            "query_text": "content",
-            "corpora": ["sep"],
-            "limit": 10,
-        }))
-        .send()
-        .await
-        .unwrap();
+    // The requester is a verified member whose node id IS our own self_id.
+    // The route treats it as "a peer that is us" — no check that it differs —
+    // so the emission still fires, and origin stays self.
+    common::name_member_with_key(&state, self_id, "self", SELF_KEY).await;
+    let resp = common::acceptor_stamp(
+        reqwest::Client::new().post(format!("http://{addr}/internal/knowledge/search")),
+        "self",
+        self_id,
+        SELF_KEY,
+    )
+    .json(&serde_json::json!({
+        "query_embedding": vec![0.0_f32; EMBED_DIM],
+        "query_text": "content",
+        "corpora": ["sep"],
+        "limit": 10,
+    }))
+    .send()
+    .await
+    .unwrap();
     assert_eq!(resp.status(), reqwest::StatusCode::OK);
 
     let events = state.inner.fabric.contribution_emitter.events().unwrap();
@@ -288,7 +307,7 @@ async fn origin_unaffected_by_requester_header_swap() {
     assert_eq!(
         served.len(),
         1,
-        "self-headered request should still produce one event"
+        "a verified requester that happens to be us still produces one event"
     );
 
     // The event's origin (`node_id`) is always self.
@@ -297,13 +316,13 @@ async fn origin_unaffected_by_requester_header_swap() {
         "origin MUST be self regardless of header content"
     );
 
-    // for_node reflects what the header said — verifying the
-    // header-driven path works, but the origin is independent.
+    // for_node reflects the VERIFIED requester — the attribution path works,
+    // and the origin is independent of it.
     if let LedgerEventKind::KnowledgeQueryServed { for_node, .. } = &served[0].kind {
         assert_eq!(
             for_node, &self_id,
-            "for_node reflects the X-Node-Id header verbatim; a regression \
-             that conflated origin and for_node would lose this distinction"
+            "for_node is the verified requester; a regression that conflated \
+             origin and for_node would lose this distinction"
         );
     }
 }

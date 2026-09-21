@@ -295,7 +295,7 @@ fn peak_rss_mb() -> Option<u64> {
 }
 
 /// The TCP port this node's in-process RPC inference worker is serving, parsed
-/// from `SOVEREIGN_RPC_SERVE` (e.g. `0.0.0.0:50052` → 50052) **and only when a
+/// from `SOVEREIGN_RPC_SERVE` (e.g. `127.0.0.1:50052` → 50052) **and only when a
 /// worker is actually accepting on it**. `None` when this node is not configured
 /// as a worker, or is configured but the worker isn't live — e.g. ggml tore its
 /// accept loop down on a transient `accept()` error and the supervisor hasn't
@@ -458,7 +458,7 @@ pub struct InferenceStatus {
 /// (`node-` + first 16 hex chars of the id — what `NodeId`'s `Display`
 /// prints). The `X-Node-Id` HEADER surface is the different, full
 /// form: `NodeId::to_hex()`, exactly 32 lowercase hex chars
-/// (`crate::headers::parse_x_node_id` accepts nothing else). A
+/// (`sovereign_contracts::principal::claimed_node_id` accepts nothing else). A
 /// truncated hex string from a status row must never be echoed back
 /// as a header — resolve through the roster or `to_hex`.
 #[derive(Debug, Serialize)]
@@ -475,7 +475,8 @@ pub struct PrincipalRequestStatus {
     /// Unix seconds of the most recent admission.
     pub last_request_at: i64,
     /// Zero-bucket row only (fix 7): the raw `X-Node-Id` header value
-    /// that failed [`crate::headers::parse_x_node_id`]. `None` on
+    /// that failed [`sovereign_contracts::principal::claimed_node_id`].
+    /// `None` on
     /// every well-formed row and on the zero row when no malformed
     /// header has ever arrived.
     #[serde(skip_serializing_if = "Option::is_none")]

@@ -327,7 +327,16 @@ concurrently, then two ADVISORY size ratchets that report and let the push
 through. The ratchets are the half no test run speaks to; each failure names
 its own fix command. Two rules:
 
-- **A ratchet failure is not fixed by `--update-baseline` on your working
+- **A file over its size ceiling is SPLIT, by whoever pushed it over, in the
+  same piece of work. It is never re-pinned and it is never a question for the
+  operator** (operator direction 2026-09-21: "Why do I need to decide what to
+  do when files go over the limit? The answer is never to repin."). `arch-gate`
+  already says it — "Trim or split (ARCH §3.1)" — and what made it a question
+  was the re-pin recipe below being read as an option for it. It is not one.
+  That covers a file that GREW past its slack and a file that ENTERED the
+  800-1200 approach band: move what you added into a sibling file, behaviour
+  preserved, one file per commit, and watch the gate go green.
+- **Any other ratchet failure is not fixed by `--update-baseline` on your working
   tree** — that absorbs your own growth along with everything else. Re-pin at
   `origin/main` (a worktree, then copy `quality/baselines/` back) so what is
   already public is separated from what this push adds, and ledger the

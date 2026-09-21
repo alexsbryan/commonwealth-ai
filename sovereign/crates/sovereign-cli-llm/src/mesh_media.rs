@@ -13,6 +13,7 @@ use std::time::{Duration, Instant};
 use crate::mesh_cmd::daemon_client_port;
 
 mod declare;
+mod viewer;
 pub(crate) use declare::cmd_media_declare;
 
 pub(crate) async fn cmd_media(args: &[String]) -> i32 {
@@ -23,7 +24,10 @@ pub(crate) async fn cmd_media(args: &[String]) -> i32 {
         return cmd_media_declare(&args[1..]);
     }
     if args.first().map(String::as_str) == Some("offer") {
-        return cmd_media_offer(&args[1..]);
+        return cmd_media_offer(&args[1..]).await;
+    }
+    if args.first().map(String::as_str) == Some("withdraw") {
+        return cmd_media_withdraw(&args[1..]);
     }
     if args.first().map(String::as_str) == Some("admit") {
         return cmd_media_admit(&args[1..]);
@@ -31,6 +35,7 @@ pub(crate) async fn cmd_media(args: &[String]) -> i32 {
     if sovereign_cli_shared::help::wants_help(args) {
         eprintln!("Usage: svrn mesh media [<peer>] [--json] [--no-probe]");
         eprintln!("       svrn mesh media offer [<origin>] [--admit <member>...]");
+        eprintln!("       svrn mesh media withdraw");
         eprintln!("       svrn mesh media admit <member>...");
         eprintln!("       svrn mesh media fanout <path> [--peers a,b] [--method M] [--timeout-ms N] [--json]");
         eprintln!(
@@ -161,9 +166,14 @@ pub(crate) async fn cmd_media(args: &[String]) -> i32 {
                     line.push_str("  — a RELAYED reading (the bar's kind)");
                 } else if p.path == "mixed" {
                     line.push_str(&format!(
-                        "  — {} direct addr + relay both live; bytes ride the direct leg, so this \
-                         is NOT a relayed reading (pin both ends with SOVEREIGN_IROH_RELAY_ONLY=1)",
-                        p.active_direct_addrs
+                        "  — {} direct addr{} + relay both live; bytes ride the direct leg, so \
+                         this is NOT a relayed reading (pin both ends with \
+                         SOVEREIGN_IROH_RELAY_ONLY=1)",
+                        p.active_direct_addrs,
+                        match p.active_direct_socket_addrs.as_slice() {
+                            [] => String::new(),
+                            a => format!(" [{}]", a.join(" ")),
+                        }
                     ));
                 } else if p.path == "direct" {
                     line.push_str("  — a direct reading, not the bar's");
@@ -254,6 +264,9 @@ async fn list_offers(client: &reqwest::Client, url: &str, json_out: bool) -> i32
             .unwrap_or_else(|| "no path yet (nothing dialed)".to_string());
         println!("  {:<16} {}  {:<8} {}", o.peer, o.node_id, status, path);
         println!("  {:<16} {}", "", offered_to_line(&o.offered_to));
+        if let Some(line) = in_use_line(o.media_available) {
+            println!("  {:<16} {line}", "");
+        }
     }
     println!();
     println!("Play one:  svrn mesh media <peer>");
@@ -451,6 +464,22 @@ pub(crate) async fn cmd_fanout(app: Option<&str>, args: &[String]) -> i32 {
     0
 }
 
+/// The "in use" line for one offer, or nothing to say.
+///
+/// Three states, three renderings, and the third is not silence-by-omission:
+/// `0.0` the holder is watching it, `1.0` free (nothing to print — a free
+/// library is the ordinary case), and `None` the holder published no presence,
+/// which is printed so a person is not left reading "free" off a blank line.
+fn in_use_line(media_available: Option<f32>) -> Option<String> {
+    match media_available {
+        Some(v) if v <= commonwealth_media::IN_USE => {
+            Some("in use right now (the holder is watching it)".to_string())
+        }
+        Some(_) => None,
+        None => Some("in use: not reported by this holder".to_string()),
+    }
+}
+
 /// The `offered to` line for one offer: the holder's gossiped admit list, or
 /// everyone when it is empty (`admit_media` reads an empty list the same way).
 fn offered_to_line(offered_to: &[String]) -> String {
@@ -470,6 +499,7 @@ fn set_offer(
     doc: &mut toml_edit::DocumentMut,
     origin: std::net::SocketAddr,
     admit: &[String],
+    viewer_user: Option<&str>,
 ) -> Result<(), String> {
     let iroh = doc
         .entry("iroh")
@@ -483,7 +513,27 @@ fn set_offer(
         let names: toml_edit::Array = admit.iter().map(String::as_str).collect();
         iroh.insert("media_allow", toml_edit::value(names));
     }
+    // `None` LEAVES the recorded viewer alone rather than clearing it: only
+    // `offer` mints a viewer, and `admit` — which shares this writer — must
+    // not silently un-record the account the presence poll reads.
+    if let Some(id) = viewer_user {
+        iroh.insert("media_viewer_user", toml_edit::value(id));
+    }
     Ok(())
+}
+
+/// Remove every key `offer` wrote. The inverse, and the whole of it: origin,
+/// admit list and viewer account go together, because each one describes an
+/// offer that no longer exists.
+fn clear_offer(doc: &mut toml_edit::DocumentMut) -> bool {
+    let Some(iroh) = doc.get_mut("iroh").and_then(|i| i.as_table_mut()) else {
+        return false;
+    };
+    let had = iroh.contains_key("media_origin");
+    iroh.remove("media_origin");
+    iroh.remove("media_allow");
+    iroh.remove("media_viewer_user");
+    had
 }
 
 /// Where a media server listens when nobody said: Jellyfin's HTTP port, then
@@ -524,7 +574,7 @@ fn stored_origin(doc: &toml_edit::DocumentMut) -> Result<Option<std::net::Socket
 /// says what it found. Both keys reload live (`MediaRoute`), so no restart:
 /// a restart left peers dialing the holder's endpoint for 120 s (ring-room
 /// 99ca7e4cb leg 3).
-fn cmd_media_offer(args: &[String]) -> i32 {
+async fn cmd_media_offer(args: &[String]) -> i32 {
     if sovereign_cli_shared::help::wants_help(args) {
         eprintln!("Usage: svrn mesh media offer [<origin>] [--admit <member>...]");
         eprintln!();
@@ -591,7 +641,112 @@ fn cmd_media_offer(args: &[String]) -> i32 {
             return 1;
         }
     };
-    write_offer(path, doc, origin, &admit)
+    // The read-only account viewers reach this library as, minted with the
+    // credential the install stage declared and REPLACING it — the admin-
+    // equivalent key that was declared until now is the thing this closes
+    // (see `viewer`). A failure here is named and does NOT stop the offer: a
+    // library served by the old credential is what the holder already had,
+    // and refusing to offer at all would be a worse answer than a loud one.
+    let root = sovereign_contracts::rebrand::svrnmesh_root();
+    let dir = commonwealth_media::dir_under(&root);
+    let house_dir = commonwealth_media::house_dir_under(&root);
+    let before = commonwealth_media::read_declared_in(&dir);
+    let viewer = match viewer::provision(origin, &before).await {
+        Ok(v) => {
+            // The credential being replaced is the HOUSE's — the one account
+            // on this origin that can see the holder's own sessions. Kept
+            // here, on this machine only, so the presence poll still has an
+            // asker after the declaration becomes the viewer's read-only
+            // token. Skipped when there is nothing to keep: on a second offer
+            // `provision` hands back the token already declared, and storing
+            // that as the house credential would lose the elevated one.
+            if let Some((_, install)) = before
+                .iter()
+                .find(|(n, val)| n == "authorization" && *val != v.credential)
+            {
+                if let Err(e) =
+                    commonwealth_media::write_declared_in(&house_dir, "authorization", install)
+                {
+                    eprintln!(
+                        "mesh media offer: the house credential could not be kept — {e}; this \
+                         node will publish no \"in use\" signal"
+                    );
+                }
+            }
+            if let Err(e) =
+                commonwealth_media::write_declared_in(&dir, "authorization", &v.credential)
+            {
+                eprintln!(
+                    "mesh media offer: the viewer was created but could not be declared — {e}"
+                );
+                None
+            } else {
+                println!("Viewers reach this library as a read-only account (policy read back).");
+                Some(v)
+            }
+        }
+        Err(e) => {
+            tracing::warn!(error = %e, "media offer: no read-only viewer account");
+            eprintln!("mesh media offer: no read-only viewer account — {e}");
+            eprintln!("  The offer stands with whatever credential is declared, and this node");
+            eprintln!("  will publish no \"in use\" signal until a viewer account exists.");
+            None
+        }
+    };
+    write_offer(
+        path,
+        doc,
+        origin,
+        &admit,
+        viewer.as_ref().map(|v| v.id.as_str()),
+    )
+}
+
+/// `svrn mesh media withdraw` — stop offering this machine's library. The
+/// inverse of `offer` and the whole of it: origin, admit list and viewer
+/// account are removed together and the daemon reloaded, so the offer is gone
+/// from every member's rail within one gossip round rather than at the next
+/// restart.
+fn cmd_media_withdraw(args: &[String]) -> i32 {
+    if sovereign_cli_shared::help::wants_help(args) {
+        eprintln!("Usage: svrn mesh media withdraw");
+        eprintln!();
+        eprintln!("Stop offering this machine's media server to the mesh. Removes the");
+        eprintln!("origin, the admit list and the read-only viewer account this node");
+        eprintln!("recorded, then reloads the daemon so members see it go within one");
+        eprintln!("gossip round. The library, the server and the declared credential are");
+        eprintln!("untouched — `svrn mesh media offer` puts it back.");
+        return 0;
+    }
+    if let Some(extra) = args.iter().next() {
+        eprintln!("mesh media withdraw: takes no arguments (got {extra:?})");
+        return 1;
+    }
+    let (path, mut doc) = match crate::publish_cmd::load_doc() {
+        Ok(d) => d,
+        Err(e) => {
+            eprintln!("mesh media withdraw: {e}");
+            return 1;
+        }
+    };
+    let had = clear_offer(&mut doc);
+    if let Err(e) = crate::publish_cmd::write_doc(&path, &doc) {
+        eprintln!("mesh media withdraw: could not write the config — {e}");
+        return 1;
+    }
+    tracing::info!(config = %path.display(), had, "media offer withdrawn");
+    if had {
+        println!("Withdrawn. ({})", path.display());
+    } else {
+        // Not an error — the end state is the one asked for — but never
+        // reported as if a live offer had just been taken down.
+        println!(
+            "This machine was not offering media; nothing to withdraw. ({})",
+            path.display()
+        );
+    }
+    println!("reloading the daemon to publish the withdrawal…");
+    reload_daemon()
 }
 
 /// `svrn mesh media admit <member>...` — narrow a standing offer to the named
@@ -631,7 +786,7 @@ fn cmd_media_admit(args: &[String]) -> i32 {
             return 1;
         }
     };
-    write_offer(path, doc, origin, args)
+    write_offer(path, doc, origin, args, None)
 }
 
 /// Write the offer into the config and reload the daemon — the one tail
@@ -641,9 +796,10 @@ fn write_offer(
     mut doc: toml_edit::DocumentMut,
     origin: std::net::SocketAddr,
     admit: &[String],
+    viewer_user: Option<&str>,
 ) -> i32 {
-    if let Err(e) =
-        set_offer(&mut doc, origin, admit).and_then(|()| crate::publish_cmd::write_doc(&path, &doc))
+    if let Err(e) = set_offer(&mut doc, origin, admit, viewer_user)
+        .and_then(|()| crate::publish_cmd::write_doc(&path, &doc))
     {
         eprintln!("mesh media offer: could not write the config — {e}");
         return 1;

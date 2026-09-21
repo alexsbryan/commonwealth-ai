@@ -2711,7 +2711,8 @@ impl ModelSlot {
                 target: "capability",
                 model = %model_id,
                 arch = %slot_ctx.arch,
-                reason = gate.measured,
+                verdict = gate.measured,
+                cause = gate.measured_cause.unwrap_or("unknown"),
                 prefix_cache_safe,
                 "capability: no measurement for this slot — the arch declaration decided"
             );

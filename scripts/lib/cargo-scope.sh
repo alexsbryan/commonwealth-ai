@@ -117,7 +117,7 @@ keep_members() {
 # this replaced.
 resolve_features() {
     if [[ $# -eq 0 ]]; then
-        echo "corpus-engine/treesitter,sovereign-cli/dev-tools,sovereign-cli/code-intel,sovereign-cli/awareness,sovereign-mesh/dst,sovereign-turn-client/bundled-backend"
+        echo "corpus-engine/treesitter,sovereign-cli/dev-tools,sovereign-cli/code-intel,sovereign-cli/awareness,sovereign-daemon/treesitter,sovereign-mesh/dst,sovereign-turn-client/bundled-backend"
         return 0
     fi
 
@@ -170,6 +170,16 @@ if "sovereign-cli" in seen:
     # fingerprints on features, so alternating lint and test rebuilt
     # sovereign-cli and sovereign-mesh on every switch.
     want.append("sovereign-cli/awareness")
+if "sovereign-daemon" in seen:
+    # `treesitter` gates `pub mod bootstrap` (lib.rs:63) — and with it the
+    # whole `rpc_worker_flag_tests` module. The daemon BINARY enables the
+    # feature unconditionally, so a workspace build compiles bootstrap; no
+    # test run ever did, because no gate named the flag. Measured 2026-09-20:
+    # `--package sovereign-daemon --filter bare_flag_takes_the_documented_default`
+    # exited 4, "no tests matched", while 756 other tests passed — the same
+    # shape as the sovereign-mesh/treesitter hole below. Same value in both
+    # gates, so no fingerprint flip.
+    want.append("sovereign-daemon/treesitter")
 if "sovereign-mesh" in seen:
     # `dst` compiles the fault-injection harness and, through it, the Tier-1
     # scheduler simulator that moved to `sovereign-mesh-test-harness` (domains

@@ -67,6 +67,7 @@ pub(crate) fn solo_state(service: Arc<dyn LocalInferenceService>) -> AppState {
                 loaded_models: vec![],
                 origins: Vec::new(),
                 media_allow: Vec::new(),
+                media_available: None,
                 embed_model: None,
                 benchmark: None,
                 current_in_flight: None,
@@ -183,6 +184,7 @@ async fn a_url_in_a_tool_result_does_not_constrain_sampling_by_default() {
         State(state),
         HeaderMap::new(),
         None,
+        None,
         Json(chat_with_url_in_tool_result()),
     )
     .await;
@@ -205,7 +207,7 @@ async fn a_caller_supplied_allowlist_survives_the_gate() {
     let state = solo_state(Arc::new(svc.clone()));
     let mut request = chat_with_url_in_tool_result();
     request.url_allowlist = Some(vec!["https://example.test/a".to_string()]);
-    let _ = chat_completions(State(state), HeaderMap::new(), None, Json(request)).await;
+    let _ = chat_completions(State(state), HeaderMap::new(), None, None, Json(request)).await;
     assert_eq!(
         svc.seen().url_allowlist.as_deref(),
         Some(&["https://example.test/a".to_string()][..]),

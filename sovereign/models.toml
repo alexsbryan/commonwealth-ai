@@ -594,7 +594,7 @@ instruction = 2
 # across the mesh via RPC layer-distribution.
 #
 # To run it: download all 4 split parts (co-located), point [models].primary
-# at the first part, run each worker with SOVEREIGN_RPC_SERVE=0.0.0.0:50052,
+# at the first part, run each worker with SOVEREIGN_RPC_SERVE=127.0.0.1:50052,
 # and start the host daemon with SOVEREIGN_RPC_DISCOVER=1. The host then
 # splits the model across the mesh's pooled VRAM. See
 # docs/RPC_DISTRIBUTED_INFERENCE.md.

@@ -8,8 +8,20 @@
 //! alpha but breaks the moment the daemon runs on a routable address
 //! someone untrusted can reach (a VPS, shared wifi, a tailnet with
 //! guests). This layer is the **B** tier of the 2026-06 auth plan
-//! (localhost-default + bearer token); node-identity auth for mesh
-//! peers is a later milestone.
+//! (localhost-default + bearer token).
+//!
+//! **Node-identity auth for mesh peers is no longer "a later milestone" on
+//! every surface, and this one is not the surface that has it.** On the
+//! INTERNAL router (`:9742`) a peer's identity is the Ed25519 key the iroh
+//! handshake proved, forwarded by this daemon's own acceptor and resolved by
+//! [`crate::internal_principal`] — a header claiming otherwise is stripped
+//! before a handler sees it. HERE, on the client surface, the acceptor does
+//! not yet append a verified identity to `CLIENT_ALPN`, so a peer is still
+//! identified by the `x-node-id` it TYPES. That claim is read exactly once —
+//! by [`crate::client_principal`], through the one canonical wire parser —
+//! and every decider downstream reads the [`Principal`] it produces rather
+//! than the header (`crate::mesh_principal_gate` is the ratchet). A claim that
+//! does not parse is [`Principal::Unverified`], and the peer gate refuses it.
 //!
 //! ## Decision (per connection, not per header)
 //!
@@ -21,7 +33,10 @@
 //!   spoofable `X-Node-Id` header, which meant "omit the header" was a
 //!   full-trust bypass. That footgun dies here.)
 //! - **Remote caller** → must present `Authorization: Bearer <token>`
-//!   matching the daemon's configured token (constant-time compare).
+//!   matching a NAMED token ([`crate::client_tokens`], one per device and
+//!   revocable alone) or the daemon's configured token (constant-time compare
+//!   either way). `[daemon] client_tokens = "named-only"` refuses the second
+//!   with a sentence.
 //!   - No token configured (`AppState::client_token` is `None`) →
 //!     **fail closed** (403): a remote request reached a daemon that
 //!     never set up a secret; refuse rather than admit.
@@ -45,7 +60,8 @@
 //! fairness and peer-admission middlewares read it rather than resolving a
 //! second time (`DAEMON_CORE.md` §3.3, "authenticates a request once and
 //! attaches a `Principal`"). The internal router carries no `client_auth_layer`
-//! and keeps its own resolver fallback.
+//! — it runs [`crate::internal_principal::internal_principal_layer`], which
+//! attaches the same extension from the acceptor's verified key.
 //!
 //! ## Loopback is a property of the LISTENER, not of the layer
 //!
@@ -65,7 +81,7 @@
 //! inference (which carries no `Authorization` at all) keep working.
 
 use commonwealth_core::ct::constant_time_eq;
-use sovereign_grants::GuestGrant;
+use sovereign_grants::{GuestGrant, GuestSession};
 use sovereign_serving_host::admission::Principal;
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -260,7 +276,38 @@ pub async fn client_auth_layer(
                             scopes = %grant.summary(),
                             "client_auth: guest grant admitted"
                         );
-                        request.extensions_mut().insert(Guest(Arc::new(grant)));
+                        // WHO, beside WHAT. A handle the store does not know
+                        // under this grant is REFUSED rather than dropped to
+                        // `None`: "this phone's session lapsed" and "this phone
+                        // never claimed a name" are the two answers a guest
+                        // most needs to tell apart, and defaulting the first to
+                        // the second would silently un-name them mid-room
+                        // (ARCH 6).
+                        let session = match request
+                            .headers()
+                            .get(crate::routes_guest_session::RING_SESSION_HEADER)
+                        {
+                            None => None,
+                            Some(raw) => {
+                                let handle = raw.to_str().unwrap_or("").trim();
+                                match state.inner.node.guest_sessions.live(handle, &grant, now) {
+                                    Some(s) => Some(s),
+                                    None => {
+                                        tracing::info!(
+                                            peer = %peer,
+                                            path = %request.uri().path(),
+                                            "client_auth: guest session handle is not live \
+                                             under this grant"
+                                        );
+                                        return stale_session();
+                                    }
+                                }
+                            }
+                        };
+                        request.extensions_mut().insert(Guest {
+                            grant: Arc::new(grant),
+                            session,
+                        });
                         return next.run(request).await;
                     }
                     Some(grant) => {
@@ -281,11 +328,32 @@ pub async fn client_auth_layer(
                 }
             }
         }
-        // A bearer that is not a grant: the daemon-wide token admits it.
+        // A bearer that is not a grant. TWO credentials admit here and they
+        // are independent: a NAMED token (one device, revocable alone) and
+        // the daemon-wide one. The named set is read first because it is the
+        // one that can be withdrawn without disturbing anything else, and
+        // because its admit line can name WHO — see `crate::client_tokens`.
         Principal::RemoteClient { .. } => {
-            if let (Some(expected), Some(p)) = (configured.as_ref(), presented) {
-                if constant_time_eq(p.as_bytes(), expected.as_bytes()) {
+            if let Some(p) = presented {
+                if let Some(label) = state.inner.node.named_client_tokens.label_for(p) {
+                    // The LABEL, never the token: a credential in a log is a
+                    // credential in every scrollback, bug report and log
+                    // shipper downstream of it.
+                    tracing::debug!(
+                        peer = %peer,
+                        path = %request.uri().path(),
+                        label = %label,
+                        "client_auth: named client token admitted"
+                    );
                     return next.run(request).await;
+                }
+                if let Some(expected) = configured.as_ref() {
+                    if constant_time_eq(p.as_bytes(), expected.as_bytes()) {
+                        if state.inner.node.client_tokens.admits_shared_token() {
+                            return next.run(request).await;
+                        }
+                        return shared_token_refused(&peer, request.uri().path());
+                    }
                 }
             }
         }
@@ -330,7 +398,64 @@ pub async fn client_auth_layer(
 /// `Arc` because the grant is cloned out of the store once per request and read
 /// by more than one place in a handler.
 #[derive(Clone)]
-pub struct Guest(pub Arc<GuestGrant>);
+pub struct Guest {
+    /// What this caller may reach. THE decider — see
+    /// [`GuestGrant::permits_path`].
+    pub grant: Arc<GuestGrant>,
+    /// WHO is holding the phone, when they have claimed a name
+    /// ([`routes_guest_session`](crate::routes_guest_session)). `None` is a
+    /// guest who has not claimed one yet — one QR serves a room, so the grant
+    /// cannot answer this and the absence is never read as a name. A session
+    /// carries no scope of its own: it says who, never what.
+    pub session: Option<GuestSession>,
+}
+
+/// 409 for a phone presenting a session handle this grant does not know — a
+/// grant that lapsed and was re-issued, a handle from another room, or a
+/// session swept after its grant's expiry.
+///
+/// Its audience is a page that can fix it: the handle is not a credential, so
+/// naming the state leaks nothing, and the shim's answer is to ask for the name
+/// again. A 401 would be wrong — the BEARER authenticated fine.
+fn stale_session() -> Response {
+    (
+        StatusCode::CONFLICT,
+        Json(serde_json::json!({
+            "error": "this ring session is no longer live under this link — claim a name again",
+            "code": "stale_session",
+        })),
+    )
+        .into_response()
+}
+
+/// 401 for a VALID daemon-wide token on a node that has stopped accepting it
+/// (`[daemon] client_tokens = "named-only"`).
+///
+/// Named rather than folded into [`unauthorized`], for the same reason
+/// [`guest_out_of_scope`] is: the audience is not a prober guessing
+/// credentials — it is somebody holding a credential this node used to honour,
+/// and "authentication required" would send them checking the token they are
+/// already sending correctly. Naming the posture leaks nothing they could not
+/// infer from being refused while the desktop on the same machine still works.
+fn shared_token_refused(peer: &SocketAddr, path: &str) -> Response {
+    tracing::warn!(
+        peer = %peer,
+        path = %path,
+        "client_auth: the shared client token is refused under \
+         [daemon] client_tokens = \"named-only\""
+    );
+    (
+        StatusCode::UNAUTHORIZED,
+        [("WWW-Authenticate", "Bearer")],
+        Json(serde_json::json!({
+            "error": "this node no longer admits the shared client token \
+                      ([daemon] client_tokens = \"named-only\") — ask its operator \
+                      for a token of your own (`svrn mesh token --new <label>`)",
+            "code": "named_token_required",
+        })),
+    )
+        .into_response()
+}
 
 /// 403 for a live grant that simply doesn't cover this route.
 ///

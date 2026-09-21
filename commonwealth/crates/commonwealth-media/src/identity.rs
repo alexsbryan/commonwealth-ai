@@ -47,11 +47,7 @@ impl MemberIdentity {
     /// any client-supplied header under `x-mesh-` is stripped before these
     /// are added, so the origin reads them as the acceptor's word.
     pub fn headers(&self, dialer: NodePubkey) -> Vec<(String, String)> {
-        vec![
-            ("X-Mesh-Member".to_string(), self.name.clone()),
-            ("X-Mesh-Node".to_string(), self.node_id.to_string()),
-            ("X-Mesh-Pubkey".to_string(), hex::encode(dialer.0)),
-        ]
+        verified_headers(Some(self), dialer)
     }
 
     /// Whether a `media_allow` entry names this member: its exact name, or a
@@ -60,6 +56,29 @@ impl MemberIdentity {
     pub fn named_by(&self, entry: &str) -> bool {
         member_matches(self.node_id, &self.name, entry)
     }
+}
+
+/// The one implementation of the `X-Mesh-*` scheme: what the acceptor tells an
+/// origin about a dialer whose key the QUIC handshake verified.
+///
+/// The pubkey is always known — it is what the handshake proved — so it is
+/// always named. The member name and node id are the ROSTER's word, and a
+/// dialer the roster does not name gets neither rather than a placeholder: an
+/// absent header is "the roster did not answer", and a `<none>` value would be
+/// "the roster answered: nobody" (ARCH principle 6). A reader that needs a
+/// member must refuse the key-only case, and can see that it must.
+///
+/// One function rather than one per ALPN because the names ARE the scheme: a
+/// second spelling is how `cwth/http/0` learns to say `X-Mesh-NodeId` while
+/// `cwth/media/0` says `X-Mesh-Node` (ARCH principle 8).
+pub fn verified_headers(who: Option<&MemberIdentity>, dialer: NodePubkey) -> Vec<(String, String)> {
+    let mut out = Vec::with_capacity(3);
+    if let Some(who) = who {
+        out.push(("X-Mesh-Member".to_string(), who.name.clone()));
+        out.push(("X-Mesh-Node".to_string(), who.node_id.to_string()));
+    }
+    out.push(("X-Mesh-Pubkey".to_string(), hex::encode(dialer.0)));
+    out
 }
 
 /// The holder's decision for a `cwth/media/0` dial — the ONE place that turns

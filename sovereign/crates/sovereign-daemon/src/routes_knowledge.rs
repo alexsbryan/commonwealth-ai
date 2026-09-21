@@ -459,7 +459,7 @@ async fn fanout_one_peer(
         limit: Some(limit),
     };
     // Hex-encode the requester id for the `X-Node-Id` header.
-    // Matches the format `crate::headers::parse_x_node_id`
+    // Matches the format `sovereign_contracts::principal::claimed_node_id`
     // expects (32 hex chars, lowercase). One small allocation per
     // peer per query; the OICP wire shape already costs more.
     let requester_hex: String = requester_id

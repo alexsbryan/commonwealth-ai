@@ -6,11 +6,13 @@
 //! is [`client_router_for`](crate::server::client_router_for) with
 //! [`ClientSurface::Guest`] — the same route set and the same
 //! `UNTRUSTED_LOOPBACK` auth posture as the `GUEST_ALPN` bind — plus ONE
-//! route of its own: the ring page, a static directory at [`PAGE_PREFIX`],
+//! route of its own: the ring page, a static bundle under [`PAGE_PREFIX`] —
+//! one per rail namespace the wall holds ([`GuestPages`]) —
 //! merged OUTSIDE the auth layer because a browser cannot present a bearer
 //! when it navigates. The page is code, not data; everything it reads or
-//! writes goes through the rail routes, which the grant scopes to one
-//! namespace. `/app/{app_id}/*` could not carry it: that route reverse-proxies
+//! writes goes through the rail routes, which are scoped to one namespace for
+//! a `Scope::Rails` grant and to what [`GuestPages`] declares for a wall one.
+//! `/app/{app_id}/*` could not carry it: that route reverse-proxies
 //! to a running app's port and serves no directory (`routes_apps::proxy_app`).
 //!
 //! The listener exists only while [`live_rail_grants`] is non-zero, so a
@@ -30,6 +32,7 @@ use axum::http::{header, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use axum::Router;
+use sovereign_core::guest_pages::GuestPage;
 use sovereign_grants::GuestGrantStore;
 use tracing::{info, warn};
 
@@ -37,11 +40,224 @@ use crate::client_surface::ClientSurface;
 use crate::state::AppState;
 
 /// Where the door serves the ring page. The link a guest scans is
-/// `http://<guest_bind><PAGE_PREFIX>#token=…`.
+/// `http://<guest_bind><PAGE_PREFIX>#token=…`, or
+/// `http://<guest_bind><PAGE_PREFIX><namespace>/#token=…` for a wall holding
+/// more than one app.
 pub const PAGE_PREFIX: &str = "/ring/";
 
-/// The shim's path, beside the page so the page's relative imports resolve.
+/// The shim's file name, beside each page so the page's relative imports
+/// resolve. One name, two homes: `/ring/__ring.js` for the un-namespaced page
+/// and `/ring/<namespace>/__ring.js` for a registered one.
+const SHIM_FILE: &str = "__ring.js";
+
+/// The shim's path beside the un-namespaced page.
 const SHIM_PATH: &str = "/ring/__ring.js";
+
+/// Which bundle directory the door serves for which rail namespace.
+///
+/// A wall holds as many apps as the house put on it and each app is its own
+/// rail namespace, so the page surface is a REGISTRY keyed by namespace
+/// rather than one directory at one prefix — which apps exist is data that
+/// changes without a code change (ARCH §9), the same shape `[iroh.apps]`
+/// already uses for the apps a node publishes to members.
+/// **It is also the DECLARATION of which namespaces admit guests at all.** An
+/// entry here is the owner saying "this app is on the wall" — the shape a
+/// recipe's `mesh_sharing` already has for a corpus — and a wall grant
+/// ([`Scope::Wall`](sovereign_grants::Scope::Wall)) reaches exactly what is
+/// declared here and nothing else on the rail.
+#[derive(Clone, Debug, Default)]
+pub struct GuestPages {
+    /// `[daemon] guest_page_dir` — the page at the bare `/ring/`, which is
+    /// what a wall with one app has always had and still has.
+    default_dir: Option<PathBuf>,
+    /// `[daemon.guest_pages]` — namespace → the entry that says where its
+    /// bundle is and what guests may do there, each served at
+    /// `/ring/<namespace>/`.
+    by_namespace: std::collections::BTreeMap<String, GuestPage>,
+}
+
+impl GuestPages {
+    /// The registry as configured: the un-namespaced page and the named ones.
+    pub fn new(
+        default_dir: Option<PathBuf>,
+        by_namespace: std::collections::BTreeMap<String, GuestPage>,
+    ) -> Self {
+        Self {
+            default_dir,
+            by_namespace,
+        }
+    }
+
+    /// The registry as `[daemon]` declares it — the ONE place the two config
+    /// keys become the door's page surface, so the daemon reads neither.
+    ///
+    /// **Refuses a namespace this daemon owns.** The work plane, the KV rings,
+    /// the atlas and `mesh-measurements` carry the daemon's own writes under
+    /// a roster derived from membership; declaring one guest-open would hand
+    /// a stranger an append on the machinery, and no operator types that on
+    /// purpose. It is refused HERE, at the one config read, so the daemon
+    /// declines to start rather than serving a door that is wrong — and
+    /// refused AGAIN at the rail route, because a registry that was wrong must
+    /// not be the only guard (ARCH 5). The membership question is
+    /// [`is_daemon_owned`](sovereign_mesh::ring_roster::is_daemon_owned),
+    /// which is the decider that already knows; this only says what to do
+    /// about the answer.
+    pub fn from_config(d: &sovereign_core::setup_config::DaemonSection) -> Result<Self, String> {
+        for ns in d.guest_pages.keys() {
+            if sovereign_mesh::ring_roster::is_daemon_owned(ns) {
+                return Err(format!(
+                    "[daemon.guest_pages] declares '{ns}' open to guests, but that is one of \
+                     this daemon's OWN rings — its roster is the mesh's membership and its \
+                     writes are the machinery's, not an app's. Remove that entry; a guest \
+                     app needs a namespace of its own."
+                ));
+            }
+        }
+        Ok(Self::new(d.guest_page_dir.clone(), d.guest_pages.clone()))
+    }
+
+    /// Nothing to serve — the door's rail routes stand alone.
+    pub fn is_empty(&self) -> bool {
+        self.default_dir.is_none() && self.by_namespace.is_empty()
+    }
+
+    /// What this wall's owner declared about `namespace`, or `None` if they
+    /// declared nothing about it.
+    ///
+    /// **THE reader of the declaration**, for the door's page routes and for
+    /// the rail's `resolve_granted` alike — so "is this app on the wall" has
+    /// one answer whether it is asked of a page request or of an append.
+    pub fn declared(&self, namespace: &str) -> Option<&GuestPage> {
+        self.by_namespace.get(namespace)
+    }
+
+    /// Every namespace declared here, in config order (`BTreeMap`, so by
+    /// name). What the door's index at `/ring/` lists.
+    pub fn declared_namespaces(&self) -> impl Iterator<Item = &str> {
+        self.by_namespace.keys().map(String::as_str)
+    }
+}
+
+/// What a `/ring/…` request resolves to — decided in ONE place so the
+/// registry and the live-grant rule cannot disagree between the index route
+/// and the file route.
+#[derive(Debug, PartialEq)]
+enum PageRoute<'a> {
+    /// Serve `rel` from inside `dir`, injecting the shim at `shim`.
+    File {
+        dir: &'a Path,
+        rel: String,
+        shim: Option<String>,
+    },
+    /// The shim itself, rendered for this namespace.
+    Shim { namespace: String },
+    /// The wall's own index at the bare `/ring/`: the declared apps a live
+    /// grant reaches, each a link. Only when `guest_page_dir` is unset —
+    /// a wall with one app keeps the page at that address.
+    Index(Vec<String>),
+    /// Nothing is served here, and the sentence says why.
+    Missing(String),
+}
+
+/// Resolve `rel` (the path after `/ring/`) against the registry.
+///
+/// `granted` answers "does a live grant name this rail namespace". A
+/// registered page whose namespace no live grant names is NOT served: the
+/// door is open because some grant is live, and without this one wall grant
+/// would hand out every app on the wall. A live namespace with no registered
+/// page is a 404 that names it — never a fall-through to another app's page,
+/// which would answer a question nobody asked (ARCH §6).
+fn route_page<'a>(
+    pages: &'a GuestPages,
+    granted: &dyn Fn(&str) -> bool,
+    rel: &str,
+) -> PageRoute<'a> {
+    let (head, tail) = rel.split_once('/').unwrap_or((rel, ""));
+    if let Some(page) = pages.by_namespace.get(head) {
+        let dir = page.dir();
+        if !granted(head) {
+            return PageRoute::Missing(format!("no live grant names the rail namespace {head}"));
+        }
+        let rel = if tail.is_empty() { "index.html" } else { tail };
+        if rel == SHIM_FILE {
+            return PageRoute::Shim {
+                namespace: head.to_string(),
+            };
+        }
+        return PageRoute::File {
+            dir,
+            rel: rel.to_string(),
+            shim: (rel == "index.html").then(|| format!("{PAGE_PREFIX}{head}/{SHIM_FILE}")),
+        };
+    }
+    if !head.is_empty() && granted(head) {
+        return PageRoute::Missing(format!(
+            "rail namespace {head} has a live grant but no page is registered for it"
+        ));
+    }
+    match &pages.default_dir {
+        Some(dir) => {
+            let rel = if rel.is_empty() { "index.html" } else { rel };
+            if rel == SHIM_FILE {
+                return PageRoute::Shim {
+                    namespace: String::new(),
+                };
+            }
+            PageRoute::File {
+                dir,
+                rel: rel.to_string(),
+                shim: (rel == "index.html").then(|| SHIM_PATH.to_string()),
+            }
+        }
+        // No page at the bare prefix. If apps are REGISTERED, the bare prefix
+        // is the wall's index — which is what makes one QR reach the whole
+        // wall: the phone lands here and picks, carrying the same fragment.
+        // A deeper path is still a 404, because the index is one page and not
+        // a directory.
+        None if rel.is_empty() => {
+            let reachable: Vec<String> = pages
+                .by_namespace
+                .keys()
+                .filter(|ns| granted(ns))
+                .cloned()
+                .collect();
+            if reachable.is_empty() {
+                return PageRoute::Missing(
+                    "no live grant reaches any app registered at this door".to_string(),
+                );
+            }
+            PageRoute::Index(reachable)
+        }
+        None => PageRoute::Missing("no ring page is registered here".to_string()),
+    }
+}
+
+/// Does a live grant reach this rail namespace? The door's one authority for
+/// serving a namespaced page, read per request for the same reason expiry is
+/// (`GuestGrantStore::live`).
+///
+/// Two ways to reach one: a grant that NAMES it, or a wall grant and an owner
+/// who DECLARED it. The second is why one QR serves a whole wall — and it is
+/// still bounded by the registry, so a wall grant never reaches a namespace
+/// nobody put on the wall.
+fn namespace_is_granted(
+    store: &GuestGrantStore,
+    pages: &GuestPages,
+    ns: &str,
+    now_ms: u64,
+) -> bool {
+    store.all().iter().any(|g| {
+        g.is_live(now_ms)
+            && (g.rail_namespace() == Some(ns) || (g.is_wall() && pages.declared(ns).is_some()))
+    })
+}
+
+/// The page routes' state: what is registered, and who may see it.
+#[derive(Clone)]
+struct PageState {
+    pages: Arc<GuestPages>,
+    grants: Arc<GuestGrantStore>,
+}
 
 /// How often the lifecycle re-reads the grant store. Opening lags a mint by
 /// at most this, and closing lags the last expiry by at most this — during
@@ -49,28 +265,44 @@ const SHIM_PATH: &str = "/ring/__ring.js";
 /// on every request (`GuestGrantStore::live`).
 const POLL: Duration = Duration::from_secs(1);
 
-/// Live grants carrying a rail scope as of `now_ms` — the door's one input.
+/// Live grants that reach the rail as of `now_ms` — the door's one input. A
+/// wall grant counts: it names no namespace and reaches every declared one.
 pub fn live_rail_grants(store: &GuestGrantStore, now_ms: u64) -> usize {
     store
         .all()
         .iter()
-        .filter(|g| g.is_live(now_ms) && g.rail_namespace().is_some())
+        .filter(|g| g.is_live(now_ms) && g.reaches_the_rail())
         .count()
 }
 
-/// The router the door serves: the Guest surface, and the page if a
-/// directory is configured.
-pub fn door_router(state: AppState, page_dir: Option<PathBuf>) -> Router {
-    let guest = crate::server::client_router_for(state, ClientSurface::Guest);
-    match page_dir {
-        Some(dir) => guest.merge(
-            Router::new()
-                .route(PAGE_PREFIX, get(page_index))
-                .route("/ring/{*rel}", get(page_file))
-                .with_state(Arc::new(dir)),
-        ),
-        None => guest,
+/// The router the door serves: the Guest surface, and the registered pages
+/// if any are.
+///
+/// `turn_host` is the daemon that will run `POST /v1/guest/ask` in-process.
+/// It is a parameter rather than something the router reaches for because
+/// `AppState` holds no `Runtime` — the turn surface is built from
+/// `Arc<EmbeddedDaemon>` everywhere else in this crate too
+/// (`turn_http::turn_router`). `None` builds a door whose ask route names its
+/// own absence rather than one that silently 404s.
+pub fn door_router(
+    state: AppState,
+    pages: Arc<GuestPages>,
+    turn_host: Option<Arc<crate::daemon::EmbeddedDaemon>>,
+) -> Router {
+    let grants = state.inner.node.guest_grants.clone();
+    let mut guest = crate::server::client_router_for(state, ClientSurface::Guest);
+    if let Some(host) = turn_host {
+        guest = guest.layer(axum::Extension(host));
     }
+    if pages.is_empty() {
+        return guest;
+    }
+    guest.merge(
+        Router::new()
+            .route(PAGE_PREFIX, get(page_index))
+            .route("/ring/{*rel}", get(page_file))
+            .with_state(PageState { pages, grants }),
+    )
 }
 
 /// Serve the door on `bind` for as long as the daemon runs: listen while a
@@ -79,7 +311,12 @@ pub fn door_router(state: AppState, page_dir: Option<PathBuf>) -> Router {
 /// Never returns — it sits in the daemon's serve `select!`, where returning
 /// would end every other listener with it. An unparseable bind is reported
 /// once and the door stays shut; an unset one is the default, off.
-pub async fn serve(state: AppState, bind: Option<String>, page_dir: Option<PathBuf>) {
+pub async fn serve(
+    state: AppState,
+    bind: Option<String>,
+    pages: Arc<GuestPages>,
+    turn_host: Option<Arc<crate::daemon::EmbeddedDaemon>>,
+) {
     let Some(bind) = bind else {
         tracing::debug!("guest door: off ([daemon] guest_bind unset)");
         return std::future::pending().await;
@@ -108,13 +345,13 @@ pub async fn serve(state: AppState, bind: Option<String>, page_dir: Option<PathB
         info!(
             %addr,
             live_rail_grants = live,
-            page = ?page_dir,
+            pages = ?pages,
             "guest door: open"
         );
         // `ConnectInfo` for the same reason as every other client bind:
         // without it the auth layer cannot identify the caller and fails
         // closed with a 500.
-        let service = door_router(state.clone(), page_dir.clone())
+        let service = door_router(state.clone(), pages.clone(), turn_host.clone())
             .into_make_service_with_connect_info::<SocketAddr>();
         let closing = store.clone();
         if let Err(e) = axum::serve(listener, service)
@@ -140,21 +377,95 @@ async fn wait_for(store: &GuestGrantStore, done: impl Fn(usize) -> bool) -> usiz
     }
 }
 
-async fn page_index(State(dir): State<Arc<PathBuf>>) -> Response {
-    serve_under(&dir, "index.html", Some(SHIM_PATH))
+async fn page_index(State(st): State<PageState>) -> Response {
+    serve_route(&st, "")
 }
 
-async fn page_file(State(dir): State<Arc<PathBuf>>, AxPath(rel): AxPath<String>) -> Response {
-    if format!("{PAGE_PREFIX}{rel}") == SHIM_PATH {
+async fn page_file(State(st): State<PageState>, AxPath(rel): AxPath<String>) -> Response {
+    serve_route(&st, &rel)
+}
+
+/// The one body both page routes have: resolve, then serve or refuse.
+fn serve_route(st: &PageState, rel: &str) -> Response {
+    let now = commonwealth_core::clock::unix_now_millis();
+    let granted = |ns: &str| namespace_is_granted(&st.grants, &st.pages, ns, now);
+    match route_page(&st.pages, &granted, rel) {
+        PageRoute::File { dir, rel, shim } => {
+            tracing::debug!(rel, dir = %dir.display(), "guest door: page");
+            serve_under(dir, &rel, shim.as_deref())
+        }
+        PageRoute::Index(namespaces) => {
+            tracing::debug!(
+                apps = ?namespaces,
+                "guest door: the wall's index at the bare prefix"
+            );
+            (
+                [(header::CONTENT_TYPE, "text/html; charset=utf-8")],
+                wall_index(&namespaces),
+            )
+                .into_response()
+        }
         // Same origin: the page's rail calls go to this listener.
-        return (
+        PageRoute::Shim { namespace } => (
             [(header::CONTENT_TYPE, "text/javascript")],
-            ring_shim("", Some("")),
+            ring_shim(&namespace, Some("")),
         )
-            .into_response();
+            .into_response(),
+        PageRoute::Missing(why) => {
+            tracing::info!(rel, why, "guest door: no page served");
+            (StatusCode::NOT_FOUND, why).into_response()
+        }
     }
-    let shim = (rel == "index.html").then_some(SHIM_PATH);
-    serve_under(&dir, &rel, shim)
+}
+
+/// The wall's index: one link per app a live grant reaches.
+///
+/// **The links are completed in the browser, and they have to be.** The bearer
+/// travels in the URL FRAGMENT, which no browser ever sends to a server — that
+/// is the whole reason the page reads its grant from `location.hash`. So this
+/// page cannot know the token it was opened with, and the script copies the
+/// fragment onto each link instead. One scan, one bearer, every app on the
+/// wall.
+///
+/// Namespaces are rendered into an href and into text. `valid_namespace` in
+/// the rail bounds them to a safe alphabet, and the registry's keys are the
+/// owner's own config rather than anything a caller supplied — but the escape
+/// below is here anyway, because "the input is trusted" is the sentence that
+/// precedes every injection.
+fn wall_index(namespaces: &[String]) -> String {
+    let items: String = namespaces
+        .iter()
+        .map(|ns| {
+            let safe = html_escape(ns);
+            format!("<li><a class=\"app\" href=\"{safe}/\">{safe}</a></li>")
+        })
+        .collect();
+    format!(
+        "<!doctype html><meta charset=\"utf-8\">\
+         <meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">\
+         <title>The wall</title>\
+         <style>body{{font:16px/1.5 system-ui,sans-serif;margin:2rem;max-width:32rem}}\
+         li{{margin:.6rem 0}}a{{font-size:1.2rem}}</style>\
+         <h1>The wall</h1><ul>{items}</ul>\
+         <script>for (const a of document.querySelectorAll('a.app')) \
+         a.href += location.hash;</script>"
+    )
+}
+
+/// Minimal HTML-text escaping for a namespace rendered into an attribute and
+/// into element text. Not a general sanitizer — it covers exactly the five
+/// characters that can leave either context.
+fn html_escape(s: &str) -> String {
+    s.chars()
+        .map(|c| match c {
+            '&' => "&amp;".to_string(),
+            '<' => "&lt;".to_string(),
+            '>' => "&gt;".to_string(),
+            '"' => "&quot;".to_string(),
+            '\'' => "&#39;".to_string(),
+            other => other.to_string(),
+        })
+        .collect()
 }
 
 /// Serve `rel` from inside `root`, or 404 — **never from outside it**.
@@ -255,26 +566,93 @@ const RING_SHIM: &str = r#"(function () {
   // A string: the rail's base, reached with the fragment's bearer.
   const RAIL = {{RAIL_BASE}};
   const bearer = RAIL === null ? null : new URLSearchParams(location.hash.slice(1)).get('token');
+  // WHICH app this page is, as the door served it — never anything the page
+  // chose. A grant scoped to one namespace answers that from the grant, but a
+  // WALL grant names none by design (one code, every app), so the rail routes
+  // refuse a request that does not say which app it means. This is where the
+  // page says it: the namespace the door mounted this shim under.
+  const NS = "{{NAMESPACE}}";
+  const railUrl = (path) =>
+    RAIL + (NS && path.startsWith('/v1/rail/') ? path + '?namespace=' + encodeURIComponent(NS) : path);
   const ROUTES = {
     log: ['GET', '/v1/rail/log'], append: ['POST', '/v1/rail/append'],
     live: ['POST', '/v1/rail/live'], 'live-drain': ['GET', '/v1/rail/live'],
+    ask: ['POST', '/v1/guest/ask'], session: ['POST', '/v1/guest/session'],
   };
-  const send = (op, ctype, body) => {
+  // The NAME, asked by the door's shim and never by the app.
+  //
+  // One QR serves a room, so every phone holds the same bearer and the grant
+  // cannot say who is writing. The door binds the name to a session handle;
+  // this asks for it once per device and presents the handle from then on.
+  //
+  // Remembered per ORIGIN — which is this door — and NOT against the bearer.
+  // A wall's second app is a second grant with its own QR (a grant names one
+  // rail namespace), and the person does not change because the scope did.
+  // The door decides whether the handle is still good: a handle it does not
+  // recognise comes back 409 `stale_session` and is forgotten below.
+  const SESSION_KEY = 'ring.session';
+  let SESSION = null;
+  const remembered = () => {
+    try {
+      const v = JSON.parse(localStorage.getItem(SESSION_KEY) || 'null');
+      return v && v.handle ? v : null;
+    } catch (_) { return null; }
+  };
+  const forget = () => { SESSION = null; try { localStorage.removeItem(SESSION_KEY); } catch (_) {} };
+  const claim = async () => {
+    for (;;) {
+      const typed = (window.prompt('Your name for the wall') || '').trim();
+      if (!typed) throw new Error('ring: the wall shows who wrote each line, so it needs a name');
+      const r = await fetch(RAIL + ROUTES.session[1], {
+        method: 'POST',
+        headers: { authorization: 'Bearer ' + bearer, 'content-type': 'application/json' },
+        body: JSON.stringify({ name: typed }),
+      });
+      let v = null;
+      try { v = await r.json(); } catch (_) { v = null; }
+      if (r.ok && v && v.session) {
+        SESSION = { handle: v.session, name: v.name };
+        try { localStorage.setItem(SESSION_KEY, JSON.stringify(SESSION)); } catch (_) {}
+        return SESSION;
+      }
+      // 409 is a name the door refused — a member's, or one somebody in this
+      // room already has. Both are re-askable, and the door's own sentence is
+      // what the person needs to read.
+      if (r.status === 409) { window.alert((v && v.error) || 'ring: that name is taken'); continue; }
+      throw new Error((v && v.error) || 'ring: could not claim a name');
+    }
+  };
+  const session = async () => {
+    // `ring dev` holds the grant itself: no room, nobody to tell apart.
+    if (RAIL === null) return null;
+    if (!SESSION) SESSION = remembered();
+    if (!SESSION) await claim();
+    return SESSION;
+  };
+  const send = async (op, ctype, body) => {
     if (RAIL === null) {
       return fetch('/__ring/' + op, { method: 'POST', headers: { 'content-type': ctype }, body });
     }
+    await session();
     const [method, path] = ROUTES[op];
     const headers = { authorization: 'Bearer ' + bearer };
-    if (method === 'GET') return fetch(RAIL + path, { method, headers });
+    if (SESSION) headers['x-ring-session'] = SESSION.handle;
+    if (method === 'GET') return fetch(railUrl(path), { method, headers });
     headers['content-type'] = ctype;
-    return fetch(RAIL + path, { method, headers, body });
+    return fetch(railUrl(path), { method, headers, body });
   };
   const call = async (op, body) => {
     const r = await send(op, 'application/json', JSON.stringify(body || {}));
     const t = await r.text();
     let v = null;
     try { v = t ? JSON.parse(t) : null; } catch (_) { v = { error: t }; }
-    if (!r.ok) throw new Error((v && v.error) || ('ring: ' + op + ' failed'));
+    if (!r.ok) {
+      // The handle outlived the grant it was claimed under (a re-issued link,
+      // a restarted daemon). Drop it so the next call asks again rather than
+      // presenting a dead one forever.
+      if (r.status === 409 && v && v.code === 'stale_session') forget();
+      throw new Error((v && v.error) || ('ring: ' + op + ' failed'));
+    }
     return v;
   };
   window.ring = {
@@ -314,6 +692,18 @@ const RING_SHIM: &str = r#"(function () {
       // A drain, not a read: the daemon hands each payload out once.
       drain: () => call('live-drain', {}),
     },
+    // Ask the room. The door runs the turn as its OWN principal and hands
+    // back `{answer, epistemic_state}` — never a conversation id, so there is
+    // no handle here to point at anyone else's.
+    //
+    // Only over the bearer transport. Under `svrn ring dev` the grant is held
+    // by the dev server and the browser has none, so this REFUSES by name
+    // rather than posting a fifth op at a proxy whose table is the rail's
+    // three routes — the ask is the guest DOOR's route, not the rail's.
+    ask: (question) => {
+      if (RAIL === null) throw new Error('ring: ask is the guest door\'s route; `ring dev` holds no grant to present');
+      return call('ask', { question });
+    },
     // Fold the journal with your reducer.
     //
     // Skips the acts a correction voided and the corrections that state no
@@ -329,12 +719,190 @@ const RING_SHIM: &str = r#"(function () {
       return acc;
     },
   };
+  // WHO this phone is, for a page that wants to greet them. READ-ONLY on
+  // purpose: a page may say hello to a guest, it may not decide which guest it
+  // has — that is claimed at the door and carried by the handle, and an app
+  // that could set it would be back to authoring the value the wall trusts.
+  Object.defineProperty(window.ring, 'guest', {
+    enumerable: true,
+    get: () => (SESSION ? SESSION.name : null),
+  });
 })();
 "#;
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn pages(default_dir: Option<&str>, named: &[(&str, &str)]) -> GuestPages {
+        GuestPages::new(
+            default_dir.map(PathBuf::from),
+            named
+                .iter()
+                .map(|(ns, d)| ((*ns).to_string(), GuestPage::Open(PathBuf::from(*d))))
+                .collect(),
+        )
+    }
+
+    /// The wall serves the page whose namespace a live grant names, and
+    /// **only** that one. The door is open because SOME grant is live; without
+    /// this, one wall grant would hand out every app the wall holds.
+    #[test]
+    fn a_registered_page_is_served_only_while_a_grant_names_its_namespace() {
+        let reg = pages(None, &[("wall", "/srv/wall"), ("doc", "/srv/doc")]);
+        let granted = |ns: &str| ns == "wall";
+        assert_eq!(
+            route_page(&reg, &granted, "wall/"),
+            PageRoute::File {
+                dir: Path::new("/srv/wall"),
+                rel: "index.html".to_string(),
+                shim: Some("/ring/wall/__ring.js".to_string()),
+            }
+        );
+        let PageRoute::Missing(why) = route_page(&reg, &granted, "doc/") else {
+            panic!("the ungranted app's page was served");
+        };
+        assert!(why.contains("doc"), "the refusal must name the namespace");
+    }
+
+    /// A namespace a grant names with no page registered is a 404 that says
+    /// so — never the other app's page, which would answer a question nobody
+    /// asked (ARCH §6).
+    #[test]
+    fn a_granted_namespace_with_no_page_is_named_not_substituted() {
+        let reg = pages(Some("/srv/one"), &[]);
+        let PageRoute::Missing(why) = route_page(&reg, &|ns| ns == "doc", "doc/") else {
+            panic!("an unregistered namespace fell through to another page");
+        };
+        assert!(why.contains("doc") && why.contains("no page is registered"));
+    }
+
+    /// The old key keeps its old address: a wall with one app is still served
+    /// at the bare `/ring/`, shim and all.
+    #[test]
+    fn the_un_namespaced_page_is_still_served_at_the_bare_prefix() {
+        let reg = pages(Some("/srv/one"), &[]);
+        let never = |_: &str| false;
+        assert_eq!(
+            route_page(&reg, &never, ""),
+            PageRoute::File {
+                dir: Path::new("/srv/one"),
+                rel: "index.html".to_string(),
+                shim: Some(SHIM_PATH.to_string()),
+            }
+        );
+        assert_eq!(
+            route_page(&reg, &never, "app.js"),
+            PageRoute::File {
+                dir: Path::new("/srv/one"),
+                rel: "app.js".to_string(),
+                shim: None,
+            }
+        );
+        assert_eq!(
+            route_page(&reg, &never, SHIM_FILE),
+            PageRoute::Shim {
+                namespace: String::new()
+            }
+        );
+    }
+
+    /// **The hard edge, at the one config read.** A namespace this daemon
+    /// writes on its own behalf can never be declared guest-open, and an
+    /// operator who typed one gets a sentence naming it rather than a door
+    /// that quietly serves the machinery.
+    #[test]
+    fn a_daemon_owned_namespace_cannot_be_declared_open_to_guests() {
+        for owned in [
+            sovereign_core::mesh_measurements::MEASUREMENTS_APP_ID,
+            "work",
+        ] {
+            let mut d = sovereign_core::setup_config::DaemonSection::default();
+            d.guest_pages
+                .insert(owned.to_string(), GuestPage::Open("/srv/x".into()));
+            let why = GuestPages::from_config(&d)
+                .expect_err("a daemon-owned ring was accepted onto the wall");
+            assert!(why.contains(owned), "the refusal must name it: {why}");
+        }
+    }
+
+    /// The negative control: an ordinary app ring is accepted, so the test
+    /// above is not passing for a `from_config` that refuses everything.
+    #[test]
+    fn an_app_namespace_is_accepted_onto_the_wall() {
+        let mut d = sovereign_core::setup_config::DaemonSection::default();
+        d.guest_pages
+            .insert("house-expenses".into(), GuestPage::Open("/srv/x".into()));
+        let reg = GuestPages::from_config(&d).expect("an app ring is declarable");
+        assert!(reg.declared("house-expenses").is_some());
+    }
+
+    /// **One QR, the whole wall.** With no page at the bare prefix, `/ring/`
+    /// is the index of what a live grant reaches — which is what lets a wall
+    /// grant be one credential rather than one per app.
+    #[test]
+    fn the_bare_prefix_is_the_walls_index_when_no_single_page_owns_it() {
+        let reg = pages(None, &[("doc", "/srv/doc"), ("house", "/srv/house")]);
+        assert_eq!(
+            route_page(&reg, &|_| true, ""),
+            PageRoute::Index(vec!["doc".to_string(), "house".to_string()])
+        );
+        // A grant that reaches one app sees one app. The index is not a
+        // catalogue of what exists, it is a list of what this scan opens.
+        assert_eq!(
+            route_page(&reg, &|ns| ns == "doc", ""),
+            PageRoute::Index(vec!["doc".to_string()])
+        );
+        // And with nothing reachable it is a named refusal, not an empty page
+        // that reads as "this wall is empty" (ARCH §18.3).
+        assert!(matches!(
+            route_page(&reg, &|_| false, ""),
+            PageRoute::Missing(_)
+        ));
+    }
+
+    /// The old key keeps the bare prefix, so rr-2's config and the run-of-show
+    /// walk keep working — and the index is NOT served over it.
+    #[test]
+    fn a_configured_single_page_still_owns_the_bare_prefix() {
+        let reg = pages(Some("/srv/one"), &[("doc", "/srv/doc")]);
+        assert_eq!(
+            route_page(&reg, &|_| true, ""),
+            PageRoute::File {
+                dir: Path::new("/srv/one"),
+                rel: "index.html".to_string(),
+                shim: Some(SHIM_PATH.to_string()),
+            }
+        );
+    }
+
+    /// **The links must be completed in the browser.** The bearer rides the
+    /// URL fragment, which no browser sends to a server, so a link rendered
+    /// here can only be the path — the script copies the fragment on.
+    #[test]
+    fn the_index_carries_the_fragment_onto_every_link() {
+        let html = wall_index(&["doc".to_string(), "house".to_string()]);
+        assert!(html.contains("href=\"doc/\"") && html.contains("href=\"house/\""));
+        assert!(
+            html.contains("a.href += location.hash;"),
+            "the index stopped carrying the bearer forward — every link would \
+             land on a page with no grant"
+        );
+    }
+
+    /// Each registered page gets the shim beside it, rendered for its own
+    /// namespace — a page that imported another app's shim would be told it
+    /// is on the wrong rail.
+    #[test]
+    fn each_registered_page_has_its_own_shim_beside_it() {
+        let reg = pages(None, &[("wall", "/srv/wall")]);
+        assert_eq!(
+            route_page(&reg, &|_| true, "wall/__ring.js"),
+            PageRoute::Shim {
+                namespace: "wall".to_string()
+            }
+        );
+    }
 
     /// **The SDK must ship the fold, and the fold must skip both kinds of
     /// non-act.** A `fold` that forgot `voided` would double-count every
@@ -388,6 +956,25 @@ mod tests {
         );
     }
 
+    /// **The ask verb reaches the door's route, and only over the bearer
+    /// transport.** Under `ring dev` the browser holds no grant, so a shim
+    /// that posted `/__ring/ask` anyway would hit a proxy op table that is
+    /// the rail's three routes and fail with the proxy's words instead of
+    /// its own.
+    #[test]
+    fn the_ask_verb_is_the_doors_route_and_refuses_without_a_bearer() {
+        assert!(RING_SHIM.contains("ask: ['POST', '/v1/guest/ask']"));
+        assert!(RING_SHIM.contains("ask: (question) =>"));
+        assert!(
+            RING_SHIM.contains("if (RAIL === null) throw new Error('ring: ask"),
+            "the ask verb stopped refusing the grantless transport — under \
+             `ring dev` it would post at the rail proxy and fail obscurely"
+        );
+        assert!(sovereign_grants::Scope::Rails("x".into())
+            .paths()
+            .contains(&crate::routes_guest_ask::GUEST_ASK_PATH));
+    }
+
     /// **Every rail route the bearer transport names is one a rail grant
     /// unlocks.** A route the shim calls that `Scope::Rails` does not list is
     /// a page that 403s on a guest's phone and works under `ring dev`.
@@ -400,6 +987,55 @@ mod tests {
         }
     }
 
+    /// **The shim asks the name, and the shim carries the handle.** If either
+    /// half moved into an app, every app author would own a safety property
+    /// (`a guest is never mistakable for a member`) that the door can enforce
+    /// once — and the scaffolded app, which has no name field at all, would
+    /// have its guests shown under the member's name.
+    #[test]
+    fn the_shim_claims_the_guests_name_itself_and_presents_the_handle() {
+        assert!(RING_SHIM.contains("session: ['POST', '/v1/guest/session']"));
+        assert!(
+            RING_SHIM.contains("window.prompt('Your name for the wall')"),
+            "the shim stopped asking for the name — an app would have to"
+        );
+        assert!(
+            RING_SHIM.contains("headers['x-ring-session'] = SESSION.handle;"),
+            "the shim stopped presenting the session handle — the door would \
+             have nothing to name the guest from"
+        );
+        // Remembered per ORIGIN — this door — and never against the bearer,
+        // which is what makes the second app on the same wall not ask again:
+        // it is a second grant with a second bearer, and the same person.
+        assert!(
+            RING_SHIM.contains("return v && v.handle ? v : null;"),
+            "the shim stopped remembering the handle for this origin"
+        );
+        assert!(
+            !RING_SHIM.contains("v.token === bearer"),
+            "the handle is bound to one bearer again — the second app on this \
+             wall will ask the name a second time"
+        );
+    }
+
+    /// **A page may greet a guest; it may not choose one.** A settable name
+    /// would be the payload convention this replaced, wearing a new spelling.
+    #[test]
+    fn the_pages_view_of_the_guests_name_is_read_only() {
+        assert!(
+            RING_SHIM.contains("Object.defineProperty(window.ring, 'guest', {")
+                && RING_SHIM.contains("get: () => (SESSION ? SESSION.name : null),"),
+            "the name stopped being an accessor"
+        );
+        assert!(
+            !RING_SHIM.contains("set: "),
+            "the shim grew a setter for the guest's name"
+        );
+        assert!(sovereign_grants::Scope::Rails("x".into())
+            .paths()
+            .contains(&crate::routes_guest_session::GUEST_SESSION_PATH));
+    }
+
     /// The one parameter that picks the transport renders as JS: `null` for
     /// the dev proxy, a quoted string for the door. An unquoted base would
     /// be a syntax error that blanks the page.
@@ -408,5 +1044,34 @@ mod tests {
         assert!(ring_shim("n", None).contains("const RAIL = null;"));
         assert!(ring_shim("n", Some("")).contains("const RAIL = \"\";"));
         assert!(!ring_shim("n", Some("")).contains("{{"));
+    }
+
+    /// **A page served under a namespace says which app it is on every rail
+    /// call.** A `Scope::Rails` grant answers that from the grant, but a WALL
+    /// grant names no namespace by design — one code, every app — so
+    /// `resolve_wall` refuses a rail request that does not name one. Until
+    /// this landed, every `log`/`record` from a registered page came back
+    /// "this grant is for the whole wall, so it does not say which app you
+    /// mean", which is the whole wall being unreachable.
+    ///
+    /// The un-namespaced page (`guest_page_dir`, the one-app spelling) adds
+    /// nothing: there is no namespace to name, and an empty one would be a
+    /// request for an app called "".
+    #[test]
+    fn a_namespaced_page_names_its_app_on_every_rail_call() {
+        let named = ring_shim("house-expenses", Some(""));
+        assert!(
+            named.contains("const NS = \"house-expenses\";"),
+            "the shim must carry the namespace the door mounted it under"
+        );
+        assert!(
+            named.contains("path + '?namespace=' + encodeURIComponent(NS)"),
+            "the rail routes must carry the namespace"
+        );
+        // The ask and the name claim are the guest DOOR's routes, not the
+        // rail's, and neither is scoped by namespace.
+        assert!(named.contains("path.startsWith('/v1/rail/')"));
+        let bare = ring_shim("", Some(""));
+        assert!(bare.contains("const NS = \"\";"));
     }
 }

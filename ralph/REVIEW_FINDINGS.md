@@ -1,3 +1,10 @@
+<!-- APPEND ONLY. `.gitattributes` gives this file `merge=union`, so two
+     campaigns appending at once both land, in full, with no conflict markers
+     — which is why sections are grouped by campaign and never renumbered.
+     The cost of union is that an edit to an EXISTING line can land twice; it
+     shows on the page, so read around your edit after a merge. Entries are
+     never reflowed or reordered: a finding is cited by campaign and heading. -->
+
 # ring-doc — review findings
 
 One row per finding: principle, path:line, fixed-in hash (or why not fixed).
@@ -1365,6 +1372,629 @@ Findings, fixed (commits `b606f9587`, `7cf49fc9d`):
   scan source text, so a file move is not behaviour-preserving for them. No
   code fix — recorded so a split row names the source-scanning tests in its
   checks.
+
+---
+
+# ring-room rr-2 — review findings
+
+## REVIEW-audit-rr-2 (2026-09-20, range `4b8fe1a16..9e7351b50`)
+
+Checks. TESTALL exit=100 before the fixes below (13502 pass / 3 fail), exit=100
+after with ONE red left (13504 pass / 1 fail), and that one is foreign:
+`cli_contract_journeys::every_journey_cites_a_doc_that_exists` — the
+`mesh-offers-catalogue` journey cites `docs/internal/RING_APPLICATIONS.md`,
+which `.gitignore:67` excludes and which is absent on this host. The citation
+came in at `a3bd715f5` (`sovereign/docs/cli-contract.toml:3571`), an ancestor of
+this campaign's start `4b8fe1a16` (`git merge-base --is-ancestor`), and both
+prior audits recorded it the same way.
+
+PREPUSH exit=1, one blocking gate: **arch-gate**, approach-band growth, carried
+to `ralph/NEEDS_HUMAN.md` as the operator's call (the re-pin + §10 ledger is
+theirs; `--update-baseline` on a working tree is the absorb-everyone trap).
+`size-gate` (75 keys, mostly crates unbaselined since the pack split),
+`hakari-verify` (`.config/hakari.toml:54` still names `corpus-engine-vocab`,
+removed by `e9db0b96c`) and `concept-gate` (could-not-judge, stale graph) are
+advisory and all three are the same foreign reds the rd-1 and rd-2 audits saw.
+
+Rail predicate holds: `git diff 4b8fe1a16..HEAD -- commonwealth/crates/commonwealth-rail/
+commonwealth/crates/commonwealth-rail-core/` is empty — this campaign touched
+neither ring-rail crate, not even the roster door the operator permitted. The
+one hit under the wider `commonwealth-rail*` glob is
+`commonwealth-rails/src/gossip.rs` (+1: `media_available: None` in
+`minimal_capabilities`), and `commonwealth-rails` is the rails DAEMON, which the
+protocol names as outside that rule.
+
+Findings, fixed (this commit):
+
+- **ARCH 5 (a gate that stopped seeing its subject)** ·
+  `sovereign/crates/sovereign-core/tests/main/f26_egress_census.rs:521,886` ·
+  `rr-2-media-posture` added two files with HTTP client constructions the F26
+  census did not know, and TESTALL went red on both: `mesh_media/viewer.rs` (1
+  site) and `media_presence.rs` (4). Registered. `viewer.rs` is `LocalDaemon`
+  because every request goes to an origin `publish_cmd::resolve_target` REFUSES
+  unless it is loopback (`publish_cmd.rs:423-429`). `media_presence.rs` is
+  `OperatorSurface`, not `LocalDaemon`: its production client asks
+  `[iroh] media_origin`, and `MediaRoute::parse` requires a host:port and
+  constrains nothing else (`sovereign-mesh/src/media_route.rs:58-72`).
+- **ARCH 3/4 (a comment asserting what the code does not enforce)** ·
+  `sovereign/crates/sovereign-daemon/src/media_presence.rs:34` · `ASK_TIMEOUT`'s
+  doc read "it is on loopback". Nothing makes that true — see `MediaRoute::parse`
+  above. Reworded to name the config key and what it does check.
+- **ARCH 1 (a branch of production code with no tracing event)** ·
+  `sovereign/crates/sovereign-cli-llm/src/mesh_media/viewer.rs:215-256` ·
+  `already_provisioned` had four silent `None` returns — a declaration that is
+  not one `authorization` header, a refused `GET /Users/Me`, a non-JSON answer,
+  and an Id that is not this viewer's. All four send the caller down the MINT
+  path, which is the expensive branch, and none of them said so at
+  `tracing=debug`. Each now logs the reason it took. Behaviour unchanged (the
+  Id arm reads `!= Some(found)`, which covers the absent-Id case the `?` used
+  to).
+- **ARCH 3 (a generated record not landed with the code)** ·
+  `quality/conformance/{commonwealth-core,sovereign-daemon,sovereign-mesh}.toml`
+  · five tags stale on lines this campaign moved. Regenerated
+  (`UPDATE_CONFORMANCE_TAGS=1`); the diff is line numbers only.
+- **ARCH 4 (a doc claim with a citation nobody checked)** ·
+  `docs/THREAT_MODEL.md:50,55` · the guest paragraph cited
+  `commonwealth/crates/commonwealth-knowledge/src/guest_grant.rs`, which does
+  not exist (the crate is `sovereign-grants`), and said a guest reaches "only
+  the models it lists" — true of `/v1/chat/completions` under a `Scope::Models`,
+  false of `/v1/guest/ask`, whose `collect_turn` call takes no model at all
+  (`routes_guest_ask.rs`, `sovereign-core/src/runtime/serve.rs:607-614`): the
+  router picks the slot and the bound is the handler, which the paragraph
+  already explains two sentences later. Both corrected, and the exact-match
+  rule of `permits_path` named.
+
+The guest-door re-read against `docs/THREAT_MODEL.md`, recorded not changed —
+what can a guest reach that the grant did not name?
+
+- Nothing by path. `GuestGrant::permits_path` is
+  `scopes.iter().any(|s| s.paths().contains(&path))` — EXACT match, no prefix
+  arm (`guest_grant.rs:166-168`), and `client_auth.rs:253` gates every guest
+  request on it.
+- The Guest surface mounts the whole general client router
+  (`serves_general_client_routes` is true for `Guest`), so the mount is not the
+  bound there — the auth layer is. The probe that proves it is
+  `rail_e2e::guest_door::the_wall_bearer_reaches_the_page_and_the_rail_on_a_and_nothing_else`,
+  which drives nine off-scope paths with the bearer AND without it and asserts
+  a refusal for each, then pins `AUTH_EXEMPT_PATHS` so it cannot grow silently.
+  `the_door_mounts_no_operator_route` covers the operator half with the
+  daemon-wide token, so a 404 there is the route set and not a credential.
+- `/mcp` is NOT on the door. It is merged into `client_router` only
+  (`daemon.rs:3730`); neither `client_router_for(.., Guest)` nor
+  `guest_door::door_router` merges it — which matters because the MCP mount's
+  gate is loopback and guest traffic arrives wearing a loopback peer address
+  it did not earn (`client_auth.rs:50-56`).
+- Unauthenticated on the door's LAN bind: `/status`, `/oicp/v1/capabilities`
+  (pinned by the test above and named in T), and the page under `/ring/`. The
+  page's only file read is `serve_under`, which canonicalizes both sides and
+  refuses anything not under the root (`guest_door.rs:188-203`); the door test
+  probes `/ring/..%2Fsecret.txt` against a real sibling file outside the dir
+  and asserts 404 with none of its content.
+
+Recorded, not changed:
+
+- **ARCH 1, the other direction** · `sovereign-mesh/src/ring_sync.rs:243-252` ·
+  `ring sync: round membership` logs at INFO unconditionally, once per round,
+  where `gossip.rs` logs its heartbeat at debug and reserves INFO for a change.
+  Left as minted: the sync interval is 60 s, not 10, and this is the instrument
+  `rr-2-the-return-syncs-the-ring` added precisely because a round that skipped
+  its only peer was indistinguishable in the log from a round with nothing to
+  send (room run 2, 85 s). Deleting it to satisfy a gating convention would
+  return the log to the state that cost that measurement.
+
+## ring-guest — REVIEW-DEMO-rg-run (2026-09-20, binaries at `f9669ced6`)
+
+One finding, and the three runs the row asked for.
+
+**ARCH 7, validate the instrument before the result** ·
+`scripts/ring-doc-demo.sh:901` · fixed in `f9669ced6`. The first rr-1
+regression run read `ra-room-doc-name-from-membership` 0.0 FAILED against the
+1.0 A38 baseline, with `a_names_from_mesh` false and `right 0` over three
+lines — every one of which named the RIGHT person and read `NaNs ago`:
+
+```
+{node a, para 0, line "last edited by Bo NaNs ago",         want "Bo"}
+{node a, para 1, line "last edited by ring-doc-a NaNs ago", want "ring-doc-a"}
+{node a, para 2, line "last edited by Cy NaNs ago",         want "Cy"}
+```
+
+`createAttribution().lines()` lost its `members` argument in `491f49c2f`
+(rg-2-ring-doc-sheds-its-guest-code); the driver kept the two-argument call
+from `e8d847115`, so `nowMs` was bound to the roster. The app's own tests
+already assert the one-argument form, which is why `node --test` stayed green
+while the demo did not. A bar cannot be read off an instrument that does not
+call the surface under test — no bar, floor or app line was touched, and the
+re-run reproduced the baseline exactly. Archived:
+`target/ralph/rg-rr1-regression-stale-instrument.log`.
+
+rr-1 regression, `RING_ROOM_TOPOLOGY=three`, once after the fix
+(`target/ralph/rg-rr1-regression.log`), exit=1 — the A38 baseline exactly:
+
+```
+ra-room-answer-names-the-machine   0.8  FAILED
+ra-room-doc-name-from-membership   1.0  PASSED  all four legs true
+ra-room-film-from-the-library-rail 1.0  PASSED  listed_s 8.39
+ra-room-plug-in-live               0.0  FAILED  c_answer_names=false, other three true
+ra-room-nothing-typed              0    PASSED
+```
+
+Room runs, `RING_ROOM_TOPOLOGY=room`, each from cold after `scripts/dev-build.sh`
+(exit=0 both times). **Eleven PASSED each — the five `rg-*` bars and the six
+rr-2 bars** (`target/ralph/rg-room-run1.log`, `…-run2.log`), exit=0 each:
+
+```
+run 1                                run 2
+rg-second-app-zero-lines           1.0 PASSED   1.0 PASSED
+rg-guest-stamped-by-the-door       1.0 PASSED   1.0 PASSED
+rg-every-act-names-the-guest       1.0 PASSED   1.0 PASSED
+rg-one-person-across-apps          1.0 PASSED   1.0 PASSED
+rg-ring-doc-sheds-its-guest-code   1.0 PASSED   1.0 PASSED
+ra-room-scan-to-name               1.0 PASSED   1.0 PASSED
+ra-room-guest-edit-attributed      1.0 PASSED   1.0 PASSED
+ra-room-guest-ask-served-by-room   1.0 PASSED   1.0 PASSED   answered_s 13.61 / 12.46
+ra-room-film-from-littlemac        1.0 PASSED   1.0 PASSED   listed_s 2.15 / 6.31
+ra-room-offline-room-says-so       1.0 PASSED   1.0 PASSED   converged_s 16 / 55
+ra-room-member-only-by-vouch       1.0 PASSED   1.0 PASSED
+```
+
+Recorded, not changed: `converged_s` was 16 s and 55 s against a 60 s window,
+and the same leg failed at 85 s on 2026-09-20 (A50's room run 2, before the
+sync nudge). Two greens one of which sits 5 s inside the window is a margin,
+not a result — the A50 reading that the verdict is decided by which pump tick
+the heal lands between still stands.
+
+## ring-guest — REVIEW-audit-rg (2026-09-20, range `f51b66112..d1f436ab5`)
+
+Gates: **TESTALL 13548 pass / 1 fail** (the one fail is foreign, below; the
+daemon conformance stale-tag failure was this campaign's and is fixed in this
+commit). **PREPUSH exit=1, one blocking lane: `arch-gate`**, red on the
+approach band exactly as the row predicted.
+
+### The falsifier's reading — the diff against O §Predictions
+
+Per crate, `git diff --numstat f51b66112..HEAD`, tests / fixtures / examples
+counted apart. "net" is added minus deleted, code only.
+
+```
+crate                                    code+  code-    net |  test+  test-
+commonwealth-rail                           12      2     10 |     34     31
+commonwealth-rail-core                      48      5     43 |    127      2
+commonwealth-work                           11      2      9 |      1      1
+sovereign-cli-llm                          139     67     72 |      0      0
+sovereign-contracts                        183      3    180 |      0      0
+sovereign-core                               2      2      0 |      0      0
+sovereign-daemon                          1522    128   1394 |    548     68
+sovereign-grants                           653      8    645 |      0      0
+sovereign-mesh                              24      5     19 |     31      7
+sovereign/apps/ring-doc                     27     62    -35 |     28     21
+ring_cmd/templates (the scaffold)            0      0      0 |      0      0
+```
+
+**F1 — `sovereign-daemon` cost 1394 net non-test lines against a registered
+prediction of "under ~250", and against the order's own overbuild line of
+~500. The honest answer to "did we overbuild to the demo" is YES for this
+crate, 2.8× past the line the order itself drew.** Where it went:
+`guest_door.rs` +614 (`sovereign/crates/sovereign-daemon/src/guest_door.rs`,
+463 → 1077 lines), `routes_rail.rs` +372 (483 → 855), `routes_guest_session.rs`
++222 (new file), `state/node.rs` +61, `client_auth.rs` +59,
+`routes_internal/guest_grant.rs` +25, `state.rs` +20, the rest under 15 each.
+The system was shaped to the demo most visibly in `guest_door.rs`, which now
+carries the page registry, the shim, the per-namespace rendering AND the
+second app's serving path in one 1077-line file.
+
+**F2 — four crates the Predictions did not name were changed; by the
+prediction's own rule each is a finding.** `sovereign-grants` +645
+(`guest_session.rs` +530 new, `guest_grant.rs` +111), `sovereign-contracts`
++180 (`guest_pages.rs` +162 new, `setup_config.rs` +17), `sovereign-cli-llm`
++72 (`mesh_guest_link.rs` +113 new against `mesh_guest.rs` −43),
+`commonwealth-work` +9 (call-site fallout of D1's new field). The reading:
+the prediction mis-LOCATED the substrate rather than only mis-pricing it — the
+session store and the page registry belong in `sovereign-grants` and
+`sovereign-contracts`, and putting them there is right. But the two numbers
+must be read together: **substrate total outside tests = 2291 net lines
+(daemon + grants + contracts + cli-llm) against ~250 predicted, 9.2×.**
+
+**F3 — `sovereign-mesh` was predicted 0 and is +19**, all of it
+`ring_roster::is_daemon_owned` (`sovereign/crates/sovereign-mesh/src/ring_roster.rs`).
+Smallest miss on the board and defensible: it collapses two lists the crate
+already owned into one accessor with one caller (ARCH 8, one decider one name),
+rather than teaching the door to know there were two.
+
+**F4 — `commonwealth-rail*` HELD its D1(b) budget: 53 net (60 added) against
+"under ~60".** And the rail rule held structurally: `git log f51b66112..HEAD --
+commonwealth/crates/commonwealth-rail commonwealth-rail-core` returns three
+commits, all of them `rg-1-on-behalf-of` (`ec81de7f7`, `b94936862`,
+`12fccb51b`). No other row reached the rail.
+
+**F5 — THE FALSIFIER HOLDS: the scaffold's diff is EMPTY.**
+`git diff --stat f51b66112..HEAD -- sovereign/crates/sovereign-cli-llm/src/ring_cmd/templates/`
+prints nothing. The second app on the wall cost zero template lines.
+
+**F6 — `ring-doc` was predicted NEGATIVE and is −35 net non-test**
+(`app.js` −20, `adapter.js` −14, `index.html` −1), with `adapter.test.mjs` +7.
+The app volunteers no name and composes no sentence; the substrate does both.
+
+**F7 — this campaign's OWN arch-gate approach-band delta is +4 files /
++3602 lines, reported apart from rr-2's and absorbed into neither.** The gate
+measures `origin/main..HEAD` and reports files 207 → 212 (+5) and lines
+202703 → 207780 (+5077); the remainder (+1 file / +1475 lines) is rr-2's
+unaccepted growth, recorded at `ralph/DECISIONS.md` under A51. This
+campaign's four entrants, computed by counting each changed file at both ends
+of the range:
+
+```
+commonwealth-rail-core/src/tests.rs             765 -> 871
+sovereign-daemon/src/guest_door.rs              463 -> 1077
+sovereign-daemon/src/routes_rail.rs             483 -> 855
+sovereign-daemon/tests/rail_e2e/main.rs         759 -> 818
+```
+
+Two of the four are the F1 files. No baseline was touched — accepting or
+trimming this is the operator's call at push.
+
+**F8 — FIXED: `quality/conformance/sovereign-daemon.toml` was stale.** The
+UI-22 claim cited `daemon.rs:5401`; this campaign's +12/−8 in that file moved
+the test to 5405 (`grep -n the_client_api_binds_loopback_by_default…`
+confirms). Corrected in place, `scripts/ralph-check.sh test xtask` green
+(118 pass). Fixed in this commit.
+
+### Threat model re-read — the two questions the row asks
+
+**What can a session reach that its grant did not name? Nothing.**
+`GuestSessionStore::live` (`sovereign/crates/sovereign-grants/src/guest_session.rs:266-279`)
+takes the grant PRESENTED ON THIS REQUEST and returns `None` unless that grant
+is live; the session it returns carries a name and no scope, and
+`GuestGrant::permits_path` on the presented bearer stays the sole decider.
+`client_auth.rs` refuses a handle the store does not know under this grant with
+409 rather than dropping it to `None` — "lapsed" and "never claimed" stay
+distinguishable (ARCH 6).
+
+**What outlives the grant? Nothing.** `expires_at_ms` is COPIED from a grant,
+never computed from a TTL of its own, and is re-evaluated against the presented
+grant on every read. Under the `Door` binding the expiry EXTENDS
+(`guest_session.rs:275-277`) — but only ever to another live grant this same
+door minted, so `MAX_GUEST_TTL_SECS` bounds it without the store knowing the
+number (ARCH 10). `docs/THREAT_MODEL.md:86-103` states both answers, including
+the `Door`/`grant` setting and the "neither setting changes reach" clause. No
+finding: the doc and the code agree and both are checkable.
+
+### ARCH twelve — what the diff was read against
+
+No new principal class: `client_auth::Guest` widened from `Guest(Arc<GuestGrant>)`
+to `{ grant, session }`, no variant added to any principal enum. Glassbox holds
+on the decision paths — `guest_door.rs` 10 tracing events, `routes_guest_session.rs`
+4, `client_auth.rs`'s refusal branch one; `guest_pages.rs` has none and needs
+none (pure config parse, no runtime branch). No large const string literal
+outside the shim, which is JS-in-Rust by the convention the row inherited. The
+one new decider (`is_daemon_owned`, F3) has one caller and a doc naming why the
+two questions meet there.
+
+### §Less — what each row reported having reused
+
+`rg-1-on-behalf-of`: the op's existing canonical form and signature path; the
+rail interprets the field not at all (no roster lookup, no collision check).
+`rg-2-guest-session`: the grant as scope and TTL, `GuestGrantStore`'s store
+shape, the roster reader, the shim and its bearer transport, `Scope::Rails`.
+`rg-1-door-stamps-the-guest`: RR's existing append and the collision refusal.
+`rg-2-door-serves-each-app`: `serve_under`'s canonicalize-both-sides guard,
+`ring_shim`, the `App` kind's registry argument.
+`rg-2-session-belongs-to-the-door`: `GuestSessionStore` and its claim/live/expiry
+model whole; the binding decided in ONE place (`in_domain`).
+`rg-2-the-wall-declares-its-guests`: `Scope::paths`' existing rail arm shared
+with the new `Scope::Wall`, `resolve_granted`, `names_a_member`, the shim's
+per-page namespace rendering.
+`REVIEW-build-rg-instrument`: the room topology as legs — no new demo script.
+`rg-2-ring-doc-sheds-its-guest-code`: `op.person` in the gutter, `phone.mjs`.
+The negatives held too: no new principal class, no guest role on any roster,
+no second demo script (`scripts/ring-room-demo.sh` +541 net carries the legs;
+the only new script is the 82-line `scripts/ring-doc-guest-lines.py`
+instrument), and no SDK beyond the shim.
+
+### Foreign reds carried, not this campaign's
+
+- **TESTALL's one fail**: `cli_contract_journeys::every_journey_cites_a_doc_that_exists`
+  — `mesh-offers-catalogue` cites `docs/internal/RING_APPLICATIONS.md`, which
+  is gitignored (`.gitignore:67`) and per-host, absent on this Halo. The
+  citation at `sovereign/docs/cli-contract.toml:3571` landed in `a3bd715f5`,
+  an ancestor of `f51b66112`. Identically recorded by `REVIEW-audit-rr-2`
+  (`ralph/DECISIONS.md:7222`).
+- **PREPUSH advisory `size-gate`**: 76 keys, with whole crates reading
+  `0 → 38890 … is new and unbaselined` — the baseline does not know the
+  current key set, which is a baseline problem and a worker may not touch one.
+- **PREPUSH advisory `hakari-verify`**: fails with a panic backtrace, no
+  attributable finding.
+- **PREPUSH advisory `concept-gate`**: could-not-judge — the SCIP graph is at
+  `652209be` with 720 indexed source files changed in the gap, so its −1 delta
+  is not about this commit.
+
+## mesh-principal — for THREAT_MODEL
+
+Measured by `REVIEW-build-mp-inventory` (2026-09-20). Item (vii) of that row:
+three claims from the external review, each MEASURED AND RECORDED ONLY. No row
+in `ralph/next/mesh-verified-principal/STATE.md` fixes any of them, and none is
+in the order's scope.
+
+### A live-lane cursor CAN be forged — confirmed, and already disclosed in the code
+
+`POST /internal/ring/live` (`sovereign/crates/sovereign-daemon/src/routes_internal/ring_live.rs:49`)
+takes `State` and `Bytes` and nothing else: it extracts no `HeaderMap` and no
+`ConnectInfo`, so the handler cannot name its caller even to log it. The module
+header says so itself at `:9-14` — "any peer that can route to this host can
+make a cursor appear on this daemon's pages" — so this is a disclosed cost, not
+a hidden one. Two things bound it and both hold: the buffer is refused for any
+namespace no live rail grant on this daemon names, and the NAME a cursor renders
+under comes from a rail act's signer through the roster, never from this route
+(`:16-19`, bar `ra-doc-attribution-from-signer`). So the forgeable thing is a
+cursor POSITION, not an identity. Closing condition: the route reads the verified
+principal `mp-1` introduces and refuses a namespace whose roster does not name the
+asker — the same shape `mp-2-ring-sync-by-roster` gives `ring_sync`. Owner: unowned.
+
+### The tensor-split port is authenticated by mesh membership over iroh, and by nothing at all locally
+
+Over iroh, `RPC_ALPN` (`cwth/rpc/0`) is admitted to MEMBERS ONLY: the acceptor
+resolves the dialer's verified key against membership and REFUSES a non-member
+with "the rpc-server authenticates nothing, so there is no safe downgrade"
+(`sovereign/crates/sovereign-mesh/src/iroh_access.rs:507-516`). That is the
+strongest check any ALPN in `forward_for` applies. The port it forwards to is the
+local ggml rpc-server, `127.0.0.1:50052` by the acceptor's own doc
+(`commonwealth/crates/commonwealth-transport/src/iroh.rs:72-78`), and the worker
+binds exactly what the daemon resolved and refuses to guess
+(`sovereign/crates/sovereign-inference/src/rpc_worker_main.rs:63-64`). So the
+review's claim is right about the protocol — raw ggml tensor bytes carry no
+credential — and wrong about the exposure on an encrypted mesh, where membership
+is checked before a byte is forwarded. The residual is a LOCAL process on the
+worker host: nothing between it and `:50052`. Closing condition: the rpc-server
+gains a per-connection credential, or the port is documented as trusting its own
+machine the way the internal router is. Owner: unowned.
+
+### MCP is loopback-only on this host by CONFIG, not by construction, and is off the mesh surface entirely
+
+`/mcp` is merged into the CLIENT router and only that one
+(`sovereign/crates/sovereign-daemon/src/daemon.rs:3734-3741`). The peer router
+that `CLIENT_ALPN` forwards a member's dial to is built separately at `:3746-3749`
+and never receives the merge, so no mesh member reaches `/mcp` over iroh. The
+client listener binds `[daemon] client_bind`, which defaults to `127.0.0.1`
+(`sovereign/crates/sovereign-contracts/src/setup_config.rs:1600-1605`) and reads
+`127.0.0.1` in this host's `~/.svrnmesh/config.toml:22`; `ss -ltnp` confirms
+`127.0.0.1:9741`. An operator who sets `client_bind = "0.0.0.0"` exposes `/mcp` to
+the LAN behind the bearer gate `client_auth` applies to every non-loopback caller
+— which is a real gate, not an absence, but it is the daemon-wide token, so every
+remote MCP caller is one principal. Closing condition: per-caller credentials for
+the client surface, which `client_principal.rs:66-70` already names as an auth
+change rather than a scheduling one. Owner: unowned.
+
+## mesh-principal — REVIEW-DEMO-mp-run (2026-09-21, binaries at `f7e89c4e7`)
+
+Two runs, both after `scripts/dev-build.sh` (exit=0 each; the staleness refusal
+read fresh). Logs: `target/ralph/mp-rr1-regression.log`,
+`target/ralph/mp-room-run.log`.
+
+rr-1 regression, `RING_ROOM_TOPOLOGY=three`, once — exit=1, the A38 baseline
+unmoved by the call-plane and ring-sync changes:
+
+| bar | value | verdict | reading |
+|---|---|---|---|
+| `ra-room-answer-names-the-machine` | 0.8 | FAILED | baseline; 4 of 5 questions grounded |
+| `ra-room-doc-name-from-membership` | 1.0 | PASSED | all four legs true, p99 1.465 s |
+| `ra-room-film-from-the-library-rail` | 1.0 | PASSED | listed_s 2.15 |
+| `ra-room-plug-in-live` | 0.0 | FAILED | `c_answer_names` false, other three true |
+| `ra-room-nothing-typed` | 0 | PASSED | walk count 0 |
+
+Room run, `RING_ROOM_TOPOLOGY=room`, once from cold — exit=0, eleven PASSED
+(five `rg-*` and six rr-2), every leg true, no COULD-NOT-JUDGE row. The offline
+leg carried `c_byte_equal_after_the_return` true with `converged_s` 16 against
+the 60 s window, so the run was cold and the roster filter in the sync round
+did not slow convergence. Guest ask answered_s 13.82 citing RuggedFox; film
+listed_s 4.24, first byte 0.067 s; edit_seen_s 0.17.
+
+What mp-1 added, read off the keeper's own log at the moment it served the
+guest's ask (`target/ring-room-rr2-demo/halo/daemon.err:413-415`): the wall is
+named by its verified key, not by a header it sent.
+
+```
+02:08:41.182021Z DEBUG iroh(mesh): internal dial forwarded WITH the verified identity
+  (no member named means the roster does not know this key — admitted anyway, as a
+  joiner must be) dialer=1984f5ef7cc3c04d1eb3c5070b58ce2f1c342014df500dfa3e657e37bca536af
+  member="ring-room-beefy"
+02:08:41.183665Z DEBUG internal: request resolved to a verified member
+  member=ring-room-beefy node=node-6a577a855edaa29a
+```
+
+Recorded and not acted on: the rr-1 `ra-room-nothing-typed` row lists the
+Jellyfin `demo / demo` credential twice in `excluded` where the room run lists
+it once — a duplicate in the census's excluded list, not a second credential in
+the walk (`walk count: 0` on that run). It predates this campaign.
+
+## mesh-principal — REVIEW-audit-mp (2026-09-21)
+
+Campaign range `36dca4ffb..HEAD` (base = the parent of the inventory row's
+commit `08e709ccc`).
+
+### Gates
+
+TESTALL, first run: `pass: 13567 fail: 3` (exit 100). All three triaged, one
+of them this campaign's and fixed here.
+
+| failure | verdict | why |
+|---|---|---|
+| `xtask::conformance_tags::conformance_tags_are_fresh` | THIS CAMPAIGN — fixed | two separate defects, below |
+| `sovereign-cli::main cli_contract_journeys::every_journey_cites_a_doc_that_exists` | pre-existing, not fixable here | the citation landed `a3bd715f5` (2026-09-13, ring-apps); the doc it names, `docs/internal/RING_APPLICATIONS.md`, is GITIGNORED per-host and `quality/campaigns/ring-apps.toml:8` records it ABSENT on the Halo. This campaign's diff touches neither `sovereign/docs/cli-contract.toml` nor `docs/internal/` (`git diff --stat` on both paths: empty) |
+| `sovereign-mesh::main local_only_boot::a_local_only_daemon_spawns_no_network_service` | load flake, not a regression | the 10 s bound on a daemon booting under a 13570-test parallel run. `--package sovereign-mesh` alone: `pass: 604 fail: 0`, twice. Worth a bound that scales with load; not this campaign's and not tuned here |
+
+PREPUSH: exit 1, blocking on `arch-gate`. See the size section below for what
+of that is this campaign's. The other 17 lanes: 15 passed, `concept-gate`
+could-not-judge (the SCIP graph is indexed at `36dca4ff`, which it says), and
+`hakari-verify` failed advisory with a panic backtrace and no finding — both
+pre-existing and neither attributable to this diff.
+
+### Findings against ARCH's twelve, and the fixes
+
+**1 · principle 8 (one decider, one name) — `covers:` is a reserved
+vocabulary and the campaign minted campaign-bar ids into it.** Eleven doc
+comments across six files read `/// covers: mp-principal-is-the-verified-key`
+or `mp-no-decider-reads-the-header`. `covers:` is harvested by
+`corpus-engine/xtask/tests/conformance_tags.rs`, whose registry is
+`quality/requirements.toml` — GENERATED from `research/clean-room/REQUIREMENTS.md`
+and not hand-editable — so every one of them was a claim about nothing and the
+first was a hard test failure. No other campaign in the tree does this: the
+existing convention for a campaign bar in source is prose (``Bar
+`ra-room-answer-names-the-machine`: …``, `sovereign-core/src/runtime/grounding/tests.rs:2735`;
+``quality/campaigns/ring-doc.toml`` bar …, `routes_internal/ring_live.rs:20`).
+Fixed to that form; no claim was lost, because none of these ids was ever
+joinable. Fixed in this commit.
+
+**2 · principle 5 (a gate you have not watched fail is not a gate) — the
+campaign added three valid `covers: FE-99` tags and never regenerated the
+manifest they generate.** `sovereign/crates/sovereign-contracts/src/principal.rs`
+picked up FE-99 from the deleted `headers.rs` in `c4077023c`, so
+`quality/conformance/sovereign-contracts.toml` did not exist and
+`quality/conformance/sovereign-daemon.toml` still pointed FE-99 at two tests
+in a file that is gone. Regenerated with
+`UPDATE_CONFORMANCE_TAGS=1 cargo test -p xtask --test conformance_tags`
+(4 passed). Neither defect was visible to any row's own checks: the rows ran
+`TEST(sovereign-daemon)` / `TEST(sovereign-mesh)`, and this test lives in
+`xtask`. That is the audit row earning its place.
+
+**3 · ARCH §3.2 (file ceiling) — `iroh_dialer_admission_e2e.rs` went
+926 → 1304 lines, a NEW oversized file entirely of this campaign's making.**
+Split: the 378-line block `mp-1` appended is now
+`sovereign/crates/sovereign-mesh/tests/main/iroh_verified_principal_e2e.rs`
+(401 lines), wired in `tests/main.rs` the way that crate's
+`every_test_module_is_wired_to_its_own_file` gate demands, reusing the
+parent's lender/dialer helpers (now `pub(crate)`) rather than copying them.
+Parent back to 926 — exactly its pre-campaign length, so it adds nothing to
+the approach band either. Test count unchanged at 604 before and after, so
+nothing was dropped in the move.
+
+### Size, apart from the rr-2 growth the row expects (ledger A51)
+
+`arch-gate` is red on three findings after the split. Attribution, measured
+file by file across the campaign range:
+
+- `sovereign-daemon/src/server.rs` 1303 → 1312. **This campaign's, 9 lines**,
+  all of them the `internal_principal_layer` mount and its two comments. The
+  baseline pinned at 1259 is 44 lines stale from BEFORE this campaign, and
+  slack is 50, so the +9 is what tips it. Not accepted and not shaved: a
+  re-pin is the operator's call (never `--update-baseline` on a working
+  tree), and shaving a load-bearing comment to clear a ratchet is the cheap
+  repair the ratchet exists to catch.
+- approach band, files 207 → 212 and lines 202703 → 207932. **Not this
+  campaign's.** No file this campaign touched crossed 800 from below, and no
+  band FILE is new here — the split put the parent back at its baseline 926
+  and the new sibling at 401, under the line. This campaign's contribution to
+  the band's line count is `iroh_identity_forward.rs` +45,
+  `sovereign-mesh/tests/main/common/mod.rs` +50, `turn_reshape_fidelity.rs`
+  +14 and `admission.rs` +43 — about 152 of the 5229. The rest is the rr-2
+  growth ledger A51 already names.
+
+### The diff beside O §Predictions, line by line
+
+`git diff --numstat 36dca4ffb..HEAD`. Caveat: this repo puts most unit tests
+in inline `#[cfg(test)]` modules, so "src" below includes them; the "test
+files" column is only `tests/` trees and fixtures.
+
+| crate | predicted | src | test files | reading |
+|---|---|---|---|---|
+| `commonwealth-transport` | ~40, corrected by the inventory to ~0 | +45 −0 | — | the acceptor mark and its constant-time check; the inventory's correction was right that the ALPN decision is not here |
+| `sovereign-daemon` | under ~200, NET NEGATIVE in `headers.rs` | +1068 −217 | +18 −3 | **5× over.** `headers.rs` is not net negative, it is DELETED (−122, file gone) ✓. The overshoot is two new files, `internal_principal.rs` (509, of which 228 are its test module) and `mesh_principal_gate.rs` (181, of which 99 are its test module) — 327 of the 690 is test, and the rest is the resolver plus its module doc. The prediction priced "a principal resolver that reads the acceptor's headers" and did not price the acceptor-mark tie the plaintext posture forced |
+| `sovereign-mesh` | ~60 | +126 −6 | +1041 −681 | 2× over in src; the test movement is the roster suite (`ring_sync_by_roster.rs`, 419 new) plus the split above |
+| `sovereign-server` | ~20 | +105 −21 | — | 4× over; `reciprocity.rs` gained the `UserKey` derivation and its tests |
+| `oicp-types` | negative | +65 −0 | +85 −0 | **inverted, and knowingly.** `mp-4` found the premise false on all three fields and shipped a wire-tolerance fixture instead of a deletion; ledgered A62 |
+| `commonwealth-rail*` | 0 | 0 | 0 | ✓ |
+| `sovereign-contracts` | not predicted | +203 −7 | — | not in O §Scope. It is where `Principal`, `AttachedPrincipal` and the one `claimed_node_id` reader now live, which is the convergence the order asked for, in a crate the order did not name |
+| `sovereign-serving-host` | not predicted | +134 −97 | — | not in O §Scope either; the inventory added it, naming the three literal reads at `:485,551,567` |
+
+**The three named findings, checked.** A new trait: none — `git diff | grep
+'^+.*pub trait'` is empty. A new principal type beside `Principal`: none of
+substance — the two new types are `AttachedPrincipal` (the axum extension
+newtype, one per repo by construction, and its own doc says why) and
+`ClaimedNodeId` (a closed three-arm read of what the wire CLAIMS, which is not
+a principal). A second identity header scheme: **judgment call, reported not
+ruled.** `X-Mesh-Acceptor` (`iroh_identity_forward.rs:50`) is new. It carries
+no identity — it is a 32-byte per-process secret that says "the acceptor in
+this process put these headers here", checked in constant time and stripped
+before any handler — and the identity headers are still the three `X-Mesh-*`
+the media path already used. It is a new header, not a new scheme, but the
+order's prediction said "header scheme" and an operator reading that line
+should see this one.
+
+### What each row reused (O §Less)
+
+- `iroh_identity_forward`'s strip-and-append and its failing-input test —
+  `mp-1` reused both; the internal arm returns `Forward::Http` and
+  `rewrite_head` does the strip, with no second implementation.
+- `Forward`'s existing identity slot — reused; no new variant.
+- `client_principal`'s `Principal` and its one resolver — reused, and
+  CONVERGED: `Principal` and `AttachedPrincipal` moved to
+  `sovereign-contracts` so the daemon's two layers and `sovereign-server`'s
+  share one type rather than three of the same shape.
+- `RingRail::roster` — reused, read-only; the rail crates are 0 lines.
+- `sovereign_mesh::ring_roster::roster_names` — one decider, called by the
+  sender (`ring_sync.rs:321`) and the server (`routes_internal/ring_sync.rs:175`).
+- the sync round's skipped-peers line (58d754d2d) — reused as the shape for
+  `skipped_not_on_roster` (`ring_sync.rs:335`), a third list beside exchanged
+  and offline.
+- the room instrument — reused for the regression at `REVIEW-DEMO-mp-run`.
+
+### THREAT_MODEL — the two questions this row was told to answer
+
+**What can an `unverified` caller still reach?** Every internal route but
+one. `internal_principal_layer` is the internal router's outermost layer, so
+all 55 routes on `:9742` now have a principal to read; `/internal/ring/sync`
+is the only one that refuses on it. `/internal/models/load`,
+`/internal/ring/live`, `/internal/corpus/grant` and `/revoke`, the model-file
+routes, scheduling intent and plan and the rest answer any caller that reaches
+the port, exactly as `THREAT_MODEL` entry 2 has said since before this
+campaign. Written up as entry 9, owner `threat-gaps`.
+
+**What does a non-roster member still learn about a ring — its name, its size,
+its members?** Nothing it did not supply. The refusal is
+`"{asker} is not on {namespace}'s roster"` — it echoes the namespace the
+caller asked for and the caller's own id, and carries no digest, no op count
+and no roster contents. It is not an existence oracle either:
+`RingRail::journal` opens lazily for any well-formed name, so a namespace this
+host has never held refuses identically to one it holds. The rail read routes
+(`/v1/rail/log`, `/v1/rail/append`, `/v1/rail/live`) are absent from the Peer
+surface (`ClientSurface::serves_rail_routes`), so there is no second door.
+Two residues, both recorded rather than fixed: (i) the roster test runs AFTER
+`rail.journal(&req.namespace)`, which creates the journal directory, so a
+caller that will be refused can still make an empty namespace appear on this
+host's disk — pre-existing, unchanged by `mp-2`, and bounded by
+`MeshStore::apply_projection` refusing an excluded namespace; (ii) a ring with
+no `roster.json` is answered by membership, which is the rail's documented
+default and what the seven `REGISTERED_NAMESPACES` rely on, so "a non-roster
+member" only exists for a ring that has a roster file — the work plane, and
+whatever the operator writes one for.
+
+Both answers, plus the plaintext-posture `Anonymous` gap the route's own
+module header discloses, are now entries 6–9 of `docs/THREAT_MODEL.md`
+§Known gaps, each with a closing condition and an owner (ledger A56). Entry 7
+(ring sync ships every namespace) is struck, citing `0f190bc47`. Entry 6 is
+NARROWED rather than struck: the internal plane is closed, and ledger A61's
+finding — `CLIENT_ALPN` splices with no identity, so `client_principal` still
+mints `Principal::Member` from a typed `x-node-id` and member B can still
+spend C's reciprocity on an inference turn — is the half that remains. It is
+written as unowned, because the row A61 proposed is not approved.
+
+## threat-gaps — for THREAT_MODEL
+
+Recorded by `tg-2-plain-ip-members-prove-membership`, for the audit row to write
+into `docs/THREAT_MODEL.md` §Known gaps. Not a fix and not a refusal:
+
+On a plaintext mesh the internal port can now tell a MEMBER OF THE GROUP from a
+stranger, and still cannot tell one member from another. A caller that offers a
+valid `x-mesh-proof` gets a `ProvedMeshMember` marker beside its principal
+(`sovereign/crates/sovereign-daemon/src/internal_principal.rs:239`) and its
+principal is left exactly what it would have been — `Anonymous` — because any
+holder of `mesh_secret` can mint a proof naming any sender
+(`commonwealth/crates/commonwealth-core/src/mesh/mod.rs:794`), so reading the
+sender as an identity would reopen the `mp-1` forgery on plaintext meshes.
+Nothing on a plain-IP hop proves WHICH member is calling; only the encrypted
+posture does, where the QUIC handshake proves a key and
+`resolve_internal`s tied branch reads it
+(`sovereign/crates/sovereign-daemon/src/internal_principal.rs:287-332`).
+
+---
 
 ## routing-blemishes — REVIEW-build-rb-routed-intent-everywhere
 

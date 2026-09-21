@@ -221,6 +221,7 @@ pub(crate) fn plan<'a>(
     expected: Option<usize>,
 ) -> MergePlan<'a> {
     MergePlan {
+        mesh_proof: None,
         handoff_id: HandoffId::from_u128(0xC0FFEE),
         corpus_id: CORPUS,
         local_node_id: f.local,

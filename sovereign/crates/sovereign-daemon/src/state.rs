@@ -14,7 +14,7 @@ use corpus_engine::CorpusEngine;
 use oicp_types::model_aliases::ModelAliasTable;
 use serving_policy::fair_sched::{reciprocity_weight, SchedCore, TryGrant};
 use sovereign_core::identity::IdentityReader;
-use sovereign_grants::{EphemeralGrantStore, GuestGrantStore, WorkQueueManager};
+use sovereign_grants::{EphemeralGrantStore, GuestGrantStore, GuestSessionStore, WorkQueueManager};
 use sovereign_meshapp_registry::registry::AppRegistry;
 use sovereign_serving_host::admission::Principal;
 
@@ -568,6 +568,14 @@ impl AppState {
         self.inner.fabric.ring_rail.clone()
     }
 
+    /// The apps this wall's owner declared open to guests — ONE accessor for
+    /// ONE registry (ARCH §7.5). The door's page routes and the rail's
+    /// namespace resolution both read it here, so "is this app on the wall"
+    /// cannot get two answers.
+    pub fn guest_pages(&self) -> Arc<crate::guest_door::GuestPages> {
+        Arc::clone(&self.inner.node.guest_pages)
+    }
+
     /// The wake-up that makes a local store write travel now.
     ///
     /// Raised by the KV pump after it signs a write onto a journal, and by the
@@ -1092,6 +1100,7 @@ impl AppState {
                     servable_model_files: serving::ServableModelFilesReader::default(),
                     local_inference_availability: RwLock::new(1.0_f32),
                     activity_inference_availability: RwLock::new(1.0_f32),
+                    local_media_available: RwLock::new(None),
                     local_inference: serving_seed.local_inference,
                     // usize::MAX = unlimited. The desktop overwrites this
                     // at boot with the user's persisted setting (default
@@ -1143,6 +1152,11 @@ impl AppState {
                     corpus_engine,
                     started_at: std::time::Instant::now(),
                     guest_grants: Arc::new(GuestGrantStore::new()),
+                    internal_auth: node_seed.internal_auth,
+                    client_tokens: node_seed.client_tokens,
+                    named_client_tokens: node_seed.named_client_tokens,
+                    guest_sessions: Arc::new(GuestSessionStore::new(node_seed.guest_sessions)),
+                    guest_pages: Arc::new(node_seed.guest_pages),
                     // 0 sentinel = no foreground activity observed yet.
                     // The yield hook treats 0 as "never active", regardless
                     // of the window — so a fresh boot doesn't accidentally
@@ -1237,6 +1251,15 @@ impl AppState {
         Arc::clone(&self.inner.node.guest_grants).spawn_reaper()
     }
 
+    /// Spawn the guest-SESSION sweep. Same bookkeeping-not-enforcement story
+    /// as [`Self::start_guest_grant_reaper`]: `GuestSessionStore::live`
+    /// evaluates the grant's liveness and the session's own expiry on every
+    /// read, so skipping this leaves no session usable a moment longer than
+    /// its grant — it only lets the map grow.
+    pub fn start_guest_session_reaper(&self) -> tokio::task::JoinHandle<()> {
+        Arc::clone(&self.inner.node.guest_sessions).spawn_reaper()
+    }
+
     /// This node's NodeId, by value. Cheap (atomic load + Arc deref).
     /// A convenience over [`Self::identity_reader`]; `join_mesh` swaps
     /// the id when adopting a founder-assigned one, and this always
@@ -1310,6 +1333,28 @@ impl AppState {
             published,
             "inference_availability: activity input updated by sovereign-server"
         );
+    }
+
+    /// Record what this node's MEDIA origin can serve a member right now.
+    ///
+    /// The one writer of `local_media_available`; the media-presence poll
+    /// calls it through POST /internal/node/activity after each read of the
+    /// origin's sessions, and gossip publishes the value on its next round.
+    /// `None` is written when the origin could not be asked, so a stale `1.0`
+    /// cannot outlive the answer that produced it.
+    pub async fn update_local_media_available(&self, media_available: Option<f32>) {
+        *self.inner.serving.local_media_available.write().await = media_available;
+        tracing::debug!(
+            ?media_available,
+            "media_available: origin presence updated by the media poll"
+        );
+    }
+
+    /// What this node last claimed its media origin can serve, or `None` when
+    /// nothing has answered. Read by the `SelfClaims` port once per gossip
+    /// round.
+    pub async fn local_media_available(&self) -> Option<f32> {
+        *self.inner.serving.local_media_available.read().await
     }
 
     /// The yield half of the availability composite: what this node can
@@ -1973,6 +2018,7 @@ impl sovereign_core::self_claims::SelfClaims for AppState {
             in_flight: self.current_local_in_flight(),
             storage_remaining: self.storage_remaining_bytes(),
             embed_model: self.inner.store.inference_store.get_local_embed_model(),
+            media_available: self.local_media_available().await,
         }
     }
 
@@ -2025,6 +2071,7 @@ pub fn test_app_state_with_token(token: Option<Arc<str>>) -> AppState {
         mesh,
         node::NodeSeed {
             client_token: token,
+            ..Default::default()
         },
     )
 }

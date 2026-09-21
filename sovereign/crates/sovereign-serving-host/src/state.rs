@@ -129,7 +129,7 @@ pub struct RejectedNodeIdHeader {
 
 impl RejectedNodeIdHeader {
     /// The canonical wire form the header must match — the inverse of
-    /// `sovereign_daemon::headers::parse_x_node_id` (which accepts exactly this).
+    /// `sovereign_contracts::principal::claimed_node_id` (which accepts exactly this).
     pub fn expected_wire_form() -> &'static str {
         "exactly 32 lowercase hex chars — NodeId::to_hex(), e.g. \
          0123456789abcdef0123456789abcdef"
@@ -212,6 +212,19 @@ pub struct ServingPart {
     /// Stored separately from the published value so a yield window can rise
     /// and fall without destroying the coding-activity signal underneath it.
     pub activity_inference_availability: RwLock<f32>,
+    /// What this node's MEDIA origin can serve a member right now (0.0–1.0),
+    /// read by gossip each round to populate
+    /// `NodeCapabilities.media_available`. Written by the holder's media
+    /// presence poll through POST /internal/node/activity, the same route the
+    /// activity half arrives on.
+    ///
+    /// `None` — the default — is "nobody has answered": this node offers no
+    /// media, or its origin could not be asked. It is NOT `1.0`, because a
+    /// viewer must not start a stream on the strength of a missing answer
+    /// (ARCH principle 6). Unlike the inference half there is no second input
+    /// to compose with, so this is a plain setter target and the poll is its
+    /// one writer.
+    pub local_media_available: RwLock<Option<f32>>,
     /// Optional in-process inference service. When Sovereign embeds
     /// the daemon, this is a wrapper over its `EmbeddedLlamaCpp` so
     /// `/v1/chat/completions` serves peer requests from the same
@@ -292,7 +305,7 @@ pub struct ServingPart {
 
     /// The most recent present-but-malformed `X-Node-Id` header value
     /// (order commons-fluency fix 7). A peer request whose header
-    /// fails `sovereign_daemon::headers::parse_x_node_id` still gets gated and
+    /// fails `sovereign_contracts::principal::claimed_node_id` is refused and
     /// tallied under the zero node, and `/status` must NAME the
     /// rejected value and the expected wire form instead of showing an
     /// opaque `node-0000000000000000` row — absence is reported, never

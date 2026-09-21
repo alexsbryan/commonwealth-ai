@@ -49,7 +49,7 @@ come back when `svrn mesh status` lists them all. (It also covers the
 **2. Start the lending machine as a worker.**
 
 ```bash
-SOVEREIGN_RPC_SERVE=0.0.0.0:50052 svrn daemon run
+SOVEREIGN_RPC_SERVE=127.0.0.1:50052 svrn daemon run
 ```
 
 That's the whole change — the daemon now offers its GPU to the mesh. Leave it

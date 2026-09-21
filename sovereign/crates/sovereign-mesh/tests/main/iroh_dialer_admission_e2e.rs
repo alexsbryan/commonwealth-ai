@@ -25,7 +25,7 @@ use std::time::Duration;
 
 use commonwealth_core::ids::{NodeId, NodePubkey};
 use commonwealth_transport::iroh::{
-    Endpoint, EndpointAddr, EndpointBuilder, HttpBridge, IrohAcceptor, SecretKey, APP_ALPN,
+    Endpoint, EndpointAddr, EndpointBuilder, HttpBridge, IrohAcceptor, SecretKey, ALPN, APP_ALPN,
     CLIENT_ALPN, MEDIA_ALPN, OFFER_ALPN, RPC_ALPN,
 };
 use sovereign_daemon::server::{client_router, client_router_for, ClientSurface};
@@ -34,34 +34,34 @@ use sovereign_mesh::iroh_access::{AcceptorRoutes, MediaRoute, MemberCheck, Membe
 use crate::common;
 use crate::common::{client_app_state, spawn_router};
 
-const TOKEN: &str = "deadbeefcafef00ddeadbeefcafef00ddeadbeefcafef00ddeadbeefcafef00d";
-const MEMBER_SEED: u8 = 41;
-const STRANGER_SEED: u8 = 42;
+pub(crate) const TOKEN: &str = "deadbeefcafef00ddeadbeefcafef00ddeadbeefcafef00ddeadbeefcafef00d";
+pub(crate) const MEMBER_SEED: u8 = 41;
+pub(crate) const STRANGER_SEED: u8 = 42;
 
-fn key(seed: u8) -> SecretKey {
+pub(crate) fn key(seed: u8) -> SecretKey {
     SecretKey::from_bytes(&[seed; 32])
 }
 
 /// The dialer key the lender's mesh has gossiped as a member.
-fn member_pubkey() -> NodePubkey {
+pub(crate) fn member_pubkey() -> NodePubkey {
     NodePubkey(*key(MEMBER_SEED).public().as_bytes())
 }
 
 /// How the lender's roster names the member — what its media origin is told.
-fn member_identity() -> MemberIdentity {
+pub(crate) fn member_identity() -> MemberIdentity {
     MemberIdentity {
         name: "LittleMac".into(),
         node_id: NodeId::from_u128(0xB0B),
     }
 }
 
-fn only_the_member() -> MemberCheck {
+pub(crate) fn only_the_member() -> MemberCheck {
     let member = member_pubkey();
     Arc::new(move |k| Box::pin(std::future::ready((k == member).then(member_identity))))
 }
 
 /// iroh binds the wildcard, which is not dialable as-is — rewrite to loopback.
-fn dialable(endpoint: &Endpoint) -> EndpointAddr {
+pub(crate) fn dialable(endpoint: &Endpoint) -> EndpointAddr {
     let mut addr = EndpointAddr::new(endpoint.id());
     for mut a in endpoint.bound_sockets() {
         if a.ip().is_unspecified() {
@@ -76,7 +76,7 @@ fn dialable(endpoint: &Endpoint) -> EndpointAddr {
     addr
 }
 
-async fn lender_endpoint(alpns: Vec<Vec<u8>>) -> Endpoint {
+pub(crate) async fn lender_endpoint(alpns: Vec<Vec<u8>>) -> Endpoint {
     EndpointBuilder::empty()
         .crypto_provider(commonwealth_transport::iroh::ring_crypto_provider())
         .secret_key(key(3))
@@ -86,7 +86,7 @@ async fn lender_endpoint(alpns: Vec<Vec<u8>>) -> Endpoint {
         .expect("lender endpoint binds")
 }
 
-async fn dialer_endpoint(seed: u8) -> Endpoint {
+pub(crate) async fn dialer_endpoint(seed: u8) -> Endpoint {
     EndpointBuilder::empty()
         .crypto_provider(commonwealth_transport::iroh::ring_crypto_provider())
         .secret_key(key(seed))
@@ -923,4 +923,121 @@ async fn a_member_dialing_a_node_with_no_offer_origin_is_closed_not_misrouted() 
         "no offer origin means no route, got {:?}",
         outcome.map(|r| r.status())
     );
+}
+
+// ---------------------------------------------------------------------------
+// `tg-stranger-refused-9742` clause (b) — the internal ALPN refuses a
+// non-member
+// ---------------------------------------------------------------------------
+//
+// It belongs in THIS file because "who may dial what" is already decided here,
+// one test per ALPN, over a real handshake — and the internal ALPN was the one
+// row with no refusal to name.
+//
+// The edge this closes is NOT the acceptor's. `forward_for`'s internal arm
+// forwards ANY dialer on purpose: a joiner has to reach `/internal/join` before
+// anybody can name it. So the acceptor proves the key and refuses nothing,
+// `internal_principal` turns a key the roster does not name into
+// `Principal::Unverified`, and the refusal is `internal_gate`'s, at the route.
+
+/// A stand-in internal router: one gated route, carrying the same two layers
+/// `server::internal_router` mounts and in the same order — the gate applied
+/// first, so tower runs the resolver OUTERMOST.
+///
+/// `/internal/mesh/quiesce` by name, because the route a caller is refused on
+/// is what the bar names and a made-up path would not be one.
+async fn gated_internal_probe(state: sovereign_daemon::state::AppState) -> std::net::SocketAddr {
+    use axum::routing::get;
+    let served = || async move { "served" };
+    let router = axum::Router::new()
+        .route("/internal/mesh/quiesce", get(served))
+        .layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            sovereign_daemon::internal_gate::internal_gate_layer,
+        ))
+        .layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            sovereign_daemon::internal_principal::internal_principal_layer,
+        ))
+        .with_state(state);
+    spawn_router(router).await
+}
+
+/// A lender whose internal forward is the probe above, and whose roster names
+/// the MEMBER dialer by the key the handshake will prove — so the two dialers
+/// below differ in exactly one thing: whether this roster knows them.
+async fn lender_with_gated_internal() -> (Endpoint, IrohAcceptor) {
+    let state = client_app_state(NodeId::from_u128(0xA11CE), Some(TOKEN), true);
+    common::name_member_with_key(
+        &state,
+        member_identity().node_id,
+        &member_identity().name,
+        member_pubkey().0,
+    )
+    .await;
+    let internal = gated_internal_probe(state.clone()).await;
+
+    let routes = AcceptorRoutes {
+        apps: Default::default(),
+        internal,
+        rpc: None,
+        peer: Some(spawn_router(client_router_for(state.clone(), ClientSurface::Peer)).await),
+        guest: Some(spawn_router(client_router_for(state, ClientSurface::Guest)).await),
+        media: MediaRoute::fixed(None, Vec::new()),
+        offer: Default::default(),
+    };
+    let endpoint = lender_endpoint(vec![ALPN.to_vec()]).await;
+    let check = only_the_member();
+    let acceptor = IrohAcceptor::spawn_admitting_forward(endpoint.clone(), move |alpn, dialer| {
+        let check = check.clone();
+        let routes = routes.clone();
+        async move { routes.forward_for(&alpn, dialer, &check).await }
+    });
+    (endpoint, acceptor)
+}
+
+/// GET the gated route as `seed` over `alpn`, and give back the status the
+/// daemon answered with. The ALPN is an argument so each test below says which
+/// tunnel it dialed.
+async fn quiesce_over(lender: &Endpoint, seed: u8, alpn: &'static [u8]) -> u16 {
+    let dialer = dialer_endpoint(seed).await;
+    let bridge = HttpBridge::spawn(dialer, dialable(lender), alpn)
+        .await
+        .expect("bridge binds");
+    let resp = reqwest::Client::new()
+        .get(format!(
+            "http://{}/internal/mesh/quiesce",
+            bridge.local_addr()
+        ))
+        .timeout(Duration::from_secs(10))
+        .send()
+        .await
+        .expect("the dial is forwarded");
+    let status = resp.status().as_u16();
+    drop(bridge);
+    status
+}
+
+/// THE failing input. A key this roster does not name crosses the internal
+/// tunnel — the acceptor forwards it, because that arm must stay open for
+/// joiners — and the route refuses it 401.
+#[tokio::test]
+async fn a_non_member_key_over_the_internal_alpn_is_refused() {
+    let (lender, _acceptor) = lender_with_gated_internal().await;
+    assert_eq!(
+        quiesce_over(&lender, STRANGER_SEED, ALPN).await,
+        401,
+        "a key the roster does not name resolves Unverified over ALPN, and \
+         Unverified is the arm a decider refuses"
+    );
+}
+
+/// The negative control, and the one that matters most: the SAME tunnel, the
+/// same route, a key the roster DOES name. Without it the refusal above could
+/// be a gate that refuses every iroh caller — which would close the mesh's own
+/// control plane on exactly the encrypted posture the room runs.
+#[tokio::test]
+async fn a_member_key_over_the_internal_alpn_is_served() {
+    let (lender, _acceptor) = lender_with_gated_internal().await;
+    assert_eq!(quiesce_over(&lender, MEMBER_SEED, ALPN).await, 200);
 }

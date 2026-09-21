@@ -47,9 +47,24 @@ LOCK_DIR="${SVRN_CARGO_LOCK_DIR:-/tmp/svrn-cargo-lock.$(id -u)}"
 RECLAIM_AFTER_SECS="${SVRN_CARGO_LOCK_RECLAIM_SECS:-1800}"
 POLL_SECS=5
 
+# GNU `stat -c %Y` FIRST, BSD `stat -f %m` second — and that order is the whole
+# fix. On Linux `stat -f` is "filesystem status", not a format string: it
+# SUCCEEDS and prints a six-line block, so the `||` fallback never ran, `born`
+# became that block, and `$((now - born))` died under `set -u` with
+# `File: unbound variable`. The caller then compared an empty string with -gt
+# ("integer expected") and the branch evaluated false, so the stale-holder
+# reclaim could never fire on Linux — only the dead-pid path worked. Observed
+# 2026-09-19 with two agents sharing this lock.
+#
+# macOS has no `stat -c`, fails cleanly, and takes the BSD form. The numeric
+# guard is the backstop: an unparseable mtime reports age 0, which delays a
+# reclaim rather than triggering a wrong one.
 lock_age() {
     now=$(date +%s)
-    born=$(stat -f %m "$LOCK_DIR" 2>/dev/null || stat -c %Y "$LOCK_DIR" 2>/dev/null || echo "$now")
+    born=$(stat -c %Y "$LOCK_DIR" 2>/dev/null || stat -f %m "$LOCK_DIR" 2>/dev/null || echo "$now")
+    case "$born" in
+        ''|*[!0-9]*) born=$now ;;
+    esac
     echo $((now - born))
 }
 

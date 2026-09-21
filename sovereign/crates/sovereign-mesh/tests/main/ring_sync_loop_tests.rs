@@ -54,7 +54,7 @@ pub fn body_of_size(target: usize) -> Payload {
     let mut filler = target.saturating_sub(40);
     loop {
         let p = Payload::new(serde_json::json!({ "b": "x".repeat(filler) })).unwrap();
-        let n = body_json(&RailAct::Record { payload: p.clone() }).len();
+        let n = body_json(&RailAct::Record { payload: p.clone() }, None).len();
         if n >= target {
             return p;
         }
@@ -73,8 +73,17 @@ pub fn signed(key: &SigningKey, seq: u64, act: RailAct) -> Op<SignedOp> {
 /// test on the second ring pass or fail for that reason alone.
 pub fn signed_in(ns: &str, key: &SigningKey, seq: u64, act: RailAct) -> Op<SignedOp> {
     let ts = 1_700_000_000i64 + seq as i64;
-    let sig = sign_ring_op(key, ns, ts, seq, &body_json(&act));
-    Op::new(SignedOp { seq, sig, act }, ts, actor_of(key))
+    let sig = sign_ring_op(key, ns, ts, seq, &body_json(&act, None));
+    Op::new(
+        SignedOp {
+            seq,
+            sig,
+            act,
+            on_behalf_of: None,
+        },
+        ts,
+        actor_of(key),
+    )
 }
 
 pub fn ops(key: &SigningKey, n: usize) -> Vec<Op<SignedOp>> {
@@ -135,7 +144,15 @@ pub async fn serve_at(router: axum::Router) -> std::net::SocketAddr {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     tokio::spawn(async move {
-        let _ = axum::serve(listener, router).await;
+        // `into_make_service_with_connect_info` exactly as `server::serve`
+        // does: `internal_gate` reads a missing `ConnectInfo` as "not
+        // loopback" and refuses, so a bare `axum::serve` here would test a
+        // listener production does not have.
+        let _ = axum::serve(
+            listener,
+            router.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+        )
+        .await;
     });
     tokio::time::sleep(Duration::from_millis(20)).await;
     addr
@@ -165,7 +182,7 @@ async fn a_journal_past_the_one_exchange_ceiling_converges_onto_a_fresh_peer() {
         node(peer_dir.path(), &SigningKey::from_bytes(&[2u8; 32]), 0);
 
     let url = serve(internal_router(peer_state)).await;
-    let out = exchange(&reqwest::Client::new(), &url, &rail, &journal).await;
+    let out = exchange(&reqwest::Client::new(), &url, &rail, &journal, None).await;
 
     assert!(out.stop.is_none(), "the exchange failed: {:?}", out.stop);
     assert_eq!(out.pushed, N, "every op landed on the peer");
@@ -207,7 +224,7 @@ async fn a_peers_seal_prunes_this_nodes_disk_in_the_round_it_arrives() {
     assert_eq!(journal.read().unwrap().0.len(), 3, "control: we hold three");
 
     let url = serve(internal_router(peer_state)).await;
-    let out = exchange(&reqwest::Client::new(), &url, &rail, &journal).await;
+    let out = exchange(&reqwest::Client::new(), &url, &rail, &journal, None).await;
 
     assert!(out.stop.is_none(), "the exchange failed: {:?}", out.stop);
     assert_eq!(out.pulled, 1, "one op came over, and it was the seal");
@@ -280,7 +297,7 @@ async fn a_peers_seal_prunes_the_daemons_own_namespace_whose_roster_is_derived()
     let (a, b) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
     let (_s, journal, rail) = node_on_own(a.path(), false);
     let url = serve(internal_router(sealed_peer(b.path()))).await;
-    let out = exchange(&reqwest::Client::new(), &url, &rail, &journal).await;
+    let out = exchange(&reqwest::Client::new(), &url, &rail, &journal, None).await;
     assert_eq!(out.pulled, 1, "{:?}", out.stop);
     assert_eq!(
         journal.read().unwrap().0.len(),
@@ -300,7 +317,7 @@ async fn a_peers_seal_prunes_the_daemons_own_namespace_whose_roster_is_derived()
         "the derived roster does not claim our key: {roster:?}"
     );
     let url = serve(internal_router(sealed_peer(d.path()))).await;
-    let out = exchange(&reqwest::Client::new(), &url, &rail, &journal).await;
+    let out = exchange(&reqwest::Client::new(), &url, &rail, &journal, None).await;
     assert_eq!(out.pulled, 1, "{:?}", out.stop);
     let held = journal.read().unwrap().0;
     assert_eq!(
@@ -336,7 +353,7 @@ async fn an_ordinary_op_arriving_prunes_nothing() {
         .unwrap();
 
     let url = serve(internal_router(peer_state)).await;
-    let out = exchange(&reqwest::Client::new(), &url, &rail, &journal).await;
+    let out = exchange(&reqwest::Client::new(), &url, &rail, &journal, None).await;
 
     assert_eq!(out.pulled, 1);
     assert_eq!(journal.read().unwrap().0.len(), 4, "nothing was retired");
@@ -411,7 +428,7 @@ async fn a_second_call_that_fails_still_reports_what_the_first_call_pulled() {
     let key = SigningKey::from_bytes(&[1u8; 32]);
     let (_state, journal, rail) = node(dir.path(), &key, 3);
 
-    let out = exchange(&reqwest::Client::new(), &url, &rail, &journal).await;
+    let out = exchange(&reqwest::Client::new(), &url, &rail, &journal, None).await;
     assert!(
         matches!(out.stop, Some(ExchangeStop::Refused { .. })),
         "a 413 is a refusal, not an unreachable peer: {:?}",
@@ -428,6 +445,32 @@ async fn a_second_call_that_fails_still_reports_what_the_first_call_pulled() {
     );
 }
 
+/// A peer that REFUSES this ring answers 403, and that is an answer too. It
+/// had the same collapse the 413 did until `tg-2-strangers-are-refused`: the
+/// status the new internal-port gate and `roster_refusal` both use was filed
+/// under `peers_unreachable` at DEBUG, so a mesh refusing us for identity read
+/// as a partitioned one.
+#[tokio::test]
+async fn a_peer_that_answers_403_is_refused_rather_than_unreachable() {
+    let router = axum::Router::new().route(
+        "/internal/ring/sync",
+        axum::routing::post(|| async { axum::http::StatusCode::FORBIDDEN }),
+    );
+    let url = serve(router).await;
+    let dir = tempfile::tempdir().unwrap();
+    let key = SigningKey::from_bytes(&[1u8; 32]);
+    let (_state, journal, rail) = node(dir.path(), &key, 3);
+
+    let out = exchange(&reqwest::Client::new(), &url, &rail, &journal, None).await;
+    match out.stop {
+        Some(ExchangeStop::Refused { sent_bytes, status }) => {
+            assert_eq!(status, 403);
+            assert!(sent_bytes > 0);
+        }
+        other => panic!("expected Refused, got {other:?}"),
+    }
+}
+
 /// A peer that answers nothing but 413 is REFUSED, not unreachable —
 /// the distinction the round counts on, and the one whose absence made
 /// the ceiling silent.
@@ -442,13 +485,14 @@ async fn a_peer_that_answers_413_is_refused_rather_than_unreachable() {
     let key = SigningKey::from_bytes(&[1u8; 32]);
     let (_state, journal, rail) = node(dir.path(), &key, 3);
 
-    let out = exchange(&reqwest::Client::new(), &url, &rail, &journal).await;
+    let out = exchange(&reqwest::Client::new(), &url, &rail, &journal, None).await;
     match out.stop {
-        Some(ExchangeStop::Refused { sent_bytes }) => {
+        Some(ExchangeStop::Refused { sent_bytes, status }) => {
             assert!(
                 sent_bytes > 0,
                 "the refused size is what makes it actionable"
-            )
+            );
+            assert_eq!(status, 413, "the status is what picks the sentence");
         }
         other => panic!("expected Refused, got {other:?}"),
     }
@@ -461,6 +505,7 @@ async fn a_peer_that_answers_413_is_refused_rather_than_unreachable() {
         "http://127.0.0.1:1/internal/ring/sync",
         &rail,
         &journal,
+        None,
     )
     .await;
     assert!(
@@ -500,7 +545,7 @@ async fn a_peer_whose_digest_never_moves_stops_the_loop_instead_of_spinning() {
     let key = SigningKey::from_bytes(&[1u8; 32]);
     let (_state, journal, rail) = node(dir.path(), &key, 3);
 
-    let out = exchange(&reqwest::Client::new(), &url, &rail, &journal).await;
+    let out = exchange(&reqwest::Client::new(), &url, &rail, &journal, None).await;
     assert!(out.stop.is_none());
     assert_eq!(out.pulled, 0);
     assert_eq!(out.pushed, 0);

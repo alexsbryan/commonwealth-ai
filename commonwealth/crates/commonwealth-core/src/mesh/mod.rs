@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 
 pub use crate::mesh_identity::{aliased_endpoint_keys, AliasedEndpointKey, EndpointClaim};
 
+pub mod offer_view;
 pub mod wire;
 
 use crate::capabilities::NodeCapabilities;
@@ -632,6 +633,41 @@ impl Mesh {
     }
 
     /// Decide what one incoming member record does to the local roster, and
+    /// apply it — then say which arm decided it.
+    ///
+    /// The whole body is [`Self::decide_one_member`]; this wrapper exists only
+    /// so [`offer_view::log_merge_arm`] has ONE call site and fires on EVERY
+    /// arm, including the two that return before any write. Reading the
+    /// existing triple here rather than inside each arm is what lets the line
+    /// carry what we held BEFORE the insert (ARCH 8: one call, not five).
+    fn merge_one_member(
+        &mut self,
+        id: NodeId,
+        incoming: &MemberRecord,
+        self_node_id: NodeId,
+        enforce_signed: bool,
+    ) -> MemberOutcome {
+        let existing = self
+            .members
+            .get(&id)
+            .map(|r| (offer_view::OfferView::of(r), r.event_time()));
+        let outcome = self.decide_one_member(id, incoming, self_node_id, enforce_signed);
+        let arm = match &outcome {
+            MemberOutcome::Added { .. } => "first-sight",
+            MemberOutcome::Updated { .. } => "lww-update",
+            MemberOutcome::Refused(_) => "refused",
+            MemberOutcome::NotApplicable(SkipReason::AuthoritativeForSelf) => {
+                "authoritative-for-self"
+            }
+            MemberOutcome::NotApplicable(SkipReason::LocalRecordNotOlder) => {
+                "local-record-not-older"
+            }
+        };
+        offer_view::log_merge_arm(existing.as_ref(), incoming, arm);
+        outcome
+    }
+
+    /// Decide what one incoming member record does to the local roster, and
     /// apply it. Returns the decision; [`MergeReport`]'s own `record` fold is
     /// what turns it into a number.
     ///
@@ -639,7 +675,7 @@ impl Mesh {
     /// than five scattered counter increments and two `continue`s. The
     /// refusal returns like any other outcome, which is what lets one poisoned
     /// row be abandoned without costing the rest of the cycle.
-    fn merge_one_member(
+    fn decide_one_member(
         &mut self,
         id: NodeId,
         incoming: &MemberRecord,
@@ -668,6 +704,7 @@ impl Mesh {
                         arm: MergeArm::FirstSight,
                     });
                 }
+                offer_view::log_merged(None, &record, "first-sight");
                 self.members.insert(id, record);
                 // A tombstone we have never seen is still added (so it
                 // converges mesh-wide), but it is not "observed alive".
@@ -699,6 +736,7 @@ impl Mesh {
                         arm: MergeArm::LwwUpdate,
                     });
                 }
+                offer_view::log_merged(Some(existing), &record, "lww-update");
                 self.members.insert(id, record);
                 MemberOutcome::Updated { observed: active }
             }

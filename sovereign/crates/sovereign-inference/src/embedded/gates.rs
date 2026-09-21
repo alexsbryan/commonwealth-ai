@@ -81,6 +81,10 @@ pub(crate) struct PrefixCacheGate {
     pub(crate) quirks_say_recurrent: bool,
     /// The load-time probe's verdict label.
     pub(crate) measured: &'static str,
+    /// WHY, when `measured` is `could-not-judge`; `None` otherwise. Read from
+    /// the SAME verdict as `measured`, so the label and its cause cannot
+    /// disagree about which verdict they describe (principle 8).
+    pub(crate) measured_cause: Option<&'static str>,
     pub(crate) authority: PrefixCacheAuthority,
     pub(crate) speculative_active: bool,
     /// `SOVEREIGN_PREFIX_CACHE_FORCE` overrode a recurrent/hybrid
@@ -171,6 +175,7 @@ pub(crate) fn prefix_cache_gate(
         arch_says_recurrent,
         quirks_say_recurrent,
         measured: caps.partial_kv.label(),
+        measured_cause: caps.partial_kv.cause(),
         authority,
         speculative_active,
         forced,
@@ -690,6 +695,49 @@ mod tests {
         );
         assert_eq!(g.authority, PrefixCacheAuthority::Measured);
         assert!(!g.model_says_recurrent && !g.arch_says_recurrent);
+    }
+
+    /// `reason="could-not-judge"` was the verdict's LABEL — the same word for
+    /// all three ways to be unjudgeable — so an operator could not tell "probe
+    /// switched off" from "distributed child" from "probe aborted", and the
+    /// ring-room investigation read it as "nobody has measured this
+    /// architecture" when the primary slot simply never probes (ralph A35).
+    /// The cause is read from the SAME verdict as the label.
+    #[test]
+    fn a_could_not_judge_gate_carries_the_cause_not_just_the_label() {
+        let caps = slot(
+            "qwen35",
+            false,
+            PartialKvVerdict::CouldNotJudge {
+                reason: "SOVEREIGN_CAPABILITY_PROBE=0",
+            },
+        );
+        let g = prefix_cache_gate(&caps, false, false, no_env);
+        assert_eq!(g.measured, "could-not-judge", "the label is unchanged");
+        assert_eq!(
+            g.measured_cause,
+            Some("SOVEREIGN_CAPABILITY_PROBE=0"),
+            "and the cause is now reported beside it"
+        );
+    }
+
+    /// The other direction (principle 7): a verdict that DID judge has no cause
+    /// and must not be handed a fabricated one.
+    #[test]
+    fn a_judged_gate_reports_no_cause() {
+        for v in [
+            PartialKvVerdict::Safe,
+            PartialKvVerdict::Refused,
+            PartialKvVerdict::AcceptedButUnfaithful,
+        ] {
+            let label = v.label();
+            let g = prefix_cache_gate(&slot("qwen35", false, v), false, false, no_env);
+            assert_eq!(g.measured, label);
+            assert_eq!(
+                g.measured_cause, None,
+                "{label} judged — there is no could-not-judge cause to report"
+            );
+        }
     }
 
     #[test]

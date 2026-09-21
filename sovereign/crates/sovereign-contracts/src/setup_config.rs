@@ -393,6 +393,14 @@ pub struct SharedModelSection {
     /// wins if pre-set.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub headroom: Option<f64>,
+    /// Acknowledge that this node's tensor-split RPC port may be bound where
+    /// other hosts can reach it. The worker authenticates nothing and
+    /// encrypts nothing, so a non-loopback `SOVEREIGN_RPC_SERVE` is REFUSED
+    /// unless this is `true` — members already reach the worker over the
+    /// encrypted mesh tunnel, which needs no LAN bind. Env
+    /// `SOVEREIGN_RPC_ALLOW_PLAINTEXT_LAN` wins if pre-set.
+    #[serde(default)]
+    pub allow_plaintext_lan: bool,
     /// How anchors fetch their shard of the model — the host emits this as
     /// `SOVEREIGN_RPC_SHARD_FETCH`. Defaults to [`ShardFetch::Ranges`] (each
     /// node pulls only its slice), which is required whenever no single node
@@ -1360,7 +1368,7 @@ pub struct DaemonSection {
     /// non-loopback caller (auto-generated to `<data.dir>/client-token`
     /// unless `client_token` is set) — see `client_token` and
     /// `sovereign_daemon::client_auth`. The internal mesh port
-    /// (`:9742`, mTLS) always binds `0.0.0.0` independently of this.
+    /// (`:9742`, see `internal_auth` — never mTLS) always binds `0.0.0.0`.
     #[serde(default = "default_client_bind")]
     pub client_bind: String,
 
@@ -1384,11 +1392,17 @@ pub struct DaemonSection {
     #[serde(default)]
     pub guest_bind: Option<String>,
 
-    /// The ring page the guest door serves at `/ring/` (a bundle directory
-    /// such as `sovereign/apps/ring-doc`). `None` serves no page; the door's
-    /// rail routes are unaffected.
+    /// The ring page the guest door serves at the bare `/ring/` (a bundle
+    /// directory such as `sovereign/apps/ring-doc`). `None` serves no page
+    /// there; the door's rail routes are unaffected. A wall with more than
+    /// one app names them in `[daemon.guest_pages]` instead.
     #[serde(default)]
     pub guest_page_dir: Option<PathBuf>,
+    /// What a guest's claimed NAME is recognised under — `"door"` (default,
+    /// `None`) or `"grant"`; reach is unaffected by either. Parsed and
+    /// explained by `sovereign_grants::GuestSessionBinding`, its one reader.
+    #[serde(default)]
+    pub guest_sessions: Option<String>,
 
     /// **Local-only profile: no discovery, no transport, no mesh loops.**
     ///
@@ -1415,12 +1429,38 @@ pub struct DaemonSection {
     /// `0.0.0.0` (every interface) — the historical behaviour, and the
     /// right choice when a cloud firewall / security group already scopes
     /// who can reach the port. Pin it to a specific private address (e.g.
-    /// the VPC NIC `10.0.1.4`) to keep the **unauthenticated** internal API
-    /// off any other interface — defense-in-depth on a multi-homed host.
+    /// the VPC NIC `10.0.1.4`) to keep the internal API off any other
+    /// interface — defense-in-depth beside `internal_auth`, not instead of it.
     /// Ignored under `require_encryption`, which forces the internal router
     /// loopback-only (the iroh acceptor is then the sole network ingress).
     #[serde(default = "default_internal_bind")]
     pub internal_bind: String,
+
+    /// What the internal mesh API (`:9742`) requires of a caller: `None`
+    /// (default) is `"member"`, and `"perimeter"` is the pre-knob behaviour
+    /// where any caller that can route to the port is served. A CLOSED SET —
+    /// `sovereign_daemon::internal_gate::InternalAuth` is its one reader and
+    /// carries the whole contract, including which routes are exempt.
+    #[serde(default)]
+    pub internal_auth: Option<String>,
+
+    /// What the CLIENT API (`:9741`) accepts as a remote credential: `None`
+    /// (default) is `"shared"` — the daemon-wide `client_token` admits, and so
+    /// does any token minted with `svrn mesh token --new <label>`. `"named-only"`
+    /// refuses the shared token and admits only the named ones. A CLOSED SET —
+    /// `sovereign_daemon::client_tokens::ClientTokens` is its one reader and
+    /// carries the whole contract.
+    #[serde(default)]
+    pub client_tokens: Option<String>,
+
+    /// `[daemon.guest_pages]` — one wall, more than one app: rail namespace
+    /// → bundle directory, served at `/ring/<namespace>/`. Registering an app
+    /// here is how its owner DECLARES that it admits guests; a wall grant
+    /// reaches exactly what is declared. Both entry spellings, the narrowing
+    /// and the worked example live on [`GuestPage`], its one type. Declared
+    /// LAST because a TOML table must follow this section's scalars.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub guest_pages: std::collections::BTreeMap<String, crate::guest_pages::GuestPage>,
 }
 
 /// Filesystem paths for mutable state.
@@ -1452,7 +1492,11 @@ impl Default for DaemonSection {
             client_token: None,
             guest_bind: None,
             guest_page_dir: None,
+            guest_sessions: None,
+            guest_pages: std::collections::BTreeMap::new(),
             internal_bind: default_internal_bind(),
+            internal_auth: None,
+            client_tokens: None,
             local_only: default_local_only(),
         }
     }
