@@ -148,7 +148,12 @@ async fn a_write_made_while_the_peer_was_offline_travels_when_it_returns() {
         db.path(),
         &kb,
         b_id,
-        mesh_with(vec![keyed(b_id, "beefy", &kb, "127.0.0.1:2".parse().unwrap())]),
+        mesh_with(vec![keyed(
+            b_id,
+            "beefy",
+            &kb,
+            "127.0.0.1:2".parse().unwrap(),
+        )]),
     );
     let b_addr = common::spawn_router(internal_router(b_state)).await;
 

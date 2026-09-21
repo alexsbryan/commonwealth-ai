@@ -41,7 +41,10 @@ const BUDGET: Duration = Duration::from_secs(2);
 /// member needs a pubkey — see [`node`].
 fn mesh_of(a: NodeId, b: NodeId, b_addr: std::net::SocketAddr) -> Mesh {
     let mut members = HashMap::new();
-    members.insert(a, keyed(a, "a", &key_a(), "127.0.0.1:9742".parse().unwrap()));
+    members.insert(
+        a,
+        keyed(a, "a", &key_a(), "127.0.0.1:9742".parse().unwrap()),
+    );
     members.insert(b, keyed(b, "b", &key_b(), b_addr));
     Mesh {
         mesh_secret: [0u8; 32],
