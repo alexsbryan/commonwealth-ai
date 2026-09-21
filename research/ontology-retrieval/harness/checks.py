@@ -693,15 +693,21 @@ def plant_i5(root):
     note = _materialise(root, "oracle", (CMP.BARE_ARM, CMP.FULL_ARM,
                                          CMP.CLOSED_BOOK_ARM))
 
+    # EVERY K0 row, not one: the floor is read on the category mean, so one low
+    # row is caught only when the borrowed arm already sat near 0.8. On the pod
+    # pilot (20260921T035355Z) it left k0 at exactly 0.800 and the plant read
+    # never-ran. The first row is forced to K0 so the category is never empty.
     def corrupt(doc):
-        for row in doc.get("results") or []:
+        for i, row in enumerate(doc.get("results") or []):
+            if i == 0:
+                row["category"] = ATT.K0
+            if row.get("category") != ATT.K0:
+                continue
             row.pop("error", None)
-            row["category"] = ATT.K0
             synth = row.setdefault("synth", {})
             synth.setdefault("judge_fact_score", {})["ratio"] = 0.1
-            break
     _edit_runs(root, "oracle", corrupt)
-    return _note(f"one oracle row scored 0.1 on {ATT.K0}", note)
+    return _note(f"every oracle {ATT.K0} row scored 0.1", note)
 
 
 def plant_i6(root):
