@@ -546,7 +546,10 @@ mod ledger {
         );
         assert!(
             !walk.nodes.is_empty()
-                && walk.nodes.iter().all(|n| ["Alpha", "Beta"].contains(&n.name.as_str())),
+                && walk
+                    .nodes
+                    .iter()
+                    .all(|n| ["Alpha", "Beta"].contains(&n.name.as_str())),
             "the carried echo must be the walk over the fixture's two articles. {walk:?}"
         );
     }
