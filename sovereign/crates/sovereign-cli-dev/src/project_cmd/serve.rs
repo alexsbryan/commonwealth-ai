@@ -254,22 +254,6 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
         }
     };
 
-    // ── Feature store (ATOS charters + milestones) ─────────────
-    let features_db_path = sovereign_dir.join("features.db");
-    let features_store = match corpus_engine_atos::FeatureStore::open(&features_db_path) {
-        Ok(s) => {
-            eprintln!("  features.db      ✓");
-            Arc::new(s)
-        }
-        Err(e) => {
-            eprintln!("  warning: could not open features DB: {e}");
-            Arc::new(
-                corpus_engine_atos::FeatureStore::open(std::path::Path::new(":memory:"))
-                    .expect("in-memory features store"),
-            )
-        }
-    };
-
     // Print any open todos from previous sessions at startup.
     if let Ok(todos) = notes_store.open_todos(5).await {
         if !todos.is_empty() {
@@ -484,7 +468,7 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
         sovereign_code::GetLintOutputTool::new(Arc::clone(&lint_store)).declared(),
     ));
 
-    // ── Agent partnership tools (notes, blast radius, project context) ──
+    // ── Agent partnership tools (notes, blast radius) ──
 
     tools.register(Box::new(
         sovereign_code::WriteNoteTool::new(Arc::clone(&notes_store)).declared(),
@@ -583,21 +567,7 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
             .with_atlas(Arc::clone(&atlas_store) as std::sync::Arc<dyn sovereign_code::PeerWork>)
             .declared(),
     ));
-    if let Some(ref ds) = docs_store {
-        tools.register(Box::new(
-            sovereign_atos::tools::ProjectContextTool::new(Arc::clone(ds))
-                .with_features(Arc::clone(&features_store))
-                .declared(),
-        ));
-    }
 
-    // ── ATOS feature management ─────────────────────────────────
-    tools.register(Box::new(
-        sovereign_atos::tools::ProvisionFeatureTool::new(Arc::clone(&features_store)).declared(),
-    ));
-    tools.register(Box::new(
-        sovereign_atos::tools::ArchiveFeatureTool::new(Arc::clone(&features_store)).declared(),
-    ));
     tools.register(Box::new(
         sovereign_code::ReadNoteByIdTool::new(Arc::clone(&notes_store)).declared(),
     ));
@@ -613,30 +583,12 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
         sovereign_code::ReadNoteDigestTool::new(Arc::clone(&notes_store)).declared(),
     ));
     tools.register(Box::new(
-        sovereign_atos::tools::RecordAtosEventTool::new(Arc::clone(&features_store)).declared(),
-    ));
-    // atos_plan_emit intentionally NOT registered — see runtime
-    // tools_cmd/registry.rs for rationale (markdown plan path
-    // replaced structured-JSON path).
-    tools.register(Box::new(
         sovereign_code::WriteRedteamFindingTool::new(Arc::clone(&notes_store)).declared(),
     ));
 
     // ── Session reflection (feedback loop) ─────────────────────────────
     tools.register(Box::new(
         sovereign_code::SessionReflectionTool::new(Arc::clone(&notes_store)).declared(),
-    ));
-
-    // ── DESIGN.md structural signals ────────────────────────────────────
-    //
-    // Project-scoped: bound to this repo's DESIGN.md by default, so the
-    // agent can call `design_signals_extract()` with no args and get the
-    // right file. Absolute paths still work — the tool resolves them
-    // verbatim, bypassing project_root.
-    tools.register(Box::new(
-        sovereign_atos::tools::DesignSignalsExtractTool::new()
-            .with_project_root(repo_root.clone())
-            .declared(),
     ));
 
     // ── Start watcher coordinator ───────────────────────────────

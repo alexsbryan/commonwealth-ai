@@ -19,7 +19,6 @@ use std::process::Command;
 const DEV_VERBS: &[&str] = &[
     // `code` and `project` deliberately left out — both are split surfaces.
     // See `project_is_served_in_process` and `code_refuses_without_code_intel`.
-    "atos",
     "tools",
     "status",
     "charter",

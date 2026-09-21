@@ -11,8 +11,8 @@
 //! `write_note(kind='redteam_finding', …)`?
 //!
 //! 1. The structured schema ( `invariant`, `status`, `evidence`,
-//!    `confidence`) matches §5.3 of the ATOS design doc without the
-//!    agent having to remember the field names inside a freeform
+//!    `confidence`) keeps the field names explicit without the
+//!    agent having to remember them inside a freeform
 //!    `content` blob.
 //! 2. Tool-filtering enforcement at the MCP router (deferred to M4)
 //!    will key on tool name, not note kind. Keeping the red-team

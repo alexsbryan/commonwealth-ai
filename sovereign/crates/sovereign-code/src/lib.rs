@@ -93,11 +93,6 @@ pub mod build;
 #[cfg(feature = "treesitter")]
 pub mod spec;
 
-// Spec-drift inspection. Calls into `sovereign_atos::approval`
-// so the verdict matches the daemon's approval_gate middleware
-// exactly: a feature this tool calls "drifted" is the same
-// feature the gate would write a deviation note for.
-
 // Architectural-drift freshness gate — sibling to lint_status /
 // test_status. Reads the fingerprint sidecar the drift orchestrator
 // writes; reports fresh/stale/partial/never_run against the
@@ -168,12 +163,6 @@ pub mod blast_radius;
 #[cfg(feature = "treesitter")]
 pub mod session_reflection;
 
-// Doc path validity checker.
-#[cfg(feature = "treesitter")]
-// ATOS feature management.
-pub mod atos_plan_emit;
-pub mod atos_utils;
-pub mod atos_verify;
 #[cfg(feature = "treesitter")]
 pub mod promote_note;
 #[cfg(feature = "treesitter")]
@@ -182,11 +171,6 @@ pub mod read_note_by_id;
 pub mod read_note_digest;
 #[cfg(feature = "treesitter")]
 pub mod write_redteam_finding;
-
-// DESIGN.md structural signals — wraps corpus_engine_atos::design_signals
-// so the agent-collaborative design session (and any MCP client) can
-// audit a DESIGN.md's gaps and keywords without round-tripping through
-// the CLI.
 
 // Root re-exports for three tools whose hosts named them at the crate root
 // via sovereign-tools' old `pub use sovereign_code::<module>::<Tool>;` lines.
@@ -237,9 +221,6 @@ pub use lint_status::LintStatusTool;
 #[cfg(feature = "treesitter")]
 pub use spec::SpecTool;
 
-#[cfg(feature = "treesitter")]
-pub use atos_plan_emit::AtosPlanEmitTool;
-pub use atos_verify::AtosVerifyTool;
 #[cfg(feature = "treesitter")]
 pub use blast_radius::BlastRadiusTool;
 #[cfg(feature = "treesitter")]

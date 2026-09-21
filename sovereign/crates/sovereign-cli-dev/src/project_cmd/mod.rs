@@ -30,8 +30,6 @@ mod serve;
 pub(crate) use serve::cmd_serve;
 mod refresh;
 pub(crate) use refresh::cmd_refresh;
-mod design_plan;
-pub(crate) use design_plan::{cmd_design, cmd_plan};
 // `init` + `scaffold` moved to `sovereign-cli::project_init` (2026-08-07) —
 // `svrn init` and `svrn project init` are served by the shipped dispatcher
 // now, so this binary is never asked for them.
@@ -73,14 +71,6 @@ pub async fn run_project(args: &[String]) -> i32 {
     // SOVEREIGN_QUIET_DEPRECATIONS=1.
     use sovereign_cli_shared::deprecation::announce;
     match args[0].as_str() {
-        "design" => {
-            announce("svrn project design", "svrn design");
-            cmd_design(&args[1..]).await
-        }
-        "plan" => {
-            announce("svrn project plan", "svrn plan");
-            cmd_plan(&args[1..]).await
-        }
         "charter" => {
             announce("svrn project charter", "svrn charter");
             cmd_charter(&args[1..]).await
@@ -125,9 +115,7 @@ const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help 
             // `init` is absent on purpose: it ships in the dispatcher
             // (`svrn init` / `svrn project init`) and never reaches this
             // binary, so listing it here would advertise a verb we'd reject.
-            ("design",         "Agent-collaborative DESIGN.md session (opencode-first). --solo to skip the agent"),
-            ("plan",           "Compose IMPLEMENTATION_PLAN.md from DESIGN.md + OPEN_QUESTIONS.md; indexes plan items in .sovereign/plan.db"),
-            ("charter",        "Write / edit the free-form team CHARTER.md (governance, culture, onboarding); separate from DESIGN.md"),
+            ("charter",        "Write / edit the free-form team CHARTER.md (governance, culture, onboarding)"),
             ("found",          "Once per project: structured conversation that produces CHARTER.md + PHASES.md"),
             ("amend",          "Edit CHARTER.md with an adversarial review — every amendment logs who, why, and what was argued against"),
             ("phase",          "phase status | phase pass [N] — track PHASES.md progression, run stop conditions, write phase-N.md"),
@@ -405,19 +393,18 @@ pub(crate) async fn cmd_status(args: &[String]) -> i32 {
 }
 
 // `MergedGraphSummary`, `load_merged_graph`, and `snapshot_graph_mtimes`
-// moved to `sovereign-cli-shared::scip` so the new `sovereign-cli-atos`
-// binary can share one implementation with `tools_cmd::registry`. The
+// moved to `sovereign-cli-shared::scip` so the workbench binary can share
+// one implementation with `tools_cmd::registry`. The
 // re-exports below preserve the prior `crate::project_cmd::…` call sites.
 pub(crate) use sovereign_cli_shared::scip::{load_merged_graph, snapshot_graph_mtimes};
 
 // `--orchestrate` (which sequenced DESIGN.md + CHARTER.md +
 // IMPLEMENTATION_PLAN.md + PHASES.md composition) is retired in
-// favour of the explicit `svrn design` / `svrn charter`
-// / `svrn plan` triad.
+// favour of the explicit `svrn charter` flow.
 async fn cmd_found(_args: &[String]) -> i32 {
     sovereign_cli_shared::deprecation::announce_retired(
         "svrn project found",
-        "Founding is implicit now: `svrn init` + a committed          spec is sufficient. Use `svrn charter` if you want          to define team conventions, or `svrn plan` to write          PHASES.md from a design doc.",
+        "Founding is implicit now: `svrn init` + a committed          spec is sufficient. Use `svrn charter` if you want          to define team conventions.",
     );
     0
 }

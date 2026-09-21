@@ -814,7 +814,7 @@ const REFLECT_HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::hel
             ),
             (
                 "--feature-id <id>",
-                "Scope the reflection to this ATOS feature. Mirrors SOVEREIGN_FEATURE_ID.",
+                "Scope the reflection to this feature. Mirrors SOVEREIGN_FEATURE_ID.",
             ),
             (
                 "--content <text>",
@@ -1311,7 +1311,7 @@ const BRIEF_HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help:
             ),
             (
                 "--feature-id <id>",
-                "ATOS feature id, used to scope notes. Mirrors SOVEREIGN_FEATURE_ID env var.",
+                "Feature id, used to scope notes. Mirrors SOVEREIGN_FEATURE_ID env var.",
             ),
             ("--output <md>", "Write to this path instead of stdout."),
             (

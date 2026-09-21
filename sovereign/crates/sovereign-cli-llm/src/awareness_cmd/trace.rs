@@ -3,10 +3,9 @@
 //!
 //! Shows every decision point the awareness pipeline made about a
 //! single entity: extraction (canonical name, aliases, source
-//! chunks), merge resolution (folded names that collapsed), ATOS
-//! link composition (Initiative only), interaction timeline, cross-
-//! references, and the digest line as it would render on the next
-//! turn. The deepest diagnostic per the spec.
+//! chunks), merge resolution (folded names that collapsed),
+//! interaction timeline, cross-references, and the digest line as it
+//! would render on the next turn. The deepest diagnostic per the spec.
 //!
 //! Phase 3 ships everything except the ranking-score breakdown,
 //! which depends on the `format_*_with_scores` split (deferred).
@@ -18,19 +17,15 @@ use corpus_engine::enrichment::atlas::edges::{Edge, EdgeType};
 use corpus_engine::enrichment::atlas::writer::{read_atlas_atoms, read_atlas_edges};
 use corpus_engine::enrichment::pipeline::atlas::EntityType;
 use sovereign_tools::knowledge_view::splice_extension::{
-    load_chunk_timestamps, relational_notes_for_entity, AtosSnapshot,
+    load_chunk_timestamps, relational_notes_for_entity,
 };
 use sovereign_tools::knowledge_view::timeline::{
-    assemble_timelines_from_atlas, AtosLink, AtosLinkKind, CharterStatus, Interaction,
-    InteractionTimeline, TimelineEntityKind,
+    assemble_timelines_from_atlas, Interaction, InteractionTimeline, TimelineEntityKind,
 };
 
 use super::args::parse_args;
 use super::render::{display_path, format_datetime};
-use super::store_open::{
-    atlas_dir_for, project_toml_path, sovereign_root, state_db_path, try_open_features,
-    try_open_notes,
-};
+use super::store_open::{atlas_dir_for, sovereign_root, state_db_path, try_open_notes};
 
 const RELATIONAL_VIEWS: &[&str] = &["personal-knowledge", "conversation-history"];
 
@@ -121,16 +116,6 @@ pub(super) async fn cmd_trace(args: &[String]) -> i32 {
     };
     let (source_view, target) = entity;
 
-    // ATOS lookup (built once for downstream use).
-    let toml_path = project_toml_path();
-    let toml_path_opt = if toml_path.exists() {
-        Some(toml_path.as_path())
-    } else {
-        None
-    };
-    let features = try_open_features();
-    let atos = AtosSnapshot::build(features.as_ref(), toml_path_opt).await;
-
     // Find the timeline produced for this entity by the assembler so
     // we can show the same data the digest would see.
     let db_path = state_db_path(&root);
@@ -142,7 +127,7 @@ pub(super) async fn cmd_trace(args: &[String]) -> i32 {
         if !atlas_dir_for(&root, view_id).exists() {
             continue;
         }
-        match assemble_timelines_from_atlas(&corpus_dir, &resolver, &atos) {
+        match assemble_timelines_from_atlas(&corpus_dir, &resolver) {
             Ok(mut t) => all_timelines.append(&mut t),
             Err(e) => {
                 eprintln!(
@@ -168,9 +153,6 @@ pub(super) async fn cmd_trace(args: &[String]) -> i32 {
     // ── Render ─────────────────────────────────────────────────
     print_extraction(target, source_view, &edges_by_view);
     print_merging(target, &edges_by_view);
-    if matches!(target.entity_type, EntityType::Initiative) {
-        print_atos_section(&target.canonical_name, &atos);
-    }
     if let Some(tl) = target_timeline.as_ref() {
         print_timeline_section(tl);
         print_cross_refs(&all_timelines, tl);
@@ -284,36 +266,6 @@ fn print_merging(target: &Entity, edges_by_view: &[(String, Vec<Edge>)]) {
     );
 }
 
-fn print_atos_section(canonical_name: &str, atos: &AtosSnapshot) {
-    println!();
-    println!("═══ ATOS Link ═══");
-    println!();
-    let folded = canonical_name.trim().to_lowercase();
-    use sovereign_tools::knowledge_view::timeline::AtosLookup;
-    match atos.lookup(&folded) {
-        Some(link) => print_atos_link(&link),
-        None => println!("No ATOS project / feature matches \"{canonical_name}\" — initiative renders without phase data."),
-    }
-}
-
-fn print_atos_link(link: &AtosLink) {
-    let kind = match link.kind {
-        AtosLinkKind::Project => "project",
-        AtosLinkKind::Feature => "feature",
-    };
-    let phase = match (link.current_phase, link.total_phases) {
-        (Some(c), Some(t)) => format!("phase {c}/{t}"),
-        (Some(c), None) => format!("phase {c}"),
-        _ => "no phase data".to_string(),
-    };
-    let charter = match link.charter_status {
-        CharterStatus::Clean => "Clean",
-        CharterStatus::Drifted => "Drifted",
-        CharterStatus::Unapproved => "Unapproved",
-    };
-    println!("ATOS: {kind} \"{}\", {phase}, charter: {charter}", link.id);
-}
-
 fn print_timeline_section(tl: &InteractionTimeline) {
     println!();
     println!("═══ Timeline ═══");
@@ -419,14 +371,6 @@ fn print_digest_line(
             .map(|d| d.format("%b %d").to_string())
             .unwrap_or_else(|| "—".to_string());
         head.push_str(&format!(", last {date}"));
-    }
-    if let Some(link) = &tl.atos_project {
-        let phase = match (link.current_phase, link.total_phases) {
-            (Some(c), Some(t)) => format!(", ATOS phase {c}/{t}"),
-            (Some(c), None) => format!(", ATOS phase {c}"),
-            _ => String::new(),
-        };
-        head.push_str(&phase);
     }
     if !linked_notes.is_empty() {
         let summary: Vec<String> = linked_notes

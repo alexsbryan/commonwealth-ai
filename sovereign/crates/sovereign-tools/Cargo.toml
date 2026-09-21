@@ -107,9 +107,7 @@ docx-lite = "0.2"
 pdfium-render = { version = "0.9", features = ["thread_safe"] }
 image = "0.25"
 # Stable, cryptographic short-hash for deriving corpus IDs from a
-# canonicalised root path. Used by local_corpus::config and by the
-# splice-extension module's CHARTER.md drift detector (mirroring
-# sovereign-atos::approval::detect_drift without the cross-crate dep).
+# canonicalised root path. Used by local_corpus::config.
 sha2 = { workspace = true }
 # Content-derived stable keys for atlas atoms in `atlas_view`. Lets
 # Phase 2's curation overlay key edits by content hash instead of the
@@ -177,20 +175,12 @@ workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 # `treesitter` is default-on since build-latency move bl-hakari: the gate
 # feature list (`corpus-engine/treesitter`) resolves it in every full build, so
 # default-on keeps a `-p` scope from compiling a second sovereign-tools
-# (quality/BUILD_LATENCY.md D1). `atos` and `dev-tools` are NOT here, and were
-# for one uncommitted afternoon: they pull back-of-house crates, and layer-gate
+# (quality/BUILD_LATENCY.md D1). `dev-tools` is NOT here, and was for one
+# uncommitted afternoon: it pulls back-of-house crates, and layer-gate
 # forbids those in the default build (quality/ARCH_LAYERS.toml, back-of-house).
 default = ["treesitter"]
 email = ["lettre"]
 treesitter = ["corpus-engine/treesitter"]
-# `atos` is the experimental agent feature-lifecycle subsystem (charter →
-# milestones → approval-gate → drift). It is OFF by default so product builds
-# carry zero ATOS; here it unlocks the KnowledgeView strategic ATOS splice.
-# Orthogonal to `treesitter` — the strategic splice needs both axes.
-#
-# A pure CODE gate since the FIVE_PROGRAMS cut: the splice takes an injected
-# `knowledge_view::timeline::FeatureCatalog`, so no ATOS crate is named here.
-atos = []
 # PaddleOCR (ONNX) OCR engine. Off by default so headless/default builds
 # don't pull the OCR inference surface; the desktop enables it once the
 # bake-off greenlights swapping it in for tesseract.

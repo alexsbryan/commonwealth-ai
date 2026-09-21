@@ -77,11 +77,11 @@ pub mod lessons;
 pub mod local_inference;
 pub mod mcp_config;
 pub mod memory_config;
-/// Answering's port — the middleware trait, its request/session/error/view
-/// vocabulary, and the session artifact delta it carries. Lifted out of
+/// Answering's port — the middleware trait and its
+/// request/session/error/view vocabulary. Lifted out of
 /// `sovereign-api` (domains `REVIEW-build-middleware-seam`) so the Workspace
-/// decision extractor and the ATOS middlewares can name it without the host;
-/// the composition (`Pipeline`, the registry) stays host code.
+/// decision extractor can name it without the host; the composition
+/// (`Pipeline`, the registry) stays host code.
 pub mod middleware;
 pub mod mobile_host;
 pub mod model_family;

@@ -235,14 +235,6 @@ impl PeerPreferenceStore {
 ///   Written and read inside the leader's own `run_leader_step`; the
 ///   only other reader is `svrn newsworthy status` against the
 ///   repo-local `.sovereign/mesh.db`.
-/// - `atos-sessions` — one row per opencode session, read back by
-///   local `session_id`. The row is mutated in place by the middleware
-///   chain on every request, so replicating it was a write per gated
-///   request for a key nothing else resolves.
-/// - `atos-approvals` — feature-approval rows. Written and read by the
-///   `svrn atos` CLI verbs against the repo-local `.sovereign/mesh.db`;
-///   the daemon-side reader (`ApprovalGate`) was never constructed with
-///   a store at all, so no row ever reached the gossiping instance.
 ///
 /// Moved to the ring rail (cw-lift 2d):
 ///
@@ -268,8 +260,6 @@ pub const GOSSIP_EXCLUDED_APP_IDS: &[&str] = &[
     "portfolio-private",
     "wikipedia-newsworthy:status",
     "wikipedia-newsworthy:portal",
-    "atos-sessions",
-    "atos-approvals",
     "mesh-measurements",
 ];
 
@@ -427,9 +417,6 @@ mod tests {
         assert!(is_gossip_excluded("wikipedia-newsworthy:status"));
         // Leader reads back its own marker inside `run_leader_step`.
         assert!(is_gossip_excluded("wikipedia-newsworthy:portal"));
-        // Read back by local `session_id` / by the same CLI process.
-        assert!(is_gossip_excluded("atos-sessions"));
-        assert!(is_gossip_excluded("atos-approvals"));
         // The tracked set is the newsworthy namespace that DOES have a
         // cross-peer consumer: the leader writes it, every node reads
         // it to pick its partition. It must keep replicating — which

@@ -11,15 +11,11 @@
 //! explicit import list — every name it pulled is either shared plumbing or
 //! already lived in this binary from slices 1-2.
 //!
-//! Two things deliberately did NOT come along:
-//!   - The ATOS opencode plugin install. The ATOS verb tree stays gated to the
-//!     workbench, so writing `.opencode/plugins/sovereign-atos.ts` here would
-//!     install config for a surface the shipped binary does not have. It still
-//!     runs from `svrn atos install-plugin`.
-//!   - Nothing else. In particular `project_toml` DID come along (via
-//!     sovereign-cli-shared): `.sovereign/project.toml` is read by
-//!     sovereign-server, commonwealth-api's context injector and the desktop
-//!     knowledge view, so an `init` that skipped it would be broken.
+//! One thing deliberately did NOT come along: nothing. In particular
+//! `project_toml` DID (via sovereign-cli-shared):
+//! `.sovereign/project.toml` is read by sovereign-server,
+//! commonwealth-api's context injector and the desktop knowledge
+//! view, so an `init` that skipped it would be broken.
 
 mod scaffold;
 mod setup;
@@ -282,10 +278,9 @@ pub(crate) async fn cmd_init(args: &[String]) -> i32 {
     let design_exists = design_md_path.exists();
 
     // Git auto-with-confirm. Runs BEFORE the observation report so the
-    // report has an up-to-date `has_git` to render (either "✓ Git
-    // repository" or the deferred note). The design-doc presence is
-    // passed through because the prompt's kindness wording changes
-    // based on whether the user is about to start drafting a
+    // report has an up-to-date `has_git` to render. The design-doc
+    // presence is passed through because the prompt's kindness wording
+    // changes based on whether the user is about to start drafting a
     // DESIGN.md (the main value prop for git) or not.
     let git_outcome = resolve_git(
         &repo_root,
@@ -341,13 +336,7 @@ pub(crate) async fn cmd_init(args: &[String]) -> i32 {
     // (captured before resolve_git) is stale on the `has_git` axis.
     // Patch it so the report reflects reality.
     observation.has_git = has_git;
-    let report_ctx = ObservationReportContext {
-        design_exists,
-        git_declined: matches!(
-            git_outcome,
-            GitOutcome::DeclinedByUser | GitOutcome::DeclinedPreviously
-        ),
-    };
+    let report_ctx = ObservationReportContext { design_exists };
     print_observation_report(&observation, &report_ctx);
 
     // Persist observations BEFORE any indexing/SCIP work so the
@@ -866,13 +855,6 @@ vector = false
                 }
                 Err(e) => eprintln!("    \u{26a0} Cannot write .opencode/opencode.json: {e}"),
             }
-
-            // The ATOS opencode plugin used to be written here. It stayed in
-            // the workbench with the rest of the ATOS surface: this binary has
-            // no `atos` verb tree, so installing its plugin would leave the
-            // user a `.opencode/plugins/sovereign-atos.ts` that injects
-            // `X-Feature-Id` for a pipeline they cannot drive. Developers who
-            // want it run `svrn atos install-plugin`, which is the same code.
         }
 
         // AGENTS.md — only write if absent; it's project-specific and users edit it.
@@ -1000,8 +982,6 @@ vector = false
 }
 
 // ─── Design session ──────────────────────────────────────────
-//
-// Step 4 of the ATOS onboarding redesign. `cmd_design` is the
 
 /// Local-to-`project_cmd` language detection struct. Distinct from
 /// `sovereign_cli_shared::observation::LanguageObservation` which carries the

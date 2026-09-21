@@ -1,15 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Exec dispatch into the `sovereign-cli-dev` sibling binary
-//! (workbench: ATOS workflow + project lifecycle + code intel +
-//! tools).
+//! (workbench: project lifecycle + code intel + tools).
 //!
-//! When the user runs `svrn atos ...` (or any verb that
-//! delegates into the workbench — `notes promote`, `audit teardown`,
-//! `drift accept`, `status`, `charter`, ...), the parent `sovereign`
-//! dispatcher locates its sibling `sovereign-cli-dev` binary and
-//! execs into it. Same PID on Unix (replaces this process), so
-//! stdout/stderr/stdin flow straight through with no shell
-//! interposition.
+//! When the user runs a verb that delegates into the workbench
+//! (`notes`-family forwards, `audit`, `drift detect`, `status`,
+//! `charter`, ...), the parent `sovereign` dispatcher locates its
+//! sibling `sovereign-cli-dev` binary and execs into it. Same PID
+//! on Unix (replaces this process), so stdout/stderr/stdin flow
+//! straight through with no shell interposition.
 //!
 //! Binary discovery order:
 //!   1. `$SOVEREIGN_CLI_DEV_BIN` if set

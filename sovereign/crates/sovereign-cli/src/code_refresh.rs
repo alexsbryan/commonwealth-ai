@@ -9,7 +9,7 @@
 //! The old crate got its plumbing via `use super::*` from `project_cmd::mod`.
 //! Here the imports are explicit, which is what makes the dependency surface
 //! auditable: this module reaches ONLY the loopback-HTTP helpers and the index
-//! path — never `sovereign-tools`, `sovereign-mesh` or `sovereign-atos`.
+//! path — never `sovereign-tools` or `sovereign-mesh`.
 
 use std::path::{Path, PathBuf};
 

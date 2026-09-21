@@ -40,7 +40,6 @@ use std::sync::Arc;
 use arc_swap::ArcSwap;
 
 use corpus_engine::CorpusEngine;
-use corpus_engine_atos::FeatureStore;
 use corpus_engine_notes::{NoteStore, ProjectDocsStore};
 use corpus_engine_watchers::{LintResultStore, TestResultStore};
 use corpus_index::types::EmbedFn;
@@ -121,7 +120,7 @@ pub(super) async fn open_tools_registry() -> Result<ToolsEnv, String> {
     );
     // NoteStore lives at `~/.svrnmesh/notes.db` — the same path
     // the daemon writes to, NOT the project-local `<repo>/.sovereign/`.
-    // Notes are agent-global working memory (per ATOS), not
+    // Notes are agent-global working memory, not
     // per-repo state. Two physical DBs split the corpus + leave
     // the CLI reading 15-note fragments while the daemon's
     // canonical store holds the full 298+ history. Other CLI
@@ -140,11 +139,6 @@ pub(super) async fn open_tools_registry() -> Result<ToolsEnv, String> {
         };
         Arc::new(inner)
     };
-    let features_store = Arc::new(
-        FeatureStore::open(&sovereign_dir.join("features.db"))
-            .or_else(|_| FeatureStore::open(std::path::Path::new(":memory:")))
-            .map_err(|e| format!("feature store: {e}"))?,
-    );
     let docs_store = ProjectDocsStore::open(&data_dir.join("project_docs.db"))
         .ok()
         .map(Arc::new);
@@ -392,7 +386,7 @@ pub(super) async fn open_tools_registry() -> Result<ToolsEnv, String> {
         sovereign_code::GetRunOutputTool::new(Arc::clone(&test_store)).declared(),
     ));
 
-    // Notes + ATOS lifecycle tools.
+    // Notes tools.
     tools.register(Box::new(
         sovereign_code::WriteNoteTool::new(Arc::clone(&notes_store)).declared(),
     ));
@@ -415,43 +409,16 @@ pub(super) async fn open_tools_registry() -> Result<ToolsEnv, String> {
         sovereign_code::ReadNoteDigestTool::new(Arc::clone(&notes_store)).declared(),
     ));
     tools.register(Box::new(
-        sovereign_atos::tools::ProvisionFeatureTool::new(Arc::clone(&features_store)).declared(),
-    ));
-    tools.register(Box::new(
-        sovereign_atos::tools::ArchiveFeatureTool::new(Arc::clone(&features_store)).declared(),
-    ));
-    tools.register(Box::new(
-        sovereign_atos::tools::RecordAtosEventTool::new(Arc::clone(&features_store)).declared(),
-    ));
-    // `atos_plan_emit` was added then withdrawn the same session
-    // after a first-principles check: forcing the agent through a
-    // structured-JSON tool for plan emission solved a problem we
-    // didn't actually have. PLAN.md as the source of truth (the
-    // agent's `write` tool, markdown the model is fluent in) won
-    // out. The tool's source stays in `sovereign-tools` as an
-    // escape hatch for future work where rigid structure matters,
-    // but it is intentionally NOT registered with the live MCP
-    // surface so opencode stops advertising it.
-    tools.register(Box::new(
         sovereign_code::WriteRedteamFindingTool::new(Arc::clone(&notes_store)).declared(),
     ));
     tools.register(Box::new(
         sovereign_code::SessionReflectionTool::new(Arc::clone(&notes_store)).declared(),
     ));
 
-    // Project context + doc health — both require the docs store.
-    if let Some(ref ds) = docs_store {
-        tools.register(Box::new(
-            sovereign_atos::tools::ProjectContextTool::new(Arc::clone(ds))
-                .with_features(Arc::clone(&features_store))
-                .declared(),
-        ));
-    }
     // `spec` — single-call active-spec + ARCHITECTURE.md +
-    // CHARTER.md reader. Wraps the same docs store as
-    // `project_context` so future Phase 5 polish can fold in
-    // search-style related-doc excerpts without another
-    // registration site.
+    // CHARTER.md reader. Takes the docs store so future polish
+    // can fold in search-style related-doc excerpts without
+    // another registration site.
     {
         let mut tool = sovereign_code::SpecTool::new();
         if let Some(ref ds) = docs_store {
@@ -459,9 +426,6 @@ pub(super) async fn open_tools_registry() -> Result<ToolsEnv, String> {
         }
         tools.register(Box::new(tool.declared()));
     }
-    // `drift` — calls `sovereign_atos::approval::detect_drift`
-    // for every feature directory. Stateless; no store needed.
-    tools.register(Box::new(sovereign_atos::tools::DriftTool::new().declared()));
 
     Ok(ToolsEnv { registry: tools })
 }

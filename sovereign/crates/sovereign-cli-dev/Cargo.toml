@@ -3,14 +3,11 @@ name = "sovereign-cli-dev"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Local-dev workbench binary: project lifecycle + code intelligence + MCP tool runner + ATOS workflow."
+description = "Local-dev workbench binary: project lifecycle + code intelligence + MCP tool runner."
 
 # Sibling binary to `sovereign-cli`. The workbench: project lifecycle
 # (`project init/status/...`), code-intelligence helpers (`code`),
-# the MCP tool surface (`tools`), and the ATOS workflow on top of it
-# all (`atos`). Renamed 2026-05-22 from `sovereign-cli-atos` to
-# reflect the actual bounded context — ATOS is one feature here, not
-# the binary's identity.
+# and the MCP tool surface (`tools`).
 #
 # Sibling carve-outs:
 #   - sovereign-cli-daemon: daemon lifecycle + setup + service install + doctor
@@ -75,18 +72,12 @@ sovereign-core = { workspace = true, optional = true }
 # `sovereign_mesh::projects` (the only thing the index path uses from it)
 # extracted to a leaf crate. Do not cite the swap as the size win.
 sovereign-store = { workspace = true, optional = true }
-# The dev workbench drives the ATOS code-intel tools (project_context,
-# provision/archive/record-atos-event, design-signals, drift), so it enables
-# the `atos` feature; product builds (daemon/desktop/server) leave it off.
-# `dev-tools` (git archaeology in BriefTool) and the code-intel `atos` tools
-# travel with `sovereign-code` since the 2026-09-21 lift; sovereign-tools keeps
-# only the `atos` axis its own knowledge_view splice needs.
+# `dev-tools` (git archaeology in BriefTool) travels with
+# `sovereign-code` since the 2026-09-21 lift.
 sovereign-code = { workspace = true, features = ["treesitter", "dev-tools"] }
 sovereign-tools = { workspace = true, features = [
     "treesitter",
-    "atos",
 ], optional = true }
-sovereign-atos = { workspace = true, optional = true }
 sovereign-enrichment-build = { workspace = true }
 sovereign-contracts = { workspace = true }
 sovereign-mesh = { workspace = true, features = ["treesitter"], optional = true }
@@ -114,7 +105,6 @@ corpus-engine-notes = { workspace = true, optional = true }
 # same git harvest the drift/arch temporal sections use.
 arch-layers = { workspace = true, optional = true }
 corpus-engine-archaeology = { workspace = true, optional = true }
-corpus-engine-atos = { workspace = true, optional = true }
 corpus-engine-watchers = { workspace = true, optional = true }
 # `refactor_wire` (the factory's stage-6 encoding gate) serialises fixtures
 # of the kernel's id types through the ONE wire decider, `kernel_types::wire`
@@ -146,9 +136,6 @@ regex = { workspace = true }
 tempfile = { workspace = true }
 which = "7"
 hostname = { workspace = true }
-# `atos_cmd::run` reads SQLite directly for one query (open-feature
-# replay extraction). Same dep as sovereign-cli's `awareness` path.
-rusqlite = { version = "0.35", features = ["bundled"] }
 workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 
 # daemon_cmd uses libc::kill / setsid for unix process lifecycle.
@@ -163,7 +150,6 @@ workbench = [
     "dep:sovereign-core",
     "dep:sovereign-store",
     "dep:sovereign-tools",
-    "dep:sovereign-atos",
     "dep:sovereign-mesh",
     "dep:sovereign-daemon",
     "dep:sovereign-work-atlas",
@@ -175,7 +161,6 @@ workbench = [
     "dep:corpus-engine-notes",
     "dep:arch-layers",
     "dep:corpus-engine-archaeology",
-    "dep:corpus-engine-atos",
     "dep:corpus-engine-watchers",
     "dep:kernel-types",
     "dep:axum",

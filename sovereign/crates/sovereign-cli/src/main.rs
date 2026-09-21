@@ -3,13 +3,12 @@
 //   * dev_bin / llm_bin — exec dispatchers into the two sibling
 //     binaries (`sovereign-cli-dev`, `sovereign-cli-llm`).
 //   * Pure delegators that translate the new flat CLI surface
-//     (`svrn status`, `svrn drift accept`, etc.) into the
-//     legacy `atos`/`project`/`code` handler arguments before exec'ing.
+//     (`svrn status`, `svrn drift detect`, etc.) into the
+//     legacy `project`/`code` handler arguments before exec'ing.
 //   * Light commands that touch only SQLite stores + filesystem
 //     (notes, claim, reflect, rough-edges, archaeology-eval,
 //     git-archaeology).
 //
-// Slice 1 → sovereign-cli-dev: atos_cmd, atos_plugin.
 // Slice 2 → sovereign-cli-dev: project_cmd, code_cmd, amend, phases,
 //   observation, project_toml, plan_composer, plan_enricher,
 //   design_session, design_onboarding, audit_extract, audit_recover,
@@ -273,7 +272,7 @@ const HELP: Help = Help {
 };
 
 /// Verbs that belong to the **developer toolchain** — project lifecycle,
-/// ATOS orchestration, code intelligence, git archaeology, agent benches.
+/// code intelligence, git archaeology, agent benches.
 /// They are gated out of the default (end-user) build: most exec the
 /// `sovereign-cli-dev` sibling that a public build does not ship; the rest
 /// are in-process dev tooling kept off the product surface. A default build
@@ -296,7 +295,6 @@ const DEV_VERBS: &[&str] = &[
     // dispatch arm is `#[cfg(feature = "deep-research")]`; a build without
     // the feature falls to the unknown-verb catch-all, like the other
     // feature-gated arms.
-    "atos",
     "tools",
     "status",
     "charter",
@@ -344,7 +342,6 @@ const ALL_VERBS: &[&str] = &[
     "amend",
     "archaeology-eval",
     "atlas",
-    "atos",
     "audit",
     "awareness",
     "backlog",
@@ -432,18 +429,14 @@ const DEV_SUBCOMMANDS: &[(&str, &str)] = &[
         "tools",
         "Invoke code-intelligence tools (list / describe / call)",
     ),
-    (
-        "atos",
-        "Agent task orchestration (charter → plan → milestones)",
-    ),
-    ("status", "Project / ATOS status report"),
+    ("status", "Project status report"),
     ("charter", "Create or amend a project charter"),
     ("design", "Capture a design session"),
     ("plan", "Compose + align a project plan"),
     ("amend", "Amend a charter or plan"),
-    ("milestone", "Advance or close an ATOS milestone"),
+    ("milestone", "Close a project phase"),
     ("drift", "Architectural-drift detection + spec accept"),
-    ("audit", "Audit rollup / recover / teardown"),
+    ("audit", "Audit rollup / recover"),
     ("refresh", "Rebuild the project code index"),
     (
         "seat",
@@ -862,7 +855,7 @@ async fn async_main() {
             if DEV_VERBS.contains(&first.as_str()) {
                 eprintln!(
                     "{first}: part of the Sovereign developer toolchain (project \
-                     lifecycle, ATOS orchestration, code intelligence). It is not \
+                     lifecycle, code intelligence). It is not \
                      in the default build. Restore it with `cargo build -p \
                      sovereign-cli --features dev-tools` (the `-p` matters — \
                      without it you rebuild the workspace default, not this \
@@ -1171,13 +1164,6 @@ async fn async_main() {
                 // build that recorded episodes with no way to read,
                 // bundle, or switch them off would be indefensible.
                 let code = journal_cmd::run(&raw_args[1..]);
-                std::process::exit(code);
-            }
-            "atos" => {
-                // Lives in the `sovereign-cli-dev` sibling binary now.
-                // exec() replaces the current process on Unix; child
-                // exit on other platforms.
-                let code = dev_bin::exec("atos", &raw_args[1..]);
                 std::process::exit(code);
             }
             "memory" => {

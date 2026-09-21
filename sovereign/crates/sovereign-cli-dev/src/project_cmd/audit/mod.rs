@@ -220,22 +220,9 @@ async fn build_audit_report(
 
     // ── Features ───────────────────────────────────────────────
     //
-    // Phase 6: enumerate features from BOTH sources and merge by
-    // id, so a feature with just a committed `spec.md` (no
-    // `provision` step) shows up alongside features that were
-    // explicitly seeded into `features.db`.
-    //
-    //   - `.sovereign/features/<id>/` directories on disk → "spec
-    //     present" / "no spec yet" depending on whether `spec.md`
-    //     exists. Source of truth for the new flat-namespace flow.
-    //   - `features.db` rows → state machine (active/archived) and
-    //     auto-redteam preference. Still useful for projects that
-    //     ran `svrn atos provision`, but no longer required.
-    //
-    // Both sources are merged on `id`. A directory-only feature
-    // shows `state = "(directory only)"`; a db-only feature
-    // (provisioned but never had its spec written) shows
-    // `state = <db state>` + a missing-spec note.
+    // Enumerate `.sovereign/features/<id>/` directories on disk →
+    // "spec present" / "no spec yet" depending on whether `spec.md`
+    // exists.
     out.push_str("## Features\n\n");
     let feature_rows = collect_feature_rows(&sov).await;
     if feature_rows.is_empty() {
@@ -261,7 +248,7 @@ async fn build_audit_report(
     out.push_str("## Artifact inventory\n\n");
     let artifacts = collect_artifact_inventory(&sov);
     if artifacts.is_empty() {
-        out.push_str("_(no ATOS artifacts found)_\n\n");
+        out.push_str("_(no project artifacts found)_\n\n");
     } else {
         for a in &artifacts {
             out.push_str(&format!("- `{a}`\n"));
@@ -692,28 +679,22 @@ fn short_date(rfc3339: &str) -> String {
     rfc3339.chars().take(10).collect()
 }
 
-/// One audit row in the Features table. Merges what we know from
-/// `features.db` (lifecycle state, redteam preference) with what we
-/// see on disk (`.sovereign/features/<id>/spec.md`). A row exists
-/// if either source has the feature.
+/// One audit row in the Features table, enumerated from
+/// `.sovereign/features/<id>/` directories on disk.
 struct FeatureRow {
     id: String,
-    /// "(directory only)" when the feature is on disk but absent
-    /// from features.db; the db state ("active", "archived", …)
-    /// otherwise. Phase 6: directory-only is the new default —
-    /// users no longer need to run `svrn atos provision` to
-    /// have a feature exist for the audit.
+    /// Always "(directory only)" — features are whatever the user
+    /// has written specs for on disk.
     state: String,
     /// True iff `<id>/spec.md` is present at the canonical path.
     spec_present: bool,
-    /// Mirrors `FeatureRow.auto_redteam` from the db. Defaults to
-    /// false for directory-only entries.
+    /// Always false for directory-only entries.
     auto_redteam: bool,
 }
 
-/// Enumerate features from both sources (db + on-disk directories)
-/// and return one merged row per id, sorted alphabetically. Result
-/// is empty when neither source has any features — the audit
+/// Enumerate features from `.sovereign/features/<id>/` directories
+/// and return one row per id, sorted alphabetically. Result
+/// is empty when there are no feature directories — the audit
 /// renders that as a one-line "_(no features yet)_" note rather
 /// than a header-less table.
 async fn collect_feature_rows(sov: &Path) -> Vec<FeatureRow> {
@@ -721,7 +702,7 @@ async fn collect_feature_rows(sov: &Path) -> Vec<FeatureRow> {
 
     let mut by_id: BTreeMap<String, FeatureRow> = BTreeMap::new();
 
-    // Source A: `.sovereign/features/<id>/` directories.
+    // `.sovereign/features/<id>/` directories.
     let features_dir = sov.join("features");
     if let Ok(entries) = std::fs::read_dir(&features_dir) {
         for entry in entries.flatten() {
@@ -741,30 +722,6 @@ async fn collect_feature_rows(sov: &Path) -> Vec<FeatureRow> {
                     auto_redteam: false,
                 },
             );
-        }
-    }
-
-    // Source B: `features.db` rows. Where ids overlap, the db row
-    // "wins" for state + auto_redteam; spec_present is taken from
-    // the directory walk (we don't trust the db to know whether
-    // spec.md was actually written).
-    let features_db = sov.join("features.db");
-    if features_db.exists() {
-        if let Ok(store) = corpus_engine_atos::FeatureStore::open(&features_db) {
-            if let Ok(features) = store.list(true).await {
-                for f in features {
-                    let spec_present = features_dir.join(&f.id).join("spec.md").is_file();
-                    by_id.insert(
-                        f.id.clone(),
-                        FeatureRow {
-                            id: f.id,
-                            state: f.state.to_string(),
-                            spec_present,
-                            auto_redteam: f.auto_redteam,
-                        },
-                    );
-                }
-            }
         }
     }
 

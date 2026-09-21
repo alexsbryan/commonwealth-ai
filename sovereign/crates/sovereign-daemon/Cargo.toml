@@ -51,11 +51,9 @@ corpus-engine = { workspace = true, features = ["treesitter"] }
 tree-sitter = "0.26"
 corpus-engine-scip = { workspace = true }
 corpus-engine-notes = { workspace = true }
-corpus-engine-atos = { workspace = true, optional = true }
 # Leaf items the engine re-exports (types, error, index, corpus) — spelled at their owner.
 corpus-index = { workspace = true }
 oplog = { workspace = true }
-sovereign-atos = { path = "../sovereign-atos", optional = true }
 http-body = "1"
 arc-swap = { workspace = true }
 sha2 = { workspace = true }
@@ -113,10 +111,9 @@ default = []
 # default so binaries that never serve the project surface don't drag in
 # `corpus-engine`'s 5 tree-sitter grammar crates.
 treesitter = ["sovereign-mesh/treesitter", "sovereign-tools/treesitter"]
-# The daemon's ATOS code-intel tools on the MCP surface and the headless OCR
-# installer. Both cfg gates moved here with the composition half (domains
-# `dm-daemon-cli-composition`); the binary's features forward to these.
-atos = ["sovereign-tools/atos", "dep:sovereign-atos", "dep:corpus-engine-atos"]
+# The headless OCR installer. The cfg gate moved here with the composition
+# half (domains `dm-daemon-cli-composition`); the binary's features forward
+# to these.
 ocr = ["sovereign-tools/paddle-ocr"]
 
 [dev-dependencies]
@@ -126,13 +123,11 @@ corpus-engine-scip = { workspace = true }
 # `solve_http`'s route test drives the router with `tower::ServiceExt`.
 tower = { workspace = true, features = ["util"] }
 # The host cluster's own integration tests, moved from sovereign-api at
-# domains `dm-daemon-api-edge`: `rail_e2e` installs a real ring signer, the
-# loopback-vs-remote split drives the router with `tower::oneshot`, and the
-# middleware fixtures come from sovereign-contracts' `test-fixtures`.
+# domains `dm-daemon-api-edge`: `rail_e2e` installs a real ring signer and
+# the loopback-vs-remote split drives the router with `tower::oneshot`.
 ed25519-dalek = { workspace = true }
 tokio = { workspace = true, features = ["test-util", "macros"] }
 http-body-util = "0.1"
-sovereign-contracts = { workspace = true, features = ["test-fixtures"] }
 # `client_tokens_e2e` captures the admit line to prove it names the LABEL and
 # not the token (bar `tg-token-revoked-alone`, clause c).
 tracing-subscriber = { workspace = true }

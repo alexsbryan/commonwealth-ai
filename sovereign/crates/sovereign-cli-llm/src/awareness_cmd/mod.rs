@@ -8,15 +8,13 @@
 //! over time, how does extraction quality compare to a golden set.
 //!
 //! The CLI is a thin orchestration layer — it reuses the same
-//! StateStore, NoteStore, FeatureStore, and atlas writer the
-//! production pipeline does. No mock storage; the developer runs
-//! against a real (but development) `~/.svrnmesh/` instance.
+//! StateStore, NoteStore, and atlas writer the production pipeline
+//! does. No mock storage; the developer runs against a real (but
+//! development) `~/.svrnmesh/` instance.
 //!
 //! ## Module layout
 //!
-//! Mirrors the `atos_cmd/` layout:
-//!
-//! - [`args`] — flag parsing helpers (mirrors `atos_cmd/args.rs`)
+//! - [`args`] — flag parsing helpers
 //! - [`store_open`] — `.sovereign/` resolver + store openers
 //! - [`render`] — shared output formatting (status symbols, `--json`
 //!   toggle pattern from `enrich_cmd/errors.rs`)

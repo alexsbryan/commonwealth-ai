@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Phase progression — the execution-trail half of the ATOS
+//! Phase progression — the execution-trail half of the project
 //! artifact story.
 //!
 //! ## Why this exists

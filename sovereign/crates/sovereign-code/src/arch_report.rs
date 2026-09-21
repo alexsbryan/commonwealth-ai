@@ -40,7 +40,7 @@ use std::sync::Arc;
 /// Feature axes whose `cfg(feature = "…")` spread is worth watching — the
 /// flags that reshape the dependency graph (see CLAUDE.md's build-thrash
 /// notes).
-const FEATURE_AXES: &[&str] = &["treesitter", "atos", "dev-tools"];
+const FEATURE_AXES: &[&str] = &["treesitter", "dev-tools"];
 
 /// ARCH §3.1 file-size ceiling (mirrors the xtask arch-gate constant).
 const FILE_SIZE_LIMIT: usize = 1200;

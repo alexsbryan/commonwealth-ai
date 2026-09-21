@@ -34,9 +34,6 @@ members = [
     # corpus-engine 2026-05-23 to cut the rebuild blast radius for scip
     # changes from 20 crates to ~6.
     "corpus-engine-scip",
-    # ATOS state — FeatureStore + plan_items + DESIGN.md design_signals.
-    # Step 2 of the corpus-engine decomposition (see DECOMPOSITION.md).
-    "corpus-engine-atos",
     # NoteStore + project_docs + notes_sync. Step 3 of the corpus-engine
     # decomposition. notes.rs (2781 LOC) cleared from the §3.1 list.
     "corpus-engine-notes",
@@ -181,7 +178,6 @@ members = [
     "sovereign/crates/sovereign-cli-daemon",
     "sovereign/crates/sovereign-cli-llm",
     "sovereign/crates/sovereign-cli-mesh",
-    "sovereign/crates/sovereign-atos",
     "sovereign/crates/sovereign-eval",
     "sovereign/crates/sovereign-authoring-harness",
     "sovereign/crates/sovereign-pipeline",
@@ -318,7 +314,6 @@ serving-policy = { path = "serving-policy" }
 oplog = { path = "oplog" }
 corpus-engine = { path = "corpus-engine" }
 corpus-engine-scip = { path = "corpus-engine-scip" }
-corpus-engine-atos = { path = "corpus-engine-atos" }
 corpus-engine-notes = { path = "corpus-engine-notes" }
 corpus-engine-archaeology = { path = "corpus-engine-archaeology" }
 corpus-engine-yield = { path = "corpus-engine-yield" }
@@ -353,7 +348,6 @@ sovereign-daemon = { path = "sovereign/crates/sovereign-daemon" }
 sovereign-peer-wire = { path = "sovereign/crates/sovereign-peer-wire" }
 sovereign-compute = { path = "sovereign/crates/sovereign-compute" }
 sovereign-service = { path = "sovereign/crates/sovereign-service" }
-sovereign-atos = { path = "sovereign/crates/sovereign-atos" }
 sovereign-cli-shared = { path = "sovereign/crates/sovereign-cli-shared" }
 sovereign-pipeline = { path = "sovereign/crates/sovereign-pipeline" }
 sovereign-work-atlas = { path = "sovereign/crates/sovereign-work-atlas" }
@@ -482,7 +476,7 @@ arrow-schema = "57"
 parquet = "57"
 lancedb = "0.27"
 
-# Markdown (sovereign-atos charter parsing)
+# Markdown (the corpus-engine markdown extractor)
 pulldown-cmark = { version = "0.12", default-features = false, features = ["simd"] }
 
 # Grammar-constrained sampling: llguidance is the upstream

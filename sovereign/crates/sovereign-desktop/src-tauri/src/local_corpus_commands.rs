@@ -97,8 +97,8 @@ use sovereign_contracts::daemon_wire::{JobResponse, RunRequest, RunResponse, Wor
 // (2026-09-12): every one of these is pure serde — what this app writes when
 // a user drags a folder in, what the daemon persists, and what crosses
 // `/internal/corpus/local/*`. Spelling them used to mean linking
-// `sovereign-tools`, and through it corpus-engine, sovereign-store and
-// sovereign-atos. `sovereign_tools::local_corpus` re-exports every one at its
+// `sovereign-tools`, and through it corpus-engine and sovereign-store.
+// `sovereign_tools::local_corpus` re-exports every one at its
 // old path, so this is a changed `use`, not a changed call site.
 use sovereign_contracts::daemon_wire::local_corpus::{
     clusterer::ClusterConfig,

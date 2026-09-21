@@ -101,8 +101,8 @@ pub struct BriefInputs<'a> {
     pub branch_name: &'a str,
     /// Token budget. Soft-capped per section, hard-capped at the end.
     pub budget_tokens: usize,
-    /// Optional ATOS feature id to scope notes (mirrors
-    /// `inject-notes.sh` behaviour).
+    /// Optional feature id to scope notes (mirrors `inject-notes.sh`
+    /// behaviour).
     pub feature_id: Option<&'a str>,
     /// Directory holding the architectural-drift fingerprint +
     /// report (typically `~/.svrnmesh/drift/`). When provided and

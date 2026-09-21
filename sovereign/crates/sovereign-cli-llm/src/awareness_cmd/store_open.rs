@@ -1,13 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! `.sovereign/` store openers shared across awareness subcommands.
 //!
-//! Mirrors `atos_cmd/stores.rs` but resolves *user-level* paths
-//! (`~/.svrnmesh/`) rather than *project-level* (`./.sovereign/`).
-//! The relational + strategic awareness pipeline writes its atlas
-//! under the user's home — same place `KnowledgeViewManager` writes
-//! it in production. The project-level features.db / project.toml
-//! are still resolved relative to CWD because that's where ATOS
-//! lives.
+//! Resolves *user-level* paths (`~/.svrnmesh/`) for the relational +
+//! strategic awareness pipeline, which writes its atlas under the
+//! user's home — same place `KnowledgeViewManager` writes it in
+//! production. The project-level `notes.db` is resolved relative to
+//! CWD.
 //!
 //! `--db-path <path>` overrides the `~/.svrnmesh/` root for
 //! sandboxed runs (e.g. an integration test directory).
@@ -15,9 +13,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use corpus_engine_atos::FeatureStore;
 use corpus_engine_notes::NoteStore;
-use sovereign_tools::knowledge_view::timeline::{FeatureCatalog, FeatureMilestone, FeatureRecord};
 
 use super::args::parse_args;
 use sovereign_cli_shared::args::Parsed;
@@ -39,8 +35,7 @@ pub(super) fn sovereign_root(flags: &Parsed) -> PathBuf {
     sovereign_contracts::rebrand::svrnmesh_root()
 }
 
-/// Where the per-project ATOS store lives — `./.sovereign/` from CWD.
-/// Mirrors `atos_cmd/stores.rs::sovereign_dir`.
+/// Where the per-project stores live — `./.sovereign/` from CWD.
 pub(super) fn project_sovereign_dir() -> PathBuf {
     std::env::current_dir()
         .unwrap_or_else(|_| PathBuf::from("."))
@@ -60,21 +55,10 @@ pub(super) fn state_db_path(root: &Path) -> PathBuf {
     root.join("state.db")
 }
 
-/// `notes.db` path. Notes live alongside features in the
-/// per-project `.sovereign/` (mirrors how `KnowledgeViewManager` is
-/// wired in main.rs:534-535).
+/// `notes.db` path. Notes live in the per-project `.sovereign/`
+/// (mirrors how `KnowledgeViewManager` is wired in main.rs:534-535).
 pub(super) fn notes_db_path() -> PathBuf {
     project_sovereign_dir().join("notes.db")
-}
-
-/// `features.db` path inside the per-project `.sovereign/`.
-pub(super) fn features_db_path() -> PathBuf {
-    project_sovereign_dir().join("features.db")
-}
-
-/// `project.toml` path inside the per-project `.sovereign/`.
-pub(super) fn project_toml_path() -> PathBuf {
-    project_sovereign_dir().join("project.toml")
 }
 
 /// Open the NoteStore. Returns `None` if `notes.db` is absent so
@@ -86,54 +70,6 @@ pub(super) fn try_open_notes() -> Option<Arc<NoteStore>> {
         return None;
     }
     NoteStore::open(&path).ok().map(Arc::new)
-}
-
-/// Open the FeatureStore. Returns `None` if `features.db` is absent
-/// (the user hasn't run `svrn atos provision`).
-pub(super) fn try_open_features() -> Option<Arc<dyn FeatureCatalog>> {
-    let path = features_db_path();
-    if !path.exists() {
-        return None;
-    }
-    FeatureStore::open(&path)
-        .ok()
-        .map(|s| Arc::new(FeatureStoreCatalog(Arc::new(s))) as Arc<dyn FeatureCatalog>)
-}
-
-/// Binds the ATOS store to the read door the strategic splice owns.
-struct FeatureStoreCatalog(Arc<FeatureStore>);
-
-#[async_trait::async_trait]
-impl FeatureCatalog for FeatureStoreCatalog {
-    async fn list_features(&self) -> Result<Vec<FeatureRecord>, String> {
-        self.0
-            .list(false)
-            .await
-            .map(|rows| {
-                rows.into_iter()
-                    .map(|r| FeatureRecord {
-                        id: r.id,
-                        title: r.title,
-                    })
-                    .collect()
-            })
-            .map_err(|e| e.to_string())
-    }
-
-    async fn list_milestones(&self, feature_id: &str) -> Result<Vec<FeatureMilestone>, String> {
-        self.0
-            .list_milestones(feature_id)
-            .await
-            .map(|rows| {
-                rows.into_iter()
-                    .map(|m| FeatureMilestone {
-                        ordinal: m.ordinal,
-                        started_at: m.started_at,
-                    })
-                    .collect()
-            })
-            .map_err(|e| e.to_string())
-    }
 }
 
 #[cfg(test)]

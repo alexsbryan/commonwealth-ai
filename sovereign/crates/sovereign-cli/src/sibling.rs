@@ -76,8 +76,8 @@ const DEV_SIBLING: &str = "sovereign-cli-dev";
 ///
 /// The footgun (cost a session on 2026-07-26): `cargo build -p sovereign-cli`
 /// without the feature silently REPLACES a working `target/debug/sovereign-cli`
-/// with one that has lost every developer verb — `notes`, `code`, `project`,
-/// `atos`, `tools`. Nothing fails at build time; the loss surfaces minutes
+/// with one that has lost every developer verb — `notes`, `code`, `tools`.
+/// Nothing fails at build time; the loss surfaces minutes
 /// later as `notes: … not in the default build` on an unrelated command, which
 /// reads as a missing feature rather than as "your last build downgraded your
 /// install". Same family as the stale-sibling warning above: what you are
@@ -101,7 +101,7 @@ pub fn warn_if_dev_tools_missing(has_dev_tools: bool) {
     // verbs they can actually run are missing.
     eprintln!(
         "warning: this `sovereign` was built WITHOUT `--features dev-tools`, but a \
-         {DEV_SIBLING} sits beside it — the developer verbs (notes, code, atos, \
+         {DEV_SIBLING} sits beside it — the developer verbs (notes, code, \
          tools, and the `project` lifecycle subcommands) are missing from this \
          binary. A bare `cargo build -p sovereign-cli` does this silently. \
          Restore them: cargo build -p sovereign-cli --features dev-tools  \

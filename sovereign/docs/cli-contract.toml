@@ -27,7 +27,7 @@
 # SCOPE (v1): this manifest covers the *documented* surface (everything in
 # CLI_REFERENCE.md) plus the public surface. The large internal-only surface that
 # dispatches but is undocumented (corpus watch-*, enrich phases/legacy, atlas
-# internals, the atos delegator arms, voice/meta-atlas/router-cache/etc., and the
+# internals, the voice/meta-atlas/router-cache/etc. delegator arms, and the
 # unrouted proxy/portfolio) is enumerated in docs/cli-audit-findings.md and is added
 # here in Phase 2, driven by the `__dump-commands` reverse check (which runs with a
 # compile loop). Until then the reverse code-check is report-only for untracked paths.
@@ -830,94 +830,6 @@ flags = [
   { name = "--save-baseline" },
 ]
 
-# atos — dev-tools. Leaf delegators (spec/end-milestone) reject --help.
-[[command]]
-path = "atos provision"
-binary = "dev"
-feature = "dev-tools"
-flags = [{ name = "--charter", takes_value = true }]
-[[command]]
-path = "atos next"
-binary = "dev"
-feature = "dev-tools"
-[[command]]
-path = "atos start-milestone"
-binary = "dev"
-feature = "dev-tools"
-probe = "no-args"
-flags = [{ name = "--brief", takes_value = true }, { name = "--red-team" }]
-[[command]]
-path = "atos end-milestone"
-binary = "dev"
-feature = "dev-tools"
-probe = "no-args"
-[[command]]
-path = "atos archive"
-binary = "dev"
-feature = "dev-tools"
-probe = "no-args"
-flags = [{ name = "--reason", takes_value = true }]
-[[command]]
-path = "atos status"
-binary = "dev"
-feature = "dev-tools"
-[[command]]
-path = "atos promote"
-binary = "dev"
-feature = "dev-tools"
-probe = "no-args"
-flags = [{ name = "--to", takes_value = true }]
-[[command]]
-path = "atos diff"
-binary = "dev"
-feature = "dev-tools"
-flags = [{ name = "--ordinal", takes_value = true }]
-[[command]]
-path = "atos run-ab"
-binary = "dev"
-feature = "dev-tools"
-flags = [{ name = "--brief", takes_value = true }, { name = "--driver", takes_value = true }]
-[[command]]
-path = "atos probe-driver"
-binary = "dev"
-feature = "dev-tools"
-probe = "no-args"
-flags = [{ name = "--url", takes_value = true }]
-[[command]]
-path = "atos report"
-binary = "dev"
-feature = "dev-tools"
-probe = "no-args"
-# No flags: cmd_report parses positionals only (atos_cmd/status.rs). `--section`
-# and `--out` were promised here and in CLI_REFERENCE but silently ignored.
-[[command]]
-path = "atos teardown"
-binary = "dev"
-feature = "dev-tools"
-probe = "no-args"
-flags = [{ name = "--dry-run" }]  # --auto was promised but never parsed
-[[command]]
-path = "atos feature"
-binary = "dev"
-feature = "dev-tools"
-probe = "no-args"
-[[command]]
-path = "atos spec"
-binary = "dev"
-feature = "dev-tools"
-probe = "no-args"
-[[command]]
-path = "atos doctor"
-binary = "dev"
-feature = "dev-tools"
-probe = "no-args"
-[[command]]
-path = "atos install-plugin"
-binary = "dev"
-feature = "dev-tools"
-probe = "no-args"
-
-# mobile — internal (phone bridge), default build.
 [[command]]
 path = "mobile serve"
 binary = "llm"
@@ -1221,7 +1133,7 @@ flags = [
 # ─────────────────────────────────────────────────────────────────────
 # INTERNAL — top-level surface tracked at VERB level for the reverse check.
 # These dispatch in the real binary but are either deprecated flat aliases
-# of a project/atos subcommand, or undocumented internal tooling (hidden).
+# of a project subcommand, or undocumented internal tooling (hidden).
 # Listed so the code-conformance reverse check (`__dump-commands` vs the
 # manifest) finds no UNTRACKED top-level verb. They are excluded from the
 # docs check (alias/hidden) and not existence-probed (only canonical, non-
@@ -1265,12 +1177,6 @@ path = "audit"
 binary = "dev"
 feature = "dev-tools"
 alias_of = "project audit"
-[[command]]
-path = "milestone"
-binary = "dev"
-feature = "dev-tools"
-alias_of = "atos end-milestone"
-
 # Hidden internal tooling — undocumented on purpose, dispatches in the build
 # shown. Tracked here; intentionally absent from CLI_REFERENCE.
 [[command]]
@@ -1729,12 +1635,6 @@ doc = "sovereign/docs/SOLVER_FOR_PI_USERS.md"
 capabilities = ["solve", "solve --status"]
 
 [[experience]]
-id = "atos-orchestration"
-title = "Take a repo from charter to a passed phase with agent collaboration"
-doc = "sovereign/docs/ATOS.md"
-capabilities = ["project charter", "atos provision", "atos status"]
-
-[[experience]]
 id = "correctness-loops"
 title = "Prove a quality change is real before claiming it"
 doc = "sovereign/docs/CORRECTNESS_TOOLING.md"
@@ -1783,7 +1683,6 @@ env-var switch appearing nowhere but inside the script that read it.
 So `svrn contract` is a promise like any other, and it is journeyed like any \
 other. The self-reference is the point: a quality surface that is not itself \
 covered is asking for an exemption it has not earned."""
-
 
 # ═════════════════════════════════════════════════════════════════════════
 # JOURNEYS — the sequenced use cases the CLI promises.
@@ -3084,64 +2983,6 @@ run = "solve --cancel {job_id}"
 mutates = true
 
 [[journey]]
-id = "atos-project"
-title = "Take a greenfield repo from charter to a passed phase"
-persona = "developer"
-experience = "atos-orchestration"
-tier = 4
-doc = "sovereign/docs/ATOS.md"
-skip_live = "agent-collaborative; each step drives a long orchestrated session"
-[[journey.step]]
-run = "project init"
-mutates = true
-[[journey.step]]
-run = "project design"
-mutates = true
-[[journey.step]]
-run = "project plan"
-mutates = true
-[[journey.step]]
-run = "project charter"
-mutates = true
-[[journey.step]]
-run = "project found --orchestrate"
-mutates = true
-[[journey.step]]
-run = "project phase"
-mutates = true
-[[journey.step]]
-run = "project audit"
-[journey.step.expect]
-stdout_non_empty = true
-
-[[journey]]
-id = "atos-feature"
-title = "Drive one feature through provision, milestones, and teardown"
-persona = "developer"
-experience = "atos-orchestration"
-tier = 5
-doc = "sovereign/docs/ATOS.md"
-skip_live = "long orchestrated sessions; teardown reads stdin"
-[[journey.step]]
-run = "atos provision {feature_id} --charter {charter}"
-mutates = true
-[[journey.step]]
-run = "atos start-milestone {feature_id} --brief {brief}"
-mutates = true
-[[journey.step]]
-run = "atos end-milestone {feature_id}"
-mutates = true
-[[journey.step]]
-run = "atos spec {feature_id}"
-[[journey.step]]
-run = "atos status {feature_id}"
-[journey.step.expect]
-stdout_non_empty = true
-[[journey.step]]
-run = "atos teardown {feature_id}"
-mutates = true
-
-[[journey]]
 id = "journal-audit"
 title = "See what a feature recorded about your own work, and check the claim"
 persona = "developer"
@@ -3772,7 +3613,6 @@ quality tool starts dying."""
 exit = 0
 stdout_contains = "covers:"
 
-
 # ═════════════════════════════════════════════════════════════════════════
 # STRANDED — verbs that belong to no journey.
 #
@@ -3812,12 +3652,6 @@ verb = "rough-edges"
 reason = "FIXME/TODO/HACK scanner over a code corpus; belongs with the other code-intelligence surfaces"
 disposition = "fold"
 fold_into = "code"
-
-[[stranded]]
-verb = "nudge"
-reason = "one subcommand (`dismiss`) whose only purpose is suppressing ATOS audit nudges"
-disposition = "fold"
-fold_into = "atos"
 
 [[stranded]]
 verb = "recipe-agent"
@@ -4024,7 +3858,6 @@ the column name does not."""
 [journey.step.expect]
 exit = 0
 stdout_contains = "peak_ctx"
-
 
 [[journey.step]]
 run = "session frames"

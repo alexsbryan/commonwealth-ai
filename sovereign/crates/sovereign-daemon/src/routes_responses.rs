@@ -10,8 +10,8 @@
 //!
 //! Adapter, not duplicate (ARCH §10.1, §10.3): the only path
 //! difference between `/v1/chat/completions` and `/v1/responses` is
-//! the translation layer. All slot routing, OICP gating, ATOS
-//! middleware, grammar-constrained tool calls, and SSE streaming run
+//! the translation layer. All slot routing, OICP gating,
+//! grammar-constrained tool calls, and SSE streaming run
 //! through the existing handler.
 //!
 //! What we accept (codex subset of the public Responses spec):

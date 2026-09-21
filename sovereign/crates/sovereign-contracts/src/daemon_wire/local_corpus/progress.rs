@@ -5,8 +5,8 @@
 //! Moved down from `sovereign_tools::local_corpus::progress` at svt-6
 //! (2026-09-12) and re-exported there at the historical path. Pure serde over
 //! primitives: a client that only wants to SPELL one of these had to link
-//! `sovereign-tools` — and through it corpus-engine, sovereign-store,
-//! sovereign-atos and five more. See this module's parent for the full note.
+//! `sovereign-tools` — and through it corpus-engine, sovereign-store
+//! and four more. See this module's parent for the full note.
 
 use serde::{Deserialize, Serialize};
 

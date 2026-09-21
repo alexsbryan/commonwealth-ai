@@ -48,8 +48,8 @@ use crate::state::AppState;
 /// Which agentic-harness contract this /v1/responses request is
 /// speaking. Each profile picks a different set of passes — codex's
 /// apply_patch-trained contract resists the full reshape we built
-/// for opencode, while bare drivers (curl scripts, ATOS sandbox)
-/// don't need any of it. See `passes_for` for the per-profile pipe.
+/// for opencode, while bare drivers (curl scripts) don't need any
+/// of it. See `passes_for` for the per-profile pipe.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Harness {
     /// codex CLI (`codex_cli_rs/*` UA). System prompt teaches
@@ -66,7 +66,7 @@ pub enum Harness {
     /// coherence baseline + grammar lock when tool_choice="required",
     /// but DO NOT reshape the prompt or inject synthetic tools.
     Generic,
-    /// Bare driver (curl smoke, ATOS sandbox loop) — nothing applies.
+    /// Bare driver (curl smoke) — nothing applies.
     Bare,
 }
 

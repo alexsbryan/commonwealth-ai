@@ -8,8 +8,8 @@
 //! writes when a user drags a folder in, what the daemon persists, and what
 //! crosses `/internal/corpus/local/*` in both directions. `sovereign-tools`
 //! defined them, so a client that only wanted to SPELL a source type had to
-//! link the tools crate — and through it corpus-engine, sovereign-store,
-//! sovereign-atos and five more (`quality/ARCH_LAYERS.toml`'s
+//! link the tools crate — and through it corpus-engine, sovereign-store
+//! and four more (`quality/ARCH_LAYERS.toml`'s
 //! `sovereign-desktop -> arch-layers` row names the chain).
 //!
 //! What stayed in `sovereign_tools::local_corpus::config` is the half that

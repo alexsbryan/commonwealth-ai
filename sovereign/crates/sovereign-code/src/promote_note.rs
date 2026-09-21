@@ -6,8 +6,7 @@
 //! into a global invariant at teardown. The source row is left untouched
 //! (audit trail); the new row carries `promoted_from = <source id>`.
 //!
-//! Operators typically drive this via `sovereign atos promote <id> --to global`,
-//! but the tool is also available to agents so a wrap-up session can propose
+//! The tool is available to agents so a wrap-up session can propose
 //! promotions for the operator to review.
 
 use std::sync::Arc;

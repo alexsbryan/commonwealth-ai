@@ -70,164 +70,6 @@ situation = "You're planning to split a hub crate or move a boundary and need to
 call = { corpus_id = "commonwealth-ai", include_git = true }
 
 [[tool]]
-id = "archive_feature"
-name = "Archive Feature"
-description = "Mark an ATOS feature as archived. Notes tagged to the feature remain queryable via read_notes with scope=['feature'] + feature_id but stop being injected into fresh sessions. Use after the compliance review passes and any promotable notes have been promoted to global scope."
-effect = "write"
-idempotency = "idempotent"
-latency = "instant"
-scope = "persistent"
-permissions = []
-
-[tool.parameters]
-type = "object"
-required = ["id", "reason"]
-
-[tool.parameters.properties]
-
-[tool.parameters.properties.id]
-type = "string"
-description = "Feature id (as returned by provision_feature)."
-
-[tool.parameters.properties.reason]
-type = "string"
-description = "Why the feature is archived (e.g. 'shipped v0.5', 'abandoned in favor of <other>')."
-
-[tool.output_schema]
-type = "object"
-
-[tool.output_schema.properties]
-
-[tool.output_schema.properties.archived]
-type = "boolean"
-
-[tool.output_schema.properties.id]
-type = "string"
-
-[[tool.examples]]
-situation = "Milestone 1 of the atos-version-flag feature passed review and the operator asked you to wrap it up. Archive it and move on."
-call = { id = "atos-version-flag", reason = "shipped; --version flag lives in atos_cmd.rs" }
-
-[[tool]]
-id = "atos_plan_emit"
-name = "ATOS plan emit (structured)"
-description = "Emit a structured implementation plan for the ATOS Runner during PLAN or REASSESS phases. Pass `workdir` (the absolute path the runner gave you in the atos-context block) and `steps` (an array of step objects). The tool validates the schema, auto-increments the revision against any prior plan, and writes the canonical plan.json to <workdir>/.sovereign/. Use this tool INSTEAD of writing a JSON code block in your reply — free-form prose JSON is brittle for plan-shaped data and the runner's parser will struggle with it. The tool is the deterministic path."
-effect = "write"
-idempotency = "nonidempotent"
-latency = "instant"
-scope = "persistent"
-permissions = []
-
-[tool.parameters]
-type = "object"
-required = ["workdir", "steps"]
-
-[tool.parameters.properties]
-
-[tool.parameters.properties.workdir]
-type = "string"
-description = "Absolute path to the workdir. Read from the atos-context block — it lists the canonical workdir path verbatim. Must be absolute (start with `/`)."
-
-[tool.parameters.properties.steps]
-type = "array"
-minItems = 1
-maxItems = 32
-description = "Plan steps in execution order. 3-12 steps for a normal feature; 32 is a hard cap."
-
-[tool.parameters.properties.steps.items]
-type = "object"
-required = ["id", "goal", "verify_cmd"]
-
-[tool.parameters.properties.steps.items.properties]
-
-[tool.parameters.properties.steps.items.properties.id]
-type = "string"
-description = "Stable id like `step-01`. The runner's merge logic keys execution state on this — keep ids consistent across REASSESS revisions."
-
-[tool.parameters.properties.steps.items.properties.goal]
-type = "string"
-description = "One sentence describing what this step delivers in code terms."
-
-[tool.parameters.properties.steps.items.properties.files_touched]
-type = "array"
-description = "Workdir-relative paths the step will write or edit. The hollow-file gate uses this to verify real work happened."
-
-[tool.parameters.properties.steps.items.properties.files_touched.items]
-type = "string"
-
-[tool.parameters.properties.steps.items.properties.verify_cmd]
-type = "string"
-description = "Shell command that exits 0 when the step is complete. Runs from workdir root. Strict verification: a step is not done until this command passes."
-
-[tool.parameters.properties.steps.items.properties.rationale]
-type = "string"
-description = "Why this step before/after others. Optional but surfaces in PLAN.md."
-
-[tool.parameters.properties.feature_id]
-type = "string"
-description = "Optional. The runner carries it over from any prior plan; only set on first PLAN if you know the id."
-
-[tool.output_schema]
-type = "object"
-
-[tool.output_schema.properties]
-
-[tool.output_schema.properties.plan_path]
-type = "string"
-
-[tool.output_schema.properties.steps]
-type = "integer"
-
-[tool.output_schema.properties.revision]
-type = "integer"
-
-[tool.output_schema.properties.feature_id]
-type = "string"
-
-[[tool.examples]]
-situation = "PLAN phase: the agent has read DESIGN.md and decomposed the work into 5 steps. Emit the plan as a tool call instead of prose JSON."
-call = { workdir = "/Users/me/dev/myproject", steps = [{ id = "step-01", goal = "Scaffold Cargo.toml + src/lib.rs", files_touched = ["Cargo.toml", "src/lib.rs"], verify_cmd = "cargo check", rationale = "Phase 0 skeleton must build before any types" }, { id = "step-02", goal = "Define core wire types with serde annotations", files_touched = ["src/lib.rs"], verify_cmd = "cargo check", rationale = "Phase 1: types before behaviour" }] }
-
-[[tool]]
-id = "atos_verify"
-name = "ATOS step verification"
-description = "Run a step's verify command and check that the agent actually modified the files it claimed to. Three gates: (1) shell verify command exits zero, (2) touched files are not empty/near-empty (hollow), (3) at least one touched file was modified after `since_unix_ts` (untouched — gate is skipped unless the caller supplies a pre-iteration timestamp). Returns passed=true only when every applicable gate passes."
-effect = "readwrite"
-idempotency = "nonidempotent"
-latency = "slow"
-scope = "session"
-permissions = ["Shell"]
-
-[tool.parameters]
-type = "object"
-required = ["workdir", "verify_cmd"]
-
-[tool.parameters.properties]
-
-[tool.parameters.properties.workdir]
-type = "string"
-description = "Absolute path to the project workdir"
-
-[tool.parameters.properties.verify_cmd]
-type = "string"
-description = "Shell command to run (e.g. 'cargo test --test test_foo -- bar')"
-
-[tool.parameters.properties.files_touched]
-type = "array"
-description = "Workdir-relative paths the step was supposed to modify"
-
-[tool.parameters.properties.files_touched.items]
-type = "string"
-
-[tool.parameters.properties.since_unix_ts]
-type = "number"
-description = "Optional. Epoch seconds snapshotted before the agent ran. When set, the untouched gate fires if no file in files_touched has an mtime newer than this."
-
-[[tool.examples]]
-situation = "After implementing step-02 (define CapabilityHint enum), verify the step"
-call = { workdir = "/Users/user/dev/atos-experiment-oicp-types", verify_cmd = "cargo test --test test_capability_hint -- roundtrip", files_touched = ["src/lib.rs", "tests/test_capability_hint.rs"], since_unix_ts = 1715000000 }
-
-[[tool]]
 id = "blast"
 name = "Blast Radius"
 description = "Compute the transitive impact of changing a symbol: all callers at every depth level up to max_depth. Use before modifying a function signature, removing a method, or changing a trait definition. Separates production callers from test callers and groups by module. Backed by the SCIP call graph — compiler-resolved, not grep. IMPORTANT: Before using on a large refactor, call read_notes(kinds=[\"reflection\"], query=\"blast_radius\") to check for known limitations recorded by previous sessions (e.g. macro-generated call sites not traversed by SCIP)."
@@ -773,91 +615,6 @@ type = "boolean"
 [[tool.examples]]
 situation = "You just completed the work described in a todo note, or a decision note has been superseded by a better approach. Clean it up so it doesn't mislead future sessions. The ID comes from the read_notes response."
 call = { id = "note_abc123" }
-
-[[tool]]
-id = "design_signals_extract"
-name = "Design Signals Extract"
-description = "Parse a DESIGN.md file and return the structural signals the solo-mode fallback and agent-collaborative session both rely on: the Anchors block's bullets, structural gaps (TBD markers, empty/placeholder sections, open X-vs-Y choices, literal question sentences), and keyword-bucket presence flags (time / persistence / api / queue / concurrency / secrets / consumers). Strictly structural — does NOT interpret semantics. Run after each substantive edit to a DESIGN.md to see which gaps the user should still resolve."
-effect = "read"
-idempotency = "idempotent"
-latency = "instant"
-scope = "session"
-permissions = []
-
-[tool.parameters]
-type = "object"
-required = []
-
-[tool.parameters.properties]
-
-[tool.parameters.properties.design_path]
-type = "string"
-description = "Path to the DESIGN.md file. Defaults to `DESIGN.md` at the project root (the canonical location). Absolute paths are used as-is."
-
-[tool.output_schema]
-type = "object"
-
-[tool.output_schema.properties]
-
-[tool.output_schema.properties.design_path]
-type = "string"
-
-[tool.output_schema.properties.anchors]
-type = "array"
-
-[tool.output_schema.properties.anchors.items]
-type = "string"
-
-[tool.output_schema.properties.gap_count]
-type = "integer"
-
-[tool.output_schema.properties.gaps]
-type = "array"
-
-[tool.output_schema.properties.gaps.items]
-type = "object"
-
-[tool.output_schema.properties.gaps.items.properties]
-
-[tool.output_schema.properties.gaps.items.properties.section]
-type = "string"
-
-[tool.output_schema.properties.gaps.items.properties.reason]
-type = "string"
-
-[tool.output_schema.properties.gaps.items.properties.line]
-type = "integer"
-
-[tool.output_schema.properties.gaps.items.properties.snippet]
-type = "string"
-
-[tool.output_schema.properties.keywords]
-type = "object"
-
-[tool.output_schema.properties.sections]
-type = "array"
-
-[tool.output_schema.properties.sections.items]
-type = "object"
-
-[tool.output_schema.properties.sections.items.properties]
-
-[tool.output_schema.properties.sections.items.properties.heading]
-type = "string"
-
-[tool.output_schema.properties.sections.items.properties.level]
-type = "integer"
-
-[tool.output_schema.properties.sections.items.properties.line]
-type = "integer"
-
-[[tool.examples]]
-situation = "The user just edited DESIGN.md — check which structural gaps remain before asking another question."
-call = { design_path = "DESIGN.md" }
-
-[[tool.examples]]
-situation = "Running from a subdirectory; verify the doc at the known project root."
-call = { design_path = "/absolute/path/to/DESIGN.md" }
 
 [[tool]]
 id = "drift"
@@ -1528,7 +1285,7 @@ description = "ATOS scope. Defaults to 'global'. Pass 'feature' with a feature_i
 
 [tool.parameters.properties.feature_id]
 type = "string"
-description = "Required when scope='feature'. The id returned by provision_feature (same value as $SOVEREIGN_FEATURE_ID in the ATOS driver env)."
+description = "Required when scope='feature'. The feature id the note is scoped to."
 
 [tool.parameters.properties.supersedes]
 type = "string"
@@ -1717,70 +1474,6 @@ situation = "You're about to modify a symbol and want every note thematically co
 call = { related_to = "UrlAllowlistConstraint" }
 
 [[tool]]
-id = "project_context"
-name = "Project Context"
-description = "Search indexed project documentation (*.md files, .sovereign/conventions/) for relevant context. Use to check architectural decisions, coding conventions, API contracts, or onboarding guides before making changes. Results are BM25 keyword-ranked — use specific terms from your change context for best results. If results seem incomplete, call read_notes(kinds=[\"reflection\"], query=\"project_context\") to check for known gaps recorded by previous sessions."
-effect = "read"
-idempotency = "idempotent"
-latency = "fast"
-scope = "persistent"
-permissions = []
-
-[tool.parameters]
-type = "object"
-required = ["query"]
-
-[tool.parameters.properties]
-
-[tool.parameters.properties.query]
-type = "string"
-description = "What to look for in project docs"
-
-[tool.parameters.properties.feature_id]
-type = "string"
-description = "Optional ATOS feature id. When set, the feature's charter and SOVEREIGN.md are returned as the first result (relevance=1.0) before BM25 matches. Use when you're running inside a provisioned feature."
-
-[tool.output_schema]
-type = "object"
-
-[tool.output_schema.properties]
-
-[tool.output_schema.properties.query]
-type = "string"
-
-[tool.output_schema.properties.total_results]
-type = "integer"
-
-[tool.output_schema.properties.results]
-type = "array"
-
-[tool.output_schema.properties.results.items]
-type = "object"
-
-[tool.output_schema.properties.results.items.properties]
-
-[tool.output_schema.properties.results.items.properties.file_path]
-type = "string"
-
-[tool.output_schema.properties.results.items.properties.snippet]
-type = "string"
-
-[tool.output_schema.properties.results.items.properties.score]
-type = "number"
-
-[[tool.examples]]
-situation = "You're about to implement something and want to check whether the project has established conventions for it before you guess or invent your own. Do this before writing any code."
-call = { query = "error handling conventions" }
-
-[[tool.examples]]
-situation = "You're unsure about the architectural boundary between two subsystems. Pull the documented decisions rather than inferring from code."
-call = { query = "corpus engine vs sovereign tools boundary" }
-
-[[tool.examples]]
-situation = "You got empty or low-relevance results from a code search. Check here — the answer may be in conventions docs rather than source code."
-call = { query = "testing strategy integration vs unit" }
-
-[[tool]]
 id = "promote_note"
 name = "Promote Note"
 description = "Copy a note to a higher scope (session/feature → feature/global). The source row stays in place for audit; the new row has promoted_from=<source id>. Pass new_content to rewrite the note with a more general framing suitable for the destination scope (global notes should read as codebase-wide invariants, not feature-local decisions)."
@@ -1830,62 +1523,6 @@ type = "string"
 [[tool.examples]]
 situation = "At feature teardown, a decision about extending SourceKind turned out to be the general pattern for all new source types. Promote it to global with a codebase-wide framing."
 call = { id = "note-abc-123", to_scope = "global", new_content = "New source types extend SourceKind in corpus-engine/src/recipe.rs and add a match arm in engine/ingest.rs — do not create plugin registries for source type dispatch." }
-
-[[tool]]
-id = "provision_feature"
-name = "Provision Feature"
-description = "Create an ATOS feature charter. The feature holds the human-approved spec (charter_md), per-feature invariants (sovereign_md), and a machine-checkable stop condition. Returns the feature id to pass back to `start-milestone`. Fails if the id already exists."
-effect = "write"
-idempotency = "idempotent"
-latency = "instant"
-scope = "persistent"
-permissions = []
-
-[tool.parameters]
-type = "object"
-required = ["id", "title", "charter_md"]
-
-[tool.parameters.properties]
-
-[tool.parameters.properties.id]
-type = "string"
-description = "Slug-style identifier, e.g. 'atos-version-flag'. Must be unique."
-
-[tool.parameters.properties.title]
-type = "string"
-description = "Human-readable title shown in status views."
-
-[tool.parameters.properties.charter_md]
-type = "string"
-description = "Approved specification in markdown. Includes the sections required by the ATOS spec gate: integration points, schema additions, files, invariants, test plan, milestones."
-
-[tool.parameters.properties.sovereign_md]
-type = "string"
-description = "Optional per-feature invariants and conventions surfaced via project_context when feature_id is set."
-
-[tool.parameters.properties.stop_condition]
-type = "string"
-description = "Shell command whose zero-exit status signals the feature is complete. Run by `sovereign atos end-milestone`."
-
-[tool.output_schema]
-type = "object"
-
-[tool.output_schema.properties]
-
-[tool.output_schema.properties.id]
-type = "string"
-
-[tool.output_schema.properties.title]
-type = "string"
-
-[[tool.examples]]
-situation = "The operator has approved a spec and wants to kick off ATOS milestone 1. Call this before any implementation tool to register the feature."
-call = { id = "atos-version-flag", title = "Add --version flag to `sovereign atos`", charter_md = """
-# atos-version-flag
-
-## Invariants
-- Output must match regex ^atos [0-9]+\\.\
-""", stop_condition = "cargo run -p sovereign-cli -- atos --version | grep -E '^atos [0-9]+\\.'" }
 
 [[tool]]
 id = "read_note_by_id"
@@ -2012,67 +1649,6 @@ call = { hours = 24 }
 [[tool.examples]]
 situation = "Something broke and you want to know what changed recently that could have caused it. Narrows the search to files actually modified in the last hour."
 call = { hours = 2 }
-
-[[tool]]
-id = "record_atos_event"
-name = "Record ATOS Event"
-description = "Append a tool-execution event to the ATOS run ledger. Called by the opencode plugin on tool.execute.before/after hooks. The `phase` discriminator distinguishes pre-call (args captured) from post-call (outcome + duration). Orphan events whose run_id is not in atos_runs are rejected."
-effect = "write"
-idempotency = "nonidempotent"
-latency = "instant"
-scope = "persistent"
-permissions = []
-
-[tool.parameters]
-type = "object"
-required = ["run_id", "call_id", "tool_name", "phase"]
-
-[tool.parameters.properties]
-
-[tool.parameters.properties.run_id]
-type = "string"
-description = "$ATOS_RUN_ID exported by `sovereign atos start-milestone`."
-
-[tool.parameters.properties.call_id]
-type = "string"
-description = "Driver-scoped tool-call id (persists across before/after)."
-
-[tool.parameters.properties.tool_name]
-type = "string"
-description = "Name of the MCP tool that was invoked."
-
-[tool.parameters.properties.phase]
-type = "string"
-enum = ["before", "after", "parse_error"]
-description = "before=args captured, after=outcome captured, parse_error=tool_call JSON failed to parse."
-
-[tool.parameters.properties.args_json]
-type = "string"
-description = "Serialized arguments on phase=before. Omit on after."
-
-[tool.parameters.properties.outcome]
-type = "string"
-description = "'success'|'error'|'empty_result'|'parse_error' on phase=after."
-
-[tool.parameters.properties.duration_ms]
-type = "integer"
-description = "Wall-clock duration in ms on phase=after."
-
-[tool.parameters.properties.session_id]
-type = "string"
-description = "Optional driver session id; sets atos_runs.session_id on first capture."
-
-[tool.output_schema]
-type = "object"
-
-[tool.output_schema.properties]
-
-[tool.output_schema.properties.recorded]
-type = "boolean"
-
-[[tool.examples]]
-situation = "opencode's tool.execute.after hook just fired after read_notes returned success in ~18ms. Append the event."
-call = { run_id = "run_abc123", call_id = "call_42", tool_name = "read_notes", phase = "after", outcome = "success", duration_ms = 18 }
 
 [[tool]]
 id = "retire_note"
@@ -2417,75 +1993,6 @@ situation = "You've made a change and want to know if tests pass. Do NOT run `ca
 call = {  }
 
 [[tool]]
-id = "write_redteam_finding"
-name = "Write Red-Team Finding"
-description = "Record a red-team review finding. Structured around §5.3 of the ATOS design doc — {invariant, status, evidence, confidence}. The call must be made from a `mode=redteam` driver session against a provisioned feature_id; otherwise normal-mode `write_note` is the right tool."
-effect = "write"
-idempotency = "nonidempotent"
-latency = "instant"
-scope = "persistent"
-permissions = []
-
-[tool.parameters]
-type = "object"
-required = ["feature_id", "invariant", "status", "confidence"]
-
-[tool.parameters.properties]
-
-[tool.parameters.properties.feature_id]
-type = "string"
-description = "Feature this finding applies to. Usually $SOVEREIGN_FEATURE_ID from the driver env."
-
-[tool.parameters.properties.invariant]
-type = "string"
-description = "The spec invariant being checked. Quote it from the charter verbatim."
-
-[tool.parameters.properties.status]
-type = "string"
-enum = ["violated", "potentially_violated", "not_found"]
-description = "Whether the invariant is violated, possibly violated, or no evidence either way was found."
-
-[tool.parameters.properties.evidence]
-type = "string"
-description = "The specific symbol, file, or line that led to the finding. Empty string for `status=not_found`."
-
-[tool.parameters.properties.confidence]
-type = "string"
-enum = ["high", "medium", "low"]
-description = "Reviewer confidence in the status verdict."
-
-[tool.parameters.properties.files]
-type = "array"
-description = "Optional: file paths the evidence points at. Drives report grouping."
-
-[tool.parameters.properties.files.items]
-type = "string"
-
-[tool.output_schema]
-type = "object"
-
-[tool.output_schema.properties]
-
-[tool.output_schema.properties.id]
-type = "string"
-
-[tool.output_schema.properties.feature_id]
-type = "string"
-
-[tool.output_schema.properties.invariant]
-type = "string"
-
-[tool.output_schema.properties.status]
-type = "string"
-
-[tool.output_schema.properties.confidence]
-type = "string"
-
-[[tool.examples]]
-situation = "You found that ZoteroLibrary's factory method relies on a default for `scope=Local` when the charter said the field must be set explicitly. Medium confidence — the default currently happens to be correct but a refactor could silently flip it."
-call = { feature_id = "zotero-acquirer", invariant = "LocalCorpusConfig::zotero_library MUST set scope=Local explicitly, not via default.", status = "violated", evidence = "corpus-engine/src/acquirers/zotero.rs::factory() line 42 omits the field.", confidence = "medium", files = ["corpus-engine/src/acquirers/zotero.rs"] }
-
-[[tool]]
 id = "session_state"
 name = "Session State Upsert"
 description = "Upsert your session frame (the successor-facing gist: objective, goal, state, next, decisions, invariants, dead ends, working set, verification) at transitions \u2014 task start, plan step done, blocker hit \u2014 NOT only at session end. Provided sections replace their previous body; others are preserved. Writes are rejected over the 2.1k-token budget with per-section counts so you trim instead of bloating. Encode-time writes are the strong continuity path (self-reported frames grade 100% vs 17% for post-hoc distillation); a current frame is what lets a successor session resume your work without re-reading the repo. `objective` is the standing outcome the work serves and is REQUIRED alongside any of goal/state/next/decisions \u2014 inherit it from your predecessor rather than restating it as a delta. Sections are FLAT string params \u2014 one key per section (objective, goal, state, next, decisions, invariants, dead_ends, working_set, verification); there is no `sections` array and no `section`/`content` pair."
@@ -2541,7 +2048,6 @@ type = "integer"
 
 [tool.output_schema.properties.advice]
 type = "string"
-
 
 [[tool]]
 id = "suggest_note"

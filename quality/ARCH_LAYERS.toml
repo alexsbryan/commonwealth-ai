@@ -50,8 +50,6 @@ backstage = [
     "sovereign-eval",
     "sovereign-cli-dev",
     "sovereign-agent-bench",
-    "sovereign-atos",
-    "corpus-engine-atos",
     "corpus-engine-archaeology",
     "xtask",
 ]
@@ -317,7 +315,6 @@ crates = [
     "sovereign-runtime-recipe",
     "sovereign-work-atlas",
     "sovereign-workflow-host",
-    "sovereign-atos",
     "sovereign-eval",
     "sovereign-meshapp",
     "sovereign-authoring-harness",
@@ -954,16 +951,6 @@ name = "sovereign-workflow"
 allow = ["sovereign-contracts", "workspace-hack"]
 
 [[package_leaf]]
-name = "corpus-engine-atos"
-# The ATOS plan + feature stores (SQLite, schema embedded from its own
-# `assets/`). Admitted 2026-09-21 on `corpus-engine-yield`'s test — ONE in-repo
-# dep, itself a leaf — and on the same two-package finding: `code` reaches it
-# from 15 files of `sovereign-cli-dev`'s atos verbs, `svrn` from the daemon's
-# middleware and cli-llm. Unclaimed it made every one of those edges red, which
-# measures the absence of a decision rather than a boundary.
-allow = ["corpus-engine-yield", "workspace-hack"]
-
-[[package_leaf]]
 name = "corpus-engine-yield"
 # Backpressure + wall-clock utilities. Zero internal deps; 12 import sites in
 # corpus-engine and 86 use sites across engine, enrichment, meta-atlas,
@@ -1049,8 +1036,8 @@ allow = ["kernel-types"]
 #   build tooling — arch-layers, xtask. Neither ships.
 #   protocol conformance — oicp-conformance. A test suite over `oicp-types`.
 #   §5 "deleted, not migrated" — sovereign-studio, sovereign-workflow,
-#     sovereign-workflow-host (the studio surface), sovereign-atos,
-#     corpus-engine-atos (atos), sovereign-work-atlas (the work atlas). Each is
+#     sovereign-workflow-host (the studio surface), sovereign-work-atlas
+#     (the work atlas). Each is
 #     kept unless a §7 journey reaches it. Declaring a package for a crate set
 #     slated for deletion would be enforcing a boundary around something that
 #     should not exist.
@@ -1221,7 +1208,7 @@ doc = "docs/FIVE_PROGRAMS.md"
 # few hours ago (ef227581f) are DELETED by this commit, not migrated. They were
 # honest and each named its closing condition; they are also the shape the
 # operator's correction is aimed at, so `sovereign-code -> corpus-engine`,
-# `-> sovereign-atos`, `-> corpus-engine-atos`, `-> sovereign-work-atlas`,
+# `-> sovereign-work-atlas`,
 # `-> commonwealth-core` and `-> arch-layers` are red lines now. Their closing
 # conditions are not lost — they are in ef227581f's diff and in
 # docs/CODE_TOOLING_BOUNDARY.md.

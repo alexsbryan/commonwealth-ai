@@ -21,13 +21,6 @@
 //!
 //! Invariant: no canonical command is visibility=public AND feature=dev-tools
 //!   (it would exit 2 in the shipped binary, breaking a public promise).
-//!
-//! `atos` is in UNPROBED_VERBS: `atos <sub> --help` routes into the subcommand
-//!   handler (run_atos only honors `--help` as argv[0]), and several mutate
-//!   (install-plugin) or read stdin (teardown). atos is still tracked
-//!   (Direction 2) and docs-checked. Under the default build it IS asserted
-//!   intercepted — the dev-tools gate fires on the verb before any handler
-//!   runs, so it is side-effect-free there.
 
 use std::collections::BTreeSet;
 use std::process::{Command, Output};
@@ -85,12 +78,6 @@ pub(crate) fn contract() -> Contract {
     Contract::load_default().expect("docs/cli-contract.toml must parse")
 }
 
-/// Verbs whose subcommands are not safe to offline-probe (see module docs).
-/// Only referenced by the dev-tools Direction-1 probe (the default build gates
-/// these before any handler runs, so they're safe to assert there).
-#[cfg_attr(not(feature = "dev-tools"), allow(dead_code))]
-pub(crate) const UNPROBED_VERBS: &[&str] = &["atos"];
-
 /// Distinctive prefix of the dispatcher's top-level usage banner (HELP.summary
 /// in main.rs). It appears only when a verb fell through to `print_usage` —
 /// i.e. it was not recognized. A recognized verb's `--help` shows its own help.
@@ -133,7 +120,7 @@ fn direction1_dev_build_every_canonical_command_dispatches() {
     let c = contract();
     let mut fails = Vec::new();
     for cmd in c.canonical() {
-        if cmd.probe == Probe::Skip || UNPROBED_VERBS.contains(&verb_of(&cmd.path)) {
+        if cmd.probe == Probe::Skip {
             continue;
         }
         let argv = help_argv(&cmd.path);

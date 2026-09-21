@@ -10,8 +10,8 @@
 //! retirement banners are exercised end-to-end. Style mirrors
 //! `aliases.rs` (sibling test file).
 //!
-//! `project` / `atos` are developer-toolchain verbs — the default
-//! build intercepts them before the retirement shim runs (see
+//! `project` is a developer-toolchain verb — the default
+//! build intercepts it before the retirement shim runs (see
 //! `DEV_VERBS` in main.rs), so this suite only applies to dev builds.
 //! The intercept itself is covered by `default_build_gate.rs`.
 #![cfg(feature = "dev-tools")]
@@ -35,7 +35,7 @@ fn run(args: &[&str]) -> Output {
         .expect("spawn sovereign-cli")
 }
 
-/// Retired `project` / `atos` verbs print their banner from inside the
+/// Retired `project` verbs print their banner from inside the
 /// `sovereign-cli-dev` sibling (the dispatcher forwards there). `cargo
 /// test` builds the dispatcher but not the sibling bin, so without a
 /// prior `cargo build --bins` we skip rather than false-fail with
@@ -103,27 +103,6 @@ fn project_found_is_retired_no_op() {
     assert!(
         err.contains("spec") || err.contains("charter"),
         "retirement banner should hint at the new flow (spec / charter); got:\n{err}"
-    );
-}
-
-/// Same retirement contract for `svrn atos provision`.
-#[test]
-fn atos_provision_is_retired_no_op() {
-    require_siblings!();
-    let out = run(&["atos", "provision"]);
-    assert_exit_zero(&out, "atos provision");
-    let err = stderr(&out);
-    assert!(
-        err.contains("`svrn atos provision`"),
-        "retirement banner should reference the old name; got:\n{err}"
-    );
-    assert!(
-        err.contains("retired"),
-        "retirement banner should say 'retired'; got:\n{err}"
-    );
-    assert!(
-        err.contains("spec") || err.contains("features.db"),
-        "retirement banner should hint at the new flow (spec / features.db not required); got:\n{err}"
     );
 }
 

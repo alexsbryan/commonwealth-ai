@@ -13,19 +13,15 @@ use std::path::Path;
 use rusqlite::{Connection, OpenFlags};
 
 use sovereign_tools::knowledge_view::splice_extension::{
-    load_chunk_timestamps, relational_notes_for_entity, AtosSnapshot,
+    load_chunk_timestamps, relational_notes_for_entity,
 };
 use sovereign_tools::knowledge_view::timeline::{
-    assemble_timelines_from_atlas, AtosLink, AtosLinkKind, CharterStatus, Interaction,
-    InteractionTimeline, TimelineEntityKind,
+    assemble_timelines_from_atlas, Interaction, InteractionTimeline, TimelineEntityKind,
 };
 
 use super::args::parse_args;
 use super::render::{display_path, format_date, format_datetime};
-use super::store_open::{
-    atlas_dir_for, project_toml_path, sovereign_root, state_db_path, try_open_features,
-    try_open_notes,
-};
+use super::store_open::{atlas_dir_for, sovereign_root, state_db_path, try_open_notes};
 
 const RELATIONAL_VIEWS: &[&str] = &["personal-knowledge", "conversation-history"];
 
@@ -68,16 +64,6 @@ pub(super) async fn cmd_timeline(args: &[String]) -> i32 {
     let chunk_ts = load_chunk_timestamps(&db_path);
     let resolver = move |id: &str| -> Option<i64> { chunk_ts.get(id).copied() };
 
-    // ATOS lookup for Initiative entities.
-    let toml_path = project_toml_path();
-    let toml_path_opt = if toml_path.exists() {
-        Some(toml_path.as_path())
-    } else {
-        None
-    };
-    let features = try_open_features();
-    let atos = AtosSnapshot::build(features.as_ref(), toml_path_opt).await;
-
     // Walk both atlas dirs; collect every timeline.
     let mut all_timelines: Vec<InteractionTimeline> = Vec::new();
     for view_id in RELATIONAL_VIEWS {
@@ -85,7 +71,7 @@ pub(super) async fn cmd_timeline(args: &[String]) -> i32 {
         if !atlas_dir_for(&root, view_id).exists() {
             continue;
         }
-        match assemble_timelines_from_atlas(&corpus_dir, &resolver, &atos) {
+        match assemble_timelines_from_atlas(&corpus_dir, &resolver) {
             Ok(mut tls) => all_timelines.append(&mut tls),
             Err(e) => {
                 eprintln!(
@@ -316,31 +302,6 @@ fn print_header(t: &InteractionTimeline, window_days: i64) {
         println!();
         println!("Participants: {}", t.participants.join(", "));
     }
-    if let Some(link) = &t.atos_project {
-        println!();
-        print_atos_link(link);
-    }
-}
-
-fn print_atos_link(link: &AtosLink) {
-    let kind = match link.kind {
-        AtosLinkKind::Project => "project",
-        AtosLinkKind::Feature => "feature",
-    };
-    let phase = match (link.current_phase, link.total_phases) {
-        (Some(c), Some(t)) => format!("phase {c}/{t}"),
-        (Some(c), None) => format!("phase {c}"),
-        _ => "no phase data".to_string(),
-    };
-    let charter = match link.charter_status {
-        CharterStatus::Clean => "Clean",
-        CharterStatus::Drifted => "Drifted",
-        CharterStatus::Unapproved => "Unapproved",
-    };
-    println!(
-        "ATOS: {} \"{}\", {}, charter: {}",
-        kind, link.id, phase, charter
-    );
 }
 
 fn print_interactions(
@@ -468,7 +429,6 @@ mod tests {
                     source_chunk_id: "c2".into(),
                 },
             ],
-            atos_project: None,
         };
         let api = InteractionTimeline {
             entity_id: "entity-0002".into(),
@@ -481,7 +441,6 @@ mod tests {
                 timestamp: Some(300),
                 source_chunk_id: "c3".into(),
             }],
-            atos_project: None,
         };
         let mike = InteractionTimeline {
             entity_id: "entity-0003".into(),
@@ -494,7 +453,6 @@ mod tests {
                 timestamp: Some(150),
                 source_chunk_id: "c1".into(),
             }],
-            atos_project: None,
         };
         let all = vec![sarah.clone(), api, mike];
         let refs = collect_cross_refs(&all, &sarah);

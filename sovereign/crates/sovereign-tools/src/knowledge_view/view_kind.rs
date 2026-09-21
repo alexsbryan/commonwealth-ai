@@ -44,8 +44,7 @@ pub enum ViewKind {
     /// `knowledge_view::timeline` for assembly.
     Relational,
     /// Initiatives the user is organising work around. Synthetic:
-    /// derived from `Initiative` atoms + goal notes. ATOS phase /
-    /// charter status composed via [`crate::knowledge_view::timeline::AtosLookup`].
+    /// derived from `Initiative` atoms + goal notes.
     Strategic,
 }
 

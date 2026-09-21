@@ -47,8 +47,6 @@ use sovereign_contracts::tokens::estimate_tokens;
 
 #[cfg(feature = "treesitter")]
 use super::relational::{format_relational, RelationalNote};
-#[cfg(all(feature = "treesitter", feature = "atos"))]
-use super::splice_extension::AtosSnapshot;
 #[cfg(feature = "treesitter")]
 use super::splice_extension::{
     load_chunk_timestamps, relational_notes_for_entity, strategic_goals_for_entity,
@@ -112,19 +110,6 @@ pub struct KnowledgeViewManager {
     /// commitment / follow_up / goal notes by `related_entity` to
     /// the relational and strategic blocks.
     notes_db_path: PathBuf,
-    /// Injected ATOS feature catalog. `None` = no feature lookup; the
-    /// strategic block falls back to initiative names without phase / drift
-    /// annotation. Only read when the `atos` feature is on (the strategic
-    /// ATOS splice). Injected rather than opened here so this crate names
-    /// only the trait, never `corpus-engine-atos` — see [`FeatureCatalog`].
-    ///
-    /// [`FeatureCatalog`]: super::timeline::FeatureCatalog
-    #[cfg_attr(not(feature = "atos"), allow(dead_code))]
-    feature_catalog: Option<Arc<dyn super::timeline::FeatureCatalog>>,
-    /// `.sovereign/project.toml` path. `None` = no project name in
-    /// scope; initiatives can still surface from atoms but they
-    /// won't link to a local project.
-    project_toml_path: Option<PathBuf>,
     /// Late-installed handles for the memory-pool RAPTOR rebuild
     /// (see [`Self::install_memory_atlas`]). Shared with the
     /// debouncer task; `None` until installed.
@@ -273,8 +258,6 @@ impl KnowledgeViewManager {
             digest_cache: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
             db_path,
             notes_db_path,
-            feature_catalog: None,
-            project_toml_path: None,
             mem_atlas_handles,
             #[cfg(feature = "treesitter")]
             notes_handle: Arc::new(tokio::sync::Mutex::new(None)),
@@ -296,32 +279,6 @@ impl KnowledgeViewManager {
     ) {
         let mut slot = self.mem_atlas_handles.write().await;
         *slot = Some(crate::mem_atlas::MemAtlasHandles { store, inference });
-    }
-
-    /// Install the ATOS feature catalog. When set + `with_project_toml_path`
-    /// is also set, the strategic digest will surface phase + drift
-    /// annotations on initiatives that match a local project or
-    /// feature. Caller owns the store and passes only the read door:
-    ///
-    /// ```ignore
-    /// let mgr = KnowledgeViewManager::new(...).await
-    ///     .with_feature_catalog(Arc::new(FeatureStoreCatalog::new(store)))
-    ///     .with_project_toml_path(project_toml_path);
-    /// ```
-    pub fn with_feature_catalog(
-        mut self,
-        catalog: Arc<dyn super::timeline::FeatureCatalog>,
-    ) -> Self {
-        self.feature_catalog = Some(catalog);
-        self
-    }
-
-    /// Set the `.sovereign/project.toml` path. Used by the strategic
-    /// digest to match initiative entity names against the local
-    /// project name (with parent-dir fallback for v1 files).
-    pub fn with_project_toml_path(mut self, path: PathBuf) -> Self {
-        self.project_toml_path = Some(path);
-        self
     }
 
     /// Ingest each view. Safe to call repeatedly —
@@ -667,9 +624,8 @@ impl KnowledgeViewManager {
 
     /// Compose the Relational + Strategic digest blocks (Phase 4.B).
     /// Reads atoms / edges from the personal-knowledge and
-    /// conversation-history atlases, joins NoteStore records by
-    /// `related_entity`, and composes ATOS phase / drift via
-    /// `AtosSnapshot`. Soft-fails: any I/O error per source falls
+    /// conversation-history atlases and joins NoteStore records by
+    /// `related_entity`. Soft-fails: any I/O error per source falls
     /// through with a debug log; the splice continues without the
     /// affected block.
     #[cfg(feature = "treesitter")]
@@ -683,20 +639,7 @@ impl KnowledgeViewManager {
         let timestamps = load_chunk_timestamps(&self.db_path);
         let chunk_ts = |id: &str| timestamps.get(id).copied();
 
-        // 2. Build the ATOS snapshot (feature `atos`, off by default). When
-        //    on, timelines get phase/drift annotation from the FeatureCatalog +
-        //    project.toml. When off, a `NoAtosLookup` means no annotation —
-        //    the strategic block still renders from NoteStore-backed goals.
-        #[cfg(feature = "atos")]
-        let atos = AtosSnapshot::build(
-            self.feature_catalog.as_ref(),
-            self.project_toml_path.as_deref(),
-        )
-        .await;
-        #[cfg(not(feature = "atos"))]
-        let atos = super::timeline::NoAtosLookup;
-
-        // 3. Pull timelines from both atlas sources. We compute the
+        // 2. Pull timelines from both atlas sources. We compute the
         //    per-corpus index directory directly (engine.index_dir +
         //    view_id) — calling `open_index_for_corpus` would attempt
         //    to open the LanceDB tables, which fails for a brand-new
@@ -706,7 +649,7 @@ impl KnowledgeViewManager {
         let mut timelines = Vec::new();
         for view_id in [ViewKind::Personal.id(), ViewKind::Conversational.id()] {
             let corpus_dir = self.engine.index_dir().join(view_id);
-            match assemble_timelines_from_atlas(&corpus_dir, &chunk_ts, &atos) {
+            match assemble_timelines_from_atlas(&corpus_dir, &chunk_ts) {
                 Ok(mut tls) => timelines.append(&mut tls),
                 Err(e) => {
                     tracing::debug!(
@@ -722,7 +665,7 @@ impl KnowledgeViewManager {
             return;
         }
 
-        // 4. NoteStore-backed `related_entity` resolver. We collect
+        // 3. NoteStore-backed `related_entity` resolver. We collect
         //    all needed (entity_name, kind-bucket) pairs and pre-load
         //    them into HashMaps so the formatters can stay sync.
         let notes_handle = self.notes_store_handle().await;
@@ -742,13 +685,13 @@ impl KnowledgeViewManager {
             }
         }
 
-        // 5. In-conversation predicate from the current message thread.
+        // 4. In-conversation predicate from the current message thread.
         let corpus = ConversationCorpus::from_messages(conversation_messages.iter().cloned());
         let in_conv = |name: &str| corpus.contains_entity(name);
 
         let now = chrono::Utc::now().timestamp();
 
-        // 6. Render Relational.
+        // 5. Render Relational.
         let relational_lookup = |name: &str| -> Vec<RelationalNote> {
             relational_index.get(name).cloned().unwrap_or_default()
         };
@@ -766,7 +709,7 @@ impl KnowledgeViewManager {
             });
         }
 
-        // 7. Render Strategic.
+        // 6. Render Strategic.
         let strategic_lookup = |name: &str| -> Vec<StrategicGoal> {
             strategic_index.get(name).cloned().unwrap_or_default()
         };

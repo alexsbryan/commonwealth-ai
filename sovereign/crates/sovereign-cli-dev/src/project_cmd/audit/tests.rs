@@ -9,10 +9,8 @@ use super::*;
 // ─── Phase 6: directory-only features show up in audit ────────
 
 /// `collect_feature_rows` returns one row for a feature with a
-/// `.sovereign/features/<id>/spec.md` on disk and no
-/// `features.db`. Phase 6: this is the new default — users do
-/// NOT need to run `svrn atos provision` to have a feature
-/// surface in the audit; writing the spec is sufficient.
+/// `.sovereign/features/<id>/spec.md` on disk. Writing the spec is
+/// sufficient for the feature to surface in the audit.
 #[tokio::test]
 async fn audit_lists_directory_only_feature_without_features_db() {
     let tmp = tempfile::tempdir().unwrap();

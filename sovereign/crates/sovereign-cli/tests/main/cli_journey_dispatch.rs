@@ -33,17 +33,6 @@ use std::process::{Command, Output};
 
 use sovereign_cli_shared::cli_contract::{Contract, Probe};
 
-/// Steps are probed with `--help`, which short-circuits before any daemon
-/// call — but a few handlers act on bare invocation regardless. Anything
-/// whose *verb* appears here is skipped by the replay; it is still covered
-/// by the static tier and (where safe) the live tier.
-const UNPROBED_VERBS: &[&str] = &[
-    // `atos <sub> --help` routes into the subcommand handler; several
-    // mutate (install-plugin) or read stdin (teardown). Same exclusion the
-    // command-level conformance test makes, for the same reason.
-    "atos",
-];
-
 fn sovereign(home: &Path) -> Command {
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_sovereign-cli"));
     cmd.env("SOVEREIGN_QUIET_DEPRECATIONS", "1");
@@ -108,10 +97,6 @@ fn probe_argv(path: &str) -> Vec<String> {
     a
 }
 
-fn verb_of(run: &str) -> &str {
-    run.split_whitespace().next().unwrap_or("")
-}
-
 #[cfg(feature = "dev-tools")]
 #[test]
 fn every_journey_step_dispatches() {
@@ -129,11 +114,6 @@ fn every_journey_step_dispatches() {
 
     for j in &c.journeys {
         for (i, step) in j.steps.iter().enumerate() {
-            let verb = verb_of(&step.run);
-            if UNPROBED_VERBS.contains(&verb) {
-                skipped += 1;
-                continue;
-            }
             let binding = c.resolve_step(step);
             if let Some(cmd) = binding.exact() {
                 if cmd.probe == Probe::Skip {
@@ -226,9 +206,6 @@ fn default_build_gates_dev_steps_and_dispatches_public_ones() {
         .filter(|j| j.visibility == Visibility::Public)
     {
         for (i, step) in j.steps.iter().enumerate() {
-            if UNPROBED_VERBS.contains(&verb_of(&step.run)) {
-                continue;
-            }
             let binding = c.resolve_step(step);
             let Some(cmd) = binding.exact() else {
                 continue;

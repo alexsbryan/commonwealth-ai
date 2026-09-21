@@ -1,25 +1,18 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `svrn milestone <feature-id> <N> [--project]` — close a milestone.
+//! `svrn milestone --project <N>` — close a project phase.
 //!
 //! Demo shape:
 //!
 //! ```text
-//! sovereign milestone p0-payments 1            # feature milestone 1
 //! sovereign milestone --project 2              # project phase 2
 //! ```
 //!
 //! Merges the older milestone surfaces:
 //!
-//! - `svrn atos start-milestone` + `end-milestone` → unified
-//!   here. The new flow runs the stop condition once; explicit
-//!   start/end is no longer required for the common case (the demo
-//!   never invokes `start-milestone` separately).
-//! - `svrn project phase pass <N>`                → `--project`.
+//! - `svrn project phase pass <N>` → `--project`.
 //!
-//! Phase 1 (this file): a thin dispatcher. Feature path forwards to
-//! [`crate::atos_cmd::milestone::cmd_end_milestone`] with `--ordinal
-//! N` translated from the second positional. Project path forwards to
-//! [`crate::project_cmd::cmd_phase_pass`].
+//! Thin dispatcher: forwards to `project_cmd::cmd_phase_pass` in the
+//! `sovereign-cli-dev` sibling.
 
 pub async fn run(args: &[String]) -> i32 {
     if crate::util::help::wants_help(args) {
@@ -30,64 +23,39 @@ pub async fn run(args: &[String]) -> i32 {
     let project_mode = args.iter().any(|a| a == "--project");
     let positional: Vec<&String> = args.iter().filter(|a| !a.starts_with('-')).collect();
 
-    if project_mode {
-        // `svrn milestone --project <N>` — single positional N.
-        let Some(n) = positional.first().and_then(|s| s.parse::<u32>().ok()) else {
-            eprintln!(
-                "  sovereign milestone --project <N> requires N to be an integer.\n\
-                 \n\
-                 example: sovereign milestone --project 2"
-            );
-            return 2;
-        };
-        let n_str = n.to_string();
-        return crate::dev_bin::exec("project-phase-pass", &[n_str]);
-    }
-
-    // Feature path: `svrn milestone <feature-id> <N>`.
-    if positional.len() < 2 {
+    if !project_mode {
         eprintln!(
-            "  sovereign milestone <feature-id> <N> requires both args.\n\
+            "  sovereign milestone requires --project.\n\
              \n\
              USAGE\n  \
-               sovereign milestone <feature-id> <N>          Close milestone N for the feature\n  \
-               sovereign milestone --project <N>             Close project-level phase N"
+               sovereign milestone --project <N>        Close project-level phase N"
         );
         return 2;
     }
-    let feature_id = positional[0].clone();
-    let Ok(ordinal) = positional[1].parse::<i64>() else {
+
+    // `svrn milestone --project <N>` — single positional N.
+    let Some(n) = positional.first().and_then(|s| s.parse::<u32>().ok()) else {
         eprintln!(
-            "  sovereign milestone: <N> must be an integer (got {:?})",
-            positional[1]
+            "  sovereign milestone --project <N> requires N to be an integer.\n\
+             \n\
+             example: sovereign milestone --project 2"
         );
         return 2;
     };
-
-    // Forward as: <feature-id> --ordinal <N>. Pass through any other
-    // flags the user supplied (e.g. --driver) so power users keep
-    // their existing knobs.
-    let mut forwarded: Vec<String> = vec![feature_id, "--ordinal".to_string(), ordinal.to_string()];
-    for a in args.iter() {
-        if a.starts_with('-') && a != "--project" {
-            forwarded.push(a.clone());
-        }
-    }
-
-    crate::dev_bin::exec("atos-milestone-end", &forwarded)
+    let n_str = n.to_string();
+    crate::dev_bin::exec("project-phase-pass", &[n_str])
 }
 
 const HELP: crate::util::help::Help = crate::util::help::Help {
     command: "svrn milestone",
-    summary: "Close a feature milestone (runs its stop condition; writes the report).",
+    summary: "Close a project-level phase (runs its stop condition; writes the report).",
     sections: &[
         crate::util::help::HelpSection::Usage(
-            "svrn milestone <feature-id> <N>          Close milestone N for the feature\n\
-             sovereign milestone --project <N>             Close project-level phase N",
+            "svrn milestone --project <N>             Close project-level phase N",
         ),
         crate::util::help::HelpSection::Notes(
-            "Replaces the older `svrn atos start-milestone` / `end-milestone` and \
-             `svrn project phase pass` triple. Old names still work and forward here.",
+            "Replaces the older `svrn project phase pass`. The old name still \
+             works and forwards here.",
         ),
     ],
 };

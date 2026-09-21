@@ -5,20 +5,19 @@ edition.workspace = true
 license.workspace = true
 
 # Slim dispatcher binary. After slices 1–5 (2026-05-22), the only
-# code that lives here is exec-dispatch (`atos_bin`, `llm_bin`),
+# code that lives here is exec-dispatch (`dev_bin`, `llm_bin`),
 # pure-FS delegators (notes, status, drift, audit, ...) and light
 # commands that touch SQLite + filesystem only. The three archaeology
 # verbs left for `sovereign-cli-dev` 2026-09-21 — they are `svrn code`'s
 # and carried the only `corpus-engine-archaeology` edge. Every LLM-using surface
 # (bench, chat, eval, atlas, daemon, ...) moved to
-# `sovereign-cli-atos` or `sovereign-cli-llm` siblings.
+# `sovereign-cli-dev` or `sovereign-cli-llm` siblings.
 #
 # Dep surface shrank accordingly:
 #   removed: sovereign-inference (llama-cpp-2), sovereign-tools,
 #            sovereign-mesh, sovereign-pipeline, sovereign-work-atlas
 #   kept:    sovereign-core (light traits + types), sovereign-store
-#            (SqliteStateStore), sovereign-atos (approval helpers
-#            used by audit_cmd), corpus-engine (stores feature only).
+#            (SqliteStateStore), corpus-engine (stores feature only).
 #   also removed 2026-09-21: sovereign-agent-bench — `agent-bench` execs
 #            its own `[[bin]]` sibling instead (`agent_bench_bin`).
 
@@ -168,7 +167,7 @@ default = [
     "sovereign-cli-shared/mcp-client",
 ]
 # `dev-tools` re-enables the developer-toolchain verb surface (project
-# lifecycle, ATOS, code intelligence, archaeology) that the default
+# lifecycle, code intelligence, archaeology) that the default
 # (end-user) build gates out. Most gated verbs exec the
 # `sovereign-cli-dev` sibling at runtime; `deep-research` runs in-process
 # and pulls oicp-client (a pure reqwest leaf — no llama.cpp).
@@ -196,7 +195,7 @@ deep-research = ["dep:oicp-client"]
 # `#[cfg(feature = "treesitter")]`-gated and panics without it
 # (`corpus-engine/src/engine/ingest_factories.rs:295-303`).
 #
-# Deliberately NOT pulling `sovereign-tools`/`-mesh`/`-atos`: none is on the
+# Deliberately NOT pulling `sovereign-tools`/`-mesh`: neither is on the
 # index path, and each would drag llama.cpp or LanceDB into an end-user
 # binary. The grammars are already in the shipped daemon and llm siblings, so
 # this is not a new cost to the tarball — see SYSTEM_OVERVIEW.

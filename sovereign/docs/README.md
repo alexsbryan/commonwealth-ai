@@ -36,8 +36,6 @@ Running it on particular hardware or in the cloud:
 
 Building on the platform:
 
-- [`ATOS.md`](ATOS.md) — Agent Task Orchestration: design → plan → charter → phases → milestones
-- [`ATOS_RUNNER.md`](ATOS_RUNNER.md) — the runner loop, and [`ATOS_RUNNER_SMOKE.md`](ATOS_RUNNER_SMOKE.md), its smoke test
 - [`MESHAPP_AUTHORING.md`](MESHAPP_AUTHORING.md) — write a mesh app; [`MESHAPP_CONSUMER.md`](MESHAPP_CONSUMER.md) — install and run one
 
 ## Working on Sovereign

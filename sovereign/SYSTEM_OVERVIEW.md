@@ -38,7 +38,6 @@ commonwealth-ai/
 ├── corpus-index/              # Retrieval read-port leaf — CorpusIndex, persisted settings, the engine Error
 ├── corpus-engine-scip/        # SCIP call graph + per-language exporter dispatch
 ├── corpus-engine-notes/       # NoteStore + project_docs index
-├── corpus-engine-atos/        # ATOS feature store + plan items (opt-in, `--features atos`)
 ├── corpus-engine-archaeology/ # Git archaeology + rough-edges + atom-provenance
 ├── corpus-engine-yield/       # YieldHook cooperative-yield contract (tier-0 leaf)
 ├── corpus-engine-sections/    # Section detectors as a regex-only leaf
@@ -70,7 +69,7 @@ there because they read the repo root and so cannot sit in a liftable crate.
 | `oicp-types` | OICP wire types + scoring helpers | — |
 | `kernel-types` | The neutral kernel: identity and provenance (`ContentHash`, `CorpusId`, `NodeId`, `Origin`, `Custody`, `Attribution`), the trust vocabulary (`Verdict`, `Reason`, `Freshness`, `Judgement`), the released turn (`Seal`, `Citation`, `Draft`, `Answer`, `PeerAnswer`, `Refused`), the wire-form decider, the requirement registry. The SECOND layer-0 membrane beside `oicp-types`: oicp is what a node ADVERTISES, this is what content IS. May name nothing above it | `serde`, `getrandom`, `hex`, `blake3` |
 | `workspace-hack` | cargo-hakari feature-unification crate, so a `-p` build resolves what `--workspace` resolves | — |
-| `corpus-engine` | Acquire → extract → filter → chunk → embed → index | `oicp-types`, `kernel-types`, `corpus-index`, `corpus-engine-yield`, `corpus-engine-scip`, `corpus-engine-notes`, `corpus-engine-atos` |
+| `corpus-engine` | Acquire → extract → filter → chunk → embed → index | `oicp-types`, `kernel-types`, `corpus-index`, `corpus-engine-yield`, `corpus-engine-scip`, `corpus-engine-notes` |
 | `sovereign` | Local agent runtime | `corpus-engine`, `corpus-engine-scip`, `oicp-types`, `kernel-types` |
 | `commonwealth` | Symmetric mesh daemon | `corpus-engine`, `oicp-types`, `kernel-types` |
 
@@ -150,7 +149,6 @@ crates/
 ├── sovereign-store          # SQLite + Postgres + in-memory StateStore
 ├── sovereign-tools          # Built-in tools (search, knowledge, docs, web, MCP, code-intel)
 ├── sovereign-gliner         # GLiNER (ONNX) NER — its own crate to keep ONNX off sovereign-tools
-├── sovereign-atos           # ATOS lib — opt-in behind `--features atos`
 ├── sovereign-work-atlas     # Coordination atlas for agents on the mesh
 ├── sovereign-enrichment-catalog # The enrichment store below every host that reads it
 ├── sovereign-enrichment-build   # The enrichment orchestrator, outside the inference stack
@@ -784,7 +782,7 @@ Verbs by sibling: `sovereign-cli` holds the light delegators (`notes`,
 `status`, `drift`, `session`, `design`, `plan`, `init`, `reflect`, `memory`,
 `serve`) plus `code index` and `refresh` behind the `code-intel` feature;
 `sovereign-cli-daemon` holds `daemon`, `setup`, `install-service`, `doctor`;
-`sovereign-cli-dev` holds `atos`, `tools`, the `code` analysis subcommands and
+`sovereign-cli-dev` holds `tools`, the `code` analysis subcommands and
 the `project` lifecycle subcommands; `sovereign-cli-llm` holds everything that
 talks to a model or does heavy retrieval. `code converge` is the one verb
 LINKED rather than exec'd, from `sovereign-cli-dev`'s `[lib]` target.
@@ -4263,7 +4261,6 @@ the shared report.
 | Drive v2 enrichment / build inside the daemon | `sovereign-cli-llm/src/enrich_cmd/`; `enrich_now` (`sovereign-tools/src/local_corpus/atlas_dispatch.rs`) |
 | Understand delta updates / scope expansion | `corpus-engine/src/update/delta.rs`, `engine/expand.rs` |
 | Understand KnowledgeView | `sovereign-tools/src/knowledge_view/`; injected at `LandscapeDigestProvider::splice_landscape_digests` |
-| Understand ATOS lifecycle | `sovereign-atos/src/local/orchestrator.rs` + [`docs/ATOS.md`](./docs/ATOS.md) |
 | Run the long-running daemon | `sovereign-cli-daemon/src/daemon_cmd/` + `sovereign-service/data/` |
 | Serve something the desktop used to compute in-process | the client-router families in `sovereign-daemon/src/*_http.rs` — §5 |
 | Prove a deleted twin cannot come back | `scripts/twin-census.py` over `quality/twin-plants.toml` |

@@ -312,25 +312,6 @@ pub struct AppStateInner {
     /// in-flight), the storage budget and usage, and the activity emitter.
     /// Held as a part so route shells read it directly (DC §4.2).
     pub node: node::NodePart,
-    /// Answering's host composition: the ATOS middleware registry. `Pipeline`
-    /// and `MiddlewareRegistry` are the daemon's own composition root, not a
-    /// context's state (DC §4.2 "Risks carried"), so it stays here and the
-    /// route shells read it directly. It is the one field of the dissolved
-    /// `AnsweringPart` whose owner is the daemon.
-    pub middleware_registry: Arc<crate::middleware::MiddlewareRegistry>,
-    /// ATOS's session-state store, taken from
-    /// `sovereign_atos::middleware::session_store` at construction. `None` on
-    /// a build without the `atos` feature; the handler then skips ATOS
-    /// pipeline processing. The store belongs to ATOS
-    /// (`sovereign_atos::session::SessionStore`), not to the daemon.
-    #[cfg(feature = "atos")]
-    pub session_store: Option<sovereign_atos::session::SessionStore>,
-    /// The repo root the answering pipeline is anchored to, taken from
-    /// `sovereign_core::answering::repo_root` at construction. `None` when the
-    /// daemon was not started in a repo-like context, which degrades the ATOS
-    /// pipelines to a noop. The fact belongs to Answering's home,
-    /// `sovereign-core` (DC §4.2).
-    pub repo_root: Option<std::path::PathBuf>,
     /// Collaborative ingest's part: the active-ingest set, progress, the work
     /// queue and grants, pull loops and verify reports, the quiesce and
     /// throttle dials, and the newsworthy tick handle. Held as a part so route
@@ -1033,61 +1014,6 @@ impl AppState {
         let inference_store = InferenceStateStore::new(Arc::clone(&mesh_store), self_node_id);
         let activity_emitter = ActivityEmitter::new((*mesh_store).clone(), self_node_id);
         let peer_preferences = PeerPreferenceStore::new((*mesh_store).clone(), self_node_id);
-        // ATOS middleware registry. The wiring is intentionally additive —
-        // operators deploying a stock Commonwealth daemon get the full stack
-        // without extra config; tests that want a bare daemon can build a
-        // minimal registry themselves.
-        //
-        // The ATOS middlewares are installed through the inversion's entry
-        // point, `sovereign_atos::middleware::registrations()`, so this host
-        // never names an ATOS middleware type (domains
-        // REVIEW-build-answering-inversion). The tool injector lives in
-        // `sovereign-core::answering`; the artifact surface and the decision
-        // extractor stay host-side.
-        //
-        // 2026-05-22: ContextInjector + ToolInjector descriptor lists were
-        // previously pulled from `sovereign_tools::manifest`, a global static
-        // that forced commonwealth-api to drag the tree-sitter grammar crates
-        // through every downstream binary. They're now injected at construction
-        // time; `empty()` because the registry of available tools lives in the
-        // daemon host.
-        let mut middleware_registry = crate::middleware::MiddlewareRegistry::new();
-        #[cfg(feature = "atos")]
-        for mw in sovereign_atos::middleware::registrations() {
-            middleware_registry.register(mw);
-        }
-        middleware_registry.register(Arc::new(crate::middleware::ToolInjector::empty()));
-        #[cfg(feature = "atos")]
-        middleware_registry.register(Arc::new(crate::middleware::ArtifactSurface::new()));
-        // Phase 7.2: per-turn DecisionExtractor mines assistant
-        // responses for decision-shaped phrases on `post_process`,
-        // then on the next turn either persists as
-        // `source='extracted'` or drops on a user correction
-        // phrase. Lives at the END of the chain so it observes
-        // the response after every other middleware has had its
-        // say. Stateless beyond `MiddlewareSession.pending_decision`,
-        // which is already plumbed through routes_inference's
-        // session round-trip.
-        middleware_registry.register(Arc::new(crate::middleware::DecisionExtractor::new()));
-        // `read_only_enforcer` is the red-team alias's gate. For M4
-        // it shares the ApprovalGate implementation under a distinct
-        // id — M5 splits them if the behavior actually diverges.
-        #[cfg(feature = "atos")]
-        {
-            let read_only = Arc::new(crate::middleware::ApprovalGate::new());
-            middleware_registry.register(read_only);
-        }
-
-        // Session store is wired up when the daemon has a MeshStore
-        // in hand. The handler falls back to legacy routing when
-        // this is None. ATOS-only. The store is taken from ATOS's own
-        // registration entry point rather than built here, so the daemon
-        // never constructs an ATOS type.
-        #[cfg(feature = "atos")]
-        let session_store = Some(sovereign_atos::middleware::session_store(
-            (*mesh_store).clone(),
-            self_node_id,
-        ));
         Self {
             inner: Arc::new(AppStateInner {
                 fabric,
@@ -1176,10 +1102,6 @@ impl AppState {
                     storage_used_bytes: std::sync::atomic::AtomicU64::new(0),
                     activity_emitter,
                 },
-                middleware_registry: Arc::new(middleware_registry),
-                #[cfg(feature = "atos")]
-                session_store,
-                repo_root: sovereign_core::answering::repo_root(),
                 ingest: ingest::IngestPart {
                     active_ingests: RwLock::new(HashSet::new()),
                     corpus_progress: RwLock::new(HashMap::new()),

@@ -17,8 +17,8 @@
 //!  - **bindable** — every step resolves to a declared command. An
 //!    `Unresolved` step means a journey drives something that does not
 //!    exist; this is the check that catches a doc teaching a dead verb
-//!    (`ATOS.md` prescribes `sovereign read-notes`, which exits 1 exactly
-//!    like a made-up verb). A `VerbOnly` step is allowed but must carry a
+//!    (a stale doc prescribes `sovereign read-notes`, which exits 1
+//!    exactly like a made-up verb). A `VerbOnly` step is allowed but must carry a
 //!    `note` — it is the to-do list of subcommands still to declare.
 //!  - **cited** — every journey's `doc` path exists on disk.
 //!  - **coherent** — a `public` journey may not contain a `dev-tools` step

@@ -174,15 +174,11 @@ ed25519-dalek = { version = "2", features = ["pkcs8", "rand_core"] }
 rand = "0.9"
 # ── `awareness`-only, and off in every ordinary build ──
 # `awareness_cmd` moved here from `sovereign-cli` on 2026-08-21 (nc-26)
-# together with the three dependencies only it needs. All three are optional
-# and none is in `default`, so the sibling binary's ordinary build — and the
-# dispatcher's, which links this crate only under its own `awareness`
-# pass-through — is byte-for-byte what it was.
+# together with the dependencies only it needs. Both are optional
+# and neither is in `default`, so the sibling binary's ordinary build —
+# and the dispatcher's, which links this crate only under its own
+# `awareness` pass-through — is byte-for-byte what it was.
 #
-# `sovereign-tools` above is already non-optional here with `treesitter`;
-# `awareness` adds only its `atos` flag, for the `AtosSnapshot` every
-# `knowledge_view::splice_extension` caller needs.
-corpus-engine-atos = { workspace = true, optional = true }
 # Direct SQLite reads in `awareness_cmd/{entities,reset,timeline}`. Production
 # paths go through StateStore; the diagnostic CLI reads the file.
 rusqlite = { version = "0.35", features = ["bundled"], optional = true }
@@ -201,15 +197,9 @@ libc = "0.2"
 # reason the two module gates could disagree without anything noticing.
 #
 # `knowledge_view::splice_extension` (which every awareness subcommand
-# imports) is `#[cfg(feature = "treesitter")]` in sovereign-tools, and its
-# `AtosSnapshot` needs `atos` on top. Neither was declared when this feature
-# lived on the dispatcher, so it could not compile even once its module gate
-# was fixed — rustc reported them as "found an item that was configured out".
-awareness = [
-    "sovereign-tools/atos",
-    "dep:corpus-engine-atos",
-    "dep:rusqlite",
-]
+# imports) is `#[cfg(feature = "treesitter")]` in sovereign-tools, pulled
+# by the non-optional `sovereign-tools` dep above.
+awareness = ["dep:rusqlite"]
 
 [dev-dependencies]
 # First dev-dependency this crate has needed. `test-support` exposes the ONE

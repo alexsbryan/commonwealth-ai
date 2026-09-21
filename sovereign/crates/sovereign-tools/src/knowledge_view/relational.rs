@@ -250,7 +250,6 @@ mod tests {
                     source_chunk_id: t.to_string(),
                 })
                 .collect(),
-            atos_project: None,
         }
     }
 

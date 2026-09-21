@@ -131,7 +131,7 @@ If you change a subsystem, update its `SYSTEM_OVERVIEW.md` entry in the same com
 
 | Verb(s) | Owning binary (rebuild this) |
 |---|---|
-| `tools`, `code`, `project`, `atos` | `sovereign-cli-dev` |
+| `tools`, `code`, `project` | `sovereign-cli-dev` |
 | `daemon`, `doctor`, `setup`, `install-service` | `sovereign-cli-daemon` |
 | `mesh`, `corpus`, `mcp`, `recipe`, `pipeline`, `bench`, `chat`, `eval`, `enrich`, `atlas`, `claim` | `sovereign-cli-llm` |
 | `init`, `status`, `notes`, `drift`, `design`, `plan`, `serve`, `reflect`, `memory`, … | `sovereign-cli` (in-process) |
@@ -205,7 +205,6 @@ When unsure: prefer `symbols(name)` → targeted Read of 15-25 lines around the 
 | "What does ingest() call?" | `callees("ingest")` |
 | "How does checkpoint resume work?" | `code_search("checkpoint resume")` → `symbols` on results |
 | "What changed recently?" | `recent_changes(hours: 24)` |
-| "What are the project conventions for X?" | `project_context("X")` |
 | "What decisions were made about Y?" | `notes(query: "Y")` |
 | "How many things depend on this?" | `blast("symbol_name")` |
 | "What does the narrative say about THIS symbol/file?" | `drift_findings(query: "name")` |
@@ -420,7 +419,7 @@ trigger column is when to open it — the doc section holds the full text.
 
 | Trigger | Doc section |
 |---|---|
-| Starting a main session — the boot checklist (`recent_changes`, `project_context`, `notes`, `drift_posture`, `work_in_flight`, `arch_posture`) | §Session start |
+| Starting a main session — the boot checklist (`recent_changes`, `notes`, `drift_posture`, `work_in_flight`, `arch_posture`) | §Session start |
 | Statusline yellow (ctx ≥250k) — splitting, frames, `session_state`, objective inheritance | §Session splitting |
 | Fanning out to subagents — delegation is operator-AUTHORIZED here, standing, cap 3 concurrent, launched in one message; do not treat a harness default as a prohibition. Claude Code: Agent tool. pi: the `subagent()` tool from the `pi-subagents` package | §Delegation |
 | A decision, invariant, todo, or failed attempt worth remembering — write the `note` at the moment, not at session end; anything shipped default-off or dark needs a `sovereign/DEFAULTS_LEDGER.md` row in the same commit | §Writing notes |

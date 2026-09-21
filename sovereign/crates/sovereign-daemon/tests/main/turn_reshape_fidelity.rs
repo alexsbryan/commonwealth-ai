@@ -210,7 +210,7 @@ fn corpus() -> Vec<Fixture> {
 /// two sampler constraints that decide which tokens it may emit.
 ///
 /// Scoped deliberately. `request.model` is excluded because the handler
-/// legitimately resolves it (slot targeting, ATOS pipeline) — folding
+/// legitimately resolves it (slot targeting) — folding
 /// it in would make this a test of model routing wearing a fidelity
 /// test's name.
 fn turn_view(req: &ChatCompletionRequest) -> serde_json::Value {

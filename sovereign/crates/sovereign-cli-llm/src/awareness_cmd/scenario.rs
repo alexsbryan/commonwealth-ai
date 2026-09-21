@@ -17,8 +17,7 @@
 //!     scores against the template's `expected_suggestions`
 //!
 //! Spec-listed shapes deferred (require additional plumbing):
-//! `query_synthesis` (needs runtime invocation), `atos_composition`
-//! (needs project.toml shipped with the scenario), `decay_differential`
+//! `query_synthesis` (needs runtime invocation), `decay_differential`
 //! (needs synthetic Memory rows in the seed).
 
 use std::path::{Path, PathBuf};
@@ -34,7 +33,7 @@ use serde::Deserialize;
 use sovereign_core::traits::ConversationStore;
 use sovereign_store::sqlite::SqliteStateStore;
 use sovereign_tools::knowledge_view::splice_extension::{
-    load_chunk_timestamps, AtosSnapshot, ConversationCorpus,
+    load_chunk_timestamps, ConversationCorpus,
 };
 use sovereign_tools::knowledge_view::timeline::{
     assemble_timelines_from_atlas, InteractionTimeline,
@@ -588,14 +587,13 @@ fn entity_score(sandbox: &Path, golden: &GoldenSet) -> EntityScore {
 fn render_digest_block(sandbox: &Path, which: &str) -> String {
     let chunk_ts = load_chunk_timestamps(&sandbox.join("state.db"));
     let resolver = move |id: &str| -> Option<i64> { chunk_ts.get(id).copied() };
-    let atos = AtosSnapshot::empty(); // scenarios run sandboxed; no project.toml in scope
     let mut all_timelines: Vec<InteractionTimeline> = Vec::new();
     for view_id in RELATIONAL_VIEWS {
         let corpus_dir = sandbox.join("indexes").join(view_id);
         if !atlas_dir_for(sandbox, view_id).exists() {
             continue;
         }
-        if let Ok(mut t) = assemble_timelines_from_atlas(&corpus_dir, &resolver, &atos) {
+        if let Ok(mut t) = assemble_timelines_from_atlas(&corpus_dir, &resolver) {
             all_timelines.append(&mut t);
         }
     }

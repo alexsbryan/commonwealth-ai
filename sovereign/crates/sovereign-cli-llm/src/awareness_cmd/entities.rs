@@ -3,11 +3,11 @@
 //!
 //! Aggregates Entity atoms across both relational atlas dirs
 //! (personal-knowledge + conversation-history), joins them with
-//! NoteStore counts and FeatureStore-backed ATOS links, and renders
-//! plain text or JSON. The "borderline initiative" flag surfaces
-//! Initiative entities that look topic-shaped (single-conversation
-//! provenance + hedge-word evidence) so the developer knows which
-//! entries to scrutinise when tuning the extraction prompt.
+//! NoteStore counts, and renders plain text or JSON. The "borderline
+//! initiative" flag surfaces Initiative entities that look
+//! topic-shaped (single-conversation provenance + hedge-word
+//! evidence) so the developer knows which entries to scrutinise when
+//! tuning the extraction prompt.
 
 use std::collections::{HashMap, HashSet};
 
@@ -17,16 +17,11 @@ use corpus_engine::enrichment::atlas::writer::{read_atlas_atoms, read_atlas_edge
 use corpus_engine::enrichment::pipeline::atlas::EntityType;
 use serde_json::json;
 
-use sovereign_tools::knowledge_view::splice_extension::{
-    relational_notes_for_entity, AtosSnapshot,
-};
-use sovereign_tools::knowledge_view::timeline::{AtosLink, AtosLinkKind, AtosLookup};
+use sovereign_tools::knowledge_view::splice_extension::relational_notes_for_entity;
 
 use super::args::parse_args;
 use super::render::{display_path, format_date};
-use super::store_open::{
-    atlas_dir_for, project_toml_path, sovereign_root, try_open_features, try_open_notes,
-};
+use super::store_open::{atlas_dir_for, sovereign_root, try_open_notes};
 
 /// Atlas view ids that the relational pipeline writes to. A multi-
 /// or future-corpus addition would extend this list.
@@ -183,25 +178,6 @@ pub(super) async fn cmd_entities(args: &[String]) -> i32 {
         }
     }
 
-    // ATOS link for Initiative entities.
-    let toml_path = project_toml_path();
-    let toml_path_opt = if toml_path.exists() {
-        Some(toml_path.as_path())
-    } else {
-        None
-    };
-    let features = try_open_features();
-    let atos = AtosSnapshot::build(features.as_ref(), toml_path_opt).await;
-    for e in all_entities.iter_mut() {
-        if e.kind != EntityKind::Initiative {
-            continue;
-        }
-        let folded = e.canonical_name.trim().to_lowercase();
-        if let Some(link) = atos.lookup(&folded) {
-            e.atos = Some(link);
-        }
-    }
-
     // Borderline-initiative heuristic: Initiative entity, single
     // distinct chunk, hedge word in description.
     for e in all_entities.iter_mut() {
@@ -291,8 +267,6 @@ struct EntityRow {
     commitments: usize,
     follow_ups: usize,
     goals: usize,
-    /// ATOS link (Initiative only).
-    atos: Option<AtosLink>,
     /// Borderline-initiative flag — set when the Initiative is
     /// suspected of being a topic (single-chunk + hedge wording).
     borderline: bool,
@@ -318,7 +292,6 @@ impl EntityRow {
             commitments: 0,
             follow_ups: 0,
             goals: 0,
-            atos: None,
             borderline: false,
         }
     }
@@ -473,26 +446,6 @@ fn print_row(r: &EntityRow) {
             if r.goals == 1 { "" } else { "s" },
         );
     }
-    if let Some(link) = &r.atos {
-        let kind = match link.kind {
-            AtosLinkKind::Project => "project",
-            AtosLinkKind::Feature => "feature",
-        };
-        let phase = match (link.current_phase, link.total_phases) {
-            (Some(c), Some(t)) => format!("phase {c}/{t}"),
-            (Some(c), None) => format!("phase {c}"),
-            _ => "no phase".to_string(),
-        };
-        let charter = match link.charter_status {
-            sovereign_tools::knowledge_view::timeline::CharterStatus::Clean => "Clean",
-            sovereign_tools::knowledge_view::timeline::CharterStatus::Drifted => "Drifted",
-            sovereign_tools::knowledge_view::timeline::CharterStatus::Unapproved => "Unapproved",
-        };
-        println!(
-            "    ATOS link: {} \"{}\", {}, charter: {}",
-            kind, link.id, phase, charter
-        );
-    }
     let preview: Vec<&str> = r.chunks.iter().take(5).map(|s| s.as_str()).collect();
     if !preview.is_empty() {
         let suffix = if r.chunks.len() > 5 {
@@ -510,22 +463,6 @@ fn emit_json(rows: &[EntityRow], seen: &[std::path::PathBuf], missing: &[std::pa
     let entities: Vec<serde_json::Value> = rows
         .iter()
         .map(|r| {
-            let atos = r.atos.as_ref().map(|link| {
-                json!({
-                    "kind": match link.kind {
-                        AtosLinkKind::Project => "project",
-                        AtosLinkKind::Feature => "feature",
-                    },
-                    "id": link.id,
-                    "current_phase": link.current_phase,
-                    "total_phases": link.total_phases,
-                    "charter_status": match link.charter_status {
-                        sovereign_tools::knowledge_view::timeline::CharterStatus::Clean => "clean",
-                        sovereign_tools::knowledge_view::timeline::CharterStatus::Drifted => "drifted",
-                        sovereign_tools::knowledge_view::timeline::CharterStatus::Unapproved => "unapproved",
-                    },
-                })
-            });
             json!({
                 "atom_id": r.atom_id,
                 "canonical_name": r.canonical_name,
@@ -542,7 +479,6 @@ fn emit_json(rows: &[EntityRow], seen: &[std::path::PathBuf], missing: &[std::pa
                     "follow_up": r.follow_ups,
                     "goal": r.goals,
                 },
-                "atos_link": atos,
                 "borderline": r.borderline,
                 "source_chunks": r.chunks,
                 "first_seen_chunk": r.chunks.iter().min(),

@@ -4,17 +4,14 @@
 //!
 //! Formats `Initiative` interaction timelines into a compact markdown
 //! block bounded by a token budget (default 100). Each entry shows
-//! the initiative name, recent activity, ATOS phase + drift status
-//! when an [`AtosLink`](crate::knowledge_view::timeline::AtosLink) is
-//! attached, and any `goal`-kind notes the user has confirmed.
+//! the initiative name, recent activity, and any `goal`-kind notes
+//! the user has confirmed.
 //!
 //! Like [`relational`](crate::knowledge_view::relational), this
 //! formatter is pure — caller assembles timelines + supplies a
 //! goal-note resolver + a "currently in conversation" predicate.
 
-use crate::knowledge_view::timeline::{
-    AtosLinkKind, CharterStatus, InteractionTimeline, TimelineEntityKind,
-};
+use crate::knowledge_view::timeline::{InteractionTimeline, TimelineEntityKind};
 use crate::knowledge_view::view_kind::ViewKind;
 use sovereign_contracts::tokens::estimate_tokens;
 
@@ -93,12 +90,7 @@ fn strategic_score(
     } else {
         0.0
     };
-    let drift_boost = matches!(
-        t.atos_project.as_ref().map(|l| l.charter_status),
-        Some(CharterStatus::Drifted)
-    );
-    let drift_score = if drift_boost { 1.0 } else { 0.0 };
-    recency + 0.05 * freq + conv_boost + drift_score
+    recency + 0.05 * freq + conv_boost
 }
 
 fn render_entry(t: &InteractionTimeline, goals: &[StrategicGoal], now_unix: i64) -> String {
@@ -121,23 +113,6 @@ fn render_entry(t: &InteractionTimeline, goals: &[StrategicGoal], now_unix: i64)
         if let Some(last) = crate::knowledge_view::timeline::last_seen_at(t) {
             s.push_str(", last ");
             s.push_str(&format_relative_strategic(last, now_unix));
-        }
-    }
-
-    // ATOS link rendering: "ATOS phase 2/4" + "(drift)" annotation.
-    if let Some(link) = &t.atos_project {
-        s.push_str("; ATOS ");
-        match link.kind {
-            AtosLinkKind::Project => s.push_str("project "),
-            AtosLinkKind::Feature => s.push_str("feature "),
-        }
-        match (link.current_phase, link.total_phases) {
-            (Some(p), Some(total)) => s.push_str(&format!("phase {}/{}", p, total)),
-            (Some(p), None) => s.push_str(&format!("phase {}", p)),
-            _ => s.push_str(&link.id),
-        }
-        if matches!(link.charter_status, CharterStatus::Drifted) {
-            s.push_str(" (drift)");
         }
     }
 
@@ -181,9 +156,7 @@ fn format_relative_strategic(ts: i64, now_unix: i64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::knowledge_view::timeline::{
-        AtosLink, AtosLinkKind, CharterStatus, Interaction, TimelineEntityKind,
-    };
+    use crate::knowledge_view::timeline::{Interaction, TimelineEntityKind};
 
     fn initiative_timeline(name: &str, ts: &[i64]) -> InteractionTimeline {
         InteractionTimeline {
@@ -200,7 +173,6 @@ mod tests {
                     source_chunk_id: t.to_string(),
                 })
                 .collect(),
-            atos_project: None,
         }
     }
 
@@ -230,32 +202,6 @@ mod tests {
     }
 
     #[test]
-    fn atos_link_renders_phase_and_drift() {
-        let now = 1_700_000_000;
-        let mut t = initiative_timeline("API migration", &[now - 3 * 86_400]);
-        t.atos_project = Some(AtosLink {
-            kind: AtosLinkKind::Project,
-            id: "api-migration".into(),
-            current_phase: Some(2),
-            total_phases: Some(4),
-            charter_status: CharterStatus::Drifted,
-        });
-        let (out, _) = format_strategic(&[t], &|_: &str| Vec::new(), &|_: &str| false, now, 100);
-        assert!(out.contains("ATOS project phase 2/4"), "got: {}", out);
-        assert!(out.contains("(drift)"));
-    }
-
-    #[test]
-    fn no_atos_link_renders_without_phase_filler() {
-        let now = 1_700_000_000;
-        let t = initiative_timeline("Q3 enterprise push", &[now]);
-        let (out, _) = format_strategic(&[t], &|_: &str| Vec::new(), &|_: &str| false, now, 100);
-        assert!(out.contains("Q3 enterprise push"));
-        assert!(!out.contains("phase"));
-        assert!(!out.contains("n/a"));
-    }
-
-    #[test]
     fn stale_goal_gets_staleness_annotation() {
         let now = 1_700_000_000;
         let t = initiative_timeline("Churn reduction", &[now - 30 * 86_400]);
@@ -272,35 +218,5 @@ mod tests {
         let (out, _) = format_strategic(&[t], &goals, &|_: &str| false, now, 200);
         assert!(out.contains("goal: under 5% by Q3"));
         assert!(out.contains("(no recent discussion)"));
-    }
-
-    #[test]
-    fn drift_boost_lifts_drifted_initiative_to_top() {
-        let now = 1_700_000_000;
-        // One initiative discussed yesterday with no ATOS; one
-        // discussed a month ago with ATOS drift. Drift should still
-        // win the ranking.
-        let recent_clean = initiative_timeline("Recent", &[now - 86_400]);
-        let mut stale_drift = initiative_timeline("Drifted", &[now - 30 * 86_400]);
-        stale_drift.atos_project = Some(AtosLink {
-            kind: AtosLinkKind::Project,
-            id: "drifted".into(),
-            current_phase: Some(1),
-            total_phases: Some(3),
-            charter_status: CharterStatus::Drifted,
-        });
-        let (out, _) = format_strategic(
-            &[recent_clean, stale_drift],
-            &|_: &str| Vec::new(),
-            &|_: &str| false,
-            now,
-            300,
-        );
-        let drifted_pos = out.find("Drifted").unwrap();
-        let recent_pos = out.find("Recent").unwrap();
-        assert!(
-            drifted_pos < recent_pos,
-            "ATOS drift must outrank pure recency in strategic digest:\n{out}"
-        );
     }
 }

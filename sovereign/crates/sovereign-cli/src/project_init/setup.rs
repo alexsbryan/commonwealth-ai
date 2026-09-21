@@ -18,7 +18,7 @@ use std::path::Path;
 // with the reasons git unlocks value in the Sovereign workflow. Prior
 // behavior was to silently treat git-absence as a "deferred" note in
 // the observation report — they'd never see it until much later when
-// an ATOS feature needed git to gate something. Making the prompt
+// a git-dependent feature surfaced it. Making the prompt
 // explicit up-front is the difference between "tool feels
 // suffocating" and "tool is a collaborator."
 
@@ -54,9 +54,7 @@ pub(super) fn resolve_git(
         }
         Some(false) => {
             println!();
-            println!(
-                "    \u{2026} git skipped (--no-git). ATOS features that need git stay disabled."
-            );
+            println!("    \u{2026} git skipped (--no-git). Git-dependent features stay disabled.");
             return GitOutcome::DeclinedByUser;
         }
         None => {}
@@ -71,7 +69,7 @@ pub(super) fn resolve_git(
     // Non-TTY stdin (piped / CI) without explicit flag: auto-init.
     // The rationale: scripts running `svrn project init` in
     // fresh repos are almost always setting up a dev environment,
-    // and git is what every downstream ATOS command assumes. If the
+    // and git is what the downstream workflow assumes. If the
     // user truly wants no git, they pass --no-git.
     if !sovereign_cli_shared::prompts::stdin_is_tty() {
         println!();
@@ -96,7 +94,6 @@ pub(super) fn resolve_git(
     } else {
         eprintln!("    \u{00b7} per-revision diff of your DESIGN.md + CHARTER.md as they evolve");
     }
-    eprintln!("    \u{00b7} `atos feature approve` gates");
     eprintln!("    \u{00b7} amendment history that survives machine changes");
     eprintln!();
 
@@ -143,10 +140,6 @@ pub(super) struct ObservationReportContext {
     /// design doc is a legitimate state — "no languages detected"
     /// becomes "indexing deferred" rather than an actionable error.
     pub(super) design_exists: bool,
-    /// User declined git (either this session or previously).
-    /// Suppresses the "no git" deferred-bucket nudge — they already
-    /// made the call.
-    pub(super) git_declined: bool,
 }
 
 pub(super) fn print_observation_report(
@@ -203,14 +196,6 @@ pub(super) fn print_observation_report(
 
     if obs.has_git {
         ready.push("Git repository".into());
-    } else if !ctx.git_declined {
-        // Not an actionable gap in the strict sense — git is
-        // optional for init — but worth surfacing so the user knows
-        // approvals-via-git won't be available.
-        //
-        // When the user explicitly declined git (now or previously),
-        // suppress this note — they've already seen the tradeoff.
-        deferred.push("No git repository — `atos feature approve` covers the gap.".into());
     }
 
     if obs.embed_model_available {

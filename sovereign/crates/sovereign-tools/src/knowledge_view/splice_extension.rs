@@ -12,43 +12,27 @@
 //!   2. **NoteStore lookup** — answers "what `commitment`/`follow_up`
 //!      notes are anchored to this entity name" for the relational
 //!      block; the `goal`-kind variant feeds the strategic block.
-//!   3. **AtosLookup** — composes the `Initiative` entity name against
-//!      the local `project.toml` + `FeatureCatalog` so the strategic
-//!      digest can render "ATOS project phase 2/4 (drift)".
-//!   4. **in-conversation predicate** — checks whether an entity name
+//!   3. **in-conversation predicate** — checks whether an entity name
 //!      appears in any message of the current `ConversationContext`.
 //!
-//! All four are pure functions plus small struct wrappers — the
+//! All three are pure functions plus small struct wrappers — the
 //! manager owns the I/O paths and calls into this module at splice
 //! time. Formatters and the timeline assembler stay free of database
 //! handles.
-//!
-//! Gated behind the `treesitter` cargo feature alongside `corpus-engine`'s
-//! `notes` and `features` modules — both are required for the lookups.
 
 #![cfg(feature = "treesitter")]
 
 use std::collections::HashMap;
 use std::path::Path;
-#[cfg(feature = "atos")]
-use std::path::PathBuf;
-#[cfg(feature = "atos")]
-use std::sync::Arc;
 
 use corpus_engine::enrichment::atlas::atoms::AtomEnvelope;
 use corpus_engine::enrichment::atlas::writer::{read_atlas_atoms, ATLAS_DIRNAME};
 use corpus_engine_notes::notes::NoteStore;
 use rusqlite::{Connection, OpenFlags};
-#[cfg(feature = "atos")]
-use sha2::{Digest, Sha256};
 use sovereign_core::memory::EntityInventory;
 
 use crate::knowledge_view::relational::{RelationalNote, RelationalNoteKind};
 use crate::knowledge_view::strategic::StrategicGoal;
-#[cfg(feature = "atos")]
-use crate::knowledge_view::timeline::{
-    AtosLink, AtosLinkKind, AtosLookup, CharterStatus, FeatureCatalog,
-};
 
 // ── Chunk-timestamp resolver ────────────────────────────────────
 
@@ -182,202 +166,6 @@ fn shorten_summary(content: &str) -> String {
     format!("{}…", truncated.trim_end())
 }
 
-// ── ATOS lookup composition ─────────────────────────────────────
-
-#[cfg(feature = "atos")]
-/// Concrete `AtosLookup` built from a snapshot of the injected
-/// [`FeatureCatalog`] + `project.toml` lifecycle state.
-///
-/// The snapshot is rebuilt per splice (cheap — a single SELECT on
-/// `features` + per-feature SELECT on `feature_milestones`). We
-/// materialise it eagerly because the underlying calls are async
-/// while the `AtosLookup` trait is sync — pre-loading lets the
-/// formatter stay synchronous.
-pub struct AtosSnapshot {
-    project: Option<ProjectMatch>,
-    features: Vec<FeatureMatch>,
-}
-
-#[cfg(feature = "atos")]
-struct ProjectMatch {
-    folded_name: String,
-    current_phase: Option<u32>,
-    charter_status: CharterStatus,
-}
-
-#[cfg(feature = "atos")]
-struct FeatureMatch {
-    id: String,
-    folded_keys: Vec<String>,
-    current_phase: Option<u32>,
-    total_phases: Option<u32>,
-}
-
-#[cfg(feature = "atos")]
-impl AtosSnapshot {
-    /// Empty snapshot — yields no matches. Used when the caller has
-    /// no `project.toml` or no `features.db` configured.
-    pub fn empty() -> Self {
-        Self {
-            project: None,
-            features: Vec::new(),
-        }
-    }
-
-    /// Build a snapshot. `project_toml_path` may point at a missing
-    /// file (e.g. the user hasn't run `sovereign project init`); the
-    /// snapshot then carries no project entry but still surfaces any
-    /// features. `features` is the injected catalog handle (already
-    /// async-compatible — caller awaits the listing).
-    pub async fn build(
-        features: Option<&Arc<dyn FeatureCatalog>>,
-        project_toml_path: Option<&Path>,
-    ) -> Self {
-        let project = project_toml_path.and_then(load_project_match);
-
-        let mut feature_matches = Vec::new();
-        if let Some(store) = features {
-            if let Ok(rows) = store.list_features().await {
-                for row in rows {
-                    let milestones = store.list_milestones(&row.id).await.unwrap_or_default();
-                    let total = if milestones.is_empty() {
-                        None
-                    } else {
-                        Some(milestones.len() as u32)
-                    };
-                    let current = milestones
-                        .iter()
-                        .filter(|m| m.started_at.is_some())
-                        .map(|m| m.ordinal as u32)
-                        .max();
-                    let folded_keys: Vec<String> = [&row.id, &row.title]
-                        .into_iter()
-                        .map(|s| fold_name(s))
-                        .filter(|s| !s.is_empty())
-                        .collect();
-                    feature_matches.push(FeatureMatch {
-                        id: row.id,
-                        folded_keys,
-                        current_phase: current,
-                        total_phases: total,
-                    });
-                }
-            }
-        }
-
-        Self {
-            project,
-            features: feature_matches,
-        }
-    }
-}
-
-#[cfg(feature = "atos")]
-impl AtosLookup for AtosSnapshot {
-    fn lookup(&self, name: &str) -> Option<AtosLink> {
-        if let Some(p) = &self.project {
-            if p.folded_name == name {
-                return Some(AtosLink {
-                    kind: AtosLinkKind::Project,
-                    id: p.folded_name.clone(),
-                    current_phase: p.current_phase,
-                    total_phases: None,
-                    charter_status: p.charter_status,
-                });
-            }
-        }
-        for f in &self.features {
-            if f.folded_keys.iter().any(|k| k == name) {
-                return Some(AtosLink {
-                    kind: AtosLinkKind::Feature,
-                    id: f.id.clone(),
-                    current_phase: f.current_phase,
-                    total_phases: f.total_phases,
-                    charter_status: CharterStatus::Unapproved,
-                });
-            }
-        }
-        None
-    }
-}
-
-#[cfg(feature = "atos")]
-/// Read project.toml; return a `ProjectMatch` when the file is
-/// present and the lifecycle section carries enough to render an
-/// AtosLink. Drift status compares the current `CHARTER.md` SHA-256
-/// against `lifecycle.charter_hash` — same algorithm as
-/// `sovereign-atos::approval::detect_drift` but inlined here so the
-/// splice path doesn't pull in the `sovereign-atos` crate.
-fn load_project_match(project_toml_path: &Path) -> Option<ProjectMatch> {
-    let body = std::fs::read_to_string(project_toml_path).ok()?;
-    let parsed: toml::Value = toml::from_str(&body).ok()?;
-
-    let project_name = parsed
-        .get("project")
-        .and_then(|t| t.get("name"))
-        .and_then(|v| v.as_str())
-        .map(|s| s.to_string())
-        .or_else(|| {
-            // Same fallback as `ProjectTomlFile::read_with_name_fallback`:
-            // parent of `.sovereign/`. Keeps behaviour consistent for
-            // pre-v2 files that omit the `[project]` section.
-            project_toml_path
-                .parent()
-                .and_then(|p| p.parent())
-                .and_then(|p| p.file_name())
-                .and_then(|n| n.to_str())
-                .map(|s| s.to_string())
-        })
-        .filter(|s| !s.is_empty())?;
-
-    let lifecycle = parsed.get("lifecycle");
-    let current_phase = lifecycle
-        .and_then(|t| t.get("current_phase"))
-        .and_then(|v| v.as_integer())
-        .and_then(|n| u32::try_from(n).ok())
-        .filter(|n| *n > 0);
-    let charter_hash = lifecycle
-        .and_then(|t| t.get("charter_hash"))
-        .and_then(|v| v.as_str())
-        .filter(|s| !s.is_empty())
-        .map(|s| s.to_string());
-
-    let charter_status = match charter_hash {
-        None => CharterStatus::Unapproved,
-        Some(approved_hash) => {
-            // Look for CHARTER.md adjacent to project.toml (.sovereign/).
-            let charter_path = project_toml_path
-                .parent()
-                .map(|p| p.join("CHARTER.md"))
-                .unwrap_or_else(|| PathBuf::from("CHARTER.md"));
-            match std::fs::read(&charter_path) {
-                Ok(bytes) => {
-                    let mut hasher = Sha256::new();
-                    hasher.update(&bytes);
-                    let current_hash = format!("{:x}", hasher.finalize());
-                    if current_hash == approved_hash {
-                        CharterStatus::Clean
-                    } else {
-                        CharterStatus::Drifted
-                    }
-                }
-                Err(_) => CharterStatus::Unapproved,
-            }
-        }
-    };
-
-    Some(ProjectMatch {
-        folded_name: fold_name(&project_name),
-        current_phase,
-        charter_status,
-    })
-}
-
-#[cfg(feature = "atos")]
-fn fold_name(s: &str) -> String {
-    s.trim().to_lowercase()
-}
-
 // ── Entity inventory assembly ───────────────────────────────────
 
 /// Read every Entity atom's `canonical_name` + aliases across the two
@@ -501,12 +289,6 @@ mod tests {
         assert_eq!(shorten_summary("first\nsecond\nthird"), "first");
     }
 
-    #[cfg(feature = "atos")]
-    #[test]
-    fn fold_name_lowers_and_trims() {
-        assert_eq!(fold_name("  API Migration  "), "api migration");
-    }
-
     #[test]
     fn conversation_corpus_matches_entity_whole_word() {
         let corpus = ConversationCorpus::from_messages([
@@ -525,131 +307,6 @@ mod tests {
         assert!(contains_whole_word("here is sarah", "sarah"));
         assert!(!contains_whole_word("sarahkov", "sarah"));
         assert!(!contains_whole_word("oversaraherror", "sarah"));
-    }
-
-    #[cfg(feature = "atos")]
-    #[test]
-    fn atos_snapshot_empty_returns_no_matches() {
-        let snap = AtosSnapshot::empty();
-        assert!(snap.lookup("anything").is_none());
-    }
-
-    #[cfg(feature = "atos")]
-    #[test]
-    fn atos_snapshot_matches_project_name_after_folding() {
-        let snap = AtosSnapshot {
-            project: Some(ProjectMatch {
-                folded_name: "api migration".into(),
-                current_phase: Some(2),
-                charter_status: CharterStatus::Clean,
-            }),
-            features: Vec::new(),
-        };
-        let link = snap.lookup("api migration").unwrap();
-        assert_eq!(link.kind, AtosLinkKind::Project);
-        assert_eq!(link.current_phase, Some(2));
-        assert_eq!(link.charter_status, CharterStatus::Clean);
-
-        assert!(snap.lookup("unrelated").is_none());
-    }
-
-    #[cfg(feature = "atos")]
-    #[test]
-    fn atos_snapshot_matches_feature_id_or_title() {
-        let snap = AtosSnapshot {
-            project: None,
-            features: vec![FeatureMatch {
-                id: "knowledge-view-relational".into(),
-                folded_keys: vec![
-                    "knowledge-view-relational".into(),
-                    "relational and strategic awareness".into(),
-                ],
-                current_phase: Some(3),
-                total_phases: Some(8),
-            }],
-        };
-        let by_id = snap.lookup("knowledge-view-relational").unwrap();
-        assert_eq!(by_id.kind, AtosLinkKind::Feature);
-        assert_eq!(by_id.current_phase, Some(3));
-        assert_eq!(by_id.total_phases, Some(8));
-
-        let by_title = snap.lookup("relational and strategic awareness").unwrap();
-        assert_eq!(by_title.kind, AtosLinkKind::Feature);
-        assert_eq!(by_title.id, "knowledge-view-relational");
-    }
-
-    #[cfg(feature = "atos")]
-    #[test]
-    fn load_project_match_returns_unapproved_when_charter_hash_empty() {
-        let tmp = tempfile::tempdir().unwrap();
-        let sov_dir = tmp.path().join(".sovereign");
-        std::fs::create_dir_all(&sov_dir).unwrap();
-        let path = sov_dir.join("project.toml");
-        std::fs::write(
-            &path,
-            "schema_version = 2\n\n[project]\nname = \"my-app\"\n\n[lifecycle]\ncurrent_phase = 4\n",
-        )
-        .unwrap();
-        let m = load_project_match(&path).unwrap();
-        assert_eq!(m.folded_name, "my-app");
-        assert_eq!(m.current_phase, Some(4));
-        assert_eq!(m.charter_status, CharterStatus::Unapproved);
-    }
-
-    #[cfg(feature = "atos")]
-    #[test]
-    fn load_project_match_drift_when_charter_changed() {
-        let tmp = tempfile::tempdir().unwrap();
-        let sov_dir = tmp.path().join(".sovereign");
-        std::fs::create_dir_all(&sov_dir).unwrap();
-        let charter_path = sov_dir.join("CHARTER.md");
-        std::fs::write(&charter_path, "v1 charter").unwrap();
-        // Hash of "v1 charter" placed in lifecycle.charter_hash; then
-        // mutate the file to force drift.
-        let approved = {
-            let mut h = Sha256::new();
-            h.update(b"v1 charter");
-            format!("{:x}", h.finalize())
-        };
-        std::fs::write(&charter_path, "v2 charter, edited").unwrap();
-        let path = sov_dir.join("project.toml");
-        std::fs::write(
-            &path,
-            format!(
-                "schema_version = 2\n\n[project]\nname = \"my-app\"\n\n[lifecycle]\ncurrent_phase = 1\ncharter_hash = \"{}\"\n",
-                approved
-            ),
-        )
-        .unwrap();
-        let m = load_project_match(&path).unwrap();
-        assert_eq!(m.charter_status, CharterStatus::Drifted);
-    }
-
-    #[cfg(feature = "atos")]
-    #[test]
-    fn load_project_match_clean_when_hash_matches() {
-        let tmp = tempfile::tempdir().unwrap();
-        let sov_dir = tmp.path().join(".sovereign");
-        std::fs::create_dir_all(&sov_dir).unwrap();
-        let charter_path = sov_dir.join("CHARTER.md");
-        let body = "stable charter content";
-        std::fs::write(&charter_path, body).unwrap();
-        let approved = {
-            let mut h = Sha256::new();
-            h.update(body.as_bytes());
-            format!("{:x}", h.finalize())
-        };
-        let path = sov_dir.join("project.toml");
-        std::fs::write(
-            &path,
-            format!(
-                "schema_version = 2\n\n[project]\nname = \"my-app\"\n\n[lifecycle]\ncurrent_phase = 1\ncharter_hash = \"{}\"\n",
-                approved
-            ),
-        )
-        .unwrap();
-        let m = load_project_match(&path).unwrap();
-        assert_eq!(m.charter_status, CharterStatus::Clean);
     }
 
     #[test]

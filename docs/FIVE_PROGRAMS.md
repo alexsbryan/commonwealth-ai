@@ -680,6 +680,17 @@ shipped closure, which is what liftability actually means.
       `quality/ARCH_LAYERS.toml`** — it was admitted 2026-09-21 and is the
       weakest of the four promotions from that day (a store, not vocabulary;
       it survived only because no program claimed ATOS).
+      **EXECUTED 2026-09-21**: three cutters + orchestrator deletions removed
+      ~26k lines — the three bodies, the `project design`/`project plan`/
+      `amend design` flow (design_signals + plan_items WERE the atos state
+      layer), the daemon's ENTIRE middleware framework (it was atos-only,
+      feature-gated), contracts' middleware seam trimmed to what the surviving
+      decision-extractor consumes, ~100 cli-contract rows/journeys, the leaf
+      row, backstage rows, both docs. Surface note: `project_context` MCP tool
+      is GONE (its implementation died with sovereign-atos); `drift_findings`
+      SURVIVES (`sovereign_code::DriftFindingsTool`). Kept, with live
+      consumers: `corpus-engine-notes::decision_extractor` (tools +
+      cli-dev audit-recover), `NoteScope::Feature` notes plumbing.
 - [ ] **`sovereign-work-atlas`** — what it is, since the question came up:
       2,344 lines, "coordination layer for agents sharing a mesh repo". Sessions
       + Claims over a `sovereign_contracts::peer::ReplicatedKv`, a TTL GC task

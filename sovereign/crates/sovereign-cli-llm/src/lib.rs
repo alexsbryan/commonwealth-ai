@@ -5,7 +5,7 @@
 //! binary for those argv[1] values.
 //!
 //! Lives apart from `sovereign-cli` (the dispatcher) and
-//! `sovereign-cli-atos` (project / atos / code / daemon) so each
+//! `sovereign-cli-dev` (project / code / daemon) so each
 //! binary's leaf-edit recompile only touches its own subcommands.
 //!
 //! ## Why this crate has a `[lib]` target (2026-08-21)

@@ -1,23 +1,15 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `svrn audit [feature-id] [--archive]` — the deliverable.
+//! `svrn audit [--recover]` — the deliverable.
 //!
-//! Merges three older commands under one flat name:
+//! Merges two older commands under one flat name:
 //!
-//! - `svrn project audit` (no args)             → `svrn audit`
-//! - `svrn atos report <id>`                    → `svrn audit <id>`
-//! - `svrn atos teardown <id>` / `atos archive` → `svrn audit <id> --archive`
-//!
-//! Phase 1 (this file): a dispatcher over the existing handlers.
-//! Phase 7 rewrites the project-wide path to merge in the four
-//! extraction streams (tool-call patterns, diff extraction, response
-//! mining, commit-message harvesting) so the floor is never empty;
-//! that rewrite lands inside `project_cmd::cmd_audit` so the alias
-//! path benefits too.
+//! - `svrn project audit` (no args) → `svrn audit`
+//! - the old recovery pass          → `svrn audit --recover`
 //!
 //! Argument shape:
-//! - `svrn audit`                       → project-wide rollup
-//! - `svrn audit <feature-id>`          → feature-specific report
-//! - `svrn audit <feature-id> --archive`→ archive the feature
+//! - `svrn audit`           → project-wide rollup
+//! - `svrn audit --recover` → re-run the ToolPatternMatcher over
+//!   tool_call_log sessions with no extraction-source notes yet
 
 pub async fn run(args: &[String]) -> i32 {
     // Help passes straight through — each underlying handler owns
@@ -36,51 +28,8 @@ pub async fn run(args: &[String]) -> i32 {
         return crate::dev_bin::exec("audit-recover", &[]);
     }
 
-    // Detect the `--archive` flag anywhere in args. Strip it before
-    // forwarding so the underlying teardown handler doesn't see a
-    // duplicated flag.
-    let archive_requested = args.iter().any(|a| a == "--archive");
-    let forwarded: Vec<String> = args
-        .iter()
-        .filter(|a| a.as_str() != "--archive")
-        .cloned()
-        .collect();
-
-    // Identify the feature id by taking the first positional arg
-    // (anything not starting with `-`). `None` means project-wide.
-    let feature_id: Option<&String> = forwarded.iter().find(|a| !a.starts_with('-'));
-
-    match (feature_id, archive_requested) {
-        (Some(_), true) => {
-            // `svrn audit <id> --archive` → teardown the feature.
-            // Handler lives in the sovereign-cli-atos sibling binary.
-            crate::dev_bin::exec("atos-teardown", &forwarded)
-        }
-        (Some(_), false) => {
-            // `svrn audit <id>` → per-feature report. The atos
-            // report handler accepts the feature id as the first
-            // positional arg, matching this surface.
-            crate::dev_bin::exec("atos-status-report", &forwarded)
-        }
-        (None, true) => {
-            // `svrn audit --archive` with no id is a user error
-            // — there's no obvious target. Print a short hint rather
-            // than silently archiving the most-recent feature.
-            eprintln!(
-                "  sovereign audit --archive requires a feature id.\n\
-                 \n\
-                 USAGE\n  \
-                   sovereign audit <feature-id> --archive    Archive that feature\n  \
-                   sovereign audit                          Project-wide rollup\n  \
-                   sovereign audit <feature-id>             Per-feature report"
-            );
-            2
-        }
-        (None, false) => {
-            // `svrn audit` (no args) → project-wide rollup.
-            crate::dev_bin::exec("project-audit", &forwarded)
-        }
-    }
+    // `svrn audit` (no args) → project-wide rollup.
+    crate::dev_bin::exec("project-audit", args)
 }
 
 const HELP: crate::util::help::Help = crate::util::help::Help {
@@ -89,34 +38,11 @@ const HELP: crate::util::help::Help = crate::util::help::Help {
     sections: &[
         crate::util::help::HelpSection::Usage(
             "svrn audit                            Project-wide audit\n\
-             sovereign audit <feature-id>               Feature-specific report\n\
-             sovereign audit <feature-id> --archive     Archive the feature",
+             svrn audit --recover                  Re-run tool-call pattern extraction",
         ),
         crate::util::help::HelpSection::Notes(
-            "Replaces the older `svrn project audit` + `svrn atos report` \
-             + `svrn atos teardown` triple. Old names still work and forward here.",
+            "Replaces the older `svrn project audit`. The old name still works and \
+             forwards here.",
         ),
     ],
 };
-
-#[cfg(test)]
-mod tests {
-    /// `--archive` only fires when a feature id is present. Without
-    /// one, `run` short-circuits with a usage hint rather than the
-    /// project-wide path. Verified via the dispatch shape directly
-    /// rather than spawning the full handler stack.
-    #[test]
-    fn dispatch_recognises_flag_layouts() {
-        let args = ["foo".to_string(), "--archive".to_string()];
-        let archive = args.iter().any(|a| a == "--archive");
-        let positional: Vec<&String> = args.iter().filter(|a| !a.starts_with('-')).collect();
-        assert!(archive);
-        assert_eq!(positional, vec![&"foo".to_string()]);
-
-        let args2: Vec<String> = vec![];
-        let archive2 = args2.iter().any(|a| a == "--archive");
-        let positional2: Vec<&String> = args2.iter().filter(|a| !a.starts_with('-')).collect();
-        assert!(!archive2);
-        assert!(positional2.is_empty());
-    }
-}

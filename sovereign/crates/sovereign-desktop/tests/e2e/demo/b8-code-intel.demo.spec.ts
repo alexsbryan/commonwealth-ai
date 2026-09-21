@@ -69,7 +69,6 @@ const SOURCE_ROOTS = [
   "sovereign",
   "corpus-engine",
   "corpus-engine-scip",
-  "corpus-engine-atos",
   "corpus-engine-notes",
   "corpus-engine-watchers",
   "corpus-engine-yield",

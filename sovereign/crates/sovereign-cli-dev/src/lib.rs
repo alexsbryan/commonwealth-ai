@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign-cli-dev` — the workbench: ATOS workflow + project lifecycle +
+//! `sovereign-cli-dev` — the workbench: project lifecycle +
 //! local code intelligence + MCP tool runner.
 //!
 //! ## Why this crate has a `[lib]` target (2026-08-21)
@@ -11,7 +11,7 @@
 //! 0% for the same reason.
 //!
 //! The cost was already being paid daily. `sovereign-cli` is a thin dispatcher
-//! that `exec`s into this binary for `atos` / `project` / `code` / `tools`,
+//! that `exec`s into this binary for `project` / `code` / `tools`,
 //! which is why `AGENTS.md` carries the trap *"rebuild the sibling that owns
 //! the verb you changed, or your change won't run"* and why the dispatcher had
 //! to grow a stale-sibling warning on 2026-07-26. That process boundary exists
@@ -64,10 +64,6 @@ mod archaeology_eval_cmd;
 #[cfg(feature = "workbench")]
 mod atlas_identity;
 #[cfg(feature = "workbench")]
-mod atos_cmd;
-#[cfg(feature = "workbench")]
-mod atos_plugin;
-#[cfg(feature = "workbench")]
 mod audit_extract;
 #[cfg(feature = "workbench")]
 mod audit_recover;
@@ -79,11 +75,6 @@ mod code_cmd;
 mod code_fieldglass;
 #[cfg(feature = "workbench")]
 mod code_map;
-#[cfg(feature = "workbench")]
-mod design_onboarding;
-#[cfg(feature = "workbench")]
-mod design_session;
-#[cfg(feature = "workbench")]
 #[cfg(feature = "workbench")]
 mod drift_cmd_orchestrator;
 #[cfg(feature = "workbench")]
@@ -101,10 +92,6 @@ mod rough_edges_cmd;
 // workspace lint did not catch it — feature unification turns `workbench` on
 // there, so the break only surfaced in the sovereign-cli test build.
 mod intent;
-#[cfg(feature = "workbench")]
-mod plan_composer;
-#[cfg(feature = "workbench")]
-mod plan_enricher;
 #[cfg(feature = "workbench")]
 mod project_cmd;
 #[cfg(feature = "workbench")]
@@ -274,7 +261,6 @@ async fn async_main() -> i32 {
 
     let code: i32 = match cmd {
         // ── Top-level verbs ─────────────────────────────────────────
-        "atos" => atos_cmd::run_atos(rest).await,
         "project" => project_cmd::run_project(rest).await,
         "code" => code_cmd::run_code(rest).await,
         "tools" => tools_cmd::run_tools(rest).await,
@@ -286,20 +272,10 @@ async fn async_main() -> i32 {
         "archaeology-eval" => archaeology_eval_cmd::run(rest).await,
 
         // ── Hidden arms invoked by sovereign-cli delegators ────────
-        // ATOS sub-handlers (from notes/audit/drift/milestone stubs).
-        "atos-status-promote" => atos_cmd::status::cmd_promote(rest).await,
-        "atos-status-report" => atos_cmd::status::cmd_report(rest).await,
-        "atos-teardown" => atos_cmd::teardown::cmd_teardown(rest).await,
-        "atos-spec-accept" => atos_cmd::spec::cmd_spec_accept(rest).await,
-        "atos-spec-diff" => atos_cmd::spec::cmd_spec_diff(rest).await,
-        "atos-milestone-end" => atos_cmd::milestone::cmd_end_milestone(rest).await,
-
         // project_cmd sub-handlers (from status/charter/etc stubs).
         "project-status" => project_cmd::cmd_status(rest).await,
         "project-charter" => project_cmd::cmd_charter(rest).await,
         "project-amend" => project_cmd::cmd_amend(rest).await,
-        "project-design" => project_cmd::cmd_design(rest).await,
-        "project-plan" => project_cmd::cmd_plan(rest).await,
         // `project-init` is gone (2026-08-07): `svrn init` used to spawn this
         // sibling to reach `cmd_init`. `cmd_init` now lives in the dispatcher
         // itself, which calls it in-process — no spawn, and `svrn init --help`

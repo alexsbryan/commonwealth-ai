@@ -4,16 +4,14 @@
 //! Merges:
 //!
 //! - `svrn reflect` (the developer-facing read view)  → `svrn notes`
-//! - `svrn atos promote <id> --to <scope>`            → `svrn notes promote ...`
 //! - new write surface (used by Phase 7 commit harvester)  → `svrn notes add ...`
 //!
-//! Phase 1 (this file): scaffolds the three surfaces. The default
+//! Phase 1 (this file): scaffolds the two surfaces. The default
 //! read path delegates to [`crate::reflect_cmd::run_reflect`] so the
 //! 30-day reflection view that engineers rely on today keeps working
 //! verbatim. `add` is the new write surface — Phase 7 hooks the
 //! daemon's git-HEAD-poll harvester here when it detects a new
-//! commit message worth recording. `promote` forwards to the
-//! existing atos handler.
+//! commit message worth recording.
 //!
 //! The Phase 7 multi-source audit (extracted/inferred/observed
 //! sources from `corpus_engine_notes::NoteSource`) lights up here when the
@@ -138,7 +136,6 @@ pub async fn run(args: &[String]) -> i32 {
         Some("add") => cmd_add(&args[1..]).await,
         Some("list") => cmd_list(&args[1..]).await,
         Some("retrieval-audit") => crate::notes_retrieval_cmd::run(&args[1..]).await,
-        Some("promote") => crate::dev_bin::exec("atos-status-promote", &args[1..]),
         Some("migrate-from") => cmd_migrate_from(&args[1..]).await,
         Some("rationalize") => cmd_rationalize(&args[1..]).await,
         Some("gc") => cmd_gc(&args[1..]).await,
@@ -867,7 +864,6 @@ const HELP: crate::util::help::Help = crate::util::help::Help {
              svrn notes list [--query <s>]        List / search the notes themselves\n\
              svrn notes --query <s>               Same as `list --query` (search implies the list view)\n\
              svrn notes list --id <id>            Read one note by id (8-char short ids work)\n\
-             svrn notes promote <id> --to <s>     Promote scope\n\
              svrn notes migrate-from <path>       Merge a stray local notes.db into ~/.svrnmesh/notes.db\n\
              svrn notes rationalize               Candidate report: consolidate/supersede moves (no LLM, no writes)\n\
              svrn notes rationalize --distill     Preview the LLM-written survivors/verdicts (no writes)\n\
@@ -877,7 +873,7 @@ const HELP: crate::util::help::Help = crate::util::help::Help {
              svrn notes --since 7d --tool <name>  Reflection filters",
         ),
         crate::util::help::HelpSection::Notes(
-            "Replaces `svrn reflect` and `svrn atos promote`. Old names \
+            "Replaces `svrn reflect`. Old names \
              still work and forward here. Bare `svrn notes` is the reflection \
              SUMMARY; `svrn notes list` is the notes themselves — the same \
              NoteStore::read_notes query the MCP `notes` tool uses, so the two \

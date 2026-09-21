@@ -24,9 +24,9 @@
 //! # Why this crate
 //!
 //! The check has two sides: the surface LIST lives in `sovereign_tools::
-//! mcp_surface` and the tool IDS live in `sovereign-code` / `sovereign-atos`.
+//! mcp_surface` and the tool IDS live in `sovereign-code`.
 //! It ran from `sovereign-tools/tests/`, which made `sovereign-code`,
-//! `sovereign-atos`, `corpus-engine-scip` and `corpus-engine-watchers`
+//! `corpus-engine-scip` and `corpus-engine-watchers`
 //! dev-dependencies of `sovereign-tools` — four edges leaving the `svrn`
 //! package closure for a test (`quality/ARCH_LAYERS.toml`, boundary-gate).
 //! `sovereign-cli-dev` already holds both sides as NORMAL dependencies and is
@@ -237,16 +237,9 @@ fn new_tools_advertise_canonical_ids() {
     assert_eq!(spec.descriptor().id, "spec");
     assert!(MCP_TOOLS_SPEC_GATED.contains(&"spec"));
 
-    // drift → SPEC_GATED tier. Ran only under sovereign-tools' `atos` feature
-    // before the move; this crate pins `sovereign-atos`, so it always runs.
-    let drift = sovereign_atos::tools::DriftTool::new().declared();
-    assert_eq!(drift.descriptor().id, "drift");
-    assert!(MCP_TOOLS_SPEC_GATED.contains(&"drift"));
-
-    // Phase 2 unconditionally unions the two tiers, so all three
-    // are exposed today; Phase 5 will gate spec/drift on
-    // `.sovereign/features/*/spec.md` presence.
-    for name in ["build", "spec", "drift"] {
+    // Phase 2 unconditionally unions the two tiers, so both are
+    // exposed today.
+    for name in ["build", "spec"] {
         assert!(is_mcp_exposed(name), "{name} should be exposed");
     }
 }
