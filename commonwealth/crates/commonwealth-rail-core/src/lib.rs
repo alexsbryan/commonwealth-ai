@@ -549,6 +549,9 @@ impl RingVerifier for Ed25519Verifier {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod tests_sealing;
 // The roster-provenance half, split out when the two together passed the
 // 1200-line ceiling (ARCH §3.2). Named for its subject, not numbered.
 #[cfg(test)]

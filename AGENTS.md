@@ -123,7 +123,7 @@ If you change a subsystem, update its `SYSTEM_OVERVIEW.md` entry in the same com
 
 **The CLI binary is `sovereign-cli`.** A symlink at `~/.local/bin/sovereign` lets you type `sovereign …`; if it's missing, run `sovereign-cli` directly or `ln -sf $(realpath target/debug/sovereign-cli) ~/.local/bin/sovereign`. When the daemon isn't reachable, `sovereign doctor` is the first stop.
 
-**`svrn` and `sovereign` are the same binary under two names, and not every host has both.** Shipped skills and docs invoke `svrn` (the prod symlink); this dev host currently has only `sovereign`. If a documented `svrn …` command reports "command not found", retry it verbatim as `sovereign …` before concluding anything is broken — and do not "fix" the doc, the two names are intentional.
+**`svrn` and `sovereign` are the same binary under two names, and not every host has both.** Shipped skills and docs invoke `svrn` (the prod symlink); this dev host has only `sovereign`. If a documented `svrn …` reports "command not found", retry it verbatim as `sovereign …` before concluding anything is broken — do not "fix" the doc, the two names are intentional.
 
 **Build DEBUG, not `--release`.** `cargo build -p <crate>` and invoke `target/debug/<bin>`. The deployed symlink points at `target/debug/sovereign-cli`, so a release-only build is invisible to the toolchain you are actually running — and `--release` costs minutes per iteration. The `--release` flag appears below only where a specific path genuinely requires it (OCR, and `scripts/dev-release.sh` for the deployed daemon); everywhere else the examples name **which crate** to build, not which profile. The dispatcher's own error text ("Build it with `cargo build -p X --release`") is likewise wrong about the profile on this host — drop the flag.
 
@@ -142,7 +142,7 @@ So `lint_status`/`test_status`/`build` (under `tools`) live in **`sovereign-cli-
 
 **The CLI form is the portable one and it works in every harness — including harnesses with no MCP at all, and with the daemon down.** Where your harness does expose these as MCP tools (Claude Code does; pi deliberately does not), prefer that path: it is faster and costs fewer tokens. Both resolve the tool from the same `ToolRegistry` and run the same `Tool::execute` body.
 
-(This said "both reach the same `ToolRegistry::execute()`" until 2026-09-11. There is no `execute` on `ToolRegistry` — checked, its methods are `get`/`get_arc`/`descriptors`/`register*`/`install_declared`/`record_call`/`call_counts`/`remove_by_prefix`/`call_cached`. Each surface pulls a `&dyn Tool` out of `get()` and calls `.execute` itself: `sovereign-mesh/src/mcp_router.rs:579` for the MCP mount, `sovereign-cli-dev/src/tools_cmd/mod.rs:409` for the CLI, and about nine other sites besides. **There is no funnel**, which also means the two paths are not equivalent in what they pass: the MCP mount builds a `ToolContext` with `conversation_id: "mcp"` and an `agent_session_token`, the CLI builds one with `working_directory` from the cwd and no token. If a tool behaves differently under the two, that is where to look. `call_cached` is the nearest thing to a shared door and its own doc sanctions the bypass; `record_call` fires from one site only, so the call counter and the result cache cover disjoint subsets of invocations.)
+(**There is no funnel.** This said "both reach the same `ToolRegistry::execute()`" until 2026-09-11; `ToolRegistry` has no `execute`. Each surface pulls a `&dyn Tool` from `get()` and calls `.execute` itself — `sovereign-mesh/src/mcp_router.rs:579` for the MCP mount, `sovereign-cli-dev/src/tools_cmd/mod.rs:409` for the CLI, ~nine sites besides — so the two are not equivalent in what they pass: the MCP mount builds a `ToolContext` with `conversation_id: "mcp"` and an `agent_session_token`, the CLI one with `working_directory` from the cwd and no token. If a tool behaves differently under the two, look there. `record_call` fires from one site only, so the call counter and the result cache cover disjoint invocations.)
 
 ```
 sovereign tools list                           # manifest, grouped by Effect × Scope
@@ -174,11 +174,11 @@ together with the trigger that reaches it.
 <!-- portable:start precision tools + read budget -->
 ### Precision tools — use these instead of reading files
 
-**DO NOT read an entire file to find a type definition, method signature, or field list.** Call `symbols("TypeName")` first. It returns the exact definition with file path and line number in one round-trip. Only fall back to Read when you need the full surrounding context.
+**DO NOT read an entire file to find a type definition, method signature, or field list.** Call `symbols("TypeName")` first — it returns the definition with file path and line number in one round-trip. Fall back to Read only when you need the surrounding context.
 
-**DO NOT grep for a function's callers.** Call `callers("function_name")` — it is compiler-resolved (SCIP), catches trait dispatch, and is exact. Grep misses dynamic dispatch entirely.
+**DO NOT grep for a function's callers.** Call `callers("function_name")` — compiler-resolved (SCIP), exact, and it catches the trait dispatch grep misses entirely.
 
-**DO NOT guess at a type's fields or a constructor's arguments.** Even during greenfield work, patterns come from existing code. `symbols` before assuming.
+**DO NOT guess at a type's fields or a constructor's arguments.** Even in greenfield work, patterns come from existing code. `symbols` before assuming.
 
 ### Read budget — three rules that prevent the 74k-token slide
 
@@ -186,13 +186,13 @@ The /context audit on 2026-05-12 attributed 74.3k tokens to file reads, with ~22
 
 **DO NOT Read a Rust source file before calling `symbols` (or `code_search`) on a name from your task description.** Failure mode: you Read 100+ lines hunting for `narrative_view` then learn it's at line 1360 — a `symbols("narrative_view")` call would have returned `file:1360` in one round-trip with 1/30th the tokens. Empirically observed: 9 separate Reads of `atlas_drift_report.rs` in one session; 7 of them would have been replaced by 2 `symbols` calls + tighter Reads.
 
-**DO NOT Read a file you just Edited.** Edit's contract guarantees the change applied — the harness errors loudly if `old_string` wasn't unique or wasn't found. Re-Reading "to verify" is a tell that you don't trust the harness, not a real signal. Failure mode: 5k tokens spent re-Reading `atoms.rs` after each of the 8 anchor-field edits.
+**DO NOT Read a file you just Edited.** Edit's contract guarantees the change applied — the harness errors loudly if `old_string` was not unique or not found. Re-Reading "to verify" is a tell that you distrust the harness, not a signal. Failure mode: 5k tokens spent re-Reading `atoms.rs` after each of the 8 anchor-field edits.
 
 **DO NOT Read the same `(file, offset)` twice in one session.** If you need that context again, scroll the conversation up — your prior Read is still in the message history. The file hasn't changed unless you Edited it (see rule above). Failure mode: re-Reading `atlas_drift_report.rs:357-446` three times across the drift work; the second and third were pure duplicates of the first.
 
 When unsure: prefer `symbols(name)` → targeted Read of 15-25 lines around the returned site. The combined cost beats a blind Read every time.
 
-**Batch independent tool calls into one message.** Every extra serial request re-bills the entire cached context. Measured fleet-wide (2026-07-23): about 1 in 7 small serial calls needed nothing from the call before it — different files Read back-to-back, unrelated greps, separate `symbols` lookups. If the next call's inputs don't depend on the previous call's output, send both calls in the same message.
+**Batch independent tool calls into one message.** Every extra serial request re-bills the whole cached context. Measured fleet-wide (2026-07-23): about 1 in 7 small serial calls needed nothing from the call before it — different files Read back-to-back, unrelated greps, separate `symbols` lookups. If the next call's inputs don't depend on the previous call's output, send both calls in the same message.
 
 <!-- portable:end -->
 ### When to use which tool
@@ -307,11 +307,11 @@ The lint script reports the host build failure as a build failure and names the 
 
 **`--filter` sets the BUILD scope too, so a vague pattern costs minutes.** The script picks crates by `git grep`-ing the literal filter through `*.rs`, so a broad substring degrades — silently, by design — to a full-workspace build (measured 2026-08-31: `--filter ring` 280s, 275s of it build; the whole test name 37.5s; bare `cargo test -p` no better — note `db026a90`). Pass the whole test function name, or scope with `--package`. The script prints the crate count it resolved and, past a third of the workspace, the cost — on stderr, before the build starts. It is a hint, not a refusal: a deliberate sweep is legitimate.
 
-Both exit non-zero on failure and both write a raw cargo log for triage, so a failure never needs a second run to diagnose. Gate on the exit code.
+Both exit non-zero on failure and write a raw cargo log, so a failure never needs a second run to diagnose. Gate on the exit code.
 
 **Reading the results — three guards bare cargo does not have:**
 
-- **A zero-test run is never green.** `pass: 0 fail: 0` exits **4** with a banner naming the resolved scope. A filtered run that matched nothing verified nothing (note 8def98d7). `--allow-empty` opts out.
+- **A zero-test run is never green.** `pass: 0 fail: 0` exits **4**, naming the resolved scope: a filtered run that matched nothing verified nothing (note 8def98d7). `--allow-empty` opts out.
 - **Unattributable results exit 5.** A concurrent nextest run overwrote the shared JUnit report, so the counts are not yours. Re-run, or `--engine cargo`.
 - **A failed build is a failure, not a pass.** Both scripts now report build-script failures, bad feature flags, and link errors as errors. (Until 2026-07-28 the lint adapter counted only rustc diagnostics and reported everything else as green.)
 
@@ -323,31 +323,27 @@ feature that has not passed it is not done.** Install it once
 ONE-MINUTE budget (~22s warm), it scopes to the diff and runs rustfmt, the
 workspace compile, the eight blocking xtask ratchets
 (docs/arch/boundary/layer/lock/layout/env/concept) and the desktop node gates
-concurrently, then two ADVISORY size ratchets that report and let the push
-through. The ratchets are the half no test run speaks to; each failure names
-its own fix command. Two rules:
+concurrently, then two ADVISORY size ratchets. The ratchets are the half no
+test run speaks to; each failure names its own fix command. Two rules:
 
 - **A file over its size ceiling is SPLIT, by whoever pushed it over, in the
-  same piece of work. It is never re-pinned and it is never a question for the
-  operator** (operator direction 2026-09-21: "Why do I need to decide what to
-  do when files go over the limit? The answer is never to repin."). `arch-gate`
-  already says it — "Trim or split (ARCH §3.1)" — and what made it a question
-  was the re-pin recipe below being read as an option for it. It is not one.
-  That covers a file that GREW past its slack and a file that ENTERED the
-  800-1200 approach band: move what you added into a sibling file, behaviour
-  preserved, one file per commit, and watch the gate go green.
+  same piece of work — never re-pinned, never an operator question** (operator
+  direction 2026-09-21: "The answer is never to repin."). It covers a file that
+  GREW past its slack and one that ENTERED the 800-1200 band: move what you
+  added into a sibling file, behaviour preserved, and watch the gate go green.
+  A trailing `#[cfg(test)] mod tests` moves under `#[path]` — the worked
+  precedent is `sovereign-core/src/router.rs:3458`.
 - **Any other ratchet failure is not fixed by `--update-baseline` on your working
   tree** — that absorbs your own growth along with everything else. Re-pin at
-  `origin/main` (a worktree, then copy `quality/baselines/` back) so what is
-  already public is separated from what this push adds, and ledger the
-  acceptance in `SYSTEM_OVERVIEW.md §10` (§10.1c/§10.1d are worked examples).
-- **`--tighten` is always safe** — it banks a real cut and never raises.
+  `origin/main` (a worktree, then copy `quality/baselines/` back) and say in the
+  commit body what the lines bought. The baseline diff is the record — there is
+  no ledger, because a document of exceptions to a rule only ever grows.
+- **`--tighten` is always safe** — it banks a cut and never raises.
 
-**The two advisory ones are the size term, and they are new.** Every gate
-above them answers "is this correct?", and correctness is monotone: no
-amount of added code can make a passing test fail. So "done" has never
-carried a size term, and the workspace runs about +622k / -179k over 90 days
-(`quality/DELETION.md`) — 29 lines deleted per 100 added.
+**The two advisory ones are the size term.** Every gate above them answers
+"is this correct?", and correctness is monotone — no amount of added code
+makes a passing test fail. So "done" never carried a size term, and the
+workspace runs about +622k / -179k over 90 days (`quality/DELETION.md`).
 
 - `cargo xtask size-gate` — code lines per crate, comments and blanks
   excluded, `<crate>::tests` counted apart, plus a key each for `scripts/` and
@@ -360,7 +356,7 @@ carried a size term, and the workspace runs about +622k / -179k over 90 days
   155k lines to two growing lanes before this.
 
 Both are `warn_gate` deliberately: a gate in arrears, or one whose
-false-positive rate nobody has measured, is how people learn to reach for
+false-positive rate nobody measured, is how people learn to reach for
 `--no-verify`. Promote each on its own evidence — size-gate after a week of
 pushes with no false positive, deletion the day no lane grows.
 
@@ -371,7 +367,7 @@ toolbox run -c sovereign-vulkan ./scripts/sovereign-lint.sh --human --full
 toolbox run -c sovereign-vulkan ./scripts/sovereign-test.sh --human
 ```
 
-Gate on the **exit code**, not on the summary line you read. Both cover every member of the monorepo Cargo workspace and resolve the repo's real feature contract (named once under "## Architecture"). Warm: lint ~27s, tests ~45s; cold ~3m30s, of which the wrapper is under a second.
+Gate on the **exit code**, not on the summary line you read. Both cover every member of the monorepo Cargo workspace and resolve the repo's real feature contract (named once under "## Architecture"). Warm: lint ~27s, tests ~45s; cold ~3m30s.
 
 **If you touched retrieval, routing, synthesis, enrichment or inference, add the quality gate: `svrn quality check` (~30m).** The two scripts above are the *build* gate — neither runs a model against a question bank, so both stay green straight through an answer-quality regression. The check reports four verdicts per lane (passed / failed / could-not-judge / never-ran) and persists the table to `target/quality-check/<stamp>/summary.json`; gate on its exit code, and read lane KIND before you read a number (see `.claude/docs/MAIN_SESSION_PROTOCOL.md` §"Measuring quality"). A single lane runs alone with `--lane <id>`. If your change is scoped to retrieval, the lane that speaks to it is `retrieval-prod`, not the synth lane. `./scripts/sovereign-ci-bench.sh` is the FULL nightly run — hours, not minutes — and is where drift against committed baselines is judged.
 
@@ -519,10 +515,10 @@ across several machines; these keep them consistent.)
   unmeasured whole (tone, false caveats, suppressed-correct answers).
   Prefer structural, glassbox mechanisms; surface trade-offs rather than
   silently optimizing a number.
-- **Fluent CLI is a feature.** A known workflow ("kick off the SEP
-  ingest") should be ~3 shell lines (daemon start · pipeline run ·
-  status). If it isn't, the friction is a bug in the CLI/recipe/config —
-  fix the bug, don't wrap ceremony around it.
+- **Fluent CLI is a feature.** A known workflow ("kick off the SEP ingest")
+  should be ~3 shell lines (daemon start · pipeline run · status). If it is
+  not, the friction is a bug in the CLI/recipe/config — fix the bug, don't
+  wrap ceremony around it.
 - **No trailing `/schedule` offers.** Don't close turns proposing to
   schedule background follow-ups; the maintainer reads it as pestering.
 <!-- portable:end -->

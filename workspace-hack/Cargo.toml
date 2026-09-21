@@ -25,6 +25,7 @@ chrono = { version = "0.4", features = ["serde"] }
 cipher = { version = "0.4", default-features = false, features = ["block-padding"] }
 crossbeam-epoch = { version = "0.9" }
 data-encoding = { version = "2" }
+datafusion-execution = { version = "52" }
 deadpool = { version = "0.12", features = ["rt_tokio_1"] }
 deadpool-runtime = { version = "0.1", default-features = false, features = ["tokio_1"] }
 der = { version = "0.7", default-features = false, features = ["oid", "pem", "std"] }
@@ -54,7 +55,13 @@ hyper = { version = "1", features = ["full"] }
 hyper-util = { version = "0.1", features = ["client-legacy", "client-proxy", "server-auto", "service"] }
 i_overlay = { version = "4", features = ["allow_multithreading"] }
 idna = { version = "1" }
+indexmap = { version = "2" }
 inout = { version = "0.1", default-features = false, features = ["block-padding"] }
+jiff = { version = "0.2", features = ["serde"] }
+lance = { version = "4" }
+lance-datafusion = { version = "4", default-features = false, features = ["geo"] }
+lance-index = { version = "4", default-features = false, features = ["geo"] }
+lance-io = { version = "4", default-features = false, features = ["aws", "azure", "gcp", "huggingface", "oss", "tencent"] }
 lazy_static = { version = "1", default-features = false, features = ["spin_no_std"] }
 log = { version = "0.4", default-features = false, features = ["std"] }
 lopdf = { version = "0.34" }
@@ -67,6 +74,7 @@ num-complex = { version = "0.4" }
 num-integer = { version = "0.1", features = ["i128"] }
 num-iter = { version = "0.1", default-features = false, features = ["i128"] }
 num-traits = { version = "0.2", features = ["i128", "libm"] }
+object_store = { version = "0.12", features = ["aws", "azure", "gcp"] }
 once_cell = { version = "1" }
 percent-encoding = { version = "2" }
 petgraph = { version = "0.8" }
@@ -108,6 +116,7 @@ spki = { version = "0.7", default-features = false, features = ["pem", "std"] }
 stable_deref_trait = { version = "1" }
 subtle = { version = "2", default-features = false, features = ["const-generics"] }
 syn-f595c2ba2a3f28df = { package = "syn", version = "2", features = ["extra-traits", "fold", "full", "visit", "visit-mut"] }
+sync_wrapper = { version = "1", default-features = false, features = ["futures"] }
 tauri = { version = "2", features = ["tray-icon"] }
 tauri-utils = { version = "2", default-features = false, features = ["build-2", "compression", "resources"] }
 time = { version = "0.3", features = ["local-offset", "macros", "serde-well-known"] }
@@ -128,6 +137,9 @@ uuid = { version = "1", features = ["js", "serde", "v4"] }
 winnow = { version = "0.7" }
 zerocopy = { version = "0.8", default-features = false, features = ["derive", "simd"] }
 zeroize = { version = "1", features = ["derive"] }
+zstd = { version = "0.13", features = ["experimental", "zstdmt"] }
+zstd-safe = { version = "7", default-features = false, features = ["arrays", "experimental", "legacy", "std", "zdict_builder", "zstdmt"] }
+zstd-sys = { version = "2", default-features = false, features = ["experimental", "legacy", "std", "zdict_builder", "zstdmt"] }
 
 [build-dependencies]
 aho-corasick = { version = "1" }
@@ -150,6 +162,7 @@ getrandom-6f8ce4dd05d13bba = { package = "getrandom", version = "0.2", default-f
 hashbrown-3575ec1268b04181 = { package = "hashbrown", version = "0.15" }
 hashbrown-9067fe90e8c1f593 = { package = "hashbrown", version = "0.17" }
 idna = { version = "1" }
+indexmap = { version = "2" }
 log = { version = "0.4", default-features = false, features = ["std"] }
 memchr = { version = "2" }
 miniz_oxide = { version = "0.8", features = ["simd"] }
@@ -192,7 +205,9 @@ winnow = { version = "0.7" }
 zerocopy = { version = "0.8", default-features = false, features = ["derive", "simd"] }
 
 [target.x86_64-unknown-linux-gnu.dependencies]
+async-compression = { version = "0.4", default-features = false, features = ["brotli", "gzip", "tokio"] }
 bitflags = { version = "2", default-features = false, features = ["serde", "std"] }
+compression-codecs = { version = "0.4", default-features = false, features = ["brotli", "gzip"] }
 futures-executor = { version = "0.3" }
 futures-task = { version = "0.3", default-features = false, features = ["std"] }
 getrandom-9fbad63c4bcf4a8f = { package = "getrandom", version = "0.4", default-features = false, features = ["std", "sys_rng"] }
@@ -222,8 +237,10 @@ syn-dff4ba8e3ae991db = { package = "syn", version = "1" }
 toml = { version = "0.8" }
 
 [target.aarch64-apple-darwin.dependencies]
+async-compression = { version = "0.4", default-features = false, features = ["brotli", "gzip", "tokio"] }
 bitflags = { version = "2", default-features = false, features = ["serde", "std"] }
 block2 = { version = "0.6" }
+compression-codecs = { version = "0.4", default-features = false, features = ["brotli", "gzip"] }
 dispatch2 = { version = "0.3" }
 errno = { version = "0.3" }
 futures-task = { version = "0.3", default-features = false, features = ["std"] }
