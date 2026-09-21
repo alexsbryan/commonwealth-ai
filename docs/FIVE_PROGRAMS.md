@@ -568,6 +568,34 @@ cli-dev `drift_cmd_orchestrator.rs:617`), `plan_schema` (core→inference dev, m
 the enrichment catalog reader (`list_enriched_corpora_in` — port trait in contracts),
 the authoring-harness drive (`run_over_frozen_sample` — bench host or leaf).
 
+### The scip reader split — the next big lever, spec'd (100 violations at 28fc22ff4)
+
+`corpus-engine-scip` carries **7 inbound red edges** (`corpus-engine` [ingest];
+`cli`, `cli-daemon`, `cli-shared`, `core`, `daemon`×2 [svrn]) and all-external
+deps, but it both READS (`ScipGraph::open/open_with_integrity`, `ScipSymbolRecord`,
+`Caller`, `ScipGraphStats`, `build_symbol_trace`, `render_trace`) and WRITES
+(`scip_export::{export_all, check_exporters}`, `lsp_tier`, `tool_path`) the SCIP
+index §2 gives to `svrn code`. Promotion would be the fake zero — the writer
+owns the program's data. The split:
+
+- READER cluster → a new leaf: `scip_graph.rs` (3,691 lines), `scip_graph_edges.rs`,
+  `scip_proto.rs`, `trace.rs`, `error.rs`. Name it with `sovereign code converge
+  noun <Name> --corpus-id commonwealth-ai` first (candidates: `scip-read`,
+  `scip-graph`); add the `[[package_leaf]]` row + root `Cargo.toml` member and
+  `[workspace.dependencies]` entry (orchestrator's edits, not a cutter's).
+- `corpus-engine-scip` re-exports the reader at its old paths, so every [code]-package
+  user (`sovereign-code`, `code-facts`, `code-next-edit`, `corpus-engine-watchers`,
+  `cli-dev`) is untouched.
+- Repoint the READER-shaped cross-package uses: `sovereign-core/src/runtime/code_trace.rs:38`
+  (`build_symbol_trace`, `render_trace`, `ScipGraph`), `sovereign-daemon/src/project_http.rs:300`
+  + `routes_edit_predictions.rs:596` + `tests/main/next_edit_symbol_lane_e2e.rs:21`,
+  `sovereign-cli-shared/src/scip.rs:17`. Expected: −4 edges (core, daemon×2, cli-shared).
+- WRITER-shaped cross-package uses are seams needing an operator decision, not a
+  repoint: `sovereign-cli-shared/src/observation.rs:26` (`scip_export` — does a
+  non-code host write the code index?), `corpus-engine` ([ingest] exporting a SCIP
+  index — one owner per data dir says no), `sovereign-cli` (find its site). Each is
+  a dial to the code program or a dropped feature.
+
 ### The cli-llm split — 24 edges; the partition is MEASURED (scouts, 2026-09-21)
 
 - [x] Inventory + dep matrix + dispatch shape measured (3 read-only scouts at
