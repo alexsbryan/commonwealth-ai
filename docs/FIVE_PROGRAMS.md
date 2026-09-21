@@ -538,6 +538,36 @@ plus two cli-mesh fallbacks.
       `daemon_variant_census.rs:214`, desktop `attach_construction_census`)
       must move/update with them.
 
+### The leaf lever — MEASURED 2026-09-21 (103 violations at e8fee31a6)
+
+The gate counts ONE edge per (source-crate, target-crate). Promoting a target
+to `[[package_leaf]]` closes every inbound edge at once — but only if the crate
+is honestly a leaf (§11's rule: shared vocabulary or a thin reader, never a
+store a program owns on disk; a zero reached by promotion is fake). Eligibility
+of every non-leaf target, by "are all its workspace deps leaves/crates.io":
+
+| target | inbound edges | leaf-eligible? | verdict |
+|---|---|---|---|
+| `corpus-engine-scip` | **7** | deps all external | closest — but it READS (`ScipGraph::open`, `build_symbol_trace`) and EXPORTS (`scip_export`) the SCIP index, and §2 gives that index to `svrn code`. Fix = split: a thin reader leaf + the exporter stays [code]; repoint the reader-shaped uses (core, mesh, daemon `routes_edit_predictions.rs:596`). |
+| `sovereign-pods` | 2 | deps all external | program logic (pod provisioning) — promotion would be fake |
+| `commonwealth-core` | 2 | deps all external | cmnwlth substrate (NodeId …) — plausible vocabulary, but it is the program's own crate |
+| `sovereign-scheduler` | 1 | deps all external | "arithmetic over the published language" — logic |
+| `serving-policy` | 1 | deps all external | "the admission decider" — logic |
+| `sovereign-peer-wire` | 1 | needs `commonwealth-rail` | blocked on the rail-core wire types below |
+| `corpus-engine` 13, `sovereign-mesh` 4, `sovereign-core` 4, `sovereign-daemon` 4, `sovereign-tools` 3, `sovereign-store` 3, `sovereign-enrichment-*` 5+3, `sovereign-inference` 4 | — | no | real program crates: dial, trait, or split |
+
+The recurring seam list from the cheap-edge pass (each is one task, file:line in
+the commit at `e8fee31a6`): `ScipGraph` (4 sources — the one shared home closes
+core+mesh+daemon+cli-shared), `SovereignConfig`/`WatchersConfig`/`RunnerConfig`
+(3 sources: cli-daemon `checks_sovereign.rs:662`, cli-dev `tools_cmd/registry.rs:327`,
+daemon `bootstrap.rs:2582`), the rail wire types (`RailAct`/`Admission`/`Roster`/`Payload`,
+cli-shared `rail.rs:36`), the drift fingerprint codec (`sovereign-code`, cli-llm +
+cli-dev `drift_cmd_orchestrator.rs:617`), `plan_schema` (core→inference dev, move to
+`sovereign-contracts`), `guest_route::open_route` (a security decider — KEEP the edge),
+`enrich_cmd::paths`/`inference_client` (already leaf re-exports — repoint the consumers),
+the enrichment catalog reader (`list_enriched_corpora_in` — port trait in contracts),
+the authoring-harness drive (`run_over_frozen_sample` — bench host or leaf).
+
 ### The cli-llm split — 24 edges; the partition is MEASURED (scouts, 2026-09-21)
 
 - [x] Inventory + dep matrix + dispatch shape measured (3 read-only scouts at
