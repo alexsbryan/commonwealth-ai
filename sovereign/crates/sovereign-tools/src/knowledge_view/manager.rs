@@ -26,9 +26,9 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use corpus_engine::engine::CorpusEngine;
 use corpus_engine::enrichment::skeleton::FieldSkeleton;
-use corpus_engine::error::{Error as CorpusError, Result as CorpusResult};
 use corpus_engine::recipe::Recipe;
 use corpus_engine::types::{CorpusSpec, InferenceFn};
+use corpus_index::error::{Error as CorpusError, Result as CorpusResult};
 use sovereign_core::observer::StateStoreObserver;
 use sovereign_core::traits::LandscapeDigestProvider;
 use sovereign_core::types::{ConversationContext, LandscapeDigest};
@@ -1125,11 +1125,11 @@ mod tests {
         std::fs::create_dir_all(&indexes_dir).unwrap();
         std::fs::create_dir_all(&recipes_dir).unwrap();
         let _ = std::fs::File::create(&db_path).unwrap();
-        let embed: corpus_engine::EmbedFn = std::sync::Arc::new(|_| {
-            Box::pin(async { Ok::<Vec<f32>, corpus_engine::Error>(vec![0.0; 4]) })
+        let embed: corpus_index::types::EmbedFn = std::sync::Arc::new(|_| {
+            Box::pin(async { Ok::<Vec<f32>, corpus_index::Error>(vec![0.0; 4]) })
         });
         let infer: corpus_engine::InferenceFn = std::sync::Arc::new(|_, _: Option<u32>| {
-            Box::pin(async { Ok::<String, corpus_engine::Error>("{}".into()) })
+            Box::pin(async { Ok::<String, corpus_index::Error>("{}".into()) })
         });
         let engine = std::sync::Arc::new(corpus_engine::CorpusEngine::new(
             recipes_dir,
@@ -1434,11 +1434,11 @@ mod tests {
         seed_memories_table(&db_path);
         seed_personal_atlas_with_entities(&indexes_dir);
 
-        let embed: corpus_engine::EmbedFn = std::sync::Arc::new(|_| {
-            Box::pin(async { Ok::<Vec<f32>, corpus_engine::Error>(vec![0.0; 4]) })
+        let embed: corpus_index::types::EmbedFn = std::sync::Arc::new(|_| {
+            Box::pin(async { Ok::<Vec<f32>, corpus_index::Error>(vec![0.0; 4]) })
         });
         let infer: corpus_engine::InferenceFn = std::sync::Arc::new(|_, _: Option<u32>| {
-            Box::pin(async { Ok::<String, corpus_engine::Error>("{}".into()) })
+            Box::pin(async { Ok::<String, corpus_index::Error>("{}".into()) })
         });
         let engine = std::sync::Arc::new(corpus_engine::CorpusEngine::new(
             recipes_dir,
@@ -1488,11 +1488,11 @@ mod tests {
         seed_memories_table(&db_path);
         seed_personal_atlas_with_entities(&indexes_dir);
 
-        let embed: corpus_engine::EmbedFn = std::sync::Arc::new(|_| {
-            Box::pin(async { Ok::<Vec<f32>, corpus_engine::Error>(vec![0.0; 4]) })
+        let embed: corpus_index::types::EmbedFn = std::sync::Arc::new(|_| {
+            Box::pin(async { Ok::<Vec<f32>, corpus_index::Error>(vec![0.0; 4]) })
         });
         let infer: corpus_engine::InferenceFn = std::sync::Arc::new(|_, _: Option<u32>| {
-            Box::pin(async { Ok::<String, corpus_engine::Error>("{}".into()) })
+            Box::pin(async { Ok::<String, corpus_index::Error>("{}".into()) })
         });
         let engine = std::sync::Arc::new(corpus_engine::CorpusEngine::new(
             recipes_dir,

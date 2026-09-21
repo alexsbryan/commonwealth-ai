@@ -16,7 +16,7 @@
 
 use std::collections::HashSet;
 
-use corpus_engine::ScoredChunk;
+use corpus_index::types::ScoredChunk;
 
 use super::progress::ExcerptChunk;
 
@@ -207,7 +207,7 @@ mod tests {
             source_doc_id: None,
             vector_distance: None,
             // Fixture chunk: nothing acquired it (TOPOLOGY §10 rung 9.1).
-            provenance: corpus_engine::index::ChunkProvenance::manufactured("test_fixture"),
+            provenance: corpus_index::index::ChunkProvenance::manufactured("test_fixture"),
         }
     }
 

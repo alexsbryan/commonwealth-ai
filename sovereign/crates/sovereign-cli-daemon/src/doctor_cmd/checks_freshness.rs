@@ -345,7 +345,7 @@ pub(super) fn orphaned_indexes() -> Vec<(String, Option<String>)> {
         .filter(|e| e.path().join("scip_graph.db").exists())
         .filter_map(|e| {
             let id = e.file_name().to_str()?.to_string();
-            let root = std::fs::read_to_string(corpus_engine::Corpus::meta_in(e.path()))
+            let root = std::fs::read_to_string(corpus_index::corpus::Corpus::meta_in(e.path()))
                 .ok()
                 .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
                 .and_then(|v| v.get("source_path")?.as_str().map(str::to_string));
@@ -389,7 +389,7 @@ pub(super) async fn check_code_tools_see_corpora() -> CheckResult {
     let indexes_dir = sovereign_root().join("indexes");
     let mut visible: Vec<String> = Vec::new();
     for id in &on_disk {
-        let Ok(index) = corpus_engine::CorpusIndex::open(&indexes_dir.join(id)).await else {
+        let Ok(index) = corpus_index::index::CorpusIndex::open(&indexes_dir.join(id)).await else {
             // `code_indexed` already reports an unreadable Lance table.
             continue;
         };

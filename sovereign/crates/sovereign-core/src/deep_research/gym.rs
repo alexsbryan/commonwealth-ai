@@ -40,7 +40,7 @@ use super::icd::CorpusEntry;
 use super::icd::Plan;
 use crate::traits::InferenceProvider;
 use crate::types::Custody;
-use corpus_engine::CorpusIndex;
+use corpus_index::index::CorpusIndex;
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
@@ -1192,7 +1192,7 @@ mod tests {
     //      malformed locator — never a silent empty.
 
     async fn fixture_corpus_surface(dir: &Path, corpus_id: &str) -> CorpusSurface {
-        use corpus_engine::index::{InsertChunk, InsertCodeMeta};
+        use corpus_index::index::{InsertChunk, InsertCodeMeta};
         const EMBED_DIM: usize = 8;
         fn embedding(seed: f32) -> Vec<f32> {
             (0..EMBED_DIM).map(|i| seed + i as f32 * 0.1).collect()
@@ -1205,7 +1205,7 @@ mod tests {
                 Ok(embedding(seed))
             }
         }
-        let index = corpus_engine::CorpusIndex::create(
+        let index = corpus_index::index::CorpusIndex::create(
             dir,
             corpus_id,
             "Gym fixture",

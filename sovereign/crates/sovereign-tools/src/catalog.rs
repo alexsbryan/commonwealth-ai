@@ -32,7 +32,7 @@
 use std::collections::HashMap;
 
 use corpus_engine::recipe::CatalogConfig;
-use corpus_engine::types::{CorpusKind, IndexInfo, ScoredChunk};
+use corpus_index::types::{CorpusKind, IndexInfo, ScoredChunk};
 
 /// Index-side context needed to resolve a `Catalog`-kind chunk into
 /// a [`CatalogHit`]. Built once per partition call from
@@ -245,7 +245,7 @@ mod tests {
             source_doc_id: None,
             vector_distance: None,
             // Fixture chunk: nothing acquired it (TOPOLOGY §10 rung 9.1).
-            provenance: corpus_engine::index::ChunkProvenance::manufactured("test_fixture"),
+            provenance: corpus_index::index::ChunkProvenance::manufactured("test_fixture"),
         }
     }
 
@@ -261,7 +261,7 @@ mod tests {
             source_doc_id: None,
             vector_distance: None,
             // Fixture chunk: nothing acquired it (TOPOLOGY §10 rung 9.1).
-            provenance: corpus_engine::index::ChunkProvenance::manufactured("test_fixture"),
+            provenance: corpus_index::index::ChunkProvenance::manufactured("test_fixture"),
         }
     }
 

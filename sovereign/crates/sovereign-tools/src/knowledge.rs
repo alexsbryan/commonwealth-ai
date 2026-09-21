@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use corpus_engine::recipe::CatalogConfig;
-use corpus_engine::types::CorpusKind;
+use corpus_index::types::CorpusKind;
 use sovereign_core::error::{Error, Result};
 use sovereign_core::traits::{InferenceProvider, StateStore};
 use sovereign_core::types::*;

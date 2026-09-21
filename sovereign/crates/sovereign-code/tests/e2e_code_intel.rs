@@ -33,7 +33,8 @@ use sovereign_code::{CodeSearchTool, RecentChangesTool, SymbolLookupTool};
 use sovereign_contracts::traits::Tool;
 use sovereign_contracts::types::{StepOutput, ToolContext};
 
-use corpus_engine::{CorpusEngine, CorpusSpec, EmbedFn};
+use corpus_engine::{CorpusEngine, CorpusSpec};
+use corpus_index::types::EmbedFn;
 
 // ─── Shared fixture ───────────────────────────────────────────
 
@@ -75,7 +76,10 @@ impl Fixture {
 
         let embed: EmbedFn = Arc::new(|_text: &str| {
             Box::pin(async {
-                Ok::<Vec<f32>, corpus_engine::Error>(vec![0.0; corpus_engine::DEFAULT_EMBED_DIM])
+                Ok::<Vec<f32>, corpus_index::Error>(vec![
+                    0.0;
+                    corpus_index::types::DEFAULT_EMBED_DIM
+                ])
             })
         });
         // `with_embedding_model` is a hard precondition of `ingest()`:
@@ -686,9 +690,12 @@ impl AuthFixture {
 
         // ── Index the fixture (LanceDB for symbol_lookup/code_search) ─
 
-        let embed: corpus_engine::EmbedFn = Arc::new(|_text: &str| {
+        let embed: corpus_index::types::EmbedFn = Arc::new(|_text: &str| {
             Box::pin(async {
-                Ok::<Vec<f32>, corpus_engine::Error>(vec![0.0; corpus_engine::DEFAULT_EMBED_DIM])
+                Ok::<Vec<f32>, corpus_index::Error>(vec![
+                    0.0;
+                    corpus_index::types::DEFAULT_EMBED_DIM
+                ])
             })
         });
         // See `Fixture::setup` for why this is required — the engine
@@ -1381,7 +1388,7 @@ async fn mixed_corpora_code_intel_skips_knowledge() {
 
     // ── Engine wired identically to the main Fixture. ───────────
     let embed: EmbedFn = Arc::new(|_text: &str| {
-        Box::pin(async { Ok::<Vec<f32>, corpus_engine::Error>(vec![0.0; 8]) })
+        Box::pin(async { Ok::<Vec<f32>, corpus_index::Error>(vec![0.0; 8]) })
     });
     let engine = Arc::new(
         CorpusEngine::new(recipe_dir.clone(), data_dir.clone(), embed)

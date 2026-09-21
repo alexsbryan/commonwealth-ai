@@ -12,7 +12,8 @@ use std::sync::{
     Arc,
 };
 
-use corpus_engine::{CorpusEngine, EmbedFn};
+use corpus_engine::CorpusEngine;
+use corpus_index::types::EmbedFn;
 use sovereign_core::error::Result as SovResult;
 use sovereign_store::memory::InMemoryStateStore;
 use tempfile::TempDir;

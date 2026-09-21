@@ -168,7 +168,7 @@ pub(super) fn build_person_seed_entities(
 /// 2026-06-11). Best-effort: any parse or fetch failure returns
 /// empty vecs (the v1 input shape).
 pub(super) async fn member_source_for_leaf(
-    index: &corpus_engine::index::CorpusIndex,
+    index: &corpus_index::index::CorpusIndex,
     leaf: &ConvRaptorNodeRow,
 ) -> (Vec<String>, Vec<String>) {
     let member_ids: Vec<u64> = leaf

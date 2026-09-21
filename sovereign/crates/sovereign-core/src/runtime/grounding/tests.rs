@@ -102,8 +102,8 @@ use crate::types::{Depth, ProviderCapabilities};
 use futures::Stream;
 use std::pin::Pin;
 
-fn chunk_with(corpus_id: &str, chunk_id: Option<u64>) -> corpus_engine::ScoredChunk {
-    corpus_engine::ScoredChunk {
+fn chunk_with(corpus_id: &str, chunk_id: Option<u64>) -> corpus_index::types::ScoredChunk {
+    corpus_index::types::ScoredChunk {
         content: "text".into(),
         title: None,
         url: None,
@@ -114,7 +114,7 @@ fn chunk_with(corpus_id: &str, chunk_id: Option<u64>) -> corpus_engine::ScoredCh
         source_doc_id: None,
         vector_distance: None,
         // Fixture chunk: nothing acquired it (TOPOLOGY §10 rung 9.1).
-        provenance: corpus_engine::index::ChunkProvenance::manufactured("test_fixture"),
+        provenance: corpus_index::index::ChunkProvenance::manufactured("test_fixture"),
     }
 }
 

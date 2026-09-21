@@ -3654,8 +3654,7 @@ mod tests {
     #[tokio::test]
     async fn corpus_source_retrieves_value_bearing_chunk_into_window() {
         use super::gym::{CorpusEmbed, CorpusSurface, Deck, MockBackendImpl, MockDraftSurface};
-        use corpus_engine::index::{InsertChunk, InsertCodeMeta};
-        use corpus_engine::CorpusIndex;
+        use corpus_index::index::{CorpusIndex, InsertChunk, InsertCodeMeta};
 
         const EMBED_DIM: usize = 8;
         fn embedding(seed: f32) -> Vec<f32> {

@@ -37,8 +37,9 @@ use std::sync::Arc;
 
 use corpus_engine::progress::IngestProgress;
 use corpus_engine::recipe::Recipe;
-use corpus_engine::types::{CorpusKind, CorpusSpec};
+use corpus_engine::types::CorpusSpec;
 use corpus_engine::CorpusEngine;
+use corpus_index::types::CorpusKind;
 use serde::{Deserialize, Serialize};
 use understanding_vocab::atoms::{AtomEnvelope, AtomType};
 use understanding_vocab::read::{read_atlas_atoms, read_atlas_edges};
@@ -178,13 +179,13 @@ pub enum CatalogIngestError {
     ContentRecipeLoad {
         content_recipe: String,
         #[source]
-        source: corpus_engine::Error,
+        source: corpus_index::Error,
     },
 
     #[error("ingest failed: {source}")]
     Ingest {
         #[source]
-        source: corpus_engine::Error,
+        source: corpus_index::Error,
     },
 
     #[error("enrichment failed (exit code {exit_code})")]
@@ -382,13 +383,13 @@ pub async fn run_catalog_ingest(
         //   - mark ingestion complete so installed_indexes() lists it.
         // Without these, `chat inspect` / OICP retrieval skip the
         // dir as "in-progress" and the corpus is invisible.
-        if let Ok(canon) = corpus_engine::CorpusIndex::open(&canonical_path).await {
+        if let Ok(canon) = corpus_index::index::CorpusIndex::open(&canonical_path).await {
             // Inherit the parent_corpus_id from the patched content
             // recipe (e.g. wikipedia-article sets parent="wikipedia"
             // so fetched articles surface alongside the curated L5).
             let parent = catalog_corpus_id.clone();
             if let Err(e) = canon.set_kind_and_parent(
-                Some(corpus_engine::types::CorpusKind::Knowledge),
+                Some(corpus_index::types::CorpusKind::Knowledge),
                 Some(&parent),
             ) {
                 tracing::warn!(
@@ -656,7 +657,7 @@ async fn collect_expansion_neighbours(
     // shape and dedupe.
     let canonical_path = engine.index_dir().join(target_corpus_id);
     let existing_ids: std::collections::HashSet<String> =
-        match corpus_engine::CorpusIndex::open(&canonical_path).await {
+        match corpus_index::index::CorpusIndex::open(&canonical_path).await {
             Ok(idx) => idx.list_indexed_source_doc_ids().await.unwrap_or_default(),
             Err(_) => Default::default(),
         };
@@ -784,7 +785,7 @@ pub(crate) fn patch_content_recipe(
 /// the matched chunk's title, or `None` if the work isn't present.
 async fn lookup_work_title(
     engine: &CorpusEngine,
-    catalog_info: &corpus_engine::types::IndexInfo,
+    catalog_info: &corpus_index::types::IndexInfo,
     work_id: &str,
 ) -> Option<String> {
     let idx = engine.open_index(&catalog_info.path).await.ok()?;
@@ -866,7 +867,7 @@ mod tests {
                 size_compressed_gb: 0.0,
                 size_indexed_gb: 0.0,
                 schema_version: 1,
-                kind: corpus_engine::types::CorpusKind::Knowledge,
+                kind: corpus_index::types::CorpusKind::Knowledge,
                 on_demand: true,
                 parent_corpus_id: None,
                 mutable_merge: None,

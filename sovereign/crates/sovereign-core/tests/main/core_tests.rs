@@ -2530,7 +2530,7 @@ async fn a_turn_holds_the_foreground_lease_until_its_stream_is_dropped() {
     let indexes = dir.path().join("indexes");
     std::fs::create_dir_all(&recipes).unwrap();
     std::fs::create_dir_all(&indexes).unwrap();
-    let embed: corpus_engine::types::EmbedFn =
+    let embed: corpus_index::types::EmbedFn =
         Arc::new(|_t: &str| Box::pin(async { Ok(vec![0.1_f32; 4]) }));
     let engine = Arc::new(corpus_engine::CorpusEngine::new(recipes, indexes, embed));
     let signal = Arc::new(CountingForeground::default());

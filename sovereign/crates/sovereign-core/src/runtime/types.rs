@@ -25,7 +25,7 @@ use super::{EvidenceShape, SynthesisRoute};
 /// the two paths cannot diverge in how they search, build prompts, or report
 /// provenance.
 pub(crate) struct KnowledgeContext {
-    pub(crate) chunks: Vec<corpus_engine::ScoredChunk>,
+    pub(crate) chunks: Vec<corpus_index::types::ScoredChunk>,
     /// Corpora this turn would have searched and could not. Twin of the
     /// field on [`KnowledgeQueryPlan`] — the DeepQuery path carries it here.
     pub(crate) unavailable_corpora: Vec<crate::traits::CorpusUnavailable>,
@@ -254,7 +254,7 @@ pub struct AtlasWalkEcho {
 /// than a retrieval-grounded one.
 pub(crate) struct KnowledgeQueryPlan {
     pub(crate) request: CompletionRequest,
-    pub(crate) chunks: Vec<corpus_engine::ScoredChunk>,
+    pub(crate) chunks: Vec<corpus_index::types::ScoredChunk>,
     /// The question names entities from the corpus's own world (atlas
     /// gazetteer match in the agentic loop). The grounding gate uses
     /// this to close the general-knowledge exemption: outside
@@ -384,7 +384,7 @@ pub(crate) enum GkReason {
 /// the same code path (RETRIEVAL_REDESIGN.md §7.1).
 pub struct EvidenceRetrieval {
     /// The merged, pipeline-composed evidence pool (post truncate tail).
-    pub chunks: Vec<corpus_engine::ScoredChunk>,
+    pub chunks: Vec<corpus_index::types::ScoredChunk>,
     /// Wall time of the retrieval pipeline run, embed included.
     pub search_ms: u64,
     /// `"empty" | "focused" | "synthesis" | "routed"` — the plan's

@@ -24,16 +24,18 @@ use crate::traits::InferenceProvider;
 /// Create a corpus-engine `EmbedFn` from Sovereign's `InferenceProvider`.
 ///
 /// The error mapping is the load-bearing part: corpus-engine only understands
-/// `corpus_engine::Error`, so a provider failure has to arrive as
+/// `corpus_index::Error`, so a provider failure has to arrive as
 /// `Error::Embed` or ingestion reports it as something it is not.
-pub fn inference_to_embed_fn(inference: Arc<dyn InferenceProvider>) -> corpus_engine::EmbedFn {
+pub fn inference_to_embed_fn(
+    inference: Arc<dyn InferenceProvider>,
+) -> corpus_index::types::EmbedFn {
     Arc::new(move |text: &str| {
         let inf = Arc::clone(&inference);
         let text = text.to_string();
         Box::pin(async move {
             inf.embed(&text)
                 .await
-                .map_err(|e| corpus_engine::Error::Embed(e.to_string()))
+                .map_err(|e| corpus_index::Error::Embed(e.to_string()))
         })
     })
 }
@@ -62,14 +64,14 @@ pub fn inference_to_embed_fn(inference: Arc<dyn InferenceProvider>) -> corpus_en
 /// substitution §18.3 forbids, so the query side got its own adapter instead.
 pub fn inference_to_embed_query_fn(
     inference: Arc<dyn InferenceProvider>,
-) -> corpus_engine::EmbedFn {
+) -> corpus_index::types::EmbedFn {
     Arc::new(move |text: &str| {
         let inf = Arc::clone(&inference);
         let text = text.to_string();
         Box::pin(async move {
             inf.embed_query(&text)
                 .await
-                .map_err(|e| corpus_engine::Error::Embed(e.to_string()))
+                .map_err(|e| corpus_index::Error::Embed(e.to_string()))
         })
     })
 }

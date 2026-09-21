@@ -52,6 +52,9 @@ sovereign-gliner = { workspace = true }
 # `CorpusEngine`, `open_wikipedia_graph`, `MetaAtlasIndex`, `BridgeIndex`,
 # `RerankConfig`. Knowledge layer — down.
 corpus-engine = { workspace = true }
+# `RerankConfig` moved to the read-port leaf; the engine items above keep this
+# edge on corpus-engine.
+corpus-index = { workspace = true }
 # The tool-decision write hook's backing store is NOT a dependency: the host
 # hands it in as `sovereign_contracts::notes::AgentNotes` (RecipeInputs.note_store).
 tracing = { workspace = true }

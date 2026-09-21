@@ -17,7 +17,7 @@ use sovereign_core::health::{
 };
 
 /// Convert a corpus-engine error to a sovereign-core error.
-fn ce(e: corpus_engine::Error) -> Error {
+fn ce(e: corpus_index::Error) -> Error {
     Error::Other(Box::new(e))
 }
 

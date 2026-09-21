@@ -56,18 +56,18 @@ pub fn rerank_dedup_filter_from_env() -> Option<std::collections::HashSet<String
 
 /// Which chunk wins per article during dedup: `fused` (default, RRF /
 /// blended-score order) or `vector` (cosine distance to the query).
-pub fn rerank_dedup_picker_from_env() -> corpus_engine::DedupPicker {
+pub fn rerank_dedup_picker_from_env() -> corpus_index::types::DedupPicker {
     match std::env::var("SOVEREIGN_RERANK_DEDUP_PICKER")
         .as_deref()
         .unwrap_or("fused")
     {
-        "vector" | "vector_distance" => corpus_engine::DedupPicker::VectorDistance,
-        _ => corpus_engine::DedupPicker::FusedScore,
+        "vector" | "vector_distance" => corpus_index::types::DedupPicker::VectorDistance,
+        _ => corpus_index::types::DedupPicker::FusedScore,
     }
 }
 
 /// Resolve the full `SOVEREIGN_RERANK_*` environment into a
-/// [`corpus_engine::RerankConfig`].
+/// [`corpus_index::types::RerankConfig`].
 ///
 /// **One decider for the rerank knobs.** The CLI, the daemon and the
 /// desktop all resolve them here, so the three surfaces cannot answer
@@ -120,8 +120,8 @@ pub fn rerank_candidates_k_from_env() -> Option<usize> {
     }
 }
 
-pub fn rerank_config_from_env() -> corpus_engine::RerankConfig {
-    let mut cfg = corpus_engine::RerankConfig::default();
+pub fn rerank_config_from_env() -> corpus_index::types::RerankConfig {
+    let mut cfg = corpus_index::types::RerankConfig::default();
     let gate_only = std::env::var("SOVEREIGN_RERANK_GATE_ONLY")
         .map(|s| s == "1" || s.eq_ignore_ascii_case("true"))
         .unwrap_or(false);
@@ -174,18 +174,20 @@ pub fn rerank_config_from_env() -> corpus_engine::RerankConfig {
 ///
 /// Providers without a reranker return `Error::NotImplemented` from
 /// `rerank_batch`; the wrapper converts that into
-/// `corpus_engine::Error::Rerank`. The search path
+/// `corpus_index::Error::Rerank`. The search path
 /// (`CorpusIndex::search_with_rerank`) catches that and falls back
 /// to the un-reranked fusion result — so installing this wrapper is
 /// always safe.
-pub fn inference_to_rerank_fn(inference: Arc<dyn InferenceProvider>) -> corpus_engine::RerankFn {
+pub fn inference_to_rerank_fn(
+    inference: Arc<dyn InferenceProvider>,
+) -> corpus_index::types::RerankFn {
     Arc::new(move |query: &str, docs: Vec<String>| {
         let inf = Arc::clone(&inference);
         let query = query.to_string();
         Box::pin(async move {
             inf.rerank_batch(&query, &docs)
                 .await
-                .map_err(|e| corpus_engine::Error::Rerank(e.to_string()))
+                .map_err(|e| corpus_index::Error::Rerank(e.to_string()))
         })
     })
 }
@@ -196,14 +198,14 @@ pub fn inference_to_rerank_fn(inference: Arc<dyn InferenceProvider>) -> corpus_e
 /// significantly higher throughput.
 pub fn inference_to_batch_embed_fn(
     inference: Arc<dyn InferenceProvider>,
-) -> corpus_engine::BatchEmbedFn {
+) -> corpus_index::types::BatchEmbedFn {
     Arc::new(move |texts: &[String]| {
         let inf = Arc::clone(&inference);
         let texts = texts.to_vec();
         Box::pin(async move {
             inf.embed_batch(&texts)
                 .await
-                .map_err(|e| corpus_engine::Error::Embed(e.to_string()))
+                .map_err(|e| corpus_index::Error::Embed(e.to_string()))
         })
     })
 }
@@ -263,7 +265,7 @@ pub fn inference_to_inference_fn(
             let resp = inf
                 .complete(&request)
                 .await
-                .map_err(|e| corpus_engine::Error::Embed(format!("inference: {e}")))?;
+                .map_err(|e| corpus_index::Error::Embed(format!("inference: {e}")))?;
             Ok(resp.text)
         })
     })

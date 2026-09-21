@@ -19,7 +19,7 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-use corpus_engine::error::{Error, Result};
+use corpus_index::error::{Error, Result};
 
 use crate::paths;
 

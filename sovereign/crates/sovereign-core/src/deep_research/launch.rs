@@ -40,7 +40,7 @@ use crate::oicp::ShardingPrivacy;
 use crate::setup_config::SetupConfig;
 use crate::traits::InferenceProvider;
 use crate::types::Custody;
-use corpus_engine::index::{CorpusIndex, InsertChunk};
+use corpus_index::index::{CorpusIndex, InsertChunk};
 
 /// The launch sidecar (order deep-research-t3a): the run's backend
 /// identity, written into the run dir BEFORE launch and read back on

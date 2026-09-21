@@ -4,7 +4,7 @@
 //! Distinct from KnowledgeQuery: filters retrieval to the source the
 //! locator points to ("according to SEP" → only sep; "in this
 //! codebase" → only the code corpora, resolved by
-//! [`corpus_engine::IndexInfo::is_code_corpus`] rather than by the
+//! [`corpus_index::types::IndexInfo::is_code_corpus`] rather than by the
 //! `CorpusKind::Code` tag, which repo corpora deliberately never carry).
 //! When the locator names a source that isn't indexed locally, we surface
 //! the gap explicitly rather than falling through to general knowledge —
@@ -107,7 +107,7 @@ impl Runtime {
         };
 
         // Resolve locator → (kind_filter, name_match).
-        let (kind_filter, name_match): (Option<corpus_engine::CorpusKind>, Option<String>) =
+        let (kind_filter, name_match): (Option<corpus_index::types::CorpusKind>, Option<String>) =
             match &locator {
                 MetalingualLocator::SystemCode
                 | MetalingualLocator::Ambient
@@ -369,7 +369,7 @@ impl Runtime {
         // describes how the located source uses the term, and that
         // citations should attribute claims to the source.
         let (kinds, display_categories): (
-            std::collections::HashMap<String, corpus_engine::CorpusKind>,
+            std::collections::HashMap<String, corpus_index::types::CorpusKind>,
             std::collections::HashMap<String, String>,
         ) = if let Some(engine) = &self.corpus_engine {
             let mut kinds_map = std::collections::HashMap::new();
@@ -692,7 +692,7 @@ const CONV_LOCATOR_CHARS_PER_MSG: usize = 400;
 /// The ordinal label is the load-bearing part — it is the only place in
 /// the prompt where turn ORDER is stated explicitly, which is what lets
 /// the model answer "first"/"then"/"after that" at all.
-fn conversation_turns_as_chunks(msgs: &[Message]) -> Vec<corpus_engine::ScoredChunk> {
+fn conversation_turns_as_chunks(msgs: &[Message]) -> Vec<corpus_index::types::ScoredChunk> {
     let total = msgs.len();
 
     // Which indices to render: whole thread when short, else head+tail.
@@ -705,7 +705,7 @@ fn conversation_turns_as_chunks(msgs: &[Message]) -> Vec<corpus_engine::ScoredCh
         (0..total).collect()
     };
 
-    let mut out: Vec<corpus_engine::ScoredChunk> = Vec::with_capacity(keep.len() + 1);
+    let mut out: Vec<corpus_index::types::ScoredChunk> = Vec::with_capacity(keep.len() + 1);
     let mut prev: Option<usize> = None;
     for (rank, &i) in keep.iter().enumerate() {
         // Visible seam where the middle was dropped.
@@ -746,8 +746,8 @@ fn conversation_turns_as_chunks(msgs: &[Message]) -> Vec<corpus_engine::ScoredCh
 /// id that doesn't exist. Scores descend with turn order so that any
 /// downstream stable sort preserves the sequence — order is the signal
 /// on this path, not relevance.
-fn conv_chunk(title: String, content: String, rank: usize) -> corpus_engine::ScoredChunk {
-    corpus_engine::ScoredChunk {
+fn conv_chunk(title: String, content: String, rank: usize) -> corpus_index::types::ScoredChunk {
+    corpus_index::types::ScoredChunk {
         content,
         title: Some(title),
         url: None,
@@ -758,7 +758,7 @@ fn conv_chunk(title: String, content: String, rank: usize) -> corpus_engine::Sco
         source_doc_id: None,
         vector_distance: None,
         // A rendered turn from THIS conversation, not corpus content.
-        provenance: corpus_engine::index::ChunkProvenance::manufactured("conversation_turn"),
+        provenance: corpus_index::index::ChunkProvenance::manufactured("conversation_turn"),
     }
 }
 

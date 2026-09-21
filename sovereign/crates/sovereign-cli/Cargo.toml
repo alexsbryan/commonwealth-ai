@@ -106,6 +106,7 @@ sovereign-cli-llm = { path = "../sovereign-cli-llm", optional = true }
 # first consumer, and the edge is easier to read where it is paid.
 sovereign-cli-dev = { path = "../sovereign-cli-dev", default-features = false, optional = true }
 corpus-engine = { workspace = true }
+corpus-index = { workspace = true }
 corpus-engine-scip = { workspace = true, optional = true }
 # The pure-HTTP OICP client — `RemoteApiProvider` for `code index`'s embed
 # calls. Depended on directly rather than through `sovereign-inference`, which

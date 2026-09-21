@@ -55,10 +55,10 @@ use crate::runtime::Runtime;
 pub struct Rerank {
     /// The cross-encoder itself. `None` = none is wired, and every
     /// `search_with_rerank` degrades to plain fusion rather than failing.
-    pub f: Option<corpus_engine::RerankFn>,
+    pub f: Option<corpus_index::types::RerankFn>,
     /// Overfetch size, threshold, blend weight. Always present: `enabled =
     /// false` makes the pass a no-op regardless of `f`.
-    pub config: corpus_engine::RerankConfig,
+    pub config: corpus_index::types::RerankConfig,
 }
 
 impl Rerank {
@@ -70,7 +70,7 @@ impl Rerank {
 
     /// The cross-encoder, borrowed for the call sites that pass it straight
     /// through to `CorpusIndex::search_with_rerank`.
-    pub fn f(&self) -> Option<&corpus_engine::RerankFn> {
+    pub fn f(&self) -> Option<&corpus_index::types::RerankFn> {
         self.f.as_ref()
     }
 }
@@ -79,7 +79,7 @@ impl Default for Rerank {
     fn default() -> Self {
         Self {
             f: None,
-            config: corpus_engine::RerankConfig::default(),
+            config: corpus_index::types::RerankConfig::default(),
         }
     }
 }

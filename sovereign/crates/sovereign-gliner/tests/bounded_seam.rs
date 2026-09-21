@@ -24,7 +24,7 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 use corpus_engine::enrichment::tiered::ChunkEntityExtractor;
-use corpus_engine::index::EnrichmentChunkRow;
+use corpus_index::index::EnrichmentChunkRow;
 use sovereign_contracts::error::Result;
 use sovereign_gliner::bounded_input::{MAX_BATCH_CHUNKS, MAX_CHUNK_CHARS};
 use sovereign_gliner::gliner_ner::EntityMention;

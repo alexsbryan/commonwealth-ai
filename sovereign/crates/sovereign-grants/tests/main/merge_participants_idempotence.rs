@@ -70,8 +70,8 @@
 //! that is silent only because it was given no address.
 
 use commonwealth_core::ids::HandoffId;
-use corpus_engine::index::{InsertChunk, InsertCodeMeta};
-use corpus_engine::{Corpus, CorpusIndex};
+use corpus_index::index::{InsertChunk, InsertCodeMeta};
+use corpus_index::{corpus::Corpus, index::CorpusIndex};
 use sovereign_grants::shard_manager::MergePlan;
 
 use super::merge_participants_coverage::{

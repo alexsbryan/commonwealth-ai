@@ -77,7 +77,7 @@ pub async fn build_preview(
         .map_err(|e| Error::Execution(format!("get_chunks: {e}")))?;
 
     // Index by id for O(1) lookup during assembly.
-    let chunk_by_id: HashMap<u64, &corpus_engine::StoredChunk> =
+    let chunk_by_id: HashMap<u64, &corpus_index::index::StoredChunk> =
         chunks.iter().map(|c| (c.id, c)).collect();
 
     let cluster_by_id: HashMap<i32, &LabeledCluster> =

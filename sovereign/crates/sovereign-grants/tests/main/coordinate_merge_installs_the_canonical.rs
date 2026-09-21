@@ -70,7 +70,7 @@ use std::sync::Arc;
 use commonwealth_core::ids::HandoffId;
 use commonwealth_core::knowledge::{CompleteOutcome, HandoffPhase, IngestionHandoff, WorkUnit};
 use commonwealth_core::oicp::{EmbedModelInfo, NormalizationStrategy, PoolingStrategy};
-use corpus_engine::{Corpus, CorpusIndex};
+use corpus_index::{corpus::Corpus, index::CorpusIndex};
 use sovereign_grants::{ShardManager, WorkQueueManager};
 
 use super::merge_participants_coverage::{embedding, fixture, Fixture, CORPUS};
@@ -199,7 +199,7 @@ struct InstalledProbe {
 }
 
 async fn probe_installed(f: &Fixture) -> InstalledProbe {
-    let ids = |rows: Vec<corpus_engine::IndexInfo>| -> Vec<String> {
+    let ids = |rows: Vec<corpus_index::types::IndexInfo>| -> Vec<String> {
         rows.into_iter().map(|i| i.corpus_id).collect()
     };
     let installed = ids(f

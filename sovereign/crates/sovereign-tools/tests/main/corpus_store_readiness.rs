@@ -15,7 +15,7 @@
 use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
 
-use corpus_engine::CorpusIndex;
+use corpus_index::index::CorpusIndex;
 use sovereign_tools::corpus_store::CorpusStoreTool;
 
 fn ctx() -> ToolContext {

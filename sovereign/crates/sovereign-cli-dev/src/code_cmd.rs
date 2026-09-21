@@ -97,7 +97,7 @@ async fn cmd_finalize(args: &[String]) -> i32 {
     // `finalise_solo_ingest` only inspects the filesystem — no embed
     // calls. A noop EmbedFn keeps the engine constructable without
     // booting the daemon.
-    let noop_embed: corpus_engine::EmbedFn =
+    let noop_embed: corpus_index::types::EmbedFn =
         Arc::new(|_text: &str| Box::pin(async move { Ok(vec![0.0_f32; 1]) }));
     let engine = corpus_engine::CorpusEngine::new(recipes_dir, data_dir, noop_embed);
     match engine.finalise_solo_ingest(&corpus_id) {
@@ -1491,7 +1491,7 @@ async fn cmd_watch(args: &[String]) -> i32 {
         return 1;
     }
 
-    let index = match corpus_engine::CorpusIndex::open(&index_path).await {
+    let index = match corpus_index::index::CorpusIndex::open(&index_path).await {
         Ok(i) => i,
         Err(e) => {
             eprintln!("error: cannot open index: {e}");

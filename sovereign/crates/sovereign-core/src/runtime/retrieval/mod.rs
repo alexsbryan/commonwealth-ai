@@ -55,7 +55,7 @@ impl Runtime {
     /// callers degrade gracefully.
     pub(crate) async fn contested_titles_for_chunks(
         &self,
-        chunks: &[corpus_engine::ScoredChunk],
+        chunks: &[corpus_index::types::ScoredChunk],
         lane: &crate::runtime::Lane,
     ) -> std::collections::HashSet<String> {
         let mut out = std::collections::HashSet::new();
@@ -97,7 +97,7 @@ impl Runtime {
         message: &str,
         context: &ConversationContext,
         intent: &Intent,
-    ) -> Vec<corpus_engine::ScoredChunk> {
+    ) -> Vec<corpus_index::types::ScoredChunk> {
         let kc = self
             .prepare_knowledge_context(message, context, intent, None)
             .await;
@@ -252,7 +252,7 @@ impl Runtime {
         // defaults, so no callsite gates on the engine being
         // configured.
         let (kinds, display_categories): (
-            std::collections::HashMap<String, corpus_engine::CorpusKind>,
+            std::collections::HashMap<String, corpus_index::types::CorpusKind>,
             std::collections::HashMap<String, String>,
         ) = if let Some(engine) = &self.corpus_engine {
             let mut kinds_map = std::collections::HashMap::new();
@@ -406,7 +406,7 @@ impl Runtime {
             {
                 let admitted_idx: std::collections::HashSet<usize> =
                     formatted_doc.admitted.iter().map(|(i, _)| *i).collect();
-                let is_raptor = |c: &corpus_engine::ScoredChunk| {
+                let is_raptor = |c: &corpus_index::types::ScoredChunk| {
                     c.metadata
                         .get("source")
                         .map(|s| s == "raptor")

@@ -33,7 +33,7 @@ use chrono::{Datelike, NaiveDateTime, Timelike};
 use serde::{Deserialize, Serialize};
 
 use corpus_engine::chunkers::threaded_turns::{parse_turns, ParsedTurn, TurnAuthor};
-use corpus_engine::index::CorpusIndex;
+use corpus_index::index::CorpusIndex;
 
 pub mod semantic;
 
@@ -749,14 +749,14 @@ fn first_nonempty_line(body: &str) -> String {
 /// Group chunk rows into per-conversation docs, parsing turn blocks via
 /// the chunker's own header grammar. Rows without a `source_doc_id`
 /// fold under their stringified chunk id (degenerate but total).
-pub fn build_conv_docs(rows: &[corpus_engine::index::EnrichmentChunkRow]) -> Vec<ConvDoc> {
+pub fn build_conv_docs(rows: &[corpus_index::index::EnrichmentChunkRow]) -> Vec<ConvDoc> {
     #[derive(Deserialize, Default)]
     struct DocMeta {
         #[serde(default)]
         summary: Option<String>,
     }
 
-    let mut sorted: Vec<&corpus_engine::index::EnrichmentChunkRow> = rows.iter().collect();
+    let mut sorted: Vec<&corpus_index::index::EnrichmentChunkRow> = rows.iter().collect();
     sorted.sort_by_key(|r| r.id);
 
     let mut by_doc: BTreeMap<String, ConvDoc> = BTreeMap::new();
@@ -1127,8 +1127,8 @@ pub fn generic_keys_by_case_profile(
 /// chunks contributes all of itself. Reading header-bearing text alone
 /// left 81.5% of the real archive's prose out of the pool the generics
 /// filter needs `CASE_PROFILE_MIN_EVIDENCE` sightings from.
-pub fn collect_assistant_text(rows: &[corpus_engine::index::EnrichmentChunkRow]) -> Vec<String> {
-    let mut sorted: Vec<&corpus_engine::index::EnrichmentChunkRow> = rows.iter().collect();
+pub fn collect_assistant_text(rows: &[corpus_index::index::EnrichmentChunkRow]) -> Vec<String> {
+    let mut sorted: Vec<&corpus_index::index::EnrichmentChunkRow> = rows.iter().collect();
     // Group by conversation, then archive order within it — the open
     // turn must never carry across a conversation boundary.
     sorted.sort_by(|a, b| {
@@ -1172,7 +1172,7 @@ pub fn collect_assistant_text(rows: &[corpus_engine::index::EnrichmentChunkRow])
 /// `Fed · IMF · Community Land Trusts`.
 pub fn ner_theme_rows<'a>(
     rows: &'a [EntityRow],
-    all_chunks: &[corpus_engine::index::EnrichmentChunkRow],
+    all_chunks: &[corpus_index::index::EnrichmentChunkRow],
     content: &HashMap<u64, String>,
 ) -> Vec<&'a EntityRow> {
     let assistant_texts = collect_assistant_text(all_chunks);

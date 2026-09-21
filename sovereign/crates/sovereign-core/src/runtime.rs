@@ -1089,7 +1089,7 @@ mod enrichment_seam_invariant {
         l.rerank.f = Some(std::sync::Arc::new(|_q: &str, docs: Vec<String>| {
             Box::pin(async move { Ok(vec![0.0_f32; docs.len()]) })
                 as std::pin::Pin<
-                    Box<dyn std::future::Future<Output = corpus_engine::Result<Vec<f32>>> + Send>,
+                    Box<dyn std::future::Future<Output = corpus_index::Result<Vec<f32>>> + Send>,
                 >
         }));
         assert!(lane_seams(&l).iter().any(|(n, p)| *n == "rerank" && *p));
@@ -1104,7 +1104,7 @@ mod enrichment_seam_invariant {
         l.rerank.f = Some(std::sync::Arc::new(|_q: &str, docs: Vec<String>| {
             Box::pin(async move { Ok(vec![0.0_f32; docs.len()]) })
                 as std::pin::Pin<
-                    Box<dyn std::future::Future<Output = corpus_engine::Result<Vec<f32>>> + Send>,
+                    Box<dyn std::future::Future<Output = corpus_index::Result<Vec<f32>>> + Send>,
                 >
         }));
         assert!(l.snapshot().rerank.active(), "snapshot dropped `rerank`");

@@ -954,7 +954,7 @@ fn load_reranker(lane: &mut LaneSources, wiring: RerankWiring, progress: &dyn Re
     let dedup_picker = sovereign_tools::corpus::rerank_dedup_picker_from_env();
 
     if dedup_only {
-        let mut cfg = corpus_engine::RerankConfig::default();
+        let mut cfg = corpus_index::types::RerankConfig::default();
         cfg.enabled = true;
         cfg.per_article = true;
         cfg.dedup_corpus_filter = dedup_filter.clone();

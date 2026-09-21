@@ -193,7 +193,7 @@ impl Clusterer {
 
 // ─── Prompt + parsing ────────────────────────────────────────────────
 
-fn build_label_prompt(chunks: &[corpus_engine::StoredChunk]) -> String {
+fn build_label_prompt(chunks: &[corpus_index::index::StoredChunk]) -> String {
     // Spec §6.3 prompt, verbatim structure. Keeps the tag-path grammar
     // predictable so the UI and the write-back layer agree on the
     // shape.
@@ -336,7 +336,7 @@ fn extract_json_block(raw: &str) -> &str {
 /// into the nearest cluster rather than leaving it as a permanent
 /// outlier.
 async fn compute_confidences(
-    index: &corpus_engine::CorpusIndex,
+    index: &corpus_index::index::CorpusIndex,
     cluster_result: &EngineClusterResult,
 ) -> Result<(HashMap<u64, f32>, HashMap<u64, i32>)> {
     let (chunk_ids, embeddings) = index

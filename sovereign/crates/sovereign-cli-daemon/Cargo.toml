@@ -88,6 +88,7 @@ sovereign-cli-shared = { workspace = true, features = ["scip"] }
 #
 # `NodeId` straight from the neutral kernel, not through a re-export.
 corpus-engine = { workspace = true, features = ["treesitter"] }
+corpus-index = { workspace = true }
 corpus-engine-notes = { workspace = true }
 corpus-engine-scip = { workspace = true }
 corpus-engine-watchers = { workspace = true }

@@ -31,7 +31,8 @@ use std::io::{self, BufRead as _, IsTerminal as _, Write as _};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use corpus_engine::{CorpusEngine, CorpusSpec, EmbedFn, IngestProgress};
+use corpus_engine::{CorpusEngine, CorpusSpec, IngestProgress};
+use corpus_index::types::EmbedFn;
 
 use sovereign_cli_shared::dirs::default_data_dir;
 use sovereign_cli_shared::mcp_client::check_mcp_server;
@@ -515,7 +516,7 @@ vector = false
 
     let embed: EmbedFn = Arc::new(|_text: &str| {
         Box::pin(async {
-            Ok::<Vec<f32>, corpus_engine::Error>(vec![0.0; corpus_engine::DEFAULT_EMBED_DIM])
+            Ok::<Vec<f32>, corpus_index::Error>(vec![0.0; corpus_index::types::DEFAULT_EMBED_DIM])
         })
     });
     let recipes_dir = tempdir.clone();

@@ -64,7 +64,7 @@ use std::sync::Arc;
 
 use corpus_engine::engine::{CorpusEngine, CustomAcquirerFn};
 use corpus_engine::enrichment::atlas::analysis::sec_facts::normalize_concept_phrase;
-use corpus_engine::error::{Error, Result};
+use corpus_index::error::{Error, Result};
 use serde::{Deserialize, Serialize};
 
 use crate::sec_facts_render::RenderOutput;
@@ -1338,7 +1338,7 @@ mod tests {
     #[test]
     fn registering_makes_the_kind_resolvable_by_the_engine() {
         let dir = tempfile::tempdir().expect("tempdir");
-        let embed: corpus_engine::types::EmbedFn =
+        let embed: corpus_index::types::EmbedFn =
             Arc::new(|_: &str| Box::pin(async { Ok(vec![0.0f32; 8]) }));
         let engine = CorpusEngine::new(dir.path().join("recipes"), dir.path().join("idx"), embed);
         register(&engine);

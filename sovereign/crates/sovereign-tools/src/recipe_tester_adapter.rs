@@ -17,7 +17,8 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
-use corpus_engine::{CorpusEngine, EmbedFn, TestOptions};
+use corpus_engine::{CorpusEngine, TestOptions};
+use corpus_index::types::EmbedFn;
 use sovereign_contracts::recipe::testing::{
     ExtractionOutcome, RecipeTestOutcome, RecipeTestParams, RecipeTester, SectionMiss,
     ValidationOutcome,
@@ -38,8 +39,9 @@ impl CorpusEngineRecipeTester {
     /// but the constructor requires an `EmbedFn`. The temp dir is scratch space
     /// for the engine's corpus/db roots.
     fn build_stub_engine() -> CorpusEngine {
-        let stub_embed: EmbedFn =
-            Arc::new(|_text| Box::pin(async { Ok(vec![0f32; corpus_engine::DEFAULT_EMBED_DIM]) }));
+        let stub_embed: EmbedFn = Arc::new(|_text| {
+            Box::pin(async { Ok(vec![0f32; corpus_index::types::DEFAULT_EMBED_DIM]) })
+        });
         let tmp = std::env::temp_dir().join("sovereign-recipe-author-tester");
         CorpusEngine::new(tmp.clone(), tmp, stub_embed)
     }

@@ -29,6 +29,9 @@ sovereign-tools-base = { workspace = true }
 # crate no longer reaches into a cmnwlth package (quality/ARCH_LAYERS.toml).
 oicp-types = { workspace = true }
 corpus-engine = { workspace = true }
+# Leaf items the engine re-exports (`types::*`, `error`, `index`, `corpus`,
+# `recipe::DisplayMeta`) — spelled at their owner now.
+corpus-index = { workspace = true }
 # The atlas vocabulary + its read door (`read_atlas_atoms`/`read_atlas_edges`)
 # — a two-crate leaf closure, so a reader of atoms.json need not name the
 # engine that writes it (domains dm-vocab-bypass-tools).

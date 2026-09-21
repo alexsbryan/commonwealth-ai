@@ -18,7 +18,7 @@
 
 use std::collections::HashMap;
 
-use corpus_engine::ScoredChunk;
+use corpus_index::types::ScoredChunk;
 
 use crate::types::{ConversationContext, Message, Role};
 
@@ -617,7 +617,7 @@ pub(crate) fn drop_no_overlap_chunks(chunks: Vec<ScoredChunk>, query: &str) -> V
 #[cfg(test)]
 mod query_relevance_tests {
     use super::reweight_by_query_relevance;
-    use corpus_engine::ScoredChunk;
+    use corpus_index::types::ScoredChunk;
     use std::collections::HashMap;
 
     fn chunk(corpus: &str, title: &str, content: &str, score: f32) -> ScoredChunk {
@@ -632,7 +632,7 @@ mod query_relevance_tests {
             source_doc_id: None,
             vector_distance: None,
             // Fixture chunk: nothing acquired it (TOPOLOGY §10 rung 9.1).
-            provenance: corpus_engine::index::ChunkProvenance::manufactured("test_fixture"),
+            provenance: corpus_index::index::ChunkProvenance::manufactured("test_fixture"),
         }
     }
 

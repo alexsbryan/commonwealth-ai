@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 use super::*;
-use corpus_engine::index::{EnrichmentChunkRow, InsertChunk, InsertCodeMeta};
+use corpus_index::index::{EnrichmentChunkRow, InsertChunk, InsertCodeMeta};
 
 fn ts(s: &str) -> NaiveDateTime {
     NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M").unwrap()

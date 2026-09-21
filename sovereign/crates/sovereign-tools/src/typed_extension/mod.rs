@@ -39,7 +39,7 @@ use corpus_engine::enrichment::atlas::SourceCitation;
 use corpus_engine::enrichment::pipeline::atlas::{
     EnrichmentDepth, SectionExtraction, TypeExtension,
 };
-use corpus_engine::error::{Error, Result};
+use corpus_index::error::{Error, Result};
 use sovereign_core::conv_tiered::{ConvRaptorNodeRow, ConvTieredReader, VaultThemeRow};
 use sovereign_core::traits::InferenceProvider;
 use sovereign_store::sqlite::SqliteStateStore;
@@ -212,7 +212,7 @@ pub async fn run_typed_extension(
     // level above the atlas dir; open it once (best-effort — on any
     // failure Pass A degrades to summary+quote-span input, the v1
     // behavior).
-    let index = corpus_engine::index::CorpusIndex::open(atlas_dir.parent().unwrap_or(atlas_dir))
+    let index = corpus_index::index::CorpusIndex::open(atlas_dir.parent().unwrap_or(atlas_dir))
         .await
         .map_err(|e| {
             tracing::warn!(

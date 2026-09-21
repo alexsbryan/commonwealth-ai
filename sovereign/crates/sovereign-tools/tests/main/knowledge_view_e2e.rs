@@ -39,7 +39,8 @@ use corpus_engine::enrichment::skeleton::{
     CanonicalQuestion, FieldSkeleton, SkeletonFaultLine, SkeletonOpenQuestion, SkeletonPosition,
 };
 use corpus_engine::recipe::AcquirerConfig;
-use corpus_engine::{CorpusEngine, EmbedFn};
+use corpus_engine::CorpusEngine;
+use corpus_index::types::EmbedFn;
 use sovereign_core::observer::SharedStateStoreObserver;
 use sovereign_core::time::unix_now;
 use sovereign_core::traits::{ConversationStore, MemoryStore};
@@ -70,7 +71,7 @@ use tempfile::TempDir;
 /// `recipe_to_tempfile` in `knowledge_view/manager.rs`.
 static INGEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
-const EMBED_DIMS: usize = corpus_engine::DEFAULT_EMBED_DIM;
+const EMBED_DIMS: usize = corpus_index::types::DEFAULT_EMBED_DIM;
 
 /// Deterministic embed stub: every call returns a fixed zero vector.
 /// Adequate for the splice path, which never re-embeds.

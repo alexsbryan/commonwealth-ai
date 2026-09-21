@@ -39,10 +39,11 @@ use std::sync::Arc;
 
 use arc_swap::ArcSwap;
 
-use corpus_engine::{CorpusEngine, EmbedFn};
+use corpus_engine::CorpusEngine;
 use corpus_engine_atos::FeatureStore;
 use corpus_engine_notes::{NoteStore, ProjectDocsStore};
 use corpus_engine_watchers::{LintResultStore, TestResultStore};
+use corpus_index::types::EmbedFn;
 use sovereign_cli_shared::{
     dirs::default_data_dir, repo::find_sovereign_dir, scip::load_merged_graph,
 };
@@ -479,7 +480,7 @@ fn find_git_root(start: &std::path::Path) -> Option<PathBuf> {
     Some(PathBuf::from(String::from_utf8_lossy(&out.stdout).trim()))
 }
 
-/// Build a `corpus_engine::EmbedFn` backed by the running daemon's
+/// Build a `corpus_index::types::EmbedFn` backed by the running daemon's
 /// `/v1/embeddings`. Probes once; if the daemon's offline at CLI
 /// startup, returns the zero-vector fallback so SQL/FTS tools
 /// stay correct and embedding-sensitive tools degrade to FTS-only
@@ -489,7 +490,10 @@ async fn build_daemon_embed_fn_or_zero(daemon_url: &str) -> EmbedFn {
     if !reachable {
         return Arc::new(|_text: &str| {
             Box::pin(async {
-                Ok::<Vec<f32>, corpus_engine::Error>(vec![0.0; corpus_engine::DEFAULT_EMBED_DIM])
+                Ok::<Vec<f32>, corpus_index::Error>(vec![
+                    0.0;
+                    corpus_index::types::DEFAULT_EMBED_DIM
+                ])
             })
         });
     }
@@ -506,9 +510,9 @@ async fn build_daemon_embed_fn_or_zero(daemon_url: &str) -> EmbedFn {
                 .timeout(std::time::Duration::from_secs(10))
                 .send()
                 .await
-                .map_err(|e| corpus_engine::Error::Embed(format!("daemon: {e}")))?;
+                .map_err(|e| corpus_index::Error::Embed(format!("daemon: {e}")))?;
             if !resp.status().is_success() {
-                return Err(corpus_engine::Error::Embed(format!(
+                return Err(corpus_index::Error::Embed(format!(
                     "daemon HTTP {}",
                     resp.status()
                 )));
@@ -516,7 +520,7 @@ async fn build_daemon_embed_fn_or_zero(daemon_url: &str) -> EmbedFn {
             let body: serde_json::Value = resp
                 .json()
                 .await
-                .map_err(|e| corpus_engine::Error::Embed(format!("daemon parse: {e}")))?;
+                .map_err(|e| corpus_index::Error::Embed(format!("daemon parse: {e}")))?;
             body.get("data")
                 .and_then(|v| v.get(0))
                 .and_then(|v| v.get("embedding"))
@@ -527,7 +531,7 @@ async fn build_daemon_embed_fn_or_zero(daemon_url: &str) -> EmbedFn {
                         .collect::<Vec<f32>>()
                 })
                 .ok_or_else(|| {
-                    corpus_engine::Error::Embed("daemon: no embedding in response".into())
+                    corpus_index::Error::Embed("daemon: no embedding in response".into())
                 })
         })
     })

@@ -114,7 +114,7 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
 
     let embed: EmbedFn = Arc::new(|_text: &str| {
         Box::pin(async {
-            Ok::<Vec<f32>, corpus_engine::Error>(vec![0.0; corpus_engine::DEFAULT_EMBED_DIM])
+            Ok::<Vec<f32>, corpus_index::Error>(vec![0.0; corpus_index::types::DEFAULT_EMBED_DIM])
         })
     });
     let recipes_dir = data_dir.clone();

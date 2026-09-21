@@ -26,7 +26,8 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use corpus_engine::{CorpusEngine, EmbedFn};
+use corpus_engine::CorpusEngine;
+use corpus_index::types::EmbedFn;
 use sovereign_core::traits::StateStore;
 use sovereign_store::memory::InMemoryStateStore;
 use sovereign_tools::local_corpus::config::{
@@ -39,7 +40,7 @@ use sovereign_tools::local_corpus::watched::state::WatchedFolderState;
 use sovereign_tools::local_corpus::watched::worker::{Worker, WorkerOutcome};
 use tempfile::TempDir;
 
-const EMBED_DIMS: usize = corpus_engine::DEFAULT_EMBED_DIM;
+const EMBED_DIMS: usize = corpus_index::types::DEFAULT_EMBED_DIM;
 
 fn stub_embed() -> EmbedFn {
     Arc::new(|_text: &str| Box::pin(async { Ok(vec![0.0f32; EMBED_DIMS]) }))

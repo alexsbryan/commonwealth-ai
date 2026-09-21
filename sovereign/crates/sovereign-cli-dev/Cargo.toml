@@ -100,6 +100,9 @@ sovereign-work-atlas = { workspace = true, optional = true }
 commonwealth-state = { path = "../../../commonwealth/crates/commonwealth-state", optional = true }
 commonwealth-core = { path = "../../../commonwealth/crates/commonwealth-core", optional = true }
 corpus-engine = { workspace = true, features = ["treesitter"], optional = true }
+# Read-port leaf (`EmbedFn`, `Error`, `DEFAULT_EMBED_DIM`, `CorpusIndex`) —
+# same workbench gate as corpus-engine.
+corpus-index = { workspace = true, optional = true }
 # The code-intel package's fact base (`facts`/`facts_check`/`facts_store`),
 # moved out of corpus-engine at domains REVIEW-build-code-facts. `code_cmd`
 # names `code_facts::*` directly; the `treesitter`/`stores` features arrive
@@ -167,6 +170,7 @@ workbench = [
     "dep:commonwealth-state",
     "dep:commonwealth-core",
     "dep:corpus-engine",
+    "dep:corpus-index",
     "dep:code-facts",
     "dep:corpus-engine-notes",
     "dep:arch-layers",

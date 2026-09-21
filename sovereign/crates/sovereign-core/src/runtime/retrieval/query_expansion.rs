@@ -63,12 +63,12 @@ impl Runtime {
     /// max(0, lane − core), near zero on knowledge-query turns.
     pub(crate) fn spawn_ppr_lane(
         &self,
-        chunks: &[corpus_engine::ScoredChunk],
+        chunks: &[corpus_index::types::ScoredChunk],
         message: &str,
         enabled_corpora: Option<&[String]>,
         corpus_ceiling: Option<&[String]>,
         lane: &crate::runtime::Lane,
-    ) -> Option<tokio::task::JoinHandle<Vec<corpus_engine::ScoredChunk>>> {
+    ) -> Option<tokio::task::JoinHandle<Vec<corpus_index::types::ScoredChunk>>> {
         // Default ON (promoted 2026-07-17 after the v10 battery:
         // +2 wiki sources, facts held, +182ms p50 = harness noise;
         // "0"/"false"/"off"/"no" disables — same convention as
@@ -124,7 +124,7 @@ impl Runtime {
 pub(crate) struct PprLane {
     pub graph: std::sync::Arc<dyn corpus_engine::WikipediaGraphApi>,
     pub engine: std::sync::Arc<corpus_engine::CorpusEngine>,
-    pub rerank_fn: corpus_engine::RerankFn,
+    pub rerank_fn: corpus_index::types::RerankFn,
     pub gliner: Option<std::sync::Arc<dyn crate::traits::EntityExtractor>>,
 }
 
@@ -143,7 +143,7 @@ impl Runtime {
         enabled_corpora: Option<&[String]>,
         corpus_ceiling: Option<&[String]>,
         lane: &crate::runtime::Lane,
-    ) -> Option<tokio::task::JoinHandle<Vec<corpus_engine::ScoredChunk>>> {
+    ) -> Option<tokio::task::JoinHandle<Vec<corpus_index::types::ScoredChunk>>> {
         if !merge_select_enabled() {
             return None;
         }
@@ -170,12 +170,12 @@ impl Runtime {
 /// (`obligation_entity`) for the merge selector's demand slots.
 pub(crate) async fn fetch_entity_obligations(
     engine: std::sync::Arc<corpus_engine::CorpusEngine>,
-    rerank_fn: Option<corpus_engine::RerankFn>,
+    rerank_fn: Option<corpus_index::types::RerankFn>,
     message: String,
     enabled_corpora: Option<Vec<String>>,
     corpus_ceiling: Option<Vec<String>>,
     gliner: Option<std::sync::Arc<dyn crate::traits::EntityExtractor>>,
-) -> Vec<corpus_engine::ScoredChunk> {
+) -> Vec<corpus_index::types::ScoredChunk> {
     let mut entities: Vec<String> = extract_comparison_entities(&message);
     if entities.is_empty() {
         entities = extract_question_entities(&message);
@@ -227,7 +227,8 @@ pub(crate) async fn fetch_entity_obligations(
         .filter(|i| {
             matches!(
                 i.kind,
-                corpus_engine::CorpusKind::Knowledge | corpus_engine::CorpusKind::Catalog
+                corpus_index::types::CorpusKind::Knowledge
+                    | corpus_index::types::CorpusKind::Catalog
             ) && enabled_corpora
                 .as_deref()
                 .map(|e| e.iter().any(|c| c == &i.corpus_id))
@@ -255,7 +256,7 @@ pub(crate) async fn fetch_entity_obligations(
         let message = message.clone();
         async move {
             let e_lower = entity.to_lowercase();
-            let mut out: Vec<corpus_engine::ScoredChunk> = Vec::new();
+            let mut out: Vec<corpus_index::types::ScoredChunk> = Vec::new();
             for path in &paths {
                 let Ok(idx) = engine.open_index(path).await else {
                     continue;
@@ -351,7 +352,7 @@ pub(crate) async fn fetch_entity_obligations(
                     else {
                         continue;
                     };
-                    let overlap = |c: &corpus_engine::ScoredChunk| -> usize {
+                    let overlap = |c: &corpus_index::types::ScoredChunk| -> usize {
                         let body = c.content.to_lowercase();
                         q_tokens
                             .iter()
@@ -373,7 +374,7 @@ pub(crate) async fn fetch_entity_obligations(
             out
         }
     });
-    let obligations: Vec<corpus_engine::ScoredChunk> =
+    let obligations: Vec<corpus_index::types::ScoredChunk> =
         futures::future::join_all(fetches).await.concat();
     // Glassbox: name the named entities AND the concept articles that
     // fired separately, so a reader of the audit trail can see exactly
@@ -401,7 +402,7 @@ pub(crate) async fn ppr_propose_and_gate(
     message: String,
     enabled_corpora: Option<Vec<String>>,
     corpus_ceiling: Option<Vec<String>>,
-) -> Vec<corpus_engine::ScoredChunk> {
+) -> Vec<corpus_index::types::ScoredChunk> {
     {
         let graph = &lane.graph;
         let message = message.as_str();
@@ -721,7 +722,7 @@ pub(crate) async fn ppr_propose_and_gate(
             let paths = fetch_corpora.clone();
             let q_tokens = q_tokens.clone();
             async move {
-                let mut article: Vec<corpus_engine::ScoredChunk> = Vec::new();
+                let mut article: Vec<corpus_index::types::ScoredChunk> = Vec::new();
                 for path in &paths {
                     let Ok(idx) = engine.open_index(std::path::Path::new(path)).await else {
                         continue;
@@ -738,7 +739,7 @@ pub(crate) async fn ppr_propose_and_gate(
                 }
                 // Rank within the article by substantive question-token
                 // overlap; take the top few for the gate.
-                let overlap = |c: &corpus_engine::ScoredChunk| -> usize {
+                let overlap = |c: &corpus_index::types::ScoredChunk| -> usize {
                     let body = c.content.to_lowercase();
                     q_tokens
                         .iter()
@@ -750,7 +751,7 @@ pub(crate) async fn ppr_propose_and_gate(
                 article
             }
         });
-        let cand_chunks: Vec<corpus_engine::ScoredChunk> =
+        let cand_chunks: Vec<corpus_index::types::ScoredChunk> =
             futures::future::join_all(fetches).await.concat();
         let fetch_ms = t_fetch.elapsed().as_millis() as u64;
         if cand_chunks.is_empty() {
@@ -771,7 +772,7 @@ pub(crate) async fn ppr_propose_and_gate(
         // rejects answer-side people (Fermi -2.72 / Einstein -1.18
         // under the bare framing). Query side stays untouched — the
         // shared-prefix KV reuse in score_batch depends on it.
-        let fmt_doc = |c: &corpus_engine::ScoredChunk| {
+        let fmt_doc = |c: &corpus_index::types::ScoredChunk| {
             let bridge = c
                 .title
                 .as_deref()
@@ -834,7 +835,7 @@ pub(crate) async fn ppr_propose_and_gate(
             .iter()
             .map(|(t, m)| format!("{t} (mass {m:.4})"))
             .collect();
-        let mut added: Vec<corpus_engine::ScoredChunk> = Vec::new();
+        let mut added: Vec<corpus_index::types::ScoredChunk> = Vec::new();
         for &i in admitted_idx.iter() {
             let mut c = cand_chunks[i].clone();
             c.metadata
@@ -889,9 +890,9 @@ pub(crate) async fn ppr_propose_and_gate(
 /// operationally. Chunks whose title is already in the live pool are
 /// dropped (the pool may have gained them while the lane ran).
 pub(crate) fn place_ppr_admitted(
-    admitted: Vec<corpus_engine::ScoredChunk>,
-    pool: &[corpus_engine::ScoredChunk],
-) -> Vec<corpus_engine::ScoredChunk> {
+    admitted: Vec<corpus_index::types::ScoredChunk>,
+    pool: &[corpus_index::types::ScoredChunk],
+) -> Vec<corpus_index::types::ScoredChunk> {
     let present: std::collections::HashSet<&str> =
         pool.iter().filter_map(|c| c.title.as_deref()).collect();
     let boundary = pool.len().min(kq_merged_limit());

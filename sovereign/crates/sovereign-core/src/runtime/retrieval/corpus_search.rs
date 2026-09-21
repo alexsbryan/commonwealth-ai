@@ -36,7 +36,7 @@ use crate::traits::{CorpusUnavailable, UnavailabilityReason};
 /// `query_dims == 0` is the FTS-only path: every built index still serves its
 /// BM25 results, so only the "never finished building" loss applies there.
 pub(crate) fn corpus_unavailability(
-    info: &corpus_engine::IndexInfo,
+    info: &corpus_index::types::IndexInfo,
     query_dims: usize,
 ) -> Option<UnavailabilityReason> {
     if !info.indexes_built {
@@ -67,7 +67,7 @@ pub(crate) fn corpus_unavailability(
 /// [`sovereign_contracts::traits::MeshSearchOutcome::unavailable`] — one
 /// unavailability type, both loss families.
 pub(crate) struct CorpusFanoutResult {
-    pub(crate) chunks: Vec<corpus_engine::ScoredChunk>,
+    pub(crate) chunks: Vec<corpus_index::types::ScoredChunk>,
     pub(crate) unavailable: Vec<CorpusUnavailable>,
 }
 
@@ -98,7 +98,7 @@ impl Runtime {
         enabled_corpora: Option<&[String]>,
         corpus_ceiling: Option<&[String]>,
         lane: &crate::runtime::Lane,
-    ) -> Vec<corpus_engine::ScoredChunk> {
+    ) -> Vec<corpus_index::types::ScoredChunk> {
         self.search_corpus_indexes_reporting(
             embedding,
             query_text,
@@ -191,7 +191,8 @@ impl Runtime {
             .filter(|info| {
                 if matches!(
                     info.kind,
-                    corpus_engine::CorpusKind::Knowledge | corpus_engine::CorpusKind::Catalog
+                    corpus_index::types::CorpusKind::Knowledge
+                        | corpus_index::types::CorpusKind::Catalog
                 ) {
                     true
                 } else {
@@ -227,7 +228,7 @@ impl Runtime {
         // never in scope) and rides out on `CorpusFanoutResult::unavailable`.
         let query_dims = embedding.len();
         let total_indexes = indexes.len();
-        let mut unready: Vec<(corpus_engine::IndexInfo, UnavailabilityReason)> = Vec::new();
+        let mut unready: Vec<(corpus_index::types::IndexInfo, UnavailabilityReason)> = Vec::new();
         let eligible: Vec<_> = indexes
             .into_iter()
             .filter(|info| match corpus_unavailability(info, query_dims) {
@@ -537,7 +538,7 @@ impl Runtime {
                 }
             });
         }
-        let per_corpus: Vec<Vec<corpus_engine::ScoredChunk>> = futures::stream::iter(tasks)
+        let per_corpus: Vec<Vec<corpus_index::types::ScoredChunk>> = futures::stream::iter(tasks)
             .buffer_unordered(concurrency)
             .collect()
             .await;
@@ -630,10 +631,10 @@ impl Runtime {
     async fn corpus_relevance_prefilter(
         &self,
         engine: &std::sync::Arc<corpus_engine::CorpusEngine>,
-        eligible: Vec<corpus_engine::IndexInfo>,
+        eligible: Vec<corpus_index::types::IndexInfo>,
         query_embedding: &[f32],
         label: &str,
-    ) -> Vec<corpus_engine::IndexInfo> {
+    ) -> Vec<corpus_index::types::IndexInfo> {
         let top_k = match std::env::var("SOVEREIGN_CORPUS_PREFILTER_TOPK")
             .ok()
             .and_then(|v| v.parse::<usize>().ok())
@@ -654,8 +655,8 @@ impl Runtime {
         // vector path). Each is fail-OPEN (kept); a large set here means weak
         // pruning from a probe gap, not genuine irrelevance, so we surface it.
         let mut failed_ann: Vec<(String, &'static str)> = Vec::new();
-        let mut kept: Vec<corpus_engine::IndexInfo> = Vec::new();
-        let mut ranked: Vec<(corpus_engine::IndexInfo, f32)> = Vec::new();
+        let mut kept: Vec<corpus_index::types::IndexInfo> = Vec::new();
+        let mut ranked: Vec<(corpus_index::types::IndexInfo, f32)> = Vec::new();
         for info in eligible {
             if info.personal_scope {
                 n_personal += 1;
@@ -742,13 +743,13 @@ impl Runtime {
         embedding: &[f32],
         query_text: &str,
         limit: usize,
-        kind_filter: Option<corpus_engine::CorpusKind>,
+        kind_filter: Option<corpus_index::types::CorpusKind>,
         name_match: Option<&str>,
         label: &str,
         enabled_corpora: Option<&[String]>,
         corpus_ceiling: Option<&[String]>,
         lane: &crate::runtime::Lane,
-    ) -> Vec<corpus_engine::ScoredChunk> {
+    ) -> Vec<corpus_index::types::ScoredChunk> {
         let mut chunks = Vec::new();
         let engine = match &self.corpus_engine {
             Some(e) => e,
@@ -848,7 +849,7 @@ impl Runtime {
     }
 }
 
-/// Build the effective [`corpus_engine::RerankConfig`] for a
+/// Build the effective [`corpus_index::types::RerankConfig`] for a
 /// single-corpus search. Starts from the runtime's base config (which may
 /// carry an operator env-var override or a wired cross-encoder) and, when
 /// the corpus's recipe declared `[retrieval] dedup_by_source` (surfaced on
@@ -860,9 +861,9 @@ impl Runtime {
 /// opt in are returned unchanged, so topical corpora (e.g. Wikipedia),
 /// which regress under blind dedup, keep baseline behaviour.
 fn rerank_config_for_corpus(
-    base: &corpus_engine::RerankConfig,
-    info: &corpus_engine::IndexInfo,
-) -> corpus_engine::RerankConfig {
+    base: &corpus_index::types::RerankConfig,
+    info: &corpus_index::types::IndexInfo,
+) -> corpus_index::types::RerankConfig {
     if !info.dedup_by_source {
         return base.clone();
     }
@@ -895,7 +896,7 @@ fn rerank_config_for_corpus(
 /// underlying `<corpus>`. Returns empty when `allow` is `None` (no seal) or the
 /// seal holds.
 pub(super) fn corpora_outside_seal<'a>(
-    chunks: &'a [corpus_engine::ScoredChunk],
+    chunks: &'a [corpus_index::types::ScoredChunk],
     allow: Option<&[String]>,
 ) -> Vec<&'a str> {
     let Some(allow) = allow else {
@@ -928,7 +929,7 @@ pub(super) fn corpora_outside_seal<'a>(
 /// `atlas:<corpus>` virtual chunks are checked against their underlying
 /// `<corpus>`.
 pub(crate) fn corpora_outside_scope<'a>(
-    chunks: &'a [corpus_engine::ScoredChunk],
+    chunks: &'a [corpus_index::types::ScoredChunk],
     scope: &[String],
 ) -> Vec<&'a str> {
     let scope_set: std::collections::HashSet<&str> = scope.iter().map(String::as_str).collect();
@@ -949,9 +950,9 @@ pub(crate) fn corpora_outside_scope<'a>(
 }
 
 fn apply_corpus_allow_list(
-    indexes: Vec<corpus_engine::IndexInfo>,
+    indexes: Vec<corpus_index::types::IndexInfo>,
     allow: Option<&[String]>,
-) -> Vec<corpus_engine::IndexInfo> {
+) -> Vec<corpus_index::types::IndexInfo> {
     let Some(allow) = allow else {
         return indexes;
     };
@@ -986,8 +987,8 @@ mod allow_list_tests {
     /// a chunk names, and borrowing a producer to say so tied this test to a
     /// production path it does not test. Built here now, so the next producer
     /// to retire does not take these three tests with it.
-    fn chunk(corpus: &str) -> corpus_engine::ScoredChunk {
-        corpus_engine::ScoredChunk {
+    fn chunk(corpus: &str) -> corpus_index::types::ScoredChunk {
+        corpus_index::types::ScoredChunk {
             content: "body".to_string(),
             title: Some("conv/1".to_string()),
             url: None,
@@ -997,7 +998,7 @@ mod allow_list_tests {
             chunk_id: None,
             source_doc_id: None,
             vector_distance: Some(0.5),
-            provenance: corpus_engine::index::ChunkProvenance::acquired_from_estate(corpus),
+            provenance: corpus_index::index::ChunkProvenance::acquired_from_estate(corpus),
         }
     }
 
@@ -1079,7 +1080,7 @@ mod allow_list_tests {
         // Baseline: a corpus that did NOT declare `[retrieval]
         // dedup_by_source` is returned the runtime's base config unchanged
         // (no dedup) — preserves Wikipedia-shape behaviour.
-        let base = corpus_engine::RerankConfig::default();
+        let base = corpus_index::types::RerankConfig::default();
         assert!(!base.enabled, "precondition: base config is disabled");
 
         let plain = idx("wikipedia", None); // idx() sets dedup_by_source = false
@@ -1103,8 +1104,8 @@ mod allow_list_tests {
         );
     }
 
-    fn idx(id: &str, parent: Option<&str>) -> corpus_engine::IndexInfo {
-        corpus_engine::IndexInfo {
+    fn idx(id: &str, parent: Option<&str>) -> corpus_index::types::IndexInfo {
+        corpus_index::types::IndexInfo {
             corpus_id: id.to_string(),
             corpus_name: id.to_string(),
             path: std::path::PathBuf::new(),
@@ -1127,7 +1128,7 @@ mod allow_list_tests {
             enriched_chunks: None,
             source_version: None,
             update_manifest_url: None,
-            kind: corpus_engine::CorpusKind::Knowledge,
+            kind: corpus_index::types::CorpusKind::Knowledge,
             parent_corpus_id: parent.map(String::from),
             indexes_built: true,
             vector_index_built: true,

@@ -55,9 +55,9 @@ fn empty_graph() -> sovereign_code::ScipGraphHandle {
 }
 
 fn empty_engine() -> Arc<corpus_engine::CorpusEngine> {
-    let embed: corpus_engine::EmbedFn = Arc::new(|_text: &str| {
+    let embed: corpus_index::types::EmbedFn = Arc::new(|_text: &str| {
         Box::pin(async {
-            Ok::<Vec<f32>, corpus_engine::Error>(vec![0.0; corpus_engine::DEFAULT_EMBED_DIM])
+            Ok::<Vec<f32>, corpus_index::Error>(vec![0.0; corpus_index::types::DEFAULT_EMBED_DIM])
         })
     });
     let dir = tempfile::tempdir().unwrap().keep();

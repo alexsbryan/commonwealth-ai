@@ -46,8 +46,8 @@
 use std::collections::HashMap;
 
 use corpus_engine::enrichment::skeleton::FieldSkeleton;
-use corpus_engine::error::Result as CorpusResult;
-use corpus_engine::EmbedFn;
+use corpus_index::error::Result as CorpusResult;
+use corpus_index::types::EmbedFn;
 
 /// One item extracted from a view's skeleton for cross-view
 /// matching. The item's text is what gets embedded; the view and

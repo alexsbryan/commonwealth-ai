@@ -9,7 +9,7 @@
 //! not search:
 //!
 //! ```ignore
-//! st.chunks.push(corpus_engine::ScoredChunk {
+//! st.chunks.push(corpus_index::types::ScoredChunk {
 //!     content: "(Assistant guidance — relay this in your own words …)",
 //!     score: 1.0,
 //!     metadata: HashMap::new(),
@@ -44,7 +44,7 @@
 //! `chunks` field live and where every step that writes the pool is defined.
 //! It is NOT the whole of rung `nc-4-evidence`: 47 `ScoredChunk` literals
 //! remain across `sovereign-core` and `corpus-engine`, and the rung is not
-//! done until the pool's element type is `corpus_engine::Evidence` — which
+//! done until the pool's element type is `corpus_index::index::Evidence` — which
 //! cannot be minted outside the engine at all. This is the bounded first rung.
 
 use std::path::PathBuf;

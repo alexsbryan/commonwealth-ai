@@ -58,7 +58,8 @@ use std::time::{Duration, Instant};
 
 use commonwealth_core::ids::{HandoffId, NodeId};
 use commonwealth_state::{ContributionEmitter, MeshStore};
-use corpus_engine::{Corpus, CorpusEngine};
+use corpus_engine::CorpusEngine;
+use corpus_index::corpus::Corpus;
 
 use crate::shard_manager::{MergePlan, ShardManager};
 
@@ -152,7 +153,7 @@ pub enum RecoveryOutcome {
     /// `mark_indexes_built` / `mark_ingestion_complete` / the fingerprint
     /// stamp, in `corpus_engine::finalize_canonical`.
     ///
-    /// Carried here from [`corpus_engine::Error::MergedNotFinalized`], which
+    /// Carried here from [`corpus_index::Error::MergedNotFinalized`], which
     /// the merge itself now returns; this enum keeps its own spelling because
     /// `corpus-engine` cannot name a `commonwealth-api` type (the same
     /// dependency direction that keeps `IncompleteCoverage` two types).
@@ -257,7 +258,7 @@ pub struct FoldRecovery {
 /// where the post-condition belongs.
 ///
 /// When the merge succeeds and that finalize does not, the merge returns
-/// [`corpus_engine::Error::MergedNotFinalized`] and this function reports it
+/// [`corpus_index::Error::MergedNotFinalized`] and this function reports it
 /// as [`RecoveryOutcome::MergedButNotInstalled`] — neither `Recovered` nor
 /// `Failed`; see that variant for why it is neither.
 pub async fn merge_from_fold_coverage(
@@ -341,7 +342,7 @@ pub async fn merge_from_fold_coverage(
             shards_covered: expected,
         },
         Ok(None) => RecoveryOutcome::NotEnoughPartitions,
-        Err(corpus_engine::Error::IncompleteCoverage {
+        Err(corpus_index::Error::IncompleteCoverage {
             covered, expected, ..
         }) => RecoveryOutcome::PartitionsUnreachable { covered, expected },
         // Chunks on disk, indexes not built. Neither `Recovered` (which would
@@ -349,7 +350,7 @@ pub async fn merge_from_fold_coverage(
         // would claim nothing was produced while that directory holds the only
         // copy). The merge already logged it at `error!` with the same fields;
         // this arm carries them across the crate boundary unchanged.
-        Err(corpus_engine::Error::MergedNotFinalized {
+        Err(corpus_index::Error::MergedNotFinalized {
             canonical_path,
             chunks,
             detail,

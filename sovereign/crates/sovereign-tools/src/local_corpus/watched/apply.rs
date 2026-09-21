@@ -94,7 +94,7 @@ pub async fn apply_watched_diff(
         let id = doc_id.to_owned();
         let fut = async move {
             let entry = snap.get(&id).ok_or_else(|| {
-                corpus_engine::error::Error::Extraction(format!(
+                corpus_index::error::Error::Extraction(format!(
                     "watched_folder: doc_id '{id}' missing from sweep snapshot"
                 ))
             })?;
@@ -108,9 +108,7 @@ pub async fn apply_watched_diff(
             })
             .await
             .map_err(|e| {
-                corpus_engine::error::Error::Extraction(format!(
-                    "watched_folder: extract task: {e}"
-                ))
+                corpus_index::error::Error::Extraction(format!("watched_folder: extract task: {e}"))
             })?;
 
             let is_pdf = path
@@ -127,7 +125,7 @@ pub async fn apply_watched_diff(
                         // for scanned PDFs where pdf-extract panics.
                         String::new()
                     } else {
-                        return Err(corpus_engine::error::Error::Extraction(format!(
+                        return Err(corpus_index::error::Error::Extraction(format!(
                             "watched_folder: extract '{id}': {e}"
                         )));
                     }
@@ -167,7 +165,7 @@ pub async fn apply_watched_diff(
                 )
                 .await
                 .map_err(|e| {
-                    corpus_engine::error::Error::Extraction(format!(
+                    corpus_index::error::Error::Extraction(format!(
                         "watched_folder: ocr '{id}': {e}"
                     ))
                 });
@@ -177,7 +175,7 @@ pub async fn apply_watched_diff(
         };
         Box::pin(fut)
             as Pin<
-                Box<dyn std::future::Future<Output = corpus_engine::error::Result<String>> + Send>,
+                Box<dyn std::future::Future<Output = corpus_index::error::Result<String>> + Send>,
             >
     };
 

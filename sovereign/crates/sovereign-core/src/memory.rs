@@ -367,7 +367,7 @@ pub async fn recall_relevant_memories_embed_reranked(
     scope: &MemoryScope,
     query: &str,
     limit: usize,
-    rerank_fn: Option<&corpus_engine::RerankFn>,
+    rerank_fn: Option<&corpus_index::types::RerankFn>,
 ) -> Result<Vec<Memory>> {
     // LLM-pick stage (opt-in, `SOVEREIGN_MEM_PICK=1`) takes
     // precedence over the cross-encoder when both are enabled — it

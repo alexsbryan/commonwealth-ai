@@ -8,8 +8,8 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use corpus_engine::enrichment::tiered::{ChunkEntityExtractor, ChunkNerOutcome};
-use corpus_engine::error::{Error, Result};
-use corpus_engine::index::{CorpusIndex, EnrichmentChunkRow};
+use corpus_index::error::{Error, Result};
+use corpus_index::index::{CorpusIndex, EnrichmentChunkRow};
 use sovereign_store::sqlite::SqliteStateStore;
 
 use crate::bounded_input::BoundedInputs;

@@ -22,7 +22,7 @@ impl Runtime {
     /// pattern context for the synth model to ground generalisations).
     pub(crate) async fn build_conv_briefing_block(
         &self,
-        chunks: &[corpus_engine::ScoredChunk],
+        chunks: &[corpus_index::types::ScoredChunk],
         display_categories: &std::collections::HashMap<String, String>,
         lane: &crate::runtime::Lane,
     ) -> String {

@@ -73,7 +73,7 @@ impl Runtime {
         corpus_ceiling: Option<&[String]>,
         pool_corpora: &[String],
         lane: &crate::runtime::Lane,
-    ) -> Option<Vec<corpus_engine::ScoredChunk>> {
+    ) -> Option<Vec<corpus_index::types::ScoredChunk>> {
         let atom_enum_on = std::env::var("SOVEREIGN_ATOM_ENUM").ok().as_deref() == Some("1");
         // Default ON (parity push — surface atlas Claims for overview questions
         // in desktop + bench). Set SOVEREIGN_ATOM_ENUM_OVERVIEW=0 to disable.
@@ -656,7 +656,7 @@ impl Runtime {
         // ("sec_0001", the modern pipelines) → FTS the passage_preview
         // for the evidence chunk (per atom). An unresolvable atom is a
         // no-op.
-        let mut chunks: Vec<corpus_engine::ScoredChunk> = Vec::new();
+        let mut chunks: Vec<corpus_index::types::ScoredChunk> = Vec::new();
         let mut fetched_names: Vec<&str> = Vec::new();
         for (i, (name, c)) in ranked.iter().enumerate() {
             // Shape-aware resolution to a REAL chunk. Numeric chunk_id
@@ -767,7 +767,7 @@ impl Runtime {
         corpus_ceiling: Option<&[String]>,
         pool_corpora: &[String],
         lane: &crate::runtime::Lane,
-    ) -> Option<Vec<corpus_engine::ScoredChunk>> {
+    ) -> Option<Vec<corpus_index::types::ScoredChunk>> {
         let provider = lane.atlas_context.as_ref()?;
         let top_k: usize = std::env::var("SOVEREIGN_ATOM_ENUM_TOPK")
             .ok()
@@ -974,7 +974,7 @@ impl Runtime {
                 })
         });
         cands.truncate(top_k);
-        let mut chunks: Vec<corpus_engine::ScoredChunk> = Vec::with_capacity(cands.len());
+        let mut chunks: Vec<corpus_index::types::ScoredChunk> = Vec::with_capacity(cands.len());
         let mut seen_chunk_ids: std::collections::HashSet<(String, u64)> =
             std::collections::HashSet::new();
         let mut mapped = 0usize;
@@ -1071,7 +1071,7 @@ impl Runtime {
                 metadata.insert("source".to_string(), "atom-enum".to_string());
                 metadata.insert("atom_type".to_string(), "claim".to_string());
                 metadata.insert("atom_claim_unmapped".to_string(), "1".to_string());
-                chunks.push(corpus_engine::ScoredChunk {
+                chunks.push(corpus_index::types::ScoredChunk {
                     content,
                     title: Some(format!("{} — key point", c.corpus)),
                     url: None,
@@ -1082,7 +1082,7 @@ impl Runtime {
                     source_doc_id: None,
                     vector_distance: None,
                     // An atlas claim atom injected as a virtual chunk.
-                    provenance: corpus_engine::index::ChunkProvenance::manufactured(
+                    provenance: corpus_index::index::ChunkProvenance::manufactured(
                         "atom_enum_claim",
                     ),
                 });

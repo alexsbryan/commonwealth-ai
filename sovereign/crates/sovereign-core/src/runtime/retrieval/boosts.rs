@@ -30,7 +30,7 @@ impl Runtime {
     /// about.
     pub(crate) async fn meta_atlas_boost(
         &self,
-        chunks: &mut Vec<corpus_engine::ScoredChunk>,
+        chunks: &mut Vec<corpus_index::types::ScoredChunk>,
         entities: &[String],
         enabled_corpora: Option<&[String]>,
         corpus_ceiling: Option<&[String]>,

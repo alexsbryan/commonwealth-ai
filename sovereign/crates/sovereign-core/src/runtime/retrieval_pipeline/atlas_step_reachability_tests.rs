@@ -168,7 +168,7 @@ mod ledger {
             build_wikipedia_columnar_store_from_chunks, wiki_atom_id,
         };
         use corpus_engine::extractors::wikipedia_types::{WikiLink, WikipediaChunkMetadata};
-        use corpus_engine::index::StoredChunkWithMetadata;
+        use corpus_index::index::StoredChunkWithMetadata;
 
         let atlas = indexes
             .join(corpus)
@@ -307,7 +307,7 @@ mod ledger {
             atlas_context: Some(provider),
             ..crate::runtime::Lane::none()
         };
-        let mut chunks: Vec<corpus_engine::ScoredChunk> = Vec::new();
+        let mut chunks: Vec<corpus_index::types::ScoredChunk> = Vec::new();
         // ei-7a: the walk hands its `Summary` rollups OUT here rather than
         // appending them, because rung 8 is before reweight and rerank. This
         // helper discards them — it asserts on the step's ledger, not on the

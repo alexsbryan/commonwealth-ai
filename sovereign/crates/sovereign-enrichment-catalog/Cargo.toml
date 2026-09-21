@@ -24,6 +24,9 @@ description = "The enrichment catalog: where enrichment workspaces live on disk,
 # recipe-supplied ontology) and `PhaseCache` (the model-stamped phase cache
 # `EnrichConfig::phase_cache` constructs). Knowledge layer — down.
 corpus-engine = { workspace = true }
+# Error/Result moved to the read-port leaf; the engine items above keep this
+# edge on corpus-engine.
+corpus-index = { workspace = true }
 # The path SSOT. `rebrand::data_dir()` is the ONE derivation the env registry
 # declares for the per-user data root (quality/env-flags.toml, SOVEREIGN_DATA_DIR:
 # "read sites must not re-derive the fallback chain"). Contract layer — down.

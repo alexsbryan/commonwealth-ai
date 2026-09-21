@@ -430,7 +430,7 @@ async fn build_chunk_path_map(corpus_id: &str) -> Result<HashMap<String, PathBuf
             sovereign_root().join("indexes").display()
         ));
     };
-    let index = corpus_engine::CorpusIndex::open(&index_dir)
+    let index = corpus_index::index::CorpusIndex::open(&index_dir)
         .await
         .map_err(|e| format!("open {}: {e}", index_dir.display()))?;
     let chunks = index

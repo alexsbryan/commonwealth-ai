@@ -34,8 +34,8 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use chrono::Utc;
 use corpus_engine::enrichment::tiered::{ConvBucket, TieredEnrichmentProvider};
-use corpus_engine::error::{Error, Result};
-use corpus_engine::index::EnrichmentChunkRow;
+use corpus_index::error::{Error, Result};
+use corpus_index::index::EnrichmentChunkRow;
 use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::{DocumentTypeTag, QuoteSpan, RaptorNode};
 // `DocumentTypeTag::Unknown` is the closest neutral tag; conversation
@@ -470,7 +470,7 @@ impl FolderTieredProvider {
     ) -> Result<()> {
         use corpus_engine::enrichment::tiered::ConvBucket;
         use corpus_engine::enrichment::tiered::TieredEnrichmentProvider;
-        use corpus_engine::index::CorpusIndex;
+        use corpus_index::index::CorpusIndex;
 
         if source_doc_ids.is_empty() {
             return Ok(());

@@ -48,7 +48,8 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use corpus_engine::enrichment::pipeline::ChatPrompt;
-use corpus_engine::{CorpusEngine, CorpusSpec, EmbedFn, Error};
+use corpus_engine::{CorpusEngine, CorpusSpec};
+use corpus_index::{types::EmbedFn, Error};
 use sovereign_core::health::{HealthCheckable, HealthIssue};
 use sovereign_tools::enrichment_checker::EnrichmentChecker;
 use tracing_subscriber::fmt::MakeWriter;

@@ -16,7 +16,7 @@
 
 use std::path::Path;
 
-use corpus_engine::error::{Error, Result};
+use corpus_index::error::{Error, Result};
 
 use crate::config::EnrichConfig;
 use crate::paths;
@@ -119,7 +119,7 @@ fn list_in(root: &Path) -> Result<Vec<EnrichedCorpusSummary>> {
     Ok(out)
 }
 
-/// `corpus_engine::Error::Io` carries the OS error but not what was being
+/// `corpus_index::Error::Io` carries the OS error but not what was being
 /// read; a bare `?` here yields "Permission denied" with no path. Re-wrapping
 /// keeps the `ErrorKind` (callers may still match on it) and names the file.
 fn io_at(e: std::io::Error, path: &Path) -> Error {

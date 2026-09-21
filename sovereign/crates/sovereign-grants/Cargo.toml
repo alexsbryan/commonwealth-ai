@@ -8,6 +8,7 @@ license.workspace = true
 commonwealth-core = { path = "../../../commonwealth/crates/commonwealth-core" }
 commonwealth-state = { path = "../../../commonwealth/crates/commonwealth-state" }
 corpus-engine = { workspace = true }
+corpus-index = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 dirs = "5"

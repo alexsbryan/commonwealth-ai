@@ -12,7 +12,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use arc_swap::ArcSwap;
-use corpus_engine::{CorpusEngine, CorpusSpec, EmbedFn, IngestProgress};
+use corpus_engine::{CorpusEngine, CorpusSpec, IngestProgress};
+use corpus_index::types::EmbedFn;
 
 // ─── Command submodules (god-file breakup — see quality/CLEANUP.md) ───
 mod audit;
@@ -207,7 +208,7 @@ pub(crate) async fn cmd_status(args: &[String]) -> i32 {
     // Index
     let index_path = data_dir.join(&corpus_id);
     if index_path.exists() {
-        match corpus_engine::CorpusIndex::open(&index_path).await {
+        match corpus_index::index::CorpusIndex::open(&index_path).await {
             Ok(idx) => match idx.info().await {
                 Ok(info) => {
                     let age = format_age(info.last_updated);

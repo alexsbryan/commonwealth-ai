@@ -51,11 +51,11 @@ impl Runtime {
         &self,
         corpus_id: &str,
         chunk_id: u64,
-    ) -> Option<corpus_engine::ScoredChunk> {
+    ) -> Option<corpus_index::types::ScoredChunk> {
         let engine = self.corpus_engine.as_ref()?;
         let indexes = engine.usable_indexes().await.ok()?;
         let info = indexes.into_iter().find(|i| i.corpus_id == corpus_id)?;
-        let index = corpus_engine::index::CorpusIndex::open(&info.path)
+        let index = corpus_index::index::CorpusIndex::open(&info.path)
             .await
             .ok()?;
         // Through the index's own re-acquisition door rather than rebuilt
@@ -80,7 +80,7 @@ impl Runtime {
         &self,
         query_text: &str,
         embedding: &[f32],
-        chunks: &mut Vec<corpus_engine::ScoredChunk>,
+        chunks: &mut Vec<corpus_index::types::ScoredChunk>,
         summaries_out: &mut Vec<corpus_engine::enrichment::atlas::ground::SummaryNode>,
         walk_out: &mut Option<crate::runtime::AtlasWalkEcho>,
         label: &str,
@@ -465,7 +465,7 @@ impl corpus_engine::enrichment::atlas::ground::EvidenceFetcher for RuntimeEviden
         &self,
         corpus: &kernel_types::CorpusId,
         row: u64,
-    ) -> Option<corpus_engine::ScoredChunk> {
+    ) -> Option<corpus_index::types::ScoredChunk> {
         self.runtime.fetch_chunk_by_id(corpus.as_str(), row).await
     }
 
@@ -474,7 +474,7 @@ impl corpus_engine::enrichment::atlas::ground::EvidenceFetcher for RuntimeEviden
         corpus: &kernel_types::CorpusId,
         query: &str,
         limit: usize,
-    ) -> Vec<corpus_engine::ScoredChunk> {
+    ) -> Vec<corpus_index::types::ScoredChunk> {
         let scope = [corpus.as_str().to_string()];
         self.runtime
             .search_corpus_indexes_with_overrides(
@@ -513,7 +513,7 @@ impl corpus_engine::enrichment::atlas::ground::EvidenceFetcher for RuntimeEviden
 /// tag is a legacy name. The RESERVE decision no longer reads it (§10.6).
 pub(crate) fn atlas_summary_chunk(
     node: &corpus_engine::enrichment::atlas::ground::SummaryNode,
-) -> corpus_engine::ScoredChunk {
+) -> corpus_index::types::ScoredChunk {
     let corpus_id = node.site.chunk_corpus().as_str().to_string();
     let mut metadata = std::collections::HashMap::new();
     metadata.insert("source".to_string(), "raptor".to_string());
@@ -521,7 +521,7 @@ pub(crate) fn atlas_summary_chunk(
     if !node.atom_id.is_empty() {
         metadata.insert("atom_id".to_string(), node.atom_id.clone());
     }
-    corpus_engine::ScoredChunk {
+    corpus_index::types::ScoredChunk {
         content: node.text.clone(),
         // The article when the site has one (`sep-abduction` -> `abduction`),
         // else the corpus's own name: the title is what the prompt labels the
@@ -539,7 +539,7 @@ pub(crate) fn atlas_summary_chunk(
         chunk_id: None,
         source_doc_id: None,
         vector_distance: Some(1.0 - node.score),
-        provenance: corpus_engine::index::ChunkProvenance::manufactured_summary("atlas_summary"),
+        provenance: corpus_index::index::ChunkProvenance::manufactured_summary("atlas_summary"),
     }
 }
 
@@ -553,7 +553,7 @@ pub(crate) fn atlas_summary_chunk(
 /// the one time it was left to a caller, the summaries were appended at the
 /// tail and admitted at zero for four months.
 pub(crate) fn append_atlas_summaries(
-    chunks: &mut Vec<corpus_engine::ScoredChunk>,
+    chunks: &mut Vec<corpus_index::types::ScoredChunk>,
     summaries: &[corpus_engine::enrichment::atlas::ground::SummaryNode],
     label: &str,
 ) -> usize {
@@ -631,8 +631,7 @@ mod atlas_summary_append_tests {
     use super::{append_atlas_summaries, atlas_summary_chunk};
     use corpus_engine::enrichment::atlas::evidence_site::EvidenceSite;
     use corpus_engine::enrichment::atlas::ground::SummaryNode;
-    use corpus_engine::index::ChunkProvenance;
-    use corpus_engine::ScoredChunk;
+    use corpus_index::{index::ChunkProvenance, types::ScoredChunk};
 
     fn leaf(i: usize) -> ScoredChunk {
         ScoredChunk {

@@ -23,7 +23,8 @@ use sovereign_core::error::{Error, Result};
 use sovereign_core::traits::{InferenceProvider, SensitiveCorpusOracle, StateStore};
 use tokio::sync::RwLock;
 
-use corpus_engine::{CorpusEngine, CorpusSpec, ScoredChunk};
+use corpus_engine::{CorpusEngine, CorpusSpec};
+use corpus_index::types::ScoredChunk;
 
 use super::config::{recipe_toml, LocalCorpusConfig};
 use super::extract_stage::{self, default_staging_path};
@@ -302,7 +303,7 @@ impl LocalCorpusManager {
             if !dir.join("_corpus_meta.json").exists() {
                 continue; // registered but never ingested
             }
-            match corpus_engine::index::backfill_personal_scope(&dir, true) {
+            match corpus_index::index::backfill_personal_scope(&dir, true) {
                 Ok(true) => tracing::info!(
                     corpus = %corpus_id,
                     "backfilled personal_scope=true onto local corpus meta"
@@ -317,7 +318,7 @@ impl LocalCorpusManager {
             }
             if let Some(display) = super::config::display_meta(&cfg.source_type) {
                 let category = display.category.clone();
-                match corpus_engine::index::backfill_display(&dir, display) {
+                match corpus_index::index::backfill_display(&dir, display) {
                     Ok(true) => tracing::info!(
                         corpus = %corpus_id,
                         category = category.as_deref().unwrap_or(""),

@@ -34,13 +34,13 @@ pub use sovereign_contracts::daemon_wire::local_corpus::config::*;
 /// retrieval-visible too.
 pub fn display_meta(
     source_type: &LocalCorpusSourceType,
-) -> Option<corpus_engine::recipe::DisplayMeta> {
+) -> Option<corpus_index::recipe::DisplayMeta> {
     match source_type {
-        LocalCorpusSourceType::ObsidianVault { .. } => Some(corpus_engine::recipe::DisplayMeta {
+        LocalCorpusSourceType::ObsidianVault { .. } => Some(corpus_index::recipe::DisplayMeta {
             category: Some("vault".to_string()),
             icon: Some("book-open".to_string()),
         }),
-        LocalCorpusSourceType::WatchedFolder(_) => Some(corpus_engine::recipe::DisplayMeta {
+        LocalCorpusSourceType::WatchedFolder(_) => Some(corpus_index::recipe::DisplayMeta {
             category: Some("watched_folder".to_string()),
             icon: Some("folder".to_string()),
         }),
@@ -49,7 +49,7 @@ pub fn display_meta(
         // the `watched_folder` category, which is what lands it in
         // TIERED_DISPLAY_CATEGORIES for entity-aware retrieval. Watching,
         // not enrichment, is the only thing DocumentFolder gives up.
-        LocalCorpusSourceType::DocumentFolder => Some(corpus_engine::recipe::DisplayMeta {
+        LocalCorpusSourceType::DocumentFolder => Some(corpus_index::recipe::DisplayMeta {
             category: Some("watched_folder".to_string()),
             icon: Some("folder".to_string()),
         }),

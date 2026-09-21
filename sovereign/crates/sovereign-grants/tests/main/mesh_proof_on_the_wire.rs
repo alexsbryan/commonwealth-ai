@@ -20,7 +20,8 @@ use std::sync::{Arc, Mutex};
 
 use commonwealth_core::ids::{HandoffId, NodeId};
 use commonwealth_state::MeshStore;
-use corpus_engine::{CorpusEngine, EmbedFn};
+use corpus_engine::CorpusEngine;
+use corpus_index::types::EmbedFn;
 use sovereign_grants::shard_manager::MergePlan;
 use sovereign_grants::ShardManager;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};

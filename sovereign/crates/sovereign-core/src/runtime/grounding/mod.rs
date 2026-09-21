@@ -350,9 +350,9 @@ pub(crate) struct GateEvidenceParts {
 /// (the pre-Fix-B A/B baseline) keeps summaries in retrieval ORDER and
 /// marked Leaf — byte-identical to the historical baseline.
 pub(crate) fn gate_evidence_with_sources(
-    chunks: &[corpus_engine::ScoredChunk],
+    chunks: &[corpus_index::types::ScoredChunk],
 ) -> GateEvidenceParts {
-    let labels_of = |c: &corpus_engine::ScoredChunk| {
+    let labels_of = |c: &corpus_index::types::ScoredChunk| {
         let mut labels = Vec::with_capacity(2);
         if let Some(t) = c.title.as_deref() {
             let t = t.trim();
@@ -372,9 +372,9 @@ pub(crate) fn gate_evidence_with_sources(
     // machinery disengaged below — `stamped_custody` is `Option` precisely
     // so this site keeps that distinction; a pool where nothing is stamped
     // must not become a pool where everything refuses.
-    let custody_of = |c: &corpus_engine::ScoredChunk| c.provenance.stamped_custody();
-    let url_of = |c: &corpus_engine::ScoredChunk| c.url.clone();
-    let member_of = |c: &corpus_engine::ScoredChunk| c.metadata.get("peer").cloned();
+    let custody_of = |c: &corpus_index::types::ScoredChunk| c.provenance.stamped_custody();
+    let url_of = |c: &corpus_index::types::ScoredChunk| c.url.clone();
+    let member_of = |c: &corpus_index::types::ScoredChunk| c.metadata.get("peer").cloned();
     let exclude_raptor = std::env::var("SOVEREIGN_GATE_EXCLUDE_RAPTOR")
         .map(|v| !(v == "0" || v.eq_ignore_ascii_case("false")))
         .unwrap_or(true);
@@ -398,7 +398,7 @@ pub(crate) fn gate_evidence_with_sources(
     // `metadata["source"] == "raptor"`, which matched an indexed rollup row
     // and an in-process one by accident of a shared tag; `grain()` answers
     // for both arms on purpose.
-    let is_summary = |c: &corpus_engine::ScoredChunk| c.provenance.grain() == Grain::Summary;
+    let is_summary = |c: &corpus_index::types::ScoredChunk| c.provenance.grain() == Grain::Summary;
     // Resolved once over the ORIGINAL indices, then carried through the same
     // filter and reordering below, so `chunk_locators[i]` always names
     // `chunks[i]`.
@@ -462,7 +462,7 @@ pub(crate) fn gate_evidence_with_sources(
 /// yields `Some` target and `None` locator, and such a citation is openable
 /// even though it can name no chapter.
 pub(crate) fn gate_evidence_targets(
-    chunks: &[corpus_engine::ScoredChunk],
+    chunks: &[corpus_index::types::ScoredChunk],
 ) -> Vec<Option<CitationTarget>> {
     chunks
         .iter()
@@ -503,7 +503,9 @@ pub(crate) fn gate_evidence_targets(
 /// rather than a wrong one.
 ///
 /// Manifests are read at most once per (corpus, document) per turn.
-pub(crate) fn gate_evidence_locators(chunks: &[corpus_engine::ScoredChunk]) -> Vec<Option<String>> {
+pub(crate) fn gate_evidence_locators(
+    chunks: &[corpus_index::types::ScoredChunk],
+) -> Vec<Option<String>> {
     use corpus_engine::enrichment::governance_view::{chunk_to_section_map, section_titles};
     use std::collections::HashMap;
 
@@ -550,7 +552,9 @@ pub(crate) fn gate_evidence_locators(chunks: &[corpus_engine::ScoredChunk]) -> V
 /// naming a source by its corpus or section title is not mistaken for a fabrication.
 /// RAPTOR summaries are NOT excluded here: a summary's title/corpus is still a real
 /// label, and since labels never narrow groundedness, including them is always safe.
-pub(crate) fn gate_evidence_source_labels(chunks: &[corpus_engine::ScoredChunk]) -> Vec<String> {
+pub(crate) fn gate_evidence_source_labels(
+    chunks: &[corpus_index::types::ScoredChunk],
+) -> Vec<String> {
     let mut out = Vec::with_capacity(chunks.len() * 2);
     for c in chunks {
         if let Some(t) = c.title.as_deref() {

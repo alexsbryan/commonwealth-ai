@@ -1059,7 +1059,7 @@ impl Runtime {
         // them. Best-effort: if `installed_indexes()` errors we fall
         // back to no-kinds formatting (pre-catalog behaviour).
         let (kinds, display_categories): (
-            std::collections::HashMap<String, corpus_engine::CorpusKind>,
+            std::collections::HashMap<String, corpus_index::types::CorpusKind>,
             std::collections::HashMap<String, String>,
         ) = if let Some(engine) = &self.corpus_engine {
             let mut kinds_map = std::collections::HashMap::new();

@@ -16,7 +16,7 @@
 //!    Run on the merged top-K to enforce article diversity and to
 //!    guarantee shelf space for both sides of a comparison query.
 
-use corpus_engine::ScoredChunk;
+use corpus_index::types::ScoredChunk;
 
 /// Per-section chunk cap inside the per-article cap. 4 keeps a
 /// fact-rich Wikipedia article from filling all its slots with one

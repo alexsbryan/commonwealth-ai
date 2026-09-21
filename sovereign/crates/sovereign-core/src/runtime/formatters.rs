@@ -13,7 +13,7 @@
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 
-use corpus_engine::{CorpusKind, ScoredChunk};
+use corpus_index::types::{CorpusKind, ScoredChunk};
 
 use crate::traits::FolderMetadata;
 use crate::types::{CoverageNote, SourceSummary, ThinFolder};
@@ -624,7 +624,7 @@ mod folder_attribution_tests {
             source_doc_id: None,
             vector_distance: None,
             // Fixture chunk: nothing acquired it (TOPOLOGY §10 rung 9.1).
-            provenance: corpus_engine::index::ChunkProvenance::manufactured("test_fixture"),
+            provenance: corpus_index::index::ChunkProvenance::manufactured("test_fixture"),
         }
     }
 
@@ -769,7 +769,7 @@ mod folder_attribution_tests {
             source_doc_id: None,
             vector_distance: None,
             // Fixture chunk: nothing acquired it (TOPOLOGY §10 rung 9.1).
-            provenance: corpus_engine::index::ChunkProvenance::manufactured("test_fixture"),
+            provenance: corpus_index::index::ChunkProvenance::manufactured("test_fixture"),
         };
         let web = ScoredChunk {
             content: "Breaking news…".into(),
@@ -782,7 +782,7 @@ mod folder_attribution_tests {
             source_doc_id: None,
             vector_distance: None,
             // Fixture chunk: nothing acquired it (TOPOLOGY §10 rung 9.1).
-            provenance: corpus_engine::index::ChunkProvenance::manufactured("test_fixture"),
+            provenance: corpus_index::index::ChunkProvenance::manufactured("test_fixture"),
         };
         let out = format_scored_chunks_with_kinds(&[corpus, web], 100_000, None, None, None, None);
         assert!(
@@ -925,7 +925,7 @@ mod formatter_stream_section_tests {
     //! (no-regression for un-meta-tagged retrieval).
 
     use super::format_scored_chunks_with_kinds;
-    use corpus_engine::ScoredChunk;
+    use corpus_index::types::ScoredChunk;
     use std::collections::HashMap;
 
     fn chunk(
@@ -953,7 +953,7 @@ mod formatter_stream_section_tests {
             source_doc_id: None,
             vector_distance: None,
             // Fixture chunk: nothing acquired it (TOPOLOGY §10 rung 9.1).
-            provenance: corpus_engine::index::ChunkProvenance::manufactured("test_fixture"),
+            provenance: corpus_index::index::ChunkProvenance::manufactured("test_fixture"),
         }
     }
 
@@ -1033,8 +1033,7 @@ mod formatter_stream_section_tests {
         );
         c.url = Some("https://plato.stanford.edu/entries/compatibilism/".into());
         c.chunk_id = None;
-        c.provenance =
-            corpus_engine::index::ChunkProvenance::manufactured_summary("raptor_summary");
+        c.provenance = corpus_index::index::ChunkProvenance::manufactured_summary("raptor_summary");
         c.metadata.insert("raptor_level".into(), "1".into());
         let web = {
             let mut w = chunk("web", "live-result", "Genuine web fetch.", None, None);
@@ -1069,7 +1068,7 @@ mod formatter_stream_section_tests {
         let mut summary = chunk("sep", "free-will", "Summary body.", None, None);
         summary.url = Some("https://plato.stanford.edu/entries/free-will/".into());
         summary.provenance =
-            corpus_engine::index::ChunkProvenance::manufactured_summary("raptor_summary");
+            corpus_index::index::ChunkProvenance::manufactured_summary("raptor_summary");
         let leaf = chunk("sep", "free-will", "Leaf passage body.", None, None);
         // Summary FIRST in the vector (reserve_summary_chunks order) —
         // the section order must still put passages first.

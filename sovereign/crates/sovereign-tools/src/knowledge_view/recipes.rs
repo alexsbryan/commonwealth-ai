@@ -333,7 +333,7 @@ pub fn conversation_history_recipe(db_path: &Path, local_only_skill_ids: &[&str]
         // chats) and `conversations-anthropic` (imported Claude
         // chats) appear side by side, regardless of which one they
         // originated from.
-        display: Some(corpus_engine::DisplayMeta {
+        display: Some(corpus_index::recipe::DisplayMeta {
             category: Some("conversation".into()),
             icon: Some("chat-bubble".into()),
         }),

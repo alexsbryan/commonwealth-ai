@@ -75,7 +75,7 @@ async fn create_index(
     in_progress: bool,
 ) {
     let path = indexes.join(corpus_id);
-    let index = corpus_engine::CorpusIndex::create(
+    let index = corpus_index::index::CorpusIndex::create(
         &path,
         corpus_id,
         &format!("{corpus_id} (fixture)"),

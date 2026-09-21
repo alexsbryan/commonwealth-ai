@@ -24,7 +24,7 @@ use corpus_engine::enrichment::investigation::graph::{
     InvestigationEntity as InvEntity, PatternFinding, PatternKind, Relationship as InvRelationship,
     INVESTIGATION_DIRNAME,
 };
-use corpus_engine::index::CorpusIndex;
+use corpus_index::index::CorpusIndex;
 
 // ─── The failure type ────────────────────────────────────────────────
 

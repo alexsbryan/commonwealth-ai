@@ -30,8 +30,9 @@ use std::sync::Arc;
 
 use commonwealth_core::ids::{HandoffId, NodeId};
 use commonwealth_state::MeshStore;
-use corpus_engine::index::{InsertChunk, InsertCodeMeta};
-use corpus_engine::{Corpus, CorpusEngine, CorpusIndex, EmbedFn};
+use corpus_engine::CorpusEngine;
+use corpus_index::index::{InsertChunk, InsertCodeMeta};
+use corpus_index::{corpus::Corpus, index::CorpusIndex, types::EmbedFn};
 use sovereign_grants::shard_manager::MergePlan;
 use sovereign_grants::ShardManager;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -244,7 +245,7 @@ async fn refuses_when_coverage_falls_short_of_the_bar() {
         .expect_err("2 of 3 partitions must be a refusal, not a canonical");
 
     match err {
-        corpus_engine::Error::IncompleteCoverage {
+        corpus_index::Error::IncompleteCoverage {
             ref corpus,
             covered,
             expected,

@@ -17,7 +17,8 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use corpus_engine::{CorpusEngine, EmbedFn};
+use corpus_engine::CorpusEngine;
+use corpus_index::types::EmbedFn;
 use sovereign_core::traits::{SensitiveCorpusOracle, StateStore};
 use sovereign_store::memory::InMemoryStateStore;
 use sovereign_tools::local_corpus::config::{
@@ -32,7 +33,7 @@ use sovereign_tools::local_corpus::watched::worker::{Worker, WorkerOutcome};
 use sovereign_tools::local_corpus::watched::workflow_trigger::WorkflowTriggerRuntime;
 use tempfile::TempDir;
 
-const EMBED_DIMS: usize = corpus_engine::DEFAULT_EMBED_DIM;
+const EMBED_DIMS: usize = corpus_index::types::DEFAULT_EMBED_DIM;
 
 /// Deterministic embed: every call returns the same zero vector.
 /// LanceDB stores it as opaque bytes so the diff/apply path completes

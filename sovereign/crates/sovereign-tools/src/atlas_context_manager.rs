@@ -78,7 +78,7 @@ fn attach_pipeline_map(
 /// Both moved DOWN to `corpus_engine::enrichment::atlas::context_loader`
 /// (order ei-5a-build-cut): every type they touch was already corpus-engine's,
 /// and the loader's only inference need is `embed_query`, which is
-/// `corpus_engine::EmbedFn`. Keeping the write in the inference stack bought
+/// `corpus_index::types::EmbedFn`. Keeping the write in the inference stack bought
 /// nothing and cost every atlas writer a llama.cpp link.
 ///
 /// Re-exported at the historical path — NOT copied (ARCH §10.6) — so
@@ -927,7 +927,7 @@ mod tests {
     async fn write_wiki_fixture(indexes: &Path, corpus: &str) {
         use corpus_engine::enrichment::atlas::wiki_store::build_wikipedia_columnar_store_from_chunks;
         use corpus_engine::extractors::wikipedia_types::{WikiLink, WikipediaChunkMetadata};
-        use corpus_engine::index::StoredChunkWithMetadata;
+        use corpus_index::index::StoredChunkWithMetadata;
         let atlas = indexes.join(corpus).join(ATLAS_DIRNAME);
         std::fs::create_dir_all(&atlas).unwrap();
         let meta = |links: Vec<(&str, &str)>| {

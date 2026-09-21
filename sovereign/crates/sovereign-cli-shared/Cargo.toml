@@ -22,6 +22,8 @@ corpus-engine-scip = { workspace = true, optional = true }
 # ingest engine and the loopback embed client; both binaries that serve the verb
 # already link both, and every other sibling skips them.
 corpus-engine = { workspace = true, optional = true }
+# Leaf half of the code-index verb's edge (`Corpus`, `EmbedFn`, …).
+corpus-index = { workspace = true, optional = true }
 oicp-client = { workspace = true, optional = true }
 sovereign-core = { workspace = true, optional = true }
 # Bottom-layer wall-clock SSOT — `project_toml` stamps `observed_at`. Depended
@@ -92,7 +94,7 @@ project-model = ["dep:corpus-engine-scip", "dep:which"]
 # shared by `sovereign-cli` (which ships it) and `sovereign-cli-dev` (whose
 # `code` router also serves it). Each carried its own copy until 2026-08-20 and
 # the two drifted; see the module docs for the three defects that merged.
-code-index = ["dep:corpus-engine", "dep:oicp-client", "dep:sovereign-core"]
+code-index = ["dep:corpus-engine", "dep:corpus-index", "dep:oicp-client", "dep:sovereign-core"]
 # Enables `sovereign_cli_shared::rail` — the ONE operator-side rail client
 # (cw-lift 5e). It was `ring_cmd`'s private pair while `ring` and `job` were
 # the only callers; `svrn quality check --distribute` is a third, and it lives

@@ -11,7 +11,7 @@
 //!
 //! # What is counted
 //!
-//! `corpus_engine::index::ChunkProvenance` has two arms. `Acquired` is
+//! `corpus_index::index::ChunkProvenance` has two arms. `Acquired` is
 //! stamped by a door from the index's own facts and has **no public
 //! constructor** — the compiler holds that half, so this census does not
 //! re-check it. `Manufactured { producer }` is what a process writes when it
@@ -211,7 +211,7 @@ fn no_new_pool_content_bypasses_an_acquisition_door() {
         new.is_empty(),
         "new manufactured chunk producer(s). Each one is content that will reach a prompt \
          without passing an acquisition door (TOPOLOGY hazard 1). Either acquire it through a \
-         `corpus_engine::index::CorpusIndex` door, or add it to MANUFACTURED with what would \
+         `corpus_index::index::CorpusIndex` door, or add it to MANUFACTURED with what would \
          take it off the list.\n{new:#?}"
     );
 
@@ -323,7 +323,7 @@ fn every_acquisition_door_is_a_written_decision() {
 /// direction that fabricates.
 #[test]
 fn the_peer_door_refuses_on_absence_and_joins_on_presence() {
-    use corpus_engine::index::ChunkProvenance;
+    use corpus_index::index::ChunkProvenance;
     use kernel_types::{Custody, Grain};
 
     // An un-upgraded peer: no custody, no grain. Exactly as unquotable and as
@@ -358,7 +358,7 @@ fn the_peer_door_refuses_on_absence_and_joins_on_presence() {
 /// parameter, or point it at any class other than `Personal`.
 #[test]
 fn the_estate_door_fixes_its_custody() {
-    use corpus_engine::index::ChunkProvenance;
+    use corpus_index::index::ChunkProvenance;
     use kernel_types::Custody;
 
     let p = ChunkProvenance::acquired_from_estate("estate-notes");
@@ -375,7 +375,7 @@ fn the_estate_door_fixes_its_custody() {
 /// refuses (custody.md §4, red R-3).
 #[test]
 fn an_unstamped_pool_leaves_the_custody_machinery_disengaged() {
-    use corpus_engine::index::ChunkProvenance;
+    use corpus_index::index::ChunkProvenance;
     use kernel_types::Custody;
 
     let manufactured = ChunkProvenance::manufactured("atlas_context_entity");

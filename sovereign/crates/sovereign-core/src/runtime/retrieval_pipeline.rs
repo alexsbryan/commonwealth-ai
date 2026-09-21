@@ -303,7 +303,7 @@ pub struct PipelineState<'ctx> {
     /// uses `format!("{intent:?}")` (e.g. `SimpleQuery`).
     pub search_label: String,
     // ── working set ──
-    pub chunks: Vec<corpus_engine::ScoredChunk>,
+    pub chunks: Vec<corpus_index::types::ScoredChunk>,
     // ── threaded step products ──
     pub hot_corpora: HashMap<String, usize>,
     pub entities: Vec<String>,
@@ -353,12 +353,12 @@ pub struct PipelineState<'ctx> {
     /// `entity_boost`, joined at `ppr_struct_expand`) — the lane is
     /// pool-independent, so it overlaps the core grounding steps
     /// instead of serializing after them.
-    pub ppr_pending: Option<tokio::task::JoinHandle<Vec<corpus_engine::ScoredChunk>>>,
+    pub ppr_pending: Option<tokio::task::JoinHandle<Vec<corpus_index::types::ScoredChunk>>>,
     /// In-flight entity-obligations fetch (merge-select architecture;
     /// spawned with the PPR lane, joined with it). Question-named
     /// entities title-resolved and title-fetched directly — supply for
     /// the merge selector's demand slots.
-    pub obligations_pending: Option<tokio::task::JoinHandle<Vec<corpus_engine::ScoredChunk>>>,
+    pub obligations_pending: Option<tokio::task::JoinHandle<Vec<corpus_index::types::ScoredChunk>>>,
     // ── deep-only products ──
     /// corpus_id → peer name for mesh-served corpora we don't host.
     pub peer_attribution: HashMap<String, String>,
@@ -529,7 +529,7 @@ fn resolve_expansion_corpora<'a>(
 /// the homogeneous rig can measure — the SEP-at-rig anchor and the banks are
 /// the arms that exercise it.
 fn top_scoring_corpora(
-    chunks: &[corpus_engine::ScoredChunk],
+    chunks: &[corpus_index::types::ScoredChunk],
     query: &str,
     budget: usize,
 ) -> Vec<String> {
@@ -548,14 +548,17 @@ fn top_scoring_corpora(
     // of the main pool per turn; at n=1000 that is ~20k chunks, which is tens
     // of milliseconds against a multi-second retrieval, and it is paid once
     // rather than once per expansion.
-    let mut scratch: Vec<corpus_engine::ScoredChunk> = chunks.to_vec();
+    let mut scratch: Vec<corpus_index::types::ScoredChunk> = chunks.to_vec();
     reweight_by_query_relevance(&mut scratch, query);
     top_corpora_by_best_chunk(&scratch, budget)
 }
 
 /// Per-corpus best score, ranked, capped at `budget` CORPORA. Split out so the
 /// ranking rule is testable independently of which score is fed to it.
-fn top_corpora_by_best_chunk(chunks: &[corpus_engine::ScoredChunk], budget: usize) -> Vec<String> {
+fn top_corpora_by_best_chunk(
+    chunks: &[corpus_index::types::ScoredChunk],
+    budget: usize,
+) -> Vec<String> {
     // Rank each corpus by its BEST chunk, then take the top `budget` CORPORA.
     //
     // The unit is corpora, not chunks, and that is the whole point. Budgeting
@@ -889,7 +892,7 @@ fn dead_law_chunk_ids(
 /// and silently dropping unattributable evidence would substitute a guess for
 /// an absence (ARCH §18.3).
 fn drop_dead_law_chunks(
-    chunks: &mut Vec<corpus_engine::ScoredChunk>,
+    chunks: &mut Vec<corpus_index::types::ScoredChunk>,
     dead_chunks: &std::collections::HashSet<u64>,
     label: &str,
     dead_section_total: usize,
@@ -1458,27 +1461,28 @@ fn step_ppr_struct_expand<'a, 'ctx>(
         // overruns the deadline is abandoned, not awaited — the
         // pipeline's latency contract wins over a slow expansion.
         const PPR_JOIN_DEADLINE: std::time::Duration = std::time::Duration::from_secs(4);
-        let join = |handle: Option<tokio::task::JoinHandle<Vec<corpus_engine::ScoredChunk>>>,
-                    what: &'static str| {
-            let handle = handle?;
-            Some(async move {
-                match tokio::time::timeout(PPR_JOIN_DEADLINE, handle).await {
-                    Ok(Ok(a)) => a,
-                    Ok(Err(e)) => {
-                        tracing::warn!(error = %e, what, "lane task failed — skipping");
-                        Vec::new()
+        let join =
+            |handle: Option<tokio::task::JoinHandle<Vec<corpus_index::types::ScoredChunk>>>,
+             what: &'static str| {
+                let handle = handle?;
+                Some(async move {
+                    match tokio::time::timeout(PPR_JOIN_DEADLINE, handle).await {
+                        Ok(Ok(a)) => a,
+                        Ok(Err(e)) => {
+                            tracing::warn!(error = %e, what, "lane task failed — skipping");
+                            Vec::new()
+                        }
+                        Err(_) => {
+                            tracing::warn!(
+                                deadline_secs = PPR_JOIN_DEADLINE.as_secs(),
+                                what,
+                                "lane overran the join deadline — abandoned"
+                            );
+                            Vec::new()
+                        }
                     }
-                    Err(_) => {
-                        tracing::warn!(
-                            deadline_secs = PPR_JOIN_DEADLINE.as_secs(),
-                            what,
-                            "lane overran the join deadline — abandoned"
-                        );
-                        Vec::new()
-                    }
-                }
-            })
-        };
+                })
+            };
         let ppr = join(st.ppr_pending.take(), "ppr_expand");
         let obligations = join(st.obligations_pending.take(), "entity_obligations");
         let mut total_added = 0usize;
@@ -2057,12 +2061,12 @@ fn step_main_retrieval_mesh<'a, 'ctx>(
             // un-upgraded peer's hits stay exactly as unquotable as they were
             // while they were `Manufactured` — no loosening, ever, from a peer
             // that says nothing.
-            let provenance = corpus_engine::index::ChunkProvenance::acquired_from_peer(
+            let provenance = corpus_index::index::ChunkProvenance::acquired_from_peer(
                 hit.corpus_id.clone(),
                 hit.custody,
                 hit.grain,
             );
-            st.chunks.push(corpus_engine::ScoredChunk {
+            st.chunks.push(corpus_index::types::ScoredChunk {
                 content: hit.content,
                 title: hit.title,
                 url: hit.url,
@@ -2129,7 +2133,7 @@ fn step_store_search<'a, 'ctx>(rt: &'a Runtime, st: &'a mut PipelineState<'ctx>)
             // is not something this call site chooses — walking through
             // `acquired_from_estate` is the only way to get it, and there is
             // no argument that could ask for another (TOPOLOGY §10 rung 9.1).
-            st.chunks.push(corpus_engine::ScoredChunk {
+            st.chunks.push(corpus_index::types::ScoredChunk {
                 content: doc.content.clone(),
                 title: Some(doc.source.clone()),
                 url: Some(format!("estate:{corpus_id}")),
@@ -2139,7 +2143,7 @@ fn step_store_search<'a, 'ctx>(rt: &'a Runtime, st: &'a mut PipelineState<'ctx>)
                 chunk_id: None,
                 source_doc_id: None,
                 vector_distance: None,
-                provenance: corpus_engine::index::ChunkProvenance::acquired_from_estate(
+                provenance: corpus_index::index::ChunkProvenance::acquired_from_estate(
                     corpus_id.clone(),
                 ),
             });
@@ -2372,8 +2376,8 @@ mod tests {
             "the join must resolve the dead SECTION to its chunk rows"
         );
 
-        fn chunk(id: Option<u64>) -> corpus_engine::ScoredChunk {
-            corpus_engine::ScoredChunk {
+        fn chunk(id: Option<u64>) -> corpus_index::types::ScoredChunk {
+            corpus_index::types::ScoredChunk {
                 content: format!("{id:?}"),
                 title: None,
                 url: None,
@@ -2383,7 +2387,7 @@ mod tests {
                 chunk_id: id,
                 source_doc_id: None,
                 vector_distance: None,
-                provenance: corpus_engine::index::ChunkProvenance::manufactured("test_fixture"),
+                provenance: corpus_index::index::ChunkProvenance::manufactured("test_fixture"),
             }
         }
         // 11 is retrieved and repealed; 10 is not retrieved this turn; the
@@ -2477,8 +2481,8 @@ mod tests {
         );
     }
 
-    fn scored(corpus: &str, score: f32) -> corpus_engine::ScoredChunk {
-        corpus_engine::ScoredChunk {
+    fn scored(corpus: &str, score: f32) -> corpus_index::types::ScoredChunk {
+        corpus_index::types::ScoredChunk {
             content: "body".to_string(),
             title: None,
             url: None,
@@ -2489,7 +2493,7 @@ mod tests {
             source_doc_id: None,
             vector_distance: None,
             // Fixture chunk: nothing acquired it (TOPOLOGY §10 rung 9.1).
-            provenance: corpus_engine::index::ChunkProvenance::manufactured("test_fixture"),
+            provenance: corpus_index::index::ChunkProvenance::manufactured("test_fixture"),
         }
     }
 

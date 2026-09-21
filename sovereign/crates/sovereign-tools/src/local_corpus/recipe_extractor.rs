@@ -11,7 +11,8 @@
 //! folder-drop watched-folder flow; this module reuses it.
 use std::sync::Arc;
 
-use corpus_engine::{CorpusEngine, CustomExtractorFn, Error, Result};
+use corpus_engine::{CorpusEngine, CustomExtractorFn};
+use corpus_index::{Error, Result};
 
 use super::extract_stage::{safe_extract_pdf_text, SafeExtractError};
 

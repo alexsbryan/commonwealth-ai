@@ -399,7 +399,7 @@ pub(crate) fn build_demands(message: &str, intent: &Intent, entities: &[String])
 /// form appears in some chunk's title or content; SubQuestion = every
 /// substantive token of the sub-query appears in ONE chunk. The
 /// `Supported` upgrade happens at assembly, from gate claims.
-pub(crate) fn stamp_coverage(demands: &mut [Demand], chunks: &[corpus_engine::ScoredChunk]) {
+pub(crate) fn stamp_coverage(demands: &mut [Demand], chunks: &[corpus_index::types::ScoredChunk]) {
     let lowered: Vec<(String, String)> = chunks
         .iter()
         .map(|c| {
@@ -643,7 +643,7 @@ pub async fn coverage_probe(
         // subset (order-dependent), so the topic/claim verdict depended on
         // which corpora happened to sort first. `None` (no scope) keeps the
         // all-installed behavior for un-scoped turns.
-        let scoped: Vec<&corpus_engine::IndexInfo> = infos
+        let scoped: Vec<&corpus_index::types::IndexInfo> = infos
             .iter()
             .filter(|i| corpus_in_probe_scope(&i.corpus_id, enabled_corpora))
             .collect();
@@ -698,7 +698,7 @@ pub async fn coverage_probe(
 /// and the mesh member each chunk came from (`metadata["peer"]`, the one
 /// writer being the retrieval pipeline's mesh merge), aligned with
 /// `chunks`; `None` for a local chunk.
-pub(crate) fn pool_context(chunks: &[corpus_engine::ScoredChunk]) -> PoolContext {
+pub(crate) fn pool_context(chunks: &[corpus_index::types::ScoredChunk]) -> PoolContext {
     let mut seen = std::collections::HashSet::new();
     let mut corpora = Vec::new();
     for c in chunks {

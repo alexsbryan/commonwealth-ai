@@ -36,7 +36,11 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use corpus_engine::{Corpus, CorpusEngine, CorpusSpec, EmbedFn, CORPUS_META_FILENAME};
+use corpus_engine::{CorpusEngine, CorpusSpec};
+use corpus_index::{
+    corpus::{Corpus, CORPUS_META_FILENAME},
+    types::EmbedFn,
+};
 use oicp_client::RemoteApiProvider;
 use sovereign_core::traits::InferenceProvider;
 

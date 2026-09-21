@@ -29,7 +29,8 @@ use corpus_engine::enrichment::atlas::{
     AtomEnvelope,
 };
 use corpus_engine::progress::IngestProgress;
-use corpus_engine::{CorpusEngine, EmbedFn, ProgressCallback};
+use corpus_engine::{CorpusEngine, ProgressCallback};
+use corpus_index::types::EmbedFn;
 
 /// Outcome of a structural-atlas post-install run.
 #[derive(Debug)]

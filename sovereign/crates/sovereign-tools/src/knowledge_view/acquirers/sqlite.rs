@@ -50,7 +50,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use corpus_engine::engine::{CorpusEngine, CustomAcquirerFn};
-use corpus_engine::error::{Error, Result};
+use corpus_index::error::{Error, Result};
 use rusqlite::{Connection, OpenFlags};
 use serde::{Deserialize, Serialize};
 

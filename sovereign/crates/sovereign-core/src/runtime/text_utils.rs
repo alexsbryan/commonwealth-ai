@@ -95,7 +95,7 @@ pub(crate) fn truncate_chars(s: &str, max_chars: usize) -> String {
 /// which Runtime instance you want to instrument) to surface the
 /// events.
 pub(crate) fn audit_pipeline_stage(
-    chunks: &[corpus_engine::ScoredChunk],
+    chunks: &[corpus_index::types::ScoredChunk],
     stage: &'static str,
     query: &str,
 ) {

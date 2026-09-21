@@ -527,7 +527,7 @@ pub(super) async fn check_code_indexed() -> CheckResult {
             Some(n) => n.to_string(),
             None => continue,
         };
-        match corpus_engine::CorpusIndex::open(&path).await {
+        match corpus_index::index::CorpusIndex::open(&path).await {
             Ok(_) => healthy.push(name),
             Err(_) => broken.push(name),
         }

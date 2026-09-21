@@ -16,7 +16,8 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use corpus_engine::{CorpusEngine, EmbedFn};
+use corpus_engine::CorpusEngine;
+use corpus_index::types::EmbedFn;
 use sovereign_code::{CodeSearchTool, RecentChangesTool, SymbolLookupTool};
 use sovereign_contracts::traits::Tool;
 use sovereign_contracts::types::{StepOutput, ToolContext};
@@ -33,7 +34,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // to FTS-only when no inference provider is wired).
     let embed: EmbedFn = Arc::new(|_text: &str| {
         Box::pin(async {
-            Ok::<Vec<f32>, corpus_engine::Error>(vec![0.0; corpus_engine::DEFAULT_EMBED_DIM])
+            Ok::<Vec<f32>, corpus_index::Error>(vec![0.0; corpus_index::types::DEFAULT_EMBED_DIM])
         })
     });
     let engine = Arc::new(CorpusEngine::new(

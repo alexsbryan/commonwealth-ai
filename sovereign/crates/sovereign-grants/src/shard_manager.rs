@@ -7,7 +7,12 @@ use commonwealth_core::contributions::LedgerEventKind;
 use commonwealth_core::ids::{HandoffId, NodeId};
 use commonwealth_core::knowledge::{IngestionHandoff, KnowledgeShardAssignment, PartitionStatus};
 use commonwealth_state::{ContributionEmitter, MeshStore};
-use corpus_engine::{ChunkRange, Corpus, CorpusEngine, CorpusIndex, IndexInfo, ShardInfo};
+use corpus_engine::{CorpusEngine, ShardInfo};
+use corpus_index::{
+    corpus::Corpus,
+    index::CorpusIndex,
+    types::{ChunkRange, IndexInfo},
+};
 
 pub struct ShardManager {
     engine: Arc<CorpusEngine>,
@@ -106,7 +111,7 @@ impl ShardManager {
         &self,
         corpus_id: &str,
         assignments: &[KnowledgeShardAssignment],
-    ) -> corpus_engine::Result<Vec<PreparedShard>> {
+    ) -> corpus_index::Result<Vec<PreparedShard>> {
         let mut shards = Vec::new();
         for assignment in assignments {
             if assignment.corpus_id != corpus_id {
@@ -137,17 +142,17 @@ impl ShardManager {
         corpus_id: &str,
         chunk_range: &ChunkRange,
         received_dir: &Path,
-    ) -> corpus_engine::Result<PathBuf> {
+    ) -> corpus_index::Result<PathBuf> {
         let dest = self.engine.index_dir().join(format!(
             "{}-shard-{}-{}",
             corpus_id, chunk_range.start_id, chunk_range.end_id
         ));
-        std::fs::rename(received_dir, &dest).map_err(corpus_engine::Error::Io)?;
+        std::fs::rename(received_dir, &dest).map_err(corpus_index::Error::Io)?;
         Ok(dest)
     }
 
     /// Merge all local shard directories for a corpus into a complete index.
-    pub async fn consolidate_shards(&self, corpus_id: &str) -> corpus_engine::Result<IndexInfo> {
+    pub async fn consolidate_shards(&self, corpus_id: &str) -> corpus_index::Result<IndexInfo> {
         let shard_dirs: Vec<PathBuf> = self
             .engine
             .installed_indexes()
@@ -158,7 +163,7 @@ impl ShardManager {
             .collect();
 
         if shard_dirs.is_empty() {
-            return Err(corpus_engine::Error::NoShardsFound(corpus_id.into()));
+            return Err(corpus_index::Error::NoShardsFound(corpus_id.into()));
         }
 
         let output = self.engine.index_dir().join(corpus_id);
@@ -225,7 +230,7 @@ impl ShardManager {
         local_node_id: NodeId,
         peer_shard_base_urls: &[(NodeId, String)],
         mesh_proof: Option<(&str, &str)>,
-    ) -> corpus_engine::Result<Option<IndexInfo>> {
+    ) -> corpus_index::Result<Option<IndexInfo>> {
         const PARTITION_POLL_INTERVAL: Duration = Duration::from_secs(30);
         const MAX_WAIT_SECS: u64 = 3600; // 1 hour
 
@@ -474,16 +479,16 @@ impl ShardManager {
     ///
     /// # Two refusals, each with its own name
     ///
-    /// * [`corpus_engine::Error::IncompleteCoverage`] — `plan.expected_partitions`
+    /// * [`corpus_index::Error::IncompleteCoverage`] — `plan.expected_partitions`
     ///   named a bar the resolved shards miss, so nothing was merged.
-    /// * [`corpus_engine::Error::MergedNotFinalized`] — the chunks merged and
+    /// * [`corpus_index::Error::MergedNotFinalized`] — the chunks merged and
     ///   the finalize did not. Not folded into a generic error: it carries
     ///   the chunk count and the canonical path because that directory holds
     ///   the only surviving copy of the merged rows (ARCH §18.3).
     pub async fn merge_participants(
         &self,
         plan: MergePlan<'_>,
-    ) -> corpus_engine::Result<Option<IndexInfo>> {
+    ) -> corpus_index::Result<Option<IndexInfo>> {
         let MergePlan {
             handoff_id,
             corpus_id,
@@ -639,7 +644,7 @@ impl ShardManager {
                     missing = ?unresolved,
                     "merge_participants: refusing to merge — coverage is incomplete"
                 );
-                return Err(corpus_engine::Error::IncompleteCoverage {
+                return Err(corpus_index::Error::IncompleteCoverage {
                     corpus: corpus_id.to_string(),
                     covered: shard_dirs.len(),
                     expected,
@@ -648,7 +653,7 @@ impl ShardManager {
         }
 
         if shard_dirs.is_empty() {
-            return Err(corpus_engine::Error::NoShardsFound(format!(
+            return Err(corpus_index::Error::NoShardsFound(format!(
                 "no shard dirs for handoff {handoff_id}"
             )));
         }
@@ -714,8 +719,8 @@ impl ShardManager {
         corpus_id: &str,
         canonical_path: &Path,
         info: &IndexInfo,
-        cause: corpus_engine::Error,
-    ) -> corpus_engine::Error {
+        cause: corpus_index::Error,
+    ) -> corpus_index::Error {
         tracing::error!(
             corpus = %corpus_id,
             chunks = info.chunk_count,
@@ -727,7 +732,7 @@ impl ShardManager {
              the bits finalize writes). The source partitions were already \
              cleaned up, so this canonical holds the only copy."
         );
-        corpus_engine::Error::MergedNotFinalized {
+        corpus_index::Error::MergedNotFinalized {
             corpus: corpus_id.to_string(),
             canonical_path: canonical_path.display().to_string(),
             chunks: info.chunk_count,
@@ -998,7 +1003,7 @@ pub async fn verify_merge_sample(
     corpus_id: &str,
     sample_n: usize,
     epsilon: f32,
-) -> corpus_engine::Result<VerifyReport> {
+) -> corpus_index::Result<VerifyReport> {
     let index = engine.open_index_for_corpus(corpus_id).await?;
     let samples = index.sample_chunks_with_embeddings(sample_n).await?;
     let embed = engine.embed_fn();

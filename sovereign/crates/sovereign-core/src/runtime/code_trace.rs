@@ -35,8 +35,8 @@
 
 use std::path::PathBuf;
 
-use corpus_engine::ScoredChunk;
 use corpus_engine_scip::{build_symbol_trace, render_trace, ScipGraph};
+use corpus_index::types::ScoredChunk;
 
 use crate::atlas_context::{render_call_chain_brief, AtlasGraph, CallChainResult, CallDirection};
 
@@ -388,7 +388,7 @@ mod tests {
             source_doc_id: None,
             vector_distance: None,
             // Fixture chunk: nothing acquired it (TOPOLOGY §10 rung 9.1).
-            provenance: corpus_engine::index::ChunkProvenance::manufactured("test_fixture"),
+            provenance: corpus_index::index::ChunkProvenance::manufactured("test_fixture"),
         }
     }
 
@@ -476,7 +476,7 @@ mod tests {
                     source_doc_id: None,
                     vector_distance: None,
                     // Fixture chunk: nothing acquired it (TOPOLOGY §10 rung 9.1).
-                    provenance: corpus_engine::index::ChunkProvenance::manufactured("test_fixture"),
+                    provenance: corpus_index::index::ChunkProvenance::manufactured("test_fixture"),
                 }
             })
             .collect();

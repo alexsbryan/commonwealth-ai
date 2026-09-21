@@ -174,7 +174,7 @@ pub(crate) fn question_is_entity_anchored(keywords: &[String], corpus_ids: &[Str
 pub(crate) fn compute_entity_anchored(
     message: &str,
     enabled_corpora: Option<&[String]>,
-    chunks: &[corpus_engine::ScoredChunk],
+    chunks: &[corpus_index::types::ScoredChunk],
 ) -> bool {
     let lookup_ids: Vec<String> = match enabled_corpora {
         Some(ids) if !ids.is_empty() => ids.to_vec(),
@@ -204,13 +204,13 @@ pub(crate) fn compute_entity_anchored(
 /// anyway. A MIXED turn (some full-text) is not catalog-only either — the body
 /// chunks can ground a real answer, so the honest GK path stays open there.
 pub(crate) fn retrieval_is_catalog_only(
-    chunks: &[corpus_engine::ScoredChunk],
-    kinds: &std::collections::HashMap<String, corpus_engine::CorpusKind>,
+    chunks: &[corpus_index::types::ScoredChunk],
+    kinds: &std::collections::HashMap<String, corpus_index::types::CorpusKind>,
 ) -> bool {
     !chunks.is_empty()
         && chunks
             .iter()
-            .all(|c| kinds.get(&c.corpus_id) == Some(&corpus_engine::CorpusKind::Catalog))
+            .all(|c| kinds.get(&c.corpus_id) == Some(&corpus_index::types::CorpusKind::Catalog))
 }
 
 /// Retrieval-derived entity anchor: does the question name a SPECIFIC
@@ -245,7 +245,7 @@ pub(crate) fn retrieval_is_catalog_only(
 /// because the body supplies the support.
 pub(crate) fn question_anchors_retrieved_title(
     message: &str,
-    chunks: &[corpus_engine::ScoredChunk],
+    chunks: &[corpus_index::types::ScoredChunk],
 ) -> bool {
     const MIN_TITLE_SIG: usize = 2;
     const TITLE_MATCH_FLOOR: f32 = 0.70;
@@ -348,6 +348,6 @@ fn stem(word: &str) -> &str {
 
 /// Distinct corpus ids present in a chunk set — the implicit scope
 /// when the conversation carries no explicit corpus seal.
-pub(crate) fn merged_corpora(chunks: &[corpus_engine::ScoredChunk]) -> HashSet<String> {
+pub(crate) fn merged_corpora(chunks: &[corpus_index::types::ScoredChunk]) -> HashSet<String> {
     chunks.iter().map(|c| c.corpus_id.clone()).collect()
 }

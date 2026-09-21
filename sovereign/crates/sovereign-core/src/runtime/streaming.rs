@@ -458,7 +458,7 @@ async fn continue_truncated_synthesis(
 /// First few distinct chunk titles in rank order — the "what was
 /// pulled" payload for `RetrievalComplete.top_titles`, so the waiting
 /// UI can show the user's own document titles instead of bare counts.
-fn top_passage_titles(chunks: &[corpus_engine::ScoredChunk], cap: usize) -> Vec<String> {
+fn top_passage_titles(chunks: &[corpus_index::types::ScoredChunk], cap: usize) -> Vec<String> {
     let mut seen = std::collections::HashSet::new();
     let mut out: Vec<String> = Vec::new();
     for c in chunks {
