@@ -1,3 +1,10 @@
+<!-- APPEND ONLY. `.gitattributes` gives this file `merge=union`, so two
+     campaigns appending at once both land, in full, with no conflict markers
+     — which is why sections are grouped by campaign and never renumbered.
+     The cost of union is that an edit to an EXISTING line can land twice; it
+     shows on the page, so read around your edit after a merge. Entries are
+     never reflowed or reordered: a finding is cited by campaign and heading. -->
+
 # ring-doc — review findings
 
 One row per finding: principle, path:line, fixed-in hash (or why not fixed).

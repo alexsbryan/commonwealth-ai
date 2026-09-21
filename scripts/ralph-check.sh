@@ -104,6 +104,38 @@ case "$check" in
     desktop) run desktop 12 bash -c 'cd sovereign/crates/sovereign-desktop && npm run check && npm run test' ;;
     pilot)   run pilot 20 research/ontology-retrieval/pilot/run-pilot.sh ;;
     testall) run testall 12 ./scripts/with-cargo-lock.sh ./scripts/sovereign-test.sh --human ;;
+    decisions) run decisions 5 python3 scripts/ralph-decisions.py --check ;;
+    conformance) # regenerate quality/conformance/*.toml from the `covers:` tags; a row that
+             # adds a line above a tag owes this in its own commit, and LINT does not run it
+             run conformance 12 bash -c 'cd corpus-engine && UPDATE_CONFORMANCE_TAGS=1 ../scripts/with-cargo-lock.sh cargo test -p xtask --test conformance_tags' ;;
     prepush) run prepush 20 ./scripts/pre-push.sh ;;
-    *) echo "usage: scripts/ralph-check.sh clean|lint|test <crate>|testfn <crate> <fn>|layer|arch|env|toml|campaign <id>|docs|py <script>|node <dir>|desktop|demo [script]|demo-bg [script]|demo-wait|pilot|testall|prepush, or a name under [checks] in the queue's queue.toml (RALPH_QUEUE=${RALPH_QUEUE:-<unset>})" >&2; exit 2 ;;
+    *) { echo "usage: scripts/ralph-check.sh <check> [args]"
+          # One verb per line, deliberately: the single-line form was itself a
+          # merge conflict in this file on 2026-09-21, because two campaigns
+          # each added a verb to it. Two lines do not collide.
+          echo "  clean                      dev-build --clean --gate-only"
+          echo "  lint                       sovereign-lint.sh --human + arch-gate"
+          echo "  test <crate>               sovereign-test.sh --package <crate>"
+          echo "  testfn <crate> <fn>        sovereign-test.sh --filter <whole test fn name>"
+          echo "  testall                    sovereign-test.sh --human, whole workspace"
+          echo "  layer                      cargo xtask layer-gate"
+          echo "  arch                       cargo xtask arch-gate"
+          echo "  docs                       cargo xtask docs-gate"
+          echo "  env                        cargo xtask env-gate"
+          echo "  conformance                regenerate quality/conformance/ from the covers: tags"
+          echo "  decisions                  ralph-decisions.py --check (the rendered ledger is fresh)"
+          echo "  toml                       co-lineage.py list (ring-doc's campaign files)"
+          echo "  campaign <id>              parse quality/campaigns/<id>.toml"
+          echo "  py <script.py>             <script> --self-test"
+          echo "  node <dir>                 npm check + test in <dir>"
+          echo "  desktop                    sovereign-desktop npm check + test"
+          echo "  demo [script]              the queue's demo, foreground"
+          echo "  demo-bg [script]           the same demo detached; poll it with demo-wait"
+          echo "  demo-wait                  poll a detached demo (exit 3 = still running)"
+          echo "  pilot                      research/ontology-retrieval/pilot/run-pilot.sh"
+          echo "  prepush                    scripts/pre-push.sh"
+          echo
+          echo "  ...or any name under [checks] in the queue's queue.toml"
+          echo "     (RALPH_QUEUE=${RALPH_QUEUE:-<unset>})"
+        } >&2; exit 2 ;;
 esac

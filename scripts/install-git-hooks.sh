@@ -19,6 +19,14 @@ if ! git rev-parse --git-dir >/dev/null 2>&1; then
     exit 0
 fi
 
+# Merge drivers named by .gitattributes. `union` is built into git; the
+# keep-ours driver for the generated ralph ledger is not, and a driver lives in
+# config, which is per-clone — so it is registered here rather than remembered.
+# `true` leaves our version in the work tree; scripts/pre-push.sh then refuses
+# a render that has not been regenerated from ralph/decisions/.
+git config merge.ralph-generated.name "keep ours; ralph/DECISIONS.md is regenerated from ralph/decisions/"
+git config merge.ralph-generated.driver true
+
 current="$(git config --local --get core.hooksPath || true)"
 
 # Respect a developer who has deliberately pointed hooksPath somewhere else
@@ -35,6 +43,7 @@ chmod +x .githooks/* scripts/pre-push.sh 2>/dev/null || true
 git config core.hooksPath .githooks
 
 echo "install-git-hooks: core.hooksPath -> .githooks"
+echo "install-git-hooks: merge.ralph-generated -> keep-ours (see .gitattributes)"
 echo
 echo "  The pre-push gate now runs on every push. It scopes to what you"
 echo "  changed, and is held to a ONE-MINUTE budget (~22s for a full push,"

@@ -76,9 +76,13 @@ placements the docs already imply. The charter's bright lines still stop it:
 no weakening a pass bar, no third `[[exception]]`, no widening an `except`, no
 `HUMAN-` rows, no pushes.
 
-Every director decision is one commit, recorded in `ralph/DECISIONS.md` with
-its evidence and the commit hash(es), and tagged `REVIEW-AFTER:` when the
-charter did not clearly cover it. The supervisor records each resolution's
+Every director decision is one commit, recorded as one file under
+`ralph/decisions/` (`scripts/ralph-decisions.py new <campaign>`, then
+`--write` to re-render `ralph/DECISIONS.md`) with its evidence and the commit
+hash(es), and tagged `REVIEW-AFTER:` when the charter did not clearly cover
+it. One file per decision is what lets two campaigns record at the same time
+without a merge conflict; the pre-push `ralph-decisions` gate refuses a stale
+render. The supervisor records each resolution's
 commit range in `ralph/.director-commits`, and
 `python3 scripts/ralph.py report` prints the decisions, the ranges with their
 commits, the packages and the queue head — so a decision the operator
