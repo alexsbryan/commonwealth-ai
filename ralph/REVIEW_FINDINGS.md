@@ -1755,3 +1755,45 @@ the LAN behind the bearer gate `client_auth` applies to every non-loopback calle
 remote MCP caller is one principal. Closing condition: per-caller credentials for
 the client surface, which `client_principal.rs:66-70` already names as an auth
 change rather than a scheduling one. Owner: unowned.
+
+## mesh-principal — REVIEW-DEMO-mp-run (2026-09-21, binaries at `f7e89c4e7`)
+
+Two runs, both after `scripts/dev-build.sh` (exit=0 each; the staleness refusal
+read fresh). Logs: `target/ralph/mp-rr1-regression.log`,
+`target/ralph/mp-room-run.log`.
+
+rr-1 regression, `RING_ROOM_TOPOLOGY=three`, once — exit=1, the A38 baseline
+unmoved by the call-plane and ring-sync changes:
+
+| bar | value | verdict | reading |
+|---|---|---|---|
+| `ra-room-answer-names-the-machine` | 0.8 | FAILED | baseline; 4 of 5 questions grounded |
+| `ra-room-doc-name-from-membership` | 1.0 | PASSED | all four legs true, p99 1.465 s |
+| `ra-room-film-from-the-library-rail` | 1.0 | PASSED | listed_s 2.15 |
+| `ra-room-plug-in-live` | 0.0 | FAILED | `c_answer_names` false, other three true |
+| `ra-room-nothing-typed` | 0 | PASSED | walk count 0 |
+
+Room run, `RING_ROOM_TOPOLOGY=room`, once from cold — exit=0, eleven PASSED
+(five `rg-*` and six rr-2), every leg true, no COULD-NOT-JUDGE row. The offline
+leg carried `c_byte_equal_after_the_return` true with `converged_s` 16 against
+the 60 s window, so the run was cold and the roster filter in the sync round
+did not slow convergence. Guest ask answered_s 13.82 citing RuggedFox; film
+listed_s 4.24, first byte 0.067 s; edit_seen_s 0.17.
+
+What mp-1 added, read off the keeper's own log at the moment it served the
+guest's ask (`target/ring-room-rr2-demo/halo/daemon.err:413-415`): the wall is
+named by its verified key, not by a header it sent.
+
+```
+02:08:41.182021Z DEBUG iroh(mesh): internal dial forwarded WITH the verified identity
+  (no member named means the roster does not know this key — admitted anyway, as a
+  joiner must be) dialer=1984f5ef7cc3c04d1eb3c5070b58ce2f1c342014df500dfa3e657e37bca536af
+  member="ring-room-beefy"
+02:08:41.183665Z DEBUG internal: request resolved to a verified member
+  member=ring-room-beefy node=node-6a577a855edaa29a
+```
+
+Recorded and not acted on: the rr-1 `ra-room-nothing-typed` row lists the
+Jellyfin `demo / demo` credential twice in `excluded` where the room run lists
+it once — a duplicate in the census's excluded list, not a second credential in
+the walk (`walk count: 0` on that run). It predates this campaign.
