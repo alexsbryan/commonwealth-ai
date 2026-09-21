@@ -364,7 +364,6 @@ pub(crate) fn build_demands(
     message: &str,
     intent: &Intent,
     entities: &[String],
-    plan: Option<&crate::runtime::retrieval_pipeline::DemandPlan>,
 ) -> Vec<Demand> {
     let mut demands = vec![Demand {
         facet: DemandFacet::Query,
@@ -393,23 +392,6 @@ pub(crate) fn build_demands(
     {
         for s in subs {
             push_unique(&mut demands, DemandFacet::SubQuestion, &s);
-        }
-    }
-    // I4: fold in the LLM demand plan's facets when present — one demand
-    // model, two producers. Sub-queries become SubQuestion demands; stance
-    // poles (both sides of a contested axis) become Stance demands; section
-    // terms become Section demands.
-    if let Some(plan) = plan {
-        for s in &plan.sub_queries {
-            push_unique(&mut demands, DemandFacet::SubQuestion, s);
-        }
-        if let Some(stance) = &plan.stance_contrast {
-            for pole in &stance.poles {
-                push_unique(&mut demands, DemandFacet::Stance, pole);
-            }
-        }
-        for term in &plan.section_terms {
-            push_unique(&mut demands, DemandFacet::Section, term);
         }
     }
     demands

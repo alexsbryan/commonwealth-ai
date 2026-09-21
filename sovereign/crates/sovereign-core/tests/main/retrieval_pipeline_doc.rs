@@ -75,13 +75,10 @@ fn render() -> String {
            (both A/B-validated 2026-06-09). Disable only for A/B runs.\n\
          - **Experimental, opt-in (default OFF)** — `SOVEREIGN_ATOM_ENUM`\n\
            (net-negative on focused enumeration per the 2026-06-04\n\
-           bench; keep gated), `SOVEREIGN_TITLE_EXPAND` (see\n\
-           wikipedia_learn/V36_FINDINGS.md), `SOVEREIGN_QUERY_DECOMP`,\n\
-           `SOVEREIGN_GRAPH_NEIGHBOR_EXPAND`, `SOVEREIGN_COMPACTION_DISABLE`.\n\
+           bench; keep gated), `SOVEREIGN_COMPACTION_DISABLE`.\n\
            Flipping one ON in prod requires its own bench A/B.\n\
-         - **Tunable parameters** — the `_TOPK/_POOL/_RANK/_SCORE`,\n\
-           `DECOMP_DECAY`, `CONV_PPR_WEIGHT` family. Sub-knobs of their\n\
-           parent feature.\n\
+         - **Tunable parameters** — the `_TOPK/_POOL/_RANK/_SCORE`\n\
+           family. Sub-knobs of their parent feature.\n\
          - **Retired** — the `SOVEREIGN_RAPTOR_*` family (2026-09-07,\n\
            order ei-5c). The retrieval-time summary injector they gated\n\
            was a second grounding implementation outside corpus-engine;\n\
@@ -90,9 +87,8 @@ fn render() -> String {
            (`svrn enrich summary-atoms <corpus>`), not a knob. Setting\n\
            any of the five has no effect. See\n\
            `sovereign/DEFAULTS_LEDGER.md`.\n\
-         - **Debug / escape hatches** — `SOVEREIGN_FORENSIC` (audit\n\
-           snapshots), `SOVEREIGN_ATOM_ENUM_NOFILTER` (ablation).\n\
-           Never set in normal operation.\n",
+         - **Debug / escape hatches** — `SOVEREIGN_ATOM_ENUM_NOFILTER`\n\
+           (ablation). Never set in normal operation.\n",
     );
     md
 }

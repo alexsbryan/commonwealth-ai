@@ -745,20 +745,6 @@ fn load_cross_corpus_members(
     // no-op and retrieval falls back to cosine + existing entity-boost.
     load_meta_atlas(lane, warmth, progress);
 
-    // Cross-corpus bridge edges (Phase 6). Empty/absent → bridge_boost is a
-    // no-op; the boost only runs at all when `SOVEREIGN_META_BRIDGE` is set.
-    let bridge_index = match corpus_engine::meta_atlas::BridgeIndex::load(None) {
-        Ok(idx) => Arc::new(idx),
-        Err(e) => {
-            progress.note(&format!("Bridge: load failed ({e}); bridge boost disabled"));
-            Arc::new(corpus_engine::meta_atlas::BridgeIndex::empty())
-        }
-    };
-    progress.note(&format!(
-        "Bridge:      {} cross-corpus edges",
-        bridge_index.len()
-    ));
-    lane.bridge = Some(Arc::clone(&bridge_index));
 }
 
 /// Fill (or arrange to fill) `lane.meta_atlas` — see [`LaneWarmth`] for why

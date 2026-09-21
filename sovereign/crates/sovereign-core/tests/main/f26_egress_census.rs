@@ -160,7 +160,9 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     // copies preceded it — so this row is where a future probe-site review
     // lands instead of in each consumer.
     ("sovereign/crates/sovereign-turn-client/src/reach.rs", Class::LocalDaemon, 1),
-    // sovereign-mobile: the phone's ApiClient — one `reqwest::Client`, one
+    // sovereign-mobile: the phone's ApiClient. The crate was cut
+    // (FIVE_PROGRAMS §2a — the phone is the served UI in a webview), and the
+    // row went with it. Original note: one `reqwest::Client`, one
     // `TurnClient::new(base_url)` over the same client family the desktop
     // and CLI use (sv-surface R6, 4e1f99f55), and the response parser.
     // The base url is the OWNER's own daemon on the LAN or over the mesh,
@@ -169,7 +171,6 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     // reason peer traffic is: own auth (the daemon's), custody class peer.
     // Joined the workspace 2026-09-10, which is when the census first saw
     // it.
-    ("sovereign-mobile/src-tauri/src/remote/client.rs", Class::Mesh, 3),
     // sovereign-cli `svrn quality check` (2026-09-04, order quality-check-lean;
     // the module became a directory on 2026-09-07 in registry-1-selections, so
     // the one row became two — same two clients, same class, split across the
@@ -234,7 +235,14 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     // `sovereign_mesh` build). The census scans production `src/` only, so those
     // sites are out of scope now and their rows are removed, not re-keyed —
     // the files still hold 9/4/3 sites, but no longer as production code.
-    ("sovereign/crates/sovereign-daemon/src/rpc_warm_http.rs", Class::Mesh, 7),
+    ("sovereign/crates/sovereign-daemon/src/rpc_warm_http.rs", Class::Mesh, 2),
+    // The 2026-09 split of rpc_warm_http.rs moved sites into a sibling
+    // orchestrator and a test module; neither had a row, so this census was
+    // already red on main before the FIVE_PROGRAMS cut touched it.
+    ("sovereign/crates/sovereign-daemon/src/rpc_warm_http/orchestrator.rs", Class::Mesh, 2),
+    ("sovereign/crates/sovereign-daemon/src/tests/rpc_warm_http.rs", Class::TestOnly, 4),
+    // `#[cfg(test)] mod` at mesh_proof_outbound.rs:59 — the stamp fixture.
+    ("sovereign/crates/sovereign-daemon/src/mesh_proof_outbound.rs", Class::TestOnly, 1),
     // 5 -> 7 (2026-08-23): the two reload-diff regression tests
     // (`reload_applies_a_context_size_change_without_a_restart`,
     // `reload_applies_a_code_slot_change_without_a_restart`) each build a
@@ -308,7 +316,7 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     // re-baselines the whole file, not to a row being added.
     ("sovereign/crates/sovereign-daemon/src/assets_http.rs", Class::Mesh, 4),
     ("sovereign/crates/sovereign-daemon/src/project_http.rs", Class::Mesh, 4),
-    ("sovereign/crates/sovereign-serving-host/src/model_fetch.rs", Class::Mesh, 4),
+    ("sovereign/crates/sovereign-serving-host/src/model_fetch.rs", Class::Mesh, 5),
     ("sovereign/crates/sovereign-daemon/src/loopback_guard.rs", Class::Mesh, 3),
     ("sovereign/crates/sovereign-serving-host/src/peer_inference.rs", Class::Mesh, 2),
     // setup_cmd/terminal.rs (2026-08-30, the `terminal` node class; 1 -> 3 on
@@ -739,10 +747,6 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     ("sovereign/crates/sovereign-tools/src/catalog_ingest.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-tools/src/calendar.rs", Class::OperatorSurface, 1),
 
-    // ---- sovereign-server (LocalDaemon — API server → host daemon) ----
-    ("sovereign/crates/sovereign-server/src/startup.rs", Class::LocalDaemon, 1),
-    ("sovereign/crates/sovereign-server/src/reciprocity.rs", Class::LocalDaemon, 1),
-    ("sovereign/crates/sovereign-server/src/activity.rs", Class::LocalDaemon, 1),
 
     // ---- sovereign-inference (InboundOnly: range-resumed model downloads) ----
     ("sovereign/crates/sovereign-inference/src/setup_planner.rs", Class::InboundOnly, 1),

@@ -412,7 +412,6 @@ impl Runtime {
             hot_corpora,
             entities,
             meta_atlas_hits,
-            demand_plan,
             unavailable_corpora,
             atlas_summaries,
             atlas_walk,
@@ -429,7 +428,6 @@ impl Runtime {
                 message,
                 intent,
                 &entities,
-                demand_plan.as_ref(),
             );
             crate::runtime::epistemic::stamp_coverage(&mut d, &chunks);
             d

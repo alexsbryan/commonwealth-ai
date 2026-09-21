@@ -138,7 +138,6 @@ const COMMISSIONING_PROCESSES: &[&str] = &[
     // `sovereign-desktop/src-tauri/src/state.rs` LEFT this list 2026-09-11
     // (504c6b6d3, sv-surface svt-3b): the app commissions no `Runtime` and
     // attaches to a daemon it does not own. 4 -> 3; the daemon is the target.
-    "sovereign/crates/sovereign-server/src/main.rs",
 ];
 
 /// The turn-execution methods. Calling one of these IS executing a turn.

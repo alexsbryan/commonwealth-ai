@@ -23,7 +23,6 @@ fn demands_build_and_stamp() {
         "How did Newton and Einstein differ on gravity?",
         &Intent::KnowledgeQuery,
         &entities,
-        None,
     );
     assert_eq!(demands[0].facet, DemandFacet::Query);
     assert!(demands
@@ -48,40 +47,6 @@ fn demands_build_and_stamp() {
     assert_eq!(einstein.covered, CoverageLevel::Absent);
 }
 
-#[test]
-fn build_demands_folds_in_the_llm_plan() {
-    use crate::runtime::retrieval_pipeline::{DemandPlan, StanceContrast};
-    let plan = DemandPlan {
-        sub_queries: vec!["general relativity gravity".into()],
-        entities: vec![],
-        stance_contrast: Some(StanceContrast {
-            axis: "the nature of gravity".into(),
-            poles: vec!["action at a distance".into(), "spacetime curvature".into()],
-        }),
-        section_terms: vec!["reception".into()],
-    };
-    let demands = build_demands(
-        "How did Newton and Einstein differ on gravity?",
-        &Intent::KnowledgeQuery,
-        &[],
-        Some(&plan),
-    );
-    // Stance poles → both sides demanded.
-    assert!(demands
-        .iter()
-        .any(|d| d.facet == DemandFacet::Stance && d.text == "action at a distance"));
-    assert!(demands
-        .iter()
-        .any(|d| d.facet == DemandFacet::Stance && d.text == "spacetime curvature"));
-    // Section term.
-    assert!(demands
-        .iter()
-        .any(|d| d.facet == DemandFacet::Section && d.text == "reception"));
-    // Plan sub-query.
-    assert!(demands
-        .iter()
-        .any(|d| d.facet == DemandFacet::SubQuestion && d.text == "general relativity gravity"));
-}
 
 #[test]
 fn stance_and_section_facets_stamp_and_gap() {
