@@ -5693,4 +5693,6 @@ Operator, in session: "1, 2, 3 — go with your recommendations". Read against P
 
 **D8 amends A40.** Pod latency exists now (median / p90: bare 12.4 / 26.3 s, deep 9.5 / 26.5, full 10.1 / 36.8) against the committed local 2026-09-19 runs (20.8 / 40.8, 20.7 / 45.8, 25.1 / 59.7). Not a controlled pair: the local runs used IQ4_NL and six pre-rewrite K4 items. "At most half the local figure" holds for deep and full on the median and misses for bare (12.4 vs 10.4); recorded, not ruled.
 
+**Outcome, same day.** With the echo carried (40c08e08c) the pilot passed on a second pod (operator: "a run under 2 hours"; Vast 51862876, window `20260921T052958Z`, destroyed): 7 checks clean, 7 plants caught, I2 walk 23/24 and summary 5/8 K4. Pod median / p90 on that run: bare 10.4 / 29.2 s, deep 7.9 / 22.6, full 7.2 / 26.9. Closed-book scored >= 0.5 on all 8 K4 rows, so the closed-book rule removes the kind on the pilot corpus; the row carries that to the audit.
+
 </details>
