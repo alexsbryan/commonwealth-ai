@@ -249,8 +249,10 @@ mod tests {
     /// A server that records the mesh-proof header of every request, so the
     /// assertion is about what went ON THE WIRE and not about what the caller
     /// meant to send.
-    async fn spawn_header_recorder() -> (String, std::sync::Arc<std::sync::Mutex<Vec<Option<String>>>>)
-    {
+    async fn spawn_header_recorder() -> (
+        String,
+        std::sync::Arc<std::sync::Mutex<Vec<Option<String>>>>,
+    ) {
         let seen: std::sync::Arc<std::sync::Mutex<Vec<Option<String>>>> = Default::default();
         let sink = seen.clone();
         let handler = move |headers: axum::http::HeaderMap| {
