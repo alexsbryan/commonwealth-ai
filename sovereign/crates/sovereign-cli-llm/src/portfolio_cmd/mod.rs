@@ -16,8 +16,8 @@
 //! it lives in its own file the daemon does not replicate.
 
 use bytes::Bytes;
-use commonwealth_core::ids::NodeId;
 use commonwealth_state::{MeshStore, PORTFOLIO_PRIVATE_APP_ID};
+use kernel_types::NodeId;
 
 pub mod ask;
 

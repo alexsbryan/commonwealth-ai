@@ -367,7 +367,7 @@ pub(super) fn orphaned_indexes() -> Vec<(String, Option<String>)> {
 /// question the tool asks does.
 ///
 /// So this check runs the REAL predicate the code tools run
-/// (`sovereign_code::has_code_graph`) over the REAL corpus list and
+/// (`IndexInfo::is_code_corpus`) over the REAL corpus list and
 /// reports the count. If a corpus has a graph but the tools would skip it,
 /// that discrepancy IS the finding.
 pub(super) async fn check_code_tools_see_corpora() -> CheckResult {
@@ -384,7 +384,7 @@ pub(super) async fn check_code_tools_see_corpora() -> CheckResult {
     }
 
     // Open each index and ask the REAL predicate about the REAL `IndexInfo`
-    // — same `kind` derivation, same `has_code_graph` rule the tools use. No
+    // — same `kind` derivation, same `is_code_corpus` rule the tools use. No
     // corpus engine (and so no EmbedFn) is needed to answer this.
     let indexes_dir = sovereign_root().join("indexes");
     let mut visible: Vec<String> = Vec::new();
@@ -396,7 +396,7 @@ pub(super) async fn check_code_tools_see_corpora() -> CheckResult {
         let Ok(info) = index.info().await else {
             continue;
         };
-        if sovereign_code::has_code_graph(&info) {
+        if info.is_code_corpus() {
             visible.push(info.corpus_id);
         }
     }
@@ -416,7 +416,7 @@ pub(super) async fn check_code_tools_see_corpora() -> CheckResult {
             repair: Repair::Manual(
                 "A corpus is visible to the code tools when it is tagged \
                  CorpusKind::Code OR has a scip_graph.db beside its chunk table \
-                 (sovereign_code::has_code_graph). Check that the index \
+                 (IndexInfo::is_code_corpus). Check that the index \
                  dir and _corpus_meta.json agree."
                     .into(),
             ),

@@ -52,9 +52,6 @@ sovereign-cli-shared = { workspace = true }
 #                       model — the same crate the daemon's donor loop and
 #                       `svrn job` use, so the three cannot disagree about who
 #                       holds a lease (ARCH §10.6).
-#   commonwealth-rail   `RailAct` — the typed wire form the daemon's append
-#                       door parses, so a caller cannot spell it wrong and
-#                       learn about it from a 422.
 #   (no commonwealth-core edge: `HandoffId` comes through commonwealth-work's
 #    re-export, so one constructor does not buy a dep on the god crate.)
 #   oicp-types          `JobKind` / `JobRequirements` / `JobUnit`, the job
@@ -65,7 +62,6 @@ sovereign-cli-shared = { workspace = true }
 # caller. A second client against those two routes is the §10.6 violation this
 # rung must not commit.
 commonwealth-work = { workspace = true, features = ["process"], optional = true }
-commonwealth-rail = { workspace = true, optional = true }
 oicp-types = { workspace = true, optional = true }
 # Flag surfaces are declared as structs (`#[derive(clap::Parser)]`), not
 # hand-rolled `while i < args.len()` loops: the dispatcher's own `--help` /
@@ -112,20 +108,15 @@ corpus-engine-scip = { workspace = true, optional = true }
 # re-exports it while linking llama.cpp unconditionally.
 oicp-client = { workspace = true, optional = true }
 corpus-engine-notes = { workspace = true }
-async-trait = { workspace = true }
-futures = { workspace = true }
 serde_json = { workspace = true }
 serde = { workspace = true }
 tokio = { workspace = true }
 toml = { workspace = true }
 tracing = { workspace = true }
-tracing-subscriber = { workspace = true }
 reqwest = { workspace = true }
 uuid = { workspace = true }
-arc-swap = { workspace = true }
 dirs = "5"
 hex = "0.4"
-hostname = { workspace = true }
 which = "7"
 sha2 = { workspace = true }
 chrono = { workspace = true }
@@ -173,9 +164,8 @@ default = [
 # and pulls oicp-client (a pure reqwest leaf — no llama.cpp).
 dev-tools = [
     # `svrn quality check --distribute` (cw-lift 5e). See the dep block above
-    # for why each of the five is here; `rail-client` is the ONE rail client.
+    # for why each of the four is here; `rail-client` is the ONE rail client.
     "dep:commonwealth-work",
-    "dep:commonwealth-rail",
     "dep:oicp-types",
     "sovereign-cli-shared/rail-client",
     # The linked workbench surface — `InProcessCodeVerb`. Thin by construction

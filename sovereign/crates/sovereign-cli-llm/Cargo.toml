@@ -59,9 +59,6 @@ sovereign-contracts = { workspace = true }
 # a Runtime to run one itself (TOPOLOGY §10).
 sovereign-turn-client = { workspace = true }
 sovereign-inference = { workspace = true }
-# OICP feature-string constants (constraint:json_schema/json_object) for
-# discovery-driven StructuredOutputMode negotiation — see enrich_cmd/providers.rs.
-oicp-types = { workspace = true }
 sovereign-store = { workspace = true }
 sovereign-tools = { workspace = true, features = ["treesitter"] }
 sovereign-gliner = { workspace = true }
@@ -99,12 +96,9 @@ sovereign-cli-mesh = { path = "../sovereign-cli-mesh" }
 # the runner that reads its trailing line speak one verdict vocabulary rather
 # than two (noun-convergence rung nc-10-judgement). Layer 0, edge points DOWN.
 kernel-types = { workspace = true }
+# `svrn portfolio` / `svrn newsworthy` store through commonwealth-state's
+# gossip-excluded `MeshStore`; no sovereign crate owns that type yet.
 commonwealth-state = { path = "../../../commonwealth/crates/commonwealth-state" }
-commonwealth-core = { path = "../../../commonwealth/crates/commonwealth-core" }
-# `svrn ring` reads and writes the ring roster, and needs the node key the
-# ledger signs with. DIRECT deps on the crates that own `Roster`/`Person`
-# and `load_or_generate_node_key`, so this crate and the daemon cannot end
-# up on two versions of one logical type (ARCH §8.3).
 #
 # `commonwealth-knowledge` (now `sovereign-grants`) is ABSENT since cw-lift
 # 1d, and its absence is the
@@ -140,30 +134,18 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }
 toml = { workspace = true }
-toml_edit = { workspace = true }
-tower-http = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 # `stream` on top of the workspace features: `solve --watch` reads
 # the daemon's SSE round events via `bytes_stream()`.
 reqwest = { workspace = true, features = ["stream"] }
 uuid = { workspace = true }
-arc-swap = { workspace = true }
 dirs = "5"
 chrono = { workspace = true }
 sha2 = { workspace = true }
-# `meshapp publish/install` pack/unpack bundle artifacts (tar over zstd, like
-# corpus snapshots).
-tar = "0.4"
-zstd = "0.13"
 regex = { workspace = true }
 tempfile = { workspace = true }
-which = "7"
-hostname = { workspace = true }
 hex = "0.4"
-# `mesh grant --qr-svg`: the wall link as an SVG QR. `svg` is dependency-free;
-# never `image` (it pulls resvg).
-fast_qr = { version = "=0.14.0", default-features = false, features = ["svg"] }
 ed25519-dalek = { version = "2", features = ["pkcs8", "rand_core"] }
 rand = "0.9"
 # ── `awareness`-only, and off in every ordinary build ──
@@ -201,9 +183,6 @@ awareness = ["dep:rusqlite"]
 # and four test modules here still take it (egress_reds, errors, reset,
 # integration_tests). A feature rather than a second copy of the lock (§10.6).
 sovereign-enrichment-build = { workspace = true, features = ["test-support"] }
-# Decodes `--qr-svg` output back to the link. `default-features = false`: its
-# `img` default pulls `image`.
-rqrr = { version = "=0.11.0", default-features = false }
 
 [lints]
 workspace = true

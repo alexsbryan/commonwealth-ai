@@ -45,10 +45,9 @@ use std::collections::BTreeMap;
 use std::path::Path;
 use std::time::{Duration, Instant};
 
-// Through `commonwealth-work`'s re-export, not a direct dep on the crate that
-// defines it: one constructor is not worth an edge onto `commonwealth-core`
-// (ARCH §8.3, and the fan-in cap `layer-gate` holds).
-use commonwealth_rail::RailAct;
+// Through `sovereign-cli-shared::rail`, the ONE operator-side rail client:
+// reaching the act type directly would add a `commonwealth-rail` edge for a
+// route this crate already links (ARCH §10.6, §8.3).
 use commonwealth_work::act::{Submission, WorkAct, MAX_TTL_SECS, MIN_TTL_SECS};
 use commonwealth_work::process::{ProcessPayload, ResultSource};
 use commonwealth_work::projection::{WorkProjection, WorkUnitStatus};
@@ -59,7 +58,7 @@ use kernel_types::attribution::ComputeAttribution;
 use kernel_types::quality::{Instrument, Overrun, Trigger, VerdictSource};
 use kernel_types::{Judgement, Reason, Server, Verdict};
 use oicp_types::{JobKind, JobRequirements, JobUnit};
-use sovereign_cli_shared::rail::{admission_from_wire, rail_append, rail_log};
+use sovereign_cli_shared::rail::{admission_from_wire, rail_append_record, rail_log};
 
 use super::exec::{Covariates, InstrumentRun};
 
@@ -800,7 +799,7 @@ pub(super) async fn run_distributed(
     let submission = Submission::new(handoff, kind, units, None, Some(budget_secs));
     let payload = commonwealth_work::to_payload(&WorkAct::Submit(submission))
         .map_err(|why| format!("the submission could not be sealed onto the rail: {why}"))?;
-    let answer = rail_append(WORK_NAMESPACE, &RailAct::Record { payload }).await?;
+    let answer = rail_append_record(WORK_NAMESPACE, payload).await?;
     tracing::debug!(
         handoff = %handoff.to_hex(),
         units = hashes.len(),

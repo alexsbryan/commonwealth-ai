@@ -33,7 +33,7 @@
 
 use std::collections::BTreeMap;
 
-use commonwealth_rail::{Admission, AdmittedOp, RailAct, RailGap};
+use commonwealth_rail::{Admission, AdmittedOp, Payload, RailAct, RailGap};
 
 /// The rail's three routes, spelled once for every caller in the workspace.
 ///
@@ -147,6 +147,17 @@ pub async fn rail_append(namespace: &str, act: &RailAct) -> Result<serde_json::V
         return Err(error_text(resp).await);
     }
     resp.json().await.map_err(|e| format!("bad response: {e}"))
+}
+
+/// One operator-side `Record` write: wrap `payload` in the act and append it.
+///
+/// The typed constructor lives with the client so a caller reaches the ONE
+/// rail route without naming `commonwealth-rail`'s act type itself.
+pub async fn rail_append_record(
+    namespace: &str,
+    payload: Payload,
+) -> Result<serde_json::Value, String> {
+    rail_append(namespace, &RailAct::Record { payload }).await
 }
 
 /// Rebuild the [`Admission`] the daemon already computed, so a caller's fold

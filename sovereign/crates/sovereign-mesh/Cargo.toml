@@ -160,7 +160,6 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }
 axum = { workspace = true }
-tower-http = { workspace = true }
 thiserror = { workspace = true }
 # Tool-profile registry parses ~/.svrnmesh/tool_profiles.toml.
 toml = { workspace = true }
@@ -184,12 +183,6 @@ rand = "0.9"
 # pipeline. `io-util` exposes SyncIoBridge; `io` brings ReaderStream /
 # StreamReader.
 tokio-util = { version = "0.7", features = ["io", "io-util"] }
-# `tokio-stream` exposes BroadcastStream — the adapter that turns a
-# `tokio::sync::broadcast::Receiver` into a `futures::Stream`, so
-# the MCP `GET /mcp` SSE handler can chain it with the endpoint
-# event and forward server-pushed JSON-RPC notifications
-# (`notifications/tools/list_changed`, Phase 5b).
-tokio-stream = { version = "0.1", features = ["sync"] }
 # Enumerate ALL local network interfaces so a node on both WiFi
 # and Tailscale (the usual Commonwealth LAN-+-VPN topology) can
 # advertise both addresses in its `MemberRecord.addresses`. The
@@ -223,10 +216,6 @@ axum-server = { version = "0.7", features = ["tls-rustls-no-provider"] }
 # reqwest client) share one FIPS-aligned crypto stack. `std` is
 # default in rustls 0.23 but we make it explicit here.
 rustls = { version = "0.23", default-features = false, features = ["std", "aws_lc_rs"] }
-# Percent-encode model file names in the peer-fetch URL so a
-# filename with characters that would otherwise need encoding
-# (spaces, plus signs) reaches the server intact.
-urlencoding = "2"
 # FS watcher primitives for the Reindexer's freshness pipeline.
 # `notify` drives the kernel-level change events; `ignore` honours
 # .gitignore semantics so we don't fire on target/ or node_modules/.
@@ -293,12 +282,8 @@ sovereign-core = { workspace = true }
 # namespace tests (`tests/main/ring_live_non_durable.rs`) also issue real rail
 # grants through `Scope::Rails` (merged 2026-09-18).
 sovereign-grants = { workspace = true }
-# TEST-ONLY: `ScipGraph` in tests/main/loopback_parity.rs; no src/ reference.
-corpus-engine-scip = { workspace = true }
 # TEST-ONLY: `local_corpus`/`atlas_view`/`knowledge_view`/`spec_watcher` in tests/main/*.
 sovereign-tools = { workspace = true }
-# TEST-ONLY: `CONFIG_SCHEMA_VERSION` in tests/main/enrich_surface_e2e.rs.
-sovereign-enrichment-catalog = { workspace = true }
 # TEST-ONLY: `InMemoryStateStore`/`SqliteStateStore`/`RecipeProjectStore` in tests/main/*.
 sovereign-store = { workspace = true }
 tempfile = "3"

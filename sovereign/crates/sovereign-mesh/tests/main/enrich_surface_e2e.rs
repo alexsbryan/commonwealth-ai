@@ -76,10 +76,12 @@ async fn build_daemon() -> (Arc<EmbeddedDaemon>, tempfile::TempDir) {
     // workspace and one directory with no config (mid-`enrich init`).
     let enrichment = tmp.path().join("enrichment");
     // Written as the JSON `svrn enrich init` writes — the required keys of
-    // `sovereign_enrichment_catalog::EnrichConfig`, defaults for the rest —
-    // so the route is exercised through the SAME loader the CLI uses.
+    // `EnrichConfig`, defaults for the rest — so the route is exercised
+    // through the SAME loader the CLI uses. `1` is a local twin of the
+    // catalog's `CONFIG_SCHEMA_VERSION` (one line); the loader only rejects a
+    // version GREATER than its own, so this fixture stays valid across a bump.
     let cfg = serde_json::json!({
-        "schema_version": sovereign_enrichment_catalog::CONFIG_SCHEMA_VERSION,
+        "schema_version": 1,
         "corpus_id": CORPUS,
         "pipeline_id": "literary_atlas",
         "source_path": "/tmp/essays.txt",
