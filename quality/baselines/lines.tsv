@@ -89,8 +89,8 @@
 2803	sovereign/crates/sovereign-cli-daemon::tests
 27732	sovereign/crates/sovereign-cli-dev
 6266	sovereign/crates/sovereign-cli-dev::tests
-96438	sovereign/crates/sovereign-cli-llm
-20032	sovereign/crates/sovereign-cli-llm::tests
+96557	sovereign/crates/sovereign-cli-llm
+20109	sovereign/crates/sovereign-cli-llm::tests
 3002	sovereign/crates/sovereign-cli-shared
 1572	sovereign/crates/sovereign-cli-shared::tests
 6192	sovereign/crates/sovereign-cli::tests
@@ -146,8 +146,8 @@
 4024	sovereign/crates/sovereign-tdd::tests
 27	sovereign/crates/sovereign-time
 13	sovereign/crates/sovereign-time::tests
-40857	sovereign/crates/sovereign-tools
-25323	sovereign/crates/sovereign-tools::tests
+40928	sovereign/crates/sovereign-tools
+25369	sovereign/crates/sovereign-tools::tests
 2751	sovereign/crates/sovereign-turn-client
 1115	sovereign/crates/sovereign-turn-client::tests
 1735	sovereign/crates/sovereign-work-atlas
