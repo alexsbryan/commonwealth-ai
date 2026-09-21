@@ -132,6 +132,7 @@ members = [
     # catalog, hoisted out of the CLI so the daemon can run workflows (the living
     # trigger's prerequisite).
     "studio/crates/sovereign-workflow-host",
+    "studio/crates/sovereign-studio",
     # Headless studio CLI — authors + tests recipes and runs workflows against any
     # OICP daemon, linking ONLY the studio crates + shared leaves (no corpus-engine,
     # no sovereign-core). The proof the studio package is independently usable.
@@ -166,6 +167,7 @@ members = [
     "sovereign/crates/sovereign-serving-host",
     "sovereign/crates/sovereign-service",
     "sovereign/crates/sovereign-desktop/src-tauri",
+    "sovereign-mobile/src-tauri",
     # The phone surface. Promoted into the workspace 2026-09-10 (sv-surface R6):
     # it was detached so that unverified mobile deps could not break the main
     # build, for as long as it hand-rolled its OWN copy of the turn protocol. It now
@@ -334,6 +336,7 @@ sovereign-store = { path = "sovereign/crates/sovereign-store" }
 sovereign-time = { path = "sovereign/crates/sovereign-time" }
 sovereign-tools = { path = "sovereign/crates/sovereign-tools" }
 sovereign-code = { path = "sovereign/crates/sovereign-code" }
+sovereign-studio = { path = "studio/crates/sovereign-studio" }
 sovereign-gliner = { path = "sovereign/crates/sovereign-gliner" }
 sovereign-enrichment-catalog = { path = "sovereign/crates/sovereign-enrichment-catalog" }
 sovereign-enrichment-build = { path = "sovereign/crates/sovereign-enrichment-build" }

@@ -160,9 +160,7 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     // copies preceded it — so this row is where a future probe-site review
     // lands instead of in each consumer.
     ("sovereign/crates/sovereign-turn-client/src/reach.rs", Class::LocalDaemon, 1),
-    // sovereign-mobile: the phone's ApiClient. The crate was cut
-    // (FIVE_PROGRAMS §2a — the phone is the served UI in a webview), and the
-    // row went with it. Original note: one `reqwest::Client`, one
+    // sovereign-mobile: the phone's ApiClient — one `reqwest::Client`, one
     // `TurnClient::new(base_url)` over the same client family the desktop
     // and CLI use (sv-surface R6, 4e1f99f55), and the response parser.
     // The base url is the OWNER's own daemon on the LAN or over the mesh,
@@ -171,6 +169,7 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     // reason peer traffic is: own auth (the daemon's), custody class peer.
     // Joined the workspace 2026-09-10, which is when the census first saw
     // it.
+    ("sovereign-mobile/src-tauri/src/remote/client.rs", Class::Mesh, 3),
     // sovereign-cli `svrn quality check` (2026-09-04, order quality-check-lean;
     // the module became a directory on 2026-09-07 in registry-1-selections, so
     // the one row became two — same two clients, same class, split across the
