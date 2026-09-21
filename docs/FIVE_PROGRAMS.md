@@ -480,6 +480,88 @@ core 39, corpus-mcp 16, meshapp 10.
       ~2.4k lines, spans three packages and belongs to none: `code_index` +
       `code_index_incremental`, `scip`, `observation`, `rail`.
 
+### Phase 6a — the mesh test tree (diagnosed 2026-09-21; not a port job)
+
+`sovereign-mesh`'s six DEV lines — `→ sovereign-daemon` (forbidden), `→ sovereign-store`,
+`→ sovereign-tools`, `→ corpus-engine-scip`, `→ sovereign-enrichment-catalog`, and
+`sovereign-mesh-test-harness → sovereign-daemon` (forbidden) — have **zero `src/`
+sites between them.** They are one fact, and it is not an inversion problem:
+**the test tree for code that already moved to `sovereign-daemon` (`dm-daemon-mesh-edge`)
+did not move with it.**
+
+- 77 of 85 files under `sovereign-mesh/tests/main/` name daemon-owned symbols
+  (`EmbeddedDaemon`, `AppState`, `assemble`, `client_router`/`internal_router`,
+  14 `*_router` surfaces) — 266 sites.
+- **31 of those files, ≈15.9k lines including the 952-line `common/mod.rs`
+  fixture, name `sovereign_daemon` and never name `sovereign_mesh` at all.**
+  They are daemon tests parked in mesh's tree: `atlas_surface_e2e`,
+  `conv_surface_e2e`, `corpus_watch_http_e2e`, `d6/d8/d9a_*/d9_turn_extras`,
+  `daemon_variant_census`, `enrich_surface_e2e`, `fold_ingest_{abandoned,coverage}`,
+  `iroh_transport_e2e`, `landscape_digest_http_e2e`, `lc_surface_e2e`,
+  `local_only_boot`, `meshapp_{parcels,surface}`, `node_id_persistence`,
+  `pattern_observation_e2e`, `port_config`, `reading_http_e2e`,
+  `recipe_surface_e2e`, `research_surface_e2e`, `rotate_pre_split_guard`,
+  `spec_gate_e2e`, `storage_snapshot_e2e`, `try_resume_first_gossip`,
+  `turn_surface`, `wire_view_drift`, `common/mod.rs`. 46 more name both.
+
+- [ ] Move the 31 pure-daemon files to `sovereign-daemon/tests/`. That is the
+      whole of the two `[[forbid]]` lines and most of the other four.
+- [ ] `sovereign-tools`, 21 sites / 10 files, all inside the pure-daemon set.
+      Four of them are **wire types** deserialised out of HTTP answers
+      (`atlas_view::{AtlasCorpusSummary, AtomListPage, AtomDetail,
+      AtlasMemberSummary}`, `atlas_surface_e2e.rs:354,381,396,440,476`) and
+      `sovereign-contracts::daemon_wire` exists for exactly that case by its own
+      stated purpose — a client that only parses an answer should not link the
+      serving host to name it.
+- [ ] `sovereign-store`, 21 sites / 8 files: `memory::InMemoryStateStore` (13),
+      `sqlite::SqliteStateStore` (5). **Do not fake these.** `StateStore` is a
+      supertrait of 12 sub-traits, and `InMemoryStateStore` already IS the
+      in-memory reference implementation — a harness fake would be a
+      thirteenth-trait second copy of it (§8).
+- [ ] `corpus-engine-scip`, **exactly one site** (`loopback_parity.rs:73`),
+      forced by a signature mesh re-exports:
+      `Reindexer::new(PathBuf, ScipGraphHandle)` where
+      `ScipGraphHandle = Arc<ArcSwap<ScipGraph>>` and only
+      `ScipGraph::open_in_memory` can mint one. Closes with an in-memory
+      constructor on `Reindexer` in `corpus-engine-watchers`.
+- [ ] `sovereign-enrichment-catalog`, **one site** (`enrich_surface_e2e.rs:81`):
+      `CONFIG_SCHEMA_VERSION` written into a fixture `config.json`. A literal
+      there is a second copy of a one-decider version and breaks on the next
+      legitimate bump. Closes by moving the constant (with `EnrichConfig`) into
+      contracts — the same argument that moved `guest_link`.
+- [ ] `sovereign-mesh-test-harness → sovereign-daemon` is one file,
+      `tests/integration.rs` (831 lines), binding `SimulatedMesh<AppState>` and
+      driving the real routers over TCP against 200/400/503 plus JSON bodies.
+      No fake holds that. Its real home is `sovereign-daemon/tests/`, which puts
+      `sovereign-daemon → sovereign-mesh-test-harness` on the table as a new dev
+      edge. Moving it to `sovereign-mesh/tests/` instead would gate it out behind
+      the optional `dst` feature — a test taught to skip, refused.
+- [ ] `sovereign-mesh → corpus-engine` is a genuine SRC edge, 8 sites:
+      `canonical_pull.rs:46,47`, `gossip.rs:46`, `capabilities.rs:43,269,283,292`,
+      `ring_roster.rs:260`. 96 more in tests. `CorpusEngine` is spelled two ways
+      (`corpus_engine::` and `corpus_engine::engine::`).
+- [ ] `sovereign-mesh → corpus-engine-notes` is ALREADY dev-only in fact — 0 src
+      sites, 7 test sites — but declared in `[dependencies]`, so the gate reads
+      it as normal. One line in mesh's manifest.
+
+**Do not fake any of these to make the number move.** The assembled-host e2e
+tests that cannot be inverted without going vacuous, by name: `turn_surface.rs`
+(1,636 lines, real turns over a live socket with a real store),
+`loopback_parity.rs` (asserts the mounted router and the in-process call agree —
+a fake on either side IS the subject), `daemon_variant_census.rs` plus
+`common/mod.rs::{desktop_services, mesh_admin_services}` (they drive
+`sovereign_daemon::assemble` deliberately, because a fixture composing a variant
+directly is the one site able to build a shape no launch can produce — the
+comments name this "Falsifier 3"), `d9a_documents_e2e.rs` and
+`conv_surface_e2e.rs` (SQLite rows and conv-tiered projections),
+`enrich_surface_e2e.rs`.
+
+**A dev edge still counts.** `quality/arch-layers/src/packages.rs:171`, pinned by
+its test at `:549`, enforces dev edges in the package pass — so demoting a dep
+from `[dependencies]` to `[dev-dependencies]` makes the line re-read as DEV
+rather than closing it. It is still worth doing: it removes the edge from the
+shipped closure, which is what liftability actually means.
+
 ### Phase 7 — decisions, not cuts
 
 - [x] **`atos` is CUT COMPLETELY** (operator, 2026-09-21). Footprint:
