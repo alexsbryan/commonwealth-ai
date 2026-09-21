@@ -712,7 +712,11 @@ name, so a browser `click` picks up the approval gate and replay ledger while
 a `snapshot` read does not.
 
 **Code intelligence** is served over MCP by `svrn project serve` or the
-daemon. Tools under `sovereign-tools/src/code/`: the code index (`symbols`,
+daemon. The tools live in their own crate, `sovereign-code` — 18,431 lines
+lifted out of `sovereign-tools` on 2026-09-21 (822681564), so that `svrn code`
+is a program with a boundary a gate can read rather than a module inside the
+knowledge server (docs/FIVE_PROGRAMS.md §2). Tools under
+`sovereign-code/src/`: the code index (`symbols`,
 `code_search`, `recent_changes`, `working_set`, `brief`), the session brief
 (`briefing`), the tree-sitter fact base (`facts`), the SCIP call graph
 (`callers`, `callees`, `blast_radius`), watchers, notes, ATOS lifecycle,
@@ -3856,8 +3860,11 @@ work pins the GPU while the user is chatting. Components:
   quarantine that peer for 60 s after three of them.
   `PrincipalInflightGuard` is RAII (`release`s the principal's slot on drop,
   accurate under panic unwind). The **same `SchedCore` policy** backs
-  the chat server's turn scheduler (`sovereign-server/scheduler.rs`),
-  so both admission gates are fair by identical rules.
+  the serving host's admission gate (`sovereign-serving-host/src/state.rs`),
+  so both are fair by identical rules. The second consumer used to be the
+  chat server's own turn scheduler; that crate was deleted at 5cb09f22b, and
+  the surviving pair is the serving host above plus
+  `sovereign-daemon/src/state.rs`.
 - **W3 — tray status chip + pause submenu**
   (`sovereign-desktop/src-tauri/src/tray.rs`).
 - **W4 — first-mesh-join consent** —

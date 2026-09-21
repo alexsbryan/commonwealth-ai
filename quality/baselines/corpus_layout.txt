@@ -38,7 +38,7 @@
 1	sovereign/crates/sovereign-meshapp/src/wrapped.rs
 1	sovereign/crates/sovereign-meshapp/src/wrapped/tests.rs
 3	sovereign/crates/sovereign-tools/src/atlas_view/reader.rs
-1	sovereign/crates/sovereign-tools/src/code/dry_report.rs
+1	sovereign/crates/sovereign-code/src/dry_report.rs
 2	sovereign/crates/sovereign-tools/src/local_corpus/manager.rs
 1	sovereign/crates/sovereign-tools/src/local_corpus/watched/worker.rs
 2	sovereign/crates/sovereign-tools/tests/main/enrichment_health_e2e.rs

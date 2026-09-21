@@ -277,6 +277,13 @@ crates = [
 name = "capabilities"
 crates = [
     "sovereign-tools",
+    # `svrn code` — lifted out of `sovereign-tools/src/code/` on 2026-09-21
+    # (822681564) and left off this map by that commit, which layer-gate
+    # reported as "crate `sovereign-code` is not assigned to any layer" for
+    # every run since. Here rather than a tier lower because it is the same
+    # kind of thing as the crate it left: a capability the hosts mount, not a
+    # library they build on.
+    "sovereign-code",
     # The enrichment store's layout + `config.json` schema + inventory. Sits
     # here and not with the CLI because THREE hosts read that file (the CLI,
     # the daemon's watched-folder driver via sovereign-tools, and the desktop)

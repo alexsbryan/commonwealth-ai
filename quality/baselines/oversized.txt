@@ -173,13 +173,13 @@
 1594	sovereign/crates/sovereign-tdd/src/trial.rs
 1639	sovereign/crates/sovereign-tools/src/atlas_postinstall.rs
 1267	sovereign/crates/sovereign-tools/src/atlas_view/reader.rs
-1605	sovereign/crates/sovereign-tools/src/code/session_state.rs
+1605	sovereign/crates/sovereign-code/src/session_state.rs
 1421	sovereign/crates/sovereign-tools/src/conv_tiered_provider.rs
 1549	sovereign/crates/sovereign-tools/src/knowledge_view/manager.rs
 1311	sovereign/crates/sovereign-tools/src/local_corpus/extract_stage.rs
 2657	sovereign/crates/sovereign-tools/src/local_corpus/manager.rs
 2145	sovereign/crates/sovereign-tools/src/raptor_atlas.rs
 1374	sovereign/crates/sovereign-tools/src/sec_edgar.rs
-1539	sovereign/crates/sovereign-tools/tests/main/e2e_code_intel.rs
+1539	sovereign/crates/sovereign-code/tests/e2e_code_intel.rs
 4800	sovereign/crates/sovereign-turn-client/src/lib.rs
 1201	studio/crates/sovereign-tools-base/src/web/search/mod.rs
