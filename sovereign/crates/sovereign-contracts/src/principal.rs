@@ -218,9 +218,7 @@ mod tests {
         assert_eq!(Principal::Unverified.node_id(), None, "not a peer key");
         assert_ne!(
             Principal::Unverified,
-            Principal::LocalOwner {
-                sub_identity: None
-            },
+            Principal::LocalOwner { sub_identity: None },
             "an untied connection may be a LAN caller, not only a local one"
         );
     }

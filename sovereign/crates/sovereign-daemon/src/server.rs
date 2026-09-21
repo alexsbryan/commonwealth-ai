@@ -667,8 +667,7 @@ pub async fn serve(
     // ConnectInfo on the internal listener too: `internal_principal_layer`
     // decides "is this hop my own acceptor's" partly from the peer address,
     // and a missing one resolves every caller `Unverified` (fail closed).
-    let internal_app =
-        internal_router(state).into_make_service_with_connect_info::<SocketAddr>();
+    let internal_app = internal_router(state).into_make_service_with_connect_info::<SocketAddr>();
 
     let client_listener = TcpListener::bind(client_addr).await?;
     let internal_listener = TcpListener::bind(internal_addr).await?;
