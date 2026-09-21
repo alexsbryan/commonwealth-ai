@@ -11,6 +11,17 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 /// Repo root = grandparent of `corpus-engine/xtask/`.
+///
+/// RESOLVED AT COMPILE TIME, not from the cwd. A prebuilt `target/debug/xtask`
+/// therefore scans the checkout it was BUILT in, whatever directory you run it
+/// from — so `cd <worktree> && /path/to/xtask arch-gate` reports the main
+/// tree's numbers while looking like it read the worktree's. That silently
+/// breaks the re-pin recipe in AGENTS.md ("re-pin at `origin/main` — a
+/// worktree, then copy `quality/baselines/` back"): the worktree needs its own
+/// `cargo run -p xtask`, and `size-gate --root <path>` is the only gate with a
+/// flag for it. Measured 2026-09-21: three runs against two worktrees and the
+/// main tree returned byte-identical output while the files differed by 127
+/// lines.
 pub fn repo_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
