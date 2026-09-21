@@ -52,8 +52,8 @@ use std::sync::{Arc, Mutex};
 
 use commonwealth_rail::{RingRail, SigningKey};
 use commonwealth_work::WORK_NAMESPACE;
-use corpus_engine::index::CorpusIndex;
-use corpus_engine::Corpus;
+use corpus_index::corpus::Corpus;
+use corpus_index::index::CorpusIndex;
 use sovereign_daemon::ingest_executor::fold_coverage_for;
 use sovereign_daemon::state::AppState;
 use sovereign_grants::auto_recover::{

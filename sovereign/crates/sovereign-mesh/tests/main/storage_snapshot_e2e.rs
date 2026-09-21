@@ -31,8 +31,9 @@ use std::time::Duration;
 use crate::common;
 use crate::common::mesh_admin_services;
 use commonwealth_core::contributions::LedgerEventKind;
-use corpus_engine::index::{CorpusIndex, InsertChunk};
-use corpus_engine::{CorpusEngine, EmbedFn};
+use corpus_engine::CorpusEngine;
+use corpus_index::index::{CorpusIndex, InsertChunk};
+use corpus_index::types::EmbedFn;
 use sovereign_contracts::setup_config::SetupConfig;
 use sovereign_daemon::daemon::EmbeddedDaemon;
 

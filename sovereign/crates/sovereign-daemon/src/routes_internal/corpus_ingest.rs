@@ -252,7 +252,7 @@ pub async fn corpus_canonical_stream(
     // Resolve the index info so we can:
     //   1. Refuse private corpora (query_sharing=false).
     //   2. Surface the fingerprint header for client-side validation.
-    let info = match corpus_engine::index::CorpusIndex::open(&canonical_path).await {
+    let info = match corpus_index::index::CorpusIndex::open(&canonical_path).await {
         Ok(idx) => match idx.info().await {
             Ok(i) => i,
             Err(e) => {
@@ -1168,7 +1168,7 @@ pub async fn spawn_corpus_install_outcome(
                     }
                 });
             }
-            Err(corpus_engine::Error::Cancelled(_)) => {
+            Err(corpus_index::Error::Cancelled(_)) => {
                 // Cancel route handles the wipe; we only clean up
                 // the progress map so the UI returns to
                 // "not_installed" on the next poll.

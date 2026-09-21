@@ -13,7 +13,7 @@ use axum::extract::State;
 use axum::http::StatusCode;
 use axum::Json;
 
-use corpus_engine::Corpus;
+use corpus_index::corpus::Corpus;
 
 use crate::state::AppState;
 

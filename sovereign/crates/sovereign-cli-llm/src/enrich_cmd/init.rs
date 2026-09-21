@@ -22,7 +22,8 @@ use std::sync::Arc;
 
 use corpus_engine::chunkers::sectioned::{ChapterRegexDetector, SectionedChunker};
 use corpus_engine::enrichment::pipeline::ChapterManifest;
-use corpus_engine::{CorpusEngine, EmbedFn};
+use corpus_engine::CorpusEngine;
+use corpus_index::types::EmbedFn;
 
 use super::config::{EnrichConfig, TocMarkers, CONFIG_SCHEMA_VERSION};
 use super::inference_client::{probe_daemon, resolve_default_models};

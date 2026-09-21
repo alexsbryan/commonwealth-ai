@@ -176,7 +176,7 @@ async fn a_daemon_streams_a_turn_to_a_websocket_client() {
 /// the engine's `installed_indexes()` reports it — the same fixture
 /// `knowledge_served_e2e` uses.
 async fn install_corpus(indexes_dir: &std::path::Path, id: &str) {
-    use corpus_engine::index::{CorpusIndex, InsertChunk};
+    use corpus_index::index::{CorpusIndex, InsertChunk};
     let index = CorpusIndex::create(
         &indexes_dir.join(id),
         id,

@@ -161,8 +161,8 @@ pub(super) fn share_corpus(
     indexes_dir: &std::path::Path,
     id: &str,
 ) -> Result<std::path::PathBuf, String> {
-    let corpus =
-        corpus_engine::Corpus::named(indexes_dir, id).ok_or("corpus id must not be empty")?;
+    let corpus = corpus_index::corpus::Corpus::named(indexes_dir, id)
+        .ok_or("corpus id must not be empty")?;
     if !corpus.is_installed() {
         return Err(format!(
             "no installed corpus `{id}` under {} — `svrn corpus list`",
@@ -221,7 +221,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let indexes = dir.path().join("indexes");
         let root = indexes.join("larkspur");
-        let idx = corpus_engine::index::CorpusIndex::create_with_sharing(
+        let idx = corpus_index::index::CorpusIndex::create_with_sharing(
             &root,
             "larkspur",
             "larkspur",
@@ -235,7 +235,7 @@ mod tests {
         .unwrap();
         idx.mark_ingestion_complete().unwrap();
         drop(idx);
-        let embed: corpus_engine::EmbedFn =
+        let embed: corpus_index::types::EmbedFn =
             std::sync::Arc::new(|_t: &str| Box::pin(async { Ok(vec![0.0_f32; 8]) }));
         let engine = std::sync::Arc::new(corpus_engine::CorpusEngine::new(
             dir.path().join("recipes"),

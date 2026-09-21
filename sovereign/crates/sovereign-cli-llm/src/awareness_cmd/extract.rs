@@ -28,7 +28,7 @@ use corpus_engine::enrichment::domains::conversational::ConversationalDomain;
 use corpus_engine::enrichment::domains::personal::PersonalDomain;
 use corpus_engine::enrichment::entity_extraction::{run_entity_extraction, EntityExtractionResult};
 use corpus_engine::enrichment::EnrichmentProgress;
-use corpus_engine::index::StoredChunk;
+use corpus_index::index::StoredChunk;
 
 use sovereign_core::traits::{ConversationStore, MemoryStore};
 use sovereign_store::sqlite::SqliteStateStore;

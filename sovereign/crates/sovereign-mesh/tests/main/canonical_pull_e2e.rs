@@ -25,8 +25,10 @@ use std::time::Duration;
 use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::mesh::Mesh;
 use commonwealth_state::MeshStore;
-use corpus_engine::index::{CorpusIndex, EmbeddedChunk, InsertChunk};
-use corpus_engine::{Corpus, CorpusEngine, EmbedFn};
+use corpus_engine::CorpusEngine;
+use corpus_index::corpus::Corpus;
+use corpus_index::index::{CorpusIndex, EmbeddedChunk, InsertChunk};
+use corpus_index::types::EmbedFn;
 use sovereign_daemon::server::internal_router;
 use sovereign_daemon::state::AppState;
 use sovereign_mesh::canonical_pull::{pull_canonical_from_peer, PullError};
@@ -59,7 +61,7 @@ async fn create_synthetic_canonical(index_dir: &Path, corpus_id: &str) -> String
             content_hash: Some(hash.into()),
             source_doc_id: Some(hash.into()),
             source_file: None,
-            code: corpus_engine::index::InsertCodeMeta::default(),
+            code: corpus_index::index::InsertCodeMeta::default(),
             unit_id: None,
         },
         embedding: vec.to_vec(),
@@ -113,7 +115,7 @@ async fn app_state_with_engine(index_dir: &Path) -> AppState {
         peers: vec![],
     };
     let zero_embed: EmbedFn =
-        Arc::new(|_t: &str| Box::pin(async { Ok::<Vec<f32>, corpus_engine::Error>(vec![0.0; 4]) }));
+        Arc::new(|_t: &str| Box::pin(async { Ok::<Vec<f32>, corpus_index::Error>(vec![0.0; 4]) }));
     let engine = Arc::new(
         CorpusEngine::new(index_dir.to_path_buf(), index_dir.to_path_buf(), zero_embed)
             .with_embedding_model("test-embed"),

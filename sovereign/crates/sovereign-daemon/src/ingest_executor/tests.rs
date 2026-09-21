@@ -14,7 +14,7 @@ fn engine() -> (tempfile::TempDir, Arc<CorpusEngine>) {
     let indexes = dir.path().join("indexes");
     std::fs::create_dir_all(&recipes).expect("recipes dir");
     std::fs::create_dir_all(&indexes).expect("indexes dir");
-    let embed: corpus_engine::EmbedFn =
+    let embed: corpus_index::types::EmbedFn =
         Arc::new(|_text: &str| Box::pin(async { Ok(vec![0.1_f32; 4]) }));
     let engine = Arc::new(CorpusEngine::new(recipes, indexes, embed));
     // The TempDir is returned so the caller keeps it alive: dropping it here

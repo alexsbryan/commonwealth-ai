@@ -79,7 +79,8 @@ use corpus_engine::enrichment::tiered::{
     run_folder_tiered_enrichment, ChunkEntityExtractor, ChunkEntityExtractorHandle,
     ChunkNerOutcome, ConvBucket, TieredEnrichmentProvider, TieredProviderHandle,
 };
-use corpus_engine::{EnrichmentChunkRow, Result as EngineResult};
+use corpus_index::index::EnrichmentChunkRow;
+use corpus_index::Result as EngineResult;
 use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::Speed;
 use sovereign_store::sqlite::SqliteStateStore;

@@ -25,7 +25,7 @@
 //! only way this command touches an atlas other than the source's.
 
 use corpus_engine::enrichment::field_atoms::{publish_to_atlas, skeleton_from_atoms};
-use corpus_engine::CorpusIndex;
+use corpus_index::index::CorpusIndex;
 use sovereign_cli_shared::help;
 
 /// The budget `turn_prepass::splice_ambient_field_digests` renders at. Repeated

@@ -435,18 +435,40 @@ spelling. Engine-owned and therefore real: `CorpusEngine`, `enrichment::*`,
 `CorpusSpec`, `IngestResult`, `SovereignConfig`, `InferenceFn`, `ChatPrompt`,
 `progress`, `update`, `snapshot`, the canonical-merge functions.
 
-### The corpus-index sweep — mechanical, no decisions, do it first
+### The corpus-index sweep — DONE 2026-09-21, two cutter waves + rule-gap passes
 
-Do this FIRST, not for the edge count but because phases 3 and 6 cannot be
-priced until it has run.
+Run not for the edge count but because the atlas and de-embed items could not
+be priced until it ran. It closed **zero** edges — every crate with leaf
+spellings also has engine-owned production refs, so no `corpus-engine` dep line
+fell. The original prediction is kept struck-through as the lesson:
 
-- [ ] Rewrite every `corpus_engine::<re-exported module>` path to `corpus_index::`
+- [x] Rewrite every `corpus_engine::<re-exported module>` path to `corpus_index::`
       across all consumers; drop the `corpus-engine` dep wherever the residue empties.
-- [ ] Closes outright: `sovereign-cli` (4 refs), `sovereign-cli-shared` (7),
-      `sovereign-code` (7, dev), `sovereign-cli-daemon` (7) — all mostly
-      `Error`/`EmbedFn`/`DEFAULT_EMBED_DIM`.
-- [ ] Report the per-crate residue for the five deep consumers: core 290,
-      tools 339, cli-llm 396, daemon 135, mesh 85.
+- [x] ~~Closes outright: `sovereign-cli` (4 refs), `sovereign-cli-shared` (7),
+      `sovereign-code` (7, dev), `sovereign-cli-daemon` (7)~~ — those counts
+      were sibling-crate noise: the grep matched `corpus_engine_{notes,scip,
+      watchers,archaeology,atos}`, different crates entirely. Real counts:
+      cli 5, cli-shared 8, code 16, cli-daemon 13, and the residue in each is
+      engine-owned (`CorpusEngine`, `CorpusSpec`, `SovereignConfig`).
+- [x] Per-crate residue AFTER the sweep: core 70, tools 294, cli-llm 386,
+      daemon 224, mesh 94 — dominated by `enrichment` (~490 refs across all
+      consumers) and `CorpusEngine`. `corpus-index` is now a declared dep of
+      14 crates; the engine-root `oplog`/`Grain`/`Articulation` indirections
+      are closed at their sites via direct deps on shared leaves (no new
+      violations).
+
+Seams the sweep learned, by name:
+
+- `corpus_engine::index` is NOT uniformly leaf — the engine kept its own
+  `index/field_skeleton.rs` and `index/raptor.rs` beside the
+  `pub use corpus_index::index::*` shim (tools, daemon, cli-llm each reach
+  them; they are enrichment machinery and belong to the atlas question).
+- `InferenceFn` is re-exported from `types` but is ENGINE-owned — a naive
+  whole-module sweep of `types` would have broken it.
+- The long tail was root spellings: `CorpusIndex` (~20), `Evidence`/
+  `EvidenceSet`, `InsertChunk`/`StoredChunk`, `EnrichmentChunkRow` (9),
+  `read_provenance`/`set_provenance`/`CorpusProvenance`, `Retention` — all
+  closed to `corpus_index::index::*`.
 
 ### The recipes tree — mechanical, one cutter, one pass
 

@@ -676,7 +676,7 @@ fn an_engine() -> (tempfile::TempDir, Arc<corpus_engine::CorpusEngine>) {
     let indexes = dir.path().join("indexes");
     std::fs::create_dir_all(&recipes).expect("recipes dir");
     std::fs::create_dir_all(&indexes).expect("indexes dir");
-    let embed: corpus_engine::EmbedFn =
+    let embed: corpus_index::types::EmbedFn =
         Arc::new(|_t: &str| Box::pin(async { Ok(vec![0.1_f32; 4]) }));
     (
         dir,

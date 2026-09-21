@@ -42,8 +42,8 @@ use std::time::Instant;
 
 use corpus_engine::enrichment::code_intel::SymbolEnrichment;
 use corpus_engine::enrichment::pipeline::ChatPrompt;
-use corpus_engine::types::EmbedFn;
 use corpus_engine::InferenceFn;
+use corpus_index::types::EmbedFn;
 use futures::stream::{self, StreamExt};
 use serde::{Deserialize, Serialize};
 

@@ -159,7 +159,7 @@ pub async fn cmd_atlas_reconcile(args: &[String]) -> i32 {
 
     // Persist the audit trail (append-only) so the per-merge rationale
     // survives — the same writer the bench uses.
-    let oplog = corpus_engine::oplog::Oplog::<ReconciliationAct>::new(atlas_dir.clone());
+    let oplog = oplog::Oplog::<ReconciliationAct>::new(atlas_dir.clone());
     let mut oplog_errs = 0usize;
     for entry in &outcome.oplog_entries {
         if oplog.append(entry).is_err() {

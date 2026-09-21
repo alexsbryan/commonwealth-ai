@@ -10,7 +10,7 @@
 //! hook's `apply_atom_delta` would leave legacy atoms orphaned.
 
 use corpus_engine::enrichment::atlas::writer::read_atlas_atoms;
-use corpus_engine::index::CorpusIndex;
+use corpus_index::index::CorpusIndex;
 
 pub async fn run(args: &[String]) -> i32 {
     let mut corpus_filter: Option<String> = None;

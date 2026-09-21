@@ -11,8 +11,9 @@ use std::sync::Arc;
 use super::discovery_policy;
 use crate::startup::{daemon_pid_path, warn_orphaned_indexes};
 use crate::EmbeddedDaemon;
-use corpus_engine::{CorpusEngine, EmbedFn};
+use corpus_engine::CorpusEngine;
 use corpus_engine_notes::{NodeRoster, NotePropagationEvent, NoteStore, RosterEntry};
+use corpus_index::types::EmbedFn;
 use kernel_types::NodeId;
 use sovereign_contracts::peer::{Convergence, ReplicatedKv};
 use sovereign_core::model_family::{
@@ -129,20 +130,19 @@ pub fn build_corpus_engine(
             Box::pin(async move {
                 p.embed(&text)
                     .await
-                    .map_err(|e| corpus_engine::Error::Embed(e.to_string()))
+                    .map_err(|e| corpus_index::Error::Embed(e.to_string()))
             })
         });
         let provider_for_batch = Arc::clone(&provider);
-        let batch_embed: corpus_engine::types::BatchEmbedFn =
-            Arc::new(move |texts: &[String]| {
-                let p = Arc::clone(&provider_for_batch);
-                let texts = texts.to_vec();
-                Box::pin(async move {
-                    p.embed_batch(&texts)
-                        .await
-                        .map_err(|e| corpus_engine::Error::Embed(e.to_string()))
-                })
-            });
+        let batch_embed: corpus_index::types::BatchEmbedFn = Arc::new(move |texts: &[String]| {
+            let p = Arc::clone(&provider_for_batch);
+            let texts = texts.to_vec();
+            Box::pin(async move {
+                p.embed_batch(&texts)
+                    .await
+                    .map_err(|e| corpus_index::Error::Embed(e.to_string()))
+            })
+        });
 
         // Wire the SAME embed slot into the NoteStore so T1
         // (semantic-blend retrieval) lights up. NoteStore has its
@@ -1698,7 +1698,7 @@ pub fn spawn_lazy_stamp_fingerprints(engine: Arc<CorpusEngine>) {
 ///
 /// **This ran in the desktop until svt-6 (2026-09-12) and ran nowhere else.**
 /// It is a self-heal of the index's own on-disk `IndexMeta.vector_index_built`:
-/// `corpus_engine::index::create::is_vector_index_ready` calls
+/// `corpus_index::index::create::is_vector_index_ready` calls
 /// `mark_vector_index_built` when LanceDB reports a complete index the meta
 /// had not recorded. The ONE reader of that field is
 /// `crate::corpus_catalog_http::catalog`, which prefers it over the

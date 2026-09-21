@@ -24,8 +24,11 @@ use commonwealth_core::capabilities::{AvailableResources, HardwareProfile, NodeC
 use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::mesh::{MemberRecord, Mesh, NodeStatus};
 use commonwealth_state::MeshStore;
-use corpus_engine::index::{CorpusIndex, InsertChunk};
-use corpus_engine::{CorpusEngine, EmbedFn};
+use corpus_engine::CorpusEngine;
+use corpus_index::{
+    index::{CorpusIndex, InsertChunk},
+    types::EmbedFn,
+};
 use oicp_types::knowledge::CorpusShardInfo;
 use sovereign_daemon::server::{client_router, internal_router};
 use sovereign_daemon::state::AppState;

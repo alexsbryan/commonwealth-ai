@@ -36,8 +36,8 @@ use corpus_engine::enrichment::atlas::migrate_ids::migrate_atlas_ids;
 use corpus_engine::enrichment::atlas::{read_atlas_atoms, AtomEnvelope, AtomId};
 use corpus_engine::enrichment::governance_view::section_titles;
 use corpus_engine::enrichment::{GovernanceOpKind, GovernanceView, TensionDisposition};
-use corpus_engine::oplog::{Op, Oplog};
 use corpus_engine::CorpusEngine;
+use oplog::{Op, Oplog};
 use sovereign_time::unix_now;
 
 use crate::daemon::EmbeddedDaemon;

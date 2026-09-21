@@ -231,7 +231,7 @@ fn print_cli_event(evt: &EnrichProgress) {
 /// It does NOT probe. The one `embed_query("probe")` lives in
 /// [`probe_embedder`], on the path both callers share, so the CLI and the
 /// daemon spend exactly one probe each and neither spends two.
-async fn backfill_session_embedder() -> Result<corpus_engine::EmbedFn, String> {
+async fn backfill_session_embedder() -> Result<corpus_index::types::EmbedFn, String> {
     let (globals, _) = parse_globals(&[])?;
     let session = build_session(&globals).await.map_err(|e| {
         format!(

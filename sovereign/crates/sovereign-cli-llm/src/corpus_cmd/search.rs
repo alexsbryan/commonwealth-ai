@@ -3,7 +3,7 @@
 //! daemon's embed slot and search a corpus index, closing the ingest→query loop
 //! for a workflow-built corpus (or any installed one). Vector + FTS hybrid.
 
-use corpus_engine::CorpusIndex;
+use corpus_index::index::CorpusIndex;
 use sovereign_core::traits::InferenceProvider;
 use sovereign_inference::remote::RemoteApiProvider;
 
@@ -73,7 +73,7 @@ pub(crate) async fn search_corpus(
     id: &str,
     query: &str,
     limit: usize,
-) -> Result<Vec<corpus_engine::ScoredChunk>, String> {
+) -> Result<Vec<corpus_index::types::ScoredChunk>, String> {
     // Embed the query via the daemon's embed slot, resolved through the ONE
     // decider (`sovereign_workflow_host::daemon_models`): configured stem →
     // advertised id, proved by a `/v1/embeddings` probe. The refusal names

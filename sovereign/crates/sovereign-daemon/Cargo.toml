@@ -52,6 +52,9 @@ tree-sitter = "0.26"
 corpus-engine-scip = { workspace = true }
 corpus-engine-notes = { workspace = true }
 corpus-engine-atos = { workspace = true, optional = true }
+# Leaf items the engine re-exports (types, error, index, corpus) — spelled at their owner.
+corpus-index = { workspace = true }
+oplog = { workspace = true }
 sovereign-atos = { path = "../sovereign-atos", optional = true }
 http-body = "1"
 arc-swap = { workspace = true }

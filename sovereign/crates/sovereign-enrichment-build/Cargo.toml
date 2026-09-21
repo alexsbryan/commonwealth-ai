@@ -41,6 +41,7 @@ description = "The atlas enrichment build orchestrator and its phase drivers, be
 corpus-engine = { workspace = true, features = ["treesitter"] }
 # The atlas vocabulary leaf — `OntologyPolicies` as recorded in atlas/ontology.json.
 understanding-vocab = { workspace = true }
+corpus-index = { workspace = true }
 # The enrichment store's layout + `config.json` schema. Re-exported from
 # `lib.rs` as `config` / `paths` so the moved modules' `super::config` and
 # `super::paths` paths resolve unchanged — the same re-export

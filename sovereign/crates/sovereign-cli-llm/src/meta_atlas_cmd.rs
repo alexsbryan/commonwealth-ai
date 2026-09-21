@@ -83,7 +83,7 @@ fn adjudicate_call(
     req: bridge::AdjudicationRequest,
 ) -> std::pin::Pin<
     Box<
-        dyn std::future::Future<Output = corpus_engine::Result<Option<bridge::AdjudicationVerdict>>>
+        dyn std::future::Future<Output = corpus_index::Result<Option<bridge::AdjudicationVerdict>>>
             + Send,
     >,
 > {

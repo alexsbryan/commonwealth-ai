@@ -58,9 +58,9 @@ use corpus_engine::enrichment::pipeline::atlas::{
     ClaimScope, DiscourseAct, EnrichmentDepth, EpistemicStatus,
 };
 use corpus_engine::enrichment::GovernanceOpKind;
-use corpus_engine::oplog::{Op, Oplog};
 use corpus_engine::CorpusEngine;
 use corpus_engine_notes::NoteStore;
+use oplog::{Op, Oplog};
 use sovereign_contracts::mcp_config::{McpAuthConfig, McpServerConfig, McpTransportConfig};
 use sovereign_contracts::setup_config::SetupConfig;
 use sovereign_contracts::types::{Effect, Idempotency, Latency, Scope, StepOutput, ToolDescriptor};

@@ -748,7 +748,7 @@ fn write_fixture_meta(dir: &std::path::Path, corpus_id: &str, ingestion_in_progr
         "indexes_built": !ingestion_in_progress,
     });
     std::fs::write(
-        corpus_engine::Corpus::meta_in(dir),
+        corpus_index::corpus::Corpus::meta_in(dir),
         serde_json::to_string_pretty(&meta).unwrap(),
     )
     .unwrap();
@@ -774,7 +774,7 @@ async fn corpus_status_route_serves_the_one_deciders_rows() {
         std::sync::Arc::new(|_t: &str| {
             Box::pin(async { Ok(vec![0.0_f32; 8]) })
                 as std::pin::Pin<
-                    Box<dyn std::future::Future<Output = corpus_engine::Result<Vec<f32>>> + Send>,
+                    Box<dyn std::future::Future<Output = corpus_index::Result<Vec<f32>>> + Send>,
                 >
         }),
     ));

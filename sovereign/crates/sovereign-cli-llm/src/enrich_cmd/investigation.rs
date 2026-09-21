@@ -31,8 +31,9 @@ use corpus_engine::{
         graph as investigation_graph, normalize::Normalizer, recoalesce, run_investigation,
         ChunkInput, INVESTIGATION_DIRNAME,
     },
-    CorpusIndex, RecipeRegistry,
+    RecipeRegistry,
 };
+use corpus_index::index::CorpusIndex;
 
 use super::config::EnrichConfig;
 use super::inference_client::DaemonInferenceClient;

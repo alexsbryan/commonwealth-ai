@@ -48,7 +48,8 @@ use corpus_engine::enrichment::atlas::atoms_delta::{apply_atom_delta, AtomsDelta
 use corpus_engine::enrichment::atlas::migrate_ids::migrate_atlas_ids;
 use corpus_engine::enrichment::atlas::{read_atlas_atoms, read_atlas_edges, ATLAS_DIRNAME};
 use corpus_engine::enrichment::pipeline::{Phase1Output, PipelinePhase};
-use corpus_engine::{CorpusEngine, EmbedFn};
+use corpus_engine::CorpusEngine;
+use corpus_index::types::EmbedFn;
 
 use super::atlas_resolve::{collect_section_extractions, resolve_into_dir, ResolvePhase};
 use super::build::{self, ParsedBuild};
@@ -632,7 +633,7 @@ pub async fn cmd_delta_manifest(args: &[String]) -> i32 {
     // matching the chunk's `metadata_raw` (the email JSON carries the
     // staging-slice path, e.g. `symes-k_..._link`) — NOT source_doc_id,
     // which is the bare javamail message-id with no slice info.
-    let new_rows: Vec<corpus_engine::EnrichmentChunkRow> = rows
+    let new_rows: Vec<corpus_index::index::EnrichmentChunkRow> = rows
         .into_iter()
         .filter(|r| {
             if covered_ids.contains(&r.id) {

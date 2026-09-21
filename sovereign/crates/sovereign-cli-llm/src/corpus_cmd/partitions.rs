@@ -6,7 +6,8 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use corpus_engine::{Corpus, CorpusEngine, ReconstructionMethod};
+use corpus_engine::{CorpusEngine, ReconstructionMethod};
+use corpus_index::corpus::Corpus;
 
 use super::fmt::human_bytes;
 
@@ -330,7 +331,7 @@ pub(super) async fn cmd_corpus_merge_partitions(args: &[String]) -> i32 {
     let mut total_chunks_input: u64 = 0;
 
     for (path, label) in &partitions {
-        let idx = match corpus_engine::CorpusIndex::open(path).await {
+        let idx = match corpus_index::index::CorpusIndex::open(path).await {
             Ok(i) => i,
             Err(e) => {
                 eprintln!("Failed to open partition {}: {e}", path.display());
@@ -675,7 +676,7 @@ pub(super) async fn cmd_corpus_reconstruct_manifest(args: &[String]) -> i32 {
     let index_dir = sovereign_cli_shared::dirs::sovereign_indexes();
 
     // Build a no-op embed function — reconstruction reads metadata only.
-    let noop_embed: corpus_engine::EmbedFn =
+    let noop_embed: corpus_index::types::EmbedFn =
         Arc::new(|_text: &str| Box::pin(async { Ok(vec![0.0_f32; 0]) }));
 
     let recipes_dir = sovereign_cli_shared::dirs::sovereign_root().join("recipes");
@@ -905,7 +906,7 @@ pub(super) async fn cmd_corpus_migrate_to_partition(args: &[String]) -> i32 {
     // Engine just needs the directories + a no-op embed for this
     // file-moving operation; ingestion won't run during migration.
     let recipes_dir = data_dir.join("recipes");
-    let noop_embed: corpus_engine::EmbedFn =
+    let noop_embed: corpus_index::types::EmbedFn =
         Arc::new(|_text: &str| Box::pin(async { Ok(vec![0.0_f32; 0]) }));
     let engine = CorpusEngine::new(recipes_dir, index_dir, noop_embed)
         .with_self_node_id(self_node_id_str.clone());

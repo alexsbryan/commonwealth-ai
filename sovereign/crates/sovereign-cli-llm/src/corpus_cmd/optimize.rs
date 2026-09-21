@@ -182,7 +182,7 @@ pub async fn run_optimize(args: &[String]) -> i32 {
         std::env::temp_dir(),
         indexes_dir.clone(),
         Arc::new(|_: &str| {
-            Box::pin(async move { Ok::<Vec<f32>, corpus_engine::Error>(Vec::new()) })
+            Box::pin(async move { Ok::<Vec<f32>, corpus_index::Error>(Vec::new()) })
         }),
     );
 
@@ -210,7 +210,7 @@ pub async fn run_optimize(args: &[String]) -> i32 {
     // without being handed a reader-safety decision they did not make.
     let retention = match (prune_days, keep_versions) {
         (None, None) => None,
-        (days, keep) => Some(corpus_engine::Retention {
+        (days, keep) => Some(corpus_index::index::Retention {
             min_age_days: days.unwrap_or(1),
             keep_versions: keep,
         }),

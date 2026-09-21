@@ -46,7 +46,8 @@ use corpus_engine::enrichment::atlas::strategies::code_walk::{
 use corpus_engine::enrichment::atlas::{doc_to_atoms, read_atlas_atoms, ATLAS_DIRNAME};
 use corpus_engine::enrichment::code_intel::pass::run_code_intel_for_corpus;
 use corpus_engine::enrichment::code_intel::{diff_code_intel_caches, SymbolEnrichment};
-use corpus_engine::{CorpusEngine, EmbedFn};
+use corpus_engine::CorpusEngine;
+use corpus_index::types::EmbedFn;
 
 use super::config::EnrichConfig;
 use super::inference_client::{probe_daemon, DaemonInferenceClient};

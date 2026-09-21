@@ -2321,7 +2321,7 @@ mod tests {
         use corpus_engine::enrichment::atlas::atoms::ChunkRef;
         use corpus_engine::enrichment::governance::RuleStatus;
         use corpus_engine::enrichment::governance_view::{GovernanceView, RuleView};
-        use corpus_engine::oplog::OpId;
+        use oplog::OpId;
 
         fn rule(id: usize, section: &str, status: RuleStatus) -> RuleView {
             RuleView {

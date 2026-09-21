@@ -745,7 +745,7 @@ pub async fn run_recall_probe(opts: &RecallRunOptions) -> Result<(), String> {
     // bootstrap. When set, every plant reports the reranked rank and
     // the added milliseconds next to the plain rank, so the
     // quality-vs-witness-latency trade is measured, never assumed.
-    let rerank_fn: Option<corpus_engine::RerankFn> = match std::env::var(
+    let rerank_fn: Option<corpus_index::types::RerankFn> = match std::env::var(
         "SOVEREIGN_RERANK_MODEL_PATH",
     ) {
         Ok(path) => {

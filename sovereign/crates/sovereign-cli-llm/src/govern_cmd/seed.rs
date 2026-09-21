@@ -13,7 +13,7 @@ use std::collections::HashSet;
 
 use corpus_engine::enrichment::atlas::{read_atlas_atoms, AtomEnvelope, AtomId};
 use corpus_engine::enrichment::GovernanceOpKind;
-use corpus_engine::oplog::{Op, Oplog};
+use oplog::{Op, Oplog};
 
 use super::{atlas_dir, now_unix};
 

@@ -11,8 +11,9 @@ use commonwealth_core::capabilities::{AvailableResources, HardwareProfile, NodeC
 use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::mesh::{MemberRecord, Mesh, NodeStatus};
 use commonwealth_state::MeshStore;
-use corpus_engine::index::{CorpusIndex, InsertChunk};
-use corpus_engine::{CorpusEngine, EmbedFn};
+use corpus_engine::CorpusEngine;
+use corpus_index::index::{CorpusIndex, InsertChunk};
+use corpus_index::types::EmbedFn;
 use sovereign_daemon::state::AppState;
 use sovereign_mesh::gossip;
 use sovereign_meshapp_registry::registry::AppRegistry;

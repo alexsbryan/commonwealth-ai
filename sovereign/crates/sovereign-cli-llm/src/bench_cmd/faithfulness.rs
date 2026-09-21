@@ -333,7 +333,7 @@ async fn run(rest: &[String]) -> i32 {
 
     // Resolve member texts in one batched read.
     let index_path = indexes_dir.join(&corpus_id);
-    let index = match corpus_engine::index::CorpusIndex::open(&index_path).await {
+    let index = match corpus_index::index::CorpusIndex::open(&index_path).await {
         Ok(ix) => ix,
         Err(e) => {
             eprintln!("error: open corpus index {}: {e}", index_path.display());

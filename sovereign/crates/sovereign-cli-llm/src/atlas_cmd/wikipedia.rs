@@ -10,7 +10,8 @@
 use std::sync::Arc;
 
 use corpus_engine::enrichment::atlas::wiki_store::build_wikipedia_columnar_store_from_chunks;
-use corpus_engine::{CorpusEngine, EmbedFn};
+use corpus_engine::CorpusEngine;
+use corpus_index::types::EmbedFn;
 
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 

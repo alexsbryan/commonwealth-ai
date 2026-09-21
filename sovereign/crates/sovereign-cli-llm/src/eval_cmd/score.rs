@@ -14,7 +14,7 @@
 //!   - A question with zero expected items in a dimension is treated
 //!     as N/A (not 0/0 = NaN, not 1.0). The runner skips that dimension.
 
-use corpus_engine::ScoredChunk;
+use corpus_index::types::ScoredChunk;
 
 /// Result of comparing a question's `expected_sources` against the
 /// titles of chunks that came back from retrieval.
@@ -1021,7 +1021,7 @@ mod tests {
             source_doc_id: None,
             vector_distance: None,
             // Fixture chunk: nothing acquired it (TOPOLOGY §10 rung 9.1).
-            provenance: corpus_engine::index::ChunkProvenance::manufactured("test_fixture"),
+            provenance: corpus_index::index::ChunkProvenance::manufactured("test_fixture"),
         }
     }
 

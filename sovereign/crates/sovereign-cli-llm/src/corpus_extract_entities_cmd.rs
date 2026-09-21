@@ -18,7 +18,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
 
-use corpus_engine::index::CorpusIndex;
+use corpus_index::index::CorpusIndex;
 use sovereign_core::conv_tiered::{ChunkEntityProgressRow, ChunkEntityRow};
 use sovereign_gliner::gliner_ner::{
     self, GlinerExtractor, DEFAULT_LABELS, DEFAULT_MODEL_ID, DEFAULT_THRESHOLD,

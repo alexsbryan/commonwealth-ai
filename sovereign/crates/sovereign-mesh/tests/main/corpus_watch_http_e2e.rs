@@ -36,7 +36,8 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::{Arc, OnceLock};
 
-use corpus_engine::{CorpusEngine, EmbedFn};
+use corpus_engine::CorpusEngine;
+use corpus_index::types::EmbedFn;
 use sovereign_contracts::traits::StateStore;
 use sovereign_daemon::corpus_watch_http::corpus_watch_router;
 use sovereign_daemon::watched_folder_runtime;

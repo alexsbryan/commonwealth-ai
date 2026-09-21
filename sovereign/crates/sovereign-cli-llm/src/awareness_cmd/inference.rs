@@ -461,7 +461,7 @@ async fn real_inference(flags: &Parsed) -> Result<InferenceFn, String> {
                 Some(tokens) => client.complete_with_tokens(&prompt, tokens).await,
                 None => client.complete(&prompt).await,
             }
-            .map_err(|e| corpus_engine::error::Error::Extraction(e.to_string()))?;
+            .map_err(|e| corpus_index::error::Error::Extraction(e.to_string()))?;
             if verbose {
                 eprintln!("─── awareness daemon response ─────────────────────");
                 eprintln!("{}", truncate_for_display(&resp, 4000));

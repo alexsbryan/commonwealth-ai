@@ -14,7 +14,8 @@
 use std::sync::Arc;
 
 use corpus_engine::enrichment::atlas::{AtlasData, AtlasIngestionConfig, AtlasIngestionRegistry};
-use corpus_engine::{CorpusEngine, EmbedFn, IngestProgress, ProgressCallback};
+use corpus_engine::{CorpusEngine, IngestProgress, ProgressCallback};
+use corpus_index::types::EmbedFn;
 
 use super::paths;
 use sovereign_cli_shared::help::{self, Help, HelpSection};

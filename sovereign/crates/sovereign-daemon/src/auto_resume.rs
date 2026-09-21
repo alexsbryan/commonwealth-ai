@@ -270,11 +270,11 @@ async fn resume_in_progress_ingests(state: AppState) {
         // partition's flag because that's the active write target;
         // a peer-pulled coordinator role would be on canonical.)
         let canonical_provenance =
-            corpus_engine::read_provenance(&engine.canonical_path(&corpus_id));
+            corpus_index::index::read_provenance(&engine.canonical_path(&corpus_id));
         let partition_provenance =
-            corpus_engine::read_provenance(&engine.partition_path(&corpus_id));
-        if canonical_provenance == corpus_engine::CorpusProvenance::PeerPulled
-            || partition_provenance == corpus_engine::CorpusProvenance::PeerPulled
+            corpus_index::index::read_provenance(&engine.partition_path(&corpus_id));
+        if canonical_provenance == corpus_index::index::CorpusProvenance::PeerPulled
+            || partition_provenance == corpus_index::index::CorpusProvenance::PeerPulled
         {
             tracing::info!(
                 corpus = %corpus_id,

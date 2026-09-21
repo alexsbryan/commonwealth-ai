@@ -35,8 +35,9 @@ use commonwealth_transport::iroh::{EndpointBuilder, IrohAcceptor, IrohTransport,
 use commonwealth_transport::{
     IpTransport, PeerContact, PeerTransport, RoutedTransport, TrafficClass,
 };
-use corpus_engine::index::{CorpusIndex, EmbeddedChunk, InsertChunk};
-use corpus_engine::{CorpusEngine, EmbedFn};
+use corpus_engine::CorpusEngine;
+use corpus_index::index::{CorpusIndex, EmbeddedChunk, InsertChunk};
+use corpus_index::types::EmbedFn;
 use oicp_types::knowledge::CorpusShardInfo;
 use sovereign_daemon::server::{client_router, internal_router};
 use sovereign_daemon::state::AppState;
@@ -386,7 +387,7 @@ async fn canonical_pull_over_iroh_from_peer_with_no_ip() {
     let fingerprint = idx.compute_and_stamp_fingerprint().await.unwrap();
 
     let zero_embed: EmbedFn =
-        Arc::new(|_t: &str| Box::pin(async { Ok::<Vec<f32>, corpus_engine::Error>(vec![0.0; 4]) }));
+        Arc::new(|_t: &str| Box::pin(async { Ok::<Vec<f32>, corpus_index::Error>(vec![0.0; 4]) }));
     let engine_a = Arc::new(
         CorpusEngine::new(indexes_a.clone(), indexes_a.clone(), zero_embed)
             .with_embedding_model("test-embed"),

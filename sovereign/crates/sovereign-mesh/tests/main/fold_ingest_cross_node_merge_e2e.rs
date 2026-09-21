@@ -106,8 +106,9 @@ use commonwealth_rail::{
 use commonwealth_state::MeshStore;
 use commonwealth_work::projection::{WorkProjection, WorkUnitStatus};
 use commonwealth_work::{ActorKey, Completion, Submission, UnitRef, WorkAct, WORK_NAMESPACE};
-use corpus_engine::index::{CorpusIndex, InsertChunk, InsertCodeMeta};
-use corpus_engine::{CorpusEngine, EmbedFn};
+use corpus_engine::CorpusEngine;
+use corpus_index::index::{CorpusIndex, InsertChunk, InsertCodeMeta};
+use corpus_index::types::EmbedFn;
 use kernel_types::judgement::Reason;
 use kernel_types::{ComputeAttribution, Judgement, NodeId, Server};
 use oicp_types::{JobKind, JobRequirements, JobUnit};
@@ -553,7 +554,7 @@ pub(crate) struct InstalledProbe {
 
 pub(crate) async fn probe_installed(index_dir: &std::path::Path, corpus: &str) -> InstalledProbe {
     let engine = engine_at(index_dir, leader_node());
-    let ids = |rows: Vec<corpus_engine::IndexInfo>| -> Vec<String> {
+    let ids = |rows: Vec<corpus_index::types::IndexInfo>| -> Vec<String> {
         rows.into_iter().map(|i| i.corpus_id).collect()
     };
     let installed = ids(engine
@@ -568,7 +569,7 @@ pub(crate) async fn probe_installed(index_dir: &std::path::Path, corpus: &str) -
     let mut dirs_on_disk: Vec<String> = std::fs::read_dir(index_dir)
         .expect("index dir")
         .flatten()
-        .filter(|e| corpus_engine::Corpus::meta_in(e.path()).exists())
+        .filter(|e| corpus_index::corpus::Corpus::meta_in(e.path()).exists())
         .filter_map(|e| e.file_name().to_str().map(str::to_string))
         .collect();
     dirs_on_disk.sort();

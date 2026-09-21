@@ -29,8 +29,9 @@
 use std::sync::Arc;
 
 use commonwealth_state::MeshStore;
-use corpus_engine::index::{CorpusIndex, InsertChunk};
-use corpus_engine::{CorpusEngine, EmbedFn};
+use corpus_engine::CorpusEngine;
+use corpus_index::index::{CorpusIndex, InsertChunk};
+use corpus_index::types::EmbedFn;
 use sovereign_daemon::daemon::EmbeddedDaemon;
 use sovereign_daemon::reading_http::reading_router;
 

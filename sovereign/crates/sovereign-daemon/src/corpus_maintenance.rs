@@ -34,7 +34,7 @@
 //! outside its indexes — a metadata read — and does real work only when that
 //! number crosses a floor. On an idle corpus a cycle costs a few milliseconds
 //! and writes nothing, which matters because the index phase is NOT idempotent
-//! (see `corpus_engine::index::maintain`): an unconditional pass adds index
+//! (see `corpus_index::index::maintain`): an unconditional pass adds index
 //! versions forever and turns the healer into a leak.
 
 use std::sync::Arc;

@@ -476,7 +476,7 @@ impl PipelineParseTool {
         let to_value = |v: std::result::Result<serde_json::Value, serde_json::Error>| {
             v.map_err(|e| Error::Execution(format!("pipeline_parse: serialize: {e}")))
         };
-        let err = |p: &str, e: corpus_engine::error::Error| {
+        let err = |p: &str, e: corpus_index::error::Error| {
             Error::Execution(format!("pipeline_parse: {p}: {e}"))
         };
 

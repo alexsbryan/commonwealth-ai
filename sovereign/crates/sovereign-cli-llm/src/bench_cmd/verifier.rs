@@ -13,7 +13,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use corpus_engine::CorpusIndex;
+use corpus_index::index::CorpusIndex;
 use sovereign_core::oicp::ShardingPrivacy;
 use sovereign_core::runtime::{extract_claim_list, value_present_in_chunks};
 use sovereign_core::traits::InferenceProvider;

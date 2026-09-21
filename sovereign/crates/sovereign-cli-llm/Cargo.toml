@@ -135,6 +135,10 @@ corpus-engine = { workspace = true, features = ["treesitter"] }
 # The atlas vocabulary leaf — the ONE `atoms.json` shape (§10.6).
 understanding-vocab = { workspace = true }
 corpus-engine-notes = { workspace = true }
+# The retrieval read-port leaf: index/corpus/types/filters rows this host
+# reads directly instead of via corpus-engine's historical re-exports.
+corpus-index = { workspace = true }
+oplog = { workspace = true }
 async-trait = { workspace = true }
 axum = { workspace = true }
 futures = { workspace = true }

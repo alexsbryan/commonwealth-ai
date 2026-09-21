@@ -25,7 +25,7 @@ use std::time::Instant;
 
 use super::lost_corpora;
 use corpus_engine::enrichment::atlas::ATLAS_DIRNAME;
-use corpus_engine::ScoredChunk;
+use corpus_index::types::ScoredChunk;
 use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 use sovereign_core::atlas_context::{atlas_top_k_across, cosine, AtlasContext};
@@ -946,7 +946,7 @@ async fn run_question_prod(
 
 async fn run_question(
     session: &ChatSession,
-    target_indexes: &[&corpus_engine::IndexInfo],
+    target_indexes: &[&corpus_index::types::IndexInfo],
     q: &Question,
     limit: usize,
     atlases: &[AtlasContext],

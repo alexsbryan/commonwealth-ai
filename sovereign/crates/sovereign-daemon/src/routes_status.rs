@@ -114,7 +114,7 @@ pub async fn status(State(state): State<AppState>) -> Json<StatusResponse> {
             let mut ids: Vec<String> = Vec::new();
             let mut chunks: u64 = 0;
             for info in infos {
-                if matches!(info.kind, corpus_engine::CorpusKind::Code) {
+                if matches!(info.kind, corpus_index::types::CorpusKind::Code) {
                     continue;
                 }
                 chunks += info.chunk_count;

@@ -17,7 +17,7 @@
 //! and the model still flails, the bug is in prompt assembly or the
 //! model itself.
 
-use corpus_engine::ScoredChunk;
+use corpus_index::types::ScoredChunk;
 use serde_json::json;
 
 use crate::chat_cmd::bootstrap::{build_session, ChatSession};
@@ -201,7 +201,7 @@ async fn run_inspect(
         .filter(|i| corpus_filter.is_none_or(|f| i.corpus_id == f))
     {
         let dim_match = info.embedding_dimensions == embedding.len();
-        let is_code = matches!(info.kind, corpus_engine::CorpusKind::Code);
+        let is_code = matches!(info.kind, corpus_index::types::CorpusKind::Code);
         eprintln!(
             "corpus {} — {} chunks, kind={:?}, dims {}, model `{}` {}{}",
             info.corpus_id,

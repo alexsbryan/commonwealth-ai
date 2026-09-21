@@ -37,12 +37,15 @@ use sovereign_contracts::types::{
 
 // ── Corpus layout ───────────────────────────────────────────────
 
-/// One corpus's layout on one node. `corpus_engine::Corpus` is the ONE speller
+/// One corpus's layout on one node. `corpus_index::corpus::Corpus` is the ONE speller
 /// of `<index_dir>/<id>` and `<id>-partition-<node>`, and `cargo xtask
 /// layout-gate` is what keeps it that way — a test that retypes the infix is a
 /// second answer to where a partition lives.
-pub fn corpus_at(index_dir: impl Into<std::path::PathBuf>, id: &str) -> corpus_engine::Corpus {
-    corpus_engine::Corpus::named(index_dir, id).expect("a non-empty corpus id")
+pub fn corpus_at(
+    index_dir: impl Into<std::path::PathBuf>,
+    id: &str,
+) -> corpus_index::corpus::Corpus {
+    corpus_index::corpus::Corpus::named(index_dir, id).expect("a non-empty corpus id")
 }
 
 // ── Capabilities + member helpers ───────────────────────────────
@@ -574,8 +577,8 @@ pub fn engine_at(tmp: &tempfile::TempDir) -> Arc<corpus_engine::CorpusEngine> {
 pub async fn fixture_index(
     indexes: &std::path::Path,
     corpus_id: &str,
-) -> corpus_engine::index::CorpusIndex {
-    corpus_engine::index::CorpusIndex::create(
+) -> corpus_index::index::CorpusIndex {
+    corpus_index::index::CorpusIndex::create(
         &indexes.join(corpus_id),
         corpus_id,
         "Governance",

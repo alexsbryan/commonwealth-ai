@@ -15,7 +15,7 @@ use corpus_engine::snapshot::{
     prebuilt_toml_snippet, publish_snapshot, read_manifest_from_archive, restore_snapshot_archive,
     PublishOptions, SnapshotManifest,
 };
-use corpus_engine::CorpusIndex;
+use corpus_index::index::CorpusIndex;
 
 use sovereign_cli_shared::dirs::sovereign_root;
 use sovereign_cli_shared::help::{Help, HelpSection};
@@ -470,7 +470,7 @@ async fn cmd_publish(args: &[String]) -> i32 {
         // is written into the manifest only when the vectors agree with it.
         // The daemon's HTTP embedder is the one every restorer probes with.
         let probe = {
-            let embed: corpus_engine::EmbedFn = corpus_engine::embed_http::http_embed_fn(
+            let embed: corpus_index::types::EmbedFn = corpus_engine::embed_http::http_embed_fn(
                 format!(
                     "{}/embeddings",
                     sovereign_cli_shared::urls::daemon_v1_base()
@@ -1136,7 +1136,7 @@ async fn cmd_restore(args: &[String]) -> i32 {
     // the same HTTP one `corpus-mcp` uses against the local daemon; if that is
     // not up, the verdict is COULD-NOT-JUDGE by name and the restored index is
     // REMOVED rather than left in place unjudged (§18.3).
-    let embed: corpus_engine::EmbedFn = corpus_engine::embed_http::http_embed_fn(
+    let embed: corpus_index::types::EmbedFn = corpus_engine::embed_http::http_embed_fn(
         format!(
             "{}/embeddings",
             sovereign_cli_shared::urls::daemon_v1_base()

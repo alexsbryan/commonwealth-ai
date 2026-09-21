@@ -12,7 +12,7 @@
 //! superseding rule (`--draft`) is deferred — see the `--draft` arm.
 
 use corpus_engine::enrichment::GovernanceOpKind;
-use corpus_engine::oplog::{Op, Oplog};
+use oplog::{Op, Oplog};
 
 use super::{atlas_dir, load_view, now_unix};
 

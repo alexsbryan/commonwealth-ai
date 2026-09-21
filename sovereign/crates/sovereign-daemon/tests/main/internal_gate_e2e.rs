@@ -414,7 +414,8 @@ async fn serve_as_lan(state: AppState) -> (String, std::sync::Arc<std::sync::Mut
 /// the router answered with.
 async fn shard_pull_statuses(stamped: bool) -> Vec<u16> {
     use commonwealth_state::MeshStore;
-    use corpus_engine::{CorpusEngine, EmbedFn};
+    use corpus_engine::CorpusEngine;
+    use corpus_index::types::EmbedFn;
     use sovereign_grants::shard_manager::MergePlan;
     use sovereign_grants::ShardManager;
     use std::sync::Arc;

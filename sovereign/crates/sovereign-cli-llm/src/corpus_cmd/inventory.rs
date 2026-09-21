@@ -5,7 +5,7 @@
 
 use std::path::PathBuf;
 
-use corpus_engine::Corpus;
+use corpus_index::corpus::Corpus;
 
 use super::fmt::{dir_size_bytes, format_count, human_bytes};
 // The readiness decider moved to `status.rs` with `corpus status`; `--wait`

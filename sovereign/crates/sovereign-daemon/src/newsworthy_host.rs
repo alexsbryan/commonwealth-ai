@@ -28,8 +28,8 @@ use commonwealth_core::ids::NodeId;
 use commonwealth_core::mesh::NodeStatus;
 use commonwealth_core::partition;
 use commonwealth_state::MeshStore;
-use corpus_engine::error::{Error as CorpusError, Result as CorpusResult};
 use corpus_engine::update::newsworthy_watcher::{CommittedDocs, NewsworthyHost};
+use corpus_index::error::{Error as CorpusError, Result as CorpusResult};
 use sovereign_contracts::identity::IdentityReader;
 
 pub struct MeshNewsworthyHost {

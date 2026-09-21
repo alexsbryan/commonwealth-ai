@@ -387,7 +387,7 @@ impl IngestExecutor {
             // The donor asked, so this node no longer holds the lease.
             // `run_unit` publishes nothing for a `Cancelled` — a report from a
             // non-lessee is what the fold counts `unreadable`.
-            Err(corpus_engine::Error::Cancelled(_)) if ctx.cancel_requested() => {
+            Err(corpus_index::Error::Cancelled(_)) if ctx.cancel_requested() => {
                 debug!(
                     target: TRACE_TARGET,
                     unit_hash = %unit.unit_hash,

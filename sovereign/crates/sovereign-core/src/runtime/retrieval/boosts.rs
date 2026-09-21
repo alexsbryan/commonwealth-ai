@@ -78,7 +78,7 @@ impl Runtime {
                 continue;
             }
 
-            for axis in corpus_engine::stream_axes::Articulation::ALL.iter() {
+            for axis in understanding_vocab::articulation::Articulation::ALL.iter() {
                 let anchor = match corpus_engine::meta_atlas::MetaAtlasIndex::top_anchor_for_axis(
                     &atom,
                     *axis,

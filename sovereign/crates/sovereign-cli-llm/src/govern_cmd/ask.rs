@@ -19,8 +19,8 @@
 use std::io::Write;
 
 use corpus_engine::enrichment::{GovernanceOpKind, RuleStatus};
-use corpus_engine::oplog::Oplog;
 use futures::StreamExt as _;
+use oplog::Oplog;
 
 use sovereign_core::types::Intent;
 

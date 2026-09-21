@@ -30,7 +30,8 @@ use axum::http::{Request, StatusCode};
 use axum::Router;
 use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::mesh::Mesh;
-use corpus_engine::{Corpus, CorpusEngine, IngestProgress};
+use corpus_engine::{CorpusEngine, IngestProgress};
+use corpus_index::corpus::Corpus;
 use sovereign_daemon::server::internal_router;
 use sovereign_daemon::state::AppState;
 use tempfile::TempDir;
@@ -62,7 +63,7 @@ fn mock_embedding(text: &str) -> Vec<f32> {
 /// hardware. 2 ms per embed × ~500 chunks ≈ 1 s of embedding — plenty
 /// of margin between "install returns 202" and "canonical exists" for
 /// the cancel path to land in the middle.
-fn slow_mock_embed_fn() -> corpus_engine::types::EmbedFn {
+fn slow_mock_embed_fn() -> corpus_index::types::EmbedFn {
     Arc::new(|text: &str| {
         let v = mock_embedding(text);
         Box::pin(async move {
@@ -74,7 +75,7 @@ fn slow_mock_embed_fn() -> corpus_engine::types::EmbedFn {
 
 /// A fast mock embed for the reinstall phase where we want the
 /// ingest to finish promptly for the canonical-index assertion.
-fn fast_mock_embed_fn() -> corpus_engine::types::EmbedFn {
+fn fast_mock_embed_fn() -> corpus_index::types::EmbedFn {
     Arc::new(|text: &str| {
         let v = mock_embedding(text);
         Box::pin(async move { Ok(v) })
@@ -91,13 +92,13 @@ fn fast_mock_embed_fn() -> corpus_engine::types::EmbedFn {
 /// fail → retry → complete without swapping engines.
 fn switchable_failing_embed_fn(
     fail: Arc<std::sync::atomic::AtomicBool>,
-) -> corpus_engine::types::EmbedFn {
+) -> corpus_index::types::EmbedFn {
     Arc::new(move |text: &str| {
         let fail = Arc::clone(&fail);
         let v = mock_embedding(text);
         Box::pin(async move {
             if fail.load(std::sync::atomic::Ordering::SeqCst) {
-                Err(corpus_engine::Error::Embed(
+                Err(corpus_index::Error::Embed(
                     "simulated mid-install embed failure".into(),
                 ))
             } else {
@@ -188,7 +189,7 @@ embedding_dimensions = 8
 /// Build an `AppState` whose corpus engine is rooted in `tmp` and
 /// reports its node id as `node-test` so partition directories land
 /// at a predictable path.
-fn test_state(tmp: &TempDir, embed_fn: corpus_engine::types::EmbedFn) -> AppState {
+fn test_state(tmp: &TempDir, embed_fn: corpus_index::types::EmbedFn) -> AppState {
     let index_dir = tmp.path().join("indexes");
     std::fs::create_dir_all(&index_dir).unwrap();
     let recipes_dir = tmp.path().join("recipes");

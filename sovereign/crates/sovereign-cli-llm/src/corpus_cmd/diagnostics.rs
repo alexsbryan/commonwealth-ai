@@ -246,7 +246,7 @@ pub(super) async fn cmd_corpus_stream_axes(args: &[String]) -> i32 {
         std::env::temp_dir(),
         indexes_dir.clone(),
         Arc::new(|_: &str| {
-            Box::pin(async move { Ok::<Vec<f32>, corpus_engine::Error>(Vec::new()) })
+            Box::pin(async move { Ok::<Vec<f32>, corpus_index::Error>(Vec::new()) })
         }),
     );
 
@@ -287,13 +287,13 @@ pub(super) async fn cmd_corpus_stream_axes(args: &[String]) -> i32 {
         }
         let (stability, from_signal) =
             corpus_engine::stream_axes::derive_stability_from_info(&info);
-        let axes = corpus_engine::stream_axes::StreamAxes {
+        let axes = corpus_index::stream_axes::StreamAxes {
             stability,
-            source: corpus_engine::stream_axes::StreamAxesSource::Backfill,
+            source: corpus_index::stream_axes::StreamAxesSource::Backfill,
             derived_at: corpus_engine::stream_axes::timestamp_now(),
             from_signal: from_signal.clone(),
         };
-        match corpus_engine::index::set_stream_axes(&info.path, axes.clone()) {
+        match corpus_index::index::set_stream_axes(&info.path, axes.clone()) {
             Ok(()) => {
                 println!(
                     "{:<32} {:<10} {:<10} {}",
@@ -479,7 +479,7 @@ pub(super) async fn cmd_corpus_diag(args: &[String]) -> i32 {
         }
     }
 
-    let index = match corpus_engine::CorpusIndex::open(&index_path).await {
+    let index = match corpus_index::index::CorpusIndex::open(&index_path).await {
         Ok(i) => i,
         Err(e) => {
             eprintln!("Failed to open corpus index: {e}");
@@ -755,7 +755,7 @@ pub(super) async fn cmd_corpus_dedupe(args: &[String]) -> i32 {
         index_path.display(),
         surface_label
     );
-    let index = match corpus_engine::CorpusIndex::open(&index_path).await {
+    let index = match corpus_index::index::CorpusIndex::open(&index_path).await {
         Ok(i) => i,
         Err(e) => {
             eprintln!("Failed to open corpus index: {e}");
@@ -1101,7 +1101,7 @@ pub(super) async fn cmd_corpus_repair(args: &[String]) -> i32 {
     // round-trips through serde so any unknown fields in the meta are
     // preserved (it reads → mutates → writes the typed struct).
     println!("\nOpening index…");
-    let index = match corpus_engine::CorpusIndex::open(&index_path).await {
+    let index = match corpus_index::index::CorpusIndex::open(&index_path).await {
         Ok(i) => i,
         Err(e) => {
             eprintln!("Failed to open corpus index: {e}");
@@ -1118,9 +1118,9 @@ pub(super) async fn cmd_corpus_repair(args: &[String]) -> i32 {
     }
 
     if needs_provenance_flip {
-        if let Err(e) = corpus_engine::set_provenance(
+        if let Err(e) = corpus_index::index::set_provenance(
             &index_path,
-            corpus_engine::CorpusProvenance::SelfInitiated,
+            corpus_index::index::CorpusProvenance::SelfInitiated,
         ) {
             eprintln!("Failed to flip provenance: {e}");
             return 1;

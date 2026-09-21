@@ -10,7 +10,8 @@
 
 use std::sync::Arc;
 
-use corpus_engine::{CorpusEngine, EmbedFn};
+use corpus_engine::CorpusEngine;
+use corpus_index::types::EmbedFn;
 use sovereign_contracts::setup_config::SetupConfig;
 use sovereign_daemon::daemon::EmbeddedDaemon;
 use sovereign_daemon::enrich_http::enrich_router;

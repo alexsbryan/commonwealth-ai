@@ -26,6 +26,7 @@ sovereign-time = { workspace = true }
 corpus-engine = { workspace = true }
 # The retrieval read-port leaf — ScoredChunk/IndexInfo/types+index, no engine.
 corpus-index = { workspace = true }
+oplog = { workspace = true }
 # The atlas vocabulary leaf — `AtomsFile` for the evidence loop's gazetteer.
 understanding-vocab = { workspace = true }
 # `LaneSources::meta_atlas` is a CELL, not a value: the desktop fires

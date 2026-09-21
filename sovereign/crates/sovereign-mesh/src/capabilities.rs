@@ -266,7 +266,7 @@ pub async fn build_local_capabilities(
 /// `mesh_sharing` automatically, preserving pre-split behavior.
 async fn build_hosted_corpora(
     engine: &CorpusEngine,
-    indexes: &[corpus_engine::IndexInfo],
+    indexes: &[corpus_index::types::IndexInfo],
 ) -> Vec<CorpusShardInfo> {
     let indexes_dir = engine.index_dir().to_path_buf();
     indexes
@@ -289,7 +289,7 @@ async fn build_hosted_corpora(
             };
             CorpusShardInfo {
                 corpus_id: idx.corpus_id,
-                // `corpus_engine::ChunkRange` and
+                // `corpus_index::types::ChunkRange` and
                 // `oicp_types::knowledge::ChunkRange` are structurally
                 // identical but different types — the engine's is its
                 // storage vocabulary, the other is the gossip wire's. Copy.

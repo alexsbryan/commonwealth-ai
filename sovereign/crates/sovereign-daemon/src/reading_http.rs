@@ -29,7 +29,7 @@ use corpus_engine::enrichment::atlas::{
     read_atlas_atoms, read_atlas_cross_corpus_edges, read_atlas_edges, AtomEnvelope, AtomId,
     CrossCorpusEdge, Edge,
 };
-use corpus_engine::EnrichmentChunkRow;
+use corpus_index::index::EnrichmentChunkRow;
 
 use crate::daemon::EmbeddedDaemon;
 use crate::http_response::{internal_error, not_found, service_unavailable};

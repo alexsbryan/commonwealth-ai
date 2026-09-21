@@ -139,7 +139,7 @@ fn corpus_source_id(cfg: &EnrichConfig) -> Option<String> {
 fn fetch_enrichment_chunks(
     source_corpus_id: &str,
     needed_ids: &[u64],
-) -> Result<Vec<corpus_engine::EnrichmentChunkRow>> {
+) -> Result<Vec<corpus_index::index::EnrichmentChunkRow>> {
     read_corpus_chunks(source_corpus_id, Some(needed_ids))
 }
 
@@ -147,7 +147,9 @@ fn fetch_enrichment_chunks(
 /// which has to locate all of them against the source document — it cannot
 /// name the ids it wants in advance, because working them out is the whole
 /// job.
-pub fn fetch_all_corpus_chunks(corpus_id: &str) -> Result<Vec<corpus_engine::EnrichmentChunkRow>> {
+pub fn fetch_all_corpus_chunks(
+    corpus_id: &str,
+) -> Result<Vec<corpus_index::index::EnrichmentChunkRow>> {
     read_corpus_chunks(corpus_id, None)
 }
 
@@ -156,7 +158,7 @@ pub fn fetch_all_corpus_chunks(corpus_id: &str) -> Result<Vec<corpus_engine::Enr
 fn read_corpus_chunks(
     source_corpus_id: &str,
     needed_ids: Option<&[u64]>,
-) -> Result<Vec<corpus_engine::EnrichmentChunkRow>> {
+) -> Result<Vec<corpus_index::index::EnrichmentChunkRow>> {
     // The SAME root every other enrichment path hangs from — `paths::`, i.e.
     // `rebrand::data_dir()`, which honours `SOVEREIGN_DATA_DIR`. This derived
     // its own from `SetupConfig.data.dir` (falling back to `svrnmesh_root()`)
@@ -170,26 +172,31 @@ fn read_corpus_chunks(
     let source_corpus = source_corpus_id.to_string();
     let ids = needed_ids.map(<[u64]>::to_vec);
     std::thread::scope(|s| {
-        let handle = s.spawn(move || -> Result<Vec<corpus_engine::EnrichmentChunkRow>> {
-            let rt = tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .build()
-                .map_err(|e| {
-                    Error::Database(format!("fetch_enrichment_chunks: tokio build: {e}"))
-                })?;
-            rt.block_on(async {
-                let index = engine
-                    .open_index_for_corpus(&source_corpus)
-                    .await
+        let handle = s.spawn(
+            move || -> Result<Vec<corpus_index::index::EnrichmentChunkRow>> {
+                let rt = tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
                     .map_err(|e| {
-                        Error::Database(format!("open source corpus `{source_corpus}`: {e}"))
+                        Error::Database(format!("fetch_enrichment_chunks: tokio build: {e}"))
                     })?;
-                match &ids {
-                    Some(ids) => index.chunks_by_ids(ids).await,
-                    None => index.all_chunks_full().await,
-                }
-            })
-        });
+                rt.block_on(async {
+                    let index =
+                        engine
+                            .open_index_for_corpus(&source_corpus)
+                            .await
+                            .map_err(|e| {
+                                Error::Database(format!(
+                                    "open source corpus `{source_corpus}`: {e}"
+                                ))
+                            })?;
+                    match &ids {
+                        Some(ids) => index.chunks_by_ids(ids).await,
+                        None => index.all_chunks_full().await,
+                    }
+                })
+            },
+        );
         handle
             .join()
             .map_err(|_| Error::Database("fetch_enrichment_chunks: worker panicked".into()))?
@@ -361,7 +368,7 @@ pub fn build_corpus(cfg: &EnrichConfig) -> Result<(CorpusContext, ChapterManifes
 /// same numbering.
 pub fn build_manifest_from_corpus_rows(
     corpus_id: &str,
-    rows: Vec<corpus_engine::EnrichmentChunkRow>,
+    rows: Vec<corpus_index::index::EnrichmentChunkRow>,
     limit_articles: Option<usize>,
     include_articles: Option<Vec<String>>,
     start_ordinal: u32,

@@ -37,8 +37,9 @@
 
 use std::sync::Arc;
 
-use corpus_engine::index::InsertChunk;
-use corpus_engine::{CorpusEngine, EmbedFn};
+use corpus_engine::CorpusEngine;
+use corpus_index::index::InsertChunk;
+use corpus_index::types::EmbedFn;
 use sovereign_contracts::daemon_wire::conv_tiered::{ChunkEntityProgressRow, ChunkEntityRow};
 use sovereign_contracts::setup_config::SetupConfig;
 use sovereign_core::conv_tiered::{ConvRaptorNodeRow, ConvSkeletonRow, ConvTieredReader};

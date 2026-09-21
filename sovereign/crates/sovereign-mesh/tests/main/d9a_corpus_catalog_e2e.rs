@@ -98,7 +98,7 @@ async fn create_index(
     // written into the engine's own meta file, after its writer made
     // one, so the shape is the writer's and only the value is the
     // fixture's.
-    let meta_path = corpus_engine::Corpus::meta_in(&path);
+    let meta_path = corpus_index::corpus::Corpus::meta_in(&path);
     let mut meta: serde_json::Value =
         serde_json::from_str(&std::fs::read_to_string(&meta_path).unwrap()).unwrap();
     meta["created_at"] = serde_json::json!(created_at);

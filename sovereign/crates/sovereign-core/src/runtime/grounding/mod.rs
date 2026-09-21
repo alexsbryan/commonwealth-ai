@@ -149,7 +149,7 @@ use std::sync::Arc;
 // same door this file already takes `ScoredChunk` through. Replaced the
 // local `EvidenceSource` enum 2026-08-20 (rung nc-4-evidence): two
 // variants, identical meaning, one of them a copy.
-use corpus_engine::Grain;
+use kernel_types::Grain;
 
 use crate::traits::InferenceProvider;
 use crate::types::CitationTarget;

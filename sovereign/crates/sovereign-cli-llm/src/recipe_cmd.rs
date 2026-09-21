@@ -17,7 +17,8 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use corpus_engine::harness::FrozenSample;
-use corpus_engine::{CorpusEngine, EmbedFn, Recipe, RecipeRegistry, TestOptions};
+use corpus_engine::{CorpusEngine, Recipe, RecipeRegistry, TestOptions};
+use corpus_index::types::EmbedFn;
 use sovereign_authoring_harness::{render::render_report, Declaration};
 
 mod authoring;
@@ -576,8 +577,9 @@ async fn cmd_list(args: &[String]) -> i32 {
 ///
 /// The stub returns zero-vectors; it is never called when `embed = false`.
 fn build_stub_engine() -> CorpusEngine {
-    let stub_embed: EmbedFn =
-        Arc::new(|_text| Box::pin(async { Ok(vec![0f32; corpus_engine::DEFAULT_EMBED_DIM]) }));
+    let stub_embed: EmbedFn = Arc::new(|_text| {
+        Box::pin(async { Ok(vec![0f32; corpus_index::types::DEFAULT_EMBED_DIM]) })
+    });
 
     // Use a temporary location for downloads; the engine's index_dir is
     // unused since we never write a production index.

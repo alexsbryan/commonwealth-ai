@@ -91,24 +91,24 @@ pub async fn cmd_sheets_ingest(args: &[String]) -> i32 {
     // Default to the embed-centroid classifier (semantic, generalizes);
     // fall back to the keyword map on --keyword or if the daemon embed
     // endpoint is unreachable.
-    let embed_classifier: Option<(HeaderClassifier, corpus_engine::types::EmbedFn)> =
-        if keyword_mode {
-            println!("  classifier: keyword map (--keyword)");
-            None
-        } else {
-            match build_embed_classifier().await {
-                Ok(pair) => {
-                    println!("  classifier: embed-centroid (semantic)");
-                    Some(pair)
-                }
-                Err(e) => {
-                    eprintln!(
-                        "  warn: embed classifier unavailable ({e}); falling back to keyword map"
-                    );
-                    None
-                }
+    let embed_classifier: Option<(HeaderClassifier, corpus_index::types::EmbedFn)> = if keyword_mode
+    {
+        println!("  classifier: keyword map (--keyword)");
+        None
+    } else {
+        match build_embed_classifier().await {
+            Ok(pair) => {
+                println!("  classifier: embed-centroid (semantic)");
+                Some(pair)
             }
-        };
+            Err(e) => {
+                eprintln!(
+                    "  warn: embed classifier unavailable ({e}); falling back to keyword map"
+                );
+                None
+            }
+        }
+    };
 
     let mut files: Vec<PathBuf> = match std::fs::read_dir(&folder) {
         Ok(rd) => rd
@@ -211,7 +211,7 @@ pub async fn cmd_sheets_ingest(args: &[String]) -> i32 {
 /// `/v1/embeddings`. Returns the classifier + the EmbedFn (reused to
 /// embed each column's signal during extraction).
 async fn build_embed_classifier(
-) -> std::result::Result<(HeaderClassifier, corpus_engine::types::EmbedFn), String> {
+) -> std::result::Result<(HeaderClassifier, corpus_index::types::EmbedFn), String> {
     let client = DaemonInferenceClient::new(
         "http://localhost:9741",
         "unused-chat-model",

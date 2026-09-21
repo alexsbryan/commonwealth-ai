@@ -44,7 +44,7 @@
 use std::path::{Path, PathBuf};
 
 use corpus_engine::canonical_sync;
-use corpus_engine::index::CorpusIndex;
+use corpus_index::index::CorpusIndex;
 
 /// Result of a successful pull. Lets callers log throughput,
 /// confirm the fingerprint match, and decide whether to emit a

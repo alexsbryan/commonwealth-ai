@@ -54,7 +54,7 @@ use commonwealth_core::ids::HandoffId;
 use commonwealth_core::knowledge::{HandoffPhase, MAX_UNIT_ATTEMPTS};
 use commonwealth_work::projection::{WorkProjection, WorkUnitStatus};
 use commonwealth_work::{Submission, WorkAct};
-use corpus_engine::index::CorpusIndex;
+use corpus_index::index::CorpusIndex;
 use oicp_types::JobKind;
 use sovereign_daemon::ingest_executor::{fold_coverage_for, FoldCoverage, INGEST_KIND};
 use sovereign_daemon::server::internal_router;
