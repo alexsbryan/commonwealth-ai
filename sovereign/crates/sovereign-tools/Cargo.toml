@@ -29,21 +29,11 @@ sovereign-tools-base = { workspace = true }
 # never re-enters commonwealth-* (path break is enforced by
 # rustc, not just convention).
 commonwealth-core = { workspace = true }
-# `DriftTool` calls `sovereign_atos::approval::{find_approval,
-# detect_drift, current_spec_hash}` so its verdict matches the
-# daemon's approval_gate middleware exactly. The dep is one-way
-# (sovereign-atos depends on sovereign-core only); no cycle.
-sovereign-atos = { workspace = true, optional = true }
-# Work atlas — `blast` queries it to surface concurrent claims in
-# the same response (§8 of the spec). One-way dep: work-atlas does
-# not depend on sovereign-tools.
-sovereign-work-atlas = { workspace = true }
 corpus-engine = { workspace = true }
 # The atlas vocabulary + its read door (`read_atlas_atoms`/`read_atlas_edges`)
 # — a two-crate leaf closure, so a reader of atoms.json need not name the
 # engine that writes it (domains dm-vocab-bypass-tools).
 understanding-vocab = { workspace = true }
-corpus-engine-archaeology = { workspace = true, optional = true }
 corpus-engine-notes = { workspace = true }
 # The section detectors `rag::section` runs — a `regex` + `tracing` leaf. The
 # module came back from `sovereign-tools-base` at sv-surface svt-7 and brought
@@ -52,17 +42,6 @@ corpus-engine-notes = { workspace = true }
 # there — see `src/rag/mod.rs`).
 corpus-engine-sections = { workspace = true }
 corpus-engine-watchers = { workspace = true }
-# SCIP call graph types — carved out of corpus-engine 2026-05-23.
-# Used by code/{callers,callees,blast_radius,symbol_lookup,index_health}.
-corpus-engine-scip = { workspace = true }
-# The code-intel package's fact base (`facts`/`facts_store`), moved out of
-# corpus-engine at domains REVIEW-build-code-facts; `code/facts_tool.rs` names
-# `code_facts::*` directly. The `stores` feature arrives through corpus-engine.
-code-facts = { workspace = true }
-# Layer-map schema/evaluator (quality/ARCH_LAYERS.toml) shared with the
-# xtask layer-gate — one parser, so the declared (CI) and observed
-# (arch_report) enforcement halves can't drift.
-arch-layers = { workspace = true }
 corpus-engine-atos = { workspace = true, optional = true }
 async-trait = { workspace = true }
 csv = "1.3"
@@ -220,12 +199,7 @@ treesitter = ["corpus-engine/treesitter"]
 # tools (DriftTool, Provision/Archive/RecordAtosEvent/ProjectContext/
 # DesignSignalsExtract) and the KnowledgeView strategic ATOS splice. Orthogonal
 # to `treesitter` — the code-intel ATOS tools need both axes.
-atos = ["dep:sovereign-atos", "dep:corpus-engine-atos"]
-# `dev-tools` is the developer workbench surface. Today it gates the
-# git-archaeology rendering in BriefTool (principles-as-inquiries + recent
-# commit activity). OFF by default so product builds (server/desktop/daemon)
-# drop `corpus-engine-archaeology`; the `sovereign-cli-dev` workbench enables it.
-dev-tools = ["dep:corpus-engine-archaeology"]
+atos = ["dep:corpus-engine-atos"]
 # PaddleOCR (ONNX) OCR engine. Off by default so headless/default builds
 # don't pull the OCR inference surface; the desktop enables it once the
 # bake-off greenlights swapping it in for tesseract.
@@ -241,6 +215,9 @@ zip = { version = "8", default-features = false, features = ["deflate"] }
 uuid = { workspace = true }
 futures = { workspace = true }
 tempfile = { workspace = true }
+# TEST-ONLY: mcp_surface_e2e builds a ScipGraph fixture. Dev-only for the same
+# reason as sovereign-code below — the production graph carries no svrn -> code.
+corpus-engine-scip = { workspace = true }
 # TEST-ONLY edge: the MCP surface list is this crate's, the tools it classifies
 # are sovereign-code's, so the cross-check has to see both. Dev-only keeps the
 # PRODUCTION graph free of svrn -> code (FIVE_PROGRAMS §4 rule 6).
