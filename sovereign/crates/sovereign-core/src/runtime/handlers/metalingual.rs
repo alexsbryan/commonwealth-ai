@@ -387,8 +387,6 @@ impl Runtime {
             Default::default()
         };
         let folder_meta = self.folder_metadata_snapshot().await;
-        self.rerank_conv_chunks_via_ppr(message, &mut chunks, &display_categories, &lane)
-            .await;
         let conv_briefing = self
             .build_conv_briefing_block(&chunks, &display_categories, &lane)
             .await;

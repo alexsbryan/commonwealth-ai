@@ -47,7 +47,6 @@ fn demands_build_and_stamp() {
     assert_eq!(einstein.covered, CoverageLevel::Absent);
 }
 
-
 #[test]
 fn stance_and_section_facets_stamp_and_gap() {
     let mut demands = vec![

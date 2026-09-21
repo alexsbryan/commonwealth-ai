@@ -1102,7 +1102,6 @@ pub fn deep_pipeline(include_corpus_search: bool) -> RetrievalPipeline {
 
 // ─── Shared steps (identical on both paths, modulo the label) ────
 
-
 fn step_meta_atlas_boost<'a, 'ctx>(
     rt: &'a Runtime,
     st: &'a mut PipelineState<'ctx>,
@@ -1134,11 +1133,6 @@ fn step_meta_atlas_boost<'a, 'ctx>(
         StepOutcome::default()
     })
 }
-
-
-
-
-
 
 fn step_noise_floor<'a, 'ctx>(_rt: &'a Runtime, st: &'a mut PipelineState<'ctx>) -> StepFuture<'a> {
     Box::pin(async move {
@@ -1410,7 +1404,6 @@ fn step_reweight_and_sort<'a, 'ctx>(
         StepOutcome::default()
     })
 }
-
 
 fn step_ppr_spawn<'a, 'ctx>(rt: &'a Runtime, st: &'a mut PipelineState<'ctx>) -> StepFuture<'a> {
     Box::pin(async move {
@@ -2433,8 +2426,6 @@ mod tests {
             "a turn that dropped nothing says nothing"
         );
     }
-
-
 
     /// Every flag this table declares must ALSO be declared in the
     /// workspace env-knob registry (`quality/env-flags.toml`) — the

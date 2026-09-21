@@ -45,16 +45,6 @@ use crate::responses_types::{
 use crate::routes_inference::chat_completions;
 use crate::state::AppState;
 
-/// Env var that enables the legacy "full frontdoor" reshape. Retained
-/// as a backwards-compat alias — `SOVEREIGN_FRONTDOOR=1` now maps to
-/// the `Opencode` harness profile (the original reshape design).
-/// `SOVEREIGN_HARNESS` overrides this when set.
-pub fn is_enabled() -> bool {
-    std::env::var("SOVEREIGN_FRONTDOOR")
-        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-        .unwrap_or(false)
-}
-
 /// Which agentic-harness contract this /v1/responses request is
 /// speaking. Each profile picks a different set of passes — codex's
 /// apply_patch-trained contract resists the full reshape we built
@@ -187,9 +177,6 @@ pub fn detect_harness(headers: &HeaderMap) -> Harness {
         if ua_lower.contains("opencode") {
             return Harness::Opencode;
         }
-    }
-    if is_enabled() {
-        return Harness::Opencode;
     }
     Harness::Generic
 }
@@ -445,7 +432,7 @@ pub fn apply_codex_brief(req: &mut ResponsesRequest) {
 
 /// Apply ALL frontdoor passes to `req` in-place. Reshapes codex's
 /// verbose harness contract into the local-model-native dialect.
-/// Gated by `is_enabled()` — see module docs for the full rationale.
+/// Gated by the harness profile — see module docs for the full rationale.
 ///
 /// As of 2026-05-13 (post-v14 review): the full pass is known to
 /// FIGHT codex's training contract (apply_patch teaching, free-text
@@ -3677,9 +3664,7 @@ mod tests {
         // Empty UA + no env override = Generic (Bare requires explicit opt-in).
         let h = HeaderMap::new();
         let prior = std::env::var("SOVEREIGN_HARNESS").ok();
-        let prior_fd = std::env::var("SOVEREIGN_FRONTDOOR").ok();
         std::env::remove_var("SOVEREIGN_HARNESS");
-        std::env::remove_var("SOVEREIGN_FRONTDOOR");
         assert_eq!(detect_harness(&h), Harness::Generic);
 
         // SOVEREIGN_HARNESS env wins over UA.
@@ -3691,21 +3676,10 @@ mod tests {
         );
         assert_eq!(detect_harness(&h), Harness::Bare);
 
-        // Legacy SOVEREIGN_FRONTDOOR=1 maps to Opencode when no
-        // explicit harness override and no UA hint.
-        std::env::remove_var("SOVEREIGN_HARNESS");
-        std::env::set_var("SOVEREIGN_FRONTDOOR", "1");
-        let h = HeaderMap::new();
-        assert_eq!(detect_harness(&h), Harness::Opencode);
-
         // Restore prior env values.
         match prior {
             Some(v) => std::env::set_var("SOVEREIGN_HARNESS", v),
             None => std::env::remove_var("SOVEREIGN_HARNESS"),
-        }
-        match prior_fd {
-            Some(v) => std::env::set_var("SOVEREIGN_FRONTDOOR", v),
-            None => std::env::remove_var("SOVEREIGN_FRONTDOOR"),
         }
     }
 
@@ -3756,33 +3730,6 @@ mod tests {
             "write_stdin",
         ] {
             assert!(!tool_keeplist_contains(n), "expected {n} to be dropped");
-        }
-    }
-
-    // Single combined test: env-var reads are global state and the
-    // tests would race in parallel.
-    #[test]
-    fn is_enabled_env_var_semantics() {
-        // Snapshot prior value so we don't leak into other test cases
-        // that might query the same env var.
-        let prior = std::env::var("SOVEREIGN_FRONTDOOR").ok();
-
-        std::env::remove_var("SOVEREIGN_FRONTDOOR");
-        assert!(!is_enabled(), "should default off when unset");
-
-        std::env::set_var("SOVEREIGN_FRONTDOOR", "0");
-        assert!(!is_enabled(), "0 should be falsy");
-
-        std::env::set_var("SOVEREIGN_FRONTDOOR", "1");
-        assert!(is_enabled(), "1 should be truthy");
-
-        std::env::set_var("SOVEREIGN_FRONTDOOR", "TRUE");
-        assert!(is_enabled(), "TRUE should be truthy");
-
-        // Restore.
-        match prior {
-            Some(v) => std::env::set_var("SOVEREIGN_FRONTDOOR", v),
-            None => std::env::remove_var("SOVEREIGN_FRONTDOOR"),
         }
     }
 

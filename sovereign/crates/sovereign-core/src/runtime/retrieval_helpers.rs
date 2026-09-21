@@ -470,7 +470,6 @@ pub(crate) fn apply_cross_corpus_discipline(chunks: &mut Vec<ScoredChunk>, label
     }
 }
 
-
 /// Inject canonical-entity boost hits into the merge bag. Each newly
 /// injected chunk gets a small score lift above `top_score` so it
 /// survives `chunks.truncate(KQ_MERGED_LIMIT)`. Existing chunks with
@@ -741,6 +740,4 @@ mod query_relevance_tests {
             chunks[0].score
         );
     }
-
-
 }

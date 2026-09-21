@@ -360,11 +360,7 @@ pub(crate) fn derive_verdict(
 /// computed — zero model calls (EPISTEMIC_STATE.md, P1a). Facets:
 /// the query itself (always), the entity-boost entities, and the
 /// heuristic sub-question decomposition (env-gate-free inner form).
-pub(crate) fn build_demands(
-    message: &str,
-    intent: &Intent,
-    entities: &[String],
-) -> Vec<Demand> {
+pub(crate) fn build_demands(message: &str, intent: &Intent, entities: &[String]) -> Vec<Demand> {
     let mut demands = vec![Demand {
         facet: DemandFacet::Query,
         text: message.to_string(),

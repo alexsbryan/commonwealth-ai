@@ -478,9 +478,6 @@ mod pool_scale {
 
 // ─── Wikipedia link-graph one-hop expansion (Atlas Layer 0) ──
 
-
-
-
 // ─── PPR structural expansion, cross-encoder gated (S4+S3) ───
 //
 // The walk proposes; the gate disposes. Walk params bound the sqlite
@@ -575,7 +572,6 @@ pub(crate) const PPR_MAX_ADMITTED: usize = 4;
 /// Upper bound on sub-queries the decomposer may emit. Higher values
 /// inflate latency without lifting the bench in early prototyping.
 pub(crate) const DECOMP_MAX_QUERIES: usize = 4;
-
 
 /// Fast-path output budget. Enough for a focused summary with citations,
 /// not enough to invite the model to ramble.

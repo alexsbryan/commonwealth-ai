@@ -193,7 +193,7 @@ impl Runtime {
                         &kc.chunks,
                     ),
                 ) as _),
-                entity_anchored: crate::runtime::evidence_loop::question_is_corpus_deictic(message),
+                entity_anchored: crate::runtime::anchoring::question_is_corpus_deictic(message),
                 top_similarity: None,
                 chunk_sources: gate_parts.chunk_sources,
                 // The acquisition stamp in builder ordering (custody.md

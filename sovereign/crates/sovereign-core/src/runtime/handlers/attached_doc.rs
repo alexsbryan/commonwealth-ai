@@ -196,7 +196,7 @@ impl Runtime {
             briefing_entity_names
                 .iter()
                 .any(|n| n.len() > 2 && q.contains(&n.to_lowercase()))
-                || crate::runtime::evidence_loop::question_is_corpus_deictic(message)
+                || crate::runtime::anchoring::question_is_corpus_deictic(message)
         };
         // Distinct (lowercased, trimmed) query strings the model has
         // actually issued this turn. Used to enforce the

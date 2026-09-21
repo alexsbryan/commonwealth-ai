@@ -5,7 +5,7 @@
 //! and the grounding-gate predicates (`compute_entity_anchored`,
 //! `retrieval_is_catalog_only`, `question_anchors_retrieved_title`,
 //! `question_is_corpus_deictic`) that knowledge_query / streaming / the
-//! handlers read via `crate::runtime::evidence_loop::*`.
+//! handlers read via `crate::runtime::anchoring::*`.
 //!
 //! Split out of `evidence_loop.rs` (2026-07-13) for legibility and the
 //! ARCH §3.1 file-size ceiling — a pure move, no behaviour change.
@@ -13,7 +13,7 @@
 use std::collections::HashSet;
 use understanding_vocab::atoms::{AtomEnvelope, AtomsFile};
 
-use super::dbg;
+use super::grounding::config::dbg;
 
 /// Process-level parse cache for a corpus's `atlas/atoms.json`, keyed by corpus
 /// id with the file mtime as the freshness token.
@@ -318,44 +318,6 @@ pub(crate) fn question_is_corpus_deictic(message: &str) -> bool {
     DEICTIC.iter().any(|d| q.contains(d))
 }
 
-/// Broader companion to `question_is_entity_anchored`: does the
-/// question share ANY content word (stemmed) with the corpus's atlas —
-/// entity names or atom-description vocabulary? Drives the structural
-/// general-knowledge caveat: when a question is topically FOREIGN to
-/// every enabled corpus and two retrieval rounds found nothing, the
-/// answer is coming from the model's parametric memory and must say
-/// so. The caveat is committed via `assistant_prefix` in code because
-/// prompt instructions to add it are followed ~60% of the time
-/// (measured across the 2026-06-11 banks: 3/5 OOD caveat omissions on
-/// one run was the difference between honesty 0.64 and 0.91).
-pub(crate) fn question_is_corpus_anchored(keywords: &[String], corpus_ids: &[String]) -> bool {
-    if keywords.is_empty() {
-        // No content words to test — err on the side of "anchored"
-        // (no caveat) rather than mislabeling a corpus answer as GK.
-        return true;
-    }
-    let kw_stems: Vec<String> = keywords.iter().map(|k| stem(k).to_string()).collect();
-    for cid in corpus_ids {
-        for name in atlas_entity_names(cid) {
-            let nl = name.to_lowercase();
-            for t in nl.split(|c: char| !c.is_alphanumeric()) {
-                if t.len() >= 4 && kw_stems.iter().any(|s| s == stem(t)) {
-                    return true;
-                }
-            }
-        }
-        for (desc, _) in atlas_atom_records(cid) {
-            let dl = desc.to_lowercase();
-            for w in dl.split(|c: char| !c.is_alphanumeric()) {
-                if w.len() >= 4 && kw_stems.iter().any(|s| s == stem(w)) {
-                    return true;
-                }
-            }
-        }
-    }
-    false
-}
-
 /// Minimal suffix-stripping stem so "abandons"/"abandoned"/"abandon"
 /// compare equal. Deliberately crude — it only needs to make keyword
 /// overlap robust to inflection, not be linguistically right.
@@ -383,95 +345,6 @@ fn stem(word: &str) -> &str {
 // character prominence, which for WHICH-questions is an anti-signal.
 // Atom matching below replaces it at the semantic layer, where the
 // right candidate's ACTION is what's indexed.
-
-/// All atom (description, passage_previews) pairs from a corpus's
-/// atlas file — the raw material for both the lexical and the
-/// semantic matchers below.
-fn atlas_atom_records(corpus_id: &str) -> Vec<(String, Vec<String>)> {
-    let Some(file) = cached_atoms(corpus_id) else {
-        return Vec::new();
-    };
-    // The kinds that carry a prose `description`: Entity, Event,
-    // Configuration. (The untyped walk also asked for `statement`; no kind
-    // has one — see `cached_atoms`.) Previews come from the envelope's own
-    // evidence accessor; an Entity has no evidence list, so its previews are
-    // empty exactly as before.
-    file.atoms()
-        .iter()
-        .filter_map(|a| {
-            let desc = match a {
-                AtomEnvelope::Entity(e) => e.description.as_str(),
-                AtomEnvelope::Event(e) => e.description.as_str(),
-                AtomEnvelope::Configuration(c) => c.description.as_str(),
-                _ => return None,
-            };
-            if desc.is_empty() {
-                return None;
-            }
-            let previews: Vec<String> = a
-                .evidence()
-                .into_iter()
-                .filter_map(|c| c.passage_preview.clone())
-                .collect();
-            Some((desc.to_string(), previews))
-        })
-        .collect()
-}
-
-/// Atlas atom records matching the question's content words. The
-/// enrichment pipeline already did the hard part at ingest time —
-/// event/relation atoms carry pronoun-resolved, single-sentence
-/// statements of who did what ("X abandons Y by jumping off the
-/// train…"), each with a supporting source passage. For a question
-/// whose answer is an action, the atom IS the evidence; no chunk-rank
-/// lottery required. Matching is plain stemmed keyword overlap in
-/// code over the (small) atom file — no model call, no embedding.
-/// Returns `(description, passage_previews, keyword_hits)` for atoms
-/// with ≥2 distinct keyword hits, best first, capped at 4.
-pub(crate) fn atlas_atom_matches(
-    corpus_id: &str,
-    keywords: &[String],
-) -> Vec<(String, Vec<String>, usize)> {
-    if keywords.len() < 2 {
-        return Vec::new();
-    }
-    // Keywords that are tokens of entity canonical names are weak
-    // evidence — the protagonists' names co-occur in half the atoms
-    // of a narrative corpus, so name-only overlap matches household
-    // scenery, not the asked-about action (measured on the v7a probe:
-    // "Winnie…Verloc" matched 3 dinner-table atoms for a murder
-    // question). Require at least one ACTION-word hit, and rank by
-    // action hits first.
-    let entity_toks: HashSet<String> = atlas_entity_names(corpus_id)
-        .iter()
-        .flat_map(|n| n.split(|c: char| !c.is_alphanumeric()))
-        .filter(|t| t.len() >= 4)
-        .map(str::to_lowercase)
-        .collect();
-    let mut scored: Vec<(String, Vec<String>, usize, usize)> = Vec::new();
-    for (desc, previews) in atlas_atom_records(corpus_id) {
-        let dl = desc.to_lowercase();
-        let dwords: Vec<&str> = dl.split(|c: char| !c.is_alphanumeric()).collect();
-        let mut hits = 0usize;
-        let mut action_hits = 0usize;
-        for k in keywords {
-            let s = stem(k);
-            if dwords.iter().any(|w| stem(w) == s) {
-                hits += 1;
-                if !entity_toks.contains(k) {
-                    action_hits += 1;
-                }
-            }
-        }
-        if hits < 2 || action_hits < 1 {
-            continue;
-        }
-        scored.push((desc, previews, hits, action_hits));
-    }
-    scored.sort_by(|a, b| (b.3, b.2).cmp(&(a.3, a.2)));
-    scored.truncate(3);
-    scored.into_iter().map(|(d, p, h, _)| (d, p, h)).collect()
-}
 
 /// Distinct corpus ids present in a chunk set — the implicit scope
 /// when the conversation carries no explicit corpus seal.

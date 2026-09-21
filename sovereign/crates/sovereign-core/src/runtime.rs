@@ -91,10 +91,9 @@ pub(crate) use self::question_analysis::{
     COARSE_CONVERSATION_LOCATOR_EMBED,
 };
 pub(crate) use self::retrieval_helpers::{
-    apply_cross_corpus_discipline, atlas_grounding_enabled,
-    build_per_corpus_k_overrides, build_retrieval_query, collect_hot_corpora,
-    cross_corpus_sort_cmp, drop_no_overlap_chunks, inject_meta_atlas_hits,
-    reweight_by_query_relevance,
+    apply_cross_corpus_discipline, atlas_grounding_enabled, build_per_corpus_k_overrides,
+    build_retrieval_query, collect_hot_corpora, cross_corpus_sort_cmp, drop_no_overlap_chunks,
+    inject_meta_atlas_hits, reweight_by_query_relevance,
 };
 pub use self::types::ATLAS_WALK_META_KEY;
 pub use self::types::{
@@ -114,12 +113,12 @@ pub mod acquisition;
 /// "this host already accepted this turn", so the model-slot queue parks a
 /// continuation instead of shedding it. Nothing branches on it but that.
 mod admission;
+mod anchoring;
 pub mod capabilities;
 mod code_trace;
 mod collaboration;
 pub mod epistemic;
 mod evidence;
-mod evidence_loop;
 mod gk_rescue;
 pub(crate) mod grounding;
 // The gold-free value-presence primitive — shared by the gate (decides) and the

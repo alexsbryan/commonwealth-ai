@@ -424,11 +424,7 @@ impl Runtime {
         // decomposition), coverage-stamped against the composed pool.
         // Zero model calls; retained on the plan for ledger assembly.
         let demands = {
-            let mut d = crate::runtime::epistemic::build_demands(
-                message,
-                intent,
-                &entities,
-            );
+            let mut d = crate::runtime::epistemic::build_demands(message, intent, &entities);
             crate::runtime::epistemic::stamp_coverage(&mut d, &chunks);
             d
         };
@@ -1087,8 +1083,6 @@ impl Runtime {
         let contested_titles: std::collections::HashSet<String> =
             self.contested_titles_for_chunks(&chunks, &lane).await;
         let folder_meta = self.folder_metadata_snapshot().await;
-        self.rerank_conv_chunks_via_ppr(message, &mut chunks, &display_categories, &lane)
-            .await;
         // Late summary injection: append whole-work summaries AFTER the full
         // leaf pipeline (reweight → … → ppr-rerank) so they cannot perturb leaf
         // retrieval/ranking — QA-neutral by construction. The position was
@@ -1142,15 +1136,6 @@ impl Runtime {
         // variable's loop-success semantics. See the construction below.
         let mut agentic_entity_anchored = false;
         let mut agentic_corpus_anchored = true;
-        if crate::runtime::evidence_loop::agentic_kq_enabled() {
-            let (merged, still_insufficient, entity_anchored, corpus_anchored) = self
-                .agentic_evidence_round(message, chunks, context, intent, scope)
-                .await;
-            chunks = merged;
-            agentic_still_insufficient = still_insufficient;
-            agentic_entity_anchored = entity_anchored;
-            agentic_corpus_anchored = corpus_anchored;
-        }
         let conv_briefing = self
             .build_conv_briefing_block(&chunks, &display_categories, &lane)
             .await;
@@ -1553,22 +1538,21 @@ impl Runtime {
         // entity anchor does: with only metadata behind the answer, a confident
         // specific is a fabrication the gate must verify (and abstain on) rather
         // than release under an honest "from general knowledge:" caveat.
-        let catalog_only =
-            crate::runtime::evidence_loop::retrieval_is_catalog_only(&chunks, &kinds);
+        let catalog_only = crate::runtime::anchoring::retrieval_is_catalog_only(&chunks, &kinds);
         // Retrieval-derived anchor: the question names a specific entity that a
         // retrieved TITLE identifies, but no ingested body may ground the
         // specific. Catches the MIXED/full-text-miss case `catalog_only` misses
         // (one tangential body chunk disables the strict all-catalog rule).
         let title_anchored =
-            crate::runtime::evidence_loop::question_anchors_retrieved_title(message, &chunks);
+            crate::runtime::anchoring::question_anchors_retrieved_title(message, &chunks);
         // Break each contributing signal out (rather than fold them into the `||`)
         // so the glassbox decision line below can attribute WHICH one anchored.
-        let atlas_anchored = crate::runtime::evidence_loop::compute_entity_anchored(
+        let atlas_anchored = crate::runtime::anchoring::compute_entity_anchored(
             message,
             context.conversation.enabled_corpora.as_deref(),
             &chunks,
         );
-        let corpus_deictic = crate::runtime::evidence_loop::question_is_corpus_deictic(message);
+        let corpus_deictic = crate::runtime::anchoring::question_is_corpus_deictic(message);
         let gate_entity_anchored =
             atlas_anchored || corpus_deictic || catalog_only || title_anchored;
         // Glassbox: the entity-anchor decision strips the GK-caveat exemption and
