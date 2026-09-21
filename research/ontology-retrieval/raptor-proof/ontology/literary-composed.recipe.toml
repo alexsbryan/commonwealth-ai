@@ -1,0 +1,301 @@
+# A COMPOSED literary ontology for one novel — DRAFT for the operator to edit.
+# Not installed, not built. Variant of recipes/pilot-and-his-wife/recipe.toml: same book
+# file, same [chunk] and [index], a NEW corpus id so both atlases can coexist.
+#
+# Why: the built-in `literary_atlas` gives Summary atoms to `thematic` questions only
+# (corpus-engine/src/enrichment/pipeline/pipelines/ontologies/literary_atlas.toml:52-88:
+# `tension` has summary_sources = [], `trajectory` has none), so plot-arc and
+# character-change essay questions never received a summary. Here every row an essay
+# question can land on seeds `Summary` and composes both summary sources.
+#
+# Each block says which essay question it serves (essay/templates.toml ids in brackets).
+# What the syntax could not express is marked CANNOT; see NOTES.md beside this file.
+#
+#   svrn recipe validate literary-composed.recipe.toml
+
+[corpus]
+id = "raptor-pilot-and-his-wife-composed"
+name = "The Pilot and His Wife (Lie) — composed literary ontology"
+description = "Project Gutenberg #15588, header and footer stripped. Same text as raptor-pilot-and-his-wife; atlas built under a recipe-declared literary ontology with navigation rows."
+license = "Public Domain"
+mesh_sharing = false
+size_compressed_gb = 0.001
+size_indexed_gb = 0.005
+
+[acquire]
+type = "local_file"
+path = "/Users/alexsbryan/dev/commonwealth-ai/research/ontology-retrieval/raptor-proof/books/pilot-and-his-wife.txt"
+
+[extract]
+type = "plaintext"
+
+[chunk]
+type = "paragraph"
+max_chars = 2048
+overlap_chars = 256
+
+[index]
+fts = true
+vector = true
+
+[enrichment]
+enabled = true
+type = "atlas"
+domain = "literary"
+
+[enrichment.ontology]
+version = 1
+# Read by the extractor under "## Domain focus". Written for a small open-weight model:
+# one instruction per sentence, no exceptions to remember. The declared-type block the
+# engine appends costs prompt budget too (MAX_ADDED_PROMPT_CHARS = 3000,
+# ontology_schema.rs:30), so type descriptions below are one line each.
+guidance = """
+This is a novel. Read each section as a piece of one story told in order.
+A character is a named person in the story. The narrator is not a character.
+A setting is a place where the story happens: a town, a ship, a house, a coast.
+A theme is an idea the story keeps coming back to: jealousy, pride, trust, duty.
+When a character's feelings or situation change in this section, record the new state of that character.
+When two characters' relationship changes in this section, record the new state of that relationship: warmer, colder, broken, mended.
+Record what happens as events. Mark an event as a turning point only when the story cannot go back afterwards.
+Record what a character wants or fears as a motive. Record what a character believes is right or true as a conviction.
+Use only what this section says. Do not explain the book as a whole.
+"""
+
+# ── Entities ────────────────────────────────────────────────────────────────
+
+# Serves: who the story is about [change, secondary, relationship]. Declared as its own
+# type rather than the base `person` on purpose: two claims by one `person` are dropped
+# as "same named speaker" before the tension classifier sees them
+# (analysis/tensions.rs:180-199), which would delete every inner conflict.
+[[enrichment.ontology.types]]
+name = "character"
+kind = "entity"
+description = "A named person in the story. Never the narrator or the author."
+# `station` serves [society]. It is also here for a mechanical reason: the prompt's one
+# worked attribute example uses the FIRST declared type that has attributes and always
+# prints it as an entity sketch (ontology_prompt.rs:231-294); with `bond` first, the
+# dry-run showed a relation drawn with `canonical_name`. Keep an entity first.
+attributes = [
+  { name = "station", type = "text", description = "rank, trade or class, if the section says" },
+]
+
+# Serves: how the setting shapes choices [setting, society].
+[[enrichment.ontology.types]]
+name = "setting"
+kind = "entity"
+description = "A place or milieu the story happens in: a town, a ship, a household, a coast."
+
+# Serves: major themes and the events that carry them [themes, society]. The thematic
+# navigation row seeds on this entity_type.
+[[enrichment.ontology.types]]
+name = "theme"
+kind = "entity"
+description = "An idea the story returns to: jealousy, pride, trust, duty, class."
+
+# ── Relation: the pair of characters ────────────────────────────────────────
+
+# Serves: the main relationship and what strains it [relationship, secondary]. The
+# CONDITION of a bond as it changes is extracted by the engine's generic
+# `relations_developed` facet (configurable_atlas_prompts/phase1_system.md:69-76) and
+# carried as the Relation atom's own trajectory.
+[[enrichment.ontology.types]]
+name = "bond"
+kind = "relation"
+from = "character"
+to = "character"
+description = "A lasting tie between two characters."
+attributes = [
+  { name = "tie", type = "text", values = ["marriage", "courtship", "family", "friendship", "rivalry", "service"] },
+]
+
+# ── Events: the plot ────────────────────────────────────────────────────────
+
+# Serves: the arc of the plot and how early events set up later ones [arc, setup].
+# `consequence` stands in for a cause edge: no build emits `Causes`
+# (literary_atlas.toml:45-49), so what an event sets up rides on the event itself.
+[[enrichment.ontology.types]]
+name = "plot_event"
+kind = "event"
+participants = { actor = "character" }
+description = "Something that happens and moves the story forward."
+attributes = [
+  { name = "place", type = "ref", of = "setting" },
+  { name = "consequence", type = "text", description = "what it makes possible or impossible later, if the section says" },
+]
+
+# Serves: the turning point and why it matters; what the ending resolves [turning-point,
+# ending]. A kind of plot_event: inherits its attributes (decl.rs:360-363).
+[[enrichment.ontology.types]]
+name = "turning_point"
+kind = "event"
+specializes = "plot_event"
+description = "An event after which the story cannot go back: a break, a confession, a loss, a reconciliation."
+
+# ── Claims inside the story: motive and conflict ────────────────────────────
+
+# Serves: what drives the protagonist; the central conflict [conflict, inner-conflicts].
+# `commissive` = commits the holder to something (decl.rs:501-502): a want or an intent.
+# scope in_work = true inside the story, not a critic's reading (decl.rs:543-546).
+[[enrichment.ontology.types]]
+name = "motive"
+kind = "claim"
+force = "commissive"
+scope = "in_work"
+subject = "character"
+description = "What a character wants, fears or intends."
+
+# Serves: the other half of an inner conflict — duty against desire [inner-conflicts,
+# conflict, society].
+[[enrichment.ontology.types]]
+name = "conviction"
+kind = "claim"
+force = "assertive"
+scope = "in_work"
+subject = "character"
+description = "What a character holds to be right or true, about themselves or another."
+
+# ── States: declared, but NOT extracted as declared kinds ───────────────────
+
+# Serves: how the protagonist changes [change]. CANNOT: a declared state type adds no
+# prompt text and no schema slot — "States are not extracted as a declared kind in
+# Phase 1" (parse_policy.rs:217-220; ontology_prompt.rs:32-37 renders four kinds, not
+# five). The states themselves ARE extracted, by the generic `entities_developed` facet.
+# This declaration puts `State` in the seed population (seed_population.rs:122-130) and
+# records intent; delete it and extraction is unchanged.
+[[enrichment.ontology.types]]
+name = "inner_state"
+kind = "state"
+of = "character"
+description = "A condition a character is in: trust, jealousy, shame, resolve."
+
+# Serves: the condition of a relationship over the story [relationship]. CANNOT: `of`
+# takes ONE declared type (decl.rs:377-379), so a state of a PAIR of characters has no
+# direct form. Nearest legal form: a state of the `bond` relation, which is the pair.
+# Same caveat as inner_state: documentation and seed population only.
+[[enrichment.ontology.types]]
+name = "bond_state"
+kind = "state"
+of = "bond"
+description = "The condition of a bond at one point in the story: warm, strained, broken, mended."
+
+# ── Corpus-level blocks ─────────────────────────────────────────────────────
+
+# Serves: every "from the beginning to the end" question [arc, change, setup, ending].
+# States fold on order within the work, not on a calendar.
+[enrichment.ontology.change]
+clock = "narrative"
+
+# Serves: keeping the teller out of the cast. Enforced in the parser, not only asked of
+# the model (decl.rs:568-569).
+[enrichment.ontology.voices]
+not_entities = ["the narrator", "the author"]
+
+# Serves: themes and what the novel suggests as a whole [themes, society]. Phase 8
+# interpretive configurations; off by default once types are declared (decl.rs:323-329),
+# and its prompt is written in the literary frame, which is this corpus's frame.
+[enrichment.ontology.derive]
+configurations = true
+
+# Serves: inner conflicts [inner-conflicts, conflict]. `between` admits claim types only
+# (validate.rs:294-301). CANNOT: there is no "no comparability criterion" — an empty
+# `same` means subject + clock (tension_policy.rs:304-311), and under a narrative clock
+# the clock is vacuous (tension_fields.rs:88-102). So pairs are comparable when they are
+# about the SAME character: this block finds a character at odds with themselves. A
+# conflict BETWEEN two characters is dropped whenever both claims name their character;
+# that conflict is carried by `bond` and its developed states instead.
+[enrichment.ontology.tension]
+label = "conflict"
+between = ["motive", "conviction"]
+same = ["subject"]
+not_conflicts = [
+  "a character changing their mind later in the story",
+  "a wish and the fear of losing the same thing",
+  "the same want stated twice in different words",
+]
+
+# ── Navigation rows ─────────────────────────────────────────────────────────
+# A row you write replaces the default row WHOLE (navigation.rs:503-507). Kinds and
+# edges are on-disk tags. Exemplars classify a question onto a row by centroid
+# (navigation.rs:200-217): they describe KINDS of essay question about fiction in
+# general — never this book, never a bank's sentences.
+
+# Serves: [arc, change, relationship, secondary, turning-point, ending, setup] — seven of
+# the twelve essay questions, hence seven exemplars where the defaults carry four.
+# Entity seeds are narrowed to characters; `Relation` carries the bond's trajectory;
+# `Summary` draws its own quota so it cannot take a leaf's slot.
+[enrichment.ontology.navigation.trajectory]
+seed = { kinds = ["Entity", "State", "Relation", "Event", "Summary"], entity_types = ["character", "person"], budgets = { Summary = 8 } }
+walk = ["Transition", "Involves"]
+hops = 2
+budget = 12
+summary_sources = ["atoms", "raptor"]
+exemplars = [
+  "how does the story move from where it starts to where it finishes",
+  "in what ways is the main character a different person by the last chapter, and why",
+  "how does the bond between the two leads shift as the book goes on",
+  "how does a lesser character influence the growth of the lead",
+  "which moment changes the direction of the story, and what follows from it",
+  "how do things that happen early prepare what happens later",
+  "what is settled by the final chapters and what stays unsettled",
+]
+
+# Serves: [conflict, inner-conflicts]. Seeds the conflict-bearing kinds: the claims
+# (motive, conviction), the states they produce, the bonds they strain.
+[enrichment.ontology.navigation.tension]
+seed = { kinds = ["Claim", "State", "Relation", "Summary"], budgets = { Summary = 8 } }
+walk = ["Tension", "Involves"]
+hops = 1
+budget = 12
+summary_sources = ["atoms", "raptor"]
+exemplars = [
+  "what is the main struggle in the story and how does it come out",
+  "what is the hero torn between",
+  "what puts pressure on the marriage or friendship at the heart of the book",
+  "which characters want things that cannot both be had",
+  "where do duty and desire pull against each other",
+]
+
+# Serves: [themes, society, setting]. `concept` stays beside `theme` because the generic
+# entity types remain reachable under a declared ontology (ontology_schema.rs:86-89).
+[enrichment.ontology.navigation.thematic]
+seed = { kinds = ["Configuration", "Entity", "Summary"], entity_types = ["theme", "concept", "setting"], budgets = { Summary = 8 } }
+walk = ["Involves", "Tension", "Configures"]
+hops = 2
+budget = 12
+summary_sources = ["atoms", "raptor"]
+exemplars = [
+  "what larger ideas does the novel keep returning to",
+  "which scenes carry the book's main ideas",
+  "what picture of its society does the book give",
+  "how does the place and time of the story bear on what the characters do",
+  "what is the book saying as a whole",
+]
+
+# Serves: point facts — the NarrativeQA-style bank, not the essay bank. No summaries: a
+# "who is X" answer lives in a leaf.
+[enrichment.ontology.navigation.lookup]
+seed = { kinds = ["Entity", "Event", "Relation"] }
+walk = ["Involves"]
+hops = 1
+budget = 12
+summary_sources = []
+exemplars = [
+  "who is this character",
+  "what happens in this scene",
+  "where does this take place",
+  "tell me about this person",
+]
+
+# Serves: lists. Seeds on the declared types above and their subtypes; no walk.
+[enrichment.ontology.navigation.enumeration]
+seed = { declared = true }
+walk = []
+hops = 0
+budget = 12
+summary_sources = []
+exemplars = [
+  "which characters appear in the book",
+  "list the places the story visits",
+  "name the themes it records",
+  "how many turning points are there",
+]
