@@ -22,7 +22,7 @@ use sovereign_contracts::error::{Error, Result};
 use sovereign_contracts::traits::InferenceProvider;
 use sovereign_contracts::types::*;
 
-use corpus_engine::CorpusEngine;
+use corpus_index::source::IndexSource;
 
 use super::{escape_sql, extract_code_rows_pub, CodeRow};
 use sovereign_contracts::tool_manifest::DeclaredTool;
@@ -33,12 +33,12 @@ use sovereign_contracts::tool_manifest::DeclaredTool;
 const CHUNK_STALE_DAYS: u64 = 7;
 
 pub struct CodeSearchTool {
-    engine: Arc<CorpusEngine>,
+    engine: Arc<dyn IndexSource>,
     inference: Option<Arc<dyn InferenceProvider>>,
 }
 
 impl CodeSearchTool {
-    pub fn new(engine: Arc<CorpusEngine>) -> Self {
+    pub fn new(engine: Arc<dyn IndexSource>) -> Self {
         Self {
             engine,
             inference: None,

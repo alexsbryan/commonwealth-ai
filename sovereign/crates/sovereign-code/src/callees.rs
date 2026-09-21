@@ -13,8 +13,8 @@ use arc_swap::ArcSwap;
 use sovereign_contracts::error::{Error, Result};
 use sovereign_contracts::types::*;
 
-use corpus_engine::CorpusEngine;
 use corpus_engine_scip::scip_graph::{CallKind, ScipGraph};
+use corpus_index::source::IndexSource;
 
 use super::index_health::IndexHealthChecker;
 use super::is_valid_symbol_name;
@@ -27,13 +27,13 @@ pub type ScipGraphHandle = Arc<ArcSwap<ScipGraph>>;
 
 pub struct FindCalleesTool {
     #[allow(dead_code)]
-    engine: Arc<CorpusEngine>,
+    engine: Arc<dyn IndexSource>,
     graph: ScipGraphHandle,
     checker: Option<Arc<IndexHealthChecker>>,
 }
 
 impl FindCalleesTool {
-    pub fn new(engine: Arc<CorpusEngine>, graph: ScipGraphHandle) -> Self {
+    pub fn new(engine: Arc<dyn IndexSource>, graph: ScipGraphHandle) -> Self {
         Self {
             engine,
             graph,

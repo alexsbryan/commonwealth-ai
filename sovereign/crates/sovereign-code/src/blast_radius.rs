@@ -51,7 +51,7 @@ pub struct BlastRadiusTool {
     /// array (the field is always present per the spec §8 —
     /// "present-but-possibly-empty on every response, never
     /// conditionally omitted").
-    atlas: Option<Arc<sovereign_work_atlas::WorkAtlasStore>>,
+    atlas: Option<Arc<dyn sovereign_contracts::peer_work::PeerWork>>,
 }
 
 impl BlastRadiusTool {
@@ -83,7 +83,7 @@ impl BlastRadiusTool {
     /// Attach the work-atlas store. When present, blast responses
     /// gain a `concurrent` field listing live claims on the queried
     /// symbol — spec §8.
-    pub fn with_atlas(mut self, atlas: Arc<sovereign_work_atlas::WorkAtlasStore>) -> Self {
+    pub fn with_atlas(mut self, atlas: Arc<dyn sovereign_contracts::peer_work::PeerWork>) -> Self {
         self.atlas = Some(atlas);
         self
     }
@@ -93,36 +93,11 @@ impl BlastRadiusTool {
     /// or when the store errors — this enrichment must never fail
     /// the main blast call. Past-TTL claims are filtered out.
     fn atlas_concurrent_claims(&self, symbol: &str) -> Vec<serde_json::Value> {
-        let Some(atlas) = self.atlas.as_ref() else {
-            return Vec::new();
-        };
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_secs())
-            .unwrap_or(0);
-        match atlas.list_claims_for_scope(symbol, sovereign_work_atlas::store::ScopeMatch::Symbol) {
-            Ok(claims) => claims
-                .into_iter()
-                .filter(|c| c.ttl_expires_at >= now)
-                .map(|c| {
-                    let node_id = atlas
-                        .get_session(c.session_id)
-                        .ok()
-                        .flatten()
-                        .map(|s| s.node_id.to_string());
-                    json!({
-                        "claim_id":   c.claim_id.to_string(),
-                        "session_id": c.session_id.to_string(),
-                        "intent":     c.intent,
-                        "node_id":    node_id,
-                    })
-                })
-                .collect(),
-            Err(e) => {
-                tracing::debug!(error = %e, "blast: atlas lookup failed; emitting empty concurrent");
-                Vec::new()
-            }
-        }
+        use sovereign_contracts::peer_work::ScopeKind;
+        self.atlas
+            .as_ref()
+            .map(|a| a.in_flight(symbol, ScopeKind::Symbol, None).claims)
+            .unwrap_or_default()
     }
 }
 

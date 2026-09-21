@@ -38,10 +38,10 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
-use corpus_engine::index::CorpusIndex;
 use corpus_engine_scip::capability_map::{is_function, pkg_and_desc};
 use corpus_engine_scip::converge::SourceScope;
 use corpus_engine_scip::ScipGraph;
+use corpus_index::index::CorpusIndex;
 use sovereign_contracts::error::{Error, Result};
 
 /// Skip symbols shorter than this — trivial getters/one-liners are "duplicated"

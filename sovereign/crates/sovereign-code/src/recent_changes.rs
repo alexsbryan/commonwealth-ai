@@ -11,7 +11,7 @@ use std::sync::Arc;
 use sovereign_contracts::error::{Error, Result};
 use sovereign_contracts::types::*;
 
-use corpus_engine::CorpusEngine;
+use corpus_index::source::IndexSource;
 
 use super::{group_by_file, query_all_code_indexes};
 use sovereign_contracts::tool_manifest::DeclaredTool;
@@ -27,11 +27,11 @@ const MAX_FILES_RENDERED: usize = 20;
 const MAX_SYMBOLS_PER_FILE: usize = 15;
 
 pub struct RecentChangesTool {
-    engine: Arc<CorpusEngine>,
+    engine: Arc<dyn IndexSource>,
 }
 
 impl RecentChangesTool {
-    pub fn new(engine: Arc<CorpusEngine>) -> Self {
+    pub fn new(engine: Arc<dyn IndexSource>) -> Self {
         Self { engine }
     }
 }

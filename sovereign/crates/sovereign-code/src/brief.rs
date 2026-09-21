@@ -45,7 +45,6 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use corpus_engine::enrichment::atlas::{read_atlas_atoms, AtomEnvelope};
 #[cfg(feature = "dev-tools")]
 use corpus_engine_archaeology::archaeology_eval::{
     inquiries_matching_files, load_inquiries_from_dir,
@@ -54,6 +53,8 @@ use corpus_engine_archaeology::archaeology_eval::{
 use corpus_engine_archaeology::git_archaeology::{batch_harvest_all_commits, CommitRecord};
 use corpus_engine_notes::{NodeRoster, Note, NoteStore};
 use serde::Deserialize;
+use understanding_vocab::atoms::AtomEnvelope;
+use understanding_vocab::read::read_atlas_atoms;
 
 use sovereign_contracts::tokens::estimate_tokens;
 

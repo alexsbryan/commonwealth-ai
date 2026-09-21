@@ -4261,3 +4261,15 @@ mod tests {
         assert_eq!(engine.jsonl_source_shard_count("wikipedia").unwrap(), 2);
     }
 }
+
+/// The engine IS the read port. `open_index` delegates to the CACHED opener.
+#[async_trait::async_trait]
+impl corpus_index::source::IndexSource for CorpusEngine {
+    async fn usable_indexes(&self) -> Result<Vec<IndexInfo>> {
+        CorpusEngine::usable_indexes(self).await
+    }
+
+    async fn open_index(&self, path: &Path) -> Result<CorpusIndex> {
+        CorpusEngine::open_index(self, path).await
+    }
+}

@@ -29,9 +29,9 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
 
+use sovereign_code::{CodeSearchTool, RecentChangesTool, SymbolLookupTool};
 use sovereign_contracts::traits::Tool;
 use sovereign_contracts::types::{StepOutput, ToolContext};
-use sovereign_code::{CodeSearchTool, RecentChangesTool, SymbolLookupTool};
 
 use corpus_engine::{CorpusEngine, CorpusSpec, EmbedFn};
 
@@ -140,9 +140,19 @@ vector = false
                 corpus_engine_scip::ScipGraph::open_in_memory("fixture")
                     .expect("in-memory ScipGraph for fixture"),
             ));
-        let sym = SymbolLookupTool::new(Arc::clone(&engine), Arc::clone(&scip_handle)).declared();
-        let search = CodeSearchTool::new(Arc::clone(&engine)).declared();
-        let recent = RecentChangesTool::new(Arc::clone(&engine)).declared();
+        let sym = SymbolLookupTool::new(
+            Arc::clone(&engine) as std::sync::Arc<dyn sovereign_code::CodeIndexSource>,
+            Arc::clone(&scip_handle),
+        )
+        .declared();
+        let search = CodeSearchTool::new(
+            Arc::clone(&engine) as std::sync::Arc<dyn sovereign_code::CodeIndexSource>
+        )
+        .declared();
+        let recent = RecentChangesTool::new(
+            Arc::clone(&engine) as std::sync::Arc<dyn sovereign_code::CodeIndexSource>
+        )
+        .declared();
 
         Self {
             root,
@@ -740,10 +750,25 @@ vector = false
 
         // ── Build tools ──────────────────────────────────────
 
-        let sym = SymbolLookupTool::new(Arc::clone(&engine), Arc::clone(&graph)).declared();
-        let search = CodeSearchTool::new(Arc::clone(&engine)).declared();
-        let callees = FindCalleesTool::new(Arc::clone(&engine), Arc::clone(&graph)).declared();
-        let callers = FindCallersTool::new(Arc::clone(&engine), Arc::clone(&graph)).declared();
+        let sym = SymbolLookupTool::new(
+            Arc::clone(&engine) as std::sync::Arc<dyn sovereign_code::CodeIndexSource>,
+            Arc::clone(&graph),
+        )
+        .declared();
+        let search = CodeSearchTool::new(
+            Arc::clone(&engine) as std::sync::Arc<dyn sovereign_code::CodeIndexSource>
+        )
+        .declared();
+        let callees = FindCalleesTool::new(
+            Arc::clone(&engine) as std::sync::Arc<dyn sovereign_code::CodeIndexSource>,
+            Arc::clone(&graph),
+        )
+        .declared();
+        let callers = FindCallersTool::new(
+            Arc::clone(&engine) as std::sync::Arc<dyn sovereign_code::CodeIndexSource>,
+            Arc::clone(&graph),
+        )
+        .declared();
 
         Self {
             root,
@@ -1490,9 +1515,18 @@ embedding_dimensions = 8
         corpus_engine_scip::ScipGraph::open_in_memory("mixed")
             .expect("in-memory ScipGraph for mixed-corpora test"),
     ));
-    let sym = SymbolLookupTool::new(Arc::clone(&engine), Arc::clone(&mixed_graph));
-    let search = CodeSearchTool::new(Arc::clone(&engine)).declared();
-    let recent = RecentChangesTool::new(Arc::clone(&engine)).declared();
+    let sym = SymbolLookupTool::new(
+        Arc::clone(&engine) as std::sync::Arc<dyn sovereign_code::CodeIndexSource>,
+        Arc::clone(&mixed_graph),
+    );
+    let search = CodeSearchTool::new(
+        Arc::clone(&engine) as std::sync::Arc<dyn sovereign_code::CodeIndexSource>
+    )
+    .declared();
+    let recent = RecentChangesTool::new(
+        Arc::clone(&engine) as std::sync::Arc<dyn sovereign_code::CodeIndexSource>
+    )
+    .declared();
     let ctx = ToolContext {
         conversation_id: "mixed-corpora-test".to_string(),
         task_id: None,

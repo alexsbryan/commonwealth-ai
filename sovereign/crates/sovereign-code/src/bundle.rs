@@ -30,7 +30,7 @@ use sovereign_contracts::traits::InferenceProvider;
 /// compose from.
 #[cfg(feature = "treesitter")]
 pub struct CodeIntelTools {
-    corpus_engine: Arc<corpus_engine::CorpusEngine>,
+    corpus_engine: Arc<dyn corpus_index::source::IndexSource>,
     inference: Arc<dyn InferenceProvider>,
     scip_graph: crate::ScipGraphHandle,
 }
@@ -39,7 +39,7 @@ pub struct CodeIntelTools {
 impl CodeIntelTools {
     /// Build the family over a graph handle the host owns.
     pub fn new(
-        corpus_engine: Arc<corpus_engine::CorpusEngine>,
+        corpus_engine: Arc<dyn corpus_index::source::IndexSource>,
         inference: Arc<dyn InferenceProvider>,
         scip_graph: crate::ScipGraphHandle,
     ) -> Self {

@@ -2484,6 +2484,7 @@ dependencies = [
  "arrow",
  "arrow-array",
  "arrow-schema",
+ "async-trait",
  "blake3",
  "chrono",
  "corpus-engine-yield",
@@ -12447,6 +12448,7 @@ dependencies = [
  "corpus-engine-notes",
  "corpus-engine-scip",
  "corpus-engine-watchers",
+ "corpus-index",
  "filetime",
  "futures",
  "lancedb",
@@ -12456,11 +12458,11 @@ dependencies = [
  "sha2 0.10.9",
  "sovereign-contracts",
  "sovereign-time",
- "sovereign-work-atlas",
  "tempfile",
  "tokio",
  "toml 0.8.2",
  "tracing",
+ "understanding-vocab",
  "workspace-hack",
 ]
 

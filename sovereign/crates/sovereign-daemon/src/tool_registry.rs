@@ -65,30 +65,46 @@ pub async fn build_tool_registry(
         &graph_handle,
     )));
     tools.register(Box::new(
-        sovereign_code::SymbolLookupTool::new(Arc::clone(&engine), Arc::clone(&graph_handle))
-            .with_health_checker(Arc::clone(&health_checker))
-            .declared(),
+        sovereign_code::SymbolLookupTool::new(
+            Arc::clone(&engine) as std::sync::Arc<dyn sovereign_code::CodeIndexSource>,
+            Arc::clone(&graph_handle),
+        )
+        .with_health_checker(Arc::clone(&health_checker))
+        .declared(),
     ));
     tools.register(Box::new(
-        sovereign_code::CodeSearchTool::new(Arc::clone(&engine)).declared(),
+        sovereign_code::CodeSearchTool::new(
+            Arc::clone(&engine) as std::sync::Arc<dyn sovereign_code::CodeIndexSource>
+        )
+        .declared(),
     ));
     tools.register(Box::new(
-        sovereign_code::RecentChangesTool::new(Arc::clone(&engine)).declared(),
+        sovereign_code::RecentChangesTool::new(
+            Arc::clone(&engine) as std::sync::Arc<dyn sovereign_code::CodeIndexSource>
+        )
+        .declared(),
     ));
     tools.register(Box::new(
-        sovereign_code::FindCallersTool::new(Arc::clone(&engine), Arc::clone(&graph_handle))
-            .with_health_checker(Arc::clone(&health_checker))
-            .declared(),
+        sovereign_code::FindCallersTool::new(
+            Arc::clone(&engine) as std::sync::Arc<dyn sovereign_code::CodeIndexSource>,
+            Arc::clone(&graph_handle),
+        )
+        .with_health_checker(Arc::clone(&health_checker))
+        .declared(),
     ));
     tools.register(Box::new(
-        sovereign_code::FindCalleesTool::new(Arc::clone(&engine), Arc::clone(&graph_handle))
-            .with_health_checker(Arc::clone(&health_checker))
-            .declared(),
+        sovereign_code::FindCalleesTool::new(
+            Arc::clone(&engine) as std::sync::Arc<dyn sovereign_code::CodeIndexSource>,
+            Arc::clone(&graph_handle),
+        )
+        .with_health_checker(Arc::clone(&health_checker))
+        .declared(),
     ));
     tools.register(Box::new(
         sovereign_code::BlastRadiusTool::new(Arc::clone(&graph_handle))
             .with_health_checker(Arc::clone(&health_checker))
-            .with_atlas(Arc::clone(&work_atlas_store))
+            .with_atlas(Arc::clone(&work_atlas_store)
+                as std::sync::Arc<dyn sovereign_contracts::peer_work::PeerWork>)
             .declared(),
     ));
     // Capability map — derived "what the codebase does" overview. Resolves
@@ -268,7 +284,8 @@ pub async fn build_tool_registry(
     // tools use, rather than being silently absent.
     {
         let mut tool = sovereign_code::BriefingTool::new(Arc::clone(&notes))
-            .with_atlas(Arc::clone(&work_atlas_store));
+            .with_atlas(Arc::clone(&work_atlas_store)
+                as std::sync::Arc<dyn sovereign_contracts::peer_work::PeerWork>);
         if let Some(ws) = workspace_dir.clone() {
             tool = tool.with_workspace_root(ws);
         }

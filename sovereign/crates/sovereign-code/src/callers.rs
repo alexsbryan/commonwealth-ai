@@ -10,7 +10,7 @@ use std::sync::Arc;
 use sovereign_contracts::error::{Error, Result};
 use sovereign_contracts::types::*;
 
-use corpus_engine::CorpusEngine;
+use corpus_index::source::IndexSource;
 
 use super::callees::ScipGraphHandle;
 use super::index_health::IndexHealthChecker;
@@ -19,13 +19,13 @@ use sovereign_contracts::tool_manifest::DeclaredTool;
 
 pub struct FindCallersTool {
     #[allow(dead_code)]
-    engine: Arc<CorpusEngine>,
+    engine: Arc<dyn IndexSource>,
     graph: ScipGraphHandle,
     checker: Option<Arc<IndexHealthChecker>>,
 }
 
 impl FindCallersTool {
-    pub fn new(engine: Arc<CorpusEngine>, graph: ScipGraphHandle) -> Self {
+    pub fn new(engine: Arc<dyn IndexSource>, graph: ScipGraphHandle) -> Self {
         Self {
             engine,
             graph,

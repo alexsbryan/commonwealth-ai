@@ -34,6 +34,7 @@ pub mod error;
 pub mod filters;
 pub mod index;
 pub mod recipe;
+pub mod source;
 pub mod stream_axes;
 pub mod types;
 

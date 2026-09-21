@@ -13,8 +13,8 @@ license.workspace = true
 [dependencies]
 sovereign-contracts = { workspace = true }
 sovereign-time = { workspace = true }
-sovereign-work-atlas = { workspace = true }
-corpus-engine = { workspace = true }
+corpus-index = { workspace = true }
+understanding-vocab = { workspace = true }
 corpus-engine-scip = { workspace = true }
 corpus-engine-notes = { workspace = true }
 corpus-engine-archaeology = { workspace = true, optional = true }
@@ -41,10 +41,12 @@ workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 # Mirrors sovereign-tools' axes exactly — these modules were gated there before
 # the lift and the gates travel with the code, not with the old home.
 default = ["treesitter"]
-treesitter = ["corpus-engine/treesitter"]
+treesitter = []
 dev-tools = ["dep:corpus-engine-archaeology"]
 
 [dev-dependencies]
+# TEST-ONLY: the e2e builds real LanceDB fixtures. Production graph stays engine-free.
+corpus-engine = { workspace = true }
 tempfile = { workspace = true }
 # e2e_code_intel builds LanceDB fixtures by hand and ages file mtimes.
 arrow = { workspace = true }

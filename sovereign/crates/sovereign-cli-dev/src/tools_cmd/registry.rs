@@ -170,25 +170,40 @@ pub(super) async fn open_tools_registry() -> Result<ToolsEnv, String> {
     // Code index (LanceDB-backed): identical construction to
     // project_cmd so ids, descriptors, examples all match.
     tools.register(Box::new(
-        sovereign_code::SymbolLookupTool::new(Arc::clone(&engine), Arc::clone(&merged_graph))
-            .with_health_checker(Arc::clone(&health_checker))
-            .declared(),
+        sovereign_code::SymbolLookupTool::new(
+            Arc::clone(&engine) as std::sync::Arc<dyn sovereign_code::CodeIndexSource>,
+            Arc::clone(&merged_graph),
+        )
+        .with_health_checker(Arc::clone(&health_checker))
+        .declared(),
     ));
     tools.register(Box::new(
-        sovereign_code::CodeSearchTool::new(Arc::clone(&engine)).declared(),
+        sovereign_code::CodeSearchTool::new(
+            Arc::clone(&engine) as std::sync::Arc<dyn sovereign_code::CodeIndexSource>
+        )
+        .declared(),
     ));
     tools.register(Box::new(
-        sovereign_code::RecentChangesTool::new(Arc::clone(&engine)).declared(),
+        sovereign_code::RecentChangesTool::new(
+            Arc::clone(&engine) as std::sync::Arc<dyn sovereign_code::CodeIndexSource>
+        )
+        .declared(),
     ));
     tools.register(Box::new(
-        sovereign_code::FindCalleesTool::new(Arc::clone(&engine), Arc::clone(&merged_graph))
-            .with_health_checker(Arc::clone(&health_checker))
-            .declared(),
+        sovereign_code::FindCalleesTool::new(
+            Arc::clone(&engine) as std::sync::Arc<dyn sovereign_code::CodeIndexSource>,
+            Arc::clone(&merged_graph),
+        )
+        .with_health_checker(Arc::clone(&health_checker))
+        .declared(),
     ));
     tools.register(Box::new(
-        sovereign_code::FindCallersTool::new(Arc::clone(&engine), Arc::clone(&merged_graph))
-            .with_health_checker(Arc::clone(&health_checker))
-            .declared(),
+        sovereign_code::FindCallersTool::new(
+            Arc::clone(&engine) as std::sync::Arc<dyn sovereign_code::CodeIndexSource>,
+            Arc::clone(&merged_graph),
+        )
+        .with_health_checker(Arc::clone(&health_checker))
+        .declared(),
     ));
     // Capability map — derived "what the codebase does" overview.
     tools.register(Box::new(
@@ -281,7 +296,7 @@ pub(super) async fn open_tools_registry() -> Result<ToolsEnv, String> {
     tools.register(Box::new(
         sovereign_code::BriefingTool::new(Arc::clone(&notes_store))
             .with_workspace_root(repo_root.clone())
-            .with_atlas(Arc::clone(&atlas_store))
+            .with_atlas(Arc::clone(&atlas_store) as std::sync::Arc<dyn sovereign_code::PeerWork>)
             .declared(),
     ));
     // Encode-time session-frame upsert — `svrn tools call
@@ -296,7 +311,7 @@ pub(super) async fn open_tools_registry() -> Result<ToolsEnv, String> {
         sovereign_code::BlastRadiusTool::new(Arc::clone(&merged_graph))
             .with_project_root(repo_root.clone())
             .with_health_checker(Arc::clone(&health_checker))
-            .with_atlas(Arc::clone(&atlas_store))
+            .with_atlas(Arc::clone(&atlas_store) as std::sync::Arc<dyn sovereign_code::PeerWork>)
             .declared(),
     ));
 

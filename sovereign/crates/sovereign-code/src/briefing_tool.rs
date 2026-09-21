@@ -22,9 +22,8 @@ use serde_json::json;
 
 use corpus_engine_notes::NoteStore;
 use sovereign_contracts::error::{Error, Result};
+use sovereign_contracts::peer_work::{PeerWork, ScopeKind};
 use sovereign_contracts::types::{StepOutput, ToolContext};
-use sovereign_work_atlas::store::ScopeMatch;
-use sovereign_work_atlas::WorkAtlasStore;
 
 use super::brief::{assemble_brief, BriefInputs, WorkInFlightEntry};
 use super::working_set::{detect_working_set, Strategy};
@@ -34,7 +33,7 @@ use sovereign_contracts::tool_manifest::DeclaredTool;
 pub struct BriefingTool {
     notes: Arc<NoteStore>,
     workspace_root: Option<PathBuf>,
-    atlas: Option<Arc<WorkAtlasStore>>,
+    atlas: Option<Arc<dyn PeerWork>>,
 }
 
 impl BriefingTool {
@@ -55,7 +54,7 @@ impl BriefingTool {
     }
 
     /// Live work-atlas handle for the "Work in flight" section.
-    pub fn with_atlas(mut self, atlas: Arc<WorkAtlasStore>) -> Self {
+    pub fn with_atlas(mut self, atlas: Arc<dyn PeerWork>) -> Self {
         self.atlas = Some(atlas);
         self
     }
@@ -78,7 +77,7 @@ impl BriefingTool {
 /// overlap several working-set files); observations by
 /// `(session_id, file_path)`.
 pub fn overlaps_for_working_set(
-    store: &WorkAtlasStore,
+    store: &dyn PeerWork,
     repo_root: &std::path::Path,
     working_set: &[PathBuf],
     caller_token: Option<&str>,
@@ -95,15 +94,7 @@ pub fn overlaps_for_working_set(
         let rel = file.to_string_lossy().into_owned();
         let abs = repo_root.join(file).to_string_lossy().into_owned();
         for scope in [rel.as_str(), abs.as_str()] {
-            let Ok(in_flight) = sovereign_work_atlas::tools::collect_in_flight(
-                store,
-                scope,
-                ScopeMatch::File,
-                caller_token,
-                false,
-            ) else {
-                continue;
-            };
+            let in_flight = store.in_flight(scope, ScopeKind::File, caller_token);
             for c in &in_flight.claims {
                 acc.add_claim(c);
             }

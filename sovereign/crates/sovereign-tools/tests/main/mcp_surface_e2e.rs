@@ -58,16 +58,25 @@ fn renamed_tool_descriptor_ids_are_canonical() {
     let engine = empty_engine();
     let graph = empty_graph();
 
-    let symbols =
-        sovereign_code::SymbolLookupTool::new(Arc::clone(&engine), Arc::clone(&graph)).declared();
+    let symbols = sovereign_code::SymbolLookupTool::new(
+        Arc::clone(&engine) as std::sync::Arc<dyn sovereign_code::CodeIndexSource>,
+        Arc::clone(&graph),
+    )
+    .declared();
     assert_eq!(symbols.descriptor().id, "symbols");
 
-    let callers =
-        sovereign_code::FindCallersTool::new(Arc::clone(&engine), Arc::clone(&graph)).declared();
+    let callers = sovereign_code::FindCallersTool::new(
+        Arc::clone(&engine) as std::sync::Arc<dyn sovereign_code::CodeIndexSource>,
+        Arc::clone(&graph),
+    )
+    .declared();
     assert_eq!(callers.descriptor().id, "callers");
 
-    let callees =
-        sovereign_code::FindCalleesTool::new(Arc::clone(&engine), Arc::clone(&graph)).declared();
+    let callees = sovereign_code::FindCalleesTool::new(
+        Arc::clone(&engine) as std::sync::Arc<dyn sovereign_code::CodeIndexSource>,
+        Arc::clone(&graph),
+    )
+    .declared();
     assert_eq!(callees.descriptor().id, "callees");
 
     let blast = sovereign_code::BlastRadiusTool::new(Arc::clone(&graph)).declared();
@@ -94,13 +103,25 @@ fn render_tools_list_emits_canonical_only() {
 
     let mut registry = ToolRegistry::new();
     registry.register(Box::new(
-        sovereign_code::SymbolLookupTool::new(Arc::clone(&engine), Arc::clone(&graph)).declared(),
+        sovereign_code::SymbolLookupTool::new(
+            Arc::clone(&engine) as std::sync::Arc<dyn sovereign_code::CodeIndexSource>,
+            Arc::clone(&graph),
+        )
+        .declared(),
     ));
     registry.register(Box::new(
-        sovereign_code::FindCallersTool::new(Arc::clone(&engine), Arc::clone(&graph)).declared(),
+        sovereign_code::FindCallersTool::new(
+            Arc::clone(&engine) as std::sync::Arc<dyn sovereign_code::CodeIndexSource>,
+            Arc::clone(&graph),
+        )
+        .declared(),
     ));
     registry.register(Box::new(
-        sovereign_code::FindCalleesTool::new(Arc::clone(&engine), Arc::clone(&graph)).declared(),
+        sovereign_code::FindCalleesTool::new(
+            Arc::clone(&engine) as std::sync::Arc<dyn sovereign_code::CodeIndexSource>,
+            Arc::clone(&graph),
+        )
+        .declared(),
     ));
     registry.register(Box::new(
         sovereign_code::BlastRadiusTool::new(Arc::clone(&graph)).declared(),
@@ -241,10 +262,18 @@ fn plan_schema_builds_over_real_tool_descriptors() {
 
     let mut registry = ToolRegistry::new();
     registry.register(Box::new(
-        sovereign_code::SymbolLookupTool::new(Arc::clone(&engine), Arc::clone(&graph)).declared(),
+        sovereign_code::SymbolLookupTool::new(
+            Arc::clone(&engine) as std::sync::Arc<dyn sovereign_code::CodeIndexSource>,
+            Arc::clone(&graph),
+        )
+        .declared(),
     ));
     registry.register(Box::new(
-        sovereign_code::FindCallersTool::new(Arc::clone(&engine), Arc::clone(&graph)).declared(),
+        sovereign_code::FindCallersTool::new(
+            Arc::clone(&engine) as std::sync::Arc<dyn sovereign_code::CodeIndexSource>,
+            Arc::clone(&graph),
+        )
+        .declared(),
     ));
     registry.register(Box::new(
         sovereign_code::BlastRadiusTool::new(Arc::clone(&graph)).declared(),

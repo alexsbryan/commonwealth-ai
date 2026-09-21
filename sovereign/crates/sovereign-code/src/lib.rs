@@ -271,7 +271,12 @@ use arrow_array::{Array, Int32Array, Int64Array, RecordBatch, StringArray};
 use futures::TryStreamExt;
 use lancedb::query::{ExecutableQuery, QueryBase};
 
-use corpus_engine::{CorpusEngine, CorpusIndex, Error as CorpusError};
+use corpus_index::index::CorpusIndex;
+use corpus_index::source::IndexSource;
+pub use corpus_index::source::IndexSource as CodeIndexSource;
+use corpus_index::types::IndexInfo;
+use corpus_index::Error as CorpusError;
+pub use sovereign_contracts::peer_work::PeerWork;
 
 /// A single code chunk row read from a LanceDB query via the typed code
 /// columns. This is the in-memory shape the index-based tools operate on after
@@ -308,7 +313,7 @@ pub(crate) fn is_valid_symbol_name(name: &str) -> bool {
 
 /// Is this corpus one the code tools should query?
 ///
-/// Thin alias for [`corpus_engine::IndexInfo::is_code_corpus`], which
+/// Thin alias for [`IndexInfo::is_code_corpus`], which
 /// carries the full rationale for why the `CorpusKind::Code` tag alone is
 /// the wrong test. The predicate moved to `IndexInfo` after it turned out
 /// to exist in three places that disagreed — this one, `code_corpus_ids`
@@ -320,7 +325,7 @@ pub(crate) fn is_valid_symbol_name(name: &str) -> bool {
 ///
 /// Kept as a named function because it reads better at the call sites in
 /// this module and is part of the crate's public surface.
-pub fn has_code_graph(info: &corpus_engine::IndexInfo) -> bool {
+pub fn has_code_graph(info: &IndexInfo) -> bool {
     info.is_code_corpus()
 }
 
@@ -334,7 +339,7 @@ pub fn has_code_graph(info: &corpus_engine::IndexInfo) -> bool {
 /// query would error at column resolution rather than return zero rows.
 /// See [`has_code_graph`] for why that screen is not a `kind` check.
 pub(crate) async fn query_all_code_indexes(
-    engine: &Arc<CorpusEngine>,
+    engine: &Arc<dyn IndexSource>,
     filter: &str,
     limit: usize,
 ) -> Result<Vec<CodeRow>, CorpusError> {
@@ -527,7 +532,7 @@ mod tests {
     /// Build an `IndexInfo` for `path` with the given kind. Goes through
     /// serde because `IndexInfo` has ~30 fields and no `Default`; every
     /// field this test doesn't name carries `#[serde(default)]`.
-    fn index_info(path: &std::path::Path, kind: &str) -> corpus_engine::IndexInfo {
+    fn index_info(path: &std::path::Path, kind: &str) -> IndexInfo {
         serde_json::from_value(serde_json::json!({
             "corpus_id": "some-repo",
             "corpus_name": "some-repo",
