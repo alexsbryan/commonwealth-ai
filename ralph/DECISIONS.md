@@ -293,6 +293,10 @@ exactly it. `FLAG` marks a reading of a bar or a clause the operator may revert.
 - Needed: A58 decided this correction and held it until `REVIEW-audit-rg` landed, because the instrument printed "ring-room.toml is unedited" in that bar's row and the shed bar's goodhart forbids a clause edit to that file inside the campaign. The audit landed (`a2a688d07`, closed at A59).
 - Chose: clause (a) now asks that the grant's scope REACH this app, where it named `Scope::Rails(ring-doc)` + `Scope::Models`. The correction is in the bar's own text, says it came AFTER data existed, and says which runs were read under which wording. The instrument's row for that bar no longer claims the file is unedited. No other clause changed: vouch (b) stays as written (A58), edit-attributed (c) was already a faithful reading.
 - Because: A55 made the wall one grant, so the old text describes a grant this system no longer mints by default; leaving a false clause under a passing bar is the quiet version of the weakening the goodhart line exists to catch, and saying so in the text is the open version.
+**A61 · 2026-09-21 · mp-1-deciders-read-the-principal · director FINDING, decision is the OPERATOR's** — this commit
+- Needed: the deciders row met its bar — `mp-principal-is-the-verified-key` is scoped to "the internal plane", and on `:9742` a typed `x-node-id` or a forged `x-mesh-*` no longer becomes anybody (seat-read: `18849c316`+`c4077023c`+`8f1ca8a0a`, one unit across three commits because a hook aborted the first `git add`). Reading the resolver the nine deciders now trust, the seat found the same forgery still open one plane over. `client_principal::resolve` step 2 (`sovereign-daemon/src/client_principal.rs:~190-205`) returns `Principal::Member { node_id }` for ANY readable `x-node-id`, and this row moved that step ABOVE the bearer. The acceptor knows better and throws it away: `forward_for`'s `CLIENT_ALPN` arm checks `is_member(dialer)` and then returns `Forward::Splice(self.peer)` — a bare splice, no identity (`sovereign-mesh/src/iroh_access.rs`, `forward_for`), exactly what `cwth/http/0` was before `e8f7f0520`. So member B, verified as B in the handshake, types `x-node-id: <C>` on an inference or embedding turn and the peer ceiling, the admission tally and the reciprocity key (`routes_inference.rs:284,619`, `serving-host/admission.rs`, `sovereign-server/reciprocity.rs`) all move for C.
+- Chose: nothing built. NOT a regression — before this row the same sites read the typed header directly — and the row's reorder fixed a live defect (every real peer resolved `RemoteClient` and was bucketed under node zero). But the order's Objective names "an admission tally or a reciprocity ledger", both of which live on this plane, so the campaign's sentence is not yet true and its bar cannot see that. PROPOSED to the operator: one more product row before REVIEW-DEMO-mp-run — the `CLIENT_ALPN` member arm becomes `Forward::Http` with the same `verified_headers` + acceptor mark, and `client_principal` prefers a tied verified key over the typed claim (the typed claim stays for one release as the fallback an older sender needs, logged as unverified-claim) — plus a fifth clause on the bar: B typing C on an inference turn moves B's tally.
+- Because: the ratchet `mesh_principal_gate` greps deciders for the literal header and allows RESOLVERS to read it; on the client surface the resolver IS the read, so the gate is green while the claim is forgeable — the rename goodhart the bar's own text warns about, one layer down. Widening a bar and adding a row are the operator's.
 
 **A44 · 2026-09-19 · rr-2-gossip-claim-one-decider · director (supervisor resolution, attempt 1)** — commit: this one
 - Needed: A43 wrote the row on the premise that a SECOND site builds the claim gossip sends. The worker measured the send path and found one, stopped at the premise check without improvising a target, and asked whether to rewrite or strike the row.
@@ -7663,5 +7667,14 @@ Demo evidence the walk starts from: both cold room runs eleven of eleven PASSED 
 <details>
 
 `co-lineage.py --self-test` exit 0 with the edit; `bash -n` and a `py_compile` of the embedded verdict block pass. Not re-run against the room: the change to the instrument is one string in a verdict row's annotation. Note 9ec551b2 is retired by this entry.
+
+</details>
+
+
+## A61 · 2026-09-21 — the client plane still believes a typed node id
+
+<details>
+
+Not run: no two-daemon test types C on an inference turn today, so "moves for C" is read from the resolver and the splice, not observed. Row 49's mark cites `18849c316`, the deletion-only half that does not compile alone; the unit is `18849c316^..8f1ca8a0a`.
 
 </details>
