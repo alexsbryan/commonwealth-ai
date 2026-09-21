@@ -317,6 +317,10 @@ exactly it. `FLAG` marks a reading of a bar or a clause the operator may revert.
 - Needed: `530db2bb2` built A64's design exactly (a valid proof attaches `ProvedMeshMember`, the principal stays `Anonymous`, no `x-node-id` read, `mesh_principal_gate` untouched; both plants red) and stamped four `:9742`-reaching call sites. It DISCLOSED five it could not reach from its named files — the auto-ingest pull loop, the corpus queue, model transfer, warm-RPC, and `sovereign-grants`' `ShardManager` — and named the next row as owner. The next row's text predated that finding and did not mention them. Its gate defaults to `member`. Its bar's clause (c) checks gossip and ring sync only.
 - Chose: `touch ralph/STOP` at the boundary (the gate row's session was 30 s old, nothing committed, tree clean; supervisor logged `operator STOP — leaving it stopped`, no resolution dispatched). The row now opens with STAMP BEFORE YOU REFUSE: the five builders take the header pair, one test each, one gate-level test over the routes they hit, a PLANT that drops one stamp, and a §6 stop — not a `perimeter` default — if a builder cannot be reached. No bar text changed.
 - Because: the operator's standing criterion (A54) is that security must not cost the 0→1 path, and a mesh created without `--encrypt` is the 0→1 path. A gate that breaks corpus pull on it while its bar reads PASSED is the exact failure ARCH 5 and the bar's own goodhart line describe. TO THE OPERATOR, not decided: whether `tg-stranger-refused-9742` clause (c) should name these callers too; the row tests them either way.
+**A67 · 2026-09-21 · files over their size ceiling · OPERATOR (standing direction)** — this commit
+- Needed: three audits in two days (`REVIEW-audit-rr-2` A51, `REVIEW-audit-rg` A59, `REVIEW-audit-mp` A63) and the seat's own reports each carried "the arch-gate approach band — accept, trim or re-pin" to the operator as a decision, and `8885071db` just disclosed another (`setup_config.rs` 3509 against 3495) "for the audit". Operator: "Why do I need to decide what to do when files go over the limit? The answer is never to repin."
+- Chose (operator): a file over its ceiling is SPLIT by whoever pushed it over, in the same piece of work; never re-pinned; never an operator question. Made structural, not remembered: `AGENTS.md` §Definition of done says it ahead of the re-pin recipe, which now reads as being for OTHER ratchets; the running queue's PROMPT gains it as a hard rule with the command to run before a unit commit, and its CHARTER says a package offering "accept, trim or re-pin" is wrongly written. Measured today (`cargo xtask arch-gate`, exit 1): five files GREW past slack — `setup_config.rs` 3445→3509, `bootstrap.rs` 2857→2910, `daemon.rs` 5683→5748, `rpc_warm_http.rs` 1214→1352, `server.rs` 1259→1330 — and six entered the 800-1200 band since `origin/main`: `guest_door.rs` 412→1077, `gossip_integration.rs` 557→1157, `routes_rail.rs` 483→855, `rail-core/src/tests.rs` 765→871, `mesh_media.rs` 686→842, `rail_e2e/main.rs` 759→824. Two split rows go into the threat-gaps queue ahead of its demo row, so the room regression runs over the refactor; added at the next row boundary, because a worker holds the state file now.
+- Because: the gate's own message has always said "Trim or split (ARCH §3.1)"; what turned it into a question was a documented escape hatch and charters that filed file size under "baselines are the operator's". A51, A59 and A63's arch-gate items are withdrawn as operator decisions by this entry. The seat was the one re-presenting them.
 
 **A44 · 2026-09-19 · rr-2-gossip-claim-one-decider · director (supervisor resolution, attempt 1)** — commit: this one
 - Needed: A43 wrote the row on the premise that a SECOND site builds the claim gossip sends. The worker measured the send path and found one, stopped at the premise check without improvising a target, and asked whether to rewrite or strike the row.
@@ -7741,5 +7745,14 @@ Also accepted from the row, unchanged: tg-3's drop falsifier and the mesh-secret
 <details>
 
 Not verified by the seat: the five sites are the worker's classing in `530db2bb2`; the amended row re-measures them. The unstamped-by-design sites it listed (inference and status probes rewritten to `:9741`, iroh-only RPC and media, gossip's body-borne proof) are accepted as classed.
+
+</details>
+
+
+## A67 · 2026-09-21 — over the limit means split
+
+<details>
+
+Not covered by this direction and still the operator's: the api-gate snapshot re-pin (a public-API surface, not a file size) and size-gate's 76 unbaselined keys (a baseline that does not know the key set). The seat will ask about those separately rather than assume the same answer.
 
 </details>

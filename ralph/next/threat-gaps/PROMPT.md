@@ -140,6 +140,14 @@ Never print a whole log into the session; grep it. A PLANT that stays green is
 - No `Co-Authored-By` line and no assistant name in any commit.
 - Never `--update-baseline` a ratchet; never add an `[[exception]]` row or widen
   an `except` list unless the row names that exact row.
+- A FILE YOU PUSH OVER ITS SIZE CEILING IS YOURS TO SPLIT, IN THIS UNIT (operator
+  direction 2026-09-21, ledger A67; `AGENTS.md` §Definition of done). Before your
+  unit commit run `scripts/ralph-check.sh arch` and read its `size:` lines. It
+  exits non-zero today for files earlier units pushed over; those have their
+  own split rows, so judge only the files THIS unit touched. If a file this unit touched "GREW past slack" or newly
+  sits in the 800-1200 band, move what you added into a sibling file, behaviour
+  preserved, in its own commit before the unit commit. It is never §6, never a
+  line in a package, never "the audit's", and never a re-pin.
 - Never build `--release`. Never run bare `cargo build`/`test`/`check`/`clippy`
   — only the §5 commands, which take the cargo lock.
 - Never edit `sovereign/ARCH_PRINCIPLES.md`, `AGENTS.md`, `.claude/`,

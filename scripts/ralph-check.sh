@@ -35,6 +35,7 @@ case "$check" in
     test)    [ -n "${1:-}" ] || { echo "usage: ralph-check.sh test <crate>" >&2; exit 2; }
              run test 8 ./scripts/with-cargo-lock.sh ./scripts/sovereign-test.sh --human --package "$1" ;;
     layer)   run layer 5 bash -c 'cd corpus-engine && ../scripts/with-cargo-lock.sh cargo xtask layer-gate' ;;
+    arch)    run arch 5 bash -c 'cd corpus-engine && ../scripts/with-cargo-lock.sh cargo xtask arch-gate' ;;
     docs)    run docs 5 bash -c 'cd corpus-engine && ../scripts/with-cargo-lock.sh cargo xtask docs-gate' ;;
     toml)    python3 scripts/co-lineage.py list >/dev/null; rc=$?; echo "exit=$rc"; exit "$rc" ;;   # the registry loader is the one decider; it refuses every campaign when any one is malformed
     node)    [ -n "${1:-}" ] || { echo "usage: ralph-check.sh node <dir>" >&2; exit 2; }
@@ -71,5 +72,5 @@ case "$check" in
              echo "exit=$rc"; tail -n 14 target/ralph/demo.log; rm -f target/ralph/demo.pid; exit "$rc" ;;
     testall) run testall 12 ./scripts/with-cargo-lock.sh ./scripts/sovereign-test.sh --human ;;
     prepush) run prepush 20 ./scripts/pre-push.sh ;;
-    *) echo "usage: scripts/ralph-check.sh clean|lint|test <crate>|layer|toml|docs|node <dir>|demo [script]|demo-bg [script]|demo-wait|testall|prepush" >&2; exit 2 ;;
+    *) echo "usage: scripts/ralph-check.sh clean|lint|test <crate>|layer|arch|toml|docs|node <dir>|demo [script]|demo-bg [script]|demo-wait|testall|prepush" >&2; exit 2 ;;
 esac

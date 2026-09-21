@@ -91,13 +91,16 @@ wrong resolution.
   one-host run, and never by blocking a machine row on them.
 - Daemon restarts route through the seat. The deployed daemon is never stopped
   or restarted from this queue; a row that needs it writes the package.
-- Never `git push`. Never `--update-baseline` on any ratchet: `server.rs` is
-  already past its arch-gate pin (1312 against 1259, audit `615cec34f`), so new
-  code goes beside it, and an accepted raise is the operator's.
+- Never `git push`. Never `--update-baseline` on any ratchet. A file over its
+  size ceiling is SPLIT by the unit that pushed it over and is NEVER taken to the
+  operator (operator direction 2026-09-21, ledger A67: "The answer is never to
+  repin"). A package that offers the operator "accept, trim or re-pin" for a
+  file size is wrongly written; resolve it by splitting, or by adding a split
+  row, and say so in the ledger. There is no such thing as an accepted raise.
 - The rr-1 baseline, the six rr-2 bars, the five `rg-*` bars and the four
   `mp-*` bars are regression gates; their campaign files are never edited from
   this queue.
 - Ledger entries go AFTER the previous one in `ralph/DECISIONS.md` (the last is
-  A66, which sits above the older A44 block — insert below A66, not at the end
+  A67, which sits above the older A44 block — insert below A67, not at the end
   of the ledger list), with the appendix of the same number at EOF. Next id:
-  **A67**.
+  **A68**.
