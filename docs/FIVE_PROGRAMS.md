@@ -538,12 +538,43 @@ plus two cli-mesh fallbacks.
       `daemon_variant_census.rs:214`, desktop `attach_construction_census`)
       must move/update with them.
 
-### The cli-llm split — 23 edges, unblocked by the de-embed
+### The cli-llm split — 24 edges; the partition is MEASURED (scouts, 2026-09-21)
 
-- [ ] 60.6k lines of bench, 44.7k of ingest, 18.8k of svrn in one crate.
-- [ ] The blocker was always `chat_cmd/bootstrap.rs`'s `build_session`, which
-      §2 says should be a dialled URL — after phase 4 it IS a dial, so the
-      split stops needing a new mechanism and becomes `git mv` waves.
+- [x] Inventory + dep matrix + dispatch shape measured (3 read-only scouts at
+      3a59e08da). Three groups, sized: **bench 60,519 lines** (bench_cmd,
+      eval_cmd, inner_chaos, voice_eval, search_gym_cmd, knowledge_gym_cmd,
+      gym_judge, quality_lane_cmd), **ingest 45,600** (enrich_cmd, corpus_cmd +
+      5 corpus_* files + corpus_resolve, atlas_cmd, meta_atlas_cmd,
+      pipeline_cmd, recipe_cmd/{.rs,/}, recipe_agent_cmd, recipe_agent_live_trial,
+      workflow_cmd, worker_pod_provider, alignment_cmd), **svrn 16,975**
+      (chat_cmd, awareness_cmd, mcp_cmd, mcp_demo_server, govern_cmd, turn_sink,
+      newsworthy, mobile, reading_diag, proxy, portfolio, router_*, lib/main).
+- [ ] Mechanically: each moving group becomes `[lib] + [[bin]]` (the
+      `sovereign-agent-bench` precedent), and the DISPATCHER (sovereign-cli,
+      `main.rs:877` and `:1204`) get a sibling exec module (`bench_bin::exec`,
+      `ingest_bin::exec`) — the per-cluster `llm_bin`/`dev_bin` pattern. Do NOT
+      make bin-only: the moving trees link each other and staying trees link
+      moving helpers (below).
+- [ ] Entry points a new crate re-exposes: `run_bench(&[String]) -> i32`
+      (bench_cmd/mod.rs:173), `run_enrich` (enrich_cmd/mod.rs:188),
+      `run_corpus` (corpus_cmd/mod.rs:38), `run_govern` (govern_cmd/mod.rs:65).
+- [ ] The seams that block a clean cut, by name: `chat_cmd::bootstrap`
+      (`build_session`, `ChatSession`, `build_inference`) + `chat_cmd::config`
+      (`parse_globals`) are used by ALL THREE groups (32 files) — the heaviest
+      seam; `eval_cmd::{bank,runner}` used by ingest+bench; `bench_cmd →
+      enrich_cmd` (atlas.rs:40, all.rs:31, adjudicate.rs:28, obsidian.rs:278,
+      scaffold.rs:22, governance.rs:212) forces bench-crate → ingest-crate;
+      `bench_cmd → govern_cmd::ask` (governance.rs:119); staying→moving helpers
+      that are re-exports of leaves (`enrich_cmd::paths` →
+      `sovereign-enrichment-catalog::paths`; `enrich_cmd::inference_client` →
+      `sovereign-enrichment-build`) repoint, they do not move.
+- [ ] Deps that die with the split: `sovereign-eval`, `sovereign-gliner`,
+      `oplog`, `sovereign-code`; six declared deps already have ZERO refs
+      (`commonwealth-{media,rail,transport}`, `oicp-types`, `sovereign-meshapp`,
+      `sovereign-work-atlas`) — drop them first, that is free.
+- [ ] Verification: `boundary-gate`'s own count line is the only burn-down
+      number; `scripts/evidence-verdict.py <commit>` for any test-evidence
+      claim. Commit bodies quote the script output, never an interpretation.
 
 ### The ports — independent of each other
 
