@@ -291,11 +291,18 @@ mod ledger {
         )
     }
 
+    /// The step's two return values: the ledger it accounts with, and the
+    /// walk echo it carries out. Both, because a test that asserts on one and
+    /// not the other cannot tell "the walk reached nothing" from "the echo
+    /// lost it".
     async fn ledger_over(
         rt: &Runtime,
         provider: Arc<dyn AtlasContextProvider>,
         corpus: &str,
-    ) -> crate::runtime::retrieval_ledger::StepLedger {
+    ) -> (
+        crate::runtime::retrieval_ledger::StepLedger,
+        Option<crate::runtime::AtlasWalkEcho>,
+    ) {
         let lane = crate::runtime::Lane {
             atlas_context: Some(provider),
             ..crate::runtime::Lane::none()
@@ -307,19 +314,23 @@ mod ledger {
         // late append — but the sink has to exist for the walk to have
         // somewhere to put them.
         let mut summaries = Vec::new();
+        let mut walk = None;
         let scope = [corpus.to_string()];
-        rt.apply_atlas_grounding(
-            "what does alpha say about beta",
-            &vec_for("what does alpha say about beta"),
-            &mut chunks,
-            &mut summaries,
-            "test",
-            None,
-            Some(&scope),
-            None,
-            &lane,
-        )
-        .await
+        let ledger = rt
+            .apply_atlas_grounding(
+                "what does alpha say about beta",
+                &vec_for("what does alpha say about beta"),
+                &mut chunks,
+                &mut summaries,
+                &mut walk,
+                "test",
+                None,
+                Some(&scope),
+                None,
+                &lane,
+            )
+            .await;
+        (ledger, walk)
     }
 
     /// THE STEP'S BODY REACHES A WIKI-CLASS STORE — and says so in a value.
@@ -342,7 +353,8 @@ mod ledger {
         mgr.init_from_cache().await;
         let rt = runtime();
 
-        let served = ledger_over(&rt, mgr.clone() as Arc<dyn AtlasContextProvider>, "wikish").await;
+        let (served, _) =
+            ledger_over(&rt, mgr.clone() as Arc<dyn AtlasContextProvider>, "wikish").await;
         let considered = served.considered.expect("an injector reports `considered`");
         assert!(
             considered > 0,
@@ -362,7 +374,7 @@ mod ledger {
 
         // The failing input, run: the SAME fixture through a provider that can
         // only serve atom-class stores refuses, and refuses to zero.
-        let refused = ledger_over(
+        let (refused, _) = ledger_over(
             &rt,
             Arc::new(AtomClassOnly(mgr)) as Arc<dyn AtlasContextProvider>,
             "wikish",
@@ -374,6 +386,171 @@ mod ledger {
             "an atom-class-only provider has no store for a wiki corpus, so \
              the step falls to bag-of-atoms over an empty bag. If this is \
              non-zero the test above is no longer discriminating."
+        );
+    }
+
+    /// THE ECHO CARRIES THE PATH, NOT JUST THE COUNTS.
+    ///
+    /// `considered > 0` (the test above) says the walk produced candidates. It
+    /// says nothing about WHICH atoms it reached, and a study of ontology reach
+    /// is a join on atom ids — a walk whose echo carries an empty `nodes` is
+    /// indistinguishable from no walk at all on the only surface that can
+    /// measure it (`svrn eval run` emits no `sovereign_core` tracing, so the
+    /// `atlas-grounding: fetch ledger` event is dark there).
+    ///
+    /// The fixture's fetch finds nothing — no corpus index behind it — so
+    /// `added` is 0 here on purpose. The path under test is upstream of the
+    /// fetch, which is exactly why it has to be its own assertion: build the
+    /// echo with `nodes: vec![]` and every count in it still reads correct.
+    #[tokio::test]
+    async fn atlas_walk_echo_carries_atom_ids_and_subtypes() {
+        let tmp = tempfile::tempdir().unwrap();
+        write_wiki_atlas(tmp.path(), "wikish").await;
+        let mgr = manager(tmp.path());
+        mgr.init_from_cache().await;
+        let rt = runtime();
+
+        let (served, walk) =
+            ledger_over(&rt, mgr.clone() as Arc<dyn AtlasContextProvider>, "wikish").await;
+        let considered = served.considered.expect("an injector reports `considered`");
+        assert!(
+            considered > 0,
+            "the walk must have run for the echo to be worth asserting on; \
+             considered {considered}"
+        );
+
+        let walk = walk.expect(
+            "a walk that ran must carry an echo. `None` is reserved for the \
+             walk that did NOT run — feature off, no provider, no embedding, \
+             or no graph layer — and collapsing the two makes 'reached \
+             nothing' unreadable.",
+        );
+        assert!(
+            !walk.nodes.is_empty(),
+            "the echo must carry the evidence PATH, not only its counts: a \
+             walk that considered {considered} candidates reached the atoms \
+             that produced them. counts were seeds={} edges={} reached={} \
+             requests={}",
+            walk.seeds,
+            walk.edges_followed,
+            walk.nodes_reached,
+            walk.requests
+        );
+        // Against the FIXTURE's own atoms, not against the echo's self-report
+        // (ARCH §5: assert on something the subject cannot author). `atom_id`
+        // merely being non-empty is satisfied by any literal the echo builder
+        // chooses — which is the shape that let the wrong-slot guard pass on
+        // an SSE `model` field the client had supplied. These two ids and
+        // titles come out of the store `write_wiki_atlas` wrote.
+        for n in &walk.nodes {
+            let expected_id =
+                corpus_engine::enrichment::atlas::wiki_store::wiki_atom_id(&n.name, "wikish");
+            assert_eq!(
+                n.atom_id, expected_id,
+                "the echoed atom id must be the one the fixture's store minted \
+                 for `{}` — it is the join key a reach study is made of, and an \
+                 id the echo authored joins to nothing. node {n:?}",
+                n.name
+            );
+            assert!(
+                ["Alpha", "Beta"].contains(&n.name.as_str()),
+                "the fixture wrote exactly two articles; a walk reporting any \
+                 other name did not read that store. node {n:?}"
+            );
+            assert_eq!(
+                n.kind, "entity",
+                "the wiki store builds Entity atoms, so the echoed kind is \
+                 `AtomType::Entity.label()`. node {n:?}"
+            );
+            assert_eq!(
+                n.subtype,
+                corpus_engine::enrichment::atlas::wiki_store::WIKI_ENTITY_TYPE,
+                "the echoed subtype must be the fixture's declared entity type \
+                 — the field a declared-ontology study groups by. node {n:?}"
+            );
+        }
+    }
+
+    /// A DEEPQUERY TURN THAT WAS WALKED SAYS SO.
+    ///
+    /// `deep_pipeline` has carried `atlas_grounding` all along (test 1 above),
+    /// and until 2026-09-21 `prepare_knowledge_context` destructured the
+    /// pipeline state with `..` and let the echo fall through it. Every
+    /// DeepQuery and SimpleQuery message therefore persisted no `atlas_walk`
+    /// key, and the ei7 pod pilot read four walked whole-story turns as
+    /// unwalked (`research/ontology-retrieval/pod/20260921T035355Z/`).
+    ///
+    /// Same fixture and same assertion target as the echo test above: the
+    /// names come out of the store `write_wiki_atlas` wrote, not out of the
+    /// echo's own report.
+    #[tokio::test]
+    async fn a_walked_deep_query_turn_carries_the_echo_out_of_retrieval() {
+        let tmp = tempfile::tempdir().unwrap();
+        write_wiki_atlas(tmp.path(), "wikish").await;
+        let mgr = manager(tmp.path());
+        mgr.init_from_cache().await;
+        let rt = Runtime::new(crate::runtime::RuntimeParts::new(
+            Arc::new(FixedEmbed),
+            Box::new(crate::stubs::PassthroughRouter),
+            Box::new(crate::stubs::NoOpPlanner),
+            Arc::new(ToolRegistry::new()),
+            Arc::new(sovereign_store::memory::InMemoryStateStore::new()),
+            Arc::new(SkillRegistry::new()),
+            Arc::new(crate::executor::AutoApprovalChannel),
+            crate::types::InferenceConfig::default(),
+            crate::runtime::lane::LaneSources {
+                atlas_context: Some(mgr.clone() as Arc<dyn AtlasContextProvider>),
+                ..crate::runtime::lane::LaneSources::none()
+            },
+        ));
+        let context = crate::types::ConversationContext {
+            conversation: crate::types::Conversation {
+                id: "conv-deep-echo".to_string(),
+                title: None,
+                messages: Vec::new(),
+                created_at: 0,
+                updated_at: 0,
+                version: 0,
+                deleted_at: None,
+                skill_id: None,
+                enabled_corpora: Some(vec!["wikish".to_string()]),
+                searched_sources: None,
+            },
+            memories: Vec::new(),
+            working_memory: None,
+            installed_corpora: vec![],
+            corpus_ceiling: None,
+            document_session: None,
+            topic_context: None,
+            knowledge_view_digests: None,
+            temporal_tensions: Vec::new(),
+            compacted_history: None,
+            history_retrieval_hits: None,
+            tool_dossier: None,
+            intent_policy: None,
+        };
+
+        let kc = rt
+            .prepare_knowledge_context(
+                "what does alpha say about beta",
+                &context,
+                &crate::types::Intent::DeepQuery,
+                None,
+            )
+            .await;
+
+        let walk = kc.atlas_walk.expect(
+            "the deep pipeline ran `atlas_grounding` over a store it can walk; \
+             `None` here is the echo being dropped between the pipeline state \
+             and the `KnowledgeContext`, not a walk that did not run",
+        );
+        assert!(
+            !walk.nodes.is_empty()
+                && walk
+                    .nodes
+                    .iter()
+                    .all(|n| ["Alpha", "Beta"].contains(&n.name.as_str())),
+            "the carried echo must be the walk over the fixture's two articles. {walk:?}"
         );
     }
 }

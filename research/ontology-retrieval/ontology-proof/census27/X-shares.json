@@ -1,0 +1,129 @@
+{
+ "service": "X",
+ "list": "shares",
+ "source": "spikes/fineprint-data/ota-pga-versions/X/Privacy Policy.md",
+ "verdict": "qualifies",
+ "headings": [
+  {
+   "line": 165,
+   "text": "3\\. Sharing Information",
+   "span_ends_line": 212
+  }
+ ],
+ "items": [
+  {
+   "item": "With the general public",
+   "line": 172,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "With other X users",
+   "line": 174,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "With partners",
+   "line": 179,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "With service providers",
+   "line": 183,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "With advertisers",
+   "line": 185,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Third-party content and integrations",
+   "line": 187,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Third-party collaborators",
+   "line": 189,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Through our APIs",
+   "line": 191,
+   "from": "bold-lead-in"
+  }
+ ],
+ "dropped": [
+  {
+   "item": "Your interactions with X content of other users, such as replies, and people you follow",
+   "line": 176,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Content you send to a specific X user, such as through Direct Messages. Please keep in mind that if you’ve shared information like Direct Messages or protected posts with someone else who accesses X through a third-party service, the information may be shared with the third-party service",
+   "line": 177,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "3.2 With third parties and third-party integrations",
+   "line": 181,
+   "from": "bold-lead-in",
+   "rule": "prose"
+  },
+  {
+   "item": "3.3 When required by law, to prevent harm, or in the public interest",
+   "line": 193,
+   "from": "bold-lead-in",
+   "rule": "prose"
+  },
+  {
+   "item": "comply with a law, regulation, legal process, or governmental request",
+   "line": 197,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "protect the safety of any person, protect the safety or integrity of our platform, including to help prevent spam, abuse, or malicious actors on our services",
+   "line": 198,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "explain why we have removed content or accounts from our services",
+   "line": 199,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "protect our rights or property, or the rights or property of those who use our services",
+   "line": 201,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "3.5 As a result of a change in ownership",
+   "line": 209,
+   "from": "bold-lead-in",
+   "rule": "prose"
+  },
+  {
+   "item": "3.1 When you post and share",
+   "line": 170,
+   "from": "bold-lead-in",
+   "rule": "numbered"
+  },
+  {
+   "item": "address fraud, security, or technical issues; or",
+   "line": 200,
+   "from": "list-item",
+   "rule": "dangling"
+  },
+  {
+   "item": "3.4 With our affiliates",
+   "line": 205,
+   "from": "bold-lead-in",
+   "rule": "numbered"
+  }
+ ]
+}

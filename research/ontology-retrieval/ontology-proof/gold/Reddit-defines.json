@@ -1,0 +1,21 @@
+{
+ "service": "Reddit",
+ "list": "defines",
+ "source": "spikes/fineprint-data/ota-pga-versions/Reddit/Developer Terms.md",
+ "headings": [],
+ "items": [
+  {
+   "item": "IP",
+   "line": 158,
+   "from": "definition"
+  },
+  {
+   "item": "IP Rights",
+   "line": 160,
+   "from": "definition"
+  }
+ ],
+ "dropped": [],
+ "verdict": "absent",
+ "reason": "2 items under 0 matching heading(s); a list needs 5"
+}

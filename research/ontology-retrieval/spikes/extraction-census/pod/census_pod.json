@@ -1,0 +1,73 @@
+{
+ "spike-fineprint-census": {
+  "atoms": 1239,
+  "edges": 1416,
+  "types": {
+   "organization": 57,
+   "agreement": 35,
+   "service": 26,
+   "work": 23,
+   "person": 83,
+   "data_type": 56,
+   "recipient": 22,
+   "concept": 22,
+   "defined_term": 68,
+   "purpose": 24,
+   "place": 9,
+   "institution": 2,
+   "obligation": 320
+  },
+  "deontic": {
+   "unset": 312,
+   "forbid": 7,
+   "require": 1
+  },
+  "service_filled": {
+   "data_type": "46/56",
+   "recipient": "16/22",
+   "purpose": "16/24"
+  }
+ },
+ "spike-fineprint-census-pod": {
+  "atoms": 3775,
+  "edges": 4650,
+  "types": {
+   "organization": 146,
+   "agreement": 100,
+   "defined_term": 281,
+   "service": 84,
+   "place": 20,
+   "person": 165,
+   "recipient": 54,
+   "data_type": 139,
+   "work": 46,
+   "concept": 60,
+   "purpose": 15,
+   "institution": 1,
+   "obligation": 1221
+  },
+  "deontic": {
+   "unset": 1175,
+   "forbid": 21,
+   "require": 13,
+   "permit": 12
+  },
+  "service_filled": {
+   "recipient": "39/54",
+   "data_type": "94/139",
+   "purpose": "14/15"
+  }
+ },
+ "pod_Spotify": {
+  "data_type": [],
+  "recipient": []
+ },
+ "pod_Reddit": {
+  "data_type": [],
+  "recipient": []
+ },
+ "pod_LinkedIn": {
+  "data_type": [],
+  "recipient": []
+ }
+}

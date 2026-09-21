@@ -1,0 +1,49 @@
+{
+ "service": "BeReal",
+ "list": "collects",
+ "source": "spikes/fineprint-data/ota-pga-versions/BeReal/Privacy Policy.md",
+ "verdict": "under-5",
+ "headings": [
+  {
+   "line": 10,
+   "text": "1\\. Information we process about you",
+   "span_ends_line": 55
+  },
+  {
+   "line": 28,
+   "text": "1.2. Data we collect when you use our App or visit our website",
+   "span_ends_line": 43
+  },
+  {
+   "line": 56,
+   "text": "2\\. How we use information we receive about you",
+   "span_ends_line": 86
+  },
+  {
+   "line": 194,
+   "text": "9.1. Personal Information We Collect",
+   "span_ends_line": 211
+  }
+ ],
+ "items": [],
+ "dropped": [
+  {
+   "item": "1.2. Data we collect when you use our App or visit our website",
+   "line": 28,
+   "from": "sub-heading",
+   "rule": "prose"
+  },
+  {
+   "item": "1.3. Information about you provided by third parties",
+   "line": 44,
+   "from": "sub-heading",
+   "rule": "prose"
+  },
+  {
+   "item": "1.1. Data that you provide to us",
+   "line": 15,
+   "from": "sub-heading",
+   "rule": "numbered"
+  }
+ ]
+}

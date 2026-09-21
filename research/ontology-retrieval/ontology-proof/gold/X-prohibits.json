@@ -1,0 +1,77 @@
+{
+ "service": "X",
+ "list": "prohibits",
+ "source": "spikes/fineprint-data/ota-pga-versions/X/Advertising Content Policy.md",
+ "headings": [
+  {
+   "line": 44,
+   "text": "Prohibited Content",
+   "span_ends_line": 52
+  },
+  {
+   "line": 2000,
+   "text": "Prohibited Content",
+   "span_ends_line": 2020
+  }
+ ],
+ "items": [
+  {
+   "item": "Deceptive and Fraudulent Content",
+   "line": 48,
+   "from": "list-item"
+  },
+  {
+   "item": "Prohibited Content for Minors",
+   "line": 49,
+   "from": "list-item"
+  },
+  {
+   "item": "Unacceptable Content",
+   "line": 50,
+   "from": "list-item"
+  },
+  {
+   "item": "Weapons and Weapon Accessories",
+   "line": 51,
+   "from": "list-item"
+  },
+  {
+   "item": "Cigarettes",
+   "line": 2006,
+   "from": "list-item"
+  },
+  {
+   "item": "Cigars",
+   "line": 2008,
+   "from": "list-item"
+  },
+  {
+   "item": "Pipe Tobacco",
+   "line": 2010,
+   "from": "list-item"
+  },
+  {
+   "item": "Roll-your-own tobacco",
+   "line": 2012,
+   "from": "list-item"
+  },
+  {
+   "item": "Chewing Tobacco",
+   "line": 2014,
+   "from": "list-item"
+  },
+  {
+   "item": "Snus",
+   "line": 2016,
+   "from": "list-item"
+  },
+  {
+   "item": "Dip",
+   "line": 2018,
+   "from": "list-item"
+  }
+ ],
+ "dropped": [],
+ "verdict": "built",
+ "reason": "11 published items, 0 prose dropped"
+}

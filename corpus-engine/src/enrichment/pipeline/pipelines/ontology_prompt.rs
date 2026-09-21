@@ -346,18 +346,32 @@ fn family_shape(a: &AttrDecl) -> String {
 /// The is-about link is the whole point of `subject = "coin"`. A claim
 /// without it cannot be reached from the thing it discusses, which is the
 /// question a declared claim type exists to answer ("who disputes this coin's
-/// dating"). Empty unless a claim type declares a subject, so a recipe that
-/// declares none pays nothing.
+/// dating"). Empty unless a claim type declares a subject or a deontic mode,
+/// so a recipe that declares neither pays nothing.
 fn render_subject_shape(policies: &OntologyPolicies, index: &TypeIndex<'_>) -> String {
-    let Some(t) = policies.claim_types().find(|t| t.subject.is_some()) else {
+    // A declared `deontic` is the same defect in the same slot: the mode is
+    // in the schema, absent from the only worked example, and filled on 46 of
+    // 1,221 obligations (spike 3, 2026-09-19). So a claim type that declares
+    // either facet earns the example — a deontic recipe that declares no
+    // subject got none at all.
+    let Some(t) = policies
+        .claim_types()
+        .find(|t| t.subject.is_some() || !t.deontic.is_empty())
+    else {
         return String::new();
     };
-    let about = t.subject.as_deref().unwrap_or_default();
     // The claim example carries its `attributes` object for the same reason
     // the entity example does: an example without one is an instruction to
-    // leave it out. `grade` rides in the same bag as the declared attributes
-    // (`set_attribute_property`), so it is shown in the same bag.
+    // leave it out. `deontic` and `grade` ride in the same bag as the
+    // declared attributes (`set_attribute_property`), in the order that
+    // function inserts them, so prompt and schema agree on generation order.
     let mut pairs = attribute_pairs(&index.effective_attributes(&t.name));
+    if let Some(first) = t.deontic.first() {
+        if !pairs.is_empty() {
+            pairs.push_str(", ");
+        }
+        pairs.push_str(&format!("\"deontic\": \"{}\"", wire_name(first)));
+    }
     if !t.grades.is_empty() {
         if !pairs.is_empty() {
             pairs.push_str(", ");
@@ -368,6 +382,20 @@ fn render_subject_shape(policies: &OntologyPolicies, index: &TypeIndex<'_>) -> S
         String::new()
     } else {
         format!("\x20     \"attributes\": {{ {pairs} }}\n")
+    };
+    // The heading, the lead and the closing paragraph are about the is-about
+    // link and nothing else, so a type that declares no subject renders the
+    // example without them rather than asserting a link it never declared.
+    let Some(about) = t.subject.as_deref() else {
+        return format!(
+            "\n## What a claim looks like\n\n\
+             A `{name}` sketch carries its declared keys:\n\n\
+             \x20   {{ \"content\": <text>, \"claim_kind\": \"{name}\",\n\
+             \x20     \"attributed_to\": <text>, \"anchor\": <text>,\n\
+             {attributes}\
+             \x20   }}\n",
+            name = t.name,
+        );
     };
     format!(
         "\n## What a claim is about\n\n\
@@ -634,6 +662,65 @@ mod tests {
         assert!(
             block.contains("\"grade\": <one of the grades above>"),
             "and the reserved key that rides in the same bag"
+        );
+    }
+
+    /// The deontic mode is the directive's force, and it was in the schema,
+    /// absent from the worked example, and filled on 46 of 1,221 obligations
+    /// (spike 3, 2026-09-19) — the same defect
+    /// [`no_worked_example_omits_the_attributes_object`] pins for the bag as
+    /// a whole. So a declared mode is SHOWN in the example and REQUIRED in
+    /// the bag, and a claim type that declares one earns an example even with
+    /// no `subject` to hang it on.
+    ///
+    /// Falsifier: drop the `deontic` push from the example and the prompt
+    /// stops naming the slot it is asking the model to fill.
+    #[test]
+    fn deontic_is_required_and_shown_when_declared() {
+        let governance = crate::recipe_templates::policies("governance")
+            .expect("governance is a shipped ontology template");
+
+        let block = render_declared_types(&governance);
+        assert!(
+            block.contains("\"deontic\": \"require\""),
+            "the example shows the type's first declared mode: {block}"
+        );
+        let bag =
+            &phase1_schema_for(&governance)["$defs"]["claim_sketch"]["properties"]["attributes"];
+        assert!(
+            bag["properties"].get("deontic").is_some(),
+            "the schema still offers the slot: {bag}"
+        );
+        assert_eq!(
+            bag["required"],
+            serde_json::json!(["deontic"]),
+            "and requires it by name, so an opened bag cannot omit it: {bag}"
+        );
+
+        // A declared mode with no `subject` still earns the example — before
+        // this it got none at all, so the slot was named nowhere.
+        let mut no_subject = governance.clone();
+        for t in &mut no_subject.shape.types {
+            t.subject = None;
+        }
+        let block = render_declared_types(&no_subject);
+        assert!(
+            block.contains("## What a claim looks like"),
+            "the example renders on the deontic alone: {block}"
+        );
+        assert!(block.contains("\"deontic\": \"require\""));
+        assert!(
+            !block.contains("\"subject\":"),
+            "and claims no is-about link the recipe never declared: {block}"
+        );
+
+        // A recipe declaring no mode pays nothing, in either surface.
+        let plain = numismatics();
+        assert!(!render_declared_types(&plain).contains("\"deontic\""));
+        assert!(
+            phase1_schema_for(&plain)["$defs"]["claim_sketch"]["properties"]["attributes"]
+                .get("required")
+                .is_none()
         );
     }
 

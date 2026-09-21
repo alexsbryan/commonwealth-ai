@@ -28,7 +28,9 @@ use serde::Serialize;
 use super::OntologyConfig;
 use crate::error::{Error, Result};
 use crate::recipe_parsing::translate_parse_error;
-use understanding_vocab::ontology::decl::{Force, OntologyV1, TypeKind};
+use understanding_vocab::ontology::decl::{
+    Force, OntologyV1, TypeKind, MAX_ENTITIES_PER_SECTION, MIN_ENTITIES_PER_SECTION,
+};
 use understanding_vocab::ontology::OntologyPolicies;
 
 // ── The trait and its registry ──────────────────────────────────────────────
@@ -163,6 +165,7 @@ const V1_KEYS: &[&str] = &[
     "vocabulary",
     "must_not",
     "types",
+    "max_entities_per_section",
     "voices",
     "change",
     "tension",
@@ -197,6 +200,19 @@ impl OntologyLanguage for V1 {
                 t.name,
                 wire_names(&Force::ALL)
             )));
+        }
+        // The entity cap is a number the grammar enforces on the model, so an
+        // out-of-range one is refused here rather than clamped at extraction
+        // (§18.3): a clamp would run a corpus under a cap its author never
+        // wrote and never hears about.
+        if let Some(n) = v1.max_entities_per_section {
+            if !(MIN_ENTITIES_PER_SECTION..=MAX_ENTITIES_PER_SECTION).contains(&n) {
+                return Err(Error::Recipe(format!(
+                    "[enrichment.ontology] max_entities_per_section = {n} is outside \
+                     {MIN_ENTITIES_PER_SECTION}..={MAX_ENTITIES_PER_SECTION}. Omit the key \
+                     to take the shipped Phase-1 cap."
+                )));
+            }
         }
         Ok(v1.into_policies())
     }

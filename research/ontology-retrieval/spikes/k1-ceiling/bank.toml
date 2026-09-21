@@ -1,0 +1,10 @@
+[bank]
+name = "spike-k1-ceiling"
+corpus = "enron-sample-multi-wide"
+description = "Feasibility spike 1 (PRE-REG): how many members of a 40-member set reach the passages and the answer. expected_facts = the 40 highest-degree institution atoms. NOT a study bank."
+
+[[questions]]
+id = "k1_institutions"
+category = "K1"
+question = "List every company and organization that appears in this email collection. Be exhaustive: name as many distinct ones as the evidence supports."
+expected_facts = ["El Paso", "Los Angeles Department of Water and Power", "Williams Bal of PV", "Dynegy", "Edison International", "George W. Bush Administration Special Energy Task Force", "Prebon West", "Pacific Gas and Electric", "Sempra", "FERC", "Calpine", "Duke", "Morgan", "California Department of Water Resources", "Mirant", "Amerex", "Wisconsin Power & Light Co.", "PacifiCorp", "California ISO", "CalPX", "Allegheny", "Public Utilities Commission", "Dominion Resources Inc.", "GE Power Systems' Energy Services unit", "Bonneville Power Administration", "PG&E Corp", "Midcoast Energy Resources Inc.", "BLOOMBERG", "NewPower Holdings", "Xcel Energy Inc.", "FPL Group Inc.", "Exelon Energy Company", "Sierra Pacific Resources", "Entergy Corp.", "Chase", "Datacentric Broadband", "Power Marketing Association", "Smith Graham & Company", "Cantabrico", "ERMS IT"]

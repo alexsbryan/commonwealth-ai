@@ -1,0 +1,72 @@
+{
+ "service": "Tumblr",
+ "list": "shares",
+ "source": "spikes/fineprint-data/ota-pga-versions/Tumblr/Privacy Policy.md",
+ "verdict": "qualifies",
+ "headings": [
+  {
+   "line": 98,
+   "text": "With Whom Your Information Is Shared",
+   "span_ends_line": 132
+  }
+ ],
+ "items": [
+  {
+   "item": "Information Shared with the Public Through the Services",
+   "line": 107,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Information Shared Between the Services",
+   "line": 111,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Information You Share with Third Party Services",
+   "line": 113,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Information Disclosed Pursuant to Business Transfers",
+   "line": 119,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Information Shared with Other Third Parties",
+   "line": 131,
+   "from": "bold-lead-in"
+  }
+ ],
+ "dropped": [
+  {
+   "item": "Information Shared with and Received from our Corporate Parents",
+   "line": 103,
+   "from": "bold-lead-in",
+   "rule": "prose"
+  },
+  {
+   "item": "Information Shared with Our Agents in Order to Operate and Improve the Services",
+   "line": 117,
+   "from": "bold-lead-in",
+   "rule": "prose"
+  },
+  {
+   "item": "Information Disclosed to Comply With Legal and Regulatory Requirements",
+   "line": 123,
+   "from": "bold-lead-in",
+   "rule": "prose"
+  },
+  {
+   "item": "Information Disclosed for Our Protection and the Protection of Others",
+   "line": 125,
+   "from": "bold-lead-in",
+   "rule": "prose"
+  },
+  {
+   "item": "Information We Share with Your Consent or at Your Request",
+   "line": 129,
+   "from": "bold-lead-in",
+   "rule": "prose"
+  }
+ ]
+}

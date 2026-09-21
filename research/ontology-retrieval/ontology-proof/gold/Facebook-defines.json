@@ -1,0 +1,121 @@
+{
+ "service": "Facebook",
+ "list": "defines",
+ "source": "spikes/fineprint-data/ota-pga-versions/Facebook/Developer Terms.md",
+ "headings": [],
+ "items": [
+  {
+   "item": "including",
+   "line": 23,
+   "from": "definition"
+  },
+  {
+   "item": "App",
+   "line": 547,
+   "from": "definition"
+  },
+  {
+   "item": "Approved Addendum",
+   "line": 550,
+   "from": "definition"
+  },
+  {
+   "item": "Audit",
+   "line": 553,
+   "from": "definition"
+  },
+  {
+   "item": "Clauses",
+   "line": 556,
+   "from": "definition"
+  },
+  {
+   "item": "Client",
+   "line": 559,
+   "from": "definition"
+  },
+  {
+   "item": "Developer",
+   "line": 562,
+   "from": "definition"
+  },
+  {
+   "item": "Developer Docs",
+   "line": 565,
+   "from": "definition"
+  },
+  {
+   "item": "Global Data Transfer Addendum",
+   "line": 568,
+   "from": "definition"
+  },
+  {
+   "item": "IT Systems",
+   "line": 571,
+   "from": "definition"
+  },
+  {
+   "item": "Necessary Condition",
+   "line": 574,
+   "from": "definition"
+  },
+  {
+   "item": "Platform",
+   "line": 593,
+   "from": "definition"
+  },
+  {
+   "item": "Platform Data",
+   "line": 596,
+   "from": "definition"
+  },
+  {
+   "item": "Process",
+   "line": 599,
+   "from": "definition"
+  },
+  {
+   "item": "Prohibited Practices",
+   "line": 602,
+   "from": "definition"
+  },
+  {
+   "item": "Restricted Platform Data",
+   "line": 608,
+   "from": "definition"
+  },
+  {
+   "item": "SDKs",
+   "line": 611,
+   "from": "definition"
+  },
+  {
+   "item": "Service Provider",
+   "line": 614,
+   "from": "definition"
+  },
+  {
+   "item": "Tech Provider",
+   "line": 617,
+   "from": "definition"
+  },
+  {
+   "item": "Third-Party Auditors",
+   "line": 620,
+   "from": "definition"
+  },
+  {
+   "item": "User",
+   "line": 623,
+   "from": "definition"
+  },
+  {
+   "item": "Your Content",
+   "line": 626,
+   "from": "definition"
+  }
+ ],
+ "dropped": [],
+ "verdict": "built",
+ "reason": "22 published items, 0 prose dropped"
+}

@@ -1,0 +1,88 @@
+[bank]
+name = "ontology-proof-heldout-v1"
+corpus = "ei7-recensus-fineprint"
+description = "K1 lists and K0 lookups over X, Facebook, YouTube, gold from each service's own policy text (make_bank.py). Held-out services."
+
+[[questions]]
+id = "list-x-collects"
+category = "unattested"
+question = "According to X's privacy policy, what categories of personal data does X collect?"
+expected_facts = ["1.1 Information you provide us", "Personal accounts", "Professional Accounts", "Payment information", "Preferences", "Biometric information", "Job applications / recommendations", "Usage information", "Purchase and payments", "Device information", "Location information", "Inferred identity", "Log information", "Advertisements", "Cookies and similar technologies", "Interactions with our content on third-party sites", "1.3 Information we receive from third parties", "Other third parties, account connections, and integrations"]
+notes = "data_type; spikes/fineprint-data/ota-pga-versions/X/Privacy Policy.md lines 71-132; gold/X-collects.json"
+
+[[questions]]
+id = "list-x-shares"
+category = "unattested"
+question = "According to X's privacy policy, with whom does X share personal data?"
+expected_facts = ["3.1 When you post and share", "With the general public", "With other X users", "With partners", "With service providers", "With advertisers", "Third-party content and integrations", "Third-party collaborators", "Through our APIs", "address fraud, security, or technical issues; or", "3.4 With our affiliates"]
+notes = "recipient; spikes/fineprint-data/ota-pga-versions/X/Privacy Policy.md lines 170-205; gold/X-shares.json"
+
+[[questions]]
+id = "list-x-prohibits"
+category = "unattested"
+question = "According to X's advertising policy, what categories of advertising does X prohibit?"
+expected_facts = ["Deceptive and Fraudulent Content", "Prohibited Content for Minors", "Unacceptable Content", "Weapons and Weapon Accessories", "Cigarettes", "Cigars", "Pipe Tobacco", "Roll-your-own tobacco", "Chewing Tobacco", "Snus", "Dip"]
+notes = "obligation; spikes/fineprint-data/ota-pga-versions/X/Advertising Content Policy.md lines 48-2018; gold/X-prohibits.json"
+
+[[questions]]
+id = "list-x-defines"
+category = "unattested"
+question = "According to X's developer terms, what terms does the agreement define?"
+expected_facts = ["Developer Site", "Direct Message", "Intellectual Property Rights", "Licensed Material", "Paid Service", "Payment Portal", "Services", "Post", "X API", "X Applications", "X Content", "X Marks", "Users", "Commercial Use", "Affiliate", "Campaign", "Client", "Company Marks", "Company Materials", "Company Service", "Data", "End Users", "Marks", "Materials", "Personal Data", "X Ads", "X Code", "X Materials", "X Network", "X Marketing Partners Program", "X Service", "X Conversion Tracking Partner", "Credits", "Pricing Schedule"]
+notes = "defined_term; spikes/fineprint-data/ota-pga-versions/X/Developer Terms.md lines 8-763; gold/X-defines.json"
+
+[[questions]]
+id = "list-facebook-collects"
+category = "unattested"
+question = "According to Facebook's privacy policy, what categories of personal data does Facebook collect?"
+expected_facts = ["Highlights", "Your activity and information you provide", "Content you create, like posts, comments or audio", "Hashtags you use", "Information with special protections", "Friends, followers and other connections", "Information we collect about contacts and connections", "App, browser and device information", "Signals from your device. [See examples\\[15\\]]", "Information from partners, vendors and other third parties", "Your [device\\[11\\]]  information", "Apps you use", "Games you play", "Take control", "Partner", "What Products does this Policy cover?", "Examples of why we collect and receive information", "Security of our Products", "Safety and integrity", "Performance", "Information you provide", "Create your avatar", "Fill out a form", "Contact us", "What we collect from our camera feature", "How filters, effects, masks and avatars work", "What we collect from voice-enabled features", "Metadata", "What features you access from our messaging products", "Purchases or other transactions", "Purchases within an online game", "Donations to a friend’s fundraiser", "Purchases of subscriptions on Meta Products", "What we collect from transactions", "Billing, shipping and contact details", "Items you bought and how many", "Other account and authentication information", "Why we collect this information", "More in the Privacy Policy", "Device", "When we collect information based on others’ activity", "Send you a message", "Invite you to join a conversation", "Invite you to play a game", "Block or report you", "The type of device", "Details about its operating system", "Details about its hardware and software", "Brand and model", "Battery level", "Signal strength", "Available storage", "Browser type", "App and file names and types", "Plugins", "Device signals", "Related metadata", "IP address", "Language", "Time zone", "Mobile phone number", "Connection and download speed", "Network capability", "Information about our Products’ performance on your device", "Information from cookies and similar technologies", "Types of partners", "Partners", "Integrated partners", "Who are our partners and integrated partners?", "Advertisers", "Publishers   and their vendors", "App developers", "Game developers", "E-commerce platforms", "Other third parties we get information from", "Law enforcement", "Government authorities", "Third-party public sources", "Undertake analytics", "Integrated partner", "Third party"]
+notes = "data_type; spikes/fineprint-data/ota-pga-versions/Facebook/Privacy Policy.md lines 40-457; gold/Facebook-collects.json"
+
+[[questions]]
+id = "list-facebook-uses"
+category = "unattested"
+question = "According to Facebook's privacy policy, for what purposes does Facebook use personal data?"
+expected_facts = ["Highlights", "To provide, personalize and improve our Products", "How we show ads", "Take control", "How we use information to improve Meta Products", "Develop and improve products and features", "Your activity and information you provide", "Friends, followers and other connections", "App browser and device information", "Information from partners, vendors and third parties", "How we use location-related information", "To promote safety, security and integrity", "To provide measurement, analytics and business services", "To communicate with you", "To research and innovate for social good", "Promoting safety, security and integrity", "Detect, prevent and combat harmful or unlawful behavior", "Detect and prevent spam and other bad experiences", "Detect when someone needs help and provide support", "Maintain the integrity of our Products", "Providing measurement, analytics and business services", "More in the Privacy Policy", "Communicating with you", "Researching and innovating for social good", "Advancing technology", "Improving safety, health and well-being", "Account Center and using information across our Products", "Keep you and others safe", "Why we use information across devices", "Manual review", "Examples of when we use manual review", "Who reviews this information", "What Products does this Policy cover?", "Your activity on our Products", "Topics we think you might be interested in", "Your connections", "Other device signals we receive", "IP address", "Personalizing ads for you and others", "Helping to keep your account secure", "Partner", "Information we provide about different types of people", "Third party", "Device", "Service provider"]
+notes = "purpose; spikes/fineprint-data/ota-pga-versions/Facebook/Privacy Policy.md lines 465-800; gold/Facebook-uses.json"
+
+[[questions]]
+id = "list-facebook-shares"
+category = "unattested"
+question = "According to Facebook's privacy policy, with whom does Facebook share personal data?"
+expected_facts = ["Highlights", "Remember to share only with people you trust", "On Meta Products", "People and accounts you share and communicate with", "What you share with them", "Share a post you’ve written", "Share a photo or video", "Create a story", "Share a news article", "Add information to your profile", "What you communicate with them", "Some of your activity", "Comment on or react to others’ posts", "View their story on Facebook or Instagram", "When you’re active", "When you interact with a supervised user", "Content others share or reshare about you", "Who can see or reshare your content", "How information about you can be shared", "Mention you in a post or story", "Take control", "Public content", "What content is public?", "Name", "Facebook and Instagram username", "Profile picture", "Activity on public groups, Facebook Pages and channels", "Avatars", "Who can see public content?", "Where can public content be shared?", "APIs", "The media, like TV", "Other apps and websites connected to our Products", "Search engines. [Learn more\\[45\\]]", "With integrated partners", "Information they receive automatically", "What you use their services to do", "Information they receive with your permission", "How long they can access your information", "How integrated partners handle your information", "More resources", "What Products does this Policy cover?", "Choosing an audience", "The public, including people on and off Facebook", "A customized list of people", "Yourself", "Audience settings are different from app permissions", "Supervision", "Search engines", "Integrated partner", "When an integrated partner might receive your information", "Sharing friends lists", "When you share your friends list", "When your friends share their friends list", "Advertisers who show ads on our Products", "Partners", "Advertisers and Audience Network publishers", "Advertisers", "Ads people engaged with, if any", "When people engaged with ads", "Where that ad was shown", "Audience Network publishers and their vendors", "Partners who use our analytics services", "Any information required by applicable regulation", "Other information you choose to share with them", "Integrated partners", "Vendors", "Measurement vendors", "Marketing vendors", "Service providers", "Investigating suspicious activity", "Facilitating payments", "Providing customer support", "Improving the functionality of our Products", "Providing technical infrastructure services", "Analyzing how our Products are used", "Conducting research and surveys", "Marketing and promoting our Products", "Third parties", "External researchers", "Our business or mission", "Social good. Learn more", "Technological advancement", "Safety and security on our Products", "Public interest", "Health and well-being", "AI integrations", "Other third parties", "Partner", "Third party", "General demographics and interests", "Were women", "Were between the ages of 25 and 34", "Clicked on the ad from their phone", "When you might give us permission", "Transactions you might make", "Subscribing to premium content", "Buying, selling or using products", "Buying, selling or using services", "Donating to charities", "Commerce services platforms", "Payments", "Marketing", "Shipping", "Customer engagement tools", "Measurement vendor", "Marketing vendor", "To provide optional features and integrations", "Complying with their legal obligations", "Helping keep you and others safe", "Performing account verification", "Investigating suspicious activities", "Creating analytics", "Developing and providing features and integrations", "Understanding how people use our products"]
+notes = "recipient; spikes/fineprint-data/ota-pga-versions/Facebook/Privacy Policy.md lines 808-1387; gold/Facebook-shares.json"
+
+[[questions]]
+id = "list-facebook-defines"
+category = "unattested"
+question = "According to Facebook's developer terms, what terms does the agreement define?"
+expected_facts = ["including", "App", "Approved Addendum", "Audit", "Clauses", "Client", "Developer", "Developer Docs", "Global Data Transfer Addendum", "IT Systems", "Necessary Condition", "Platform", "Platform Data", "Process", "Prohibited Practices", "Restricted Platform Data", "SDKs", "Service Provider", "Tech Provider", "Third-Party Auditors", "User", "Your Content"]
+notes = "defined_term; spikes/fineprint-data/ota-pga-versions/Facebook/Developer Terms.md lines 23-626; gold/Facebook-defines.json"
+
+[[questions]]
+id = "list-youtube-collects"
+category = "unattested"
+question = "According to YouTube's privacy policy, what categories of personal data does YouTube collect?"
+expected_facts = ["Your apps, browsers & devices", "Your activity", "Terms you search for", "Videos you watch", "Views and interactions with content and ads", "Voice and audio information", "Purchase activity", "People with whom you communicate or share content", "Your location information", "GPS and other sensor data from your device", "IP address"]
+notes = "data_type; spikes/fineprint-data/ota-pga-versions/YouTube/Privacy Policy.md lines 77-111; gold/YouTube-collects.json"
+
+[[questions]]
+id = "list-youtube-uses"
+category = "unattested"
+question = "According to YouTube's privacy policy, for what purposes does YouTube use personal data?"
+expected_facts = ["We use data to build better services", "Provide our services", "Maintain & improve our services", "Develop new services", "Provide personalized services, including content and ads", "Measure performance", "Communicate with you", "Protect Google, our users, and the public"]
+notes = "purpose; spikes/fineprint-data/ota-pga-versions/YouTube/Privacy Policy.md lines 126-163; gold/YouTube-uses.json"
+
+[[questions]]
+id = "list-youtube-shares"
+category = "unattested"
+question = "According to YouTube's privacy policy, with whom does YouTube share personal data?"
+expected_facts = ["When you share your information", "When Google shares your information", "With your consent", "With domain administrators", "Change your account password", "Suspend or terminate your account access", "For external processing", "For legal reasons"]
+notes = "recipient; spikes/fineprint-data/ota-pga-versions/YouTube/Privacy Policy.md lines 282-313; gold/YouTube-shares.json"
+
+[[questions]]
+id = "list-youtube-defines"
+category = "unattested"
+question = "According to YouTube's developer terms, what terms does the agreement define?"
+expected_facts = ["Agreement", "API Client", "API Credentials", "API Data", "API Project", "Authorized Data", "Google Applications", "Non-Authorized Data", "Terms of Service", "User Credentials", "YouTube API Services", "YouTube Applications", "YouTube Brand Features"]
+notes = "defined_term; spikes/fineprint-data/ota-pga-versions/YouTube/Developer Terms.md lines 494-518; gold/YouTube-defines.json"

@@ -8,7 +8,9 @@
 
 use super::config::EnrichConfig;
 use super::corpus_io::rebuild_corpus_state;
-use super::inference_client::{probe_daemon, DaemonInferenceClient};
+use super::inference_client::{
+    probe_daemon_status, DaemonInferenceClient, DaemonProbe, V1_MODELS_TIMEOUT,
+};
 use super::paths;
 use corpus_engine::enrichment::pipeline::{
     checkpoint_processed_ids, collapse_phase1_checkpoint, read_phase1_checkpoint, ChapterManifest,
@@ -87,6 +89,25 @@ async fn cmd_finalize(cfg: &EnrichConfig, checkpoint_path: &std::path::Path) -> 
     0
 }
 
+/// The user-facing failure text for a failed readiness probe, naming
+/// the cause (order enrich-probe-timeout). A timed-out probe is SLOW:
+/// it names the elapsed budget and keeps the URL. A refused probe
+/// keeps the historical DOWN message with its start-it hint. The two
+/// cases must never share a message — "answered slower than 5s" is
+/// not "not responding".
+fn daemon_probe_error(base_url: &str, probe: DaemonProbe) -> Option<String> {
+    match probe {
+        DaemonProbe::Up => None,
+        DaemonProbe::Slow => Some(format!(
+            "error: daemon at {base_url} answered slower than {}s — daemon under load?",
+            V1_MODELS_TIMEOUT.as_secs()
+        )),
+        DaemonProbe::Down => Some(format!(
+            "error: daemon is not responding at {base_url} — start it with `svrn daemon start` or equivalent"
+        )),
+    }
+}
+
 /// `svrn enrich extract` minus its `--help` gate: Phase 1 per-section atlas
 /// extraction for a corpus, on the `-> i32` exit-code contract both callers
 /// need. The CLI wraps this ([`super::…`] is not available here — the wrapper
@@ -125,12 +146,11 @@ pub async fn run_extract(args: &[String]) -> i32 {
         return cmd_finalize(&cfg, &checkpoint_path).await;
     }
 
-    // Probe daemon — fail fast if it's down.
-    if !probe_daemon(&cfg.base_url).await {
-        eprintln!(
-            "error: daemon is not responding at {} — start it with `svrn daemon start` or equivalent",
-            cfg.base_url
-        );
+    // Probe daemon — fail fast if it's down, and name SLOW separately
+    // from DOWN (order enrich-probe-timeout): a probe that timed out
+    // must not tell the user to start a daemon that is serving.
+    if let Some(err) = daemon_probe_error(&cfg.base_url, probe_daemon_status(&cfg.base_url).await) {
+        eprintln!("{err}");
         return 2;
     }
 
@@ -651,3 +671,52 @@ pub async fn run_with_closures_for_test(
 // tuple, which the CLI explicitly names for clarity).
 #[allow(dead_code)]
 fn _hold_chapter_manifest(_: &ChapterManifest) {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn slow_probe_error_names_budget_and_load_not_down() {
+        let msg = daemon_probe_error("http://127.0.0.1:9740", DaemonProbe::Slow).unwrap();
+        assert_eq!(
+            msg,
+            "error: daemon at http://127.0.0.1:9740 answered slower than 5s — daemon under load?"
+        );
+        // Slow is not DOWN: no start-it hint on a daemon that may be
+        // serving — that hint is the DOWN case's alone.
+        assert!(!msg.contains("svrn daemon start"));
+    }
+
+    #[test]
+    fn down_probe_error_keeps_the_start_it_hint_verbatim() {
+        let msg = daemon_probe_error("http://127.0.0.1:9740", DaemonProbe::Down).unwrap();
+        assert_eq!(
+            msg,
+            "error: daemon is not responding at http://127.0.0.1:9740 — start it with `svrn daemon start` or equivalent"
+        );
+    }
+
+    #[test]
+    fn slow_and_down_never_share_a_message() {
+        let base = "http://127.0.0.1:9740";
+        assert_ne!(
+            daemon_probe_error(base, DaemonProbe::Slow),
+            daemon_probe_error(base, DaemonProbe::Down)
+        );
+        assert!(daemon_probe_error(base, DaemonProbe::Up).is_none());
+    }
+
+    #[test]
+    fn slow_message_budget_tracks_the_module_constant() {
+        // The "5s" in the message must stay glued to the probe's actual
+        // budget — one threshold, one name (the const at
+        // inference_client/discovery.rs).
+        let msg = daemon_probe_error("http://x", DaemonProbe::Slow).unwrap();
+        let expected = format!(
+            "error: daemon at http://x answered slower than {}s — daemon under load?",
+            V1_MODELS_TIMEOUT.as_secs()
+        );
+        assert_eq!(msg, expected);
+    }
+}

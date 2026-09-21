@@ -1,0 +1,246 @@
+# Pilot bank SOURCE — chaos-secret-agent (Conrad, *The Secret Agent*, PG #974).
+#
+# This file is the INPUT to `harness/attest.py`; `bank.toml` beside it is the
+# output and is the file `svrn eval run --bank` loads. Do not hand-edit
+# `bank.toml` — re-run attest.
+#
+# `category = "unattested"` on every question here, deliberately. The pre-reg
+# ("Theory, in one paragraph and one table") fixes that kinds are COMPUTED from
+# the corpus text, never labelled by the author, so the source bank carries a
+# placeholder and `attest.py` overwrites it with the kind its six rules reach.
+# The source bank's `qtype` (present / absent_adjacent / provenance_trap /
+# distractor) is a chaos-monkey axis about abstention, not a retrieval kind, and
+# is NOT copied.
+#
+# CONVERTED FROM `sovereign/bench/chaos_monkey/secret_agent.toml`, whose
+# `gold_keywords` become `expected_facts` unchanged. Every fact in this file is
+# a gold keyword that bank already verified against pg974.txt at authoring
+# time; the four `list-*` questions are authored here (the source bank has no
+# enumeration shape) and draw only on facts the source already carries.
+# `notes` names the source question each row converts, or `authored` where
+# there is none.
+#
+# `answer1` IS THE LITERARY TRUTH FIELD, and it is what lets the two literary
+# rules fire at all. The pre-reg's corpus table gives the literary corpus kinds
+# K0 and K4, and both are decided by one measurement — the most of `answer1`'s
+# content words any single chunk holds (>=80% is literary K0, below it K4).
+# A question with no `answer1` leaves both rules unjudged and falls through to
+# the count rules, which is what the `list-*` questions are for: they carry no
+# `answer1` because their kind is the passage count, not an answer.
+#
+# `expected_sources` is empty on every question, as in
+# `sovereign/bench/literary/thematic-bk-book-1.toml`: all 316 chunks carry one
+# title, so a source score would read 1.0 for any retrieval whatsoever.
+
+[bank]
+name = "ontology-pilot-secret-agent-v1"
+corpus = "chaos-secret-agent"
+description = """
+24 questions over the installed 316-chunk chaos-secret-agent corpus, for the
+custom-ontology/RAPTOR study's stage-0c pilot. The pilot is instrument
+evidence only: it exists so that checks I1-I6 have arms to judge and planted
+faults to catch, and no bar is read from it.
+
+Three shapes are aimed for, and which kind each lands in is the corpus's
+answer, not this file's: single-passage lookups, four enumerations, and the
+six whole-story prompts the chaos-monkey bank calls `maximal`.
+"""
+
+# ── single-passage lookups ───────────────────────────────────────────────────
+
+[[questions]]
+id = "lookup-wife"
+category = "unattested"
+question = "In the novel, who is the wife of Adolf Verloc?"
+expected_facts = ["Winnie|Mrs Verloc|Winnie Verloc"]
+answer1 = "Winnie Verloc"
+notes = "converts present-wife"
+
+[[questions]]
+id = "lookup-stevie-relation"
+category = "unattested"
+question = "What is Stevie's family relationship to Winnie Verloc?"
+expected_facts = ["brother"]
+answer1 = "Stevie is Winnie's younger brother"
+notes = "converts present-stevie-relation"
+
+[[questions]]
+id = "lookup-shop-street"
+category = "unattested"
+question = "On what street is Verloc's shop located?"
+expected_facts = ["Brett"]
+answer1 = "Brett Street"
+notes = "converts present-shop-street"
+
+[[questions]]
+id = "lookup-killer-weapon"
+category = "unattested"
+question = "With what kind of weapon does Winnie kill Adolf Verloc?"
+expected_facts = ["knife"]
+answer1 = "a carving knife"
+notes = "converts present-killer-weapon"
+
+[[questions]]
+id = "lookup-bomb-target"
+category = "unattested"
+question = "What building is the intended target of the bomb plot?"
+expected_facts = ["Observatory"]
+answer1 = "the Greenwich Observatory"
+notes = "converts present-bomb-target"
+
+[[questions]]
+id = "lookup-heat-rank"
+category = "unattested"
+question = "What police rank does Heat hold?"
+expected_facts = ["Chief Inspector"]
+answer1 = "Chief Inspector"
+notes = "converts present-heat-rank"
+
+[[questions]]
+id = "lookup-shop-window"
+category = "unattested"
+question = "What kind of photographs are displayed in the window of Verloc's shop?"
+expected_facts = ["dancing girls"]
+answer1 = "photographs of dancing girls"
+notes = "converts present-shop-window"
+
+[[questions]]
+id = "lookup-stevie-circles"
+category = "unattested"
+question = "What does Stevie habitually draw with a compass and pencil?"
+expected_facts = ["circles"]
+answer1 = "circles"
+notes = "converts present-stevie-circles"
+
+[[questions]]
+id = "lookup-embassy-baron"
+category = "unattested"
+question = "Which late Baron had been the embassy patron long associated with Verloc's employment?"
+expected_facts = ["Stott-Wartenheim"]
+answer1 = "Baron Stott-Wartenheim"
+notes = "converts present-embassy-baron"
+
+[[questions]]
+id = "lookup-professor-detonator"
+category = "unattested"
+question = "What does the Professor carry in his trouser pocket as the detonator for the explosives strapped to his body?"
+expected_facts = ["india-rubber ball"]
+answer1 = "an india-rubber ball"
+notes = "converts prov-professor-detonator"
+
+[[questions]]
+id = "lookup-mother-almshouse"
+category = "unattested"
+question = "To what kind of charitable institution does Winnie's mother arrange to move herself, to spare the household her keep?"
+expected_facts = ["almshouse"]
+answer1 = "an almshouse"
+notes = "converts prov-mother-almshouse"
+
+[[questions]]
+id = "lookup-vladimir-science"
+category = "unattested"
+question = "According to Mr Vladimir, what 'sacrosanct fetish' of the modern age should an outrage be aimed at, to most scandalise the public?"
+expected_facts = ["science"]
+answer1 = "science"
+notes = "converts prov-vladimir-science"
+
+[[questions]]
+id = "lookup-stevie-cabhorse"
+category = "unattested"
+question = "Toward what suffering animal does Stevie show overwhelming compassion during the cab ride?"
+expected_facts = ["horse"]
+answer1 = "the cab horse"
+notes = "converts present-stevie-cabhorse"
+
+[[questions]]
+id = "lookup-anarchists-parlour"
+category = "unattested"
+question = "In which room behind his shop does Verloc receive the anarchist circle?"
+expected_facts = ["parlour"]
+answer1 = "the parlour behind the shop"
+notes = "converts present-anarchists-parlour"
+
+# ── enumerations: no `answer1`, so the kind is the passage count ─────────────
+
+[[questions]]
+id = "list-anarchist-circle"
+category = "unattested"
+question = "Name every member of the anarchist circle who meets in the parlour behind Verloc's shop."
+expected_facts = ["Michaelis", "Ossipon", "Professor"]
+notes = "authored; facts are gold keywords of present-michaelis, present-ossipon-abandons and distract-bomb-maker"
+
+[[questions]]
+id = "list-police-figures"
+category = "unattested"
+question = "Name every police official who works on the Greenwich investigation, and say what each one holds."
+expected_facts = ["Chief Inspector", "Assistant", "Commissioner"]
+notes = "authored; facts are gold keywords of present-heat-rank and present-asst-commissioner"
+
+[[questions]]
+id = "list-verloc-household"
+category = "unattested"
+question = "Name everyone who lives in the household behind the Brett Street shop."
+expected_facts = ["Winnie", "Stevie", "Verloc"]
+notes = "authored; facts are gold keywords of present-maximal-tragedy and present-maximal-verloc"
+
+[[questions]]
+id = "list-embassy-figures"
+category = "unattested"
+question = "Name every figure attached to the foreign embassy that employs Verloc."
+expected_facts = ["Vladimir", "Stott-Wartenheim"]
+notes = "authored; facts are gold keywords of present-vladimir-pressures and present-embassy-baron"
+
+# ── whole-story prompts, from the chaos-monkey `maximal` set ─────────────────
+# Asked as QUESTIONS, not writing commands (operator decision A73, 2026-09-20):
+# an imperative routes to GenerativeQuery, which retrieves nothing by design
+# (`sovereign/crates/sovereign-core/src/runtime/handlers/generative.rs:1-14`),
+# so the `full` arm was closed-book on these rows. `answer1` and
+# `expected_facts` are the chaos-monkey originals, untouched.
+
+[[questions]]
+id = "arc-anarchism"
+category = "unattested"
+question = "Across the whole of the novel, how do anarchism and revolutionary politics play out — the competing ideologies, every character who embodies them, and the central plot they drive?"
+expected_facts = ["anarchist", "bomb"]
+answer1 = "The novel sets four incompatible revolutionary temperaments against one another. Michaelis, the ticket-of-leave apostle, preaches an optimistic historical determinism from a cottage lent by a patroness. Karl Yundt, toothless, rehearses a fantasy of a merciless band of men. Comrade Ossipon peddles Lombrosian degeneracy pamphlets and lives off women. The Professor, a walking bomb with an india-rubber ball in his pocket, wants a perfect detonator so that destruction may begin. Verloc, paid by a foreign embassy, hosts them in his parlour while informing on them, and Mr Vladimir uses their reputation to force the Greenwich outrage."
+notes = "converts present-maximal-anarchism"
+
+[[questions]]
+id = "arc-statepower"
+category = "unattested"
+question = "Across the whole of the novel, how does it depict state power, policing, and espionage — every relevant figure and institution, traced through the whole plot?"
+expected_facts = ["police", "agent"]
+answer1 = "State power appears as rival departments rather than one authority. Chief Inspector Heat protects his private informant and would rather charge Michaelis than disturb the arrangement. The Assistant Commissioner, restless behind a desk and married into society, goes out to the Italian restaurant in Soho to break that arrangement himself. Sir Ethelred receives the case as parliamentary business and the fatuous Toodles ushers it along. Against them the foreign embassy, Privy Councillor Wurmt and Mr Vladimir, buys an agent provocateur to provoke the English police into repression."
+notes = "converts present-maximal-statepower"
+
+[[questions]]
+id = "arc-tragedy"
+category = "unattested"
+question = "Across the whole of the novel, what happens in its domestic tragedy — the Verloc household, Stevie, and Winnie's arc from beginning to end?"
+expected_facts = ["Winnie", "Stevie"]
+answer1 = "Winnie marries Adolf Verloc because his shop shelters her mother and her brother Stevie, and her whole scheme of things is that they do not bear looking into. Her mother removes herself to an almshouse to secure Stevie's place. Verloc takes Stevie to Greenwich and the boy is blown to pieces on a tree root. When Winnie learns it she stabs her husband with the carving knife, flees with Ossipon, is abandoned on the Channel boat with her money taken, and drowns in the channel."
+notes = "converts present-maximal-tragedy"
+
+[[questions]]
+id = "arc-bombing"
+category = "unattested"
+question = "Across the whole of the novel, what happens in the Greenwich bombing plot — its conception at the embassy, Verloc's role, how it was carried out, and its aftermath?"
+expected_facts = ["Greenwich", "Stevie"]
+answer1 = "Mr Vladimir summons Verloc to the embassy and demands an outrage against science, naming the Observatory, on pain of losing his pay. Verloc obtains explosives from the Professor and takes Stevie, wearing a coat with an address sewn inside, toward Greenwich Park. The boy stumbles on a tree root and is blown to fragments. Chief Inspector Heat recovers the address label and goes to Brett Street, the Assistant Commissioner reaches Verloc first, and Verloc is stabbed by his wife before any charge is laid."
+notes = "converts present-maximal-bombing"
+
+[[questions]]
+id = "arc-verloc"
+category = "unattested"
+question = "Across the whole of the novel, what happens to Adolf Verloc — his secret double life, his shop, his marriage, and his downfall?"
+expected_facts = ["Verloc", "shop"]
+answer1 = "Verloc keeps a shabby shop of shady wares in Brett Street, sells to furtive customers, and is by turns a secret agent paid by a foreign embassy, an informant of Chief Inspector Heat, and a trusted comrade of the anarchists who meet in his parlour. He is indolent, fat, and attached to domestic comfort. Vladimir's demand for an outrage destroys the arrangement; he uses Stevie, loses him, and is killed at home with a carving knife by the wife who married him for her brother's sake."
+notes = "converts present-maximal-verloc"
+
+[[questions]]
+id = "arc-london"
+category = "unattested"
+question = "Across the whole of the novel, how does it portray the city of London and its political/anarchist underworld?"
+expected_facts = ["London", "anarchist"]
+answer1 = "London is rendered as a town of marvels and mud, a monstrous cruelty of a cold and brooding sky where the sun hangs bloodshot without rays. Its underworld is domestic and shabby rather than heroic: a Brett Street shop of dubious wares, a parlour of talkers, the Silenus beer-hall where the Professor is met, an Italian restaurant in Soho of no particular nationality, cabs and omnibuses and the long walk through Hyde Park. The Professor walks its crowded pavements unsuspected, and the Greenwich Observatory stands at the edge of it."
+notes = "converts present-maximal-london"

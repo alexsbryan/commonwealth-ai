@@ -1,0 +1,67 @@
+{
+ "service": "Spotify",
+ "list": "collects",
+ "source": "spikes/fineprint-data/ota-pga-versions/Spotify/Privacy Policy.md",
+ "headings": [
+  {
+   "line": 132,
+   "text": "3\\. Personal data we collect about you",
+   "span_ends_line": 172
+  }
+ ],
+ "items": [
+  {
+   "item": "User Data",
+   "line": 140,
+   "from": "table-cell"
+  },
+  {
+   "item": "Street Address Data",
+   "line": 141,
+   "from": "table-cell"
+  },
+  {
+   "item": "Usage Data",
+   "line": 146,
+   "from": "table-cell"
+  },
+  {
+   "item": "Voice Data",
+   "line": 151,
+   "from": "table-cell"
+  },
+  {
+   "item": "Message Data",
+   "line": 152,
+   "from": "table-cell"
+  },
+  {
+   "item": "Age Check Data",
+   "line": 153,
+   "from": "table-cell"
+  },
+  {
+   "item": "Payment and Purchase Data",
+   "line": 154,
+   "from": "table-cell"
+  },
+  {
+   "item": "Precise Location Data",
+   "line": 155,
+   "from": "table-cell"
+  },
+  {
+   "item": "Survey and Research Data",
+   "line": 156,
+   "from": "table-cell"
+  },
+  {
+   "item": "Customer Service Data",
+   "line": 157,
+   "from": "table-cell"
+  }
+ ],
+ "dropped": [],
+ "verdict": "built",
+ "reason": "10 published items, 0 prose dropped"
+}

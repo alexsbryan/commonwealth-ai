@@ -810,8 +810,13 @@ fn find_merge_target(
     // intact. Unbounded distance because substring is a strong
     // signal — rule 1 is the only other unbounded rule, and an
     // alias-less follow-up sketch deserves the same courtesy.
+    // Containment is FUZZY evidence, not exact: "Payment partners" contains
+    // "partners" and names a different recipient. A type the author gave an
+    // identity key can refuse on that (`merge_permitted` rule 3); a type
+    // without one still merges here, which is why the bare-head-noun case
+    // below is still open.
     if let Some(idx) = find_substring_match(&folded_name, entities) {
-        if permit(idx, MergeEvidence::Exact) {
+        if permit(idx, MergeEvidence::Fuzzy) {
             return Some(idx);
         }
     }
@@ -3342,6 +3347,106 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(out.entities.len(), 1);
+    }
+
+    /// The spike-3 fine-print declaration, reduced to the one type the
+    /// head-noun merge destroyed. `identity` is the only axis these two
+    /// tests differ on — the shape at
+    /// `research/ontology-retrieval/spikes/extraction-census/recipe.toml:98`
+    /// declares `recipient` with NO identity key.
+    fn recipient_policies(identity: &[&str]) -> crate::enrichment::ontology::OntologyPolicies {
+        use crate::enrichment::ontology::{
+            OntologyPolicies, OntologyTypeDecl, ShapePolicy, TypeKind,
+        };
+        OntologyPolicies {
+            shape: ShapePolicy {
+                types: vec![OntologyTypeDecl {
+                    name: "recipient".into(),
+                    kind: TypeKind::Entity,
+                    identity: identity.iter().map(|k| (*k).to_string()).collect(),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            },
+            ..Default::default()
+        }
+    }
+
+    fn recipient(name: &str, description: &str) -> EntitySketch {
+        let mut s = entity(name, &[], description);
+        s.entity_type = EntityType::Other("recipient".into());
+        s
+    }
+
+    /// The bare head noun first, its three qualified forms in a later
+    /// section — the order the Spotify policy presents them in.
+    fn head_noun_sections() -> Vec<SectionExtraction> {
+        vec![
+            section(
+                "sec_0001",
+                vec![recipient(
+                    "partners",
+                    "Third parties Spotify shares data with.",
+                )],
+                vec![],
+            ),
+            section(
+                "sec_0002",
+                vec![
+                    recipient("Authentication partners", "Verify a user's identity."),
+                    recipient("Payment partners", "Process subscription payments."),
+                    recipient("Advertising partners", "Serve and measure ads."),
+                ],
+                vec![],
+            ),
+        ]
+    }
+
+    async fn resolved_recipient_names(identity: &[&str]) -> Vec<String> {
+        let p = recipient_policies(identity);
+        let out = resolve_entities_and_events_with(
+            &head_noun_sections(),
+            &fake_embed(),
+            &ResolutionPolicy::new(&p),
+        )
+        .await
+        .unwrap();
+        out.entities
+            .iter()
+            .map(|e| e.canonical_name.clone())
+            .collect()
+    }
+
+    /// Rule 4 merges on whole-word CONTAINMENT, which is fuzzy evidence:
+    /// "partners" is inside "Payment partners" and is a different recipient.
+    /// Passing `MergeEvidence::Exact` skipped `merge_permitted` rule 3
+    /// entirely, so a type the author identified by an external key merged
+    /// anyway. Revert the call at rule 4 to `Exact` and this goes red with
+    /// one atom named "partners".
+    #[tokio::test]
+    async fn rule_4_containment_obeys_a_declared_identity_key() {
+        let names = resolved_recipient_names(&["find_id"]).await;
+        assert_eq!(names.len(), 4, "got {names:?}");
+    }
+
+    /// OPEN DEFECT, ignored rather than deleted so it cannot rot: a DECLARED
+    /// type with no identity key has nothing to refuse on — `merge_permitted`
+    /// rule 3 skips a keyless type by design (`resolution_identity.rs`, the
+    /// `keys.is_empty()` arm), so the bare head noun still absorbs all three
+    /// qualified forms. Spike 3 (2026-09-19, the 108-section fine-print
+    /// census): Spotify's recipient recall by canonical name was 4 of 13.
+    /// Which criterion should refuse this is a merge-policy fork for the
+    /// operator — `ralph/DECISIONS.md`, 2026-09-19. Run with
+    /// `--ignored` to watch it.
+    #[tokio::test]
+    #[ignore = "open defect: a keyless declared type has no head-noun refusal (ralph/DECISIONS.md 2026-09-19)"]
+    async fn a_bare_head_noun_does_not_absorb_its_qualified_forms() {
+        let names = resolved_recipient_names(&[]).await;
+        assert_eq!(
+            names.len(),
+            4,
+            "a bare head noun must not absorb its qualified forms; got {names:?}"
+        );
     }
 
     #[tokio::test]

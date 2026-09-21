@@ -7768,3 +7768,183 @@ Not covered by this direction and still the operator's: the api-gate snapshot re
 Measured by the seat before writing the CSP row, so the worker re-measures rather than re-derives: the main window's only non-test `fetch` calls are same-origin (`src/lib/api.ts:1144`, `src/lib/components/MeshAppsSection.svelte:123`); no `new WebSocket` or `EventSource` outside tests; raw HTML reaches the DOM at two sites (`AssistantMessage.svelte:656`, `deep_research/DeepResearchView.svelte:654`), both through `src/lib/utils/markdown.ts`; `tauri.conf.json` has no `devCsp`. The mesh-app windows' `MESHAPP_CSP` (`src-tauri/src/commands/meshapp.rs:573`) is the nearest existing policy. A remote `img-src` is named in the row as the thing not to allow: an answer that renders an image URL carrying a secret is the egress path entry 11 describes.
 
 </details>
+
+> **Renumbered 2026-09-21.** These seven entries were written on the e7/ontology
+> branch as A35-A41 while the ring-room branch independently minted A35-A68 on
+> `main`. They are renumbered A69-A75 at the merge; cross-references inside them
+> and in `research/ontology-retrieval/` were rewritten with them. Nothing else
+> changed. One id, one decision (ARCH 8).
+
+## A69 · 2026-09-19 — REVIEW-build-e7x-head-noun-merge: land the row, leave the criterion to the operator
+
+<details>
+
+**Fork.** The row's fix (`MergeEvidence::Exact` -> `Fuzzy` on resolution rule 4) compiles, breaks
+nothing, and does not fix the defect it names. Four options were on the table: (1) widen
+`merge_permitted` rule 3 to keyless declared types; (2) make rule 4 refuse a one-token shorter side;
+(3) declare `identity` on the spike recipe's fine-print types; (4) land the row as written, with the
+gap recorded and D4 left at "not attempted".
+
+**Evidence, reproduced this session, not taken from the package.**
+
+- Every premise in the row is true: `find_merge_target` at `corpus-engine/src/enrichment/atlas/resolution.rs:769`,
+  rule 4's `permit(idx, ...)` at `:814`, `find_substring_match` at `:2299`, `merge_permitted` at
+  `resolution_identity.rs:51`, the Fuzzy-only guard at `:106`.
+- The guard has a second precondition the row did not account for. `resolution_identity.rs:106-111`
+  runs `if !declared(t) || keys.is_empty() { continue; }` — a DECLARED type with an empty
+  `effective_identity` is skipped, so the guard is a no-op for it.
+- `grep -n identity research/ontology-retrieval/spikes/extraction-census/recipe.toml` returns
+  nothing. `recipient` (`:98`), `data_type` (`:90`) and `defined_term` (`:84`) are declared with no
+  identity key — the three types spike 3 recorded as head-noun victims
+  (`spikes/extraction-census/REPORT.md:67`).
+- With the fix applied and the keyless declaration,
+  `cargo test -p corpus-engine --features treesitter --lib -- --ignored a_bare_head_noun_does_not_absorb_its_qualified_forms`
+  is RED: four recipients collapse to one atom named `partners` (1 != 4). The fix is inert for
+  exactly the population spike 3 measured.
+- With `identity = ["find_id"]` on the same declaration and the same four sketches,
+  `rule_4_containment_obeys_a_declared_identity_key` passes — four atoms. Revert rule 4 to `Exact`
+  and it is red with `["partners"]`, 1 != 4 (watched, this session). So the change IS reachable; the
+  keyless declared type is the whole gap.
+- Whole crate with the change: `pass: 2067 fail: 0`. Zero existing tests went red, so the row's own
+  STOP bar ("more than three") never tripped. `scripts/ralph-check.sh lint` exit 0.
+
+**Decision: (4).** Options 1-3 each pick a criterion for refusing a head-noun merge, and each
+changes merging for a different population that no fixture in the tree measures — option 1 for every
+declared keyless corpus, option 2 for every corpus including undeclared ones (it breaks
+`atlas_resolve_rule_4_substring_crosses_any_section_distance:3260` and
+`atlas_resolve_rule_4_merges_title_prefix_names:3324`, because "Payment partners" and "Father
+Zossima" are the same shape to the resolver), option 3 by putting the mechanism in the study's own
+recipe so the re-census measures against itself. The charter reserves for the operator "anything
+that changes behaviour a user or peer can observe beyond what the row states", and the row itself
+says a merge-policy change "is a merge-policy decision for the operator, not a row to push through".
+The order (`.sovereign/features/ei7-stage0-harness/order.md`) does not imply a fix: `resolution.rs`
+is not in its Scope, and its Seams read "No tuning of the walk, prompts or thresholds".
+
+So what landed is exactly the row: containment is reclassified as fuzzy evidence, which is the
+correct classification on its own terms (`MergeEvidence::Exact`'s doc comment claimed containment,
+and is corrected in this commit), a keyed declared type can now refuse it, and the open defect is in
+the tree as an `#[ignore]`d test rather than a patch file or a paragraph, so it cannot rot.
+`ontology_identity_e2e.rs` was not extended: its module doc scopes it to the `reconcile` /
+`reify_merges` surface, and this change is in `resolve_entities_and_events_with`.
+
+**Consequence for the campaign.** `e7-deep-pool-knob` and `e7-pod-preflight` unblock. D4 stays "not
+attempted": unless the operator lands a criterion before the pod window,
+`REVIEW-DEMO-e7-pod-window` measures the same recipient recall and D4 takes its pre-registered
+`< 0.5` branch (PRE-REG `:210`). That is a pre-registered outcome, not a deviation, and the pre-reg
+allows no second fix round.
+
+**Recommendation to the operator, if you do want D4 attempted.** Option 1 is the smallest change
+matching the evidence and its cost is bounded to declared corpora, which is the population D4 is
+about. It trades one over-merge for an under-merge of unknown size, and nothing in the tree measures
+that side — `spikes/extraction-census/REPORT.md:65` records 40+ normalized names duplicated across
+types, so fragmentation is already the larger failure by count. Un-`#[ignore]` the test that is now
+in `resolution.rs` and it is the bar.
+
+**Falsified if** a corpus-engine test goes red that was green at `1c22d8e5e`; if
+`rule_4_containment_obeys_a_declared_identity_key` passes with rule 4 reverted to `Exact` (then the
+guard was reachable all along and the row was sufficient); or if a recipe in the tree declares
+`identity` on a fine-print type, in which case option 3 was already taken and the fix is not inert
+for it.
+
+**Commits.** `54900d8f3` (the decision), `7a30e2018` (the prior session's spike run logs, no
+code).
+
+**REVIEW-AFTER:** landing a partial whose own row calls the remainder an operator fork is not a case
+the charter names in either list. Read as: the row's stated edit is mine to land, the criterion
+beyond it is not.
+
+</details>
+
+## A70 · 2026-09-20 — e7-pod-preflight: the re-census corpus gets its own row; `--finalize` is skipped in rehearsal
+
+<details>
+
+**Unit:** `e7-pod-preflight`, halted §6 with `pod_window.sh` landed (`473d5dbcc`). Decided by the seat, not a resolution session: the operator's standing word for this window (2026-09-19, rent allowed, 4 h cap) is what prices the fork, and a resolver does not hold it. The supervisor was stopped with an empty `ralph/STOP` before it dispatched one.
+
+**Fork 1 — which corpus the batch re-censuses.** Not open: PRE-REG `:233` ("three services that were not in the spike, chosen by the corpus rule") and the REVIEW-DEMO row both name it. Measured by the worker: X 145,448 · Facebook 90,447 · YouTube 71,576 words. The gap was that no row built it. New row `e7-recensus-corpus`: parametrize the spike's `build_corpus.py` (no-arg output `cmp`-identical), a recipe byte-identical to the spike's from `[extract]` down under a FRESH id `ei7-recensus-fineprint` (both spike corpora carry a pre-lane-X `_phase1_checkpoint.jsonl`; `--resume` would skip every chapter lane X changed and D3-D5 would read the old numbers back), and `corpus install` moved OUT of the pod batch because it needs no GPU.
+
+**Fork 2 — rehearsal vs `--finalize`.** `extract/args.rs:120-127` refuses `--finalize` with `--dry-run`. Rehearsal skips that line and prints `skipped` with the reason; running it for real would rewrite `cache/questions.json` on a real corpus, and dropping it loses the resumed-extraction read.
+
+**Cost.** ~1,370 sections at the measured 4.7 s is ~1 h 47 m of extraction, ~2.5-3 h with build and pilot, against the 1.5 h the HUMAN row said. Inside the 4 h cap on an Ada-class card (~$0.67/h, max ~$2.70); the HUMAN row now says so and names the 4 h watchdog.
+
+**Added, beyond the halt:** the batch copies the corpus's `runs/` into the window's committed directory, so a later head-noun-merge criterion (A69) can be re-censused locally from the saved sketches instead of a second rental.
+
+**Falsified if** the install reports a section count far from ~1,370 (then re-derive the meter before renting); or `wc -w` ranks a different top three.
+
+</details>
+
+## A71 · 2026-09-20 — e7-pod-preflight: a rehearsal of a state-chained batch claims argv, and says so
+
+<details>
+
+**Unit:** `e7-pod-preflight`, second §6 halt, with the skip rule and `batch-stage0.txt` landed (`8a584b5cf`). Seat decision, supervisor held with an empty `ralph/STOP`.
+
+**The fork.** `enrich init --dry-run` writes no state (`enrich_cmd/init.rs:555-561`), so `extract`, `--finalize`, `build` and the `cp` have nothing to read and the rehearsal exits 1 on line 02 ("no enrichment config"). (a) a third rehearsal verdict, `needs-live-state`; or (b) run init for real locally, which pins `localhost:9741` and this host's model into `config.json` (`init.rs:576-592`) and makes the metered window `--force` over it.
+
+**Choice: (a).** (b) changes what the metered window does in order to make a rehearsal greener — the instrument bending the run. (a) keeps the live path byte-identical and makes the rehearsal say only what it can: a marked line's argv parses. The marker is data in the batch (`#@ live-state`), not an error-text match; exit 2 on a marked line is still `failed`, and both directions are planted (an unmarked failure fails the rehearsal; a marked bad flag does not hide). Residual risk, accepted: a marked line can still fail live for a reason a dry-run never sees; the batch stops there and the trap destroys the pod, so the exposure is one line's runtime at ~$0.67/h. The same five verbs ran green on a pod in spike 3 on 2026-09-19.
+
+**Meter, corrected by measurement.** 826 sections (rehearsal line 01), not ~1,370: ~1 h 05 m extraction, 1.5-2 h window. HUMAN-e7-pod-up says so now.
+
+**Falsified if** the CLI exits something other than 2 for an unknown flag (the row stops on that), or a marked line fails live on argv.
+
+</details>
+
+## A72 · 2026-09-20 — the pod window: extraction complete on the pod, the batch stopped on a skip counted as a failure
+
+<details>
+
+**What happened.** Instance 51687232 (RTX 6000 Ada, $0.670/h) rented 03:35Z, destroyed 04:58Z, ~$0.93; `dev-pod.sh status` read back "nothing billing". The seat ran `pod_window.sh` itself, detached in its own session: the loop's worker has a 7,200 s session timeout against a ~2 h window, and a killed session would have fired the trap mid-batch. Line 02 `enrich extract --full --resume` did all 826 sections in 4,476 s (5.4 s a section; 664 extractions, 3.02M tokens) and exited 1 because 162 sections under the 40-word minimum are reported as failures. `pod_window.sh` stopped and destroyed the pod, as written. Lines 03-06 did not run there.
+
+**The seat's miss.** The first too-short `FAILED` printed two minutes in; the link to stop-on-non-zero was not made. A71's rehearsal could not show it: a `needs-live-state` line claims argv only.
+
+**Recovered without a second rental.** `--finalize` exit 0 locally; sketches copied to `<window>/runs/`; build ran on the local daemon (same model id, `base_url` re-pointed, named here), exit 0 in 1,268 s, 6,399 atoms. D3/D4/D5 and attribution measure EXTRACTION, which ran on the pod under lane X, so they stand. D8 (pod vs local pilot latency) is could-not-judge; re-renting is the operator's call — the one-window rule was spent.
+
+**CORRECTION 2026-09-21 — "same model id" above is wrong.** The local build did not run on the pod's `Qwen3.6-35B-A3B-MTP-UD-Q6_K`. `~/.svrnmesh/enrichment/ei7-recensus-fineprint/config.json` pins `chat_model: commonwealth/primary` at `:9741`, and that daemon (pid 7675, up since 2026-09-18, loadout unchanged) resolves the alias to `Qwen3.6-35B-A3B-UD-MTP-IQ4_NL`; the Q6_K id in its `/v1/models` is a mesh peer's row, which is what the seat read. Reach: cluster NAMES from the build only. D3/D4/D5 and attribution measure extraction, which ran on the pod, and stand.
+
+**For the operator.** Should a too-short skip make `enrich extract` exit non-zero? "Skipped" reported as "failed" is what turned a complete extraction into a failed batch line (ARCH 6). And the ralph library needs a row-level session timeout: inventory item 12 for `ralph-lib`.
+
+</details>
+
+## A73 · 2026-09-20 — the I2 fork: fix the bank, add a route census, leave I2 alone (OPERATOR decision)
+
+<details>
+
+**Decided by the operator in session** ("let's go with your recs"), on the seat's recommendation. The pilot exited 4: six of eight K4 items are writing commands, the router sends those to GenerativeQuery, and that route retrieves nothing by design — the `full` arm was closed-book on them and I2 abstained correctly. Refused: narrowing I2's population (tunes a pre-registered instrument toward passing) and carving I2 out of the pilot (a borrowed reason). Not attempted here: making Generative retrieve — a product question with its own order (`routing-blemishes-1` C1, `turn-pipeline-2`).
+
+**What lands:** K4 items re-asked by ONE fixed template, applied once, before any route or score is seen; a new check I7 (route census) and an `excluded_ungrounded_route` count in `compare.py study`; I2 and its 50% threshold untouched. REVIEW-DEMO-e7-pod-window is closed on its re-census half (`0635b244e`); its PILOT check moves to REVIEW-DEMO-e7-pilot-rerun. The scope sentence is PROPOSED under Deviations; placing it in the pre-reg body is the operator's at ratification.
+
+**Falsified if** I2 is still under 50% after the rewrite — then the K4 treatment does not reach question-shaped asks either, and that is a finding about the product, recorded as a result.
+
+</details>
+
+## A74 · 2026-09-20 — re-census rulings, delegated by the operator to the seat's recommendations
+
+<details>
+
+Operator, in session: "1, 2, 3 — go with your recommendations". Read against PR's decision tree (`:206-214`) before ruling.
+
+- **D5 passed** (2681/2681) and **D4 passed** (0.729 >= 0.5): obligation questions and `recipient` questions are attempted. The head-noun criterion (A69) stops being a study dependency; it stays a product defect.
+- **D3 could-not-judge is an INSTRUMENT gap, and it is owed.** PR says "each service's own published list"; the row and `decisions.py` scored table cells only. New row `REVIEW-build-e7-d3-published-lists`: gold from published lists by a rule fixed and COMMITTED before it meets an atom; the 0.7-on-2-of-3 bar is untouched. If it then fails, PR D6 applies (ANS takes the stage) and the operator says so — the row stops there.
+- **Service attribution 0.504 vs 0.90: recorded as a result; no second fix round in stage 0.** It is not a D-branch. The structural fix is not another prompt change: an atom's chapter -> document -> service is known from provenance (`decisions.py` already derives it from `chapters.json`), so the attribute should be STAMPED at resolve time, never asked of the model (ARCH 10). Banked as product work, not built in this queue.
+- **D8: local, in a reserved window** — PR's own fallback. No second rental.
+- **D7: a recording fix**, row `e7-enrich-records-model-id`.
+- **K4 template title slot = "the novel"** (040e5a826): confirmed.
+- **The audit row now carries data**: a per-unit net-line ledger, `dry-report` clones involving symbols added since launch, and `converge noun` on every new type.
+
+</details>
+
+## A75 · 2026-09-21 — the pod pilot: I7's set corrected, DeepQuery gets the walk before stage 0 proceeds (OPERATOR decision)
+
+<details>
+
+**Decided by the operator in session** ("go with your rec"), on the seat's recommendation, from `ralph/NEEDS_HUMAN.md`. The pilot ran on Vast 51850589 (window `20260921T035355Z`, four arms recorded, 0 refusals) and exited 4: I2 never-ran at 3/8 K4 summaries, I7 failed on five `DeepQuery` rows. One fact under both: in `full`, the four K4 rows on KnowledgeQuery all walked (3 with summaries); the four on DeepQuery carry no `atlas_walk` and retrieved 20-28 chunks each. A73's falsifier fired.
+
+**Ruled.** (2) I7's grounded set is an instrument defect and is corrected: `deep_query` and `simple_query` retrieve through `handle_simple` (`simple.rs:24-27`). Recorded under PR Deviations 2026-09-21 as made after the table was read. (3) DeepQuery running the atlas walk is product work under its own order; stage 0 waits on it. **CORRECTED same day: DeepQuery already runs the walk.** `deep_pipeline` shares `atlas_grounding` with `kq_pipeline`, and the pod `full` rows on DeepQuery carry `raptor` and `atom-enum` chunks that `bare` lacks. What is missing is the `atlas_walk` key: `handle_simple` drops the echo. (3) is therefore `turn-pipeline-1` step 6 for the Deep/Simple door, not new retrieval work. The seat inferred a missing treatment from a missing key (ARCH 6). Refused: scoring K4 over the four KnowledgeQuery rows only — a claim staged on n = 4.
+
+**Also landed.** `run_arm.py` passes the daemon's primary id as `--chat-model` (45d00f353); the I5 plant no longer depends on the borrowed arm's scores (9216aa972). After both, on the committed pod runs: I7 passed, seven of seven plants caught, I2 unchanged.
+
+**D8 amends A74.** Pod latency exists now (median / p90: bare 12.4 / 26.3 s, deep 9.5 / 26.5, full 10.1 / 36.8) against the committed local 2026-09-19 runs (20.8 / 40.8, 20.7 / 45.8, 25.1 / 59.7). Not a controlled pair: the local runs used IQ4_NL and six pre-rewrite K4 items. "At most half the local figure" holds for deep and full on the median and misses for bare (12.4 vs 10.4); recorded, not ruled.
+
+**Outcome, same day.** With the echo carried (40c08e08c) the pilot passed on a second pod (operator: "a run under 2 hours"; Vast 51862876, window `20260921T052958Z`, destroyed): 7 checks clean, 7 plants caught, I2 walk 23/24 and summary 5/8 K4. Pod median / p90 on that run: bare 10.4 / 29.2 s, deep 7.9 / 22.6, full 7.2 / 26.9. Closed-book scored >= 0.5 on all 8 K4 rows, so the closed-book rule removes the kind on the pilot corpus; the row carries that to the audit.
+
+</details>

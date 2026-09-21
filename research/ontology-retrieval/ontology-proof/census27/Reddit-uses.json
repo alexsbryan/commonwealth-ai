@@ -1,0 +1,82 @@
+{
+ "service": "Reddit",
+ "list": "uses",
+ "source": "spikes/fineprint-data/ota-pga-versions/Reddit/Privacy Policy.md",
+ "verdict": "under-5",
+ "headings": [
+  {
+   "line": 87,
+   "text": "How We Use Your Information",
+   "span_ends_line": 103
+  }
+ ],
+ "items": [],
+ "dropped": [
+  {
+   "item": "Provide you personalized, age-appropriate services, content, and features",
+   "line": 93,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Provide you with relevant advertising, including personalized advertising on and off Reddit",
+   "line": 94,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Optimize and measure the effectiveness of ads shown on our Services",
+   "line": 95,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Advertise Reddit Services to you on other sites and apps, including measuring the performance of those ads",
+   "line": 96,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Help protect the safety of Reddit and our users, which includes blocking suspected spammers, addressing abuse, age restricting certain content and enforcing our rights, the Reddit User Agreement and our other terms and policies, as well as comply with applicable law",
+   "line": 97,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Send you technical notices, updates, security alerts, invoices, and other support and administrative messages",
+   "line": 99,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Communicate with you about products, services, offers, promotions, events, and programs, and provide other news and information we think will be of interest to you  ; and",
+   "line": 101,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Monitor and analyze trends, usage, and activities in connection with our Services",
+   "line": 102,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Provide, maintain, and improve the Services",
+   "line": 92,
+   "from": "list-item",
+   "rule": "dangling"
+  },
+  {
+   "item": "Research and develop new services",
+   "line": 98,
+   "from": "list-item",
+   "rule": "dangling"
+  },
+  {
+   "item": "Provide customer service",
+   "line": 100,
+   "from": "list-item",
+   "rule": "dangling"
+  }
+ ]
+}

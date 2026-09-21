@@ -1,0 +1,9 @@
+{
+ "service": "TruthSocial",
+ "list": "collects",
+ "source": "spikes/fineprint-data/ota-pga-versions/TruthSocial/Privacy Policy.md",
+ "verdict": "no-heading",
+ "headings": [],
+ "items": [],
+ "dropped": []
+}

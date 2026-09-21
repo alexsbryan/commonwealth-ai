@@ -1,0 +1,173 @@
+{
+ "service": "X",
+ "list": "collects",
+ "source": "spikes/fineprint-data/ota-pga-versions/X/Privacy Policy.md",
+ "headings": [
+  {
+   "line": 66,
+   "text": "1\\. Information We Collect",
+   "span_ends_line": 133
+  }
+ ],
+ "items": [
+  {
+   "item": "1.1 Information you provide us",
+   "line": 71,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Personal accounts",
+   "line": 75,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Professional Accounts",
+   "line": 77,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Payment information",
+   "line": 79,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Preferences",
+   "line": 81,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Biometric information",
+   "line": 83,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Job applications / recommendations",
+   "line": 85,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Usage information",
+   "line": 92,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Purchase and payments",
+   "line": 100,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Device information",
+   "line": 102,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Location information",
+   "line": 108,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Inferred identity",
+   "line": 110,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Log information",
+   "line": 116,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Advertisements",
+   "line": 120,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Cookies and similar technologies",
+   "line": 122,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Interactions with our content on third-party sites",
+   "line": 124,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "1.3 Information we receive from third parties",
+   "line": 126,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Other third parties, account connections, and integrations",
+   "line": 132,
+   "from": "bold-lead-in"
+  }
+ ],
+ "dropped": [
+  {
+   "item": "1.2 Information we collect when you use X",
+   "line": 88,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Posts and other content you post   and information about your broadcast activity  , including broadcasts you’ve created and when you created them, your lists, bookmarks, and Communities you are a part of",
+   "line": 94,
+   "from": "list-item"
+  },
+  {
+   "item": "Your interactions with other users’ content, such as reposts, likes, bookmarks, shares, downloads, replies, if other users mention or tag you in content or if you mention or tag them, and broadcasts you’ve participated in",
+   "line": 95,
+   "from": "list-item"
+  },
+  {
+   "item": "How you interact with others on the platform, such as people you follow and people who follow you, metadata related to Encrypted Messages, and when you use Direct Messages, including the contents of the messages, the recipients, and date and time of messages",
+   "line": 96,
+   "from": "list-item"
+  },
+  {
+   "item": "If you communicate with us, such as through email, we will collect information about the communication and its content",
+   "line": 97,
+   "from": "list-item"
+  },
+  {
+   "item": "We collect information on links you interact with across our services",
+   "line": 98,
+   "from": "list-item"
+  },
+  {
+   "item": "Information about your connection, such as your IP address, browser type, and related information",
+   "line": 104,
+   "from": "list-item"
+  },
+  {
+   "item": "Information about your device and its settings, such as device and advertising ID, operating system, carrier, language, memory, apps installed, and battery level",
+   "line": 105,
+   "from": "list-item"
+  },
+  {
+   "item": "Your device address book, if you’ve chosen to share it with us",
+   "line": 106,
+   "from": "list-item"
+  },
+  {
+   "item": "When you sign into X on a browser or device, we will associate that browser or device with your account. Subject to your settings, we may also associate your account with browsers or devices other than those you use to sign into X",
+   "line": 112,
+   "from": "list-item"
+  },
+  {
+   "item": "When you provide other information to X, including an email address or phone number, we associate that information with your X account. Subject to your settings, we may also use this information in order to infer other information about you and/or your identity, for example by associating your account with hashes of email addresses that share common components with the email address you have provided to X",
+   "line": 113,
+   "from": "list-item"
+  },
+  {
+   "item": "When you access X and are not signed in, we may infer your identity based on the information we collect",
+   "line": 114,
+   "from": "list-item"
+  },
+  {
+   "item": "IP address and related information; browser type and language; operating system; the referring webpage; access times; pages visited; location; your mobile carrier; device information  ; search terms and IDs  ; ads shown to you on X; X-generated identiﬁers; and identiﬁers associated with cookies. We also receive log information when you click on, view, or interact with links on our services, including when you install another application through X",
+   "line": 118,
+   "from": "list-item"
+  }
+ ],
+ "verdict": "built",
+ "reason": "18 published items, 13 prose dropped"
+}

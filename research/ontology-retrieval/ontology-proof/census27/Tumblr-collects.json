@@ -1,0 +1,114 @@
+{
+ "service": "Tumblr",
+ "list": "collects",
+ "source": "spikes/fineprint-data/ota-pga-versions/Tumblr/Privacy Policy.md",
+ "verdict": "under-5",
+ "headings": [
+  {
+   "line": 144,
+   "text": "What Information You Can Access",
+   "span_ends_line": 148
+  },
+  {
+   "line": 185,
+   "text": "Summary of Information We Collect",
+   "span_ends_line": 225
+  }
+ ],
+ "items": [
+  {
+   "item": "Non-Discrimination",
+   "line": 209,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Opt-Out",
+   "line": 211,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Content Portability",
+   "line": 212,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Right to Opt-Out",
+   "line": 218,
+   "from": "bold-lead-in"
+  }
+ ],
+ "dropped": [
+  {
+   "item": "Or other information that identifies or can be reasonably associated with you",
+   "line": 197,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Identifiers",
+   "line": 189,
+   "from": "list-item",
+   "rule": "one-word"
+  },
+  {
+   "item": "Commercial information",
+   "line": 190,
+   "from": "list-item",
+   "rule": "dangling"
+  },
+  {
+   "item": "Financial data",
+   "line": 191,
+   "from": "list-item",
+   "rule": "dangling"
+  },
+  {
+   "item": "Internet or other network or device activity",
+   "line": 192,
+   "from": "list-item",
+   "rule": "dangling"
+  },
+  {
+   "item": "Geolocation information",
+   "line": 193,
+   "from": "list-item",
+   "rule": "dangling"
+  },
+  {
+   "item": "Inference data about you",
+   "line": 194,
+   "from": "list-item",
+   "rule": "dangling"
+  },
+  {
+   "item": "Legally protected classifications",
+   "line": 195,
+   "from": "list-item",
+   "rule": "dangling"
+  },
+  {
+   "item": "Physical characteristics or description",
+   "line": 196,
+   "from": "list-item",
+   "rule": "dangling"
+  },
+  {
+   "item": "Access",
+   "line": 207,
+   "from": "bold-lead-in",
+   "rule": "one-word"
+  },
+  {
+   "item": "Delete",
+   "line": 208,
+   "from": "bold-lead-in",
+   "rule": "one-word"
+  },
+  {
+   "item": "Correct",
+   "line": 210,
+   "from": "bold-lead-in",
+   "rule": "one-word"
+  }
+ ]
+}

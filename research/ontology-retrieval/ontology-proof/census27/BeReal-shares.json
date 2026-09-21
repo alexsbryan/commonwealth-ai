@@ -1,0 +1,105 @@
+{
+ "service": "BeReal",
+ "list": "shares",
+ "source": "spikes/fineprint-data/ota-pga-versions/BeReal/Privacy Policy.md",
+ "verdict": "qualifies",
+ "headings": [
+  {
+   "line": 87,
+   "text": "3\\. When we share information about you",
+   "span_ends_line": 111
+  },
+  {
+   "line": 233,
+   "text": "9.4. Disclosure of Personal Information",
+   "span_ends_line": 249
+  },
+  {
+   "line": 250,
+   "text": "9.5. Sale, Sharing and Targeted Advertising",
+   "span_ends_line": 259
+  }
+ ],
+ "items": [
+  {
+   "item": "BeReal Employees",
+   "line": 92,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Service Providers",
+   "line": 94,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Ad Partners",
+   "line": 101,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Commercial partners",
+   "line": 103,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Partner Integrations",
+   "line": 105,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Legal and Statutory Purposes",
+   "line": 107,
+   "from": "bold-lead-in"
+  }
+ ],
+ "dropped": [
+  {
+   "item": "Service providers and processors, such as hosting providers, cloud infrastructure providers, analytics providers, security providers, communication providers, customer support providers and payment-related service providers",
+   "line": 237,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Professional advisers, such as legal, accounting, audit and compliance advisers",
+   "line": 239,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Advertising and measurement partners, subject to your choices and applicable law",
+   "line": 241,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Integration partners, when you choose to connect a partner service to BeReal",
+   "line": 243,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Public authorities, courts, law enforcement or other third parties where required or permitted by law",
+   "line": 245,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Another entity in connection with a merger, acquisition, reorganization, asset sale or similar transaction",
+   "line": 247,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Counsels",
+   "line": 96,
+   "from": "bold-lead-in",
+   "rule": "one-word"
+  },
+  {
+   "item": "Change in Ownership",
+   "line": 109,
+   "from": "bold-lead-in",
+   "rule": "imperative"
+  }
+ ]
+}

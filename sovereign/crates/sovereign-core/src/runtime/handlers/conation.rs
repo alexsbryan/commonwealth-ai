@@ -203,6 +203,9 @@ impl Runtime {
             created_at: now(),
             metadata: Some(serde_json::json!({
                 "intent": "ConationQuery",
+                // The route by variant name; the sibling "intent" above is
+                // the free-form display label.
+                "routed_intent": crate::types::Intent::ConationQuery.name(),
                 "subshape": "transform",
                 "prior_message_id": prior_assistant.id,
             })),

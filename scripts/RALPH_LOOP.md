@@ -41,6 +41,10 @@ and `watch` and run the printed `launchctl bootstrap`.
 - a ready `HUMAN-` row stops before any session (operator-only);
 - `ralph/waiting` is bounded (`--marker-timeout`, default 7200s) — a detached
   run that never writes its marker halts with a package;
+- a lane ending on `ralph/waiting` (a detached run outliving its session) is
+  WAITING, not a failure: the pool polls the named marker on its tick,
+  respawns the lane when it lands, and escalates with a package after 48h
+  (`LANE_MAX_WAIT_SECS`);
 - every poll tick writes `ralph/.heartbeat`; `watch` notifies when it goes
   stale, when a package sits unresolved, when the job is down without
   DONE/operator-STOP, or when disk drops below 5 GB;
@@ -96,7 +100,10 @@ nohup python3 scripts/ralph.py supervise --workdir . --label ring2 \
 
 A lane session writes `ralph/lanes/<unit>.done` (committed) when the unit
 passes its own tests; the pool merges a lane whose marker is present. Lanes do
-not edit `STATE.md`; the pool marks a unit `[x]` after merging.
+not edit `STATE.md`; the pool marks a unit `[x]` after merging. A lane that
+instead ends holding `ralph/waiting` naming a `*.done` marker (a detached
+field run still going) is WAITING — no strike against the 3-failure bound;
+the tick resumes it when the marker appears and escalates past 48h.
 
 ## Models and tests
 

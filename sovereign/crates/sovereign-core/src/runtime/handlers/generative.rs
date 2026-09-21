@@ -41,6 +41,26 @@ const GENERATIVE_SYSTEM_PROMPT: &str = "You are a skilled, versatile writer and 
      no preamble about what you're about to do, no offers to help, and no questions back unless the \
      request is genuinely impossible to attempt.";
 
+/// The assistant-message metadata for a GenerativeQuery turn — ONE builder, so
+/// the `Response` the non-streaming door returns carries exactly what the pump
+/// persisted under the same `message_id`. Until this was single-sourced the
+/// door minted `{"intent"}` of its own and the caller saw no provenance at all,
+/// for a row that had one. `None` is the pump-published-nothing case (the
+/// persist below failed): the key is absent rather than fabricated.
+fn generative_metadata(provenance: Option<&ResponseProvenance>) -> serde_json::Value {
+    // `routed_intent` is the route by variant name; the sibling "intent" is
+    // the free-form display label. Both doors persist through this builder,
+    // so one stamp covers the stream and the collect-to-completion path.
+    let mut metadata = serde_json::json!({
+        "intent": "GenerativeQuery",
+        "routed_intent": crate::types::Intent::GenerativeQuery.name(),
+    });
+    if let Some(provenance) = provenance {
+        metadata["provenance"] = serde_json::json!(provenance);
+    }
+    metadata
+}
+
 impl Runtime {
     /// Handle GenerativeQuery (streaming): stream the requested creative piece
     /// with a neutral prompt. No retrieval, no gate, no tools — tokens flow to
@@ -49,6 +69,26 @@ impl Runtime {
     /// persistence: a spawned pump forwards chunks + writes the assistant
     /// message on stream close, sharing the minted `message_id`.
     pub(crate) async fn handle_generative_query_stream(
+        &self,
+        message: &str,
+        conversation_id: &str,
+        context: &ConversationContext,
+        cancel_token: tokio_util::sync::CancellationToken,
+    ) -> Result<StreamHandle> {
+        // A streaming consumer reads the persisted row by `message_id`, so it
+        // has no use for the metadata receiver — dropping it closes the
+        // channel and the pump's send is a no-op.
+        let (handle, _metadata) = self
+            .generative_stream(message, conversation_id, context, cancel_token)
+            .await?;
+        Ok(handle)
+    }
+
+    /// The generative stream itself, plus a one-shot that resolves to the
+    /// metadata the pump PERSISTED for `handle.message_id`. Exists so the
+    /// non-streaming door below can return what was stored instead of
+    /// minting a second, thinner metadata object for the same row.
+    async fn generative_stream(
         &self,
         message: &str,
         conversation_id: &str,
@@ -62,7 +102,10 @@ impl Runtime {
         // long story ran to completion (finish_reason came back "stop", not
         // "cancelled"; real-cancel-stream regression, 2026-07-07).
         cancel_token: tokio_util::sync::CancellationToken,
-    ) -> Result<StreamHandle> {
+    ) -> Result<(
+        StreamHandle,
+        tokio::sync::oneshot::Receiver<serde_json::Value>,
+    )> {
         let request = CompletionRequest {
             admission: None,
             prompt: message.to_string(),
@@ -106,6 +149,7 @@ impl Runtime {
         let max_tokens_budget = request.max_tokens.map(|t| t);
         let started = std::time::Instant::now();
         let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<Result<String>>();
+        let (metadata_tx, metadata_rx) = tokio::sync::oneshot::channel::<serde_json::Value>();
 
         // Copied out before the spawn — `self` does not outlive the task, and a
         // `RouterStamp` is `Copy`, so the turn carries the router that routed it.
@@ -181,30 +225,38 @@ impl Runtime {
                 completion_tokens: Some(completion_tokens),
                 context_window,
             };
+            let metadata = generative_metadata(Some(&provenance));
             let assistant_msg = Message {
                 id: message_id_for_persist,
                 conversation_id: conversation_id_owned,
                 role: Role::Assistant,
                 content: full_text,
                 created_at: now(),
-                metadata: Some(serde_json::json!({
-                    "intent": "GenerativeQuery",
-                    "provenance": provenance,
-                })),
+                metadata: Some(metadata.clone()),
                 version: 0,
             };
-            if let Err(e) = store.save_message(&assistant_msg).await {
-                tracing::warn!(error = %e, "generative_stream: persist failed");
+            match store.save_message(&assistant_msg).await {
+                // Published only once the row is actually in the store, so a
+                // caller that awaits this is told what WAS stored rather than
+                // what we meant to store. The streaming door drops the
+                // receiver, so a closed channel here is expected, not a fault.
+                Ok(()) => {
+                    let _ = metadata_tx.send(metadata);
+                }
+                Err(e) => tracing::warn!(error = %e, "generative_stream: persist failed"),
             }
         });
 
         let stream = futures::stream::unfold(rx, |mut rx| async move {
             rx.recv().await.map(|item| (item, rx))
         });
-        Ok(StreamHandle {
-            message_id,
-            stream: Box::pin(stream),
-        })
+        Ok((
+            StreamHandle {
+                message_id,
+                stream: Box::pin(stream),
+            },
+            metadata_rx,
+        ))
     }
 
     /// Non-streaming fallback (the `handle_message` / `handle_turn` path). Drives
@@ -219,8 +271,8 @@ impl Runtime {
         // Non-streaming callers have no session cancel token — pass a fresh
         // one that is never cancelled (the collect-to-completion loop below
         // owns the lifetime).
-        let handle = self
-            .handle_generative_query_stream(
+        let (handle, metadata_rx) = self
+            .generative_stream(
                 message,
                 conversation_id,
                 context,
@@ -236,6 +288,20 @@ impl Runtime {
                 full_text.push_str(&item?);
             }
         }
+        // The stream closes only when the pump's task has finished, so the
+        // publish above has already happened or never will. `Err` is the
+        // persist-failed path (which warns there): the reply then carries the
+        // intent alone rather than a record of a row that is not in the store.
+        let metadata = match metadata_rx.await {
+            Ok(metadata) => metadata,
+            Err(_) => {
+                tracing::warn!(
+                    message_id = %message_id,
+                    "generative: nothing was persisted for this turn — replying without provenance"
+                );
+                generative_metadata(None)
+            }
+        };
         Ok(Response {
             message: Message {
                 id: message_id,
@@ -243,11 +309,152 @@ impl Runtime {
                 role: Role::Assistant,
                 content: full_text,
                 created_at: now(),
-                metadata: Some(serde_json::json!({ "intent": "GenerativeQuery" })),
+                metadata: Some(metadata),
                 version: 0,
             },
             task: None,
             metrics: None,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::pin::Pin;
+    use std::sync::Arc;
+
+    use async_trait::async_trait;
+    use futures::Stream;
+
+    use crate::error::{Error, Result};
+    use crate::registry::ToolRegistry;
+    use crate::runtime::Runtime;
+    use crate::skills::SkillRegistry;
+    use crate::traits::{ConversationStore, InferenceProvider, StateStore};
+    use crate::types::{
+        CompletionRequest, CompletionResponse, Conversation, ConversationContext, Depth,
+        ProviderCapabilities, ResponseProvenance, Speed,
+    };
+
+    /// Streams two fixed chunks and closes. The handler is what is under
+    /// test; the model only has to end cleanly so the pump reaches its
+    /// persist.
+    struct StreamingStub;
+
+    #[async_trait]
+    impl InferenceProvider for StreamingStub {
+        async fn complete(&self, _request: &CompletionRequest) -> Result<CompletionResponse> {
+            Err(Error::NotImplemented(
+                "the generative handler streams; `complete` is unused".into(),
+            ))
+        }
+
+        async fn complete_stream(
+            &self,
+            _request: &CompletionRequest,
+        ) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>> {
+            Ok(Box::pin(futures::stream::iter(vec![
+                Ok("Once upon ".to_string()),
+                Ok("a time.".to_string()),
+            ])))
+        }
+
+        async fn embed(&self, _text: &str) -> Result<Vec<f32>> {
+            Ok(vec![0.0; 8])
+        }
+
+        fn capabilities(&self) -> ProviderCapabilities {
+            ProviderCapabilities {
+                max_context_tokens: 4096,
+                supports_structured_output: false,
+                relative_speed: Speed::Fast,
+                relative_reasoning: Depth::Moderate,
+            }
+        }
+    }
+
+    fn empty_context() -> ConversationContext {
+        ConversationContext {
+            conversation: Conversation {
+                id: "conv-generative".to_string(),
+                title: None,
+                messages: Vec::new(),
+                created_at: 0,
+                updated_at: 0,
+                version: 0,
+                deleted_at: None,
+                skill_id: None,
+                enabled_corpora: None,
+                searched_sources: None,
+            },
+            memories: Vec::new(),
+            working_memory: None,
+            installed_corpora: vec![],
+            corpus_ceiling: None,
+            document_session: None,
+            topic_context: None,
+            knowledge_view_digests: None,
+            temporal_tensions: Vec::new(),
+            compacted_history: None,
+            history_retrieval_hits: None,
+            tool_dossier: None,
+            intent_policy: None,
+        }
+    }
+
+    /// The non-streaming door drives the streaming one and shares its
+    /// `message_id`, so the `Response` it hands back and the row the pump
+    /// persisted are two views of ONE turn. Until
+    /// rb-generative-returns-what-it-stores the door minted
+    /// `{"intent": "GenerativeQuery"}` of its own while the pump wrote the
+    /// same id with a full `ResponseProvenance`: a caller reading the reply
+    /// saw no backend, no finish reason and no latency for a turn that had
+    /// recorded all three. The two metadata objects are now one object.
+    #[tokio::test]
+    async fn generative_response_metadata_matches_the_stored_row() {
+        let store = Arc::new(sovereign_store::memory::InMemoryStateStore::new());
+        let runtime = Runtime::new(crate::runtime::RuntimeParts::new(
+            Arc::new(StreamingStub),
+            Box::new(crate::stubs::PassthroughRouter),
+            Box::new(crate::stubs::NoOpPlanner),
+            Arc::new(ToolRegistry::new()),
+            Arc::clone(&store) as Arc<dyn StateStore>,
+            Arc::new(SkillRegistry::new()),
+            Arc::new(crate::executor::AutoApprovalChannel),
+            crate::types::InferenceConfig::default(),
+            crate::runtime::lane::LaneSources::none(),
+        ));
+
+        let response = runtime
+            .handle_generative_query("tell me a story", "conv-generative", &empty_context())
+            .await
+            .expect("the generative door collects its own stream");
+
+        let stored = store
+            .get_conversation("conv-generative")
+            .await
+            .expect("the pump persisted the turn");
+        let row = stored
+            .messages
+            .iter()
+            .find(|m| m.id == response.message.id)
+            .expect("the reply and the stored row share one message_id");
+
+        assert_eq!(
+            response.message.metadata, row.metadata,
+            "the reply must return what the pump stored, not a thinner object \
+             built beside it"
+        );
+
+        let provenance: ResponseProvenance = serde_json::from_value(
+            response.message.metadata.as_ref().expect("metadata")["provenance"].clone(),
+        )
+        .expect("the returned metadata carries the record the row carries");
+        assert_eq!(provenance.intent, "GenerativeQuery");
+        assert!(
+            provenance.finish_reason.is_some(),
+            "the finish reason is the field a Stop click depends on: {:?}",
+            provenance.finish_reason
+        );
     }
 }

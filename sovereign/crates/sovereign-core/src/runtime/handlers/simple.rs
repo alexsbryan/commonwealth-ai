@@ -348,8 +348,16 @@ impl Runtime {
                     "model": completion.model_id,
                     "tokens": completion.tokens_used,
                     "latency_ms": completion.latency_ms,
+                    // Which route this turn actually took, by variant name.
+                    // This handler is the dispatcher's catch-all arm — it
+                    // serves SimpleQuery, DeepQuery, SimpleAction and
+                    // Continuation — and writes no "intent" path label at
+                    // all, so without this key the row names no route.
+                    "routed_intent": intent.name(),
                     "provenance": provenance,
                     "retrieved_chunks": kc.retrieved_chunks,
+                    // `null` = the walk did not run on this turn.
+                    crate::runtime::ATLAS_WALK_META_KEY: kc.atlas_walk,
                     "recalled_memories": recalled_memories_metadata,
                     "epistemic_state": epistemic_state,
                 });

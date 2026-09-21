@@ -1,0 +1,137 @@
+{
+ "service": "Bluesky",
+ "list": "uses",
+ "source": "spikes/fineprint-data/ota-pga-versions/Bluesky/Privacy Policy.md",
+ "verdict": "qualifies",
+ "headings": [
+  {
+   "line": 117,
+   "text": "10\\. How We Use Personal Data",
+   "span_ends_line": 145
+  }
+ ],
+ "items": [
+  {
+   "item": "To Provide Our Services",
+   "line": 124,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "For Administrative Purposes",
+   "line": 129,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "For Marketing",
+   "line": 141,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "With Your Consent",
+   "line": 142,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Other Purposes",
+   "line": 143,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Legal Bases for Processing",
+   "line": 144,
+   "from": "bold-lead-in"
+  }
+ ],
+ "dropped": [
+  {
+   "item": "Providing access to certain areas, functionalities, and features of the Bluesky App Services",
+   "line": 126,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Communicating with you about your account, activities on the Bluesky App Services, and policy changes",
+   "line": 128,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Pursuing our legitimate interests like direct marketing, research and development  , network and information security, and fraud prevention",
+   "line": 130,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Detecting security incidents, protecting against malicious, deceptive, fraudulent or illegal activity, and taking appropriate actions against malicious actors",
+   "line": 131,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Measuring interest in, and engagement with Bluesky and with Services",
+   "line": 132,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Sharing information with third parties as needed to provide Bluesky and Services",
+   "line": 138,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Carrying out activities that are required to comply with our legal obligations",
+   "line": 140,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Managing your account",
+   "line": 125,
+   "from": "list-item",
+   "rule": "dangling"
+  },
+  {
+   "item": "Answering support requests; and",
+   "line": 127,
+   "from": "list-item",
+   "rule": "dangling"
+  },
+  {
+   "item": "Creating de-identified and/or aggregated information",
+   "line": 133,
+   "from": "list-item",
+   "rule": "dangling"
+  },
+  {
+   "item": "Carrying out analytics",
+   "line": 134,
+   "from": "list-item",
+   "rule": "dangling"
+  },
+  {
+   "item": "Improving, upgrading, or enhancing Bluesky and Services",
+   "line": 135,
+   "from": "list-item",
+   "rule": "dangling"
+  },
+  {
+   "item": "Developing new products and services",
+   "line": 136,
+   "from": "list-item",
+   "rule": "dangling"
+  },
+  {
+   "item": "Ensuring internal quality control and safety",
+   "line": 137,
+   "from": "list-item",
+   "rule": "dangling"
+  },
+  {
+   "item": "Enforcing our agreements and policies; and",
+   "line": 139,
+   "from": "list-item",
+   "rule": "dangling"
+  }
+ ]
+}

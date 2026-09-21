@@ -97,6 +97,13 @@ pub struct ShapePolicy {
     /// prompt bytes composed from it are deterministic).
     #[serde(default)]
     pub types: Vec<OntologyTypeDecl>,
+    /// How many entities one section may introduce, when the author set one.
+    /// `None` leaves the shipped Phase-1 schema's own cap in place — the
+    /// literal there is the default, and it is not restated here. The range
+    /// is held at the recipe boundary
+    /// ([`decl::MIN_ENTITIES_PER_SECTION`]..=[`decl::MAX_ENTITIES_PER_SECTION`]).
+    #[serde(default)]
+    pub max_entities_per_section: Option<usize>,
 }
 
 /// Axis 2 — what a source says, at corpus level.

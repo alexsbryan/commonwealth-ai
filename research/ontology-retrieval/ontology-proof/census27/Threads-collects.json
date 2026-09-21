@@ -1,0 +1,48 @@
+{
+ "service": "Threads",
+ "list": "collects",
+ "source": "spikes/fineprint-data/ota-pga-versions/Threads/Privacy Policy.md",
+ "verdict": "qualifies",
+ "headings": [
+  {
+   "line": 17,
+   "text": "What information do we collect?",
+   "span_ends_line": 32
+  }
+ ],
+ "items": [
+  {
+   "item": "Your Threads activity and information that you provide",
+   "line": 22,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Threads Profile Information",
+   "line": 26,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Threads Activity",
+   "line": 27,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Threads Followers and Other Connections",
+   "line": 28,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "App, browser, and device information",
+   "line": 30,
+   "from": "bold-lead-in"
+  }
+ ],
+ "dropped": [
+  {
+   "item": "Information we collect from Third Party Services and Third Party Users",
+   "line": 31,
+   "from": "bold-lead-in",
+   "rule": "prose"
+  }
+ ]
+}

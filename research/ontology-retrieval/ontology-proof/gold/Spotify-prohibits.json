@@ -1,0 +1,173 @@
+{
+ "service": "Spotify",
+ "list": "prohibits",
+ "source": "spikes/fineprint-data/ota-pga-versions/Spotify/Advertising Content Policy.md",
+ "headings": [
+  {
+   "line": 14,
+   "text": "Prohibited Ads",
+   "span_ends_line": 98
+  }
+ ],
+ "items": [
+  {
+   "item": "Dangerous or Derogatory Content",
+   "line": 20,
+   "from": "sub-heading"
+  },
+  {
+   "item": "Promote, incite, or glorify violence",
+   "line": 24,
+   "from": "list-item"
+  },
+  {
+   "item": "Inappropriate Content",
+   "line": 33,
+   "from": "sub-heading"
+  },
+  {
+   "item": "Harmful or unlawful acts",
+   "line": 37,
+   "from": "list-item"
+  },
+  {
+   "item": "Graphic violence or depictions of serious bodily harm",
+   "line": 39,
+   "from": "list-item"
+  },
+  {
+   "item": "Gruesome audio or imagery",
+   "line": 41,
+   "from": "list-item"
+  },
+  {
+   "item": "Gratuitous use of profanity",
+   "line": 43,
+   "from": "list-item"
+  },
+  {
+   "item": "Explicit Adult Content",
+   "line": 46,
+   "from": "sub-heading"
+  },
+  {
+   "item": "Pornography or visual depictions of genitalia",
+   "line": 50,
+   "from": "list-item"
+  },
+  {
+   "item": "Sexual solicitation",
+   "line": 52,
+   "from": "list-item"
+  },
+  {
+   "item": "Dangerous Products and Services",
+   "line": 55,
+   "from": "sub-heading"
+  },
+  {
+   "item": "Firearms",
+   "line": 59,
+   "from": "list-item"
+  },
+  {
+   "item": "Firearm parts and accessories",
+   "line": 61,
+   "from": "list-item"
+  },
+  {
+   "item": "Explosives and instructional content about building explosives",
+   "line": 65,
+   "from": "list-item"
+  },
+  {
+   "item": "Cigarettes, tobacco products, and related accessories",
+   "line": 67,
+   "from": "list-item"
+  },
+  {
+   "item": "Vaporizers and related accessories",
+   "line": 71,
+   "from": "list-item"
+  },
+  {
+   "item": "Recreational drugs and related accessories",
+   "line": 73,
+   "from": "list-item"
+  },
+  {
+   "item": "Illegal or Deceptive Products and Services",
+   "line": 76,
+   "from": "sub-heading"
+  },
+  {
+   "item": "False or misleading representations",
+   "line": 80,
+   "from": "list-item"
+  },
+  {
+   "item": "“Get rich quick” schemes",
+   "line": 82,
+   "from": "list-item"
+  },
+  {
+   "item": "Manipulated and synthetic media that causes harm",
+   "line": 84,
+   "from": "list-item"
+  },
+  {
+   "item": "Deceptive or fraudulent offers",
+   "line": 86,
+   "from": "list-item"
+  },
+  {
+   "item": "Counterfeit or fake products",
+   "line": 88,
+   "from": "list-item"
+  },
+  {
+   "item": "Cloaking, malware, or phishing",
+   "line": 90,
+   "from": "list-item"
+  },
+  {
+   "item": "Otherwise enabling illegal, deceptive or dishonest behavior",
+   "line": 94,
+   "from": "list-item"
+  }
+ ],
+ "dropped": [
+  {
+   "item": "Harass, bully or incite hatred against any individual or group",
+   "line": 26,
+   "from": "list-item"
+  },
+  {
+   "item": "Promote stereotypes or negatively portray or attack an individual or group on the basis of race, religion, gender identity or expression, ethnicity, nationality, sexual orientation, veteran status, age, disability or other characteristics associated with systemic discrimination or marginalization",
+   "line": 28,
+   "from": "list-item"
+  },
+  {
+   "item": "Engage in or promote any other behavior that may place people at risk of harm",
+   "line": 30,
+   "from": "list-item"
+  },
+  {
+   "item": "Dangerous weapons, such as knives that are designed to injure an opponent",
+   "line": 63,
+   "from": "list-item"
+  },
+  {
+   "item": "Nicotine products not designed to aid in smoking cessation",
+   "line": 69,
+   "from": "list-item"
+  },
+  {
+   "item": "Content that infringes upon or violates, or encourages the infringement or violation of, the rights of any third party, including copyright, trademark, privacy, publicity, defamation, or other personal or proprietary rights",
+   "line": 92,
+   "from": "list-item"
+  }
+ ],
+ "verdict": "built",
+ "reason": "25 published items, 6 prose dropped"
+}

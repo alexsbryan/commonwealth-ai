@@ -1539,6 +1539,7 @@ mod tests {
                 essay_readiness: None,
                 atlas_navigation: vec![],
                 meta_atlas_hits: vec![],
+                atlas_walk: None,
             })
             .collect();
         EvalRun {

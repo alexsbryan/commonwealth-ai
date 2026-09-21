@@ -1,0 +1,119 @@
+{
+ "extra": {
+  "data_type": {
+   "by_service": {
+    "Spotify": 16,
+    "None": 10,
+    "LinkedIn": 13,
+    "Reddit": 17
+   },
+   "service_vs_doc_mismatch": 0
+  },
+  "recipient": {
+   "by_service": {
+    "Spotify": 3,
+    "LinkedIn": 7,
+    "None": 6,
+    "Reddit": 6
+   },
+   "service_vs_doc_mismatch": 2
+  },
+  "purpose": {
+   "by_service": {
+    "Reddit": 10,
+    "Spotify": 3,
+    "LinkedIn": 3,
+    "None": 8
+   },
+   "service_vs_doc_mismatch": 0
+  }
+ },
+ "spotify_data_type_recall": {
+  "User Data": [
+   "User Data"
+  ],
+  "Street Address Data": [
+   "Street Address Data"
+  ],
+  "Usage Data": [
+   "Usage Data"
+  ],
+  "Voice Data": [
+   "Voice Data"
+  ],
+  "Message Data": [
+   "Message Data"
+  ],
+  "Age Check Data": [
+   "Age Check Data"
+  ],
+  "Payment and Purchase Data": [
+   "Payment and Purchase Data"
+  ],
+  "Precise Location Data": [
+   "Precise Location Data"
+  ],
+  "Survey and Research Data": [
+   "Survey and Research Data"
+  ],
+  "Customer Service Data": [
+   "Customer Service Data"
+  ]
+ },
+ "spotify_recipient_recall": {
+  "Third party applications": [],
+  "Support community": [],
+  "Other Spotify users": [
+   "Other Spotify group companies"
+  ],
+  "Artists and record labels": [],
+  "Service providers": [
+   "analytics service providers",
+   "advertising service providers"
+  ],
+  "Payment partners": [
+   "partners"
+  ],
+  "Advertising partners": [
+   "partners"
+  ],
+  "Marketing Partners": [
+   "partners"
+  ],
+  "Ticketing and event partners": [],
+  "Podcast Hosting Platforms": [],
+  "Academic researchers": [
+   "Academic researchers"
+  ],
+  "Spotify group companies": [
+   "Other Spotify group companies",
+   "Spotify group companies"
+  ],
+  "Purchasers of our business": []
+ },
+ "spotify_recipient_recall_canonical_only": {
+  "Third party applications": [],
+  "Support community": [],
+  "Other Spotify users": [
+   "Other Spotify group companies"
+  ],
+  "Artists and record labels": [],
+  "Service providers": [
+   "analytics service providers",
+   "advertising service providers"
+  ],
+  "Payment partners": [],
+  "Advertising partners": [],
+  "Marketing Partners": [],
+  "Ticketing and event partners": [],
+  "Podcast Hosting Platforms": [],
+  "Academic researchers": [
+   "Academic researchers"
+  ],
+  "Spotify group companies": [
+   "Other Spotify group companies",
+   "Spotify group companies"
+  ],
+  "Purchasers of our business": []
+ }
+}

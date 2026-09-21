@@ -1,0 +1,137 @@
+{
+ "service": "TikTok",
+ "list": "shares",
+ "source": "spikes/fineprint-data/ota-pga-versions/TikTok/Privacy Policy.md",
+ "verdict": "qualifies",
+ "headings": [
+  {
+   "line": 64,
+   "text": "How We Share Your Information",
+   "span_ends_line": 111
+  },
+  {
+   "line": 380,
+   "text": "How Do We Share Your Information?",
+   "span_ends_line": 385
+  },
+  {
+   "line": 433,
+   "text": "How We Share Information of Users of the Under 13 Experience",
+   "span_ends_line": 438
+  }
+ ],
+ "items": [
+  {
+   "item": "Service Providers",
+   "line": 67,
+   "from": "sub-heading"
+  },
+  {
+   "item": "Third Party Platforms and Partners",
+   "line": 75,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Measurement and Data Partners",
+   "line": 83,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Sellers and their Service Providers",
+   "line": 85,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Users of Our Analytics Services",
+   "line": 87,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Our Corporate Group",
+   "line": 89,
+   "from": "sub-heading"
+  },
+  {
+   "item": "Users and the Public",
+   "line": 97,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Independent Researchers",
+   "line": 99,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Corporate Transactions",
+   "line": 101,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Legal Obligations and Rights",
+   "line": 103,
+   "from": "bold-lead-in"
+  }
+ ],
+ "dropped": [
+  {
+   "item": "log-in to a third party platform using your account, we will share your basic account information and any other Information You Provide",
+   "line": 77,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "sign-up or log-in to the Platform using your account details from a third party platform  , we will share certain Technical Information to facilitate this",
+   "line": 78,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "share User Content you publish on the Platform on other social media platforms, we will share your User Content and related information",
+   "line": 79,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "comply with applicable law, legal process or government requests, as consistent with internationally recognised standards",
+   "line": 105,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "protect the rights, property, and safety of our users, copyright holders, and others, including to protect life or prevent imminent bodily harm. For example, we may provide information   to law enforcement in the event of an emergency where someone’s life or safety is at risk",
+   "line": 106,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "investigate potential violations of and enforce our Terms, Guidelines, or any other applicable terms, policies, or standards, or",
+   "line": 107,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "detect, investigate, prevent, or address misleading activity, copyright infringement, or other illegal activity",
+   "line": 108,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Partners",
+   "line": 73,
+   "from": "sub-heading",
+   "rule": "one-word"
+  },
+  {
+   "item": "Advertisers",
+   "line": 81,
+   "from": "bold-lead-in",
+   "rule": "one-word"
+  },
+  {
+   "item": "Others",
+   "line": 93,
+   "from": "sub-heading",
+   "rule": "one-word"
+  }
+ ]
+}

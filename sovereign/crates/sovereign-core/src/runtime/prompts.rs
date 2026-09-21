@@ -365,6 +365,117 @@ pub(crate) const KQ_PER_CORPUS_LIMIT: usize = 20;
 /// expander = ~13k chars, comfortably under the 16k prompt budget.
 pub(crate) const KQ_MERGED_LIMIT: usize = 20;
 
+/// `SOVEREIGN_KQ_POOL_SCALE`: the deep-pool arm's one knob. 1..=8,
+/// default 1, read once.
+///
+/// PRE-REG-custom-ontology-and-raptor-2026-09-17 "Arms" records that
+/// `--limit 80` does nothing under `--synth`, so the arm that answers
+/// "just retrieve more" has no knob at all: what reaches synthesis is
+/// fixed by `KQ_MERGED_LIMIT` and `MAX_KNOWLEDGE_CHARS`. This scales
+/// BOTH — raising the chunk cap alone evicts the tail it just
+/// admitted, which is the trade
+/// `text_utils::the_prompt_budget_triple_moves_together_or_not_at_all`
+/// exists to record. See `pool_limits_at`.
+///
+/// Unset, unparsable, 0 and > 8 all mean 1, and at 1 every call site
+/// is byte-identical to the constants. Never a default — it exists
+/// for the pre-registered arm; `sovereign/DEFAULTS_LEDGER.md`.
+pub(crate) fn kq_pool_scale() -> usize {
+    static SCALE: std::sync::OnceLock<usize> = std::sync::OnceLock::new();
+    *SCALE.get_or_init(|| {
+        let raw = std::env::var("SOVEREIGN_KQ_POOL_SCALE").ok();
+        let asked = raw
+            .as_deref()
+            .and_then(|v| v.trim().parse::<usize>().ok())
+            .filter(|n| (1..=8).contains(n));
+        // NAME the substitution instead of defaulting through it
+        // (ARCH §18.3). Unset means 1 and is the declared default, but
+        // a SET value we could not honour is a different thing: a pod
+        // run launched with a typo'd or out-of-range scale would
+        // otherwise execute at 1 and still be recorded as the
+        // deep-pool arm — a well-formed result that is wrong.
+        if let (Some(v), None) = (raw.as_deref(), asked) {
+            tracing::warn!(
+                requested = v,
+                effective = 1,
+                "SOVEREIGN_KQ_POOL_SCALE is not an integer in 1..=8 — running \
+                 at 1. This run does NOT have a deeper pool."
+            );
+        }
+        let scale = asked.unwrap_or(1);
+        let (merged, chars) = pool_limits_at(scale);
+        tracing::debug!(
+            scale,
+            kq_merged_limit = merged,
+            max_knowledge_chars = chars,
+            "kq_pool_scale: effective retrieval pool"
+        );
+        scale
+    })
+}
+
+/// The derivation itself, separated from the env it reads, because a
+/// test that re-reads the knob to check the knob cannot fail — change
+/// the formula and both sides move together. As a function of a NAMED
+/// scale it is falsifiable at any scale, which is what makes "both
+/// limits move together, never one alone" checkable rather than
+/// merely asserted. Same split, same reason, as
+/// `grounding::config::concurrency_for_cores`.
+pub(crate) fn pool_limits_at(scale: usize) -> (usize, usize) {
+    (
+        KQ_MERGED_LIMIT * scale,
+        crate::runtime::formatters::MAX_KNOWLEDGE_CHARS * scale,
+    )
+}
+
+/// Effective post-merge chunk cap. Every `KQ_MERGED_LIMIT` use site
+/// reads this, never the constant.
+pub(crate) fn kq_merged_limit() -> usize {
+    pool_limits_at(kq_pool_scale()).0
+}
+
+/// Effective knowledge-char budget. Every `MAX_KNOWLEDGE_CHARS` use
+/// site reads this, never the constant.
+pub(crate) fn max_knowledge_chars() -> usize {
+    pool_limits_at(kq_pool_scale()).1
+}
+
+#[cfg(test)]
+mod pool_scale {
+    use super::*;
+    use crate::runtime::formatters::MAX_KNOWLEDGE_CHARS;
+
+    /// The knob is inert at 1 and moves BOTH limits above it. The
+    /// ratio is cross-multiplied rather than divided so the check is
+    /// exact, and stated as a relationship between the two limits
+    /// rather than as `CONST * scale` — re-deriving the formula the
+    /// function uses would make this unable to fail.
+    #[test]
+    fn pool_scale_moves_both_limits_together() {
+        assert_eq!(
+            pool_limits_at(1),
+            (KQ_MERGED_LIMIT, MAX_KNOWLEDGE_CHARS),
+            "scale 1 must be byte-identical to the two constants"
+        );
+        for scale in 2..=8 {
+            let (merged, chars) = pool_limits_at(scale);
+            assert!(
+                merged > KQ_MERGED_LIMIT && chars > MAX_KNOWLEDGE_CHARS,
+                "scale {scale}: both limits must move, got ({merged}, {chars})"
+            );
+            assert_eq!(
+                merged * MAX_KNOWLEDGE_CHARS,
+                chars * KQ_MERGED_LIMIT,
+                "scale {scale}: the chunk cap and the char budget moved by \
+                 different factors ({merged} vs {chars}). A deeper pool the \
+                 formatter then trims to the old budget evicts the tail it \
+                 just admitted; a wider budget over the old cap has nothing \
+                 to put in it. They move together or not at all."
+            );
+        }
+    }
+}
+
 // ─── Wikipedia link-graph one-hop expansion (Atlas Layer 0) ──
 
 /// One-hop neighbor cap per seed title. Higher values pull in

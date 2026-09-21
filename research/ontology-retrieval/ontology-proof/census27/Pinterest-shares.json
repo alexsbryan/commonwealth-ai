@@ -1,0 +1,78 @@
+{
+ "service": "Pinterest",
+ "list": "shares",
+ "source": "spikes/fineprint-data/ota-pga-versions/Pinterest/Privacy Policy.md",
+ "verdict": "under-5",
+ "headings": [
+  {
+   "line": 10,
+   "text": "State Privacy Law Disclosure & Notice at Collection",
+   "span_ends_line": 14
+  },
+  {
+   "line": 59,
+   "text": "3\\. Our partners and advertisers share information with us",
+   "span_ends_line": 68
+  },
+  {
+   "line": 407,
+   "text": "How and when we share information",
+   "span_ends_line": 417
+  }
+ ],
+ "items": [
+  {
+   "item": "Third-party platforms",
+   "line": 63,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Technical service partners",
+   "line": 64,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Advertisers or other partners",
+   "line": 65,
+   "from": "bold-lead-in"
+  }
+ ],
+ "dropped": [
+  {
+   "item": "This applies only if you are a resident of a US state governed by a state-level privacy law. This page also serves as our California Notice at Collection",
+   "line": 13,
+   "from": "bold-lead-in",
+   "rule": "prose"
+  },
+  {
+   "item": "With other services, at your direction. For example, when you decide to to third-party services, or when you publish your content on Pinterest to such services, you direct disclosure of certain information to those services. Creators may direct us to share information with advertisers or other partners for paid engagements",
+   "line": 412,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Depending on where you live, and your privacy settings, we share data for advertising and related purposes, including showing you ads about Pinterest on third-party services, enabling partners to show you ads both and Pinterest, and helping advertisers understand how ads on Pinterest perform. For example, when you fill in a lead ad form, or click on an ad on Pinterest, we’ll share information related to that action with advertising partners. We may also provide partners with information about you so that advertisers can show you ads on or off of Pinterest. Find out more about how we support third-party advertising and the settings you can use to manage it",
+   "line": 413,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "With vendors that we employ to process information on our behalf based on our instructions and for the purposes described in this Privacy Policy. For example, we share data with security consultants to help us get better at identifying spam. Some information that we acquire may be collected by vendors on our behalf",
+   "line": 414,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "With law enforcement agencies, government agencies, researchers or other parties in compliance with laws, rules or regulations. For example, we may get requests for account information from law enforcement authorities such as the police or courts. We only disclose information in response to such requests if we believe that disclosure is reasonably necessary to comply with a law, regulation or legal request; to protect the safety, rights or property of the public, any person or Pinterest; or to detect, prevent or otherwise address fraud, security or technical issues. We may also share information if we believe that it is necessary to prevent imminent and serious bodily harm to a person in emergency situations. To find out more about how we respond to law enforcement requests, please see our . We may share your publicly accessible information with independent researchers who meet certain criteria, in order to combat societal harms",
+   "line": 415,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "With our corporate family of companies, including wholly owned subsidiaries and affiliates. If we were to engage in a merger, acquisition, bankruptcy, dissolution, reorganisation or similar transaction or proceeding that involves the transfer of the information described in this Privacy Policy, we would share your information with a party involved in such a process",
+   "line": 416,
+   "from": "list-item",
+   "rule": "prose"
+  }
+ ]
+}

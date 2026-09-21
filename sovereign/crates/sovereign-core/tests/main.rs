@@ -28,6 +28,8 @@ mod chunk_provenance_census;
 mod core_tests;
 #[path = "main/custody_reds.rs"]
 mod custody_reds;
+#[path = "main/deep_stream_gate_trace.rs"]
+mod deep_stream_gate_trace;
 #[path = "main/drb1_r1_reds.rs"]
 mod drb1_r1_reds;
 #[path = "main/drb1_r2b_reds.rs"]
@@ -81,6 +83,8 @@ mod retrieval_pipeline_mechanics;
 mod router_bootstrap_parity;
 #[path = "main/router_cache_fresh.rs"]
 mod router_cache_fresh;
+#[path = "main/routing_log_join.rs"]
+mod routing_log_join;
 #[path = "main/routing_moves.rs"]
 mod routing_moves;
 #[path = "main/runtime_commission_census.rs"]

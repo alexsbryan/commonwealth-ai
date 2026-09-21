@@ -1,0 +1,45 @@
+{
+ "service": "Threads",
+ "list": "shares",
+ "source": "spikes/fineprint-data/ota-pga-versions/Threads/Privacy Policy.md",
+ "verdict": "under-5",
+ "headings": [
+  {
+   "line": 46,
+   "text": "How is information shared?",
+   "span_ends_line": 61
+  }
+ ],
+ "items": [
+  {
+   "item": "Public Information",
+   "line": 51,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Sharing With Third-Party Services & Users",
+   "line": 52,
+   "from": "bold-lead-in"
+  }
+ ],
+ "dropped": [
+  {
+   "item": "For example, when you have a follower who is a Third Party User, we will share a copy of your post and your information to this follower’s Third Party Service so that it can store, process, and deliver the post to your follower. Similarly, if you make your profile public, a copy of your post and your information is made available to the applicable Third Party Service so that it can store and process that information",
+   "line": 54,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "As another example, when you like or reply to a post from a Third Party Service, you are asking us to share a copy of that like or reply to the Third Party Service so that it can be stored, processed, and delivered to the user and appear along with the post. We’ll receive similar information from the Third Party Service so that you can see the post and its comments",
+   "line": 55,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "The information we share with the Third Party Service will depend on your activity, but usually will include your profile information  , and could also include things like the content of the comment, interaction, or post, including any attachments such as photos or videos; and certain metadata associated with your interaction, such as IP address of our Threads server and the timestamp of the interaction",
+   "line": 56,
+   "from": "list-item",
+   "rule": "prose"
+  }
+ ]
+}

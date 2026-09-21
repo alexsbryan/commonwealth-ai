@@ -57,6 +57,32 @@ impl Runtime {
                 source = %resolved_source,
                 "runtime: document_operation — no chunks found for source"
             );
+            // An abstention is a turn that happened, so it carries the same
+            // record keys the success path writes below, plus the
+            // `result_quality: "no_source"` marker `metalingual.rs`'s
+            // empty-locator branch already uses. No inference ran and
+            // nothing was retrieved: `inference_backend` is the empty
+            // string `chat_cmd/render.rs` already reads as "no backend",
+            // and `search_method` is `None`, which its doc on
+            // `ResponseProvenance` defines as "nothing was retrieved".
+            let provenance = ResponseProvenance {
+                router: self.router.stamp(),
+                intent: "DocumentOperation".to_string(),
+                search_method: None,
+                sources: Vec::new(),
+                inference_backend: String::new(),
+                oicp_match: None,
+                total_latency_ms: 0,
+                tokens_used: 0,
+                coarse_intent: None,
+                self_assessment: None,
+                routing_trigger: None,
+                coverage: None,
+                finish_reason: None,
+                max_tokens_budget: None,
+                completion_tokens: None,
+                context_window: None,
+            };
             let assistant_msg = Message {
                 id: uuid::Uuid::new_v4().to_string(),
                 conversation_id: conversation_id.to_string(),
@@ -66,7 +92,17 @@ impl Runtime {
                     source_hint
                 ),
                 created_at: now(),
-                metadata: None,
+                metadata: Some(serde_json::json!({
+                    "provenance": provenance,
+                    // A literal, not an `Intent`: this door is taken in
+                    // `turn.rs` on the `[Document attached: …]` prefix, BEFORE
+                    // intent classification runs, so no variant names it —
+                    // same shape as `recipe_author.rs`.
+                    "routed_intent": "DocumentOperation",
+                    "document_source": resolved_source,
+                    "document_chunks": 0,
+                    "result_quality": "no_source",
+                })),
                 version: now(),
             };
             self.store.save_message(&assistant_msg).await?;
@@ -329,6 +365,8 @@ impl Runtime {
             created_at: now(),
             metadata: Some(serde_json::json!({
                 "provenance": provenance,
+                // See the abstention branch above for why this is a literal.
+                "routed_intent": "DocumentOperation",
                 "document_source": resolved_source,
                 "document_chunks": chunk_count,
             })),

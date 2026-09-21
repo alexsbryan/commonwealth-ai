@@ -1986,3 +1986,94 @@ Nothing on a plain-IP hop proves WHICH member is calling; only the encrypted
 posture does, where the QUIC handshake proves a key and
 `resolve_internal`s tied branch reads it
 (`sovereign/crates/sovereign-daemon/src/internal_principal.rs:287-332`).
+
+---
+
+## routing-blemishes — REVIEW-build-rb-routed-intent-everywhere
+
+One finding, recorded because the row and the tree disagreed and the build went
+with the tree. NOT a §6 stop: the decision lives in a file the row itself points
+at, so reading the pointer resolved it.
+
+- **ARCH 8 (one decider, one name) · row said `slug`, the key's contract says
+  `name`** · `sovereign/crates/sovereign-contracts/src/types/routing.rs:174`
+  and `types/projection.rs:208` · the row directs "STAMP it, from
+  `intent.row().slug`". `IntentRow::slug` is the snake_case WIRE key
+  (exemplars TOML, eval banks' `expected_intent`); `IntentRow::name` is
+  documented at routing.rs:174 as "the one rendering used wherever a route is
+  RECORDED (`routed_intent` on turn metadata, chaos transcript rows)", and
+  `TurnMetadata::routed_intent` at projection.rs:208 as "by variant name
+  (`DeepQuery`, `KnowledgeQuery`, …)". All four pre-existing stamp sites write
+  the PascalCase name (`streaming.rs:2365`, `:3522`, `complex_task.rs:512`,
+  `recipe_author.rs:489`/`:571`), and two consumers group on those values
+  (`bench_cmd/chaos_monkey.rs:2160`/`:2175` assert `"ComplexTask"` /
+  `"KnowledgeQuery"`; `quality_lane_cmd/chat_ask.rs:824` renders the field).
+  Stamping `slug` at the ten new sites would have put `knowledge_query` and
+  `KnowledgeQuery` under one key and split every grouping silently. Built with
+  `Intent::name()`; fixed-in the `REVIEW-build-rb-routed-intent-everywhere`
+  commit itself — there was no separate repair.
+
+## routing-blemishes — REVIEW-audit-rb-1 (2026-09-20, range `bdeb55545..87f378398`)
+
+Eight tier-A rows, eleven commits (eight units + three rustfmt/mark follow-ups).
+Gates: TESTALL red on one test, PREPUSH exit 0 with two advisory lanes wanting
+attention. Findings below; the two fixed ones land in this audit's commit.
+
+| # | principle | path:line | fixed in | finding |
+|---|---|---|---|---|
+| 1 | 8 (one decider, one name) | `sovereign-core/src/runtime/routing_record.rs:52`, `sovereign-contracts/src/traits/routing.rs:54` | this commit | `policy_intent` — a column minted one commit after the queue's own `slug`-vs-`name` finding — was written `format!("{effective:?}")`, the exact rendering `Intent::name`'s doc (`types/routing.rs:119-121`) and the test `a_recorded_route_is_a_label_not_a_payload` (`:804`) exist to prevent. `Intent::Continuation { task_id }` would have written a different string every turn into a column whose purpose is grouping. |
+| 2 | 5 (a gate you have not watched fail) | `quality/conformance/sovereign-core.toml:17` | this commit | TESTALL red: `conformance_tags_are_fresh`. `rb-simple-trace-label` added three lines above a `covers:` tag in `retrieval_pipeline.rs`, and the generated index still pinned `line = 2628`. Regenerated with the command the gate names; the diff is that one number, no claim lost, `asserts` unchanged at 8. |
+| 3 | 5 (four verdicts) | `scripts/pre-push.sh` lane `hakari-verify` | not fixed | The lane reports **failed** where the honest verdict is **never-ran**: `cargo hakari` is not installed on this host (`lane-hakari-verify.err`: "no such command: `hakari`"). A missing tool and a real skew read identically in the table. Not fixed — the row names no gate-harness change, and `pre-push.sh` is another campaign's surface. |
+| 4 | — (arrears, not a defect) | `quality/baselines/` size-gate | no change | size-gate is 76 keys in arrears (`sovereign-daemon` 38,044 lines "new and unbaselined", etc.). None of this queue's three crates — `sovereign-core`, `sovereign-store`, `sovereign-contracts` — appears in the grown list (checked: `cargo xtask size-gate \| grep -E 'sovereign-core\|sovereign-store\|sovereign-contracts'` returns nothing). Advisory by design; the arrears predate the queue. |
+
+Finding 1's fix is structural, not remembered (principle 10): the trait
+parameter is now `&'static str`, so the Debug rendering no longer compiles.
+Watched fail before the fix, `scripts/ralph-check.sh lint` exit=1:
+
+    error[E0716]: temporary value dropped while borrowed
+      --> sovereign/crates/sovereign-core/src/runtime/routing_record.rs:52:26
+       |
+    52 |             let label = &format!("{effective:?}");
+       |                          ^^^^^^^^^^^^^^^^^^^^^^^^ creates a temporary value which is freed while still in use
+    53 |             if let Err(e) = self.store.log_routing_policy_intent(&hash, label).await {
+       |                             -------------------------------------------------- argument requires that borrow lasts for `'static`
+
+The plant was reverted and LINT re-run green (exit=0) before commit.
+
+### Behaviour-neutrality — the tier's own bar, checked per row
+
+The order's kill condition is "a tier A row turns out to change an answer a
+user sees". Read against the diffs, no row does. What each row actually moved:
+
+- **A2** `rb-simple-trace-label` — a trace/audit `&'static str`. The label's
+  three consumers take it as display; the deep step LIST and `deep_pipeline`'s
+  signature are unchanged. The two `retrieval.seal` messages became format
+  strings; nothing matches on their text (`corpus_search.rs:1031` is a comment
+  citing the history, not an assertion).
+- **A3** `rb-deep-arm-gate-trace` — two `tracing` emits and one `if` over a
+  `len()`. No existing line edited.
+- **A4** `rb-stream-dispatch-trace` — eight calls to one emitter plus a `door`
+  field on the turn door's existing event. Nothing branches on `dispatch`.
+- **A5** `rb-document-op-abstention-record` — metadata keys on a reply whose
+  TEXT is untouched.
+- **A6** `rb-generative-returns-what-it-stores` — the non-streaming door now
+  returns the metadata the pump persisted. The `await` cannot block: the
+  oneshot is sent on the `Ok` arm of `save_message` inside the pump task, and
+  the collect loop the door already ran ends only when that task drops `tx`.
+- **A7** `REVIEW-build-rb-routing-log-joinable` — two nullable columns and one
+  conditional UPDATE. `resolve_policy_intent` replaced
+  `effective_intent.unwrap_or(raw)` at both doors with the same expression.
+- **A8** `REVIEW-build-rb-routed-intent-everywhere` — an additive metadata key
+  at ten sites, and one eval field that now prefers it.
+- **A9** `rb-one-refusal-retry` — extraction. `head_flushed = true` moved ahead
+  of the `tx.send`, which is unobservable: the only path between them returns
+  `None`, and the caller's `?` returns `None` too, exactly as the two
+  `return None`s did.
+
+### The process finding, recorded rather than fixed
+
+None of the eight rows regenerated `quality/conformance/`, and none of their
+`check:` lists named a gate that would have caught it — LINT does not run that
+test. A row that adds a line above a `covers:` tag owes the regeneration in its
+own commit. Not a queue edit (the rows are `[x]`); recorded so the next queue's
+mint step names it.

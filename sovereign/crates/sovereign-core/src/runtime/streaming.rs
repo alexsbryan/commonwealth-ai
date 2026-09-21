@@ -3,11 +3,9 @@
 //! classification-bearing body, plus the session-continuation
 //! (`resume_session_stream`) and cancel-and-redirect
 //! (`redirect_turn_stream`) entry points. The KnowledgeQuery and
-//! Deep/Simple streaming synthesis loops are still INLINE here,
-//! including their two near-duplicate refusal-retry state machines —
-//! a known duplication whose unification is deliberately deferred
-//! (the blocks differ in error-frame and finish-reason handling, so
-//! merging them is a measured behavior change, not a move).
+//! Deep/Simple streaming synthesis loops both run through the shared
+//! `run_synthesis_stream`, whose ONE refusal-retry is `refusal_retry_stream`,
+//! called from that loop's two triggers (see its doc).
 //! Extracted verbatim from `runtime.rs` in the 2026-06-10
 //! decomposition; same `impl Runtime`-across-files pattern as
 //! `handlers/`.
@@ -190,37 +188,20 @@ async fn run_synthesis_stream(
                             if !retried && had_retrieved_chunks && looks_like_refusal_opener(&head)
                             {
                                 retried = true;
-                                tracing::info!(
-                                    target: "synth.refusal_retry",
-                                    head = %head.chars().take(80).collect::<String>(),
-                                    "{}: refusal opener detected with evidence present — retrying with answer prefill",
-                                    log_tag
-                                );
-                                full_text.clear();
-                                full_text.push_str(REFUSAL_RETRY_PREFIX);
-                                if tx.send(Ok(REFUSAL_RETRY_PREFIX.to_string())).await.is_err() {
-                                    return None;
-                                }
                                 head_flushed = true;
-                                let mut retry_req = request.clone();
-                                retry_req.assistant_prefix = Some(REFUSAL_RETRY_PREFIX.to_string());
-                                retry_req.system_message = Some(REFUSAL_RETRY_SYSTEM.to_string());
-                                match inference
-                                    .complete_stream_with_id_and_finish(&retry_req)
-                                    .await
-                                {
-                                    Ok((s2, mid2)) => {
-                                        s = s2;
-                                        model_id = mid2;
-                                        observed_finish = None;
-                                        observed_completion_tokens = None;
-                                        continue 'synth;
-                                    }
-                                    Err(e) => {
-                                        let _ = tx.send(Err(e)).await;
-                                        return None;
-                                    }
-                                }
+                                (s, model_id) = refusal_retry_stream(
+                                    inference,
+                                    request,
+                                    tx,
+                                    full_text,
+                                    &head,
+                                    "refusal opener",
+                                    log_tag,
+                                )
+                                .await?;
+                                observed_finish = None;
+                                observed_completion_tokens = None;
+                                continue 'synth;
                             } else if tx.send(Ok(std::mem::take(&mut head))).await.is_err() {
                                 return None;
                             } else {
@@ -264,37 +245,20 @@ async fn run_synthesis_stream(
         if !head_flushed && !gate_on {
             if !retried && had_retrieved_chunks && looks_like_refusal_opener(&head) {
                 retried = true;
-                tracing::info!(
-                    target: "synth.refusal_retry",
-                    head = %head.chars().take(80).collect::<String>(),
-                    "{}: short refusal detected with evidence present — retrying with answer prefill",
-                    log_tag
-                );
-                full_text.clear();
-                full_text.push_str(REFUSAL_RETRY_PREFIX);
-                if tx.send(Ok(REFUSAL_RETRY_PREFIX.to_string())).await.is_err() {
-                    return None;
-                }
                 head_flushed = true;
-                let mut retry_req = request.clone();
-                retry_req.assistant_prefix = Some(REFUSAL_RETRY_PREFIX.to_string());
-                retry_req.system_message = Some(REFUSAL_RETRY_SYSTEM.to_string());
-                match inference
-                    .complete_stream_with_id_and_finish(&retry_req)
-                    .await
-                {
-                    Ok((s2, mid2)) => {
-                        s = s2;
-                        model_id = mid2;
-                        observed_finish = None;
-                        observed_completion_tokens = None;
-                        continue 'synth;
-                    }
-                    Err(e) => {
-                        let _ = tx.send(Err(e)).await;
-                        return None;
-                    }
-                }
+                (s, model_id) = refusal_retry_stream(
+                    inference,
+                    request,
+                    tx,
+                    full_text,
+                    &head,
+                    "short refusal",
+                    log_tag,
+                )
+                .await?;
+                observed_finish = None;
+                observed_completion_tokens = None;
+                continue 'synth;
             } else {
                 let _ = tx.send(Ok(std::mem::take(&mut head))).await;
                 head_flushed = true;
@@ -368,6 +332,49 @@ async fn run_synthesis_stream(
         observed_finish,
         observed_completion_tokens,
     })
+}
+
+/// The ONE refusal-retry of [`run_synthesis_stream`], reached from both of its
+/// triggers — the head crossing `REFUSAL_HEAD_CHARS`, and a stream that ended
+/// still buffering the head — which differ only in the `trigger` word logged.
+/// `None` => caller must `return None`: `tx` gone, or the re-open sent its Err.
+async fn refusal_retry_stream(
+    inference: &Arc<dyn InferenceProvider>,
+    request: &CompletionRequest,
+    tx: &tokio::sync::mpsc::Sender<Result<String>>,
+    full_text: &mut String,
+    head: &str,
+    trigger: &'static str,
+    log_tag: &'static str,
+) -> Option<(
+    Pin<Box<dyn Stream<Item = crate::types::StreamFrame> + Send>>,
+    String,
+)> {
+    tracing::info!(
+        target: "synth.refusal_retry",
+        head = %head.chars().take(80).collect::<String>(),
+        "{}: {} detected with evidence present — retrying with answer prefill",
+        log_tag, trigger
+    );
+    full_text.clear();
+    full_text.push_str(REFUSAL_RETRY_PREFIX);
+    tx.send(Ok(REFUSAL_RETRY_PREFIX.to_string())).await.ok()?;
+    let mut req = request.clone();
+    req.assistant_prefix = Some(REFUSAL_RETRY_PREFIX.to_string());
+    req.system_message = Some(REFUSAL_RETRY_SYSTEM.to_string());
+    match inference.complete_stream_with_id_and_finish(&req).await {
+        Ok(reopened) => Some(reopened),
+        Err(e) => {
+            let _ = tx.send(Err(e)).await;
+            None
+        }
+    }
+}
+
+/// Stream-door twin of `runtime::turn`'s `runtime: dispatching` line. A streamed
+/// CodeQuery reaches `stream_deep_query_turn`, not the row's `handle_code_query`.
+fn trace_stream_dispatch(dispatch: &'static str) {
+    tracing::info!(dispatch, door = "stream", "runtime: dispatching");
 }
 
 /// Last `n` chars of `s`, char-safe — for glassbox answer tails (truncation trace).
@@ -1355,6 +1362,11 @@ impl Runtime {
             route,
             gap_check_enabled,
             unavailable_corpora,
+            // Rides into this turn's message metadata below, beside
+            // `meta_atlas_hits`. That is the ONLY way a `--synth` eval row can
+            // see the walk: that lane drives this handler and then reads the
+            // PERSISTED metadata back, never a return value.
+            atlas_walk,
             search_ms,
             retrieved_chunks,
             source_map,
@@ -2392,6 +2404,15 @@ impl Runtime {
                 // bench's fourth legibility lens. Empty when the
                 // registry was unset or matched no entities.
                 "meta_atlas_hits": meta_atlas_hits,
+                // The atlas walk's evidence PATH for this turn
+                // (`AtlasWalkEcho`): which atoms it reached, by which
+                // edge, and what the fetch did with the requests. `null`
+                // when the walk did not run; an object with empty
+                // `nodes` when it ran and reached nothing — the two are
+                // different facts and stay distinguishable here. The
+                // `--synth` eval lane reads this key back off the
+                // persisted message; nothing in the chat UI reads it.
+                ATLAS_WALK_META_KEY: atlas_walk,
                 // PR3 — grounded follow-ups rendered as clickable
                 // NextStepButtons under the bubble. Empty array
                 // when retrieval produced nothing to ground an
@@ -2972,6 +2993,7 @@ impl Runtime {
         let sources = kc.sources;
         let coverage = kc.coverage;
         let retrieved_chunks = kc.retrieved_chunks;
+        let atlas_walk = kc.atlas_walk;
         // TEACHABLE P0 — the context's lesson snapshot + a note-store
         // handle ride into the spawn for the post-gate transform,
         // metadata, and whisper-once stamping.
@@ -2986,7 +3008,7 @@ impl Runtime {
         // Format the corpus evidence now so the post-stream epistemic-
         // humility hook can feed it to the gap checker. Moved into the
         // streaming spawn; not used before the synthesis completes.
-        let evidence = format_scored_chunks(&kc.chunks, MAX_KNOWLEDGE_CHARS);
+        let evidence = format_scored_chunks(&kc.chunks, max_knowledge_chars());
         let question = message.to_string();
 
         let intent_label = format!("{intent:?}");
@@ -3124,6 +3146,35 @@ impl Runtime {
             Vec::new()
         };
         let deep_seal_trace = !deep_trace_labels.is_empty();
+        // This arm's gate decision, in the shape its KnowledgeQuery twin
+        // emits (same target, same field names — search `target:
+        // "grounding_gate"` above). The deep arm computed `deep_gate_on` and
+        // `deep_hold` and said nothing. Two fields the twin has no need of:
+        // `route`, because this arm serves four intents and the twin serves
+        // one, and `chunks`, because `deep_gate_on` turns on that count.
+        tracing::info!(
+            target: "grounding_gate",
+            gate_on = deep_gate_on,
+            route = intent.row().slug,
+            chunks = kc.chunks.len(),
+            trace_chars = kc.code_trace.len(),
+            trace_labels = deep_trace_labels.len(),
+            seal_trace = deep_seal_trace,
+            "streaming gate: call-graph trace sealing decision"
+        );
+        if kc.chunks.is_empty() {
+            // The `!kc.chunks.is_empty()` half of `deep_gate_on`, said out
+            // loud: an empty pool turns the gate off whatever the surface
+            // returns, which the info row above cannot distinguish from an
+            // env-disabled surface.
+            tracing::debug!(
+                target: "grounding_gate",
+                route = intent.row().slug,
+                surface_enabled = deep_gate_surface.enabled(),
+                "deep gate off: retrieval returned no chunks, so the turn has \
+                 no evidence universe to audit an answer against"
+            );
+        }
         // Built ahead of the literal so the conversation's own recalled
         // turns join the universe too — see the KnowledgeQuery sibling
         // above and `seal_conversation_evidence`.
@@ -3472,6 +3523,9 @@ impl Runtime {
                 "routed_intent": routed_intent_name,
                 "provenance": provenance,
                 "retrieved_chunks": retrieved_chunks,
+                // Same key, same meaning as the KnowledgeQuery writer above:
+                // `null` = the walk did not run on this turn.
+                ATLAS_WALK_META_KEY: atlas_walk,
                 // Phase 3b: present only on the relational/witness
                 // path; absent or null elsewhere. The desktop's
                 // inner-work surface renders these as gutter echo
@@ -4134,10 +4188,9 @@ impl Runtime {
             declared_register,
             active_mode.as_deref(),
         );
-        let mut intent = intent_policy
-            .effective_intent
-            .clone()
-            .unwrap_or_else(|| raw_intent.clone());
+        let mut intent = self
+            .resolve_policy_intent(message, &raw_intent, &intent_policy)
+            .await;
         context.intent_policy = Some(intent_policy);
 
         // Evidence escalation. A query routed to a non-retrieval type but that
@@ -4413,6 +4466,7 @@ impl Runtime {
                 register = ?context.turn_register(),
                 "runtime: dispatching ExpressiveQuery to streaming witness"
             );
+            trace_stream_dispatch("handle_expressive_query_stream");
             return self
                 .handle_expressive_query_stream(message, conversation_id, &context)
                 .await;
@@ -4425,6 +4479,7 @@ impl Runtime {
         // (a 1.5-3.5min blank screen then a dump — 2026-06-26 breaker finding).
         if matches!(intent, Intent::GenerativeQuery) {
             tracing::info!(intent = ?intent, "runtime: dispatching GenerativeQuery to streaming");
+            trace_stream_dispatch("handle_generative_query_stream");
             return self
                 .handle_generative_query_stream(message, conversation_id, &context, cancel_token)
                 .await;
@@ -4460,6 +4515,7 @@ impl Runtime {
             );
             let response = match intent {
                 Intent::MetalingualQuery => {
+                    trace_stream_dispatch("handle_metalingual_query");
                     self.handle_metalingual_query(
                         message,
                         conversation_id,
@@ -4469,14 +4525,17 @@ impl Runtime {
                     .await?
                 }
                 Intent::ConationQuery => {
+                    trace_stream_dispatch("handle_conation_query");
                     self.handle_conation_query(message, conversation_id, &context)
                         .await?
                 }
                 Intent::CommissiveQuery => {
+                    trace_stream_dispatch("handle_commissive_query");
                     self.handle_commissive_query(message, conversation_id, &context)
                         .await?
                 }
                 Intent::ComplexTask => {
+                    trace_stream_dispatch("handle_complex_task");
                     self.handle_complex_task(message, conversation_id, &context, &tool_descriptors)
                         .await?
                 }
@@ -4523,6 +4582,7 @@ impl Runtime {
         // which made the desktop chat window sit inert for ~35s while
         // the full response was assembled server-side.
         if matches!(intent, Intent::KnowledgeQuery | Intent::ComparisonQuery) {
+            trace_stream_dispatch("stream_knowledge_query_turn");
             return self
                 .stream_knowledge_query_turn(
                     message,
@@ -4541,6 +4601,7 @@ impl Runtime {
         }
 
         // DeepQuery / SimpleQuery streaming path.
+        trace_stream_dispatch("stream_deep_query_turn");
         self.stream_deep_query_turn(
             message,
             conversation_id,

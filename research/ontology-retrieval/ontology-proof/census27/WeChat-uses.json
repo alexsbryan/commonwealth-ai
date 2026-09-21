@@ -1,0 +1,36 @@
+{
+ "service": "WeChat",
+ "list": "uses",
+ "source": "spikes/fineprint-data/ota-pga-versions/WeChat/Privacy Policy.md",
+ "verdict": "under-5",
+ "headings": [
+  {
+   "line": 165,
+   "text": "4\\. HOW DO WE USE YOUR INFORMATION?",
+   "span_ends_line": 224
+  }
+ ],
+ "items": [
+  {
+   "item": "SENSITIVE PERSONAL INFORMATION",
+   "line": 205,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "SHARED INFORMATION",
+   "line": 211,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "PERSONAL INFORMATION WITHIN YOUR CONTENT",
+   "line": 215,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "WECHAT GUARDIAN MODE FUNCTION",
+   "line": 219,
+   "from": "bold-lead-in"
+  }
+ ],
+ "dropped": []
+}

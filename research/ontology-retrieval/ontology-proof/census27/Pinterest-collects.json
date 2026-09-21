@@ -1,0 +1,9 @@
+{
+ "service": "Pinterest",
+ "list": "collects",
+ "source": "spikes/fineprint-data/ota-pga-versions/Pinterest/Privacy Policy.md",
+ "verdict": "no-heading",
+ "headings": [],
+ "items": [],
+ "dropped": []
+}

@@ -29,10 +29,12 @@
 //! right.
 
 pub mod atlas_ann;
+pub mod atlas_walk_meta;
 pub mod attribution;
 pub mod bank;
 pub mod lost_corpora;
 pub mod report;
+pub mod routed_intent;
 pub mod routing_metrics;
 pub mod runner;
 pub mod runner_threads;
@@ -106,6 +108,7 @@ const RUN_HELP: Help = Help {
         HelpSection::Flags(&[
             ("--bank <path>",  "Path to the bank TOML (e.g. sovereign/bench/wikipedia/questions.toml)."),
             ("--synth",        "Drive each question through the full chat pipeline (routing → retrieval → synthesis). Slower, but exercises the model + routing layers."),
+            ("--closed-book",  "Closed-book arm. Requires --synth; refuses --prod-pipeline and --routing-only. Each question runs as a RAW MODEL turn (TurnMode::Naked): no retrieval, no router, no grounding gate, no atlas. Scores the model's parametric memory alone — the floor a grounded arm has to beat before a delta is evidence of retrieval."),
             ("--routing-only", "Call the classifier per question and score the routing decision against `expected_intent` (or category default). Skips retrieval and synthesis — fast iteration loop for tuning the classifier prompt."),
             ("--isolate",      "Per-corpus isolation (with --synth or --prod-pipeline). Seeds each question's conversation with enabled_corpora=[bank.corpus] so retrieval is scoped to the bank's target corpus alone — measures corpus integrity without cross-corpus dilution."),
             ("--prod-pipeline", "Bench-prod parity mode. Each question drives the PRODUCTION KnowledgeQuery retrieval pipeline in-process (context build → kq_pipeline() 19 steps → merge/truncate) via Runtime::retrieve_evidence and scores the returned evidence pool — no synthesis pass. Measures the pipeline chat surfaces actually run, unlike the default raw-index mode. Deterministic (intent pinned to KnowledgeQuery)."),
@@ -289,6 +292,14 @@ struct RunArgs {
     /// pool (no synthesis). See `runner::run_bank_prod` and
     /// RETRIEVAL_REDESIGN.md §7.1.
     prod_pipeline: bool,
+    /// Closed-book arm (synth only): every question runs as a
+    /// `TurnMode::Naked` turn — retrieval, the router, the grounding gate,
+    /// tools and the atlas are all bypassed, so the answer is the model's
+    /// parametric memory alone. This is the study's FLOOR: a question the
+    /// closed-book arm already answers measures the model, not the corpus,
+    /// and a grounded arm's score on it is not evidence of retrieval. Off
+    /// by default; refuses the two retrieval modes (see `cmd_run`).
+    closed_book: bool,
 }
 
 impl Default for RunArgs {
@@ -324,6 +335,7 @@ impl Default for RunArgs {
             max_turns: None,
             atlas_seed: atlas_ann::SeedMode::Cosine,
             prod_pipeline: false,
+            closed_book: false,
         }
     }
 }
@@ -459,6 +471,9 @@ async fn cmd_run(args: &[String]) -> i32 {
             }
             "--synth" => {
                 a.synth = true;
+            }
+            "--closed-book" => {
+                a.closed_book = true;
             }
             "--routing-only" => {
                 a.routing_only = true;
@@ -601,6 +616,35 @@ async fn cmd_run(args: &[String]) -> i32 {
         eprintln!("error: --bank is required");
         eprintln!("hint: try sovereign/bench/wikipedia/questions.toml");
         return 2;
+    }
+
+    // The closed-book arm is the SYNTH arm run naked. It refuses rather than
+    // silently ignoring the flag, because the run's artifact is filed under
+    // the arm's name: a `--closed-book` run that quietly stayed grounded would
+    // report a grounded score as the study's floor, and every delta measured
+    // against it would be understated by exactly the thing being measured
+    // (ARCH §18.3 — never silently substitute). `--prod-pipeline` and
+    // `--routing-only` score an evidence pool and a routing decision, and a
+    // naked turn produces neither.
+    if a.closed_book {
+        if !a.synth {
+            eprintln!("error: --closed-book requires --synth (it is the synth arm run naked)");
+            return 2;
+        }
+        if a.prod_pipeline {
+            eprintln!(
+                "error: --closed-book is incompatible with --prod-pipeline \
+                 (a naked turn builds no evidence pool to score)"
+            );
+            return 2;
+        }
+        if a.routing_only {
+            eprintln!(
+                "error: --closed-book is incompatible with --routing-only \
+                 (a naked turn never routes)"
+            );
+            return 2;
+        }
     }
 
     // Thread bench short-circuits the rest of the flow. The bank
@@ -870,17 +914,31 @@ async fn cmd_run(args: &[String]) -> i32 {
     };
 
     let run = if a.synth {
-        eprintln!(
-            "synth mode — driving full chat pipeline. This will take ~one chat-completion \
-             per question; sit tight."
-        );
+        // The arm announces itself (ei-7a). Under `--closed-book` the synth
+        // banner would be false — nothing about the pipeline runs — and a
+        // closed-book artifact is indistinguishable from a grounded one in
+        // the JSON, so the stderr is the only place the arm is named.
+        let turn_mode = if a.closed_book {
+            eprintln!(
+                "closed-book mode — each question is a RAW MODEL turn (no retrieval, no \
+                 router, no grounding gate, no atlas). Answers come from the model's \
+                 parametric memory alone; `retrieved` is empty by construction."
+            );
+            sovereign_contracts::types::TurnMode::Naked
+        } else {
+            eprintln!(
+                "synth mode — driving full chat pipeline. This will take ~one chat-completion \
+                 per question; sit tight."
+            );
+            sovereign_contracts::types::TurnMode::Grounded
+        };
         if !atlas_ctxs.is_empty() {
             eprintln!(
                 "note: --with-atlas is ignored under --synth (synth path uses runtime \
                  retrieval, not the eval runner's chunk search)."
             );
         }
-        match runner::run_bank_synth(&session, &bank, !a.no_judge, a.isolate).await {
+        match runner::run_bank_synth(&session, &bank, !a.no_judge, a.isolate, turn_mode).await {
             Ok(r) => r,
             Err(e) => {
                 eprintln!("error: {e}");
@@ -912,7 +970,9 @@ async fn cmd_run(args: &[String]) -> i32 {
         // nothing — so a run that fell through to raw-index mode looked
         // exactly like one that drove the production pipeline, in the output
         // and in the file. That matters most for an A/B over atlas grounding:
-        // ONLY `--prod-pipeline` reaches `apply_atlas_grounding`, so a
+        // this arm does NOT reach `apply_atlas_grounding` and both the
+        // pipeline arms do (`--synth` through `stream_knowledge_query_turn`
+        // → `prepare_knowledge_query_plan` → `kq_pipeline()` step 8), so a
         // two-arm comparison run in this mode is one arm run twice, and
         // nothing in the artifact says so (ARCH §18.3, §18.4 — validate the
         // instrument before the result).
@@ -1088,6 +1148,33 @@ mod tests {
         assert_eq!(
             got.iter().map(|t| t.id.as_str()).collect::<Vec<_>>(),
             vec!["big"]
+        );
+    }
+
+    /// `--closed-book` names an ARM, and an arm that silently ran grounded
+    /// would file a grounded score as the study's floor — understating every
+    /// delta measured against it by exactly the thing being measured. All
+    /// three refusals land before the bank is opened, so this test reaches
+    /// no daemon and no file (the bank path below does not exist).
+    #[tokio::test]
+    async fn closed_book_refuses_without_synth_and_with_prod_pipeline() {
+        let argv = |flags: &[&str]| -> Vec<String> {
+            ["--bank", "sovereign/bench/no-such-bank.toml"]
+                .iter()
+                .chain(flags.iter())
+                .map(|s| s.to_string())
+                .collect()
+        };
+        assert_eq!(cmd_run(&argv(&["--closed-book"])).await, 2, "needs --synth");
+        assert_eq!(
+            cmd_run(&argv(&["--closed-book", "--synth", "--prod-pipeline"])).await,
+            2,
+            "--prod-pipeline scores an evidence pool a naked turn never builds"
+        );
+        assert_eq!(
+            cmd_run(&argv(&["--closed-book", "--synth", "--routing-only"])).await,
+            2,
+            "--routing-only scores a routing decision a naked turn never makes"
         );
     }
 

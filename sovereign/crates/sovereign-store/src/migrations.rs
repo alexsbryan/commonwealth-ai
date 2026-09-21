@@ -1046,3 +1046,24 @@ pub fn run_searched_sources_migration(conn: &Connection) -> rusqlite::Result<()>
     let _ = conn.execute_batch("ALTER TABLE conversations ADD COLUMN searched_sources TEXT");
     Ok(())
 }
+
+/// Join keys for `routing_log`. The table was keyed by `message_hash`
+/// alone, so a routing decision could not be joined to the turn it
+/// routed: the same question asked in two conversations produced two
+/// rows indistinguishable from one conversation asking twice.
+///
+/// `conversation_id` is written at INSERT time by
+/// `RoutingStore::log_routing`, from the `ConversationContext` the
+/// router was handed. `policy_intent` is written afterwards by
+/// `RoutingStore::log_routing_policy_intent`, and ONLY when the
+/// per-turn `IntentPolicy` overrode the router's verdict — `NULL`
+/// means "the policy left the router's intent standing", never
+/// "unknown".
+///
+/// `message_id` is deliberately absent: the assistant message does
+/// not exist yet when the router runs.
+pub fn run_routing_join_migration(conn: &Connection) -> rusqlite::Result<()> {
+    let _ = conn.execute_batch("ALTER TABLE routing_log ADD COLUMN conversation_id TEXT");
+    let _ = conn.execute_batch("ALTER TABLE routing_log ADD COLUMN policy_intent TEXT");
+    Ok(())
+}

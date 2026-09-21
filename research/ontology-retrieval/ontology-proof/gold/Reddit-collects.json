@@ -1,0 +1,107 @@
+{
+ "service": "Reddit",
+ "list": "collects",
+ "source": "spikes/fineprint-data/ota-pga-versions/Reddit/Privacy Policy.md",
+ "headings": [
+  {
+   "line": 46,
+   "text": "What Information We Collect",
+   "span_ends_line": 86
+  }
+ ],
+ "items": [
+  {
+   "item": "Account Information",
+   "line": 48,
+   "from": "layout-cell"
+  },
+  {
+   "item": "Public Content You Submit",
+   "line": 48,
+   "from": "layout-cell"
+  },
+  {
+   "item": "Non-Public Content You Submit",
+   "line": 48,
+   "from": "layout-cell"
+  },
+  {
+   "item": "Actions You Take",
+   "line": 48,
+   "from": "layout-cell"
+  },
+  {
+   "item": "Transactional Information",
+   "line": 48,
+   "from": "layout-cell"
+  },
+  {
+   "item": "Logs Data",
+   "line": 48,
+   "from": "layout-cell"
+  },
+  {
+   "item": "Usage Information",
+   "line": 48,
+   "from": "layout-cell"
+  },
+  {
+   "item": "Information Collected From Cookies and Similar Technologies",
+   "line": 48,
+   "from": "layout-cell"
+  },
+  {
+   "item": "Location Information",
+   "line": 48,
+   "from": "layout-cell"
+  },
+  {
+   "item": "Public Information Related to You",
+   "line": 48,
+   "from": "layout-cell"
+  },
+  {
+   "item": "Inferred Information",
+   "line": 48,
+   "from": "layout-cell"
+  },
+  {
+   "item": "Linked Services",
+   "line": 48,
+   "from": "layout-cell"
+  },
+  {
+   "item": "Information Collected From Integrations",
+   "line": 48,
+   "from": "layout-cell"
+  },
+  {
+   "item": "Reddit Ads Users",
+   "line": 48,
+   "from": "layout-cell"
+  },
+  {
+   "item": "Reddit Pro Users",
+   "line": 48,
+   "from": "layout-cell"
+  },
+  {
+   "item": "Reddit Program Participants and Potential Participants",
+   "line": 48,
+   "from": "layout-cell"
+  },
+  {
+   "item": "Embedded Content",
+   "line": 48,
+   "from": "layout-cell"
+  },
+  {
+   "item": "Audience Measurement",
+   "line": 48,
+   "from": "layout-cell"
+  }
+ ],
+ "dropped": [],
+ "verdict": "built",
+ "reason": "18 published items, 0 prose dropped"
+}

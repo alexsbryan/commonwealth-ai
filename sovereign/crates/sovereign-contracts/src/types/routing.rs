@@ -73,10 +73,11 @@ pub enum Intent {
     /// poem", "compose a letter", "brainstorm names"). No corpus retrieval, no
     /// grounding gate, no tools, no situated/relational framing — the handler
     /// streams the requested piece behind a neutral creative system prompt
-    /// (`handlers/generative.rs`). Short-circuited off the DeepQuery path by the
-    /// router's `looks_like_creative_generation` heuristic, because routing a
-    /// creative ask through retrieval+synthesis buffers every token behind the
-    /// gate (a long blank screen, then a dump grounded in irrelevant corpora).
+    /// (`handlers/generative.rs`). Kept off DeepQuery by the embed router's
+    /// `generative_query` exemplars and the coarse `GENERATIVE` label (a creative
+    /// ask behind retrieval+gate is a long blank screen, then an irrelevant dump).
+    /// Decided on the text's FORM only: an essay ABOUT an installed corpus lands
+    /// here too and is answered ungrounded (note b06be54f, 2026-09-20).
     GenerativeQuery,
     /// A question about how THIS codebase works — "how does inference run",
     /// "what calls gate_answer", "where is X implemented", "trace the request

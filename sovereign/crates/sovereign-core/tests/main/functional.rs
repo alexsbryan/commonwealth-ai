@@ -2173,3 +2173,53 @@ async fn memory_integrity_guards_route_primary_and_stay_local() {
         .expect("detect_contradictions should complete");
     assert_primary_and_local(&p2.captured, "detect_contradictions");
 }
+
+/// A zero-chunk DocumentOperation turn is an abstention, and an abstention is
+/// still a turn. Until rb-document-op-abstention-record it saved
+/// `metadata: None`, so the reply text was the only record of it: nothing
+/// downstream could say which source came up empty, or tell this apart from a
+/// message that was never routed at all. The success path writes
+/// `provenance` / `document_source` / `document_chunks`; the abstention now
+/// writes the same three (chunks = 0) plus `result_quality: "no_source"`. The
+/// reply TEXT is unchanged — this row is a record, not a behaviour change.
+#[tokio::test]
+async fn document_op_abstention_carries_a_record() {
+    let h = TestHarness::new();
+    // Nothing is ingested in a fresh harness, so `list_sources` resolves the
+    // hint to itself and `get_chunks_by_source` returns zero chunks.
+    let response = h
+        .send("[Document attached: not-ingested.pdf] summarise this")
+        .await;
+
+    assert!(
+        response
+            .message
+            .content
+            .contains("No document chunks found"),
+        "this test must land on the abstention branch, not another handler: {}",
+        response.message.content
+    );
+
+    let metadata = response
+        .message
+        .metadata
+        .as_ref()
+        .expect("an abstention carries a record, not `None`");
+    assert_eq!(metadata["document_source"], "not-ingested.pdf");
+    assert_eq!(metadata["document_chunks"], 0);
+    assert_eq!(metadata["result_quality"], "no_source");
+
+    let provenance = h.provenance(&response);
+    assert_eq!(provenance.intent, "DocumentOperation");
+    assert!(
+        provenance.search_method.is_none(),
+        "nothing was retrieved, so the retrieval-path label is absent rather \
+         than guessed: {:?}",
+        provenance.search_method
+    );
+    assert!(
+        provenance.sources.is_empty(),
+        "no source contributed: {:?}",
+        provenance.sources
+    );
+}

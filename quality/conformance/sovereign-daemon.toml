@@ -42,5 +42,5 @@ asserts = 3
 requirement = "UI-22"
 test = "sovereign-daemon::daemon::tests::the_client_api_binds_loopback_by_default_and_never_exposes_an_unauthenticated_listener"
 file = "sovereign/crates/sovereign-daemon/src/daemon.rs"
-line = 5402
+line = 5420
 asserts = 21

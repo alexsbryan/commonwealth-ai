@@ -1,0 +1,583 @@
+{
+ "service": "Facebook",
+ "list": "uses",
+ "source": "spikes/fineprint-data/ota-pga-versions/Facebook/Privacy Policy.md",
+ "verdict": "qualifies",
+ "headings": [
+  {
+   "line": 462,
+   "text": "How do we use your information?",
+   "span_ends_line": 804
+  },
+  {
+   "line": 514,
+   "text": "How we use information to improve Meta Products",
+   "span_ends_line": 525
+  },
+  {
+   "line": 526,
+   "text": "How we use information to personalize our features that are part of AI at Meta",
+   "span_ends_line": 539
+  },
+  {
+   "line": 540,
+   "text": "How we use location-related information",
+   "span_ends_line": 555
+  }
+ ],
+ "items": [
+  {
+   "item": "To provide, personalize and improve our Products",
+   "line": 484,
+   "from": "sub-heading"
+  },
+  {
+   "item": "How we show ads",
+   "line": 496,
+   "from": "sub-heading"
+  },
+  {
+   "item": "How we use information to improve Meta Products",
+   "line": 514,
+   "from": "sub-heading"
+  },
+  {
+   "item": "Develop and improve products and features",
+   "line": 521,
+   "from": "list-item"
+  },
+  {
+   "item": "How we use location-related information",
+   "line": 540,
+   "from": "sub-heading"
+  },
+  {
+   "item": "To promote safety, security and integrity",
+   "line": 563,
+   "from": "sub-heading"
+  },
+  {
+   "item": "To provide measurement, analytics and business services",
+   "line": 569,
+   "from": "sub-heading"
+  },
+  {
+   "item": "To communicate with you",
+   "line": 575,
+   "from": "sub-heading"
+  },
+  {
+   "item": "To research and innovate for social good",
+   "line": 581,
+   "from": "sub-heading"
+  },
+  {
+   "item": "Promoting safety, security and integrity",
+   "line": 587,
+   "from": "sub-heading"
+  },
+  {
+   "item": "Detect, prevent and combat harmful or unlawful behavior",
+   "line": 595,
+   "from": "list-item"
+  },
+  {
+   "item": "Detect and prevent spam and other bad experiences",
+   "line": 596,
+   "from": "list-item"
+  },
+  {
+   "item": "Detect when someone needs help and provide support",
+   "line": 597,
+   "from": "list-item"
+  },
+  {
+   "item": "Maintain the integrity of our Products",
+   "line": 599,
+   "from": "list-item"
+  },
+  {
+   "item": "Providing measurement, analytics and business services",
+   "line": 608,
+   "from": "sub-heading"
+  },
+  {
+   "item": "More in the Privacy Policy",
+   "line": 622,
+   "from": "sub-heading"
+  },
+  {
+   "item": "Communicating with you",
+   "line": 627,
+   "from": "sub-heading"
+  },
+  {
+   "item": "Researching and innovating for social good",
+   "line": 644,
+   "from": "sub-heading"
+  },
+  {
+   "item": "Advancing technology",
+   "line": 650,
+   "from": "list-item"
+  },
+  {
+   "item": "Improving safety, health and well-being",
+   "line": 651,
+   "from": "list-item"
+  },
+  {
+   "item": "Account Center and using information across our Products",
+   "line": 662,
+   "from": "sub-heading"
+  },
+  {
+   "item": "Keep you and others safe",
+   "line": 677,
+   "from": "list-item"
+  },
+  {
+   "item": "Why we use information across devices",
+   "line": 694,
+   "from": "sub-heading"
+  },
+  {
+   "item": "Manual review",
+   "line": 699,
+   "from": "sub-heading"
+  },
+  {
+   "item": "Examples of when we use manual review",
+   "line": 702,
+   "from": "sub-heading"
+  },
+  {
+   "item": "Who reviews this information",
+   "line": 708,
+   "from": "sub-heading"
+  },
+  {
+   "item": "What Products does this Policy cover?",
+   "line": 714,
+   "from": "sub-heading"
+  },
+  {
+   "item": "Your activity on our Products",
+   "line": 719,
+   "from": "sub-heading"
+  },
+  {
+   "item": "Topics we think you might be interested in",
+   "line": 733,
+   "from": "sub-heading"
+  },
+  {
+   "item": "Your connections",
+   "line": 742,
+   "from": "sub-heading"
+  },
+  {
+   "item": "Other device signals we receive",
+   "line": 747,
+   "from": "sub-heading"
+  },
+  {
+   "item": "IP address",
+   "line": 752,
+   "from": "sub-heading"
+  },
+  {
+   "item": "Personalizing ads for you and others",
+   "line": 759,
+   "from": "sub-heading"
+  },
+  {
+   "item": "Helping to keep your account secure",
+   "line": 766,
+   "from": "sub-heading"
+  },
+  {
+   "item": "Information we provide about different types of people",
+   "line": 776,
+   "from": "sub-heading"
+  },
+  {
+   "item": "Third party",
+   "line": 781,
+   "from": "sub-heading"
+  },
+  {
+   "item": "Service provider",
+   "line": 800,
+   "from": "sub-heading"
+  }
+ ],
+ "dropped": [
+  {
+   "item": "We personalize your experience, like by suggesting reels to watch, communities to join, or providing more relevant responses from our features that are part of AI at Meta",
+   "line": 470,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "We improve our Products by applying information about what you use them to do, and what else is happening on your device when our app crashes",
+   "line": 471,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "We work to prevent harmful behavior and keep people safe on our Products",
+   "line": 472,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "We send you messages about the Products you use or ones you might like, if you let us",
+   "line": 473,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "We research for the good of people around the world, like to advance technology or to help out in a crisis",
+   "line": 474,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Seeing if our Products are working correctly, such as troubleshooting, and fixing it when it’s not working",
+   "line": 489,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Personalizing features, content and recommendations, such as your Facebook Feed, Instagram Feed, Meta AI, Stories and ads",
+   "line": 490,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Build and test out new products and features to see if they work",
+   "line": 522,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Get feedback on our ideas for products or features",
+   "line": 523,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Conduct surveys and other research on what we can do better for Meta Products and brands",
+   "line": 524,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "How we use information to personalize our features that are part of AI at Meta",
+   "line": 526,
+   "from": "sub-heading",
+   "rule": "prose"
+  },
+  {
+   "item": "[IP addresses\\[32\\]] , which we use to estimate your general location. We can use IP addresses to estimate your specific location if it’s necessary to protect the safety and security of you or others",
+   "line": 547,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Your and others' activity on our Products, like check-ins and events",
+   "line": 548,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Information you give us directly, like if you enter your current city on your profile, or provide your address in Marketplace",
+   "line": 549,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Provide, personalize and improve our Products, including ads  , for you and others. [See an example\\[33\\]]",
+   "line": 553,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Detect suspicious activity and help keep your account secure. [Learn how.\\[34\\]]",
+   "line": 554,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Verify accounts, identity and activity. Learn more about how you can choose to verify your account or identity through facial recognition technology",
+   "line": 592,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Find and address violations of our terms or policies. In some cases, the decisions we make about violations are reviewed by the Oversight Board. They may use information we have when they review our decisions. Learn more about how the Oversight Board processes information",
+   "line": 593,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Investigate suspicious activity. Learn more about face analysis and how we use it to help protect you and others from impersonation and identity misuse",
+   "line": 594,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Detect and stop threats to our personnel and property",
+   "line": 598,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "How many people see and interact with their products, services or content, including posts, videos, Facebook Pages, listings, Shops and ads  , including those shown through apps using Meta Audience Network",
+   "line": 615,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "How people interact with their content, websites, apps and services",
+   "line": 616,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "What [types of people\\[36\\]]  interact with their content or use their services",
+   "line": 617,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "How people use our partners' products and services to connect to Meta Products, the performance of their connection and networks and users' experience with them",
+   "line": 618,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "We send messages about the Products we know you use, using the email you register to your account",
+   "line": 632,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Depending on your settings, we send marketing communications about Products you might like",
+   "line": 633,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "We ask you to participate in research based on things like how you use our Products",
+   "line": 634,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "We let you know about our policies and terms of service",
+   "line": 635,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "When you contact us with questions, we reply to your email",
+   "line": 636,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "We facilitate customer support communications with you when you've told us, either directly or through a [third party\\[37\\]] , that you have questions or concerns about our Products",
+   "line": 637,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Contributing to social good and areas of public interest",
+   "line": 649,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "We analyze information about where groups of people go during crises. This helps relief organizations get aid to the right places",
+   "line": 655,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "We work with independent researchers to better understand the impact social media might have on elections and democratic processes",
+   "line": 656,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "We’ve collaborated with academics and industry experts to help improve internet access and quality in rural areas",
+   "line": 657,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "We support research in areas like artificial intelligence and machine learning",
+   "line": 658,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Provide you with the option to use connected experiences",
+   "line": 667,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Personalize ads for you and others and measure how they perform, if we show you ads",
+   "line": 668,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Personalize content and suggestions for you and others. [See an example\\[38\\]]",
+   "line": 669,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Improve our Products and provide optional activities that span across them",
+   "line": 670,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Adjust some of your accounts information and settings to match across your accounts, which you can manage anytime",
+   "line": 671,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "More accurately count people and measure how they use our Products",
+   "line": 678,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Make sure our Products are working correctly so we can fix them if they’re not",
+   "line": 679,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "WhatsApp and Meta are joint controllers for the purpose of associating the accounts you have added to an Accounts Center with each other",
+   "line": 683,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Meta will combine your information across accounts on Meta Company Products and use your information as described in this section. This includes using your information to keep you and others safe, more accurately count people and measure how they use our products, and make sure our Products are working correctly so we can fix them if they’re not",
+   "line": 684,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "WhatsApp will combine your information across accounts on Meta Company Products and use your information as described in the WhatsApp in Accounts Center Supplemental Privacy Policy",
+   "line": 685,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Our reviewers help us promote safety, security and integrity across our Products. For example, reviewers can look for and remove content that violates our terms and policies and keep content that doesn’t break our terms and policies available. Their work supplements our technology that detects violations",
+   "line": 704,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "When our algorithms detect that someone might need help, a reviewer can review their post and offer support if needed",
+   "line": 705,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "We also use manual review to analyze content to train our algorithms to review content the same way a person would. This improves our automatic processing, which in turn helps us improve our products",
+   "line": 706,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Your activity on third-party websites and apps, depending on your settings",
+   "line": 724,
+   "from": "sub-heading",
+   "rule": "prose"
+  },
+  {
+   "item": "Providing more personalized features, content and suggestions across our Products",
+   "line": 786,
+   "from": "sub-heading",
+   "rule": "prose"
+  },
+  {
+   "item": "Automatically fill in registration information, like your phone number, from one Meta Product when you sign up for an account on a different Product",
+   "line": 791,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Let others see and search your name and profile photo across our Products and communicate with you",
+   "line": 792,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Show all interactions in one place for content you’ve cross-posted to different Products",
+   "line": 793,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Highlights",
+   "line": 465,
+   "from": "sub-heading",
+   "rule": "one-word"
+  },
+  {
+   "item": "Take control",
+   "line": 507,
+   "from": "sub-heading",
+   "rule": "imperative"
+  },
+  {
+   "item": "Your activity and information you provide",
+   "line": 531,
+   "from": "list-item",
+   "rule": "link-only"
+  },
+  {
+   "item": "Friends, followers and other connections",
+   "line": 532,
+   "from": "list-item",
+   "rule": "link-only"
+  },
+  {
+   "item": "App browser and device information",
+   "line": 533,
+   "from": "list-item",
+   "rule": "link-only"
+  },
+  {
+   "item": "Information from partners, vendors and third parties",
+   "line": 534,
+   "from": "list-item",
+   "rule": "link-only"
+  },
+  {
+   "item": "Partner",
+   "line": 771,
+   "from": "sub-heading",
+   "rule": "one-word"
+  },
+  {
+   "item": "Device",
+   "line": 795,
+   "from": "sub-heading",
+   "rule": "one-word"
+  }
+ ]
+}

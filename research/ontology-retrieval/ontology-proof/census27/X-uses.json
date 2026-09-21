@@ -1,0 +1,46 @@
+{
+ "service": "X",
+ "list": "uses",
+ "source": "spikes/fineprint-data/ota-pga-versions/X/Privacy Policy.md",
+ "verdict": "under-5",
+ "headings": [
+  {
+   "line": 134,
+   "text": "2\\. How We Use Information",
+   "span_ends_line": 164
+  }
+ ],
+ "items": [],
+ "dropped": [
+  {
+   "item": "2.3 Measure, analyze and make our services better",
+   "line": 153,
+   "from": "bold-lead-in",
+   "rule": "prose"
+  },
+  {
+   "item": "2.1 Operate, improve, and personalize our services",
+   "line": 139,
+   "from": "bold-lead-in",
+   "rule": "numbered"
+  },
+  {
+   "item": "2.2 Foster safety and security",
+   "line": 149,
+   "from": "bold-lead-in",
+   "rule": "numbered"
+  },
+  {
+   "item": "2.4 Communicate with you about our services",
+   "line": 157,
+   "from": "bold-lead-in",
+   "rule": "numbered"
+  },
+  {
+   "item": "2.5 Research",
+   "line": 161,
+   "from": "bold-lead-in",
+   "rule": "numbered"
+  }
+ ]
+}

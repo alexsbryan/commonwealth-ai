@@ -41,9 +41,12 @@ use super::resolution_ontology::ResolutionPolicy;
 /// first token plus one long token; the declared ontology cares which.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MergeEvidence {
-    /// The whole name or an alias matched, or one name contains the other.
+    /// The whole name or an alias matched.
     Exact,
-    /// Token overlap, edit distance, or description similarity.
+    /// Token overlap, edit distance, description similarity, or one name
+    /// CONTAINS the other. Containment moved here 2026-09-19: "Payment
+    /// partners" contains "partners" and is not the same recipient, so a
+    /// keyed type must be allowed to say so (rule 3 below).
     Fuzzy,
 }
 
@@ -317,7 +320,10 @@ mod tests {
 
     fn policies(types: Vec<OntologyTypeDecl>) -> OntologyPolicies {
         OntologyPolicies {
-            shape: ShapePolicy { types },
+            shape: ShapePolicy {
+                types,
+                ..Default::default()
+            },
             ..Default::default()
         }
     }

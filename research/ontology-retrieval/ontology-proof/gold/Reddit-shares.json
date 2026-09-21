@@ -1,0 +1,63 @@
+{
+ "service": "Reddit",
+ "list": "shares",
+ "source": "spikes/fineprint-data/ota-pga-versions/Reddit/Privacy Policy.md",
+ "headings": [
+  {
+   "line": 104,
+   "text": "How We Share Your Information",
+   "span_ends_line": 117
+  },
+  {
+   "line": 156,
+   "text": "EU-U.S., UK Extension, and Swiss-U.S. Data Privacy Frameworks Disclosure",
+   "span_ends_line": 164
+  }
+ ],
+ "items": [
+  {
+   "item": "With your consent",
+   "line": 109,
+   "from": "list-item"
+  },
+  {
+   "item": "With linked services",
+   "line": 110,
+   "from": "list-item"
+  },
+  {
+   "item": "With our service providers",
+   "line": 111,
+   "from": "list-item"
+  },
+  {
+   "item": "To comply with the law",
+   "line": 112,
+   "from": "list-item"
+  },
+  {
+   "item": "In an emergency",
+   "line": 113,
+   "from": "list-item"
+  },
+  {
+   "item": "With our affiliates",
+   "line": 115,
+   "from": "list-item"
+  },
+  {
+   "item": "Aggregated or de-identified information",
+   "line": 116,
+   "from": "list-item"
+  }
+ ],
+ "dropped": [
+  {
+   "item": "To enforce our rights and promote safety and security",
+   "line": 114,
+   "from": "list-item"
+  }
+ ],
+ "verdict": "built",
+ "reason": "7 published items, 1 prose dropped"
+}

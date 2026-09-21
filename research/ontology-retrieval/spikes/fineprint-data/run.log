@@ -1,0 +1,175 @@
+| service | approved | tested | (a) ToS;DR exact | (a) 12w | (b) OTA exact | (b) 12w | OTA docs |
+|---|---|---|---|---|---|---|---|
+| Reddit | 96 | 29 | 29/29 (100%) | 29/29 (100%) | 28/29 (97%) | 28/29 (97%) | 12 |
+| Spotify | 74 | 29 | 26/29 (90%) | 29/29 (100%) | 26/29 (90%) | 29/29 (100%) | 9 |
+| LinkedIn | 20 | 20 | 19/20 (95%) | 20/20 (100%) | 18/20 (90%) | 19/20 (95%) | 13 |
+| Zoom | 57 | 27 | 27/27 (100%) | 27/27 (100%) | 1/27 (4%) | 9/27 (33%) | 2 |
+| Discord | 87 | 28 | 27/28 (96%) | 27/28 (96%) | 24/28 (86%) | 24/28 (86%) | 3 |
+| Google | 62 | 28 | 25/28 (89%) | 27/28 (96%) | 16/28 (57%) | 27/28 (96%) | 2 |
+| Facebook | 65 | 29 | 29/29 (100%) | 29/29 (100%) | 12/29 (41%) | 19/29 (66%) | 19 |
+| Slack | 23 | 23 | 23/23 (100%) | 23/23 (100%) | no OTA folder | - | 0 |
+| ALL | 484 | 213 | 205/213 (96%) | 211/213 (99%) | 125/213 (59%) | 155/213 (73%) | |
+| ALL, OTA-covered services only | | 190 | | | 125/190 (66%) | 155/190 (82%) | |
+{
+ "220": {
+  "title": "targeted third-party advertising",
+  "points_total": 1797,
+  "points_fetched": 1797,
+  "status": {
+   "declined": 135,
+   "approved": 241,
+   "pending": 1420,
+   "changes-requested": 1
+  },
+  "approved_points": 241,
+  "approved_distinct_documents_UPPER_BOUND_on_services": 220,
+  "approved_points_resolved_to_service": 157,
+  "approved_points_unresolved": 84,
+  "distinct_services_resolved": 154,
+  "resolved_services_in_ota": 26,
+  "resolved_services_in_ota_names": [
+   "BBC",
+   "Blizzard",
+   "Brave",
+   "Bumble",
+   "Facebook",
+   "Foursquare",
+   "Google",
+   "IKEA",
+   "Imgur",
+   "Instagram",
+   "Last.fm",
+   "Microsoft Store",
+   "Netflix",
+   "Quora",
+   "Rakuten",
+   "Reddit",
+   "Samsung",
+   "SoundCloud",
+   "Spotify",
+   "The Guardian",
+   "TikTok",
+   "Tinder",
+   "W3Schools",
+   "WeTransfer",
+   "XING",
+   "eBay"
+  ],
+  "EXTRAPOLATED_distinct_services": 220,
+  "EXTRAPOLATED_services_in_ota": 37
+ },
+ "504": {
+  "title": "automated decisions / profiling / AI training",
+  "points_total": 73,
+  "points_fetched": 73,
+  "status": {
+   "approved": 54,
+   "declined": 19
+  },
+  "approved_points": 54,
+  "approved_distinct_documents_UPPER_BOUND_on_services": 54,
+  "approved_points_resolved_to_service": 48,
+  "approved_points_unresolved": 6,
+  "distinct_services_resolved": 48,
+  "resolved_services_in_ota": 17,
+  "resolved_services_in_ota_names": [
+   "BlueSky",
+   "Brave",
+   "DeviantArt",
+   "Discord",
+   "Facebook",
+   "Foursquare",
+   "Google",
+   "Grammarly",
+   "IKEA",
+   "Last.fm",
+   "PayPal",
+   "Pinterest",
+   "Reddit",
+   "Samsung",
+   "Spotify",
+   "Tinder",
+   "Wire"
+  ],
+  "EXTRAPOLATED_distinct_services": 54,
+  "EXTRAPOLATED_services_in_ota": 19
+ },
+ "166": {
+  "title": "shares data with non-essential third parties",
+  "points_total": 3294,
+  "points_fetched": 3294,
+  "status": {
+   "approved": 199,
+   "declined": 211,
+   "pending": 2882,
+   "changes-requested": 2
+  },
+  "approved_points": 199,
+  "approved_distinct_documents_UPPER_BOUND_on_services": 188,
+  "approved_points_resolved_to_service": 141,
+  "approved_points_unresolved": 58,
+  "distinct_services_resolved": 140,
+  "resolved_services_in_ota": 18,
+  "resolved_services_in_ota_names": [
+   "BlueSky",
+   "Brave",
+   "Coinbase",
+   "Discord",
+   "Disqus",
+   "Facebook",
+   "Google",
+   "Instagram",
+   "Netflix",
+   "Qwant",
+   "Reddit",
+   "Samsung",
+   "SoundCloud",
+   "Spotify",
+   "TikTok",
+   "Tinder",
+   "W3Schools",
+   "eBay"
+  ],
+  "EXTRAPOLATED_distinct_services": 188,
+  "EXTRAPOLATED_services_in_ota": 24
+ }
+}
+{
+ "contrib-versions": {
+  "folders": 387,
+  "match_tosdr_name": 174
+ },
+ "pga-versions": {
+  "folders": 26,
+  "match_tosdr_name": 20
+ },
+ "vlopses-us-versions": {
+  "folders": 23,
+  "match_tosdr_name": 14
+ },
+ "genai-contrib-versions": {
+  "folders": 51,
+  "match_tosdr_name": 8
+ },
+ "_union": {
+  "folders": 451,
+  "match_tosdr_name": 190,
+  "tosdr_services": 10290
+ }
+}
+324844 AI-TRAINING | | To customize your experience with our Services and otherwise improve our Services including, depending on the terms that apply to your use of the Services, using User Content to train, fine tune and improve the models that power our Services. | Basic Information, Account Information, Communications, App, browser, and device information, Services usage data, and User Content | Legitimate Interest
+330499 UNCLEAR | <p>We use third-party service providers to offer AI-powered chatbot and search tools on our website to assist with general inquiries and navigation. Your interactions with these tools may be recorded, including message content and usage patterns, and the data may be used to help improve response accuracy, personalize your experience, and enhance system performance.
+319091 UNCLEAR | This processing can include use of automated technologies such as machine learning systems that help us power and improve our services.
+318417 PROFILING-ONLY | In certain cases we make automated decisions related to you. We may use technology to assess your personal situation and other factors to predict potential risks or outcomes (this practice is known as profiling).
+319376 PROFILING-ONLY | Wealthsimple may use automated decision making and artificial intelligence systems to process your personal information. Wealthsimple may rely on decisions made by these automated systems for the following purposes:</p> <ul> <li><p>providing our Products or services to you (e.g. verifying your identity, assessing internal risk or creditworthiness);</p></li> <li><p>customer service purposes (e.g. u
+327901 AI-TRAINING | Train machine learning models to improve services, for example, better recommendations
+319478 UNCLEAR | <br><br>Developing and improving new features and services, including through machine learning and other technologies, and testing them out<br><br>
+319274 AI-TRAINING | * We use publicly available information online or from other public sources to help train new machine learning models and build foundational technologies that power various Google products such as Google Translate, Gemini Apps, and Cloud AI capabilities.<br>* We use your interactions with AI models and technologies like Gemini Apps to develop, train, fine-tune, and improve these models to better h
+330102 PROFILING-ONLY | We may use automated decision making and/or profiling regarding your personal data for some Services, for example by providing you with relevant features suggestion or by offering you a custom promotional offer based on your email information and behavior inside our Services. You can request a manual review of the accuracy of an automated decision that you are unhappy with or limit or object to su
+322237 PROFILING-ONLY | <p><strong>Right Not to Be Subject to Automated Individual Decision-Making.</strong> You have the right not to be subject to a decision based solely on automated processing (including profiling) that produces legal effects concerning you or similarly significantly affects you.</p>
+327774 UNCLEAR | To conduct data analytics and use artificial intelligence and machine learning to support internal research, create new products and services, improve functionality of existing products and services, and develop new features. nd develop new features.
+319918 AI-TRAINING | to monitor how the Services are used and to develop new products and services, including to train AI models,
+327989 AI-TRAINING | <p>We use Personal Information that we collect on the Scratch Website, such as your location and your activities, to monitor and analyze usage of the Scratch Website and to enhance your learning experience,&nbsp;including by training AI tools to personalize features or recommendations on the Website.</p>
+321325 PROFILING-ONLY | In certain circumstances, you can object to the processing of your personal data (for example to object to the use of your data for profiling and/or purely automated decision making).
+322460 AI-TRAINING | Some features in Asana are powered by artificial intelligence (AI) and machine learning. Admins and super admins can adjust AI preferences for your domain at any time by visiting the admin console.</p> <p>When features powered by Asana AI are enabled in your domain, we use metadata related to your domain’s use of Asana to train machine learning models. Depending on the model and the feature, these
+requests: 400

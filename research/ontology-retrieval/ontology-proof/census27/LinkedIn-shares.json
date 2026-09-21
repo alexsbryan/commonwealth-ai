@@ -1,0 +1,15 @@
+{
+ "service": "LinkedIn",
+ "list": "shares",
+ "source": "spikes/fineprint-data/ota-pga-versions/LinkedIn/Privacy Policy.md",
+ "verdict": "under-5",
+ "headings": [
+  {
+   "line": 109,
+   "text": "Data Sharing with Third Parties",
+   "span_ends_line": 112
+  }
+ ],
+ "items": [],
+ "dropped": []
+}

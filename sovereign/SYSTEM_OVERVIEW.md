@@ -1647,13 +1647,19 @@ rule, and the "44 GB boot peak" were all this one corpus.
   — it EDITS the shipped `phase1_section_extraction_schema`, extending the
   entity enum, adding a type slot plus one union `attributes` object per kind
   — the object REQUIRED, its slots optional, since a strict grammar omits an
-  optional object at will and enforces only `required`; and `subject`
+  optional object at will and enforces only `required`; the one slot that is
+  also required by name is a declared `deontic`, the directive's force, which
+  an open-but-empty bag left filled on 46 of 1,221 obligations; and `subject`
   inserted BEFORE the bag, because property order is the model's generation
   order under llguidance and a `subject` asked for after an empty `{}` was
   skipped (note 5c06bc92; `corpus-engine` declares serde_json
   `preserve_order` for the same reason) — requiring
-  `claim_kind`, and dropping `argument_reconstructions` unless
-  `derivation.arguments`) and the reader's `ParsePolicy`
+  `claim_kind`, dropping `argument_reconstructions` unless
+  `derivation.arguments`, and raising `entities_introduced`'s `maxItems` to
+  the recipe's `max_entities_per_section` when one is declared — the shipped
+  15 stands otherwise, since that is the number every other pipeline's benches
+  were measured at, and a section that ENUMERATES is the one case that needs
+  more) and the reader's `ParsePolicy`
   (`pipelines/parse_policy.rs`), enforced by `pipelines/ontology_parse.rs`:
   a declared `EntityType::Other` is kept, attributes validate by family and
   store normalised, a declared voice is neither an entity nor an attribution,
@@ -1817,7 +1823,12 @@ rule, and the "44 GB boot peak" were all this one corpus.
   (`atlas/resolution_identity.rs`): a declared type never folds across
   types, two mentions carrying different declared identity keys are two
   things, and a type identified by an external key merges on fuzzy name
-  shape only when a key agrees (`MergeEvidence`); and declared
+  shape only when a key agrees (`MergeEvidence` — since 2026-09-19 that
+  includes rule 4's whole-word CONTAINMENT, so "Payment partners" no longer
+  folds into "partners" for a KEYED type; a declared type with no identity
+  key is skipped by that guard and still folds, which is the open head-noun
+  defect the `#[ignore]`d
+  `a_bare_head_noun_does_not_absorb_its_qualified_forms` reproduces); and declared
   `ref` attributes snap to atom ids, an unresolvable one keeping the name
   plus an `UnresolvedAttributeRef` record. `resolve_step_3b` /
   `resolve_entities_and_events` stay as shims over the `_with` forms, so
@@ -3594,7 +3605,26 @@ here is what only a `Runtime` can do: choose the atlases in scope (through
 derivation, replacing an inline `format!("{}-{}", corpus_id, title)`), embed
 the question through the lane's provider, and fetch a chunk — the two methods
 of `ground::EvidenceFetcher`. `corpus-mcp`'s `ask` implements the same two and
-gets the same walk, which is the point (§10.6: one walk, two hosts).
+gets the same walk, which is the point (§10.6: one walk, two hosts). It also
+hands the walk's own REPORT out, as a value: a second out-parameter `walk_out`
+writes `AtlasWalkEcho` (the map section's nodes — atlas, atom id, kind,
+subtype, hop, via, from, score — plus the walk and resolve counters,
+`runtime/types.rs`) into `PipelineState::atlas_walk`, carried to
+`KnowledgeQueryPlan` and `EvidenceRetrieval` exactly the way
+`unavailable_corpora` is and out to `EvalResult.atlas_walk`, because the
+`atlas-grounding: fetch ledger` event that used to hold it alone is dark on the
+surface that has to measure it (`svrn eval run` emits no `sovereign_core`
+tracing at any level). The `--synth` lane reaches that same field by the other
+door the plan has: `runtime/streaming.rs` writes the echo into the assistant
+message's metadata under `ATLAS_WALK_META_KEY` beside `meta_atlas_hits`, and
+`eval_cmd::atlas_walk_meta` reads it back off the PERSISTED row — that lane
+returns no plan to read, so a value is not enough and only the metadata hop
+carries it. Since 2026-09-21 the DeepQuery/SimpleQuery path carries it too:
+`deep_pipeline` always ran the same step, but `prepare_knowledge_context`
+dropped the echo, so `KnowledgeContext` now holds it and both Deep doors
+(`stream_deep_query_turn`, `handle_simple`) plus `retrieve_evidence`'s deep
+branch write it. Before that a walked Deep turn persisted no key, which read
+downstream as "not walked".
 
 The question's KIND selects the row, by centroid over the map's own exemplars
 (`atlas_traversal::question_kind`, ARCH §2.4 — the router's method, ported
@@ -3827,7 +3857,8 @@ metadata with no query-token overlap that the floor would drop
 (`step_atom_enum`). That exemption is load-bearing and dangerous in equal
 measure: nothing downstream can reject an irrelevant chunk once injected, and
 `merge_demand_select` **pins** `source=atom-enum` chunks ahead of the ranked
-pool. Measured on `bench sep/summarize --prod-pipeline`, the overview-claim
+pool, up to half the merge budget (`ATOM_ENUM_MERGE_SHARE_DEN`; past that they
+compete on rank like any chunk). Measured on `bench sep/summarize --prod-pipeline`, the overview-claim
 injector was spending 5-8 of ~30 slots per turn on
 `commonwealth-ai-arch-principles` in **14 of 14** questions — the same three
 claims each time, because its selector ranked on `(has_evidence, has_excerpt,
@@ -8314,9 +8345,13 @@ never treating a halt STOP (non-empty) as the operator's (an empty
 `ralph/STOP`); `watch` notifies on needs-human, stopped-without-DONE, a stale
 `ralph/.heartbeat` and low disk, re-nagging at most once per 30 min. Every
 terminal state is DONE, an operator stop, or an escalation —
-`python3 scripts/tests/ralph.py` proves the FSMs in-process (26 tests). `pool`
+`python3 scripts/tests/ralph.py` proves the FSMs in-process (90 tests). `pool`
 runs waves of ready units in git worktrees with serial merges (a conflict
-halts) and lane markers at `ralph/lanes/<unit>.done`; the shell family it
+halts) and lane markers at `ralph/lanes/<unit>.done`; a lane that ends holding
+`ralph/waiting` naming a marker is WAITING, not a failure (2026-09-19,
+r9-boundary-sweep struck out twice while its detached sweep ran): the tick
+polls the marker, respawns the lane when it lands, and escalates past
+`LANE_MAX_WAIT_SECS` (48h). The shell family it
 replaced (`ralph-*.sh`) is deleted. Reference: `scripts/RALPH_LOOP.md`.
 
 ### 8.1 Where configuration and state live
@@ -8738,7 +8773,7 @@ now) and the row is dropped — or trimmed to the still-open residual.
 | `project_cmd.rs` split — **DONE 2026-07-13** | `sovereign-cli-dev/src/project_cmd/` (dispatcher `mod.rs` 645 lines, was 7,102) | Split into a directory module — `audit/`, `serve.rs`, `refresh.rs`, `charter_amend.rs`, `registry_watch.rs`, `hooks.rs`, `phase.rs`, `design_plan.rs` — every file under the ARCH §3.1 1,200-line ceiling. `mod.rs` keeps `run_project` dispatch + the shared daemon/git/date plumbing; each command family is one findable file. (`sovereign-cli-dev` remains feature-gated out of the public build behind `--features dev-tools` — the rationale the `atos_cmd/run.rs` row still references.) **`init/` and `scaffold.rs` left this tree 2026-08-07** for `sovereign-cli/src/project_init/`; `registry_watch.rs`'s four verbs were mirrored into `sovereign-cli/src/project_registry.rs` on 2026-08-06, and **`registry_watch.rs` itself was DELETED 2026-08-21 (nc-27)** — the mirror made the cli-dev copies unreachable (`project_registry::try_run` is consulted first and never returns `None` for those verbs), so the file was a dead fork; its one live function, `daemon_get`, moved into `mod.rs` beside `daemon_post`. |
 | `model_slot.rs` residual (was the `embedded.rs` split) | `sovereign-inference/src/embedded/model_slot.rs` (~5,860 lines) | The residual of the `embedded.rs` decomposition ([HISTORY](./HISTORY.md#embeddedrs--embedded-pr5b--2026-06-10)): the slot state machine + decode loops + MTP — one tight, unsafe-heavy (44 blocks) FFI concern whose remaining seam is an alternate inference backend at the `InferenceProvider` boundary, not a file split. That seam is now cut: `engine_factory` selects the engine from `[engine] kind`, so this file is llama's implementation rather than the system's only one. |
 | `retrieval_pipeline.rs` residual — **baseline raised 3,076 → 3,201, 2026-09-03** | `sovereign-core/src/runtime/retrieval_pipeline.rs` (3,201 lines) | The step ledger (`cba4d6e5d`) added 631 lines to an already-oversized file. **512 of them left again** in the same push: the whole accounting concern — `StepKind`, `DropReason`, `StepLedger`, `StepOutcome`, `ledger_violations`, `audit_step` and the violation counter — is now `runtime/retrieval_ledger.rs` (344 lines), and its 12 tests are `tests/main/retrieval_ledger.rs`. That split is real rather than cosmetic: the ledger depends on none of the pipeline's internals (every function in it is pure apart from one counter), which is why it could move whole and why `retrieval_pipeline` only re-exports it. The **+125 that remains is irreducible**: a `StepKind` argument threaded through 26 `step(...)` declarations, the runner's synthesise-then-audit block, and the re-export. That is the pipeline's own share of the accounting and it cannot live anywhere else. Accepted by editing the ONE line in `quality/baselines/oversized.txt` rather than `arch-gate --update-baseline`, which would also have absorbed the `sovereign-tdd` approach-band growth from four unrelated local commits — the trap `AGENTS.md` names. Next seam if it grows again: the 27 `step_*` bodies are the bulk and split along head / core / per-intent-tail. |
-| `streaming.rs` refusal-retry duplication | `sovereign-core/src/runtime/streaming.rs` (~2,900 lines) | The 2026-06-10 runtime.rs decomposition moved the streaming dispatch here intact. Its KQ and Deep/Simple synthesis loops carry two NEAR-duplicate refusal-retry state machines that genuinely differ (error-frame + finish-reason handling) — unifying them is a measured behavior change, not a move. Same deferral class for the streaming-vs-non-streaming setup duplication (turn.rs). |
+| `streaming.rs` refusal-retry duplication — **resolved 2026-09-20** | `sovereign-core/src/runtime/streaming.rs` (4,738 lines) | The 2026-06-10 runtime.rs decomposition moved the streaming dispatch here intact, and this row recorded two NEAR-duplicate refusal-retry state machines said to "genuinely differ (error-frame + finish-reason handling)". Measured before merging: the KQ and Deep/Simple loops had already converged on one `run_synthesis_stream`, and ITS two retry blocks were byte-identical apart from one word of the log message (`refusal opener` vs `short refusal`) — no error-frame or finish-reason difference existed. Both now call `refusal_retry_stream`, same retry count, same `synth.refusal_retry` target, same fields. Untouched and still deferred: the streaming-vs-non-streaming setup duplication (turn.rs). |
 | `state.rs` decomposition (desktop) | `sovereign-desktop/src-tauri/src/state.rs` (~1,730 lines, was 2,347) | Contiguous phases are extracted ([HISTORY](./HISTORY.md#staters-desktop--extraction-of-the-contiguous-phases-2026-06-09)). The `tools` registry stays inline *by necessity, not omission*: it is **interleaved** across the whole bootstrap (tools registered before AND after `corpus_engine`), so it cannot be a pure-relocation builder without reordering a GGUF-gated startup path. The `EmbeddedDaemon` wiring no longer is: daemon-convergence Phase 2 (2026-08-24) replaced the four `mesh.set_*` sites with ONE commissioning site just before `try_resume`, and the daemon's services arrive as a single `sovereign_mesh::DaemonServices::Desktop` value assembled from what bootstrap already built. Keep `AppState` fields flat (~295 call sites borrow `state.<field>`). |
 | `DesktopError` burn-down (desktop) | `sovereign-desktop/src-tauri/src/error.rs` + `src/lib/errors.ts` | The structured error + frontend mirror + zero-per-caller-edit migration enabler are in place ([HISTORY](./HISTORY.md#desktoperror--first-pr--the-burn-down-enabler-2026-06-09)). **Remaining (incremental, ~140 command modules):** flip each handler's `-> Result<_, String>` → `DesktopError` (the `?`-sites auto-convert via `From<String>`; explicit `return Err` / tail `map_err` take `.into()` or a semantic `DesktopError::upstream`/`invalid_request`) + repoint its api.ts wrapper at `invokeChecked`. `AppState::store()` landed 2026-08-24 with daemon-convergence Phase 0 (see the `Runtime` surface row below); `corpus_engine()` and the `require_runtime!` retirement still wait on the first chat-path module that needs them (deferred — chat is the live, higher-traffic path). |
 | `Runtime` surface shrink (desktop + server) — **Phase 0 DONE 2026-08-24** | `sovereign-desktop/src-tauri/src/{state.rs,commands/{mod,conversation,models}.rs}`; `sovereign-server/src/{main,routes,routes_documents,routes_mcp,corpus_upload,tenant,ws}.rs` | `sovereign_core::Runtime` was doubling as a general-purpose DB handle: 11 desktop and 20 server call sites reached `runtime.store` for work that is not a chat turn (conversation list/rename/delete, memory tombstones, message search, document assets, corpus upload). Both hosts already held the SAME `Arc<dyn StateStore>` independently, so those sites now read it directly — desktop via `AppState::store()` / the `require_store!` macro, server via a `store` Extension layered from `main.rs` beside the Runtime (`ToolRegistry` likewise, retiring `runtime.tools` on `/v1/tools` and the whole `/mcp` surface). Desktop consumption surface: 9 methods + 5 fields → 9 methods + **4** fields. **Still on the Runtime, deliberately:** desktop `runtime.tools` (`commands/models.rs`) and `runtime.skills` (`commands/conversation.rs::list_skills`) — `AppState` carries no tool or skill registry of its own, so there is nothing to repoint to; `runtime.sessions` (`commands/chat.rs`, cancel/redirect) is a chat operation and belongs to the daemon-convergence Phase 5 turn protocol. One intended behavioural delta: the store opens earlier than the Runtime and survives a Runtime rebuild, so the repointed commands answer from the database in those two windows instead of reporting "Backend is still loading". |

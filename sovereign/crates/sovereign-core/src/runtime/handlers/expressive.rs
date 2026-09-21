@@ -494,6 +494,9 @@ impl Runtime {
             metadata: Some({
                 let mut m = serde_json::json!({
                     "intent": "ExpressiveQuery",
+                    // The route by variant name; the sibling "intent" above is
+                    // the free-form display label.
+                    "routed_intent": crate::types::Intent::ExpressiveQuery.name(),
                     "current_goal": current_goal,
                     "had_prior_assistant": last_assistant.is_some(),
                 });
@@ -947,6 +950,8 @@ impl Runtime {
 
             let mut metadata = serde_json::json!({
                 "intent": "ExpressiveQuery",
+                // See the non-streaming persistence above.
+                "routed_intent": crate::types::Intent::ExpressiveQuery.name(),
                 "current_goal": current_goal,
                 "had_prior_assistant": last_assistant.is_some(),
             });

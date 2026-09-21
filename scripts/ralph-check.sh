@@ -14,24 +14,46 @@
 # exact — every macro asked the operator once per session (2026-09-17,
 # log-permissions.txt 22:58-23:00). One verb, one rule: Bash(scripts/ralph-check.sh *).
 #
+# A queue's OWN checks are data, not verbs here: under a `--queue` loop
+# scripts/ralph.py exports RALPH_QUEUE, and a name that ralph/next/<queue>/queue.toml
+# declares under [checks] runs that argv (extra arguments appended), logging to
+# target/ralph/<queue>/ so two loops in one checkout do not share a log. The
+# built-ins below cannot be redeclared (the manifest loader refuses it). `toml`,
+# `demo`, `pilot` and `desktop` stay as verbs only for the queues still on
+# legacy launch lines; a queue with a manifest declares its own.
+#
 # The macros' own rules are kept here, not re-decided:
 #   clean  — no lock wrapper (at the 256G ceiling it is a du and never runs
 #            cargo; the build-latency campaign holds the lock ~19 min a build)
 #   lint / test / layer / docs / testall — through scripts/with-cargo-lock.sh
 set -uo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
-mkdir -p target/ralph
+logdir="target/ralph${RALPH_QUEUE:+/$RALPH_QUEUE}"
+mkdir -p target/ralph "$logdir"
 
 check="${1:-}"; shift || true
 run() {   # run <log-name> <tail-lines> <command...>
-    local log="target/ralph/$1.log" n="$2"; shift 2
+    local log="$logdir/$1.log" n="$2"; shift 2
     "$@" > "$log" 2>&1; local rc=$?
     echo "exit=$rc"; tail -n "$n" "$log"
     exit "$rc"
 }
+if [ -n "${RALPH_QUEUE:-}" ] && [ -n "$check" ]; then
+    declared=$(python3 scripts/ralph.py check-argv --queue "$RALPH_QUEUE" "$check"); rc=$?
+    case "$rc" in
+        0) argv=(); while IFS= read -r a; do argv+=("$a"); done <<< "$declared"
+           run "$check" 12 "${argv[@]}" "$@" ;;
+        1) ;;   # not declared by the queue: a built-in or a legacy verb below
+        *) echo "ralph-check: queue '$RALPH_QUEUE' has no usable manifest (above) — '$check' did not run" >&2; exit 2 ;;
+    esac
+fi
 case "$check" in
     clean)   RALPH_CLEAN_MB="${RALPH_CLEAN_MB:-262144}" run build 5 ./scripts/dev-build.sh --clean --gate-only ;;
-    lint)    run lint 5 ./scripts/with-cargo-lock.sh ./scripts/sovereign-lint.sh --human ;;
+    # LINT is the one check every unit runs, so the file-size ratchet rides on it
+    # (2 s): a unit that grows a file past its arch-gate ceiling fails ITS OWN
+    # check, not an audit nine rows later. The ceiling is the invariant; rows and
+    # prompts carry no "this file is nearly full" text (2026-09-20).
+    lint)    run lint 8 ./scripts/with-cargo-lock.sh bash -c './scripts/sovereign-lint.sh --human && cd corpus-engine && cargo xtask arch-gate' ;;
     test)    [ -n "${1:-}" ] || { echo "usage: ralph-check.sh test <crate>" >&2; exit 2; }
              run test 8 ./scripts/with-cargo-lock.sh ./scripts/sovereign-test.sh --human --package "$1" ;;
     layer)   run layer 5 bash -c 'cd corpus-engine && ../scripts/with-cargo-lock.sh cargo xtask layer-gate' ;;
@@ -70,7 +92,18 @@ case "$check" in
              # when all six passed and exit=0 when one FAILED, and counted COULD-NOT-JUDGE as a pass.
              rc=$(cat target/ralph/demo.rc 2>/dev/null); [ -n "$rc" ] || { rc=2; echo "the demo ended without writing its exit code (killed?)"; }
              echo "exit=$rc"; tail -n 14 target/ralph/demo.log; rm -f target/ralph/demo.pid; exit "$rc" ;;
+    # Campaign-neutral verbs (ei7-stage0, 2026-09-18). `toml` above names
+    # ring-doc's files; a queue that is not ring-doc uses `campaign <id>` instead.
+    testfn)  [ -n "${2:-}" ] || { echo "usage: ralph-check.sh testfn <crate> <whole-test-fn-name>" >&2; exit 2; }
+             run testfn 8 ./scripts/with-cargo-lock.sh ./scripts/sovereign-test.sh --human --package "$1" --filter "$2" ;;
+    env)     run env 5 bash -c 'cd corpus-engine && ../scripts/with-cargo-lock.sh cargo xtask env-gate' ;;
+    py)      [ -n "${1:-}" ] || { echo "usage: ralph-check.sh py <script.py> (runs its --self-test)" >&2; exit 2; }
+             run py 12 python3 "$1" --self-test ;;
+    campaign) [ -n "${1:-}" ] || { echo "usage: ralph-check.sh campaign <id>" >&2; exit 2; }
+             run campaign 5 python3 -c "import sys,tomllib; tomllib.load(open(f'quality/campaigns/{sys.argv[1]}.toml','rb'))" "$1" ;;
+    desktop) run desktop 12 bash -c 'cd sovereign/crates/sovereign-desktop && npm run check && npm run test' ;;
+    pilot)   run pilot 20 research/ontology-retrieval/pilot/run-pilot.sh ;;
     testall) run testall 12 ./scripts/with-cargo-lock.sh ./scripts/sovereign-test.sh --human ;;
     prepush) run prepush 20 ./scripts/pre-push.sh ;;
-    *) echo "usage: scripts/ralph-check.sh clean|lint|test <crate>|layer|arch|toml|docs|node <dir>|demo [script]|demo-bg [script]|demo-wait|testall|prepush" >&2; exit 2 ;;
+    *) echo "usage: scripts/ralph-check.sh clean|lint|test <crate>|testfn <crate> <fn>|layer|arch|env|toml|campaign <id>|docs|py <script>|node <dir>|desktop|demo [script]|demo-bg [script]|demo-wait|pilot|testall|prepush, or a name under [checks] in the queue's queue.toml (RALPH_QUEUE=${RALPH_QUEUE:-<unset>})" >&2; exit 2 ;;
 esac

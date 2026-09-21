@@ -296,7 +296,10 @@ mod tests {
     }
 
     fn shape(types: Vec<OntologyTypeDecl>) -> ShapePolicy {
-        ShapePolicy { types }
+        ShapePolicy {
+            types,
+            ..Default::default()
+        }
     }
 
     #[test]

@@ -515,10 +515,9 @@ impl Runtime {
             declared_register,
             active_mode.as_deref(),
         );
-        let intent = intent_policy
-            .effective_intent
-            .clone()
-            .unwrap_or_else(|| raw_intent.clone());
+        let intent = self
+            .resolve_policy_intent(message, &raw_intent, &intent_policy)
+            .await;
         context.intent_policy = Some(intent_policy);
         let coarse_intent = classification.coarse_intent.clone();
         let self_assessment = classification.self_assessment.clone();
@@ -847,7 +846,7 @@ impl Runtime {
         // names by `dispatch_column_names_a_runtime_handler`; that a given row
         // names the arm actually taken below is still a reading, not a test.
         let dispatch = intent.row().dispatch;
-        tracing::info!(dispatch, "runtime: dispatching");
+        tracing::info!(dispatch, door = "turn", "runtime: dispatching");
 
         let result = match intent {
             Intent::ComplexTask => {

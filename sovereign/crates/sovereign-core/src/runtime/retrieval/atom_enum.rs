@@ -805,8 +805,9 @@ impl Runtime {
         //
         // `step_atom_enum` runs POST noise-floor on purpose (retrieval_pipeline.rs
         // :1140) so these metadata chunks survive a filter built for prose, and
-        // `merge_demand_select` then PINS every `source=atom-enum` chunk
-        // unconditionally (merge_select.rs:121). Nothing downstream can reject an
+        // `merge_demand_select` then PINS `source=atom-enum` chunks up to half
+        // the merge budget (`ATOM_ENUM_MERGE_SHARE_DEN`, merge_select.rs:141);
+        // the rest compete on rank. Nothing downstream can reject an
         // irrelevant claim once it is injected — so the selection here is the last
         // and only place topicality can be checked.
         //

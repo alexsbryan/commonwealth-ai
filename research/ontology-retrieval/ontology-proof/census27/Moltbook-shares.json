@@ -1,0 +1,78 @@
+{
+ "service": "Moltbook",
+ "list": "shares",
+ "source": "spikes/fineprint-data/ota-pga-versions/Moltbook/Privacy Policy.md",
+ "verdict": "qualifies",
+ "headings": [
+  {
+   "line": 82,
+   "text": "HOW WE DISCLOSE PERSONAL INFORMATION",
+   "span_ends_line": 114
+  }
+ ],
+ "items": [
+  {
+   "item": "Account and data management",
+   "line": 89,
+   "from": "list-item"
+  },
+  {
+   "item": "AI search embeddings",
+   "line": 91,
+   "from": "list-item"
+  },
+  {
+   "item": "Website and Services hosting",
+   "line": 93,
+   "from": "list-item"
+  },
+  {
+   "item": "Communications and customer support, including email service providers",
+   "line": 95,
+   "from": "list-item"
+  },
+  {
+   "item": "Detect and protect against fraud",
+   "line": 104,
+   "from": "list-item"
+  }
+ ],
+ "dropped": [
+  {
+   "item": "Account registration and verification through third party platforms such as X",
+   "line": 87,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Protect the legal rights of our registered users, our company, our employees, our agents, and our affiliates",
+   "line": 100,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Protect the safety and security of those who access and use our Website and Services",
+   "line": 102,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "In certain situations, we may be required to disclose personal information in response to lawful requests by public authorities, including to meet law enforcement requirements or a court order, subpoena, or other judicial, administrative, or investigative proceedings",
+   "line": 106,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "We may disclose personal information with our corporate affiliates or in connection with a proposed or actual sale, merger, transfer, acquisition, bankruptcy, or other disposition of some or all of our assets",
+   "line": 108,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "We may disclose information to our corporate affiliates in connection with the provision, operation, improvement, and development of products and services, including AI models and systems",
+   "line": 110,
+   "from": "list-item",
+   "rule": "prose"
+  }
+ ]
+}

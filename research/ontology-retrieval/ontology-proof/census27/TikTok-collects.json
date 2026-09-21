@@ -1,0 +1,139 @@
+{
+ "service": "TikTok",
+ "list": "collects",
+ "source": "spikes/fineprint-data/ota-pga-versions/TikTok/Privacy Policy.md",
+ "verdict": "qualifies",
+ "headings": [
+  {
+   "line": 10,
+   "text": "What Information We Collect",
+   "span_ends_line": 41
+  },
+  {
+   "line": 15,
+   "text": "Information You Provide",
+   "span_ends_line": 25
+  },
+  {
+   "line": 372,
+   "text": "What Information Do We Collect from You?",
+   "span_ends_line": 375
+  },
+  {
+   "line": 415,
+   "text": "What Information We Collect from Users of This Experience",
+   "span_ends_line": 424
+  }
+ ],
+ "items": [
+  {
+   "item": "Information You Provide",
+   "line": 15,
+   "from": "sub-heading"
+  },
+  {
+   "item": "Account Information",
+   "line": 17,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "User Content",
+   "line": 18,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Your Contacts and Other Connections",
+   "line": 20,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Purchase Information",
+   "line": 21,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Surveys, Research, and Promotions",
+   "line": 22,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Information When You Contact Us",
+   "line": 23,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Information From Forms and Features You Use",
+   "line": 24,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Automatically Collected Information",
+   "line": 26,
+   "from": "sub-heading"
+  },
+  {
+   "item": "Technical Information",
+   "line": 28,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Location Information",
+   "line": 29,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Usage Information",
+   "line": 30,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Content Characteristics and Features",
+   "line": 31,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Inferred Information",
+   "line": 32,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Information From Other Sources",
+   "line": 35,
+   "from": "sub-heading"
+  },
+  {
+   "item": "Advertising, Measurement and Other Partners",
+   "line": 37,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Sellers, Payment and Transaction Fulfillment Providers",
+   "line": 38,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Third Party Platforms and Partners",
+   "line": 39,
+   "from": "bold-lead-in"
+  },
+  {
+   "item": "Additional Sources",
+   "line": 40,
+   "from": "bold-lead-in"
+  }
+ ],
+ "dropped": [
+  {
+   "item": "Messages",
+   "line": 19,
+   "from": "bold-lead-in",
+   "rule": "one-word"
+  },
+  {
+   "item": "Cookies",
+   "line": 33,
+   "from": "bold-lead-in",
+   "rule": "one-word"
+  }
+ ]
+}

@@ -1,0 +1,75 @@
+{
+ "service": "YouTube",
+ "list": "uses",
+ "source": "spikes/fineprint-data/ota-pga-versions/YouTube/Privacy Policy.md",
+ "verdict": "qualifies",
+ "headings": [
+  {
+   "line": 123,
+   "text": "Why Google collects data",
+   "span_ends_line": 176
+  }
+ ],
+ "items": [
+  {
+   "item": "We use data to build better services",
+   "line": 126,
+   "from": "sub-heading"
+  },
+  {
+   "item": "Provide our services",
+   "line": 131,
+   "from": "sub-heading"
+  },
+  {
+   "item": "Maintain & improve our services",
+   "line": 135,
+   "from": "sub-heading"
+  },
+  {
+   "item": "Develop new services",
+   "line": 139,
+   "from": "sub-heading"
+  },
+  {
+   "item": "Provide personalized services, including content and ads",
+   "line": 143,
+   "from": "sub-heading"
+  },
+  {
+   "item": "Measure performance",
+   "line": 155,
+   "from": "sub-heading"
+  },
+  {
+   "item": "Communicate with you",
+   "line": 159,
+   "from": "sub-heading"
+  },
+  {
+   "item": "Protect Google, our users, and the public",
+   "line": 163,
+   "from": "sub-heading"
+  }
+ ],
+ "dropped": [
+  {
+   "item": "We don’t show you personalized ads based on sensitive categories, such as race, religion, sexual orientation, or health",
+   "line": 149,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "We don’t show you personalized ads based on your content from Drive, Gmail, or Photos",
+   "line": 150,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "We don’t share information that personally identifies you with advertisers, such as your name or email, unless you ask us to. For example, if you see an ad for a nearby flower shop and select the “tap to call” button, we’ll connect your call and may share your phone number with the flower shop",
+   "line": 151,
+   "from": "list-item",
+   "rule": "prose"
+  }
+ ]
+}

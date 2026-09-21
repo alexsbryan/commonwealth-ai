@@ -1,0 +1,30 @@
+# ei7-stage0 as a queue manifest. The launch line, in place of the flag-and-env
+# block in STATE.md (left as written: a running loop reads that file):
+#
+#   nohup python3 scripts/ralph.py supervise --workdir . --queue ei7-stage0 \
+#     -- python3 scripts/ralph.py run --workdir . --queue ei7-stage0 --max-stall 3 \
+#     >> ralph/log-ei7-stage0.txt 2>&1 &
+#
+# Under --queue the control files are ralph/next/ei7-stage0/ctl/{STOP,DONE,NEEDS_HUMAN.md},
+# not ralph/, and the worker prompt is ralph/PROMPT.base.md + PROMPT.addendum.md
+# (print it: python3 scripts/ralph.py prompt --queue ei7-stage0). Do not start it
+# while the legacy line's loop is still running this queue: both would work STATE.md.
+label = "ei7-stage0"
+session_timeout = 7200
+audit_every = 6          # units; `run` inserts a REVIEW-audit- row when it comes due
+worker_bin = "scripts/ralph-claude-shim.sh"
+settings = "ralph/claude-settings.json"
+
+[models]
+worker = "claude-opus-5"
+review = "claude-opus-5"
+resolve = "claude-opus-5"
+variant = "high"   # opencode-only: the shim drops it and says so in the iter log
+
+# `scripts/ralph-check.sh <name> [args]` runs these; arguments are appended.
+[checks]
+desktop = ["bash", "-c", "cd sovereign/crates/sovereign-desktop && npm run check && npm run test"]
+pilot = ["research/ontology-retrieval/pilot/run-pilot.sh"]
+py = ["sh", "-c", "python3 \"$1\" --self-test", "py"]
+campaign = ["python3", "-c", "import sys, tomllib; tomllib.load(open(f'quality/campaigns/{sys.argv[1]}.toml', 'rb'))"]
+node = ["node", "--test"]

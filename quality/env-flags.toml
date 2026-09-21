@@ -560,6 +560,13 @@ default = "0.49"
 status = "shipped"
 purpose = "Similarity floor for the coverage probe's TopicUncovered/ClaimUncovered split. Calibrated 2026-09-09 on the secret_agent bank (43 q): in-topic 0.5089-0.7982, off-topic 0.2015-0.3323. The boundary is the TOP of the observed off-topic band across both calibration runs (2026-07-19 saw off-topic as high as 0.49), not the midpoint of the gap. Was 0.55, which sat inside the in-topic band."
 
+[[flag]]
+name = "SOVEREIGN_KQ_POOL_SCALE"
+cluster = "retrieval"
+default = "1"
+status = "experiment"
+purpose = "Integer multiplier 1..=8 on BOTH retrieval pool limits at once — KQ_MERGED_LIMIT (20) and MAX_KNOWLEDGE_CHARS (24000). Exists only for the deep-pool arm of PRE-REG-custom-ontology-and-raptor-2026-09-17, which found `--limit 80` is dead under `--synth`. One decider, `runtime::prompts::kq_pool_scale`; the pair is computed in `pool_limits_at` so neither limit can move alone. Unset/unparsable/0/>8 all mean 1, and at 1 every call site is byte-identical. Ceiling is the synth model's context. Never a default: sovereign/DEFAULTS_LEDGER.md."
+
 # ── mesh ────────────────────────────────────────────────────────────
 
 [[flag]]

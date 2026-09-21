@@ -1,0 +1,15 @@
+{
+ "service": "Mastodon",
+ "list": "collects",
+ "source": "spikes/fineprint-data/ota-pga-versions/Mastodon/Privacy Policy.md",
+ "verdict": "under-5",
+ "headings": [
+  {
+   "line": 8,
+   "text": "What information do we collect?",
+   "span_ends_line": 16
+  }
+ ],
+ "items": [],
+ "dropped": []
+}

@@ -1,0 +1,1602 @@
+{
+ "corpus": "ei7-recensus-fineprint",
+ "chapter_doc_map": {
+  "source": "derived from /Users/alexsbryan/.svrnmesh/indexes/ei7-recensus-fineprint/chapters.json",
+  "chapters": 826,
+  "services": [
+   "Facebook",
+   "X",
+   "YouTube"
+  ]
+ },
+ "atoms_total": 7589,
+ "by_atom_type": {
+  "Entity": 2278,
+  "Event": 93,
+  "State": 694,
+  "Relation": 743,
+  "Claim": 2681,
+  "Question": 1100
+ },
+ "data_keys_by_atom_type": {
+  "Entity": {
+   "id": 2278,
+   "canonical_name": 2278,
+   "entity_type": 2278,
+   "first_appearance": 2278,
+   "description": 2278,
+   "salience": 2278,
+   "enrichment_depth": 2278,
+   "provenance": 2278,
+   "aliases": 191,
+   "attributes": 1136
+  },
+  "Event": {
+   "id": 93,
+   "description": 93,
+   "event_type": 93,
+   "participants": 93,
+   "evidence": 93,
+   "section_position": 93,
+   "enrichment_depth": 93
+  },
+  "State": {
+   "id": 694,
+   "entity_id": 694,
+   "label": 694,
+   "state_type": 694,
+   "evidence": 694,
+   "section_range": 694,
+   "enrichment_depth": 694
+  },
+  "Relation": {
+   "id": 743,
+   "label": 743,
+   "participants": 743,
+   "relation_type": 743,
+   "evidence": 742,
+   "section_range": 743,
+   "enrichment_depth": 743
+  },
+  "Claim": {
+   "id": 2681,
+   "content": 2681,
+   "discourse_act": 2681,
+   "epistemic_status": 2681,
+   "scope": 2681,
+   "evidence": 2681,
+   "attributed_to": 819,
+   "subject": 2338,
+   "attributes": 2681,
+   "anchor": 2681,
+   "claim_kind": 2681,
+   "enrichment_depth": 2681
+  },
+  "Question": {
+   "id": 1100,
+   "content": 1100,
+   "question_type": 1100,
+   "raised_at": 1100,
+   "resolution_status": 1100,
+   "enrichment_depth": 1100
+  }
+ },
+ "entity_type_counts": {
+  "defined_term": 629,
+  "data_type": 343,
+  "person": 298,
+  "organization": 292,
+  "agreement": 184,
+  "service": 171,
+  "concept": 144,
+  "work": 62,
+  "recipient": 59,
+  "purpose": 52,
+  "place": 41,
+  "institution": 3
+ },
+ "entity_undeclared_types": {
+  "concept": 144,
+  "person": 298,
+  "work": 62,
+  "place": 41,
+  "institution": 3
+ },
+ "claim_kind_counts": {
+  "obligation": 2681
+ },
+ "entity_types": {
+  "organization": {
+   "count": 292,
+   "attr_filled": {},
+   "with_any_attr": 0,
+   "unmerged_duplicate_names": {
+    "x": 19,
+    "you": 7,
+    "we": 2,
+    "meta": 5,
+    "youtube": 8,
+    "": 4,
+    "user": 2
+   },
+   "heading_like": [
+    "advertisers",
+    "search engines",
+    "Service Provider",
+    "partners",
+    "external researchers",
+    "integrated partner",
+    "Google Account",
+    "the public",
+    "Affiliates",
+    "third parties"
+   ],
+   "empty_description": 0,
+   "by_first_doc": {
+    "X — Developer Terms": 16,
+    "X — Terms of Service": 6,
+    "Facebook — Terms of Service": 7,
+    "X — Privacy Policy": 13,
+    "Facebook — Developer Terms": 6,
+    "X — Community Guidelines": 41,
+    "Facebook — Privacy Policy": 39,
+    "Facebook — Community Guidelines": 17,
+    "YouTube — Content Monetisation Policy": 4,
+    "YouTube — Privacy Policy": 20,
+    "X — Advertising Content Policy": 27,
+    "X — Law Enforcement Guidelines": 10,
+    "YouTube — Community Guidelines": 40,
+    "YouTube — Copyright Claims Policy": 1,
+    "X — Content Monetisation Policy": 1,
+    "X — Data Controller Agreement": 8,
+    "X — Deceased Users": 2,
+    "YouTube — Terms of Service": 10,
+    "YouTube — Developer Terms": 8,
+    "Facebook — Advertising Content Policy": 3,
+    "Facebook — Data Processor Agreement": 1,
+    "Facebook — Law Enforcement Guidelines": 3,
+    "X — Trackers Policy": 9
+   },
+   "examples": [
+    {
+     "name": "X",
+     "attributes": null,
+     "aliases": null,
+     "description": "A platform testing technology to help copyright owners find and control unauthorized uses of their content.",
+     "first_doc": "X — Community Guidelines",
+     "first_chunk": "sec_00112"
+    },
+    {
+     "name": "Google Account",
+     "attributes": null,
+     "aliases": null,
+     "description": "The account infrastructure under which the user manages their access to the Service and data.",
+     "first_doc": "YouTube — Privacy Policy",
+     "first_chunk": "sec_00430"
+    },
+    {
+     "name": "government official",
+     "attributes": null,
+     "aliases": null,
+     "description": "A government representative who may submit content review requests.",
+     "first_doc": "X — Law Enforcement Guidelines",
+     "first_chunk": "sec_00153"
+    },
+    {
+     "name": "Stripe",
+     "attributes": null,
+     "aliases": null,
+     "description": "A payment processor handling transaction functionality and fraud protection cookies.",
+     "first_doc": "X — Trackers Policy",
+     "first_chunk": "sec_00426"
+    },
+    {
+     "name": "Advertising Standards Authority",
+     "attributes": null,
+     "aliases": null,
+     "description": "An external body providing resources and codes (CAP Code) relevant to advertisers, particularly in the UK.",
+     "first_doc": "X — Advertising Content Policy",
+     "first_chunk": "sec_00524"
+    },
+    {
+     "name": "trusted partners",
+     "attributes": null,
+     "aliases": null,
+     "description": "Entities such as directory services, marketing partners, and security partners that provide data to Google.",
+     "first_doc": "YouTube — Privacy Policy",
+     "first_chunk": "sec_00785"
+    },
+    {
+     "name": "Anne O'Leary",
+     "attributes": null,
+     "aliases": null,
+     "description": "The authorized representative for the service in Ireland.",
+     "first_doc": "Facebook — Terms of Service",
+     "first_chunk": "sec_00350"
+    },
+    {
+     "name": "WhatsApp",
+     "attributes": null,
+     "aliases": null,
+     "description": "A service that acts as a joint controller with Meta when its account is added to an Accounts Center.",
+     "first_doc": "Facebook — Privacy Policy",
+     "first_chunk": "sec_00063"
+    }
+   ]
+  },
+  "party": {
+   "count": 0,
+   "attr_filled": {},
+   "with_any_attr": 0,
+   "unmerged_duplicate_names": {},
+   "heading_like": [],
+   "empty_description": 0,
+   "by_first_doc": {},
+   "examples": []
+  },
+  "service": {
+   "count": 171,
+   "attr_filled": {},
+   "with_any_attr": 0,
+   "unmerged_duplicate_names": {
+    "x": 31,
+    "x api": 2
+   },
+   "heading_like": [
+    "My Activity",
+    "Android device with Google apps",
+    "Content ID",
+    "Copyright Match Tool",
+    "Political Content ads",
+    "financial products and services",
+    "Google Account",
+    "Webform",
+    "X + Developers",
+    "X Cards",
+    "X Login"
+   ],
+   "empty_description": 0,
+   "by_first_doc": {
+    "X — Developer Terms": 22,
+    "X — Content Monetisation Policy": 2,
+    "X — Privacy Policy": 8,
+    "Facebook — Developer Terms": 1,
+    "X — Terms of Service": 3,
+    "Facebook — Terms of Service": 4,
+    "YouTube — Developer Terms": 3,
+    "YouTube — Content Monetisation Policy": 1,
+    "Facebook — Privacy Policy": 24,
+    "X — Community Guidelines": 23,
+    "YouTube — Privacy Policy": 37,
+    "X — Law Enforcement Guidelines": 7,
+    "Facebook — Community Guidelines": 4,
+    "X — Data Controller Agreement": 5,
+    "YouTube — Copyright Claims Policy": 4,
+    "X — Advertising Content Policy": 13,
+    "YouTube — Community Guidelines": 5,
+    "Facebook — Advertising Content Policy": 1,
+    "Facebook — Law Enforcement Guidelines": 1,
+    "YouTube — Terms of Service": 1,
+    "X — Trackers Policy": 2
+   },
+   "examples": [
+    {
+     "name": "X for Android",
+     "attributes": null,
+     "aliases": [
+      "Android"
+     ],
+     "description": "The mobile application interface where deactivated account profiles are hidden.",
+     "first_doc": "X — Privacy Policy",
+     "first_chunk": "sec_00044"
+    },
+    {
+     "name": "Google Analytics",
+     "attributes": null,
+     "aliases": null,
+     "description": "A Google service used by third-party websites and apps to track interactions.",
+     "first_doc": "YouTube — Privacy Policy",
+     "first_chunk": "sec_00552"
+    },
+    {
+     "name": "third-party apps and services",
+     "attributes": null,
+     "aliases": null,
+     "description": "External applications that users can connect to their Meta account to enhance experience.",
+     "first_doc": "Facebook — Privacy Policy",
+     "first_chunk": "sec_00056"
+    },
+    {
+     "name": "X",
+     "attributes": null,
+     "aliases": null,
+     "description": "The online platform that processes counter-notices and hosts the web form for submissions.",
+     "first_doc": "X — Community Guidelines",
+     "first_chunk": "sec_00654"
+    },
+    {
+     "name": "adult sites and services",
+     "attributes": null,
+     "aliases": null,
+     "description": "Websites providing erotica, pornography, and other adult-oriented content.",
+     "first_doc": "X — Content Monetisation Policy",
+     "first_chunk": "sec_00002"
+    },
+    {
+     "name": "Drive",
+     "attributes": null,
+     "aliases": null,
+     "description": "A service designed to help manage specific types of content saved with Google.",
+     "first_doc": "YouTube — Privacy Policy",
+     "first_chunk": "sec_00402"
+    },
+    {
+     "name": "X’s Legal Request Submissions site",
+     "attributes": null,
+     "aliases": null,
+     "description": "The designated single point of contact for submitting legal requests, including preservations and content removal.",
+     "first_doc": "X — Law Enforcement Guidelines",
+     "first_chunk": "sec_00711"
+    },
+    {
+     "name": "X",
+     "attributes": null,
+     "aliases": null,
+     "description": "The online service and platform whose privacy policy is being described.",
+     "first_doc": "X — Privacy Policy",
+     "first_chunk": "sec_00004"
+    }
+   ]
+  },
+  "agreement": {
+   "count": 184,
+   "attr_filled": {
+    "service": 112
+   },
+   "with_any_attr": 112,
+   "unmerged_duplicate_names": {
+    "gdpr": 2
+   },
+   "heading_like": [
+    "Privacy Policy",
+    "Advertiser-friendly Content Guidelines",
+    "Cookies Policy",
+    "Legal Guarantee",
+    "Direct Message-level enforcement",
+    "misinformation policies",
+    "Exhibit A: Individual Product Terms/X Ads API",
+    "Fake engagement policy",
+    "firearms policy",
+    "X Developer Policy",
+    "counterfeit policy",
+    "Playlists policy",
+    "Prohibited Commercial Practices",
+    "Harassment & cyberbullying policies",
+    "Violent or graphic content policies",
+    "Impersonation policy",
+    "geo guidelines",
+    "Platform Usage Guidelines",
+    "vulgar language policy",
+    "Terms of Service",
+    "Quality policy",
+    "Prohibited content for minors",
+    "X Ads Account Eligibility",
+    "X Ads Products and Services Agreement",
+    "X Ads Review Process",
+    "X Developer Agreement",
+    "X Shopping Policy",
+    "X’s Creator Monetization Standards"
+   ],
+   "empty_description": 0,
+   "by_first_doc": {
+    "X — Content Monetisation Policy": 5,
+    "Facebook — Developer Terms": 7,
+    "X — Terms of Service": 9,
+    "Facebook — Terms of Service": 12,
+    "X — Privacy Policy": 9,
+    "YouTube — Content Monetisation Policy": 19,
+    "Facebook — Community Guidelines": 7,
+    "X — Community Guidelines": 22,
+    "X — Developer Terms": 18,
+    "YouTube — Terms of Service": 11,
+    "X — Advertising Content Policy": 23,
+    "X — Law Enforcement Guidelines": 6,
+    "Facebook — Trackers Policy": 1,
+    "YouTube — Community Guidelines": 12,
+    "Facebook — Live Policy": 5,
+    "Facebook — Commercial Terms": 1,
+    "Facebook — Data Processor Agreement": 1,
+    "Facebook — Law Enforcement Guidelines": 2,
+    "Facebook — User Consent Policy": 4,
+    "YouTube — Privacy Policy": 4,
+    "YouTube — Developer Terms": 3,
+    "Facebook — Privacy Policy": 3
+   },
+   "examples": [
+    {
+     "name": "Medical Misinformation framework",
+     "attributes": {
+      "service": "entity-2259"
+     },
+     "aliases": null,
+     "description": "A broader policy framework continuing to apply to content related to infectious diseases including influenza and measles.",
+     "first_doc": "YouTube — Community Guidelines",
+     "first_chunk": "sec_00413"
+    },
+    {
+     "name": "X Rules: Illegal or certain regulated goods or services Policy",
+     "attributes": {
+      "service": "entity-2276"
+     },
+     "aliases": [
+      "X Rules",
+      "Rules",
+      "Rules and Policies",
+      "[X Rules](http://twitter.com/rules)",
+      "Automation Rules",
+      "API Restricted Uses Rules"
+     ],
+     "description": "The set of platform rules governing user conduct on the service, which may be violated by posts subject to this section's analysis.",
+     "first_doc": "X — Content Monetisation Policy",
+     "first_chunk": "sec_00003"
+    },
+    {
+     "name": "User Agreement",
+     "attributes": {
+      "service": "entity-2276"
+     },
+     "aliases": [
+      "Agreement",
+      "main body of the Agreement",
+      "Master Licensing Agreement or Order",
+      "Master License Agreement"
+     ],
+     "description": "A legally binding contract of which these Terms are a part, comprising various policies depending on jurisdiction.",
+     "first_doc": "X — Terms of Service",
+     "first_chunk": "sec_00022"
+    },
+    {
+     "name": "X’s Ads Policies",
+     "attributes": {
+      "service": "entity-2276"
+     },
+     "aliases": null,
+     "description": "Policies that advertisers must follow when advertising on X.",
+     "first_doc": "X — Content Monetisation Policy",
+     "first_chunk": "sec_00760"
+    },
+    {
+     "name": "X Ads Review Process",
+     "attributes": {
+      "service": "entity-2276"
+     },
+     "aliases": null,
+     "description": "An approval process applied to advertiser accounts and content on the X platform.",
+     "first_doc": "X — Advertising Content Policy",
+     "first_chunk": "sec_00735"
+    },
+    {
+     "name": "current Terms of Service",
+     "attributes": {
+      "service": "entity-2259"
+     },
+     "aliases": null,
+     "description": "The existing Terms of Service that remain in force until the new version takes effect.",
+     "first_doc": "YouTube — Terms of Service",
+     "first_chunk": "sec_00574"
+    },
+    {
+     "name": "Housing, Lending, and Credit Opportunities Policy",
+     "attributes": null,
+     "aliases": null,
+     "description": "A policy document regulating ads related to housing, lending, and credit in the US and Canada only.",
+     "first_doc": "X — Advertising Content Policy",
+     "first_chunk": "sec_00672"
+    },
+    {
+     "name": "spam, deceptive practices, and scams policies",
+     "attributes": {
+      "service": "entity-2259"
+     },
+     "aliases": null,
+     "description": "The policy document governing the prohibited digital security contents listed in this section.",
+     "first_doc": "YouTube — Community Guidelines",
+     "first_chunk": "sec_00196"
+    }
+   ]
+  },
+  "defined_term": {
+   "count": 629,
+   "attr_filled": {
+    "definition": 613,
+    "agreement": 568
+   },
+   "with_any_attr": 618,
+   "unmerged_duplicate_names": {
+    "cookies": 2,
+    "account": 2
+   },
+   "heading_like": [
+    "Adult or Sexual Content",
+    "Process",
+    "Graphic, Objectionable and Violent Content",
+    "Hate or Extremist Content",
+    "intellectual property rights",
+    "Ad settings",
+    "age-restricted content",
+    "Annotations",
+    "Google Account",
+    "Other Legal Terms",
+    "About This Agreement",
+    "cookies",
+    "device",
+    "Legal Guarantee",
+    "Downloadable Software",
+    "Extremely dangerous challenges",
+    "Dangerous or threatening pranks",
+    "Terms of Service",
+    "Inauthentic Behavior",
+    "Liquidated Damages",
+    "Prevention misinformation",
+    "Prohibited Merchandise Categories",
+    "misinformation",
+    "Personal information",
+    "pixel tag",
+    "preservation requests",
+    "Weapons and Weapon Accessories",
+    "phone number",
+    "Referrer URL",
+    "Drugs and Drug Paraphernalia",
+    "Tobacco and Tobacco Accessories",
+    "Child Safety Policy",
+    "Political Campaigning ads",
+    "X passwords",
+    "cookies",
+    "browser web storage",
+    "server logs",
+    "spam",
+    "sensitive categories"
+   ],
+   "empty_description": 0,
+   "by_first_doc": {
+    "X — Developer Terms": 63,
+    "X — Content Monetisation Policy": 13,
+    "X — Privacy Policy": 5,
+    "Facebook — Developer Terms": 20,
+    "Facebook — Terms of Service": 6,
+    "YouTube — Developer Terms": 25,
+    "YouTube — Content Monetisation Policy": 67,
+    "X — Community Guidelines": 70,
+    "Facebook — Community Guidelines": 51,
+    "YouTube — Privacy Policy": 39,
+    "YouTube — Community Guidelines": 94,
+    "Facebook — Privacy Policy": 70,
+    "X — Advertising Content Policy": 55,
+    "X — Law Enforcement Guidelines": 14,
+    "YouTube — Terms of Service": 15,
+    "Facebook — Trackers Policy": 4,
+    "X — Terms of Service": 9,
+    "Facebook — Advertising Content Policy": 1,
+    "YouTube — Copyright Claims Policy": 1,
+    "X — Trackers Policy": 5,
+    "X — Data Controller Agreement": 2
+   },
+   "examples": [
+    {
+     "name": "Hateful Profile",
+     "attributes": {
+      "definition": "use hateful images or symbols in your profile image or profile header... use your username, display name, or profile bio to engage in abusive behavior",
+      "agreement": "entity-1386"
+     },
+     "aliases": null,
+     "description": "Use of hateful images/symbols in profile elements or abusive behavior via username/display name/bio.",
+     "first_doc": "X — Community Guidelines",
+     "first_chunk": "sec_00662"
+    },
+    {
+     "name": "third-party apps",
+     "attributes": {
+      "definition": "external software integrated or suggested by X",
+      "agreement": "entity-0119"
+     },
+     "aliases": null,
+     "description": "External applications users can discover through the service based on collected information.",
+     "first_doc": "X — Privacy Policy",
+     "first_chunk": "sec_00018"
+    },
+    {
+     "name": "Agreement",
+     "attributes": {
+      "definition": "The terms under which API access is granted, including prohibited actions.",
+      "agreement": "entity-0009"
+     },
+     "aliases": null,
+     "description": "The legal documents defined and referenced in Section 2 of the YouTube API Services Terms of Service.",
+     "first_doc": "YouTube — Developer Terms",
+     "first_chunk": "sec_00268"
+    },
+    {
+     "name": "pharmaceutical policy scope",
+     "attributes": {
+      "definition": "Pharmacies... Online pharmacies... Brick and mortar pharmacies... Compounding (custom prescription) pharmacies... Pet pharmacies... Pharmaceutical and medical products...",
+      "agreement": "What products or services are subject to this policy?"
+     },
+     "aliases": null,
+     "description": "Products and services including pharmacies, pharmaceutical manufacturers, medical devices, clinical trials, abortion services, telemedicine, and health supplements.",
+     "first_doc": "X — Advertising Content Policy",
+     "first_chunk": "sec_00676"
+    },
+    {
+     "name": "safety settings",
+     "attributes": {
+      "definition": "User interface location to mark posted media as containing material that may be sensitive.",
+      "agreement": "entity-1386"
+     },
+     "aliases": null,
+     "description": "User interface location to mark posted media as containing material that may be sensitive.",
+     "first_doc": "X — Community Guidelines",
+     "first_chunk": "sec_00665"
+    },
+    {
+     "name": "Violent Non-State Actors",
+     "attributes": {
+      "definition": "non-state actor that engages in a pattern of purposive and planned acts of high-severity violence targeting government, military... does not intentionally and explicitly target civilians"
+     },
+     "aliases": null,
+     "description": "Entities engaged in violence against state or military actors in armed conflicts without intentionally targeting civilians.",
+     "first_doc": "Facebook — Community Guidelines",
+     "first_chunk": "sec_00178"
+    },
+    {
+     "name": "Public Service Announcements (PSAs)",
+     "attributes": {
+      "definition": "* Public Service Announcements (PSAs) or videos on the negative impact of bullying or humiliating kids*",
+      "agreement": "entity-0011"
+     },
+     "aliases": null,
+     "description": "Videos or messages highlighting negative impacts like bullying, considered acceptable if they discourage such acts.",
+     "first_doc": "YouTube — Content Monetisation Policy",
+     "first_chunk": "sec_00154"
+    },
+    {
+     "name": "Non-regenerative organ trafficking",
+     "attributes": {
+      "definition": "trafficking of non-regenerative organs, excluding non-exploitative donation/transplant",
+      "agreement": "entity-0176"
+     },
+     "aliases": null,
+     "description": "Trafficking involving organs that cannot be regenerated, excluding non-exploitative donation or transplant contexts.",
+     "first_doc": "Facebook — Community Guidelines",
+     "first_chunk": "sec_00335"
+    }
+   ]
+  },
+  "data_type": {
+   "count": 343,
+   "attr_filled": {
+    "source": 313,
+    "service": 173
+   },
+   "with_any_attr": 319,
+   "unmerged_duplicate_names": {
+    "name": 2,
+    "posts": 2
+   },
+   "heading_like": [
+    "payment information",
+    "IP address",
+    "cookies",
+    "contact information",
+    "device signals",
+    "non-personally identifiable information",
+    "your information",
+    "Political Content",
+    "Weapons and Weapon Accessories",
+    "related metadata",
+    "server logs",
+    "third-party public sources",
+    "information with special protections",
+    "adult content",
+    "devices",
+    "voice and audio information",
+    "referrer URL",
+    "Android device with Google apps",
+    "Activity on Google services",
+    "Information about things near your device"
+   ],
+   "empty_description": 0,
+   "by_first_doc": {
+    "X — Developer Terms": 15,
+    "X — Content Monetisation Policy": 22,
+    "X — Privacy Policy": 15,
+    "Facebook — Developer Terms": 11,
+    "YouTube — Developer Terms": 5,
+    "X — Community Guidelines": 35,
+    "YouTube — Privacy Policy": 68,
+    "Facebook — Community Guidelines": 16,
+    "YouTube — Community Guidelines": 15,
+    "Facebook — Privacy Policy": 98,
+    "YouTube — Content Monetisation Policy": 8,
+    "X — Data Controller Agreement": 14,
+    "X — Law Enforcement Guidelines": 12,
+    "Facebook — Law Enforcement Guidelines": 2,
+    "X — Advertising Content Policy": 7
+   },
+   "examples": [
+    {
+     "name": "adult sexual arousal products",
+     "attributes": null,
+     "aliases": null,
+     "description": "Products focused on stimulating sexual pleasure or arousal, including sex toys and erotic products.",
+     "first_doc": "Facebook — Community Guidelines",
+     "first_chunk": "sec_00525"
+    },
+    {
+     "name": "contact information",
+     "attributes": {
+      "service": "entity-2276",
+      "source": "provided_by_user"
+     },
+     "aliases": [
+      "Personal Contact Information"
+     ],
+     "description": "Contact details of others shared without consent or outside specific charitable/missing person contexts.",
+     "first_doc": "X — Community Guidelines",
+     "first_chunk": "sec_00066"
+    },
+    {
+     "name": "general area",
+     "attributes": {
+      "service": "entity-1020",
+      "source": "collected_automatically"
+     },
+     "aliases": null,
+     "description": "Location information about where a user was when using a Google service.",
+     "first_doc": "YouTube — Privacy Policy",
+     "first_chunk": "sec_00069"
+    },
+    {
+     "name": "inferred identity information",
+     "attributes": {
+      "source": "collected_automatically"
+     },
+     "aliases": null,
+     "description": "Identity inferences derived from user activity and collected via cookies for up to 13 months.",
+     "first_doc": "X — Privacy Policy",
+     "first_chunk": "sec_00031"
+    },
+    {
+     "name": "depictions of sex acts",
+     "attributes": {
+      "source": "collected_automatically"
+     },
+     "aliases": null,
+     "description": "Visual or textual representations of sexual intercourse and related activities.",
+     "first_doc": "X — Content Monetisation Policy",
+     "first_chunk": "sec_00002"
+    },
+    {
+     "name": "sexually explicit accessories and clothing",
+     "attributes": {
+      "source": "collected_automatically"
+     },
+     "aliases": null,
+     "description": "Items of apparel or accessory designed for sexual purposes or display.",
+     "first_doc": "X — Content Monetisation Policy",
+     "first_chunk": "sec_00002"
+    },
+    {
+     "name": "Binary options",
+     "attributes": {
+      "service": "entity-0150",
+      "source": "collected_automatically"
+     },
+     "aliases": null,
+     "description": "A high-risk financial product prohibited from advertising.",
+     "first_doc": "X — Advertising Content Policy",
+     "first_chunk": "sec_00258"
+    },
+    {
+     "name": "check-ins and events",
+     "attributes": {
+      "service": "entity-1664",
+      "source": "provided_by_user"
+     },
+     "aliases": null,
+     "description": "User activity data indicating presence at specific locations or gatherings.",
+     "first_doc": "Facebook — Privacy Policy",
+     "first_chunk": "sec_00332"
+    }
+   ]
+  },
+  "recipient": {
+   "count": 59,
+   "attr_filled": {
+    "service": 49
+   },
+   "with_any_attr": 49,
+   "unmerged_duplicate_names": {},
+   "heading_like": [
+    "Service Providers",
+    "advertisers",
+    "the public",
+    "third parties",
+    "marketing vendors",
+    "measurement vendors",
+    "search engines",
+    "publicly accessible sources"
+   ],
+   "empty_description": 0,
+   "by_first_doc": {
+    "X — Privacy Policy": 4,
+    "Facebook — Terms of Service": 2,
+    "Facebook — Developer Terms": 2,
+    "Facebook — Privacy Policy": 18,
+    "YouTube — Privacy Policy": 9,
+    "Facebook — Community Guidelines": 9,
+    "X — Data Controller Agreement": 3,
+    "X — Content Monetisation Policy": 1,
+    "X — Advertising Content Policy": 3,
+    "YouTube — Content Monetisation Policy": 1,
+    "YouTube — Community Guidelines": 5,
+    "Facebook — Data Processor Agreement": 1,
+    "YouTube — Terms of Service": 1
+   },
+   "examples": [
+    {
+     "name": "partner sites",
+     "attributes": {
+      "service": "entity-1020"
+     },
+     "aliases": [
+      "partner sites and apps"
+     ],
+     "description": "External entities that partner with Google to show advertisements based on user settings.",
+     "first_doc": "YouTube — Privacy Policy",
+     "first_chunk": "sec_00072"
+    },
+    {
+     "name": "search engines",
+     "attributes": {
+      "service": "entity-2292"
+     },
+     "aliases": null,
+     "description": "Services that use information from public content according to their own terms and policies.",
+     "first_doc": "Facebook — Privacy Policy",
+     "first_chunk": "sec_00709"
+    },
+    {
+     "name": "third-party collaborators",
+     "attributes": null,
+     "aliases": null,
+     "description": "Third parties that may use shared data for independent purposes, including training AI models.",
+     "first_doc": "X — Privacy Policy",
+     "first_chunk": "sec_00025"
+    },
+    {
+     "name": "violent extremist organization",
+     "attributes": {
+      "service": "entity-2259"
+     },
+     "aliases": null,
+     "description": "An entity prohibited from using YouTube for any purpose, including recruitment.",
+     "first_doc": "YouTube — Community Guidelines",
+     "first_chunk": "sec_00619"
+    },
+    {
+     "name": "third parties",
+     "attributes": {
+      "service": "entity-1020"
+     },
+     "aliases": [
+      "other third parties",
+      "third parties[62]",
+      "third party",
+      "third party apps and sites"
+     ],
+     "description": "Entities other than the service, advertisers, or affiliates with whom information is shared for legal compliance and harm prevention.",
+     "first_doc": "YouTube — Privacy Policy",
+     "first_chunk": "sec_00384"
+    },
+    {
+     "name": "Google-certified providers",
+     "attributes": {
+      "service": "entity-0323"
+     },
+     "aliases": null,
+     "description": "Providers whose sports betting content may be allowed for all audiences under specific circumstances.",
+     "first_doc": "YouTube — Community Guidelines",
+     "first_chunk": "sec_00224"
+    },
+    {
+     "name": "vendors",
+     "attributes": {
+      "service": "entity-0050"
+     },
+     "aliases": null,
+     "description": "Entities that receive information from Facebook as part of its operational sharing practices.",
+     "first_doc": "Facebook — Privacy Policy",
+     "first_chunk": "sec_00144"
+    },
+    {
+     "name": "ad partners",
+     "attributes": {
+      "service": "entity-2276"
+     },
+     "aliases": [
+      "partners",
+      "Business partners and service providers",
+      "service providers",
+      "trusted partners",
+      "Partners who offer goods or services on our Products and commerce services platforms",
+      "third-party providers and partners",
+      "partners and other third-parties",
+      "integrated partners"
+     ],
+     "description": "External entities, including sellers, creators, fundraisers, charities, payment service providers, and commerce platforms that users interact with to complete transactions.",
+     "first_doc": "X — Privacy Policy",
+     "first_chunk": "sec_00004"
+    }
+   ]
+  },
+  "purpose": {
+   "count": 52,
+   "attr_filled": {
+    "service": 38
+   },
+   "with_any_attr": 38,
+   "unmerged_duplicate_names": {},
+   "heading_like": [
+    "legal guarantee",
+    "legitimate interests",
+    "consent",
+    "legal obligation",
+    "Memorialization",
+    "communicating with you",
+    "Ad Settings"
+   ],
+   "empty_description": 0,
+   "by_first_doc": {
+    "YouTube — Privacy Policy": 12,
+    "Facebook — Community Guidelines": 3,
+    "YouTube — Community Guidelines": 2,
+    "YouTube — Content Monetisation Policy": 6,
+    "Facebook — Privacy Policy": 26,
+    "YouTube — Terms of Service": 1,
+    "X — Trackers Policy": 2
+   },
+   "examples": [
+    {
+     "name": "safety, security and integrity purposes",
+     "attributes": {
+      "service": "entity-1664"
+     },
+     "aliases": null,
+     "description": "Reasons related to the protection of the platform's stability and users.",
+     "first_doc": "Facebook — Privacy Policy",
+     "first_chunk": "sec_00723"
+    },
+    {
+     "name": "global transfers",
+     "attributes": {
+      "service": "entity-2292"
+     },
+     "aliases": null,
+     "description": "Transferring data internally and externally to operate services globally and improve products.",
+     "first_doc": "Facebook — Privacy Policy",
+     "first_chunk": "sec_00468"
+    },
+    {
+     "name": "Personalized ads setting in X",
+     "attributes": null,
+     "aliases": null,
+     "description": "A mechanism to adjust how X uses data for advertising purposes within its own platform.",
+     "first_doc": "X — Trackers Policy",
+     "first_chunk": "sec_00635"
+    },
+    {
+     "name": "marketing and promoting products",
+     "attributes": null,
+     "aliases": null,
+     "description": "Activities aimed at advertising the products to current or potential users.",
+     "first_doc": "Facebook — Privacy Policy",
+     "first_chunk": "sec_00545"
+    },
+    {
+     "name": "Signed-out search personalization",
+     "attributes": {
+      "service": "entity-1020"
+     },
+     "aliases": null,
+     "description": "The customization of search results for users who are not signed in, which can be turned off.",
+     "first_doc": "YouTube — Privacy Policy",
+     "first_chunk": "sec_00786"
+    },
+    {
+     "name": "improving functionality",
+     "attributes": null,
+     "aliases": null,
+     "description": "Enhancing how the products work or perform for users.",
+     "first_doc": "Facebook — Privacy Policy",
+     "first_chunk": "sec_00545"
+    },
+    {
+     "name": "investigating suspicious activity",
+     "attributes": null,
+     "aliases": null,
+     "description": "A purpose for sharing user information with service providers to detect threats or anomalies.",
+     "first_doc": "Facebook — Privacy Policy",
+     "first_chunk": "sec_00545"
+    },
+    {
+     "name": "Personalize based on inferred identity",
+     "attributes": null,
+     "aliases": null,
+     "description": "The practice of linking a user's account or device to other browsers or devices they use.",
+     "first_doc": "X — Trackers Policy",
+     "first_chunk": "sec_00635"
+    }
+   ]
+  }
+ },
+ "obligation": {
+  "count": 2681,
+  "deontic": {
+   "permit": 995,
+   "require": 1007,
+   "forbid": 679
+  },
+  "subject_filled": 2338,
+  "subject_top": {
+   "user [organization]": 453,
+   "X [organization]": 172,
+   "advertisers [organization]": 141,
+   "service [organization]": 138,
+   "YouTube [organization]": 121,
+   "the service [organization]": 113,
+   "we [organization]": 111,
+   "X (the service) [organization]": 98,
+   "Facebook [organization]": 92,
+   "you [organization]": 85,
+   "the User [organization]": 81,
+   "Google [organization]": 73,
+   "other X users [organization]": 62,
+   "Meta [organization]": 58,
+   "content creators [organization]": 52
+  },
+  "attr_filled": {
+   "deontic": 2681,
+   "deadline": 20,
+   "valid": 40
+  },
+  "attributed_to_filled": 819,
+  "discourse_act": {
+   "enact": 2681
+  },
+  "examples": [
+   {
+    "content": "Fair use determinations are made on a case by case basis with no clear formula.",
+    "deontic": "require",
+    "subject": null,
+    "attributes": {
+     "deontic": "require"
+    },
+    "doc": "X — Community Guidelines"
+   },
+   {
+    "content": "Developers are forbidden from performing bulk, aggressive, or spammy actions such as bulk following.",
+    "deontic": "forbid",
+    "subject": "Developer",
+    "attributes": {
+     "deontic": "forbid"
+    },
+    "doc": "X — Developer Terms"
+   },
+   {
+    "content": "Activity data on Google sites, apps, and services may be saved in the account’s Web & App Activity if signed in with that feature turned on.",
+    "deontic": "permit",
+    "subject": "Google",
+    "attributes": {
+     "deontic": "permit"
+    },
+    "doc": "YouTube — Privacy Policy"
+   },
+   {
+    "content": "Users must not exceed or circumvent Rate Limits on the X API.",
+    "deontic": "forbid",
+    "subject": "the User",
+    "attributes": {
+     "deontic": "forbid"
+    },
+    "doc": "X — Developer Terms"
+   },
+   {
+    "content": "Information shared with advertisers includes ads people engaged with, when they engaged, and where the ad was shown.",
+    "deontic": "permit",
+    "subject": "Meta",
+    "attributes": {
+     "deontic": "permit"
+    },
+    "doc": "Facebook — Privacy Policy"
+   },
+   {
+    "content": "Meta will make available to you all information that is reasonably necessary to demonstrate Meta's compliance with its obligations as a Processor under these Data Processing Terms.",
+    "deontic": "require",
+    "subject": "Meta Ireland",
+    "attributes": {
+     "deontic": "require"
+    },
+    "doc": "Facebook — Data Processor Agreement"
+   },
+   {
+    "content": "Exceptions are made for content in the public interest, including congressional proceedings and campaign speeches.",
+    "deontic": "permit",
+    "subject": "YouTube",
+    "attributes": {
+     "deontic": "permit"
+    },
+    "doc": "YouTube — Community Guidelines"
+   },
+   {
+    "content": "Platform Data maintained by a Tech Provider on behalf of one Client must be kept separate from that of other Clients.",
+    "deontic": "require",
+    "subject": "Tech Provider",
+    "attributes": {
+     "deontic": "require"
+    },
+    "doc": "Facebook — Developer Terms"
+   }
+  ]
+ },
+ "non_obligation_claims": {
+  "count": 0,
+  "examples": []
+ },
+ "edges_total": 9194,
+ "edges_by_type": {
+  "Involves": 5524,
+  "Grounds": 3375,
+  "Transition": 295
+ },
+ "ontology.json": {
+  "ontology_version": 1,
+  "pipeline_id": "custom_atlas",
+  "types": [
+   [
+    "organization",
+    "entity"
+   ],
+   [
+    "party",
+    "entity"
+   ],
+   [
+    "service",
+    "entity"
+   ],
+   [
+    "agreement",
+    "entity"
+   ],
+   [
+    "defined_term",
+    "entity"
+   ],
+   [
+    "data_type",
+    "entity"
+   ],
+   [
+    "recipient",
+    "entity"
+   ],
+   [
+    "purpose",
+    "entity"
+   ],
+   [
+    "obligation",
+    "claim"
+   ]
+  ],
+  "policy_keys": [
+   "shape",
+   "assertion",
+   "identity",
+   "change",
+   "derivation",
+   "prose",
+   "navigation"
+  ]
+ },
+ "schema_validation.json": {
+  "schema_version": "2.1",
+  "corpus_id": "ei7-recensus-fineprint",
+  "section_count": 635,
+  "extraction": {
+   "total_atoms": 7589,
+   "by_type": [
+    {
+     "atom_type": "Entity",
+     "count": 2278
+    },
+    {
+     "atom_type": "Event",
+     "count": 93
+    },
+    {
+     "atom_type": "State",
+     "count": 694
+    },
+    {
+     "atom_type": "Relation",
+     "count": 743
+    },
+    {
+     "atom_type": "Claim",
+     "count": 2681
+    },
+    {
+     "atom_type": "Question",
+     "count": 1100
+    },
+    {
+     "atom_type": "Configuration",
+     "count": 0
+    }
+   ],
+   "zero_coverage_types": [
+    "Configuration"
+   ]
+  },
+  "depth": {
+   "extracted": 7589,
+   "structural": 0,
+   "structural_classified": 0
+  },
+  "confidence": {
+   "buckets": [
+    2224,
+    39,
+    7,
+    4,
+    1,
+    0,
+    1,
+    0,
+    1,
+    1
+   ],
+   "total_with_confidence": 2278,
+   "low_confidence_fraction": 0.99868304
+  },
+  "utilisation": {
+   "fractions": [
+    {
+     "atom_type": "Entity",
+     "fraction": 0.3001713
+    },
+    {
+     "atom_type": "Event",
+     "fraction": 0.012254579
+    },
+    {
+     "atom_type": "State",
+     "fraction": 0.09144815
+    },
+    {
+     "atom_type": "Relation",
+     "fraction": 0.09790486
+    },
+    {
+     "atom_type": "Claim",
+     "fraction": 0.35327446
+    },
+    {
+     "atom_type": "Question",
+     "fraction": 0.14494663
+    },
+    {
+     "atom_type": "Configuration",
+     "fraction": 0.0
+    }
+   ],
+   "under_utilised_types": [
+    "Event",
+    "Configuration"
+   ]
+  },
+  "orphans": {
+   "orphan_atoms": 2507,
+   "total_atoms": 7589,
+   "orphan_fraction": 0.33034655,
+   "by_type": [
+    {
+     "atom_type": "Entity",
+     "orphan_count": 1407,
+     "total_count": 2278,
+     "orphan_fraction": 0.61764705
+    },
+    {
+     "atom_type": "Event",
+     "orphan_count": 0,
+     "total_count": 93,
+     "orphan_fraction": 0.0
+    },
+    {
+     "atom_type": "State",
+     "orphan_count": 0,
+     "total_count": 694,
+     "orphan_fraction": 0.0
+    },
+    {
+     "atom_type": "Relation",
+     "orphan_count": 0,
+     "total_count": 743,
+     "orphan_fraction": 0.0
+    },
+    {
+     "atom_type": "Claim",
+     "orphan_count": 0,
+     "total_count": 2681,
+     "orphan_fraction": 0.0
+    },
+    {
+     "atom_type": "Question",
+     "orphan_count": 1100,
+     "total_count": 1100,
+     "orphan_fraction": 1.0
+    }
+   ]
+  },
+  "discourse": {
+   "buckets": [
+    {
+     "act": "enact",
+     "count": 2681
+    }
+   ],
+   "total_claims": 2681,
+   "top_act": "enact",
+   "top_fraction": 1.0
+  },
+  "cross_corpus": {
+   "available": false,
+   "grounding_count": 0,
+   "local_atoms_with_outbound": 0,
+   "local_entity_atom_count": 2278
+  },
+  "gaps": {
+   "transition_without_trigger": 281,
+   "ungrounded_claim": 0,
+   "open_question": 1100,
+   "total_transitions": 295,
+   "total_claims": 2681,
+   "total_questions": 1100
+  },
+  "ontology": {
+   "ontology_version": 1,
+   "by_type": [
+    {
+     "kind": "entity",
+     "name": "organization",
+     "count": 292,
+     "count_with_subtypes": 292
+    },
+    {
+     "kind": "entity",
+     "name": "party",
+     "count": 316,
+     "count_with_subtypes": 316
+    },
+    {
+     "kind": "entity",
+     "name": "service",
+     "count": 171,
+     "count_with_subtypes": 171
+    },
+    {
+     "kind": "entity",
+     "name": "agreement",
+     "count": 184,
+     "count_with_subtypes": 184
+    },
+    {
+     "kind": "entity",
+     "name": "defined_term",
+     "count": 629,
+     "count_with_subtypes": 629
+    },
+    {
+     "kind": "entity",
+     "name": "data_type",
+     "count": 343,
+     "count_with_subtypes": 343
+    },
+    {
+     "kind": "entity",
+     "name": "recipient",
+     "count": 59,
+     "count_with_subtypes": 59
+    },
+    {
+     "kind": "entity",
+     "name": "purpose",
+     "count": 52,
+     "count_with_subtypes": 52
+    },
+    {
+     "kind": "claim",
+     "name": "obligation",
+     "count": 2681,
+     "count_with_subtypes": 2681
+    }
+   ],
+   "identity": [
+    {
+     "type_name": "organization",
+     "criterion": "default:canonical_name"
+    },
+    {
+     "type_name": "party",
+     "criterion": "default:canonical_name"
+    },
+    {
+     "type_name": "service",
+     "criterion": "default:canonical_name"
+    },
+    {
+     "type_name": "agreement",
+     "criterion": "default:canonical_name"
+    },
+    {
+     "type_name": "defined_term",
+     "criterion": "default:canonical_name"
+    },
+    {
+     "type_name": "data_type",
+     "criterion": "default:canonical_name"
+    },
+    {
+     "type_name": "recipient",
+     "criterion": "default:canonical_name"
+    },
+    {
+     "type_name": "purpose",
+     "criterion": "default:canonical_name"
+    },
+    {
+     "type_name": "obligation",
+     "criterion": "default:canonical_name"
+    }
+   ],
+   "merges": null,
+   "same_as_claims": 0,
+   "claims_missing_subject": 343,
+   "attribute_fill": [
+    {
+     "type_name": "agreement",
+     "attribute": "service",
+     "atoms": 184,
+     "with_slot": 184,
+     "filled": 112
+    },
+    {
+     "type_name": "defined_term",
+     "attribute": "definition",
+     "atoms": 629,
+     "with_slot": 629,
+     "filled": 613
+    },
+    {
+     "type_name": "defined_term",
+     "attribute": "agreement",
+     "atoms": 629,
+     "with_slot": 629,
+     "filled": 568
+    },
+    {
+     "type_name": "data_type",
+     "attribute": "service",
+     "atoms": 343,
+     "with_slot": 343,
+     "filled": 173
+    },
+    {
+     "type_name": "data_type",
+     "attribute": "source",
+     "atoms": 343,
+     "with_slot": 343,
+     "filled": 313
+    },
+    {
+     "type_name": "recipient",
+     "attribute": "service",
+     "atoms": 59,
+     "with_slot": 59,
+     "filled": 49
+    },
+    {
+     "type_name": "purpose",
+     "attribute": "service",
+     "atoms": 52,
+     "with_slot": 52,
+     "filled": 38
+    },
+    {
+     "type_name": "obligation",
+     "attribute": "valid",
+     "atoms": 2681,
+     "with_slot": 2681,
+     "filled": 40
+    },
+    {
+     "type_name": "obligation",
+     "attribute": "deadline",
+     "atoms": 2681,
+     "with_slot": 2681,
+     "filled": 20
+    }
+   ]
+  }
+ },
+ "resolution_failures.json": {
+  "count": 726,
+  "kinds": {
+   "unresolved_claim_subject": 318,
+   "unresolved_relation_participant": 216,
+   "unresolved_attribute_ref": 163,
+   "unresolved_claim_attribution": 29
+  },
+  "sample": [
+   {
+    "phase": "questions",
+    "subject": "sketch:relation_introduced:sec_00008#1",
+    "kind": "unresolved_relation_participant",
+    "reason": "relation participant `businesses and organizations` did not resolve (relation label: `displays sponsored content from third parties`)"
+   },
+   {
+    "phase": "questions",
+    "subject": "sketch:relation_introduced:sec_00016#1",
+    "kind": "unresolved_relation_participant",
+    "reason": "relation participant `Section 1.c` did not resolve (relation label: `derives meaning from`)"
+   },
+   {
+    "phase": "questions",
+    "subject": "sketch:relation_introduced:sec_00016#2",
+    "kind": "unresolved_relation_participant",
+    "reason": "relation participant `Section 3.a` did not resolve (relation label: `derives meaning from`)"
+   },
+   {
+    "phase": "questions",
+    "subject": "sketch:relation_introduced:sec_00016#3",
+    "kind": "unresolved_relation_participant",
+    "reason": "relation participant `Section 7.b` did not resolve (relation label: `derives meaning from`)"
+   },
+   {
+    "phase": "questions",
+    "subject": "sketch:relation_introduced:sec_00022#0",
+    "kind": "unresolved_relation_participant",
+    "reason": "relation participant `user engagement` did not resolve (relation label: `driven by factors including`)"
+   },
+   {
+    "phase": "questions",
+    "subject": "sketch:relation_introduced:sec_00025#4",
+    "kind": "unresolved_relation_participant",
+    "reason": "relation participant `user engagement data` did not resolve (relation label: `learns from user interaction with ads`)"
+   }
+  ]
+ },
+ "_summary.json": {
+  "schema_version": 6,
+  "atom_count": 0,
+  "tier2_count": 0,
+  "fingerprint": "sha256:1774d6b96c12e2154d04713b1b01f3fcf82a74d7e24fb66b6ea5acf380e49712",
+  "atoms_mtime_ms": 1789873687220,
+  "atoms_size_bytes": 44,
+  "atom_counts": {},
+  "subtype_counts": {},
+  "ann_mtime_ms": 0,
+  "csr_mtime_ms": 0
+ }
+}

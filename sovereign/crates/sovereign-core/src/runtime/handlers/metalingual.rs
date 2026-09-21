@@ -19,10 +19,10 @@ use crate::error::Result;
 use crate::types::*;
 
 use super::super::{
-    cap_chunks_per_article, cross_corpus_sort_cmp, format_scored_chunks_with_kinds, now,
-    parse_metalingual_locator, reweight_by_query_relevance, MetalingualLocator, Runtime,
-    FAST_KNOWLEDGE_MAX_TOKENS, KNOWLEDGE_SYNTHESIS_SYSTEM, KQ_MERGED_LIMIT, KQ_PER_CORPUS_LIMIT,
-    MAX_CHUNKS_PER_ARTICLE_AT_MERGE, MAX_KNOWLEDGE_CHARS,
+    cap_chunks_per_article, cross_corpus_sort_cmp, format_scored_chunks_with_kinds,
+    kq_merged_limit, max_knowledge_chars, now, parse_metalingual_locator,
+    reweight_by_query_relevance, MetalingualLocator, Runtime, FAST_KNOWLEDGE_MAX_TOKENS,
+    KNOWLEDGE_SYNTHESIS_SYSTEM, KQ_PER_CORPUS_LIMIT, MAX_CHUNKS_PER_ARTICLE_AT_MERGE,
 };
 
 impl Runtime {
@@ -241,7 +241,7 @@ impl Runtime {
             reweight_by_query_relevance(&mut chunks, message);
             chunks.sort_by(cross_corpus_sort_cmp);
             let mut chunks = cap_chunks_per_article(chunks, MAX_CHUNKS_PER_ARTICLE_AT_MERGE);
-            chunks.truncate(KQ_MERGED_LIMIT);
+            chunks.truncate(kq_merged_limit());
             chunks
         };
 
@@ -394,7 +394,7 @@ impl Runtime {
             .await;
         let doc_context = format_scored_chunks_with_kinds(
             &chunks,
-            MAX_KNOWLEDGE_CHARS,
+            max_knowledge_chars(),
             Some(&kinds),
             None,
             if folder_meta.is_empty() {
@@ -608,6 +608,9 @@ impl Runtime {
             metadata: Some({
                 let mut m = serde_json::json!({
                     "intent": "MetalingualQuery",
+                    // The route by variant name; the sibling "intent" above is
+                    // the free-form display label.
+                    "routed_intent": crate::types::Intent::MetalingualQuery.name(),
                     "locator": format!("{:?}", locator),
                     "sources": sources,
                     "chunks_used": chunks.len(),

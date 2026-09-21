@@ -1,0 +1,9 @@
+# `pod_window.sh` writes one directory per window here. A LIVE window's is the
+# product — D4 has the batch copy the phase-1 sketches into it so a later
+# head-noun merge fix can re-census them without renting a second pod — so
+# nothing here is ignored wholesale.
+#
+# A `--rehearse` directory is the opposite: it proves the preflight ran, the
+# commit body carries its table, and a tree of stale rehearsals under differing
+# verdict schemes would misread as evidence about the live batch.
+rehearse-*/

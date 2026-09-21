@@ -1,0 +1,49 @@
+{
+ "service": "Threads",
+ "list": "uses",
+ "source": "spikes/fineprint-data/ota-pga-versions/Threads/Privacy Policy.md",
+ "verdict": "under-5",
+ "headings": [
+  {
+   "line": 33,
+   "text": "How do we use this information?",
+   "span_ends_line": 45
+  }
+ ],
+ "items": [
+  {
+   "item": "to provide, personalise  , and improve Threads",
+   "line": 38,
+   "from": "list-item"
+  },
+  {
+   "item": "to provide measurement, analytics and other business services",
+   "line": 39,
+   "from": "list-item"
+  },
+  {
+   "item": "to research and innovate for social good",
+   "line": 42,
+   "from": "list-item"
+  },
+  {
+   "item": "Threads in Accounts Centre",
+   "line": 44,
+   "from": "bold-lead-in"
+  }
+ ],
+ "dropped": [
+  {
+   "item": "to promote safety, integrity and security across Meta Products",
+   "line": 40,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "to communicate with you, and",
+   "line": 41,
+   "from": "list-item",
+   "rule": "dangling"
+  }
+ ]
+}

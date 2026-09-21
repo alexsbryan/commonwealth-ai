@@ -1,0 +1,59 @@
+{
+ "sections_ok": 107,
+ "sections_failed": 1,
+ "failed": [
+  [
+   "sec_00438",
+   "{'chapter_id': 'sec_00438', 'reason': 'chat error: Serialization error: daemon chat error 503 Service Unavailable: {\"error\":{\"message\":\"host busy: ~40686 ms pre"
+  ]
+ ],
+ "facet_totals": {
+  "entities_introduced": 551,
+  "entities_developed": 107,
+  "relations_introduced": 213,
+  "claims": 317,
+  "questions_raised": 172,
+  "relations_developed": 2,
+  "events": 15
+ },
+ "entity_type_sketches": {
+  "data_type": 99,
+  "defined_term": 84,
+  "organization": 70,
+  "service": 57,
+  "agreement": 54,
+  "recipient": 51,
+  "party": 43,
+  "work": 29,
+  "purpose": 25,
+  "concept": 23,
+  "place": 14,
+  "institution": 2
+ },
+ "claim_kind_sketches": {
+  "obligation": 317
+ },
+ "obligation_deontic_sketches": {
+  "None": 309,
+  "forbid": 7,
+  "require": 1
+ },
+ "obligation_subject_filled": 317,
+ "sections_at_entity_cap_15": [
+  [
+   "sec_00062",
+   "3. Personal data we collect about you",
+   1610
+  ]
+ ],
+ "service_attr_filled": {
+  "recipient": 38,
+  "data_type": 64,
+  "purpose": 17
+ },
+ "service_attr_missing": {
+  "data_type": 35,
+  "recipient": 13,
+  "purpose": 8
+ }
+}

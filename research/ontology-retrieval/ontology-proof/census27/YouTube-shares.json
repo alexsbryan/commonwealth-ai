@@ -1,0 +1,121 @@
+{
+ "service": "YouTube",
+ "list": "shares",
+ "source": "spikes/fineprint-data/ota-pga-versions/YouTube/Privacy Policy.md",
+ "verdict": "qualifies",
+ "headings": [
+  {
+   "line": 214,
+   "text": "Shared endorsements",
+   "span_ends_line": 219
+  },
+  {
+   "line": 279,
+   "text": "Sharing your information",
+   "span_ends_line": 325
+  },
+  {
+   "line": 282,
+   "text": "When you share your information",
+   "span_ends_line": 288
+  },
+  {
+   "line": 289,
+   "text": "When Google shares your information",
+   "span_ends_line": 325
+  }
+ ],
+ "items": [
+  {
+   "item": "When you share your information",
+   "line": 282,
+   "from": "sub-heading"
+  },
+  {
+   "item": "When Google shares your information",
+   "line": 289,
+   "from": "sub-heading"
+  },
+  {
+   "item": "With your consent",
+   "line": 294,
+   "from": "sub-heading"
+  },
+  {
+   "item": "With domain administrators",
+   "line": 298,
+   "from": "sub-heading"
+  },
+  {
+   "item": "Suspend or terminate your account access",
+   "line": 305,
+   "from": "list-item"
+  },
+  {
+   "item": "For external processing",
+   "line": 309,
+   "from": "sub-heading"
+  },
+  {
+   "item": "For legal reasons",
+   "line": 313,
+   "from": "sub-heading"
+  }
+ ],
+ "dropped": [
+  {
+   "item": "Access and retain information stored in your account, like your email",
+   "line": 302,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "View statistics regarding your account, like how many apps you install",
+   "line": 303,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Receive your account information in order to satisfy applicable law, regulation, legal process, or enforceable governmental request",
+   "line": 306,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Restrict your ability to delete or edit your information or your privacy settings",
+   "line": 307,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Respond to any applicable law, regulation,legal process, or enforceable governmental request. We share information about the number and type of requests we receive from governments in our Transparency Report",
+   "line": 317,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Enforce applicable Terms of Service, including investigation of potential violations",
+   "line": 318,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Detect, prevent, or otherwise address fraud, security, or technical issues",
+   "line": 319,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Protect against harm to the rights, property or safety of Google, our users, or the public",
+   "line": 320,
+   "from": "list-item",
+   "rule": "prose"
+  },
+  {
+   "item": "Change your account password",
+   "line": 304,
+   "from": "list-item",
+   "rule": "imperative"
+  }
+ ]
+}

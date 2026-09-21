@@ -7,6 +7,12 @@ drivers this replaces (`ralph/NEEDS_HUMAN.md`, `ralph/STOP`, `ralph/DONE`,
 is DONE, an operator stop, or an escalation — the machine cannot resolve to
 quietly stuck.
 
+`--queue <name>` runs `ralph/next/<name>/` from its `queue.toml` instead: its
+own state, prompt, charter, models, checks and control files (`ctl/` beside
+the manifest), so two loops share a checkout. Without it every flag and
+default is the legacy one. `audit_every = N` there makes `run` insert and
+dispatch a `REVIEW-audit-` row once N units have landed without one.
+
 Subcommands:
   run        the serial campaign driver: one unit per session
   supervise  wrap a campaign command: bounded resolutions, progress by unit
@@ -16,6 +22,8 @@ Subcommands:
   models     show or set ralph/models.env and kickstart the loaded job
   plan       print the queue's head and the model it routes to
   promote    make a staged campaign (ralph/next/<name>/) the active one
+  prompt     print the worker prompt a queue runs on (rendered or as written)
+  check-argv the argv a queue's [checks] declares (scripts/ralph-check.sh asks)
 """
 from __future__ import annotations
 
@@ -23,6 +31,7 @@ import argparse
 import dataclasses
 import enum
 import hashlib
+import itertools
 import os
 import pathlib
 import re
@@ -43,19 +52,215 @@ def say(msg: str) -> None:
     print(f"{time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())} {msg}", flush=True)
 
 
+class HostError(Exception):
+    """The platform cannot do what was asked; the message names what is missing."""
+
+
+class Host:
+    """The two things a loop asks of the machine it runs on — a desktop
+    notification and a detached job — behind one interface, so the FSM names
+    neither osascript nor launchd. This base is the platform with no backend:
+    it reports every request instead of dropping it (the old notify swallowed
+    every failure, so a Linux host simply never heard from its loops)."""
+    notifier = ""
+    job_tools = ()
+
+    def __init__(self, *, run=subprocess.run, which=shutil.which, home=None):
+        self._run = run
+        self._which = which
+        self.home = pathlib.Path(home) if home else pathlib.Path.home()
+        self._reported = set()
+
+    def _absent(self, tools, kind):
+        if not tools:
+            return f"no {kind} backend for {sys.platform}"
+        gone = [t for t in tools if not self._which(t)]
+        return f"{', '.join(gone)} not found" if gone else ""
+
+    def notify(self, title, body):
+        absent = self._absent((self.notifier,) if self.notifier else (), "notification")
+        if absent:
+            say(f"notify ({absent}) — {title}: {body}")
+            return False
+        try:
+            self._run(self._notify_argv(title, body), capture_output=True, timeout=10)
+        except (OSError, subprocess.SubprocessError) as e:
+            say(f"notify ({self.notifier} failed: {e}) — {title}: {body}")
+            return False
+        return True
+
+    def require_jobs(self):
+        absent = self._absent(self.job_tools, "job")
+        if absent:
+            raise HostError(f"{absent} — this host cannot run a detached ralph job")
+
+    def job_running(self, name):
+        try:
+            self.require_jobs()
+        except HostError as e:
+            if name not in self._reported:
+                self._reported.add(name)
+                say(f"{e}: cannot tell whether {name} is running — treating it as not running")
+            return False
+        return self._job_running(name)
+
+    def install_job(self, name, argv, workdir, log_path, interval=None):
+        self.require_jobs()
+        return self._install_job(name, [str(a) for a in argv], str(workdir), str(log_path),
+                                 interval)
+
+    def start_job(self, name):
+        self.require_jobs()
+        return self._start_job(name)
+
+    def stop_job(self, name):
+        self.require_jobs()
+        return self._stop_job(name)
+
+    def restart_job(self, name):
+        """True when a loaded job was restarted, False when none is loaded."""
+        self.require_jobs()
+        return self._restart_job(name)
+
+
+class MacHost(Host):
+    notifier = "/usr/bin/osascript"
+    job_tools = ("launchctl",)
+
+    def _notify_argv(self, title, body):
+        return [self.notifier, "-e", f'display notification "{body}" with title "ralph: {title}"']
+
+    def _domain(self, name=""):
+        return f"gui/{os.getuid()}" + (f"/{name}" if name else "")
+
+    def job_file(self, name):
+        return self.home / "Library" / "LaunchAgents" / f"{name}.plist"
+
+    def _job_running(self, name):
+        r = self._run(["launchctl", "print", self._domain(name)], capture_output=True, text=True)
+        return "state = running" in r.stdout
+
+    def _install_job(self, name, argv, workdir, log_path, interval):
+        plist = self.job_file(name)
+        args = "\n".join(f"    <string>{a}</string>" for a in argv)
+        schedule = (f"  <key>StartInterval</key><integer>{interval}</integer>\n"
+                    if interval else "  <key>RunAtLoad</key><true/>\n")
+        plist.parent.mkdir(parents=True, exist_ok=True)
+        plist.write_text(f"""<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>{name}</string>
+  <key>ProgramArguments</key><array>
+{args}
+  </array>
+  <key>WorkingDirectory</key><string>{workdir}</string>
+{schedule}  <key>EnvironmentVariables</key><dict>
+    <key>HOME</key><string>{self.home}</string>
+    <key>PATH</key><string>{os.environ.get("PATH", "")}</string>
+  </dict>
+  <key>StandardOutPath</key><string>{log_path}</string>
+  <key>StandardErrorPath</key><string>{log_path}</string>
+</dict></plist>
+""")
+        return plist
+
+    def _start_job(self, name):
+        self._stop_job(name)
+        r = self._run(["launchctl", "bootstrap", self._domain(), str(self.job_file(name))],
+                      capture_output=True, text=True)
+        if r.returncode != 0:
+            raise HostError(f"bootstrap failed: {(r.stderr or r.stdout).strip()}")
+
+    def _stop_job(self, name):
+        self._run(["launchctl", "bootout", self._domain(name)], capture_output=True, text=True)
+
+    def _restart_job(self, name):
+        r = self._run(["launchctl", "print", self._domain(name)], capture_output=True, text=True)
+        if r.returncode != 0:
+            return False
+        self._run(["launchctl", "kickstart", "-k", self._domain(name)], capture_output=True)
+        return True
+
+
+class LinuxHost(Host):
+    """notify-send and a transient `systemd-run --user` unit. `install_job`
+    records the command (as the plist does on macOS); `start_job` runs it."""
+    notifier = "notify-send"
+    job_tools = ("systemd-run", "systemctl")
+
+    def _notify_argv(self, title, body):
+        return [self.notifier, f"ralph: {title}", body]
+
+    def job_file(self, name):
+        return self.home / ".config" / "ralph" / "jobs" / f"{name}.json"
+
+    def _units(self, name):
+        return [f"{name}.service", f"{name}.timer"]
+
+    def _job_running(self, name):
+        return any(self._run(["systemctl", "--user", "is-active", "--quiet", unit],
+                             capture_output=True, text=True).returncode == 0
+                   for unit in self._units(name))
+
+    def _install_job(self, name, argv, workdir, log_path, interval):
+        import json
+        spec = self.job_file(name)
+        spec.parent.mkdir(parents=True, exist_ok=True)
+        spec.write_text(json.dumps({"argv": argv, "workdir": workdir, "log": log_path,
+                                    "interval": interval}, indent=2) + "\n")
+        return spec
+
+    def _start_job(self, name):
+        import json
+        job = json.loads(self.job_file(name).read_text())
+        self._stop_job(name)
+        timer = ([f"--on-active=1", f"--on-unit-active={job['interval']}"]
+                 if job["interval"] else [])
+        r = self._run(["systemd-run", "--user", "--unit", name, "--collect",
+                       f"--working-directory={job['workdir']}",
+                       f"--setenv=PATH={os.environ.get('PATH', '')}",
+                       "-p", f"StandardOutput=append:{job['log']}",
+                       "-p", f"StandardError=append:{job['log']}", *timer, *job["argv"]],
+                      capture_output=True, text=True)
+        if r.returncode != 0:
+            raise HostError(f"systemd-run failed: {(r.stderr or r.stdout).strip()}")
+
+    def _stop_job(self, name):
+        self._run(["systemctl", "--user", "stop", *self._units(name)],
+                  capture_output=True, text=True)
+
+    def _restart_job(self, name):
+        if not self._job_running(name):
+            return False
+        self._start_job(name)
+        return True
+
+
+def host_for(platform=None, **kwargs):
+    platform = platform or sys.platform
+    if platform == "darwin":
+        return MacHost(**kwargs)
+    if platform.startswith("linux"):
+        return LinuxHost(**kwargs)
+    return Host(**kwargs)
+
+
+_HOST = None
+
+
+def host():
+    global _HOST
+    if _HOST is None:
+        _HOST = host_for()
+    return _HOST
+
+
 def notify(title: str, body: str, enabled: bool = True) -> None:
     """Titles carry the tier so a popup says who must act (2026-09-17):
     "OPERATOR — …" a human act is required; "auto — …" the loop is handling it
     (a director dispatch, a retry); "DONE" / "stopped" are terminal."""
-    if not enabled:
-        return
-    try:
-        subprocess.run(
-            ["/usr/bin/osascript", "-e",
-             f'display notification "{body}" with title "ralph: {title}"'],
-            capture_output=True, timeout=10)
-    except Exception:
-        pass
+    if enabled:
+        host().notify(title, body)
 
 
 def file_hash(path) -> str:
@@ -69,6 +274,15 @@ def head_of(workdir) -> str:
     r = subprocess.run(["git", "-C", str(workdir), "rev-parse", "HEAD"],
                        capture_output=True, text=True)
     return r.stdout.strip()
+
+
+def commit_state(paths, subject):
+    """The state file alone, as ralph-mark.sh commits it: whatever else is
+    staged in the checkout belongs to someone's unit."""
+    git = ["git", "-C", str(paths.workdir)]
+    subprocess.run([*git, "add", "--", paths.state], capture_output=True, text=True)
+    return subprocess.run([*git, "commit", "-q", "-m", subject, "--", paths.state],
+                          capture_output=True, text=True)
 
 
 def first_line(path) -> str:
@@ -107,17 +321,28 @@ def guarded(fn, paths, *, notifier=notify, notify_enabled=True):
         return 3
 
 
-def wait_for_marker(paths, marker_timeout):
-    """None to proceed, "wait" to yield this tick, or a reason string to halt."""
-    waiting = paths.p(paths.waiting)
+def waiting_marker(root, waiting_rel):
+    """The waiting file under `root` and the marker it names, or None when
+    the file is absent or names no `*.done` marker (ignored and unlinked —
+    the convention wait_for_marker has always enforced). One parse for the
+    main-tree control file and for a lane worktree's `ralph/waiting`."""
+    waiting = pathlib.Path(root) / waiting_rel
     if not waiting.exists():
         return None
     m = re.search(r"[A-Za-z0-9._/-]+\.done", waiting.read_text())
     if not m:
-        say("ralph/waiting names no *.done marker — ignoring it")
+        say(f"{waiting_rel} names no *.done marker — ignoring it")
         waiting.unlink()
         return None
-    marker = paths.p(m.group(0))
+    return waiting, pathlib.Path(root) / m.group(0)
+
+
+def wait_for_marker(paths, marker_timeout):
+    """None to proceed, "wait" to yield this tick, or a reason string to halt."""
+    parsed = waiting_marker(paths.workdir, paths.waiting)
+    if parsed is None:
+        return None
+    waiting, marker = parsed
     if marker.exists():
         say(f"{marker} present — resuming")
         waiting.unlink()
@@ -141,7 +366,7 @@ def resolver_prompt(paths, attempt, resolve_max, reason, charter=None):
             f"Read the package (`{paths.needs_human}`), verify its facts, and DECIDE — do not\n"
             "defer a fork the charter covers. Reproduce every claim you rely on.\n\n"
             f"1. Read `{paths.needs_human}`, `{paths.state}`, `git status`, and the charter.\n"
-            "   Campaign logs are under `~/.svrnmesh/ralph/` and `target/ralph/`.\n"
+            f"   Campaign logs are under `~/.svrnmesh/ralph/` and `{paths.log_dir}/`.\n"
             "2. Apply the smallest change that makes the campaign flow: correct the row or\n"
             "   the code, with its source order corrected together when a premise was false.\n"
             "3. Record the decision in `ralph/DECISIONS.md` (date, unit, fork, choice,\n"
@@ -157,7 +382,7 @@ def resolver_prompt(paths, attempt, resolve_max, reason, charter=None):
     return head + (
         "You are the resolution session. Diagnose and fix so the campaign flows again:\n"
         f"1. Read `{paths.needs_human}`, `{paths.state}`, and `git status`. Campaign logs are\n"
-        "   under `~/.svrnmesh/ralph/` and `target/ralph/`.\n"
+        f"   under `~/.svrnmesh/ralph/` and `{paths.log_dir}/`.\n"
         "2. Fix the blocker. A false premise may be corrected only from verified code or\n"
         "   consumer evidence, with the row and its source order corrected together.\n"
         "3. Do NOT weaken a PASS BAR and do not mark a unit [x] that has not earned it.\n"
@@ -189,6 +414,7 @@ class Row:
     hash: str | None
     lineno: int
     line: str
+    review: bool = False
 
 
 class Queue:
@@ -218,7 +444,8 @@ class Queue:
                 raise ValueError(f"{self.path}:{n}: row has no id")
             commit = next((t for t in tokens if HASH_RE.fullmatch(t)), None)
             deps = tuple(d.strip() for d in m.group("deps").split(",") if d.strip())
-            rows.append(Row(row_id, Status(m.group("mark")), deps, commit, n, line))
+            rows.append(Row(row_id, Status(m.group("mark")), deps, commit, n, line,
+                            review=bool(REVIEW_TAG_RE.search(m.group("rest")))))
         return rows
 
     def by_id(self):
@@ -254,6 +481,25 @@ class Queue:
         self.path.write_text("\n".join(lines) + "\n")
         self.rows = self._parse()
 
+    def insert_before(self, row_id, line):
+        """Add a row above another; the file is rewritten as set_status does it."""
+        row = self.by_id()[row_id]
+        lines = self.path.read_text().splitlines()
+        if lines[row.lineno - 1] != row.line:
+            raise ValueError(f"{self.path}:{row.lineno}: row moved under insert_before")
+        lines.insert(row.lineno - 1, line)
+        self.path.write_text("\n".join(lines) + "\n")
+        self.rows = self._parse()
+
+    def units_since_audit(self):
+        """`[x]` rows below the last `[x]` audit row. An audit still open has
+        reviewed nothing, and a HUMAN- row is the operator's act, not a unit."""
+        n = 0
+        for r in self.rows:
+            if r.status is Status.DONE and not r.id.startswith("HUMAN-"):
+                n = 0 if r.id.startswith(AUDIT_PREFIX) else n + 1
+        return n
+
     def all_done(self):
         return all(r.status is Status.DONE for r in self.rows)
 
@@ -264,12 +510,14 @@ class Queue:
                 return r
         return None
 
-    def pick_wave(self, lanes, conflicts, heavy=frozenset()):
+    def pick_wave(self, lanes, conflicts, heavy=frozenset(), waiting=frozenset()):
         """Ready non-review units, up to `lanes`, no conflicting pair.
         `[~]` rows are resumable lanes: a killed session leaves one behind.
         At most ONE heavy row (ralph/heavy.txt, loaded by the Pool) per wave —
         the big moves run sequentially (2026-09-17, operator direction: derisk
-        first); the other lane takes non-heavy rows."""
+        first); the other lane takes non-heavy rows. A `waiting` unit's lane
+        sits on `ralph/waiting` for a detached run — the Pool respawns it when
+        the marker lands, not as wave filler."""
         wave = []
         for r in self.rows:
             if len(wave) >= lanes:
@@ -280,6 +528,8 @@ class Queue:
                 continue
             if r.id.startswith("HUMAN-"):
                 continue          # operator-only; the run loop asks for it
+            if r.id in waiting:
+                continue
             if not self.deps_met(r):
                 continue
             if r.id in heavy and any(w in heavy for w in wave):
@@ -288,6 +538,27 @@ class Queue:
                 continue
             wave.append(r.id)
         return wave
+
+
+AUDIT_PREFIX = "REVIEW-audit-"
+# The one text of a cadence audit (`audit_every` in queue.toml; Campaign inserts
+# the row). A queue's hand-written audit rows stay its author's.
+AUDIT_ROW_BODY = (
+    "audit the commits since the previous `REVIEW-audit-` row's hash (since this queue "
+    "started if there is none) against `sovereign/ARCH_PRINCIPLES.md`; REUSE AND SIZE, WITH "
+    "DATA: (1) paste a per-unit net-line ledger for product code over that range — "
+    "`git log --numstat --format=%s <hash>..HEAD`, summed by the subject's unit id, src "
+    "apart from tests; (2) run `target/debug/sovereign-cli code dry-report --scope <dir>` "
+    "for each crate dir the range touched and paste every exact or near clone with a side "
+    "that is a symbol ADDED in the range; (3) for every new `struct`/`enum`/`trait` in the "
+    "range, `target/debug/sovereign-cli code converge noun <Name>`, and paste any noun "
+    "with more than one definition; fix here what is behaviour-preserving and small, "
+    "record the rest in `ralph/REVIEW_FINDINGS.md` with both file:line sites "
+    "— read: `sovereign/ARCH_PRINCIPLES.md` — check: LINT")
+
+
+def audit_row(row_id, after):
+    return f"- [ ] {row_id} — depends [{after}] — {AUDIT_ROW_BODY}"
 
 
 MODEL_KEYS = ("MODEL", "REVIEW_MODEL", "RESOLVE_MODEL", "VARIANT")
@@ -309,14 +580,188 @@ def load_models(path):
     return out
 
 
-def select_model_args(row_id, model, review_model, variant):
-    chosen = review_model if (review_model and "review" in row_id.lower()) else model
+REVIEW_TAG_RE = re.compile(r"(?:^|—)\s*review\s*=\s*true\s*(?=—|$)")
+
+
+def is_review(row):
+    """A review row is the `REVIEW-` prefix or a `— review = true —` field on
+    the row. It was the substring "review" anywhere in the id, which would send
+    a row named for a review FEATURE to the stronger model."""
+    if isinstance(row, str):
+        return row.startswith("REVIEW-")
+    return row.id.startswith("REVIEW-") or row.review
+
+
+def select_model_args(row, model, review_model, variant):
+    chosen = review_model if (review_model and is_review(row)) else model
     args = []
     if chosen:
         args += ["--model", chosen]
     if variant:
         args += ["--variant", variant]
     return args
+
+
+# The checks ralph-check.sh implements itself. A manifest may not redeclare one:
+# one name, one decider.
+BUILTIN_CHECKS = ("clean", "lint", "test", "testfn", "layer", "env", "docs",
+                  "testall", "prepush")
+MANIFEST_MODEL_KEYS = {"worker": "MODEL", "review": "REVIEW_MODEL",
+                       "resolve": "RESOLVE_MODEL", "variant": "VARIANT"}
+MANIFEST_PATH_KEYS = {"state": "STATE.md", "prompt": "PROMPT.md", "charter": "CHARTER.md",
+                      "conflicts": "conflicts.txt", "heavy": "heavy.txt", "control_dir": "ctl"}
+
+
+@dataclasses.dataclass(frozen=True)
+class QueueManifest:
+    """`ralph/next/<name>/queue.toml`: everything one queue owns, as data.
+    Named apart from `Queue`, which is the row grammar of its STATE.md."""
+    name: str
+    path: str
+    label: str
+    state: str
+    prompt: str
+    charter: str
+    conflicts: str
+    heavy: str
+    control_dir: str
+    models: dict
+    checks: dict
+    session_timeout: int | None = None
+    worker_bin: str = ""
+    settings: str = ""
+    prompt_declared: bool = False
+    audit_every: int | None = None        # absent: no cadence, the queue's own audit rows only
+
+
+def manifest_rel(name):
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", name or ""):
+        raise ValueError(f"queue name {name!r} must be one path segment under {STAGED_DIR}/")
+    return f"{STAGED_DIR}/{name}/queue.toml"
+
+
+def load_manifest(workdir, name):
+    """Strict: an unknown key, a mistyped value or a missing file is refused by
+    name. A typo that silently fell back to a default is how a queue ends up
+    running another queue's files."""
+    import tomllib          # 3.11+; imported here so legacy launch lines need no manifest support
+    rel = manifest_rel(name)
+    file = pathlib.Path(workdir) / rel
+    if not file.is_file():
+        raise ValueError(f"no queue manifest at {rel} (workdir {workdir})")
+    try:
+        data = tomllib.loads(file.read_text())
+    except tomllib.TOMLDecodeError as e:
+        raise ValueError(f"{rel}: {e}") from e
+
+    def bad(key, want):
+        return ValueError(f"{rel}: `{key}` must be {want}")
+
+    known = {"label", "session_timeout", "audit_every", "worker_bin", "settings", "models",
+             "checks", *MANIFEST_PATH_KEYS}
+    for key in data:
+        if key not in known:
+            raise ValueError(f"{rel}: unknown key `{key}` (known: {', '.join(sorted(known))})")
+    strings = {}
+    for key in ("label", "worker_bin", "settings", *MANIFEST_PATH_KEYS):
+        if key in data and not isinstance(data[key], str):
+            raise bad(key, "a string")
+        strings[key] = data.get(key, "")
+    timeout = data.get("session_timeout")
+    if timeout is not None and (isinstance(timeout, bool) or not isinstance(timeout, int)
+                                or timeout <= 0):
+        raise bad("session_timeout", "a positive integer of seconds")
+    every = data.get("audit_every")
+    if every is not None and (isinstance(every, bool) or not isinstance(every, int) or every < 2):
+        raise bad("audit_every", "an integer >= 2 (units between audits)")
+    models = {}
+    table = data.get("models", {})
+    if not isinstance(table, dict):
+        raise bad("models", "a table")
+    for key, value in table.items():
+        if key not in MANIFEST_MODEL_KEYS:
+            raise ValueError(f"{rel}: unknown [models] key `{key}` "
+                             f"(known: {', '.join(MANIFEST_MODEL_KEYS)})")
+        if not isinstance(value, str):
+            raise bad(f"models.{key}", "a string")
+        models[MANIFEST_MODEL_KEYS[key]] = value
+    checks = {}
+    table = data.get("checks", {})
+    if not isinstance(table, dict):
+        raise bad("checks", "a table")
+    for key, argv in table.items():
+        if key in BUILTIN_CHECKS:
+            raise ValueError(f"{rel}: [checks] `{key}` is a ralph-check.sh built-in "
+                             "and cannot be redeclared")
+        if (not isinstance(argv, list) or not argv
+                or not all(isinstance(a, str) and a and "\n" not in a for a in argv)):
+            raise bad(f"checks.{key}", "a non-empty argv list of one-line strings")
+        checks[key] = tuple(argv)
+    base = f"{STAGED_DIR}/{name}"
+    return QueueManifest(
+        name=name, path=rel, label=strings["label"] or name,
+        models=models, checks=checks, session_timeout=timeout,
+        worker_bin=strings["worker_bin"], settings=strings["settings"],
+        prompt_declared="prompt" in data, audit_every=every,
+        **{key: strings[key] or f"{base}/{default}"
+           for key, default in MANIFEST_PATH_KEYS.items()})
+
+
+MODEL_FLAGS = {"MODEL": "model", "REVIEW_MODEL": "review_model",
+               "RESOLVE_MODEL": "resolve_model", "VARIANT": "variant"}
+
+
+def resolve_models(args, paths):
+    """The one model decider: the queue's `[models]`, then the flag, then the
+    per-checkout models.env. A flag the manifest overrides is named, not dropped."""
+    shared = load_models(paths.p(paths.models))
+    declared = paths.manifest.models if paths.manifest else {}
+    out = {}
+    for key, flag in MODEL_FLAGS.items():
+        given = getattr(args, flag, "") or ""
+        if declared.get(key):
+            if given and given != declared[key]:
+                say(f"--queue {paths.queue} wins: ignoring --{flag.replace('_', '-')} {given} "
+                    f"({paths.manifest.path} [models] names {declared[key]})")
+            out[key] = declared[key]
+        else:
+            out[key] = given or shared.get(key, "")
+    return out
+
+
+def write_manifest_models(file, updates):
+    """Set `[models]` keys in a queue.toml by line, leaving every other line as
+    written (tomllib reads only; a re-serialise would drop the comments). The
+    result must load, or the file is put back."""
+    import json
+    import tomllib
+    original = file.read_text()
+    lines = original.splitlines()
+    header = next((i for i, l in enumerate(lines) if l.strip() == "[models]"), None)
+    if header is None:
+        if lines and lines[-1].strip():
+            lines.append("")
+        lines.append("[models]")
+        header = len(lines) - 1
+    end = next((i for i in range(header + 1, len(lines)) if lines[i].lstrip().startswith("[")),
+               len(lines))
+    while end > header + 1 and not lines[end - 1].strip():
+        end -= 1                      # new keys go above the blank lines that close the table
+    for key, value in updates.items():
+        entry = f"{key} = {json.dumps(value, ensure_ascii=False)}"
+        at = next((i for i in range(header + 1, end)
+                   if re.match(rf"\s*{re.escape(key)}\s*=", lines[i])), None)
+        if at is None:
+            lines.insert(end, entry)
+            end += 1
+        else:
+            lines[at] = entry
+    file.write_text("\n".join(lines) + "\n")
+    try:
+        tomllib.loads(file.read_text())
+    except tomllib.TOMLDecodeError as e:
+        file.write_text(original)
+        raise ValueError(f"{file}: the [models] rewrite did not parse ({e}); file restored") from e
 
 
 @dataclasses.dataclass
@@ -330,14 +775,119 @@ class Paths:
     waiting: str = "ralph/waiting"
     models: str = "ralph/models.env"
     heartbeat: str = "ralph/.heartbeat"
+    charter: str = "ralph/CHARTER.md"
+    conflicts: str = "ralph/conflicts.txt"
+    heavy: str = "ralph/heavy.txt"
+    queue: str = ""                       # the --queue name; "" on a legacy launch line
+    control_dir: str = "ralph"            # a queue's own: ralph/next/<name>/ctl
+    director_commits: str = "ralph/.director-commits"
+    log_dir: str = "target/ralph"
+    prompt_addendum: str = ""             # set when the prompt is rendered, not read
+    manifest: QueueManifest | None = None
 
     def p(self, rel):
         return self.workdir / rel
+
+    @staticmethod
+    def control_files(control_dir):
+        """The per-loop files, as Paths fields. One loop per control_dir."""
+        return {"control_dir": control_dir, "done": f"{control_dir}/DONE",
+                "stop": f"{control_dir}/STOP", "needs_human": f"{control_dir}/NEEDS_HUMAN.md",
+                "waiting": f"{control_dir}/waiting", "heartbeat": f"{control_dir}/.heartbeat",
+                "director_commits": f"{control_dir}/.director-commits"}
+
+
+PROMPT_BASE = "ralph/PROMPT.base.md"
+SECTION_RE = re.compile(r"^<!-- section: (?P<name>[a-z0-9-]+)"
+                        r"(?: (?P<mode>append|after=(?P<after>[a-z0-9-]+)))? -->\n", re.M)
+VAR_RE = re.compile(r"\{\{([a-z_]+)\}\}")
+
+
+def prompt_sections(text, source):
+    """`<!-- section: name [append|after=<name>] -->` lines split a prompt file;
+    the marker lines, and anything above the first one, are not rendered."""
+    marks = list(SECTION_RE.finditer(text))
+    out = []
+    for n, m in enumerate(marks):
+        body = text[m.end():marks[n + 1].start() if n + 1 < len(marks) else len(text)]
+        if any(name == m["name"] for name, _, _, _ in out):
+            raise ValueError(f"{source}: section `{m['name']}` appears twice")
+        out.append((m["name"], m["mode"] or "", m["after"], body))
+    return out
+
+
+def section_vars(body):
+    """The `key = value` lines of a `vars` section."""
+    return dict([part.strip() for part in line.split("=", 1)] for line in body.splitlines()
+                if "=" in line and not line.lstrip().startswith("#"))
+
+
+def render_prompt(base, addendum, builtins):
+    """The shared prompt once, a queue's differences beside it (until 2026-09-19
+    every queue carried a sed-edited copy, and ei7-stage0's copy kept a
+    ralph-mark.sh call that named another queue's file). An addendum section
+    replaces the base section of its name, `append` adds to it, `after=<name>`
+    places a new one, and any other new name goes last; `vars` is `key = value`
+    lines for {{key}}. Whatever cannot be rendered is refused by name."""
+    order, bodies = [], {}
+    for name, mode, _, body in prompt_sections(base, "base"):
+        if mode or name == "vars":
+            raise ValueError(f"base: section `{name}` may not be `vars` or carry a mode")
+        order.append(name)
+        bodies[name] = body
+    variables = dict(builtins)
+    for name, mode, after, body in prompt_sections(addendum, "addendum"):
+        if name == "vars":
+            for key, value in section_vars(body).items():
+                if key in builtins:
+                    raise ValueError(f"addendum: var `{key}` is the loop's own, not the queue's")
+                variables[key] = value
+        elif mode == "append":
+            if name not in bodies:
+                raise ValueError(f"addendum: `{name} append` — the base has no section `{name}`")
+            bodies[name] += body
+        elif after:
+            if after not in bodies or name in bodies:
+                raise ValueError(f"addendum: `{name} after={after}` — `{after}` must exist "
+                                 f"and `{name}` must be new")
+            order.insert(order.index(after) + 1, name)
+            bodies[name] = body
+        else:
+            if name not in bodies:
+                order.append(name)
+            bodies[name] = body
+
+    def fill(m):
+        if m[1] not in variables:
+            raise ValueError(f"prompt: {{{{{m[1]}}}}} is not a var "
+                             f"(known: {', '.join(sorted(variables))})")
+        return variables[m[1]]
+
+    return VAR_RE.sub(fill, "".join(bodies[name] for name in order))
+
+
+def prompt_text(paths):
+    """(text, source) for the worker prompt: rendered when the queue has an
+    addendum and declares no `prompt` of its own, else the file as written."""
+    if paths.prompt_addendum:
+        text = render_prompt(paths.p(PROMPT_BASE).read_text(),
+                             paths.p(paths.prompt_addendum).read_text(),
+                             {"queue": paths.queue, "state": paths.state,
+                              "control_dir": paths.control_dir, "log_dir": paths.log_dir})
+        return text, f"{PROMPT_BASE} + {paths.prompt_addendum}"
+    return paths.p(paths.prompt).read_text(), paths.prompt
 
 
 # A driver heartbeat younger than this means a loop is live. One number for the
 # watchdog's "stalled" and promote's "still running".
 STALL_SECS = 300
+
+# A pool lane may wait on a detached run's marker for this long from the moment
+# its session first banked `ralph/waiting` (the file's mtime) before the pool
+# escalates with a package. The serial flow's bound is `--marker-timeout`
+# (7200s); a lane's detached run is expected to outlive many sessions
+# (r9-boundary-sweep's full-density sweep ran ~23h), so its bound is its own.
+LANE_MAX_WAIT_SECS = 48 * 3600
 
 
 def job_name(paths, label):
@@ -345,9 +895,7 @@ def job_name(paths, label):
 
 
 def job_running(paths, label):
-    r = subprocess.run(["launchctl", "print", f"gui/{os.getuid()}/{job_name(paths, label)}"],
-                       capture_output=True, text=True)
-    return "state = running" in r.stdout
+    return host().job_running(job_name(paths, label))
 
 
 def sessions_under(workdir):
@@ -385,6 +933,27 @@ def _install_signal_handlers():
     signal.signal(signal.SIGINT, _term)
 
 
+def session_env(paths):
+    """What every worker session is told about the loop that spawned it, so
+    ralph-mark.sh and ralph-check.sh need no per-campaign default. RALPH_QUEUE
+    is set even when empty: a legacy loop launched from inside a queue's
+    session must not inherit that queue."""
+    env = {"RALPH_QUEUE": paths.queue, "RALPH_STATE": paths.state,
+           "RALPH_CONTROL_DIR": paths.control_dir}
+    if paths.manifest and paths.manifest.settings:
+        env["RALPH_CLAUDE_SETTINGS"] = str(paths.p(paths.manifest.settings))
+    return env
+
+
+def worker_bin(paths):
+    """The manifest's worker_bin (a path is relative to the workdir), then
+    RALPH_OPENCODE_BIN, then opencode."""
+    declared = paths.manifest.worker_bin if paths.manifest else ""
+    if declared:
+        return str(paths.p(declared)) if "/" in declared else declared
+    return os.environ.get("RALPH_OPENCODE_BIN", "opencode")
+
+
 class Session:
     """One opencode session in its own process group, with a wall-clock
     timeout, a STOP check, a heartbeat, and permission-reject detection."""
@@ -393,7 +962,7 @@ class Session:
                  notifier=notify, notify_enabled=True, cwd=None, env=None):
         self.paths = paths
         self.timeout = timeout
-        self.opencode = opencode or os.environ.get("RALPH_OPENCODE_BIN", "opencode")
+        self.opencode = opencode or worker_bin(paths)
         self.poll = poll
         self.notifier = notifier
         self.notify_enabled = notify_enabled
@@ -402,6 +971,7 @@ class Session:
 
     def heartbeat(self, context):
         try:
+            self.paths.p(self.paths.control_dir).mkdir(parents=True, exist_ok=True)
             self.paths.p(self.paths.heartbeat).write_text(f"{int(time.time())} {context}\n")
         except OSError:
             pass
@@ -421,7 +991,7 @@ class Session:
         with open(log, "w") as fh:
             proc = subprocess.Popen(
                 [self.opencode, "run", *model_args, note + prompt_text],
-                cwd=workdir, env={**os.environ, **self.env},
+                cwd=workdir, env={**os.environ, **session_env(self.paths), **self.env},
                 stdout=fh, stderr=subprocess.STDOUT, start_new_session=True)
         _ACTIVE_SESSIONS.add(proc)
         waited = 0
@@ -513,17 +1083,28 @@ class Campaign:
                 iteration -= 1
                 continue
             # Re-read every iteration: the worker mutates the queue as it goes.
-            unit = Queue(self.paths.p(self.paths.state)).current()
+            queue = Queue(self.paths.p(self.paths.state))
+            unit = queue.current()
             if unit is None:
                 return self.halt(f"no ready unit in {self.paths.state}; check dependencies")
             if unit.id.startswith("HUMAN-"):
                 return self.halt(f"operator approval required: {unit.id}")
-            model_args = select_model_args(unit.id, self.model, self.review_model, self.variant)
+            if self._audit_due(queue, unit):
+                unit, refused = self._insert_audit(queue, unit)
+                if refused:
+                    return self.halt(f"audit row {unit.id} is in {self.paths.state} "
+                                     f"but git refused the commit: {refused}")
+            model_args = select_model_args(unit, self.model, self.review_model, self.variant)
             say(f"unit {unit.id} — {' '.join(model_args) or 'configured default'}")
             before = head_of(self.paths.workdir)
-            note = (f"Your unit: {unit.id} — its row in ralph/STATE.md is the [~] row, "
+            note = (f"Your unit: {unit.id} — its row in {self.paths.state} is the [~] row, "
                     "or the first ready [ ] row. Open only that row; do not scan the "
                     "queue for another.\n\n")
+            if self.paths.queue:
+                # Another loop may own ralph/STOP and ralph/NEEDS_HUMAN.md in this checkout.
+                note += (f"This queue's control files are {self.paths.needs_human}, "
+                         f"{self.paths.done} and {self.paths.waiting} — never the files of "
+                         "those names directly under ralph/, which belong to another loop.\n\n")
             self.session_run(model_args, note + self._prompt_text(), self._log_path(iteration))
             after = head_of(self.paths.workdir)
             if after != before:
@@ -535,17 +1116,58 @@ class Campaign:
                     return self.halt(f"{self.max_stall} iterations without a commit")
         return self.halt(f"MAX_ITER={self.max_iter} reached")
 
+    def _audit_due(self, queue, unit):
+        """`audit_every`, enforced where rows are dispatched: a 22-row queue ran
+        ~60 commits on one closing audit because a cadence was its author's to
+        remember. A [~] row is finished first — `current()` returns it until it
+        closes, so a row inserted above it would be inserted again every pass."""
+        every = self.paths.manifest.audit_every if self.paths.manifest else None
+        return bool(every and unit.status is Status.PENDING
+                    and not unit.id.startswith(AUDIT_PREFIX)
+                    and queue.units_since_audit() >= every)
+
+    def _insert_audit(self, queue, unit):
+        """(the inserted row, git's refusal or ""). The id's <prefix> is the
+        addendum's `prefix` var, else the queue's name."""
+        prefix = self.paths.queue
+        if self.paths.prompt_addendum:
+            for name, _, _, body in prompt_sections(
+                    self.paths.p(self.paths.prompt_addendum).read_text(), "addendum"):
+                if name == "vars":
+                    prefix = section_vars(body).get("prefix", prefix)
+        if not re.fullmatch(r"[A-Za-z0-9._-]+", prefix):
+            say(f"prefix var {prefix!r} cannot be part of a row id; using the queue name")
+            prefix = self.paths.queue
+        stem = f"{AUDIT_PREFIX}{prefix}-auto-"
+        row_id = f"{stem}{1 + sum(r.id.startswith(stem) for r in queue.rows)}"
+        n = queue.units_since_audit()
+        last_done = [r.id for r in queue.rows if r.status is Status.DONE][-1]
+        queue.insert_before(unit.id, audit_row(row_id, last_done))
+        subject = f"ralph: audit due after {n} units — {row_id}"
+        say(subject)
+        r = commit_state(self.paths, subject)
+        refused = "" if r.returncode == 0 else (r.stderr.strip() or f"exit {r.returncode}")
+        return Queue(queue.path).by_id()[row_id], refused
+
     def _beat(self, context):
         try:
+            self.paths.p(self.paths.control_dir).mkdir(parents=True, exist_ok=True)
             self.paths.p(self.paths.heartbeat).write_text(f"{int(time.time())} {context}\n")
         except OSError:
             pass
 
     def _prompt_text(self):
-        return self.paths.p(self.paths.prompt).read_text()
+        """Re-read every iteration, as before; the hash is logged when it changes,
+        so the log says which prompt each unit ran on."""
+        text, source = prompt_text(self.paths)
+        digest = hashlib.sha256(text.encode()).hexdigest()[:16]
+        if digest != getattr(self, "_prompt_digest", None):
+            self._prompt_digest = digest
+            say(f"prompt: {source} sha256={digest}")
+        return text
 
     def _log_path(self, iteration):
-        return str(self.paths.workdir / "target" / "ralph" / f"iter-{iteration}.out")
+        return str(self.paths.p(self.paths.log_dir) / f"iter-{iteration}.out")
 
 
 class Supervisor:
@@ -572,8 +1194,9 @@ class Supervisor:
     def _record_director_range(self, before, after, attempt, reason):
         """Name the director's commits so the morning review can revert one:
         `git revert <sha>` works because a decision is its own commit."""
-        log = self.paths.p("ralph/.director-commits")
+        log = self.paths.p(self.paths.director_commits)
         try:
+            log.parent.mkdir(parents=True, exist_ok=True)
             with log.open("a") as fh:
                 fh.write(f"{int(time.time())} attempt={attempt} {before}..{after} — {reason}\n")
         except OSError:
@@ -658,6 +1281,16 @@ class Supervisor:
                 say(f"supervisor: resolution {attempt} cleared the halt — resuming the campaign")
 
 
+def conflict_pairs(text):
+    """A line of N ids means all N-choose-2 pairs; `#` starts a comment. Reading
+    only the first two dropped the third id of ring-doc's line without a word."""
+    pairs = set()
+    for line in text.splitlines():
+        ids = line.split("#")[0].split()
+        pairs.update(frozenset(pair) for pair in itertools.combinations(ids, 2))
+    return pairs
+
+
 class Pool:
     """The parallel driver: waves of ready units in git worktrees, serial
     merges, a conflict halts (never auto-resolved). REVIEW rows run serially
@@ -699,14 +1332,8 @@ class Pool:
             return None
 
     def _conflict_pairs(self):
-        pairs = set()
         p = self.paths.p(self.conflicts)
-        if p.exists():
-            for line in p.read_text().splitlines():
-                parts = line.split()
-                if len(parts) >= 2:
-                    pairs.add(frozenset(parts[:2]))
-        return pairs
+        return conflict_pairs(p.read_text()) if p.exists() else set()
 
     def _heavy(self):
         """The heavy rows (ralph/heavy.txt): at most one per wave."""
@@ -726,6 +1353,42 @@ class Pool:
 
     def _prompt_text(self):
         return self.paths.p(self.prompt).read_text()
+
+    def poll_waiting_lanes(self):
+        """Each tick, every lane worktree whose `ralph/waiting` names a marker:
+        resume the lane whose marker has landed, hold the rest out of the
+        waves, escalate past LANE_MAX_WAIT_SECS. Returns (halt reason or None,
+        the units still waiting). The filesystem is the state — a restart or a
+        previous pool generation loses nothing."""
+        still = set()
+        wt_root = self.paths.workdir / ".ralph" / "wt"
+        if not wt_root.exists():
+            return None, still
+        for wt in sorted(wt_root.iterdir()):
+            parsed = waiting_marker(wt, "ralph/waiting")
+            if parsed is None:
+                continue
+            unit, waiting, marker = wt.name, parsed[0], parsed[1]
+            named = marker.relative_to(wt)
+            age = int(time.time() - waiting.stat().st_mtime)
+            if age >= LANE_MAX_WAIT_SECS:
+                return (f"lane {unit} waited {age // 3600}h on {named} "
+                        f"(limit {LANE_MAX_WAIT_SECS // 3600}h) — the detached run "
+                        "never wrote its marker"), still
+            if marker.exists():
+                say(f"pool: lane {unit} waiting on {named} — marker present, resuming")
+                waiting.unlink()
+                # End the waiting ON THE LANE BRANCH, not just on disk: a
+                # committed waiting file that survives to the merge parks the
+                # main tree's loop on a marker that only ever existed in this
+                # worktree. The commit is a no-op when nothing is staged.
+                self._git("add", "-A", "--", "ralph/waiting", cwd=wt)
+                self._git("commit", "-q", "-m", f"{unit}: waiting ended — marker landed",
+                          cwd=wt)
+            else:
+                say(f"pool: lane {unit} waiting on {named} ({age}s)")
+                still.add(unit)
+        return None, still
 
     def run(self):
         # `ralph/lanes/` not `ralph/done/`: on a case-insensitive filesystem
@@ -753,6 +1416,9 @@ class Pool:
             if marker == "wait":
                 self.sleep(self.wait_poll)
                 continue
+            reason, waiting = self.poll_waiting_lanes()
+            if reason is not None:
+                return self._halt(reason)
             unit = queue.current()
             if unit is not None and unit.id.startswith("HUMAN-"):
                 return self._halt(f"operator approval required: {unit.id}")
@@ -762,7 +1428,7 @@ class Pool:
                 if result is not None:
                     return result
                 continue
-            wave = queue.pick_wave(self.lanes, self._conflict_pairs(), self._heavy())
+            wave = queue.pick_wave(self.lanes, self._conflict_pairs(), self._heavy(), waiting)
             if not wave:
                 say("pool: no ready unit and no ready review — waiting (dependencies unmet?)")
                 self.sleep(60)
@@ -930,6 +1596,16 @@ class Pool:
                 self.notifier("auto — halt package, director next", first_line(lane_pkg), self.notify_enabled)
                 return 3
             if not (wt / "ralph" / "lanes" / f"{unit}.done").exists():
+                parsed = waiting_marker(wt, "ralph/waiting")
+                if parsed is not None:
+                    # A waiting end is the lane's own protocol for a detached
+                    # run outliving the session (r9-boundary-sweep, struck out
+                    # twice for it and halted ring 9, 2026-09-19): the tick
+                    # polls the named marker and respawns the lane when it
+                    # lands — the failure counter never sees this end.
+                    say(f"pool: lane {unit} waiting on {parsed[1].relative_to(wt)} "
+                        "— no failure count")
+                    continue
                 # A lane that keeps ending without its marker would otherwise be
                 # re-run forever (2026-09-17: ~50 sessions over 2.5h on
                 # dm-daemon-api-edge). Bound it and hand the row to the director.
@@ -1042,28 +1718,13 @@ class Watch:
         return cond
 
 
-def install_launchd(plist_label, program_args, workdir, log_path, interval=None):
-    plist = pathlib.Path.home() / "Library" / "LaunchAgents" / f"{plist_label}.plist"
-    args = "\n".join(f"    <string>{a}</string>" for a in program_args)
-    schedule = (f"  <key>StartInterval</key><integer>{interval}</integer>\n"
-                if interval else "  <key>RunAtLoad</key><true/>\n")
-    plist.write_text(f"""<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0"><dict>
-  <key>Label</key><string>{plist_label}</string>
-  <key>ProgramArguments</key><array>
-{args}
-  </array>
-  <key>WorkingDirectory</key><string>{workdir}</string>
-{schedule}  <key>EnvironmentVariables</key><dict>
-    <key>HOME</key><string>{pathlib.Path.home()}</string>
-    <key>PATH</key><string>{os.environ.get("PATH", "")}</string>
-  </dict>
-  <key>StandardOutPath</key><string>{log_path}</string>
-  <key>StandardErrorPath</key><string>{log_path}</string>
-</dict></plist>
-""")
-    return plist
+def install_job(name, program_args, workdir, log_path, interval=None):
+    """Exit-2 text instead of a traceback when the host has no job backend."""
+    try:
+        return host().install_job(name, program_args, workdir, log_path, interval)
+    except HostError as e:
+        print(f"install: {e}", file=sys.stderr)
+        return None
 
 
 def ensure_excludes(workdir, rel_paths):
@@ -1091,21 +1752,26 @@ RUNTIME_MARKERS = ("ralph/DONE", "ralph/STOP", "ralph/NEEDS_HUMAN.md",
                    "ralph/log.txt", "ralph/.director-commits")
 
 
+def runtime_markers(paths):
+    """What must not dirty the tree: a queue's whole control dir, else the legacy set."""
+    return (f"{paths.control_dir}/",) if paths.queue else RUNTIME_MARKERS
+
+
 def cmd_plan(args):
-    paths = Paths(pathlib.Path(args.workdir).resolve())
+    paths = paths_for(args)
     queue = Queue(paths.p(paths.state))
-    models = load_models(paths.p(paths.models))
-    model = args.model or models.get("MODEL", "")
-    review = args.review_model or models.get("REVIEW_MODEL", "")
-    variant = args.variant or models.get("VARIANT", "")
+    models = resolve_models(args, paths)
     unit = queue.current()
-    print(f"prompt: {paths.prompt}  queue: {paths.state}")
-    print(f"commits since review: n/a  head: {head_of(paths.workdir)[:9]}")
+    print(f"prompt: {prompt_text(paths)[1]}  queue: {paths.state}")
+    every = paths.manifest.audit_every if paths.manifest else None
+    print(f"units since audit: {queue.units_since_audit()}"
+          f"{f' (audit every {every})' if every else ''}  head: {head_of(paths.workdir)[:9]}")
     print(f"done: {queue.done_count()}/{len(queue.rows)}")
     if unit is None:
         print("no ready unit")
         return 0
-    routed = select_model_args(unit.id, model, review, variant)
+    routed = select_model_args(unit, models["MODEL"], models["REVIEW_MODEL"],
+                               models["VARIANT"])
     print(f"unit {unit.id} — {' '.join(routed) or 'configured default'}")
     return 0
 
@@ -1127,7 +1793,7 @@ def staged_campaigns(paths):
 
 
 def cmd_promote(args):
-    paths = Paths(pathlib.Path(args.workdir).resolve())
+    paths = paths_for(args)
     staged = paths.p(f"{STAGED_DIR}/{args.name}")
     missing = [f for f in ("STATE.md", "PROMPT.md") if not (staged / f).is_file()]
     if missing:
@@ -1181,8 +1847,26 @@ def cmd_promote(args):
     return 0
 
 
+def models_in_manifest(args, paths):
+    """`models --queue`: the queue's own `[models]`, never the shared models.env."""
+    toml_keys = {v: k for k, v in MANIFEST_MODEL_KEYS.items()}
+    updates = {toml_keys[key]: getattr(args, flag) for key, flag in MODEL_FLAGS.items()
+               if getattr(args, flag)}
+    if updates:
+        write_manifest_models(paths.p(paths.manifest.path), updates)
+        say(f"models: wrote [models] {', '.join(updates)} in {paths.manifest.path} — "
+            "a running loop reads it on its next start")
+    current = load_manifest(paths.workdir, paths.queue).models
+    print(f"models: {paths.manifest.path} [models]")
+    for key in MODEL_KEYS:
+        print(f"  {toml_keys[key]}={current.get(key) or '<unset>'}")
+    return 0
+
+
 def cmd_models(args):
-    paths = Paths(pathlib.Path(args.workdir).resolve())
+    paths = paths_for(args)
+    if paths.manifest:
+        return models_in_manifest(args, paths)
     file = paths.p(paths.models)
     current = load_models(file)
     if args.model or args.review_model or args.resolve_model or args.variant:
@@ -1198,15 +1882,16 @@ def cmd_models(args):
             f"RESOLVE_MODEL={current.get('RESOLVE_MODEL', '')}\n"
             f"VARIANT={current.get('VARIANT', '')}\n")
         if not args.no_restart and args.label:
-            job = f"dev.ralph.{paths.workdir.name}-{args.label}"
-            r = subprocess.run(["launchctl", "print", f"gui/{os.getuid()}/{job}"],
-                               capture_output=True, text=True)
-            if r.returncode == 0:
-                subprocess.run(["launchctl", "kickstart", "-k", f"gui/{os.getuid()}/{job}"],
-                               capture_output=True)
-                print(f"restarted {job} (any in-flight session was killed)")
+            job = job_name(paths, args.label)
+            try:
+                restarted = host().restart_job(job)
+            except HostError as e:
+                print(f"models: {e}; {job} was not restarted", file=sys.stderr)
             else:
-                print(f"{job} is not loaded — the change applies on the next start")
+                if restarted:
+                    print(f"restarted {job} (any in-flight session was killed)")
+                else:
+                    print(f"{job} is not loaded — the change applies on the next start")
     print(f"models: {paths.models}")
     print(f"  MODEL={current.get('MODEL') or '<unset>'}")
     print(f"  REVIEW_MODEL={current.get('REVIEW_MODEL') or '<unset>'}")
@@ -1216,8 +1901,8 @@ def cmd_models(args):
 
 
 def cmd_pool(args):
-    paths = Paths(pathlib.Path(args.workdir).resolve())
-    models = load_models(paths.p(paths.models))
+    paths = paths_for(args)
+    models = resolve_models(args, paths)
     base = args.base_branch or subprocess.run(
         ["git", "-C", str(paths.workdir), "rev-parse", "--abbrev-ref", "HEAD"],
         capture_output=True, text=True).stdout.strip()
@@ -1230,9 +1915,8 @@ def cmd_pool(args):
                 lanes=args.lanes, base_branch=base, conflicts=args.conflicts,
                 prompt=args.prompt, state=args.state,
                 marker_timeout=args.marker_timeout,
-                model=args.model or models.get("MODEL", ""),
-                review_model=args.review_model or models.get("REVIEW_MODEL", ""),
-                variant=args.variant or models.get("VARIANT", ""))
+                model=models["MODEL"], review_model=models["REVIEW_MODEL"],
+                variant=models["VARIANT"])
     if args.install_launchd:
         ensure_excludes(paths.workdir, RUNTIME_MARKERS + (".ralph/",))
         inner = [sys.executable, str(pathlib.Path(__file__).resolve()), "pool",
@@ -1241,16 +1925,16 @@ def cmd_pool(args):
                  "--lanes", str(args.lanes)]
         if args.notify:
             inner.append("--notify")
-        plist = install_launchd(f"dev.ralph.{paths.workdir.name}-{args.label}", inner,
+        plist = install_job(f"dev.ralph.{paths.workdir.name}-{args.label}", inner,
                                 paths.workdir,
                                 str(state_dir_for(paths, args.label) / "launchd.log"))
-        print(f"wrote {plist}")
-        return 0
+        print(f"wrote {plist}" if plist else "nothing installed")
+        return 0 if plist else 2
     return guarded(pool.run, paths, notify_enabled=args.notify)
 
 
 def cmd_report(args):
-    paths = Paths(pathlib.Path(args.workdir).resolve())
+    paths = paths_for(args)
     queue = Queue(paths.p(paths.state))
     done = queue.done_count()
     active = sum(1 for r in queue.rows if r.status is Status.ACTIVE)
@@ -1266,7 +1950,8 @@ def cmd_report(args):
             # report is how the operator learns it before `promote` refuses.
             rows = f"DOES NOT PARSE — {e}"
         print(f"next up: {d.name} ({rows}, staged in {STAGED_DIR})")
-    markers =[m for m in ("DONE", "STOP", "NEEDS_HUMAN.md") if paths.p(f"ralph/{m}").exists()]
+    markers = [pathlib.PurePath(m).name for m in (paths.done, paths.stop, paths.needs_human)
+               if paths.p(m).exists()]
     print(f"markers: {', '.join(markers) if markers else 'none'}")
     decisions = paths.p("ralph/DECISIONS.md")
     if decisions.exists():
@@ -1276,7 +1961,7 @@ def cmd_report(args):
         print("\n".join(lines[-args.lines:]))
     else:
         print("\nralph/DECISIONS.md: not written yet")
-    ranges = paths.p("ralph/.director-commits")
+    ranges = paths.p(paths.director_commits)
     if ranges.exists():
         entries = [l for l in ranges.read_text().splitlines() if ".." in l]
         print(f"\n=== director commit ranges ({len(entries)}) — revert one with "
@@ -1297,37 +1982,83 @@ def cmd_report(args):
 
 
 def cmd_watch(args):
-    paths = Paths(pathlib.Path(args.workdir).resolve())
+    paths = paths_for(args)
     state_dir = state_dir_for(paths, args.label)
     watch = Watch(paths, label=args.label, dry=os.environ.get("RALPH_WATCH_DRY") == "1")
     if args.install_launchd:
-        plist = install_launchd(
+        plist = install_job(
             f"dev.ralphwatch.{paths.workdir.name}-{args.label}",
             [sys.executable, str(pathlib.Path(__file__).resolve()),
-             "watch", "--workdir", str(paths.workdir), "--label", args.label],
+             "watch", "--workdir", str(paths.workdir), "--label", args.label,
+             *(["--queue", paths.queue] if paths.queue else [])],
             paths.workdir, state_dir / "watch.log", interval=120)
-        print(f"wrote {plist}")
-        return 0
+        print(f"wrote {plist}" if plist else "nothing installed")
+        return 0 if plist else 2
     watch.run(state_dir / "watch.state")
     return 0
 
 
+DEFAULT_SESSION_TIMEOUT = 3600
+LEGACY_PATH_FLAGS = ("prompt", "state", "charter", "conflicts")
+
+
 def paths_for(args):
-    """The one place a subcommand turns its flags into `Paths`.
+    """The one place a subcommand turns its flags into `Paths`: `--queue` wins,
+    the legacy flags are next, the legacy defaults are last.
 
     `run` and `supervise` accept `--prompt` and `--state` and, until
     2026-09-17, built `Paths(workdir)` with the DEFAULTS - so a staged queue
     passed by flag was silently swapped for `ralph/STATE.md` (ARCH 6). Found
     the expensive way: a ring-doc launch spent six minutes on a domains row.
+    `plan`, `stop`, `start`, `watch`, `models` and `report` still did that
+    until 2026-09-19; they take `--queue` now and come through here too.
     """
-    return Paths(pathlib.Path(args.workdir).resolve(),
-                 prompt=getattr(args, "prompt", None) or "ralph/PROMPT.md",
-                 state=getattr(args, "state", None) or "ralph/STATE.md")
+    workdir = pathlib.Path(args.workdir).resolve()
+    name = getattr(args, "queue", None)
+    if not name:
+        if getattr(args, "label", "") is None:
+            args.label = "campaign"
+        if getattr(args, "session_timeout", 0) is None:
+            args.session_timeout = DEFAULT_SESSION_TIMEOUT
+        return Paths(workdir,
+                     prompt=getattr(args, "prompt", None) or "ralph/PROMPT.md",
+                     state=getattr(args, "state", None) or "ralph/STATE.md",
+                     charter=getattr(args, "charter", None) or "ralph/CHARTER.md",
+                     conflicts=getattr(args, "conflicts", None) or "ralph/conflicts.txt")
+    m = load_manifest(workdir, name)
+    for flag in LEGACY_PATH_FLAGS:
+        if getattr(args, flag, None):
+            say(f"--queue {name} wins: ignoring --{flag} {getattr(args, flag)} "
+                f"({m.path} names {getattr(m, flag)})")
+    if getattr(args, "label", "") is None:
+        args.label = m.label
+    given = getattr(args, "session_timeout", 0)
+    if m.session_timeout:
+        if given and given != m.session_timeout:
+            say(f"--queue {name} wins: ignoring --session-timeout {given} "
+                f"({m.path} names {m.session_timeout})")
+        args.session_timeout = m.session_timeout
+    elif given is None:
+        args.session_timeout = DEFAULT_SESSION_TIMEOUT
+    addendum = f"{STAGED_DIR}/{name}/PROMPT.addendum.md"
+    if m.prompt_declared or not (workdir / addendum).is_file():
+        addendum = ""
+    return Paths(workdir, prompt=m.prompt, state=m.state, charter=m.charter,
+                 prompt_addendum=addendum,
+                 conflicts=m.conflicts, heavy=m.heavy, queue=name, manifest=m,
+                 log_dir=f"target/ralph/{name}", **Paths.control_files(m.control_dir))
+
+
+def queue_flags(paths):
+    """How a re-invocation (an installed job) names the same queue."""
+    if paths.queue:
+        return ["--queue", paths.queue]
+    return ["--prompt", paths.prompt, "--state", paths.state]
 
 
 def cmd_run(args):
     paths = paths_for(args)
-    models = load_models(paths.p(paths.models))
+    models = resolve_models(args, paths)
     session = Session(paths, timeout=args.session_timeout,
                       notify_enabled=args.notify)
     campaign = Campaign(
@@ -1336,19 +2067,17 @@ def cmd_run(args):
         notify_enabled=args.notify,
         max_stall=args.max_stall, max_iter=args.max_iter,
         marker_timeout=args.marker_timeout,
-        model=args.model or models.get("MODEL", ""),
-        review_model=args.review_model or models.get("REVIEW_MODEL", ""),
-        variant=args.variant or models.get("VARIANT", ""))
+        model=models["MODEL"], review_model=models["REVIEW_MODEL"], variant=models["VARIANT"])
     if args.install_launchd:
-        ensure_excludes(paths.workdir, RUNTIME_MARKERS)
-        plist = install_launchd(
+        ensure_excludes(paths.workdir, runtime_markers(paths))
+        plist = install_job(
             f"dev.ralph.{paths.workdir.name}-{args.label}",
             [sys.executable, str(pathlib.Path(__file__).resolve()), "run",
              "--workdir", str(paths.workdir), "--label", args.label,
-             "--prompt", args.prompt, "--state", args.state],
+             *queue_flags(paths)],
             paths.workdir, str(state_dir_for(paths, args.label) / "launchd.log"))
-        print(f"wrote {plist}")
-        return 0
+        print(f"wrote {plist}" if plist else "nothing installed")
+        return 0 if plist else 2
     result = guarded(campaign.run, paths, notify_enabled=args.notify)
     if isinstance(result, int):
         return result
@@ -1359,7 +2088,7 @@ def cmd_run(args):
 
 def cmd_supervise(args):
     paths = paths_for(args)
-    models = load_models(paths.p(paths.models))
+    models = resolve_models(args, paths)
     session = Session(paths, timeout=args.session_timeout, notify_enabled=args.notify)
     campaign = list(args.campaign)
     if campaign and campaign[0] == "--":
@@ -1367,41 +2096,59 @@ def cmd_supervise(args):
     if not campaign:
         print("ralph supervise: the campaign command is required after --", file=sys.stderr)
         return 2
-    charter_path = pathlib.Path(args.charter) if args.charter else paths.p("ralph/CHARTER.md")
+    charter_path = paths.p(paths.charter)
     charter = charter_path.read_text() if charter_path.exists() else None
     if charter:
         say(f"supervisor: director charter loaded from {charter_path}")
-    ensure_excludes(paths.workdir, RUNTIME_MARKERS)
+    ensure_excludes(paths.workdir, runtime_markers(paths))
 
     def run_inner():
         subprocess.run(campaign, cwd=str(paths.workdir))
 
     def resolver_run(attempt, reason):
-        resolve_model = (args.resolve_model or models.get("RESOLVE_MODEL", "")
-                         or args.review_model or models.get("REVIEW_MODEL", ""))
-        resolve_variant = args.resolve_variant or args.variant or models.get("VARIANT", "")
-        model_args = select_model_args("review", resolve_model, "", resolve_variant)
+        resolve_model = models["RESOLVE_MODEL"] or models["REVIEW_MODEL"]
+        resolve_variant = args.resolve_variant or models["VARIANT"]
+        model_args = select_model_args("resolver", resolve_model, "", resolve_variant)
         prompt = resolver_prompt(paths, attempt, args.resolve_max, reason, charter)
-        session.run(model_args, prompt, str(paths.workdir / "target" / "ralph"
-                                           / f"supervise-{attempt}.out"))
+        session.run(model_args, prompt,
+                    str(paths.p(paths.log_dir) / f"supervise-{attempt}.out"))
 
     supervisor = Supervisor(paths, run_inner=run_inner, resolver_run=resolver_run,
                             notify_enabled=args.notify, resolve_max=args.resolve_max)
     if args.install_launchd:
-        ensure_excludes(paths.workdir, RUNTIME_MARKERS)
-        plist = install_launchd(
+        ensure_excludes(paths.workdir, runtime_markers(paths))
+        plist = install_job(
             f"dev.ralph.{paths.workdir.name}-{args.label}",
             [sys.executable, str(pathlib.Path(__file__).resolve()), "supervise",
              "--workdir", str(paths.workdir), "--label", args.label,
-             "--session-timeout", str(args.session_timeout)] + campaign,
+             "--session-timeout", str(args.session_timeout),
+             *(["--queue", paths.queue] if paths.queue else [])] + campaign,
             paths.workdir, str(state_dir_for(paths, args.label) / "launchd.log"))
-        print(f"wrote {plist}")
-        return 0
+        print(f"wrote {plist}" if plist else "nothing installed")
+        return 0 if plist else 2
     return guarded(supervisor.run, paths, notify_enabled=args.notify)
 
 
+def cmd_prompt(args):
+    """What a worker of this queue is given, exactly."""
+    sys.stdout.write(prompt_text(paths_for(args))[0])
+    return 0
+
+
+def cmd_check_argv(args):
+    """ralph-check.sh's lookup: the argv a queue's `[checks]` declares for a
+    name, one argument per line. 1 = not declared (the script falls through to
+    its own verbs); a refused manifest is main()'s exit 2."""
+    paths = paths_for(args)
+    argv = paths.manifest.checks.get(args.name)
+    if argv is None:
+        return 1
+    print("\n".join(argv))
+    return 0
+
+
 def cmd_stop(args):
-    paths = Paths(pathlib.Path(args.workdir).resolve())
+    paths = paths_for(args)
     stop = paths.p(paths.stop)
     stop.parent.mkdir(parents=True, exist_ok=True)
     stop.write_text("")
@@ -1416,9 +2163,10 @@ def cmd_stop(args):
         say("stop: still running — re-run with --hard to boot the job out "
             "(its SIGTERM handler takes the sessions with it)")
         return 1
-    subprocess.run(["launchctl", "bootout",
-                    f"gui/{os.getuid()}/{job_name(paths, args.label)}"],
-                   capture_output=True, text=True)
+    try:
+        host().stop_job(job_name(paths, args.label))
+    except HostError as e:
+        say(f"stop: {e}")
     strays = sessions_under(paths.workdir)
     for pid in strays:
         try:
@@ -1430,45 +2178,54 @@ def cmd_stop(args):
 
 
 def cmd_start(args):
-    paths = Paths(pathlib.Path(args.workdir).resolve())
-    plist = (pathlib.Path.home() / "Library" / "LaunchAgents"
-             / f"{job_name(paths, args.label)}.plist")
-    if not plist.exists():
-        print(f"start: no plist at {plist} — install it first:\n"
-              f"  python3 scripts/ralph.py supervise --workdir {paths.workdir} "
-              f"--label {args.label} --install-launchd -- <campaign command>",
-              file=sys.stderr)
-        return 2
-    stop = paths.p(paths.stop)
-    if stop.exists():
-        if stop.stat().st_size:
-            print(f"start: {paths.stop} holds a halt reason — resolve it "
-                  f"(read {paths.needs_human}) and remove the file first",
+    paths = paths_for(args)
+    job = job_name(paths, args.label)
+    try:
+        host().require_jobs()
+        job_file = host().job_file(job)
+        if not job_file.exists():
+            print(f"start: no job installed at {job_file} — install it first:\n"
+                  f"  python3 scripts/ralph.py supervise --workdir {paths.workdir} "
+                  f"--label {args.label} --install-launchd -- <campaign command>",
                   file=sys.stderr)
             return 2
-        stop.unlink()
-        say("start: cleared the operator STOP")
-    job = job_name(paths, args.label)
-    subprocess.run(["launchctl", "bootout", f"gui/{os.getuid()}/{job}"],
-                   capture_output=True, text=True)
-    r = subprocess.run(["launchctl", "bootstrap", f"gui/{os.getuid()}", str(plist)],
-                       capture_output=True, text=True)
-    if r.returncode != 0:
-        print(f"start: bootstrap failed: {(r.stderr or r.stdout).strip()}", file=sys.stderr)
-        return r.returncode
-    say(f"start: {job} bootstrapped")
+        stop = paths.p(paths.stop)
+        if stop.exists():
+            if stop.stat().st_size:
+                print(f"start: {paths.stop} holds a halt reason — resolve it "
+                      f"(read {paths.needs_human}) and remove the file first",
+                      file=sys.stderr)
+                return 2
+            stop.unlink()
+            say("start: cleared the operator STOP")
+        host().start_job(job)
+    except HostError as e:
+        print(f"start: {e}", file=sys.stderr)
+        return 2
+    say(f"start: {job} started")
     return 0
 
 
-def main(argv=None):
-    _install_signal_handlers()
+def build_parser():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
 
-    def common(p, notify_default=False):
+    def queue_flag(p, label_default=None):
         p.add_argument("--workdir", default=".")
-        p.add_argument("--label", default="campaign")
-        p.add_argument("--session-timeout", type=int, default=3600)
+        p.add_argument("--queue", default="",
+                       help="a queue under ralph/next/<name>/ with a queue.toml: state, prompt, "
+                            "charter, models, checks and control files all come from it")
+        # None = not given: paths_for fills in the manifest's label, else "campaign".
+        p.add_argument("--label", default=label_default)
+
+    def common(p, notify_default=False, queue=True):
+        if queue:
+            queue_flag(p)
+        else:
+            p.add_argument("--workdir", default=".")
+            p.add_argument("--label", default="campaign")
+        p.add_argument("--session-timeout", type=int, default=None if queue else 3600,
+                       help="default: 3600")
         p.add_argument("--marker-timeout", type=int, default=7200)
         p.add_argument("--notify", action="store_true", default=notify_default)
         p.add_argument("--model", default="")
@@ -1477,44 +2234,46 @@ def main(argv=None):
 
     p = sub.add_parser("run")
     common(p)
-    p.add_argument("--prompt", default="ralph/PROMPT.md")
-    p.add_argument("--state", default="ralph/STATE.md")
+    p.add_argument("--prompt", default=None, help="default: ralph/PROMPT.md")
+    p.add_argument("--state", default=None, help="default: ralph/STATE.md")
     p.add_argument("--max-stall", type=int, default=3)
     p.add_argument("--max-iter", type=int, default=200)
-    p.add_argument("--install-launchd", action="store_true")
+    p.add_argument("--install-launchd", "--install-job", dest="install_launchd",
+                   action="store_true", help="launchd on macOS, systemd-run --user on Linux")
     p.set_defaults(fn=cmd_run)
 
     p = sub.add_parser("supervise")
     common(p, notify_default=True)
-    p.add_argument("--prompt", default="ralph/PROMPT.md")
-    p.add_argument("--state", default="ralph/STATE.md")
+    p.add_argument("--prompt", default=None, help="default: ralph/PROMPT.md")
+    p.add_argument("--state", default=None, help="default: ralph/STATE.md")
     p.add_argument("--resolve-model", default="")
     p.add_argument("--resolve-variant", default="")
     p.add_argument("--resolve-max", type=int, default=4)
     p.add_argument("--charter", default="", help="default: ralph/CHARTER.md when present")
-    p.add_argument("--install-launchd", action="store_true")
+    p.add_argument("--install-launchd", "--install-job", dest="install_launchd",
+                   action="store_true", help="launchd on macOS, systemd-run --user on Linux")
     p.add_argument("campaign", nargs=argparse.REMAINDER)
     p.set_defaults(fn=cmd_supervise)
 
     p = sub.add_parser("pool")
-    common(p)
+    common(p, queue=False)          # another repo drives this verb; it stays on its flags
     p.add_argument("--prompt", default="ralph/PROMPT.md")
     p.add_argument("--state", default="ralph/STATE.md")
     p.add_argument("--lanes", type=int, default=2)
     p.add_argument("--conflicts", default="ralph/conflicts.txt")
     p.add_argument("--base-branch", default="")
-    p.add_argument("--install-launchd", action="store_true")
+    p.add_argument("--install-launchd", "--install-job", dest="install_launchd",
+                   action="store_true", help="launchd on macOS, systemd-run --user on Linux")
     p.set_defaults(fn=cmd_pool)
 
     p = sub.add_parser("watch")
-    p.add_argument("--workdir", default=".")
-    p.add_argument("--label", default="campaign")
-    p.add_argument("--install-launchd", action="store_true")
+    queue_flag(p)
+    p.add_argument("--install-launchd", "--install-job", dest="install_launchd",
+                   action="store_true", help="launchd on macOS, systemd-run --user on Linux")
     p.set_defaults(fn=cmd_watch)
 
     p = sub.add_parser("stop")
-    p.add_argument("--workdir", default=".")
-    p.add_argument("--label", default="campaign")
+    queue_flag(p)
     p.add_argument("--timeout", type=int, default=180,
                    help="seconds to wait for the loop to go down before suggesting --hard")
     p.add_argument("--hard", action="store_true",
@@ -1522,13 +2281,11 @@ def main(argv=None):
     p.set_defaults(fn=cmd_stop)
 
     p = sub.add_parser("start")
-    p.add_argument("--workdir", default=".")
-    p.add_argument("--label", default="campaign")
+    queue_flag(p)
     p.set_defaults(fn=cmd_start)
 
     p = sub.add_parser("models")
-    p.add_argument("--workdir", default=".")
-    p.add_argument("--label", default="")
+    queue_flag(p, label_default="")
     p.add_argument("--model", default="")
     p.add_argument("--review-model", default="")
     p.add_argument("--resolve-model", default="")
@@ -1537,13 +2294,24 @@ def main(argv=None):
     p.set_defaults(fn=cmd_models)
 
     p = sub.add_parser("report")
-    p.add_argument("--workdir", default=".")
+    queue_flag(p)
     p.add_argument("--lines", type=int, default=40)
     p.set_defaults(fn=cmd_report)
 
     p = sub.add_parser("plan")
     common(p)
     p.set_defaults(fn=cmd_plan)
+
+    p = sub.add_parser("prompt")
+    queue_flag(p)
+    p.add_argument("--prompt", default=None, help="default: ralph/PROMPT.md")
+    p.set_defaults(fn=cmd_prompt)
+
+    p = sub.add_parser("check-argv")
+    p.add_argument("name")
+    p.add_argument("--workdir", default=".")
+    p.add_argument("--queue", required=True)
+    p.set_defaults(fn=cmd_check_argv)
 
     p = sub.add_parser("promote")
     p.add_argument("name", help="the staged campaign under ralph/next/")
@@ -1553,8 +2321,19 @@ def main(argv=None):
                    help="parse the staged queue and print its head; change nothing")
     p.set_defaults(fn=cmd_promote)
 
-    args = ap.parse_args(argv)
-    return args.fn(args)
+    return ap
+
+
+def main(argv=None):
+    _install_signal_handlers()
+    args = build_parser().parse_args(argv)
+    try:
+        return args.fn(args)
+    except ValueError as e:
+        if not getattr(args, "queue", None):
+            raise
+        print(f"ralph {args.cmd}: {e}", file=sys.stderr)      # a refused manifest, by name
+        return 2
 
 
 if __name__ == "__main__":

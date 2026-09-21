@@ -322,6 +322,9 @@ impl Runtime {
                 search_ms: t0.elapsed().as_millis() as u64,
                 result_quality: "deep_pipeline",
                 unavailable_corpora: kc.unavailable_corpora,
+                // `deep_pipeline` runs the same `atlas_grounding` step, and
+                // `KnowledgeContext` carries its echo since 2026-09-21.
+                atlas_walk: kc.atlas_walk,
             });
         }
         let plan = self
@@ -332,6 +335,7 @@ impl Runtime {
             search_ms: plan.search_ms,
             result_quality: plan.result_quality,
             unavailable_corpora: plan.unavailable_corpora,
+            atlas_walk: plan.atlas_walk,
         })
     }
 
@@ -411,6 +415,7 @@ impl Runtime {
             demand_plan,
             unavailable_corpora,
             atlas_summaries,
+            atlas_walk,
             peer_attribution,
             ..
         } = pipeline_state;
@@ -571,6 +576,7 @@ impl Runtime {
                 // case: the marker names what was missing so "I found
                 // nothing" cannot be read as "there is nothing".
                 unavailable_corpora: unavailable_corpora.clone(),
+                atlas_walk: atlas_walk.clone(),
                 search_ms,
                 retrieved_chunks: Vec::new(),
                 source_map: HashMap::new(),
@@ -844,6 +850,7 @@ impl Runtime {
                 // (cheap: doc_context is empty).
                 gap_check_enabled: true,
                 unavailable_corpora: unavailable_corpora.clone(),
+                atlas_walk: atlas_walk.clone(),
                 search_ms,
                 retrieved_chunks: Vec::new(),
                 source_map: HashMap::new(),
@@ -930,12 +937,12 @@ impl Runtime {
                     (expanded, EXPANDED_KNOWLEDGE_CHARS, true)
                 } else {
                     expansion_kind = "top_sources_noop";
-                    (expanded, MAX_KNOWLEDGE_CHARS, false)
+                    (expanded, max_knowledge_chars(), false)
                 }
             }
             ExpansionStrategy::NoExpansion => {
                 expansion_kind = "none";
-                (chunks, MAX_KNOWLEDGE_CHARS, false)
+                (chunks, max_knowledge_chars(), false)
             }
         };
 
@@ -1604,6 +1611,7 @@ impl Runtime {
             route,
             gap_check_enabled,
             unavailable_corpora,
+            atlas_walk,
             search_ms,
             retrieved_chunks,
             source_map,
@@ -2105,6 +2113,13 @@ impl Runtime {
                     "tokens": completion.tokens_used,
                     "latency_ms": completion.latency_ms,
                     "intent": "knowledge_query",
+                    // Which route this turn actually took, by variant name.
+                    // The sibling "intent" above is a hardcoded path label and
+                    // this handler serves BOTH KnowledgeQuery and
+                    // ComparisonQuery, so it cannot answer "which surface did
+                    // this probe take?" — the same reason the streaming twin
+                    // stamps this key.
+                    "routed_intent": intent.name(),
                     "documents_found": plan.chunks.len(),
                     "search_ms": plan.search_ms,
                     "result_quality": plan.result_quality,

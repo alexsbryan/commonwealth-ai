@@ -1,0 +1,53 @@
+[bank]
+name = "ontology-proof-dev-v1"
+corpus = "spike-fineprint-census"
+description = "K1 lists and K0 lookups over Reddit, Spotify, LinkedIn, gold from each service's own policy text (make_bank.py). DEVELOPMENT services: reported as their own row, never pooled with held-out."
+
+[[questions]]
+id = "list-reddit-collects"
+category = "unattested"
+question = "According to Reddit's privacy policy, what categories of personal data does Reddit collect?"
+expected_facts = ["Account Information", "Public Content You Submit", "Non-Public Content You Submit", "Actions You Take", "Transactional Information", "Logs Data", "Usage Information", "Information Collected From Cookies and Similar Technologies", "Location Information", "Public Information Related to You", "Inferred Information", "Linked Services", "Information Collected From Integrations", "Reddit Ads Users", "Reddit Pro Users", "Reddit Program Participants and Potential Participants", "Embedded Content", "Audience Measurement"]
+notes = "data_type; spikes/fineprint-data/ota-pga-versions/Reddit/Privacy Policy.md lines 48-48; gold/Reddit-collects.json"
+
+[[questions]]
+id = "list-reddit-shares"
+category = "unattested"
+question = "According to Reddit's privacy policy, with whom does Reddit share personal data?"
+expected_facts = ["With your consent", "With linked services", "With our service providers", "To comply with the law", "In an emergency", "With our affiliates", "Aggregated or de-identified information"]
+notes = "recipient; spikes/fineprint-data/ota-pga-versions/Reddit/Privacy Policy.md lines 109-116; gold/Reddit-shares.json"
+
+[[questions]]
+id = "list-spotify-collects"
+category = "unattested"
+question = "According to Spotify's privacy policy, what categories of personal data does Spotify collect?"
+expected_facts = ["User Data", "Street Address Data", "Usage Data", "Voice Data", "Message Data", "Age Check Data", "Payment and Purchase Data", "Precise Location Data", "Survey and Research Data", "Customer Service Data"]
+notes = "data_type; spikes/fineprint-data/ota-pga-versions/Spotify/Privacy Policy.md lines 140-157; gold/Spotify-collects.json"
+
+[[questions]]
+id = "list-spotify-shares"
+category = "unattested"
+question = "According to Spotify's privacy policy, with whom does Spotify share personal data?"
+expected_facts = ["Information available to other Spotify users", "your profile name", "your profile", "Personal data you may choose to disclose", "Support community", "Other Spotify users", "Artists and record labels", "Information we may disclose", "Service providers", "Payment partners", "Advertising partners", "Marketing Partners", "Ticketing and event partners", "Podcast Hosting Platforms", "Academic researchers", "Purchasers of our business", "Courts and Authorities", "to comply with a legal obligation", "to respond to a valid legal process"]
+notes = "recipient; spikes/fineprint-data/ota-pga-versions/Spotify/Privacy Policy.md lines 204-255; gold/Spotify-shares.json"
+
+[[questions]]
+id = "list-spotify-prohibits"
+category = "unattested"
+question = "According to Spotify's advertising policy, what categories of advertising does Spotify prohibit?"
+expected_facts = ["Dangerous or Derogatory Content", "Promote, incite, or glorify violence", "Inappropriate Content", "Harmful or unlawful acts", "Graphic violence or depictions of serious bodily harm", "Gruesome audio or imagery", "Gratuitous use of profanity", "Explicit Adult Content", "Pornography or visual depictions of genitalia", "Sexual solicitation", "Dangerous Products and Services", "Firearms", "Firearm parts and accessories", "Explosives and instructional content about building explosives", "Cigarettes, tobacco products, and related accessories", "Vaporizers and related accessories", "Recreational drugs and related accessories", "Illegal or Deceptive Products and Services", "False or misleading representations", "“Get rich quick” schemes", "Manipulated and synthetic media that causes harm", "Deceptive or fraudulent offers", "Counterfeit or fake products", "Cloaking, malware, or phishing", "Otherwise enabling illegal, deceptive or dishonest behavior"]
+notes = "obligation; spikes/fineprint-data/ota-pga-versions/Spotify/Advertising Content Policy.md lines 20-94; gold/Spotify-prohibits.json"
+
+[[questions]]
+id = "list-linkedin-prohibits"
+category = "unattested"
+question = "According to LinkedIn's advertising policy, what categories of advertising does LinkedIn prohibit?"
+expected_facts = ["Professional Community Policies", "Illegal Products, Services and Activities", "Discrimination", "Offensive to Good Taste", "Fraud and Deception", "Trademark Infringement", "Copyright Infringement", "Fake Documents and Related Services", "Tobacco Products", "Illicit or Recreational Drugs", "Weapons, Fireworks and Other Violent Products or Services", "Adult Content", "Counterfeit", "Gambling and Sweepstakes", "Occult Pursuits", "Health Matters", "Affiliate Advertising", "Political", "Sensitive Events", "Hacking, Cracking and Circumvention", "Incomplete Ad"]
+notes = "obligation; spikes/fineprint-data/ota-pga-versions/LinkedIn/Advertising Content Policy.md lines 26-68; gold/LinkedIn-prohibits.json"
+
+[[questions]]
+id = "list-linkedin-defines"
+category = "unattested"
+question = "According to LinkedIn's developer terms, what terms does the agreement define?"
+expected_facts = ["APIs", "Content", "LinkedIn Services", "Access Credentials", "Profile Data"]
+notes = "defined_term; spikes/fineprint-data/ota-pga-versions/LinkedIn/Developer Terms.md lines 41-170; gold/LinkedIn-defines.json"

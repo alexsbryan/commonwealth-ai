@@ -1,0 +1,9 @@
+{
+ "service": "Mastodon",
+ "list": "uses",
+ "source": "spikes/fineprint-data/ota-pga-versions/Mastodon/Privacy Policy.md",
+ "verdict": "no-heading",
+ "headings": [],
+ "items": [],
+ "dropped": []
+}

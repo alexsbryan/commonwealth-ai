@@ -34,6 +34,7 @@ use std::collections::{HashMap, HashSet};
 use crate::chat_cmd::bootstrap::ChatSession;
 use crate::chat_cmd::render::split_reasoning;
 use crate::enrich_cmd::paths;
+use crate::eval_cmd::atlas_walk_meta::atlas_walk_from_metadata;
 use crate::eval_cmd::attribution;
 use crate::eval_cmd::bank::{EvalBank, Question};
 use crate::eval_cmd::score::{
@@ -145,6 +146,19 @@ pub struct EvalResult {
     /// retrieval-mode runs (synth path only).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub meta_atlas_hits: Vec<MetaAtlasHitEcho>,
+    /// The atlas walk's evidence PATH for this question — which atoms it
+    /// reached, by which edge, and what the fetch did with the requests.
+    ///
+    /// Distinct from `atlas_navigation` above, which is an embedding top-K
+    /// snapshot that never enters the prompt. This is the walk that DID enter
+    /// it, and until now it existed only as a tracing event `svrn eval run`
+    /// cannot emit (`atlas-grounding: fetch ledger`).
+    ///
+    /// `None` = the walk did not run for this row, which includes every lane
+    /// that does not drive the production pipeline. Absent is never "reached
+    /// nothing" — `Some` with empty `nodes` is that.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub atlas_walk: Option<sovereign_core::runtime::AtlasWalkEcho>,
 }
 
 /// Echo of `sovereign_core::runtime::MetaAtlasHitRecord` for the
@@ -185,9 +199,9 @@ pub struct SynthSnapshot {
     /// `provenance.total_latency_ms` from the persisted message
     /// metadata, when present.
     pub total_latency_ms: Option<u64>,
-    /// `provenance.intent` — what the classifier decided. Crucial for
-    /// debugging routing-layer regressions ("why is this question
-    /// routing to ChitChat instead of KnowledgeQuery?").
+    /// Which route the turn took — `routed_intent`, falling back to the
+    /// `provenance.intent` display label. Crucial for debugging
+    /// routing-layer regressions. See `super::routed_intent`.
     pub intent: Option<String>,
     /// Origins of every retrieval source the runtime touched, e.g.
     /// `corpus-wikipedia`, `web`, `conversation-history`. Empty when
@@ -816,6 +830,7 @@ async fn run_question_prod(
         essay_readiness: None,
         atlas_navigation: Vec::new(),
         meta_atlas_hits: Vec::new(),
+        atlas_walk: None,
     };
 
     let ev = match session
@@ -925,6 +940,7 @@ async fn run_question_prod(
         essay_readiness: None,
         atlas_navigation: Vec::new(),
         meta_atlas_hits: Vec::new(),
+        atlas_walk: ev.atlas_walk,
     }
 }
 
@@ -963,6 +979,7 @@ async fn run_question(
                 essay_readiness: None,
                 atlas_navigation: Vec::new(),
                 meta_atlas_hits: Vec::new(),
+                atlas_walk: None,
                 // `with_error` below sets `error`, which is what keeps this
                 // row out of the baseline comparison instead of scoring it 0.
                 error: None,
@@ -1510,6 +1527,7 @@ async fn run_question(
         essay_readiness,
         atlas_navigation: atlas_navigation_packed,
         meta_atlas_hits: Vec::new(),
+        atlas_walk: None,
     }
 }
 
@@ -1558,11 +1576,18 @@ fn truncate(s: &str, max: usize) -> String {
 /// asks per-fact whether the concept is conveyed; results land in
 /// `synth.judge_fact_score`. The strict keyword scorer always runs
 /// regardless. See `score::score_facts_judge`.
+///
+/// `mode` is the turn mode every question runs under. `Grounded` is the
+/// pipeline this harness has always driven; `Naked` is the closed-book arm
+/// (`--closed-book`), which bypasses retrieval, the router, the grounding
+/// gate, tools and the atlas — see `run_question_synth` for what that means
+/// for the row's `retrieved`.
 pub async fn run_bank_synth(
     session: &ChatSession,
     bank: &EvalBank,
     judge: bool,
     isolate: bool,
+    mode: sovereign_contracts::types::TurnMode,
 ) -> Result<EvalRun, String> {
     let started_at_unix = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -1598,7 +1623,7 @@ pub async fn run_bank_synth(
 
     let mut results = Vec::with_capacity(bank.questions.len());
     for q in &bank.questions {
-        let result = run_question_synth(session, q, judge, isolate_corpora.as_deref()).await;
+        let result = run_question_synth(session, q, judge, isolate_corpora.as_deref(), mode).await;
         results.push(result);
     }
 
@@ -1614,11 +1639,22 @@ pub async fn run_bank_synth(
     })
 }
 
+/// One question, one fresh conversation, one turn under `mode`.
+///
+/// Under `TurnMode::Naked` the assistant row persists `metadata: None`
+/// (`Runtime::handle_message_stream_naked_unleased`), so `retrieved`,
+/// `corpora_hit` and every provenance-derived field below are empty BY
+/// CONSTRUCTION — that is the closed-book arm's definition, not a failure.
+/// The row stays a measurement: `empty_synth_result` is reached only when
+/// `collect_turn` returns `Err`, and `degraded_router` reads `None` from
+/// absent provenance rather than stamping the row unmeasured. A naked answer
+/// is scored on its text, which is the whole point of the arm.
 async fn run_question_synth(
     session: &ChatSession,
     q: &Question,
     judge: bool,
     isolate_corpora: Option<&[String]>,
+    mode: sovereign_contracts::types::TurnMode,
 ) -> EvalResult {
     let conversation_id = uuid::Uuid::new_v4().to_string();
     let t_wall = Instant::now();
@@ -1671,7 +1707,7 @@ async fn run_question_synth(
         session.store.as_ref(),
         &conversation_id,
         &q.question,
-        sovereign_contracts::types::TurnMode::Grounded,
+        mode,
         None,
     )
     .await
@@ -1716,10 +1752,10 @@ async fn run_question_synth(
     let total_latency_ms = prov
         .and_then(|p| p.get("total_latency_ms"))
         .and_then(|v| v.as_u64());
-    let intent = prov
-        .and_then(|p| p.get("intent"))
-        .and_then(|v| v.as_str())
-        .map(str::to_string);
+    // WHICH ROUTE, not which display label — see `routed_intent` for why the
+    // two are different questions and why the old label is still the
+    // fallback.
+    let intent = super::routed_intent::snapshot_intent(&metadata);
     let source_origins: Vec<String> = prov
         .and_then(|p| p.get("sources"))
         .and_then(|s| s.as_array())
@@ -1752,6 +1788,10 @@ async fn run_question_synth(
         .and_then(|m| m.get("meta_atlas_hits"))
         .and_then(|v| serde_json::from_value::<Vec<MetaAtlasHitEcho>>(v.clone()).ok())
         .unwrap_or_default();
+
+    // The atlas walk's evidence path, off the same persisted metadata block
+    // (written at `runtime/streaming.rs`, beside `meta_atlas_hits`).
+    let atlas_walk = atlas_walk_from_metadata(metadata.as_ref(), &q.id);
 
     let titles: Vec<String> = retrieved_chunks_meta
         .iter()
@@ -1888,6 +1928,7 @@ async fn run_question_synth(
         essay_readiness: None,
         atlas_navigation: Vec::new(),
         meta_atlas_hits,
+        atlas_walk,
     };
 
     // The scores above are real arithmetic over a real answer — and on a
@@ -1969,6 +2010,7 @@ fn empty_synth_result(q: &Question, err: String, stream_wall_ms: u64) -> EvalRes
         essay_readiness: None,
         atlas_navigation: Vec::new(),
         meta_atlas_hits: Vec::new(),
+        atlas_walk: None,
     };
     row.with_error(err)
 }
@@ -2062,6 +2104,7 @@ mod degraded_router_tests {
             essay_readiness: None,
             atlas_navigation: Vec::new(),
             meta_atlas_hits: Vec::new(),
+            atlas_walk: None,
         };
         let degraded = as_metadata(Some(RouterStamp::default()));
         let why = degraded_router(Some(&degraded)).expect("default stamp is all-false");

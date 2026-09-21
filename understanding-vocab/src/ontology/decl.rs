@@ -202,6 +202,16 @@ pub enum Comparison {
 
 // ── Version-1 TOML types (rendered into SCHEMA.md) ──────────────────────────
 
+/// The narrowest [`OntologyV1::max_entities_per_section`] a recipe may
+/// declare. Below this a section cannot carry even a short list, so a number
+/// under it is an authoring mistake rather than a choice.
+pub const MIN_ENTITIES_PER_SECTION: usize = 5;
+/// The widest [`OntologyV1::max_entities_per_section`] a recipe may declare.
+/// The Phase-1 array caps are runaway prevention, not data-quality caps
+/// (`PHASE1_SECTION_EXTRACTION_SCHEMA`'s own note); past this the cap stops
+/// preventing runaway and one section can swallow the token budget.
+pub const MAX_ENTITIES_PER_SECTION: usize = 60;
+
 /// `[enrichment.ontology]` under `version = 1`: the declaration language for
 /// "your own types". Every key is optional; each defaults to today's
 /// behaviour, so a block carrying only `version = 1` (or only the version-0
@@ -228,6 +238,13 @@ pub struct OntologyV1 {
     /// specializing one atom kind.
     #[serde(default)]
     pub types: Vec<OntologyTypeDecl>,
+    /// How many entities one section may introduce in Phase 1. Absent takes
+    /// the shipped schema's cap of 15 — raise it for a corpus whose sections
+    /// enumerate (a data table, a list of recipients). Outside
+    /// `MIN_ENTITIES_PER_SECTION`..=`MAX_ENTITIES_PER_SECTION` (5..=60) the
+    /// recipe refuses at load rather than clamping.
+    #[serde(default)]
+    pub max_entities_per_section: Option<usize>,
     /// Who speaks in the corpus, and which speakers are not subject matter.
     #[serde(default)]
     pub voices: VoicesDecl,
@@ -284,7 +301,10 @@ impl OntologyV1 {
         }
 
         OntologyPolicies {
-            shape: ShapePolicy { types: self.types },
+            shape: ShapePolicy {
+                types: self.types,
+                max_entities_per_section: self.max_entities_per_section,
+            },
             assertion: AssertionPolicy {
                 voices: self.voices,
                 must_not: self.must_not,

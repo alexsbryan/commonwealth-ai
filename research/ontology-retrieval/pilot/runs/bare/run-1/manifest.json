@@ -1,0 +1,52 @@
+{
+  "schema": "ei7-arm-manifest/v1",
+  "identity": {
+    "arm": "bare",
+    "corpus": "chaos-secret-agent",
+    "host": "http://127.0.0.1:9841",
+    "synth_model": "Qwen3.6-35B-A3B-MTP-UD-Q6_K",
+    "judge_model": "Qwen3.5-4B-UD-Q6_K_XL",
+    "recipe_sha256": "9002b6a176c7940bf182bd5223f20106fe2c0e45edc834f762ccb5d1d48357f2",
+    "ontology_sha256": "a5ea4ca32dbbc02e1c49a28503a1f403aa033c24a848188aed02b37f9f1e7662",
+    "chunks_listing_sha256": "47102b42df4439d7652cb6c8a111ae1bda67dde03132006f49a0a1477b26cce4"
+  },
+  "variant": "both",
+  "run": 1,
+  "env": {
+    "SOVEREIGN_ATLAS_GROUNDING": "0",
+    "SOVEREIGN_ATOM_ENUM": "0",
+    "SOVEREIGN_ATOM_ENUM_OVERVIEW": "0"
+  },
+  "argv": [
+    "/Users/alexsbryan/.local/bin/sovereign",
+    "eval",
+    "run",
+    "--bank",
+    "research/ontology-retrieval/pilot/bank.toml",
+    "--synth",
+    "--isolate",
+    "--format",
+    "json",
+    "--output",
+    "research/ontology-retrieval/pilot/runs/bare/run-1/eval.json",
+    "--chat-model",
+    "Qwen3.6-35B-A3B-MTP-UD-Q6_K"
+  ],
+  "eval_exit": 0,
+  "daemon_refusals": {
+    "count": 0,
+    "sample": []
+  },
+  "models_source": "http://127.0.0.1:9841/v1/models",
+  "verdict": null,
+  "never_ran_reasons": [],
+  "provenance": {
+    "commit": "40c08e08c1aecb96331767413b2ac0e5c51bb77b",
+    "dirty": true,
+    "started_at_unix": 1789969440,
+    "paths": {
+      "index_dir": "/Users/alexsbryan/.svrnmesh/indexes/chaos-secret-agent",
+      "recipe": "sovereign-recipes/chaos-secret-agent/recipe.toml"
+    }
+  }
+}

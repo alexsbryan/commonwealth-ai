@@ -1,0 +1,86 @@
+# The six arms of PRE-REG-custom-ontology-and-raptor-2026-09-17 "Arms", as DATA.
+#
+# The arm table in the pre-reg is prose; this file is the one place a runner
+# reads it from, so an arm cannot drift between the document and the run
+# (ARCH §9: config that can change without a code change is data).
+#
+# `env` is the arm's OWN environment, and only it: run_arm.py layers these over
+# the inherited environment and records exactly this table in the manifest. Every
+# flag the pre-reg leaves to a default is written here explicitly instead —
+# an arm that leans on a default records nothing while the default moves under it.
+#
+# `flags` are appended to the fixed `eval run --bank <b> --synth --isolate
+# --format json` the pre-reg fixes for every arm; run_arm.py owns that prefix.
+#
+# `variant` is `ontology` / `literary` / `both`. All six read `both`: the
+# pre-reg's table fills both columns for every arm ("one shape for every
+# corpus"), and where the two variants differ — the ablation's generic atlas
+# vs. an atlas copy with no `Summary` atoms, the oracle's attesting passages vs.
+# the held-out plot summary — they differ in WHICH corpus and index the arm is
+# pointed at, never in its env or flags. That is `--corpus` and `--index-dir`,
+# supplied per run.
+#
+# `${pool_scale}` is the one placeholder in this file. run_arm.py substitutes
+# `--pool-scale N` and REFUSES the arm when it is absent — the multiplier is
+# fixed at ratification together with the model, and until then the deep-pool
+# arm is never-ran, not a guess (pre-reg, "Deep pool has no knob today").
+
+[[arm]]
+id = "closed-book"
+variant = "both"
+# TurnMode::Naked bypasses retrieval, router, gate and atlas, so no retrieval
+# env var reaches a decision here. The flag is the whole arm.
+flags = ["--closed-book"]
+[arm.env]
+
+[[arm]]
+id = "bare"
+variant = "both"
+flags = []
+[arm.env]
+SOVEREIGN_ATLAS_GROUNDING = "0"
+SOVEREIGN_ATOM_ENUM = "0"
+SOVEREIGN_ATOM_ENUM_OVERVIEW = "0"
+
+[[arm]]
+id = "deep"
+variant = "both"
+flags = []
+[arm.env]
+SOVEREIGN_ATLAS_GROUNDING = "0"
+SOVEREIGN_ATOM_ENUM = "0"
+SOVEREIGN_ATOM_ENUM_OVERVIEW = "0"
+SOVEREIGN_KQ_POOL_SCALE = "${pool_scale}"
+
+[[arm]]
+id = "ablation"
+variant = "both"
+# Same env as `full`; the difference is the index it is pointed at — a build
+# with no `[enrichment.ontology]` (ontology corpora) or an atlas copy with no
+# `Summary` atoms (literary). That is check I3: same chunks hash, different
+# ontology hash.
+flags = []
+[arm.env]
+SOVEREIGN_ATLAS_GROUNDING = "1"
+SOVEREIGN_ATOM_ENUM = "1"
+SOVEREIGN_ATOM_ENUM_OVERVIEW = "1"
+
+[[arm]]
+id = "full"
+variant = "both"
+flags = []
+[arm.env]
+SOVEREIGN_ATLAS_GROUNDING = "1"
+SOVEREIGN_ATOM_ENUM = "1"
+SOVEREIGN_ATOM_ENUM_OVERVIEW = "1"
+
+[[arm]]
+id = "oracle"
+variant = "both"
+# Bare's env, against a corpus holding only the attesting passages (or the
+# held-out plot summary as the only context, for the literary variant).
+flags = []
+[arm.env]
+SOVEREIGN_ATLAS_GROUNDING = "0"
+SOVEREIGN_ATOM_ENUM = "0"
+SOVEREIGN_ATOM_ENUM_OVERVIEW = "0"

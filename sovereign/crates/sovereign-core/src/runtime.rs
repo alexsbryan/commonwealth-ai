@@ -96,9 +96,11 @@ pub(crate) use self::retrieval_helpers::{
     cross_corpus_sort_cmp, drop_no_overlap_chunks, inject_meta_atlas_hits,
     reweight_by_query_relevance,
 };
+pub use self::types::ATLAS_WALK_META_KEY;
 pub use self::types::{
-    ContradictionProv, EvidenceRetrieval, HistoryEntryProv, HistoryRecallProv, HistorySummaryProv,
-    MetaAtlasHitRecord, RecalledMemoryProv, StreamHandle, TurnProvenance,
+    AtlasWalkEcho, AtlasWalkNodeEcho, ContradictionProv, EvidenceRetrieval, HistoryEntryProv,
+    HistoryRecallProv, HistorySummaryProv, MetaAtlasHitRecord, RecalledMemoryProv, StreamHandle,
+    TurnProvenance,
 };
 pub(crate) use self::types::{KnowledgeContext, KnowledgeQueryPlan};
 
@@ -215,6 +217,7 @@ pub mod retrieval_ledger;
 /// (two `sovereign_core` identities). Not a supported external API.
 #[doc(hidden)]
 pub mod retrieval_pipeline;
+mod routing_record;
 /// Serving one turn — drive the stream, forward the narration, emit the
 /// terminal metadata frame (`TOPOLOGY.md §10` phase 5c). The one place
 /// that turns a `Runtime` into `TurnFrame`s, so a host does not have to be
