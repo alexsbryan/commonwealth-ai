@@ -313,19 +313,25 @@ it.
 10. **A compromised node can serve bad inference.** Not defended. *By design:*
    the social trust model, documented since the first architecture draft —
    you mesh with machines whose owners you trust.
-11. **The desktop app's own window runs with no Content-Security-Policy.**
-   `sovereign/crates/sovereign-desktop/src-tauri/tauri.conf.json` sets
-   `app.security.csp` to `null`, so the main window — the one holding your
-   conversations, corpora and mesh controls — is under no restraint on where
-   it may load script from or where it may send a request. Mesh-app windows
-   are not covered by this: each is built with the strict `MESHAPP_CSP`
-   (`src/commands/meshapp.rs`), which is `'self'` for script and limits
-   `connect-src` to the IPC scheme. This is the host half that has no such
-   clamp, so any injection reaching the main window's DOM — a rendered
-   model answer, a corpus document, an imported conversation — has an open
-   egress path. *Closes when:* the main window carries a CSP the app's real
-   asset and connection needs are measured against, rather than `null`.
-   *Owner:* unowned.
+11. **The desktop main window's Content-Security-Policy has been set but not
+   watched refuse.** Narrowed 2026-09-21 (row `tg-11-main-window-has-a-csp`).
+   `sovereign/crates/sovereign-desktop/src-tauri/tauri.conf.json` set
+   `app.security.csp` to `null` until then, so the main window — the one
+   holding your conversations, corpora and mesh controls — was under no
+   restraint on where it may load script from or where it may send a
+   request, and any injection reaching its DOM (a rendered model answer, a
+   corpus document, an imported conversation) had an open egress path. It
+   now carries `default-src 'self'; script-src 'self'` (no `'unsafe-inline'`,
+   no `'unsafe-eval'`), `connect-src` limited to `'self'` and the Tauri IPC
+   origins, `img-src 'self' data:`, `object-src 'none'`, `base-uri 'self'`,
+   `form-action 'none'` — measured against a census of every asset,
+   connection and font the window actually uses, and held there by
+   `src-tauri/tests/csp_census.rs`, which fails on a null policy, on
+   `'unsafe-inline'`/`'unsafe-eval'` in `script-src`, and on any remote
+   origin in any directive. That census is a SOURCE check: nobody has yet
+   watched a running window refuse a remote load. *Closes when:* a live
+   window under this policy is observed refusing one. *Owner:* campaign
+   `threat-gaps` (order `threat-gaps-close`), row `HUMAN-tg-the-stranger`.
 
 ## Reporting
 
