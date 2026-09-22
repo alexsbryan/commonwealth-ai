@@ -78,6 +78,15 @@
   let sg = $state<AtlasSubgraph | null>(null);
   let sgLoading = $state(false);
   let sgError = $state<string | null>(null);
+  /** Atom ids to light on the map — an answer's evidence path, fed from
+   *  the walk ledger. Read once from `?highlight=atom1,atom2,…` so a demo
+   *  beat (or a shared link) can drive the view without new plumbing; an
+   *  absent param leaves the map byte-identical to before. */
+  let highlight = $state<Set<string>>(new Set());
+  if (typeof window !== "undefined") {
+    const raw = new URLSearchParams(window.location.search).get("highlight");
+    if (raw) highlight = new Set(raw.split(",").filter(Boolean));
+  }
 
   // Fetch the curated subgraph when the user enters Map mode (or switches
   // corpus while in it). The backend caches atoms.json, so re-entering is
@@ -500,6 +509,7 @@
       <AtlasGraph
         nodes={sg.nodes}
         edges={sg.edges}
+        {highlight}
         onNodeClick={(id) => onSelectAtom?.(id)}
       />
     {/if}
