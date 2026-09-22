@@ -138,7 +138,7 @@ while it's in use.
 
 *Deep dive: SYSTEM_OVERVIEW §5; [`docs/THREAT_MODEL.md`](./THREAT_MODEL.md);
 hands-on: [`docs/TWO_NODE_QUICKSTART.md`](./TWO_NODE_QUICKSTART.md). The
-custody split is pinned by `sovereign-mesh/tests/knowledge_fanout_e2e.rs`
+custody split is pinned by `sovereign-daemon/tests/main/knowledge_fanout_e2e.rs`
 and `tests/local_only_corpus_locality.rs`.*
 
 ## 5. The trust machinery: every layer has a gate

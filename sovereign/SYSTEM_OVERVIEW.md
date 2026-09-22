@@ -799,7 +799,6 @@ LINKED rather than exec'd, from `sovereign-cli-dev`'s `[lib]` target.
 | Retrieval redesign | [`docs/RETRIEVAL_REDESIGN.md`](./docs/RETRIEVAL_REDESIGN.md) |
 | Epistemic state / the epistemic index | [`docs/EPISTEMIC_STATE.md`](./docs/EPISTEMIC_STATE.md), [`docs/specs/EPISTEMIC_INDEX.md`](./docs/specs/EPISTEMIC_INDEX.md) |
 | Ontology primitives + migration | [`docs/specs/ONTOLOGY_PRIMITIVES.md`](./docs/specs/ONTOLOGY_PRIMITIVES.md), [`docs/specs/ONTOLOGY_MIGRATION.md`](./docs/specs/ONTOLOGY_MIGRATION.md) |
-| ATOS | [`docs/ATOS.md`](./docs/ATOS.md), [`docs/ATOS_RUNNER.md`](./docs/ATOS_RUNNER.md) |
 | Drift / correctness tooling | [`docs/DRIFT_DETECTION.md`](./docs/DRIFT_DETECTION.md), [`docs/CORRECTNESS_TOOLING.md`](./docs/CORRECTNESS_TOOLING.md) |
 | Work-atlas peer coordination | [`docs/WORK_ATLAS.md`](./docs/WORK_ATLAS.md) |
 | Desktop quality surface — START HERE to verify the desktop | [`crates/sovereign-desktop/QUALITY_SURFACE.md`](./crates/sovereign-desktop/QUALITY_SURFACE.md) |
@@ -959,7 +958,7 @@ through `peer_transport_reader()`).
   forms: `spawn` (all streams → one local listener, Track M) and
   `spawn_routed` (W1 — dispatch by negotiated ALPN to per-class local
   listeners). Spike proof:
-  `sovereign-mesh/tests/iroh_transport_e2e.rs` (run with
+  `sovereign-daemon/tests/main/iroh_transport_e2e.rs` (run with
   `--features iroh-experimental`) drives a real gossip round dialed
   by pubkey. `IrohTransport` resolves its dial target from the
   gossiped `PeerContact` (relay + direct addrs, W2) and picks the ALPN
@@ -2478,7 +2477,7 @@ projections (`meshapp_http.rs`), the enrichment store (`enrich_http.rs`), the
 local-corpus registry (`lc_http.rs`), governance, insights, notes, features,
 recipe projects, MCP config, turn extras, documents, the corpus catalogue,
 recipe authoring and deep research. Parity is audited by
-`sovereign-mesh/tests/loopback_parity.rs`.
+`sovereign-daemon/tests/main/loopback_parity.rs`.
 
 **Internal API — :9742, plaintext under perimeter trust.** No per-request
 auth: gossip, scheduling intent and plans, model transfer, RPC warm, index
@@ -2636,7 +2635,7 @@ carrying `dial=` is tunnelled or it is refused (§18.3).
 | `/api/{version,tags,ps,show,chat,generate,embed,embeddings}` | **Ollama-native compatibility shim** (`routes_ollama.rs`). Pure translation over the OpenAI handlers above — lets Ollama-native clients (Open WebUI's Ollama mode, IDE plugins) connect. `chat`/`generate` are non-streaming-backed in v1: the inner handler runs `stream:false` and the complete answer is framed as Ollama NDJSON (one content frame + terminal). No CORS layer + the same auth posture as `/v1/*` (documented in-module); incremental streaming is a tracked follow-up. |
 | `POST /internal/ring/sync` | Ring-ledger anti-entropy for one namespace: the caller sends its per-actor contiguous high-water digest (and optionally ops), the responder ingests those and answers with its own digest plus as much of what the caller lacks as fits `RING_SYNC_OPS_BUDGET_BYTES`. Both `ops` arrays are budgeted and the sender repeats the exchange, so one body is not the unit of convergence. Own route on its own 60s cadence; `/internal/app/state`'s 10s full-snapshot push was the alternative and was deleted at cw-lift 2e, leaving this the ONE receiver and its loop the ONE sender of replicated state. |
 | `POST /v1/rail/append`, `GET /v1/rail/log` | The ring rail. Appends one signed act to the caller's namespace, and reads back the admitted acts (already in the one order every node applies them) + gaps. The payload is the app's and the rail reads no field of it: whose words an act is comes from the guest session the door authenticated, is signed with the act (`SignedOp::on_behalf_of`), and a name a caller puts on the wire is dropped. `GET /v1/rail/log` finishes that attribution once — a guest act's `person` reads `<name>, guest of <member>` with a structured `guest` beside it — so the wall's page, a scaffolded app and `svrn ring log` all render the same name without composing it. There is no balance here to return. The namespace comes from `Scope::Rails` on the grant, never from the request; an operator (no grant) passes `?namespace=`. Mounted on `Operator` and `Rail`, and on neither `Peer` nor `Guest` — a ring rail is loopback-only in M0. A successful append raises `AppState::ring_write_nudge` (the third raiser, beside the KV pump and the work atlas's broadcaster), so a peer holds the act in about a second instead of at `ring_sync`'s sixty-second tick; the route still talks to no peer itself. |
-| `POST /v1/rail/live`, `GET /v1/rail/live`, `POST /internal/ring/live` | The ring rail's LIVE lane — delivery, not record (`routes_rail_live.rs`, `routes_internal/ring_live.rs`). POST fans one payload (≤ `LIVE_PAYLOAD_MAX_BYTES` = 4096, refused with 413 at both ends, never truncated) out to every online peer's `/internal/ring/live` with `pipeline_pause.rs::forward_to_peers`' fan-out, in a `{namespace, payload}` envelope whose namespace is the grant's (`routes_rail::namespace_for`, as append and log); the receiver refuses a namespace no live rail grant on it names and otherwise puts the payload in that namespace's bounded 256-entry in-memory buffer on `AppState` (`rail_live_buffer`, one accessor), and GET drains only the caller's namespace, reporting `dropped` for anything evicted. Nothing reaches a store, a journal or a disk, so `/internal/ring/live` gets NO `REPLICATION_SENDERS` row — that census's subject is replicated state, and it staying green is this lane's positive control while `sovereign-mesh/tests/main/ring_live_non_durable.rs` is the negative one. The lane exists because y-protocols awareness `outdatedTimeout` is 30 s and `ring_sync`'s cadence is 60 s: a cursor carried by the journal would have faded before it arrived. The payload is opaque TEXT and neither route looks inside it. |
+| `POST /v1/rail/live`, `GET /v1/rail/live`, `POST /internal/ring/live` | The ring rail's LIVE lane — delivery, not record (`routes_rail_live.rs`, `routes_internal/ring_live.rs`). POST fans one payload (≤ `LIVE_PAYLOAD_MAX_BYTES` = 4096, refused with 413 at both ends, never truncated) out to every online peer's `/internal/ring/live` with `pipeline_pause.rs::forward_to_peers`' fan-out, in a `{namespace, payload}` envelope whose namespace is the grant's (`routes_rail::namespace_for`, as append and log); the receiver refuses a namespace no live rail grant on it names and otherwise puts the payload in that namespace's bounded 256-entry in-memory buffer on `AppState` (`rail_live_buffer`, one accessor), and GET drains only the caller's namespace, reporting `dropped` for anything evicted. Nothing reaches a store, a journal or a disk, so `/internal/ring/live` gets NO `REPLICATION_SENDERS` row — that census's subject is replicated state, and it staying green is this lane's positive control while `sovereign-daemon/tests/main/ring_live_non_durable.rs` is the negative one. The lane exists because y-protocols awareness `outdatedTimeout` is 30 s and `ring_sync`'s cadence is 60 s: a cursor carried by the journal would have faded before it arrived. The payload is opaque TEXT and neither route looks inside it. |
 | `/internal/guest/grant`, `…/revoke`, `…/list` | Mint / kill / list ephemeral guest grants. On the `ClientSurface::Operator` bind ONLY: `:9742` has no auth gate, so a mint route there would let any mesh peer forge guest credentials — and the peer/guest binds of the client router 404 it for the same reason. Unreachable by a guest because no `Scope` names it either. |
 | `/v1/mesh/*` `/v1/admin/*` `/mcp/*` | **Loopback-only** (router middleware + per-handler `enforce_localhost`) |
 
@@ -2647,7 +2646,7 @@ while the daemon's went unread — the same question answering differently
 depending on which surface asked. Each family below is a door over an object
 the daemon already holds, mounted beside `reading_http` with one posture:
 router-level `from_fn(loopback_only)` **and** per-handler `enforce_localhost`,
-audited by `sovereign-mesh/tests/loopback_parity.rs` (including the PUT leg
+audited by `sovereign-daemon/tests/main/loopback_parity.rs` (including the PUT leg
 above, which no handler can satisfy alone). None of them is served on the peer
 or guest bind.
 
@@ -2939,7 +2938,7 @@ absent and the guards fail closed for *every* caller.
   phase file) — stay, and the client is owed a READ of each, not the
   type: `MeshStatusSummary` and `IngestProgressView<Stats>` are the fields
   the desktop reads, parsed from the same bytes, pinned to the route's
-  type field by field in `sovereign-mesh/tests/main/wire_view_drift.rs`
+  type field by field in `sovereign-daemon/tests/main/wire_view_drift.rs`
   (rename either side and it is red). `IngestProgressView` is generic over
   the receipt's counts so the desktop reads `IngestStats` typed while the
   contract crate names no capability-layer type. Two pass-throughs the
@@ -3240,7 +3239,7 @@ directory per namespace — and this store is the fold of it:
   `Notify` on the offline→online EDGE (never on every reach) and the writes
   made while that peer was gone go now rather than at the next tick — room
   run 2 of 2026-09-20 converged at 85 s against a 60 s bar without it
-  (`sovereign-mesh/tests/main/ring_return_syncs.rs`).
+  (`sovereign-daemon/tests/main/ring_return_syncs.rs`).
 - **Which namespaces replicate is DECLARED**, in
   `ring_roster::DAEMON_OWN_NAMESPACES`, and every entry is the constant its
   owning subsystem exports (`INFERENCE_APP_ID`, `CONTRIBUTIONS_APP_ID`,
@@ -3564,7 +3563,7 @@ work pins the GPU while the user is chatting. Components:
   ungrounded streaming.
 
   **One census row was owed elsewhere and is paid here.**
-  `sovereign-mesh/tests/main/daemon_variant_census.rs` listed `state.rs` as a
+  `sovereign-daemon/tests/main/daemon_variant_census.rs` listed `state.rs` as a
   live `DaemonServices::Desktop` construction site; deleting the commission
   turned it red, which is the failing input its own header names ("delete the
   last host that builds `Desktop`"). The row is removed and its claim moves to

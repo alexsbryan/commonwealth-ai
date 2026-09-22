@@ -35,6 +35,7 @@ use oicp_types::{
 };
 use sovereign_contracts::traits::InferenceProvider;
 use sovereign_contracts::types::{CompletionRequest, Speed};
+use sovereign_core::time::unix_now_u64;
 use sovereign_daemon::daemon::InferenceVenue;
 use sovereign_mesh::peer_inference::{InferenceRouter, VenueHost, VenueSource};
 
@@ -141,10 +142,7 @@ async fn spawn_slow_peer(hits: Arc<AtomicUsize>) -> SocketAddr {
 /// gate are both keyed by it, so reusing one id would make four peers
 /// share one cache entry and the test would measure nothing.
 fn peer_endpoint(idx: u128, addr: SocketAddr) -> InferenceVenue {
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_secs();
+    let now = unix_now_u64();
     InferenceVenue {
         node_id: NodeId::from_u128((0x42 + idx) << 100),
         name: format!("peer-{idx}"),

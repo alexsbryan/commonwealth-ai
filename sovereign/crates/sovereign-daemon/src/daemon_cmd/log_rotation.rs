@@ -28,6 +28,8 @@
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use sovereign_core::time::unix_now_u64;
+
 /// 10 MiB. Picked so a single rotation comfortably fits the kind of
 /// detail an operator scrolls through during a debugging session,
 /// without the file becoming unreadable in `less` / browser tools.
@@ -97,10 +99,7 @@ fn rotate_one(path: &Path, size_cap: u64, keep_n_baks: usize) -> std::io::Result
     // second), the `keep_n_baks` trim catches the duplicate so we
     // don't accumulate. If it ever does collide we'd overwrite the
     // older sibling, which is benign.
-    let ts = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
+    let ts = unix_now_u64();
     let bak_name = format!(
         "{}.{ts}.bak",
         path.file_name().and_then(|s| s.to_str()).unwrap_or("log"),

@@ -37,6 +37,8 @@
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
+use sovereign_core::time::unix_now_u64;
+
 /// Cap on retained crash records — enough history to see a pattern,
 /// bounded so a crash loop can't fill the disk.
 const KEEP_RECORDS: usize = 50;
@@ -144,10 +146,7 @@ fn write_crash_record(
 ) -> std::io::Result<()> {
     let crashes = data_dir.join("crashes");
     std::fs::create_dir_all(&crashes)?;
-    let ts = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
+    let ts = unix_now_u64();
     let seq = SEQ.fetch_add(1, Ordering::Relaxed);
     let record = serde_json::json!({
         "kind": "panic",

@@ -6,6 +6,8 @@
 //! infrastructure and stay with the `svrn` CLI tree, which keeps its
 //! own originals.
 
+use sovereign_core::time::unix_now_u64;
+
 /// Wait for SIGINT (Ctrl-C) or SIGTERM (systemd/launchd shutdown) — the
 /// only triggers that end the daemon's run loop. A user-initiated mesh
 /// leave no longer exits the process: `POST /v1/mesh/leave` re-creates a
@@ -67,10 +69,7 @@ fn log_shutdown_context(signal: &'static str, path: &'static str) {
     let ppid: i64 = unsafe { libc::getppid() } as i64;
     let rss_mb = peak_rss_mb();
     let jetsam_risk = rss_mb.map(|mb| mb >= 24 * 1024).unwrap_or(false);
-    let now_unix = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
+    let now_unix = unix_now_u64();
     if jetsam_risk && signal == "SIGTERM" {
         // Platform-correct forensics pointer: during the 2026-07-27
         // post-mortem this line said "inspect Console.app" on a Linux

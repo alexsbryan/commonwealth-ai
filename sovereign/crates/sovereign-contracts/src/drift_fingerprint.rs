@@ -14,10 +14,10 @@
 //! file contents is the honest signal.
 
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use sovereign_time::unix_now_u64;
 
 /// File name of the fingerprint sidecar. Lives alongside `latest.md` /
 /// `latest.md.json` so all drift state co-locates.
@@ -55,10 +55,7 @@ pub fn write_fingerprint(
         let h = hash_file(path)?;
         hashes.insert(path.to_string_lossy().into_owned(), h);
     }
-    let generated_at_unix = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
+    let generated_at_unix = unix_now_u64();
     let fp = DriftFingerprint {
         schema_version: DriftFingerprint::SCHEMA_VERSION,
         generated_at_unix,
