@@ -1,0 +1,30 @@
+# five-programs as a queue manifest. Launch line (run it from the repo root;
+# control files live in ralph/next/five-programs/ctl/ under --queue):
+#
+#   nohup python3 scripts/ralph.py supervise --workdir . --queue five-programs \
+#     -- python3 scripts/ralph.py run --workdir . --queue five-programs --max-stall 3 \
+#     >> ralph/log-five-programs.txt 2>&1 &
+#
+# The worker prompt is ralph/PROMPT.base.md + the campaign addendum
+# (print it: python3 scripts/ralph.py prompt --queue five-programs).
+# Do not start it while another loop holds the cargo lock: check
+# `pgrep -f 'ralph.py supervise'` first.
+label = "five-programs"
+session_timeout = 7200
+audit_every = 6
+worker_bin = "scripts/ralph-claude-shim.sh"
+settings = "ralph/claude-settings.json"
+
+[models]
+worker = "claude-opus-5"
+review = "claude-opus-5"
+resolve = "claude-opus-5"
+variant = "high"
+
+# The campaign's checks ARE the gates: each unit's commit body carries the
+# boundary-gate count. `layer` and `lint` are ralph-check.sh BUILTINS (host
+# side, pure-Rust xtask); COMPILE is the toolbox-wrapped full compile this
+# host requires for anything that reaches llama-cpp-sys-4.
+[checks]
+boundary = ["bash", "-c", "toolbox run -c sovereign-vulkan bash -lc 'cd corpus-engine && cargo xtask boundary-gate; true'"]
+compile = ["bash", "-c", "toolbox run -c sovereign-vulkan bash -lc './scripts/sovereign-lint.sh --human'"]

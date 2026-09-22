@@ -3,6 +3,7 @@
   "permissions": {
     "defaultMode": "auto",
     "allow": [
+      "Bash(toolbox run -c sovereign-vulkan *)",
       "Read",
       "Edit",
       "Write",
