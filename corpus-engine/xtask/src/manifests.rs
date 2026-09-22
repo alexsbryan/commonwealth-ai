@@ -20,14 +20,47 @@ pub struct MemberCrate {
     pub dir: String,
 }
 
+/// The body of the root `members = […]` array, comments stripped.
+///
+/// The members list is annotated prose — every entry carries its why — and
+/// prose may contain brackets: the literal `[[package_leaf]]` inside a
+/// member's comment ended this scan early (found live 2026-09-22, fp-17),
+/// truncating the member set to the entries above the comment and sending
+/// four gates green over a six-crate workspace. So the closing bracket is
+/// found with comment state tracked: `#` outside a string skips to
+/// end-of-line.
+fn members_array_body(manifest: &str) -> Option<String> {
+    let rest = manifest.split_once("members = [")?.1;
+    let mut body = String::new();
+    let mut in_str = false;
+    let mut chars = rest.chars();
+    while let Some(ch) = chars.next() {
+        match ch {
+            '"' => {
+                in_str = !in_str;
+                body.push(ch);
+            }
+            '#' if !in_str => {
+                for c in chars.by_ref() {
+                    if c == '\n' {
+                        body.push('\n');
+                        break;
+                    }
+                }
+            }
+            ']' if !in_str => return Some(body),
+            _ => body.push(ch),
+        }
+    }
+    Some(body) // unterminated array: parse what is there
+}
+
 /// Expand the root `members = […]` list (including `dir/*` globs) and read
 /// each member's package name.
 pub fn workspace_members(root: &Path) -> Vec<MemberCrate> {
     let manifest = std::fs::read_to_string(root.join("Cargo.toml")).unwrap_or_default();
     let mut dirs: Vec<String> = Vec::new();
-    if let Some(start) = manifest.find("members = [") {
-        let body = &manifest[start..];
-        let body = &body[..body.find(']').unwrap_or(body.len())];
+    if let Some(body) = members_array_body(&manifest) {
         for m in body.split('"').skip(1).step_by(2) {
             if let Some(parent) = m.strip_suffix("/*") {
                 if let Ok(rd) = std::fs::read_dir(root.join(parent)) {
@@ -335,6 +368,23 @@ fn header_dep_context(header: &str) -> Option<(DepKind, Option<String>)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_bracket_in_a_members_comment_does_not_end_the_array() {
+        // fp-17: a member's why-comment carried the literal `[[package_leaf]]`;
+        // the old first-`]` scan ended the array there, truncating the member
+        // set to the entries above the comment — and the gates printed green
+        // over a six-crate workspace.
+        let manifest = "\
+members = [\n\
+    \"oicp-types\",\n\
+    # the arithmetic half, a [[package_leaf]] row in ARCH_LAYERS.toml\n\
+    \"serving-policy\",\n\
+]\n";
+        let body = members_array_body(manifest).unwrap();
+        let entries: Vec<&str> = body.split('"').skip(1).step_by(2).collect();
+        assert_eq!(entries, ["oicp-types", "serving-policy"]);
+    }
 
     #[test]
     fn package_name_comes_from_package_section_only() {

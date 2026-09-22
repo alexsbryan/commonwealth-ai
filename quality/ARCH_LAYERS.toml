@@ -133,6 +133,11 @@ crates = [
     # back. See the two [[forbid]] blocks below — the layer entry alone would
     # be a green gate enforcing nothing (§5.1).
     "serving-policy",
+    # The arithmetic half of serving-policy as a shared leaf (fp-17): the
+    # daemon's admission path computes the same fair-share rule the serving
+    # cluster does. Tier-0 like the shim above it — its only in-repo dep is
+    # `oicp-types`, so anywhere above layer 0 puts a cross-family edge back.
+    "serving-policy-core",
     # The serving package's ranker (SERVING_BOUNDARY.md "The two tiers"). Here
     # for the same reason serving-policy is: rule 1 lets it name `oicp-types`
     # and nothing else in this repo, so any layer above this one would put a
@@ -1029,6 +1034,22 @@ name = "oplog"
 # commonwealth-rail, commonwealth-rail-core, corpus-engine — which is what a
 # shared leaf is rather than a convenience.
 allow = ["kernel-types"]
+
+[[package_leaf]]
+name = "serving-policy-core"
+# The serving-policy ARITHMETIC — fair_sched (SchedCore, EtaEwma, reciprocity,
+# TryGrant, fair_share_cap) and the pipeline_aliases table. Admitted 2026-09-22
+# under FIVE_PROGRAMS fp-17: the daemon's admission path (svrn) computes the
+# same share rule the [cmnwlth] serving cluster does, and a package member may
+# not name another package's crate — the arithmetic is the shared part both
+# ends own. Tested against §12 decision 3 first: contracts takes wire
+# format/vocabulary only, and this is policy arithmetic, not wire — so the leaf
+# instead (the rail-core pattern; `serving-policy` re-imports both modules at
+# their historical paths). The leaf test holds: no fs (the one `include_str!`
+# lands inside the crate root, `default_pipelines.toml`), no store, and its
+# only in-repo dep is `oicp-types`, already an admitted leaf — the real
+# widening is the crate itself and nothing else.
+allow = ["oicp-types", "workspace-hack"]
 
 # ── The packages ─────────────────────────────────────────────────────────────
 #

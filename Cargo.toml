@@ -20,6 +20,11 @@ members = [
     # DELETES two cross-family edges instead of relocating them. Tier-0, and
     # the empty in-repo dep list is the contract (see its lib.rs).
     "serving-policy",
+    # The arithmetic half of serving-policy as a [[package_leaf]] vocabulary
+    # leaf (fp-17, 2026-09-22): the daemon computes the same fair-share rule
+    # the serving cluster does, and an [svrn] member may not name a [cmnwlth]
+    # package crate — the shared arithmetic is the part both ends own.
+    "serving-policy-core",
     # The append-only journal — Op/OpId/Oplog/Journaled/SkippedLine. Minted
     # 2026-09-04: it was `corpus-engine/src/oplog.rs`, and the commonwealth
     # ring rail took a dep on corpus-engine — a 578-crate closure — to reach
@@ -316,6 +321,7 @@ oicp-client = { path = "oicp-client" }
 oicp-types = { path = "oicp-types" }
 kernel-types = { path = "kernel-types" }
 serving-policy = { path = "serving-policy" }
+serving-policy-core = { path = "serving-policy-core" }
 oplog = { path = "oplog" }
 corpus-engine = { path = "corpus-engine" }
 corpus-engine-scip = { path = "corpus-engine-scip" }

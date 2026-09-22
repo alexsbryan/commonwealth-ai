@@ -1,4 +1,4 @@
-# Conformance tags in `serving-policy` — GENERATED. DO NOT EDIT BY HAND.
+# Conformance tags in `serving-policy-core` — GENERATED. DO NOT EDIT BY HAND.
 #
 #   UPDATE_CONFORMANCE_TAGS=1 cargo test -p xtask --test conformance_tags
 #
@@ -12,7 +12,7 @@
 
 [[claim]]
 requirement = "FE-102"
-test = "serving-policy::fair_sched::tests::fair_share_cap_is_uncapped_for_a_lone_principal"
-file = "serving-policy/src/fair_sched/tests.rs"
+test = "serving-policy-core::fair_sched::tests::fair_share_cap_is_uncapped_for_a_lone_principal"
+file = "serving-policy-core/src/fair_sched/tests.rs"
 line = 274
 asserts = 2

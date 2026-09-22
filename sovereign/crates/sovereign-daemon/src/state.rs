@@ -12,7 +12,7 @@ use commonwealth_state::store_adapter::InferenceStateStore;
 use commonwealth_state::{ActivityEmitter, MeshStore, PeerPreferenceStore};
 use corpus_engine::CorpusEngine;
 use oicp_types::model_aliases::ModelAliasTable;
-use serving_policy::fair_sched::{reciprocity_weight, SchedCore, TryGrant};
+use serving_policy_core::fair_sched::{reciprocity_weight, SchedCore, TryGrant};
 use sovereign_core::identity::IdentityReader;
 use sovereign_grants::{EphemeralGrantStore, GuestGrantStore, GuestSessionStore, WorkQueueManager};
 use sovereign_meshapp_registry::registry::AppRegistry;
@@ -1021,7 +1021,7 @@ impl AppState {
                 serving: serving::ServingPart {
                     model_aliases: ModelAliasTable::default_table(),
                     pipeline_aliases:
-                        serving_policy::pipeline_aliases::PipelineAliasTable::default_table(),
+                        serving_policy_core::pipeline_aliases::PipelineAliasTable::default_table(),
                     slot_aliases: serving::SlotAliasesReader::default(),
                     servable_model_files: serving::ServableModelFilesReader::default(),
                     local_inference_availability: RwLock::new(1.0_f32),
@@ -1526,7 +1526,7 @@ impl AppState {
     }
 
     /// The concurrency budget shared out by
-    /// [`serving_policy::fair_sched::fair_share_cap`].
+    /// [`serving_policy_core::fair_sched::fair_share_cap`].
     pub fn client_fair_concurrency(&self) -> u32 {
         self.inner
             .serving

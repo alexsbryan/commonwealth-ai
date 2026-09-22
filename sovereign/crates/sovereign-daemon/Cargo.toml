@@ -53,7 +53,7 @@ sovereign-authoring-harness = { workspace = true }
 # domains `dm-daemon-api-edge` (2026-09-18): the admission policy, the grant
 # store, the next-edit package crate, the HTTP body seam, the canonical-sync
 # codec and the small leaves the edge reads.
-serving-policy = { workspace = true }
+serving-policy-core = { workspace = true }
 sovereign-grants = { workspace = true }
 code-next-edit = { path = "../../../code-next-edit" }
 corpus-engine = { workspace = true, features = ["treesitter"] }

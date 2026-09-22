@@ -11,11 +11,39 @@
 # covers: tag over a body that cannot fail is refused by the generator.
 
 [[claim]]
+requirement = "FE-10"
+test = "sovereign-daemon::main::mesh_switch::leaving_clears_the_active_pointer_rather_than_stranding_it"
+file = "sovereign/crates/sovereign-daemon/tests/main/mesh_switch.rs"
+line = 181
+asserts = 3
+
+[[claim]]
 requirement = "FE-100"
 test = "sovereign-daemon::admission::tests::peer_traffic_and_client_traffic_never_consume_each_others_budget"
 file = "sovereign/crates/sovereign-daemon/src/admission.rs"
 line = 825
 asserts = 7
+
+[[claim]]
+requirement = "FE-15"
+test = "sovereign-daemon::main::rotate_pre_split_guard::the_refusal_tells_an_unconfirmed_peer_apart_from_an_old_build"
+file = "sovereign/crates/sovereign-daemon/tests/main/rotate_pre_split_guard.rs"
+line = 116
+asserts = 3
+
+[[claim]]
+requirement = "FE-17"
+test = "sovereign-daemon::main::rotate_pre_split_guard::rotate_refuses_while_an_unconfirmed_peer_is_online"
+file = "sovereign/crates/sovereign-daemon/tests/main/rotate_pre_split_guard.rs"
+line = 88
+asserts = 3
+
+[[claim]]
+requirement = "FE-7"
+test = "sovereign-daemon::main::join_parks_not_leaves::same_mesh_id_survives_a_failed_join_from_a_solo_mesh"
+file = "sovereign/crates/sovereign-daemon/tests/main/join_parks_not_leaves.rs"
+line = 91
+asserts = 3
 
 [[claim]]
 requirement = "FE-99"

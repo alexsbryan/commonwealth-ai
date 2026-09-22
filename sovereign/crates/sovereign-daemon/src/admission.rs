@@ -184,7 +184,7 @@ fn admit_client(state: &AppState, who: &Principal) -> AdmissionVerdict {
     let (outcome, cap, active, inflight) = {
         let mut sched = state.lock_client_sched();
         let active = sched.active_keys_including(who);
-        let cap = serving_policy::fair_sched::fair_share_cap(budget, active);
+        let cap = serving_policy_core::fair_sched::fair_share_cap(budget, active);
         let inflight = sched.inflight_of(who);
         // Weight is a constant: see the "never ranks" note above.
         let outcome = if enforcing {
@@ -202,7 +202,7 @@ fn admit_client(state: &AppState, who: &Principal) -> AdmissionVerdict {
     // measured against, and what was decided. `target: "admission"` is a custom
     // target — it is dark unless the tracing filter lists it (see
     // `quality/env-flags.toml`).
-    let granted = matches!(outcome, serving_policy::fair_sched::TryGrant::Granted);
+    let granted = matches!(outcome, serving_policy_core::fair_sched::TryGrant::Granted);
     tracing::debug!(
         target: "admission",
         principal = %who,

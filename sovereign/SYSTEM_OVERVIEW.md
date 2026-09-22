@@ -33,7 +33,8 @@ commonwealth-ai/
 ├── oicp-client/               # OICP pure-HTTP client (OpenAI-compat + manifest routing)
 ├── oicp-conformance/          # Standalone OICP v0.4 host conformance tester
 ├── oplog/                     # Op/Oplog/Journaled — the append-only JSONL journal (tier-0)
-├── serving-policy/            # Fair-share scheduling + pipeline aliases (tier-0)
+├── serving-policy/            # Re-export shim for the serving-policy arithmetic (tier-0)
+├── serving-policy-core/       # Fair-share scheduling + pipeline aliases ([[package_leaf]] vocabulary leaf)
 ├── corpus-engine/             # Knowledge layer (LanceDB + Tantivy)
 ├── corpus-index/              # Retrieval read-port leaf — CorpusIndex, persisted settings, the engine Error
 ├── corpus-engine-scip/        # SCIP call graph + per-language exporter dispatch
@@ -98,11 +99,13 @@ Two protocols cross that boundary. **OICP** is declared in
 **`EmbedFn` / `InferenceFn`** are closures `corpus-engine` accepts from any
 caller; each project supplies its own.
 
-`serving-policy` sits BELOW the boundary rather than crossing it: `fair_sched`
+`serving-policy-core` sits BELOW the boundary rather than crossing it: `fair_sched`
 (fair-share caps, `EtaEwma`, reciprocity, the `SchedCore` the REST scheduler
-and the mesh admission gate share) plus `pipeline_aliases`. Its in-repo
-dependency list is empty, and `quality/ARCH_LAYERS.toml` forbids a dep on
-`sovereign-*` or `commonwealth-*` in either direction.
+and the mesh admission gate share) plus `pipeline_aliases`. It is a
+`[[package_leaf]]` (fp-17): its only in-repo dep is `oicp-types`, and
+`quality/ARCH_LAYERS.toml` forbids a dep on `sovereign-*` or `commonwealth-*`
+in either direction on the `serving-policy` shim, which re-exports both
+modules at their historical paths for the serving cluster's own consumers.
 
 ---
 
@@ -2498,7 +2501,7 @@ Two disjoint layers, so a request meets exactly one and is never double-gated.
 `peer_admission_layer` rations traffic that NAMES a node;
 `client_fairness_layer` rations traffic that does not, returning early when
 `X-Node-Id` is present. Both key the same
-`serving_policy::fair_sched::SchedCore<Principal>`, which also backs the chat
+`serving_policy_core::fair_sched::SchedCore<Principal>`, which also backs the chat
 server's turn scheduler, so every admission gate is fair by identical rules.
 Local requests admit unconditionally; peer requests get 503 + `Retry-After`
 when paused, yielding to recent local foreground work, or refused by the
@@ -3754,7 +3757,7 @@ work pins the GPU while the user is chatting. Components:
   `PeerWork::KnowledgeRead`) meets only the pause gate and its own
   `[daemon] max_peer_knowledge_reads` budget (default 4,
   `serving.knowledge_read_sched`), never the yield or the inference
-  ceiling (seat A23). The flat ceiling became a **`serving_policy::fair_sched::SchedCore<Principal>`**
+  ceiling (seat A23). The flat ceiling became a **`serving_policy_core::fair_sched::SchedCore<Principal>`**
   (`AppStateInner.serving.peer_sched`): a runtime-mutable global ceiling
   (`set_slots`, `0` = reject all) **plus a per-principal concurrency cap**
   so one peer can't hog the pool, **reciprocity-scaled** — a
@@ -3810,7 +3813,7 @@ work pins the GPU while the user is chatting. Components:
   is deliberately NOT `sovereign-contracts`'
   `PrincipalResolver` (`traits.rs:106`), which keys on a conversation
   id that stateless `/v1/chat/completions` does not carry. The share
-  rule is `serving_policy::fair_sched::fair_share_cap(budget,
+  rule is `serving_policy_core::fair_sched::fair_share_cap(budget,
   active)` — `u32::MAX` when one principal is alone on the host (so
   single-caller load is untouched), else `max(1, budget / active)`.
   It takes no weight argument, so the weight-ordering condemned by

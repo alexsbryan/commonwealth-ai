@@ -1,0 +1,18 @@
+[package]
+name = "serving-policy-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "The shared serving-policy arithmetic: fair-share scheduling (SchedCore, EtaEwma, reciprocity, TryGrant) and the pipeline alias table. A [[package_leaf]] vocabulary leaf (FIVE_PROGRAMS §12, the rail-core pattern) — pure policy over plain data, no fs, no store — so both the [svrn] daemon and the [cmnwlth] serving cluster compute admission by identical rules without a cross-package edge."
+
+[dependencies]
+oicp-types = { workspace = true }
+serde = { workspace = true }
+# `PipelineAliasTable::from_toml` parses the operator's override text and the
+# embedded `default_pipelines.toml`. Third-party, so it costs the crate no
+# in-repo edge — which is the only budget this crate keeps.
+toml = { workspace = true }
+workspace-hack = { version = "0.1", path = "../workspace-hack" }
+
+[lints]
+workspace = true
