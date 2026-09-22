@@ -746,6 +746,70 @@ slot is healthy (0.85 s for a small completion) and the committed pilot record
 is the earlier one, unchanged. A second rental, and the daemon's state, are the
 operator's call; the measurements are in `ralph/NEEDS_HUMAN.md`.
 
+### 2026-09-22 — study 1 closes; three mechanism repairs landed mid-study, and any board after them is study 2
+
+The non-goals clause (no tuning of the walk, declarations, prompts or thresholds
+against these banks) applies to three pieces of work landed after the final
+boards. None was tuned ON a bank; each was diagnosed on an instrument (boards,
+census, classifier race) and priced on fixtures or controls. They are recorded
+here because the discipline says so, and because any future board over these
+banks is a NEW study under them:
+
+1. **Enumeration exemplars replaced** (understanding-vocab navigation.rs).
+   Measured in the classifier's own space: the bank's 32 K1 questions lost to
+   `lookup` 32/32 with the shipped exemplars, and the margin gate abstained
+   (0.009–0.017 vs 0.02). The replacement set (concrete membership phrasings,
+   subjects kept generic) wins 32/32 raw with thematic/trajectory/tension/
+   lookup controls unflipped. Admission at the 0.02 global margin is still
+   unresolved — the reviewer's ruling is that a global absolute margin is the
+   wrong shape for centroids at 0.87–0.92 mutual cosine (controls themselves
+   fail it); mean-centring or a difference-vector margin is study-2 work.
+2. **Section-context ref derivation** (corpus-engine resolution_ontology.rs,
+   in flight at close): unfilled declared ref attributes may be derived from
+   the section's own breadcrumb at resolution time. Motivation measured by the
+   ref census: coins carry a `hoard` ref 49/362 (13.5%), the Corinth hoard
+   zero — the K1 relation was never extracted, so the typed enumeration had
+   nothing to enumerate. Candidate restriction is to the section's OWN
+   breadcrumb segments with abstain-on-ambiguity (reviewer ruling); the
+   prompt-side instruction alone moved emission 1/23 on the best sections.
+3. **The summary verifier's pass bar rebuilt** (sovereign-tools
+   summary_verify.rs): the incumbent conjunction failed 6/6 abstractive
+   summaries DETERMINISTICALLY (instrument: 0 test-retest flips; cross-cluster
+   control 6/6 correct) — every "RAPTOR" summary this study measured is
+   extractive floor. The pass bar is now the deterministic name veto (every
+   proper noun in the summary must be carried by a member text, ≥5-char
+   prefix rule for derived forms) plus a whole-summary gestalt probe whose
+   τ is NOT yet calibrated: the faithful band is 0.56–0.92, corruption
+   measurements are thin (name-swap n=2, cross-cluster n=1), and the register
+   alone cannot resolve single-name corruption — the reviewer ruled it
+   insufficient as sole judge, hence the hybrid. RAPTOR remains UNTESTED in
+   its abstractive form; the board's negative is over floor summaries and
+   carries that qualifier forever.
+
+### 2026-09-22 — corrections to the boards' record (reviewer re-derivation)
+
+- The decline attribution is 42 vs 9 across BOTH kinds; K1-only it is 33 vs 9.
+- The "full's retrieval carries more gold" claim is thin: on full's K1
+  declines the mean gold-fact ratio in retrieved chunks is 0.22 vs bare's
+  0.17, and only 7 of 26 reach 0.3. The damning case is concrete, not
+  statistical: list-igch0076 had the Kyparissia hoard atom at hop 0, 3 of 6
+  gold mints in the chunks, and the model still declined.
+- **K0 is the headline the first write-up under-read**: full 0.571 vs bare
+  0.857 on lookups — bar 1 ("doesn't hurt lookups") goes the wrong way by
+  0.29. Formally could-not-judge (n=14 < 20 after exclusions); the direction
+  is not in doubt.
+- **I4's noise band is an instrument defect**: bare answered byte-identically
+  on 46 of 47 questions across three runs and deep on 47 of 47 — three runs
+  of those arms is one measurement, and the band always floors to 0.05. Full
+  is the arm that varies (19 of 47 identical; K1 per-run means 0.213/0.232/
+  0.220 — the −0.16 stands far outside that spread). Full's
+  non-reproducibility for identical input is itself a finding; one tracing
+  pass to attribute it (walk vs atom-enum) is owed.
+- A diagnostic arm — `ATLAS_GROUNDING=1, ATOM_ENUM=0`, the SHIPPED production
+  default — was run after close to answer whether the decline behaviour ships
+  to production or comes from the experimental atom-enum. It is a diagnostic
+  in the board's layout, not a study arm; the frozen five are untouched.
+
 ### 2026-09-21 — I7's grounded set was wrong about DeepQuery (operator decision A75)
 
 **What was wrong.** Record 2 above calls a row grounded when its route is

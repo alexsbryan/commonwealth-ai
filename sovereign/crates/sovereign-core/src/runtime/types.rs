@@ -222,6 +222,16 @@ pub const ATLAS_WALK_META_KEY: &str = "atlas_walk";
 pub struct AtlasWalkEcho {
     /// `QuestionKind::as_str()` — the navigation row that was executed.
     pub kind: String,
+    /// How `kind` came to be: `classified` (the centroid race won),
+    /// `abstained` (no row cleared the gates — `kind` is the unfiltered
+    /// row's shape, not a routing decision), `row_inert`, `no_classifier`,
+    /// `classifier_unavailable`, `caller`. Without this the echo cannot
+    /// distinguish "routed to thematic" from "abstained into the
+    /// unfiltered walk" — which is the difference between a routing
+    /// defect and a scatter defect (measured: the ANS K1 questions all
+    /// abstained, 2026-09-22, and the echo said `thematic`).
+    #[serde(default)]
+    pub kind_source: String,
     /// The traversed nodes, highest walk weight first, capped at
     /// `MAP_NODE_CAP`. Empty when the walk reached nothing.
     pub nodes: Vec<AtlasWalkNodeEcho>,

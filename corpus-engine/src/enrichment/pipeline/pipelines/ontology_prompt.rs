@@ -247,12 +247,25 @@ fn declares_deontic(policies: &OntologyPolicies) -> bool {
 fn render_attribute_shape(policies: &OntologyPolicies, index: &TypeIndex<'_>) -> String {
     // The first declared type that has attributes, in declaration order —
     // the example uses the AUTHOR's own keys, so it needs no translation.
-    let Some((t, attrs)) = policies
+    // A type carrying a REF attribute is preferred when one exists: the
+    // example is the only place the model sees a ref's shape filled, and
+    // an example without one taught it that refs are optional (the
+    // ei7-ans build filled `mint` on 247 of 362 coins — the row states
+    // it — and `hoard` on 49, all from rows that repeat it; the hoard a
+    // coin belongs to is SECTION CONTEXT, stated in the title, never in
+    // the row, so nothing the prompt showed ever got filled from it).
+    let candidates: Vec<(&OntologyTypeDecl, Vec<&AttrDecl>)> = policies
         .shape
         .types
         .iter()
         .map(|t| (t, index.effective_attributes(&t.name)))
-        .find(|(_, a)| !a.is_empty())
+        .filter(|(_, a)| !a.is_empty())
+        .collect();
+    let Some((t, attrs)) = candidates
+        .iter()
+        .find(|(_, a)| a.iter().any(|x| matches!(x.family, AttrFamily::Ref { .. })))
+        .or_else(|| candidates.first())
+        .map(|(t, a)| (*t, a.clone()))
     else {
         return String::new();
     };
@@ -285,6 +298,30 @@ fn render_attribute_shape(policies: &OntologyPolicies, index: &TypeIndex<'_>) ->
                 .join(" and "),
         )
     };
+    // A ref may be SECTION CONTEXT, not row text. Measured (ei7-ans,
+    // 2026-09-22): the model filled `mint` wherever the row printed it and
+    // `hoard` almost never, because a coin's hoard is named by the section
+    // heading ("A. The Corinth Hoard") and the instruction above says to
+    // take values from "the section's own words" — read as the row. The
+    // ref-link is the declared ontology's load-bearing relation (the
+    // enumeration path walks exactly these edges), so this block names the
+    // context source the example cannot show. Only emitted when a declared
+    // type carries a ref, so a text-only declaration pays nothing.
+    let ref_context = if policies.shape.types.iter().any(|t| {
+        index
+            .effective_attributes(&t.name)
+            .iter()
+            .any(|a| matches!(a.family, AttrFamily::Ref { .. }))
+    }) {
+        "\nA `name of a …` attribute may be stated by the row, by the \
+         surrounding catalogue, or by the section heading: a sketch inside \
+         a section about one thing belongs to that thing even when the row \
+         does not repeat its name. Write that name — an unlinked sketch \
+         cannot be found from the thing it belongs to.\n"
+            .to_string()
+    } else {
+        String::new()
+    };
     format!(
         "\n## Where attributes go\n\n\
          A declared attribute is a field of the sketch object itself. The \
@@ -296,11 +333,12 @@ fn render_attribute_shape(policies: &OntologyPolicies, index: &TypeIndex<'_>) ->
          When a type declares an attribute, the value belongs in that object \
          and nowhere else — never restated as a claim, a relation, or prose \
          in the description.\n\n\
-         `<text>` and `<number>` are shapes, not values: take each from the \
-         section's own words. Leave out any key the section does not state. A \
-         `0` or an \"unknown\" put there to fill a slot reads downstream as a \
-         measurement, and only a missing key is visibly missing.\n\
-         {identity}",
+          `<text>` and `<number>` are shapes, not values: take each from the \
+          section's own words. Leave out any key the section does not state. A \
+          `0` or an \"unknown\" put there to fill a slot reads downstream as a \
+          measurement, and only a missing key is visibly missing.\n\
+          {identity}\
+          {ref_context}",
         name = t.name,
         slot = match t.kind {
             TypeKind::Relation => "relation_type",

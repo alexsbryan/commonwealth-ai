@@ -30,6 +30,10 @@ pub struct NodeIn {
     pub atom_type: AtomType,
     pub label: String,
     pub salience: Option<f32>,
+    /// The declared type's own noun (`hoard`, `mint`) when the corpus
+    /// declares one — `None` on an undeclared corpus, so the map colours
+    /// by atom kind exactly as before there.
+    pub declared_type: Option<String>,
 }
 
 /// Light edge input — `crux` is already extracted from a `Tension` edge's
@@ -51,6 +55,12 @@ pub struct AtlasNode {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub salience: Option<f32>,
     pub degree: u32,
+    /// The declared type's own noun, when the corpus declares one. The
+    /// map colours by this when present (stage 0b: "the custom atlas of
+    /// the same corpus, coloured by declared type"); absent on an
+    /// undeclared corpus, where colour stays by atom kind.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub declared_type: Option<String>,
 }
 
 /// An edge — `crux` is the disagreement a `Tension` turns on.
@@ -140,6 +150,7 @@ pub fn build_subgraph(nodes: &[NodeIn], edges: &[EdgeIn], max_nodes: usize) -> A
             atom_type: n.atom_type,
             salience: n.salience,
             degree: *degree.get(&n.id).unwrap_or(&0),
+            declared_type: n.declared_type.clone(),
         })
         .collect();
 
@@ -218,6 +229,7 @@ impl FileAtlasReader {
                 atom_type: s.atom_type,
                 label: s.display_name.clone(),
                 salience: s.salience,
+                declared_type: s.subtype.clone(),
             })
             .collect();
         let mut edges_in: Vec<EdgeIn> = edges_file
@@ -483,6 +495,7 @@ mod tests {
             atom_type: t,
             label: format!("n{i}"),
             salience: sal,
+            declared_type: None,
         }
     }
     fn tension(a: usize, b: usize, crux: &str) -> EdgeIn {

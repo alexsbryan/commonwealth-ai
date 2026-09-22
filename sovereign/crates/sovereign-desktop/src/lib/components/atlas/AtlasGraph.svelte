@@ -9,7 +9,7 @@
   // type, size by salience, Tension edges drawn as bold red "fault lines"
   // carrying their crux on hover.
   import { onDestroy } from "svelte";
-  import { atomTypeColor } from "./atomKinds";
+  import { atomTypeColor, declaredTypeColor } from "./atomKinds";
 
 
   interface AtlasNode {
@@ -18,6 +18,10 @@
     atom_type: string;
     salience?: number;
     degree: number;
+    /** The declared type's own noun (`hoard`, `mint`) on a declared
+     *  corpus — absent otherwise. Present ⇒ the node colours by it
+     *  (stage 0b: the custom atlas coloured by declared type). */
+    declared_type?: string;
   }
   interface AtlasEdge {
     source: string;
@@ -29,8 +33,18 @@
     nodes: AtlasNode[];
     edges: AtlasEdge[];
     onNodeClick?: (id: string) => void;
+    /** Atom ids to highlight — the evidence path of one answer, fed
+     *  from the walk ledger. Highlighted nodes keep their colour and
+     *  gain a halo ring; everything else dims. No core or wire change:
+     *  the caller already holds the ids. */
+    highlight?: Set<string>;
   }
-  let { nodes, edges, onNodeClick = () => {} }: Props = $props();
+  let {
+    nodes,
+    edges,
+    onNodeClick = () => {},
+    highlight = new Set<string>(),
+  }: Props = $props();
 
   type SimNode = AtlasNode & {
     x: number;
@@ -46,7 +60,8 @@
   let rafId = 0;
   let destroyed = false;
 
-  const colorFor = atomTypeColor;
+  const colorFor = (n: AtlasNode): string =>
+    n.declared_type ? declaredTypeColor(n.declared_type) : atomTypeColor(n.atom_type);
 
 
   function svgEl(tag: string, attrs: Record<string, string | number> = {}): SVGElement {
@@ -144,18 +159,35 @@
 
     for (const n of ns) {
       const g = svgEl("g") as SVGGElement;
+      const lit = highlight.size === 0 || highlight.has(n.id);
+      // The highlight set (an answer's evidence path) keeps its nodes at
+      // full colour with a halo ring and dims the rest — the map-shot
+      // beat is "the path this answer used, lit across the atlas".
+      if (highlight.has(n.id)) {
+        g.appendChild(
+          svgEl("circle", {
+            r: radius(n) + 5,
+            fill: "none",
+            stroke: colorFor(n),
+            "stroke-width": "2.5",
+            opacity: "0.85",
+          }),
+        );
+      }
       g.appendChild(
         svgEl("circle", {
           r: radius(n),
-          fill: colorFor(n.atom_type),
+          fill: colorFor(n),
           stroke: "#0e0b15",
           "stroke-width": "1.5",
+          opacity: lit ? "1" : "0.25",
         }),
       );
       if (radius(n) >= 8) {
         const nm = n.label || n.id;
         const t = svgEl("text", { class: "atlas-nlabel", "text-anchor": "middle" }) as SVGTextElement;
         t.textContent = nm.length > 22 ? nm.slice(0, 21) + "…" : nm;
+        if (!lit) t.setAttribute("opacity", "0.3");
         g.appendChild(t);
         n._label = t;
       }

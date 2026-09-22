@@ -387,6 +387,7 @@ impl Runtime {
         // path out for the run that cannot see it.
         *walk_out = Some(crate::runtime::AtlasWalkEcho {
             kind: grounding.kind.as_str().to_string(),
+            kind_source: grounding.kind_source.as_str().to_string(),
             nodes: grounding
                 .map
                 .nodes

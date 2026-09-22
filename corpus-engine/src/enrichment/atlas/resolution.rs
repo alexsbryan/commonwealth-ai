@@ -49,8 +49,8 @@ use super::resolution_identity::{
     MergeEvidence, TypedSubjectPools,
 };
 use super::resolution_ontology::{
-    check_event_participants, check_relation_endpoints, emit_role_states, rigid_entity_type,
-    snap_ref_attributes, ResolutionPolicy,
+    check_event_participants, check_relation_endpoints, derive_section_context_refs,
+    emit_role_states, rigid_entity_type, snap_ref_attributes, ResolutionPolicy,
 };
 
 // ── Tuning constants ────────────────────────────────────────
@@ -1887,8 +1887,20 @@ pub fn resolve_step_3b_with(
     // 7. Declared `ref` attributes become atom ids. Last, because it reads
     //    the finished entity set and writes nothing into this pass's atoms —
     //    the caller applies the updates to the Step 3a entities it owns.
+    //    Section-context derivation runs FIRST, on a stamped copy: the
+    //    stamps write NAMES into unfilled refs, and snap resolves them
+    //    through the same path (and the same failure ledger) as an
+    //    emission.
+    let section_derived = derive_section_context_refs(policy, entities);
+    let mut snap_input: Vec<super::atoms::Entity> = entities.to_vec();
+    for (i, attr, name) in &section_derived {
+        if let Some(e) = snap_input.get_mut(*i) {
+            e.attributes
+                .insert(attr.clone(), serde_json::Value::String(name.clone()));
+        }
+    }
     let (entity_attribute_updates, ref_failures) =
-        snap_ref_attributes(policy, entities, &name_index, &token_index);
+        snap_ref_attributes(policy, &snap_input, &name_index, &token_index);
     failures.extend(ref_failures);
 
     Ok(Step3bOutput {

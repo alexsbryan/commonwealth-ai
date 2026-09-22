@@ -102,6 +102,7 @@ async fn test_retest_and_negative_control_over_production_registers() {
     let mut table: Vec<serde_json::Value> = Vec::new();
     let mut flips = 0usize;
     let mut pass_any = 0usize;
+    let mut could_not_judge = 0usize;
     let mut control_failures = 0usize; // controls that correctly FAILED (both kinds)
     let mut control_pairs = 0usize;
 
@@ -135,6 +136,10 @@ async fn test_retest_and_negative_control_over_production_registers() {
         };
         let v1 = verifier.verify(&summary, &row.member_texts).await;
         let v2 = verifier.verify(&summary, &row.member_texts).await;
+        // A None verdict is could-not-judge, not a dropped row (the
+        // reviewer's 2026-09-22 finding: the shrinking denominators
+        // 6 → 6 → 2 hid the judge's instability). The row rides the table
+        // flagged, and the denominator says it.
         let (p1, w1, c1) = match &v1 {
             Some(v) => (
                 v.passed(),
@@ -142,8 +147,14 @@ async fn test_retest_and_negative_control_over_production_registers() {
                 (v.claims_total, v.claims_unsupported),
             ),
             None => {
+                could_not_judge += 1;
+                table.push(serde_json::json!({
+                    "cluster_key": row.cluster_key,
+                    "could_not_judge": "run1: verifier returned None",
+                    "fabricated_names_run1": v1.as_ref().map(|v| v.fabricated_names.clone()),
+                }));
                 eprintln!(
-                    "[{}] verifier returned None (judge unreachable) — row not measured",
+                    "[{}] could-not-judge: verifier returned None on run 1",
                     row.cluster_key
                 );
                 continue;
@@ -156,9 +167,16 @@ async fn test_retest_and_negative_control_over_production_registers() {
                 (v.claims_total, v.claims_unsupported),
             ),
             None => {
+                could_not_judge += 1;
+                table.push(serde_json::json!({
+                    "cluster_key": row.cluster_key,
+                    "could_not_judge": "run2: verifier returned None (flip-worthy if run1 answered)",
+                    "pass_run1": p1,
+                    "fabricated_names_run1": v1.as_ref().map(|v| v.fabricated_names.clone()),
+                }));
                 eprintln!(
-                    "[{}] verifier returned None on retest — row not measured",
-                    row.cluster_key
+                    "[{}] could-not-judge: verifier returned None on run 2 (run 1 answered: {})",
+                    row.cluster_key, p1
                 );
                 continue;
             }
@@ -235,11 +253,12 @@ async fn test_retest_and_negative_control_over_production_registers() {
 
     let measured = table.len();
     eprintln!(
-        "\n== verifier instrument: {} rows measured · flips {} · pass-any {} · controls correctly failed {}/{}",
-        measured, flips, pass_any, control_failures, control_pairs
+        "\n== verifier instrument: {} rows measured · could-not-judge {} · flips {} · pass-any {} · controls correctly failed {}/{}",
+        measured, could_not_judge, flips, pass_any, control_failures, control_pairs
     );
     let out = serde_json::json!({
         "rows_measured": measured,
+        "could_not_judge": could_not_judge,
         "test_retest_flips": flips,
         "pass_any": pass_any,
         "negative_control_failed_correctly": control_failures,

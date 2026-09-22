@@ -138,6 +138,71 @@ fn the_block_shows_where_an_attribute_goes_in_the_json() {
     );
 }
 
+/// A ref attribute is the declared ontology's load-bearing relation, and
+/// the worked example is the only place its shape is shown filled. Measured
+/// on ei7-ans (2026-09-22): `mint` filled from the row (247/362 coins) while
+/// `hoard` — section context, named in the heading, never in the row —
+/// filled 49/362 with ZERO unresolved-hoard failures (never emitted). Two
+/// pins, one for each half of the fix:
+///
+/// 1. a declaration whose ref-carrying type is NOT first with attributes
+///    (the ANS recipe's `hoard` declares text/time attrs ahead of `coin`)
+///    still gets the ref-carrying type's example;
+/// 2. the ref-context sentence — the only place the prompt says a ref may
+///    come from the section heading — renders for a ref declaration and
+///    for nothing else.
+#[test]
+fn a_ref_attribute_earns_the_example_and_names_its_context() {
+    let block = render_declared_types(&numismatics());
+    assert!(
+        block.contains("name of a mint") || block.contains("name of a hoard"),
+        "a declared ref renders its target: {block}"
+    );
+    assert!(
+        block.contains("cannot be found from the thing it belongs to"),
+        "the ref-context sentence is the heading-context instruction: {block}"
+    );
+
+    // The ANS-recipe shape: a `hoard` type declared FIRST with text attrs,
+    // ahead of `coin` (refs) — the template itself has no hoard, so the
+    // shape is built here the way the ANS recipe declares it.
+    let mut ans_shape = numismatics();
+    ans_shape.shape.types.insert(
+        0,
+        OntologyTypeDecl {
+            name: "hoard".into(),
+            kind: TypeKind::Entity,
+            description: "A group of coins buried and found together.".into(),
+            attributes: vec![AttrDecl {
+                name: "findspot".into(),
+                family: AttrFamily::Text { values: vec![] },
+                description: String::new(),
+            }],
+            specializes: None,
+            role_of: None,
+            ..Default::default()
+        },
+    );
+    let block = render_declared_types(&ans_shape);
+    assert!(
+        block.contains("\"mint\": <name of a mint>"),
+        "the ref-carrying type owns the example even when a text-attr type \
+         is declared first: {block}"
+    );
+
+    // A declaration with no ref pays nothing for the sentence.
+    let mut text_only = numismatics();
+    for t in text_only.shape.types.iter_mut() {
+        t.attributes
+            .retain(|a| !matches!(a.family, AttrFamily::Ref { .. }));
+    }
+    let block = render_declared_types(&text_only);
+    assert!(
+        !block.contains("cannot be found from the thing it belongs to"),
+        "no declared ref, no ref-context sentence"
+    );
+}
+
 /// An attribute named in `identity` decides whether two mentions merge, so
 /// it cannot read as one of seven interchangeable keys. `catalogue_ref`
 /// reached 3 of 14 coins while the corpus stated it on both the catalogue

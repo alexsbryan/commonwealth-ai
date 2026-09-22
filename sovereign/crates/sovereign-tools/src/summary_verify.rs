@@ -64,18 +64,115 @@ pub struct SummaryVerdict {
     /// (lower = more faithful). `None` = the probe did not answer —
     /// the verdict is not a measurement and `passed()` is false.
     pub whole_summary_violation: Option<f64>,
+    /// Proper nouns the summary asserts that NO member text carries —
+    /// the deterministic name veto (see [`absent_proper_nouns`]).
+    /// Non-empty fails the summary outright: name-level fabrication is
+    /// a containment invariant, not a judgement call.
+    pub fabricated_names: Vec<String>,
 }
 
 impl SummaryVerdict {
-    /// Blocking pass bar: the WHOLE-SUMMARY probe answered and came in
-    /// under τ. Claim decomposition no longer decides — it feeds
-    /// `claims_unsupported` and the retry hint (see
-    /// [`FAITHFULNESS_CLAIM_PREFIX`] for the measurement that changed
-    /// this). A probe that did not answer is not a pass: an
-    /// unverifiable summary still falls to the extractive floor.
+    /// Blocking pass bar: the deterministic name veto found nothing, AND
+    /// the whole-summary probe answered and came in under τ. Claim
+    /// decomposition no longer decides — it feeds `claims_unsupported`
+    /// and the retry hint (see [`FAITHFULNESS_CLAIM_PREFIX`] for the
+    /// measurement that changed this). A probe that did not answer is
+    /// not a pass: an unverifiable summary still falls to the floor.
     pub fn passed(&self) -> bool {
-        matches!(self.whole_summary_violation, Some(v) if v < SUPPORTED_TAU)
+        self.fabricated_names.is_empty()
+            && matches!(self.whole_summary_violation, Some(v) if v < SUPPORTED_TAU)
     }
+}
+
+/// The DETERMINISTIC name veto (2026-09-22, reviewer ruling on the
+/// whole-summary register): every proper noun a summary asserts must be
+/// carried by at least one member text.
+///
+/// The pre-reg's own prior evidence says 9 of 23 misattributions trace to
+/// summary content, and misattribution is a name-level failure. A judge is
+/// not needed to enforce a containment invariant (ARCH principle 10), and
+/// the instrument measured that a gestalt probe CANNOT resolve it: a single
+/// swapped token in ~1,900 characters moves the whole-summary score by
+/// +0.04–0.10 against a faithful band of 0.56–0.92 — no threshold
+/// separates, because the unit is wrong. The probe keeps what it can
+/// resolve (wrong-cluster arcs, invented events); names move to code.
+///
+/// Rules, all deterministic:
+/// - a word is a proper noun iff it is alphabetic, ≥3 chars, starts
+///   uppercase, and never appears lowercase anywhere in the summary
+///   (a word the summary itself uses lowercase is a common word);
+/// - a name passes when any member text contains it case-insensitively,
+///   OR carries a word sharing a ≥5-character prefix with it
+///   ("Athenian" ↔ "Athens", "Lampsacene" ↔ "Lampsacus") — derived
+///   adjectives do not false-veto while a fabricated name, which shares
+///   a prefix with nothing, fails;
+/// - returns the offenders, in order of first assertion.
+/// Sentence-initial function words no name veto should ever count. A
+/// closed list (ARCH principle 9): these are grammar, not vocabulary,
+/// and the veto's unit is the name.
+const NAME_VETO_STOPWORDS: &[&str] = &[
+    "the", "a", "an", "and", "but", "or", "in", "on", "at", "for", "with", "from", "to", "of",
+    "as", "by", "when", "while", "after", "before", "it", "its", "he", "she", "they", "we", "you",
+    "his", "her", "their", "there", "this", "that", "these", "those", "what", "who", "whom", "why",
+    "how", "all", "some", "no", "not", "one", "two", "then", "so",
+];
+
+pub fn absent_proper_nouns(summary: &str, member_texts: &[String]) -> Vec<String> {
+    const PREFIX_MIN: usize = 5;
+    let words: Vec<&str> = summary
+        .split(|c: char| !c.is_alphabetic())
+        .filter(|w| !w.is_empty())
+        .collect();
+    // Words the summary itself uses in lowercase form — a capitalized
+    // spelling of one of these is a sentence-initial common word, not a
+    // name. Built from ORIGINAL-lowercase words only, or every
+    // capitalized word would disqualify itself.
+    let lower_forms: std::collections::HashSet<String> = words
+        .iter()
+        .filter(|w| w.chars().next().is_some_and(|c| !c.is_uppercase()))
+        .map(|w| w.to_lowercase())
+        .collect();
+    let mut member_words: Vec<String> = Vec::new();
+    for text in member_texts {
+        for w in text.split(|c: char| !c.is_alphabetic()) {
+            let l = w.to_lowercase();
+            if l.chars().count() >= 4 {
+                member_words.push(l);
+            }
+        }
+    }
+    let carries = |name: &str| {
+        member_words.iter().any(|m| {
+            m == name
+                || m.chars()
+                    .zip(name.chars())
+                    .take(PREFIX_MIN)
+                    .filter(|(a, b)| a == b)
+                    .count()
+                    >= PREFIX_MIN
+        })
+    };
+    let mut absent: Vec<String> = Vec::new();
+    let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+    for w in words {
+        let chars = w.chars().count();
+        if chars < 3
+            || NAME_VETO_STOPWORDS.contains(&w.to_lowercase().as_str())
+            || !w.chars().next().is_some_and(char::is_uppercase)
+            || lower_forms.contains(&w.to_lowercase())
+        {
+            continue;
+        }
+        let l = w.to_lowercase();
+        if seen.contains(&l) {
+            continue;
+        }
+        if !carries(&l) {
+            seen.insert(l.clone());
+            absent.push((*w).to_string());
+        }
+    }
+    absent
 }
 
 /// The claim+evidence→verdict seam. `None` = the verifier itself
@@ -101,10 +198,26 @@ impl JudgeSummaryVerifier {
 impl SummaryVerifier for JudgeSummaryVerifier {
     async fn verify(&self, summary: &str, member_texts: &[String]) -> Option<SummaryVerdict> {
         let members: Vec<String> = member_texts.iter().take(MEMBER_CAP).cloned().collect();
-        // THE PASS DECIDER — one whole-summary probe over the cluster's
-        // own member window, through the audit pass's joint register.
-        // `n_stable = members.len()`: a single call shares the whole
-        // window (the deep-research audit's single-call shape).
+        // THE NAME VETO — deterministic, first, and terminal. A summary
+        // asserting a proper noun no member carries fails without a model
+        // call; the offenders are named in the verdict for the retry hint.
+        let fabricated_names = absent_proper_nouns(summary, &members);
+        if !fabricated_names.is_empty() {
+            tracing::info!(
+                names = ?fabricated_names,
+                "summary-verify: deterministic name veto — no member text carries these"
+            );
+            return Some(SummaryVerdict {
+                claims_total: 0,
+                claims_unsupported: 0,
+                whole_summary_violation: None,
+                fabricated_names,
+            });
+        }
+        // THE GESTALT PASS DECIDER — one whole-summary probe over the
+        // cluster's own member window, through the audit pass's joint
+        // register. `n_stable = members.len()`: a single call shares the
+        // whole window (the deep-research audit's single-call shape).
         let faithfulness_claim = format!("{FAITHFULNESS_CLAIM_PREFIX}{summary}\n\"\"\"");
         let whole = sovereign_core::runtime::claim_violation_joint(
             &self.inference,
@@ -124,6 +237,7 @@ impl SummaryVerifier for JudgeSummaryVerifier {
                 claims_total: 0,
                 claims_unsupported: 0,
                 whole_summary_violation: Some(whole),
+                fabricated_names: Vec::new(),
             });
         }
         // Failed the whole-summary bar: decompose for the retry hint and
@@ -172,6 +286,7 @@ impl SummaryVerifier for JudgeSummaryVerifier {
             claims_total: claims.len(),
             claims_unsupported: unsupported,
             whole_summary_violation: Some(whole),
+            fabricated_names: Vec::new(),
         })
     }
 }
@@ -315,12 +430,14 @@ mod tests {
             claims_total: 0,
             claims_unsupported: 0,
             whole_summary_violation: Some(0.1),
+            fabricated_names: Vec::new(),
         };
         assert!(probe_passed.passed());
         let probe_failed_with_clean_claims = SummaryVerdict {
             claims_total: 3,
             claims_unsupported: 0,
             whole_summary_violation: Some(0.9),
+            fabricated_names: Vec::new(),
         };
         assert!(
             !probe_failed_with_clean_claims.passed(),
@@ -332,10 +449,76 @@ mod tests {
             claims_total: 3,
             claims_unsupported: 0,
             whole_summary_violation: None,
+            fabricated_names: Vec::new(),
         };
         assert!(
             !claims_only_pass.passed(),
             "no probe answer is not a pass — unverifiable falls to the floor"
+        );
+        // The name veto outranks the probe: a grounded-score summary that
+        // asserts a name no member carries still fails.
+        let vetoed = SummaryVerdict {
+            claims_total: 0,
+            claims_unsupported: 0,
+            whole_summary_violation: Some(0.1),
+            fabricated_names: vec!["Zarkon".into()],
+        };
+        assert!(
+            !vetoed.passed(),
+            "name-level fabrication is a containment invariant, not a judgement"
+        );
+    }
+
+    /// The deterministic name veto, on the four shapes that decide
+    /// whether it is shippable: derived adjectives pass via the prefix
+    /// rule, fabricated names fail, common words never count, and the
+    /// summary's own lowercase usage disqualifies a capitalized form.
+    #[test]
+    fn the_name_veto_catches_fabrications_and_passes_derived_forms() {
+        use super::absent_proper_nouns;
+        let members = vec![
+            "Elizabeth came into Captain Beck's house; the Juno was ready \
+             for sea again, and Salve saw the Athens fleet from the harbour."
+                .to_string(),
+        ];
+        // Carried verbatim, carried by prefix (Athenian ← Athens), and a
+        // common word the summary also uses lowercase: all pass.
+        assert_eq!(
+            absent_proper_nouns(
+                "Elizabeth watches; the Athenian fleet; the house was quiet.",
+                &members
+            ),
+            Vec::<String>::new(),
+            "verbatim name, derived adjective, and common word all carried"
+        );
+        // A fabricated name fails, and is named.
+        assert_eq!(
+            absent_proper_nouns("Elizabeth met Zarkon at the harbour.", &members),
+            vec!["Zarkon".to_string()],
+            "a name no member carries is the veto's exact catch"
+        );
+        // A word the SUMMARY itself uses lowercase is a common word, not
+        // a name — capitalization at sentence start must not veto.
+        assert_eq!(
+            absent_proper_nouns("Harbour lights. The harbour was foggy.", &members),
+            Vec::<String>::new(),
+            "sentence-initial 'Harbour' with lowercase usage elsewhere is a common word"
+        );
+        // The prefix rule's documented trade, pinned: a fabrication that
+        // shares ≥5 initial chars with a member root (Salveberg ← Salve)
+        // ESCAPES the veto — that is the price of passing Athenian ←
+        // Athens, and the gestalt probe remains the backstop for it. A
+        // fabrication sharing nothing still fails.
+        assert_eq!(
+            absent_proper_nouns("Salveberg appeared.", &members),
+            Vec::<String>::new(),
+            "root-sharing inventions escape by design; the rule trades them \
+             for derived-form passes — change this ONLY together with PREFIX_MIN"
+        );
+        assert_eq!(
+            absent_proper_nouns("Salve met Quisling at the pier.", &members),
+            vec!["Quisling".to_string()],
+            "a fabrication sharing no root with any member is caught"
         );
     }
 }
