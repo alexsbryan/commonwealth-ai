@@ -24,3 +24,4 @@ pub mod projection;
 pub mod raw;
 pub mod section_cache;
 pub mod store;
+pub mod summary;
