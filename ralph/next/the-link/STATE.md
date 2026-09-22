@@ -6,7 +6,10 @@ Protocol: `ralph/next/the-link/PROMPT.md`. Campaign: `quality/campaigns/the-link
 Predictions section is what the audit reads the diff against, and its Less
 section is what every row reports having reused.
 
-Pointer keys: **O** = `.sovereign/features/the-link/order.md` ·
+Pointer keys: **O** = `ralph/next/the-link/order.md` (the campaign's order,
+copied from the gitignored `.sovereign/features/the-link/order.md` 2026-09-22
+so it travels with the queue — the `.sovereign` original is this Mac's local
+state and may have later local corrections) ·
 **C** = `quality/campaigns/the-link.toml` (floors, goodharts, derives_from) ·
 **C2** = `quality/campaigns/ring-room.toml` (six rr-2 bars: regression, NEVER edited here) ·
 **C3** = `quality/campaigns/ring-guest.toml` (five rg bars: regression, NEVER edited here) ·
