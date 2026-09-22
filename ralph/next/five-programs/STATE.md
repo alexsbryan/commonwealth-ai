@@ -11,52 +11,26 @@ Baseline when this queue was minted: **boundary-gate 79 at 09ff299b8**
 nothing pushed). The per-edge list lives in the appendix at the bottom; row
 fp-0 re-measures it.
 
-NEEDS-OPERATOR (not queued — the §12 decisions do not cover them):
-`commonwealth-transport` leaf question (TSV, 116 refs) ·
-`sovereign-work-atlas` placement blocked on its own deps (§12 open item) ·
-the state-wire durable store owner (§12 decision 4 leaves the red edge as
-the honest state until it exists; covers daemon→commonwealth-state 89 and
-cli-llm→commonwealth-state 2) ·
-`sovereign-cli → commonwealth-{work,rail}`: the wire boundary is priced and
-refused twice (§12) but NOT taken (TSV sovereign-cli→commonwealth-work, 18) ·
-`sovereign-cli → corpus-engine` project_init: D6 keeps the zero-vector index;
-the closing condition (route init through the daemon) is the §12 singleton,
-untaken (TSV, 3) ·
-the notes factory — which non-svrn host constructs the concrete NoteStore
-(TSV sovereign-cli→corpus-engine-notes 4, sovereign-cli-llm→corpus-engine-notes
-4; fp-3/fp-13 move only the types) ·
-`sovereign-cli-llm → sovereign-mesh` node identity: daemon mesh surface or
-leaf-extract persist::load_node_id (TSV, 12) ·
-`sovereign-cli-llm → sovereign-pods` owner-side pod provisioning surface
-(TSV, 19) ·
-`sovereign-cli-llm → sovereign-authoring-harness` drive home: bench host or
-leaf (TSV, 3; fp-18 is the daemon-side half) ·
-`sovereign-cli-dev → sovereign-enrichment-build` scoring types:
-RemoteApiProvider repoint or engine types down (TSV, 2) ·
-`corpus-mcp` membership (§12's open checklist item): the non-atlas
-ingest-dial residue of corpus-mcp→corpus-engine plus
-corpus-mcp→sovereign-enrichment-build (4) ·
-`sovereign-code → corpus-engine` (dev) e2e_code_intel: minted fixture or
-move to [ingest] (TSV, 3) ·
-`sovereign-grants → corpus-engine` canonical-merge: dial or drop (TSV, 22) ·
-`sovereign-core` router_calibration.rs:1253 include_str embed — gate
-structural #1; §12's singleton names relocation to sovereign-core/data/calibration
-as the candidate ·
-corpus-engine build.rs — gate structural #2: compile-time vendoring of
-sovereign-recipes vs the package no-build.rs rule.
-
-Pointer keys:
-**TSV** = docs/FIVE_PROGRAMS_DECISIONS.tsv · **FP** = docs/FIVE_PROGRAMS.md ·
-**AL** = quality/ARCH_LAYERS.toml (leaf rows ~940-1010; packages: svrn ~1090,
-ingest ~1150, cmnwlth ~1190, code ~1240, bench ~1270) ·
-**LEAF** = corpus-engine-atlas-reader/ · **CE** = corpus-engine/src/ ·
-**DA** = sovereign/crates/sovereign-daemon/src/ ·
-**CW** = commonwealth/crates/ · **SC** = sovereign/crates/sovereign-contracts/src/
+OPEN QUESTIONS — all four RESOLVED by the director 2026-09-22, from
+ARCH_PRINCIPLES (operator directive): (1) authoring-harness: placement was
+already adjudicated ([bench]; the daemon reach is a recorded finding) — the
+drive calls become the fp-24 bench dial. (2) commonwealth-transport: the
+TSV's own closure test FAILS (routed.rs:23 / fanout.rs:32 / ip.rs:29 reach
+commonwealth_core), so its fork says SPLIT THE VOCABULARY OUT — decision 3's
+owners take it (fp-21); the iroh endpoint machinery stays cmnwlth's
+(decision 2 dials it). (3) work-atlas: decision 5 named [code]; the blockers
+resolve by §12's own recorded paths — the sovereign-core use collapses to
+leaf homes ('may be re-export-only after phase 1') and the real
+commonwealth-state tests move beside the owner (decision 6's notes-tests
+pattern) (fp-22). (4) the state wire: decision 4 owns the shape; the missing
+durable owner is minted as commonwealth-state's store (MeshStore +
+store_adapter are already there) served by cw-rails, and the daemon flip
+carries the file-store data migration in the same commit (fp-23).
 
 - [x] fp-0 475f0bc0e — depends [] — RE-MEASURE the burn-down: run the gate, paste the full per-edge list into the appendix below, and against each edge write its TSV row id (source→target pair) and which queue row owns it; any edge no queue row owns gets a new row here (decided TSV rows only — a TSV row with a non-empty decision_needed cell becomes a NEEDS-OPERATOR line instead). — read: PROMPT standing facts, TSV, FP §12 — check: the appendix lists every one of the gate's violations exactly once
 - [x] fp-16 d1aaa2843 — depends [fp-0] — DIAL serving-host (§12 D2 — the serving cluster is cmnwlth's own process): the daemon's serving-host use (TSV sovereign-daemon→sovereign-serving-host, 51 refs: VenueHost trait DA venue_host.rs:18, AttachedPrincipal DA routes_ollama.rs:230, SlotManifest DA slot_manifest.rs:16, DA state/serving.rs) becomes the /v1 serving dial; the VenueHost port trait moves to sovereign-contracts (fp-13 port shape), construction stays with the serving process; absence reported ("a daemon alone serves no model"). — read: TSV row, §12 D2, DA venue_host.rs — check: scoped lint 0; gate delta recorded
 - [x] fp-17 89f9a293 — depends [fp-0] — EXTRACT serving-policy's arithmetic into a leaf (TSV sovereign-daemon→serving-policy, 5 refs): fair-sched arithmetic + the pipeline_aliases table move to a vocabulary leaf (the rail-core pattern; test it against contracts per D3 first, mint the leaf only if the leaf test — no fs, no store — holds and contracts does not), serving-policy re-imports, the daemon repoints. — read: TSV row, AL leaf rows (~940-1010) — check: scoped lint 0; AL leaf row added; gate drops 1
-- [ ] fp-19 — depends [fp-0] — DIAL the atlas build (TSV sovereign-daemon→sovereign-enrichment-build, 2 refs): the daemon's atlas_builder.rs (ParsedBuild::from_inputs :41, build_with_progress_with_embedder :53) becomes a call into the ingest program's build surface; absence reported. — read: TSV row, DA atlas_builder.rs — check: scoped lint 0; gate drops 1
+- [~] fp-19 — depends [fp-0] — DIAL the atlas build (TSV sovereign-daemon→sovereign-enrichment-build, 2 refs): the daemon's atlas_builder.rs (ParsedBuild::from_inputs :41, build_with_progress_with_embedder :53) becomes a call into the ingest program's build surface; absence reported. — read: TSV row, DA atlas_builder.rs — check: scoped lint 0; gate drops 1
 - [ ] fp-20 — depends [fp-0] — REPOINT the daemon's media routes to cw-rails (TSV sovereign-daemon→commonwealth-media, 33 refs; the routes are ALREADY served — /v1/mesh/media, /v1/mesh/media/fanout, /v1/mesh/publish — nothing new to build): DA media_presence.rs:109, publish_http.rs:33, media_reach.rs:44, origin_fanout.rs:50 become client stubs; absence reported. — read: TSV row, CW commonwealth-rails routes — check: scoped lint 0; daemon Cargo.toml drops commonwealth-media; gate drops 1
 - [ ] fp-21 — depends [fp-0, fp-6] — DIAL the daemon's in-process /v1/rail mount (TSV sovereign-daemon→commonwealth-rail, 51 refs): DA routes_rail.rs:35 admit and the rail serving sites become cw-rails clients (cw-rails already serves /v1/rail/{log,append,live} per the TSV fix); wire types are already in the commonwealth-rail-core leaf. — read: TSV row, DA routes_rail.rs, §12 D2 — check: scoped lint 0; gate delta recorded
 - [ ] fp-22 — depends [fp-0, fp-7] — DIAL the work donor (TSV sovereign-daemon→commonwealth-work, 46 refs; §12 D2 names -work's leaf dead): DA work_donor.rs:80-90 and ingest_executor.rs:84 act sites become cw-rails wire calls; the work-MODEL types re-derive as contracts DTOs; absence reported. — read: TSV row, §12 D2, DA work_donor.rs — check: scoped lint 0; gate delta recorded
@@ -93,7 +67,12 @@ ingest ~1150, cmnwlth ~1190, code ~1240, bench ~1270) ·
 - [ ] fp-15 — depends [fp-14] — RE-MEASURE + reconcile: run the gate, update the appendix, requeue any edge the TSV covers that no row handled, and verify the three finish conditions in FP §11. If the gate is 0 and the finish conditions hold, write ralph/DONE. — read: FP §11 finish conditions, the appendix — check: gate count + finish conditions, each quoted
 
 
-- [ ] fp-18 — depends [fp-0] — BLOCKED (director, 2026-09-22): the row's own leaf-test prediction held — the drive reads fs (authoring-harness/src/drive.rs:96), so the leaf arm is dead; the named alternative ([bench] placement) does not close the daemon edge (the daemon would still hold 3 refs across a package line), and the two arms that WOULD close it — Declaration/HarnessRun types to sovereign-contracts (decision-3 shape, not named by §12 for this pair) and a bench serving surface to dial — do not exist yet. Half the row is NEEDS-OPERATOR by its own text. Queued last; the operator answers the drive-home question. ORIGINAL ROW: MOVE the harness drive to its host home (TSV sovereign-daemon→sovereign-authoring-harness, 3 refs): run_over_frozen_sample + Declaration/HarnessRun (DA recipe_http.rs:620, :27) get a home outside [svrn] — a leaf if the drive passes the leaf test (no fs — it likely does NOT; frozen samples are read from disk), else the [bench] program; the daemon repoints or dials. CONDITIONAL: the cli-llm side of this question is NEEDS-OPERATOR (drive home); if the operator's answer lands differently, the operator edits this row. — read: TSV row, sovereign-authoring-harness/src — check: scoped lint 0; gate delta recorded
+- [x] fp-18 047da82ee — RESCOPED by the director (2026-09-22, first principles): the placement is ALREADY correct — ARCH_LAYERS adjudicated it twice (noun-convergence rung 3: carved out of sovereign-eval so the desktop's shipped recipe-testing panel could consume it; the [bench] block: 'a judge, so it is bench's, and the svrn daemon reaching it is a finding') and it already sits in the [bench] member list. The leaf arm was always dead (fs); the remaining daemon (3 refs) and cli-llm drive calls are BENCH-DIAL rows, queued as fp-24.
+- [ ] fp-21 — depends [fp-0] — SPLIT commonwealth-transport's vocabulary out to sovereign-contracts (§12 decision 3; the TSV's closure test failed — routed.rs:23/fanout.rs:32/ip.rs:29 reach commonwealth_core): PeerEndpoint, PeerContact, TrafficClass, mesh_proof::MeshProofStamp, identity::* types, the iroh ALPN constants and the PeerTransport trait move to a SC module; the iroh ENDPOINT machinery (iroh.rs, iroh_path.rs, iroh_identity_forward.rs) stays cmnwlth's — the daemon dials it through cw-rails (decision 2). NodeId comes from kernel-types (contracts may name it). TSV pair sovereign-daemon→commonwealth-transport (116 refs). — read: TSV row, CW transport/src, §12 decision 3 — check: scoped lint 0; the daemon's vocabulary refs point at SC; gate delta recorded
+- [ ] fp-22 — depends [fp-0] — COLLAPSE work-atlas's blockers and place it in [code] (§12 decision 5): (a) the sovereign-core use reduces to leaf homes or re-exports (§12's recorded path); (b) the real commonwealth-state store tests move beside the owner in cmnwlth's tree (decision 6's notes-tests pattern — real-SQL proof is not faked, it is RELOCATED); work-atlas keeps port-level tests over a fake; (c) then the AL membership row: sovereign-work-atlas → [code]. TSV row sovereign-cli-dev→sovereign-work-atlas + §12 open item. — read: §12 decision 5 + open item, sovereign-work-atlas/src + tests, CW commonwealth-state — check: scoped lint 0; AL updated; gate delta recorded
+- [ ] fp-23 — depends [fp-7] — MINT the durable store owner and flip the state wire (§12 decision 4): commonwealth-state grows the durable store for the replicated mesh state (MeshStore/store_adapter are already there), cw-rails serves it, and the daemon's portfolio/newsworthy flip to read-through-cache + dial WITH the file-store data migrated IN THE SAME COMMIT — the migration is what makes the reverted app-id wire's silent-persistence-loss structurally impossible (principle 10; decision 4's absence-reported rule governs the error paths). Covers daemon→commonwealth-state 89 and cli-llm→commonwealth-state 2. — read: §12 decision 4, CW commonwealth-state/src, TSV sovereign-cli-llm→commonwealth-state — check: scoped lint 0; a restart reads the migrated store; gate delta recorded
+- [ ] fp-24 — depends [fp-21, fp-23] — DIAL the harness drive (fp-18's residue; §12 decision 2): the bench program gets a serving surface for run_over_frozen_sample (cw-rails or the eval surface), the daemon's recipe_http.rs:620 route and cli-llm's recipe_cmd.rs:235 verb become clients reporting ABSENCE when bench is down; the run-record types (Declaration/HarnessRun) move to SC then if the wire needs them. TSV pair sovereign-daemon→sovereign-authoring-harness (3 refs). — read: fp-18 row, TSV row, §12 decision 2 — check: scoped lint 0; the daemon Cargo.toml drops sovereign-authoring-harness; gate drops 1
+
 ## Appendix — fp-0 re-measure (gate at 38a084b36, 2026-09-22: 79 violation(s) = 77 dep edges + 2 structural; same total as the mint)
 
 Owner key: `fp-N` = the queue row minted for it · `REVIEW-mint-fp-<x>` = a minted REVIEW row that mints the atomic rows once its deps land · `NEEDS-OPERATOR` = the TSV row's decision cell is open — see the block at the top.

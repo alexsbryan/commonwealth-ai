@@ -42,7 +42,6 @@
 
 pub mod admin_http;
 pub mod assets_http;
-pub mod atlas_builder;
 pub mod atlas_http;
 /// The auto-collaborate pull loop and its heartbeat verdict — ingest run as
 /// background work (DAEMON_CORE.md §3.2, `jobs`).
