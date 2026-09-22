@@ -305,7 +305,7 @@ pub(crate) const HELP_MESH_GRANT: Help = Help {
         HelpSection::Flags(&[
             (
                 "--model <id>",
-                "A model this grant may dispatch. Repeatable. Exact ids from `/v1/models`.",
+                "A model this grant may dispatch. Repeatable. Omitted: `primary`, this daemon's primary slot. `svrn model list` prints the ids.",
             ),
             (
                 "--wall",
@@ -467,10 +467,20 @@ pub(crate) async fn cmd_grant(args: &[String]) -> i32 {
         return 2;
     }
 
+    // No --model means "let this grant reach this node's primary": the daemon
+    // advertises the alias `primary` in `/v1/models`, so the default is the
+    // ALIAS rather than a copied id — one source of truth for what "primary"
+    // is, and it follows the operator's next `svrn model set` instead of going
+    // stale. Say it, so the grant's breadth is never silent.
+    let defaulted_model = models.is_empty();
+    if defaulted_model {
+        models.push("primary".to_string());
+    }
+
     let port = daemon_client_port();
-    if !crate::mesh_cmd::daemon_listening_on(port).await {
-        eprintln!("No daemon detected on :{port} — minting a grant needs one.");
-        eprintln!("Start it with `svrn daemon start`, then re-run.");
+    if let Err(why) = crate::mesh_cmd::daemon_probe(port).await {
+        eprintln!("{why}");
+        eprintln!("Minting a grant needs a running daemon: `svrn daemon start`.");
         return 1;
     }
 
@@ -479,12 +489,6 @@ pub(crate) async fn cmd_grant(args: &[String]) -> i32 {
     }
     if let Some(token) = revoke {
         return grant_revoke(port, &token).await;
-    }
-
-    if models.is_empty() {
-        eprintln!("A grant must name at least one model: --model <id>");
-        eprintln!("`svrn mesh grant --list` shows what is already outstanding.");
-        return 2;
     }
 
     // Which way in — asked, not inferred. See `resolve_guest_path`.
@@ -580,6 +584,9 @@ pub(crate) async fn cmd_grant(args: &[String]) -> i32 {
     println!("Guest link minted.");
     println!();
     println!("  Grants:   {summary}");
+    if defaulted_model {
+        println!("  Model:    primary (this daemon's primary slot — pass --model to narrow)");
+    }
     match &path {
         GuestPath::Direct { base_url } => println!("  Reach at: {base_url}"),
         // Say WHY the tunnel, not just that there is one: an operator who

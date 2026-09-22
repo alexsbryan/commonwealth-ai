@@ -2901,15 +2901,28 @@ async fn cmd_join(args: &[String]) -> i32 {
 /// than `/` because the daemon's root route returns 405 for GET and
 /// reqwest's `.send()` succeeds against 405 just as well as 200 — the
 /// goal is "is anything listening", not "is the response 2xx".
-pub(crate) async fn daemon_listening_on(port: u16) -> bool {
+/// The daemon's liveness probe, with the REASON it failed.
+///
+/// `daemon_listening_on` is the boolean most callers want; a caller that has
+/// to tell the user something ("minting a grant needs one") must not claim
+/// "no daemon" for a failure that is not absence — a client that could not be
+/// built, a refused connection, or an answer slower than the timeout all land
+/// here with their own words. The timeout is seconds: a daemon busy loading a
+/// model answers late, and late is not absent.
+pub(crate) async fn daemon_probe(port: u16) -> Result<(), String> {
     let url = format!("http://127.0.0.1:{port}/v1/models");
-    let Ok(client) = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_millis(500))
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(3))
         .build()
-    else {
-        return false;
-    };
-    client.get(&url).send().await.is_ok()
+        .map_err(|e| format!("could not build the HTTP client: {e}"))?;
+    match client.get(&url).send().await {
+        Ok(_) => Ok(()),
+        Err(e) => Err(format!("the daemon at {url} did not answer: {e}")),
+    }
+}
+
+pub(crate) async fn daemon_listening_on(port: u16) -> bool {
+    daemon_probe(port).await.is_ok()
 }
 
 /// POST `arg` to the running daemon's `/v1/mesh/join` endpoint and

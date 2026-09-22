@@ -298,7 +298,7 @@ each link to ask again. The wall's own screen is the member page, which
 QR comes from the grant verb, with `--url` set to the door:
 
 ```bash
-svrn mesh grant --model <id from /v1/models> --wall --ttl 2h \
+svrn mesh grant --wall --ttl 2h \
   --label wall --url http://<beefy's room address>:<port>/ring/ --qr-svg wall-qr.svg
 ```
 

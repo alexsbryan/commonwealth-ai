@@ -52,9 +52,13 @@ copy — pick one origin and keep it.
 ## Point a link at it
 
 ```bash
-svrn mesh grant --model <id> --wall --ttl 2h \
+svrn mesh grant --wall --ttl 2h \
   --url https://svrnme.sh/ --qr-svg wall-qr.svg
 ```
+
+`--model` may be omitted — the grant then reaches this daemon's primary slot
+(`svrn model list` prints every id a grant accepts, including the `primary`
+alias).
 
 The QR now carries `iroh=<dial string>` in the fragment beside the token, so
 the page dials the wall wherever it is. Same-network guests are unaffected:

@@ -274,6 +274,18 @@ async fn cmd_list() -> i32 {
             .map(|n| n.to_string())
             .unwrap_or_else(|| "auto".to_string())
     );
+    // The ids `svrn mesh grant --model <id>` accepts. They come from the same
+    // `/v1/models` read as the load marks above (one wire parse), and include
+    // the slot ALIASES — `primary` is what `mesh grant` defaults to — so
+    // nobody has to copy a path stem that would go stale on the next
+    // `svrn model set`.
+    if let Some(ids) = &resident {
+        if !ids.is_empty() {
+            println!();
+            println!("Ids `svrn mesh grant --model <id>` accepts:");
+            println!("  {}", ids.join(", "));
+        }
+    }
     match &resident {
         Some(_) => println!("\ndaemon: running — changes apply live."),
         None => println!("\ndaemon: not reachable — changes apply on next `svrn daemon start`."),

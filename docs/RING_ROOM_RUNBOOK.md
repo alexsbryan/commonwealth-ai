@@ -56,9 +56,12 @@ svrn ring dev house-expenses --dir ./house-expenses     # serves it on loopback
 **One QR for the whole wall:**
 
 ```bash
-svrn mesh grant --model <id from /v1/models> --wall --ttl 2h \
+svrn mesh grant --wall --ttl 2h \
   --label wall --url http://192.168.1.20:19947/ring/ --qr-svg wall-qr.svg
 ```
+
+`--model` may be omitted: the grant then reaches this daemon's primary slot
+(`svrn model list` prints every id a grant accepts).
 
 **What you should see:** one QR. A phone scans it, a page opens, the person
 types a name, and within 5 s the name is on the wall's roster. The member list
@@ -156,7 +159,7 @@ browser-dial-2).
 On the wall, point the grant at the page's origin:
 
 ```bash
-svrn mesh grant --model <id> --wall --ttl 2h \
+svrn mesh grant --wall --ttl 2h \
   --url https://<origin>/ --qr-svg wall-qr.svg
 ```
 
