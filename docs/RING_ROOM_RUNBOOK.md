@@ -1,185 +1,174 @@
 # The ring room — runbook
 
-Every step is a `svrn` command or a browser. You do not need this repository:
-install the CLI, run `svrn setup`, and the commands below work. The full
-account of what a person watches and why each step is shaped this way is
-`docs/RING_ROOM_RUN_OF_SHOW.md`.
+One person in a room with a screen; the rest of the mesh anywhere; guests are
+phones with nothing installed. This is the short version: who is which
+machine, what to type once, and what should happen during the sitting. The
+long account — what a person watches, and why each step is shaped this way —
+is `docs/RING_ROOM_RUN_OF_SHOW.md`.
+
+Every step below is a `svrn` command or a browser. You do not need this
+repository.
 
 ---
 
-## 0. Every machine
+## Who is who
+
+| role | what it is | what it does |
+|---|---|---|
+| **the wall** | one member machine **in the room**, with a screen | shows the QR and the shared doc; serves the guest page; answers the room's questions by fetching them from the keeper |
+| **the keeper** | a member machine somewhere else | holds a folder of knowledge and answers questions about it |
+| **the holder** | a member machine somewhere else | holds a media library and offers it to the room |
+| **the guests** | phones in the room, nothing installed | scan once, type a name, then edit / ask / watch |
+
+The wall and the keeper are the minimum. The holder and a second app are for
+the film and multi-app legs.
+
+---
+
+## Once, on each machine
 
 ```bash
-svrn setup                    # first run: detects the hardware, downloads models, starts the daemon
+svrn setup                 # first run: detects hardware, downloads models, starts the daemon
 ```
 
-On the first machine:
+Form one mesh — on the first machine:
 
 ```bash
-svrn mesh create              # prints an invite
+svrn mesh create           # prints an invite
 ```
 
-On the others:
+on every other:
 
 ```bash
 svrn mesh join <invite>
 ```
 
-**What you should see:** `svrn mesh status` lists every member, the models each
-is running, and what knowledge each hosts.
+`svrn mesh status` on any machine shows the members, the models each runs, and
+what knowledge each hosts.
 
----
+### On the wall (the one in the room)
 
-## 1. The wall — the one machine in the room
-
-It needs a screen and a folder to serve. Scaffold an app (or use one you have)
-and declare it to the room:
+Declare the app the room will open. No address to type: the door binds every
+interface on its own port, the address a guest link carries is derived by this
+machine, and `ring serve` prints the one it will advertise.
 
 ```bash
-svrn ring new ./house-expenses
-svrn ring serve house-expenses --dir ./house-expenses
-svrn daemon restart          # the door serves what you declared
+svrn ring new ./house-expenses                          # or an app you already have
+svrn ring serve house-expenses --dir ./house-expenses    # declare it to the room
+svrn daemon restart                                      # the door serves what you declared
 ```
 
-No address to type: the door binds every interface on its own port, and the
-address a guest link carries is **derived from this machine** — `ring serve`
-prints the one it will advertise. The app is served at `/ring/house-expenses/`.
-Add `--read` for an app guests may only look at. `svrn ring serve` with no
-arguments shows what this door declares, and `svrn ring serve --clear
-house-expenses` stops serving one app. One `--wall` link (below) then reaches
-every app declared this way.
+`svrn ring serve` with no arguments shows what this door declares;
+`--clear house-expenses` stops serving one app; `--read` makes an app
+look-only. Each app is served at `/ring/<name>/`.
 
-If this machine is on several networks (a room network *and* a tailnet, say),
-only you know which one the guest is on: pass `--bind <room address:port>` to
-name the interface, or `--url` on the grant.
+**If this machine is on more than one network** (a room network *and* a
+tailnet, say), only you know which one the guests are on: pass
+`--bind <room address:port>` so the door advertises that one.
 
 The wall's own screen, for the people in the room:
 
 ```bash
-svrn ring dev house-expenses --dir ./house-expenses     # serves it on loopback
+svrn ring dev house-expenses --dir ./house-expenses
 ```
 
-**One QR for the whole wall:**
+**One QR for every app declared** (or use the desktop app's Room panel
+instead):
 
 ```bash
 svrn mesh grant --wall --ttl 2h --label wall --qr-svg wall-qr.svg
 ```
 
-No address to retype: the link inherits the door's declared address from
-`--bind` above (`--url` overrides it, which is how §7 points at the static
-origin instead). `--model` may be omitted too — the grant then reaches this
-daemon's primary slot (`svrn model list` prints every id a grant accepts).
+Display `wall-qr.svg` on the wall's screen. `--model` is optional too — the
+grant reaches the daemon's primary slot (`svrn model list` prints the ids a
+grant accepts). `svrn mesh grant --list` shows outstanding guests with their
+expiry; `--revoke <token>` ends one early.
 
-**What you should see:** one QR. A phone scans it, a page opens, the person
-types a name, and within 5 s the name is on the wall's roster. The member list
-is unchanged — the phone is a guest, not a member. `svrn mesh grant --list`
-shows the guests with their expiry; `--revoke <token>` ends one.
-
----
-
-## 2. The keeper — the machine with the folder
+### On the keeper (the machine with the folder)
 
 ```bash
 svrn corpus ingest <folder> --corpus <id> --share
 ```
 
-`--share` is what lets the room's questions reach it. Check with
-`svrn corpus status <id>`.
+`--share` is what lets the room's questions reach it. `svrn corpus status <id>`
+checks.
 
----
-
-## 3. The holder — the machine with the library
+### On the holder (the machine with the library)
 
 ```bash
-svrn mesh media origin 8096   # where your media server answers (Jellyfin's default port)
+svrn mesh media origin 8096     # the port your media server answers on (Jellyfin's default)
 svrn daemon restart
-svrn mesh media offer         # offer it to the whole mesh; withdraw ends the offer
+svrn mesh media offer           # withdraw ends the offer
 ```
 
-`svrn mesh media origin` with no arguments shows what this node declares;
-`--clear` stops offering it.
-
-**What you should see:** the library appears on the wall's Library rail as
-"offered to: everyone here" within 30 s; a title's first byte within 5 s;
-nobody typed a login. While the holder is watching it themselves the rail says
-"in use" and starts nothing.
+`svrn mesh media origin` alone shows what this node declares; `--clear` stops.
 
 ---
 
-## 4. The phone — nothing installed
+## The sitting
 
-Scan the QR. Then:
+1. **A phone scans the QR.** A page opens, served by the wall. The person
+   types a name — in the wall's roster within 5 s. The mesh's member list does
+   not change: a guest, not a member.
+2. **They type into the doc.** On the wall within ~1.4 s: `<name>, guest of
+   <wall>` — never the name alone. `svrn ring log <ns>` on the wall shows
+   every act, in the order every node applies them.
+3. **They ask something only the keeper's folder answers.** First token on the
+   phone within 60 s; the answer cites the keeper; `svrn mesh transport` on the
+   wall shows whether iroh carried it direct or through a relay.
+4. **The holder offers the library.** It appears on the wall's Library rail as
+   "offered to: everyone here" within 30 s, and a title plays with no login
+   typed (first byte within 5 s). The desktop's Library rail opens a title in
+   the browser; `svrn mesh media <holder>` prints the same URL for any player.
+   While the holder is watching it themselves, the rail says "in use" and
+   starts nothing.
+5. **The wall's internet is cut** (WiFi stays up). The doc keeps working on the
+   phones; a question needing the keeper's folder comes back saying it is
+   unavailable, with no citation of the keeper. Reconnect: the two replicas are
+   byte-equal within 60 s.
+6. **Nobody became a member by accident.** `svrn mesh status` on the wall and
+   the keeper is unchanged; `svrn mesh grant --list` shows the guests with
+   their expiry.
+7. **The record survives the cut.** Where a ring is held:
 
-| the person does | what should happen |
-|---|---|
-| types a name | it is in the wall's roster within 5 s |
-| types a word into the doc | on the wall within 1.4 s: `<name>, guest of <wall>` — never the name alone |
-| asks a question only the keeper's folder can answer | first token within 60 s; the answer cites the keeper; `svrn mesh transport` on the wall shows which path carried it (direct or relayed) |
-| opens the second app | same name, no second prompt; every act reads `<name>, guest of <wall>` |
+   ```bash
+   svrn ring checkpoint <namespace> --out checkpoint.json
+   ```
 
-`svrn ring log <ns>` from the wall shows every act in the order every node
-applies them.
+   Carry the file (AirDrop, USB, email to yourself) to any machine — even one
+   the mesh has never seen — and:
+
+   ```bash
+   svrn ring checkpoint --verify checkpoint.json
+   ```
+
+   Exit 0, printing the document's marks and `verified — N admitted act(s) … no
+   gaps`. One flipped byte, a truncated tail, or a repeated sequence number is
+   refused by name with the failing step and the actor. `--roster <file>`
+   verifies against the verifier's own roster instead of the document's.
 
 ---
 
-## 5. The cut
+## The guest from anywhere (not the room's WiFi)
 
-Cut the wall's internet, leaving its WiFi up. **What you should see:** the doc
-keeps working on the phones; a question needing the keeper's folder comes back
-saying that folder is unavailable, with no citation of the keeper.
-Reconnect — the two replicas are byte-equal within 60 s
-(`svrn ring log <ns>` on both ends).
+A plain mobile browser on a network the wall has never seen can still reach
+it: the page loads from one static origin, then dials the wall itself over
+iroh's relay. Nothing of yours is exposed — no port, no tunnel, no tailnet —
+and nothing proxies HTTP. (Measured WORKED at the pinned iroh:
+`ralph/DECISIONS.md` browser-dial-2.)
 
----
-
-## 6. Carry the record to a machine that was never a member
-
-Where the ring is held:
+Point the grant at the page's origin instead of the door:
 
 ```bash
-svrn ring checkpoint <namespace> --out checkpoint.json
+svrn mesh grant --wall --ttl 2h --url https://svrnme.sh/ --qr-svg wall-qr.svg
 ```
 
-Carry the file (AirDrop, USB, email to yourself). On a machine the mesh has
-never seen:
+The link now carries the wall's dial string (`iroh=`) beside the token, so the
+guest's browser connects wherever it is. **What you should see:** the guest's
+page reaches the wall and returns the grant-scoped answer.
 
-```bash
-svrn ring checkpoint --verify checkpoint.json
-```
-
-**What you should see:** exit 0, printing the document's marks and
-`verified — N admitted act(s) … no gaps`. `--roster <file>` verifies against
-the verifier's own roster instead of the one in the document. One flipped byte,
-a truncated tail, or a repeated sequence number each exit 1 with one sentence
-naming the failing step and the actor.
-
----
-
-## 7. The guest from anywhere
-
-A plain mobile browser on a network the daemon has never seen can reach it:
-the page loads from one static origin, then dials the wall itself over iroh's
-relay. Nothing of yours is exposed — no port, no tunnel, no tailnet — and
-nothing proxies HTTP. Measured WORKED at the pinned iroh (`ralph/DECISIONS.md`
-browser-dial-2).
-
-On the wall, point the grant at the page's origin:
-
-```bash
-svrn mesh grant --wall --ttl 2h \
-  --url https://<origin>/ --qr-svg wall-qr.svg
-```
-
-The QR's link now carries the wall's dial string (`iroh=`) beside the token;
-the guest scans it and their browser connects. Same-network guests are
-unaffected — the wall's own door serves the page directly, as in §1.
-
-**What you should see:** the guest's page reaches the wall and returns the
-grant-scoped answer, with no address of yours typed anywhere.
-
-The page is `sovereign/apps/ring-runtime`, shipped with the landing deploy:
-`landing/scripts/build-ring-runtime.sh` (run by `npm run deploy` from
-`landing/`) builds it into `landing/ring/`, which Vercel serves at
+The page is `sovereign/apps/ring-runtime`; it ships with the landing deploy
+(`landing/scripts/build-ring-runtime.sh`, run by `npm run deploy`), served at
 `https://svrnme.sh/ring/` — the page path a `--url https://svrnme.sh/` link
 composes.
 
@@ -188,7 +177,8 @@ composes.
 ## For developers: rehearse it on one machine
 
 The test harness stands four containers in for the machines and judges every
-check without any hardware — a repo checkout, `toolbox run -c sovereign-vulkan`:
+check with no hardware. From a repo checkout, in the `sovereign-vulkan`
+toolbox:
 
 ```bash
 ./scripts/with-cargo-lock.sh ./scripts/dev-build.sh
@@ -196,6 +186,6 @@ RING_ROOM_TOPOLOGY=room scripts/ring-room-demo.sh verdict all
 RING_ROOM_TOPOLOGY=room scripts/ring-room-demo.sh down
 ```
 
-It prints fourteen rows: twelve PASSED and two COULD-NOT-JUDGE (their proofs
-are cargo tests and the decisions ledger). Exit 4 is the passing shape. This is
-CI, not the demo — nothing above it is needed for the walk.
+It prints fourteen rows — twelve PASSED and two COULD-NOT-JUDGE (their proofs
+are cargo tests and the decisions ledger; exit 4 is the passing shape). This is
+CI, not the demo: nothing above it is needed for the walk.
