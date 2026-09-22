@@ -866,7 +866,10 @@ fn every_printed_node_id_form_resolves_its_member() {
     assert!(m(&id.to_string()), "Display form: {id}");
     assert!(m("188f04e2831741c77ccd5a"), "status column (22)");
     assert!(m("188f04e2831741c77ccd5a142a314e07"), "full hex (32)");
-    assert!(!m("188f04e2831741c77ccd5a142a314e08"), "a wrong full id must not match");
+    assert!(
+        !m("188f04e2831741c77ccd5a142a314e08"),
+        "a wrong full id must not match"
+    );
 }
 
 /// An empty query must never match. It reaches here as `--force` with no
