@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+use std::sync::Arc;
 use std::time::Duration;
 
 use commonwealth_core::capabilities::*;
@@ -18,12 +19,27 @@ use sovereign_mesh_test_harness::simulated_node::SimulatedNodeBuilder;
 
 // The harness's node is generic over its state (the OICP/contracts seam), so
 // these tests — which assemble the real host node — bind `AppState` here.
+use sovereign_daemon::internal_gate::InternalAuth;
 use sovereign_daemon::server::{client_router, internal_router};
 use sovereign_daemon::state::AppState;
 
 /// The node-state factory the simulated nodes are built with.
 fn app_state(id: NodeId, mesh: Mesh) -> AppState {
-    AppState::new(id, mesh)
+    let mut state = AppState::new(id, mesh);
+    // Simulated nodes hold no mesh secret to present, and these tests
+    // exercise mesh semantics — not the internal gate, which has its own
+    // tests in sovereign-daemon (client_auth, internal_gate). `perimeter`
+    // is the documented restore for exactly this caller shape
+    // (`[daemon] internal_auth`, routes_internal/mod.rs). The gate resolves
+    // its posture at construction and never re-reads it, so this is the one
+    // moment it can be set — and the panic is deliberate: a silent no-op
+    // would leave every internal-port test reading 401 and naming nothing.
+    let inner = Arc::get_mut(&mut state.inner).expect(
+        "harness must be sole owner of a node's state at construction; \
+         if AppState::new now shares it, set the posture inside instead",
+    );
+    inner.node.internal_auth = InternalAuth::Perimeter;
+    state
 }
 
 /// The routers the simulated servers mount, built from a node's state.
