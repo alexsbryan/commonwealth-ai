@@ -1,0 +1,28 @@
+{
+ "kind": "coverage",
+ "key": "essay-pilot-and-his-wife-conflict--bare-r1",
+ "prompt": "Below are numbered plot points of a novel and an answer written about the novel.\nLabel every point by what the answer says about it:\n\"correct\" = the answer states it\n\"contradicted\" = the answer says something that conflicts with it\n\"absent\" = the answer does not mention it\nReturn only JSON with one entry per point: {\"P1\": \"correct\", \"P2\": \"absent\"}\n\nPoints:\nP1. The novel portrays the life of a sailor named Salve Kristiansen.\nP2. Salve loves Elisabeth and she returns his affection.\nP3. Elisabeth is attracted to a young officer who wishes to marry her.\nP4. Elisabeth spurns the officer because her old love for Salve prevails.\nP5. Salve leaves his native land in desperation before he can reconcile with Elisabeth.\nP6. Salve sails toward foreign shores after leaving home.\nP7. Salve returns to his old home years later.\nP8. Salve finds that Elisabeth has remained true to him during his absence.\nP9. Salve marries Elisabeth upon his return.\nP10. The thought of Elisabeth's momentary hesitation makes life miserable for both spouses.\nP11. Ten years elapse while Salve and Elisabeth struggle with their marital issues.\nP12. Salve and Elisabeth finally come to a clear understanding of one another.\nP13. Salve and Elisabeth lay the foundation for a happy life together.\nP14. The novel emphasizes the need of implicit confidence and trust in marriage.\n\nAnswer:\nBased on the retrieved passages, the central conflict of *The Pilot and His Wife* is a domestic struggle between Salve (the pilot) and Elizabeth regarding their marriage, characterized by Salve's tyrannical behavior stemming from his temper and jealousy, which has driven Elizabeth to emotional suffering.\n\n**The Nature of the Conflict**\nSalve is described as having an \"unapproachability\" that conveys bitterness, leading others in Arendal to believe he had taken to drink. While he holds a high reputation for piloting vessels into port under unusual difficulty and danger, he has never received a medal for saving life nor been made a certificated pilot of the district. His domestic life deteriorates significantly after settling out at Merdoe; specifically following incidents involving Captain Beck's nomination as master of the pilots and Carl Beck arriving to superintend shipbuilding, Salve becomes increasingly difficult.\n\nElizabeth endures what she describes as \"self-denying struggle\" against his irritable humor and contemptuous remarks about old Beck. Over time, her patience makes him a tyrant who does not tolerate contradiction from anyone in the house. He frequently goes back to sea shortly after returning home if provoked by an unlucky word or expression, sometimes leaving Elizabeth with no hope of seeing him return due to bad weather. The conflict is exacerbated by Salve's suspicion that Elizabeth has been cultivating alliances with the Becks; he believes she spoke of Fru Beck's unhappy marriage with significance and was \"put up to it\" by his friend, leading him to feel trampled under foot.\n\n**The Resolution (as presented in the text)**\nIn the provided passages, there is **no resolution** shown for this central conflict. Instead, the narrative reaches a climax where Salve experiences an internal crisis before departing again. He sits alone in their bedroom, contemplating the loss of Elizabeth, muttering, \"I have deserved it,\" and acknowledging that he has treated her shamefully, suspiciously, and tyrannically. Despite recognizing his own folly and terrorizing thoughts about losing her forever ([unverified excerpt: everything... would stand unmoved, undusted for ever]), the text ends with him leaving the house to go back to Arendal on Wednesday, implying the cycle of tension continues rather than resolving into peace or separation within this excerpt.\n\nNot in your sources \u2014 from general knowledge: The novel concludes tragically when Salve kills himself after a final confrontation where Elizabeth reveals she never loved him as he suspected; however, these specific events are not detailed in the retrieved passages above. Want me to read *The Pilot and His Wife* by Knut Hamsun in depth? It would take about 15 minutes.\n\n---\n*Verification note: these statements could not be confirmed against your sources \u2014 treat them as unverified:*\n- The text ends with Salve leaving the house to go back to Arendal on Wednesday without resolving the conflict.\n- In general knowledge, the novel concludes tragically when Salve kills himself after Elizabeth reveals she never loved him.\n- he has never received a medal for saving life nor been made a certificated pilot of the district",
+ "attempts": [
+  {
+   "nudged": false,
+   "reply": "{\n\"P1\": \"correct\",\n\"P2\": \"contradicted\",\n\"P3\": \"absent\",\n\"P4\": \"contradicted\",\n\"P5\": \"absent\",\n\"P6\": \"absent\",\n\"P7\": \"absent\",\n\"P8\": \"contradicted\",\n\"P9\": \"contradicted\",\n\"P10\": \"correct\",\n\"P11\": \"absent\",\n\"P12\": \"contradicted\",\n\"P13\": \"contradicted\",\n\"P14\": \"absent\"\n}",
+   "model": "Qwen3.6-35B-A3B-MTP-UD-Q6_K"
+  }
+ ],
+ "parsed": {
+  "P1": "correct",
+  "P2": "contradicted",
+  "P3": "absent",
+  "P4": "contradicted",
+  "P5": "absent",
+  "P6": "absent",
+  "P7": "absent",
+  "P8": "contradicted",
+  "P9": "contradicted",
+  "P10": "correct",
+  "P11": "absent",
+  "P12": "contradicted",
+  "P13": "contradicted",
+  "P14": "absent"
+ }
+}

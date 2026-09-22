@@ -8,7 +8,7 @@
     "judge_model": "Qwen3.5-4B-UD-Q6_K_XL",
     "recipe_sha256": "57412b9302f9dc80a4e41746376151cd52c8b70d362b7a3249162889f14d1064",
     "ontology_sha256": "0201fecabc1abe1c3f8d995f598cd7124e1a09fc9aba7eac73c678f8621e6164",
-    "chunks_listing_sha256": "5d239ba73123bbc8f833afe478a5e351ef5021a306ac2a0e348f610f1f7af093"
+    "chunks_listing_sha256": "6b28f424793946216d459253496ccf1944fc95d767f2151729726a73d31e925a"
   },
   "variant": "both",
   "run": 2,
@@ -41,9 +41,9 @@
   "verdict": null,
   "never_ran_reasons": [],
   "provenance": {
-    "commit": "86e0c981546eb10b83a94f62e84944415a233fc9",
+    "commit": "3c3130a6e73ad014523ecbcf8ba77e6b0c100a27",
     "dirty": true,
-    "started_at_unix": 1790023866,
+    "started_at_unix": 1790092379,
     "paths": {
       "index_dir": "/Users/alexsbryan/.svrnmesh/indexes/ei7-ans",
       "recipe": "research/ontology-retrieval/ontology-proof/ans/recipe.toml"

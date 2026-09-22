@@ -1,0 +1,28 @@
+{
+ "kind": "coverage",
+ "key": "essay-pilot-and-his-wife-secondary--closed-book-r1",
+ "prompt": "Below are numbered plot points of a novel and an answer written about the novel.\nLabel every point by what the answer says about it:\n\"correct\" = the answer states it\n\"contradicted\" = the answer says something that conflicts with it\n\"absent\" = the answer does not mention it\nReturn only JSON with one entry per point: {\"P1\": \"correct\", \"P2\": \"absent\"}\n\nPoints:\nP1. The novel portrays the life of a sailor named Salve Kristiansen.\nP2. Salve loves Elisabeth and she returns his affection.\nP3. Elisabeth is attracted to a young officer who wishes to marry her.\nP4. Elisabeth spurns the officer because her old love for Salve prevails.\nP5. Salve leaves his native land in desperation before he can reconcile with Elisabeth.\nP6. Salve sails toward foreign shores after leaving home.\nP7. Salve returns to his old home years later.\nP8. Salve finds that Elisabeth has remained true to him during his absence.\nP9. Salve marries Elisabeth upon his return.\nP10. The thought of Elisabeth's momentary hesitation makes life miserable for both spouses.\nP11. Ten years elapse while Salve and Elisabeth struggle with their marital issues.\nP12. Salve and Elisabeth finally come to a clear understanding of one another.\nP13. Salve and Elisabeth lay the foundation for a happy life together.\nP14. The novel emphasizes the need of implicit confidence and trust in marriage.\n\nAnswer:\nIn the novel *The Pilot and His Wife* by R.D. Blackmore, **Salve** plays a crucial role as Elisabeth\u2019s **confidante, protector, and moral anchor**. She is not merely a servant but functions almost like an older sister or surrogate mother to Elisabeth, significantly influencing her development in several key ways:\n\n### 1. **Emotional Support and Confidentiality**\nElisabeth is a young woman caught between societal expectations, family pressure (particularly from her father), and her own growing feelings for Captain Jack Armine. Salve provides Elisabeth with a safe space to express her fears, doubts, and desires without judgment. Because Salve is loyal and discreet, Elisabeth can confide in her about her love for the Pilot\u2014a relationship that would be scandalous given their different social standings. This emotional outlet helps Elisabeth maintain her sanity and resilience during times of intense stress.\n\n### 2. **Moral Guidance and Prudence**\nSalve often serves as the voice of prudence and realism. While she supports Elisabeth\u2019s heart, she also gently warns her against rash decisions or false hopes. She encourages Elisabeth to remain dignified and steadfast rather than succumbing to despair or manipulation. Her grounded perspective helps Elisabeth navigate complex social dynamics and avoid pitfalls set by antagonists like Sir James Orme (though Salve is more directly involved in protecting Elisabeth from immediate threats).\n\n### 3. **Active Protection and Intervention**\nSalve does not just offer advice; she takes active steps to protect Elisabeth. For example:\n- She helps manage household affairs to shield Elisabeth from undue interference.\n- She acts as a buffer between Elisabeth and oppressive figures, such as Elisabeth\u2019s father or other suitors.\n- In critical moments, she intervenes physically or socially to prevent harm or humiliation of her mistress. This agency empowers Elisabeth indirectly, allowing her to feel secure enough to pursue her own moral and emotional integrity.\n\n### 4. **Reinforcement of Virtue and Identity**\nThrough her loyalty and steadfastness, Salve models the virtues that Blackmore associates with true nobility\u2014loyalty, courage, discretion, and selflessness\u2014regardless of social class. By aligning herself so closely with Elisabeth, Salve reinforces Elisabeth\u2019s identity as a woman of worth who deserves respect and love based on character rather than status alone. This helps Elisabeth develop confidence in her own value independent of societal validation.\n\n### Conclusion\nSalve is instrumental in Elisabeth\u2019s development by providing **emotional stability**, **practical protection**, and **moral reinforcement**. Without Salve\u2019s unwavering support, Elisabeth might have been more easily broken down by external pressures or manipulated into compromising her principles. Salve enables Elisabeth to remain true to herself and ultimately achieve a happy ending grounded in mutual respect and genuine affection for Jack Armine.",
+ "attempts": [
+  {
+   "nudged": false,
+   "reply": "{\n\"P1\": \"absent\",\n\"P2\": \"contradicted\",\n\"P3\": \"correct\",\n\"P4\": \"absent\",\n\"P5\": \"absent\",\n\"P6\": \"absent\",\n\"P7\": \"absent\",\n\"P8\": \"absent\",\n\"P9\": \"absent\",\n\"P10\": \"absent\",\n\"P11\": \"absent\",\n\"P12\": \"absent\",\n\"P13\": \"absent\",\n\"P14\": \"absent\"\n}",
+   "model": "Qwen3.6-35B-A3B-MTP-UD-Q6_K"
+  }
+ ],
+ "parsed": {
+  "P1": "absent",
+  "P2": "contradicted",
+  "P3": "correct",
+  "P4": "absent",
+  "P5": "absent",
+  "P6": "absent",
+  "P7": "absent",
+  "P8": "absent",
+  "P9": "absent",
+  "P10": "absent",
+  "P11": "absent",
+  "P12": "absent",
+  "P13": "absent",
+  "P14": "absent"
+ }
+}

@@ -1,0 +1,4489 @@
+{
+ "n_questions": 12,
+ "n_points": 14,
+ "reference_words": 225,
+ "route_exclusions": {},
+ "relevance_could_not_judge": [],
+ "arms": {
+  "bare": {
+   "verdict": "ran",
+   "runs": [
+    {
+     "run": 1,
+     "answers": 12,
+     "empty": 0,
+     "could_not_judge": 0,
+     "never_ran": 0,
+     "contradictions": 33,
+     "answer_chars": 4210.5,
+     "coverage_all": 0.2619047619047619,
+     "coverage_relevant": 0.2799348799348799,
+     "specificity": 1.6666666666666667,
+     "synthesis": 2.5,
+     "faithfulness": 1.0,
+     "rubric_mean": 1.7222222222222223
+    },
+    {
+     "run": 2,
+     "answers": 12,
+     "empty": 0,
+     "could_not_judge": 0,
+     "never_ran": 0,
+     "contradictions": 32,
+     "answer_chars": 4123.25,
+     "coverage_all": 0.30357142857142855,
+     "coverage_relevant": 0.36459605209605206,
+     "specificity": 2.25,
+     "synthesis": 2.8333333333333335,
+     "faithfulness": 1.0833333333333333,
+     "rubric_mean": 2.055555555555556
+    },
+    {
+     "run": 3,
+     "answers": 12,
+     "empty": 0,
+     "could_not_judge": 0,
+     "never_ran": 0,
+     "contradictions": 32,
+     "answer_chars": 4123.25,
+     "coverage_all": 0.30357142857142855,
+     "coverage_relevant": 0.36459605209605206,
+     "specificity": 2.25,
+     "synthesis": 2.8333333333333335,
+     "faithfulness": 1.0833333333333333,
+     "rubric_mean": 2.055555555555556
+    }
+   ],
+   "mean": {
+    "coverage_all": 0.2896825396825397,
+    "coverage_relevant": 0.3363756613756614,
+    "rubric_mean": 1.9444444444444446,
+    "specificity": 2.055555555555556,
+    "synthesis": 2.7222222222222228,
+    "faithfulness": 1.0555555555555556,
+    "answer_chars": 4152.333333333333
+   },
+   "contradictions": 97,
+   "band": {
+    "coverage_all": 0.04166666666666663,
+    "coverage_relevant": 0.08466117216117214,
+    "rubric_mean": 0.3333333333333335
+   }
+  },
+  "deep": {
+   "verdict": "ran",
+   "runs": [
+    {
+     "run": 1,
+     "answers": 12,
+     "empty": 0,
+     "could_not_judge": 0,
+     "never_ran": 0,
+     "contradictions": 36,
+     "answer_chars": 4346.666666666667,
+     "coverage_all": 0.26785714285714285,
+     "coverage_relevant": 0.31171906796906795,
+     "specificity": 1.75,
+     "synthesis": 2.5833333333333335,
+     "faithfulness": 1.0,
+     "rubric_mean": 1.777777777777778
+    },
+    {
+     "run": 2,
+     "answers": 12,
+     "empty": 0,
+     "could_not_judge": 0,
+     "never_ran": 0,
+     "contradictions": 36,
+     "answer_chars": 4346.666666666667,
+     "coverage_all": 0.26785714285714285,
+     "coverage_relevant": 0.31171906796906795,
+     "specificity": 1.75,
+     "synthesis": 2.5833333333333335,
+     "faithfulness": 1.0,
+     "rubric_mean": 1.777777777777778
+    },
+    {
+     "run": 3,
+     "answers": 12,
+     "empty": 0,
+     "could_not_judge": 0,
+     "never_ran": 0,
+     "contradictions": 36,
+     "answer_chars": 4346.666666666667,
+     "coverage_all": 0.26785714285714285,
+     "coverage_relevant": 0.31171906796906795,
+     "specificity": 1.75,
+     "synthesis": 2.5833333333333335,
+     "faithfulness": 1.0,
+     "rubric_mean": 1.777777777777778
+    }
+   ],
+   "mean": {
+    "coverage_all": 0.26785714285714285,
+    "coverage_relevant": 0.31171906796906795,
+    "rubric_mean": 1.777777777777778,
+    "specificity": 1.75,
+    "synthesis": 2.5833333333333335,
+    "faithfulness": 1.0,
+    "answer_chars": 4346.666666666667
+   },
+   "contradictions": 108,
+   "band": {
+    "coverage_all": 0.0,
+    "coverage_relevant": 0.0,
+    "rubric_mean": 0.0
+   }
+  },
+  "full": {
+   "verdict": "ran",
+   "runs": [
+    {
+     "run": 1,
+     "answers": 12,
+     "empty": 0,
+     "could_not_judge": 0,
+     "never_ran": 0,
+     "contradictions": 36,
+     "answer_chars": 4247.333333333333,
+     "coverage_all": 0.23214285714285712,
+     "coverage_relevant": 0.2964234839234839,
+     "specificity": 1.3333333333333333,
+     "synthesis": 2.4166666666666665,
+     "faithfulness": 1.0,
+     "rubric_mean": 1.5833333333333333
+    },
+    {
+     "run": 2,
+     "answers": 12,
+     "empty": 0,
+     "could_not_judge": 0,
+     "never_ran": 0,
+     "contradictions": 36,
+     "answer_chars": 4247.333333333333,
+     "coverage_all": 0.23214285714285712,
+     "coverage_relevant": 0.2964234839234839,
+     "specificity": 1.3333333333333333,
+     "synthesis": 2.4166666666666665,
+     "faithfulness": 1.0,
+     "rubric_mean": 1.5833333333333333
+    },
+    {
+     "run": 3,
+     "answers": 12,
+     "empty": 0,
+     "could_not_judge": 0,
+     "never_ran": 0,
+     "contradictions": 36,
+     "answer_chars": 4247.333333333333,
+     "coverage_all": 0.23214285714285712,
+     "coverage_relevant": 0.2964234839234839,
+     "specificity": 1.3333333333333333,
+     "synthesis": 2.4166666666666665,
+     "faithfulness": 1.0,
+     "rubric_mean": 1.5833333333333333
+    }
+   ],
+   "mean": {
+    "coverage_all": 0.23214285714285712,
+    "coverage_relevant": 0.2964234839234839,
+    "rubric_mean": 1.5833333333333333,
+    "specificity": 1.3333333333333333,
+    "synthesis": 2.4166666666666665,
+    "faithfulness": 1.0,
+    "answer_chars": 4247.333333333333
+   },
+   "contradictions": 108,
+   "band": {
+    "coverage_all": 0.0,
+    "coverage_relevant": 0.0,
+    "rubric_mean": 0.0
+   }
+  },
+  "closed-book": {
+   "verdict": "ran",
+   "runs": [
+    {
+     "run": 1,
+     "answers": 12,
+     "empty": 0,
+     "could_not_judge": 0,
+     "never_ran": 0,
+     "contradictions": 5,
+     "answer_chars": 3993.5,
+     "coverage_all": 0.041666666666666664,
+     "coverage_relevant": 0.020833333333333332,
+     "specificity": 1.0,
+     "synthesis": 1.5833333333333333,
+     "faithfulness": 2.0833333333333335,
+     "rubric_mean": 1.5555555555555556
+    }
+   ],
+   "mean": {
+    "coverage_all": 0.041666666666666664,
+    "coverage_relevant": 0.020833333333333332,
+    "rubric_mean": 1.5555555555555556,
+    "specificity": 1.0,
+    "synthesis": 1.5833333333333333,
+    "faithfulness": 2.0833333333333335,
+    "answer_chars": 3993.5
+   },
+   "contradictions": 5,
+   "band": {
+    "coverage_all": null,
+    "coverage_relevant": null,
+    "rubric_mean": null
+   }
+  }
+ },
+ "bare_band": {
+  "coverage_all": 0.04166666666666663,
+  "coverage_relevant": 0.08466117216117214,
+  "rubric_mean": 0.3333333333333335
+ },
+ "pairwise": {
+  "full_vs_bare": {
+   "verdict": "ran",
+   "win": 0,
+   "loss": 4,
+   "tie": 32,
+   "could-not-judge": 0,
+   "n": 36,
+   "sign_test_p": 0.125,
+   "per_question": {
+    "win": 0,
+    "loss": 2,
+    "tie": 10,
+    "n": 12,
+    "sign_test_p": 0.5
+   },
+   "outcomes": {
+    "essay-pilot-and-his-wife-arc/run-1": "loss",
+    "essay-pilot-and-his-wife-conflict/run-1": "tie",
+    "essay-pilot-and-his-wife-change/run-1": "tie",
+    "essay-pilot-and-his-wife-relationship/run-1": "tie",
+    "essay-pilot-and-his-wife-secondary/run-1": "tie",
+    "essay-pilot-and-his-wife-themes/run-1": "tie",
+    "essay-pilot-and-his-wife-setting/run-1": "tie",
+    "essay-pilot-and-his-wife-turning-point/run-1": "tie",
+    "essay-pilot-and-his-wife-ending/run-1": "tie",
+    "essay-pilot-and-his-wife-inner-conflicts/run-1": "tie",
+    "essay-pilot-and-his-wife-setup/run-1": "loss",
+    "essay-pilot-and-his-wife-society/run-1": "tie",
+    "essay-pilot-and-his-wife-arc/run-2": "tie",
+    "essay-pilot-and-his-wife-conflict/run-2": "tie",
+    "essay-pilot-and-his-wife-change/run-2": "tie",
+    "essay-pilot-and-his-wife-relationship/run-2": "tie",
+    "essay-pilot-and-his-wife-secondary/run-2": "tie",
+    "essay-pilot-and-his-wife-themes/run-2": "tie",
+    "essay-pilot-and-his-wife-setting/run-2": "tie",
+    "essay-pilot-and-his-wife-turning-point/run-2": "tie",
+    "essay-pilot-and-his-wife-ending/run-2": "tie",
+    "essay-pilot-and-his-wife-inner-conflicts/run-2": "tie",
+    "essay-pilot-and-his-wife-setup/run-2": "loss",
+    "essay-pilot-and-his-wife-society/run-2": "tie",
+    "essay-pilot-and-his-wife-arc/run-3": "tie",
+    "essay-pilot-and-his-wife-conflict/run-3": "tie",
+    "essay-pilot-and-his-wife-change/run-3": "tie",
+    "essay-pilot-and-his-wife-relationship/run-3": "tie",
+    "essay-pilot-and-his-wife-secondary/run-3": "tie",
+    "essay-pilot-and-his-wife-themes/run-3": "tie",
+    "essay-pilot-and-his-wife-setting/run-3": "tie",
+    "essay-pilot-and-his-wife-turning-point/run-3": "tie",
+    "essay-pilot-and-his-wife-ending/run-3": "tie",
+    "essay-pilot-and-his-wife-inner-conflicts/run-3": "tie",
+    "essay-pilot-and-his-wife-setup/run-3": "loss",
+    "essay-pilot-and-his-wife-society/run-3": "tie"
+   }
+  },
+  "full_vs_deep": {
+   "verdict": "ran",
+   "win": 0,
+   "loss": 3,
+   "tie": 33,
+   "could-not-judge": 0,
+   "n": 36,
+   "sign_test_p": 0.25,
+   "per_question": {
+    "win": 0,
+    "loss": 1,
+    "tie": 11,
+    "n": 12,
+    "sign_test_p": 1.0
+   },
+   "outcomes": {
+    "essay-pilot-and-his-wife-arc/run-1": "tie",
+    "essay-pilot-and-his-wife-conflict/run-1": "tie",
+    "essay-pilot-and-his-wife-change/run-1": "tie",
+    "essay-pilot-and-his-wife-relationship/run-1": "tie",
+    "essay-pilot-and-his-wife-secondary/run-1": "tie",
+    "essay-pilot-and-his-wife-themes/run-1": "tie",
+    "essay-pilot-and-his-wife-setting/run-1": "tie",
+    "essay-pilot-and-his-wife-turning-point/run-1": "tie",
+    "essay-pilot-and-his-wife-ending/run-1": "tie",
+    "essay-pilot-and-his-wife-inner-conflicts/run-1": "tie",
+    "essay-pilot-and-his-wife-setup/run-1": "loss",
+    "essay-pilot-and-his-wife-society/run-1": "tie",
+    "essay-pilot-and-his-wife-arc/run-2": "tie",
+    "essay-pilot-and-his-wife-conflict/run-2": "tie",
+    "essay-pilot-and-his-wife-change/run-2": "tie",
+    "essay-pilot-and-his-wife-relationship/run-2": "tie",
+    "essay-pilot-and-his-wife-secondary/run-2": "tie",
+    "essay-pilot-and-his-wife-themes/run-2": "tie",
+    "essay-pilot-and-his-wife-setting/run-2": "tie",
+    "essay-pilot-and-his-wife-turning-point/run-2": "tie",
+    "essay-pilot-and-his-wife-ending/run-2": "tie",
+    "essay-pilot-and-his-wife-inner-conflicts/run-2": "tie",
+    "essay-pilot-and-his-wife-setup/run-2": "loss",
+    "essay-pilot-and-his-wife-society/run-2": "tie",
+    "essay-pilot-and-his-wife-arc/run-3": "tie",
+    "essay-pilot-and-his-wife-conflict/run-3": "tie",
+    "essay-pilot-and-his-wife-change/run-3": "tie",
+    "essay-pilot-and-his-wife-relationship/run-3": "tie",
+    "essay-pilot-and-his-wife-secondary/run-3": "tie",
+    "essay-pilot-and-his-wife-themes/run-3": "tie",
+    "essay-pilot-and-his-wife-setting/run-3": "tie",
+    "essay-pilot-and-his-wife-turning-point/run-3": "tie",
+    "essay-pilot-and-his-wife-ending/run-3": "tie",
+    "essay-pilot-and-his-wife-inner-conflicts/run-3": "tie",
+    "essay-pilot-and-his-wife-setup/run-3": "loss",
+    "essay-pilot-and-his-wife-society/run-3": "tie"
+   }
+  }
+ },
+ "arm_leaks": 0,
+ "answers_cut": 0,
+ "cells": {
+  "essay-pilot-and-his-wife-arc--bare-r1": {
+   "arm": "bare",
+   "run": 1,
+   "question_id": "essay-pilot-and-his-wife-arc",
+   "status": "judged",
+   "answer_chars": 2886,
+   "coverage": {
+    "coverage_all": 0.35714285714285715,
+    "coverage_relevant": 0.38461538461538464,
+    "contradictions": 2,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "absent",
+     "P3": "contradicted",
+     "P4": "contradicted",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "correct",
+     "P8": "absent",
+     "P9": "correct",
+     "P10": "absent",
+     "P11": "absent",
+     "P12": "correct",
+     "P13": "correct",
+     "P14": "absent"
+    }
+   },
+   "rubric": {
+    "specificity": 2,
+    "synthesis": 3,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-conflict--bare-r1": {
+   "arm": "bare",
+   "run": 1,
+   "question_id": "essay-pilot-and-his-wife-conflict",
+   "status": "judged",
+   "answer_chars": 3216,
+   "coverage": {
+    "coverage_all": 0.14285714285714285,
+    "coverage_relevant": 0.16666666666666666,
+    "contradictions": 6,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "contradicted",
+     "P3": "absent",
+     "P4": "contradicted",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "contradicted",
+     "P9": "contradicted",
+     "P10": "correct",
+     "P11": "absent",
+     "P12": "contradicted",
+     "P13": "contradicted",
+     "P14": "absent"
+    }
+   },
+   "rubric": {
+    "specificity": 5,
+    "synthesis": 4,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-change--bare-r1": {
+   "arm": "bare",
+   "run": 1,
+   "question_id": "essay-pilot-and-his-wife-change",
+   "status": "judged",
+   "answer_chars": 5189,
+   "coverage": {
+    "coverage_all": 0.35714285714285715,
+    "coverage_relevant": 0.2857142857142857,
+    "contradictions": 0,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "absent",
+     "P3": "absent",
+     "P4": "absent",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "absent",
+     "P9": "absent",
+     "P10": "correct",
+     "P11": "absent",
+     "P12": "correct",
+     "P13": "correct",
+     "P14": "correct"
+    }
+   },
+   "rubric": {
+    "specificity": 1,
+    "synthesis": 2,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-relationship--bare-r1": {
+   "arm": "bare",
+   "run": 1,
+   "question_id": "essay-pilot-and-his-wife-relationship",
+   "status": "judged",
+   "answer_chars": 2305,
+   "coverage": {
+    "coverage_all": 0.2857142857142857,
+    "coverage_relevant": 0.125,
+    "contradictions": 2,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "absent",
+     "P3": "contradicted",
+     "P4": "contradicted",
+     "P5": "absent",
+     "P6": "correct",
+     "P7": "absent",
+     "P8": "absent",
+     "P9": "absent",
+     "P10": "correct",
+     "P11": "absent",
+     "P12": "absent",
+     "P13": "absent",
+     "P14": "correct"
+    }
+   },
+   "rubric": {
+    "specificity": 2,
+    "synthesis": 3,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-secondary--bare-r1": {
+   "arm": "bare",
+   "run": 1,
+   "question_id": "essay-pilot-and-his-wife-secondary",
+   "status": "judged",
+   "answer_chars": 4798,
+   "coverage": {
+    "coverage_all": 0.42857142857142855,
+    "coverage_relevant": 0.375,
+    "contradictions": 1,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "absent",
+     "P3": "contradicted",
+     "P4": "absent",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "absent",
+     "P9": "correct",
+     "P10": "correct",
+     "P11": "absent",
+     "P12": "correct",
+     "P13": "correct",
+     "P14": "correct"
+    }
+   },
+   "rubric": {
+    "specificity": 1,
+    "synthesis": 2,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-themes--bare-r1": {
+   "arm": "bare",
+   "run": 1,
+   "question_id": "essay-pilot-and-his-wife-themes",
+   "status": "judged",
+   "answer_chars": 6004,
+   "coverage": {
+    "coverage_all": 0.21428571428571427,
+    "coverage_relevant": 0.4,
+    "contradictions": 1,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "absent",
+     "P3": "contradicted",
+     "P4": "absent",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "absent",
+     "P9": "absent",
+     "P10": "correct",
+     "P11": "absent",
+     "P12": "absent",
+     "P13": "absent",
+     "P14": "correct"
+    }
+   },
+   "rubric": {
+    "specificity": 1,
+    "synthesis": 2,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-setting--bare-r1": {
+   "arm": "bare",
+   "run": 1,
+   "question_id": "essay-pilot-and-his-wife-setting",
+   "status": "judged",
+   "answer_chars": 4988,
+   "coverage": {
+    "coverage_all": 0.2857142857142857,
+    "coverage_relevant": 0.3333333333333333,
+    "contradictions": 6,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "absent",
+     "P3": "contradicted",
+     "P4": "contradicted",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "contradicted",
+     "P9": "contradicted",
+     "P10": "correct",
+     "P11": "correct",
+     "P12": "contradicted",
+     "P13": "contradicted",
+     "P14": "correct"
+    }
+   },
+   "rubric": {
+    "specificity": 1,
+    "synthesis": 2,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-turning-point--bare-r1": {
+   "arm": "bare",
+   "run": 1,
+   "question_id": "essay-pilot-and-his-wife-turning-point",
+   "status": "judged",
+   "answer_chars": 3461,
+   "coverage": {
+    "coverage_all": 0.2857142857142857,
+    "coverage_relevant": 0.0,
+    "contradictions": 3,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "contradicted",
+     "P3": "absent",
+     "P4": "absent",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "absent",
+     "P9": "absent",
+     "P10": "correct",
+     "P11": "correct",
+     "P12": "contradicted",
+     "P13": "contradicted",
+     "P14": "correct"
+    }
+   },
+   "rubric": {
+    "specificity": 1,
+    "synthesis": 2,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-ending--bare-r1": {
+   "arm": "bare",
+   "run": 1,
+   "question_id": "essay-pilot-and-his-wife-ending",
+   "status": "judged",
+   "answer_chars": 4384,
+   "coverage": {
+    "coverage_all": 0.2857142857142857,
+    "coverage_relevant": 0.5,
+    "contradictions": 2,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "absent",
+     "P3": "contradicted",
+     "P4": "contradicted",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "absent",
+     "P9": "absent",
+     "P10": "absent",
+     "P11": "absent",
+     "P12": "correct",
+     "P13": "correct",
+     "P14": "correct"
+    }
+   },
+   "rubric": {
+    "specificity": 2,
+    "synthesis": 3,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-inner-conflicts--bare-r1": {
+   "arm": "bare",
+   "run": 1,
+   "question_id": "essay-pilot-and-his-wife-inner-conflicts",
+   "status": "judged",
+   "answer_chars": 4915,
+   "coverage": {
+    "coverage_all": 0.14285714285714285,
+    "coverage_relevant": 0.16666666666666666,
+    "contradictions": 2,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "absent",
+     "P3": "contradicted",
+     "P4": "contradicted",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "absent",
+     "P9": "absent",
+     "P10": "absent",
+     "P11": "absent",
+     "P12": "correct",
+     "P13": "absent",
+     "P14": "absent"
+    }
+   },
+   "rubric": {
+    "specificity": 1,
+    "synthesis": 2,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-setup--bare-r1": {
+   "arm": "bare",
+   "run": 1,
+   "question_id": "essay-pilot-and-his-wife-setup",
+   "status": "judged",
+   "answer_chars": 2999,
+   "coverage": {
+    "coverage_all": 0.14285714285714285,
+    "coverage_relevant": 0.2222222222222222,
+    "contradictions": 6,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "contradicted",
+     "P3": "absent",
+     "P4": "contradicted",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "correct",
+     "P8": "contradicted",
+     "P9": "contradicted",
+     "P10": "absent",
+     "P11": "absent",
+     "P12": "contradicted",
+     "P13": "contradicted",
+     "P14": "absent"
+    }
+   },
+   "rubric": {
+    "specificity": 2,
+    "synthesis": 3,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-society--bare-r1": {
+   "arm": "bare",
+   "run": 1,
+   "question_id": "essay-pilot-and-his-wife-society",
+   "status": "judged",
+   "answer_chars": 5381,
+   "coverage": {
+    "coverage_all": 0.21428571428571427,
+    "coverage_relevant": 0.4,
+    "contradictions": 2,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "absent",
+     "P3": "contradicted",
+     "P4": "contradicted",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "absent",
+     "P9": "absent",
+     "P10": "correct",
+     "P11": "absent",
+     "P12": "absent",
+     "P13": "absent",
+     "P14": "correct"
+    }
+   },
+   "rubric": {
+    "specificity": 1,
+    "synthesis": 2,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-arc--bare-r2": {
+   "arm": "bare",
+   "run": 2,
+   "question_id": "essay-pilot-and-his-wife-arc",
+   "status": "judged",
+   "answer_chars": 2683,
+   "coverage": {
+    "coverage_all": 0.2857142857142857,
+    "coverage_relevant": 0.3076923076923077,
+    "contradictions": 4,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "contradicted",
+     "P3": "absent",
+     "P4": "contradicted",
+     "P5": "correct",
+     "P6": "correct",
+     "P7": "correct",
+     "P8": "contradicted",
+     "P9": "contradicted",
+     "P10": "absent",
+     "P11": "absent",
+     "P12": "absent",
+     "P13": "absent",
+     "P14": "absent"
+    }
+   },
+   "rubric": {
+    "specificity": 4,
+    "synthesis": 3,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-conflict--bare-r2": {
+   "arm": "bare",
+   "run": 2,
+   "question_id": "essay-pilot-and-his-wife-conflict",
+   "status": "judged",
+   "answer_chars": 3216,
+   "coverage": {
+    "coverage_all": 0.14285714285714285,
+    "coverage_relevant": 0.16666666666666666,
+    "contradictions": 6,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "contradicted",
+     "P3": "absent",
+     "P4": "contradicted",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "contradicted",
+     "P9": "contradicted",
+     "P10": "correct",
+     "P11": "absent",
+     "P12": "contradicted",
+     "P13": "contradicted",
+     "P14": "absent"
+    }
+   },
+   "rubric": {
+    "specificity": 5,
+    "synthesis": 4,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-change--bare-r2": {
+   "arm": "bare",
+   "run": 2,
+   "question_id": "essay-pilot-and-his-wife-change",
+   "status": "judged",
+   "answer_chars": 4641,
+   "coverage": {
+    "coverage_all": 0.42857142857142855,
+    "coverage_relevant": 0.42857142857142855,
+    "contradictions": 0,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "absent",
+     "P3": "absent",
+     "P4": "absent",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "absent",
+     "P9": "absent",
+     "P10": "correct",
+     "P11": "correct",
+     "P12": "correct",
+     "P13": "correct",
+     "P14": "correct"
+    }
+   },
+   "rubric": {
+    "specificity": 1,
+    "synthesis": 2,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-relationship--bare-r2": {
+   "arm": "bare",
+   "run": 2,
+   "question_id": "essay-pilot-and-his-wife-relationship",
+   "status": "judged",
+   "answer_chars": 2180,
+   "coverage": {
+    "coverage_all": 0.35714285714285715,
+    "coverage_relevant": 0.25,
+    "contradictions": 1,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "contradicted",
+     "P3": "absent",
+     "P4": "absent",
+     "P5": "absent",
+     "P6": "correct",
+     "P7": "absent",
+     "P8": "absent",
+     "P9": "absent",
+     "P10": "correct",
+     "P11": "correct",
+     "P12": "absent",
+     "P13": "absent",
+     "P14": "correct"
+    }
+   },
+   "rubric": {
+    "specificity": 5,
+    "synthesis": 4,
+    "faithfulness": 2
+   }
+  },
+  "essay-pilot-and-his-wife-secondary--bare-r2": {
+   "arm": "bare",
+   "run": 2,
+   "question_id": "essay-pilot-and-his-wife-secondary",
+   "status": "judged",
+   "answer_chars": 3982,
+   "coverage": {
+    "coverage_all": 0.35714285714285715,
+    "coverage_relevant": 0.25,
+    "contradictions": 1,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "absent",
+     "P3": "contradicted",
+     "P4": "absent",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "absent",
+     "P9": "absent",
+     "P10": "correct",
+     "P11": "absent",
+     "P12": "correct",
+     "P13": "correct",
+     "P14": "correct"
+    }
+   },
+   "rubric": {
+    "specificity": 1,
+    "synthesis": 2,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-themes--bare-r2": {
+   "arm": "bare",
+   "run": 2,
+   "question_id": "essay-pilot-and-his-wife-themes",
+   "status": "judged",
+   "answer_chars": 6517,
+   "coverage": {
+    "coverage_all": 0.2857142857142857,
+    "coverage_relevant": 0.6,
+    "contradictions": 2,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "absent",
+     "P3": "absent",
+     "P4": "absent",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "contradicted",
+     "P9": "contradicted",
+     "P10": "correct",
+     "P11": "correct",
+     "P12": "absent",
+     "P13": "absent",
+     "P14": "correct"
+    }
+   },
+   "rubric": {
+    "specificity": 1,
+    "synthesis": 2,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-setting--bare-r2": {
+   "arm": "bare",
+   "run": 2,
+   "question_id": "essay-pilot-and-his-wife-setting",
+   "status": "judged",
+   "answer_chars": 4522,
+   "coverage": {
+    "coverage_all": 0.2857142857142857,
+    "coverage_relevant": 0.3333333333333333,
+    "contradictions": 6,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "absent",
+     "P3": "contradicted",
+     "P4": "contradicted",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "contradicted",
+     "P9": "contradicted",
+     "P10": "correct",
+     "P11": "correct",
+     "P12": "contradicted",
+     "P13": "contradicted",
+     "P14": "correct"
+    }
+   },
+   "rubric": {
+    "specificity": 2,
+    "synthesis": 4,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-turning-point--bare-r2": {
+   "arm": "bare",
+   "run": 2,
+   "question_id": "essay-pilot-and-his-wife-turning-point",
+   "status": "judged",
+   "answer_chars": 4014,
+   "coverage": {
+    "coverage_all": 0.35714285714285715,
+    "coverage_relevant": 0.0,
+    "contradictions": 2,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "absent",
+     "P3": "contradicted",
+     "P4": "contradicted",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "absent",
+     "P9": "absent",
+     "P10": "correct",
+     "P11": "absent",
+     "P12": "correct",
+     "P13": "correct",
+     "P14": "correct"
+    }
+   },
+   "rubric": {
+    "specificity": 2,
+    "synthesis": 3,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-ending--bare-r2": {
+   "arm": "bare",
+   "run": 2,
+   "question_id": "essay-pilot-and-his-wife-ending",
+   "status": "judged",
+   "answer_chars": 5126,
+   "coverage": {
+    "coverage_all": 0.35714285714285715,
+    "coverage_relevant": 0.75,
+    "contradictions": 2,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "absent",
+     "P3": "contradicted",
+     "P4": "contradicted",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "absent",
+     "P9": "absent",
+     "P10": "correct",
+     "P11": "absent",
+     "P12": "correct",
+     "P13": "correct",
+     "P14": "correct"
+    }
+   },
+   "rubric": {
+    "specificity": 2,
+    "synthesis": 3,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-inner-conflicts--bare-r2": {
+   "arm": "bare",
+   "run": 2,
+   "question_id": "essay-pilot-and-his-wife-inner-conflicts",
+   "status": "judged",
+   "answer_chars": 5275,
+   "coverage": {
+    "coverage_all": 0.42857142857142855,
+    "coverage_relevant": 0.6666666666666666,
+    "contradictions": 1,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "absent",
+     "P3": "contradicted",
+     "P4": "absent",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "absent",
+     "P9": "absent",
+     "P10": "correct",
+     "P11": "correct",
+     "P12": "correct",
+     "P13": "correct",
+     "P14": "correct"
+    }
+   },
+   "rubric": {
+    "specificity": 1,
+    "synthesis": 2,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-setup--bare-r2": {
+   "arm": "bare",
+   "run": 2,
+   "question_id": "essay-pilot-and-his-wife-setup",
+   "status": "judged",
+   "answer_chars": 2999,
+   "coverage": {
+    "coverage_all": 0.14285714285714285,
+    "coverage_relevant": 0.2222222222222222,
+    "contradictions": 6,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "contradicted",
+     "P3": "absent",
+     "P4": "contradicted",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "correct",
+     "P8": "contradicted",
+     "P9": "contradicted",
+     "P10": "absent",
+     "P11": "absent",
+     "P12": "contradicted",
+     "P13": "contradicted",
+     "P14": "absent"
+    }
+   },
+   "rubric": {
+    "specificity": 2,
+    "synthesis": 3,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-society--bare-r2": {
+   "arm": "bare",
+   "run": 2,
+   "question_id": "essay-pilot-and-his-wife-society",
+   "status": "judged",
+   "answer_chars": 4324,
+   "coverage": {
+    "coverage_all": 0.21428571428571427,
+    "coverage_relevant": 0.4,
+    "contradictions": 1,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "absent",
+     "P3": "absent",
+     "P4": "absent",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "contradicted",
+     "P9": "absent",
+     "P10": "correct",
+     "P11": "absent",
+     "P12": "absent",
+     "P13": "absent",
+     "P14": "correct"
+    }
+   },
+   "rubric": {
+    "specificity": 1,
+    "synthesis": 2,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-arc--bare-r3": {
+   "arm": "bare",
+   "run": 3,
+   "question_id": "essay-pilot-and-his-wife-arc",
+   "status": "judged",
+   "answer_chars": 2683,
+   "coverage": {
+    "coverage_all": 0.2857142857142857,
+    "coverage_relevant": 0.3076923076923077,
+    "contradictions": 4,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "contradicted",
+     "P3": "absent",
+     "P4": "contradicted",
+     "P5": "correct",
+     "P6": "correct",
+     "P7": "correct",
+     "P8": "contradicted",
+     "P9": "contradicted",
+     "P10": "absent",
+     "P11": "absent",
+     "P12": "absent",
+     "P13": "absent",
+     "P14": "absent"
+    }
+   },
+   "rubric": {
+    "specificity": 4,
+    "synthesis": 3,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-conflict--bare-r3": {
+   "arm": "bare",
+   "run": 3,
+   "question_id": "essay-pilot-and-his-wife-conflict",
+   "status": "judged",
+   "answer_chars": 3216,
+   "coverage": {
+    "coverage_all": 0.14285714285714285,
+    "coverage_relevant": 0.16666666666666666,
+    "contradictions": 6,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "contradicted",
+     "P3": "absent",
+     "P4": "contradicted",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "contradicted",
+     "P9": "contradicted",
+     "P10": "correct",
+     "P11": "absent",
+     "P12": "contradicted",
+     "P13": "contradicted",
+     "P14": "absent"
+    }
+   },
+   "rubric": {
+    "specificity": 5,
+    "synthesis": 4,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-change--bare-r3": {
+   "arm": "bare",
+   "run": 3,
+   "question_id": "essay-pilot-and-his-wife-change",
+   "status": "judged",
+   "answer_chars": 4641,
+   "coverage": {
+    "coverage_all": 0.42857142857142855,
+    "coverage_relevant": 0.42857142857142855,
+    "contradictions": 0,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "absent",
+     "P3": "absent",
+     "P4": "absent",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "absent",
+     "P9": "absent",
+     "P10": "correct",
+     "P11": "correct",
+     "P12": "correct",
+     "P13": "correct",
+     "P14": "correct"
+    }
+   },
+   "rubric": {
+    "specificity": 1,
+    "synthesis": 2,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-relationship--bare-r3": {
+   "arm": "bare",
+   "run": 3,
+   "question_id": "essay-pilot-and-his-wife-relationship",
+   "status": "judged",
+   "answer_chars": 2180,
+   "coverage": {
+    "coverage_all": 0.35714285714285715,
+    "coverage_relevant": 0.25,
+    "contradictions": 1,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "contradicted",
+     "P3": "absent",
+     "P4": "absent",
+     "P5": "absent",
+     "P6": "correct",
+     "P7": "absent",
+     "P8": "absent",
+     "P9": "absent",
+     "P10": "correct",
+     "P11": "correct",
+     "P12": "absent",
+     "P13": "absent",
+     "P14": "correct"
+    }
+   },
+   "rubric": {
+    "specificity": 5,
+    "synthesis": 4,
+    "faithfulness": 2
+   }
+  },
+  "essay-pilot-and-his-wife-secondary--bare-r3": {
+   "arm": "bare",
+   "run": 3,
+   "question_id": "essay-pilot-and-his-wife-secondary",
+   "status": "judged",
+   "answer_chars": 3982,
+   "coverage": {
+    "coverage_all": 0.35714285714285715,
+    "coverage_relevant": 0.25,
+    "contradictions": 1,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "absent",
+     "P3": "contradicted",
+     "P4": "absent",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "absent",
+     "P9": "absent",
+     "P10": "correct",
+     "P11": "absent",
+     "P12": "correct",
+     "P13": "correct",
+     "P14": "correct"
+    }
+   },
+   "rubric": {
+    "specificity": 1,
+    "synthesis": 2,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-themes--bare-r3": {
+   "arm": "bare",
+   "run": 3,
+   "question_id": "essay-pilot-and-his-wife-themes",
+   "status": "judged",
+   "answer_chars": 6517,
+   "coverage": {
+    "coverage_all": 0.2857142857142857,
+    "coverage_relevant": 0.6,
+    "contradictions": 2,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "absent",
+     "P3": "absent",
+     "P4": "absent",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "contradicted",
+     "P9": "contradicted",
+     "P10": "correct",
+     "P11": "correct",
+     "P12": "absent",
+     "P13": "absent",
+     "P14": "correct"
+    }
+   },
+   "rubric": {
+    "specificity": 1,
+    "synthesis": 2,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-setting--bare-r3": {
+   "arm": "bare",
+   "run": 3,
+   "question_id": "essay-pilot-and-his-wife-setting",
+   "status": "judged",
+   "answer_chars": 4522,
+   "coverage": {
+    "coverage_all": 0.2857142857142857,
+    "coverage_relevant": 0.3333333333333333,
+    "contradictions": 6,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "absent",
+     "P3": "contradicted",
+     "P4": "contradicted",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "contradicted",
+     "P9": "contradicted",
+     "P10": "correct",
+     "P11": "correct",
+     "P12": "contradicted",
+     "P13": "contradicted",
+     "P14": "correct"
+    }
+   },
+   "rubric": {
+    "specificity": 2,
+    "synthesis": 4,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-turning-point--bare-r3": {
+   "arm": "bare",
+   "run": 3,
+   "question_id": "essay-pilot-and-his-wife-turning-point",
+   "status": "judged",
+   "answer_chars": 4014,
+   "coverage": {
+    "coverage_all": 0.35714285714285715,
+    "coverage_relevant": 0.0,
+    "contradictions": 2,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "absent",
+     "P3": "contradicted",
+     "P4": "contradicted",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "absent",
+     "P9": "absent",
+     "P10": "correct",
+     "P11": "absent",
+     "P12": "correct",
+     "P13": "correct",
+     "P14": "correct"
+    }
+   },
+   "rubric": {
+    "specificity": 2,
+    "synthesis": 3,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-ending--bare-r3": {
+   "arm": "bare",
+   "run": 3,
+   "question_id": "essay-pilot-and-his-wife-ending",
+   "status": "judged",
+   "answer_chars": 5126,
+   "coverage": {
+    "coverage_all": 0.35714285714285715,
+    "coverage_relevant": 0.75,
+    "contradictions": 2,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "absent",
+     "P3": "contradicted",
+     "P4": "contradicted",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "absent",
+     "P9": "absent",
+     "P10": "correct",
+     "P11": "absent",
+     "P12": "correct",
+     "P13": "correct",
+     "P14": "correct"
+    }
+   },
+   "rubric": {
+    "specificity": 2,
+    "synthesis": 3,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-inner-conflicts--bare-r3": {
+   "arm": "bare",
+   "run": 3,
+   "question_id": "essay-pilot-and-his-wife-inner-conflicts",
+   "status": "judged",
+   "answer_chars": 5275,
+   "coverage": {
+    "coverage_all": 0.42857142857142855,
+    "coverage_relevant": 0.6666666666666666,
+    "contradictions": 1,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "absent",
+     "P3": "contradicted",
+     "P4": "absent",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "absent",
+     "P9": "absent",
+     "P10": "correct",
+     "P11": "correct",
+     "P12": "correct",
+     "P13": "correct",
+     "P14": "correct"
+    }
+   },
+   "rubric": {
+    "specificity": 1,
+    "synthesis": 2,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-setup--bare-r3": {
+   "arm": "bare",
+   "run": 3,
+   "question_id": "essay-pilot-and-his-wife-setup",
+   "status": "judged",
+   "answer_chars": 2999,
+   "coverage": {
+    "coverage_all": 0.14285714285714285,
+    "coverage_relevant": 0.2222222222222222,
+    "contradictions": 6,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "contradicted",
+     "P3": "absent",
+     "P4": "contradicted",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "correct",
+     "P8": "contradicted",
+     "P9": "contradicted",
+     "P10": "absent",
+     "P11": "absent",
+     "P12": "contradicted",
+     "P13": "contradicted",
+     "P14": "absent"
+    }
+   },
+   "rubric": {
+    "specificity": 2,
+    "synthesis": 3,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-society--bare-r3": {
+   "arm": "bare",
+   "run": 3,
+   "question_id": "essay-pilot-and-his-wife-society",
+   "status": "judged",
+   "answer_chars": 4324,
+   "coverage": {
+    "coverage_all": 0.21428571428571427,
+    "coverage_relevant": 0.4,
+    "contradictions": 1,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "absent",
+     "P3": "absent",
+     "P4": "absent",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "contradicted",
+     "P9": "absent",
+     "P10": "correct",
+     "P11": "absent",
+     "P12": "absent",
+     "P13": "absent",
+     "P14": "correct"
+    }
+   },
+   "rubric": {
+    "specificity": 1,
+    "synthesis": 2,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-arc--deep-r1": {
+   "arm": "deep",
+   "run": 1,
+   "question_id": "essay-pilot-and-his-wife-arc",
+   "status": "judged",
+   "answer_chars": 2550,
+   "coverage": {
+    "coverage_all": 0.2857142857142857,
+    "coverage_relevant": 0.3076923076923077,
+    "contradictions": 6,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "contradicted",
+     "P3": "absent",
+     "P4": "contradicted",
+     "P5": "correct",
+     "P6": "correct",
+     "P7": "correct",
+     "P8": "contradicted",
+     "P9": "contradicted",
+     "P10": "absent",
+     "P11": "absent",
+     "P12": "contradicted",
+     "P13": "contradicted",
+     "P14": "absent"
+    }
+   },
+   "rubric": {
+    "specificity": 2,
+    "synthesis": 3,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-conflict--deep-r1": {
+   "arm": "deep",
+   "run": 1,
+   "question_id": "essay-pilot-and-his-wife-conflict",
+   "status": "judged",
+   "answer_chars": 3216,
+   "coverage": {
+    "coverage_all": 0.14285714285714285,
+    "coverage_relevant": 0.16666666666666666,
+    "contradictions": 6,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "contradicted",
+     "P3": "absent",
+     "P4": "contradicted",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "contradicted",
+     "P9": "contradicted",
+     "P10": "correct",
+     "P11": "absent",
+     "P12": "contradicted",
+     "P13": "contradicted",
+     "P14": "absent"
+    }
+   },
+   "rubric": {
+    "specificity": 5,
+    "synthesis": 4,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-change--deep-r1": {
+   "arm": "deep",
+   "run": 1,
+   "question_id": "essay-pilot-and-his-wife-change",
+   "status": "judged",
+   "answer_chars": 4928,
+   "coverage": {
+    "coverage_all": 0.42857142857142855,
+    "coverage_relevant": 0.2857142857142857,
+    "contradictions": 2,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "absent",
+     "P3": "contradicted",
+     "P4": "contradicted",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "absent",
+     "P9": "correct",
+     "P10": "correct",
+     "P11": "absent",
+     "P12": "correct",
+     "P13": "correct",
+     "P14": "correct"
+    }
+   },
+   "rubric": {
+    "specificity": 1,
+    "synthesis": 2,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-relationship--deep-r1": {
+   "arm": "deep",
+   "run": 1,
+   "question_id": "essay-pilot-and-his-wife-relationship",
+   "status": "judged",
+   "answer_chars": 4683,
+   "coverage": {
+    "coverage_all": 0.14285714285714285,
+    "coverage_relevant": 0.125,
+    "contradictions": 6,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "absent",
+     "P3": "contradicted",
+     "P4": "contradicted",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "contradicted",
+     "P9": "contradicted",
+     "P10": "correct",
+     "P11": "absent",
+     "P12": "contradicted",
+     "P13": "contradicted",
+     "P14": "absent"
+    }
+   },
+   "rubric": {
+    "specificity": 2,
+    "synthesis": 3,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-secondary--deep-r1": {
+   "arm": "deep",
+   "run": 1,
+   "question_id": "essay-pilot-and-his-wife-secondary",
+   "status": "judged",
+   "answer_chars": 4884,
+   "coverage": {
+    "coverage_all": 0.35714285714285715,
+    "coverage_relevant": 0.25,
+    "contradictions": 1,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "absent",
+     "P3": "contradicted",
+     "P4": "absent",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "absent",
+     "P9": "absent",
+     "P10": "correct",
+     "P11": "absent",
+     "P12": "correct",
+     "P13": "correct",
+     "P14": "correct"
+    }
+   },
+   "rubric": {
+    "specificity": 1,
+    "synthesis": 2,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-themes--deep-r1": {
+   "arm": "deep",
+   "run": 1,
+   "question_id": "essay-pilot-and-his-wife-themes",
+   "status": "judged",
+   "answer_chars": 5911,
+   "coverage": {
+    "coverage_all": 0.21428571428571427,
+    "coverage_relevant": 0.4,
+    "contradictions": 1,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "contradicted",
+     "P3": "absent",
+     "P4": "absent",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "absent",
+     "P9": "absent",
+     "P10": "correct",
+     "P11": "absent",
+     "P12": "absent",
+     "P13": "absent",
+     "P14": "correct"
+    }
+   },
+   "rubric": {
+    "specificity": 1,
+    "synthesis": 2,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-setting--deep-r1": {
+   "arm": "deep",
+   "run": 1,
+   "question_id": "essay-pilot-and-his-wife-setting",
+   "status": "judged",
+   "answer_chars": 4072,
+   "coverage": {
+    "coverage_all": 0.14285714285714285,
+    "coverage_relevant": 0.3333333333333333,
+    "contradictions": 2,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "absent",
+     "P3": "contradicted",
+     "P4": "contradicted",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "absent",
+     "P9": "absent",
+     "P10": "correct",
+     "P11": "absent",
+     "P12": "absent",
+     "P13": "absent",
+     "P14": "absent"
+    }
+   },
+   "rubric": {
+    "specificity": 1,
+    "synthesis": 2,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-turning-point--deep-r1": {
+   "arm": "deep",
+   "run": 1,
+   "question_id": "essay-pilot-and-his-wife-turning-point",
+   "status": "judged",
+   "answer_chars": 4532,
+   "coverage": {
+    "coverage_all": 0.35714285714285715,
+    "coverage_relevant": 0.0,
+    "contradictions": 2,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "absent",
+     "P3": "contradicted",
+     "P4": "contradicted",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "absent",
+     "P9": "absent",
+     "P10": "correct",
+     "P11": "absent",
+     "P12": "correct",
+     "P13": "correct",
+     "P14": "correct"
+    }
+   },
+   "rubric": {
+    "specificity": 2,
+    "synthesis": 3,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-ending--deep-r1": {
+   "arm": "deep",
+   "run": 1,
+   "question_id": "essay-pilot-and-his-wife-ending",
+   "status": "judged",
+   "answer_chars": 4680,
+   "coverage": {
+    "coverage_all": 0.42857142857142855,
+    "coverage_relevant": 0.75,
+    "contradictions": 2,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "absent",
+     "P3": "contradicted",
+     "P4": "contradicted",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "absent",
+     "P9": "absent",
+     "P10": "correct",
+     "P11": "correct",
+     "P12": "correct",
+     "P13": "correct",
+     "P14": "correct"
+    }
+   },
+   "rubric": {
+    "specificity": 2,
+    "synthesis": 3,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-inner-conflicts--deep-r1": {
+   "arm": "deep",
+   "run": 1,
+   "question_id": "essay-pilot-and-his-wife-inner-conflicts",
+   "status": "judged",
+   "answer_chars": 5019,
+   "coverage": {
+    "coverage_all": 0.35714285714285715,
+    "coverage_relevant": 0.5,
+    "contradictions": 2,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "absent",
+     "P3": "contradicted",
+     "P4": "contradicted",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "absent",
+     "P9": "absent",
+     "P10": "correct",
+     "P11": "absent",
+     "P12": "correct",
+     "P13": "correct",
+     "P14": "correct"
+    }
+   },
+   "rubric": {
+    "specificity": 1,
+    "synthesis": 2,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-setup--deep-r1": {
+   "arm": "deep",
+   "run": 1,
+   "question_id": "essay-pilot-and-his-wife-setup",
+   "status": "judged",
+   "answer_chars": 2999,
+   "coverage": {
+    "coverage_all": 0.14285714285714285,
+    "coverage_relevant": 0.2222222222222222,
+    "contradictions": 6,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "contradicted",
+     "P3": "absent",
+     "P4": "contradicted",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "correct",
+     "P8": "contradicted",
+     "P9": "contradicted",
+     "P10": "absent",
+     "P11": "absent",
+     "P12": "contradicted",
+     "P13": "contradicted",
+     "P14": "absent"
+    }
+   },
+   "rubric": {
+    "specificity": 2,
+    "synthesis": 3,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-society--deep-r1": {
+   "arm": "deep",
+   "run": 1,
+   "question_id": "essay-pilot-and-his-wife-society",
+   "status": "judged",
+   "answer_chars": 4686,
+   "coverage": {
+    "coverage_all": 0.21428571428571427,
+    "coverage_relevant": 0.4,
+    "contradictions": 0,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "absent",
+     "P3": "absent",
+     "P4": "absent",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "absent",
+     "P9": "absent",
+     "P10": "correct",
+     "P11": "absent",
+     "P12": "absent",
+     "P13": "absent",
+     "P14": "correct"
+    }
+   },
+   "rubric": {
+    "specificity": 1,
+    "synthesis": 2,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-arc--deep-r2": {
+   "arm": "deep",
+   "run": 2,
+   "question_id": "essay-pilot-and-his-wife-arc",
+   "status": "judged",
+   "answer_chars": 2550,
+   "coverage": {
+    "coverage_all": 0.2857142857142857,
+    "coverage_relevant": 0.3076923076923077,
+    "contradictions": 6,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "contradicted",
+     "P3": "absent",
+     "P4": "contradicted",
+     "P5": "correct",
+     "P6": "correct",
+     "P7": "correct",
+     "P8": "contradicted",
+     "P9": "contradicted",
+     "P10": "absent",
+     "P11": "absent",
+     "P12": "contradicted",
+     "P13": "contradicted",
+     "P14": "absent"
+    }
+   },
+   "rubric": {
+    "specificity": 2,
+    "synthesis": 3,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-conflict--deep-r2": {
+   "arm": "deep",
+   "run": 2,
+   "question_id": "essay-pilot-and-his-wife-conflict",
+   "status": "judged",
+   "answer_chars": 3216,
+   "coverage": {
+    "coverage_all": 0.14285714285714285,
+    "coverage_relevant": 0.16666666666666666,
+    "contradictions": 6,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "contradicted",
+     "P3": "absent",
+     "P4": "contradicted",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "contradicted",
+     "P9": "contradicted",
+     "P10": "correct",
+     "P11": "absent",
+     "P12": "contradicted",
+     "P13": "contradicted",
+     "P14": "absent"
+    }
+   },
+   "rubric": {
+    "specificity": 5,
+    "synthesis": 4,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-change--deep-r2": {
+   "arm": "deep",
+   "run": 2,
+   "question_id": "essay-pilot-and-his-wife-change",
+   "status": "judged",
+   "answer_chars": 4928,
+   "coverage": {
+    "coverage_all": 0.42857142857142855,
+    "coverage_relevant": 0.2857142857142857,
+    "contradictions": 2,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "absent",
+     "P3": "contradicted",
+     "P4": "contradicted",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "absent",
+     "P9": "correct",
+     "P10": "correct",
+     "P11": "absent",
+     "P12": "correct",
+     "P13": "correct",
+     "P14": "correct"
+    }
+   },
+   "rubric": {
+    "specificity": 1,
+    "synthesis": 2,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-relationship--deep-r2": {
+   "arm": "deep",
+   "run": 2,
+   "question_id": "essay-pilot-and-his-wife-relationship",
+   "status": "judged",
+   "answer_chars": 4683,
+   "coverage": {
+    "coverage_all": 0.14285714285714285,
+    "coverage_relevant": 0.125,
+    "contradictions": 6,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "absent",
+     "P3": "contradicted",
+     "P4": "contradicted",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "contradicted",
+     "P9": "contradicted",
+     "P10": "correct",
+     "P11": "absent",
+     "P12": "contradicted",
+     "P13": "contradicted",
+     "P14": "absent"
+    }
+   },
+   "rubric": {
+    "specificity": 2,
+    "synthesis": 3,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-secondary--deep-r2": {
+   "arm": "deep",
+   "run": 2,
+   "question_id": "essay-pilot-and-his-wife-secondary",
+   "status": "judged",
+   "answer_chars": 4884,
+   "coverage": {
+    "coverage_all": 0.35714285714285715,
+    "coverage_relevant": 0.25,
+    "contradictions": 1,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "absent",
+     "P3": "contradicted",
+     "P4": "absent",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "absent",
+     "P9": "absent",
+     "P10": "correct",
+     "P11": "absent",
+     "P12": "correct",
+     "P13": "correct",
+     "P14": "correct"
+    }
+   },
+   "rubric": {
+    "specificity": 1,
+    "synthesis": 2,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-themes--deep-r2": {
+   "arm": "deep",
+   "run": 2,
+   "question_id": "essay-pilot-and-his-wife-themes",
+   "status": "judged",
+   "answer_chars": 5911,
+   "coverage": {
+    "coverage_all": 0.21428571428571427,
+    "coverage_relevant": 0.4,
+    "contradictions": 1,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "contradicted",
+     "P3": "absent",
+     "P4": "absent",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "absent",
+     "P9": "absent",
+     "P10": "correct",
+     "P11": "absent",
+     "P12": "absent",
+     "P13": "absent",
+     "P14": "correct"
+    }
+   },
+   "rubric": {
+    "specificity": 1,
+    "synthesis": 2,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-setting--deep-r2": {
+   "arm": "deep",
+   "run": 2,
+   "question_id": "essay-pilot-and-his-wife-setting",
+   "status": "judged",
+   "answer_chars": 4072,
+   "coverage": {
+    "coverage_all": 0.14285714285714285,
+    "coverage_relevant": 0.3333333333333333,
+    "contradictions": 2,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "absent",
+     "P3": "contradicted",
+     "P4": "contradicted",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "absent",
+     "P9": "absent",
+     "P10": "correct",
+     "P11": "absent",
+     "P12": "absent",
+     "P13": "absent",
+     "P14": "absent"
+    }
+   },
+   "rubric": {
+    "specificity": 1,
+    "synthesis": 2,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-turning-point--deep-r2": {
+   "arm": "deep",
+   "run": 2,
+   "question_id": "essay-pilot-and-his-wife-turning-point",
+   "status": "judged",
+   "answer_chars": 4532,
+   "coverage": {
+    "coverage_all": 0.35714285714285715,
+    "coverage_relevant": 0.0,
+    "contradictions": 2,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "absent",
+     "P3": "contradicted",
+     "P4": "contradicted",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "absent",
+     "P9": "absent",
+     "P10": "correct",
+     "P11": "absent",
+     "P12": "correct",
+     "P13": "correct",
+     "P14": "correct"
+    }
+   },
+   "rubric": {
+    "specificity": 2,
+    "synthesis": 3,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-ending--deep-r2": {
+   "arm": "deep",
+   "run": 2,
+   "question_id": "essay-pilot-and-his-wife-ending",
+   "status": "judged",
+   "answer_chars": 4680,
+   "coverage": {
+    "coverage_all": 0.42857142857142855,
+    "coverage_relevant": 0.75,
+    "contradictions": 2,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "absent",
+     "P3": "contradicted",
+     "P4": "contradicted",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "absent",
+     "P9": "absent",
+     "P10": "correct",
+     "P11": "correct",
+     "P12": "correct",
+     "P13": "correct",
+     "P14": "correct"
+    }
+   },
+   "rubric": {
+    "specificity": 2,
+    "synthesis": 3,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-inner-conflicts--deep-r2": {
+   "arm": "deep",
+   "run": 2,
+   "question_id": "essay-pilot-and-his-wife-inner-conflicts",
+   "status": "judged",
+   "answer_chars": 5019,
+   "coverage": {
+    "coverage_all": 0.35714285714285715,
+    "coverage_relevant": 0.5,
+    "contradictions": 2,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "absent",
+     "P3": "contradicted",
+     "P4": "contradicted",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "absent",
+     "P9": "absent",
+     "P10": "correct",
+     "P11": "absent",
+     "P12": "correct",
+     "P13": "correct",
+     "P14": "correct"
+    }
+   },
+   "rubric": {
+    "specificity": 1,
+    "synthesis": 2,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-setup--deep-r2": {
+   "arm": "deep",
+   "run": 2,
+   "question_id": "essay-pilot-and-his-wife-setup",
+   "status": "judged",
+   "answer_chars": 2999,
+   "coverage": {
+    "coverage_all": 0.14285714285714285,
+    "coverage_relevant": 0.2222222222222222,
+    "contradictions": 6,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "contradicted",
+     "P3": "absent",
+     "P4": "contradicted",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "correct",
+     "P8": "contradicted",
+     "P9": "contradicted",
+     "P10": "absent",
+     "P11": "absent",
+     "P12": "contradicted",
+     "P13": "contradicted",
+     "P14": "absent"
+    }
+   },
+   "rubric": {
+    "specificity": 2,
+    "synthesis": 3,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-society--deep-r2": {
+   "arm": "deep",
+   "run": 2,
+   "question_id": "essay-pilot-and-his-wife-society",
+   "status": "judged",
+   "answer_chars": 4686,
+   "coverage": {
+    "coverage_all": 0.21428571428571427,
+    "coverage_relevant": 0.4,
+    "contradictions": 0,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "absent",
+     "P3": "absent",
+     "P4": "absent",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "absent",
+     "P9": "absent",
+     "P10": "correct",
+     "P11": "absent",
+     "P12": "absent",
+     "P13": "absent",
+     "P14": "correct"
+    }
+   },
+   "rubric": {
+    "specificity": 1,
+    "synthesis": 2,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-arc--deep-r3": {
+   "arm": "deep",
+   "run": 3,
+   "question_id": "essay-pilot-and-his-wife-arc",
+   "status": "judged",
+   "answer_chars": 2550,
+   "coverage": {
+    "coverage_all": 0.2857142857142857,
+    "coverage_relevant": 0.3076923076923077,
+    "contradictions": 6,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "contradicted",
+     "P3": "absent",
+     "P4": "contradicted",
+     "P5": "correct",
+     "P6": "correct",
+     "P7": "correct",
+     "P8": "contradicted",
+     "P9": "contradicted",
+     "P10": "absent",
+     "P11": "absent",
+     "P12": "contradicted",
+     "P13": "contradicted",
+     "P14": "absent"
+    }
+   },
+   "rubric": {
+    "specificity": 2,
+    "synthesis": 3,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-conflict--deep-r3": {
+   "arm": "deep",
+   "run": 3,
+   "question_id": "essay-pilot-and-his-wife-conflict",
+   "status": "judged",
+   "answer_chars": 3216,
+   "coverage": {
+    "coverage_all": 0.14285714285714285,
+    "coverage_relevant": 0.16666666666666666,
+    "contradictions": 6,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "contradicted",
+     "P3": "absent",
+     "P4": "contradicted",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "contradicted",
+     "P9": "contradicted",
+     "P10": "correct",
+     "P11": "absent",
+     "P12": "contradicted",
+     "P13": "contradicted",
+     "P14": "absent"
+    }
+   },
+   "rubric": {
+    "specificity": 5,
+    "synthesis": 4,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-change--deep-r3": {
+   "arm": "deep",
+   "run": 3,
+   "question_id": "essay-pilot-and-his-wife-change",
+   "status": "judged",
+   "answer_chars": 4928,
+   "coverage": {
+    "coverage_all": 0.42857142857142855,
+    "coverage_relevant": 0.2857142857142857,
+    "contradictions": 2,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "absent",
+     "P3": "contradicted",
+     "P4": "contradicted",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "absent",
+     "P9": "correct",
+     "P10": "correct",
+     "P11": "absent",
+     "P12": "correct",
+     "P13": "correct",
+     "P14": "correct"
+    }
+   },
+   "rubric": {
+    "specificity": 1,
+    "synthesis": 2,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-relationship--deep-r3": {
+   "arm": "deep",
+   "run": 3,
+   "question_id": "essay-pilot-and-his-wife-relationship",
+   "status": "judged",
+   "answer_chars": 4683,
+   "coverage": {
+    "coverage_all": 0.14285714285714285,
+    "coverage_relevant": 0.125,
+    "contradictions": 6,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "absent",
+     "P3": "contradicted",
+     "P4": "contradicted",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "contradicted",
+     "P9": "contradicted",
+     "P10": "correct",
+     "P11": "absent",
+     "P12": "contradicted",
+     "P13": "contradicted",
+     "P14": "absent"
+    }
+   },
+   "rubric": {
+    "specificity": 2,
+    "synthesis": 3,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-secondary--deep-r3": {
+   "arm": "deep",
+   "run": 3,
+   "question_id": "essay-pilot-and-his-wife-secondary",
+   "status": "judged",
+   "answer_chars": 4884,
+   "coverage": {
+    "coverage_all": 0.35714285714285715,
+    "coverage_relevant": 0.25,
+    "contradictions": 1,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "absent",
+     "P3": "contradicted",
+     "P4": "absent",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "absent",
+     "P9": "absent",
+     "P10": "correct",
+     "P11": "absent",
+     "P12": "correct",
+     "P13": "correct",
+     "P14": "correct"
+    }
+   },
+   "rubric": {
+    "specificity": 1,
+    "synthesis": 2,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-themes--deep-r3": {
+   "arm": "deep",
+   "run": 3,
+   "question_id": "essay-pilot-and-his-wife-themes",
+   "status": "judged",
+   "answer_chars": 5911,
+   "coverage": {
+    "coverage_all": 0.21428571428571427,
+    "coverage_relevant": 0.4,
+    "contradictions": 1,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "contradicted",
+     "P3": "absent",
+     "P4": "absent",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "absent",
+     "P9": "absent",
+     "P10": "correct",
+     "P11": "absent",
+     "P12": "absent",
+     "P13": "absent",
+     "P14": "correct"
+    }
+   },
+   "rubric": {
+    "specificity": 1,
+    "synthesis": 2,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-setting--deep-r3": {
+   "arm": "deep",
+   "run": 3,
+   "question_id": "essay-pilot-and-his-wife-setting",
+   "status": "judged",
+   "answer_chars": 4072,
+   "coverage": {
+    "coverage_all": 0.14285714285714285,
+    "coverage_relevant": 0.3333333333333333,
+    "contradictions": 2,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "absent",
+     "P3": "contradicted",
+     "P4": "contradicted",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "absent",
+     "P9": "absent",
+     "P10": "correct",
+     "P11": "absent",
+     "P12": "absent",
+     "P13": "absent",
+     "P14": "absent"
+    }
+   },
+   "rubric": {
+    "specificity": 1,
+    "synthesis": 2,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-turning-point--deep-r3": {
+   "arm": "deep",
+   "run": 3,
+   "question_id": "essay-pilot-and-his-wife-turning-point",
+   "status": "judged",
+   "answer_chars": 4532,
+   "coverage": {
+    "coverage_all": 0.35714285714285715,
+    "coverage_relevant": 0.0,
+    "contradictions": 2,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "absent",
+     "P3": "contradicted",
+     "P4": "contradicted",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "absent",
+     "P9": "absent",
+     "P10": "correct",
+     "P11": "absent",
+     "P12": "correct",
+     "P13": "correct",
+     "P14": "correct"
+    }
+   },
+   "rubric": {
+    "specificity": 2,
+    "synthesis": 3,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-ending--deep-r3": {
+   "arm": "deep",
+   "run": 3,
+   "question_id": "essay-pilot-and-his-wife-ending",
+   "status": "judged",
+   "answer_chars": 4680,
+   "coverage": {
+    "coverage_all": 0.42857142857142855,
+    "coverage_relevant": 0.75,
+    "contradictions": 2,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "absent",
+     "P3": "contradicted",
+     "P4": "contradicted",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "absent",
+     "P9": "absent",
+     "P10": "correct",
+     "P11": "correct",
+     "P12": "correct",
+     "P13": "correct",
+     "P14": "correct"
+    }
+   },
+   "rubric": {
+    "specificity": 2,
+    "synthesis": 3,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-inner-conflicts--deep-r3": {
+   "arm": "deep",
+   "run": 3,
+   "question_id": "essay-pilot-and-his-wife-inner-conflicts",
+   "status": "judged",
+   "answer_chars": 5019,
+   "coverage": {
+    "coverage_all": 0.35714285714285715,
+    "coverage_relevant": 0.5,
+    "contradictions": 2,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "absent",
+     "P3": "contradicted",
+     "P4": "contradicted",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "absent",
+     "P9": "absent",
+     "P10": "correct",
+     "P11": "absent",
+     "P12": "correct",
+     "P13": "correct",
+     "P14": "correct"
+    }
+   },
+   "rubric": {
+    "specificity": 1,
+    "synthesis": 2,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-setup--deep-r3": {
+   "arm": "deep",
+   "run": 3,
+   "question_id": "essay-pilot-and-his-wife-setup",
+   "status": "judged",
+   "answer_chars": 2999,
+   "coverage": {
+    "coverage_all": 0.14285714285714285,
+    "coverage_relevant": 0.2222222222222222,
+    "contradictions": 6,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "contradicted",
+     "P3": "absent",
+     "P4": "contradicted",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "correct",
+     "P8": "contradicted",
+     "P9": "contradicted",
+     "P10": "absent",
+     "P11": "absent",
+     "P12": "contradicted",
+     "P13": "contradicted",
+     "P14": "absent"
+    }
+   },
+   "rubric": {
+    "specificity": 2,
+    "synthesis": 3,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-society--deep-r3": {
+   "arm": "deep",
+   "run": 3,
+   "question_id": "essay-pilot-and-his-wife-society",
+   "status": "judged",
+   "answer_chars": 4686,
+   "coverage": {
+    "coverage_all": 0.21428571428571427,
+    "coverage_relevant": 0.4,
+    "contradictions": 0,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "absent",
+     "P3": "absent",
+     "P4": "absent",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "absent",
+     "P9": "absent",
+     "P10": "correct",
+     "P11": "absent",
+     "P12": "absent",
+     "P13": "absent",
+     "P14": "correct"
+    }
+   },
+   "rubric": {
+    "specificity": 1,
+    "synthesis": 2,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-arc--full-r1": {
+   "arm": "full",
+   "run": 1,
+   "question_id": "essay-pilot-and-his-wife-arc",
+   "status": "judged",
+   "answer_chars": 3890,
+   "coverage": {
+    "coverage_all": 0.07142857142857142,
+    "coverage_relevant": 0.07692307692307693,
+    "contradictions": 7,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "contradicted",
+     "P3": "absent",
+     "P4": "contradicted",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "contradicted",
+     "P8": "contradicted",
+     "P9": "contradicted",
+     "P10": "absent",
+     "P11": "absent",
+     "P12": "contradicted",
+     "P13": "contradicted",
+     "P14": "absent"
+    }
+   },
+   "rubric": {
+    "specificity": 1,
+    "synthesis": 2,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-conflict--full-r1": {
+   "arm": "full",
+   "run": 1,
+   "question_id": "essay-pilot-and-his-wife-conflict",
+   "status": "judged",
+   "answer_chars": 3029,
+   "coverage": {
+    "coverage_all": 0.2857142857142857,
+    "coverage_relevant": 0.3333333333333333,
+    "contradictions": 6,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "contradicted",
+     "P3": "absent",
+     "P4": "contradicted",
+     "P5": "correct",
+     "P6": "correct",
+     "P7": "absent",
+     "P8": "contradicted",
+     "P9": "contradicted",
+     "P10": "correct",
+     "P11": "absent",
+     "P12": "contradicted",
+     "P13": "contradicted",
+     "P14": "absent"
+    }
+   },
+   "rubric": {
+    "specificity": 1,
+    "synthesis": 2,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-change--full-r1": {
+   "arm": "full",
+   "run": 1,
+   "question_id": "essay-pilot-and-his-wife-change",
+   "status": "judged",
+   "answer_chars": 5619,
+   "coverage": {
+    "coverage_all": 0.35714285714285715,
+    "coverage_relevant": 0.2857142857142857,
+    "contradictions": 1,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "absent",
+     "P3": "absent",
+     "P4": "contradicted",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "absent",
+     "P9": "absent",
+     "P10": "correct",
+     "P11": "absent",
+     "P12": "correct",
+     "P13": "correct",
+     "P14": "correct"
+    }
+   },
+   "rubric": {
+    "specificity": 1,
+    "synthesis": 2,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-relationship--full-r1": {
+   "arm": "full",
+   "run": 1,
+   "question_id": "essay-pilot-and-his-wife-relationship",
+   "status": "judged",
+   "answer_chars": 3018,
+   "coverage": {
+    "coverage_all": 0.21428571428571427,
+    "coverage_relevant": 0.25,
+    "contradictions": 3,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "contradicted",
+     "P3": "absent",
+     "P4": "absent",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "absent",
+     "P9": "absent",
+     "P10": "correct",
+     "P11": "correct",
+     "P12": "contradicted",
+     "P13": "contradicted",
+     "P14": "absent"
+    }
+   },
+   "rubric": {
+    "specificity": 2,
+    "synthesis": 3,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-secondary--full-r1": {
+   "arm": "full",
+   "run": 1,
+   "question_id": "essay-pilot-and-his-wife-secondary",
+   "status": "judged",
+   "answer_chars": 3754,
+   "coverage": {
+    "coverage_all": 0.07142857142857142,
+    "coverage_relevant": 0.0,
+    "contradictions": 2,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "absent",
+     "P3": "contradicted",
+     "P4": "contradicted",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "absent",
+     "P9": "absent",
+     "P10": "absent",
+     "P11": "absent",
+     "P12": "absent",
+     "P13": "absent",
+     "P14": "absent"
+    }
+   },
+   "rubric": {
+    "specificity": 2,
+    "synthesis": 3,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-themes--full-r1": {
+   "arm": "full",
+   "run": 1,
+   "question_id": "essay-pilot-and-his-wife-themes",
+   "status": "judged",
+   "answer_chars": 5040,
+   "coverage": {
+    "coverage_all": 0.2857142857142857,
+    "coverage_relevant": 0.6,
+    "contradictions": 6,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "absent",
+     "P3": "contradicted",
+     "P4": "contradicted",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "contradicted",
+     "P9": "contradicted",
+     "P10": "correct",
+     "P11": "correct",
+     "P12": "contradicted",
+     "P13": "contradicted",
+     "P14": "correct"
+    }
+   },
+   "rubric": {
+    "specificity": 2,
+    "synthesis": 4,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-setting--full-r1": {
+   "arm": "full",
+   "run": 1,
+   "question_id": "essay-pilot-and-his-wife-setting",
+   "status": "judged",
+   "answer_chars": 4061,
+   "coverage": {
+    "coverage_all": 0.21428571428571427,
+    "coverage_relevant": 0.3333333333333333,
+    "contradictions": 0,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "absent",
+     "P3": "absent",
+     "P4": "absent",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "absent",
+     "P9": "absent",
+     "P10": "correct",
+     "P11": "absent",
+     "P12": "absent",
+     "P13": "absent",
+     "P14": "correct"
+    }
+   },
+   "rubric": {
+    "specificity": 1,
+    "synthesis": 2,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-turning-point--full-r1": {
+   "arm": "full",
+   "run": 1,
+   "question_id": "essay-pilot-and-his-wife-turning-point",
+   "status": "judged",
+   "answer_chars": 3281,
+   "coverage": {
+    "coverage_all": 0.14285714285714285,
+    "coverage_relevant": 0.0,
+    "contradictions": 1,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "absent",
+     "P3": "absent",
+     "P4": "absent",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "absent",
+     "P9": "absent",
+     "P10": "contradicted",
+     "P11": "absent",
+     "P12": "absent",
+     "P13": "absent",
+     "P14": "correct"
+    }
+   },
+   "rubric": {
+    "specificity": 2,
+    "synthesis": 3,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-ending--full-r1": {
+   "arm": "full",
+   "run": 1,
+   "question_id": "essay-pilot-and-his-wife-ending",
+   "status": "judged",
+   "answer_chars": 5390,
+   "coverage": {
+    "coverage_all": 0.2857142857142857,
+    "coverage_relevant": 0.5,
+    "contradictions": 2,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "absent",
+     "P3": "contradicted",
+     "P4": "contradicted",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "absent",
+     "P9": "absent",
+     "P10": "absent",
+     "P11": "absent",
+     "P12": "correct",
+     "P13": "correct",
+     "P14": "correct"
+    }
+   },
+   "rubric": {
+    "specificity": 1,
+    "synthesis": 2,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-inner-conflicts--full-r1": {
+   "arm": "full",
+   "run": 1,
+   "question_id": "essay-pilot-and-his-wife-inner-conflicts",
+   "status": "judged",
+   "answer_chars": 5310,
+   "coverage": {
+    "coverage_all": 0.42857142857142855,
+    "coverage_relevant": 0.6666666666666666,
+    "contradictions": 1,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "absent",
+     "P3": "contradicted",
+     "P4": "absent",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "absent",
+     "P9": "absent",
+     "P10": "correct",
+     "P11": "correct",
+     "P12": "correct",
+     "P13": "correct",
+     "P14": "correct"
+    }
+   },
+   "rubric": {
+    "specificity": 1,
+    "synthesis": 2,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-setup--full-r1": {
+   "arm": "full",
+   "run": 1,
+   "question_id": "essay-pilot-and-his-wife-setup",
+   "status": "judged",
+   "answer_chars": 3302,
+   "coverage": {
+    "coverage_all": 0.21428571428571427,
+    "coverage_relevant": 0.1111111111111111,
+    "contradictions": 3,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "contradicted",
+     "P3": "absent",
+     "P4": "absent",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "absent",
+     "P9": "absent",
+     "P10": "correct",
+     "P11": "correct",
+     "P12": "contradicted",
+     "P13": "contradicted",
+     "P14": "absent"
+    }
+   },
+   "rubric": {
+    "specificity": 1,
+    "synthesis": 2,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-society--full-r1": {
+   "arm": "full",
+   "run": 1,
+   "question_id": "essay-pilot-and-his-wife-society",
+   "status": "judged",
+   "answer_chars": 5274,
+   "coverage": {
+    "coverage_all": 0.21428571428571427,
+    "coverage_relevant": 0.4,
+    "contradictions": 4,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "absent",
+     "P3": "contradicted",
+     "P4": "contradicted",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "contradicted",
+     "P9": "contradicted",
+     "P10": "correct",
+     "P11": "absent",
+     "P12": "absent",
+     "P13": "absent",
+     "P14": "correct"
+    }
+   },
+   "rubric": {
+    "specificity": 1,
+    "synthesis": 2,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-arc--full-r2": {
+   "arm": "full",
+   "run": 2,
+   "question_id": "essay-pilot-and-his-wife-arc",
+   "status": "judged",
+   "answer_chars": 3890,
+   "coverage": {
+    "coverage_all": 0.07142857142857142,
+    "coverage_relevant": 0.07692307692307693,
+    "contradictions": 7,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "contradicted",
+     "P3": "absent",
+     "P4": "contradicted",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "contradicted",
+     "P8": "contradicted",
+     "P9": "contradicted",
+     "P10": "absent",
+     "P11": "absent",
+     "P12": "contradicted",
+     "P13": "contradicted",
+     "P14": "absent"
+    }
+   },
+   "rubric": {
+    "specificity": 1,
+    "synthesis": 2,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-conflict--full-r2": {
+   "arm": "full",
+   "run": 2,
+   "question_id": "essay-pilot-and-his-wife-conflict",
+   "status": "judged",
+   "answer_chars": 3029,
+   "coverage": {
+    "coverage_all": 0.2857142857142857,
+    "coverage_relevant": 0.3333333333333333,
+    "contradictions": 6,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "contradicted",
+     "P3": "absent",
+     "P4": "contradicted",
+     "P5": "correct",
+     "P6": "correct",
+     "P7": "absent",
+     "P8": "contradicted",
+     "P9": "contradicted",
+     "P10": "correct",
+     "P11": "absent",
+     "P12": "contradicted",
+     "P13": "contradicted",
+     "P14": "absent"
+    }
+   },
+   "rubric": {
+    "specificity": 1,
+    "synthesis": 2,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-change--full-r2": {
+   "arm": "full",
+   "run": 2,
+   "question_id": "essay-pilot-and-his-wife-change",
+   "status": "judged",
+   "answer_chars": 5619,
+   "coverage": {
+    "coverage_all": 0.35714285714285715,
+    "coverage_relevant": 0.2857142857142857,
+    "contradictions": 1,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "absent",
+     "P3": "absent",
+     "P4": "contradicted",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "absent",
+     "P9": "absent",
+     "P10": "correct",
+     "P11": "absent",
+     "P12": "correct",
+     "P13": "correct",
+     "P14": "correct"
+    }
+   },
+   "rubric": {
+    "specificity": 1,
+    "synthesis": 2,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-relationship--full-r2": {
+   "arm": "full",
+   "run": 2,
+   "question_id": "essay-pilot-and-his-wife-relationship",
+   "status": "judged",
+   "answer_chars": 3018,
+   "coverage": {
+    "coverage_all": 0.21428571428571427,
+    "coverage_relevant": 0.25,
+    "contradictions": 3,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "contradicted",
+     "P3": "absent",
+     "P4": "absent",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "absent",
+     "P9": "absent",
+     "P10": "correct",
+     "P11": "correct",
+     "P12": "contradicted",
+     "P13": "contradicted",
+     "P14": "absent"
+    }
+   },
+   "rubric": {
+    "specificity": 2,
+    "synthesis": 3,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-secondary--full-r2": {
+   "arm": "full",
+   "run": 2,
+   "question_id": "essay-pilot-and-his-wife-secondary",
+   "status": "judged",
+   "answer_chars": 3754,
+   "coverage": {
+    "coverage_all": 0.07142857142857142,
+    "coverage_relevant": 0.0,
+    "contradictions": 2,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "absent",
+     "P3": "contradicted",
+     "P4": "contradicted",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "absent",
+     "P9": "absent",
+     "P10": "absent",
+     "P11": "absent",
+     "P12": "absent",
+     "P13": "absent",
+     "P14": "absent"
+    }
+   },
+   "rubric": {
+    "specificity": 2,
+    "synthesis": 3,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-themes--full-r2": {
+   "arm": "full",
+   "run": 2,
+   "question_id": "essay-pilot-and-his-wife-themes",
+   "status": "judged",
+   "answer_chars": 5040,
+   "coverage": {
+    "coverage_all": 0.2857142857142857,
+    "coverage_relevant": 0.6,
+    "contradictions": 6,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "absent",
+     "P3": "contradicted",
+     "P4": "contradicted",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "contradicted",
+     "P9": "contradicted",
+     "P10": "correct",
+     "P11": "correct",
+     "P12": "contradicted",
+     "P13": "contradicted",
+     "P14": "correct"
+    }
+   },
+   "rubric": {
+    "specificity": 2,
+    "synthesis": 4,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-setting--full-r2": {
+   "arm": "full",
+   "run": 2,
+   "question_id": "essay-pilot-and-his-wife-setting",
+   "status": "judged",
+   "answer_chars": 4061,
+   "coverage": {
+    "coverage_all": 0.21428571428571427,
+    "coverage_relevant": 0.3333333333333333,
+    "contradictions": 0,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "absent",
+     "P3": "absent",
+     "P4": "absent",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "absent",
+     "P9": "absent",
+     "P10": "correct",
+     "P11": "absent",
+     "P12": "absent",
+     "P13": "absent",
+     "P14": "correct"
+    }
+   },
+   "rubric": {
+    "specificity": 1,
+    "synthesis": 2,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-turning-point--full-r2": {
+   "arm": "full",
+   "run": 2,
+   "question_id": "essay-pilot-and-his-wife-turning-point",
+   "status": "judged",
+   "answer_chars": 3281,
+   "coverage": {
+    "coverage_all": 0.14285714285714285,
+    "coverage_relevant": 0.0,
+    "contradictions": 1,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "absent",
+     "P3": "absent",
+     "P4": "absent",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "absent",
+     "P9": "absent",
+     "P10": "contradicted",
+     "P11": "absent",
+     "P12": "absent",
+     "P13": "absent",
+     "P14": "correct"
+    }
+   },
+   "rubric": {
+    "specificity": 2,
+    "synthesis": 3,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-ending--full-r2": {
+   "arm": "full",
+   "run": 2,
+   "question_id": "essay-pilot-and-his-wife-ending",
+   "status": "judged",
+   "answer_chars": 5390,
+   "coverage": {
+    "coverage_all": 0.2857142857142857,
+    "coverage_relevant": 0.5,
+    "contradictions": 2,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "absent",
+     "P3": "contradicted",
+     "P4": "contradicted",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "absent",
+     "P9": "absent",
+     "P10": "absent",
+     "P11": "absent",
+     "P12": "correct",
+     "P13": "correct",
+     "P14": "correct"
+    }
+   },
+   "rubric": {
+    "specificity": 1,
+    "synthesis": 2,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-inner-conflicts--full-r2": {
+   "arm": "full",
+   "run": 2,
+   "question_id": "essay-pilot-and-his-wife-inner-conflicts",
+   "status": "judged",
+   "answer_chars": 5310,
+   "coverage": {
+    "coverage_all": 0.42857142857142855,
+    "coverage_relevant": 0.6666666666666666,
+    "contradictions": 1,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "absent",
+     "P3": "contradicted",
+     "P4": "absent",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "absent",
+     "P9": "absent",
+     "P10": "correct",
+     "P11": "correct",
+     "P12": "correct",
+     "P13": "correct",
+     "P14": "correct"
+    }
+   },
+   "rubric": {
+    "specificity": 1,
+    "synthesis": 2,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-setup--full-r2": {
+   "arm": "full",
+   "run": 2,
+   "question_id": "essay-pilot-and-his-wife-setup",
+   "status": "judged",
+   "answer_chars": 3302,
+   "coverage": {
+    "coverage_all": 0.21428571428571427,
+    "coverage_relevant": 0.1111111111111111,
+    "contradictions": 3,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "contradicted",
+     "P3": "absent",
+     "P4": "absent",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "absent",
+     "P9": "absent",
+     "P10": "correct",
+     "P11": "correct",
+     "P12": "contradicted",
+     "P13": "contradicted",
+     "P14": "absent"
+    }
+   },
+   "rubric": {
+    "specificity": 1,
+    "synthesis": 2,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-society--full-r2": {
+   "arm": "full",
+   "run": 2,
+   "question_id": "essay-pilot-and-his-wife-society",
+   "status": "judged",
+   "answer_chars": 5274,
+   "coverage": {
+    "coverage_all": 0.21428571428571427,
+    "coverage_relevant": 0.4,
+    "contradictions": 4,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "absent",
+     "P3": "contradicted",
+     "P4": "contradicted",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "contradicted",
+     "P9": "contradicted",
+     "P10": "correct",
+     "P11": "absent",
+     "P12": "absent",
+     "P13": "absent",
+     "P14": "correct"
+    }
+   },
+   "rubric": {
+    "specificity": 1,
+    "synthesis": 2,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-arc--full-r3": {
+   "arm": "full",
+   "run": 3,
+   "question_id": "essay-pilot-and-his-wife-arc",
+   "status": "judged",
+   "answer_chars": 3890,
+   "coverage": {
+    "coverage_all": 0.07142857142857142,
+    "coverage_relevant": 0.07692307692307693,
+    "contradictions": 7,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "contradicted",
+     "P3": "absent",
+     "P4": "contradicted",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "contradicted",
+     "P8": "contradicted",
+     "P9": "contradicted",
+     "P10": "absent",
+     "P11": "absent",
+     "P12": "contradicted",
+     "P13": "contradicted",
+     "P14": "absent"
+    }
+   },
+   "rubric": {
+    "specificity": 1,
+    "synthesis": 2,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-conflict--full-r3": {
+   "arm": "full",
+   "run": 3,
+   "question_id": "essay-pilot-and-his-wife-conflict",
+   "status": "judged",
+   "answer_chars": 3029,
+   "coverage": {
+    "coverage_all": 0.2857142857142857,
+    "coverage_relevant": 0.3333333333333333,
+    "contradictions": 6,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "contradicted",
+     "P3": "absent",
+     "P4": "contradicted",
+     "P5": "correct",
+     "P6": "correct",
+     "P7": "absent",
+     "P8": "contradicted",
+     "P9": "contradicted",
+     "P10": "correct",
+     "P11": "absent",
+     "P12": "contradicted",
+     "P13": "contradicted",
+     "P14": "absent"
+    }
+   },
+   "rubric": {
+    "specificity": 1,
+    "synthesis": 2,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-change--full-r3": {
+   "arm": "full",
+   "run": 3,
+   "question_id": "essay-pilot-and-his-wife-change",
+   "status": "judged",
+   "answer_chars": 5619,
+   "coverage": {
+    "coverage_all": 0.35714285714285715,
+    "coverage_relevant": 0.2857142857142857,
+    "contradictions": 1,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "absent",
+     "P3": "absent",
+     "P4": "contradicted",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "absent",
+     "P9": "absent",
+     "P10": "correct",
+     "P11": "absent",
+     "P12": "correct",
+     "P13": "correct",
+     "P14": "correct"
+    }
+   },
+   "rubric": {
+    "specificity": 1,
+    "synthesis": 2,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-relationship--full-r3": {
+   "arm": "full",
+   "run": 3,
+   "question_id": "essay-pilot-and-his-wife-relationship",
+   "status": "judged",
+   "answer_chars": 3018,
+   "coverage": {
+    "coverage_all": 0.21428571428571427,
+    "coverage_relevant": 0.25,
+    "contradictions": 3,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "contradicted",
+     "P3": "absent",
+     "P4": "absent",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "absent",
+     "P9": "absent",
+     "P10": "correct",
+     "P11": "correct",
+     "P12": "contradicted",
+     "P13": "contradicted",
+     "P14": "absent"
+    }
+   },
+   "rubric": {
+    "specificity": 2,
+    "synthesis": 3,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-secondary--full-r3": {
+   "arm": "full",
+   "run": 3,
+   "question_id": "essay-pilot-and-his-wife-secondary",
+   "status": "judged",
+   "answer_chars": 3754,
+   "coverage": {
+    "coverage_all": 0.07142857142857142,
+    "coverage_relevant": 0.0,
+    "contradictions": 2,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "absent",
+     "P3": "contradicted",
+     "P4": "contradicted",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "absent",
+     "P9": "absent",
+     "P10": "absent",
+     "P11": "absent",
+     "P12": "absent",
+     "P13": "absent",
+     "P14": "absent"
+    }
+   },
+   "rubric": {
+    "specificity": 2,
+    "synthesis": 3,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-themes--full-r3": {
+   "arm": "full",
+   "run": 3,
+   "question_id": "essay-pilot-and-his-wife-themes",
+   "status": "judged",
+   "answer_chars": 5040,
+   "coverage": {
+    "coverage_all": 0.2857142857142857,
+    "coverage_relevant": 0.6,
+    "contradictions": 6,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "absent",
+     "P3": "contradicted",
+     "P4": "contradicted",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "contradicted",
+     "P9": "contradicted",
+     "P10": "correct",
+     "P11": "correct",
+     "P12": "contradicted",
+     "P13": "contradicted",
+     "P14": "correct"
+    }
+   },
+   "rubric": {
+    "specificity": 2,
+    "synthesis": 4,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-setting--full-r3": {
+   "arm": "full",
+   "run": 3,
+   "question_id": "essay-pilot-and-his-wife-setting",
+   "status": "judged",
+   "answer_chars": 4061,
+   "coverage": {
+    "coverage_all": 0.21428571428571427,
+    "coverage_relevant": 0.3333333333333333,
+    "contradictions": 0,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "absent",
+     "P3": "absent",
+     "P4": "absent",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "absent",
+     "P9": "absent",
+     "P10": "correct",
+     "P11": "absent",
+     "P12": "absent",
+     "P13": "absent",
+     "P14": "correct"
+    }
+   },
+   "rubric": {
+    "specificity": 1,
+    "synthesis": 2,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-turning-point--full-r3": {
+   "arm": "full",
+   "run": 3,
+   "question_id": "essay-pilot-and-his-wife-turning-point",
+   "status": "judged",
+   "answer_chars": 3281,
+   "coverage": {
+    "coverage_all": 0.14285714285714285,
+    "coverage_relevant": 0.0,
+    "contradictions": 1,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "absent",
+     "P3": "absent",
+     "P4": "absent",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "absent",
+     "P9": "absent",
+     "P10": "contradicted",
+     "P11": "absent",
+     "P12": "absent",
+     "P13": "absent",
+     "P14": "correct"
+    }
+   },
+   "rubric": {
+    "specificity": 2,
+    "synthesis": 3,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-ending--full-r3": {
+   "arm": "full",
+   "run": 3,
+   "question_id": "essay-pilot-and-his-wife-ending",
+   "status": "judged",
+   "answer_chars": 5390,
+   "coverage": {
+    "coverage_all": 0.2857142857142857,
+    "coverage_relevant": 0.5,
+    "contradictions": 2,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "absent",
+     "P3": "contradicted",
+     "P4": "contradicted",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "absent",
+     "P9": "absent",
+     "P10": "absent",
+     "P11": "absent",
+     "P12": "correct",
+     "P13": "correct",
+     "P14": "correct"
+    }
+   },
+   "rubric": {
+    "specificity": 1,
+    "synthesis": 2,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-inner-conflicts--full-r3": {
+   "arm": "full",
+   "run": 3,
+   "question_id": "essay-pilot-and-his-wife-inner-conflicts",
+   "status": "judged",
+   "answer_chars": 5310,
+   "coverage": {
+    "coverage_all": 0.42857142857142855,
+    "coverage_relevant": 0.6666666666666666,
+    "contradictions": 1,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "absent",
+     "P3": "contradicted",
+     "P4": "absent",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "absent",
+     "P9": "absent",
+     "P10": "correct",
+     "P11": "correct",
+     "P12": "correct",
+     "P13": "correct",
+     "P14": "correct"
+    }
+   },
+   "rubric": {
+    "specificity": 1,
+    "synthesis": 2,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-setup--full-r3": {
+   "arm": "full",
+   "run": 3,
+   "question_id": "essay-pilot-and-his-wife-setup",
+   "status": "judged",
+   "answer_chars": 3302,
+   "coverage": {
+    "coverage_all": 0.21428571428571427,
+    "coverage_relevant": 0.1111111111111111,
+    "contradictions": 3,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "contradicted",
+     "P3": "absent",
+     "P4": "absent",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "absent",
+     "P9": "absent",
+     "P10": "correct",
+     "P11": "correct",
+     "P12": "contradicted",
+     "P13": "contradicted",
+     "P14": "absent"
+    }
+   },
+   "rubric": {
+    "specificity": 1,
+    "synthesis": 2,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-society--full-r3": {
+   "arm": "full",
+   "run": 3,
+   "question_id": "essay-pilot-and-his-wife-society",
+   "status": "judged",
+   "answer_chars": 5274,
+   "coverage": {
+    "coverage_all": 0.21428571428571427,
+    "coverage_relevant": 0.4,
+    "contradictions": 4,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "correct",
+     "P2": "absent",
+     "P3": "contradicted",
+     "P4": "contradicted",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "contradicted",
+     "P9": "contradicted",
+     "P10": "correct",
+     "P11": "absent",
+     "P12": "absent",
+     "P13": "absent",
+     "P14": "correct"
+    }
+   },
+   "rubric": {
+    "specificity": 1,
+    "synthesis": 2,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-arc--closed-book-r1": {
+   "arm": "closed-book",
+   "run": 1,
+   "question_id": "essay-pilot-and-his-wife-arc",
+   "status": "judged",
+   "answer_chars": 2207,
+   "coverage": {
+    "coverage_all": 0.0,
+    "coverage_relevant": 0.0,
+    "contradictions": 0,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "absent",
+     "P2": "absent",
+     "P3": "absent",
+     "P4": "absent",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "absent",
+     "P9": "absent",
+     "P10": "absent",
+     "P11": "absent",
+     "P12": "absent",
+     "P13": "absent",
+     "P14": "absent"
+    }
+   },
+   "rubric": {
+    "specificity": 1,
+    "synthesis": 1,
+    "faithfulness": 2
+   }
+  },
+  "essay-pilot-and-his-wife-conflict--closed-book-r1": {
+   "arm": "closed-book",
+   "run": 1,
+   "question_id": "essay-pilot-and-his-wife-conflict",
+   "status": "judged",
+   "answer_chars": 4500,
+   "coverage": {
+    "coverage_all": 0.0,
+    "coverage_relevant": 0.0,
+    "contradictions": 0,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "absent",
+     "P2": "absent",
+     "P3": "absent",
+     "P4": "absent",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "absent",
+     "P9": "absent",
+     "P10": "absent",
+     "P11": "absent",
+     "P12": "absent",
+     "P13": "absent",
+     "P14": "absent"
+    }
+   },
+   "rubric": {
+    "specificity": 1,
+    "synthesis": 2,
+    "faithfulness": 5
+   }
+  },
+  "essay-pilot-and-his-wife-change--closed-book-r1": {
+   "arm": "closed-book",
+   "run": 1,
+   "question_id": "essay-pilot-and-his-wife-change",
+   "status": "judged",
+   "answer_chars": 3295,
+   "coverage": {
+    "coverage_all": 0.0,
+    "coverage_relevant": 0.0,
+    "contradictions": 1,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "absent",
+     "P2": "contradicted",
+     "P3": "absent",
+     "P4": "absent",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "absent",
+     "P9": "absent",
+     "P10": "absent",
+     "P11": "absent",
+     "P12": "absent",
+     "P13": "absent",
+     "P14": "absent"
+    }
+   },
+   "rubric": {
+    "specificity": 1,
+    "synthesis": 2,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-relationship--closed-book-r1": {
+   "arm": "closed-book",
+   "run": 1,
+   "question_id": "essay-pilot-and-his-wife-relationship",
+   "status": "judged",
+   "answer_chars": 1429,
+   "coverage": {
+    "coverage_all": 0.14285714285714285,
+    "coverage_relevant": 0.125,
+    "contradictions": 1,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "absent",
+     "P2": "contradicted",
+     "P3": "absent",
+     "P4": "absent",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "absent",
+     "P9": "absent",
+     "P10": "correct",
+     "P11": "absent",
+     "P12": "absent",
+     "P13": "absent",
+     "P14": "correct"
+    }
+   },
+   "rubric": {
+    "specificity": 1,
+    "synthesis": 2,
+    "faithfulness": 5
+   }
+  },
+  "essay-pilot-and-his-wife-secondary--closed-book-r1": {
+   "arm": "closed-book",
+   "run": 1,
+   "question_id": "essay-pilot-and-his-wife-secondary",
+   "status": "judged",
+   "answer_chars": 2987,
+   "coverage": {
+    "coverage_all": 0.07142857142857142,
+    "coverage_relevant": 0.125,
+    "contradictions": 1,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "absent",
+     "P2": "contradicted",
+     "P3": "correct",
+     "P4": "absent",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "absent",
+     "P9": "absent",
+     "P10": "absent",
+     "P11": "absent",
+     "P12": "absent",
+     "P13": "absent",
+     "P14": "absent"
+    }
+   },
+   "rubric": {
+    "specificity": 1,
+    "synthesis": 2,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-themes--closed-book-r1": {
+   "arm": "closed-book",
+   "run": 1,
+   "question_id": "essay-pilot-and-his-wife-themes",
+   "status": "judged",
+   "answer_chars": 6715,
+   "coverage": {
+    "coverage_all": 0.2857142857142857,
+    "coverage_relevant": 0.0,
+    "contradictions": 1,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "absent",
+     "P2": "contradicted",
+     "P3": "correct",
+     "P4": "absent",
+     "P5": "correct",
+     "P6": "correct",
+     "P7": "correct",
+     "P8": "absent",
+     "P9": "absent",
+     "P10": "absent",
+     "P11": "absent",
+     "P12": "absent",
+     "P13": "absent",
+     "P14": "absent"
+    }
+   },
+   "rubric": {
+    "specificity": 1,
+    "synthesis": 2,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-setting--closed-book-r1": {
+   "arm": "closed-book",
+   "run": 1,
+   "question_id": "essay-pilot-and-his-wife-setting",
+   "status": "judged",
+   "answer_chars": 5054,
+   "coverage": {
+    "coverage_all": 0.0,
+    "coverage_relevant": 0.0,
+    "contradictions": 0,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "absent",
+     "P2": "absent",
+     "P3": "absent",
+     "P4": "absent",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "absent",
+     "P9": "absent",
+     "P10": "absent",
+     "P11": "absent",
+     "P12": "absent",
+     "P13": "absent",
+     "P14": "absent"
+    }
+   },
+   "rubric": {
+    "specificity": 1,
+    "synthesis": 2,
+    "faithfulness": 1
+   }
+  },
+  "essay-pilot-and-his-wife-turning-point--closed-book-r1": {
+   "arm": "closed-book",
+   "run": 1,
+   "question_id": "essay-pilot-and-his-wife-turning-point",
+   "status": "judged",
+   "answer_chars": 7165,
+   "coverage": {
+    "coverage_all": 0.0,
+    "coverage_relevant": 0.0,
+    "contradictions": 0,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "absent",
+     "P2": "absent",
+     "P3": "absent",
+     "P4": "absent",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "absent",
+     "P9": "absent",
+     "P10": "absent",
+     "P11": "absent",
+     "P12": "absent",
+     "P13": "absent",
+     "P14": "absent"
+    }
+   },
+   "rubric": {
+    "specificity": 1,
+    "synthesis": 1,
+    "faithfulness": 2
+   }
+  },
+  "essay-pilot-and-his-wife-ending--closed-book-r1": {
+   "arm": "closed-book",
+   "run": 1,
+   "question_id": "essay-pilot-and-his-wife-ending",
+   "status": "judged",
+   "answer_chars": 1997,
+   "coverage": {
+    "coverage_all": 0.0,
+    "coverage_relevant": 0.0,
+    "contradictions": 0,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "absent",
+     "P2": "absent",
+     "P3": "absent",
+     "P4": "absent",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "absent",
+     "P9": "absent",
+     "P10": "absent",
+     "P11": "absent",
+     "P12": "absent",
+     "P13": "absent",
+     "P14": "absent"
+    }
+   },
+   "rubric": {
+    "specificity": 1,
+    "synthesis": 1,
+    "faithfulness": 2
+   }
+  },
+  "essay-pilot-and-his-wife-inner-conflicts--closed-book-r1": {
+   "arm": "closed-book",
+   "run": 1,
+   "question_id": "essay-pilot-and-his-wife-inner-conflicts",
+   "status": "judged",
+   "answer_chars": 5764,
+   "coverage": {
+    "coverage_all": 0.0,
+    "coverage_relevant": 0.0,
+    "contradictions": 0,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "absent",
+     "P2": "absent",
+     "P3": "absent",
+     "P4": "absent",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "absent",
+     "P9": "absent",
+     "P10": "absent",
+     "P11": "absent",
+     "P12": "absent",
+     "P13": "absent",
+     "P14": "absent"
+    }
+   },
+   "rubric": {
+    "specificity": 1,
+    "synthesis": 1,
+    "faithfulness": 2
+   }
+  },
+  "essay-pilot-and-his-wife-setup--closed-book-r1": {
+   "arm": "closed-book",
+   "run": 1,
+   "question_id": "essay-pilot-and-his-wife-setup",
+   "status": "judged",
+   "answer_chars": 2644,
+   "coverage": {
+    "coverage_all": 0.0,
+    "coverage_relevant": 0.0,
+    "contradictions": 0,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "absent",
+     "P2": "absent",
+     "P3": "absent",
+     "P4": "absent",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "absent",
+     "P9": "absent",
+     "P10": "absent",
+     "P11": "absent",
+     "P12": "absent",
+     "P13": "absent",
+     "P14": "absent"
+    }
+   },
+   "rubric": {
+    "specificity": 1,
+    "synthesis": 1,
+    "faithfulness": 2
+   }
+  },
+  "essay-pilot-and-his-wife-society--closed-book-r1": {
+   "arm": "closed-book",
+   "run": 1,
+   "question_id": "essay-pilot-and-his-wife-society",
+   "status": "judged",
+   "answer_chars": 4165,
+   "coverage": {
+    "coverage_all": 0.0,
+    "coverage_relevant": 0.0,
+    "contradictions": 1,
+    "unjudged_points": 0,
+    "labels": {
+     "P1": "absent",
+     "P2": "absent",
+     "P3": "absent",
+     "P4": "absent",
+     "P5": "absent",
+     "P6": "absent",
+     "P7": "absent",
+     "P8": "absent",
+     "P9": "absent",
+     "P10": "absent",
+     "P11": "absent",
+     "P12": "absent",
+     "P13": "absent",
+     "P14": "contradicted"
+    }
+   },
+   "rubric": {
+    "specificity": 1,
+    "synthesis": 2,
+    "faithfulness": 1
+   }
+  }
+ },
+ "judge": {
+  "calls": 397,
+  "reused": 0,
+  "unparsed": 0,
+  "reported_models": [
+   "Qwen3.6-35B-A3B-MTP-UD-Q6_K"
+  ]
+ },
+ "schema": "ei7-essay-board/v1",
+ "bank": "raptor-proof-essay-pilot-and-his-wife-composed-v1",
+ "runs_dir": "research/ontology-retrieval/raptor-proof/essay/runs-pilot-and-his-wife-composed",
+ "seed": 20260922,
+ "skipped_runs": [],
+ "synth_models": [
+  "Qwen3.6-35B-A3B-MTP-UD-Q6_K"
+ ],
+ "judge_model": {
+  "requested": "commonwealth/primary",
+  "resolved": "Qwen3.6-35B-A3B-MTP-UD-Q6_K",
+  "reported": [
+   "Qwen3.6-35B-A3B-MTP-UD-Q6_K"
+  ]
+ },
+ "factor_reach": {
+  "bare": {
+   "questions": 12,
+   "reached": {}
+  },
+  "deep": {
+   "questions": 12,
+   "reached": {}
+  },
+  "full": {
+   "questions": 12,
+   "reached": {
+    "state": 11,
+    "summary": 12,
+    "claim": 6,
+    "relation": 12,
+    "entity": 12,
+    "event": 9,
+    "configuration": 2,
+    "question": 2
+   }
+  },
+  "closed-book": {
+   "questions": 12,
+   "reached": {}
+  }
+ },
+ "kinship": "judge and synth are the SAME MODEL (Qwen3.6-35B-A3B-MTP-UD-Q6_K): self-preference applies to every arm alike, not to one"
+}

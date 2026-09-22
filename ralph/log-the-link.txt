@@ -39,3 +39,7 @@ campaign: needs-human — # NEEDS_HUMAN — the-link / tl-2-offline-leg-exports
 campaign: needs-human — # NEEDS_HUMAN — the-link / tl-2-offline-leg-exports
 2026-09-22T08:32:30Z supervisor: campaign stopped — # NEEDS_HUMAN — the-link / tl-2-offline-leg-exports
 2026-09-22T08:32:30Z supervisor: dispatching resolution session 4 — # NEEDS_HUMAN — the-link / tl-2-offline-leg-exports
+2026-09-22T08:38:01Z supervisor: resolution 4 left NEEDS_HUMAN — retrying
+campaign: needs-human — # NEEDS_HUMAN — the-link / tl-2-offline-leg-exports
+2026-09-22T08:38:01Z supervisor: campaign stopped — # NEEDS_HUMAN — the-link / tl-2-offline-leg-exports
+2026-09-22T08:38:01Z supervisor: 4 resolution attempts did not clear it — leaving it to the operator

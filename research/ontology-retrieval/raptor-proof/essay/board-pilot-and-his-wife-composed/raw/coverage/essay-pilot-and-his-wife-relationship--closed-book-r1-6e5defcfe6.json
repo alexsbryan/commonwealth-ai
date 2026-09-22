@@ -1,0 +1,28 @@
+{
+ "kind": "coverage",
+ "key": "essay-pilot-and-his-wife-relationship--closed-book-r1",
+ "prompt": "Below are numbered plot points of a novel and an answer written about the novel.\nLabel every point by what the answer says about it:\n\"correct\" = the answer states it\n\"contradicted\" = the answer says something that conflicts with it\n\"absent\" = the answer does not mention it\nReturn only JSON with one entry per point: {\"P1\": \"correct\", \"P2\": \"absent\"}\n\nPoints:\nP1. The novel portrays the life of a sailor named Salve Kristiansen.\nP2. Salve loves Elisabeth and she returns his affection.\nP3. Elisabeth is attracted to a young officer who wishes to marry her.\nP4. Elisabeth spurns the officer because her old love for Salve prevails.\nP5. Salve leaves his native land in desperation before he can reconcile with Elisabeth.\nP6. Salve sails toward foreign shores after leaving home.\nP7. Salve returns to his old home years later.\nP8. Salve finds that Elisabeth has remained true to him during his absence.\nP9. Salve marries Elisabeth upon his return.\nP10. The thought of Elisabeth's momentary hesitation makes life miserable for both spouses.\nP11. Ten years elapse while Salve and Elisabeth struggle with their marital issues.\nP12. Salve and Elisabeth finally come to a clear understanding of one another.\nP13. Salve and Elisabeth lay the foundation for a happy life together.\nP14. The novel emphasizes the need of implicit confidence and trust in marriage.\n\nAnswer:\nIt appears there is a misunderstanding regarding the title. There is no widely known or canonical novel titled **\"The Pilot and His Wife.\"**\n\nHowever, this may be a confusion with one of the following well-known works:\n\n1.  **_Pilot's Wife_ by Ann Marsh**: This is a popular contemporary fiction thriller published in 2006.\n    -   **Main Relationship**: The marriage between **Andy Sykes** (a commercial airline pilot) and his wife **Annie**.\n    -   **What Strains It**: Andy\u2019s frequent absences due to flying duties create emotional distance. After Andy disappears on a flight over the Atlantic Ocean under mysterious circumstances, Annie begins receiving anonymous letters claiming that someone close to her murdered him. As she investigates, she uncovers secrets about Andy\u2019s life\u2014including possible infidelity and financial troubles\u2014straining their posthumous relationship and testing her trust in those around her.\n\n2.  **_The Pilot's Wife_ by Ann Marsh** is likely what you are referring to, given its prominence in recent fiction lists involving pilots and marital strain.\n\nIf you meant a different book (such as _Pilot's Farewell_, _The Captain\u2019s Daughter_, or another title), please clarify! But based on available literary records, **\"The Pilot and His Wife\" does not exist as a standard novel title**, while **\"Pilot's Wife\"** by Ann Marsh fits the description of a story centered on a pilot\u2019s marriage under strain.",
+ "attempts": [
+  {
+   "nudged": false,
+   "reply": "{\n\"P1\": \"absent\",\n\"P2\": \"contradicted\",\n\"P3\": \"absent\",\n\"P4\": \"absent\",\n\"P5\": \"absent\",\n\"P6\": \"absent\",\n\"P7\": \"absent\",\n\"P8\": \"absent\",\n\"P9\": \"absent\",\n\"P10\": \"correct\",\n\"P11\": \"absent\",\n\"P12\": \"absent\",\n\"P13\": \"absent\",\n\"P14\": \"correct\"\n}",
+   "model": "Qwen3.6-35B-A3B-MTP-UD-Q6_K"
+  }
+ ],
+ "parsed": {
+  "P1": "absent",
+  "P2": "contradicted",
+  "P3": "absent",
+  "P4": "absent",
+  "P5": "absent",
+  "P6": "absent",
+  "P7": "absent",
+  "P8": "absent",
+  "P9": "absent",
+  "P10": "correct",
+  "P11": "absent",
+  "P12": "absent",
+  "P13": "absent",
+  "P14": "correct"
+ }
+}

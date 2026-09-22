@@ -1,0 +1,28 @@
+{
+ "kind": "coverage",
+ "key": "essay-pilot-and-his-wife-arc--closed-book-r1",
+ "prompt": "Below are numbered plot points of a novel and an answer written about the novel.\nLabel every point by what the answer says about it:\n\"correct\" = the answer states it\n\"contradicted\" = the answer says something that conflicts with it\n\"absent\" = the answer does not mention it\nReturn only JSON with one entry per point: {\"P1\": \"correct\", \"P2\": \"absent\"}\n\nPoints:\nP1. The novel portrays the life of a sailor named Salve Kristiansen.\nP2. Salve loves Elisabeth and she returns his affection.\nP3. Elisabeth is attracted to a young officer who wishes to marry her.\nP4. Elisabeth spurns the officer because her old love for Salve prevails.\nP5. Salve leaves his native land in desperation before he can reconcile with Elisabeth.\nP6. Salve sails toward foreign shores after leaving home.\nP7. Salve returns to his old home years later.\nP8. Salve finds that Elisabeth has remained true to him during his absence.\nP9. Salve marries Elisabeth upon his return.\nP10. The thought of Elisabeth's momentary hesitation makes life miserable for both spouses.\nP11. Ten years elapse while Salve and Elisabeth struggle with their marital issues.\nP12. Salve and Elisabeth finally come to a clear understanding of one another.\nP13. Salve and Elisabeth lay the foundation for a happy life together.\nP14. The novel emphasizes the need of implicit confidence and trust in marriage.\n\nAnswer:\nThere is no widely recognized or canonical novel titled **\"The Pilot and His Wife\"** in standard English literature. It is possible that you are referring to a different title, a translation of a foreign work, or perhaps conflating titles.\n\nHowever, there are several famous works with similar themes or titles that might be what you\u2019re looking for:\n\n1.  **\"The Pilot\" by James Fenimore Cooper** (part of the *Leatherstocking Tales*): This novel follows Natty Bumppo as he becomes involved with sea life and pilots during the War of 1812. However, it does not center on \u201chis wife\u201d as a primary plot arc in the way your question implies.\n2.  **\"Master and Commander\" / \"Hornblower\" series by C.S. Forester**: These naval novels feature captains/pilots and their spouses, but no single book is titled exactly this.\n3.  **Russian Literature \u2013 \"The Captain\u2019s Daughter\" or similar?** Unlikely match.\n4.  **Possible Confusion with \"The Pilot\" (a short story) or a lesser-known work.**\n\n### Most Likely Possibility: You may be thinking of **\"The Old Man and the Sea\"**?  \nNo, that doesn\u2019t involve a wife.\n\n### Another Strong Candidate: **\"Mrs. Dalloway\"?** No pilot.\n\n### Perhaps you mean **\"The Flight of the Phoenix\"?** No wife focus.\n\n---\n\nGiven the ambiguity, here are two possibilities based on common misremembered titles:\n\n#### A. If you meant **\"Pride and Prejudice\"** by Jane Austen (often confused in plot structure discussions):\n- **Opening**: Elizabeth Bennet is introduced to Mr. Bingley and Mr. Darcy; tensions arise from pride and prejudice.\n- **Arc**: Misunderstandings grow, especially regarding Wickham\u2019s lies about Darcy.\n- **Close**: After revelations and personal growth, both overcome their flaws and marry.\n\n#### B. If you meant a novel involving a pilot and his wife, such as **\"The Time Traveler\u2019s Wife\"**, **\"Love in the Time of Cholera\"** (contains pilots?), or even **\"Outlander\"**? None fit perfectly.\n\n---\n\n### Recommendation:\nCould you please clarify:\n1. The author\u2019s name?\n2. A brief plot detail (e.g., setting, time period)?\n3. Whether it might be a short story, film adaptation, or non-English original title?\n\nWith more context, I can provide an accurate summary of the plot arc!",
+ "attempts": [
+  {
+   "nudged": false,
+   "reply": "{\n\"P1\": \"absent\",\n\"P2\": \"absent\",\n\"P3\": \"absent\",\n\"P4\": \"absent\",\n\"P5\": \"absent\",\n\"P6\": \"absent\",\n\"P7\": \"absent\",\n\"P8\": \"absent\",\n\"P9\": \"absent\",\n\"P10\": \"absent\",\n\"P11\": \"absent\",\n\"P12\": \"absent\",\n\"P13\": \"absent\",\n\"P14\": \"absent\"\n}",
+   "model": "Qwen3.6-35B-A3B-MTP-UD-Q6_K"
+  }
+ ],
+ "parsed": {
+  "P1": "absent",
+  "P2": "absent",
+  "P3": "absent",
+  "P4": "absent",
+  "P5": "absent",
+  "P6": "absent",
+  "P7": "absent",
+  "P8": "absent",
+  "P9": "absent",
+  "P10": "absent",
+  "P11": "absent",
+  "P12": "absent",
+  "P13": "absent",
+  "P14": "absent"
+ }
+}
