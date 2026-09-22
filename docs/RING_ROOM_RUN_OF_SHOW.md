@@ -1,5 +1,9 @@
 # The ring room, run of show
 
+**Just want to run it? `docs/RING_ROOM_RUNBOOK.md` is the short version —
+commands and what should happen. This document is the full account: what a
+person watches, why each step is shaped this way, and the known limits.**
+
 Written 2026-09-20 at the close of ring-room rr-2's machine work, for someone
 who wants to run the demo, watch it, or walk it on real machines. It covers the
 room as it will be: one machine in the room, the rest of the mesh elsewhere,
