@@ -1915,17 +1915,26 @@ if topology == "room":
     # 2 — the guest's edit, and never mistakable for a member
     b = bars["ra-room-guest-edit-attributed"]
     edit_w = num(r"within ([\d.]+) s", b["floor_basis"])
-    # RE-READ 2026-09-20, named here rather than edited into ring-room.toml.
-    # Clause (c) is rr-2's promise that ITS work did not diff the rail. The
-    # operator opened the rail to exactly one row of the NEXT campaign
-    # (`rg-1-on-behalf-of`, D1, ledger A52), so `origin/main..HEAD` is no
-    # longer a reading of rr-2's promise — it is a reading of ring-guest's
-    # authorisation. The clause is therefore evaluated at rr-2's own tip,
-    # `origin/main..<ring-guest base>`, which nothing this campaign does can
-    # move; ring-guest's rail diff is printed beside it, unjudged by this bar.
+    # RE-READ 2026-09-22, after the same mechanism broke a third way: the
+    # D1-approved rg-1 rail diff and 6bda3417a's gate-hygiene file reorg
+    # (+824/−796, tests_sealing/journal.rs splits, zero semantics) were
+    # PUSHED to origin/main, so `origin/main..<guest_base>` stopped being
+    # "what others did" and became the approved diff itself — the clause
+    # read red on a the-link run that touched zero rail files (measured,
+    # 2026-09-22, target/ralph/demo.log). No single pin can serve both
+    # this clause and the shed bar's `guest_base..HEAD` range: a base at
+    # or past 6bda3417a empties the shed range and the rg bar abstains;
+    # anything earlier leaves the reorg in the diff. The clause therefore
+    # returns to the registered floor's literal reading (ring-room.toml,
+    # ra-room-guest-edit-attributed, clause c): `git diff --stat origin/main
+    # -- <rail>`, origin/main against the WORKING TREE. That is green for
+    # any run whose tree equals origin/main on the rail whatever history
+    # did, and it re-arms as a tripwire the moment an unpushed campaign
+    # edits rail — which is the standing rule D1 revised for one row only.
+    # Operator direction 2026-09-22 (option a on the same handoff).
     RAIL = ["commonwealth/crates/commonwealth-rail",
             "commonwealth/crates/commonwealth-rail-core"]
-    rail_diff = git("diff", "--stat", "origin/main", guest_base, "--", *RAIL)
+    rail_diff = git("diff", "--stat", "origin/main", "--", *RAIL)
     rail_diff_ring_guest = git("diff", "--stat", guest_base, "HEAD", "--", *RAIL)
     replica = (open(os.path.join(d, "wall-replica.txt")).read().splitlines() + ["", "", ""])[:3] \
         if os.path.exists(os.path.join(d, "wall-replica.txt")) else ["", "", ""]
