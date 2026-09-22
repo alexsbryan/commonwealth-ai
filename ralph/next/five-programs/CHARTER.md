@@ -17,6 +17,14 @@ do — is the wrong resolution.
 
 ## Decide these
 
+- **A false row premise (THE STANDING LESSON OF 2026-09-22).** When a worker
+  halts on `NEEDS_HUMAN` because the row's premise failed the tree, that
+  census IS the input — the director does not bounce it to a sleeping
+  operator. The director verifies the census, decides from the principles,
+  REWRITES THE ROWS in `STATE.md` (rescope, split, mint the rows the census
+  demands, strike the dead arm) with the reasoning in the row text, clears
+  the control files, and lets the loop resume. Halting is for the bright
+  lines below, never for a premise a row's own TSV/§12 context can settle.
 - Row order within the queue; splitting or folding rows; skipping a row the
   gate no longer lists (record it `[x]` with the gate count that excused it).
 - Which of two options a TSV row or FIVE_PROGRAMS §12 already names — cite
