@@ -51,3 +51,9 @@ campaign: needs-human — # NEEDS_HUMAN — the-link / tl-2-offline-leg-exports
 campaign: needs-human — # NEEDS_HUMAN — the-link / REVIEW-DEMO-the-link-run
 2026-09-22T17:41:34Z supervisor: campaign stopped — # NEEDS_HUMAN — the-link / REVIEW-DEMO-the-link-run
 2026-09-22T17:41:34Z supervisor: dispatching resolution session 1 — # NEEDS_HUMAN — the-link / REVIEW-DEMO-the-link-run
+2026-09-22T17:51:34Z supervisor: resolution 1 cleared the halt — resuming the campaign
+2026-09-22T17:51:34Z unit REVIEW-audit-the-link — --model zai-coding-plan/glm-5.3-flash
+2026-09-22T17:51:34Z prompt: ralph/next/the-link/PROMPT.md sha256=531abd063f5bddad
+campaign: needs-human — # NEEDS_HUMAN — the-link / REVIEW-audit-the-link
+2026-09-22T18:09:04Z supervisor: campaign stopped — # NEEDS_HUMAN — the-link / REVIEW-audit-the-link
+2026-09-22T18:09:04Z supervisor: dispatching resolution session 1 — # NEEDS_HUMAN — the-link / REVIEW-audit-the-link
