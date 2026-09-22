@@ -42,6 +42,13 @@ you never improvise around it.
   `./scripts/sovereign-lint.sh --human` per step, `--full` when a unit
   touches a shared crate. `sovereign-test.sh` only when a row touches test
   wiring.
+- CLEAN trips are REPORT-AFTER: the gate's du and its `cargo clean` are one
+  invocation (`dev-build.sh --clean --gate-only`), so a run over the 256G
+  ceiling cleans (~300G) and rebuilds (~5 min) — it cannot report first.
+  Run it, then write the trip report (sizes, files removed, rebuild verdict)
+  to `{{control_dir}}/NEEDS_HUMAN.md`; under the ceiling it is a bare du,
+  exit=0. fp-0 precedent 2026-09-22: 288G → 307.3GiB removed, rebuild green
+  4m45s.
 - A `[[package_leaf]]` must NOT also be a package member — check which list a
   crate line lives in (layer vs package) in `quality/ARCH_LAYERS.toml`.
   `sovereign-contracts` (layer 0) may not name understanding-vocab or
