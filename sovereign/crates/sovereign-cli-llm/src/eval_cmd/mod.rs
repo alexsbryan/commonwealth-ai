@@ -32,6 +32,7 @@ pub mod atlas_ann;
 pub mod atlas_walk_meta;
 pub mod attribution;
 pub mod bank;
+pub mod gate_meta;
 pub mod lost_corpora;
 pub mod report;
 pub mod retrieved_chunk;

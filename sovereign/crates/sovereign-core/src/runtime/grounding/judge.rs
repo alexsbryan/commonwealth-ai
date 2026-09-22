@@ -77,6 +77,17 @@ pub(crate) struct GateVerdict {
     /// its claim failed.
     #[serde(skip)]
     pub claim_evidence: Vec<String>,
+    /// The members of a multi-member value span that the veto refused BY
+    /// NAME. Non-empty only when the span had ≥2 members AND at least one
+    /// member was supported — a strict subset. A veto may only refuse what
+    /// it names (§7.6), so the terminal exit releases the answer with
+    /// these members flagged rather than abstaining the whole turn. Empty
+    /// on every other verdict, including all-members-unsupported spans,
+    /// which keep the incumbent abstention (measured 2026-09-22, the
+    /// ei7-ans list bank: two of eight K1 questions died to span-glued
+    /// vetoes; one retry was vetoed on the literal word "various").
+    #[serde(default)]
+    pub unsupported_values: Vec<String>,
 }
 
 /// How a forced-choice judge call reaches a model.
@@ -202,6 +213,7 @@ pub(crate) async fn verify_grounding(
             outcome: ClaimCheckOutcome::NotEvaluatedNoInput,
             claim: None,
             claim_evidence: Vec::new(),
+            unsupported_values: Vec::new(),
         });
     }
     if answer.chars().count() > 1_800 {
@@ -215,6 +227,7 @@ pub(crate) async fn verify_grounding(
             outcome: ClaimCheckOutcome::NotEvaluatedLongForm,
             claim: None,
             claim_evidence: Vec::new(),
+            unsupported_values: Vec::new(),
         });
     }
     // The GK-attribution exemption is sound for world-general
@@ -257,6 +270,7 @@ pub(crate) async fn verify_grounding(
                     outcome: ClaimCheckOutcome::NoClaim,
                     claim: None,
                     claim_evidence: Vec::new(),
+                    unsupported_values: Vec::new(),
                 });
             }
             dbg(&format!(
@@ -290,6 +304,7 @@ pub(crate) async fn verify_grounding(
             outcome: ClaimCheckOutcome::NoClaim,
             claim: None,
             claim_evidence: Vec::new(),
+            unsupported_values: Vec::new(),
         });
     }
 
@@ -365,6 +380,7 @@ pub(crate) async fn verify_grounding(
                     outcome: ClaimCheckOutcome::Measured,
                     claim: Some(claim),
                     claim_evidence: Vec::new(),
+                    unsupported_values: Vec::new(),
                 });
             }
             // THE PROBE RUNS ON EVERY `Present` VALUE; ONLY ITS *PASS* IS
@@ -392,42 +408,121 @@ pub(crate) async fn verify_grounding(
             // Mis-attribution is a property of what the ANSWER asserts, not
             // of whether the QUESTION named someone.
             ValuePresence::Present(value) => {
-                match value_is_supported(&**inference, question, &value, chunks, posture).await {
-                    // REFUSAL: ungated. The evidence carries the token and
-                    // does not support it.
-                    Some(false) => {
-                        tracing::info!(
-                            target: "grounding_gate",
-                            value = %value,
-                            claim = %claim.chars().take(90).collect::<String>(),
-                            entity_anchored,
-                            "value-presence: the evidence carries the token and does not support it → vp=1.0"
-                        );
-                        return Some(GateVerdict {
-                            violation_prob: 1.0,
-                            outcome: ClaimCheckOutcome::Measured,
-                            claim: Some(claim),
-                            claim_evidence: Vec::new(),
-                        });
+                // NON-VALUE GUARD (measured 2026-09-22): an extraction with
+                // no capitalised token and no digit — "various", "four
+                // distinct mints" — asserts no specific, so the SUPPORT
+                // probe cannot fail a turn over it. This guard sits AFTER
+                // presence and therefore never touches the Absent veto:
+                // an invented lowercase value is still refused exactly as
+                // before. Only the span-vs-support decision falls through
+                // to the confirmatory loop.
+                if !super::value_presence::looks_like_nonvalue(&value) {
+                    match value_is_supported(&**inference, question, &value, chunks, posture).await
+                    {
+                        // REFUSAL: ungated. The evidence carries the token and
+                        // does not support it. A multi-member span is judged
+                        // per member first — the span is many specifics glued
+                        // into one extraction, and refusing the SPAN refuses
+                        // members the evidence does support (the ei7-ans list
+                        // bank lost two of eight K1 answers to exactly that,
+                        // 2026-09-22). The veto names only the members it
+                        // refused.
+                        Some(false) => {
+                            let members = super::value_presence::split_value_members(&value);
+                            if members.len() >= 2 {
+                                let mut unsupported: Vec<String> = Vec::new();
+                                let mut supported = 0usize;
+                                for m in &members {
+                                    match value_is_supported(
+                                        &**inference,
+                                        question,
+                                        m,
+                                        chunks,
+                                        posture,
+                                    )
+                                    .await
+                                    {
+                                        Some(true) => supported += 1,
+                                        _ => unsupported.push(m.clone()),
+                                    }
+                                }
+                                if supported == members.len() {
+                                    tracing::info!(
+                                        target: "grounding_gate",
+                                        value = %value,
+                                        claim = %claim.chars().take(90).collect::<String>(),
+                                        "value-presence: span failed as a whole but every member is supported → vp=0.0"
+                                    );
+                                    return Some(GateVerdict {
+                                        violation_prob: 0.0,
+                                        outcome: ClaimCheckOutcome::Measured,
+                                        claim: Some(claim),
+                                        claim_evidence: Vec::new(),
+                                        unsupported_values: Vec::new(),
+                                    });
+                                }
+                                if supported > 0 {
+                                    tracing::info!(
+                                        target: "grounding_gate",
+                                        value = %value,
+                                        unsupported = ?unsupported,
+                                        supported_count = supported,
+                                        claim = %claim.chars().take(90).collect::<String>(),
+                                        "value-presence: multi-member span partially refused — naming the unsupported members"
+                                    );
+                                    return Some(GateVerdict {
+                                        violation_prob: 1.0,
+                                        outcome: ClaimCheckOutcome::Measured,
+                                        claim: Some(claim),
+                                        claim_evidence: Vec::new(),
+                                        unsupported_values: unsupported,
+                                    });
+                                }
+                                // Every member unsupported: the span refusal
+                                // was correct at every granularity — the
+                                // incumbent refusal below stands.
+                            }
+                            tracing::info!(
+                                target: "grounding_gate",
+                                value = %value,
+                                claim = %claim.chars().take(90).collect::<String>(),
+                                entity_anchored,
+                                "value-presence: the evidence carries the token and does not support it → vp=1.0"
+                            );
+                            return Some(GateVerdict {
+                                violation_prob: 1.0,
+                                outcome: ClaimCheckOutcome::Measured,
+                                claim: Some(claim),
+                                claim_evidence: Vec::new(),
+                                unsupported_values: Vec::new(),
+                            });
+                        }
+                        // PASS: still gated, because skipping the confirmatory
+                        // loop is the part that was calibrated.
+                        Some(true) if entity_anchored => {
+                            dbg(&format!("value-presence: {value:?} supported → vp=0.0"));
+                            return Some(GateVerdict {
+                                violation_prob: 0.0,
+                                outcome: ClaimCheckOutcome::Measured,
+                                claim: Some(claim),
+                                claim_evidence: Vec::new(),
+                                unsupported_values: Vec::new(),
+                            });
+                        }
+                        Some(true) => dbg(&format!(
+                            "value-presence: {value:?} supported but unanchored → confirmatory loop"
+                        )),
+                        // The probe did not answer — could-not-judge, so the
+                        // confirmatory loop below decides rather than this
+                        // mechanism failing the turn on an instrument fault.
+                        None => {
+                            dbg("value-presence: probe gave no verdict → confirmatory fallback")
+                        }
                     }
-                    // PASS: still gated, because skipping the confirmatory
-                    // loop is the part that was calibrated.
-                    Some(true) if entity_anchored => {
-                        dbg(&format!("value-presence: {value:?} supported → vp=0.0"));
-                        return Some(GateVerdict {
-                            violation_prob: 0.0,
-                            outcome: ClaimCheckOutcome::Measured,
-                            claim: Some(claim),
-                            claim_evidence: Vec::new(),
-                        });
-                    }
-                    Some(true) => dbg(&format!(
-                        "value-presence: {value:?} supported but unanchored → confirmatory loop"
-                    )),
-                    // The probe did not answer — could-not-judge, so the
-                    // confirmatory loop below decides rather than this
-                    // mechanism failing the turn on an instrument fault.
-                    None => dbg("value-presence: probe gave no verdict → confirmatory fallback"),
+                } else {
+                    dbg(&format!(
+                        "value-presence: {value:?} names no specific (no proper noun, no digit) → confirmatory loop"
+                    ));
                 }
             }
             // Nothing checkable asserted: the confirmatory loop decides,
@@ -517,6 +612,7 @@ pub(crate) async fn verify_grounding(
         outcome: ClaimCheckOutcome::Measured,
         claim: Some(claim),
         claim_evidence: extra,
+        unsupported_values: Vec::new(),
     })
 }
 /// One per-chunk support probe — the exact register `verify_grounding`'s

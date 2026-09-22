@@ -152,6 +152,27 @@ pub(crate) async fn value_presence_of(
     if value_present_in_chunks(&value, chunks) {
         return ValuePresence::Present(value);
     }
+    // MULTI-MEMBER SPANS (measured 2026-09-22, ei7-ans): a list answer's
+    // committed value is many specifics glued into one span, and the
+    // glued span is SUBSTRING-ABSENT even while its members individually
+    // are present ("Athens, Sparta, Argos, Megara, Aegina" — Athens IS
+    // in the pool). Classifying that as invented-from-nothing abstains
+    // the whole answer for content the evidence carries. A span whose
+    // members are ALL absent IS an invention and keeps the refusal. A
+    // span with any member present is reclassified `Present` so the
+    // judge's per-member support probing names exactly the members the
+    // evidence does not support.
+    let members = split_value_members(&value);
+    if members.len() >= 2 && members.iter().any(|m| value_present_in_chunks(m, chunks)) {
+        tracing::info!(
+            target: "grounding_gate",
+            event = "value_presence",
+            value = %value,
+            decision = "span_absent_members_present",
+            "the glued span is absent but its members are individually present — not a confab"
+        );
+        return ValuePresence::Present(value);
+    }
     tracing::info!(
         target: "grounding_gate",
         event = "value_presence",
@@ -513,6 +534,47 @@ pub fn value_present_in_chunks(value: &str, chunks: &[String]) -> bool {
     !sig.is_empty() && sig.iter().all(|w| hay.contains(w.as_str()))
 }
 
+/// Split a committed value into its MEMBERS — the individual specifics a
+/// multi-value span glues together ("Lampsacus, Abydus", "Athens and Sicyon").
+///
+/// Measured 2026-09-22 on the ei7-ans list bank: the extractor commits ONE
+/// value per answer, and on a list answer that value is a span of many
+/// specifics. The support probe judges the SPAN as one specific, so ONE
+/// wrong member refuses the whole span — and the short path then abstains
+/// the whole ANSWER, destroying every supported member alongside it (two of
+/// eight K1 questions died exactly there, one with both members wrong, one
+/// with the retry vetoed on the literal word "various"). The caller uses
+/// this split so a veto refuses only the members it names.
+///
+/// Deterministic by design: separators are punctuation and the standalone
+/// word "and"/"&". Members shorter than 3 chars are fragments, not
+/// specifics. Order is preserved; duplicates drop.
+pub(crate) fn split_value_members(value: &str) -> Vec<String> {
+    let mut members: Vec<String> = Vec::new();
+    for raw in value.split([',', ';', '/']) {
+        for part in raw.split(" and ").flat_map(|p| p.split(" & ")) {
+            let m = part.trim().trim_matches('.').trim();
+            if m.chars().count() >= 3 && !members.iter().any(|x| x == m) {
+                members.push(m.to_string());
+            }
+        }
+    }
+    members
+}
+
+/// True when an extracted "value" asserts no specific at all — no
+/// capitalised token and no digit anywhere. "various", "four distinct
+/// mints": shapes the extractor commits when the answer hedged instead of
+/// asserting. The PRESENCE veto (an absent value is a confab) still applies
+/// to these — this guard only stops the SUPPORT probe from failing a turn
+/// over a word that names nothing. Measured case: a retry vetoed to vp=1.0
+/// on the literal word "various" (igch0081, 2026-09-22).
+pub(crate) fn looks_like_nonvalue(value: &str) -> bool {
+    !value
+        .chars()
+        .any(|c| c.is_uppercase() || c.is_ascii_digit())
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
@@ -757,5 +819,53 @@ mod tests {
         let c = value_claim(MOTHER_Q, "Mrs Neale");
         assert!(c.contains("first name of Winnie's mother"), "{c}");
         assert!(c.contains("Mrs Neale"), "{c}");
+    }
+
+    /// The member split, on the shapes the ei7-ans bank actually produced
+    /// (2026-09-22). Each assertion names its members exactly — "splits
+    /// into some things" would pass a broken splitter.
+    #[test]
+    fn splits_multi_member_spans_on_the_observed_shapes() {
+        use super::split_value_members;
+        assert_eq!(
+            split_value_members("Lampsacus, Abydus"),
+            ["Lampsacus", "Abydus"],
+            "the measured Corinth case: comma-glued mint pair"
+        );
+        assert_eq!(
+            split_value_members("Athens and Sicyon"),
+            ["Athens", "Sicyon"],
+            "the word 'and' glues members too"
+        );
+        assert_eq!(
+            split_value_members("Amphipolis, Lampsacus, Abydus"),
+            ["Amphipolis", "Lampsacus", "Abydus"],
+            "three members, order preserved"
+        );
+        assert!(
+            split_value_members("summer of 1962").len() == 1,
+            "no separators: one member — the single-value path, unchanged"
+        );
+        assert!(
+            split_value_members("Lampsacus, Abydus, and Various Mints")
+                .iter()
+                .all(|m| m.chars().count() >= 3),
+            "fragments under 3 chars are dropped, not probed"
+        );
+    }
+
+    /// The non-value guard, both directions. The measured false kill was
+    /// the literal word "various" (igch0081, 2026-09-22); the guard must
+    /// NOT wave through real lowercase-absent inventions — those are the
+    /// ABSENT veto's business and stay refused — and must not touch real
+    /// values with a proper noun or digit.
+    #[test]
+    fn nonvalue_guard_names_nothing_specific() {
+        use super::looks_like_nonvalue;
+        assert!(looks_like_nonvalue("various"));
+        assert!(looks_like_nonvalue("four distinct mints"));
+        assert!(!looks_like_nonvalue("Lampsacus, Abydus"));
+        assert!(!looks_like_nonvalue("Agrinion Hoard"));
+        assert!(!looks_like_nonvalue("summer of 1962"));
     }
 }

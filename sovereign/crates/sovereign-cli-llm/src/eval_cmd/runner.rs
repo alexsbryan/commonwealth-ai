@@ -228,6 +228,14 @@ pub struct SynthSnapshot {
     /// decisions without re-running. Empty when `--no-judge`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub judge_evidence: Vec<crate::eval_cmd::score::JudgeFactDetail>,
+    /// The grounding gate's typed decision for this turn (action id,
+    /// retried, violation_prob, refused span members), read back from
+    /// the persisted message metadata. `None` when the turn's route
+    /// never gated — which is itself a fact about the row, not a
+    /// default. Without it a board cannot attribute a zero to the gate
+    /// vs retrieval after the fact (ei7-ans, 2026-09-22).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gate: Option<crate::eval_cmd::gate_meta::GateDecisionEcho>,
 }
 
 pub use crate::eval_cmd::retrieved_chunk::RetrievedChunk;
@@ -1790,6 +1798,10 @@ async fn run_question_synth(
     // (written at `runtime/streaming.rs`, beside `meta_atlas_hits`).
     let atlas_walk = atlas_walk_from_metadata(metadata.as_ref(), &q.id);
 
+    // The gate's typed decision, off the same block (written beside
+    // `provenance` in knowledge_query.rs / streaming.rs).
+    let gate = crate::eval_cmd::gate_meta::gate_decision_from_metadata(metadata.as_ref(), &q.id);
+
     let titles: Vec<String> = retrieved_chunks_meta
         .iter()
         .filter_map(|c| c.get("title").and_then(|t| t.as_str()))
@@ -1902,6 +1914,7 @@ async fn run_question_synth(
         chunks_fact_score,
         judge_fact_score,
         judge_evidence,
+        gate,
     };
 
     let row = EvalResult {
@@ -2006,6 +2019,7 @@ fn empty_synth_result(q: &Question, err: String, stream_wall_ms: u64) -> EvalRes
             chunks_fact_score: score_facts_in_text(&q.expected_facts, "").into(),
             judge_fact_score: None,
             judge_evidence: Vec::new(),
+            gate: None,
         }),
         loose_source_score: None,
         loose_source_evidence: Vec::new(),
