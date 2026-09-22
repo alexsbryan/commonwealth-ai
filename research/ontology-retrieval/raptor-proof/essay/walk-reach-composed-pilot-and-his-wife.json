@@ -1,0 +1,212 @@
+[
+ {
+  "path": "eval run --prod-pipeline --isolate on raptor-pilot-and-his-wife-composed (recipe-declared literary ontology, trajectory/tension/thematic rows seeding Summary), 2026-09-22, pod daemon",
+  "questions": 12,
+  "node_kinds": {
+   "summary": 69,
+   "state": 167,
+   "event": 23,
+   "entity": 73,
+   "claim": 14,
+   "relation": 30,
+   "configuration": 3,
+   "question": 3
+  },
+  "questions_reaching": {
+   "summary": 12,
+   "state": 11,
+   "event": 9,
+   "entity": 12,
+   "claim": 4,
+   "relation": 12,
+   "configuration": 2,
+   "question": 2
+  },
+  "per_question": [
+   {
+    "question_id": "essay-pilot-and-his-wife-arc",
+    "nodes": 23,
+    "kinds": {
+     "summary": 4,
+     "state": 10,
+     "event": 1,
+     "entity": 5,
+     "claim": 1,
+     "relation": 2
+    },
+    "seeds": 12,
+    "considered": 10,
+    "added": 12,
+    "summaries_appended": 4
+   },
+   {
+    "question_id": "essay-pilot-and-his-wife-conflict",
+    "nodes": 30,
+    "kinds": {
+     "state": 11,
+     "summary": 7,
+     "claim": 1,
+     "relation": 3,
+     "entity": 8
+    },
+    "seeds": 19,
+    "considered": 12,
+    "added": 12,
+    "summaries_appended": 7
+   },
+   {
+    "question_id": "essay-pilot-and-his-wife-change",
+    "nodes": 39,
+    "kinds": {
+     "state": 25,
+     "summary": 6,
+     "event": 2,
+     "entity": 5,
+     "relation": 1
+    },
+    "seeds": 18,
+    "considered": 18,
+    "added": 12,
+    "summaries_appended": 6
+   },
+   {
+    "question_id": "essay-pilot-and-his-wife-relationship",
+    "nodes": 32,
+    "kinds": {
+     "state": 11,
+     "relation": 7,
+     "summary": 6,
+     "entity": 8
+    },
+    "seeds": 18,
+    "considered": 12,
+    "added": 12,
+    "summaries_appended": 6
+   },
+   {
+    "question_id": "essay-pilot-and-his-wife-secondary",
+    "nodes": 31,
+    "kinds": {
+     "event": 4,
+     "summary": 1,
+     "claim": 9,
+     "state": 6,
+     "entity": 7,
+     "configuration": 1,
+     "relation": 2,
+     "question": 1
+    },
+    "seeds": 13,
+    "considered": 18,
+    "added": 12,
+    "summaries_appended": 7
+   },
+   {
+    "question_id": "essay-pilot-and-his-wife-themes",
+    "nodes": 28,
+    "kinds": {
+     "state": 16,
+     "summary": 4,
+     "entity": 5,
+     "relation": 2,
+     "event": 1
+    },
+    "seeds": 12,
+    "considered": 11,
+    "added": 12,
+    "summaries_appended": 4
+   },
+   {
+    "question_id": "essay-pilot-and-his-wife-setting",
+    "nodes": 31,
+    "kinds": {
+     "summary": 4,
+     "state": 20,
+     "entity": 5,
+     "relation": 1,
+     "event": 1
+    },
+    "seeds": 12,
+    "considered": 15,
+    "added": 12,
+    "summaries_appended": 4
+   },
+   {
+    "question_id": "essay-pilot-and-his-wife-turning-point",
+    "nodes": 37,
+    "kinds": {
+     "state": 15,
+     "event": 6,
+     "summary": 8,
+     "entity": 7,
+     "relation": 1
+    },
+    "seeds": 20,
+    "considered": 14,
+    "added": 12,
+    "summaries_appended": 8
+   },
+   {
+    "question_id": "essay-pilot-and-his-wife-ending",
+    "nodes": 40,
+    "kinds": {
+     "state": 22,
+     "summary": 8,
+     "event": 1,
+     "entity": 7,
+     "relation": 2
+    },
+    "seeds": 20,
+    "considered": 16,
+    "added": 12,
+    "summaries_appended": 8
+   },
+   {
+    "question_id": "essay-pilot-and-his-wife-inner-conflicts",
+    "nodes": 23,
+    "kinds": {
+     "summary": 5,
+     "state": 12,
+     "entity": 4,
+     "relation": 2
+    },
+    "seeds": 17,
+    "considered": 12,
+    "added": 12,
+    "summaries_appended": 5
+   },
+   {
+    "question_id": "essay-pilot-and-his-wife-setup",
+    "nodes": 41,
+    "kinds": {
+     "summary": 8,
+     "state": 19,
+     "event": 3,
+     "entity": 8,
+     "relation": 3
+    },
+    "seeds": 20,
+    "considered": 18,
+    "added": 12,
+    "summaries_appended": 8
+   },
+   {
+    "question_id": "essay-pilot-and-his-wife-society",
+    "nodes": 27,
+    "kinds": {
+     "summary": 8,
+     "entity": 4,
+     "configuration": 2,
+     "claim": 3,
+     "event": 4,
+     "question": 2,
+     "relation": 4
+    },
+    "seeds": 12,
+    "considered": 11,
+    "added": 12,
+    "summaries_appended": 8
+   }
+  ]
+ }
+]

@@ -26,8 +26,25 @@ import sys
 
 
 def rows(path):
+    """An `svrn eval run --output` file's rows, or a refusal saying what it got.
+
+    REFUSES anything else, including this script's OWN `--json` output — which
+    is a list of summaries, has no `atlas_walk` anywhere, and silently scored
+    `0 of 1` when handed back in (2026-09-22). A reach number computed from the
+    wrong file is exactly the well-formed wrong answer this tool exists to
+    catch, so it may not produce one (ARCH §18.3).
+    """
     d = json.loads(pathlib.Path(path).read_text(encoding="utf-8"))
-    return d["results"] if isinstance(d, dict) else d
+    r = d["results"] if isinstance(d, dict) and "results" in d else d
+    if not isinstance(r, list) or not r:
+        raise SystemExit(f"{path}: no `results` array — not an `eval run --output` file")
+    if not any(isinstance(x, dict) and "question_id" in x for x in r):
+        raise SystemExit(
+            f"{path}: rows carry no `question_id` — this is not an eval run"
+            + (" (it looks like walk_reach.py's own --json output)"
+               if all(isinstance(x, dict) and "questions_reaching" in x for x in r) else "")
+        )
+    return r
 
 
 def reach_counts(eval_rows):
