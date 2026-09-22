@@ -8,7 +8,18 @@ documented in `docs/RING_ROOM_DEMO.md`, which also carries the long account of
 why one of its legs cannot pass on a CPU node; this document does not repeat
 either. The order the demo serves is
 `.sovereign/features/ring-room-week2/order.md`, and its Demo section is the
-contract the six steps below are written from.
+contract the steps below are written from.
+
+**Updated 2026-09-22.** Two campaigns have closed under this one since it was
+written and both are in the run now. `the-link` added the checkpoint to the
+offline leg (`tl-checkpoint-verifies`): the wall freezes the doc's journal
+while the room is cut off, a machine that was never asked verifies that file
+cold after the heal, and three planted forgeries are refused by name in the
+same run. Its other two bars read COULD-NOT-JUDGE in the room run by design —
+their proofs are the test suite and `ralph/DECISIONS.md`, not the walk — so
+the stand-in now judges FOURTEEN bars and a fully green run exits 4, not 0.
+`browser-dial` is in measurement as this is written; it tests the guest who is
+not in the room at all (§The guest from anywhere, below).
 
 ## What a person watches
 
@@ -18,7 +29,8 @@ else, on a different network, reached over iroh; it holds a folder nobody else
 has. LittleMac is a member somewhere else too, with a Jellyfin library. People
 walk in with phones that have nothing installed.
 
-Six things happen, and each is a bar in `quality/campaigns/ring-room.toml`:
+Six things happen, and each is a bar in `quality/campaigns/ring-room.toml`;
+a seventh is `the-link`'s bar and runs in the same sitting:
 
 1. **Scan to name.** The wall shows one QR. A phone scans it and a page opens,
    served by BeefyMac over the room's WiFi. The person types a name, and within
@@ -48,6 +60,12 @@ Six things happen, and each is a bar in `quality/campaigns/ring-room.toml`:
    RuggedFox before and after the sitting are identical, and BeefyMac's grant
    list shows the guests with their expiry. Membership happens only by a
    member's `introduce`; the QR mints a guest.
+7. **The record survives the cut.** While the uplink is down, the wall freezes
+   the doc's journal into one checkpoint file; after the uplink returns, a
+   machine that was never asked verifies that file cold and prints its marks.
+   A copy with one byte flipped, one with its tail truncated, and one carrying
+   a planted fork are each refused in the same run, by name. This is
+   `the-link`'s bar `tl-checkpoint-verifies`, and the offline leg owns it.
 
 ## The stand-in
 
@@ -93,11 +111,23 @@ RING_ROOM_TOPOLOGY=room scripts/ring-room-demo.sh down
 ```
 
 `verdict all` brings the room up, runs the three legs, prints one JSON row per
-bar as its last lines, and exits 0 when all six passed, 1 on any FAILED, and 4
-when some row could not be judged. A single bar's id in place of `all` prints
-that row alone. Under the ralph harness the same run is
-`scripts/ralph-check.sh demo-bg` followed by `demo-wait`, which reports the
-demo's own exit code.
+bar as its last lines, and exits 0 when every bar passed, 1 on any FAILED, and
+4 when some row could not be judged. **Fourteen bars run now** — six rr-2,
+five ring-guest, three the-link — and two of them are designed to read
+COULD-NOT-JUDGE, so a fully green run exits 4: read the rows, not the code.
+A single bar's id in place of `all` prints that row alone. Under the ralph
+harness the same run is
+
+```bash
+RING_ROOM_TOPOLOGY=room scripts/ralph-check.sh demo-bg scripts/ring-room-demo.sh
+scripts/ralph-check.sh demo-wait   # repeat until it returns; 3 = still running
+```
+
+The script argument is load-bearing: without it `demo-bg` falls back to
+`scripts/ring-doc-demo.sh` — the three-node doc demo — and you would be
+reading the wrong room. (The queue's launch line sets `RALPH_DEMO_SCRIPT`
+instead; both work, a bare `demo-bg` does not.) `demo-wait` reports the demo's
+own exit code and its last rows.
 
 A cold room run measured about 3 min 40 s after the build on this host
 (run 2 of 2026-09-20: build finished 09:24:44Z, verdict archived 09:28:24Z).
@@ -143,6 +173,15 @@ scans, names itself, edits and asks. The leg then reconnects the uplink,
 re-asserts the seal, and polls both ring journals until they are byte-equal,
 recording `cut_at`, `heal_at` and `converged_s`.
 
+The same leg carries `tl-checkpoint-verifies`. Between the cut assertion and
+the reconnect the wall runs `svrn ring checkpoint <ns> --out <file>` and the
+leg records the document's `created_unix`; after `converged_s` the keeper runs
+`svrn ring checkpoint --verify <file>` on that file, cold; then the leg plants
+the three forgeries — a flipped byte, a truncated tail, a planted same-seq
+pair — and asserts each is refused by name, in the same run. The export's
+`created_unix` must sit strictly inside `cut_at..heal_at`, which is what makes
+"made while the room was cut" a checkable claim rather than an assertion.
+
 Every string the driver types on a person's behalf goes to a census, stamped
 `install` (bring-up, before anyone walks in) or `walk` (what a person would
 have done), and classified by shape: address, port, URL, config line,
@@ -172,6 +211,17 @@ offline threshold, so both sides marked the other Offline; an earlier run with
 a cut of the same length converged in 85 s and failed. The difference is that a
 peer coming back Online now wakes the ring sync instead of waiting for its
 next interval (`ralph/DECISIONS.md` A50).
+
+**2026-09-22 — the fourteen-bar shape, binaries built at `203bbdd24`.** Two
+cold `verdict all` runs closed `REVIEW-DEMO-the-link-run`: all six rr-2 bars
+and all five ring-guest bars PASSED, `tl-checkpoint-verifies` PASSED with all
+four legs (run 1 `created_unix` 1790098351 inside cut 1790098311..1790098375;
+run 2 1790098624 inside 1790098584..1790098648, both cold), the three forgeries
+refused by name in each, and `tl-link-carries-its-couriers` / `tl-dial-measured`
+reading COULD-NOT-JUDGE with their proof sites named. Both runs exit 4 — that
+is the passing shape, not a failure. Logs `target/ralph/tl-room-run-1.log` and
+`tl-room-run-2.log` (machine-local). The rr-1 regression in the same unit read
+the A38 baseline exactly, both expected reds unmoved.
 
 The member-only-by-vouch bar has two halves. The negative half, that no scan
 changed the member list, is what passes today. The affirmative half, that a
@@ -266,6 +316,44 @@ on a real venue network (the ask bar records it, and a relayed run is the one
 that counts), and what a real uplink outage looks like to the phones, since a
 real outage is rarely shorter than a minute.
 
+### The record, carried to a machine that was never a member
+
+`the-link`'s last row is a person carrying one file. Export a ring's checkpoint
+where it is held, carry the file by AirDrop, USB or email to yourself, and
+verify it on a machine the mesh has never seen:
+
+```bash
+svrn ring checkpoint <ns> --out checkpoint.json   # on the exporter
+svrn ring checkpoint --verify checkpoint.json     # on the never-member
+```
+
+`--verify` exits 0 printing the document's marks and its admitted-act count,
+and exits 1 with one sentence naming the failing step and the actor. It takes
+`--roster <file>` to verify against the verifier's own roster instead of the
+one embedded in the document. The stand-in does exactly this inside the cut,
+with the three forgeries added; the human walk is the same two commands
+without the room.
+
+### The guest from anywhere — in measurement, not yet in the run
+
+Today's guest has to be able to reach the wall: the phones in the room share
+its WiFi. `browser-dial` is measuring the stronger claim (campaign
+`quality/campaigns/browser-dial.toml`, bar `bd-browser-dials-relay`) — a plain
+mobile browser on a network the daemon has never seen, with no shared LAN, no
+domain, no tunnel and no tailnet of ours, dialling the daemon itself over
+iroh's relay with the `iroh=` string the guest link already carries in its
+fragment, and making one grant-scoped call.
+
+Two facts are on the record: the locked iroh does build for the browser
+(probed 2026-09-22; the Mac-side "does not build" entry was a host fact, and
+the campaign's inventory row is correcting the ledger), and the daemon's relay
+connection already works for members. Unmeasured is the dial itself — which
+alpn a guest arrives on and what the door does with a guest bearer there.
+**The exact command lands in this section when `bd-browser-dials-relay`
+measures WORKED.** If it measures a negative, the failing layer is named here
+instead and the guest stays room-bound. Until then this is a claim, not a
+step to run.
+
 ### A second app on the wall
 
 Added 2026-09-21. ring-guest finished after this document was written, and its
@@ -286,8 +374,8 @@ Halo's replica, and you edited nothing in the scaffold to get it. If you have
 to touch one line of the scaffold for a guest to be named, the campaign's
 kill condition fired; record that, do not fix it in place.
 
-The stand-in runs both walks together: `RING_ROOM_TOPOLOGY=room` judges eleven
-bars, the six above and ring-guest's five. It has come back eleven PASSED, cold,
+The stand-in runs every campaign's walk together: `RING_ROOM_TOPOLOGY=room`
+judges fourteen bars — the six above, ring-guest's five, and the-link's three. It has come back eleven PASSED, cold,
 three times (two runs at `3ebada3e4`, one at `37f931985`). The older
 three-machine sitting, `RING_ROOM_TOPOLOGY=three`, reproduces the same two
 failures every time. `ra-room-plug-in-live` reads 0.0 because the joiner's
