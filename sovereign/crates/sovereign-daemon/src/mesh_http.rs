@@ -138,6 +138,12 @@ pub struct JoinResponse {
 pub struct RotateResponse {
     pub mesh_name: String,
     pub join_key: String,
+    /// The new key's shareable deep link, from the same `current_invite` that
+    /// `/v1/mesh/status` reads — it carries the founder's iroh dial and expiry.
+    /// Without it the CLI printed a bare key and a dial-less https link, which
+    /// cannot reach a mesh whose members are not on the joiner's LAN.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub join_link: Option<String>,
 }
 
 /// Shape returned by `GET /v1/mesh/status`. Flat and JSON-friendly so
@@ -956,11 +962,24 @@ async fn mesh_join(
             ),
         )
             .into_response(),
-        Err(e) => (
-            StatusCode::CONFLICT,
-            Json(serde_json::json!({ "error": e.to_string() })),
-        )
-            .into_response(),
+        Err(e) => {
+            let status = join_error_status(&e);
+            tracing::info!(target: "mesh_state", %status, error = %e, "mesh join refused");
+            (status, Json(serde_json::json!({ "error": e.to_string() }))).into_response()
+        }
+    }
+}
+
+/// A failed join used to be a 409 whatever the cause, so "no peer on this
+/// network accepted the key" read as a state conflict on the joiner. An
+/// unreachable founder is an upstream failure; an unreadable key is the
+/// caller's input.
+fn join_error_status(e: &crate::daemon::MeshError) -> StatusCode {
+    use crate::daemon::MeshError;
+    match e {
+        MeshError::Network(_) => StatusCode::BAD_GATEWAY,
+        MeshError::InvalidJoinKey(_) => StatusCode::BAD_REQUEST,
+        _ => StatusCode::CONFLICT,
     }
 }
 
@@ -1086,12 +1105,27 @@ async fn mesh_rotate(
             // order to invite someone gets the client API exposed too (bind +
             // token apply on next start, same as create).
             daemon.expose_client_api();
+            // The link is only this rotation's if it names this rotation's key;
+            // a concurrent rotate between the two reads would otherwise hand
+            // out a link for a key the caller never saw.
+            let join_link = match daemon.current_invite().await {
+                Some((key, link)) if key == rotated.join_key => Some(link),
+                other => {
+                    tracing::warn!(
+                        target: "mesh_state",
+                        invite_present = other.is_some(),
+                        "rotate: no invite link for the new key; answering with the key alone"
+                    );
+                    None
+                }
+            };
             (
                 StatusCode::OK,
                 Json(
                     serde_json::to_value(RotateResponse {
                         mesh_name: rotated.mesh_name,
                         join_key: rotated.join_key,
+                        join_link,
                     })
                     .unwrap(),
                 ),
@@ -1560,6 +1594,9 @@ mod tests {
             .unwrap();
         assert_eq!(status["join_key"].as_str().unwrap(), new_key);
         assert!(status["join_link"].as_str().unwrap().contains(&new_key));
+        // The rotate answer carries the same link status does — the CLI prints
+        // it, and before this it printed a dial-less bare key instead.
+        assert_eq!(rotate["join_link"], status["join_link"]);
     }
 
     /// Read the hash the RUNNING daemon actually gates on, not the plaintext
