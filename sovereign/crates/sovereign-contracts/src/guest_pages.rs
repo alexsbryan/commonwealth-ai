@@ -46,6 +46,13 @@ use serde::{Deserialize, Serialize};
 /// every existing name still resolves.
 pub const PAGE_PREFIX: &str = "/ring/";
 
+/// Where the door listens when nobody names a port: the next slot after the
+/// client API (`9741`) and internal mesh gossip (`9742`). A door bound with no
+/// port named binds `0.0.0.0:<this>`; the address a guest link carries is
+/// still DERIVED per host (never the wildcard) — see
+/// `sovereign_mesh::deep_link::advertised_base`.
+pub const DEFAULT_GUEST_PORT: u16 = 9743;
+
 /// What guests may do on a registered page's rail namespace.
 ///
 /// A closed set, and that IS the property (ARCH §9): there is nothing between

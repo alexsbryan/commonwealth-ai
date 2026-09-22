@@ -32,20 +32,26 @@ is running, and what knowledge each hosts.
 
 ## 1. The wall — the one machine in the room
 
-It needs a screen and a folder to serve. Scaffold an app (or use one you have),
-declare it to the room, and bind the door:
+It needs a screen and a folder to serve. Scaffold an app (or use one you have)
+and declare it to the room:
 
 ```bash
 svrn ring new ./house-expenses
-svrn ring serve house-expenses --dir ./house-expenses --bind 192.168.1.20:19947
+svrn ring serve house-expenses --dir ./house-expenses
 svrn daemon restart          # the door serves what you declared
 ```
 
-`--bind` is this machine's room-facing address, the one the door listens on;
-the app is served at `/ring/house-expenses/`. Add `--read` for an app guests
-may only look at. `svrn ring serve` with no arguments shows what this door
-declares, and `svrn ring serve --clear house-expenses` stops serving one app.
-One `--wall` link (below) then reaches every app declared this way.
+No address to type: the door binds every interface on its own port, and the
+address a guest link carries is **derived from this machine** — `ring serve`
+prints the one it will advertise. The app is served at `/ring/house-expenses/`.
+Add `--read` for an app guests may only look at. `svrn ring serve` with no
+arguments shows what this door declares, and `svrn ring serve --clear
+house-expenses` stops serving one app. One `--wall` link (below) then reaches
+every app declared this way.
+
+If this machine is on several networks (a room network *and* a tailnet, say),
+only you know which one the guest is on: pass `--bind <room address:port>` to
+name the interface, or `--url` on the grant.
 
 The wall's own screen, for the people in the room:
 

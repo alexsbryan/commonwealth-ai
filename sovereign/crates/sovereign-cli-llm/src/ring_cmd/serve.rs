@@ -22,10 +22,11 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use sovereign_contracts::guest_pages::GuestAccess;
+use sovereign_contracts::guest_pages::{GuestAccess, DEFAULT_GUEST_PORT};
 use sovereign_contracts::setup_config::SetupConfig;
 use toml_edit::{DocumentMut, Item, Table, Value};
 
+use crate::mesh_guest_link::{advertised_base, port_of_bind};
 use crate::publish_cmd::{load_doc, write_doc};
 
 /// `svrn ring serve <ns> --dir <bundle> --bind <addr:port> [--read]`
@@ -124,19 +125,26 @@ pub(super) fn run_serve(args: &[String]) -> i32 {
         GuestAccess::Write
     };
 
-    let bind = flag(args, "--bind");
-    let bind_prev = bind.and_then(|b| set_bind(&mut doc, b));
+    // The door's LISTEN address. Naming one is optional: with none, bind every
+    // interface on the door's existing port (or the default one). The ADDRESS
+    // a guest link carries is derived per host (`advertised_base`), so a person
+    // never has to know their own IP — a wildcard bind is never advertised.
+    let port = bind_of(&doc)
+        .as_deref()
+        .and_then(port_of_bind)
+        .unwrap_or(DEFAULT_GUEST_PORT);
+    let bind = flag(args, "--bind")
+        .map(str::to_string)
+        .unwrap_or_else(|| format!("0.0.0.0:{port}"));
+    let bind_prev = set_bind(&mut doc, &bind);
 
     let prev = set_guest_page(&mut doc, &ns, &dir, access);
     match write_doc(&path, &doc) {
         Ok(()) => {
-            match (bind, bind_prev) {
-                (Some(b), Some(old)) if old != b => {
-                    println!("Guest door was on {old}; it is now {b}.")
-                }
-                (Some(b), None) => println!("Guest door bound to {b}."),
-                (Some(b), Some(_)) => println!("Guest door is on {b}."),
-                _ => {}
+            match &bind_prev {
+                Some(old) if *old != bind => println!("Guest door was on {old}; it is now {bind}."),
+                Some(_) => println!("Guest door is on {bind}."),
+                None => println!("Guest door bound to {bind}."),
             }
             match prev {
                 Some(p) if p == dir.to_string_lossy() => {
@@ -150,15 +158,20 @@ pub(super) fn run_serve(args: &[String]) -> i32 {
                 println!("  (read-only: a guest's append to `{ns}` is refused by name)");
             }
             restart_note();
-            if !has_bind(&doc) {
-                println!();
-                println!("  NOTE: no `guest_bind` — the room has no address to reach the door on.");
-                println!("  Pass `--bind <this machine's room address:port>`.");
+            // The one thing the operator wants to see and should not have to
+            // work out: where a guest reaches this. Derived, never typed.
+            match advertised_here(&bind) {
+                Some(base) => {
+                    println!("  Guests reach it at {base}  (derived from this machine's addresses)")
+                }
+                None => println!(
+                    "  NOTE: no reachable address could be derived — the link will need --url."
+                ),
             }
             println!();
             println!("Mint the room's one QR for every app so declared:");
             println!("  svrn mesh grant --wall --ttl 2h --qr-svg wall-qr.svg");
-            println!("  (the link inherits the address you just bound; --url overrides it)");
+            println!("  (the link inherits that address; --url overrides it)");
             0
         }
         Err(e) => {
@@ -166,6 +179,27 @@ pub(super) fn run_serve(args: &[String]) -> i32 {
             1
         }
     }
+}
+
+/// The base a guest reaches `bind` at: this machine's best candidate on the
+/// bind's port, or the bind's own address when it is concrete. `None` when
+/// nothing can be derived (no candidate, no port).
+fn advertised_here(bind: &str) -> Option<String> {
+    let port = port_of_bind(bind)?;
+    let best = sovereign_mesh::mesh_discovery::relay_candidates(port)
+        .into_iter()
+        .find(|c| c.recommended)
+        .map(|c| c.ip);
+    advertised_base(Some(bind), best.as_deref())
+}
+
+/// The `[daemon] guest_bind` a doc states, if any.
+fn bind_of(doc: &DocumentMut) -> Option<String> {
+    doc.get("daemon")
+        .and_then(Item::as_table)
+        .and_then(|t| t.get("guest_bind"))
+        .and_then(Item::as_str)
+        .map(str::to_string)
 }
 
 fn help() {
@@ -234,13 +268,6 @@ fn set_bind(doc: &mut DocumentMut, addr: &str) -> Option<String> {
         .map(str::to_string);
     daemon.insert("guest_bind", Value::from(addr).into());
     prev
-}
-
-fn has_bind(doc: &DocumentMut) -> bool {
-    doc.get("daemon")
-        .and_then(Item::as_table)
-        .and_then(|t| t.get("guest_bind"))
-        .is_some()
 }
 
 /// Set `[daemon.guest_pages].<ns>`. The bare path is the one-line form for an

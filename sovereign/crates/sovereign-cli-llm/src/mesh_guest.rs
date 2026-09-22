@@ -460,11 +460,10 @@ pub(crate) async fn cmd_grant(args: &[String]) -> i32 {
         return 2;
     }
 
-    // The door's declared address is the address a phone opens in the room,
-    // and the operator already typed it — once, at
-    // `svrn ring serve <ns> --bind <addr:port>`, which writes
-    // `[daemon] guest_bind`. Fall back to it when `--url` is absent: the
-    // declaration exists precisely so nothing retypes it. An explicit `--url`
+    // Nobody types an address: the door names the PORT, this machine names the
+    // ADDRESS. `guest_bind_url` derives the base from `[daemon] guest_bind`
+    // (written by `svrn ring serve`) plus this host's best candidate, and
+    // refuses to advertise a wildcard or loopback bind. An explicit `--url`
     // (the static origin, say) still wins outright.
     if url_override.is_none() {
         url_override = guest_bind_url();
