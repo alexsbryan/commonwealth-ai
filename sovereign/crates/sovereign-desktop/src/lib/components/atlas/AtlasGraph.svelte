@@ -104,6 +104,18 @@
       viewBox: `0 0 ${W} ${H}`,
       preserveAspectRatio: "xMidYMid meet",
     });
+    // The viewport transform — wheel-zoom about the cursor, drag-to-pan on
+    // the background, double-click to reset. Applied to ONE group so the
+    // sim's coordinates stay untouched; the map's own scale (K) already
+    // sets the fitted size, and this is the reader's magnifier on top.
+    const viewport = svgEl("g") as SVGGElement;
+    let view = { k: 1, x: 0, y: 0 };
+    const applyView = () =>
+      viewport.setAttribute(
+        "transform",
+        `translate(${view.x.toFixed(2)} ${view.y.toFixed(2)}) scale(${view.k.toFixed(4)})`,
+      );
+    root.appendChild(viewport);
     host.appendChild(root);
     const tip = document.createElement("div");
     tip.className = "atlas-graph-tip";
@@ -142,7 +154,7 @@
           ? { stroke: "var(--error, #d4483a)", "stroke-width": "2", "stroke-opacity": "0.85" }
           : { stroke: "#3a2f5c", "stroke-width": "1", "stroke-opacity": "0.55" },
       );
-      root.appendChild(ln);
+      viewport.appendChild(ln);
       return ln;
     });
 
@@ -227,9 +239,61 @@
         dragging = null;
         downAt = null;
       });
-      root.appendChild(g);
+      viewport.appendChild(g);
       n._g = g;
     }
+
+    // Wheel-zoom about the cursor: the standard screen->world correction so
+    // the point under the pointer stays put. Clamped so a stray trackpad
+    // flick cannot lose the map.
+    root.addEventListener(
+      "wheel",
+      (ev: WheelEvent) => {
+        ev.preventDefault();
+        const rr = root.getBoundingClientRect();
+        const sx = ((ev.clientX - rr.left) / rr.width) * W;
+        const sy = ((ev.clientY - rr.top) / rr.height) * H;
+        const factor = Math.exp(-ev.deltaY * 0.0015);
+        const k = Math.min(6, Math.max(0.25, view.k * factor));
+        const scale = k / view.k;
+        view.x = sx - (sx - view.x) * scale;
+        view.y = sy - (sy - view.y) * scale;
+        view.k = k;
+        applyView();
+      },
+      { passive: false },
+    );
+    // Drag-pan on the BACKGROUND only — a node's own pointerdown captures
+    // first, so dragging a node still moves that node.
+    let panFrom: { x: number; y: number; vx: number; vy: number } | null = null;
+    root.addEventListener("pointerdown", (ev: PointerEvent) => {
+      if (ev.target !== root && ev.target !== viewport) return;
+      const rr = root.getBoundingClientRect();
+      panFrom = {
+        x: ((ev.clientX - rr.left) / rr.width) * W,
+        y: ((ev.clientY - rr.top) / rr.height) * H,
+        vx: view.x,
+        vy: view.y,
+      };
+      root.setPointerCapture?.(ev.pointerId);
+    });
+    root.addEventListener("pointermove", (ev: PointerEvent) => {
+      if (!panFrom) return;
+      const rr = root.getBoundingClientRect();
+      const sx = ((ev.clientX - rr.left) / rr.width) * W;
+      const sy = ((ev.clientY - rr.top) / rr.height) * H;
+      view.x = panFrom.vx + (sx - panFrom.x);
+      view.y = panFrom.vy + (sy - panFrom.y);
+      applyView();
+    });
+    root.addEventListener("pointerup", () => {
+      panFrom = null;
+    });
+    // Double-click resets the reader's view; the fitted layout is the home.
+    root.addEventListener("dblclick", () => {
+      view = { k: 1, x: 0, y: 0 };
+      applyView();
+    });
 
     function paint() {
       links.forEach((l, i) => {
