@@ -258,13 +258,6 @@ iroh-experimental = ["commonwealth-transport/iroh"]
 iroh-relay-only = ["commonwealth-transport/iroh-relay-only"]
 
 [dev-dependencies]
-# The mesh host cluster moved to `sovereign-daemon` (domains
-# dm-daemon-mesh-edge). The integration tests that named it moved into that
-# crate's tree; `dst.rs` stays here (it is bound to `dst_scenarios.rs` and the
-# `dst` feature), so this is a TEST-ONLY edge — layer-gate never enforces dev
-# edges (DepKind::Dev), and the production direction stays
-# `sovereign-daemon -> sovereign-mesh`.
-sovereign-daemon = { path = "../sovereign-daemon" }
 # `worker_e2e.rs` writes a temporary SCIP root.
 tempfile = "3"
 [lints]

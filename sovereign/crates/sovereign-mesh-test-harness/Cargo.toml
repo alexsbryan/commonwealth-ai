@@ -26,17 +26,11 @@ workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 
 # The harness's `src/` meets the runtime at the OICP/contracts seam: its
 # simulated node is generic over the node state, so the library names no host.
-# The integration tests assemble the real host node and bind it, which is why
-# `sovereign-daemon` is a test-only edge here — layer-gate never enforces dev
-# edges (DepKind::Dev), and the production direction is unchanged.
+# The tests that used to assemble the real host node are stopped — that is the
+# assembled host, not the seam (`[[forbid]] sovereign-mesh-test-harness ->
+# sovereign-daemon`). What is left is `commonwealth-discovery`'s membership.
 [dev-dependencies]
 commonwealth-discovery = { workspace = true }
-commonwealth-state = { workspace = true }
-# The integration tests assemble the real host node — the host cluster moved
-# from `sovereign-api` to `sovereign-daemon` at domains `dm-daemon-api-edge`,
-# so this TEST-ONLY edge follows it. Layer-gate never enforces dev edges
-# (DepKind::Dev), and the production direction is unchanged.
-sovereign-daemon = { workspace = true }
 
 [[test]]
 name = "integration"

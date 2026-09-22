@@ -34,13 +34,20 @@ use std::time::Duration;
 
 use bytes::Bytes;
 use commonwealth_core::ids::{NodeId, NodePubkey};
-use commonwealth_core::mesh::{aliased_endpoint_keys, EndpointClaim, Mesh, NodeStatus};
+use commonwealth_core::mesh::wire::{GossipRejection, GossipRequest, GossipResponse};
+use commonwealth_core::mesh::{
+    aliased_endpoint_keys, EndpointClaim, GossipAuth, GossipAuthArm, Mesh, MeshWire, NodeStatus,
+    SecretDisclosure,
+};
 use commonwealth_core::{partition, TestClock};
-use sovereign_daemon::server::{client_router, internal_router};
-use sovereign_daemon::state::AppState;
+use commonwealth_state::MeshStore;
+use corpus_engine::CorpusEngine;
+use sovereign_contracts::self_claims::{LocalClaims, SelfClaims};
+use sovereign_mesh::fabric::{FabricPart, FabricSeed};
 use sovereign_mesh_test_harness::fault::{shared_policy, FaultProxy, FaultTransport, SharedPolicy};
 use sovereign_mesh_test_harness::simulated_mesh::SimulatedMesh;
 use sovereign_mesh_test_harness::simulated_node::SimulatedNodeBuilder;
+use sovereign_meshapp_registry::registry::AppRegistry;
 
 use sovereign_mesh::gossip;
 
@@ -48,15 +55,123 @@ use sovereign_mesh::gossip;
 // `sovereign_mesh` (with `--features dst`), not the harness crate directly.
 pub use sovereign_mesh_test_harness::fault::{FaultEvent, FaultSchedule, WireFault};
 
-/// The node-state factory the simulated nodes are built with — the harness's
-/// node is generic over its state (the OICP/contracts seam).
-fn app_state(id: NodeId, mesh: Mesh) -> AppState {
-    AppState::new(id, mesh)
+/// The node state the DST driver builds its nodes with. It meets the
+/// OICP/contracts seam the harness simulates against — Fabric's part plus the
+/// two reads a simulated node has no host to answer — so this test tree links
+/// no host crate (`[[forbid]] sovereign-mesh -> sovereign-daemon`).
+struct DstNodeState {
+    /// Fabric's part: roster, identity, clock, transport, liveness maps.
+    fabric: Arc<FabricPart>,
+    /// This simulated node runs no engine, so gossip advertises no corpora.
+    corpus_engine: Option<Arc<CorpusEngine>>,
 }
 
-/// The routers the simulated servers mount, built from a node's state.
-fn app_routers(state: &AppState) -> (axum::Router, axum::Router) {
-    (client_router(state.clone()), internal_router(state.clone()))
+impl DstNodeState {
+    fn new(id: NodeId, mesh: Mesh) -> Self {
+        #[allow(clippy::expect_used)]
+        let store = Arc::new(MeshStore::in_memory().expect("in-memory MeshStore"));
+        Self {
+            fabric: Arc::new(FabricPart::new(
+                id,
+                mesh,
+                store,
+                Arc::new(AppRegistry::new()),
+                FabricSeed::default(),
+            )),
+            corpus_engine: None,
+        }
+    }
+
+    /// In-flight peer requests. A simulated node admits none.
+    fn peer_inflight_count(&self) -> usize {
+        0
+    }
+
+    /// Peer-inflight ceiling. 1 mirrors the daemon default; the count above is
+    /// always 0, so `AdmissionSafety` reads a live ceiling and no leak.
+    fn contribution_max_peer_inflight(&self) -> usize {
+        1
+    }
+}
+
+#[async_trait::async_trait]
+impl SelfClaims for DstNodeState {
+    async fn claims(&self) -> LocalClaims {
+        // A simulated node serves nothing: every optional claim is absent.
+        LocalClaims {
+            availability: 1.0,
+            in_flight: None,
+            storage_remaining: None,
+            embed_model: None,
+            media_available: None,
+        }
+    }
+
+    fn record_storage_used(&self, _used: u64) {}
+}
+
+/// POST /internal/gossip — the one peer route DST dials, served from Fabric's
+/// part. The daemon's handler without the host's persistence and gate layers.
+async fn gossip_handler(
+    axum::extract::State(fabric): axum::extract::State<Arc<FabricPart>>,
+    axum::Json(req): axum::Json<GossipRequest>,
+) -> Result<axum::Json<GossipResponse>, (axum::http::StatusCode, axum::Json<GossipRejection>)> {
+    let incoming = req.mesh.into_mesh();
+    let self_node_id = fabric.identity.current();
+    let now_secs = fabric.clock().now_unix_secs();
+    let auth = GossipAuth {
+        sender: req.from,
+        proof: req.mesh_proof.clone(),
+        now_secs,
+    };
+    let mut mesh = fabric.mesh.write().await;
+    let report = mesh.merge_from_authenticated(self_node_id, &incoming, &auth);
+    if report.rejected() {
+        return Err((
+            axum::http::StatusCode::UNAUTHORIZED,
+            axum::Json(GossipRejection {
+                reason: "mesh_id or invite_key_hash does not match".into(),
+            }),
+        ));
+    }
+    let now_local = fabric.clock().now_unix_secs();
+    for observed_id in report.observed() {
+        fabric.observe_peer_contact(*observed_id, now_local);
+    }
+    if report.added() > 0 || report.updated() > 0 {
+        if let Some(hook) = fabric.on_mesh_mutation.as_ref() {
+            hook(&mesh, self_node_id);
+        }
+    }
+    let disclosure = if report.auth_arm() == GossipAuthArm::RawSecret {
+        SecretDisclosure::Disclose
+    } else {
+        SecretDisclosure::Redact
+    };
+    let wire = MeshWire::for_peer(&mesh, disclosure);
+    let proof = mesh.mesh_proof(self_node_id, now_secs);
+    if let Some(sender) = req.from {
+        fabric.observe_peer_split_generation(sender, !report.peer_pre_split());
+    }
+    Ok(axum::Json(GossipResponse {
+        mesh: wire,
+        from: Some(self_node_id),
+        mesh_proof: proof,
+    }))
+}
+
+/// The node-state factory the simulated nodes are built with.
+fn node_state(id: NodeId, mesh: Mesh) -> DstNodeState {
+    DstNodeState::new(id, mesh)
+}
+
+/// The routers the simulated servers mount. The client router is empty — DST
+/// dials only the internal gossip route — served from the node's Fabric part.
+fn app_routers(state: &DstNodeState) -> (axum::Router, axum::Router) {
+    let internal = axum::Router::new()
+        .route("/internal/gossip", axum::routing::post(gossip_handler))
+        .with_state(state.fabric.clone());
+    (axum::Router::new(), internal)
 }
 
 /// Offline threshold used for DST rounds. Large relative to the [`TestClock`]
@@ -80,7 +195,7 @@ pub enum Quiescence {
 
 /// A fault-injecting driver over a [`SimulatedMesh`].
 pub struct DstMesh {
-    sim: SimulatedMesh<AppState>,
+    sim: SimulatedMesh<DstNodeState>,
     policy: SharedPolicy,
     clock: TestClock,
     /// Per-node typed transport handles (parallel to `sim.nodes`), so a
@@ -102,12 +217,12 @@ impl DstMesh {
         for i in 0..n {
             sim.add_node(
                 SimulatedNodeBuilder::new((i as u128) + 1, &format!("node-{i}")),
-                app_state,
+                node_state,
             );
         }
         let addrs = sim.start_all(app_routers).await;
         for node in &sim.nodes {
-            *node.state.inner.fabric.mesh.write().await = sim.mesh_state.clone();
+            *node.state.fabric.mesh.write().await = sim.mesh_state.clone();
         }
 
         let policy = shared_policy();
@@ -124,7 +239,10 @@ impl DstMesh {
             // Per-node clock: a clone sharing the base (zero skew here; a skew
             // scenario calls `with_offset`). Routing every gossip `now` through
             // this is what makes injected time observable.
-            node.state.clock_reader().publish(Arc::new(clock.clone()));
+            node.state
+                .fabric
+                .clock_reader()
+                .publish(Arc::new(clock.clone()));
 
             let transport = Arc::new(FaultTransport::new(self_id, policy.clone()));
             for (j, &peer_id) in node_ids.iter().enumerate() {
@@ -141,6 +259,7 @@ impl DstMesh {
                 proxies.push(proxy);
             }
             node.state
+                .fabric
                 .peer_transport_reader()
                 .publish(transport.clone());
             transports.push(transport);
@@ -202,6 +321,7 @@ impl DstMesh {
     pub fn skew_node(&self, idx: usize, offset_secs: i64) {
         self.sim.nodes[idx]
             .state
+            .fabric
             .clock_reader()
             .publish(Arc::new(self.clock.with_offset(offset_secs)));
     }
@@ -268,7 +388,7 @@ impl DstMesh {
     /// Write a mesh_store key on node `idx` (origin = that node).
     pub fn store_set(&self, idx: usize, app_id: &str, key: &str, value: &[u8]) {
         let node = &self.sim.nodes[idx];
-        let _ = node.state.inner.fabric.mesh_store.set(
+        let _ = node.state.fabric.mesh_store.set(
             app_id,
             key,
             Bytes::copy_from_slice(value),
@@ -280,7 +400,6 @@ impl DstMesh {
     pub fn store_get(&self, idx: usize, app_id: &str, key: &str) -> Option<Vec<u8>> {
         self.sim.nodes[idx]
             .state
-            .inner
             .fabric
             .mesh_store
             .get(app_id, key)
@@ -294,8 +413,8 @@ impl DstMesh {
         // Individual peer failures are logged inside `run_one_round` and do not
         // propagate; a round only errs on a fundamental fault.
         if let Err(e) = gossip::run_one_round(
-            &*self.sim.nodes[idx].state.inner.fabric,
-            self.sim.nodes[idx].state.inner.node.corpus_engine.as_ref(),
+            self.sim.nodes[idx].state.fabric.as_ref(),
+            self.sim.nodes[idx].state.corpus_engine.as_ref(),
             &self.sim.nodes[idx].state,
             DST_OFFLINE_THRESHOLD,
         )
@@ -384,7 +503,7 @@ impl DstMesh {
             if self.down.contains(id) {
                 continue;
             }
-            let mesh = self.sim.nodes[idx].state.inner.fabric.mesh.read().await;
+            let mesh = self.sim.nodes[idx].state.fabric.mesh.read().await;
             let mut v: Vec<(NodeId, bool)> = mesh
                 .members
                 .iter()
@@ -412,7 +531,7 @@ impl DstMesh {
             }
             let node = &self.sim.nodes[idx];
             let members = {
-                let mesh = node.state.inner.fabric.mesh.read().await;
+                let mesh = node.state.fabric.mesh.read().await;
                 mesh.members
                     .iter()
                     .map(|(k, m)| {
