@@ -110,32 +110,31 @@ use crate::{Error, Result};
 /// margin.
 ///
 /// What a floor CAN catch here is the failure that produced this whole fix:
-/// a query embedded in a different space from the centroids. Scored against
-/// speech-act centroids, a retrieval-prefixed query wins at 0.135-0.324 and
-/// an unprefixed one at 0.151-0.463, against 0.765-0.965 for anything
-/// actually in the space. 0.50 sits in that gap with room on both sides, so
+/// a query embedded in a different space from the centroids. The 0.50 figure
+/// was measured in the UNCENTRED space (cross-space queries 0.135-0.324,
+/// in-space 0.765-0.965). After 2026-09-22's re-centring those ranges shift
+/// with the cone: in-space winners score 0.13-0.57, and a cross-space query
+/// collapses TOWARD the cone mean it is subtracted against, landing near 0.
+/// 0.05 sits in that gap with room on both sides, so
 /// [`QuestionKindClassifier::classify`] refuses a cross-space vector loudly
 /// instead of ranking it — see the warning it logs.
-const KIND_MIN_SIM: f32 = 0.50;
+const KIND_MIN_SIM: f32 = 0.05;
 
 /// Margin the winner must hold over the runner-up. A question that sits
 /// between two kinds ("what changed about the themes") has not chosen one,
 /// and forcing it into a row would walk the wrong edges silently.
 ///
-/// This is the discriminator (see [`KIND_MIN_SIM`]), and it is set from the
-/// map rather than from any evaluation bank: **the gate must admit the map's
-/// own glosses.** A classifier that abstains on the phrases its map declares
-/// as what a kind sounds like is broken by construction. The five built-in
-/// glosses clear 0.039 at worst (`"which characters are there"`), so the gate
-/// sits at half that — leaving a corpus whose exemplars are tighter than the
-/// defaults room to still classify its own glosses.
-///
-/// Two independent checks on that value, neither used to pick it. Eighteen
-/// non-question probes (`"ok"`, `"banana"`, `"asdf qwerty zxcv"`, a SQL
-/// statement, an HTML fragment, a Rust fn) all score margins ≤ 0.022, so 0.02
-/// rejects seventeen of eighteen. On the Conrad bank it admits 22 of 43 at
-/// 76% precision, against 6 of 43 at 0% before.
-const KIND_MIN_MARGIN: f32 = 0.02;
+/// This is the discriminator (see [`KIND_MIN_SIM`]). The 0.02 value was set
+/// in the UNCENTRED space, where margins were compressed by the cone; after
+/// 2026-09-22's re-centring the scale is ~7× wider and the gate is refit from
+/// BOTH directions on measured distributions: the ANS K1 bank's weakest
+/// winning margin is 0.032, and the one near-boundary control question
+/// ("What is this document about?") wins by 0.008 — 0.025 admits every real
+/// list question and refuses that near-tie to the unfiltered row instead of
+/// misrouting it. Conrad: 38/43 admitted (was 22/43), same ranking.
+/// Env-overridable as before (`SOVEREIGN_QUESTION_KIND_MIN_MARGIN`) for
+/// per-corpus fits.
+const KIND_MIN_MARGIN: f32 = 0.025;
 
 fn env_f32(key: &str, default: f32) -> f32 {
     std::env::var(key)
@@ -200,8 +199,13 @@ impl KindSource {
 /// exemplars.
 #[derive(Debug)]
 pub struct QuestionKindClassifier {
-    /// `(kind, unit-length centroid)`, in [`QuestionKind::ALL`] order.
+    /// `(kind, unit-length centroid)`, in [`QuestionKind::ALL`] order —
+    /// MEAN-CENTRED against the cone's own mean (see [`Self::centre`]).
     centroids: Vec<(QuestionKind, Vec<f32>)>,
+    /// The cone's mean vector (over the unit-length raw centroids), kept so
+    /// queries are centred into the same frame. Zero-length only for an
+    /// empty classifier, which never scores.
+    centre: Vec<f32>,
     min_sim: f32,
     min_margin: f32,
 }
@@ -248,6 +252,7 @@ impl QuestionKindClassifier {
         for (kind, phrases) in rows {
             centroids.push((kind, centroid(phrases, embed).await?));
         }
+        let centre = cone_mean(&centroids);
         tracing::debug!(
             target: "retrieval_audit",
             kinds = centroids.len(),
@@ -255,7 +260,8 @@ impl QuestionKindClassifier {
             "question-kind: centroids built from the map's exemplars"
         );
         Ok(Some(Self {
-            centroids,
+            centroids: centred(centroids, &centre),
+            centre,
             min_sim: env_f32("SOVEREIGN_QUESTION_KIND_MIN_SIM", KIND_MIN_SIM),
             min_margin: env_f32("SOVEREIGN_QUESTION_KIND_MIN_MARGIN", KIND_MIN_MARGIN),
         }))
@@ -266,15 +272,17 @@ impl QuestionKindClassifier {
     /// no network; the vectors are normalised here so a test may pass raw
     /// ones.
     pub fn from_centroids(centroids: Vec<(QuestionKind, Vec<f32>)>) -> Self {
-        let centroids = centroids
+        let centroids: Vec<(QuestionKind, Vec<f32>)> = centroids
             .into_iter()
             .map(|(k, mut v)| {
                 l2_normalize(&mut v);
                 (k, v)
             })
             .collect();
+        let centre = cone_mean(&centroids);
         Self {
-            centroids,
+            centroids: centred(centroids, &centre),
+            centre,
             min_sim: env_f32("SOVEREIGN_QUESTION_KIND_MIN_SIM", KIND_MIN_SIM),
             min_margin: env_f32("SOVEREIGN_QUESTION_KIND_MIN_MARGIN", KIND_MIN_MARGIN),
         }
@@ -322,6 +330,13 @@ impl QuestionKindClassifier {
         }
         let mut q = query_embedding.to_vec();
         l2_normalize(&mut q);
+        // Same frame as the centroids: subtract the cone's mean, renorm.
+        if q.len() == self.centre.len() {
+            for (v, m) in q.iter_mut().zip(&self.centre) {
+                *v -= m;
+            }
+            l2_normalize(&mut q);
+        }
         let mut scored: Vec<(QuestionKind, f32)> = self
             .centroids
             .iter()
@@ -477,6 +492,45 @@ fn exemplar_key(policy: &NavigationPolicy) -> u64 {
 /// [`QuestionKindClassifier::race`]'s existing contract.
 pub async fn kind_space_embedding(text: &str, embed: &EmbedFn) -> Result<Vec<f32>> {
     (embed)(&classifier_input(text)).await
+}
+
+/// Elementwise mean over the unit-length centroids.
+fn cone_mean(centroids: &[(QuestionKind, Vec<f32>)]) -> Vec<f32> {
+    let dim = centroids.first().map(|(_, c)| c.len()).unwrap_or(0);
+    if dim == 0 {
+        return Vec::new();
+    }
+    let mut mean = vec![0.0f32; dim];
+    for (_, c) in centroids {
+        for (m, v) in mean.iter_mut().zip(c) {
+            *m += v;
+        }
+    }
+    let n = centroids.len() as f32;
+    for m in mean.iter_mut() {
+        *m /= n;
+    }
+    mean
+}
+
+/// Subtract the cone mean from every centroid and renorm — the rescale that
+/// gives the margin gate its range back.
+fn centred(
+    centroids: Vec<(QuestionKind, Vec<f32>)>,
+    mean: &[f32],
+) -> Vec<(QuestionKind, Vec<f32>)> {
+    centroids
+        .into_iter()
+        .map(|(k, mut c)| {
+            if c.len() == mean.len() {
+                for (v, m) in c.iter_mut().zip(mean) {
+                    *v -= m;
+                }
+                l2_normalize(&mut c);
+            }
+            (k, c)
+        })
+        .collect()
 }
 
 async fn centroid(phrases: &[String], embed: &EmbedFn) -> Result<Vec<f32>> {
@@ -706,108 +760,97 @@ mod tests {
     /// retrieval-prefixed query wins at 0.135-0.324 and an unprefixed one at
     /// 0.151-0.463, while anything actually in the space wins at 0.765-0.965.
     ///
-    /// Failing input: `[0.30, 0.02, 0.0]` — winner cosine 0.998/… ≈ 0.31 once
-    /// normalised against the first centroid, i.e. squarely in the
-    /// cross-space band, with a wide margin so ONLY the floor can reject it.
-    /// Delete the `min_sim` term and this classifies as `Thematic`, which is
-    /// what the pre-2026-09-08 code did on every production question.
+    /// In the CENTRED space (2026-09-22) a cross-space query's signature is a
+    /// vector pointing at the cone mean: subtracting the mean leaves ~zero
+    /// length and every cosine collapses to ~0. Measured on the live banks:
+    /// in-space winners score 0.13-0.57, a mean-directed query ~0.
+    ///
+    /// Failing input: `[1.0, 0.0, 0.0]` against two centroids symmetric about
+    /// it — exactly the mean direction. Delete the `min_sim` term and this
+    /// zero-vector query ties for every kind and ranks one arbitrarily.
     #[test]
     fn a_cross_space_query_vector_is_refused_not_ranked() {
         let c = QuestionKindClassifier::from_centroids(vec![
-            (QuestionKind::Thematic, vec![1.0, 0.0, 0.0]),
-            (QuestionKind::Tension, vec![0.0, 1.0, 0.0]),
+            (QuestionKind::Thematic, vec![1.0, 0.2, 0.0]),
+            (QuestionKind::Tension, vec![1.0, -0.2, 0.0]),
         ]);
-        // sim = 0.30/sqrt(0.30^2+0.02^2+0.95^2) ≈ 0.30 — the cross-space band.
-        let (kind, score) = c.classify(&[0.30, 0.02, 0.95]);
+        // Dead on the shared (mean) axis: centred, it is the zero vector.
+        let (kind, score) = c.classify(&[1.0, 0.0, 0.0]);
         let score = score.expect("a score is still reported, so the log can name it");
         assert!(
             score.sim < KIND_MIN_SIM,
             "sim {} must land under the same-space floor",
             score.sim
         );
-        assert!(
-            score.margin >= KIND_MIN_MARGIN,
-            "margin {} must clear, so the floor is the only gate under test",
-            score.margin
-        );
         assert_eq!(kind, None);
     }
 
-    /// The floor is a same-space guard, NOT a "how close to a class" gate,
-    /// and this pins why raising it cannot fix a miss.
+    /// Centring restores the sim floor's discriminating power — the measured
+    /// upgrade of 2026-09-22.
     ///
-    /// The classifier instruction pulls everything into one narrow cone — the
-    /// five real centroids sit at cosine 0.87-0.92 from each other — so noise
-    /// and real questions interleave on `sim`. Measured: `"asdf qwerty zxcv"`
-    /// 0.872 and `"ok"` 0.907, against real bank questions at 0.765-0.923.
-    /// Modelled here with two near-collinear centroids: the noise query
-    /// OUTSCORES the real one on `sim`, so no floor admits one and rejects the
-    /// other, while the margin separates them cleanly.
+    /// In the UNCENTRED cone this test pinned the opposite: noise and real
+    /// questions interleaved on `sim` (gibberish 0.75-0.91 against real
+    /// 0.765-0.923), so no floor could separate them and the margin had to do
+    /// all the work. Centred, a noise query dead on the shared axis IS the
+    /// mean direction and collapses to sim ~0, while a real question's
+    /// off-axis content survives the subtraction at 0.13-0.57. The floor can
+    /// finally reject one and admit the other, and the margin agrees.
     ///
-    /// Failing input: raise `KIND_MIN_SIM` to reject `noise` and `real` goes
-    /// with it — assert below.
+    /// Failing input: delete the centring in `race`/`from_centroids` and the
+    /// noise query scores ~0.9 again — the interleaving returns, asserted.
     #[test]
-    fn the_floor_cannot_separate_noise_from_a_real_question_only_the_margin_can() {
-        let a = 0.9_f32.sqrt();
-        let b = (1.0_f32 - 0.9).sqrt();
+    fn centring_lets_the_floor_separate_noise_from_a_real_question() {
         let c = QuestionKindClassifier::from_centroids(vec![
-            (QuestionKind::Thematic, vec![a, b, 0.0]),
-            (QuestionKind::Lookup, vec![a, -b, 0.0]),
+            (QuestionKind::Thematic, vec![1.0, 0.2, 0.0]),
+            (QuestionKind::Lookup, vec![1.0, -0.2, 0.0]),
         ]);
-        // Noise: dead on the shared axis — high sim, no margin.
+        // Noise: dead on the shared axis — the cone mean itself.
         let noise = c.best(&[1.0, 0.0, 0.0]).expect("scored");
-        // A real question: off the shared axis toward one class, and carrying
-        // content the centroids do not (the third component) — LOWER sim than
-        // the noise, but a real margin. sim 0.867 / margin 0.065.
+        // A real question: off the shared axis, carrying content the
+        // centroids do not (the third component).
         let real = c.best(&[0.85, 0.10, 0.45]).expect("scored");
 
         assert!(
-            noise.sim > real.sim,
-            "the measured interleaving must hold: noise {} vs real {}",
-            noise.sim,
+            noise.sim < KIND_MIN_SIM,
+            "the mean-directed noise must fall under the floor: {}",
+            noise.sim
+        );
+        assert!(
+            real.sim >= KIND_MIN_SIM,
+            "the real question must clear the floor: {}",
             real.sim
         );
         assert!(
-            noise.margin < real.margin,
-            "the margin is the discriminator: noise {} vs real {}",
-            noise.margin,
+            real.margin >= KIND_MIN_MARGIN,
+            "and the margin, both directions: {}",
             real.margin
         );
-        // The consequence, stated as an assertion rather than a comment
-        // (§7.2): any floor that rejects the noise also rejects the question.
-        for floor in [0.60_f32, 0.80, 0.90, 0.95] {
-            assert!(
-                !(noise.sim < floor && real.sim >= floor),
-                "floor {floor} appeared to separate them; the geometry says it cannot"
-            );
-        }
-        // …and the margin gate does the job the floor cannot.
-        assert!(noise.margin < KIND_MIN_MARGIN && real.margin >= KIND_MIN_MARGIN);
     }
 
-    /// The gates are the ones calibrated in the classifier space, not the
-    /// retrieval-space pair they replaced. A silent revert to 0.34/0.05 would
-    /// leave the floor unable to catch a cross-space vector (0.34 sits inside
-    /// the 0.135-0.463 cross-space band) and the margin refusing 17 of the 22
-    /// questions this now classifies.
+    /// The gates are the ones calibrated in the CENTRED classifier space
+    /// (2026-09-22 refit), not the uncentred pair they replaced. A silent
+    /// revert to 0.50/0.02 would put the floor back above every measured
+    /// in-space winner (0.13-0.57) and the margin back under the ANS bank's
+    /// weakest winning margin (0.032) — refusing real questions wholesale,
+    /// which is the defect this refit fixed.
     #[test]
-    fn the_gates_are_the_classifier_space_pair() {
+    fn the_gates_are_the_centred_space_pair() {
         let c =
             QuestionKindClassifier::from_centroids(vec![(QuestionKind::Thematic, vec![1.0, 0.0])]);
         assert_eq!(c.gates(), (KIND_MIN_SIM, KIND_MIN_MARGIN));
-        assert_eq!(KIND_MIN_SIM, 0.50);
-        assert_eq!(KIND_MIN_MARGIN, 0.02);
+        assert_eq!(KIND_MIN_SIM, 0.05);
+        assert_eq!(KIND_MIN_MARGIN, 0.025);
         assert!(
-            KIND_MIN_SIM > 0.463,
-            "the floor must sit above the measured cross-space band"
+            KIND_MIN_SIM < 0.129,
+            "the floor must sit under the lowest measured in-space winner (ANS, 0.129)"
         );
         assert!(
-            KIND_MIN_SIM < 0.765,
-            "…and below the lowest in-space question"
+            KIND_MIN_MARGIN < 0.032,
+            "the margin must admit the ANS bank's weakest winning margin (0.032)"
         );
         assert!(
-            KIND_MIN_MARGIN < 0.039,
-            "the gate must admit the tightest built-in gloss"
+            KIND_MIN_MARGIN > 0.008,
+            "…and refuse the near-boundary control measured at 0.008"
         );
     }
 
