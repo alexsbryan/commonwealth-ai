@@ -8,13 +8,8 @@
 //! the leaf's table port, deriving the population from the corpus's own
 //! navigation map (`seed_population`).
 
-use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
-use std::time::Instant;
 
-use understanding_vocab::atoms::{AtomEnvelope, AtomType};
-
-use crate::enrichment::atlas::ann_store::{ann_table_dir, ANN_TABLE_DIRNAME};
 use crate::enrichment::atlas::context::{
     build_persistent_ann_seed_table, render_atom_entry, AnnBuildStats, AtlasContext, AtlasEntry,
 };
@@ -26,6 +21,9 @@ pub use super::context_filter::AtlasContextFilter;
 // `load_atlas_context` + `LoadAtlasError` moved to the atlas-reader leaf
 // (FIVE_PROGRAMS §12 decision 1 — the read bag needs no engine); re-exported
 // at the historical paths.
+use corpus_engine_atlas_reader::ann_store::ANN_TABLE_DIRNAME;
+use understanding_vocab::atoms::AtomType;
+
 pub use corpus_engine_atlas_reader::context_loader::{
     load_atlas_context, LoadAtlasError, ATLAS_ENTRY_CHAR_LIMIT,
 };
