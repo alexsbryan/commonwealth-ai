@@ -66,7 +66,7 @@ FOLLOW-ON order, opened only if this one measures WORKED.
   copy).
 - ralph/DECISIONS.md: +2 entries (the build correction; the dial outcome).
 - `target/` probe + page artifacts: never committed.
-- BASE: `<stamped by the inventory row's FIRST act — git rev-parse HEAD>`
+- BASE: `ac44e6fecc8165fbad5c624da21442b6227ccc5a` (git rev-parse HEAD, 2026-09-22)
 
 ## Less (what each row reports having reused)
 
