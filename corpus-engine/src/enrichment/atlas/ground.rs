@@ -227,9 +227,16 @@ pub async fn ground(
     let q_lower = question.to_lowercase();
     let mut name_seeds: Vec<(f32, String, String)> = Vec::new();
     for ctx in atlases {
-        if !graph_by_id.contains_key(ctx.atlas_corpus_id.as_str()) {
+        let Some(graph) = graph_by_id.get(ctx.atlas_corpus_id.as_str()) else {
             continue;
-        }
+        };
+        // The atlas's own declared type names — its vocabulary, from the
+        // data, not a list in this file. Used below to keep the last-word
+        // fallback from seeding half the corpus off a generic head noun.
+        let declared: Vec<&str> = graph
+            .ontology()
+            .map(|p| p.shape.types.iter().map(|t| t.name.as_str()).collect())
+            .unwrap_or_default();
         for entry in &ctx.entries {
             if entry.atom_id.is_empty() {
                 continue;
@@ -242,7 +249,20 @@ pub async fn ground(
             let mut hit = contains_whole_word(&q_lower, &name_lower);
             if !hit {
                 if let Some(last) = name_lower.split_whitespace().last() {
-                    if last.len() >= 4 && last != name_lower {
+                    // GENERIC-HEAD GUARD (2026-09-22). The last-word
+                    // fallback exists so a compound question can reach an
+                    // atom it names in part; but when the last word IS the
+                    // entry's own declared type, the match carries no
+                    // identity — "which mints are represented among the
+                    // coins of the Corinth hoard" contains "hoard", and
+                    // every `X hoard` atom in the corpus seeded off that
+                    // one word (measured: 153 seeds, 405 nodes, 164
+                    // requests that fetched the Siphnos/Demanhur tables
+                    // while the named hoard's own sections were crowded
+                    // out). A full-phrase match still seeds normally; only
+                    // the generic-head fallback is withdrawn.
+                    let generic_head = declared.iter().any(|t| t.eq_ignore_ascii_case(last));
+                    if last.len() >= 4 && last != name_lower && !generic_head {
                         hit = contains_whole_word(&q_lower, last);
                     }
                 }
