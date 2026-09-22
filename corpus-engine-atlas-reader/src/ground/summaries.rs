@@ -51,9 +51,9 @@ use std::collections::BTreeMap;
 
 use understanding_vocab::ontology::SummarySource;
 
-use super::super::atoms::AtomId;
-use super::super::provider::AtlasProvider;
 use super::SummaryNode;
+use crate::atoms::AtomId;
+use crate::provider::AtlasProvider;
 
 /// Everything a source needs to answer, and nothing it does not.
 ///
@@ -118,7 +118,7 @@ impl SummaryStage for SummarySource {
 
 /// The RAPTOR arm: the corpus's own summary table, read where it lives.
 ///
-/// It is a READ and not a port. `crate::index::raptor::search_raptor_summaries`
+/// It is a READ and not a port. `crate::raptor_read::search_raptor_summaries`
 /// takes a PATH — no engine handle, no daemon — and returns a `RaptorHit`
 /// carrying the exact cosine recomputed from the stored embedding, which is
 /// deliberately bit-comparable to `atlas_context::cosine` and therefore to the
@@ -146,11 +146,11 @@ async fn raptor_rows(q: &SummaryQuery<'_>) -> Vec<SummaryNode> {
         // The sidecar is the gate. Absent means this corpus has no table to
         // read, which is not an error and not a degradation — it is a corpus
         // that keeps no summaries here.
-        if crate::index::raptor::read_raptor_meta(&dir).is_none() {
+        if crate::raptor_read::read_raptor_meta(&dir).is_none() {
             continue;
         }
         let hits =
-            match crate::index::raptor::search_raptor_summaries(&dir, q.question_embedding, q.want)
+            match crate::raptor_read::search_raptor_summaries(&dir, q.question_embedding, q.want)
                 .await
             {
                 Ok(h) => h,
@@ -248,7 +248,7 @@ pub fn yield_label(served: &SourceYield) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::enrichment::atlas::evidence_site::EvidenceSite;
+    use crate::evidence_site::EvidenceSite;
 
     fn node(id: &str, score: f32) -> SummaryNode {
         SummaryNode {

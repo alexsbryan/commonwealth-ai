@@ -34,19 +34,18 @@ pub mod atoms_delta;
 // 2026-09-21 (FIVE_PROGRAMS §12 decision 1); re-exported here so the
 // historical paths keep resolving. Writers stay below.
 pub use corpus_engine_atlas_reader::{
-    axis_catalog, citation, context_filter, evidence_site, projection, section_cache,
+    axis_catalog, citation, context_filter, evidence_site, ground, inventory, projection,
+    section_cache,
 };
 pub mod context;
 pub mod context_loader;
 pub mod cross_corpus;
 pub mod doc_to_atoms;
+pub mod provider;
 pub use understanding_vocab::edges;
-pub mod ground;
 pub mod ingestion;
-pub mod inventory;
 pub mod migrate_ids;
 pub mod ontology_coverage;
-pub mod provider;
 pub mod registry;
 pub mod resolution;
 pub mod resolution_identity;
@@ -77,8 +76,8 @@ pub use cross_corpus::{
 };
 pub use edges::{Edge, EdgeId, EdgeProvenance, EdgeType, EdgesFile};
 pub use ground::{
-    candidate_atlas_ids, ground, navigation_policy_for, select_walk, Degradation, Grounding,
-    MapNode, MapSection, PolicySource, WalkLedger, WalkSelection, MAP_NODE_CAP,
+    ground, navigation_policy_for, select_walk, Degradation, Grounding, MapNode, MapSection,
+    PolicySource, WalkLedger, WalkSelection, MAP_NODE_CAP,
 };
 pub use ingestion::{AtlasData, AtlasIngestion, AtlasIngestionConfig};
 pub use inventory::{AtlasInventory, RowFit, RowInert};

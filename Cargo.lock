@@ -2380,6 +2380,7 @@ version = "0.7.0"
 dependencies = [
  "arrow",
  "arrow-array",
+ "async-trait",
  "corpus-index",
  "futures",
  "kernel-types",
@@ -2392,6 +2393,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "tracing",
+ "understanding-atlas",
  "understanding-vocab",
  "workspace-hack",
 ]

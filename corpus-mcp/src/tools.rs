@@ -470,7 +470,7 @@ impl Server {
             indexes: targets.iter().map(|t| (t.id.as_str(), &t.index)).collect(),
         };
         let allowed: Vec<String> = targets.iter().map(|t| t.id.clone()).collect();
-        let (grounded, resolve) = ground::resolve_evidence(
+        let (grounded, resolve) = corpus_engine::enrichment::atlas::resolve::resolve_evidence(
             &grounding.requests,
             grounding.budget,
             Some(&allowed),

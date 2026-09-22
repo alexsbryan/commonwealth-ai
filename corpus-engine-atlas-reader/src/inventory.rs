@@ -49,11 +49,11 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use understanding_vocab::ontology::WalkPolicy;
 
-use super::atoms::AtomType;
-use super::edges::EdgeType;
-use super::projection::AtomRecord;
-use super::provider::AtlasProvider;
-use super::summary::AtlasSummary;
+use crate::atoms::AtomType;
+use crate::edges::EdgeType;
+use crate::projection::AtomRecord;
+use crate::provider::AtlasProvider;
+use crate::summary::AtlasSummary;
 
 /// The kinds an atlas (or a set of atlases) carries, by count.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]

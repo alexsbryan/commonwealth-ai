@@ -24,7 +24,7 @@
 //! convert to a plain `(chunk_id: u32, text: &str)` pair at the
 //! boundary before constructing a `SourceCitation`.
 //!
-//! See [`crate::enrichment::pipeline::typed_schemas::source_recovery`]
+//! See `pipeline::typed_schemas::source_recovery`
 //! for the matching prompt fragment that instructs the model to PREFER
 //! verbatim phrasings from these citations when naming atoms.
 

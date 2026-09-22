@@ -11,14 +11,14 @@ use understanding_vocab::taxonomy::EntityType;
 // when `select.rs` took the classification half, and a test module that leans
 // on its parent's private imports is a test module that breaks on the next
 // split.
-use crate::atlas_traversal::question_kind::KindSource;
-use crate::types::EmbedFn;
+use crate::question_kind::KindSource;
+use corpus_index::types::EmbedFn;
 use understanding_vocab::ontology::{NavigationPolicy, QuestionKind, WalkPolicy};
 
-use crate::enrichment::atlas::ann_store::AnnSeedTable;
-use crate::enrichment::atlas::context::{AtlasEntry, AtomView, EdgeView, EvidenceRef};
-use crate::enrichment::atlas::inventory::AtlasInventory;
-use crate::enrichment::atlas::projection::AtomRecord;
+use crate::ann_store::AnnSeedTable;
+use crate::context::{AtlasEntry, AtomView, EdgeView, EvidenceRef};
+use crate::inventory::AtlasInventory;
+use crate::projection::AtomRecord;
 use understanding_vocab::atoms::ChunkRef;
 use understanding_vocab::edges::EdgeProvenance;
 
@@ -515,39 +515,6 @@ async fn the_appended_summary_count_follows_the_declared_quota() {
     assert_eq!(g.ledger.summaries_appended, 2);
 }
 
-/// The chunk → atlas id derivation, in both shapes, and its agreement
-/// with `EvidenceSite`'s reading in the other direction. Failing input:
-/// drop the self-hosted candidate, or emit the child for a titleless
-/// chunk.
-#[test]
-fn candidate_atlas_ids_covers_both_layouts_and_agrees_with_evidence_site() {
-    let ids = candidate_atlas_ids("sep", Some("freewill"));
-    assert_eq!(ids, vec!["sep".to_string(), "sep-freewill".to_string()]);
-    // The inverse holds: the child id reads back to the parent corpus.
-    assert_eq!(
-        EvidenceSite::derive("sep-freewill").chunk_corpus().as_str(),
-        "sep"
-    );
-
-    // A chunk with no title has exactly one candidate — its own corpus.
-    assert_eq!(
-        candidate_atlas_ids("wikipedia", None),
-        vec!["wikipedia".to_string()]
-    );
-    assert_eq!(
-        candidate_atlas_ids("wikipedia", Some("   ")),
-        vec!["wikipedia".to_string()]
-    );
-    // …and a chunk titled after its own corpus yields ONE candidate, not
-    // a `bk-1-bk-1` that addresses nothing. This is the literary shape,
-    // not a corner case: every chunk of `brothers-karamazov-book-1` is
-    // titled with its corpus id.
-    assert_eq!(
-        candidate_atlas_ids("bk-1", Some("bk-1")),
-        vec!["bk-1".to_string()]
-    );
-}
-
 /// The unfiltered row admits everything and does NOT over-fetch — the
 /// path `apply_atlas_grounding` has always taken. Failing input: make
 /// `seed_filter_is_active` true for the unfiltered row.
@@ -695,7 +662,9 @@ async fn a_map_with_no_exemplars_is_distinguished_from_a_dead_embedder() {
     }
     let embed: EmbedFn = std::sync::Arc::new(|_: &str| {
         Box::pin(async { Ok(vec![1.0_f32, 0.0]) })
-            as std::pin::Pin<Box<dyn std::future::Future<Output = crate::Result<Vec<f32>>> + Send>>
+            as std::pin::Pin<
+                Box<dyn std::future::Future<Output = corpus_index::error::Result<Vec<f32>>> + Send>,
+            >
     });
     let sel = select_walk(
         "who is this character",
@@ -765,7 +734,9 @@ async fn an_inert_classified_row_falls_to_the_admissible_one_by_name() {
             vec![0.0, 0.0, 1.0]
         };
         Box::pin(async move { Ok(v) })
-            as std::pin::Pin<Box<dyn std::future::Future<Output = crate::Result<Vec<f32>>> + Send>>
+            as std::pin::Pin<
+                Box<dyn std::future::Future<Output = corpus_index::error::Result<Vec<f32>>> + Send>,
+            >
     });
     // `select_walk` takes the question's TEXT since 2026-09-09 — it owns
     // embedding it in the classifier's own space — so the mixed vector this

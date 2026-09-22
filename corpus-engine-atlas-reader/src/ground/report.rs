@@ -19,14 +19,14 @@
 
 use std::collections::HashMap;
 
-use crate::atlas_traversal::question_kind::{KindScore, KindSource};
+use crate::question_kind::{KindScore, KindSource};
 
-use super::super::atoms::AtomType;
-use super::super::context::ChunkRequest;
-use super::super::edges::EdgeType;
-use super::super::evidence_site::EvidenceSite;
-use super::super::provider::AtlasProvider;
 use super::{RowInertReport, WalkSelection, MAP_NODE_CAP};
+use crate::atoms::AtomType;
+use crate::context::ChunkRequest;
+use crate::edges::EdgeType;
+use crate::evidence_site::EvidenceSite;
+use crate::provider::AtlasProvider;
 use understanding_vocab::ontology::QuestionKind;
 
 /// Which map decided the walk — recorded because a mixed-corpus query has

@@ -203,7 +203,7 @@ pub(crate) mod authority_guard;
 pub mod numeric_audit;
 mod prompt_budget;
 mod question_analysis;
-mod retrieval;
+pub mod retrieval;
 mod retrieval_helpers;
 /// The pipeline's accounting — what a step may do to the pool, what it says
 /// it did, and the invariants between. Public for the same reason

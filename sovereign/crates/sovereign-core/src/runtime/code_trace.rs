@@ -271,7 +271,11 @@ fn load_v2_code_atlas(corpus_id: &str) -> Option<AtlasGraph> {
     if !atlas_dir.exists() {
         return None;
     }
-    let graph = match AtlasGraph::load_from_disk(corpus_id, &atlas_dir) {
+    let graph = match AtlasGraph::load_from_disk(
+        corpus_id,
+        &atlas_dir,
+        corpus_engine::enrichment::atlas::context::read_section_rows(&atlas_dir),
+    ) {
         Ok(g) => g,
         Err(e) => {
             tracing::debug!(

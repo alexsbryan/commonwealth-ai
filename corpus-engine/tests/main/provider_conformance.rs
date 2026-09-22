@@ -194,7 +194,7 @@ fn atom_class(dir: &std::path::Path, corpus: &str) -> (AtlasGraph, String, Strin
     }];
     let atoms = vec![AtomEnvelope::Entity(a), AtomEnvelope::Entity(b)];
     store::write_store_blocking(dir, corpus, &atoms, &edges).unwrap();
-    let g = AtlasGraph::load_lance_from_disk(corpus, dir).unwrap();
+    let g = AtlasGraph::load_lance_from_disk(corpus, dir, Default::default()).unwrap();
     (g, aid, bid)
 }
 

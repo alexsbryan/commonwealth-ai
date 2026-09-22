@@ -342,14 +342,17 @@ impl AtlasContextManager {
         let load_started = std::time::Instant::now();
         // Load the v2 store (atoms.lance + edges.csr). A corpus without one
         // (e.g. wikipedia — columnar WikipediaGraph, no atom store) is skipped.
-        let graph =
-            match sovereign_core::atlas_context::AtlasGraph::load_from_disk(corpus_id, atlas_dir) {
-                Ok(g) => attach_pipeline_map(g, corpus_id),
-                Err(e) => {
-                    tracing::debug!(corpus = corpus_id, error = %e, "atlas-graph: load skipped");
-                    return false;
-                }
-            };
+        let graph = match sovereign_core::atlas_context::AtlasGraph::load_from_disk(
+            corpus_id,
+            atlas_dir,
+            corpus_engine::enrichment::atlas::context::read_section_rows(atlas_dir),
+        ) {
+            Ok(g) => attach_pipeline_map(g, corpus_id),
+            Err(e) => {
+                tracing::debug!(corpus = corpus_id, error = %e, "atlas-graph: load skipped");
+                return false;
+            }
+        };
         // Attach the ANN seed table on THIS long-lived runtime (the held
         // lancedb::Table is queried later by `atlas_navigate_ann`).
         let graph = sovereign_core::atlas_context::open_and_attach_ann_seed_table(
@@ -671,8 +674,11 @@ impl AtlasContextProvider for AtlasContextManager {
         // pre-init-completion query), it loads without ANN and the retrieval
         // gate (`has_ann_seed_table` over the whole pool) falls back to the v1
         // cosine seed — correct, just not the ANN win until the eager warm.
-        match sovereign_core::atlas_context::AtlasGraph::load_from_disk(atlas_corpus_id, &atlas_dir)
-        {
+        match sovereign_core::atlas_context::AtlasGraph::load_from_disk(
+            atlas_corpus_id,
+            &atlas_dir,
+            corpus_engine::enrichment::atlas::context::read_section_rows(&atlas_dir),
+        ) {
             Ok(graph) => {
                 let load_ms = load_started.elapsed().as_millis();
                 let graph = Arc::new(attach_pipeline_map(graph, atlas_corpus_id));

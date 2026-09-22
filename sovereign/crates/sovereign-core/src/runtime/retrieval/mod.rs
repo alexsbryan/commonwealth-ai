@@ -15,7 +15,11 @@
 //! the orchestrating entry points (`prepare_knowledge_context`,
 //! `retrieve_candidates`) and the small snapshot helpers they share.
 
-pub(crate) mod atlas_grounding;
+pub mod atlas_grounding;
+// The chunk → candidate-atlas-ids derivation (FIVE_PROGRAMS §12 decision 1:
+// svrn owns what it grounds on). Public so sovereign-tools' summary-atoms
+// writer reaches the one definition instead of a corpus-engine path.
+pub use atlas_grounding::candidate_atlas_ids;
 mod atom_enum;
 mod boosts;
 mod conv_tiered;

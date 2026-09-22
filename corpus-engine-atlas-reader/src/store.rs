@@ -16,7 +16,7 @@
 //!   types / conf), out-edges and a symmetric in-CSR, mmap-friendly
 //!   ([`CsrEdges`]).
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
 use std::sync::Arc;
 
@@ -485,6 +485,20 @@ where
             .unwrap_or_else(|_| Err("v2 store thread panicked".to_string()))
     })
 }
+/// Read every atom out of `atoms.lance` into a resident [`AtomRecord`], the
+/// **canonical** [`project`]ion of its lossless `payload`. Re-projecting the
+/// payload (rather than reading the scalar columns) is deliberate: it keeps the
+/// payload the single source of truth, so the scalar columns stay a pure read
+/// optimization and the resident record is always the canonical projection. It
+/// also recovers the relational fields (`aliases`/`participants`/`evidence`)
+/// that the scalar columns drop and only the payload carries. Returned sorted
+/// by interned local id (== position), so CSR neighbor ids index straight into
+/// the `Vec`.
+///
+/// Parsing every payload is the SEP/other-scale "preload" cost (cheap — hundreds
+/// to low-thousands of atoms). Wikipedia carries no atom store of its own — it
+/// serves structural neighbors from the columnar `WikipediaGraph`
+/// (`articles.lance` + `edges.lance`), not this reader.
 pub async fn read_atom_records(atlas_dir: &Path) -> Result<Vec<AtomRecord>, String> {
     let uri = atlas_dir
         .to_str()
@@ -524,4 +538,158 @@ pub async fn read_atom_records(atlas_dir: &Path) -> Result<Vec<AtomRecord>, Stri
     }
     by_local.sort_by_key(|x| x.0);
     Ok(by_local.into_iter().map(|x| x.1).collect())
+}
+
+// ── LancePreload: the production direct-read reader ───────────────────────────
+
+/// Which CSR direction an edge query walks.
+#[derive(Clone, Copy)]
+enum Dir {
+    Out,
+    In,
+}
+
+/// A resident, **sync-queryable** view over one corpus's v2 store — the
+/// production direct-read reader. Atoms live
+/// resident as projected [`AtomRecord`]s; edges stay the mmap'd `edges.csr`, so
+/// the `atlas_navigate` BFS inner loop is sync + paged (the v2 "hot BFS stays
+/// sync" invariant).
+///
+/// **Open is async, query is sync** — the ATLAS_STORAGE_V2 "preload-sync"
+/// decision. [`open`](Self::open) reads the whole atoms table once (Lance/tokio,
+/// off the hot path), then every accessor (`atom` / `atoms` / `out_edges` /
+/// `in_edges` / `edge_degree`) is a plain slice / mmap read — no async ripple
+/// into the query API. [`open_blocking`](Self::open_blocking) bridges the async
+/// open to the daemon's sync `AtlasGraph::load_from_disk` via the dedicated-
+/// thread runtime, like the write bridges.
+pub struct LancePreload {
+    /// Projected atom records; index == interned local id (sorted at open).
+    atoms: Vec<AtomRecord>,
+    /// atom-id string → local id (point lookup + edge-endpoint resolution).
+    by_str_id: HashMap<String, u32>,
+    /// local id → atom-id string, so CSR edge endpoints surface as `&str`
+    /// borrowed from resident data.
+    local_to_str: Vec<String>,
+    /// mmap'd CSR adjacency — sync + paged.
+    csr: CsrEdges,
+    /// What this store carries, counted once at open from the resident
+    /// records and the CSR's type bytes — the row-admissibility census.
+    inventory: crate::inventory::AtlasInventory,
+}
+
+impl LancePreload {
+    /// Open the v2 store under `atlas_dir` (`atoms.lance` + `edges.csr`).
+    /// Async (reads the atoms table); see [`open_blocking`](Self::open_blocking)
+    /// for the sync bridge.
+    pub async fn open(atlas_dir: &Path) -> Result<Self, String> {
+        let atoms = read_atom_records(atlas_dir).await?;
+        let mut by_str_id = HashMap::with_capacity(atoms.len());
+        let mut local_to_str = Vec::with_capacity(atoms.len());
+        for (i, rec) in atoms.iter().enumerate() {
+            by_str_id.insert(rec.id.clone(), i as u32);
+            local_to_str.push(rec.id.clone());
+        }
+        let csr = CsrEdges::open(&atlas_dir.join(EDGES_CSR_FILENAME))?;
+        // The CSR's interned id space is exactly the atoms table's rows; a
+        // mismatch means the two artifacts were written from different atom
+        // sets (a torn / partial build) and the neighbor ids would misindex.
+        if csr.n_atoms() as usize != atoms.len() {
+            return Err(format!(
+                "v2 store mismatch: edges.csr n_atoms={} != atoms.lance rows={}",
+                csr.n_atoms(),
+                atoms.len()
+            ));
+        }
+        let inventory =
+            crate::inventory::AtlasInventory::from_records(atoms.iter(), &csr.edge_type_counts());
+        Ok(Self {
+            atoms,
+            by_str_id,
+            local_to_str,
+            csr,
+            inventory,
+        })
+    }
+
+    /// The census taken at open — see [`AtlasInventory`].
+    pub fn inventory(&self) -> &crate::inventory::AtlasInventory {
+        &self.inventory
+    }
+
+    /// Sync bridge for [`open`](Self::open) — drives the async read on the
+    /// dedicated-thread runtime so the daemon's sync `AtlasGraph::load_from_disk`
+    /// can open the v2 store without an ambient-runtime panic. Lifecycle-time
+    /// (boot / corpus load), never the hot query path.
+    pub fn open_blocking(atlas_dir: &Path) -> Result<Self, String> {
+        let dir = atlas_dir.to_path_buf();
+        run_blocking(async move { LancePreload::open(&dir).await })
+    }
+
+    /// Number of atoms.
+    pub fn atom_count(&self) -> usize {
+        self.atoms.len()
+    }
+
+    /// Number of edges (from the CSR header — dangling edges already dropped).
+    pub fn edge_count(&self) -> usize {
+        self.csr.n_edges() as usize
+    }
+
+    /// Point lookup by atom-id string. `None` if absent.
+    pub fn atom(&self, atom_id: &str) -> Option<&AtomRecord> {
+        let local = *self.by_str_id.get(atom_id)?;
+        self.atoms.get(local as usize)
+    }
+
+    /// All atoms in interned local-id order.
+    pub fn atoms(&self) -> impl Iterator<Item = &AtomRecord> + '_ {
+        self.atoms.iter()
+    }
+
+    /// In + out edge degree — the prominence signal, counted from the CSR
+    /// offsets without materialising neighbor tuples. `0` for an absent atom.
+    pub fn edge_degree(&self, atom_id: &str) -> usize {
+        match self.by_str_id.get(atom_id) {
+            Some(&local) => self.csr.out_degree(local) + self.csr.in_degree(local),
+            None => 0,
+        }
+    }
+
+    /// Edges originating at `atom_id`:
+    /// `(source_str, target_str, type, conf, provenance)`, the endpoint strings
+    /// borrowed from the resident id table. Empty if the atom is absent.
+    pub fn out_edges(&self, atom_id: &str) -> Vec<(&str, &str, EdgeType, f32, EdgeProvenance)> {
+        self.adjacent(atom_id, Dir::Out)
+    }
+
+    /// Edges arriving at `atom_id`.
+    pub fn in_edges(&self, atom_id: &str) -> Vec<(&str, &str, EdgeType, f32, EdgeProvenance)> {
+        self.adjacent(atom_id, Dir::In)
+    }
+
+    fn adjacent(
+        &self,
+        atom_id: &str,
+        dir: Dir,
+    ) -> Vec<(&str, &str, EdgeType, f32, EdgeProvenance)> {
+        let Some(&local) = self.by_str_id.get(atom_id) else {
+            return Vec::new();
+        };
+        let raw = match dir {
+            Dir::Out => self.csr.out_edges(local),
+            Dir::In => self.csr.in_edges(local),
+        };
+        let self_str = self.local_to_str[local as usize].as_str();
+        raw.into_iter()
+            .filter_map(|(nbr, ty, conf, prov)| {
+                let nbr_str = self.local_to_str.get(nbr as usize)?.as_str();
+                // out-CSR neighbor is the target; in-CSR neighbor is the source.
+                let (src, tgt) = match dir {
+                    Dir::Out => (self_str, nbr_str),
+                    Dir::In => (nbr_str, self_str),
+                };
+                Some((src, tgt, u8_to_edge_type(ty), conf, u8_to_prov(prov)))
+            })
+            .collect()
+    }
 }

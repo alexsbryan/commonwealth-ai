@@ -221,7 +221,11 @@ async fn run_call_chain(
 ) -> i32 {
     let direction = call_dir.unwrap_or(CallDirection::Callees);
 
-    let mut graph = match AtlasGraph::load_from_disk(&parsed.corpus_id, atlas_dir) {
+    let mut graph = match AtlasGraph::load_from_disk(
+        &parsed.corpus_id,
+        atlas_dir,
+        corpus_engine::enrichment::atlas::context::read_section_rows(atlas_dir),
+    ) {
         Ok(g) => g,
         Err(e) => {
             eprintln!("error: loading atlas graph for {}: {e}", parsed.corpus_id);

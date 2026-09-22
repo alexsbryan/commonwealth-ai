@@ -7,6 +7,46 @@ use std::sync::Arc;
 
 use super::super::*;
 
+/// The atlas ids that could hold atoms citing a chunk — the chunk → atlas id
+/// derivation, in ONE place.
+///
+/// This is the INVERSE of (svrn-side by FIVE_PROGRAMS §12 decision 1 — svrn owns what it grounds on) `evidence_site::EvidenceSite`: that type answers "given an
+/// atlas, which corpus holds its chunks", and this answers "given a chunk,
+/// which atlases might describe it". It lived as `format!("{}-{}",
+/// corpus_id, title)` inline in `sovereign-core`'s retrieval glue — a format
+/// string that silently encoded SEP's per-article layout as a universal rule,
+/// which is the same conflation `evidence_site` exists to prevent, standing
+/// in the other direction.
+///
+/// Returns the self-hosted candidate (the chunk's own corpus) always, plus
+/// the per-article candidate when the chunk carries a title. A caller drops
+/// the candidates that have no atlas; both are cheap to test and neither may
+/// be guessed at the call site.
+pub fn candidate_atlas_ids(corpus_id: &str, title: Option<&str>) -> Vec<String> {
+    let mut out = vec![corpus_id.to_string()];
+    if let Some(t) = title
+        .map(str::trim)
+        .filter(|t| !t.is_empty() && *t != corpus_id)
+    {
+        // The per-article child of this corpus. `EvidenceSite::derive` reads
+        // this same shape back the other way, so the two agree by
+        // construction: `derive("sep-freewill").chunk_corpus() == "sep"`.
+        //
+        // The `t != corpus_id` guard is not hypothetical. Every chunk of
+        // `brothers-karamazov-book-1` carries `title =
+        // "brothers-karamazov-book-1"` (its bank file says so: that is why
+        // its `expected_sources` are empty), so the inline format string this
+        // function replaced minted
+        // `brothers-karamazov-book-1-brothers-karamazov-book-1` on EVERY
+        // literary query — an atlas id that cannot exist, warmed and then
+        // dropped, once per retrieved chunk. Suppressing it removes a probe,
+        // never a candidate: an atlas named `<corpus>-<corpus>` would require
+        // an article inside corpus X titled X.
+        out.push(format!("{corpus_id}-{t}"));
+    }
+    out
+}
+
 impl Runtime {
     /// Search all installed corpus-engine LanceDB indexes.
     ///
@@ -138,10 +178,7 @@ impl Runtime {
         // grounds even if its chunks didn't rank this turn.
         let mut scoped: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
         for c in chunks.iter() {
-            scoped.extend(ground::candidate_atlas_ids(
-                &c.corpus_id,
-                c.title.as_deref(),
-            ));
+            scoped.extend(candidate_atlas_ids(&c.corpus_id, c.title.as_deref()));
         }
         if let Some(enabled) = enabled_corpora {
             scoped.extend(enabled.iter().cloned());
@@ -348,7 +385,7 @@ impl Runtime {
             corpus_ceiling,
             lane,
         };
-        let (fetched, resolve) = ground::resolve_evidence(
+        let (fetched, resolve) = corpus_engine::enrichment::atlas::resolve::resolve_evidence(
             &grounding.requests,
             grounding.budget,
             enabled_corpora,
@@ -460,7 +497,7 @@ struct RuntimeEvidenceFetcher<'a> {
     lane: &'a crate::runtime::Lane,
 }
 
-impl corpus_engine::enrichment::atlas::ground::EvidenceFetcher for RuntimeEvidenceFetcher<'_> {
+impl corpus_engine::enrichment::atlas::resolve::EvidenceFetcher for RuntimeEvidenceFetcher<'_> {
     async fn by_row(
         &self,
         corpus: &kernel_types::CorpusId,
@@ -613,7 +650,7 @@ mod tests {
     /// Failing input: reinstate `format!("{}-{}", corpus_id, title)` here.
     #[test]
     fn the_scope_derivation_is_corpus_engines_and_still_reaches_sep_articles() {
-        use corpus_engine::enrichment::atlas::ground::candidate_atlas_ids;
+        use crate::runtime::retrieval::atlas_grounding::candidate_atlas_ids;
         let ids = candidate_atlas_ids("sep", Some("freewill"));
         assert!(ids.contains(&"sep".to_string()));
         assert!(ids.contains(&"sep-freewill".to_string()));
@@ -713,5 +750,38 @@ mod atlas_summary_append_tests {
         // article would carry, so the per-corpus ledgers stay comparable.
         assert_eq!(c.corpus_id, "sep");
         assert_eq!(c.title.as_deref(), Some("abduction"));
+    }
+    /// The chunk → atlas id derivation, in both shapes, and its agreement
+    /// with `corpus_engine::…evidence_site::EvidenceSite`'s reading in the other direction. Failing input:
+    /// drop the self-hosted candidate, or emit the child for a titleless
+    /// chunk.
+    #[test]
+    fn candidate_atlas_ids_covers_both_layouts_and_agrees_with_evidence_site() {
+        use crate::runtime::retrieval::candidate_atlas_ids;
+        let ids = candidate_atlas_ids("sep", Some("freewill"));
+        assert_eq!(ids, vec!["sep".to_string(), "sep-freewill".to_string()]);
+        // The inverse holds: the child id reads back to the parent corpus.
+        assert_eq!(
+            EvidenceSite::derive("sep-freewill").chunk_corpus().as_str(),
+            "sep"
+        );
+
+        // A chunk with no title has exactly one candidate — its own corpus.
+        assert_eq!(
+            candidate_atlas_ids("wikipedia", None),
+            vec!["wikipedia".to_string()]
+        );
+        assert_eq!(
+            candidate_atlas_ids("wikipedia", Some("   ")),
+            vec!["wikipedia".to_string()]
+        );
+        // …and a chunk titled after its own corpus yields ONE candidate, not
+        // a `bk-1-bk-1` that addresses nothing. This is the literary shape,
+        // not a corner case: every chunk of `brothers-karamazov-book-1` is
+        // titled with its corpus id.
+        assert_eq!(
+            candidate_atlas_ids("bk-1", Some("bk-1")),
+            vec!["bk-1".to_string()]
+        );
     }
 }

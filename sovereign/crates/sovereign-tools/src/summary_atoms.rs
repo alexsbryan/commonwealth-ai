@@ -19,7 +19,7 @@
 //! |---|---|
 //! | reading the summary rows | `corpus_engine::scan_raptor_summaries` |
 //! | `conv_uuid` → article title | `corpus_engine::raptor_article_title` |
-//! | title → per-article atlas id | `ground::candidate_atlas_ids` |
+//! | title → per-article atlas id | `sovereign_core::…atlas_grounding::candidate_atlas_ids` |
 //! | the tree (children, evidence chunks) | `RaptorCheckpointHandle::load_all_nodes` |
 //! | writing atoms + edges | `atlas::append_atoms_and_edges` |
 //! | the seed row | `AnnSeedTable::append_rows` |
@@ -58,11 +58,11 @@ use std::path::{Path, PathBuf};
 use corpus_engine::enrichment::atlas::ann_store::{ann_table_dir, AnnSeedTable};
 use corpus_engine::enrichment::atlas::atoms::{AtomEnvelope, AtomId, AtomType, ChunkRef, Summary};
 use corpus_engine::enrichment::atlas::edges::{Edge, EdgeId, EdgeProvenance, EdgeType};
-use corpus_engine::enrichment::atlas::ground::candidate_atlas_ids;
 use corpus_engine::enrichment::atlas::seed_population::{seed_population, write_population_marker};
 use corpus_engine::enrichment::atlas::{append_atoms_and_edges, read_atlas_atoms};
 use corpus_engine::enrichment::pipeline::atlas::EnrichmentDepth;
 use corpus_engine::{raptor_article_title, scan_raptor_summaries};
+use sovereign_core::runtime::retrieval::atlas_grounding::candidate_atlas_ids;
 
 use crate::raptor_checkpoint::RaptorCheckpointHandle;
 

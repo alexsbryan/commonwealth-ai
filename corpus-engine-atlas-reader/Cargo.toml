@@ -19,6 +19,7 @@ description = "Resolved-atlas READ surface, carved read-only out of corpus-engin
 # which re-imports the leaf's read primitives at their historical paths.
 
 [dependencies]
+async-trait = "0.1"
 serde = { workspace = true }
 serde_json = { workspace = true }
 tracing = { workspace = true }
@@ -32,6 +33,7 @@ tokio = { workspace = true }
 corpus-index = { workspace = true }
 kernel-types = { workspace = true }
 sovereign-contracts = { workspace = true }
+understanding-atlas = { workspace = true }
 understanding-vocab = { workspace = true }
 workspace-hack = { version = "0.1", path = "../workspace-hack" }
 

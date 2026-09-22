@@ -20,13 +20,13 @@
 //! Re-exported wholesale from [`super`], so `atlas::ground::select_walk` and
 //! `atlas::ground::WalkSelection` still resolve.
 
-use crate::atlas_traversal::question_kind::{shared_classifier, KindScore, KindSource};
-use crate::types::EmbedFn;
+use crate::question_kind::{shared_classifier, KindScore, KindSource};
+use corpus_index::types::EmbedFn;
 use understanding_vocab::ontology::{NavigationPolicy, QuestionKind, WalkPolicy};
 
-use super::super::inventory::{AtlasInventory, RowFit, RowInert};
-use super::super::provider::{AtlasProvider, NavigationSource};
 use super::PolicySource;
+use crate::inventory::{AtlasInventory, RowFit, RowInert};
+use crate::provider::{AtlasProvider, NavigationSource};
 
 /// Which navigation map governs this walk.
 ///
@@ -260,23 +260,22 @@ pub async fn select_walk(
     };
     // One embedding of the question, in the classifier's own space, shared by
     // the verdict and the race — two calls would be two chances to disagree.
-    let kind_vec =
-        match crate::atlas_traversal::question_kind::kind_space_embedding(question, embed).await {
-            Ok(v) => v,
-            Err(e) => {
-                tracing::warn!(
-                    target: "retrieval_audit",
-                    error = %e,
-                    "question-kind: the question could not be embedded in the classifier space; \
-                     the walk runs unfiltered"
-                );
-                return WalkSelection::unfiltered(
-                    KindSource::ClassifierUnavailable,
-                    None,
-                    policy_source,
-                );
-            }
-        };
+    let kind_vec = match crate::question_kind::kind_space_embedding(question, embed).await {
+        Ok(v) => v,
+        Err(e) => {
+            tracing::warn!(
+                target: "retrieval_audit",
+                error = %e,
+                "question-kind: the question could not be embedded in the classifier space; \
+                 the walk runs unfiltered"
+            );
+            return WalkSelection::unfiltered(
+                KindSource::ClassifierUnavailable,
+                None,
+                policy_source,
+            );
+        }
+    };
     let (kind, score) = match classifier.classify(&kind_vec) {
         (Some(kind), score) => (kind, score),
         (None, score) => {
@@ -322,8 +321,8 @@ pub async fn select_walk(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::enrichment::atlas::atoms::AtomType;
-    use crate::enrichment::atlas::edges::EdgeType;
+    use crate::atoms::AtomType;
+    use crate::edges::EdgeType;
     use std::collections::BTreeMap;
 
     /// Wikipedia's census: Entities typed `article`, Involves edges.

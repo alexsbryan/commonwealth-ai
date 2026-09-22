@@ -905,7 +905,11 @@ async fn cmd_run(args: &[String]) -> i32 {
             // ATLAS_STORAGE_V2: the AtlasGraph is the v2 store (atoms.lance +
             // edges.csr), read through the production direct-read backend — the
             // same reader the daemon uses (atoms resident + edges.csr mmap).
-            match runner::AtlasGraph::load_from_disk(&ctx.atlas_corpus_id, &atlas_dir) {
+            match runner::AtlasGraph::load_from_disk(
+                &ctx.atlas_corpus_id,
+                &atlas_dir,
+                corpus_engine::enrichment::atlas::context::read_section_rows(&atlas_dir),
+            ) {
                 Ok(g) => graphs.push(g),
                 Err(e) => eprintln!("warn: atlas-graph load `{}`: {e}", ctx.atlas_corpus_id),
             }

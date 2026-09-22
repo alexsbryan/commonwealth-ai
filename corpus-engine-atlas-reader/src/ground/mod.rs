@@ -46,18 +46,13 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use understanding_vocab::ontology::{OntologyPolicies, WalkPolicy, SUMMARY_SEED_BUDGET};
 
-use super::atoms::AtomType;
-use super::context::{
+use crate::atoms::AtomType;
+use crate::context::{
     atom_verbatim_excerpt, contains_whole_word, cosine, edge_weight, AtlasContext, ChunkRequest,
 };
-use super::edges::EdgeType;
-use super::evidence_site::{ChunkSelector, EvidenceSite};
-use super::provider::AtlasProvider;
-
-// The resolve step is the walk's other half and callers reach it through the
-// same door: `ground::{ground, resolve_evidence}` rather than two module
-// paths for one pipeline.
-pub use super::resolve::{resolve_evidence, EvidenceFetcher, ResolveLedger, ResolvedChunk};
+use crate::edges::EdgeType;
+use crate::evidence_site::{ChunkSelector, EvidenceSite};
+use crate::provider::AtlasProvider;
 
 mod report;
 mod select;
@@ -96,46 +91,6 @@ pub const MAP_NODE_CAP: usize = 64;
 /// The unfiltered row does not over-fetch, so the path
 /// `apply_atlas_grounding` has always taken is unchanged by this file.
 const SEED_OVERFETCH: usize = 4;
-
-/// The atlas ids that could hold atoms citing a chunk — the chunk → atlas id
-/// derivation, in ONE place.
-///
-/// This is the INVERSE of [`EvidenceSite`]: that type answers "given an
-/// atlas, which corpus holds its chunks", and this answers "given a chunk,
-/// which atlases might describe it". It lived as `format!("{}-{}",
-/// corpus_id, title)` inline in `sovereign-core`'s retrieval glue — a format
-/// string that silently encoded SEP's per-article layout as a universal rule,
-/// which is the same conflation `evidence_site` exists to prevent, standing
-/// in the other direction.
-///
-/// Returns the self-hosted candidate (the chunk's own corpus) always, plus
-/// the per-article candidate when the chunk carries a title. A caller drops
-/// the candidates that have no atlas; both are cheap to test and neither may
-/// be guessed at the call site.
-pub fn candidate_atlas_ids(corpus_id: &str, title: Option<&str>) -> Vec<String> {
-    let mut out = vec![corpus_id.to_string()];
-    if let Some(t) = title
-        .map(str::trim)
-        .filter(|t| !t.is_empty() && *t != corpus_id)
-    {
-        // The per-article child of this corpus. `EvidenceSite::derive` reads
-        // this same shape back the other way, so the two agree by
-        // construction: `derive("sep-freewill").chunk_corpus() == "sep"`.
-        //
-        // The `t != corpus_id` guard is not hypothetical. Every chunk of
-        // `brothers-karamazov-book-1` carries `title =
-        // "brothers-karamazov-book-1"` (its bank file says so: that is why
-        // its `expected_sources` are empty), so the inline format string this
-        // function replaced minted
-        // `brothers-karamazov-book-1-brothers-karamazov-book-1` on EVERY
-        // literary query — an atlas id that cannot exist, warmed and then
-        // dropped, once per retrieved chunk. Suppressing it removes a probe,
-        // never a candidate: an atlas named `<corpus>-<corpus>` would require
-        // an article inside corpus X titled X.
-        out.push(format!("{corpus_id}-{t}"));
-    }
-    out
-}
 
 /// **The walk.** Seed, expand, aggregate — driven by one [`WalkPolicy`] row.
 ///
@@ -726,7 +681,7 @@ fn summary_text(graph: &dyn AtlasProvider, atom_id: &str) -> String {
         return view.content().to_string();
     }
     match view.atom_envelope() {
-        Some(crate::enrichment::atlas::atoms::AtomEnvelope::Summary(s)) => s.text,
+        Some(crate::atoms::AtomEnvelope::Summary(s)) => s.text,
         _ => String::new(),
     }
 }

@@ -16,13 +16,22 @@
 //! widen it — it lands here when the store's read half moves.
 
 pub mod ann_store;
+// The vocabulary door, re-exported so carved modules can say `crate::atoms`.
+pub use understanding_vocab::{atoms, edges};
+
 pub mod axis_catalog;
 pub mod citation;
+pub mod context;
 pub mod context_filter;
+pub mod context_loader;
 pub mod evidence_site;
+pub mod ground;
+pub mod inventory;
 pub mod linalg;
 pub mod projection;
+pub mod provider;
 pub mod question_kind;
+pub mod raptor_read;
 pub mod raw;
 pub mod section_cache;
 pub mod store;
