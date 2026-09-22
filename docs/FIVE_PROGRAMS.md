@@ -822,6 +822,35 @@ refusal named the chain, which is the value.
   `sovereign-contracts` mirroring `RecipeNotes`, then all shim consumers repoint
   to `sovereign_recipe_author::*` directly.
 
+### Probes REFUSED 2026-09-21 (84 at f49fd7cf1) — do not re-probe these
+
+- **`DaemonInferenceClient` cannot enter `sovereign-turn-client`.** turn-client
+  is `contract` layer (index 0) with the hand-pinned budget
+  `sovereign-contracts + oicp-types + workspace-hack`; the client names
+  `ChatPrompt` (corpus-engine/src/enrichment/pipeline/types.rs:202) and
+  `InferenceFn` (corpus-engine/src/types.rs:45) — engine-owned, and a
+  contract-layer leaf cannot reach the `knowledge`-layer `corpus-index` either.
+  (`Error`/`Result`/`EmbedFn` ARE leaf re-exports already.) The two types must
+  land in a contract-layer leaf first. An existing dial covers the same wire:
+  `oicp-client::RemoteApiProvider` implements `InferenceProvider`
+  (`sovereign-contracts/src/traits.rs:292`) over `/chat/completions`; repointing
+  cli-dev's one scoring call to it closes the edge but substitutes the dial
+  `svrn enrich` uses — an operator decision.
+- **`sovereign-code -> corpus-engine` needs a minted fixture.** No committed
+  index exists (git ls-files: zero `.lance`/`_corpus_meta`); `e2e_code_intel.rs`
+  ingests three fixtures (21 tokio tests) and `CorpusEngine` is the only
+  `IndexSource` impl. The fixture must be built by the ingest program with the
+  deliberate 30-day-backdated mtimes `recent_changes` tests rely on
+  (executor.rs:70). Alternative: move those tests beside the ingest program.
+- **`sovereign-gliner -> sovereign-store`**: the `sqlite` module is not
+  leaf-clean (`sovereign_core::{error,observer,traits,types,time}`). Candidate A
+  (the fix): extract a chunk-entity store leaf from `conv_tiered.rs:841-1335` +
+  DDL `migrations.rs:890-968` + `map_db`, deps rusqlite/async-trait/tokio +
+  sovereign-contracts + sovereign-time; open question: share `sovereign.db`
+  (WAL, second connection) or own a file. Candidate B (gliner dials) is wrong:
+  gliner is linked into the daemon and the store is on the per-chunk ingest hot
+  path.
+
 ### The decisions — these are the operator's, and they are meant to be few
 
 - [x] **`atos` is CUT COMPLETELY** (operator, 2026-09-21). Footprint:
