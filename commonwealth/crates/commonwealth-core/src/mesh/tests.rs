@@ -855,6 +855,20 @@ fn a_short_node_id_prefix_never_resolves_a_member() {
     assert!(!m("b883"), "a wrong prefix must not match");
 }
 
+/// Every id form an operator is shown must resolve: the 16-hex `Display`
+/// (`node-…`), the 22-char column `mesh status` prints, and the full 32 the
+/// alias warning prints. Only the first did — `forget-member <id from the
+/// warning>` answered "No member matching" on a live roster.
+#[test]
+fn every_printed_node_id_form_resolves_its_member() {
+    let id = crate::ids::NodeId::from_hex("188f04e2831741c77ccd5a142a314e07").unwrap();
+    let m = |q: &str| member_matches(id, "LittleMac", q);
+    assert!(m(&id.to_string()), "Display form: {id}");
+    assert!(m("188f04e2831741c77ccd5a"), "status column (22)");
+    assert!(m("188f04e2831741c77ccd5a142a314e07"), "full hex (32)");
+    assert!(!m("188f04e2831741c77ccd5a142a314e08"), "a wrong full id must not match");
+}
+
 /// An empty query must never match. It reaches here as `--force` with no
 /// member, and matching everything would retire whichever row the iteration
 /// happened to reach first.
