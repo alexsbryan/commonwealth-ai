@@ -297,7 +297,7 @@ pub(crate) const HELP_MESH_GRANT: Help = Help {
     summary: "Lend named models to someone who is NOT a mesh member, for a bounded window.",
     sections: &[
         HelpSection::Usage(
-            "svrn mesh grant --model <id> [--model <id>…] [--wall | --rail <ns>] [--ttl 2h] [--label <text>]\n\
+            "svrn mesh grant --model <id> [--model <id>…] [--all-apps | --app <ns>] [--ttl 2h] [--label <text>]\n\
              \x20               [--url <base>] [--qr-svg <path>]\n\
              svrn mesh grant --list\n\
              svrn mesh grant --revoke <token>",
@@ -308,12 +308,12 @@ pub(crate) const HELP_MESH_GRANT: Help = Help {
                 "A model this grant may dispatch. Repeatable. Omitted: `primary`, this daemon's primary slot. `svrn model list` prints the ids.",
             ),
             (
-                "--wall",
+                "--all-apps",
                 "Also reach every ring app this door registered for guests in\n                    [daemon.guest_pages]. ONE grant and ONE QR for the whole wall:\n                    the phone lands on the door's index and picks. The owner widens\n                    the wall by registering an app, not by minting another link.",
             ),
             (
-                "--rail <ns>",
-                "The narrowing knob: reach exactly this one rail namespace and no\n                    other. Not combinable with --wall.",
+                "--app <ns>",
+                "The narrowing knob: reach exactly this one app and no\n                    other. Not combinable with --all-apps.",
             ),
             (
                 "--ttl <dur>",
@@ -322,7 +322,7 @@ pub(crate) const HELP_MESH_GRANT: Help = Help {
             ("--label <text>", "Your own note, shown by --list. Never sent to the guest."),
             (
                 "--url <base>",
-                "Base URL the guest should reach you at. Default: this node's declared door\n                    address ([daemon] guest_bind, written by `svrn ring serve --bind`),\n                    then its published address. With --rail the QR link adds that app's\n                    page path at the door; with --wall it points at the door's index.",
+                "Base URL the guest should reach you at. Default: this node's declared door\n                    address ([daemon] guest_bind, written by `svrn ring host --bind`),\n                    then its published address. With --app the QR link adds that app's\n                    page path at the door; with --all-apps it points at the door's index.",
             ),
             (
                 "--qr-svg <path>",
@@ -411,12 +411,12 @@ pub(crate) async fn cmd_grant(args: &[String]) -> i32 {
                     }
                 };
             }
-            "--rail" => {
+            "--app" => {
                 i += 1;
                 rail = match args.get(i) {
                     Some(v) => Some(v.clone()),
                     None => {
-                        eprintln!("--rail needs a namespace");
+                        eprintln!("--app needs an app (a namespace)");
                         return 2;
                     }
                 };
@@ -431,7 +431,7 @@ pub(crate) async fn cmd_grant(args: &[String]) -> i32 {
                     }
                 };
             }
-            "--wall" => wall = true,
+            "--all-apps" => wall = true,
             "--list" => list = true,
             "--revoke" => {
                 i += 1;
@@ -454,9 +454,9 @@ pub(crate) async fn cmd_grant(args: &[String]) -> i32 {
     // a union. Refused here AND at the mint route, so neither surface is the
     // only guard (ARCH 5).
     if wall && rail.is_some() {
-        eprintln!("--wall and --rail are two different grants: the whole wall, or one app.");
-        eprintln!("Drop one. `--wall` reaches every app in [daemon.guest_pages];");
-        eprintln!("`--rail <ns>` reaches that one and refuses the rest by name.");
+        eprintln!("--all-apps and --app are two different grants: every app hosted here, or one.");
+        eprintln!("Drop one. `--all-apps` reaches every app in [daemon.guest_pages];");
+        eprintln!("`--app <ns>` reaches that one and refuses the rest by name.");
         return 2;
     }
 

@@ -14,7 +14,7 @@
 //!
 //! ```text
 //! svrn ring roster add alex --self          # bind my name to my node key
-//! svrn ring dev house-expenses              # serve the app, open the tab
+//! svrn ring show house-expenses             # open the app on this screen
 //! svrn ring log house-expenses              # what is on the journal, and what is missing
 //! ```
 //!
@@ -22,7 +22,7 @@
 //!
 //! # Where the authority lives
 //!
-//! `ring dev` mints a rail-scoped grant against the local daemon — `Scope::Rails`,
+//! `ring show` mints a rail-scoped grant against the local daemon — `Scope::Rails`,
 //! which `commonwealth-knowledge` owns beside the rest of the guest grants — and
 //! holds the token itself, so the browser tab never sees a credential and the
 //! app reaches exactly one namespace's journal and nothing else on the daemon.
@@ -70,8 +70,8 @@ pub async fn run(args: &[String]) -> i32 {
         Some("new") => run_new(&args[1..]),
         Some("roster") => run_roster(&args[1..]).await,
         Some("introduce") => run_introduce(&args[1..]).await,
-        Some("dev") => run_dev(&args[1..]).await,
-        Some("serve") => run_serve(&args[1..]),
+        Some("show") => run_show(&args[1..]).await,
+        Some("host") => run_host(&args[1..]),
         Some("log") => run_log(&args[1..]).await,
         Some("checkpoint") => run_checkpoint(&args[1..]).await,
         Some("seal") => run_seal(&args[1..]).await,
@@ -83,14 +83,14 @@ pub async fn run(args: &[String]) -> i32 {
 }
 
 mod checkpoint_verify;
-mod dev;
+mod host;
 mod scaffold;
-mod serve;
+mod show;
 mod usage;
 
-use dev::run_dev;
+use host::run_host;
 use scaffold::run_new;
-use serve::run_serve;
+use show::run_show;
 
 // ── shared plumbing ──────────────────────────────────────────
 
@@ -247,7 +247,7 @@ async fn mint_rail_grant(namespace: &str) -> Result<String, String> {
     let body = serde_json::json!({
         "scopes": { "rail": namespace },
         "ttl_secs": DEV_GRANT_TTL_SECS,
-        "label": format!("ring dev: {namespace}"),
+        "label": format!("ring show: {namespace}"),
     });
     let resp = http_client()?
         .post(&url)

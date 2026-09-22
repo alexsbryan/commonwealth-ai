@@ -190,7 +190,7 @@ mod tests {
         assert_eq!(port_of_bind("10.0.0.5:19947"), Some(19947));
         assert_eq!(port_of_bind("0.0.0.0:9743"), Some(9743));
         assert_eq!(port_of_bind("nonsense"), None);
-        assert_eq!(DEFAULT_GUEST_PORT, 9743);
+        assert_eq!(DEFAULT_GUEST_PORT, 9744);
     }
 
     /// The QR carries the door's page path for whatever this grant reaches:

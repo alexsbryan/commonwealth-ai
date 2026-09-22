@@ -14,7 +14,7 @@ what the stand-in measures — is at the end.
 
 ```bash
 svrn ring new my-doc        # once: scaffold it; I edit ./my-doc
-svrn ring dev my-doc        # show it on THIS machine
+svrn ring show my-doc        # show it on THIS machine
 ```
 
 **What appears:** the doc at `http://127.0.0.1:4318/` (localhost) — my own view,
@@ -24,7 +24,7 @@ same mechanism with a ledger's vocabulary.)
 ## 2. I serve it to the room
 
 ```bash
-svrn ring serve my-doc      # host it: declare it at the guest door, and bind the door
+svrn ring host my-doc      # host it: declare it at the guest door, and bind the door
 svrn daemon restart
 ```
 
@@ -42,7 +42,7 @@ member-facing instead of guest-facing.)*
 ## 3. I grant access to people who just have phones
 
 ```bash
-svrn mesh grant --wall
+svrn mesh grant --all-apps
 ```
 
 **What appears:** the link, and the QR drawn right there in the terminal —
@@ -113,7 +113,7 @@ number is refused by name, with the failing step and the actor.
 ## 9. A guest who is not in the room
 
 ```bash
-svrn mesh grant --wall --url https://svrnme.sh/    # the page's origin, not the door
+svrn mesh grant --all-apps --url https://svrnme.sh/    # the page's origin, not the door
 ```
 
 **What appears:** the QR again, and its link now carries the wall's dial string

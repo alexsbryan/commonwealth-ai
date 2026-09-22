@@ -449,7 +449,7 @@ in every other member's page, where the guest bearer sits in `location.hash`
 rule the next generated app forgets.
 
 **The browser's layer.** `serve_file` — the one function both the door and
-`ring dev` serve through — sends `default-src 'self'` with no inline script.
+`ring show` serve through — sends `default-src 'self'` with no inline script.
 
 **The language's layer.** Hardened JavaScript: `lockdown()` once, then
 `reduce` and `pending` evaluated in a Compartment whose only endowments are a

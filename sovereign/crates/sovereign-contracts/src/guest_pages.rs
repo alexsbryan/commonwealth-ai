@@ -46,12 +46,14 @@ use serde::{Deserialize, Serialize};
 /// every existing name still resolves.
 pub const PAGE_PREFIX: &str = "/ring/";
 
-/// Where the door listens when nobody names a port: the next slot after the
-/// client API (`9741`) and internal mesh gossip (`9742`). A door bound with no
-/// port named binds `0.0.0.0:<this>`; the address a guest link carries is
-/// still DERIVED per host (never the wildcard) — see
-/// `sovereign_mesh::deep_link::advertised_base`.
-pub const DEFAULT_GUEST_PORT: u16 = 9743;
+/// Where the door listens when nobody names a port. NOT `9743`: the rail
+/// listener owns `client_port + 2`, so a default-config daemon already holds
+/// it (measured 2026-09-22 — `ring host` would have collided with its own
+/// rail). This is the slot after that: `9741` client, `9742` internal, `9743`
+/// rail, `9744` guest door. A door bound with no port named binds
+/// `0.0.0.0:<this>`; the address a guest link carries is still DERIVED per
+/// host (never the wildcard) — see `sovereign_mesh::deep_link::advertised_base`.
+pub const DEFAULT_GUEST_PORT: u16 = 9744;
 
 /// What guests may do on a registered page's rail namespace.
 ///
@@ -105,14 +107,48 @@ pub enum GuestPage {
         #[serde(default)]
         guests: GuestAccess,
     },
+    /// `my-doc = { proxy = "127.0.0.1:4318" }` — an app **already running** on
+    /// this machine, of any kind, reached through the door.
+    ///
+    /// This is the answer to "anything I can develop here, I can share": the
+    /// door reverse-proxies to the port, so the app keeps being the app — hot
+    /// reload, its own framework, its own dev server — and the room reaches it
+    /// by scanning the same one QR. No bundle, no rail, and no knowledge of
+    /// what the app is (`sovereign/apps/ring-runtime`'s opposite: that one is
+    /// a page the door ships; this one is a page you are editing).
+    ///
+    /// A rail-backed app served this way still gets guest attribution: the
+    /// door answers the dev shim's path with the GUEST shim, so the page's
+    /// rail calls come back to the door and carry the guest's session rather
+    /// than the app's own member token.
+    Proxied {
+        /// `host:port` on this machine — loopback or the machine's own
+        /// address; the door dials it, so it is never a public target.
+        proxy: String,
+        /// What guests may do on the rail, as above. For an app with no rail
+        /// this is inert.
+        #[serde(default)]
+        guests: GuestAccess,
+    },
 }
 
 impl GuestPage {
-    /// The bundle directory the door serves for this namespace.
+    /// The bundle directory the door serves for this namespace. Only
+    /// meaningful for a bundle page; a [`GuestPage::Proxied`] one has none
+    /// (ask [`Self::proxy`]).
     pub fn dir(&self) -> &Path {
         match self {
             GuestPage::Open(dir) => dir,
             GuestPage::Narrowed { dir, .. } => dir,
+            GuestPage::Proxied { .. } => Path::new(""),
+        }
+    }
+
+    /// The `host:port` the door proxies to, for a [`GuestPage::Proxied`] page.
+    pub fn proxy(&self) -> Option<&str> {
+        match self {
+            GuestPage::Proxied { proxy, .. } => Some(proxy),
+            _ => None,
         }
     }
 
@@ -121,6 +157,7 @@ impl GuestPage {
         match self {
             GuestPage::Open(_) => GuestAccess::default(),
             GuestPage::Narrowed { guests, .. } => *guests,
+            GuestPage::Proxied { guests, .. } => *guests,
         }
     }
 }
@@ -180,5 +217,26 @@ guests = "readonly""#,
             "a misspelled mode parsed as {:?} instead of being refused",
             parsed.map(|w| w.pages["a"].guests())
         );
+    }
+
+    /// A page can be an app already RUNNING on this machine, not only a bundle
+    /// the door ships. The table form keeps it unambiguous against the path
+    /// forms: a bare string is still a directory, and a `proxy` key is not a
+    /// `dir` key.
+    #[test]
+    fn a_proxied_page_names_a_port_and_is_not_mistaken_for_a_bundle() {
+        let w: Wrap = toml::from_str(
+            r#"[pages]
+bundle = "/srv/bundle"
+my-doc = { proxy = "127.0.0.1:4318" }
+read-only-app = { proxy = "127.0.0.1:5173", guests = "read" }"#,
+        )
+        .expect("proxy entries parse");
+        assert_eq!(w.pages["bundle"].proxy(), None);
+        assert_eq!(w.pages["my-doc"].proxy(), Some("127.0.0.1:4318"));
+        assert_eq!(w.pages["my-doc"].guests(), GuestAccess::Write);
+        assert_eq!(w.pages["read-only-app"].guests(), GuestAccess::Read);
+        // And a proxy entry has no directory to serve.
+        assert_eq!(w.pages["my-doc"].dir(), Path::new(""));
     }
 }

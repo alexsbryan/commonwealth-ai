@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `svrn ring dev` — serve one ring app, holding its grant.
+//! `svrn ring show` — open one ring app on this machine, holding its grant.
 //!
 //! Split from the verb's other subcommands because it is a different kind
 //! of thing: they run and exit, this one binds a port and stays. It is also
@@ -29,20 +29,22 @@ struct RingCtx {
     http: reqwest::Client,
 }
 
-pub(super) async fn run_dev(args: &[String]) -> i32 {
+pub(super) async fn run_show(args: &[String]) -> i32 {
     let Some(namespace) = args.first().filter(|a| !a.starts_with("--")).cloned() else {
-        eprintln!("ring dev: which ring? `svrn ring dev <namespace>`");
+        eprintln!("ring show: which app? `svrn ring show <namespace>`");
         return 2;
     };
     let port: u16 = flag(args, "--port")
         .and_then(|s| s.parse().ok())
         .unwrap_or(4318);
+    // The bundle defaults to `./<namespace>`: `ring new my-doc` writes ./my-doc,
+    // so the next command must not need --dir typed a second time.
     let bundle_dir = flag(args, "--dir")
         .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("."));
+        .unwrap_or_else(|| PathBuf::from(&namespace));
     if !bundle_dir.join("index.html").is_file() {
         eprintln!(
-            "ring dev: no index.html in {} — scaffold one with `svrn ring new <dir>`, or pass --dir.",
+            "ring show: no index.html in {} — scaffold one with `svrn ring new <dir>`, or pass --dir.",
             bundle_dir.display()
         );
         return 1;
@@ -51,21 +53,21 @@ pub(super) async fn run_dev(args: &[String]) -> i32 {
     // Fail before binding if the daemon is not there: a dev server that
     // serves a page which cannot reach its journal looks like it worked.
     if let Err(e) = rail_log(&namespace).await {
-        eprintln!("ring dev: the daemon is not serving this ring: {e}");
+        eprintln!("ring show: the daemon is not serving this app: {e}");
         eprintln!("  start it with `svrn daemon start`, then try again.");
         return 1;
     }
     let token = match mint_rail_grant(&namespace).await {
         Ok(t) => t,
         Err(e) => {
-            eprintln!("ring dev: could not mint a rail grant: {e}");
+            eprintln!("ring show: could not mint a rail grant: {e}");
             return 1;
         }
     };
     let http = match http_client() {
         Ok(c) => c,
         Err(e) => {
-            eprintln!("ring dev: {e}");
+            eprintln!("ring show: {e}");
             return 1;
         }
     };
@@ -94,7 +96,7 @@ pub(super) async fn run_dev(args: &[String]) -> i32 {
     let listener = match tokio::net::TcpListener::bind(addr).await {
         Ok(l) => l,
         Err(e) => {
-            eprintln!("ring dev: bind {addr}: {e} (try --port)");
+            eprintln!("ring show: bind {addr}: {e} (try --port)");
             return 1;
         }
     };
@@ -106,7 +108,7 @@ pub(super) async fn run_dev(args: &[String]) -> i32 {
     println!("  The grant this server holds reaches `{namespace}` and nothing else on");
     println!("  the daemon, and it dies with this process. The browser never sees it.");
     if let Err(e) = axum::serve(listener, app.into_make_service()).await {
-        eprintln!("ring dev: server error: {e}");
+        eprintln!("ring show: server error: {e}");
         return 1;
     }
     0
@@ -168,7 +170,7 @@ async fn op_handler(
         return (
             StatusCode::NOT_FOUND,
             format!(
-                "ring dev: no op `{op}` — this rail carries `log`, `append`, `live` and \
+                "ring show: no op `{op}` — this rail carries `log`, `append`, `live` and \
                  `live-drain`, and an app's own vocabulary is built out of those four"
             ),
         )
@@ -200,7 +202,7 @@ async fn op_handler(
         Err(e) => (
             StatusCode::BAD_GATEWAY,
             [(header::CONTENT_TYPE, "application/json")],
-            serde_json::json!({ "error": format!("ring dev: the daemon is unreachable: {e}") })
+            serde_json::json!({ "error": format!("ring show: the daemon is unreachable: {e}") })
                 .to_string(),
         )
             .into_response(),

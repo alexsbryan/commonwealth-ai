@@ -14,8 +14,8 @@ pub(super) fn print() {
          \x20 svrn ring roster add <person> (--key <node-pubkey-hex> | --self) [--on <op-id>] --ring <ns>\n\
          \x20 svrn ring roster show --ring <ns>\n\
          \x20 svrn ring introduce <person> --key <node-pubkey-hex> --reason <why> --ring <ns>\n\
-         \x20 svrn ring dev <ns> [--dir <bundle-dir>] [--port <n>]\n\
-         \x20 svrn ring serve <ns> --dir <bundle-dir> [--bind <addr:port>] [--read]\n\
+         \x20 svrn ring show <ns> [--dir <bundle-dir>] [--port <n>]\n\
+         \x20 svrn ring host <ns> --dir <bundle-dir> [--bind <addr:port>] [--read]\n\
          \x20 svrn ring log <ns> [--json]\n\
          \x20 svrn ring checkpoint <ns> [--out <file>]\n\
          \x20 svrn ring checkpoint --verify <file> [--roster <file>]\n\
@@ -26,8 +26,8 @@ pub(super) fn print() {
          introduce\n\
          \x20       vouch for a key on the journal, so the row that admits it can name\n\
          \x20       the act instead of somebody's memory. It admits NOBODY by itself.\n\
-         dev     mint a rail grant and serve the app at http://127.0.0.1:4318/.\n\
-         serve   declare an app to the ROOM and bind the guest door (--clear ends one).\n\
+         show    open the app on THIS machine at http://127.0.0.1:4318/.\n\
+         host    declare an app to the ROOM and bind the guest door (--clear ends one).\n\
          log     the acts on this journal, in the order every node applies them,\n\
          \x20       and everything the rail could not account for.\n\
          checkpoint\n\
@@ -40,6 +40,6 @@ pub(super) fn print() {
          provision. Start with `roster add`, because an op signed by a key no\n\
          roster claims is a gap rather than an act.\n\n\
          What an act MEANS — a balance, a borrowed drill — is the app's, not\n\
-         this CLI's. Open the app with `ring dev` to see it rendered."
+         this CLI's. Open the app with `ring show` to see it rendered."
     );
 }

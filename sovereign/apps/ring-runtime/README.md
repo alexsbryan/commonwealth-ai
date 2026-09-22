@@ -52,7 +52,7 @@ copy — pick one origin and keep it.
 ## Point a link at it
 
 ```bash
-svrn mesh grant --wall --ttl 2h \
+svrn mesh grant --all-apps --ttl 2h \
   --url https://svrnme.sh/ --qr-svg wall-qr.svg
 ```
 

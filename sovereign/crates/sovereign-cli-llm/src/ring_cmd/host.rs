@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `svrn ring serve` — declare one ring app to the room, and bind the door.
+//! `svrn ring host` — declare one ring app to the room, and bind the door.
 //!
-//! `svrn ring dev` is the DEVELOPMENT half: it serves a bundle on loopback
+//! `svrn ring show` is the local half: it opens a bundle on loopback
 //! and holds a grant for as long as the process runs. This is the DURABLE
 //! half, the one the room reaches: it writes `[daemon] guest_bind` (the
 //! room-facing address the door listens on) and `[daemon.guest_pages]` (the
@@ -29,10 +29,10 @@ use toml_edit::{DocumentMut, Item, Table, Value};
 use crate::mesh_guest_link::{advertised_base, port_of_bind};
 use crate::publish_cmd::{load_doc, write_doc};
 
-/// `svrn ring serve <ns> --dir <bundle> --bind <addr:port> [--read]`
-/// `svrn ring serve --clear <ns>`
-/// `svrn ring serve` — what this door declares.
-pub(super) fn run_serve(args: &[String]) -> i32 {
+/// `svrn ring host <ns> --dir <bundle> --bind <addr:port> [--read]`
+/// `svrn ring host --clear <ns>`
+/// `svrn ring host` — what this door declares.
+pub(super) fn run_host(args: &[String]) -> i32 {
     if sovereign_cli_shared::help::wants_help(args) {
         help();
         return 0;
@@ -44,15 +44,15 @@ pub(super) fn run_serve(args: &[String]) -> i32 {
     let ns = match args.iter().find(|a| !a.starts_with('-')) {
         Some(n) => n.clone(),
         None => {
-            eprintln!("Usage: svrn ring serve <namespace> --dir <bundle-dir> [--bind <addr:port>] [--read]");
-            eprintln!("       svrn ring serve --clear <namespace>");
+            eprintln!("Usage: svrn ring host <namespace> --dir <bundle-dir> [--bind <addr:port>] [--read]");
+            eprintln!("       svrn ring host --clear <namespace>");
             return 2;
         }
     };
     // The same name rule the scaffold and the grant use, checked here so a
     // namespace that could never match a page is refused when typed.
     if !commonwealth_media::valid_app_name(ns.as_bytes()) {
-        eprintln!("ring serve: {ns:?} is not a usable namespace — letters, digits, `_` and `-`.");
+        eprintln!("ring host: {ns:?} is not a usable namespace — letters, digits, `_` and `-`.");
         return 2;
     }
     // A namespace the daemon writes itself is NEVER open to guests (it is one
@@ -63,7 +63,7 @@ pub(super) fn run_serve(args: &[String]) -> i32 {
     // roster — and this verb asks it (ARCH §10.6).
     if !clear && sovereign_mesh::ring_roster::is_daemon_owned(&ns) {
         eprintln!(
-            "ring serve: `{ns}` is one of this daemon's own rings and is never open to \
+            "ring host: `{ns}` is one of this daemon's own rings and is never open to \
              guests, whatever a page registry says."
         );
         return 2;
@@ -72,7 +72,7 @@ pub(super) fn run_serve(args: &[String]) -> i32 {
     let (path, mut doc) = match load_doc() {
         Ok(d) => d,
         Err(e) => {
-            eprintln!("ring serve: {e}");
+            eprintln!("ring host: {e}");
             return 1;
         }
     };
@@ -80,7 +80,7 @@ pub(super) fn run_serve(args: &[String]) -> i32 {
     if clear {
         let removed = clear_guest_page(&mut doc, &ns);
         if !removed {
-            eprintln!("ring serve: `{ns}` is not declared to guests here.");
+            eprintln!("ring host: `{ns}` is not declared to guests here.");
             let declared = declared_names(&doc);
             if !declared.is_empty() {
                 eprintln!("  declared: {}", declared.join(", "));
@@ -95,25 +95,22 @@ pub(super) fn run_serve(args: &[String]) -> i32 {
                 0
             }
             Err(e) => {
-                eprintln!("ring serve: could not write the config — {e}");
+                eprintln!("ring host: could not write the config — {e}");
                 1
             }
         };
     }
 
-    let dir = match flag(args, "--dir").map(PathBuf::from) {
-        Some(d) => d,
-        None => {
-            eprintln!("ring serve: which bundle? `svrn ring serve {ns} --dir <bundle-dir>`");
-            return 2;
-        }
-    };
+    // The bundle defaults to `./<namespace>`, as `ring new <dir>` wrote it.
+    let dir = flag(args, "--dir")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(&ns));
     // Fail before writing: a declared bundle with no index.html is a page the
     // room opens onto a 404, and the person finds out from a phone rather than
     // from the command that promised it.
     if !dir.join("index.html").is_file() {
         eprintln!(
-            "ring serve: no index.html in {} — scaffold one with `svrn ring new <dir>`, \
+            "ring host: no index.html in {} — scaffold one with `svrn ring new <dir>`, \
              or pass --dir for the right bundle.",
             dir.display()
         );
@@ -175,7 +172,7 @@ pub(super) fn run_serve(args: &[String]) -> i32 {
             0
         }
         Err(e) => {
-            eprintln!("ring serve: could not write the config — {e}");
+            eprintln!("ring host: could not write the config — {e}");
             1
         }
     }
@@ -203,11 +200,9 @@ fn bind_of(doc: &DocumentMut) -> Option<String> {
 }
 
 fn help() {
-    eprintln!(
-        "Usage: svrn ring serve <namespace> --dir <bundle-dir> [--bind <addr:port>] [--read]"
-    );
-    eprintln!("       svrn ring serve --clear <namespace>");
-    eprintln!("       svrn ring serve");
+    eprintln!("Usage: svrn ring host <namespace> --dir <bundle-dir> [--bind <addr:port>] [--read]");
+    eprintln!("       svrn ring host --clear <namespace>");
+    eprintln!("       svrn ring host");
     eprintln!();
     eprintln!("Declare a ring app to the ROOM and bind the guest door. Writes");
     eprintln!("`[daemon] guest_bind` and `[daemon.guest_pages]`, so one `svrn mesh grant");
@@ -219,7 +214,7 @@ fn help() {
     eprintln!("  --read              guests may read this app and not write to it");
     eprintln!("  --clear <namespace> stop serving one app to the room");
     eprintln!();
-    eprintln!("`svrn ring dev` is the other half: it serves a bundle on loopback for the");
+    eprintln!("`svrn ring show` is the other half: it opens a bundle on loopback for the");
     eprintln!("wall's own screen, holding its grant only while it runs.");
     eprintln!();
     eprintln!("Restart the daemon to serve what you declared:  svrn daemon restart");
@@ -322,13 +317,13 @@ fn declared_names(doc: &DocumentMut) -> Vec<String> {
 }
 
 /// What this door declares, asked of the config (the daemon is the thing that
-/// serves it; `svrn ring serve` without arguments is the declaration's own
+/// serves it; `svrn ring host` without arguments is the declaration's own
 /// view, and there is no live listing to ask for beyond it).
 fn list() -> i32 {
     let cfg = match SetupConfig::load() {
         Ok(c) => c,
         Err(e) => {
-            eprintln!("ring serve: could not read this node's config — {e}");
+            eprintln!("ring host: could not read this node's config — {e}");
             return 1;
         }
     };
@@ -337,7 +332,7 @@ fn list() -> i32 {
     if bind.is_none() && pages.is_empty() {
         println!("This node serves no ring app to a room.");
         println!();
-        println!("  svrn ring serve <ns> --dir <bundle> --bind <room address:port>");
+        println!("  svrn ring host <ns> --dir <bundle> --bind <room address:port>");
         return 0;
     }
     match &bind {

@@ -73,9 +73,9 @@ Three zones, from most to least trusted:
   owner registered for guests in `[daemon.guest_pages]`, for the grant's
   TTL, and nothing else on the rail** — the resource declares and the
   credential identifies, the same shape a recipe's `mesh_sharing` has for
-  a corpus. That is the default (`svrn mesh grant --wall`), so one QR
+  a corpus. That is the default (`svrn mesh grant --all-apps`), so one QR
   serves a whole wall. Two knobs narrow it and neither widens anything:
-  `--rail <ns>` mints a grant that reaches exactly one namespace and is
+  `--app <ns>` mints a grant that reaches exactly one namespace and is
   refused the rest by name, and an entry written
   `<ns> = { dir = "…", guests = "read" }` serves its page and refuses a
   guest's append. A namespace the daemon writes on its own behalf — the
