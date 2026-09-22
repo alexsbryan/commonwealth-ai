@@ -4010,7 +4010,9 @@ index — so a bundle is iterable against real data without the desktop;
 dependency:** a manifest's `corpus_data` (size + the recipe the bundle ships,
 carrying a `[prebuilt]` HF block) makes the corpus first-class — `MeshAppsSection`
 shows its presence and, when missing, a one-click **"Get data (N GB) & Open"** that
-stages the recipe (`meshapp_stage_corpus_recipe` → `~/.svrnmesh/recipes/`) and runs
+stages the recipe (`meshapp_stage_corpus_recipe` → `~/.svrnmesh/recipes/`) — refusing a
+body with no `[corpus]` table, so a dev-server SPA fallback (200 + index.html) can never
+poison the recipes dir — and runs
 the existing prebuilt install with a progress bar. **Curated registry:** `svrn
 meshapp publish/install/list` (sovereign-cli-llm `meshapp_registry.rs`) distribute an
 app as a self-contained `tar.zst` (bundle + a copy of `_sdk/`); install verifies the

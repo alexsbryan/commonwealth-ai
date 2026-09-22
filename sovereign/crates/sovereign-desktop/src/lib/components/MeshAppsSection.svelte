@@ -119,10 +119,24 @@
   async function acquireCorpus(app: CatalogApp): Promise<void> {
     acquiring = app.id;
     try {
-      const recipeFile = app.corpusData?.recipe || "recipe.toml";
-      const res = await fetch(`/meshapp/${app.id}/${recipeFile}`);
-      if (!res.ok) throw new Error(`fetch corpus recipe: ${res.status}`);
-      await stageCorpusRecipe(app.corpus, await res.text());
+      // Only apps that DECLARE a bundled recipe stage one; the rest resolve
+      // through the daemon's registry/bundled path and must not fetch at all.
+      const recipeFile = app.corpusData?.recipe;
+      if (recipeFile) {
+        const url = `/meshapp/${app.id}/${recipeFile}`;
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`fetch corpus recipe ${url}: ${res.status}`);
+        const text = await res.text();
+        // A dev-server SPA fallback answers unknown paths with index.html
+        // and HTTP 200; staging those bytes poisons ~/.svrnmesh/recipes with
+        // HTML and the daemon fails with "TOML parse error at line 1".
+        if (!text.includes("[corpus]")) {
+          throw new Error(
+            `${url} did not return a recipe (no [corpus] table) — is the file in the app bundle?`,
+          );
+        }
+        await stageCorpusRecipe(app.corpus, text);
+      }
       await installCorpus(app.corpus);
       const deadline = Date.now() + 15 * 60 * 1000;
       while (Date.now() < deadline) {
