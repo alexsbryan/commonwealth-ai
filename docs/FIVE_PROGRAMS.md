@@ -905,6 +905,61 @@ refusal named the chain, which is the value.
   Fix shape: the daemon dials rpc-worker/llama-log/hardware-detect over HTTP
   (§4 rule 2) rather than relocating a catalog module.
 
+## 12. The decision sheet — front-loaded so implementation is mechanical
+
+`docs/FIVE_PROGRAMS_DECISIONS.tsv` is the whole remaining 80, one row per edge:
+source, target, refs, use shape, fix shape, missing capability, prerequisite,
+behaviour delta, the ONE decision, effort. It was produced by three read-only
+scouts over the gate output; it is data, not prose, and it replaces re-probing.
+**Every row's fix is already classified; what remains is the decision column.**
+
+### The classes (by fix shape, not by source crate)
+
+| class | rows | what it is | how it lands |
+|---|---|---|---|
+| **Atlas read surface** | 8 (tools 286, cli-llm 355, core 65, corpus-mcp 32, daemon 179, meshapp 11, mesh 6, cli-dev 16) | `corpus_engine::enrichment` read refs (~950) | ONE leaf decision + a module carve |
+| **Serving-cluster dial** | ~20 (all `sovereign-daemon` -> cmnwlth/ingest/code crates) | the daemon calls fabric/engine/queue/watcher/registry code in-process | the process-boundary decision, then route+client+repoint per edge |
+| **Vocabulary leaf promotions** | ~10 (rail-core, core-subset, transport, work-model, serving-policy, scheduler, peer-wire dep, watcher schema, cli-shared thin half, notes types) | pure vocabulary reached across programs | `[[package_leaf]]` rows + allow + repoints (the scip pattern: 7 edges in one manifest edit) |
+| **Ports** | ~8 (state, meshapp, meshapp-registry, runtime-commission, recipe FeatureStore, gliner, watchers, notes) | a trait in contracts + impl in owner + injection | only closes when the consumer stops constructing; construction stays with the owner |
+| **Placement** | 5 (corpus-mcp, work-atlas, runtime-recipe, cli-dev's notes/tools, cli-llm split) | which program owns a crate | a membership row, then the crate's edges follow |
+| **Structural / dial-only** | ~8 (daemon->mesh 250, ->inference 42, ->compute 25, ->code 34, cli-dev->daemon, cli-llm->pods, grants->corpus-engine, mesh->corpus-engine) | in-process construction of another program's runtime | a process or a wire; the largest single-effort rows |
+| **Keep** | 4 (guest_route, project init's zero-vector index, the 3 notes tests, cli->cli-mesh) | deliberate non-changes with reasons | document, do not cut |
+
+### The six decisions (answering these makes the rest mechanical)
+
+1. **The atlas reader leaf.** New thin reader leaf, widen `understanding-vocab`,
+   or lift `understanding-atlas`? Measured: the read DOOR is already in
+   `understanding-vocab::read`; the 8-module store/query surface (`context`,
+   `context_loader`, `ground`, `provider`, `inventory`, `store`, `ann_store`,
+   `summary`) is interleaved with writers, so it is a CARVE. (~950 refs, 8 edges.)
+2. **The process boundary.** Is the serving cluster (mesh, transport, state,
+   rail, work, media, grants, serving-host, inference, compute, scheduler, pods,
+   serving-policy, discovery, meshapp*) a separate process the daemon DIALS
+   (§2/§2b says the serving cluster is cmnwlth's; `cw-rails` exists), or
+   cmnwlth vocabulary the daemon links? (~20 edges.)
+3. **Leaf widening.** Accept promoting cmnwlth/ingest vocabulary into the GLOBAL
+   leaf set (admits those crates to every package's closure), or pay a port/wire
+   per edge? The scip precedent shows one row can close 7 edges. (~10 rows.)
+4. **The replicated store.** The daemon's `MeshStore` is `in_memory()`; whose
+   disk is it, and does the daemon dial it? (Unblocks the state port + the
+   portfolio/newsworthy wire that was reverted.)
+5. **Placement:** corpus-mcp -> `[ingest]` or `[svrn]`? `sovereign-work-atlas` ->
+   `[code]` or delete (as atos was)? `sovereign-runtime-recipe` -> `[svrn]` or
+   split assembly from the ingest lane? `sovereign-tools::notes` -> `[code]`?
+6. **The keep list** above — confirm as deliberate.
+
+### Front-loading procedure
+
+1. Operator answers 1-6 (the sheet's `decision_needed` column is the input).
+2. **Phase A — atlas carve** (after 1): 3-4 waves; closes 8 edges / ~950 refs.
+3. **Phase B — the serving-cluster dial** (after 2, 3): make the serving binary
+   own the verbs `cw-rails` already exposes, promote the vocabulary leaves, then
+   route+client+repoint each daemon edge. ~20 edges; the largest single phase.
+4. **Phase C — the state wire** (after 4) + **Phase D — the mechanical batch**
+   (leaf rows, ports; parallelisable) + **Phase E — placement moves** (after 5).
+5. Each row lands as a cutter task with NO decision left; 3 cutters/wave; the
+   gate's raw count in each commit body.
+
 ### The decisions — these are the operator's, and they are meant to be few
 
 - [x] **`atos` is CUT COMPLETELY** (operator, 2026-09-21). Footprint:
