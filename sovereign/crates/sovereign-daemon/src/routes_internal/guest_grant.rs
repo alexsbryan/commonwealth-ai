@@ -38,16 +38,13 @@
 //! [`ClientSurface`]: crate::server::ClientSurface
 //! [`ClientSurface::Operator`]: crate::server::ClientSurface::Operator
 
-use std::sync::Arc;
-
 use axum::extract::State;
 use axum::http::StatusCode;
-use axum::{Extension, Json};
+use axum::Json;
 use serde::{Deserialize, Serialize};
 
 use sovereign_grants::guest_grant::{Scope, DEFAULT_GUEST_TTL_SECS};
 
-use crate::daemon::EmbeddedDaemon;
 use crate::state::AppState;
 
 use super::ErrorBody;
@@ -125,6 +122,15 @@ pub struct GuestGrantRequest {
     /// does not link the mesh crates — displays exactly what the CLI would.
     #[serde(default)]
     pub url: Option<String>,
+    /// THIS node's iroh dial string, when the caller has one to give
+    /// (`/v1/mesh/status` → `self_reachability.dial`; the CLI reads the same
+    /// field). Composed into the link as `iroh=` so a guest who shares no
+    /// network with this machine can still reach it. Absent is the direct
+    /// (plain-HTTP) form, and is never invented here: the daemon cannot read
+    /// its own dial on this route — the extension that owns it is installed
+    /// per-router and this surface does not carry it.
+    #[serde(default)]
+    pub dial: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -144,11 +150,11 @@ pub struct GuestGrantResponse {
 /// POST /internal/guest/grant — mint an ephemeral guest grant.
 pub async fn guest_grant_issue(
     State(state): State<AppState>,
-    Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
     Json(req): Json<GuestGrantRequest>,
 ) -> Result<Json<GuestGrantResponse>, (StatusCode, Json<ErrorBody>)> {
     // What composing the link needs, read BEFORE `scopes` is consumed.
     let url = req.url.clone();
+    let dial = req.dial.clone();
     let rail = req.scopes.rail.clone();
     let wall = req.scopes.wall.unwrap_or(false);
     let scopes = req
@@ -228,17 +234,12 @@ pub async fn guest_grant_issue(
     // (`sovereign_mesh::deep_link::wall_https_link`) — the same string the CLI
     // writes into its QR — so the desktop can display a link it cannot build
     // (it is an HTTP client; it does not link the mesh crates). The dial is
-    // this node's own reachability, the value `/v1/mesh/status` publishes.
-    let dial = daemon
-        .self_reachability()
-        .await
-        .and_then(|r| r.dial)
-        .filter(|d| !d.is_empty());
+    // the caller's, read from this daemon's own status; see the field doc.
     let link = guest_link(
         url.as_deref(),
         rail.as_deref(),
         wall,
-        dial.as_deref(),
+        dial.as_deref().filter(|d| !d.is_empty()),
         &grant.token,
         grant.expires_at_ms / 1_000,
         &grant.summary(),

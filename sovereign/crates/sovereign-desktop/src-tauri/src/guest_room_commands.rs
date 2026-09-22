@@ -64,6 +64,26 @@ fn http() -> Result<reqwest::Client, String> {
         .map_err(|e| e.to_string())
 }
 
+/// This node's own iroh dial string, from the daemon's status — the same field
+/// the CLI reads (`/v1/mesh/status` → `self_reachability.dial`). Best-effort:
+/// iroh off, no reachable address yet, or an unreachable status all mean "no
+/// dial", and the composed link is then the direct (plain-HTTP) form. The
+/// daemon composes; it cannot read its own dial on the grant route, so the
+/// caller that just asked for the status hands it in.
+async fn node_dial(state: &AppState) -> Option<String> {
+    let url = format!("{}/v1/mesh/status", state.client_base_url());
+    let resp = http().ok()?.get(&url).send().await.ok()?;
+    if !resp.status().is_success() {
+        return None;
+    }
+    let body: serde_json::Value = resp.json().await.ok()?;
+    body.get("self_reachability")?
+        .get("dial")?
+        .as_str()
+        .map(str::to_string)
+        .filter(|d| !d.is_empty())
+}
+
 /// Mint a guest grant for the room.
 ///
 /// `scope` is `"wall"` (every app the door registers for guests) or a rail
@@ -105,6 +125,11 @@ pub async fn guest_grant_create(
     }
     if let Some(u) = base_url.filter(|u| !u.trim().is_empty()) {
         body["url"] = serde_json::json!(u);
+    }
+    // The dial rides along so the daemon's composed link can reach a guest who
+    // shares no network with this machine (iroh=). No dial is not an error.
+    if let Some(d) = node_dial(&state).await {
+        body["dial"] = serde_json::json!(d);
     }
 
     let url = format!("{}/internal/guest/grant", state.client_base_url());
