@@ -1,0 +1,61 @@
+# Flight rules — read raw. Verdicts come from measurement rows, never prose here.
+#
+# CHILD of ring-apps, after ring-guest. Builds the node-side half of
+# docs/THE_LINK.md (rung 1: the checkpoint; the link's courier fields) and
+# MEASURES the dial (rung 2's one unknown) without gating anything on it.
+# Orders under it `serves: the-link <bar-id ...>`.
+#
+# PRE-REGISTERED 2026-09-21 by the seat, before any row ran and before any
+# datum exists. Operator decisions the bars assume (same day): D1 `at=`
+# carries digest marks only, never the payload; D2 couriers ride the join
+# link's `iroh=` dial-string param; D3 the dial bar passes on honest
+# measurement, including an honest negative; D4 verification is node-side.
+id        = "the-link"
+parent    = "ring-apps"
+objective = "A ring's record, frozen while the room was cut off from the internet, verifies cold on a machine that was never asked: one export verb, one verify verb, four steps over shipped rail exports and zero rail-core edits. The guest link carries its own couriers and marks. The dial's single unknown becomes three numbers in a decisions appendix, whatever they say."
+spec      = ".sovereign/features/the-link/order.md (Demo, Decisions, Premises, Predictions); docs/THE_LINK.md (the design); quality/campaigns/ring-room.toml and ring-guest.toml (regression sets, NEVER edited here); commonwealth/BOUNDARY.md:133 (the journal layout)"
+declared  = "2026-09-21"
+status    = "active"
+
+[predicate]
+statement = "With the room stand-in up, RING_ROOM_TOPOLOGY=room scripts/ring-room-demo.sh verdict all reads PASSED on every tl-* bar, on all six rr-2 bars and all five rg bars, twice from cold, and git diff --stat <BASE>..HEAD -- commonwealth/crates/commonwealth-rail-core is empty."
+check     = "./scripts/sovereign-test.sh --human --package sovereign-daemon --package sovereign-cli-llm --package commonwealth-discovery --package commonwealth-rail-core"
+
+[[bar]]
+id           = "tl-checkpoint-verifies"
+demo         = "The wall exports the doc's journal mid-cut; after the heal the Halo verifies the file cold and prints its marks. Two corrupted copies and one forked copy are refused by name in the same run."
+rung         = "tl-1"
+one_line     = "CLAIM: an export made while the room was cut proves itself on a machine that was never asked — and refuses every forgery the instrument plants"
+derives_from = "digest marks are contiguous from each actor's sealed floor by construction (`commonwealth-rail-core/src/sync.rs:126-160`), so digest equality IS the completeness claim; admit runs signature, roster, sequence, fork and void rules (`admit.rs:307`); both are public exports (`lib.rs:91-95`) — the checkpoint needs no new decider"
+floor        = 1.0
+floor_basis  = "structural: 1.0 iff (a) the leg exports inside the cut window (created_unix strictly between cut_at and heal_at, both already recorded by the offline leg) and the Halo's `svrn ring checkpoint --verify` exits 0 printing the document's marks, (b) a copy with one flipped op byte is refused and the refusal names the signature step, (c) a copy with the last ops line removed is refused and the refusal names the actor whose marks disagree, (d) a copy carrying a planted same-seq pair is refused as a fork. Any false is 0.0."
+target       = 1.0
+direction    = "higher_is_better"
+goodhart     = "reads 1.0 on kindness if the instrument only ever verifies the happy path — clauses (b)-(d) are negative controls the same verb must refuse in the same run; reads 1.0 while trusting the document if any field is read without re-derivation (the four steps are the floor's shape, not decoration)"
+status       = "open"
+
+[[bar]]
+id           = "tl-link-carries-its-couriers"
+demo         = "A guest link built with `at=` marks and an `iroh=` dial string round-trips through builder, parser and QR. A link without them is byte-identical to today's output."
+rung         = "tl-2"
+one_line     = "CLAIM: the link names its own couriers and its own expected state, in the fragment, without breaking one link that exists"
+derives_from = "the builder and parser are one file with one percent-encoder (`commonwealth-discovery/src/deep_link.rs:195-259`) and the token-outside-fragment refusal already exists for one param (:243); join links already carry `iroh=` dial strings (`commonwealth-rails/src/join.rs:87-99`), so the param form is not new — only its presence on the https guest form is"
+floor        = 1.0
+floor_basis  = "structural: 1.0 iff (a) build→parse round-trips `at` and `iroh` exactly, (b) each of token, at and iroh placed outside the fragment is not read — one refusal test each, (c) a builder call with no new params produces bytes identical to today's (the two production callers change behaviour for nobody), (d) `wall_qr_svg` encodes a link carrying a 3-actor `at=` (or the row names the measured actor count that stops encoding). Any false is 0.0."
+target       = 1.0
+direction    = "higher_is_better"
+goodhart     = "reads 1.0 while breaking old links if only new links are tested (clause (c) is byte-identity, not parse-identity); reads 1.0 with the marks readable on the wire if any new param left the fragment (clause (b) extends the existing rule to each)"
+status       = "open"
+
+[[bar]]
+id           = "tl-dial-measured"
+demo         = "A decisions appendix carries three numbers: rail-core's wasm size, iroh's wasm build outcome at the locked version, and — if it built — one dial attempt's verdict."
+rung         = "tl-3"
+one_line     = "CLAIM: the dial's one unknown is a measured number on the record, and no product code moved because of it"
+derives_from = "rail-core compiles for wasm32 only in an isolated copy (`docs/RING_APP_LIBRARY.md:360-380`, workspace-hack carries tokio; getrandom needs wasm_js); iroh's browser relay-only build is CLAIMED, never verified against our pin (`:546-553`) — both are measurements, not premises"
+floor        = 1.0
+floor_basis  = "structural: 1.0 iff (a) the wasm size is of the artifact that was built, hashed and named by tool and opt level — not of a hello-world stand-in, (b) the iroh attempt names the locked version it ran against and its outcome with the failing layer, verbatim, (c) if it built, the dial attempt names the layer that answered or failed against a live node's guest channel, (d) `git diff` over sovereign/crates and commonwealth/crates for this row is empty. Any false is 0.0 — including a missing appendix entry."
+target       = 1.0
+direction    = "higher_is_better"
+goodhart     = "reads 1.0 for an optimistic summary (clause (b) wants the failing layer verbatim, not 'no'); reads 1.0 while product code drifted toward the outcome it wanted (clause (d) is the whole point of D3)"
+status       = "open"
