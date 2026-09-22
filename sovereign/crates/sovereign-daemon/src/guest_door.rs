@@ -43,7 +43,11 @@ use crate::state::AppState;
 /// `http://<guest_bind><PAGE_PREFIX>#token=…`, or
 /// `http://<guest_bind><PAGE_PREFIX><namespace>/#token=…` for a wall holding
 /// more than one app.
-pub const PAGE_PREFIX: &str = "/ring/";
+///
+/// Defined in `sovereign_contracts::guest_pages` (three crates must agree, and
+/// the mesh crate cannot depend on the daemon) and re-exported here so every
+/// existing `sovereign_daemon::guest_door::PAGE_PREFIX` still resolves.
+pub use sovereign_contracts::guest_pages::PAGE_PREFIX;
 
 /// The shim's file name, beside each page so the page's relative imports
 /// resolve. One name, two homes: `/ring/__ring.js` for the un-namespaced page

@@ -34,10 +34,10 @@
 //! for the guest to resolve.
 
 use sovereign_cli_shared::help::{Help, HelpSection};
-use sovereign_mesh::deep_link::{build_guest_link, parse_deep_link, DeepLink};
+use sovereign_mesh::deep_link::{build_guest_link, parse_deep_link, wall_https_link, DeepLink};
 
 use crate::guest_link::{self, GuestLink};
-use crate::mesh_guest_link::{wall_https_link, wall_qr_svg};
+use crate::mesh_guest_link::wall_qr_svg;
 
 /// Read the daemon's client port from `SetupConfig` rather than hardcoding
 /// 9741 — a sandbox pointed at its own daemon must not mint against the

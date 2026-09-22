@@ -1,57 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! The address a phone opens, and the QR that carries it.
 //!
-//! Split out of `mesh_guest` when `--wall` landed: the link composer and its
-//! QR renderer are one concern — "what does a scan reach" — and the two tests
-//! that pin them (a decode of the actual SVG among them) are most of what the
-//! parent file was carrying for them. Nothing here changed in the move.
-
-use sovereign_mesh::deep_link::build_https_guest_link;
-
-/// The address a phone opens: the door `--url` names, plus the page path of
-/// whatever this grant reaches — the app `--rail` names, or the door's own
-/// index under `--wall`, which lists every app the owner declared. Either way
-/// the namespace is typed once rather than twice. A base already spelling a
-/// `/ring/` page is returned as typed, never rewritten.
-pub(crate) fn wall_page_base(base: &str, rail: Option<&str>, wall: bool) -> String {
-    let prefix = sovereign_daemon::guest_door::PAGE_PREFIX;
-    if base.contains(prefix) {
-        return base.to_string();
-    }
-    let root = base.trim_end_matches('/');
-    match rail {
-        Some(ns) => format!("{root}{prefix}{ns}/"),
-        None if wall => format!("{root}{prefix}"),
-        None => base.to_string(),
-    }
-}
-
-/// The wall QR's https link: the page base, plus the DIAL STRING when the
-/// guest must tunnel in.
-///
-/// The dial rides the fragment beside the token, so a browser that cannot
-/// reach this machine over HTTP can still reach it by key over the relay —
-/// the "guest from anywhere" case (`docs/RING_APP_LIBRARY.md`, "The page is
-/// an iroh endpoint"; `docs/THE_LINK.md`). Absent on a direct (plain-HTTP)
-/// grant, where the base URL IS the address and there is nothing to dial.
-pub(crate) fn wall_https_link(
-    token: &str,
-    base: &str,
-    rail: Option<&str>,
-    wall: bool,
-    expires_at_secs: u64,
-    summary: Option<&str>,
-    dial: Option<&str>,
-) -> String {
-    build_https_guest_link(
-        token,
-        &wall_page_base(base, rail, wall),
-        expires_at_secs,
-        summary,
-        None,
-        dial,
-    )
-}
+//! Split out of `mesh_guest` when `--wall` landed. The LINK COMPOSER moved on
+//! again, to `sovereign_mesh::deep_link::wall_page_base` / `wall_https_link`,
+//! when the daemon needed the same rule to return a grant's link (2026-09-22 —
+//! one composer for the CLI, the daemon, and the desktop that reads the
+//! daemon's link). What stays here is the QR RENDERER: the CLI writes the SVG;
+//! the desktop draws its own from the link.
 
 /// The QR module margin, in modules. Four is the quiet zone the QR standard
 /// requires; a scanner cannot find the finder patterns without it.
@@ -70,54 +25,11 @@ pub(crate) fn wall_qr_svg(link: &str) -> Result<String, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sovereign_mesh::deep_link::build_https_guest_link;
 
     /// The QR carries the door's page path for whatever this grant reaches:
     /// the app `--rail` names, or the door's index under `--wall`. A base the
     /// operator already spelled a page path into is never rewritten.
-    #[test]
-    fn the_wall_link_composes_the_page_path_from_the_rail() {
-        let (b, pinned) = ("http://h:9", "http://h:9/ring/");
-        assert_eq!(
-            wall_page_base(b, Some("wall"), false),
-            "http://h:9/ring/wall/"
-        );
-        assert_eq!(wall_page_base(pinned, Some("w"), false), pinned);
-        assert_eq!(wall_page_base(b, None, false), b);
-        // `--wall`: the index, which lists every declared app. One scan reaches
-        // the whole wall rather than one page of it.
-        assert_eq!(wall_page_base(b, None, true), "http://h:9/ring/");
-        assert_eq!(wall_page_base(pinned, None, true), pinned);
-    }
-
-    /// The wall QR's link must carry the dial string when the guest has no
-    /// HTTP path to this machine — that is the whole "guest from anywhere"
-    /// case — and must not invent one on a direct grant. The builder's own
-    /// round-trip is pinned in `sovereign-mesh`; this guards the CALLER, which
-    /// passed `None` here until 2026-09-22.
-    #[test]
-    fn the_wall_link_carries_the_dial_string_when_the_guest_must_tunnel() {
-        let dial = "5a46ef@https://usw1-1.relay.n0.iroh.link./,10.89.60.11:55686";
-        let tunnelled = wall_https_link(
-            "tok",
-            "https://svrnme.sh",
-            None,
-            true,
-            1_790_112_357,
-            None,
-            Some(dial),
-        );
-        match sovereign_mesh::deep_link::parse_https_guest_link(&tunnelled) {
-            Some(sovereign_mesh::deep_link::DeepLink::Guest { dial: got, .. }) => {
-                assert_eq!(got.as_deref(), Some(dial))
-            }
-            _ => panic!("the wall link did not parse as a guest link: {tunnelled}"),
-        }
-
-        // A direct grant has no dial string, and the link must stay as it was.
-        let direct = wall_https_link("tok", "http://10.0.0.1:19947", None, true, 1, None, None);
-        assert!(!direct.contains("iroh="), "{direct}");
-    }
-
     /// Rasterise the SVG `wall_qr_svg` writes — its `viewBox` and one
     /// `M{x},{y}h1v1h-1` per dark module — onto a DARK surround, and decode
     /// it. The surround is the point: on an all-white canvas rqrr decodes a

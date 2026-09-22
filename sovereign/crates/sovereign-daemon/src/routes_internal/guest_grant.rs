@@ -38,13 +38,16 @@
 //! [`ClientSurface`]: crate::server::ClientSurface
 //! [`ClientSurface::Operator`]: crate::server::ClientSurface::Operator
 
+use std::sync::Arc;
+
 use axum::extract::State;
 use axum::http::StatusCode;
-use axum::Json;
+use axum::{Extension, Json};
 use serde::{Deserialize, Serialize};
 
 use sovereign_grants::guest_grant::{Scope, DEFAULT_GUEST_TTL_SECS};
 
+use crate::daemon::EmbeddedDaemon;
 use crate::state::AppState;
 
 use super::ErrorBody;
@@ -116,6 +119,12 @@ pub struct GuestGrantRequest {
     /// Operator's own note, echoed back by `list`. Never consulted.
     #[serde(default)]
     pub label: Option<String>,
+    /// The base a phone opens (the room address, or the static origin). When
+    /// present, the response carries the composed `link`, so a client that
+    /// cannot compose it itself — the desktop, which is an HTTP client and
+    /// does not link the mesh crates — displays exactly what the CLI would.
+    #[serde(default)]
+    pub url: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -125,13 +134,23 @@ pub struct GuestGrantResponse {
     /// One-line rendering of what this grant buys, for the link's display
     /// string. Display only — the store is the authority.
     pub summary: String,
+    /// The composed guest link when the request named a `url` — the same
+    /// string the CLI writes into its QR. Absent otherwise (absence is
+    /// reported, never a guessed base).
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub link: Option<String>,
 }
 
 /// POST /internal/guest/grant — mint an ephemeral guest grant.
 pub async fn guest_grant_issue(
     State(state): State<AppState>,
+    Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
     Json(req): Json<GuestGrantRequest>,
 ) -> Result<Json<GuestGrantResponse>, (StatusCode, Json<ErrorBody>)> {
+    // What composing the link needs, read BEFORE `scopes` is consumed.
+    let url = req.url.clone();
+    let rail = req.scopes.rail.clone();
+    let wall = req.scopes.wall.unwrap_or(false);
     let scopes = req
         .scopes
         .into_scopes()
@@ -205,10 +224,31 @@ pub async fn guest_grant_issue(
         "guest_grant: issued an ephemeral guest grant"
     );
 
+    // The link a phone opens, when the caller named a base. ONE composer
+    // (`sovereign_mesh::deep_link::wall_https_link`) — the same string the CLI
+    // writes into its QR — so the desktop can display a link it cannot build
+    // (it is an HTTP client; it does not link the mesh crates). The dial is
+    // this node's own reachability, the value `/v1/mesh/status` publishes.
+    let dial = daemon
+        .self_reachability()
+        .await
+        .and_then(|r| r.dial)
+        .filter(|d| !d.is_empty());
+    let link = guest_link(
+        url.as_deref(),
+        rail.as_deref(),
+        wall,
+        dial.as_deref(),
+        &grant.token,
+        grant.expires_at_ms / 1_000,
+        &grant.summary(),
+    );
+
     Ok(Json(GuestGrantResponse {
         token: grant.token.clone(),
         expires_at_ms: grant.expires_at_ms,
         summary: grant.summary(),
+        link,
     }))
 }
 
@@ -276,4 +316,89 @@ pub async fn guest_grant_list(State(state): State<AppState>) -> Json<Vec<GuestGr
             })
             .collect(),
     )
+}
+
+/// The link a guest opens, or `None` when the caller named no base.
+///
+/// ONE composer: [`sovereign_mesh::deep_link::wall_https_link`], the same one
+/// the CLI's QR encodes — so a link the desktop displays from this response
+/// and a link the CLI prints cannot disagree. `dial` is this node's own
+/// reachability string; absent when iroh is not running, in which case the
+/// link is the direct (plain-HTTP) form.
+fn guest_link(
+    url: Option<&str>,
+    rail: Option<&str>,
+    wall: bool,
+    dial: Option<&str>,
+    token: &str,
+    expires_at_secs: u64,
+    summary: &str,
+) -> Option<String> {
+    let base = url?;
+    Some(sovereign_mesh::deep_link::wall_https_link(
+        token,
+        base,
+        rail,
+        wall,
+        expires_at_secs,
+        (!summary.is_empty()).then_some(summary),
+        dial,
+    ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The response link is the CLI's link, built by the one composer; and
+    /// absent when the caller named no base (absence reported, never a
+    /// guessed address).
+    #[test]
+    fn the_response_link_is_the_cli_link_or_absent() {
+        let link = guest_link(
+            Some("https://svrnme.sh"),
+            None,
+            true,
+            Some("5a46ef@https://relay.example/,10.0.0.1:1"),
+            "tok",
+            1_790_112_357,
+            "primary; the wall",
+        )
+        .expect("a url was given");
+        // The door's page path, the token, and the dial string, in the fragment.
+        assert!(link.starts_with("https://svrnme.sh/ring/"), "{link}");
+        assert!(link.contains("token=tok"), "{link}");
+        assert!(link.contains("iroh="), "{link}");
+        match sovereign_mesh::deep_link::parse_https_guest_link(&link) {
+            Some(sovereign_mesh::deep_link::DeepLink::Guest { token, dial, .. }) => {
+                assert_eq!(token, "tok");
+                assert!(dial.is_some());
+            }
+            _ => panic!("the link did not parse: {link}"),
+        }
+
+        // No base → no link.
+        assert!(guest_link(None, None, true, None, "tok", 1, "").is_none());
+
+        // No dial → the direct form, with no `iroh=`.
+        let direct =
+            guest_link(Some("http://10.0.0.1:19947"), None, true, None, "t", 1, "").unwrap();
+        assert!(!direct.contains("iroh="), "{direct}");
+
+        // A rail grant names the app's page, not the door's index.
+        let railed = guest_link(
+            Some("http://10.0.0.1:19947"),
+            Some("house-expenses"),
+            false,
+            None,
+            "t",
+            1,
+            "",
+        )
+        .unwrap();
+        assert!(
+            railed.starts_with("http://10.0.0.1:19947/ring/house-expenses/"),
+            "{railed}"
+        );
+    }
 }

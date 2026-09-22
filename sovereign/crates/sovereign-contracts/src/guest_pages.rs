@@ -31,6 +31,21 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+/// Where a guest door serves the ring page: the path every guest link's base
+/// carries. `http://<guest_bind>/ring/#token=…` for a wall holding one app,
+/// `…/ring/<namespace>/#token=…` for one of several — and the same path a
+/// static origin serves the browser runtime from (svg the guest link composes,
+/// `sovereign_mesh::deep_link::wall_page_base`).
+///
+/// It lives here, with the page contract, because THREE crates need to agree
+/// on it and the only one they all depend on is this leaf: the daemon serves
+/// it, the CLI composes links with it, and the mesh crate composes the same
+/// links for the daemon's grant responses. It was `sovereign_daemon`'s, which
+/// the mesh crate may not depend on (`[[forbid]] sovereign-mesh ->
+/// sovereign-daemon`); the move is 2026-09-22 and the daemon re-exports it, so
+/// every existing name still resolves.
+pub const PAGE_PREFIX: &str = "/ring/";
+
 /// What guests may do on a registered page's rail namespace.
 ///
 /// A closed set, and that IS the property (ARCH §9): there is nothing between
