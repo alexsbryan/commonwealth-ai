@@ -817,6 +817,25 @@ banks is a NEW study under them:
   to production or comes from the experimental atom-enum. It is a diagnostic
   in the board's layout, not a study arm; the frozen five are untouched.
 
+### 2026-09-23 — demo-coverage gaps, named (operator: "honest gaps at first")
+
+- **A1 authoring record was never cut contemporaneously.** The ANS declaration
+  was authored across two commits on 2026-09-20 and the bank followed the same
+  night; no separate record existed at freeze. `ontology-proof/ans/authoring-record.md`
+  is a RECONSTRUCTED record (git author, the two commits, 116 lines, current
+  validate output) with the reconstruction stated in the file. The pre-reg's
+  authoring-time operand ("under an hour", claim 3) has no measurement for this
+  corpus and is not claimed.
+- **Blind-preference tallies (bar 4) do not exist.** Bar 4 needs the outside
+  reader recruited before any arm; with both boards negative the bar is moot,
+  but the reader was never recruited — recorded so a study-2 pass does not
+  inherit an unstated omission.
+- **i3 ablation and I5 oracle remain never-ran** on both boards (named on the
+  scoreboards).
+- **B11 map beat is written, not yet filmed**: capture needs the desktop's
+  Rust rebuilt (the `declared_type` wire field) and the ANS corpus on the demo
+  profile's shelf; both are capture-run steps, not study work.
+
 ### 2026-09-22 — the diagnostic arms: production's default carries the loss; the decline is atom-enum's
 
 Three diagnostic runs on the pod (board identity, chat model pinned

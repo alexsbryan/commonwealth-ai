@@ -36,3 +36,12 @@ gain per claimed kind) has nothing to pick: the claim rule is the gate.
 Empty, by rule: a deck exists only for claimed kinds, and none is claimed. A live
 draw still runs — `demo/live-run.sh "<question>"` — with the measured odds stated
 before the draw and any disagreement said out loud.
+
+## The RAPTOR board (essay, composed corpus)
+
+`raptor-proof/essay/board-pilot-and-his-wife-composed/board.md` — the factor
+was REACHED (Summary 12/12 on full, the composed-ontology reach fix) and does
+not help: full loses 0/4 with 32 ties, every axis <= bare. Measured over
+extractive-floor summaries; the abstractive variant is untested behind the
+verifier whose pass bar was rebuilt (see Deviations). No kind is claimed here
+either; the deck is empty by the same rule.
