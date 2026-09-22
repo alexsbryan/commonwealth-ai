@@ -37,6 +37,7 @@ mod tray;
 mod turn_report;
 mod update_commands;
 mod watched_folder_commands;
+mod webview_env;
 mod workflow_commands;
 
 /// Shared test-only support. Lives in the crate root so every module's
@@ -156,6 +157,7 @@ fn main() -> ExitCode {
     if std::env::var_os("SOVEREIGN_NOTE_AS_METADATA").is_none() {
         std::env::set_var("SOVEREIGN_NOTE_AS_METADATA", "1");
     }
+    let webview_raster = webview_env::apply();
 
     // Default filter gives glass-box visibility into every inference path.
     // Set RUST_LOG to override (e.g. RUST_LOG=sovereign_core=debug for more detail).
@@ -236,6 +238,7 @@ fn main() -> ExitCode {
     // `crate::crash_report`. Native (SIGSEGV) model crashes are captured
     // separately via the crash-isolation subprocess.
     crash_report::install_panic_hook();
+    webview_env::log(&webview_raster);
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
