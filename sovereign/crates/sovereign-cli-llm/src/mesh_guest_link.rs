@@ -5,8 +5,26 @@
 //! again, to `sovereign_mesh::deep_link::wall_page_base` / `wall_https_link`,
 //! when the daemon needed the same rule to return a grant's link (2026-09-22 —
 //! one composer for the CLI, the daemon, and the desktop that reads the
-//! daemon's link). What stays here is the QR RENDERER: the CLI writes the SVG;
-//! the desktop draws its own from the link.
+//! daemon's link). What stays here is the QR RENDERER and the BASE the link is
+//! composed with: the door's declared address when the operator has declared
+//! one, so a grant never makes them retype it.
+
+/// An address a phone opens, from the door's declared bind. `host:port` in,
+/// `http://host:port` out; blank means "not declared", which is `None` rather
+/// than an empty address (absence reported, never defaulted).
+pub(crate) fn base_from_bind(bind: Option<&str>) -> Option<String> {
+    let b = bind.map(str::trim).filter(|b| !b.is_empty())?;
+    Some(format!("http://{b}"))
+}
+
+/// `[daemon] guest_bind` as a base URL, when the door has been declared —
+/// written by `svrn ring serve --bind`. The grant inherits it so the address is
+/// typed once, where the door is, and `--url` remains the override for a page
+/// served from somewhere else (the static origin).
+pub(crate) fn guest_bind_url() -> Option<String> {
+    let cfg = sovereign_core::setup_config::SetupConfig::load().ok()?;
+    base_from_bind(cfg.daemon.guest_bind.as_deref())
+}
 
 /// The QR module margin, in modules. Four is the quiet zone the QR standard
 /// requires; a scanner cannot find the finder patterns without it.
@@ -26,6 +44,23 @@ pub(crate) fn wall_qr_svg(link: &str) -> Result<String, String> {
 mod tests {
     use super::*;
     use sovereign_mesh::deep_link::build_https_guest_link;
+
+    /// The door's declared bind becomes a base a phone can open, and an absent
+    /// or blank declaration is `None` — never an empty address in a link.
+    #[test]
+    fn the_door_bind_becomes_a_base_or_absence() {
+        assert_eq!(
+            base_from_bind(Some("192.168.1.20:19947")).as_deref(),
+            Some("http://192.168.1.20:19947")
+        );
+        assert_eq!(
+            base_from_bind(Some("  10.0.0.5:9 ")).as_deref(),
+            Some("http://10.0.0.5:9")
+        );
+        assert_eq!(base_from_bind(Some("")), None);
+        assert_eq!(base_from_bind(Some("   ")), None);
+        assert_eq!(base_from_bind(None), None);
+    }
 
     /// The QR carries the door's page path for whatever this grant reaches:
     /// the app `--rail` names, or the door's index under `--wall`. A base the

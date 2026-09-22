@@ -37,7 +37,7 @@ use sovereign_cli_shared::help::{Help, HelpSection};
 use sovereign_mesh::deep_link::{build_guest_link, parse_deep_link, wall_https_link, DeepLink};
 
 use crate::guest_link::{self, GuestLink};
-use crate::mesh_guest_link::wall_qr_svg;
+use crate::mesh_guest_link::{guest_bind_url, wall_qr_svg};
 
 /// Read the daemon's client port from `SetupConfig` rather than hardcoding
 /// 9741 — a sandbox pointed at its own daemon must not mint against the
@@ -322,11 +322,11 @@ pub(crate) const HELP_MESH_GRANT: Help = Help {
             ("--label <text>", "Your own note, shown by --list. Never sent to the guest."),
             (
                 "--url <base>",
-                "Base URL the guest should reach you at. Default: this node's published address.\n                    With --rail the QR link adds that app's page path at the door; with\n                    --wall it points at the door's index, which lists them all.",
+                "Base URL the guest should reach you at. Default: this node's declared door\n                    address ([daemon] guest_bind, written by `svrn ring serve --bind`),\n                    then its published address. With --rail the QR link adds that app's\n                    page path at the door; with --wall it points at the door's index.",
             ),
             (
                 "--qr-svg <path>",
-                "Write the https link (<url>#token=…) to <path> as an SVG QR code. Needs --url.",
+                "Write the https link (<url>#token=…) to <path> as an SVG QR code. Uses\n                    --url, or the door's declared address when --url is absent.",
             ),
             ("--list", "Show outstanding grants, including revoked and expired ones."),
             ("--revoke <token>", "Kill a link immediately. The token is the one in the link."),
@@ -460,10 +460,24 @@ pub(crate) async fn cmd_grant(args: &[String]) -> i32 {
         return 2;
     }
 
-    // The https link's base is the address the operator typed; there is no
-    // default a phone could open, so refuse rather than guess one.
+    // The door's declared address is the address a phone opens in the room,
+    // and the operator already typed it — once, at
+    // `svrn ring serve <ns> --bind <addr:port>`, which writes
+    // `[daemon] guest_bind`. Fall back to it when `--url` is absent: the
+    // declaration exists precisely so nothing retypes it. An explicit `--url`
+    // (the static origin, say) still wins outright.
+    if url_override.is_none() {
+        url_override = guest_bind_url();
+    }
+
+    // With neither, there is genuinely no address a phone could open: refuse
+    // rather than guess one, and name the one command that would supply it.
     if qr_svg.is_some() && url_override.is_none() {
-        eprintln!("--qr-svg needs --url <base>: the address a phone opens.");
+        eprintln!("--qr-svg needs an address a phone can open.");
+        eprintln!(
+            "Declare the door once — `svrn ring serve <ns> --dir <bundle> --bind <addr:port>`"
+        );
+        eprintln!("— and this inherits it; or pass `--url <base>` here.");
         return 2;
     }
 

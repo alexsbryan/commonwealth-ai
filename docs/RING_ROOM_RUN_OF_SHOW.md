@@ -298,9 +298,12 @@ each link to ask again. The wall's own screen is the member page, which
 QR comes from the grant verb, with `--url` set to the door:
 
 ```bash
-svrn mesh grant --wall --ttl 2h \
-  --label wall --url http://<beefy's room address>:<port>/ring/ --qr-svg wall-qr.svg
+svrn mesh grant --wall --ttl 2h --label wall --qr-svg wall-qr.svg
 ```
+
+The link inherits the door's declared address (`[daemon] guest_bind`, written
+by `svrn ring serve --bind`); `--url` overrides it when the page is served from
+somewhere else (the static origin, §The guest from anywhere).
 
 `--wall` is the flag that makes it one code for every registered app. Swap it
 for `--rail <ns>` to hand out a link that reaches exactly that one and is

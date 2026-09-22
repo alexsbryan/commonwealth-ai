@@ -157,7 +157,8 @@ pub(super) fn run_serve(args: &[String]) -> i32 {
             }
             println!();
             println!("Mint the room's one QR for every app so declared:");
-            println!("  svrn mesh grant --wall --ttl 2h --url http://<addr:port>/ring/ --qr-svg wall-qr.svg");
+            println!("  svrn mesh grant --wall --ttl 2h --qr-svg wall-qr.svg");
+            println!("  (the link inherits the address you just bound; --url overrides it)");
             0
         }
         Err(e) => {
