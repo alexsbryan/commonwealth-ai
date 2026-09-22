@@ -925,28 +925,84 @@ scouts over the gate output; it is data, not prose, and it replaces re-probing.
 | **Structural / dial-only** | ~8 (daemon->mesh 250, ->inference 42, ->compute 25, ->code 34, cli-dev->daemon, cli-llm->pods, grants->corpus-engine, mesh->corpus-engine) | in-process construction of another program's runtime | a process or a wire; the largest single-effort rows |
 | **Keep** | 4 (guest_route, project init's zero-vector index, the 3 notes tests, cli->cli-mesh) | deliberate non-changes with reasons | document, do not cut |
 
-### The six decisions (answering these makes the rest mechanical)
+### The decisions, taken — each against ARCH_PRINCIPLES.md
 
-1. **The atlas reader leaf.** New thin reader leaf, widen `understanding-vocab`,
-   or lift `understanding-atlas`? Measured: the read DOOR is already in
-   `understanding-vocab::read`; the 8-module store/query surface (`context`,
-   `context_loader`, `ground`, `provider`, `inventory`, `store`, `ann_store`,
-   `summary`) is interleaved with writers, so it is a CARVE. (~950 refs, 8 edges.)
-2. **The process boundary.** Is the serving cluster (mesh, transport, state,
-   rail, work, media, grants, serving-host, inference, compute, scheduler, pods,
-   serving-policy, discovery, meshapp*) a separate process the daemon DIALS
-   (§2/§2b says the serving cluster is cmnwlth's; `cw-rails` exists), or
-   cmnwlth vocabulary the daemon links? (~20 edges.)
-3. **Leaf widening.** Accept promoting cmnwlth/ingest vocabulary into the GLOBAL
-   leaf set (admits those crates to every package's closure), or pay a port/wire
-   per edge? The scip precedent shows one row can close 7 edges. (~10 rows.)
-4. **The replicated store.** The daemon's `MeshStore` is `in_memory()`; whose
-   disk is it, and does the daemon dial it? (Unblocks the state port + the
-   portfolio/newsworthy wire that was reverted.)
-5. **Placement:** corpus-mcp -> `[ingest]` or `[svrn]`? `sovereign-work-atlas` ->
-   `[code]` or delete (as atos was)? `sovereign-runtime-recipe` -> `[svrn]` or
-   split assembly from the ingest lane? `sovereign-tools::notes` -> `[code]`?
-6. **The keep list** above — confirm as deliberate.
+**1. The atlas reader: a NEW thin reader leaf, read-only; the vocabulary door
+stays in `understanding-vocab`.** Principle 11 forbids building new before
+citing why the existing surface cannot serve, and here the citation is exact:
+`understanding-vocab` is depended on by `oicp-types`, the wire floor. The
+resolved-atlas reads (`summary`, `store`, `ann_store`, `context`, `inventory`,
+`provider`) need arrow/lancedb/memmap2, and pulling a store under the wire floor
+is the line drawn wrong (12: "look where the ability is granted — the
+dependency"). The leaf holds RAW reads (`corpus-index` precedent, §11's "thin
+reader"); `ground`'s selection POLICY (`candidate_atlas_ids`, walk choice) is
+the consumer's decision and moves to the svrn side (12: "a gap in one thing is
+not a job for another" — the ingest program owns the atlas, svrn owns what it
+grounds on). Carve one module set at a time (2).
+
+**2. The serving cluster is cmnwlth's own process; the daemon DIALS it — no
+leaf promotions for program substrate.** Principle 12: a daemon owns its data
+root and its conversations; the mesh owns the roster, the model server owns its
+weights, idle policy and restart. The daemon currently supervises/embeds all
+three, which is "a component holding another's lifecycle" — the line is wrong.
+Principle 11: `cw-rails` already exists and already serves `/v1/mesh/media`,
+`/v1/mesh/publish`, `/v1/mesh/{status,app,fanout}` — extend it, do not build a
+new binary. Principle 6: with the serving process absent the route reports
+absence ("a daemon alone serves no model"), never a silent fallback. Principle
+10: the boundary becomes the import/wire, not a remembered rule. This rejects
+the alternative reading — promoting `commonwealth-core`/`-transport`/`-work` to
+leaves would make every program co-own cmnwlth's substrate, which is the
+"ability granted" test failing.
+
+**3. Leaf widening: only wire FORMAT/VOCABULARY moves, into the two owners
+`§4 rule 6` already names (`oicp-types`, `sovereign-contracts`) — no program
+crate is promoted.** Principle 8: a schema or wire constant must have ONE
+definition; moving it into the shared leaf is how that becomes structural.
+Principle 12: a wire type is shared vocabulary (both ends own it); a program's
+substrate is not. So: rail wire types (`RailAct`/`Admission`/`Roster`/`Payload`),
+`sovereign-peer-wire`'s ring-sync types, the watcher `projects` schema, and the
+notes DTO set move to contracts; the crates that produce them stay where they
+are. The scip promotion already proved the mechanism (7 edges, one row) — but it
+was legitimate there because scip is a format/read port, not a store (11).
+
+**4. The replicated store: cmnwlth owns the disk; the daemon keeps a read-through
+cache and dials.** Principle 12, second clause verbatim: a gap in one thing is
+not a job for another — the in-memory `MeshStore` is the mesh's missing durable
+owner, not a licence for the daemon to hold it. Principle 6: the reverted wire
+was reverted BECAUSE it silently stopped persisting; the rule is that an absence
+is reported (a named refusal), never defaulted. Until the durable owner exists,
+`portfolio`/`newsworthy` keep their file store and their edge stays red — that is
+the honest state, not a fix.
+
+**5. Placement — read off §2's own table (principle 11: the inventory is the
+authority).**
+- `corpus-mcp` stays `[svrn]`: §2 lists it as svrn's own ("exists today as
+  `corpus-mcp/` + the turn path"). Its `corpus-engine` refs are the atlas-read
+  (row 1) and an ingest dial — not a re-home.
+- `sovereign-work-atlas` -> `[code]`. It owns agents' claims about their own
+  work; §2 gives code the agents' metadata (SCIP index, notes), and the three
+  tools are mandated by AGENTS.md, so 11 says place a used capability rather
+  than delete it. The daemon dials the three MCP tools.
+- `sovereign-runtime-recipe` -> SPLIT (12: the runtime assembly is svrn's own
+  lifetime; the ingest lane is ingest's). Assembly to `[svrn]`, lane stays.
+- `sovereign-tools::notes` (`patterns`, `diff_extract`, `response_mine`) and
+  `sovereign-cli-shared::{code_index, scip, observation, rail}` move to their
+  owning programs — `notes` and `code_index` are §2's code program's own state
+  ("owns SCIP index, notes"). cli-shared keeps only the thin dispatcher helpers.
+
+**6. The keep/turn list — every abstention has the run that demanded it (5).**
+- `project init`'s FTS-only zero-vector index: **keep.** The alternative silently
+  changes what lands on disk at install time (6), and routing init through the
+  daemon makes the daemon a prerequisite of installation — a lifecycle inversion
+  (12). §11:961 already records it as deliberate; this confirms it.
+- The three real-SQL tests beside `corpus-engine-notes`: **move them to the
+  owner's test tree, not grandfather.** Principle 12 (the gap is the owner's)
+  and 5 (faking them swaps real-SQL proof for a green gate — so do not fake;
+  relocate).
+- `guest_route::open_route`: **wire, not keep.** It parks a tunnel handle in a
+  process `OnceLock` — holding a handle is ownership (12), and the mesh owns the
+  tunnel; cli-llm dials the daemon's guest surface. Duplicating it is forbidden
+  by 8 (one security decider).
 
 ### Front-loading procedure
 
