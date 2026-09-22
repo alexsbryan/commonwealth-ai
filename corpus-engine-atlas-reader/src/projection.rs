@@ -8,24 +8,24 @@
 //! `AtomEnvelope` kept as a JSON payload blob for the rare deep read.
 //!
 //! This module is the single source of that projection. The v2 store writer
-//! (`super::store`) projects atoms through [`project`] into the columnar
-//! `atoms.lance`, and the reader ([`super::store::LancePreload`]) re-projects the
+//! (corpus-engine's `atlas::store`) projects atoms through [`project`] into the
+//! columnar `atoms.lance`, and the reader (`store::LancePreload`) re-projects the
 //! lossless `payload` back into [`AtomRecord`]s — so the columns and the resident
 //! records derive from the *same* projection by construction. (Formerly this also
 //! backed the v1 `atoms.rkyv` archive; that backend was retired in
 //! ATLAS_STORAGE_V2, leaving the projection types here, rkyv-free.)
 //!
 //! This module used to declare its own `AtomKindTag`, `ArchEdgeType` and
-//! `ArchChunkRef` — hand-synced mirrors of [`super::atoms::AtomType`],
-//! [`super::edges::EdgeType`] and [`super::atoms::ChunkRef`], two of which
+//! `ArchChunkRef` — hand-synced mirrors of `atoms::AtomType`,
+//! `edges::EdgeType` and `atoms::ChunkRef`, two of which
 //! crossed into sovereign as a SECOND published name for a concept
 //! corpus-engine already published. All three were deleted 2026-08-20: the
-//! projection carries the canonical types and `super::store` maps them to
+//! projection carries the canonical types and the store maps them to
 //! their on-disk bytes directly. The byte values are unchanged, so
 //! `atoms.lance` and `edges.csr` written before the change read back
 //! identically (ARCH §10.6 — one decider, one name).
 
-use super::atoms::{AtomEnvelope, AtomType, ChunkRef};
+use understanding_vocab::atoms::{AtomEnvelope, AtomType, ChunkRef};
 
 /// One atom: structured hot fields + the full-fidelity JSON payload.
 #[derive(Clone, Debug, PartialEq)]

@@ -2295,6 +2295,7 @@ dependencies = [
  "bzip2 0.5.2",
  "calamine",
  "chrono",
+ "corpus-engine-atlas-reader",
  "corpus-engine-scip",
  "corpus-engine-sections",
  "corpus-engine-yield",
@@ -2370,6 +2371,19 @@ dependencies = [
  "toml 0.8.2",
  "tracing",
  "walkdir",
+ "workspace-hack",
+]
+
+[[package]]
+name = "corpus-engine-atlas-reader"
+version = "0.7.0"
+dependencies = [
+ "kernel-types",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tracing",
+ "understanding-vocab",
  "workspace-hack",
 ]
 

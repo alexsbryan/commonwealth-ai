@@ -37,6 +37,7 @@ commonwealth-ai/
 ├── corpus-engine/             # Knowledge layer (LanceDB + Tantivy)
 ├── corpus-index/              # Retrieval read-port leaf — CorpusIndex, persisted settings, the engine Error
 ├── corpus-engine-scip/        # SCIP call graph + per-language exporter dispatch
+├── corpus-engine-atlas-reader/ # Resolved-atlas READ surface (read-only leaf; writes stay in corpus-engine)
 ├── corpus-engine-notes/       # NoteStore + project_docs index
 ├── corpus-engine-archaeology/ # Git archaeology + rough-edges + atom-provenance
 ├── corpus-engine-yield/       # YieldHook cooperative-yield contract (tier-0 leaf)
@@ -69,7 +70,7 @@ there because they read the repo root and so cannot sit in a liftable crate.
 | `oicp-types` | OICP wire types + scoring helpers | — |
 | `kernel-types` | The neutral kernel: identity and provenance (`ContentHash`, `CorpusId`, `NodeId`, `Origin`, `Custody`, `Attribution`), the trust vocabulary (`Verdict`, `Reason`, `Freshness`, `Judgement`), the released turn (`Seal`, `Citation`, `Draft`, `Answer`, `PeerAnswer`, `Refused`), the wire-form decider, the requirement registry. The SECOND layer-0 membrane beside `oicp-types`: oicp is what a node ADVERTISES, this is what content IS. May name nothing above it | `serde`, `getrandom`, `hex`, `blake3` |
 | `workspace-hack` | cargo-hakari feature-unification crate, so a `-p` build resolves what `--workspace` resolves | — |
-| `corpus-engine` | Acquire → extract → filter → chunk → embed → index | `oicp-types`, `kernel-types`, `corpus-index`, `corpus-engine-yield`, `corpus-engine-scip`, `corpus-engine-notes` |
+| `corpus-engine` | Acquire → extract → filter → chunk → embed → index | `oicp-types`, `kernel-types`, `corpus-index`, `corpus-engine-yield`, `corpus-engine-scip`, `corpus-engine-atlas-reader`, `corpus-engine-notes` |
 | `sovereign` | Local agent runtime | `corpus-engine`, `corpus-engine-scip`, `oicp-types`, `kernel-types` |
 | `commonwealth` | Symmetric mesh daemon | `corpus-engine`, `oicp-types`, `kernel-types` |
 

@@ -470,47 +470,10 @@ impl SectionType {
 // secondaries) so existing `cache/section_classifications.json` files
 // stay readable across the bump.
 
-/// Axis A — what is the section's language *doing*. Six MECE values.
-/// Atom families produced per discourse mode:
-/// - Narrative: Events, EntityStates, Relations, RelationStates, ParticipantArcs
-/// - Argumentative: Positions, Mechanisms, Oppositions, EvidenceInvocations, Concessions
-/// - Descriptive: Definitions, PropertyClaims, Relationships, Examples, Provenance
-/// - Reflective: Interactions, Observations, OpenThreads, MoodShifts, Realisations
-/// - Procedural: Tasks, Decisions, Artifacts, Dependencies, Blockers, StatusSignals
-/// - Lyric: Images, Motifs, FormalDevices, VoiceShifts, TonalMovements
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum DiscourseMode {
-    Narrative,
-    Argumentative,
-    Descriptive,
-    Reflective,
-    Procedural,
-    Lyric,
-}
-
-impl DiscourseMode {
-    /// Stable short tag — filenames, logs, prompt-asset paths.
-    pub fn tag(self) -> &'static str {
-        match self {
-            DiscourseMode::Narrative => "narrative",
-            DiscourseMode::Argumentative => "argumentative",
-            DiscourseMode::Descriptive => "descriptive",
-            DiscourseMode::Reflective => "reflective",
-            DiscourseMode::Procedural => "procedural",
-            DiscourseMode::Lyric => "lyric",
-        }
-    }
-
-    pub const ALL: &'static [DiscourseMode] = &[
-        DiscourseMode::Narrative,
-        DiscourseMode::Argumentative,
-        DiscourseMode::Descriptive,
-        DiscourseMode::Reflective,
-        DiscourseMode::Procedural,
-        DiscourseMode::Lyric,
-    ];
-}
+// `DiscourseMode` lives in the `understanding-vocab` leaf since 2026-09-21
+// (FIVE_PROGRAMS §12 decision 1 — the atlas axis catalog must not reach the
+// pipeline); re-exported here so the historical path keeps resolving.
+pub use understanding_vocab::taxonomy::DiscourseMode;
 
 /// Dispatcher fans out to every discourse mode whose weight ≥ this.
 /// 0.25 chosen so a 0.55/0.45 hybrid fires both extensions but a

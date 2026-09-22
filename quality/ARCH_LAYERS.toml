@@ -966,6 +966,20 @@ name = "sovereign-peer-wire"
 allow = ["commonwealth-rail-core"]
 
 [[package_leaf]]
+name = "corpus-engine-atlas-reader"
+# The resolved-atlas READ surface (projection, citation, context_filter,
+# section_cache, evidence_site, axis_catalog — the store, summary, inventory,
+# provider, context and ground read halves follow in later waves). Admitted
+# 2026-09-21 under FIVE_PROGRAMS §12 decision 1: the atlas is written by the
+# ingest program's pipeline and read by svrn, cmnwlth and the MCP surfaces, so
+# the readers get a thin RAW-READ leaf instead of linking the engine. It never
+# writes the atlas — the write paths stay in corpus-engine, which re-imports
+# these modules at their historical paths. understanding-vocab keeps only the
+# vocabulary door it already had; widening it with the store would drag
+# lancedb under the wire floor (oicp-types depends on it).
+allow = ["kernel-types", "understanding-vocab", "workspace-hack"]
+
+[[package_leaf]]
 name = "corpus-engine-scip"
 # SCIP call-graph store + language-agnostic exporter dispatch. Admitted
 # 2026-09-21: zero in-repo deps (workspace-hack alone), no build.rs, no path

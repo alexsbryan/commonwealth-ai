@@ -34,6 +34,11 @@ members = [
     # corpus-engine 2026-05-23 to cut the rebuild blast radius for scip
     # changes from 20 crates to ~6.
     "corpus-engine-scip",
+    # The resolved-atlas READ surface, carved read-only out of corpus-engine's
+    # enrichment/atlas (FIVE_PROGRAMS §12 decision 1, 2026-09-21): svrn, cmnwlth
+    # and the MCP surfaces read the atlas without linking the engine that
+    # writes it.
+    "corpus-engine-atlas-reader",
     # NoteStore + project_docs + notes_sync. Step 3 of the corpus-engine
     # decomposition. notes.rs (2781 LOC) cleared from the §3.1 list.
     "corpus-engine-notes",
@@ -314,6 +319,7 @@ serving-policy = { path = "serving-policy" }
 oplog = { path = "oplog" }
 corpus-engine = { path = "corpus-engine" }
 corpus-engine-scip = { path = "corpus-engine-scip" }
+corpus-engine-atlas-reader = { path = "corpus-engine-atlas-reader" }
 corpus-engine-notes = { path = "corpus-engine-notes" }
 corpus-engine-archaeology = { path = "corpus-engine-archaeology" }
 corpus-engine-yield = { path = "corpus-engine-yield" }

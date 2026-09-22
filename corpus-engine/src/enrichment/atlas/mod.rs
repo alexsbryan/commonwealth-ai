@@ -30,22 +30,23 @@ pub mod ann_store;
 // 2026-09-03; re-exported here so the historical paths keep resolving.
 pub use understanding_vocab::atoms;
 pub mod atoms_delta;
-pub mod axis_catalog;
-pub mod citation;
+// The atlas READ surface lives in the `corpus-engine-atlas-reader` leaf since
+// 2026-09-21 (FIVE_PROGRAMS §12 decision 1); re-exported here so the
+// historical paths keep resolving. Writers stay below.
+pub use corpus_engine_atlas_reader::{
+    axis_catalog, citation, context_filter, evidence_site, projection, section_cache,
+};
 pub mod context;
-pub mod context_filter;
 pub mod context_loader;
 pub mod cross_corpus;
 pub mod doc_to_atoms;
 pub use understanding_vocab::edges;
 pub mod embeddings;
-pub mod evidence_site;
 pub mod ground;
 pub mod ingestion;
 pub mod inventory;
 pub mod migrate_ids;
 pub mod ontology_coverage;
-pub mod projection;
 pub mod provider;
 pub mod registry;
 pub mod resolution;
@@ -53,7 +54,6 @@ pub mod resolution_identity;
 pub mod resolution_ontology;
 pub mod resolve;
 pub mod schema_validation;
-pub mod section_cache;
 pub mod seed_population;
 pub use understanding_vocab::stable_key;
 pub mod store;

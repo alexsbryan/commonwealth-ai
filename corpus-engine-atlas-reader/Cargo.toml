@@ -1,0 +1,33 @@
+[package]
+name = "corpus-engine-atlas-reader"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Resolved-atlas READ surface, carved read-only out of corpus-engine/src/enrichment/atlas (FIVE_PROGRAMS §12 decision 1)."
+
+# Why this crate is its own thing:
+#
+# The resolved atlas is written by the ingest program's enrichment pipeline,
+# but it is READ by svrn (retrieval grounding, `svrn code`), cmnwlth (mesh
+# status summaries) and the MCP surfaces. Every one of those readers paid the
+# full corpus-engine link for a handful of read calls. §12 decision 1: a NEW
+# thin reader leaf holds the RAW reads; `understanding-vocab` keeps the
+# vocabulary door it already had; the ingest program keeps the writers.
+#
+# Scope discipline: the leaf never WRITES the atlas. Write paths (pipeline
+# runs, store builds, ANN backfills, seed population) stay in corpus-engine,
+# which re-imports the leaf's read primitives at their historical paths.
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+kernel-types = { workspace = true }
+understanding-vocab = { workspace = true }
+workspace-hack = { version = "0.1", path = "../workspace-hack" }
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+tempfile = "3"

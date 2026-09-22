@@ -30,7 +30,7 @@
 
 use std::collections::HashMap;
 
-use super::atoms::ChunkRef;
+use understanding_vocab::atoms::ChunkRef;
 
 /// Primary-source handle the orchestrator attaches to every section
 /// it emits. Threads through [`super::resolution::resolve_type_extensions`]
@@ -46,7 +46,7 @@ use super::atoms::ChunkRef;
 #[derive(Debug, Clone)]
 pub struct SourceCitation {
     /// The `section_id` the orchestrator put on the synthetic
-    /// [`crate::enrichment::pipeline::atlas::SectionExtraction`].
+    /// `pipeline::atlas::SectionExtraction`.
     /// `resolve_type_extensions` copies this verbatim into every
     /// atom's `first_appearance.chunk_id` + every edge-emission
     /// `ChunkRef`. Shape: `chunk:<u32>` when a verbatim excerpt is

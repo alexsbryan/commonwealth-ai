@@ -280,3 +280,44 @@ string_enum_with_other! {
         Rhetorical = "rhetorical",
     }
 }
+
+/// The six discourse modes a section's axis dispatch recognises.
+///
+/// Carved out of corpus-engine's `pipeline::types` (2026-09-21, FIVE_PROGRAMS
+/// §12 decision 1) so the atlas axis catalog can live in the atlas-reader leaf
+/// without reaching the pipeline. Same closed six, same snake_case wire
+/// spelling; pipeline keeps its distribution and routing-threshold types and
+/// re-imports the enum from here.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DiscourseMode {
+    Narrative,
+    Argumentative,
+    Descriptive,
+    Reflective,
+    Procedural,
+    Lyric,
+}
+
+impl DiscourseMode {
+    /// Stable short tag — filenames, logs, prompt-asset paths.
+    pub fn tag(self) -> &'static str {
+        match self {
+            DiscourseMode::Narrative => "narrative",
+            DiscourseMode::Argumentative => "argumentative",
+            DiscourseMode::Descriptive => "descriptive",
+            DiscourseMode::Reflective => "reflective",
+            DiscourseMode::Procedural => "procedural",
+            DiscourseMode::Lyric => "lyric",
+        }
+    }
+
+    pub const ALL: &'static [DiscourseMode] = &[
+        DiscourseMode::Narrative,
+        DiscourseMode::Argumentative,
+        DiscourseMode::Descriptive,
+        DiscourseMode::Reflective,
+        DiscourseMode::Procedural,
+        DiscourseMode::Lyric,
+    ];
+}

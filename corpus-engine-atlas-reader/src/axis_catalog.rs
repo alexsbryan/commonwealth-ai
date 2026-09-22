@@ -21,7 +21,7 @@
 //! lyric / reflective axes land when their `resolve_type_extensions`
 //! arms land.
 
-use crate::enrichment::pipeline::types::DiscourseMode;
+use understanding_vocab::taxonomy::DiscourseMode;
 
 /// One row in the catalog. All fields are compile-time constants;
 /// the catalog is a flat `&'static [TypedAxis]`, not a runtime
@@ -67,7 +67,7 @@ pub struct TypedAxis {
 
 /// Which atom shape the axis projects onto.
 ///
-/// NOT an atom kind: [`super::atoms::AtomType`] is the closed set of atom
+/// NOT an atom kind: `atoms::AtomType` is the closed set of atom
 /// kinds. This is an axis's SELECTOR over atoms — the same envelope variant
 /// appears under several shapes, qualified by a payload tag. Named `AtomKind`
 /// until 2026-08-20, which collided with a second, unrelated `AtomKind` in

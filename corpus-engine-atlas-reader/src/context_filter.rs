@@ -18,7 +18,7 @@
 
 use std::collections::BTreeSet;
 
-use super::atoms::{AtomEnvelope, AtomType};
+use understanding_vocab::atoms::{AtomEnvelope, AtomType};
 
 /// Filter applied during atlas-context loading. Mirrors the shape
 /// of the eval CLI's `AtlasLoadFilter` so the cache key derived
@@ -74,7 +74,7 @@ pub struct AtlasContextFilter {
     /// `None` — the default, and what every read-side caller keeps — means
     /// "the population is whatever the four booleans above admit", i.e. the
     /// behaviour that existed before ei-3c. `Some` is set by
-    /// [`super::context_loader::backfill_ann`] and by nothing else: the ONE
+    /// corpus-engine's `context_loader::backfill_ann` and by nothing else: the ONE
     /// writer derives it from `atlas/ontology.json`'s `navigation` section, so
     /// the table's population is the MAP's decision and this filter is a
     /// consumer of the table rather than its author (ARCH §10.6).

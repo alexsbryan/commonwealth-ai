@@ -28,6 +28,11 @@ corpus-engine-sections = { workspace = true }
 # The atlas vocabulary (atoms/edges/taxonomy/canonical) — a behaviour-free
 # leaf re-exported at its historical paths. See understanding-vocab/Cargo.toml.
 understanding-vocab = { workspace = true }
+# The resolved-atlas READ surface (projection, citation, context_filter,
+# section_cache, evidence_site, axis_catalog) — carved read-only out of
+# enrichment/atlas (FIVE_PROGRAMS §12 decision 1) and re-exported at its
+# historical paths; corpus-engine keeps the WRITE side.
+corpus-engine-atlas-reader = { workspace = true }
 # The retrieval read-port leaf (CorpusIndex, IndexInfo, the persisted settings,
 # the search/evidence surface) — re-exported at its historical paths so nothing
 # in the monorepo changed when it was carved out (domains
