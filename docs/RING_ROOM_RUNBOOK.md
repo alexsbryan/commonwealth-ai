@@ -167,9 +167,11 @@ unaffected — the wall's own door serves the page directly, as in §1.
 **What you should see:** the guest's page reaches the wall and returns the
 grant-scoped answer, with no address of yours typed anywhere.
 
-The page is `sovereign/apps/ring-runtime` — build it with
-`scripts/build-ring-runtime.sh` and upload `target/ring-runtime/site/` to that
-origin (today `svrnme.sh`).
+The page is `sovereign/apps/ring-runtime`, shipped with the landing deploy:
+`landing/scripts/build-ring-runtime.sh` (run by `npm run deploy` from
+`landing/`) builds it into `landing/ring/`, which Vercel serves at
+`https://svrnme.sh/ring/` — the page path a `--url https://svrnme.sh/` link
+composes.
 
 ---
 

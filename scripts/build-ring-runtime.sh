@@ -12,8 +12,18 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-APP="sovereign/apps/ring-runtime"
+# The output directory is the deployable static site. Overridable so a consumer
+# (landing/scripts/build-ring-runtime.sh → landing/ring/) can place it where
+# its host serves it; default is this repo's target/.
 OUT="target/ring-runtime/site"
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --out) OUT="${2:?--out needs a directory}"; shift 2 ;;
+    *) echo "build-ring-runtime: unknown argument $1 (only --out <dir>)" >&2; exit 2 ;;
+  esac
+done
+
+APP="sovereign/apps/ring-runtime"
 WASM_BINDGEN_MIN="0.2.128"
 
 if ! rustup target list --installed 2>/dev/null | grep -q '^wasm32-unknown-unknown$'; then
