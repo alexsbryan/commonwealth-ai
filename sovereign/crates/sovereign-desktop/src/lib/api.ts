@@ -2745,3 +2745,52 @@ export async function checkForUpdate(): Promise<UpdateInfo | null> {
 export async function installUpdate(): Promise<void> {
   return invoke("install_update");
 }
+
+// ─── The room: guest grants ────────────────────────────────────────────────
+// A guest grant is the operator's side of someone who is not a member. The
+// daemon composes the link (the page path, token, and — when this node has
+// one — its iroh dial string); this app displays it and its QR.
+
+export interface GuestGrant {
+  token: string;
+  expires_at_ms: number;
+  summary: string;
+  /** Present when a base url was given; the string a QR encodes. */
+  link: string | null;
+}
+
+export interface GuestGrantRow {
+  /** First 8 hex chars — enough to identify a row; never the whole bearer. */
+  token_prefix: string;
+  summary: string;
+  label: string | null;
+  expires_at_ms: number;
+  revoked: boolean;
+  live: boolean;
+}
+
+export async function createGuestGrant(args: {
+  scope: string;
+  models: string[];
+  baseUrl: string;
+  ttlSecs: number;
+  label: string;
+}): Promise<GuestGrant> {
+  return invoke("guest_grant_create", {
+    scope: args.scope,
+    models: args.models,
+    baseUrl: args.baseUrl,
+    ttlSecs: args.ttlSecs,
+    label: args.label,
+  });
+}
+
+export async function listGuestGrants(): Promise<GuestGrantRow[]> {
+  return invoke("guest_grant_list");
+}
+
+/** Revoke by the full token (from the link). Idempotent: false when it was
+ *  already gone. */
+export async function revokeGuestGrant(token: string): Promise<boolean> {
+  return invoke("guest_grant_revoke", { token });
+}

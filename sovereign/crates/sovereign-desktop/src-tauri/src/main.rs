@@ -16,6 +16,7 @@ mod enrich_commands;
 mod error;
 mod friendly_names;
 mod governance_commands;
+mod guest_room_commands;
 mod health;
 mod import_commands;
 mod insight_commands;
@@ -786,6 +787,9 @@ fn main() -> ExitCode {
                 mesh_commands::mesh_clear_peer_preference,
                 mesh_commands::mesh_list_peer_preferences,
                 mesh_commands::mesh_media_offers,
+                guest_room_commands::guest_grant_create,
+                guest_room_commands::guest_grant_list,
+                guest_room_commands::guest_grant_revoke,
                 insight_commands::clip_insight,
                 insight_commands::list_insights,
                 insight_commands::search_insights,
