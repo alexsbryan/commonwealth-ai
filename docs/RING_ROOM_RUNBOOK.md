@@ -11,6 +11,23 @@ repository.
 
 ---
 
+## How to read the commands
+
+| command | what it means | who runs it |
+|---|---|---|
+| `svrn setup` | install, detect hardware, start the daemon | every machine, once |
+| `svrn mesh create` / `svrn mesh join <invite>` | form one mesh out of the machines | once, on the first machine / on the rest |
+| `svrn ring new <dir>` | create a **ring app**: a document that is shared, signed and converging | whoever writes the app |
+| `svrn ring dev <app> --dir D` | open that app on **this machine's own screen** (loopback) | the wall |
+| `svrn ring serve <app> --dir D` | **host that app to the room**: declare it at the guest door, and bind the door | the wall |
+| `svrn mesh grant --wall --qr-svg f.svg` | mint one **guest link** (the QR) that reaches every app hosted here | the wall |
+| `svrn corpus ingest <folder> --corpus <id> --share` | hold a folder of knowledge that other machines' guests can ask about | the keeper |
+| `svrn mesh media origin <port>` + `svrn mesh media offer` | declare and offer a media library to the mesh | the holder |
+| `svrn ring checkpoint <ns> --out f` / `--verify f` | freeze a ring's whole record to a file / verify one cold, anywhere | anyone holds it / a machine that was never a member |
+| `svrn mesh status`, `svrn mesh grant --list`, `svrn mesh transport` | who is in, who is a guest, and how traffic is carried | anyone |
+
+---
+
 ## Who is who
 
 | role | what it is | what it does |
