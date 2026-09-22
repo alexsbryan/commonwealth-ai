@@ -337,25 +337,18 @@ one embedded in the document. The stand-in does exactly this inside the cut,
 with the three forgeries added; the human walk is the same two commands
 without the room.
 
-### The guest from anywhere — in measurement, not yet in the run
+### The guest from anywhere
 
-Today's guest has to be able to reach the wall: the phones in the room share
-its WiFi. `browser-dial` is measuring the stronger claim (campaign
-`quality/campaigns/browser-dial.toml`, bar `bd-browser-dials-relay`) — a plain
-mobile browser on a network the daemon has never seen, with no shared LAN, no
-domain, no tunnel and no tailnet of ours, dialling the daemon itself over
-iroh's relay with the `iroh=` string the guest link already carries in its
-fragment, and making one grant-scoped call.
-
-Two facts are on the record: the locked iroh does build for the browser
-(probed 2026-09-22; the Mac-side "does not build" entry was a host fact, and
-the campaign's inventory row is correcting the ledger), and the daemon's relay
-connection already works for members. Unmeasured is the dial itself — which
-alpn a guest arrives on and what the door does with a guest bearer there.
-**The exact command lands in this section when `bd-browser-dials-relay`
-measures WORKED.** If it measures a negative, the failing layer is named here
-instead and the guest stays room-bound. Until then this is a claim, not a
-step to run.
+Measured WORKED 2026-09-22 (`ralph/DECISIONS.md` browser-dial-2; the runtime is
+`sovereign/apps/ring-runtime`, built by `scripts/build-ring-runtime.sh`). A
+browser on a network the wall has never seen loads the runtime from one static
+origin (today `svrnme.sh` — a file on commodity hosting, no server, no
+certificate), then dials the wall directly over iroh's relay on `GUEST_ALPN`
+and speaks the rail on that stream. Nothing proxies HTTP and no TLS is
+terminated for anyone; the grant's dial string rides the link's fragment
+(`iroh=`), which is why the wall's `mesh grant --url https://<origin>/`
+reaches a guest anywhere. The command shape is
+`docs/RING_ROOM_RUNBOOK.md` §7.
 
 ### A second app on the wall
 

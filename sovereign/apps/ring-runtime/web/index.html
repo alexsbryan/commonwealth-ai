@@ -1,0 +1,81 @@
+<!doctype html>
+<!--
+  The guest page. Served from ONE static origin (today svrnme.sh) — no server,
+  no certificate, no data. It is opened by scanning a guest QR or following a
+  guest link, whose FRAGMENT carries the grant: token=, exp=, iroh= (the dial
+  string), and s= (the label). The fragment never leaves the browser, so the
+  page loads from public static hosting while the credential stays local to
+  the phone.
+
+  After first load the page needs no origin traffic at all: it is an iroh
+  endpoint (the wasm module beside it) and dials the wall directly over a
+  relay. Add a service worker when you want it cached offline.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ring guest</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font: 16px/1.5 system-ui, sans-serif; margin: 1.5rem auto; max-width: 46rem; padding: 0 1rem; }
+  h1 { font-size: 1.2rem; }
+  #status { font-weight: 600; }
+  pre { background: #8881; padding: .75rem; border-radius: .5rem; overflow-x: auto; white-space: pre-wrap; word-break: break-word; }
+  #trace { font-size: .8rem; }
+  .bad { color: #c22; }
+  .good { color: #2a2; }
+</style>
+</head>
+<body>
+<h1 id="status">Connecting…</h1>
+<p id="label"></p>
+<pre id="response"></pre>
+<details><summary>Layers</summary><pre id="trace"></pre></details>
+
+<script type="module">
+import init, { dial_guest } from './wasm/ring_runtime.js';
+
+const status = document.getElementById('status');
+const response = document.getElementById('response');
+const traceEl = document.getElementById('trace');
+const labelEl = document.getElementById('label');
+
+const lines = [];
+window.__trace = (l) => { lines.push(l); traceEl.textContent = lines.join('\n'); };
+
+// The link's fragment: token, exp, iroh (the dial string), s (the label).
+const params = new URLSearchParams(location.hash.slice(1));
+const token = params.get('token') || '';
+const dial = params.get('iroh') || '';
+const path = params.get('path') || '/v1/rail/log';
+const label = params.get('s') || '';
+if (label) labelEl.textContent = label;
+
+function fail(msg) { status.textContent = msg; status.className = 'bad'; }
+
+if (!token || !dial) {
+  fail('Open this page from a guest link — its fragment carries token= and iroh=.');
+} else {
+  try {
+    await init();
+    status.textContent = 'Dialing the wall over the relay…';
+    const pending = dial_guest(dial, token, path);
+    const timeout = new Promise((r) => setTimeout(() => r('__TIMEOUT__'), 120000));
+    const res = await Promise.race([pending, timeout]);
+    if (res === '__TIMEOUT__') {
+      fail('Timed out — the last layer below is where it hung.');
+    } else {
+      const body = (res.split('RESPONSE-BODY: ')[1] || '').trim();
+      const st = (res.match(/RESPONSE-STATUS: (.*)/) || [])[1] || '';
+      status.textContent = st.startsWith('HTTP/1.1 2') ? 'Connected' : 'Refused';
+      status.className = st.startsWith('HTTP/1.1 2') ? 'good' : 'bad';
+      response.textContent = body || res;
+    }
+  } catch (e) {
+    fail('Could not run the runtime: ' + (e && e.stack ? e.stack : String(e)));
+  }
+}
+</script>
+</body>
+</html>

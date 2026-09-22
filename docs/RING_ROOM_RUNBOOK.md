@@ -145,18 +145,31 @@ naming the failing step and the actor.
 
 ---
 
-## 7. The guest from anywhere — not runnable yet
+## 7. The guest from anywhere
 
-Today the phone has to be on the wall's network: the QR points at the wall's
-room address. The stronger version — a plain mobile browser on a network the
-daemon has never seen, no shared LAN, no domain, no tunnel, dialling the daemon
-over iroh's relay from the guest link itself — is being measured (campaign
-`browser-dial`, bar `bd-browser-dials-relay`). Already measured: the locked
-iroh builds for the browser, and relays carry members today. Unmeasured: which
-channel a guest arrives on, and what the door does with a guest there.
+A plain mobile browser on a network the daemon has never seen can reach it:
+the page loads from one static origin, then dials the wall itself over iroh's
+relay. Nothing of yours is exposed — no port, no tunnel, no tailnet — and
+nothing proxies HTTP. Measured WORKED at the pinned iroh (`ralph/DECISIONS.md`
+browser-dial-2).
 
-**When it measures WORKED, its command lands in this section.** If it measures
-a negative, the failing layer is named here instead.
+On the wall, point the grant at the page's origin:
+
+```bash
+svrn mesh grant --model <id> --wall --ttl 2h \
+  --url https://<origin>/ --qr-svg wall-qr.svg
+```
+
+The QR's link now carries the wall's dial string (`iroh=`) beside the token;
+the guest scans it and their browser connects. Same-network guests are
+unaffected — the wall's own door serves the page directly, as in §1.
+
+**What you should see:** the guest's page reaches the wall and returns the
+grant-scoped answer, with no address of yours typed anywhere.
+
+The page is `sovereign/apps/ring-runtime` — build it with
+`scripts/build-ring-runtime.sh` and upload `target/ring-runtime/site/` to that
+origin (today `svrnme.sh`).
 
 ---
 
