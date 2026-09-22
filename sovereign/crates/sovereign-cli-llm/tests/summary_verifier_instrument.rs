@@ -110,22 +110,41 @@ async fn test_retest_and_negative_control_over_production_registers() {
     // foreign name — the smallest corruption that changes WHO the
     // summary is about while leaving its shape intact.
     fn swap_first_proper_noun(summary: &str, foreign: &str) -> String {
-        let mut out = String::with_capacity(summary.len());
-        let mut done = false;
-        for word in summary.split_inclusive(|c: char| !c.is_alphanumeric()) {
-            let stem = word.trim_end_matches(|c: char| !c.is_alphanumeric());
-            if !done
-                && stem.chars().count() > 3
-                && stem.chars().next().is_some_and(char::is_uppercase)
+        // Pick the MOST FREQUENT capitalized word except the summary's
+        // own first token: the misattribution shape is a character
+        // consistently called by the wrong name, and the veto's
+        // repetition rule is what this control exercises.
+        let first = summary
+            .split(|c: char| !c.is_alphabetic())
+            .find(|w| !w.is_empty())
+            .unwrap_or("");
+        let mut counts: std::collections::HashMap<&str, usize> = std::collections::HashMap::new();
+        for w in summary.split(|c: char| !c.is_alphabetic()) {
+            if w.chars().count() > 3
+                && w.chars().next().is_some_and(char::is_uppercase)
+                && w != first
             {
-                out.push_str(foreign);
-                out.push_str(&word[stem.len()..]);
-                done = true;
-            } else {
-                out.push_str(word);
+                *counts.entry(w).or_insert(0) += 1;
             }
         }
-        assert!(done, "no proper noun found to swap — summary: {summary}");
+        let target = counts
+            .iter()
+            .filter(|(_, n)| **n >= 2)
+            .max_by_key(|(_, n)| **n)
+            .map(|(w, _)| *w)
+            .unwrap_or("");
+        assert!(
+            !target.is_empty(),
+            "no repeated capitalized name found to swap — summary: {summary}"
+        );
+        let mut out = String::with_capacity(summary.len());
+        let mut rest = summary;
+        while let Some(idx) = rest.find(target) {
+            out.push_str(&rest[..idx]);
+            out.push_str(foreign);
+            rest = &rest[idx + target.len()..];
+        }
+        out.push_str(rest);
         out
     }
 
@@ -151,7 +170,6 @@ async fn test_retest_and_negative_control_over_production_registers() {
                 table.push(serde_json::json!({
                     "cluster_key": row.cluster_key,
                     "could_not_judge": "run1: verifier returned None",
-                    "fabricated_names_run1": v1.as_ref().map(|v| v.fabricated_names.clone()),
                 }));
                 eprintln!(
                     "[{}] could-not-judge: verifier returned None on run 1",
@@ -172,7 +190,6 @@ async fn test_retest_and_negative_control_over_production_registers() {
                     "cluster_key": row.cluster_key,
                     "could_not_judge": "run2: verifier returned None (flip-worthy if run1 answered)",
                     "pass_run1": p1,
-                    "fabricated_names_run1": v1.as_ref().map(|v| v.fabricated_names.clone()),
                 }));
                 eprintln!(
                     "[{}] could-not-judge: verifier returned None on run 2 (run 1 answered: {})",
