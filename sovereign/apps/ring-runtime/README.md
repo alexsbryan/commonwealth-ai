@@ -23,6 +23,23 @@ Needs `wasm-bindgen` on PATH (`cargo install wasm-bindgen-cli --version
 0.2.128`) and the `wasm32-unknown-unknown` target. The script writes a
 deployable directory to `target/ring-runtime/site/`.
 
+## What the built site is
+
+- `index.html` — no inline script, so its Content-Security-Policy can be
+  strict (`script-src 'self' 'wasm-unsafe-eval'`; `connect-src 'self' wss:
+  https:` for the wasm fetch and the relay's WebSocket). A `no-referrer` meta
+  keeps the link's fragment — the credential — out of any Referer.
+- `app.js` — reads the link's fragment (`token`, `iroh`, `path`, `s`) and
+  drives the runtime. The fragment is never sent to this origin by design.
+- `sw.js` + the version query on every shell URL — a service worker caches
+  the shell, so a repeat visit needs no origin traffic (the design's "no
+  traffic after first load"). The cache name and the URLs carry the module's
+  content hash, stamped at build time, so a rebuild cannot serve a stale
+  runtime.
+- `wasm/ring_runtime_bg.wasm` — ~4 MB release (run `wasm-opt -Oz` if binaryen
+  is installed; the build script applies it when present). Serve the directory
+  gzipped/brotli — the module compresses well.
+
 ## Deploy
 
 Upload `target/ring-runtime/site/` to the guest runtime's static origin —

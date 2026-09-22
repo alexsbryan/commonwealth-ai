@@ -43,11 +43,32 @@ rm -rf "$OUT"
 mkdir -p "$OUT/wasm"
 wasm-bindgen --target web --out-dir "$OUT/wasm" \
   "$APP/target/wasm32-unknown-unknown/release/ring_runtime.wasm"
-cp "$APP/web/index.html" "$OUT/"
+
+# Shrink the module when binaryen is present. Optional, not required: the page
+# works without it, and a missing optimizer must not fail a build. The size
+# matters because the guest downloads it — a CDN will gzip it again on top.
+if command -v wasm-opt >/dev/null; then
+  wasm-opt -Oz -o "$OUT/wasm/ring_runtime_bg.wasm.opt" "$OUT/wasm/ring_runtime_bg.wasm" \
+    && mv "$OUT/wasm/ring_runtime_bg.wasm.opt" "$OUT/wasm/ring_runtime_bg.wasm"
+  echo "wasm-opt: -Oz applied"
+else
+  echo "wasm-opt: not on PATH (binaryen) — shipping the unoptimized module"
+fi
+
+# The version is the module's content hash, stamped into every shell URL and
+# the service-worker cache name, so a rebuild invalidates a guest's cache
+# instead of serving a stale runtime (sovereign/apps/ring-runtime/web/sw.js).
+VERSION="$(cat "$OUT/wasm/ring_runtime_bg.wasm" "$OUT/wasm/ring_runtime.js" | sha256sum | cut -c1-12)"
+cp "$APP/web/index.html" "$APP/web/app.js" "$APP/web/sw.js" "$OUT/"
+sed -i "s/__VERSION__/${VERSION}/g" "$OUT/index.html" "$OUT/app.js" "$OUT/sw.js"
 
 echo
-echo "built: $OUT"
+echo "built: $OUT  (version ${VERSION})"
+echo "  size: $(du -h "$OUT/wasm/ring_runtime_bg.wasm" | cut -f1) wasm"
 echo "  1. upload that directory to the guest runtime's static origin"
 echo "     (today svrnme.sh, beside the landing page and installers)"
 echo "  2. point a grant at it:"
 echo "       svrn mesh grant --model <id> --wall --ttl 2h --url https://<origin>/ --qr-svg wall-qr.svg"
+echo "  Serve it with gzip/brotli on (the wasm compresses well) and, if the"
+echo "  host allows, the headers index.html's meta tags ask for — a CDN gives"
+echo "  both; nothing here depends on them."
