@@ -33,7 +33,10 @@ understanding-vocab = { workspace = true }
 # `backend-ready` and warms the ~900MB index in the background, then fills it
 # in an already-shared `Arc<Runtime>`. One storage, lock-free snapshot per turn.
 arc-swap = { workspace = true }
-corpus-engine-notes = { workspace = true }
+# `corpus-engine-notes` is NOT here (fp-27, §12 D6): its only uses were the
+# real-SQL test fixture, which relocated beside the store's owner in
+# `corpus-engine-notes/tests/real_sql_flows.rs`; logic tests take the
+# `sovereign_contracts::notes::fixtures::RecordingNotes` double.
 # Read-only SCIP call-graph access for code-intelligence-in-chat: the chat
 # runtime opens a code corpus's `scip_graph.db` and renders a caller/callee
 # trace into the synthesis evidence block (`corpus_engine_scip::trace`). This is

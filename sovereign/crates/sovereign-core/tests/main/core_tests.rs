@@ -2274,13 +2274,11 @@ impl InferenceProvider for RecordingInference {
 
 async fn lesson_note_store(
     payloads: &[serde_json::Value],
-) -> (
-    tempfile::TempDir,
-    Arc<dyn sovereign_contracts::notes::AgentNotes>,
-) {
-    let dir = tempfile::tempdir().unwrap();
-    let store =
-        Arc::new(corpus_engine_notes::NoteStore::open(&dir.path().join("notes.db")).unwrap());
+) -> Arc<dyn sovereign_contracts::notes::AgentNotes> {
+    use sovereign_contracts::recipe::notes::{NoteScope, NoteSource, RecipeNotes};
+    // Capturing double, never SQL (fp-27) — the real store's write/read
+    // contract is pinned in `corpus-engine-notes/tests/real_sql_flows.rs`.
+    let store = Arc::new(sovereign_contracts::notes::fixtures::RecordingNotes::default());
     for payload in payloads {
         store
             .write_note_full(
@@ -2289,17 +2287,17 @@ async fn lesson_note_store(
                 vec![],
                 vec![],
                 "s1",
-                corpus_engine_notes::NoteScope::Global,
+                NoteScope::Global,
                 None,
                 None,
-                corpus_engine_notes::NoteSource::Agent,
+                NoteSource::Agent,
                 None,
                 Some(&payload.to_string()),
             )
             .await
             .unwrap();
     }
-    (dir, store)
+    store
 }
 
 fn param_lesson_payload() -> serde_json::Value {
@@ -2344,7 +2342,7 @@ async fn lessons_shape_the_synthesis_request() {
     // system message outermost. Verified on the non-streaming
     // SimpleQuery path, which shares `prepare_knowledge_context` with
     // the streaming path by construction.
-    let (_dir, notes) = lesson_note_store(&[param_lesson_payload(), prompt_lesson_payload()]).await;
+    let notes = lesson_note_store(&[param_lesson_payload(), prompt_lesson_payload()]).await;
     let recording = Arc::new(RecordingInference::new("a fine answer"));
     let runtime = Runtime::new(sovereign_core::RuntimeParts {
         note_store: Some(notes),
@@ -2398,7 +2396,7 @@ async fn drain(handle: sovereign_core::runtime::StreamHandle) {
 
 #[tokio::test]
 async fn streaming_turn_applies_term_avoid_and_whispers_once() {
-    let (_dir, notes) = lesson_note_store(&[transform_lesson_payload()]).await;
+    let notes = lesson_note_store(&[transform_lesson_payload()]).await;
     let mock_answer = "The corpus helps here. [Source: Corpus Handbook] More corpus talk.";
     let store = Arc::new(MockStore::new());
     let runtime = Runtime::new(sovereign_core::RuntimeParts {

@@ -2338,16 +2338,11 @@ mod tests {
 
     // ─── tool_decision memory ─────────────────────────────────
 
-    async fn fresh_note_store() -> corpus_engine_notes::NoteStore {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("notes.db");
-        let store = corpus_engine_notes::NoteStore::open(&path).unwrap();
-        // Leak the tempdir so it outlives the store handle (each test
-        // builds its own; this isn't a daemon). Without this the
-        // tempdir drops at scope-exit and the underlying SQLite file
-        // is removed mid-test.
-        std::mem::forget(dir);
-        store
+    async fn fresh_note_store() -> sovereign_contracts::notes::fixtures::RecordingNotes {
+        // In-memory double, never SQL (fp-27): the real-SQL round-trip this
+        // fixture used to prove lives beside its owner in
+        // `corpus-engine-notes/tests/real_sql_flows.rs`.
+        sovereign_contracts::notes::fixtures::RecordingNotes::default()
     }
 
     #[test]
