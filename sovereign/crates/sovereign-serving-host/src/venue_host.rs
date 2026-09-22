@@ -1,49 +1,22 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! The host-side ports `InferenceRouter` asks its host through: the
-//! identity reader, the contribution-ledger port and the pinned-transport
-//! resolver.
+//! The host-side routing glue `InferenceRouter` reaches its ports through:
+//! `ledger_emitter_for_venue` and the pinned-transport resolver. The ports
+//! themselves — the identity reader (`VenueHost`) and the contribution-ledger
+//! port (`LedgerEmitter`) — are contract-floor vocabulary now, re-exported
+//! from `sovereign-contracts` (five-programs fp-16, §12 D2: the serving
+//! cluster is cmnwlth's own process, so the port vocabulary sits at the
+//! contract floor both ends name).
 //!
 //! Split out of `peer_inference.rs` (ARCH §3.1) and moved here from
 //! `sovereign-mesh` by domains `REVIEW-build-serving-move-peer`: the host is
 //! where the router lives, so the ports it holds live here too, and the daemon
 //! (which owns the `EmbeddedDaemon`) implements them.
-//!
-//! [`VenueSource`](sovereign_scheduler::venue::VenueSource) carries only the
-//! candidate list. The two facts the legacy port also carried are host
-//! concerns and ride here instead:
-//!
-//! - the local node id, Fabric's identity READER (`quality/DAEMON_CORE.md`
-//!   §4.2 "Identity is a reader" — join adoption swaps the id inside a running
-//!   daemon, so a cached value goes stale);
-//! - the contribution-ledger PORT ([`crate::ledger`]), which the daemon
-//!   implements over its `ContributionEmitter`. The host mints the fact from
-//!   `RoutingOutcome` (`sovereign/SERVING_BOUNDARY.md` (a)), so this trait no
-//!   longer builds a pre-filled emission per request.
 use std::sync::Arc;
 
 use async_trait::async_trait;
 use sovereign_scheduler::venue::InferenceVenue;
 
-/// The host-side companion to [`VenueSource`](sovereign_scheduler::venue::VenueSource).
-///
-/// `InferenceRouter` holds one of these as a constructor argument.
-#[async_trait]
-pub trait VenueHost: Send + Sync {
-    /// This node's id. Stamped onto outbound manifest fetches via the
-    /// `X-Node-Id` header so the peer can apply local-only affinity
-    /// preferences before serializing the manifest. `None` when the daemon has
-    /// not joined a mesh.
-    async fn local_node_id(&self) -> Option<commonwealth_core::ids::NodeId> {
-        None
-    }
-
-    /// The contribution-ledger port, or `None` when this host has none.
-    /// Default returns `None` — test stubs without a wired
-    /// `ContributionEmitter` skip the emission entirely.
-    async fn ledger_emitter(&self) -> Option<Arc<dyn crate::ledger::LedgerEmitter>> {
-        None
-    }
-}
+pub use sovereign_contracts::venue_host::VenueHost;
 
 /// The ledger port to attach to a peer-routed stream: the host's, unless the
 /// venue is a pinned worker pod.

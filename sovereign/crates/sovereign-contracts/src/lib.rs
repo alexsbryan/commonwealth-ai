@@ -144,6 +144,11 @@ pub mod tool_manifest;
 pub mod tool_result_cache;
 pub mod traits;
 pub mod types;
+/// The serving venue ports (`VenueHost`, `LedgerEmitter`) — the identity
+/// reader and ledger port the serving host's router holds. Carved from
+/// `sovereign-serving-host` (fp-16) so the port vocabulary sits at the
+/// contract floor the daemon and the serving process both name.
+pub mod venue_host;
 /// The ephemeral worker pod's owner↔pod wire protocol — bootstrap blob,
 /// worker token, seed-derived cert and the token verifier. A shared leaf
 /// rather than `sovereign-pods` (Compute's crate) because the protocol has

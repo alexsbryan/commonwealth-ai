@@ -4,8 +4,8 @@
 //! `DeferredDaemon` handle that stands in for the daemon before it is
 //! commissioned.
 //!
-//! The ports themselves now live in `sovereign_serving_host::venue_host`
-//! (`InferenceRouter` holds them, and it moved host-side by domains
+//! The ports themselves now live in `sovereign_contracts::venue_host`
+//! (fp-16; `InferenceRouter` holds them, and they moved host-side by domains
 //! `REVIEW-build-serving-move-peer`). What stays here is the half that names
 //! `commonwealth_core` / `commonwealth_state` / `EmbeddedDaemon`, which the
 //! serving package may not (`sovereign/SERVING_BOUNDARY.md` rule 5): the
@@ -13,9 +13,8 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use sovereign_contracts::venue_host::{LedgerEmitter, VenueHost};
 use sovereign_scheduler::venue::{InferenceVenue, VenueSource};
-use sovereign_serving_host::ledger::LedgerEmitter;
-use sovereign_serving_host::venue_host::VenueHost;
 
 use crate::daemon::EmbeddedDaemon;
 

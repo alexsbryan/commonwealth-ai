@@ -20,12 +20,10 @@
 use kernel_types::NodeId;
 use sovereign_scheduler::decision_log::{RoutingOutcome, ServedBy};
 
-/// The port the daemon implements over its `ContributionEmitter`.
-pub trait LedgerEmitter: Send + Sync {
-    /// Record that a peer-routed inference completed: `tokens_generated`
-    /// tokens of `model_id` were received from `from_node`.
-    fn record_inference_received(&self, from_node: &NodeId, model_id: &str, tokens_generated: u64);
-}
+// The port itself is contract-floor vocabulary (`sovereign-contracts`,
+// fp-16); re-exported here so `sovereign_serving_host::ledger::LedgerEmitter`
+// — the path the daemon's test tree names — is unchanged.
+pub use sovereign_contracts::venue_host::LedgerEmitter;
 
 /// Mint the ledger fact a completed [`RoutingOutcome`] describes and hand it
 /// to `emitter`.
