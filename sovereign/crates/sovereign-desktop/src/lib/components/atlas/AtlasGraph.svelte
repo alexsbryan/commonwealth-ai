@@ -11,6 +11,20 @@
   import { onDestroy } from "svelte";
   import { atomTypeColor, declaredTypeColor } from "./atomKinds";
 
+  /** Settled layouts, keyed by `layoutKey` (the corpus id). Clicking a
+   *  node swaps the map for the atom detail and Back remounts this
+   *  component — with no memory the whole graph re-sorted from a fresh
+   *  golden-angle init on every return ("clicking the map makes it a
+   *  medley of chaos"). One module-level map means the view CHILLS: a
+   *  remount restores exactly where every node and the reader's zoom/pan
+   *  were, and a fully-restored graph does not run the sim at all. New
+   *  nodes (a changed subgraph) still get a normal relaxation. */
+  type LayoutMemo = {
+    nodes: Map<string, { x: number; y: number }>;
+    view?: { k: number; x: number; y: number };
+  };
+  const layoutMemory = new Map<string, LayoutMemo>();
+
 
   interface AtlasNode {
     id: string;
@@ -38,12 +52,16 @@
      *  gain a halo ring; everything else dims. No core or wire change:
      *  the caller already holds the ids. */
     highlight?: Set<string>;
+    /** Stable identity for the layout memory (the corpus id). Absent =
+     *  no memory: every mount flows from scratch, the old behaviour. */
+    layoutKey?: string;
   }
   let {
     nodes,
     edges,
     onNodeClick = () => {},
     highlight = new Set<string>(),
+    layoutKey,
   }: Props = $props();
 
   type SimNode = AtlasNode & {
@@ -70,7 +88,9 @@
     return n;
   }
 
+  let unmountSnapshot: (() => void) | null = null;
   onDestroy(() => {
+    unmountSnapshot?.();
     destroyed = true;
     if (rafId) cancelAnimationFrame(rafId);
   });
@@ -80,7 +100,7 @@
     // touch deps
     nodes;
     edges;
-    if (container) build(container);
+    if (container) unmountSnapshot = build(container) ?? null;
   });
 
   function build(host: HTMLDivElement) {
@@ -134,11 +154,40 @@
     const cx = W / 2;
     const cy = H / 2;
     const GA = Math.PI * (3 - Math.sqrt(5));
+    // Layout memory: restore settled positions for known atoms; only NEW
+    // atoms get the deterministic golden-angle seed. `settled` means every
+    // node was restored — the caller then skips the sim entirely, which is
+    // the "chill out" half.
+    const memo: LayoutMemo | null = layoutKey
+      ? (layoutMemory.get(layoutKey) ?? (() => {
+          const m: LayoutMemo = { nodes: new Map() };
+          layoutMemory.set(layoutKey, m);
+          return m;
+        })())
+      : null;
+    let restored = 0;
     ns.forEach((n, i) => {
+      const p = memo?.nodes.get(n.id);
+      if (p) {
+        n.x = p.x;
+        n.y = p.y;
+        restored++;
+        return;
+      }
       const r = 14 + Math.sqrt(i) * 26;
       n.x = cx + r * Math.cos(i * GA);
       n.y = cy + r * Math.sin(i * GA);
     });
+    const settled = ns.length > 0 && restored === ns.length;
+    const snapshot = () => {
+      if (!memo) return;
+      for (const n of ns) memo.nodes.set(n.id, { x: n.x, y: n.y });
+      memo.view = { ...view };
+    };
+    if (memo?.view) {
+      view = { ...memo.view };
+      applyView();
+    }
 
     const maxSal = ns.reduce((m, n) => Math.max(m, n.salience ?? 0), 0);
     const maxDeg = ns.reduce((m, n) => Math.max(m, n.degree || 1), 1);
@@ -373,13 +422,24 @@
         rafId = requestAnimationFrame(loop);
       } else {
         running = false;
+        snapshot();
       }
     }
     function reheat() {
       frames = 0;
       if (!running) rafId = requestAnimationFrame(loop);
     }
-    rafId = requestAnimationFrame(loop);
+    if (settled) {
+      // Every node's position is remembered: paint the frozen layout, no
+      // sim, no reflow. A drag still reheats (the reader asked for it).
+      paint();
+    } else {
+      rafId = requestAnimationFrame(loop);
+    }
+    // The unmount half of the snapshot: the click that swaps this view for
+    // the atom detail destroys the component before the loop exhausts, and
+    // THAT is the state the user comes back to.
+    return snapshot;
   }
 </script>
 

@@ -514,6 +514,7 @@
         nodes={sg.nodes}
         edges={sg.edges}
         {highlight}
+        layoutKey={corpusId}
         onNodeClick={(id) => onSelectAtom?.(id)}
       />
     {/if}
