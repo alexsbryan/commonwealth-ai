@@ -115,7 +115,11 @@ runtime (`sovereign/apps/ring-runtime`), the wasm page a guest link opens,
 served at `svrnme.sh/ring/`. It is built by
 `landing/scripts/build-ring-runtime.sh` — which `npm run deploy` runs before
 `vercel deploy`, so a deploy always carries a fresh runtime — and `ring/` is
-gitignored (the CLI deploy uploads the built directory). It does use external
-JS and a wasm module; the budget above is about the landing page and still
-holds. If the deploy ever moves to Vercel's git integration, either commit
-`ring/` or give Vercel a `buildCommand` with a Rust + wasm-bindgen toolchain.
+gitignored (it is a build artifact). `.vercelignore` is a separate file so the
+UPLOAD still includes `ring/` while git does not; the deploy then runs
+`scripts/verify-ring-deployed.sh`, which fetches `svrnme.sh/ring/index.html`
+and fails if it is not live — a deploy that did not ship what it built is not
+a successful deploy. It does use external JS and a wasm module; the budget
+above is about the landing page and still holds. If the deploy ever moves to
+Vercel's git integration, either commit `ring/` or give Vercel a `buildCommand`
+with a Rust + wasm-bindgen toolchain.
