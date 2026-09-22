@@ -234,7 +234,28 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     // `sovereign_mesh` build). The census scans production `src/` only, so those
     // sites are out of scope now and their rows are removed, not re-keyed —
     // the files still hold 9/4/3 sites, but no longer as production code.
-    ("sovereign/crates/sovereign-daemon/src/rpc_warm_http.rs", Class::Mesh, 7),
+    // 7 -> 2 (2026-09-22, recorded by the the-link audit prep, NOT its
+    // change): threat-gaps' file split moved the warm-orchestration half to
+    // `rpc_warm_http/orchestrator.rs` and its tests to `src/tests/
+    // rpc_warm_http.rs` (tg-2 commits bc2e8650d, f3064c497). What remains
+    // in the parent is the one client pair (:409 builder, :412 fallback) —
+    // counted with this census's own matcher at HEAD.
+    ("sovereign/crates/sovereign-daemon/src/rpc_warm_http.rs", Class::Mesh, 2),
+    // NEW ROW 2026-09-22 (the split above). The orchestration half's client
+    // pair (:35, :38) — same construction, same class: warm RPC to peers on
+    // the estate's own transport, our own auth.
+    ("sovereign/crates/sovereign-daemon/src/rpc_warm_http/orchestrator.rs", Class::Mesh, 2),
+    // NEW ROW 2026-09-22 (the split above). The moved test module's four
+    // clients dial spawned loopback routers — the admin_http/tests.rs
+    // precedent: a src/ test file carries its sites, loopback to our own
+    // daemon is Mesh, no boundary is crossed.
+    ("sovereign/crates/sovereign-daemon/src/tests/rpc_warm_http.rs", Class::Mesh, 4),
+    // NEW ROW 2026-09-22 (tg-2-strangers-are-refused, bc2e8650d). The one
+    // client in `mesh_proof_outbound` (:88) is the carrier tg-2 added: it
+    // dials PEERS and attaches the `x-mesh-proof` pair, so a plain-IP
+    // member's outbound calls pass the internal gate its own default
+    // tightened. Peer traffic, our own transport and auth — Mesh.
+    ("sovereign/crates/sovereign-daemon/src/mesh_proof_outbound.rs", Class::Mesh, 1),
     // 5 -> 7 (2026-08-23): the two reload-diff regression tests
     // (`reload_applies_a_context_size_change_without_a_restart`,
     // `reload_applies_a_code_slot_change_without_a_restart`) each build a
@@ -308,7 +329,11 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     // re-baselines the whole file, not to a row being added.
     ("sovereign/crates/sovereign-daemon/src/assets_http.rs", Class::Mesh, 4),
     ("sovereign/crates/sovereign-daemon/src/project_http.rs", Class::Mesh, 4),
-    ("sovereign/crates/sovereign-serving-host/src/model_fetch.rs", Class::Mesh, 4),
+    // 4 -> 5 (2026-09-22, recorded by the the-link audit prep, NOT its
+    // change): tg-2's proof-header work added a fifth construction
+    // (model_fetch.rs :387 at HEAD, beside the existing four). Same class —
+    // the lender's model bytes over the estate's own transport.
+    ("sovereign/crates/sovereign-serving-host/src/model_fetch.rs", Class::Mesh, 5),
     ("sovereign/crates/sovereign-daemon/src/loopback_guard.rs", Class::Mesh, 3),
     ("sovereign/crates/sovereign-serving-host/src/peer_inference.rs", Class::Mesh, 2),
     // setup_cmd/terminal.rs (2026-08-30, the `terminal` node class; 1 -> 3 on
