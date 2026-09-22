@@ -1,0 +1,53 @@
+{
+  "schema": "ei7-arm-manifest/v1",
+  "identity": {
+    "arm": "deep",
+    "corpus": "ei7-ans",
+    "host": "http://127.0.0.1:9841",
+    "synth_model": "Qwen3.6-35B-A3B-MTP-UD-Q6_K",
+    "judge_model": "Qwen3.5-4B-UD-Q6_K_XL",
+    "recipe_sha256": "57412b9302f9dc80a4e41746376151cd52c8b70d362b7a3249162889f14d1064",
+    "ontology_sha256": "0201fecabc1abe1c3f8d995f598cd7124e1a09fc9aba7eac73c678f8621e6164",
+    "chunks_listing_sha256": "6b28f424793946216d459253496ccf1944fc95d767f2151729726a73d31e925a"
+  },
+  "variant": "both",
+  "run": 3,
+  "env": {
+    "SOVEREIGN_ATLAS_GROUNDING": "0",
+    "SOVEREIGN_ATOM_ENUM": "0",
+    "SOVEREIGN_ATOM_ENUM_OVERVIEW": "0",
+    "SOVEREIGN_KQ_POOL_SCALE": "2"
+  },
+  "argv": [
+    "/Users/alexsbryan/.local/bin/sovereign",
+    "eval",
+    "run",
+    "--bank",
+    "research/ontology-retrieval/ontology-proof/ans/bank.attested.toml",
+    "--synth",
+    "--isolate",
+    "--format",
+    "json",
+    "--output",
+    "research/ontology-retrieval/ontology-proof/ans/runs/deep/run-3/eval.json",
+    "--chat-model",
+    "Qwen3.6-35B-A3B-MTP-UD-Q6_K"
+  ],
+  "eval_exit": 0,
+  "daemon_refusals": {
+    "count": 0,
+    "sample": []
+  },
+  "models_source": "http://127.0.0.1:9841/v1/models",
+  "verdict": null,
+  "never_ran_reasons": [],
+  "provenance": {
+    "commit": "4d733f98ec19e4bf5528ec46ea696923ea79d2a2",
+    "dirty": true,
+    "started_at_unix": 1790095925,
+    "paths": {
+      "index_dir": "/Users/alexsbryan/.svrnmesh/indexes/ei7-ans",
+      "recipe": "research/ontology-retrieval/ontology-proof/ans/recipe.toml"
+    }
+  }
+}
