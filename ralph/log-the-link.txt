@@ -10,3 +10,12 @@
 campaign: needs-human — # NEEDS_HUMAN — the-link / tl-2-offline-leg-exports
 2026-09-22T06:52:56Z supervisor: campaign stopped — # NEEDS_HUMAN — the-link / tl-2-offline-leg-exports
 2026-09-22T06:52:56Z supervisor: dispatching resolution session 1 — # NEEDS_HUMAN — the-link / tl-2-offline-leg-exports
+2026-09-22T07:11:27Z supervisor: resolution 1 cleared the halt — resuming the campaign
+2026-09-22T07:11:27Z unit tl-2-offline-leg-exports — --model zai-coding-plan/glm-5.3-flash
+2026-09-22T07:11:27Z prompt: ralph/next/the-link/PROMPT.md sha256=531abd063f5bddad
+2026-09-22T07:15:57Z no commit this iteration (stall 1/3)
+2026-09-22T07:15:57Z unit tl-2-offline-leg-exports — --model zai-coding-plan/glm-5.3-flash
+2026-09-22T07:28:57Z no commit this iteration (stall 2/3)
+campaign: needs-human — # NEEDS_HUMAN — the-link / tl-2-offline-leg-exports
+2026-09-22T07:28:57Z supervisor: campaign stopped — # NEEDS_HUMAN — the-link / tl-2-offline-leg-exports
+2026-09-22T07:28:57Z supervisor: dispatching resolution session 2 — # NEEDS_HUMAN — the-link / tl-2-offline-leg-exports
