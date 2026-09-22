@@ -71,6 +71,7 @@ pub async fn run(args: &[String]) -> i32 {
         Some("roster") => run_roster(&args[1..]).await,
         Some("introduce") => run_introduce(&args[1..]).await,
         Some("dev") => run_dev(&args[1..]).await,
+        Some("serve") => run_serve(&args[1..]),
         Some("log") => run_log(&args[1..]).await,
         Some("checkpoint") => run_checkpoint(&args[1..]).await,
         Some("seal") => run_seal(&args[1..]).await,
@@ -93,6 +94,8 @@ pub async fn run(args: &[String]) -> i32 {
                  \x20       vouch for a key on the journal, so the row that admits it can name\n\
                  \x20       the act instead of somebody's memory. It admits NOBODY by itself.\n\
                  dev     mint a rail grant and serve the app at http://127.0.0.1:4318/.\n\
+                 serve   declare an app to the ROOM and bind the guest door — writes\n\
+                 \x20       [daemon] guest_bind + [daemon.guest_pages]; --clear ends one.\n\
                  log     the acts on this journal, in the order every node applies them,\n\
                  \x20       and everything the rail could not account for.\n\
                  checkpoint\n\
@@ -115,9 +118,11 @@ pub async fn run(args: &[String]) -> i32 {
 mod checkpoint_verify;
 mod dev;
 mod scaffold;
+mod serve;
 
 use dev::run_dev;
 use scaffold::run_new;
+use serve::run_serve;
 
 // ── shared plumbing ──────────────────────────────────────────
 
