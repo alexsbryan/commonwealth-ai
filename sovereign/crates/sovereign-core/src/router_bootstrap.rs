@@ -219,11 +219,35 @@ pub async fn build_llm_router(
     let mut router = LlmRouter::new(Arc::clone(&inference), store, skills);
     let mut report = RouterBuildReport::default();
 
+    // The `(method, text)` keys the shipped classifier set asks for —
+    // `baked_exemplar_specs` is the SSOT the CI freshness gate reads, so cache
+    // selection and the gate can never disagree about what "complete" means.
+    // A source that cannot cover them must not shadow one that can: the
+    // sentinel probe validates the embed SPACE, never completeness, and a
+    // probe-valid 156-entry disk cache shadowing a 423-entry exemplar set
+    // re-embedded 267 exemplars live (~36 min on a CPU-only slot, 2026-09-22).
+    // Overrides are a dev-tuning path: a cache covering the baked set is still
+    // preferred, and any override-only texts simply embed as misses.
+    let required = match baked_exemplar_specs() {
+        Ok(specs) => specs,
+        Err(e) => {
+            tracing::warn!(
+                target: "router.bootstrap",
+                error = %e,
+                "router: cannot compute the baked exemplar key set — cache \
+                 selection falls back to probe-only validation for this boot"
+            );
+            Vec::new()
+        }
+    };
+
     // Exemplar embeddings are static per (text, embed model); without
     // the cache the five classifiers below re-embed ~350 strings
     // sequentially at every boot (~5.7s of desktop splash, measured
-    // 2026-06-10). Validity is a sentinel cosine probe inside `open`.
-    let mut embed_cache = crate::router_embed_cache::BootEmbedCache::open(&*inference).await;
+    // 2026-06-10). Validity is a sentinel cosine probe inside `open`, and
+    // selection prefers the source that covers the `required` specs.
+    let mut embed_cache =
+        crate::router_embed_cache::BootEmbedCache::open(&*inference, &required).await;
 
     // Opened once. If it missed, the classifiers below are about to re-embed —
     // tell the caller now so it can narrate the phase honestly.

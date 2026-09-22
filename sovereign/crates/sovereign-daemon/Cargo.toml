@@ -39,7 +39,6 @@ kernel-types = { workspace = true }
 oicp-types = { workspace = true }
 sovereign-meshapp-registry = { workspace = true }
 sovereign-serving-host = { path = "../sovereign-serving-host" }
-sovereign-scheduler = { workspace = true }
 sovereign-work-atlas = { workspace = true }
 sovereign-core = { workspace = true }
 sovereign-time = { workspace = true }

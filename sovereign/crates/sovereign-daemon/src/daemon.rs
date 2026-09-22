@@ -19,10 +19,11 @@ use commonwealth_discovery::membership;
 use corpus_engine::CorpusEngine;
 use sovereign_core::setup_config::SetupConfig;
 use sovereign_core::traits::{InferenceProvider, StateStore};
-// The candidate record moved to `sovereign-scheduler` (domains row
-// REVIEW-build-venue); re-exported here so `sovereign_mesh::daemon::InferenceVenue`
+// The candidate record lives in `sovereign_contracts::venue` (fp-1; it moved
+// through `sovereign-scheduler` on domains row REVIEW-build-venue);
+// re-exported here so `sovereign_mesh::daemon::InferenceVenue`
 // keeps resolving while the knot's modules are still in this crate.
-pub use sovereign_scheduler::venue::InferenceVenue;
+pub use sovereign_contracts::venue::InferenceVenue;
 
 /// Short-lived TTL stamped into an ENCRYPTED mesh's invite link. The
 /// founder enforces it at the join handler, so a leaked link is useless
@@ -4846,7 +4847,7 @@ fn register_local_model_slots(app_state: &AppState, cfg: &SetupConfig, node_id: 
         // defined ONCE in `slot_aliases::SLOT_ALIAS_POLICY` — shared
         // with `oicp_synthesis::build_self_manifest`'s advertisement
         // side so the two can't drift (the 2026-05-19 fast-alias 503).
-        for key in crate::slot_aliases::resolution_alias_keys(role) {
+        for key in sovereign_contracts::venue::resolution_alias_keys(role) {
             slot_aliases.insert(key, info.name.clone());
         }
     }

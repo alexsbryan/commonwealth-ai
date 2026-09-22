@@ -2,7 +2,7 @@
 //! Validates CONFIG (#12 → drift), EXISTS, and LITERAL without the daemon (scopes CONFIG from the
 //! known code-query entry directly, bypassing embed-based resolution — tested separately).
 //!
-//! Run: cargo run -p corpus-engine --example fact_check_smoke --features treesitter
+//! Run: cargo run -p code-facts --example fact_check_smoke --features treesitter,stores
 
 use code_facts::facts::Facts;
 use code_facts::facts_check::{

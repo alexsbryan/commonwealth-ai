@@ -220,10 +220,9 @@ pub use sovereign_grants::auto_recover;
 
 // Re-exports the moved modules reached through the mesh crate root, so their
 // own `crate::` paths keep resolving here (the leaves live in the serving host
-// and the scheduler, not in this crate).
+// and `sovereign-contracts`, not in this crate).
 pub use sovereign_core::deep_research::research_run_dir;
 pub use sovereign_core::turn_approval;
-pub use sovereign_scheduler::slot_aliases;
 pub use sovereign_serving_host::inference_adapter;
 pub use sovereign_serving_host::model_fetch;
 pub use sovereign_serving_host::worker_eligibility;

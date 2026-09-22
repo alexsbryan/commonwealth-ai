@@ -13,8 +13,8 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use sovereign_contracts::venue::{InferenceVenue, VenueSource};
 use sovereign_contracts::venue_host::{LedgerEmitter, VenueHost};
-use sovereign_scheduler::venue::{InferenceVenue, VenueSource};
 
 use crate::daemon::EmbeddedDaemon;
 

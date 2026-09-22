@@ -28,74 +28,7 @@
 //! failure is the point; it's the reminder the 2026-05-19 bug never
 //! got.
 
-/// Alias policy for one canonical slot role.
-pub struct SlotAliasPolicy {
-    /// The canonical role name (`primary`, `fast`, `embed`, `code`).
-    pub role: &'static str,
-    /// Extra synonyms resolvable on inbound requests, beyond the
-    /// bare role (e.g. operators say "coder" where OICP says "code").
-    pub synonyms: &'static [&'static str],
-    /// Whether `build_self_manifest` advertises this role's aliases
-    /// as mesh-routable `ProviderModel` rows. `false` is a deliberate
-    /// policy decision and must carry a rationale comment on the row.
-    pub mesh_advertised: bool,
-}
-
-/// The canonical table. Every alias either site knows about derives
-/// from here.
-pub const SLOT_ALIAS_POLICY: &[SlotAliasPolicy] = &[
-    SlotAliasPolicy {
-        role: "primary",
-        synonyms: &[],
-        mesh_advertised: true,
-    },
-    SlotAliasPolicy {
-        role: "fast",
-        synonyms: &[],
-        mesh_advertised: true,
-    },
-    SlotAliasPolicy {
-        role: "embed",
-        // Deliberately not advertised: the embed slot is never a
-        // chat-completion candidate and peer selection never consults
-        // it (see `build_self_manifest`'s module doc). Local
-        // resolution still wants the alias so `/v1/embeddings`-side
-        // callers can address the slot by role.
-        synonyms: &[],
-        mesh_advertised: false,
-    },
-    SlotAliasPolicy {
-        role: "code",
-        // Deliberately not advertised AS AN ALIAS today: the code
-        // slot is advertised under its concrete GGUF id (with a
-        // `code` capability hint) but shares the lazy chat mutex
-        // with the primary — first request pays a 5–30s hot-swap.
-        // Advertising a stable `coder` alias would invite latency-
-        // sensitive mesh traffic onto a cold slot. Revisit when the
-        // code slot gets its own residency. NOTE: this means a peer
-        // requesting literal "coder" 503s by policy — if that bites,
-        // flip this to `true` and wire the advertisement block (the
-        // parity test will walk you through it).
-        synonyms: &["coder"],
-        mesh_advertised: false,
-    },
-];
-
-/// Alias keys the daemon must RESOLVE for a registered slot role:
-/// the bare role + `commonwealth/<role>`, ditto for each synonym.
-/// Returns empty for non-canonical roles (`primary_<i>` pool members,
-/// `extras:<name>`) — those are routed by their literal key.
-pub fn resolution_alias_keys(role: &str) -> Vec<String> {
-    let Some(policy) = SLOT_ALIAS_POLICY.iter().find(|p| p.role == role) else {
-        return Vec::new();
-    };
-    let mut keys = Vec::new();
-    for name in std::iter::once(policy.role).chain(policy.synonyms.iter().copied()) {
-        keys.push(name.to_string());
-        keys.push(format!("commonwealth/{name}"));
-    }
-    keys
-}
+pub use sovereign_contracts::venue::{resolution_alias_keys, SlotAliasPolicy, SLOT_ALIAS_POLICY};
 
 /// Alias ids `build_self_manifest` must ADVERTISE for a role —
 /// namespaced form first (canonical), bare form second (the

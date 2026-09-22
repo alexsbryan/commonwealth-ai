@@ -2306,7 +2306,7 @@ pub async fn build_mesh_provider(
     }
     let composite = Arc::new(
         sovereign_serving_host::pinned_worker_source::CompositeVenueSource::new(
-            Arc::clone(&daemon) as Arc<dyn sovereign_scheduler::venue::VenueSource>,
+            Arc::clone(&daemon) as Arc<dyn sovereign_contracts::venue::VenueSource>,
             Arc::clone(&pinned_source),
         ),
     );
@@ -2323,7 +2323,7 @@ pub async fn build_mesh_provider(
     );
     let mesh_provider = Arc::new(
         sovereign_serving_host::peer_inference::InferenceRouter::builder(Arc::clone(&provider))
-            .candidates(Arc::clone(&composite) as Arc<dyn sovereign_scheduler::venue::VenueSource>)
+            .candidates(Arc::clone(&composite) as Arc<dyn sovereign_contracts::venue::VenueSource>)
             .host(Arc::clone(&daemon) as Arc<dyn sovereign_serving_host::venue_host::VenueHost>)
             .manifest(Arc::new(crate::slot_manifest::CoreSlotManifest))
             .in_flight(in_flight_gauge.arc())

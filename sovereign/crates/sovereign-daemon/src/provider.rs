@@ -108,7 +108,7 @@ impl ProviderFactory for LlamaCppFactory {
             .daemon
             .get()
             .ok_or_else(|| "reload arrived before the daemon was commissioned".to_string())?;
-        let peer_source: Arc<dyn sovereign_scheduler::venue::VenueSource> =
+        let peer_source: Arc<dyn sovereign_contracts::venue::VenueSource> =
             Arc::clone(&self.daemon) as Arc<_>;
         let peer_host: Arc<dyn sovereign_serving_host::venue_host::VenueHost> =
             Arc::clone(&self.daemon) as Arc<_>;

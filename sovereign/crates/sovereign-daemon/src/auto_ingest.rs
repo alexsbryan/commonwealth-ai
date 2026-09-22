@@ -904,7 +904,10 @@ async fn discover_and_spawn_pull_loops(state: AppState, self_id: NodeId, daemon_
         let coordinator_url = match &coordinator_contact {
             Some(contact) => state
                 .peer_transport()
-                .endpoints(contact, sovereign_contracts::transport::TrafficClass::ControlPlane)
+                .endpoints(
+                    contact,
+                    sovereign_contracts::transport::TrafficClass::ControlPlane,
+                )
                 .await
                 .into_iter()
                 .next()

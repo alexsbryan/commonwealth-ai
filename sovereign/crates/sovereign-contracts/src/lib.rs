@@ -149,6 +149,10 @@ pub mod traits;
 /// `commonwealth-transport`, which re-exports these at its historical paths.
 pub mod transport;
 pub mod types;
+/// The ranked candidate record (`InferenceVenue`), the `VenueSource` port,
+/// and the slot-alias policy table both advertisement and resolution derive
+/// from (fp-1, §12 decision 3). The ranker lives in `sovereign-scheduler`.
+pub mod venue;
 /// The serving venue ports (`VenueHost`, `LedgerEmitter`) — the identity
 /// reader and ledger port the serving host's router holds. Carved from
 /// `sovereign-serving-host` (fp-16) so the port vocabulary sits at the

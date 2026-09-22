@@ -129,7 +129,7 @@ pub fn load_provider(
                     // The terminal resolves its entry node through the roster
                     // port; the daemon's `DeferredDaemon` is that source until
                     // it is bound.
-                    let mesh_port: Arc<dyn sovereign_scheduler::venue::VenueSource> =
+                    let mesh_port: Arc<dyn sovereign_contracts::venue::VenueSource> =
                         Arc::clone(&mesh) as Arc<_>;
                     let resolver =
                         match sovereign_serving_host::entry_endpoint::EntryNodeEndpoint::parse(
@@ -492,7 +492,7 @@ pub fn load_provider(
 /// 250-line builder would have caught.
 fn distributed_primary_model_ids(stem: &str) -> Vec<String> {
     let mut ids = vec![stem.to_string()];
-    for alias in sovereign_scheduler::slot_aliases::resolution_alias_keys("primary") {
+    for alias in sovereign_contracts::venue::resolution_alias_keys("primary") {
         if !ids.contains(&alias) {
             ids.push(alias);
         }
@@ -535,7 +535,7 @@ mod distributed_primary_routing_tests {
     #[test]
     fn every_resolvable_primary_alias_is_claimable() {
         let ids = distributed_primary_model_ids("some-model");
-        for alias in sovereign_scheduler::slot_aliases::resolution_alias_keys("primary") {
+        for alias in sovereign_contracts::venue::resolution_alias_keys("primary") {
             assert!(
                 ids.contains(&alias),
                 "`{alias}` resolves to the primary slot but would not route to the \
