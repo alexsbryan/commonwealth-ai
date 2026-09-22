@@ -43,7 +43,10 @@ pub fn rpc_discovery_armed() -> bool {
 /// from, and guessing could point the FS watcher at the wrong
 /// directory. Instead, log a one-shot hint so the operator knows
 /// to re-register each repo manually.
-pub fn warn_orphaned_indexes(indexes_dir: &Path, registry: &sovereign_mesh::projects::Registry) {
+pub fn warn_orphaned_indexes(
+    indexes_dir: &Path,
+    registry: &corpus_engine_watchers::projects::Registry,
+) {
     let Ok(entries) = std::fs::read_dir(indexes_dir) else {
         return;
     };

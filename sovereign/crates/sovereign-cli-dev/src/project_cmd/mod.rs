@@ -277,7 +277,7 @@ pub(crate) async fn cmd_status(args: &[String]) -> i32 {
     // both reporting ✓ on a repo that had been unregistered since June.
     // Same failure the lint/test surface fixed with `watcher.live` /
     // `watcher_down`; the code-intel surface never got it.
-    match sovereign_mesh::projects::Registry::load() {
+    match corpus_engine_watchers::projects::Registry::load() {
         Ok(registry) => match registry.entries().iter().find(|e| e.corpus_id == corpus_id) {
             Some(entry) if entry.root == repo_root => {
                 let mut on: Vec<&str> = Vec::new();

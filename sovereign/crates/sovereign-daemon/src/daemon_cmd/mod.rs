@@ -751,7 +751,7 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
     // daemon restart. Previously each side built its own snapshot and the
     // reindexer's graph had no readers, so the tool surface was frozen at
     // startup — the deepest cause of "the watcher is always stale."
-    let merged_scip_handle: sovereign_mesh::reindexer::ScipGraphHandle =
+    let merged_scip_handle: corpus_engine_watchers::reindexer::ScipGraphHandle =
         std::sync::Arc::new(arc_swap::ArcSwap::from_pointee(
             tool_registry::build_merged_scip_graph(&data_dir.join("indexes")).await,
         ));

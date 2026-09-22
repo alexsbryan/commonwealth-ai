@@ -447,7 +447,7 @@ pub(super) async fn check_code_tools_see_corpora() -> CheckResult {
 /// so it works whether or not the daemon is up.
 pub(super) async fn check_rebuild_outcomes() -> CheckResult {
     let name = "scip_rebuild_outcomes";
-    let registry = match sovereign_mesh::projects::Registry::load() {
+    let registry = match corpus_engine_watchers::projects::Registry::load() {
         Ok(r) => r,
         Err(_) => {
             return CheckResult {
@@ -506,7 +506,7 @@ pub(super) async fn check_rebuild_outcomes() -> CheckResult {
 }
 
 pub(super) async fn check_watcher_freshness() -> CheckResult {
-    let registry = match sovereign_mesh::projects::Registry::load() {
+    let registry = match corpus_engine_watchers::projects::Registry::load() {
         Ok(r) => r,
         Err(_) => {
             return CheckResult {
@@ -608,7 +608,7 @@ pub(super) async fn check_watcher_freshness() -> CheckResult {
         // Signal 1: git-head drift. Surfaces a watcher that's a full
         // commit behind. Skip silently when the project isn't a git
         // repo (no HEAD to compare against).
-        let current_head = sovereign_mesh::reindexer::read_git_head(&entry.root);
+        let current_head = corpus_engine_watchers::reindexer::read_git_head(&entry.root);
         let indexed_head = graph.last_indexed_head().await;
         if let (Some(cur), Some(idx)) = (current_head.as_ref(), indexed_head.as_ref()) {
             if cur != idx {
@@ -846,7 +846,7 @@ pub(super) fn newest_source_age_secs(
 /// probe does not search — the verdict is a Warning naming the
 /// directory, never a pass.
 pub(super) fn check_scip_exporters() -> CheckResult {
-    let registry = match sovereign_mesh::projects::Registry::load() {
+    let registry = match corpus_engine_watchers::projects::Registry::load() {
         Ok(r) => r,
         Err(_) => {
             return CheckResult {
@@ -1001,7 +1001,7 @@ pub(super) fn check_legacy_hooks() -> CheckResult {
     // Best-effort: read the registry directly. If the registry
     // isn't loadable, skip this check — the `warn_orphaned_indexes`
     // path at daemon startup will cover the miss.
-    let registry = match sovereign_mesh::projects::Registry::load() {
+    let registry = match corpus_engine_watchers::projects::Registry::load() {
         Ok(r) => r,
         Err(_) => {
             return CheckResult {

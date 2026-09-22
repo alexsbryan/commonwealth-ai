@@ -219,7 +219,7 @@ pub(crate) async fn cmd_refresh(args: &[String]) -> i32 {
     let repo_root = match &explicit_name {
         None => repo_root,
         Some(name) => {
-            let registry = match sovereign_mesh::projects::Registry::load() {
+            let registry = match corpus_engine_watchers::projects::Registry::load() {
                 Ok(r) => r,
                 Err(e) => {
                     eprintln!("  error: could not read the project registry: {e}");

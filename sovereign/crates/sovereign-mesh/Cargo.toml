@@ -106,10 +106,6 @@ sovereign-serving-host = { path = "../sovereign-serving-host" }
 corpus-index = { workspace = true }
 oplog = { workspace = true }
 corpus-engine = { workspace = true }
-# The workbench pair (`projects`, `reindexer`) moved here from this crate at
-# domains REVIEW-build-mesh-workbench-deferred; lib.rs shims both so the
-# daemon and cli consumers keep resolving through `sovereign_mesh::`.
-corpus-engine-watchers = { workspace = true }
 # The code-intel package's fact base (`facts`/`facts_store`), moved out of
 # corpus-engine at domains REVIEW-build-code-facts; `reindexer.rs` names
 # `code_facts::*` directly. The `stores` feature arrives through corpus-engine.
@@ -249,7 +245,7 @@ dst = ["dep:sovereign-mesh-test-harness"]
 # drag in `corpus-engine`'s `treesitter` feature with its 5 grammar
 # crates. The CLI dispatcher (sovereign-cli) skips this; the daemon
 # host (sovereign-cli-atos) and desktop both enable it.
-treesitter = ["corpus-engine/treesitter", "corpus-engine-watchers/treesitter"]
+treesitter = ["corpus-engine/treesitter"]
 # EXPERIMENTAL: compiles commonwealth-transport's iroh dial-by-key
 # transport and the spike e2e (tests/iroh_transport_e2e.rs). Off by
 # default — never part of the workspace gates. Run via:

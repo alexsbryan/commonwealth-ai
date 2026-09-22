@@ -914,7 +914,7 @@ vector = false
         // Build the watcher toggle block only when the user passed
         // `--watcher-ignore` — otherwise let the daemon use the
         // serde default (which already includes `.sovereign`).
-        // Built as JSON rather than a typed `sovereign_mesh::projects::
+        // Built as JSON rather than a typed `corpus_engine_watchers::projects::
         // WatcherToggles`: that struct is the only thing `init` ever wanted
         // from sovereign-mesh, and sovereign-mesh links llama.cpp
         // unconditionally — a whole inference stack in an end-user binary for

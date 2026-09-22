@@ -100,7 +100,7 @@ use tokio::task::JoinSet;
 use tracing::{debug, info, warn};
 
 use crate::supervised_task::SupervisedTask;
-use sovereign_mesh::projects::{ProjectState, WatcherKind};
+use corpus_engine_watchers::projects::{ProjectState, WatcherKind};
 
 /// The tracing target for everything this module decides.
 ///
@@ -369,7 +369,7 @@ impl WorkDonorHandle {
     /// What the supervisor last recorded about the loop. Exposed so a test
     /// can assert the loop parked after repeated panics rather than inferring
     /// it from a log.
-    pub async fn status(&self) -> sovereign_mesh::projects::WatcherStatus {
+    pub async fn status(&self) -> corpus_engine_watchers::projects::WatcherStatus {
         self.state.status(WatcherKind::WorkDonor).await
     }
 

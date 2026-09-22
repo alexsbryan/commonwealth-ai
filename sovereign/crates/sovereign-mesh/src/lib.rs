@@ -66,7 +66,6 @@ pub use sovereign_serving_host::model_fetch; // shim: moved by domains dm-servin
 pub mod peer_adapter;
 pub use sovereign_serving_host::peer_inference; // shim: moved by domains REVIEW-build-serving-move-peer
 pub mod persist;
-pub use corpus_engine_watchers::projects;
 /// The §4.1 candidate objective — rank on predicted time-to-answer
 /// rather than on a product of dimensionless multipliers
 /// (`SCHEDULER_QUALITY.md` §4.1). Public because it is scored from a
@@ -74,8 +73,6 @@ pub use corpus_engine_watchers::projects;
 pub use sovereign_scheduler::predicted_time; // shim: moved by domains REVIEW-build-sched-move // shim: moved by domains REVIEW-build-mesh-workbench-deferred
 pub mod rail_bind;
 pub mod rail_kv_pump;
-#[cfg(feature = "treesitter")]
-pub use corpus_engine_watchers::reindexer;
 pub use understanding_vocab::reading_formatters; // shim: moved by domains dm-mesh-move-reading-formatters // shim: moved by domains REVIEW-build-mesh-workbench-deferred
 pub mod ring_roster;
 pub mod ring_sync;

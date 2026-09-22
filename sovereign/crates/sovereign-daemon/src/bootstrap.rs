@@ -1952,9 +1952,9 @@ pub async fn start_freshness_pipeline(
     provider: Arc<dyn InferenceProvider>,
     // The merged SCIP graph the MCP tools also hold. Shared (not rebuilt here)
     // so the reindexer's overlay + full-rebuild updates are live to `symbols()`.
-    merged_handle: sovereign_mesh::reindexer::ScipGraphHandle,
+    merged_handle: corpus_engine_watchers::reindexer::ScipGraphHandle,
 ) -> (
-    Arc<sovereign_mesh::reindexer::Reindexer>,
+    Arc<corpus_engine_watchers::reindexer::Reindexer>,
     axum::Router,
     axum::Router,
 ) {
@@ -1972,7 +1972,7 @@ pub async fn start_freshness_pipeline(
     // `merged_handle` is the SAME graph the tool registry holds (passed in by
     // the caller), so every rebuild/overlay update the reindexer makes is
     // immediately visible to `symbols`/`callers`/`blast`.
-    let mut reindexer = sovereign_mesh::reindexer::Reindexer::new(
+    let mut reindexer = corpus_engine_watchers::reindexer::Reindexer::new(
         freshness_indexes_dir.clone(),
         Arc::clone(&merged_handle),
     );
@@ -1980,7 +1980,7 @@ pub async fn start_freshness_pipeline(
     // reindexer's git-HEAD poll harvests non-noisy commits into
     // `source='committed'` notes. Must run BEFORE any clone /
     // share — Arc::get_mut returns None once this is shared.
-    sovereign_mesh::reindexer::Reindexer::with_commit_harvester(
+    corpus_engine_watchers::reindexer::Reindexer::with_commit_harvester(
         &mut reindexer,
         Arc::clone(&notes_store),
     );
@@ -2023,9 +2023,9 @@ pub async fn start_freshness_pipeline(
     // come back up without the user running `project register`
     // again. Missing / unreadable registry is non-fatal — the
     // daemon runs happily with zero registered projects.
-    let registry = sovereign_mesh::projects::Registry::load().unwrap_or_else(|e| {
+    let registry = corpus_engine_watchers::projects::Registry::load().unwrap_or_else(|e| {
         tracing::warn!(error = %e, "could not load project registry; starting empty");
-        sovereign_mesh::projects::Registry::default()
+        corpus_engine_watchers::projects::Registry::default()
     });
     for entry in registry.entries() {
         reindexer.register(entry.clone()).await;

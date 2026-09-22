@@ -126,10 +126,14 @@ libc = "0.2"
 [features]
 default = []
 # Enables `project_http` — the SCIP-graph route shell, which reads
-# `sovereign_mesh::reindexer` and therefore mesh's `treesitter`. Off by
-# default so binaries that never serve the project surface don't drag in
-# `corpus-engine`'s 5 tree-sitter grammar crates.
-treesitter = ["sovereign-mesh/treesitter", "sovereign-tools/treesitter"]
+# `corpus_engine_watchers::reindexer` and therefore that crate's `treesitter`.
+# Off by default so binaries that never serve the project surface don't drag
+# in `corpus-engine`'s 5 tree-sitter grammar crates.
+treesitter = [
+    "sovereign-mesh/treesitter",
+    "sovereign-tools/treesitter",
+    "corpus-engine-watchers/treesitter",
+]
 # The headless OCR installer. The cfg gate moved here with the composition
 # half (domains `dm-daemon-cli-composition`); the binary's features forward
 # to these.

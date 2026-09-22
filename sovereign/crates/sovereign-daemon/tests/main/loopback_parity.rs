@@ -72,6 +72,7 @@ use axum::response::Response;
 use axum::Router;
 use reqwest::Method;
 
+use corpus_engine_watchers::reindexer::{Reindexer, ScipGraph};
 use sovereign_contracts::setup_config::SetupConfig;
 use sovereign_contracts::traits::StateStore;
 use sovereign_contracts::types::projection::{project_epistemic_state, project_message_metadata};
@@ -95,7 +96,6 @@ use sovereign_daemon::turn_http::{
     turn_router, ConversationListEntry, ConversationListResponse, ConversationResponse,
     MessageEntry,
 };
-use sovereign_mesh::reindexer::{Reindexer, ScipGraph};
 
 /// Outer middleware that overrides `ConnectInfo<SocketAddr>` on the
 /// request to a *non-loopback* LAN address. Wraps a real router via

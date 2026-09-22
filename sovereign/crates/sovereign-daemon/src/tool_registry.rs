@@ -383,8 +383,8 @@ pub async fn build_tool_registry(
 /// runs under launchd/systemd.
 pub async fn build_merged_scip_graph(
     indexes_dir: &std::path::Path,
-) -> sovereign_mesh::reindexer::ScipGraph {
-    let merged = sovereign_mesh::reindexer::ScipGraph::open_in_memory("merged")
+) -> corpus_engine_watchers::reindexer::ScipGraph {
+    let merged = corpus_engine_watchers::reindexer::ScipGraph::open_in_memory("merged")
         .expect("in-memory ScipGraph");
     let Ok(entries) = std::fs::read_dir(indexes_dir) else {
         return merged;
