@@ -61,7 +61,10 @@ scripts/ralph-mark.sh tl-2-offline-leg-exports <sha> ralph/next/the-link/STATE.m
 ## What the runs should read
 
 - The room verdict table is FOURTEEN bars: six `ra-room-*`, five `rg-*`,
-  three `tl-*` — all PASSED, exit 0. `tl-checkpoint-verifies` is the new
+  three `tl-*` — twelve PASSED and TWO DESIGNED CNJs, so `demo-wait` exits 4:
+  `tl-link-carries-its-couriers` and `tl-dial-measured` name their proof
+  sites (the cargo tests; `ralph/DECISIONS.md`) rather than reading 1.0 on
+  kindness (order Demo §2-§3; the-link-6). `tl-checkpoint-verifies` is the new
   claim: the wall exports mid-cut (`created_unix` strictly inside
   `cut_at..heal_at`), the halo container verifies the file cold after
   `converged_s`, and three planted forgeries (flipped signature byte,
