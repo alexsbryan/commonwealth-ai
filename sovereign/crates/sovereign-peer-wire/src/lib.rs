@@ -17,7 +17,8 @@
 //! The join and gossip bodies are NOT here: they already live in
 //! `commonwealth_core::mesh::wire` and are re-exports at their old paths.
 
-use commonwealth_rail::{Digest, Op, SignedOp};
+// The FOLD half, not the journal: `-rail` reads a disk and this crate must not.
+use commonwealth_rail_core::{Digest, Op, SignedOp};
 use serde::{Deserialize, Serialize};
 
 /// The receiver's request-body cap — the ONE decider for "how big may one

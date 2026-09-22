@@ -952,6 +952,20 @@ name = "sovereign-workflow"
 allow = ["sovereign-contracts", "workspace-hack"]
 
 [[package_leaf]]
+name = "commonwealth-rail-core"
+# The ring rail's wire/logic half (Digest, SignedOp, Roster, Admission, Payload,
+# sig) — no fs, no store; the JOURNAL half (`commonwealth-rail`, which holds the
+# append log) stays cmnwlth's. Admitted 2026-09-21 under §12 decision 3 (wire
+# vocabulary becomes shared); the existing rail [[forbid]] rows keep applying.
+allow = ["oplog", "workspace-hack"]
+
+[[package_leaf]]
+name = "sovereign-peer-wire"
+# The daemon-to-daemon internal wire types both ends must spell the same way.
+# Pure data (no fs, no store); its only workspace dep is the rail-core leaf.
+allow = ["commonwealth-rail-core"]
+
+[[package_leaf]]
 name = "corpus-engine-scip"
 # SCIP call-graph store + language-agnostic exporter dispatch. Admitted
 # 2026-09-21: zero in-repo deps (workspace-hack alone), no build.rs, no path
@@ -1189,7 +1203,6 @@ crates = [
     "commonwealth-transport",
     "commonwealth-state",
     "commonwealth-discovery",
-    "commonwealth-rail-core",
     "commonwealth-rail",
     "commonwealth-work",
     "commonwealth-media",
@@ -1201,7 +1214,6 @@ crates = [
     "serving-policy",
     "sovereign-inference",
     "sovereign-compute",
-    "sovereign-peer-wire",
     "sovereign-pods",
     "sovereign-meshapp",
     "sovereign-meshapp-registry",

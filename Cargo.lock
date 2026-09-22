@@ -12918,7 +12918,7 @@ dependencies = [
 name = "sovereign-peer-wire"
 version = "0.7.0"
 dependencies = [
- "commonwealth-rail",
+ "commonwealth-rail-core",
  "serde",
 ]
 
