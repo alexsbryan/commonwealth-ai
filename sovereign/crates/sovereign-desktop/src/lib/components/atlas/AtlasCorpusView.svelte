@@ -96,7 +96,11 @@
     if (viewMode !== "map") return;
     sgLoading = true;
     sgError = null;
-    atlasSubgraph(cid)
+    // The highlighted ids ride the FETCH too — the backend keeps them past
+    // the cap, or a path the default selection dropped would light nothing
+    // (measured: 0 of 9 baked ids survived on ei7-ans).
+    const hl = [...highlight].join(",");
+    atlasSubgraph(cid, undefined, hl || undefined)
       .then((g) => {
         sg = g;
       })

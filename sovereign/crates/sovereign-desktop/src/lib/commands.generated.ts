@@ -59,6 +59,7 @@ export interface CommandArgs {
   atlas_subgraph: {
     corpusId: unknown;
     maxNodes?: unknown;
+    highlight?: unknown;
   };
   attach_restart_daemon: Record<string, never>;
   build_corpus_index: {

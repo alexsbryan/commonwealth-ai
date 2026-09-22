@@ -2249,8 +2249,9 @@ export async function atlasListAtoms(
 export async function atlasSubgraph(
   corpusId: string,
   maxNodes?: number,
+  highlight?: string,
 ): Promise<AtlasSubgraph> {
-  return invoke("atlas_subgraph", { corpusId, maxNodes });
+  return invoke("atlas_subgraph", { corpusId, maxNodes, highlight });
 }
 
 /** Full inspector record for one atom — type-specific atom body,

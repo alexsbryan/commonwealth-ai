@@ -64,6 +64,10 @@ pub struct SubgraphQuery {
     /// — one decider for the cap, still in `sovereign-tools`.
     #[serde(default)]
     pub max_nodes: Option<usize>,
+    /// Comma-separated atom ids that must survive the cap — the Map's
+    /// highlight input (one answer's walk path, in the map shot).
+    #[serde(default)]
+    pub highlight: Option<String>,
 }
 
 // ─── Router ────────────────────────────────────────────────────
@@ -194,12 +198,31 @@ async fn subgraph(
     _: LocalOnly,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
     Path(corpus): Path<String>,
-    Query(SubgraphQuery { max_nodes }): Query<SubgraphQuery>,
+    Query(SubgraphQuery {
+        max_nodes,
+        highlight,
+    }): Query<SubgraphQuery>,
 ) -> Result<Response, Absence> {
     let reader = reader_for(&daemon)?;
+    // `highlight` — comma-separated atom ids that must survive the cap (the
+    // map shot's walk-ledger path). Absent leaves the selection as before.
+    let highlight_ids: Vec<String> = highlight
+        .as_deref()
+        .map(|h| {
+            h.split(',')
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(str::to_string)
+                .collect()
+        })
+        .unwrap_or_default();
     Ok(
         match reader
-            .subgraph(&corpus, max_nodes.unwrap_or(DEFAULT_MAX_NODES))
+            .subgraph_highlighted(
+                &corpus,
+                max_nodes.unwrap_or(DEFAULT_MAX_NODES),
+                &highlight_ids,
+            )
             .await
         {
             Ok(graph) => (StatusCode::OK, Json(graph)).into_response(),

@@ -141,12 +141,14 @@ pub async fn atlas_subgraph(
     state: State<'_, Arc<AppState>>,
     corpus_id: String,
     max_nodes: Option<usize>,
+    highlight: Option<String>,
 ) -> Result<Value, String> {
     // `None` travels as an absent `max_nodes` and the route applies
     // `atlas_view::DEFAULT_MAX_NODES` — the cap keeps ONE decider, and it
-    // is not this file.
+    // is not this file. `highlight` is the map shot's input: comma-separated
+    // atom ids that must survive the cap.
     atlas_client(&state)
-        .atlas_subgraph::<Value>(&corpus_id, max_nodes)
+        .atlas_subgraph_highlighted::<Value>(&corpus_id, max_nodes, highlight.as_deref())
         .await
         .map_err(|e| format!("atlas_subgraph: {e}"))
 }

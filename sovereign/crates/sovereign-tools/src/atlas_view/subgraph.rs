@@ -102,6 +102,20 @@ pub const DEFAULT_MAX_NODES: usize = 280;
 /// Edges are kept when both endpoints survive. The census reflects the full
 /// corpus, not just the kept subset.
 pub fn build_subgraph(nodes: &[NodeIn], edges: &[EdgeIn], max_nodes: usize) -> AtlasSubgraph {
+    build_subgraph_highlighted(nodes, edges, max_nodes, &HashSet::new())
+}
+
+/// [`build_subgraph`] keeping a caller-named highlight set, whatever its
+/// rank — the Map's one input (stage 0b): the map shot lights one answer's
+/// walk-ledger path, and a path whose atoms the cap dropped lights nothing
+/// (measured: 0 of 9 baked path ids survived the default selection on
+/// ei7-ans, 2026-09-22).
+pub fn build_subgraph_highlighted(
+    nodes: &[NodeIn],
+    edges: &[EdgeIn],
+    max_nodes: usize,
+    highlight: &HashSet<AtomId>,
+) -> AtlasSubgraph {
     let id_set: HashSet<&AtomId> = nodes.iter().map(|n| &n.id).collect();
 
     // Degree over edges whose both endpoints are real atoms.
@@ -139,10 +153,61 @@ pub fn build_subgraph(nodes: &[NodeIn], edges: &[EdgeIn], max_nodes: usize) -> A
             .partial_cmp(&score(a))
             .unwrap_or(std::cmp::Ordering::Equal)
     });
-    ranked.truncate(max_nodes.max(1));
-    let kept: HashSet<&AtomId> = ranked.iter().map(|n| &n.id).collect();
+    // NO TYPE MAY CONSUME THE MAP (stage 0b, measured 2026-09-22): the
+    // spine boost floats every Question and ArgumentReconstruction to the
+    // top, and on a question-dense corpus that is the whole map — ei7-ans
+    // returned 200 of 200 nodes typed Question (533 of its 4,091 atoms),
+    // so the declared-ontology map could not show a single entity. Cap any
+    // one type at half the budget and keep filling by rank, so the spine
+    // still leads and every other kind is present.
+    let cap = (max_nodes.max(1) / 2).max(1);
+    let mut per_type: HashMap<AtomType, usize> = HashMap::new();
+    let mut selected: Vec<&NodeIn> = Vec::with_capacity(max_nodes.max(1));
+    // The highlighted set is kept FIRST and unconditionally (bounded by the
+    // budget itself) — the cap exists to curate, not to hide the subject.
+    let mut selected_ids: HashSet<&AtomId> = HashSet::new();
+    if !highlight.is_empty() {
+        for n in &ranked {
+            if selected.len() >= max_nodes.max(1) {
+                break;
+            }
+            if highlight.contains(&n.id) {
+                selected.push(n);
+                selected_ids.insert(&n.id);
+                *per_type.entry(n.atom_type).or_insert(0) += 1;
+            }
+        }
+    }
+    for n in &ranked {
+        if selected.len() >= max_nodes.max(1) {
+            break;
+        }
+        if selected_ids.contains(&n.id) {
+            continue;
+        }
+        let count = per_type.entry(n.atom_type).or_insert(0);
+        if *count >= cap {
+            continue;
+        }
+        *count += 1;
+        selected.push(n);
+    }
+    // A pathological corpus (one type only) could leave the budget unfilled
+    // after the cap; backfill by rank so the map never shrinks silently.
+    if selected.len() < max_nodes.max(1) {
+        let chosen: HashSet<&AtomId> = selected.iter().map(|n| &n.id).collect();
+        for n in &ranked {
+            if selected.len() >= max_nodes.max(1) {
+                break;
+            }
+            if !chosen.contains(&n.id) {
+                selected.push(n);
+            }
+        }
+    }
+    let kept: HashSet<&AtomId> = selected.iter().map(|n| &n.id).collect();
 
-    let out_nodes: Vec<AtlasNode> = ranked
+    let out_nodes: Vec<AtlasNode> = selected
         .iter()
         .map(|n| AtlasNode {
             id: n.id.clone(),
@@ -197,6 +262,17 @@ impl FileAtlasReader {
         &self,
         corpus_id: &str,
         max_nodes: usize,
+    ) -> Result<AtlasSubgraph, AtomQueryError> {
+        self.subgraph_highlighted(corpus_id, max_nodes, &[]).await
+    }
+
+    /// [`Self::subgraph`] with the Map's highlight input: atom ids that must
+    /// survive the cap (one answer's walk-ledger path, in the map shot).
+    pub async fn subgraph_highlighted(
+        &self,
+        corpus_id: &str,
+        max_nodes: usize,
+        highlight_ids: &[String],
     ) -> Result<AtlasSubgraph, AtomQueryError> {
         // All atoms as summaries (one big page — atoms.json is already cached).
         let page = self
@@ -341,7 +417,11 @@ impl FileAtlasReader {
 
         edges_in.extend(synthesize_spine_edges(&spine_atoms));
 
-        Ok(build_subgraph(&nodes_in, &edges_in, max_nodes))
+        let highlight: HashSet<AtomId> =
+            highlight_ids.iter().map(|s| AtomId::from_raw(s)).collect();
+        Ok(build_subgraph_highlighted(
+            &nodes_in, &edges_in, max_nodes, &highlight,
+        ))
     }
 }
 
@@ -488,6 +568,35 @@ pub fn synthesize_spine_edges(atoms: &[SpineAtom]) -> Vec<EdgeIn> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The measured flood (ei7-ans, 2026-09-22): 533 Question atoms outrank
+    /// everything, and an uncapped map returned 200 of 200 nodes typed
+    /// Question — no entity could appear, so a declared-ontology map showed
+    /// none of its kinds. Any one type is capped at half the budget; the
+    /// rest fills by rank.
+    #[test]
+    fn no_single_type_may_consume_the_whole_map() {
+        let mut nodes: Vec<NodeIn> = (0..300)
+            .map(|i| node(i, AtomType::Question, Some(0.9)))
+            .collect();
+        for i in 300..350 {
+            nodes.push(node(i, AtomType::Entity, Some(0.5)));
+        }
+        let g = build_subgraph(&nodes, &[], 100);
+        let q = g
+            .nodes
+            .iter()
+            .filter(|n| n.atom_type == AtomType::Question)
+            .count();
+        let e = g
+            .nodes
+            .iter()
+            .filter(|n| n.atom_type == AtomType::Entity)
+            .count();
+        assert!(q <= 50, "questions must not exceed half the budget: {q}");
+        assert!(e >= 40, "entities must not be crowded out: {e}");
+        assert_eq!(g.nodes.len(), 100, "the budget stays filled");
+    }
 
     fn node(i: usize, t: AtomType, sal: Option<f32>) -> NodeIn {
         NodeIn {
