@@ -157,7 +157,7 @@ pub(super) fn run_serve(args: &[String]) -> i32 {
             }
             println!();
             println!("Mint the room's one QR for every app so declared:");
-            println!("  svrn mesh grant --model <id> --wall --ttl 2h --url http://<addr:port>/ring/ --qr-svg wall-qr.svg");
+            println!("  svrn mesh grant --wall --ttl 2h --url http://<addr:port>/ring/ --qr-svg wall-qr.svg");
             0
         }
         Err(e) => {
