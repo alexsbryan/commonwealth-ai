@@ -43,3 +43,8 @@ campaign: needs-human — # NEEDS_HUMAN — the-link / tl-2-offline-leg-exports
 campaign: needs-human — # NEEDS_HUMAN — the-link / tl-2-offline-leg-exports
 2026-09-22T08:38:01Z supervisor: campaign stopped — # NEEDS_HUMAN — the-link / tl-2-offline-leg-exports
 2026-09-22T08:38:01Z supervisor: 4 resolution attempts did not clear it — leaving it to the operator
+2026-09-22T16:59:12Z supervisor: director charter loaded from /home/alexbryan/dev/commonwealth-ai/ralph/next/the-link/CHARTER.md
+2026-09-22T16:59:12Z supervisor: operator STOP — leaving it stopped
+2026-09-22T17:00:34Z supervisor: director charter loaded from /home/alexbryan/dev/commonwealth-ai/ralph/next/the-link/CHARTER.md
+2026-09-22T17:00:34Z unit REVIEW-DEMO-the-link-run — --model zai-coding-plan/glm-5.3-flash
+2026-09-22T17:00:34Z prompt: ralph/next/the-link/PROMPT.md sha256=531abd063f5bddad
