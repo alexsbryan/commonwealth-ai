@@ -853,6 +853,22 @@ refusal named the chain, which is the value.
   gliner is linked into the daemon and the store is on the per-chunk ingest hot
   path.
 
+### Probe REFUSED 2026-09-21 (82 at 69c69a0d5)
+
+- **`sovereign-cli-daemon -> sovereign-mesh`** (2 refs: `setup_cmd/terminal.rs:229,239`
+  `deep_link::{parse_join_argument, DeepLink}`). Cannot be closed by moving the
+  `deep_link` module to a leaf: it calls
+  `crate::membership::validate_join_key_format` (deep_link.rs:340), and
+  `commonwealth-discovery::membership` pulls `commonwealth-core`. Worse, two
+  [[forbid]] rows block the shim route outright — `from = "commonwealth-discovery"
+  to = "sovereign-*"` (ARCH_LAYERS.toml:699, no except) and the same for
+  `commonwealth-rails` (:663) — and a forbid outranks the leaf budget, so a
+  `pub use sovereign_contracts::deep_link` would fail layer-gate in both crates.
+  The layer map says `sovereign-* -> mesh-foundation` is legal, which is why the
+  FORMAT was extracted from mesh once already; closing the package edge needs the
+  join-key VALIDATION re-homed below the contract seam first. Chain: extract
+  `validate_join_key_format` (pure) from `membership.rs`, then the format move.
+
 ### The decisions — these are the operator's, and they are meant to be few
 
 - [x] **`atos` is CUT COMPLETELY** (operator, 2026-09-21). Footprint:
