@@ -16,7 +16,9 @@
 
 pub use corpus_engine_atlas_reader::context::*;
 
-use std::collections::{HashMap, HashSet};
+#[cfg(test)]
+use std::collections::HashMap;
+use std::collections::HashSet;
 use std::path::Path;
 
 use corpus_engine_atlas_reader::ann_store::AnnSeedTable;
