@@ -561,6 +561,13 @@ status = "shipped"
 purpose = "Similarity floor for the coverage probe's TopicUncovered/ClaimUncovered split. Calibrated 2026-09-09 on the secret_agent bank (43 q): in-topic 0.5089-0.7982, off-topic 0.2015-0.3323. The boundary is the TOP of the observed off-topic band across both calibration runs (2026-07-19 saw off-topic as high as 0.49), not the midpoint of the gap. Was 0.55, which sat inside the in-topic band."
 
 [[flag]]
+name = "SOVEREIGN_COVERAGE_FIRST"
+cluster = "grounding"
+default = "off"
+status = "experiment"
+purpose = "Coverage-first synthesis, one A/B arm: (1) the stamped demand set's named facets (Entity/Stance/Section) are rendered into the KQ synthesis prompt as found / not found by name, and (2) an ANSWERED turn whose named entities were not found arms the Refinement gap card, which otherwise fires only on abstention. One module, runtime::coverage_first. =1 enables. Flip condition: sovereign/DEFAULTS_LEDGER.md."
+
+[[flag]]
 name = "SOVEREIGN_KQ_POOL_SCALE"
 cluster = "retrieval"
 default = "1"

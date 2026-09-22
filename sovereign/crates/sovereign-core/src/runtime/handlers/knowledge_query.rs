@@ -1219,6 +1219,16 @@ impl Runtime {
         // string when there's nothing to disclose, so the prompt
         // overhead is zero in the common case.
         let mut gap_note = build_coverage_gaps_note(&chunks, &folder_meta);
+        // Coverage-first: the stamped demand set, stated to the model as fact.
+        if crate::runtime::coverage_first::coverage_first_enabled() {
+            let brief = crate::runtime::coverage_first::render_coverage_brief(&demands);
+            if !brief.is_empty() {
+                if !gap_note.is_empty() {
+                    gap_note.push_str("\n\n");
+                }
+                gap_note.push_str(&brief);
+            }
+        }
         // Conversation turns are evidence too (gap-probe fix 2, second
         // hop). The gate already admits them via
         // `conversation_pinned_evidence`; without this the SYNTHESIS
@@ -1236,7 +1246,9 @@ impl Runtime {
             // The agentic loop fired, ran its targeted second retrieval
             // pass, and the evidence STILL fails the sufficiency judge.
             // Tell the synthesis model — a model that knows the search
-            // already came back empty abstains; one that doesn't treats
+            // already came back empty names the gap (after giving what the
+            // passages do state; 7baf4da8f: a whole-answer decline dropped
+            // members the chunks held); one that doesn't treats
             // the near-miss pile as license to answer (measured
             // 2026-06-11: 3 absent-question abstentions became
             // confident fabrications without this note).
@@ -1255,18 +1267,18 @@ impl Runtime {
                     "\n\nEVIDENCE CHECK: a targeted second retrieval pass already \
                      ran for this question and did not surface decisive evidence. \
                      This question asks about the world inside your sources; \
-                     outside 'general knowledge' cannot supply facts about it. If \
-                     the passages do not directly state the asked-for fact, answer \
-                     that the sources do not state it — never substitute a guess \
-                     or an outside-knowledge claim.",
+                     outside 'general knowledge' cannot supply facts about it. Give \
+                     what the passages do state that bears on the question, then \
+                     name in one line the asked-for fact they do not state — never \
+                     substitute a guess or an outside-knowledge claim for it.",
                 );
             } else {
                 gap_note.push_str(
                     "\n\nEVIDENCE CHECK: a targeted second retrieval pass already \
                      ran for this question and did not surface decisive evidence. \
-                     If the passages do not directly state the asked-for fact, say \
-                     plainly that the available sources do not contain it — do not \
-                     bridge the gap with a confident guess.",
+                     Give what the passages do establish, then name in one line \
+                     the asked-for fact they do not contain — do not bridge that \
+                     gap with a confident guess.",
                 );
             }
         }
@@ -1874,11 +1886,14 @@ impl Runtime {
             // instantly). See the matching block in the streaming KQ
             // path + the long-form note at
             // `prepare_knowledge_query_plan`.
-            self.maybe_collaborate(
+            self.maybe_collaborate_on(
                 conversation_id,
                 message,
                 &completion_text,
-                gate_abstained && !rescued_turn,
+                crate::runtime::coverage_first::GapTrigger::for_turn(
+                    gate_abstained && !rescued_turn,
+                    &plan.demands,
+                ),
             )
             .await
         } else {

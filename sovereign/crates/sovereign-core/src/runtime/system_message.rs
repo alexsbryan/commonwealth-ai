@@ -734,6 +734,20 @@ impl Runtime {
         response: &str,
         abstained: bool,
     ) -> String {
+        self.maybe_collaborate_on(conversation_id, question, response, abstained.into())
+            .await
+    }
+
+    /// [`Self::maybe_collaborate`] with the full trigger: a KnowledgeQuery
+    /// turn also arms the card on an answered turn whose named entities
+    /// were not found (`coverage_first::GapTrigger::Uncovered`).
+    pub(crate) async fn maybe_collaborate_on(
+        &self,
+        conversation_id: &str,
+        question: &str,
+        response: &str,
+        trigger: crate::runtime::coverage_first::GapTrigger,
+    ) -> String {
         // Synchronous (non-streaming) path: the routing-events
         // sink is wired but no live streaming session_id exists
         // here, so narration chips for the gap-check are skipped.
@@ -761,7 +775,7 @@ impl Runtime {
             conversation_id,
             question,
             response,
-            abstained,
+            trigger,
             None,
             None,
             // Legacy non-streaming caller — no lesson threading (the

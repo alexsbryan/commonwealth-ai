@@ -138,18 +138,17 @@ Anti-fabrication guardrails:\n\
 - If the passages don't cover it, flag provenance in one line (\"Not in \
   your sources, but from general knowledge…\") then answer from general \
   knowledge — never give a parametric fact as if it were retrieved.\n\
-- NEVER invent or complete a list, roster, or statistic you do not fully \
-  know.\n\
-- CRITICAL — if neither the retrieved passages nor your confident \
-  general knowledge cover the specific thing the user asked about, say \
-  \"I don't have reliable information on this\" and add NOTHING \
-  invented after it. Do NOT invent a plausible-sounding origin, \
-  lineage, author, date, organisation, or framework. A \
-  confident-sounding fabrication is worse than an honest 'I don't \
-  know' — it poisons the user's mental model of what's real. If the \
-  phrase the user used (e.g. a specific project name, person, API) is \
-  not something you can speak to with concrete factual confidence, say \
-  so plainly.\n\
+- LISTS: when the passages name only some members of a list, roster, or \
+  set, give the members they name, each cited, then add one line saying \
+  the list may be incomplete. Never add a member the passages do not \
+  name, and never withhold the members they do name.\n\
+- PARTIAL COVERAGE: answer every part of the question the passages or \
+  your confident general knowledge cover, then name the uncovered part \
+  specifically in one line (\"Not covered here: <the missing fact>\"). \
+  Never fill that part with a plausible-sounding origin, lineage, author, \
+  date, organisation, or framework — a confident fabrication is worse \
+  than a named gap. Only when NOTHING asked about is covered, say so \
+  plainly and name what the passages do cover instead.\n\
 - NEVER END ON A DEAD END. When you come up short — a decline, a \
   partial answer, a thin overview — your LAST line must hand the user \
   agency in ONE short sentence: name the nearest thing these sources \
@@ -821,6 +820,34 @@ mod synthesis_prompt_tests {
             KNOWLEDGE_SYNTHESIS_SYSTEM
                 .contains("Reproduce names exactly as the passages write them"),
             "surname discipline must be present"
+        );
+    }
+
+    /// Tombstone for the answer-or-decline rules. "NEVER invent or
+    /// complete a list … you do not fully know" plus a CRITICAL "say 'I
+    /// don't have reliable information on this' and add NOTHING" left a
+    /// list question with a partial set two exits, and the model took the
+    /// decline: the ANS K1 board (7baf4da8f) declined `list-igch0076-mints`
+    /// with 3 of 6 gold mints in its chunks, 42 decline-class rows in the
+    /// full arm against bare's 9. The replacement answers the covered part
+    /// and names the gap; fabrication stays forbidden by name.
+    #[test]
+    fn partial_coverage_answers_the_covered_part() {
+        assert!(
+            !KNOWLEDGE_SYNTHESIS_SYSTEM.contains("add NOTHING"),
+            "the whole-answer decline rule must not return"
+        );
+        assert!(
+            !KNOWLEDGE_SYNTHESIS_SYSTEM.contains("complete a list"),
+            "the list rule must not forbid a partial list"
+        );
+        assert!(
+            KNOWLEDGE_SYNTHESIS_SYSTEM.contains("never withhold the members they do name"),
+            "a partial list is given, not withheld"
+        );
+        assert!(
+            KNOWLEDGE_SYNTHESIS_SYSTEM.contains("a confident fabrication is worse"),
+            "the anti-fabrication half must stay"
         );
     }
 

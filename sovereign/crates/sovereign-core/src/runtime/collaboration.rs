@@ -115,8 +115,10 @@ pub(crate) async fn run_collaboration(
     // CannotKnowFromHere` derives from (D3). Replaces `gap.rs`'s post-hoc
     // LLM judge, which scored 12/12-equivalent to this deterministic
     // detector on the fixture bank while paying a 15-55s fast-slot call
-    // on EVERY answered turn. `false` = no gap card, pass through.
-    abstained: bool,
+    // on EVERY answered turn. `Answered` = no gap card, pass through.
+    // `Uncovered` (coverage-first) arms the card on an answered turn from
+    // the stamped demand set — still deterministic, still no judge.
+    trigger: crate::runtime::coverage_first::GapTrigger,
     // Optional narration channel: when both `routing_events` and
     // `session_id` are `Some`, surface "checking for gaps" /
     // "found a gap" chips alongside the gap-check work so the user
@@ -174,10 +176,20 @@ pub(crate) async fn run_collaboration(
     //    (the ledger still records minor uncovered facets as gap rows,
     //    without a card). This deleted `gap.rs`'s per-turn 15-55s
     //    grammar-constrained fast-slot audit.
-    if !abstained {
-        tracing::debug!("maybe_collaborate: turn answered — no gap card");
-        return RefinementOutcome::NotAttempted;
-    }
+    use crate::runtime::coverage_first::GapTrigger;
+    let computed_ask = match trigger {
+        GapTrigger::Answered => {
+            tracing::debug!("maybe_collaborate: turn answered — no gap card");
+            return RefinementOutcome::NotAttempted;
+        }
+        GapTrigger::Abstained => None,
+        GapTrigger::Uncovered(ask) => Some(ask),
+    };
+    let chip_text = if computed_ask.is_some() {
+        "Answered what the passages cover — part of the question wasn't in them."
+    } else {
+        "Came up short on this one — working out what would settle it."
+    };
 
     // Glassbox chip: the turn came up short and the system is preparing
     // the ask. Emitted before the phrasing pass + route resolution
@@ -191,8 +203,7 @@ pub(crate) async fn run_collaboration(
                 conversation_id: conversation_id.to_string(),
                 event: NarrationEvent {
                     phase: NarrationPhase::GapCheckFired,
-                    text: "Came up short on this one — working out what would settle it."
-                        .to_string(),
+                    text: chip_text.to_string(),
                     elapsed_ms: 0,
                 },
             })
@@ -204,9 +215,14 @@ pub(crate) async fn run_collaboration(
     //    ask (D4: may phrase, never invent — the fallback is the user's
     //    question verbatim, and routes come only from the catalog
     //    resolver below).
-    let gap_text = phrase_gap_question(inference, question, response)
-        .await
-        .unwrap_or_else(|| question.trim().to_string());
+    //    A computed ask is already the gap's own deterministic statement,
+    //    so it skips the phrasing call.
+    let gap_text = match computed_ask {
+        Some(ask) => ask,
+        None => phrase_gap_question(inference, question, response)
+            .await
+            .unwrap_or_else(|| question.trim().to_string()),
+    };
     let mut req = InformationRequest {
         current_understanding: String::new(),
         gap: gap_text,
@@ -516,6 +532,11 @@ pub(crate) async fn run_post_stream_refinement(
         .and_then(|a| a.as_str())
         .map(|a| a.starts_with("abstained"))
         .unwrap_or(false);
+    // Coverage-first: the same ledger also carries the stamped demands.
+    let trigger = crate::runtime::coverage_first::GapTrigger::for_metadata(
+        abstained,
+        original_metadata.as_ref(),
+    );
     let outcome = run_collaboration(
         inference,
         approval,
@@ -523,7 +544,7 @@ pub(crate) async fn run_post_stream_refinement(
         conversation_id,
         question,
         original_content,
-        abstained,
+        trigger,
         routing_events,
         session_id,
         lesson_prompt,

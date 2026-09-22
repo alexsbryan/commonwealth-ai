@@ -217,6 +217,18 @@ query. Coverage levels are stamped in two passes: `Retrieved` when any
 pooled chunk matches the facet (the coverage_select facet-tagging
 already computes this affinity), `Supported` when a holding cites it.
 
+**Read before synthesis, too (2026-09-22, `SOVEREIGN_COVERAGE_FIRST`,
+default off).** The `Retrieved`/`Absent` stamp exists before the model
+writes, and `runtime::coverage_first` is its pre-release reader. It renders
+the named facets (Entity, Stance, Section — never Query, which is
+`Retrieved` on any non-empty pool, and never the heuristic SubQuestion) into
+the KQ synthesis prompt as found / not found by name, so the model is told
+what it has instead of judging sufficiency. It also computes
+`GapTrigger::Uncovered` for an answered turn with an absent Entity facet,
+which fires the Refinement card; before this the card fired only on
+abstention (I4-C). Both readers use one facet set, so the gap the prompt
+names is the gap the card names.
+
 ### 4.2 `holdings` — the gate stops discarding its work
 
 - The gate's claim extractor + per-claim forced-choice verdicts

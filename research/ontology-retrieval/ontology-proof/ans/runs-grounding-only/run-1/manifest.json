@@ -1,0 +1,9 @@
+{
+  "arm": "grounding-only",
+  "diagnostic": true,
+  "env": {"SOVEREIGN_ATLAS_GROUNDING": "1", "SOVEREIGN_ATOM_ENUM": "0", "SOVEREIGN_ATOM_ENUM_OVERVIEW": "0"},
+  "production_default": true,
+  "chat_model": "commonwealth/primary (pod resolves to the board Q6_K)",
+  "run": 1,
+  "started_utc": "2026-09-22T19:10:56Z"
+}
