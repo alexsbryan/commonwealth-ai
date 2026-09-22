@@ -84,6 +84,7 @@ pub async fn run(args: &[String]) -> i32 {
                  \x20 svrn ring dev <ns> [--dir <bundle-dir>] [--port <n>]\n\
                  \x20 svrn ring log <ns> [--json]\n\
                  \x20 svrn ring checkpoint <ns> [--out <file>]\n\
+                 \x20 svrn ring checkpoint --verify <file> [--roster <file>]\n\
                  \x20 svrn ring seal <ns>\n\n\
                  new     scaffold a ring app (index.html, app.js, its reducer and its tests).\n\
                  roster  bind a person's name to the node key they sign with, and show why\n\
@@ -97,6 +98,8 @@ pub async fn run(args: &[String]) -> i32 {
                  checkpoint\n\
                  \x20       the ring's record, frozen: the journal verbatim, the roster it\n\
                  \x20       was admitted under, and the digest that vouches it is complete.\n\
+                 \x20       --verify runs the four steps over a frozen copy and refuses\n\
+                 \x20       every forgery by name; --roster verifies under your own roster.\n\
                  seal    retire everything this node wrote before now, and delete it.\n\n\
                  A ring namespace is created by its first write — there is nothing to\n\
                  provision. Start with `roster add`, because an op signed by a key no\n\
@@ -109,6 +112,7 @@ pub async fn run(args: &[String]) -> i32 {
     }
 }
 
+mod checkpoint_verify;
 mod dev;
 mod scaffold;
 
@@ -210,6 +214,9 @@ pub(crate) use sovereign_cli_shared::rail::{
 /// --verify` reads, and the form that travels by courier); without it the
 /// document is printed.
 async fn run_checkpoint(args: &[String]) -> i32 {
+    if args.first().map(String::as_str) == Some("--verify") {
+        return checkpoint_verify::run_verify(&args[1..]);
+    }
     let Some(namespace) = args
         .first()
         .filter(|a| !a.starts_with("--"))
