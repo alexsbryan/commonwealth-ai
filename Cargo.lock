@@ -2383,6 +2383,7 @@ dependencies = [
  "futures",
  "kernel-types",
  "lancedb",
+ "memmap2",
  "serde",
  "serde_json",
  "sha2 0.10.9",

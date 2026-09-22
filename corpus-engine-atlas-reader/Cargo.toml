@@ -27,6 +27,8 @@ arrow = { workspace = true }
 arrow-array = { workspace = true }
 futures = { workspace = true }
 lancedb = { workspace = true }
+memmap2 = "0.9"
+tokio = { workspace = true }
 kernel-types = { workspace = true }
 understanding-vocab = { workspace = true }
 workspace-hack = { version = "0.1", path = "../workspace-hack" }
