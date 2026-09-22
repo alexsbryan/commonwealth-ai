@@ -896,6 +896,14 @@ refusal named the chain, which is the value.
 - Orphan from the harness fix (a546a456b): `sovereign-mesh-test-harness`'s
   `MockLlamaServer` has no consumer left after the 15 host-route tests were
   dropped; it should move to the daemon's suite or be deleted.
+- **`sovereign-cli-daemon -> sovereign-inference`** (29 refs): `setup_planner`
+  (11 refs) is fully portable — its `crate::hardware::ProfileName` and
+  `crate::{validate_gguf, GgufExpectation}` are contract re-exports — but moving
+  it clears zero gate count. The edge is carried by 18 others: `rpc_worker_main`
+  (lib.rs:162), `llama_logs` (lib.rs:130), `hardware::detect_hardware`
+  (fim.rs:45, needs llama.cpp), `capacity` (vram_plan.rs:22), `smoketest`.
+  Fix shape: the daemon dials rpc-worker/llama-log/hardware-detect over HTTP
+  (§4 rule 2) rather than relocating a catalog module.
 
 ### The decisions — these are the operator's, and they are meant to be few
 
