@@ -26,6 +26,33 @@ pub(crate) fn wall_page_base(base: &str, rail: Option<&str>, wall: bool) -> Stri
     }
 }
 
+/// The wall QR's https link: the page base, plus the DIAL STRING when the
+/// guest must tunnel in.
+///
+/// The dial rides the fragment beside the token, so a browser that cannot
+/// reach this machine over HTTP can still reach it by key over the relay —
+/// the "guest from anywhere" case (`docs/RING_APP_LIBRARY.md`, "The page is
+/// an iroh endpoint"; `docs/THE_LINK.md`). Absent on a direct (plain-HTTP)
+/// grant, where the base URL IS the address and there is nothing to dial.
+pub(crate) fn wall_https_link(
+    token: &str,
+    base: &str,
+    rail: Option<&str>,
+    wall: bool,
+    expires_at_secs: u64,
+    summary: Option<&str>,
+    dial: Option<&str>,
+) -> String {
+    build_https_guest_link(
+        token,
+        &wall_page_base(base, rail, wall),
+        expires_at_secs,
+        summary,
+        None,
+        dial,
+    )
+}
+
 /// The QR module margin, in modules. Four is the quiet zone the QR standard
 /// requires; a scanner cannot find the finder patterns without it.
 const QR_QUIET_ZONE: usize = 4;
@@ -60,6 +87,35 @@ mod tests {
         // the whole wall rather than one page of it.
         assert_eq!(wall_page_base(b, None, true), "http://h:9/ring/");
         assert_eq!(wall_page_base(pinned, None, true), pinned);
+    }
+
+    /// The wall QR's link must carry the dial string when the guest has no
+    /// HTTP path to this machine — that is the whole "guest from anywhere"
+    /// case — and must not invent one on a direct grant. The builder's own
+    /// round-trip is pinned in `sovereign-mesh`; this guards the CALLER, which
+    /// passed `None` here until 2026-09-22.
+    #[test]
+    fn the_wall_link_carries_the_dial_string_when_the_guest_must_tunnel() {
+        let dial = "5a46ef@https://usw1-1.relay.n0.iroh.link./,10.89.60.11:55686";
+        let tunnelled = wall_https_link(
+            "tok",
+            "https://svrnme.sh",
+            None,
+            true,
+            1_790_112_357,
+            None,
+            Some(dial),
+        );
+        match sovereign_mesh::deep_link::parse_https_guest_link(&tunnelled) {
+            Some(sovereign_mesh::deep_link::DeepLink::Guest { dial: got, .. }) => {
+                assert_eq!(got.as_deref(), Some(dial))
+            }
+            _ => panic!("the wall link did not parse as a guest link: {tunnelled}"),
+        }
+
+        // A direct grant has no dial string, and the link must stay as it was.
+        let direct = wall_https_link("tok", "http://10.0.0.1:19947", None, true, 1, None, None);
+        assert!(!direct.contains("iroh="), "{direct}");
     }
 
     /// Rasterise the SVG `wall_qr_svg` writes — its `viewBox` and one

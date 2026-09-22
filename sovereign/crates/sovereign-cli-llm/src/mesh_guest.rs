@@ -34,12 +34,10 @@
 //! for the guest to resolve.
 
 use sovereign_cli_shared::help::{Help, HelpSection};
-use sovereign_mesh::deep_link::{
-    build_guest_link, build_https_guest_link, parse_deep_link, DeepLink,
-};
+use sovereign_mesh::deep_link::{build_guest_link, parse_deep_link, DeepLink};
 
 use crate::guest_link::{self, GuestLink};
-use crate::mesh_guest_link::{wall_page_base, wall_qr_svg};
+use crate::mesh_guest_link::{wall_https_link, wall_qr_svg};
 
 /// Read the daemon's client port from `SetupConfig` rather than hardcoding
 /// 9741 — a sandbox pointed at its own daemon must not mint against the
@@ -190,33 +188,6 @@ enum GuestPath {
 /// holds the live endpoint and already publishes exactly this string for
 /// invites. A second assembler would be a second answer to "how is this node
 /// dialled" (§10.6), and it would be the stale one.
-/// The wall QR's https link: the page base, plus the DIAL STRING when the
-/// guest must tunnel in.
-///
-/// The dial rides the fragment beside the token, so a browser that cannot
-/// reach this machine over HTTP can still reach it by key over the relay —
-/// the "guest from anywhere" case (`docs/RING_APP_LIBRARY.md`, "The page is
-/// an iroh endpoint"; `docs/THE_LINK.md`). Absent on a direct (plain-HTTP)
-/// grant, where the base URL IS the address and there is nothing to dial.
-fn wall_https_link(
-    token: &str,
-    base: &str,
-    rail: Option<&str>,
-    wall: bool,
-    expires_at_secs: u64,
-    summary: Option<&str>,
-    dial: Option<&str>,
-) -> String {
-    build_https_guest_link(
-        token,
-        &wall_page_base(base, rail, wall),
-        expires_at_secs,
-        summary,
-        None,
-        dial,
-    )
-}
-
 async fn node_dial_string(port: u16) -> Option<String> {
     let client = http_client(5).ok()?;
     let resp = client
@@ -1058,35 +1029,6 @@ async fn verify_link(link: &GuestLink) -> Result<Vec<String>, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    /// The wall QR's link must carry the dial string when the guest has no
-    /// HTTP path to this machine — that is the whole "guest from anywhere"
-    /// case — and must not invent one on a direct grant. The builder's own
-    /// round-trip is tested in `commonwealth-discovery`; this guards the
-    /// CALLER, which passed `None` here until 2026-09-22.
-    #[test]
-    fn the_wall_link_carries_the_dial_string_when_the_guest_must_tunnel() {
-        let dial = "5a46ef@https://usw1-1.relay.n0.iroh.link./,10.89.60.11:55686";
-        let tunnelled = wall_https_link(
-            "tok",
-            "https://svrnme.sh",
-            None,
-            true,
-            1_790_112_357,
-            None,
-            Some(dial),
-        );
-        match sovereign_mesh::deep_link::parse_https_guest_link(&tunnelled) {
-            Some(sovereign_mesh::deep_link::DeepLink::Guest { dial: got, .. }) => {
-                assert_eq!(got.as_deref(), Some(dial))
-            }
-            _ => panic!("the wall link did not parse as a guest link: {tunnelled}"),
-        }
-
-        // A direct grant has no dial string, and the link must stay as it was.
-        let direct = wall_https_link("tok", "http://10.0.0.1:19947", None, true, 1, None, None);
-        assert!(!direct.contains("iroh="), "{direct}");
-    }
 
     #[test]
     fn ttl_accepts_the_suffixes_the_help_advertises() {
