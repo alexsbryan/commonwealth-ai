@@ -41,7 +41,6 @@ pub mod context_loader;
 pub mod cross_corpus;
 pub mod doc_to_atoms;
 pub use understanding_vocab::edges;
-pub mod embeddings;
 pub mod ground;
 pub mod ingestion;
 pub mod inventory;
@@ -71,12 +70,12 @@ pub use axis_catalog::{
     all_axes, axes_for_mode, axis_by_key, AxisAtomShape, GatingField, TypedAxis, AXIS_CATALOG,
 };
 pub use citation::{apply_citation, SourceCitation};
+pub use corpus_engine_atlas_reader::raw::atoms_content_hash;
 pub use cross_corpus::{
     detect_grounding, CrossCorpusAtomRef, CrossCorpusEdge, CrossCorpusEdgesFile, CrossCorpusInput,
     CrossCorpusReport, DetectorSummary, MatchTrace, RejectionBucket, RejectionSample,
 };
 pub use edges::{Edge, EdgeId, EdgeProvenance, EdgeType, EdgesFile};
-pub use embeddings::atoms_content_hash;
 pub use ground::{
     candidate_atlas_ids, ground, navigation_policy_for, select_walk, Degradation, Grounding,
     MapNode, MapSection, PolicySource, WalkLedger, WalkSelection, MAP_NODE_CAP,

@@ -15,9 +15,11 @@
 //! `edges`, `ontology`, `taxonomy`); the store (lancedb/arrow/memmap) does not
 //! widen it — it lands here when the store's read half moves.
 
+pub mod ann_store;
 pub mod axis_catalog;
 pub mod citation;
 pub mod context_filter;
 pub mod evidence_site;
 pub mod projection;
+pub mod raw;
 pub mod section_cache;

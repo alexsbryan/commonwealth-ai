@@ -2378,10 +2378,16 @@ dependencies = [
 name = "corpus-engine-atlas-reader"
 version = "0.7.0"
 dependencies = [
+ "arrow",
+ "arrow-array",
+ "futures",
  "kernel-types",
+ "lancedb",
  "serde",
  "serde_json",
+ "sha2 0.10.9",
  "tempfile",
+ "tokio",
  "tracing",
  "understanding-vocab",
  "workspace-hack",

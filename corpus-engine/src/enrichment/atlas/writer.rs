@@ -389,23 +389,10 @@ pub fn write_atlas_ontology(
     Ok(path)
 }
 
-/// Read `atlas/ontology.json`, or `None` when the atlas declares none or the
-/// file cannot be parsed. Companion to [`write_atlas_ontology`]; the summary
-/// reads it through this and nothing else opens the file by name.
-pub fn read_atlas_ontology(atlas_dir: &Path) -> Option<AtlasOntologyFile> {
-    let raw = fs::read(atlas_dir.join(AtlasOntologyFile::FILE)).ok()?;
-    match serde_json::from_slice(&raw) {
-        Ok(parsed) => Some(parsed),
-        Err(e) => {
-            tracing::warn!(
-                atlas_dir = %atlas_dir.display(),
-                error = %e,
-                "atlas ontology: ontology.json present but unreadable; treating as undeclared"
-            );
-            None
-        }
-    }
-}
+// `read_atlas_ontology` moved to the atlas-reader leaf's `raw` module
+// (FIVE_PROGRAMS §12 decision 1) — the summary and context reads reach it
+// without linking the engine. Re-exported at the historical path.
+pub use corpus_engine_atlas_reader::raw::read_atlas_ontology;
 
 /// Read the stored `atlas/schema_validation.json` as the typed report, or
 /// `None` when the report step has not run or the file cannot be parsed.

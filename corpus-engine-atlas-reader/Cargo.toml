@@ -22,6 +22,11 @@ description = "Resolved-atlas READ surface, carved read-only out of corpus-engin
 serde = { workspace = true }
 serde_json = { workspace = true }
 tracing = { workspace = true }
+sha2 = { workspace = true }
+arrow = { workspace = true }
+arrow-array = { workspace = true }
+futures = { workspace = true }
+lancedb = { workspace = true }
 kernel-types = { workspace = true }
 understanding-vocab = { workspace = true }
 workspace-hack = { version = "0.1", path = "../workspace-hack" }
@@ -30,4 +35,5 @@ workspace-hack = { version = "0.1", path = "../workspace-hack" }
 workspace = true
 
 [dev-dependencies]
-tempfile = "3"
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt"] }
