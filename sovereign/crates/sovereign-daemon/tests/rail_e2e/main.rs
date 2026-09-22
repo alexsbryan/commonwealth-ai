@@ -128,6 +128,7 @@ fn state_with_wall(
                 .iter()
                 .map(|(ns, p)| ((*ns).to_string(), p.clone()))
                 .collect(),
+            Default::default(),
         ),
     )
 }

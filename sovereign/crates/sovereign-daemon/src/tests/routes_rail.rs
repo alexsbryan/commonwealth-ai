@@ -235,6 +235,7 @@ fn wall_of(entries: &[(&str, sovereign_core::guest_pages::GuestPage)]) -> GuestP
             .iter()
             .map(|(ns, p)| ((*ns).to_string(), p.clone()))
             .collect(),
+        Default::default(),
     )
 }
 

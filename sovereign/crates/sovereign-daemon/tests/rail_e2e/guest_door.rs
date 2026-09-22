@@ -39,6 +39,7 @@ async fn door(state: AppState, page: &std::path::Path, req: Request<Body>) -> (S
         std::sync::Arc::new(GuestPages::new(
             Some(page.to_path_buf()),
             Default::default(),
+            Default::default(),
         )),
         None,
     )

@@ -21,35 +21,44 @@ svrn ring show my-doc        # show it on THIS machine
 no mesh involved. (The demo's `ring-doc` is this app; `house-expenses` is the
 same mechanism with a ledger's vocabulary.)
 
-## 2. I serve it to the room
+## 2. I put it on the mesh
 
 ```bash
-svrn ring host my-doc      # host it: declare it at the guest door, and bind the door
-svrn daemon restart
+svrn publish my-doc 4318      # register the app that is already running here
 ```
 
-**What appears:** the address guests will use, printed — derived from this
-machine, nothing for me to type. `svrn ring serve` alone lists what the door
-hosts; `--read` makes an app look-only; `--clear my-doc` stops hosting it.
+**What appears:** the name and the port, registered — any member of my mesh can
+now reach `my-doc` by key, from their own machine, with no address typed. This
+one registration is also what the guest door reads, so the next step needs
+nothing re-declared: the app is published once and the two audiences differ only
+by the grant.
 
-If this machine is on more than one network (a room network *and* a tailnet),
-only I know which one the guests are on: add `--bind <room address:port>`.
-
-*(A member who wants the same app on another of their machines has
-`svrn publish my-doc 4318` and then `svrn mesh app <me> my-doc` — same idea,
-member-facing instead of guest-facing.)*
+*(Members reach it; guests need the grant in the next step. `svrn mesh app <me>
+my-doc` shares it to another of my machines the same way.)*
 
 ## 3. I grant access to people who just have phones
 
 ```bash
-svrn mesh grant --all-apps
+svrn mesh grant --app my-doc     # one app, one link
 ```
 
 **What appears:** the link, and the QR drawn right there in the terminal —
-scan it. No address, no model id, no file: `--ttl` defaults to 2 h and the grant
-reaches the daemon's primary slot. `--qr-svg wall.svg` writes the file instead
-for a screen; `svrn mesh grant --list` shows outstanding guests with their
-expiry; `--revoke <token>` ends one early.
+scan it. The grant NAMES `my-doc`, so that is the only app it reaches; the door
+proxies to the published port, which is why hosting for guests needed no second
+copy of the app. No address, no model id, no file: `--ttl` defaults to 2 h and
+the grant reaches the daemon's primary slot. `--qr-svg wall.svg` writes the file
+instead for a screen; `svrn mesh grant --list` shows outstanding guests with
+their expiry; `--revoke <token>` ends one early.
+
+`svrn mesh grant --all-apps` is the other shape: one link for everything
+registered to guests in `[daemon.guest_pages]`, the phone landing on the door's
+index to pick. Several grants can be live at once — one per app, or several
+links to the same app with different labels and expiries.
+
+**One live app is served at the door's root** (`http://<door>/`), so the app's
+own absolute paths (`/__ring_dev.js`, `/assets/…`) resolve. With more than one
+app live, each is served under `/ring/<name>/` instead — so an app you mean to
+reach alongside another has to be built path-relative (`base: './'`).
 
 ## 4. They edit in their mobile browser
 

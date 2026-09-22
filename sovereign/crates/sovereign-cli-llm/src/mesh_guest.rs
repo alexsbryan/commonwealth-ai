@@ -313,7 +313,7 @@ pub(crate) const HELP_MESH_GRANT: Help = Help {
             ),
             (
                 "--app <ns>",
-                "The narrowing knob: reach exactly this one app and no\n                    other. Not combinable with --all-apps.",
+                "The narrowing knob: reach exactly this one app and no\n                    other. Names either an app registered for guests in\n                    [daemon.guest_pages], or one you PUBLISHED with `svrn publish`\n                    ([iroh] apps) — for a published app the door proxies to its\n                    loopback target, so you share it with guests the same way it is\n                    shared with members. Not combinable with --all-apps.",
             ),
             (
                 "--ttl <dur>",

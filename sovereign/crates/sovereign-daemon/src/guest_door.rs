@@ -78,6 +78,12 @@ pub struct GuestPages {
     /// bundle is and what guests may do there, each served at
     /// `/ring/<namespace>/`.
     by_namespace: std::collections::BTreeMap<String, GuestPage>,
+    /// `[iroh] apps` — what `svrn publish` registered: name → `host:port` on
+    /// THIS machine. A published app is what a member reaches by mesh key; a
+    /// grant that NAMES it is what lets a guest reach it too, and the door
+    /// proxies to the same loopback target. The two audiences share one
+    /// registration; the grant is the only difference.
+    published: std::collections::BTreeMap<String, String>,
 }
 
 impl GuestPages {
@@ -85,10 +91,12 @@ impl GuestPages {
     pub fn new(
         default_dir: Option<PathBuf>,
         by_namespace: std::collections::BTreeMap<String, GuestPage>,
+        published: std::collections::BTreeMap<String, String>,
     ) -> Self {
         Self {
             default_dir,
             by_namespace,
+            published,
         }
     }
 
@@ -106,7 +114,10 @@ impl GuestPages {
     /// [`is_daemon_owned`](sovereign_mesh::ring_roster::is_daemon_owned),
     /// which is the decider that already knows; this only says what to do
     /// about the answer.
-    pub fn from_config(d: &sovereign_core::setup_config::DaemonSection) -> Result<Self, String> {
+    pub fn from_config(
+        d: &sovereign_core::setup_config::DaemonSection,
+        published: &std::collections::BTreeMap<String, String>,
+    ) -> Result<Self, String> {
         for ns in d.guest_pages.keys() {
             if sovereign_mesh::ring_roster::is_daemon_owned(ns) {
                 return Err(format!(
@@ -117,12 +128,31 @@ impl GuestPages {
                 ));
             }
         }
-        Ok(Self::new(d.guest_page_dir.clone(), d.guest_pages.clone()))
+        Ok(Self::new(
+            d.guest_page_dir.clone(),
+            d.guest_pages.clone(),
+            published.clone(),
+        ))
     }
 
     /// Nothing to serve — the door's rail routes stand alone.
     pub fn is_empty(&self) -> bool {
-        self.default_dir.is_none() && self.by_namespace.is_empty()
+        self.default_dir.is_none() && self.by_namespace.is_empty() && self.published.is_empty()
+    }
+
+    /// The loopback target of a PUBLISHED app, when `namespace` names one.
+    pub fn published_addr(&self, namespace: &str) -> Option<&str> {
+        self.published.get(namespace).map(String::as_str)
+    }
+
+    /// Every name a live grant could reach: the bundles declared to guests and
+    /// the apps published here. What the index lists (the grant filter is the
+    /// caller's, as it is for bundles).
+    pub fn reachable_names(&self) -> impl Iterator<Item = &str> {
+        self.by_namespace
+            .keys()
+            .chain(self.published.keys())
+            .map(String::as_str)
     }
 
     /// What this wall's owner declared about `namespace`, or `None` if they
@@ -155,6 +185,16 @@ enum PageRoute<'a> {
     },
     /// The shim itself, rendered for this namespace.
     Shim { namespace: String },
+    /// An app already RUNNING on this machine, published to the mesh by
+    /// `svrn publish` (`[iroh] apps`) and NAMED by a live grant: the door
+    /// proxies `rel` to its loopback target on the same origin. The grant is
+    /// the only difference between a member reaching it by mesh key and a
+    /// guest reaching it here.
+    Proxy {
+        addr: String,
+        rel: String,
+        namespace: String,
+    },
     /// The wall's own index at the bare `/ring/`: the declared apps a live
     /// grant reaches, each a link. Only when `guest_page_dir` is unset —
     /// a wall with one app keeps the page at that address.
@@ -194,6 +234,20 @@ fn route_page<'a>(
             shim: (rel == "index.html").then(|| format!("{PAGE_PREFIX}{head}/{SHIM_FILE}")),
         };
     }
+    if let Some(addr) = pages.published_addr(head) {
+        if !granted(head) {
+            return PageRoute::Missing(format!(
+                "the app {head} is published here, but no live grant names it"
+            ));
+        }
+        // `/ring/<ns>/foo.css` is the app's OWN `/foo.css`: the namespace is
+        // the door's label, not a path the app serves.
+        return PageRoute::Proxy {
+            addr: addr.to_string(),
+            rel: tail.to_string(),
+            namespace: head.to_string(),
+        };
+    }
     if !head.is_empty() && granted(head) {
         return PageRoute::Missing(format!(
             "rail namespace {head} has a live grant but no page is registered for it"
@@ -220,10 +274,9 @@ fn route_page<'a>(
         // a directory.
         None if rel.is_empty() => {
             let reachable: Vec<String> = pages
-                .by_namespace
-                .keys()
+                .reachable_names()
                 .filter(|ns| granted(ns))
-                .cloned()
+                .map(str::to_string)
                 .collect();
             if reachable.is_empty() {
                 return PageRoute::Missing(
@@ -305,6 +358,7 @@ pub fn door_router(
         Router::new()
             .route(PAGE_PREFIX, get(page_index))
             .route("/ring/{*rel}", get(page_file))
+            .fallback(root_proxy)
             .with_state(PageState { pages, grants }),
     )
 }
@@ -382,18 +436,74 @@ async fn wait_for(store: &GuestGrantStore, done: impl Fn(usize) -> bool) -> usiz
 }
 
 async fn page_index(State(st): State<PageState>) -> Response {
-    serve_route(&st, "")
-}
-
-async fn page_file(State(st): State<PageState>, AxPath(rel): AxPath<String>) -> Response {
-    serve_route(&st, &rel)
-}
-
-/// The one body both page routes have: resolve, then serve or refuse.
-fn serve_route(st: &PageState, rel: &str) -> Response {
     let now = commonwealth_core::clock::unix_now_millis();
     let granted = |ns: &str| namespace_is_granted(&st.grants, &st.pages, ns, now);
-    match route_page(&st.pages, &granted, rel) {
+    match route_page(&st.pages, &granted, "") {
+        PageRoute::Proxy { addr, .. } => proxy_get(&addr).await,
+        other => serve_resolved(other),
+    }
+}
+
+async fn page_file(
+    State(st): State<PageState>,
+    AxPath(rel): AxPath<String>,
+    request: axum::extract::Request,
+) -> Response {
+    let now = commonwealth_core::clock::unix_now_millis();
+    let granted = |ns: &str| namespace_is_granted(&st.grants, &st.pages, ns, now);
+    match route_page(&st.pages, &granted, &rel) {
+        PageRoute::Proxy {
+            addr,
+            rel,
+            namespace,
+        } => proxy_request(&addr, &rel, &namespace, request).await,
+        other => serve_resolved(other),
+    }
+}
+
+/// The wall's ROOT, when exactly ONE published app is live.
+///
+/// A running app's own absolute paths (`/__ring_dev.js`, `/assets/…`) come
+/// back to this listener, so the app has to BE the root for them to resolve.
+/// With one live app that is unambiguous; with several there is one root and
+/// many apps, and the root names the choice rather than guessing one.
+async fn root_proxy(State(st): State<PageState>, request: axum::extract::Request) -> Response {
+    let now = commonwealth_core::clock::unix_now_millis();
+    let live: Vec<(String, String)> = st
+        .pages
+        .reachable_names()
+        .filter(|ns| namespace_is_granted(&st.grants, &st.pages, ns, now))
+        .filter_map(|ns| {
+            st.pages
+                .published_addr(ns)
+                .map(|addr| (ns.to_string(), addr.to_string()))
+        })
+        .collect();
+    match live.as_slice() {
+        [(namespace, addr)] => {
+            let rel = request.uri().path().trim_start_matches('/').to_string();
+            proxy_request(addr, &rel, namespace, request).await
+        }
+        [] => (
+            StatusCode::NOT_FOUND,
+            "no live grant reaches a published app at this door",
+        )
+            .into_response(),
+        many => (
+            StatusCode::NOT_FOUND,
+            format!(
+                "{} apps are live here — open one by name at /ring/<name>/",
+                many.len()
+            ),
+        )
+            .into_response(),
+    }
+}
+
+/// The rest of the body both page routes have: serve or refuse a resolved route.
+fn serve_resolved(route: PageRoute) -> Response {
+    match route {
+        PageRoute::Proxy { .. } => unreachable!("the proxy arm is answered by the route handlers"),
         PageRoute::File { dir, rel, shim } => {
             tracing::debug!(rel, dir = %dir.display(), "guest door: page");
             serve_under(dir, &rel, shim.as_deref())
@@ -416,8 +526,129 @@ fn serve_route(st: &PageState, rel: &str) -> Response {
         )
             .into_response(),
         PageRoute::Missing(why) => {
-            tracing::info!(rel, why, "guest door: no page served");
+            tracing::info!(rel = "", why, "guest door: no page served");
             (StatusCode::NOT_FOUND, why).into_response()
+        }
+    }
+}
+
+/// A running app's own shim path, whichever spelling it serves. The door
+/// answers it with the GUEST shim for the app's namespace: same origin, same
+/// session, so a write through a proxied app keeps its attribution.
+fn is_shim_path(rel: &str) -> bool {
+    rel == SHIM_FILE || rel == DEV_SHIM_FILE
+}
+
+/// How much of a proxied request body the door will buffer. An app is served
+/// from this machine to a phone on the LAN; 16 MiB is far past an edit.
+const PROXY_BODY_CAP: usize = 16 * 1024 * 1024;
+
+/// What `ring show` serves its shim from — an absolute path, so a proxied app's
+/// index comes back to it at the door root.
+const DEV_SHIM_FILE: &str = "__ring_dev.js";
+
+/// Forward one request to a published app's loopback target, on this origin.
+async fn proxy_request(
+    addr: &str,
+    rel: &str,
+    namespace: &str,
+    request: axum::extract::Request,
+) -> Response {
+    if is_shim_path(rel) {
+        return (
+            [(header::CONTENT_TYPE, "text/javascript")],
+            ring_shim(namespace, Some("")),
+        )
+            .into_response();
+    }
+    let (parts, body) = request.into_parts();
+    let query = parts
+        .uri
+        .query()
+        .map(|q| format!("?{q}"))
+        .unwrap_or_default();
+    let url = format!("http://{addr}/{rel}{query}");
+    let bytes = match axum::body::to_bytes(body, PROXY_BODY_CAP).await {
+        Ok(b) => b,
+        Err(e) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                format!("guest door: reading the request body: {e}"),
+            )
+                .into_response()
+        }
+    };
+    let method = reqwest::Method::from_bytes(parts.method.as_str().as_bytes())
+        .unwrap_or(reqwest::Method::GET);
+    let mut out = reqwest::Client::new().request(method, &url);
+    for (name, value) in parts.headers.iter() {
+        if matches!(
+            name.as_str(),
+            "host" | "connection" | "content-length" | "accept-encoding"
+        ) {
+            continue;
+        }
+        out = out.header(name, value);
+    }
+    if !bytes.is_empty() {
+        out = out.body(bytes.to_vec());
+    }
+    match out.send().await {
+        Err(e) => {
+            tracing::info!(%url, error = %e, "guest door: published app unreachable");
+            (
+                StatusCode::BAD_GATEWAY,
+                "guest door: the app is published, but nothing is listening on its loopback port",
+            )
+                .into_response()
+        }
+        Ok(resp) => {
+            let status =
+                StatusCode::from_u16(resp.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
+            let ctype = resp
+                .headers()
+                .get(reqwest::header::CONTENT_TYPE)
+                .and_then(|v| v.to_str().ok())
+                .unwrap_or("application/octet-stream")
+                .to_string();
+            let body = resp.bytes().await.unwrap_or_default();
+            tracing::debug!(
+                rel,
+                namespace,
+                status = status.as_u16(),
+                "guest door: proxied"
+            );
+            (status, [(header::CONTENT_TYPE, ctype)], body).into_response()
+        }
+    }
+}
+
+/// The app's index, when the door serves a single live app at `/`.
+async fn proxy_get(addr: &str) -> Response {
+    match reqwest::Client::new()
+        .get(format!("http://{addr}/"))
+        .send()
+        .await
+    {
+        Err(e) => {
+            tracing::info!(addr, error = %e, "guest door: published app unreachable");
+            (
+                StatusCode::BAD_GATEWAY,
+                "guest door: the app is published, but nothing is listening on its loopback port",
+            )
+                .into_response()
+        }
+        Ok(resp) => {
+            let status =
+                StatusCode::from_u16(resp.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
+            let ctype = resp
+                .headers()
+                .get(reqwest::header::CONTENT_TYPE)
+                .and_then(|v| v.to_str().ok())
+                .unwrap_or("application/octet-stream")
+                .to_string();
+            let body = resp.bytes().await.unwrap_or_default();
+            (status, [(header::CONTENT_TYPE, ctype)], body).into_response()
         }
     }
 }
