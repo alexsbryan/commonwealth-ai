@@ -894,6 +894,67 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
         )
         .await;
 
+    // ── Corpus registry reconciliation: ONE SOURCE, the engine ─────────
+    //
+    // `corpus_state` is what `build_context` reads to derive the principal
+    // ceiling and the prompt's installed list; `installed_indexes()` is what
+    // the retrieval fan-out actually opens. When those diverge — measured
+    // 2026-09-22: 0 rows against 58 on-disk indexes — the ceiling comes out
+    // `Some([])` and Filter 5 fails CLOSED, refusing every local fan-out:
+    // unscoped turns answered "No matching passages" from general knowledge
+    // on a host holding the answer. Reconcile at boot: every engine index
+    // without a row gets one, so the registry cannot lag the thing it
+    // describes. Rows are never DELETED here — engine-absent corpora keep
+    // theirs; removal is a corpus operation, not boot's.
+    {
+        match engine.installed_indexes().await {
+            Ok(indexes) => {
+                let known: std::collections::HashSet<String> = state_store
+                    .list_corpus_states()
+                    .await
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(|s| s.corpus_id)
+                    .collect();
+                let now = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs() as i64;
+                let mut added = 0usize;
+                for info in indexes {
+                    if known.contains(&info.corpus_id) {
+                        continue;
+                    }
+                    let state = sovereign_core::types::CorpusState {
+                        corpus_id: info.corpus_id.clone(),
+                        installed_at: now,
+                        source_date: chrono::Utc::now().date_naive().to_string(),
+                        chunks_count: info.chunk_count as i64,
+                        index_size_mb: (info.index_size_bytes / (1024 * 1024)) as i64,
+                        last_updated: now,
+                        version: now,
+                        deleted_at: None,
+                        vector_index_ready: info.vector_index_built,
+                        visibility: sovereign_core::types::CorpusVisibility::Org,
+                    };
+                    if state_store.save_corpus_state(&state).await.is_ok() {
+                        added += 1;
+                    }
+                }
+                if added > 0 {
+                    tracing::info!(
+                        added,
+                        "corpus registry reconciled from the engine's installed indexes"
+                    );
+                }
+            }
+            Err(e) => tracing::warn!(
+                error = %e,
+                "corpus registry reconcile skipped: engine index listing failed"
+            ),
+        }
+    }
+
     // The watched-folder singleton must be installed before the daemon starts
     // serving, but the ROUTE is now part of the daemon's declared capability
     // rather than something this call installs — so a failed subsystem yields

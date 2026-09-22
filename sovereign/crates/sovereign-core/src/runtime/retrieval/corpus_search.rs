@@ -311,6 +311,23 @@ impl Runtime {
         // retained automatically so toggling Wikipedia ON enables
         // Wikipedia + its newsworthy/recent-events layers in one click.
         let eligible_pre_allow = eligible.len();
+        // The one line that separates "the engine enumerated nothing" from
+        // "a scope filtered everything out" — both print `corpora=0` on the
+        // fan-out line, and telling them apart cost a session on 2026-09-22
+        // (unscoped turns returned nothing: eligible_pre_allow vs the
+        // allow-list's own count). `allow_none` distinguishes a missing
+        // scope (None = every installed corpus) from Some(&[]) (search
+        // nothing), which is the difference the turn's own row cannot show.
+        tracing::info!(
+            target: "retrieval_audit",
+            event = "corpus_eligibility",
+            label = label,
+            total_indexes,
+            eligible_pre_allow,
+            allow_none = enabled_corpora.is_none(),
+            allow_len = enabled_corpora.map(|a| a.len()),
+            "retrieval_audit: corpus eligibility before the allow-list"
+        );
         let eligible = apply_corpus_allow_list(eligible, enabled_corpora);
         if eligible.len() < eligible_pre_allow {
             tracing::info!(
