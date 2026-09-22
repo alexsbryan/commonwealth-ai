@@ -89,6 +89,69 @@ pub(crate) fn wall_qr_svg(link: &str) -> Result<String, String> {
     Ok(SvgBuilder::default().margin(QR_QUIET_ZONE).to_str(&qr))
 }
 
+/// Write `link` as an SVG QR to `path` — for a wall screen or a page, where a
+/// file is wanted rather than the terminal drawing.
+pub(crate) fn write_qr_svg(link: &str, path: &str) -> Result<(), String> {
+    let svg = wall_qr_svg(link)?;
+    std::fs::write(path, svg).map_err(|e| format!("cannot write {path}: {e}"))
+}
+
+/// Print `link`'s QR for a human, when there is a terminal to print it to.
+/// Nothing at all when stdout is a pipe: a drawing is not a fact anything
+/// should parse (the demo harness, CI, `| grep`).
+pub(crate) fn print_qr_blocks(link: &str) {
+    if !std::io::IsTerminal::is_terminal(&std::io::stdout()) {
+        return;
+    }
+    match wall_qr_blocks(link) {
+        Ok(blocks) => {
+            println!("Scan this with a phone:");
+            println!();
+            print!("{blocks}");
+            println!();
+        }
+        Err(e) => eprintln!("(the QR could not be drawn here: {e})"),
+    }
+}
+
+/// Render `link` as a QR a terminal can show: two module-rows per text line,
+/// using half blocks, quiet zone included. This is the "scan this" moment in
+/// the command's own output — serving an app should not need a file viewer to
+/// see the thing a phone scans.
+pub(crate) fn wall_qr_blocks(link: &str) -> Result<String, String> {
+    let qr = fast_qr::QRBuilder::new(link)
+        .build()
+        .map_err(|e| format!("cannot encode the link as a QR code: {e}"))?;
+    let n = qr.size + 2 * QR_QUIET_ZONE;
+    let dark = |x: usize, y: usize| -> bool {
+        let (x, y) = (
+            x as isize - QR_QUIET_ZONE as isize,
+            y as isize - QR_QUIET_ZONE as isize,
+        );
+        if x < 0 || y < 0 || x as usize >= qr.size || y as usize >= qr.size {
+            return false;
+        }
+        qr.data[y as usize * qr.size + x as usize].value()
+    };
+    let mut out = String::with_capacity(n * n / 2 + n);
+    let mut y = 0;
+    while y < n {
+        for x in 0..n {
+            let top = dark(x, y);
+            let bottom = y + 1 < n && dark(x, y + 1);
+            out.push(match (top, bottom) {
+                (true, true) => '█',
+                (true, false) => '▀',
+                (false, true) => '▄',
+                (false, false) => ' ',
+            });
+        }
+        out.push('\n');
+        y += 2;
+    }
+    Ok(out)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -172,6 +235,52 @@ mod tests {
         assert_eq!(grids.len(), 1, "exactly one QR code found in the SVG");
         let (_, decoded) = grids[0].decode().expect("decodes");
         decoded
+    }
+
+    /// The terminal form decodes back to the exact link — the same guarantee
+    /// the SVG has, checked the same way (expand the blocks to a pixel grid,
+    /// then decode). Scanned geometry is what this guards: a swapped half-block
+    /// or a missing quiet zone would still *look* like a QR code.
+    #[test]
+    fn the_wall_qr_blocks_decode_back_to_the_exact_link() {
+        let link = build_https_guest_link(
+            "0123456789abcdef0123456789abcdef",
+            "http://10.0.0.5:9743/ring/",
+            1_787_900_000,
+            Some("primary; the wall"),
+            None,
+            Some("5a46ef@https://relay.example/,10.0.0.5:41234"),
+        );
+        let blocks = wall_qr_blocks(&link).expect("encodes");
+        let lines: Vec<&str> = blocks.lines().collect();
+        let width = lines[0].chars().count();
+        assert!(lines.iter().all(|l| l.chars().count() == width));
+        // Half blocks pack two module-rows per line, so the grid is 2n x n.
+        assert_eq!(width % 2, 1, "QR widths are odd");
+        let n = width;
+        let side = n * 4; // 4 px per module, as the SVG test does
+        let mut img = rqrr::PreparedImage::prepare_from_greyscale(side, side, |px, py| {
+            let (mx, my) = (px / 4, py / 4);
+            let top = my % 2 == 0;
+            let line = lines[my / 2];
+            let ch = line.chars().nth(mx).unwrap();
+            let dark = match (ch, top) {
+                ('█', _) => true,
+                ('▀', true) => true,
+                ('▄', false) => true,
+                ('▄', true) | ('▀', false) | (' ', _) => false,
+                _ => false,
+            };
+            if dark {
+                0
+            } else {
+                255
+            }
+        });
+        let grids = img.detect_grids();
+        assert_eq!(grids.len(), 1, "exactly one QR code in the terminal form");
+        let (_, decoded) = grids[0].decode().expect("decodes");
+        assert_eq!(decoded, link);
     }
 
     #[test]

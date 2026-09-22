@@ -37,7 +37,7 @@ use sovereign_cli_shared::help::{Help, HelpSection};
 use sovereign_mesh::deep_link::{build_guest_link, parse_deep_link, wall_https_link, DeepLink};
 
 use crate::guest_link::{self, GuestLink};
-use crate::mesh_guest_link::{guest_bind_url, wall_qr_svg};
+use crate::mesh_guest_link::{guest_bind_url, print_qr_blocks, write_qr_svg};
 
 /// Read the daemon's client port from `SetupConfig` rather than hardcoding
 /// 9741 — a sandbox pointed at its own daemon must not mint against the
@@ -326,7 +326,7 @@ pub(crate) const HELP_MESH_GRANT: Help = Help {
             ),
             (
                 "--qr-svg <path>",
-                "Write the https link (<url>#token=…) to <path> as an SVG QR code. Uses\n                    --url, or the door's declared address when --url is absent.",
+                "Write the https link (<url>#token=…) to <path> as an SVG QR code. Uses\n                    --url, or the door's declared address when --url is absent. (On a\n                    terminal the QR is drawn there anyway; this is for a file, e.g.\n                    the wall's screen.)",
             ),
             ("--list", "Show outstanding grants, including revoked and expired ones."),
             ("--revoke <token>", "Kill a link immediately. The token is the one in the link."),
@@ -460,11 +460,9 @@ pub(crate) async fn cmd_grant(args: &[String]) -> i32 {
         return 2;
     }
 
-    // Nobody types an address: the door names the PORT, this machine names the
-    // ADDRESS. `guest_bind_url` derives the base from `[daemon] guest_bind`
-    // (written by `svrn ring serve`) plus this host's best candidate, and
-    // refuses to advertise a wildcard or loopback bind. An explicit `--url`
-    // (the static origin, say) still wins outright.
+    // Nobody types an address: the door names the port, this machine names the
+    // address (`guest_bind_url`), refusing to advertise a wildcard or loopback
+    // bind. An explicit `--url` still wins outright.
     if url_override.is_none() {
         url_override = guest_bind_url();
     }
@@ -630,8 +628,10 @@ pub(crate) async fn cmd_grant(args: &[String]) -> i32 {
     println!();
     println!("  svrn mesh use '{link}'");
     println!();
-    if let (Some(path), Some(base)) = (&qr_svg, &url_override) {
-        let https = wall_https_link(
+    // The link a browser opens, when there is a base: written to a file when
+    // asked, and drawn in the terminal at the end (see `print_qr_blocks`).
+    let https = url_override.as_deref().map(|base| {
+        wall_https_link(
             token,
             base,
             rail.as_deref(),
@@ -639,28 +639,28 @@ pub(crate) async fn cmd_grant(args: &[String]) -> i32 {
             expires_at_secs,
             (!summary.is_empty()).then_some(summary),
             dial.as_deref(),
-        );
-        let written = wall_qr_svg(&https).and_then(|svg| {
-            std::fs::write(path, svg).map_err(|e| format!("cannot write {path}: {e}"))
-        });
-        match written {
-            Ok(()) => {
-                println!("Or open (the QR code in {path} carries this):");
-                println!();
-                println!("  {https}");
-                println!();
-            }
-            Err(e) => {
-                eprintln!("The grant was minted but its QR code was not written: {e}");
-                eprintln!("Revoke it with `svrn mesh grant --revoke {token}` and re-run.");
-                return 1;
-            }
+        )
+    });
+    if let (Some(path), Some(https)) = (&qr_svg, &https) {
+        if let Err(e) = write_qr_svg(https, path) {
+            eprintln!("The grant was minted but its QR code was not written: {e}");
+            eprintln!("Revoke it with `svrn mesh grant --revoke {token}` and re-run.");
+            return 1;
         }
+        println!("Or open (the QR code in {path} carries this):");
+        println!();
+        println!("  {https}");
+        println!();
     }
     println!("Revoke at any time with:");
     println!();
     println!("  svrn mesh grant --revoke {token}");
     println!();
+
+    // Last so it stays on the screen; a pipe sees nothing (guard inside).
+    if let Some(https) = &https {
+        print_qr_blocks(https)
+    }
     0
 }
 
