@@ -89,7 +89,16 @@ pub enum DeepLink {
         /// which is the honest outcome for them.
         ///
         /// Additive, and the same shape a join link's `dial=` already uses.
+        /// On the https fragment form the same string rides under the param
+        /// name `iroh=` — the join link's dial param.
         dial: Option<String>,
+        /// The issuing ring's digest marks (`<actor-hex>:<n>` pairs,
+        /// comma-separated), when the link names the state a guest should
+        /// expect. Opaque here, like `token`: this crate never interprets
+        /// the marks, and they are never the payload — the checkpoint
+        /// document is fetched separately. Present only on the https
+        /// fragment form; `None` for the `sovereign://guest` form.
+        at: Option<String>,
         /// Unix-seconds the grant lapses. Display + a local pre-flight so
         /// `mesh use` can refuse a dead link without a round-trip; the ISSUING
         /// NODE is the authority and rejects an expired token regardless.
@@ -180,6 +189,7 @@ pub fn parse_deep_link(url: &str) -> Option<DeepLink> {
                 token,
                 url,
                 dial,
+                at: None,
                 expires_at,
                 summary: params.get("s").map(|s| s.replace('+', " ")),
             })
@@ -215,17 +225,26 @@ pub fn build_guest_link(
     link
 }
 
-/// Build the https form of a guest link: `<base>#token=…&exp=…[&s=…]`.
+/// Build the https form of a guest link:
+/// `<base>#token=…&exp=…[&s=…][&at=…&iroh=…]`.
 ///
 /// What a phone opens. The bearer rides the URL FRAGMENT, never the path or
 /// query: a browser does not send the fragment to the server, so the token
 /// stays out of access logs and `Referer` headers, and only the page's own
 /// script reads it. `base` is kept verbatim — it is the page's address.
+///
+/// The couriers ride the fragment beside the token, on the same grounds:
+/// `at` is the ring's digest marks (`<actor-hex>:<n>` pairs) and `iroh` the
+/// lender's dial string (the join link's `iroh=` param). Both are appended
+/// only when present — a call passing neither produces bytes identical to
+/// the links this minted before the params existed.
 pub fn build_https_guest_link(
     token: &str,
     base: &str,
     expires_at: u64,
     summary: Option<&str>,
+    at: Option<&str>,
+    iroh: Option<&str>,
 ) -> String {
     let mut params = vec![
         format!("token={}", percent_encode(token)),
@@ -234,13 +253,21 @@ pub fn build_https_guest_link(
     if let Some(s) = summary {
         params.push(format!("s={}", percent_encode(s).replace(' ', "+")));
     }
+    if let Some(a) = at {
+        params.push(format!("at={}", percent_encode(a)));
+    }
+    if let Some(d) = iroh {
+        params.push(format!("iroh={}", percent_encode(d)));
+    }
     format!("{base}#{}", params.join("&"))
 }
 
 /// Parse the https form built by [`build_https_guest_link`] into a
 /// [`DeepLink::Guest`] whose `url` is the part before the fragment and whose
-/// `dial` is `None`. `token` and `exp` are required, as for the
-/// `sovereign://guest` form; a token anywhere but the fragment is not read.
+/// `at` and `dial` come from the fragment's `at=` / `iroh=` (or are `None`).
+/// `token` and `exp` are required, as for the `sovereign://guest` form; one
+/// rule covers every protected param — `token`, `at`, `iroh` — anywhere but
+/// the fragment is not read, because the parser never looks left of the `#`.
 pub fn parse_https_guest_link(link: &str) -> Option<DeepLink> {
     let (base, fragment) = link.split_once('#')?;
     if !(base.starts_with("https://") || base.starts_with("http://")) {
@@ -252,7 +279,14 @@ pub fn parse_https_guest_link(link: &str) -> Option<DeepLink> {
     Some(DeepLink::Guest {
         token,
         url: base.to_string(),
-        dial: None,
+        dial: params
+            .get("iroh")
+            .map(|d| d.trim().to_string())
+            .filter(|d| !d.is_empty()),
+        at: params
+            .get("at")
+            .map(|a| a.trim().to_string())
+            .filter(|a| !a.is_empty()),
         expires_at,
         summary: params.get("s").cloned(),
     })
@@ -812,7 +846,14 @@ mod tests {
     #[test]
     fn https_guest_link_round_trips_with_the_token_only_in_the_fragment() {
         let base = "http://192.168.1.10:9750/app/ring-doc/";
-        let link = build_https_guest_link("deadbeef", base, 1_787_900_000, Some("rail:wall"));
+        let link = build_https_guest_link(
+            "deadbeef",
+            base,
+            1_787_900_000,
+            Some("rail:wall"),
+            None,
+            None,
+        );
         let (before, fragment) = link.split_once('#').expect("a fragment");
         assert!(
             !before.contains("deadbeef"),
@@ -823,6 +864,7 @@ mod tests {
             token,
             url,
             dial,
+            at,
             expires_at,
             summary,
         } = parse_https_guest_link(&link).unwrap()
@@ -832,10 +874,76 @@ mod tests {
         assert_eq!(token, "deadbeef");
         assert_eq!(url, base);
         assert!(dial.is_none());
+        assert!(at.is_none());
         assert_eq!(expires_at, 1_787_900_000);
         assert_eq!(summary.as_deref(), Some("rail:wall"));
         // A token outside the fragment is not a guest link.
         assert!(parse_https_guest_link("http://h/?token=deadbeef&exp=1").is_none());
+    }
+
+    /// The couriers ride the fragment beside the token and come back
+    /// verbatim: the marks (`at=`) and the dial string (`iroh=`) survive the
+    /// percent-encoder, and the built link is exactly these bytes.
+    #[test]
+    fn https_guest_link_round_trips_the_couriers_exactly() {
+        let base = "http://192.168.1.10:9750/app/ring-doc/";
+        let at = "aa11:1,bb22:2,cc33:3";
+        let iroh = "3b1f0a@https://relay.example:443/,192.168.1.10:41234";
+        let link =
+            build_https_guest_link("deadbeef", base, 1_787_900_000, None, Some(at), Some(iroh));
+        assert_eq!(
+            link,
+            "http://192.168.1.10:9750/app/ring-doc/#token=deadbeef&exp=1787900000\
+             &at=aa11%3A1%2Cbb22%3A2%2Ccc33%3A3\
+             &iroh=3b1f0a%40https%3A%2F%2Frelay.example%3A443%2F%2C192.168.1.10%3A41234"
+        );
+        let DeepLink::Guest {
+            at: marks, dial, ..
+        } = parse_https_guest_link(&link).unwrap()
+        else {
+            panic!("expected a guest link")
+        };
+        assert_eq!(marks.as_deref(), Some(at));
+        assert_eq!(dial.as_deref(), Some(iroh));
+    }
+
+    /// A call with neither courier produces bytes identical to the link this
+    /// builder minted before the params existed — every existing QR and
+    /// pasted link stays valid.
+    #[test]
+    fn https_guest_link_without_the_new_params_is_byte_identical() {
+        assert_eq!(
+            build_https_guest_link(
+                "deadbeef",
+                "http://192.168.1.10:9750/app/ring-doc/",
+                1_787_900_000,
+                Some("rail:wall"),
+                None,
+                None,
+            ),
+            "http://192.168.1.10:9750/app/ring-doc/#token=deadbeef&exp=1787900000&s=rail%3Awall"
+        );
+    }
+
+    /// The marks are read from the fragment only: an `at=` in the query —
+    /// the part a browser sends to the server — is not the marks.
+    #[test]
+    fn an_at_outside_the_fragment_is_not_read() {
+        let link = "http://h:9750/app/ring-doc/?at=aa11%3A7#token=deadbeef&exp=1";
+        let DeepLink::Guest { at, .. } = parse_https_guest_link(link).unwrap() else {
+            panic!("expected a guest link")
+        };
+        assert!(at.is_none());
+    }
+
+    /// Same rule for the dial string: an `iroh=` in the query is ignored.
+    #[test]
+    fn an_iroh_outside_the_fragment_is_not_read() {
+        let link = "http://h:9750/app/ring-doc/?iroh=zz11%40relay%3A1#token=deadbeef&exp=1";
+        let DeepLink::Guest { dial, .. } = parse_https_guest_link(link).unwrap() else {
+            panic!("expected a guest link")
+        };
+        assert!(dial.is_none());
     }
 
     #[test]
@@ -851,6 +959,7 @@ mod tests {
             token,
             url: base,
             dial,
+            at,
             expires_at,
             summary,
         } = parse_deep_link(&url).unwrap()
@@ -860,6 +969,7 @@ mod tests {
         assert_eq!(token, "deadbeef");
         assert_eq!(base, "http://192.168.1.10:9741");
         assert!(dial.is_none(), "no dial was minted, so none comes back");
+        assert!(at.is_none(), "the sovereign:// form carries no marks");
         assert_eq!(expires_at, 1_787_900_000);
         assert_eq!(summary.as_deref(), Some("big-model, small-model"));
     }

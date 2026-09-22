@@ -618,6 +618,8 @@ pub(crate) async fn cmd_grant(args: &[String]) -> i32 {
             &wall_page_base(base, rail.as_deref(), wall),
             expires_at_secs,
             (!summary.is_empty()).then_some(summary),
+            None,
+            None,
         );
         let written = wall_qr_svg(&https).and_then(|svg| {
             std::fs::write(path, svg).map_err(|e| format!("cannot write {path}: {e}"))
@@ -877,6 +879,7 @@ pub(crate) async fn cmd_use(args: &[String]) -> i32 {
             token,
             url,
             dial,
+            at: _,
             expires_at,
             summary,
         }) => GuestLink {

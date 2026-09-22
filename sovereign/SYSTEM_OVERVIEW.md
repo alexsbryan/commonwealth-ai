@@ -1774,7 +1774,8 @@ A guest is not a mesh member — no `mesh_secret`, no gossip, no invite key
 — and cannot mint further grants, because no `Scope` variant names
 `/internal/*`. `svrn mesh grant` mints one (`--rail <ns>` adds the rail
 scope) and prints a `sovereign://guest/…` link, plus with `--qr-svg` the
-https form (`<url>#token=…`, the bearer in the fragment) as an SVG QR
+https form (`<url>#token=…`, the bearer — and, when present, the `at=`
+digest marks and the `iroh=` dial string — in the fragment) as an SVG QR
 code; `svrn mesh use` accepts the first and repoints
 `svrn chat`. The auth layer never matches on a `Scope` variant: it asks
 `GuestGrant::permits_path` and inserts the grant, so a future scope is a

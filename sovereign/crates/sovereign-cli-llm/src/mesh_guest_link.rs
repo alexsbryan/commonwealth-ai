@@ -67,15 +67,7 @@ mod tests {
     /// it. The surround is the point: on an all-white canvas rqrr decodes a
     /// code with no quiet zone at all (measured), so only a page that is not
     /// white shows whether the SVG carries its own.
-    #[test]
-    fn the_wall_qr_svg_decodes_back_to_the_exact_link() {
-        let link = build_https_guest_link(
-            "0123456789abcdef0123456789abcdef",
-            "http://192.168.1.10:9750/app/ring-doc/",
-            1_787_900_000,
-            Some("big, rail:wall"),
-        );
-        let svg = wall_qr_svg(&link).expect("encodes");
+    fn decode_qr_svg(svg: &str) -> String {
         let n: usize = svg
             .split_once(r#"viewBox="0 0 "#)
             .and_then(|(_, rest)| rest.split(' ').next())
@@ -108,6 +100,42 @@ mod tests {
         let grids = img.detect_grids();
         assert_eq!(grids.len(), 1, "exactly one QR code found in the SVG");
         let (_, decoded) = grids[0].decode().expect("decodes");
-        assert_eq!(decoded, link);
+        decoded
+    }
+
+    #[test]
+    fn the_wall_qr_svg_decodes_back_to_the_exact_link() {
+        let link = build_https_guest_link(
+            "0123456789abcdef0123456789abcdef",
+            "http://192.168.1.10:9750/app/ring-doc/",
+            1_787_900_000,
+            Some("big, rail:wall"),
+            None,
+            None,
+        );
+        assert_eq!(decode_qr_svg(&wall_qr_svg(&link).expect("encodes")), link);
+    }
+
+    /// The QR carries the marks too: a 3-actor `at=` link (64-hex actor ids,
+    /// realistic size) plus an `iroh=` dial string still encodes — measured
+    /// at QR v17 on fast_qr 0.14.0 defaults — and decodes back to the exact
+    /// link.
+    #[test]
+    fn the_wall_qr_svg_encodes_a_three_actor_at_link() {
+        let at = format!(
+            "{}:1,{}:2,{}:3",
+            "a".repeat(64),
+            "b".repeat(64),
+            "c".repeat(64)
+        );
+        let link = build_https_guest_link(
+            "0123456789abcdef0123456789abcdef",
+            "http://192.168.1.10:9750/app/ring-doc/",
+            1_787_900_000,
+            Some("big, rail:wall"),
+            Some(&at),
+            Some("3b1f0a@https://relay.example:443/,192.168.1.10:41234"),
+        );
+        assert_eq!(decode_qr_svg(&wall_qr_svg(&link).expect("encodes")), link);
     }
 }
