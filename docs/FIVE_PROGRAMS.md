@@ -882,6 +882,21 @@ refusal named the chain, which is the value.
   The route/client code is described in this session's transcript; do not rebuild
   it without settling persistence first.
 
+### Probe REFUSED 2026-09-21 (80 at a546a456b)
+
+- **`sovereign-cli-dev -> sovereign-daemon`** (3 refs, `project_cmd/serve.rs:670,679,700`):
+  `svrn project serve` stands up a SECOND in-process MCP server
+  (`mcp_router::{FeatureRoot, McpNotifier, mcp_router}`) scoped to the project
+  root, with a `SpecWatcher` firing `notifications/tools/list_changed`. The
+  daemon already IS an MCP server (`/mcp`, mounted on its client router,
+  daemon.rs:3753) but its `FeatureRoot` is not project-scoped and it has no
+  spec-watcher notifications. Missing capability before this edge closes: the
+  daemon's `/mcp` must take a project/feature root (and expose the list-changed
+  fan-out), or `project serve` becomes a thin proxy onto it.
+- Orphan from the harness fix (a546a456b): `sovereign-mesh-test-harness`'s
+  `MockLlamaServer` has no consumer left after the 15 host-route tests were
+  dropped; it should move to the daemon's suite or be deleted.
+
 ### The decisions — these are the operator's, and they are meant to be few
 
 - [x] **`atos` is CUT COMPLETELY** (operator, 2026-09-21). Footprint:
