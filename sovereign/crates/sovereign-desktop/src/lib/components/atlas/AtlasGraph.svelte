@@ -272,7 +272,10 @@
         dragging = n;
         downAt = { x: ev.clientX, y: ev.clientY };
         moved = false;
-        reheat();
+        // NO reheat. A drag is a LOCAL act — the reader separating a
+        // clustered node to see it — and reheating made the whole graph
+        // re-settle around the pointer ("all the reflow"). The dragged
+        // node follows the pointer via paint(); nothing else moves.
         g.setPointerCapture?.(ev.pointerId);
       });
       g.addEventListener("pointermove", (ev) => {
@@ -287,6 +290,10 @@
         if (dragging === n && !moved) onNodeClick(n.id);
         dragging = null;
         downAt = null;
+        // The dropped position is the reader's arrangement: remember it
+        // (the settle-snapshot may never run again once the layout is
+        // frozen).
+        snapshot();
       });
       viewport.appendChild(g);
       n._g = g;
@@ -418,20 +425,16 @@
       running = true;
       physics();
       frames++;
-      if (frames < 300 || dragging) {
+      if (frames < 300) {
         rafId = requestAnimationFrame(loop);
       } else {
         running = false;
         snapshot();
       }
     }
-    function reheat() {
-      frames = 0;
-      if (!running) rafId = requestAnimationFrame(loop);
-    }
     if (settled) {
       // Every node's position is remembered: paint the frozen layout, no
-      // sim, no reflow. A drag still reheats (the reader asked for it).
+      // sim, no reflow — and a drag stays local on top of it.
       paint();
     } else {
       rafId = requestAnimationFrame(loop);
