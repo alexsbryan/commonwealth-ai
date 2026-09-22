@@ -423,9 +423,9 @@ enum DaemonState {
 pub(crate) fn install_iroh_access(
     app_state: &AppState,
     access: &sovereign_mesh::iroh_access::MeshIrohAccess,
-    iroh_routed_classes: &[commonwealth_transport::TrafficClass],
-    iroh_required_classes: &std::collections::HashSet<commonwealth_transport::TrafficClass>,
-    ip_transport: &Arc<dyn commonwealth_transport::PeerTransport>,
+    iroh_routed_classes: &[sovereign_contracts::transport::TrafficClass],
+    iroh_required_classes: &std::collections::HashSet<sovereign_contracts::transport::TrafficClass>,
+    ip_transport: &Arc<dyn sovereign_contracts::transport::PeerTransport>,
     require_encryption: bool,
 ) {
     app_state
@@ -433,7 +433,7 @@ pub(crate) fn install_iroh_access(
         .publish(access.dial_info_provider());
     app_state.set_rpc_iroh_accept(access.rpc_route_active());
     if !iroh_routed_classes.is_empty() {
-        let iroh_t: Arc<dyn commonwealth_transport::PeerTransport> =
+        let iroh_t: Arc<dyn sovereign_contracts::transport::PeerTransport> =
             Arc::new(access.client_transport());
         let mut per_class = std::collections::HashMap::new();
         for class in iroh_routed_classes {
@@ -2387,7 +2387,7 @@ impl EmbeddedDaemon {
             let base_urls: Vec<String> = transport
                 .endpoints(
                     &commonwealth_transport::peer_contact(&m),
-                    commonwealth_transport::TrafficClass::Inference,
+                    sovereign_contracts::transport::TrafficClass::Inference,
                 )
                 .await
                 .into_iter()
@@ -2665,7 +2665,7 @@ impl EmbeddedDaemon {
                 let probes = transport
                     .endpoints(
                         &commonwealth_transport::peer_contact(&m),
-                        commonwealth_transport::TrafficClass::StatusProbe,
+                        sovereign_contracts::transport::TrafficClass::StatusProbe,
                     )
                     .await;
                 for probe in &probes {
@@ -2833,7 +2833,7 @@ impl EmbeddedDaemon {
     pub async fn model_transfer_endpoints(
         &self,
         node: NodeId,
-    ) -> Vec<commonwealth_transport::PeerEndpoint> {
+    ) -> Vec<sovereign_contracts::transport::PeerEndpoint> {
         let app_state = {
             let state = self.state.read().await;
             match &*state {
@@ -2852,7 +2852,7 @@ impl EmbeddedDaemon {
             .peer_transport()
             .endpoints(
                 &commonwealth_transport::peer_contact(&member),
-                commonwealth_transport::TrafficClass::ModelTransfer,
+                sovereign_contracts::transport::TrafficClass::ModelTransfer,
             )
             .await
     }
@@ -2880,13 +2880,13 @@ impl EmbeddedDaemon {
     pub async fn note_model_transfer_success(
         &self,
         node: NodeId,
-        endpoint: &commonwealth_transport::PeerEndpoint,
+        endpoint: &sovereign_contracts::transport::PeerEndpoint,
     ) {
         let state = self.state.read().await;
         if let DaemonState::Running { app_state, .. } = &*state {
             app_state.peer_transport().note_success(
                 node,
-                commonwealth_transport::TrafficClass::ModelTransfer,
+                sovereign_contracts::transport::TrafficClass::ModelTransfer,
                 endpoint,
             );
         }
@@ -3061,7 +3061,7 @@ impl EmbeddedDaemon {
         // because W3 may PUBLISH a `RoutedTransport` over iroh later in this
         // fn (after the iroh endpoint binds), reusing THIS `IpTransport` as
         // the fallback default.
-        let ip_transport: Arc<dyn commonwealth_transport::PeerTransport> =
+        let ip_transport: Arc<dyn sovereign_contracts::transport::PeerTransport> =
             Arc::new(commonwealth_transport::IpTransport::new(client_port));
         // This install's identity key and everything derived from it (key
         // beside node_id at `<data_dir>/node_key`; same unconditional
@@ -4379,12 +4379,12 @@ impl EmbeddedDaemon {
         // with no required classes (prefer-iroh, fall back to IP per
         // dial); `[iroh.transport] <class> = "ip"` opts a class out.
         let (iroh_routed_classes, iroh_required_classes): (
-            Vec<commonwealth_transport::TrafficClass>,
-            std::collections::HashSet<commonwealth_transport::TrafficClass>,
+            Vec<sovereign_contracts::transport::TrafficClass>,
+            std::collections::HashSet<sovereign_contracts::transport::TrafficClass>,
         ) = if require_encryption {
             (
-                commonwealth_transport::TrafficClass::ALL.to_vec(),
-                commonwealth_transport::TrafficClass::ALL
+                sovereign_contracts::transport::TrafficClass::ALL.to_vec(),
+                sovereign_contracts::transport::TrafficClass::ALL
                     .into_iter()
                     .collect(),
             )
@@ -5109,13 +5109,13 @@ fn sticky_endpoint(
 /// is the liveness evidence — the same ≤1-discovery-tick exposure window
 /// raw-TCP workers already have.
 async fn bridge_rpc_endpoint(
-    transport: &Arc<dyn commonwealth_transport::PeerTransport>,
+    transport: &Arc<dyn sovereign_contracts::transport::PeerTransport>,
     member: &commonwealth_core::mesh::MemberRecord,
 ) -> Option<(String, String)> {
     let candidates = transport
         .endpoints(
             &commonwealth_transport::peer_contact(member),
-            commonwealth_transport::TrafficClass::RpcTensor,
+            sovereign_contracts::transport::TrafficClass::RpcTensor,
         )
         .await;
     let ep = candidates.into_iter().next()?;

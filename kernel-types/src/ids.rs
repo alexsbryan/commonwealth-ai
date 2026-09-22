@@ -122,6 +122,45 @@ macro_rules! define_id {
 
 define_id!(NodeId, "node");
 
+/// A node's Ed25519 verifying key — the mesh-wide cryptographic
+/// identity of a node, distinct from the opaque random [`NodeId`].
+///
+/// Why both exist: `NodeId` predates this key and is the join/gossip
+/// primary key everywhere; changing it is a wire bump across every
+/// surface. The pubkey is the *transport-grade* identity — it is,
+/// byte for byte, a valid iroh node id, so a future dial-by-key
+/// transport authenticates peers end-to-end with this exact value.
+/// Until then it travels alongside the record so the trust ring is
+/// transport-ready.
+///
+/// Lives here rather than in `commonwealth-core` since fp-40 (§12
+/// decision 3): `PeerContact` is contract vocabulary and names this
+/// type, and the kernel is the ids home.
+///
+/// Serializes as a 32-byte array (same convention as
+/// `Mesh::invite_key_hash`). Display is full lowercase hex — this is
+/// public key material, never secret.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct NodePubkey(pub [u8; 32]);
+
+impl NodePubkey {
+    pub fn as_bytes(&self) -> &[u8; 32] {
+        &self.0
+    }
+}
+
+impl fmt::Display for NodePubkey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", hex::encode(self.0))
+    }
+}
+
+impl fmt::Debug for NodePubkey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "NodePubkey({})", self)
+    }
+}
+
 /// Which corpus. A slug, not a random id: corpora are named by the human who
 /// installs them and the name is the join key across every surface — 6,710
 /// occurrences of `corpus_id` across 449 production files at the time this

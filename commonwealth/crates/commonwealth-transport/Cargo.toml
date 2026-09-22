@@ -7,6 +7,10 @@ license.workspace = true
 
 [dependencies]
 commonwealth-core = { workspace = true }
+# The dial vocabulary this crate re-exports (`TrafficClass`, `PeerContact`,
+# `PeerEndpoint`, `PeerTransport`, the origin ALPNs) — moved to the contracts
+# leaf by fp-40 (§12 decision 3); the machinery above stays here.
+sovereign-contracts = { workspace = true }
 async-trait = { workspace = true }
 tracing = { workspace = true }
 ed25519-dalek = { workspace = true }

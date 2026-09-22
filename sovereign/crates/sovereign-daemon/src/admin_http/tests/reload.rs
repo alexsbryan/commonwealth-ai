@@ -313,7 +313,7 @@ async fn reload_moves_the_media_origin_without_a_restart() {
             },
         )))
     });
-    let media = commonwealth_transport::iroh::MEDIA_ALPN;
+    let media = sovereign_contracts::transport::MEDIA_ALPN;
     assert_eq!(routes.forward_for(media, member, &check).await, None);
 
     let mut offered = initial;

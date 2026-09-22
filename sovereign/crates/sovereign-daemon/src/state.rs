@@ -602,7 +602,7 @@ impl AppState {
     /// Snapshot of the active [`PeerTransport`]. Cheap (one atomic load
     /// + Arc clone); call per dial, don't cache across awaits — the
     /// watchdog may publish a new one.
-    pub fn peer_transport(&self) -> Arc<dyn commonwealth_transport::PeerTransport> {
+    pub fn peer_transport(&self) -> Arc<dyn sovereign_contracts::transport::PeerTransport> {
         self.inner.fabric.peer_transport.current()
     }
 

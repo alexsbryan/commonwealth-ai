@@ -904,7 +904,7 @@ async fn discover_and_spawn_pull_loops(state: AppState, self_id: NodeId, daemon_
         let coordinator_url = match &coordinator_contact {
             Some(contact) => state
                 .peer_transport()
-                .endpoints(contact, commonwealth_transport::TrafficClass::ControlPlane)
+                .endpoints(contact, sovereign_contracts::transport::TrafficClass::ControlPlane)
                 .await
                 .into_iter()
                 .next()
@@ -1456,7 +1456,7 @@ async fn find_best_peer_canonical(
                 .peer_transport()
                 .endpoints(
                     &commonwealth_transport::peer_contact(member),
-                    commonwealth_transport::TrafficClass::ControlPlane,
+                    sovereign_contracts::transport::TrafficClass::ControlPlane,
                 )
                 .await
                 .into_iter()

@@ -261,7 +261,7 @@ pub async fn knowledge_search(
     // future refinement once the merge-dedupe is proven.
     let mut fanout_jobs: HashMap<
         NodeId,
-        (String, commonwealth_transport::PeerContact, Vec<String>),
+        (String, sovereign_contracts::transport::PeerContact, Vec<String>),
     > = HashMap::new();
     for offering in &peer_offerings {
         let relevant: Vec<String> = offering
@@ -412,7 +412,7 @@ pub async fn knowledge_search(
 struct PeerOffering {
     node_id: NodeId,
     node_name: String,
-    contact: commonwealth_transport::PeerContact,
+    contact: sovereign_contracts::transport::PeerContact,
     corpora: Vec<String>,
 }
 
@@ -444,7 +444,7 @@ struct PeerServed {
 #[allow(clippy::too_many_arguments)]
 async fn fanout_one_peer(
     http: reqwest::Client,
-    transport: std::sync::Arc<dyn commonwealth_transport::PeerTransport>,
+    transport: std::sync::Arc<dyn sovereign_contracts::transport::PeerTransport>,
     requester_id: NodeId,
     target: crate::fanout::FanoutTarget,
     corpora: Vec<String>,
@@ -479,7 +479,7 @@ async fn fanout_one_peer(
         &transport,
         node_id,
         &target.contact,
-        commonwealth_transport::TrafficClass::KnowledgeSearch,
+        sovereign_contracts::transport::TrafficClass::KnowledgeSearch,
         |ep| {
             let http = http.clone();
             let body = &body;
