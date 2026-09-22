@@ -2380,6 +2380,7 @@ version = "0.7.0"
 dependencies = [
  "arrow",
  "arrow-array",
+ "corpus-index",
  "futures",
  "kernel-types",
  "lancedb",
@@ -2387,6 +2388,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.9",
+ "sovereign-contracts",
  "tempfile",
  "tokio",
  "tracing",

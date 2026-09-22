@@ -977,7 +977,8 @@ name = "corpus-engine-atlas-reader"
 # these modules at their historical paths. understanding-vocab keeps only the
 # vocabulary door it already had; widening it with the store would drag
 # lancedb under the wire floor (oicp-types depends on it).
-allow = ["kernel-types", "understanding-vocab", "workspace-hack"]
+allow = ["corpus-index", "kernel-types", "sovereign-contracts", "understanding-vocab",
+         "workspace-hack"]
 
 [[package_leaf]]
 name = "corpus-engine-scip"

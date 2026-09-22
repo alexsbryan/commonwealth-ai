@@ -2,6 +2,13 @@
 //! Question-kind classification — open text onto the closed [`QuestionKind`]
 //! set, by centroid (ARCH §2.4, principle 9; `EPISTEMIC_INDEX.md` §2.2).
 //!
+//! Carved into this leaf from corpus-engine's `atlas_traversal` (FIVE_PROGRAMS
+//! §12 decision 1, 2026-09-21): the ground walk's row selection classifies
+//! through this file, so it reads with the walk. corpus-engine re-exports it
+//! at the historical `atlas_traversal::question_kind` path. The error type
+//! is `corpus_index::error::Error` directly — corpus-engine's `error` module
+//! was already a shim of it.
+//!
 //! # Why this is not in `classifier.rs`
 //!
 //! Its sibling [`super::classifier`] answers a different question and keeps
@@ -19,9 +26,10 @@
 //!
 //! # The method, and where it comes from
 //!
-//! Nothing new: this is [`crate::extractors::column_aware::HeaderClassifier`]
-//! with a different label set — itself a port of the router's
-//! `scope_classifier.rs`, which `ARCH_PRINCIPLES` §2.4 names as the pattern.
+//! Nothing new: this is corpus-engine's `extractors::column_aware::
+//! HeaderClassifier` method with a different label set — itself a port of the
+//! router's `scope_classifier.rs`, which `ARCH_PRINCIPLES` §2.4 names as the
+//! pattern.
 //! Embed each exemplar, L2-normalise, sum per class, normalise again: that is
 //! the centroid. At query time, one dot product per class over a normalised
 //! query embedding, then two gates — an absolute similarity floor and a
@@ -86,14 +94,14 @@ use std::sync::{Arc, Mutex, OnceLock};
 use sovereign_contracts::embed_quirks::classifier_input;
 use understanding_vocab::ontology::{NavigationPolicy, QuestionKind};
 
-use crate::extractors::column_aware::l2_normalize;
-use crate::types::EmbedFn;
-use crate::{Error, Result};
+use crate::linalg::l2_normalize;
+use corpus_index::error::{Error, Result};
+use corpus_index::types::EmbedFn;
 
 /// Absolute similarity floor — a SAME-SPACE guard, not a "how close to a
 /// class" threshold.
 ///
-/// It used to be 0.34, borrowed from [`crate::extractors::column_aware`]'s
+/// It used to be 0.34, borrowed from the column-aware header classifier's
 /// `HEADER_MIN_SIM` on the reasoning that both are normalised cosines from
 /// the same embedding family. That reasoning died with the space change: the
 /// numbers below are all measured in the speech-act space and none of them
@@ -495,7 +503,7 @@ async fn centroid(phrases: &[String], embed: &EmbedFn) -> Result<Vec<f32>> {
                     "question-kind centroid: embedding dim mismatch {} vs {}",
                     s.len(),
                     e.len()
-                )))
+                )));
             }
             None => sum = Some(e),
         }

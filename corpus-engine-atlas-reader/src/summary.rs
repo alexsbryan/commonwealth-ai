@@ -18,7 +18,7 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 use crate::ann_store::{ann_table_mtime_ms, ann_table_present, ann_table_rows};
-use crate::raw::{atoms_content_hash, read_atlas_ontology};
+use crate::raw::atoms_content_hash;
 use crate::store::{csr_edge_counts, csr_mtime_ms};
 use tracing::debug;
 use understanding_vocab::atoms::{AtomEnvelope, AtomType};
