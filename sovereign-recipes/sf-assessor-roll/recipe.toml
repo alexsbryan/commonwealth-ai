@@ -56,9 +56,13 @@ default = ""
 # quotes / operators because the template substitutes verbatim; the year
 # uses Socrata's simple `field=value` equality and the only operator
 # ($where land>0) is pre-encoded in `where_clause`.
+# base_url is the CURRENT portal domain (data.sf.gov). The legacy
+# data.sfgov.org 301s here, but its edge WAF 403s the full $select
+# request-line outright (reproduced 2026-09-22: small queries 301, the
+# 14-field query 403s before the redirect fires) — point at the origin.
 [acquire]
 type = "http_api"
-base_url = "https://data.sfgov.org"
+base_url = "https://data.sf.gov"
 user_agent = "commonwealth-ai/0.1 (sf-assessor-roll; LVT legibility demo)"
 rate_limit_per_second = 5.0
 
