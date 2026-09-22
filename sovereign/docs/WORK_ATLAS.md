@@ -56,7 +56,7 @@ Toggling Public ↔ Private does not retroactively republish prior records. The 
 - **Agent identity via header.** `X-Agent-Session` is extracted in `mcp_router::mcp_handle` and threaded into `ToolContext::agent_session_token`. Anonymous calls (no header) fall back to `format!("conn:{mcp_session_id}")` so per-connection grouping still works.
 - **`repo_id` is MUST.** Per spec §10 (escalated from SHOULD on the user's call) the daemon refuses to create Sessions outside a git repo with an `origin` remote. `repo_id` is SHA-256(canonicalized origin URL) — SSH and HTTPS forms of the same repo hash to the same value, so two workstations clones agree.
 - **`node_id` is reused, not duplicated.** Spec §1 — atlas identity equals mesh identity. Stable per workstation via `~/.svrnmesh/node_id`.
-- **`node_is_self` says whether a record is yours** (added 2026-08-07). Every claim and observation carries it alongside `node_id`, computed in `collect_in_flight` against `WorkAtlasStore::node_id()`, so both consumers — the `work_in_flight` tool and the session-boot briefing — agree. It exists because **scope strings are not node-qualified**: a host-local resource gets the same name on every workstation, so `daemon-runtime:9741-primary-slot` is one bucket holding every node's claim on its *own* daemon. `node_id` alone cannot resolve that — it is an opaque hash and nothing else in the response says which one is the caller's — so a peer's claim reads as a lock on the box you are sitting on. That misread cost real stalled work on 2026-08-07. Pinned by `tests/cross_node.rs::same_scope_on_two_nodes_is_distinguishable_by_node_is_self`. Node *names* (`BeefyMac`, `RuggedFox`) are **not** available here — they live in the mesh roster (`svrn mesh status`, which marks self with `*`), and the work-atlas store holds only `NodeId`.
+- **`node_is_self` says whether a record is yours** (added 2026-08-07). Every claim and observation carries it alongside `node_id`, computed in `collect_in_flight` against `WorkAtlasStore::node_id()`, so both consumers — the `work_in_flight` tool and the session-boot briefing — agree. It exists because **scope strings are not node-qualified**: a host-local resource gets the same name on every workstation, so `daemon-runtime:9741-primary-slot` is one bucket holding every node's claim on its *own* daemon. `node_id` alone cannot resolve that — it is an opaque hash and nothing else in the response says which one is the caller's — so a peer's claim reads as a lock on the box you are sitting on. That misread cost real stalled work on 2026-08-07. Pinned by `tests/port_fake.rs::same_scope_on_two_nodes_is_distinguishable_by_node_is_self (real-store twin: commonwealth-state/tests/work_atlas_store.rs)`. Node *names* (`BeefyMac`, `RuggedFox`) are **not** available here — they live in the mesh roster (`svrn mesh status`, which marks self with `*`), and the work-atlas store holds only `NodeId`.
 
 ## TTL model
 
@@ -144,7 +144,7 @@ recorded.
   null — a receipt only means something when the origin is known to
   be elsewhere. The side map dies at process restart, exactly like
   the claims themselves (MeshStore is in-memory). Pinned by
-  `tests/cross_node.rs::peer_claim_gets_received_at_on_first_observation`.
+  `tests/port_fake.rs::peer_claim_gets_received_at_on_first_observation (real-store twin: commonwealth-state/tests/work_atlas_store.rs)`.
 
 ## Broadcast model
 
@@ -173,7 +173,7 @@ and the ring's anti-entropy is what redelivers it to a peer that was offline.
 claim simply stopped being re-sent and a peer kept its copy until its own TTL
 gc swept it. The rail carries a delete as a TOMBSTONE, so a release reaches
 peers — and, per K7, survives until the seal that retires it.
-`tests/cross_node.rs::release_propagates_as_a_tombstone` is the pin, and it is
+`tests/port_fake.rs::release_propagates_as_a_tombstone (real-store twin: commonwealth-state/tests/work_atlas_store.rs)` is the pin, and it is
 the assertion that was inverted at 2e.
 
 Session updates do NOT trigger the hurry (they're high-volume and the peers

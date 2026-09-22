@@ -559,16 +559,6 @@ mod tests {
         assert_eq!(private_hits.len(), 1);
     }
 
-    /// The other half of the mirror test in `peer_preferences`. If
-    /// `Privacy::Private.app_id()` ever drifts away from the literal
-    /// listed in `GOSSIP_EXCLUDED_APP_IDS`, this fails.
-    #[test]
-    fn private_app_id_matches_gossip_exclusion_list() {
-        use commonwealth_state::peer_preferences::is_gossip_excluded;
-        assert!(is_gossip_excluded(Privacy::Private.app_id()));
-        assert!(!is_gossip_excluded(Privacy::Public.app_id()));
-    }
-
     #[test]
     fn put_claim_rejects_empty_intent() {
         let s = mk_store();

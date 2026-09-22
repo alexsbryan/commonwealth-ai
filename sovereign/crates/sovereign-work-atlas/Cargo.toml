@@ -45,13 +45,15 @@ workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 
 [dev-dependencies]
 tempfile = "3"
-# TEST-ONLY, and deliberately not a runtime dep: the mirror half of the
-# gossip-exclusion invariant (`private_app_id_matches_gossip_exclusion_list`).
-# The literal in `Privacy::Private.app_id()` and the one in
-# `GOSSIP_EXCLUDED_APP_IDS` must agree or a private claim gossips; that is a
-# claim about the MESH, so the assertion has to reach the mesh's own list
-# rather than restate it here (ARCH §10.6 — one decider, one name).
-commonwealth-state = { workspace = true }
+# The real-store proofs that used to need `commonwealth-state` here —
+# `tests/cross_node.rs` and the gossip-exclusion mirror pin in
+# `src/store.rs::private_app_id_matches_gossip_exclusion_list` — now live
+# beside the store they exercise:
+# `commonwealth/crates/commonwealth-state/tests/work_atlas_store.rs`.
+# This crate's own tests run over the port via
+# `sovereign_contracts::peer::SoloReplicatedKv`
+# (`tests/port_fake.rs`), so the mesh substrate is not needed to test a
+# capability.
 
 [lints]
 workspace = true

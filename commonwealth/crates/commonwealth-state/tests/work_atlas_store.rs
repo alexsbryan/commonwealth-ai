@@ -14,6 +14,13 @@
 //! (`an_excluded_namespace_never_enters_the_outbox_nor_a_peers_store` is the
 //! same invariant end to end); repeating it here would cost two tokio runtimes
 //! and a rail per test to re-assert somebody else's mechanism.
+//!
+//! Relocated VERBATIM 2026-09-22 from
+//! `sovereign/crates/sovereign-work-atlas/tests/cross_node.rs` (fp-22, the
+//! tests-relocation half): a capability crate's tests do not pin the mesh's
+//! own replication behaviour, so they live beside the store that implements
+//! it. The port-level counterparts over `SoloReplicatedKv` remain in
+//! `sovereign/crates/sovereign-work-atlas/tests/port_fake.rs`.
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -23,7 +30,11 @@ use kernel_types::NodeId;
 use sovereign_contracts::peer::{ReplicatedKv, ReplicatedKvEntry, ReplicatedKvError};
 use uuid::Uuid;
 
-use sovereign_core::time::unix_now_u64;
+// Import fix for the new home: the clock lives in this crate's substrate
+// dependency. Same semantics as `sovereign_core::time::unix_now_u64` — both
+// are `SystemTime::now()` epoch seconds (`u64`).
+use commonwealth_core::clock::unix_now_secs as unix_now_u64;
+
 use sovereign_work_atlas::model::{
     AgentKind, ClaimRecord, ObservationRecord, ObservationSource, Privacy, SessionRecord, SymbolRef,
 };
@@ -527,4 +538,22 @@ fn same_scope_on_two_nodes_is_distinguishable_by_node_is_self() {
         self_flag(claim_b.claim_id),
         "this node's own claim reported as remote"
     );
+}
+
+/// The other half of the mirror test in `peer_preferences`. If
+/// `Privacy::Private.app_id()` ever drifts away from the literal
+/// listed in `GOSSIP_EXCLUDED_APP_IDS`, this fails.
+///
+/// Relocated 2026-09-22 from `sovereign-work-atlas`'s `src/store.rs` test
+/// module together with the rest of this file: it is inherently about the
+/// atlas's `Privacy` vocabulary and the mesh's exclusion list TOGETHER, and
+/// this crate owns the list. The dev-dependency direction this implies
+/// (state -> work-atlas, test-only) is the mirror of the port edge the atlas
+/// already has (`sovereign_contracts::peer::ReplicatedKv`); the atlas itself
+/// does not depend back on this crate.
+#[test]
+fn private_app_id_matches_gossip_exclusion_list() {
+    use commonwealth_state::peer_preferences::is_gossip_excluded;
+    assert!(is_gossip_excluded(Privacy::Private.app_id()));
+    assert!(!is_gossip_excluded(Privacy::Public.app_id()));
 }

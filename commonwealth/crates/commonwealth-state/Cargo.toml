@@ -37,5 +37,19 @@ workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 # prove is the fold and not a hand-built `Admission` that agrees with itself.
 commonwealth-rail-core = { workspace = true, features = ["test-support"] }
 
+# The work atlas's real-store proofs, relocated beside the store they
+# exercise 2026-09-22 (`tests/work_atlas_store.rs`, from
+# sovereign-work-atlas/tests/cross_node.rs plus its store.rs gossip-exclusion
+# mirror pin): they drive `WorkAtlasStore` over the REAL `MeshStore`
+# outbox→projection path, the only honest way to assert what replication
+# does with a Private record. Dev-only — the atlas does NOT depend back on
+# this crate; its port is `sovereign_contracts::peer::ReplicatedKv`.
+sovereign-work-atlas = { workspace = true }
+# The port the relocated tests adapt `MeshStore` into, and the identity
+# vocabulary their cross-instance fixtures key on.
+sovereign-contracts = { workspace = true }
+kernel-types = { workspace = true }
+uuid = { workspace = true }
+
 [lints]
 workspace = true

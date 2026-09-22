@@ -693,12 +693,14 @@ reason = "mesh foundation must stay consumable without the agent runtime"
 [[forbid]]
 from = "commonwealth-state"
 to = "sovereign-*"
-reason = "mesh foundation must stay consumable without the agent runtime"
+except = ["sovereign-contracts", "sovereign-work-atlas"]
+reason = "mesh foundation must stay consumable without the agent runtime; it meets sovereign at the contracts seam only. sovereign-work-atlas joins the exception for the relocated work-atlas acceptance tests ONLY (FIVE_PROGRAMS fp-22, 2026-09-22 — decision 6's relocate-don't-fake pattern): a dev/test edge that is not in the published closure, never a runtime dep"
 
 [[forbid]]
 from = "commonwealth-transport"
 to = "sovereign-*"
-reason = "mesh foundation must stay consumable without the agent runtime"
+except = ["sovereign-contracts"]
+reason = "mesh foundation must stay consumable without the agent runtime; it meets sovereign at the contracts seam only (FIVE_PROGRAMS fp-21, 2026-09-22 — the vocabulary half moves there; the iroh endpoints stay cmnwlth's)"
 
 [[forbid]]
 from = "commonwealth-discovery"
