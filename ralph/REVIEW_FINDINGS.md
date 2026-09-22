@@ -2209,3 +2209,126 @@ the one client that route needs.
   (`checkpoint_verify.rs` 451 < 800). Advisory: size-gate 13 keys grew (the campaign's
   share: cli-llm +310, daemon +267 — the numbers in the table above); deletion-manifest
   p0-root-junk losing ground.
+
+## browser-dial — REVIEW-audit-browser-dial (2026-09-22, range `ac44e6fec..51b64f68a`)
+
+BASE `ac44e6fecc8165fbad5c624da21442b6227ccc5a` (stamped by the inventory row into
+O §Predictions as its first act). Six commits after BASE: the campaign's four
+(a1cb78f60 inventory · 5f58c18d4 · ff6d8e561 bd-1 · 51b64f68a queue marks) interleaved
+with two foreign operator-directed lanes — 5825a2fa3 `cli: svrn ring serve + svrn mesh
+media origin` and 7fef0a9dc `runbook: 100% cli`, both committed mid-campaign by a
+concurrent session on `main` (operator direction 2026-09-22, "I want to go 100% cli").
+
+### Gates
+
+- TESTALL `scripts/ralph-check.sh testall` → **exit=100, 13710 pass / 2 fail**, both
+  foreign, triaged:
+  - `cli_contract_journeys::every_journey_cites_a_doc_that_exists` — the known per-host
+    red: `mesh-offers-catalogue` cites `docs/internal/RING_APPLICATIONS.md`, GITIGNORED
+    (`.gitignore:67`) and ABSENT on the Halo, cited at `sovereign/docs/cli-contract.toml`
+    since `a3bd715f5` (2026-09-13, an ANCESTOR of BASE — `git merge-base --is-ancestor`
+    verified). This campaign's diff touches neither `sovereign/docs/cli-contract.toml`
+    nor `docs/internal/` (empty). Recorded identically by A51 (rr-2), A59 (ring-guest)
+    and the-link-7.
+  - `local_only_boot::a_local_only_daemon_spawns_no_network_service` — load flake, not
+    a regression: the 10 s bound on a daemon booting under a 13712-test parallel run
+    (`local_only_boot.rs:277`). Re-run alone
+    (`scripts/ralph-check.sh testfn sovereign-mesh a_local_only_daemon_spawns_no_network_service`)
+    → **exit=0, 1 pass**. The same triage the mesh-principal audit recorded.
+- PREPUSH `scripts/ralph-check.sh prepush` → **exit=1, PUSH BLOCKED, 1 blocking: arch-gate
+  [hard]** — approach band GREW 203149 → 203154 (+5). Attributable in full to the foreign
+  5825a2fa3: `sovereign-cli-llm/src/ring_cmd/mod.rs` 1082 → 1087 (`Some("serve") =>
+  run_serve(...)`, its help line, `mod serve; use serve::run_serve;`). **No browser-dial
+  file is oversized or in the band** — the campaign's commits add no `.rs` line. Advisory:
+  size-gate 13 keys grew, every grown key a foreign lane's (browser-dial adds nothing);
+  deletion-manifest `p0-root-junk` losing ground (135094 > 113934); concept-gate
+  could-not-judge (SCIP graph indexed `36dca4ff`, HEAD `51b64f68`). Every hard gate green:
+  `sovereign-lint-scoped`, `rustfmt`, `docs`/`layout`/`layer`/`boundary`/`lock`/`env`/
+  `clock`/`lifecycle`, `judge-replay-control`, `ralph-decisions`, `nc-thesis`,
+  `judge-funnel-gate`, `instrument-gate`.
+
+### The falsifier's reading — per crate, tests apart, vs O §Predictions
+
+`git diff --numstat ac44e6fec..51b64f68a`, prod/test split by the `#[cfg(test)]` line in
+each file; no `tests/` tree changed.
+
+| path | predicted | +prod | +test | − | reading |
+|---|---|---|---|---|---|
+| sovereign/crates | **+0** | 532 | 146 | 0 | **+678, ALL foreign** — the loudest finding |
+| commonwealth/crates | +0 | 0 | 0 | 0 | ✓ |
+| scripts/ | +0 | 0 | — | — | ✓ |
+| quality/campaigns/browser-dial.toml | +1 file | — | — | — | ✓ — landed pre-BASE at 0e4226967 (ancestor of BASE) |
+| ralph/next/browser-dial/ | +4 files | — | — | — | ✓ — PROMPT+CHARTER pre-BASE; order +1/−1, STATE +2/−2 in range |
+| ralph/DECISIONS.md | +2 entries | +183 | — | — | ✓ — browser-dial-1, -2 rendered |
+| ralph/decisions/browser-dial-{1,2}.md | (the 2 entries' source) | +189 | — | — | ✓ |
+| `target/` | never committed | — | — | — | ✓ `git ls-files target/` empty |
+
+- **the loudest finding: `sovereign/crates` was changed the prediction did not name, and
+  `git diff --stat <BASE>..HEAD -- sovereign/crates commonwealth/crates` is NOT empty
+  (+678).** All four files are the foreign 5825a2fa3 (`ring_cmd/serve.rs` new 427 =
+  344 prod + 83 test; `mesh_media/origin.rs` new 240 = 177 prod + 63 test; `mesh_media.rs`
+  +6; `ring_cmd/mod.rs` +5). The campaign has no share of it: each row's own commit is
+  ledger + queue mark only, and the campaign's predicate — product diff empty over
+  `BASE..HEAD` — reads FALSE **literally**. bd-1's decision named and attributed this at
+  the time (`browser-dial-2.md` "Concurrent foreign product work"); it is not fixable by a
+  product edit here, because the campaign's one absolute forbids exactly that (the exit
+  condition). The operator's call (NEEDS_HUMAN).
+- Every other predicted path holds. `quality/campaigns/browser-dial.toml` and the
+  `ralph/next/browser-dial/` PROMPT/CHARTER landed at 0e4226967, an ancestor of BASE, so
+  they are absent from the range by construction — not drift.
+
+### Findings against ARCH's twelve
+
+No defect of this campaign's is fixed here; there is none to fix (its whole diff is
+ledger + queue). What the twelve were read against, and what held:
+
+1. **(2, 6, 7 — the campaign's own work holds).** The inventory corrected the ledger by
+   ADDING, never replacing (ARCH 6): `docs/internal/`-style host facts — the Mac's
+   verbatim `ring v0.17.14` refusal (exit 101) stands BESIDE the Halo's
+   `Finished \`dev\` profile … in 15.90s` (exit 0), each host's instrument named
+   (toolchain, target std, C compiler), with the falsifier named (a host whose clang
+   cannot target wasm32 — the Mac's own run). One run is not a measurement, so the
+   instrument is named before the outcome (ARCH 7). Zero product branch changed (ARCH 2).
+2. **(1, 4, 6, 7 — bd-1's record holds).** `browser-dial-2.md` names every layer with its
+   verbatim outcome (endpoint bind · relay online · QUIC/ALPN `cwth/guest/0` ·
+   request-write · admission · `HTTP/1.1 200 OK` + the named rail row
+   `ring-658e43cce7830b48`), names what would falsify each, and reports the one path fact
+   that cost a run (hold the bi-stream's send half open, as `HttpBridge::pump` does). The
+   deployed daemon's `GET /v1/rail/log` 404 is named and explained (its process is a
+   5-day-old `(deleted)` binary predating `cc8a4c3ee`) rather than substituted for the
+   throwaway node's 200 (ARCH 6). Citations spot-checked against the tree:
+   `GUEST_ALPN = b"cwth/guest/0"` at `commonwealth-transport/src/iroh.rs:101`; `pump` at
+   `:875`; `an_unrouted_guest_alpn_is_dropped…` at `:1386`; `/v1/rail/log` in
+   `Scope::Rails(_) | Scope::Wall` at `sovereign-grants/src/guest_grant.rs:133`; the guest
+   admission + 403 refusal at `sovereign-daemon/src/client_auth.rs:265,313`. The decision
+   abbreviates that last path as `client_auth.rs` (crate dirs were reorganized); it
+   resolves, no change needed.
+3. **(5 — bar instrument).** `python3 scripts/ralph-decisions.py --check` exit=0
+   (`ralph-decisions passed` in PREPUSH); the rendered ledger is fresh.
+4. **(11 — inventory outranks plan).** The engine decision took the surface the demo
+   already carries (a headless Chrome driven by the repo's vendored `playwright-core`),
+   and the relay is iroh's own n0 relay — no new container, no relay of ours.
+
+### What each row reused (O §Less)
+
+- inventory `a1cb78f60`: W's isolated-copy recipe (own `[workspace]`, manifest KEPT so
+  the build is re-derivable, `iroh = "=1.0.2"`); tl-3's measurement shape (numbers,
+  verbatim outcomes, falsifiers, zero product diff); the DECISIONS ledger.
+- bd-1 `ff6d8e561`: W's isolated-copy recipe for the page build (`iroh =1.0.2`,
+  `wasm-bindgen =0.2.128`; measured that iroh's wasm tree pulls `getrandom 0.4` with
+  `wasm_js`, so W:360-380's `--cfg getrandom_backend` note was not needed); the demo's
+  grant machinery (`POST /internal/guest/grant`, bearer); the node shape
+  `scripts/ring-doc-demo.sh`'s local backend uses (`mkcfg`/`start_daemon`, which
+  `ring-room-demo.sh` sources); tl-3's measurement shape; the phone pattern's existing
+  engine surface (Google Chrome for Testing 147.0.7727.15 headless via the vendored
+  `playwright-core` 1.59.1) — no new image. iroh's n0 relay, never one of ours.
+
+### Red gates — foreign, recorded, NEEDS_HUMAN
+
+- TESTALL's two failures: the per-host doc citation (a3bd715f5, ancestor of BASE) and the
+  `local_only_boot` 10 s load flake — both triaged above, neither worker-fixable without
+  an edit this campaign's absolute forbids.
+- PREPUSH arch-gate [hard]: the +5 band growth is entirely the foreign 5825a2fa3's
+  `ring_cmd/mod.rs`; the campaign's share is zero. A fix is either a product edit (forbidden
+  here) or a working-tree `--update-baseline` (forbidden by PROMPT §7) — the operator's call.
+  Advisory size-gate / deletion-manifest / concept-gate ride as above.
