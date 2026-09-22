@@ -208,6 +208,12 @@ impl ResolveReport {
     }
 }
 
+// The chapters reader above only pays for a corpus that declares types;
+// this is the cheap predicate that says so (a declared corpus has ≥1 type).
+fn policy_is_declared(policies: &corpus_engine::enrichment::ontology::OntologyPolicies) -> bool {
+    !policies.shape.types.is_empty()
+}
+
 pub async fn resolve_into_dir(
     cfg: &EnrichConfig,
     sections: &[SectionExtraction],
@@ -223,7 +229,46 @@ pub async fn resolve_into_dir(
         .as_ref()
         .map(|spec| spec.policies())
         .unwrap_or_default();
-    let policy = ResolutionPolicy::new(&policies);
+    // Section titles, for the section-context ref derivation (3c): a coin
+    // inside "… › THE DEMANHUR HOARD › CATALOGUE" belongs to that hoard by
+    // construction, and the chapters manifest beside the atlas dir says so
+    // without asking the model. Absent file ⇒ empty map ⇒ the pass is
+    // inert (every pre-existing caller shape).
+    let mut policy = ResolutionPolicy::new(&policies);
+    if policy_is_declared(&policies) {
+        let chapters_path = target_atlas_dir.parent().map(|p| p.join("chapters.json"));
+        if let Some(path) = chapters_path.filter(|p| p.exists()) {
+            match std::fs::read_to_string(&path)
+                .map_err(|e| e.to_string())
+                .and_then(|s| {
+                    serde_json::from_str::<serde_json::Value>(&s).map_err(|e| e.to_string())
+                }) {
+                Ok(doc) => {
+                    let mut titles = std::collections::HashMap::new();
+                    if let Some(list) = doc.get("chapters").and_then(|c| c.as_array()) {
+                        for c in list {
+                            if let (Some(id), Some(title)) = (
+                                c.get("id").and_then(|v| v.as_str()),
+                                c.get("title").and_then(|v| v.as_str()),
+                            ) {
+                                titles.insert(id.to_string(), title.to_string());
+                            }
+                        }
+                    }
+                    policy = policy.with_section_titles(titles);
+                }
+                Err(e) => {
+                    // The map is an accelerator with a named fallback, not a
+                    // precondition: report and continue without it.
+                    tracing::warn!(
+                        error = %e,
+                        path = %path.display(),
+                        "atlas resolve: chapters.json unreadable — section-context ref derivation skipped"
+                    );
+                }
+            }
+        }
+    }
 
     // Step 3a: always runs. Step 3b is re-resolved from 3a's
     // output so the atom ids remain consistent regardless of
