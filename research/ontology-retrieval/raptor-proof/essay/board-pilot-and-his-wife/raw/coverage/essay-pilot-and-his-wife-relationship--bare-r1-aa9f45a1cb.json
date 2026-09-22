@@ -1,0 +1,28 @@
+{
+ "kind": "coverage",
+ "key": "essay-pilot-and-his-wife-relationship--bare-r1",
+ "prompt": "Below are numbered plot points of a novel and an answer written about the novel.\nLabel every point by what the answer says about it:\n\"correct\" = the answer states it\n\"contradicted\" = the answer says something that conflicts with it\n\"absent\" = the answer does not mention it\nReturn only JSON with one entry per point: {\"P1\": \"correct\", \"P2\": \"absent\"}\n\nPoints:\nP1. The novel portrays the life of a sailor named Salve Kristiansen.\nP2. Salve loves Elisabeth, who returns his affection.\nP3. Elisabeth is momentarily attracted to a young officer who wishes to marry her.\nP4. Elisabeth spurns the officer and remains loyal to Salve.\nP5. Salve leaves his native land in desperation before learning of Elisabeth's loyalty.\nP6. Salve sails toward foreign shores for several years.\nP7. Salve returns home after some years have passed.\nP8. Elisabeth has remained true to Salve during his absence.\nP9. Salve marries Elisabeth upon his return.\nP10. The memory of Elisabeth's hesitation causes misery for both spouses.\nP11. Ten years pass while the couple struggles with their mutual distrust.\nP12. Salve and Elisabeth finally achieve clear understanding and genuine appreciation.\nP13. They lay the foundation for a happy life together.\nP14. The novel emphasizes that implicit confidence and trust are necessary for a happy marriage.\n\nAnswer:\nBased on the provided passages from *The Pilot and His Wife*, here is an analysis of the main relationship and its strains.\n\n### The Main Relationship\nThe central relationship in the novel is the marriage between **Salve** (the pilot) and his wife, **Elizabeth**. Their union is defined by a profound asymmetry: Elizabeth\u2019s deep, enduring devotion to Salve versus Salve\u2019s self-absorption and volatile temperament.\n\n### What Strains the Marriage\nOver the course of the story, several factors strain their bond to the breaking point:\n\n1.  **Salve\u2019s Self-Centeredness:** Elizabeth eventually confronts Salve with the core issue of their marriage: \"It is yourself, and yourself only, you have loved all along; and when you took me as your wife, you merely took another to help you\". She realizes that despite his outward heroism, he has never truly seen her or valued her emotional needs, viewing her instead as a support for his own ego.\n2.  **Professional Demands and Absence:** Salve\u2019s life at sea keeps him away from home for long periods, leaving Elizabeth in \"dulness and loneliness\" on Merdoe. While she initially takes pride in his daring deeds, the physical absence creates an emotional chasm. When he does return, the time they spend together is often brief (\"two or three days perhaps of occasional happy calm\") before he feels compelled to leave again.\n3.  **Salve\u2019s Volatile Temperament:** Salve is described as having a \"hard and harsh exterior,\" prone to sudden passions and anger. He can fly into rages over perceived slights (such as Elizabeth speaking with her aunt, Fru Beck) and then retreat into brooding silence. His inability to communicate calmly leads to cycles of conflict where Elizabeth must endure his moods while concealing her own pain.\n4.  **Elizabeth\u2019s Breaking Point:** The strain culminates in a decisive confrontation (\"eclaircissement\") where Elizabeth stops submitting. She tells Salve that if he had loved her as she loves him, they would not be standing apart \"as we are this day\". This moment marks the end of her passive endurance; she recognizes that their marriage is unsustainable under the weight of his self-love and emotional unavailability.\n\nThe passages suggest that the tragedy of their relationship lies not in external events alone, but in Salve\u2019s fundamental inability to reciprocate the depth of feeling Elizabeth offers, leading to her eventual realization that she has been suffering for a man who only truly loves himself.",
+ "attempts": [
+  {
+   "nudged": false,
+   "reply": "{\n\"P1\": \"absent\",\n\"P2\": \"contradicted\",\n\"P3\": \"absent\",\n\"P4\": \"absent\",\n\"P5\": \"absent\",\n\"P6\": \"correct\",\n\"P7\": \"absent\",\n\"P8\": \"correct\",\n\"P9\": \"absent\",\n\"P10\": \"correct\",\n\"P11\": \"absent\",\n\"P12\": \"absent\",\n\"P13\": \"absent\",\n\"P14\": \"absent\"\n}",
+   "model": "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL"
+  }
+ ],
+ "parsed": {
+  "P1": "absent",
+  "P2": "contradicted",
+  "P3": "absent",
+  "P4": "absent",
+  "P5": "absent",
+  "P6": "correct",
+  "P7": "absent",
+  "P8": "correct",
+  "P9": "absent",
+  "P10": "correct",
+  "P11": "absent",
+  "P12": "absent",
+  "P13": "absent",
+  "P14": "absent"
+ }
+}

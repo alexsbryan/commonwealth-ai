@@ -1,0 +1,181 @@
+[
+ {
+  "path": "eval run --prod-pipeline --isolate on raptor-pilot-and-his-wife (built-in literary_atlas map), 2026-09-21, after the Summary-atom citation repair",
+  "questions": 12,
+  "node_kinds": {
+   "entity": 34,
+   "state": 191,
+   "claim": 20,
+   "summary": 10,
+   "configuration": 2,
+   "event": 17,
+   "question": 1,
+   "relation": 11
+  },
+  "questions_reaching": {
+   "entity": 11,
+   "state": 9,
+   "claim": 4,
+   "summary": 2,
+   "configuration": 2,
+   "event": 2,
+   "question": 1,
+   "relation": 2
+  },
+  "per_question": [
+   {
+    "question_id": "essay-pilot-and-his-wife-arc",
+    "nodes": 22,
+    "kinds": {
+     "entity": 3,
+     "state": 19
+    },
+    "seeds": 12,
+    "considered": 13,
+    "added": 12,
+    "summaries_appended": 0
+   },
+   {
+    "question_id": "essay-pilot-and-his-wife-conflict",
+    "nodes": 6,
+    "kinds": {
+     "claim": 4,
+     "entity": 2
+    },
+    "seeds": 4,
+    "considered": 6,
+    "added": 12,
+    "summaries_appended": 0
+   },
+   {
+    "question_id": "essay-pilot-and-his-wife-change",
+    "nodes": 26,
+    "kinds": {
+     "entity": 3,
+     "state": 23
+    },
+    "seeds": 12,
+    "considered": 19,
+    "added": 12,
+    "summaries_appended": 0
+   },
+   {
+    "question_id": "essay-pilot-and-his-wife-relationship",
+    "nodes": 22,
+    "kinds": {
+     "entity": 2,
+     "state": 20
+    },
+    "seeds": 12,
+    "considered": 14,
+    "added": 12,
+    "summaries_appended": 0
+   },
+   {
+    "question_id": "essay-pilot-and-his-wife-secondary",
+    "nodes": 23,
+    "kinds": {
+     "entity": 4,
+     "state": 19
+    },
+    "seeds": 12,
+    "considered": 16,
+    "added": 12,
+    "summaries_appended": 0
+   },
+   {
+    "question_id": "essay-pilot-and-his-wife-themes",
+    "nodes": 14,
+    "kinds": {
+     "summary": 8,
+     "configuration": 1,
+     "claim": 1,
+     "event": 1,
+     "question": 1,
+     "relation": 2
+    },
+    "seeds": 9,
+    "considered": 5,
+    "added": 12,
+    "summaries_appended": 8
+   },
+   {
+    "question_id": "essay-pilot-and-his-wife-setting",
+    "nodes": 25,
+    "kinds": {
+     "entity": 2,
+     "state": 23
+    },
+    "seeds": 12,
+    "considered": 14,
+    "added": 12,
+    "summaries_appended": 0
+   },
+   {
+    "question_id": "essay-pilot-and-his-wife-turning-point",
+    "nodes": 26,
+    "kinds": {
+     "entity": 2,
+     "state": 24
+    },
+    "seeds": 12,
+    "considered": 14,
+    "added": 12,
+    "summaries_appended": 0
+   },
+   {
+    "question_id": "essay-pilot-and-his-wife-ending",
+    "nodes": 22,
+    "kinds": {
+     "entity": 2,
+     "state": 20
+    },
+    "seeds": 12,
+    "considered": 14,
+    "added": 12,
+    "summaries_appended": 0
+   },
+   {
+    "question_id": "essay-pilot-and-his-wife-inner-conflicts",
+    "nodes": 12,
+    "kinds": {
+     "claim": 8,
+     "entity": 4
+    },
+    "seeds": 8,
+    "considered": 10,
+    "added": 12,
+    "summaries_appended": 0
+   },
+   {
+    "question_id": "essay-pilot-and-his-wife-setup",
+    "nodes": 24,
+    "kinds": {
+     "entity": 3,
+     "state": 21
+    },
+    "seeds": 12,
+    "considered": 16,
+    "added": 12,
+    "summaries_appended": 0
+   },
+   {
+    "question_id": "essay-pilot-and-his-wife-society",
+    "nodes": 64,
+    "kinds": {
+     "entity": 7,
+     "state": 22,
+     "summary": 2,
+     "relation": 9,
+     "claim": 7,
+     "configuration": 1,
+     "event": 16
+    },
+    "seeds": 13,
+    "considered": 20,
+    "added": 12,
+    "summaries_appended": 6
+   }
+  ]
+ }
+]

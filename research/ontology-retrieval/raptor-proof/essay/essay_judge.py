@@ -28,7 +28,7 @@ Every judge exchange is saved under `<out>/raw/<kind>/`, keyed by a hash of the
 prompt, and an existing record is reused: a killed window resumes for free, and
 `points.json` / `relevance.json` are decided once, before any answer is read.
 """
-import argparse, hashlib, json, math, re, statistics, sys, tempfile, threading, time, tomllib
+import argparse, collections, hashlib, json, math, re, statistics, sys, tempfile, threading, time, tomllib
 import urllib.error, urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -39,6 +39,7 @@ sys.path.insert(0, str(REPO / "sovereign/bench/sep_atlas/map-conversion-rung6"))
 sys.path.insert(0, str(HERE.parent.parent / "harness"))
 from compare import is_grounded_route, measured, route_of  # noqa: E402  one route rule, one error rule
 from run_arm import _ALIAS_RE  # noqa: E402  one reading of /v1/models `owned_by`
+import walk_reach  # noqa: E402  one definition of "did the walk reach this kind"
 
 ARMS = ("bare", "deep", "full")          # the retrieving arms
 CLOSED_BOOK = "closed-book"              # optional; reported, never paired
@@ -223,6 +224,34 @@ def load_runs(runs_dir):
                 synth_models.add(sm)
             out.setdefault(arm, {})[int(m.group(1))] = {r["question_id"]: r for r in rows if measured(r)}
     return out, synth_models, skipped
+
+
+def factor_reach(runs):
+    """Per arm: on how many DISTINCT questions did the walk reach each atom kind.
+
+    The board reports coverage per arm and says nothing about whether the thing
+    the arm is FOR was ever touched. On 2026-09-21 that gap produced a readable
+    board with an unreadable result: `full` scored 0.287 against bare's 0.300
+    while the walk reached a `Summary` on 2 of the 12 questions, because the
+    `trajectory` navigation row seven of them land on seeds no summaries. A
+    null there means "not reached", and on the board it was indistinguishable
+    from "did not help".
+
+    Counted as reached if ANY run of the arm reached it — deliberately the
+    generous direction. If even the union is thin, the factor was not under
+    test, and a verdict that does not say so is a claim the data cannot carry
+    (ARCH §18.3).
+    """
+    out = {}
+    for arm, by_run in runs.items():
+        qids = set().union(*(set(r) for r in by_run.values())) if by_run else set()
+        per_kind = collections.Counter()
+        for qid in qids:
+            rows_for_q = [r[qid] for r in by_run.values() if qid in r]
+            _nodes, reached_here = walk_reach.reach_counts(rows_for_q)
+            per_kind.update(reached_here.keys())
+        out[arm] = {"questions": len(qids), "reached": dict(per_kind)}
+    return out
 
 
 def route_exclusions(runs):
@@ -449,6 +478,24 @@ def board_md(b):
         L.append(f"| {arm} | {len(rs)} | {fmt(m['coverage_relevant'])} | {fmt(m['coverage_all'])} | {a['contradictions']} | "
                  + " | ".join(fmt(m[k], 2) for k in RUBRIC) + f" | {fmt(m['rubric_mean'], 2)} | {fmt(m['answer_chars'], 0)} | "
                  f"{sum(r['empty'] for r in rs)} | {sum(r['could_not_judge'] for r in rs)} | {sum(r['never_ran'] for r in rs)} |")
+    # What the arm's walk actually TOUCHED, beside what it scored. An arm whose
+    # distinguishing evidence was reached on a handful of questions has not been
+    # tested on this bank, and the coverage column above cannot say so.
+    reach = b.get("factor_reach") or {}
+    if reach:
+        L += ["", "| arm | questions | Summary reached | Claim | Configuration | State | Entity |", "|---|---|---|---|---|---|---|"]
+        for arm, a in reach.items():
+            r, n = a["reached"], a["questions"]
+            L.append(f"| {arm} | {n} | {r.get('summary', 0)} | {r.get('claim', 0)} | "
+                     f"{r.get('configuration', 0)} | {r.get('state', 0)} | {r.get('entity', 0)} |")
+        thin = [f"{arm} ({a['reached'].get('summary', 0)}/{a['questions']})"
+                for arm, a in reach.items()
+                if arm in ARMS and a["questions"] and a["reached"].get("summary", 0) * 2 < a["questions"]]
+        if thin:
+            L.append("")
+            L.append("NOT TESTABLE on this bank — the walk reached a `Summary` on under half the "
+                     f"questions for: {', '.join(thin)}. A null against these arms means the factor "
+                     "was not reached, which is not the same finding as the factor not helping.")
     band = b["bare_band"]
     L += ["", "bare run-to-run band (max - min of run means): " + (", ".join(f"{k} {fmt(v)}" for k, v in band.items()) if band else "never-ran"), "",
           "| pair | win | loss | tie | could-not-judge | n | sign p | per-question w/l/t | per-question sign p |", "|---|---|---|---|---|---|---|---|---|"]
@@ -475,6 +522,7 @@ def run(args):
     board.update({"schema": "ei7-essay-board/v1", "bank": bank["bank"].get("name"), "runs_dir": str(args.runs), "seed": args.seed,
                   "skipped_runs": skipped, "synth_models": sorted(synth_models),
                   "judge_model": {"requested": args.model, "resolved": resolved, "reported": reported},
+                  "factor_reach": factor_reach(runs),
                   "kinship": kinship_line([resolved] if resolved else reported, sorted(synth_models))})
     Path(args.out, "board.json").write_text(json.dumps(board, indent=1))
     Path(args.out, "board.md").write_text(board_md(board))

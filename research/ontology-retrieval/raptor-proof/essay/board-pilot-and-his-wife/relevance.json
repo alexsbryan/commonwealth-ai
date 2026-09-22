@@ -17,8 +17,6 @@
  "essay-pilot-and-his-wife-conflict": [
   "P3",
   "P4",
-  "P5",
-  "P8",
   "P10",
   "P12"
  ],
@@ -29,14 +27,14 @@
   "P8",
   "P10",
   "P11",
-  "P12"
+  "P12",
+  "P13"
  ],
  "essay-pilot-and-his-wife-relationship": [
   "P2",
   "P3",
   "P4",
   "P5",
-  "P8",
   "P9",
   "P10",
   "P11"
@@ -45,13 +43,23 @@
   "P2",
   "P3",
   "P4",
+  "P5",
   "P8",
-  "P9",
   "P10",
   "P11",
-  "P12"
+  "P12",
+  "P13"
  ],
  "essay-pilot-and-his-wife-themes": [
+  "P1",
+  "P2",
+  "P3",
+  "P4",
+  "P5",
+  "P6",
+  "P7",
+  "P8",
+  "P9",
   "P10",
   "P11",
   "P12",
@@ -60,18 +68,32 @@
  ],
  "essay-pilot-and-his-wife-setting": [
   "P1",
+  "P3",
+  "P4",
   "P5",
-  "P6"
+  "P6",
+  "P7",
+  "P8",
+  "P9",
+  "P10",
+  "P11",
+  "P12",
+  "P13"
  ],
  "essay-pilot-and-his-wife-turning-point": [
   "P3",
-  "P4"
+  "P4",
+  "P5",
+  "P10",
+  "P11",
+  "P12"
  ],
  "essay-pilot-and-his-wife-ending": [
   "P9",
   "P10",
   "P12",
-  "P13"
+  "P13",
+  "P14"
  ],
  "essay-pilot-and-his-wife-inner-conflicts": [
   "P3",
@@ -90,7 +112,11 @@
   "P6",
   "P7",
   "P8",
-  "P9"
+  "P9",
+  "P10",
+  "P11",
+  "P12",
+  "P13"
  ],
  "essay-pilot-and-his-wife-society": [
   "P10",
