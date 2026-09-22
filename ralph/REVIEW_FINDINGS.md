@@ -2084,3 +2084,128 @@ None of the eight rows regenerated `quality/conformance/`, and none of their
 test. A row that adds a line above a `covers:` tag owes the regeneration in its
 own commit. Not a queue edit (the rows are `[x]`); recorded so the next queue's
 mint step names it.
+
+## the-link — REVIEW-audit-the-link (2026-09-22, range `71bfde459..7d009553b`)
+
+33 commits. The campaign's product commits (86adab41b inventory · be5baf177 ·
+8cd661e08 · 1b8b1a393 · 6367104bd · 4f08eafdc · 9a4a5aaa6 · 1e2823be8 demo-infra)
+are interleaved with four foreign lanes, attributed per file below: grounding
+(a313c9c18), f26 census split (f8a133275, 3c3130a6e, 2704131bf), summary-verify
+(33d554a87, 225f8ee94), harness (94e56791d), ontology (83b86cbe5, d84f09b3e),
+conformance regen (6b6434a47).
+
+### Gates
+
+- TESTALL `scripts/ralph-check.sh testall` → **exit=100, 13701 pass / 1 fail** —
+  `cli_contract_journeys::every_journey_cites_a_doc_that_exists`: mesh-offers-catalogue
+  cites `docs/internal/RING_APPLICATIONS.md` — foreign, not worker-fixable (NEEDS_HUMAN).
+- PREPUSH `scripts/ralph-check.sh prepush` → **PUSH BLOCKED, 1 blocking: arch-gate** —
+  foreign, not worker-fixable (NEEDS_HUMAN). Scoped lint, rustfmt, docs/layout/layer/
+  boundary/lock/env gates all passed; size-gate + deletion-manifest advisory-failed.
+- `git diff --stat 71bfde459..HEAD -- commonwealth/crates/commonwealth-rail-core`
+  is **EMPTY** (invariant `c3fed9c3` holds — the campaign's loudest check passes by
+  silence). `commonwealth-rail` also untouched; grants, templates untouched.
+
+### The falsifier's reading — per crate, tests apart, vs O §Predictions
+
+Campaign product diff, prod/test split brace-verified and hunk-header corrected:
+
+| path | +prod | +test | − | predicted |
+|---|---|---|---|---|
+| commonwealth-discovery `deep_link.rs` | 38 | 77 | 5 | +55 |
+| sovereign-cli-llm `ring_cmd/mod.rs` | 74 | 20 | 1 | rowspan — +130 |
+| sovereign-cli-llm `ring_cmd/checkpoint_verify.rs` (new) | 248 | 203 | 0 | |
+| sovereign-cli-llm `mesh_guest.rs` | 3 | 0 | 0 | |
+| sovereign-cli-llm `mesh_guest_link.rs` | 0 | 38 | 10 | |
+| sovereign-cli-shared `rail.rs` | 25 | 0 | 0 | **unnamed** |
+| sovereign-daemon `ring_checkpoint.rs`+`mod.rs`+`server.rs` | 122 | 3 | 0 | rowspan — +90 |
+| sovereign-daemon `ring_checkpoint/tests.rs` (new) | — | 233 | 0 | |
+| scripts/ring-room-demo.sh | 211 (193 the-link + 18 `1e2823be8`) | — | 32 | +110 |
+| sovereign/SYSTEM_OVERVIEW.md | 4 (doc, same-commit) | — | 2 | — |
+
+- **the system was shaped to the demo HERE — sovereign-cli-shared/src/rail.rs:199-224**
+  (+25, a crate the prediction did not name): `rail_checkpoint`, the one client for the
+  one route, targeting the internal listener on purpose. The code is the design's shape
+  (one route, one verb, one client); the prediction's crate list was wrong. Record-only.
+- **the system was shaped to the demo HERE — sovereign-daemon/routes_internal/ring_checkpoint/**
+  (+358 vs +90): the route module is 112 prod lines with its doc comment; the 233-line
+  tests.rs drives the REAL handler (`test_app_state_with_seed`), which is what the row's
+  four mandated tests (document shape, digest round-trip through RC's exports, roster
+  embedded, both refusals) cost. Prediction error, not demo-gaming. Record-only.
+- **the system was shaped to the demo HERE — sovereign-cli-llm/src/ring_cmd/checkpoint_verify.rs**
+  (+549 vs +130 across the crate; 248 prod + 203 test in the new file): the four-step
+  verb with its refusal sentences and its five tamper tests. Same character as above.
+- **scripts/ring-room-demo.sh +211 vs +110**: +193 the offline-leg checkpoint addendum
+  (4f08eafdc — export at cut start, cold verify, three forgeries, printer's third
+  campaign) plus +18/−9 from 1e2823be8, the rail clause returned to its registered
+  floor (demo infrastructure, campaign-adjacent, not product). Record-only.
+- commonwealth-discovery: prod +38 sits UNDER the +55 predicted; the +77 test lines are
+  the mandated round-trip/byte-identity/refusal/QR matrix. Within prediction, tests apart.
+- Guest surface "0": held in behavior — `mesh_guest.rs` +3 is the compiler forcing the
+  two new optional builder args (`None, None`) and an `at: _` arm; the byte-identity
+  clause (c) test pins the "changes for nobody" claim.
+
+### Findings against ARCH's twelve
+
+1. **(5, 7 — recorded, not fixed)** A pre-registered predicate was edited after the data
+   existed: `quality/campaigns/the-link.toml:21` in 9a4a5aaa6, under director decision
+   the-link-6. Verified mitigations: the correction is derived from O Demo §2–§3 (the
+   proof homes the order already named), not from the numbers; both cold room runs
+   predate the edit and are preserved; the predicate still fails the run on
+   `tl-checkpoint-verifies` < 1.0 or any rg/rr-2 FAILED clause — it was not moved in one
+   direction only; C2/C3 untouched. Recorded because pre-registrations that move after
+   data exist must leave a trail; the trail is complete (ralph/decisions/the-link-6.md,
+   falsifiers named).
+2. **(3, 4 — foreign, no fix)** d84f09b3e "ontology stuff" — a commit message that names
+   nothing it did, carrying hundreds of `research/ontology-retrieval/**` JSON files plus
+   `sovereign-tools/src/raptor_atlas.rs`. History not rewritten; recorded so the pattern
+   stays visible.
+3. **(1, 6 — verified at the site, no fix)** be5baf177's body claims check out:
+   the unknown-namespace refusal fires BEFORE the creating read
+   (routes_internal/ring_checkpoint.rs:55-64, comment names ARCH 6), one trace line at
+   export with ns/acts/actors (:96-101), ONE journal read (:74), no empty document path.
+4. **(5 — verified)** Both tl-1 commit bodies pasted their PLANT red lines with test
+   names and reverification counts; the verify tests drive the real route handler, not a
+   stand-in (8cd661e08 body, REUSED paragraph).
+5. **(2 — verified)** Behaviour preservation held: the back-compat byte-identity test
+   (deep_link tests), the untouched caller behavior, tl-3's `git diff` EMPTY clause over
+   sovereign/commonwealth crates (6367104bd).
+
+### What each row reused (O §Less)
+
+- inventory 86adab41b: measured the tree, stamped `<BASE>`, corrected rows in place
+  (git-side: STATE.md only — the order copy traveled in 4d733f98e).
+- tl-1-checkpoint-export be5baf177: the append path's own pair (`rail.roster` + ONE
+  `journal.read()`, routes_rail.rs shape), `digest`, the internal-router/gate mount,
+  `ring log`'s verb shape, the rail routes' refusal style.
+- tl-1-checkpoint-verifies 8cd661e08: the export row's document (tests drive the real
+  handler); RC's public exports `admit`/`digest`/`RailGap` Display — zero rail-core or
+  commonwealth-rail edits; the refusal-sentence and usage-exit style.
+- tl-2-link-carries-its-couriers 1b8b1a393: deep_link's builder/parser/percent-encoder;
+  the token-outside-fragment rule EXTENDED (one rule, all protected params); fast_qr's
+  existing `wall_qr_svg` path for the QR clause.
+- tl-3-dial-measured 6367104bd: W:360-380's isolated-copy recipe (probe.wasm reproduced
+  byte-identical: 415,140 B, sha256 9a07541e…9831d7); the DECISIONS ledger; no product code.
+- tl-2-offline-leg-exports 4f08eafdc: M's offline leg end to end, ring_room's cut/heal
+  recording, the scaffold probe ring (the fork is GROWN there, not typed), the verdict
+  printer now reading C beside C2 and C3, admit's dedupe semantics.
+- REVIEW-DEMO-the-link-run 9a4a5aaa6: no product code; instrument untouched.
+
+Nothing new is minted that a §Less item already does: `checkpoint_verify.rs` is the
+campaign's one designed new surface (the four steps as a verb); `rail_checkpoint` is
+the one client that route needs.
+
+### Red gates — foreign, recorded, NEEDS_HUMAN
+
+- TESTALL's one failure: the citation landed in a3bd715f5 (2026-09-13, ring-apps; an
+  ANCESTOR of BASE — `git merge-base --is-ancestor` verified), naming a doc that is
+  GITIGNORED per-host (`.gitignore:67`, `docs/internal/`) and ABSENT on this host
+  (recorded in `quality/campaigns/ring-apps.toml` spec line). The campaign's diff
+  touches neither `sovereign/docs/cli-contract.toml` nor `docs/internal/` (empty).
+  Precedent: the mesh-principal audit stopped identically on this host (DECISIONS a2a688d07).
+- PREPUSH arch-gate [hard]: `sovereign-cli-llm/src/eval_cmd/runner.rs` 2074→2133 (+59,
+  slack 50 — grown by a313c9c18, grounding lane, foreign) and the 800-1200 approach band
+  +446 lines branch-wide. **No the-link file is oversized or in the band**
+  (`checkpoint_verify.rs` 451 < 800). Advisory: size-gate 13 keys grew (the campaign's
+  share: cli-llm +310, daemon +267 — the numbers in the table above); deletion-manifest
+  p0-root-junk losing ground.
