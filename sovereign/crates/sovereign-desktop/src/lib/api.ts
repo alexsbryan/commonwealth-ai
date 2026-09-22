@@ -1342,6 +1342,13 @@ export async function meshMediaOffers(): Promise<MeshMediaOffer[]> {
   return invoke("mesh_media_offers");
 }
 
+/** One real GET through a member's media bridge — the click-time check
+ *  that the library actually answers before a browser tab is opened at
+ *  it (the CLI probes; the desktop used to open blind). */
+export async function meshMediaProbe(playerUrl: string): Promise<number> {
+  return invoke("mesh_media_probe", { playerUrl });
+}
+
 /** Roll a fresh memorable node-name suggestion (e.g. "mac-peer").
  *  The 🎲 button next to the node-name input calls this; the user
  *  still has to press Save for the name to persist. */

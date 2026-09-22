@@ -155,3 +155,76 @@ async fn a_library_in_use_by_its_holder_is_shown_and_not_reachable() {
         "the in-use holder must not be dialed at all; only the free one was"
     );
 }
+
+// ─── mesh_media_probe ──────────────────────────────────────────────────────
+
+/// The probe is loopback-http only: it must never become a fetch gadget
+/// aimed at arbitrary hosts, so everything else is refused BY NAME.
+#[tokio::test]
+async fn the_probe_refuses_non_loopback_or_non_http_urls() {
+    for url in [
+        "https://127.0.0.1:8096/",
+        "http://10.0.0.5:8096/",
+        "http://example.com/",
+        "file:///etc/passwd",
+        "not a url",
+    ] {
+        let err = probe_media_url(url)
+            .await
+            .expect_err("only loopback http may be probed");
+        assert!(
+            err.contains("loopback"),
+            "`{url}` refused with a reason naming loopback, got: {err}"
+        );
+    }
+}
+
+/// The happy path: a loopback origin that answers ANY HTTP status is a
+/// playable library — the question was "does it answer", not "is it
+/// healthy". A listener that accepts and immediately closes is the
+/// RuggedFox failure shape and must be an Err.
+#[tokio::test]
+async fn the_probe_reports_the_origin_status_and_names_a_silent_origin() {
+    use tokio::io::AsyncWriteExt as _;
+
+    // An origin that answers 204.
+    let answering = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let answer_addr = answering.local_addr().unwrap();
+    tokio::spawn(async move {
+        loop {
+            let (mut sock, _) = match answering.accept().await {
+                Ok(s) => s,
+                Err(_) => return,
+            };
+            let _ = sock
+                .write_all(b"HTTP/1.1 204 No Content\r\nContent-Length: 0\r\n\r\n")
+                .await;
+        }
+    });
+    assert_eq!(
+        probe_media_url(&format!("http://{answer_addr}")).await,
+        Ok(204),
+        "an answering origin is playable whatever its status"
+    );
+
+    // An origin that accepts and closes without a byte — the bridge's
+    // dead-far-end shape.
+    let silent = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let silent_addr = silent.local_addr().unwrap();
+    tokio::spawn(async move {
+        loop {
+            let (sock, _) = match silent.accept().await {
+                Ok(s) => s,
+                Err(_) => return,
+            };
+            drop(sock);
+        }
+    });
+    let err = probe_media_url(&format!("http://{silent_addr}"))
+        .await
+        .expect_err("a silent origin must not open a browser tab");
+    assert!(
+        err.contains("did not answer"),
+        "the refusal names the silent-origin shape, got: {err}"
+    );
+}

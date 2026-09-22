@@ -460,6 +460,9 @@ export interface CommandArgs {
   mesh_list: Record<string, never>;
   mesh_list_peer_preferences: Record<string, never>;
   mesh_media_offers: Record<string, never>;
+  mesh_media_probe: {
+    playerUrl: unknown;
+  };
   mesh_preview_join_link: {
     link: unknown;
   };
