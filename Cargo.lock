@@ -12596,7 +12596,6 @@ dependencies = [
  "sovereign-compute",
  "sovereign-contracts",
  "sovereign-core",
- "sovereign-enrichment-build",
  "sovereign-gliner",
  "sovereign-grants",
  "sovereign-inference",

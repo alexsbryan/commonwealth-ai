@@ -753,9 +753,6 @@ pub(super) async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
         &data_dir,
         &config,
         folder_tiered_deps,
-        Some(crate::atlas_builder::in_process_atlas_builder(Arc::clone(
-            &routed_provider,
-        ))),
     )
     .await;
 
