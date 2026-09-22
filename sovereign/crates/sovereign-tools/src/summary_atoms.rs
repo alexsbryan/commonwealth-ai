@@ -21,7 +21,7 @@
 //! | `conv_uuid` → article title | `corpus_engine::raptor_article_title` |
 //! | title → per-article atlas id | `ground::candidate_atlas_ids` |
 //! | the tree (children, evidence chunks) | `RaptorCheckpointHandle::load_all_nodes` |
-//! | writing atoms + edges | `atlas::append_atoms_and_edges` |
+//! | writing atoms + edges | `atlas::write_atlas_edges` + `write_atlas_atoms` |
 //! | the seed row | `AnnSeedTable::append_rows` |
 //! | which kinds the table seeds | `seed_population::seed_population` |
 //!
@@ -56,11 +56,15 @@ use std::collections::{BTreeMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use corpus_engine::enrichment::atlas::ann_store::{ann_table_dir, AnnSeedTable};
-use corpus_engine::enrichment::atlas::atoms::{AtomEnvelope, AtomId, AtomType, ChunkRef, Summary};
+use corpus_engine::enrichment::atlas::atoms::{
+    AtomEnvelope, AtomId, AtomType, AtomsFile, ChunkRef, Summary,
+};
 use corpus_engine::enrichment::atlas::edges::{Edge, EdgeId, EdgeProvenance, EdgeType};
 use corpus_engine::enrichment::atlas::ground::candidate_atlas_ids;
 use corpus_engine::enrichment::atlas::seed_population::{seed_population, write_population_marker};
-use corpus_engine::enrichment::atlas::{append_atoms_and_edges, read_atlas_atoms};
+use corpus_engine::enrichment::atlas::{
+    read_atlas_atoms, read_atlas_edges, write_atlas_atoms, write_atlas_edges,
+};
 use corpus_engine::enrichment::pipeline::atlas::EnrichmentDepth;
 use corpus_engine::{raptor_article_title, scan_raptor_summaries};
 
@@ -93,6 +97,10 @@ pub struct SummaryProjection {
     /// Rows already projected by an earlier run (same atom id) and skipped.
     /// Idempotence: re-running this must not double the atlas.
     pub skipped_already_present: usize,
+    /// Atoms already on disk with neither evidence nor children, REPLACED in
+    /// place because the tree now has both. Separate from `atoms_written`: the
+    /// atlas gains no atom and no seed row, it gains provenance.
+    pub repaired: usize,
     /// Rows whose article resolved to no atlas directory on disk.
     pub unresolved_article: usize,
     /// Rows with an empty stored embedding — no seed row possible.
@@ -116,6 +124,13 @@ impl SummaryProjection {
             self.edges_written,
             self.seeds_written,
         );
+        if self.repaired > 0 {
+            s.push_str(&format!(
+                "; {} already-projected atoms repaired in place (evidence and children \
+                 attached to summaries that had neither)",
+                self.repaired
+            ));
+        }
         if self.skipped_already_present > 0 {
             s.push_str(&format!(
                 "; {} already projected (skipped)",
@@ -182,10 +197,20 @@ fn load_tree(corpus_dir: &Path) -> BTreeMap<String, (Vec<u32>, Vec<String>)> {
 /// corpus's own dir is `<index_root>/<corpus_id>` and its per-article atlases
 /// are `<index_root>/<corpus_id>-<title>/atlas`.
 ///
-/// **Idempotent.** A node whose atom id is already in the target atlas is
-/// skipped, so a second run adds nothing — which is what lets the seed rows be
-/// APPENDED (`AnnSeedTable::append_rows`) rather than rebuilt: a key written
-/// twice would be two rows and the walk would see the atom twice.
+/// **Idempotent, and repairing.** A node whose atom id is already in the target
+/// atlas is skipped, so a second run adds nothing — which is what lets the seed
+/// rows be APPENDED (`AnnSeedTable::append_rows`) rather than rebuilt: a key
+/// written twice would be two rows and the walk would see the atom twice.
+///
+/// The one exception is the atom the skip used to strand: a `Summary` already
+/// on disk with neither evidence nor children, whose node the tree DOES have.
+/// That atom is replaced in place, keeping its id and therefore its seed row.
+/// Without this, a projection made while the tree was unreadable could never be
+/// repaired by re-running the tool that made it — the atoms stay uncitable for
+/// the life of the corpus, which is the state `chaos-secret-agent` (19) and
+/// `raptor-pilot-and-his-wife` (14) were in after 2026-09-21's tree-slot fix.
+/// Still idempotent: a second repair run finds nothing repairable, because the
+/// first filled the fields the predicate reads.
 ///
 /// **Never re-embeds.** The seed row reuses the vector already stored beside
 /// the summary. A fresh embed would be a second decider for the seed space
@@ -280,38 +305,67 @@ pub async fn write_summary_atoms(
     for (atlas_dir, article_rows) in by_atlas {
         let existing = read_atlas_atoms(&atlas_dir)
             .map_err(|e| format!("read {}: {e}", atlas_dir.join("atoms.json").display()))?;
-        let present: HashSet<String> = existing
-            .atoms()
-            .iter()
-            .map(|a| a.id().as_str().to_string())
-            .collect();
+        // Presence alone is the WRONG skip predicate, and that is what left
+        // both RAPTOR corpora permanently uncitable. A `Summary` atom with
+        // neither evidence nor children is the damage shape of a projection
+        // that ran while the tree could not be read (the bug fixed above it,
+        // and the `no RAPTOR checkpoint at all` degradation that is still a
+        // legitimate outcome). Its id is on disk, so every later run — including
+        // every run made AFTER the tree became readable — skipped it. The fix
+        // could not reach the data it fixed.
+        //
+        // So: skip a present id when the tree has nothing to ADD to it, and
+        // REPAIR it when the tree does. Both are idempotent, which is the
+        // property that mattered; a second repair run finds nothing repairable
+        // because the first one filled the fields the predicate reads.
+        let mut present: HashSet<String> = HashSet::new();
+        let mut repairable: HashSet<String> = HashSet::new();
+        for a in existing.atoms() {
+            present.insert(a.id().as_str().to_string());
+            if let AtomEnvelope::Summary(s) = a {
+                if s.evidence.is_empty() && s.children.is_empty() {
+                    repairable.insert(s.id.as_str().to_string());
+                }
+            }
+        }
         // `EdgeId::new(i)` is positional, so a second run must not restart at
         // 0 and collide with the edges already on disk. Read it or REFUSE —
         // an `unwrap_or(0)` here would mint `edge-00000` on top of an existing
         // one whenever `edges.json` failed to parse, which is a silent
-        // substitution of a wrong id for an unreadable one (§18.3).
-        // `append_atoms_and_edges` needs the file anyway, so failing here
-        // fails earlier and says why.
-        let mut next_edge_ix = corpus_engine::enrichment::atlas::read_atlas_edges(&atlas_dir)
-            .map(|f| f.edges.len())
-            .map_err(|e| {
-                format!(
-                    "read {}: {e} (an atlas with atoms.json needs an edges.json beside it)",
-                    atlas_dir.join("edges.json").display()
-                )
-            })?;
+        // substitution of a wrong id for an unreadable one (§18.3). The write
+        // below needs the file anyway, so failing here fails earlier and says
+        // why.
+        let mut edges_file = read_atlas_edges(&atlas_dir).map_err(|e| {
+            format!(
+                "read {}: {e} (an atlas with atoms.json needs an edges.json beside it)",
+                atlas_dir.join("edges.json").display()
+            )
+        })?;
+        let mut next_edge_ix = edges_file.edges.len();
 
         let mut atoms: Vec<AtomEnvelope> = Vec::new();
+        let mut repaired: Vec<AtomEnvelope> = Vec::new();
         let mut edges: Vec<Edge> = Vec::new();
         let mut seeds: Vec<(String, Vec<f32>)> = Vec::new();
 
         for row in article_rows {
             let id = atom_id_of(&row.node_id);
-            if present.contains(id.as_str()) {
-                report.skipped_already_present += 1;
-                continue;
-            }
-            let (evidence_ids, child_ids) = match tree.get(&row.node_id) {
+            // Looked up BEFORE the skip and counted after it: `no_tree_row` is
+            // a degradation of what this run WROTE, and a re-run that writes
+            // nothing must not report every skipped row as a missing node.
+            let tree_entry = tree.get(&row.node_id);
+            let is_repair = if present.contains(id.as_str()) {
+                let upgradable = repairable.contains(id.as_str())
+                    && tree_entry.is_some_and(|(e, c)| !e.is_empty() || !c.is_empty());
+                if !upgradable {
+                    report.skipped_already_present += 1;
+                    continue;
+                }
+                true
+            } else {
+                false
+            };
+            let (evidence_ids, child_ids) = match tree_entry {
                 Some((e, c)) => (e.clone(), c.clone()),
                 None => {
                     report.no_tree_row += 1;
@@ -350,12 +404,18 @@ pub async fn write_summary_atoms(
                 });
                 next_edge_ix += 1;
             }
-            if row.embedding.is_empty() {
-                report.no_embedding += 1;
-            } else {
-                seeds.push((id.as_str().to_string(), row.embedding.clone()));
+            // Seeds are for NEW atoms only. The atom id is the content hash of
+            // `node_id`, so a repaired atom keeps the id its seed row is
+            // already keyed by — appending again would be two rows under one
+            // key and the walk would see the atom twice.
+            if !is_repair {
+                if row.embedding.is_empty() {
+                    report.no_embedding += 1;
+                } else {
+                    seeds.push((id.as_str().to_string(), row.embedding.clone()));
+                }
             }
-            atoms.push(AtomEnvelope::Summary(Summary {
+            let atom = AtomEnvelope::Summary(Summary {
                 id,
                 node_id: row.node_id,
                 level: row.level.max(0) as u32,
@@ -367,17 +427,57 @@ pub async fn write_summary_atoms(
                 // `Extracted` names. Not `Structural`: nothing about a
                 // summary comes from the document's shape.
                 enrichment_depth: EnrichmentDepth::extracted_default(),
-            }));
+            });
+            if is_repair {
+                report.repaired += 1;
+                repaired.push(atom);
+            } else {
+                atoms.push(atom);
+            }
         }
 
-        if atoms.is_empty() && edges.is_empty() {
+        if atoms.is_empty() && repaired.is_empty() && edges.is_empty() {
             continue;
         }
         report.atoms_written += atoms.len();
         report.edges_written += edges.len();
         report.atlases_written += 1;
-        append_atoms_and_edges(&atlas_dir, &atoms, &edges)
-            .map_err(|e| format!("append atoms to {}: {e}", atlas_dir.display()))?;
+
+        // ONE write path for both cases, not an append plus a replace: a
+        // repair substitutes an atom under an id the file already holds, which
+        // `append_atoms_and_edges` cannot express, and with no repairs the
+        // merged set is exactly what appending produces.
+        let mut merged: Vec<AtomEnvelope> = existing.atoms().to_vec();
+        for fixed in repaired {
+            match merged
+                .iter_mut()
+                .find(|a| a.id().as_str() == fixed.id().as_str())
+            {
+                Some(slot) => *slot = fixed,
+                // Unreachable: `repairable` was built from this same vector.
+                // A silent drop would be an atom the report counted and the
+                // file does not have (§18.3).
+                None => {
+                    return Err(format!(
+                        "repair target {} vanished from {} between read and write",
+                        fixed.id().as_str(),
+                        atlas_dir.display()
+                    ))
+                }
+            }
+        }
+        merged.extend(atoms.iter().cloned());
+        edges_file.edges.extend(edges.iter().cloned());
+        // Edges FIRST: `write_atlas_atoms` rebuilds `atoms.lance` from the
+        // atoms it is handed and the edges it reads back off disk, so the
+        // other order would build the store without the new `Composes` edges.
+        write_atlas_edges(&atlas_dir, &edges_file)
+            .map_err(|e| format!("write edges to {}: {e}", atlas_dir.display()))?;
+        write_atlas_atoms(
+            &atlas_dir,
+            &AtomsFile::from_atoms(existing.schema_version.clone(), merged),
+        )
+        .map_err(|e| format!("write atoms to {}: {e}", atlas_dir.display()))?;
 
         if !seeds.is_empty() {
             match AnnSeedTable::append_rows(&ann_table_dir(&atlas_dir), &seeds).await {
@@ -443,6 +543,11 @@ pub async fn write_summary_atoms(
         corpus = corpus_id,
         rows = report.rows_read,
         atoms = report.atoms_written,
+        // A repair writes no atom and skips nothing, so every other field in
+        // this event reads as a run that did nothing. Without this one the
+        // decision that replaced 33 uncitable atoms leaves no trace (§9.1).
+        repaired = report.repaired,
+        skipped = report.skipped_already_present,
         edges = report.edges_written,
         seeds = report.seeds_written,
         with_evidence = report.with_evidence,
@@ -458,159 +563,10 @@ pub async fn write_summary_atoms(
     Ok(report)
 }
 
+// The tests live in a sibling file: their fixtures build a real
+// `raptor_summaries.lance` and a written checkpoint tree, and keeping them
+// here put this file into arch-gate's 800-1200 approach band (ARCH §3.1).
+// `#[path]`, so the names are unchanged.
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use corpus_engine::enrichment::atlas::atoms::AtomsFile;
-    use corpus_engine::{build_raptor_index, RaptorSummaryRow};
-    use tempfile::tempdir;
-
-    fn emb(i: usize) -> Vec<f32> {
-        (0..8usize)
-            .map(|d| ((i * 131 + d * 977 + 7) % 1000) as f32 / 500.0 - 1.0)
-            .collect()
-    }
-
-    /// An atlas directory with an EMPTY but valid `atoms.json` — the shape a
-    /// per-article atlas has before anything has been written into it.
-    fn empty_atlas(dir: &Path) {
-        std::fs::create_dir_all(dir).unwrap();
-        let atoms = AtomsFile::new(Vec::new());
-        std::fs::write(
-            dir.join("atoms.json"),
-            serde_json::to_vec_pretty(&atoms).unwrap(),
-        )
-        .unwrap();
-        // Both files, because both are the real shape: an atlas with
-        // `atoms.json` and no `edges.json` is a torn write, and the writer
-        // refuses it rather than restarting the edge ids at zero.
-        std::fs::write(
-            dir.join("edges.json"),
-            br#"{"schema_version":"2.0","edges":[]}"#,
-        )
-        .unwrap();
-    }
-
-    /// The SEP trap, as a test. `sep/atlas/atoms.json` EXISTS and is a
-    /// zero-atom stub; the article's real atlas is `sep-<slug>/atlas`. A
-    /// most-general-first preference would put all 11,181 summaries in the
-    /// stub, where no walk that scopes to the article would ever see them —
-    /// and every count in the report would still look right.
-    #[test]
-    fn the_per_article_atlas_wins_over_the_parent_stub() {
-        let root = tempdir().unwrap();
-        empty_atlas(&root.path().join("sep").join("atlas"));
-        empty_atlas(&root.path().join("sep-abduction").join("atlas"));
-
-        let picked = atlas_dir_for(root.path(), "sep", "abduction").expect("an atlas");
-        assert!(
-            picked.ends_with("sep-abduction/atlas"),
-            "expected the per-article atlas, got {}",
-            picked.display()
-        );
-    }
-
-    /// The other direction of the same decision: with no per-article atlas on
-    /// disk, the parent is the right answer rather than a silent drop — a
-    /// self-hosted corpus (one atlas, no article children) is a real shape.
-    #[test]
-    fn the_parent_atlas_is_used_when_the_article_has_none() {
-        let root = tempdir().unwrap();
-        empty_atlas(&root.path().join("wessex-hoard").join("atlas"));
-        let picked =
-            atlas_dir_for(root.path(), "wessex-hoard", "chapter-3").expect("the parent atlas");
-        assert!(picked.ends_with("wessex-hoard/atlas"));
-        // And an article of a corpus with NO atlas at all is reported as
-        // unresolved, never guessed at.
-        assert!(atlas_dir_for(root.path(), "nothing-here", "x").is_none());
-    }
-
-    /// End-to-end over a real `raptor_summaries.lance`, run TWICE.
-    ///
-    /// The second run is the assertion: this writer APPENDS to `atoms.json`
-    /// and to the ANN seed table, so a non-idempotent projection does not
-    /// error — it silently doubles every atom and every seed row, and the walk
-    /// then sees each summary twice. The skip is keyed on the atom id, which
-    /// is `hash(node_id | corpus_id)` and therefore stable across runs.
-    #[tokio::test]
-    async fn projecting_twice_writes_the_atoms_once() {
-        let root = tempdir().unwrap();
-        let corpus_dir = root.path().join("sep");
-        std::fs::create_dir_all(&corpus_dir).unwrap();
-        empty_atlas(&corpus_dir.join("atlas"));
-        empty_atlas(&root.path().join("sep-abduction").join("atlas"));
-
-        let rows: Vec<RaptorSummaryRow> = (0..4)
-            .map(|i| RaptorSummaryRow {
-                node_id: format!("node-{i}"),
-                conv_uuid: "https://plato.stanford.edu/entries/abduction/".into(),
-                level: (i % 2) as i64,
-                summary: format!("rollup {i}"),
-                embedding: emb(i),
-            })
-            .collect();
-        build_raptor_index(&corpus_dir, &rows, 1).await.unwrap();
-
-        let first = write_summary_atoms(root.path(), "sep").await.unwrap();
-        assert_eq!(first.rows_read, 4);
-        assert_eq!(first.atoms_written, 4);
-        assert_eq!(first.seeds_written, 4);
-        assert_eq!(first.atlases_written, 1);
-        // No checkpoint in this fixture, so every atom is tree-less — and
-        // that is REPORTED rather than passed off as "no evidence exists".
-        assert_eq!(first.no_tree_row, 4);
-        assert!(first
-            .degradations
-            .iter()
-            .any(|d| d.contains("no checkpoint node") || d.contains("checkpoint")));
-
-        let second = write_summary_atoms(root.path(), "sep").await.unwrap();
-        assert_eq!(second.atoms_written, 0, "second run must add no atom");
-        assert_eq!(second.seeds_written, 0, "second run must add no seed row");
-        assert_eq!(second.skipped_already_present, 4);
-
-        let article_atlas = root.path().join("sep-abduction").join("atlas");
-        let on_disk = read_atlas_atoms(&article_atlas).unwrap();
-        assert_eq!(on_disk.atoms().len(), 4, "atoms.json doubled");
-
-        // The marker, and it is not bookkeeping. ei-7a bumped
-        // `SEED_POPULATION_SCHEMA` 1 -> 2, so every marker on disk is stale by
-        // definition; a stale marker makes `ann_table_is_fresh` false, which
-        // sends the daemon's backfill through `build_persistent_ann_seed_table`
-        // — which REPLACES the table. Without this stamp the appended Summary
-        // seeds are deleted at the next boot, with nothing erroring and no
-        // count looking wrong.
-        assert!(
-            corpus_engine::enrichment::atlas::seed_population::population_marker_is_current(
-                &article_atlas
-            ),
-            "the population marker must be stamped, or the next backfill drops these seeds"
-        );
-        // And the projected atoms are of a kind the derived population admits
-        // — a Summary written into an atlas whose table is not built from
-        // Summary is a seed row nothing will ever look at.
-        assert!(
-            corpus_engine::enrichment::atlas::seed_population::seed_population(&article_atlas)
-                .kinds
-                .contains(&AtomType::Summary),
-            "the seed population must admit Summary"
-        );
-        // The stub parent stayed empty: nothing leaked into `sep/atlas`.
-        let stub = read_atlas_atoms(&corpus_dir.join("atlas")).unwrap();
-        assert!(stub.atoms().is_empty());
-    }
-
-    /// A corpus with no summary table is an ABSENCE, reported in words — not
-    /// an error, and not a zero that reads like "the projection ran clean".
-    #[tokio::test]
-    async fn a_corpus_with_no_summary_table_is_named_not_zeroed() {
-        let root = tempdir().unwrap();
-        std::fs::create_dir_all(root.path().join("bare")).unwrap();
-        let report = write_summary_atoms(root.path(), "bare").await.unwrap();
-        assert_eq!(report.rows_read, 0);
-        assert!(report
-            .degradations
-            .iter()
-            .any(|d| d.contains("nothing to project")));
-    }
-}
+#[path = "summary_atoms/tests.rs"]
+mod tests;

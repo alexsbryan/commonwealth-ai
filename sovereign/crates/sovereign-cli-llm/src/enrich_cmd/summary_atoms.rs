@@ -46,12 +46,19 @@ pub async fn cmd_summary_atoms(args: &[String]) -> i32 {
     match write_summary_atoms(&indexes_dir, &corpus_id).await {
         Ok(report) => {
             println!("  {}", report.describe());
-            // A run that read rows and wrote nothing is not a success to
+            // A run that read rows and CHANGED NOTHING is not a success to
             // report as one — either every node was already projected (said
             // so above) or nothing resolved, and the caller needs to tell
             // those apart from an exit code (ARCH §18.3).
+            //
+            // `repaired` counts here: a repair writes no new atom and skips
+            // nothing, so without it a run that attached evidence to every
+            // stranded summary — the whole point of the repair path — exits 1
+            // and calls itself a failure. Watched doing exactly that on
+            // `raptor-pilot-and-his-wife` (14 repaired, exit 1) on 2026-09-21.
             if report.rows_read > 0
                 && report.atoms_written == 0
+                && report.repaired == 0
                 && report.skipped_already_present == 0
             {
                 eprintln!(
