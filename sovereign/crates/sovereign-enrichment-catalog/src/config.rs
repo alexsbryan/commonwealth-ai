@@ -23,7 +23,7 @@ use corpus_index::error::{Error, Result};
 
 use crate::paths;
 
-pub const CONFIG_SCHEMA_VERSION: u32 = 1;
+pub use sovereign_contracts::daemon_wire::enrich_catalog::CONFIG_SCHEMA_VERSION;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EnrichConfig {

@@ -3,11 +3,11 @@
 //! (thin-desktop order, 2026-09-11): the enriched-corpus inventory and the
 //! starter questions mined from a corpus's atlas.
 //!
-//! Both read the DAEMON's data root. `enrich_commands.rs` read
-//! `sovereign_enrichment_catalog::paths::enrichment_dir()` — this process's
-//! default data root, which on an attached boot is the laptop's, not the
-//! host's — and pulled every atom of a corpus over the wire to pick six
-//! questions out of it. Same loopback posture as `reading_http`.
+//! Both read the DAEMON's data root. The desktop's `enrich_commands.rs` read
+//! its own process's default enrichment root — which on an attached boot is
+//! the laptop's, not the host's — and pulled every atom of a corpus over the
+//! wire to pick six questions out of it. Same loopback posture as
+//! `reading_http`.
 
 use std::sync::Arc;
 
@@ -59,7 +59,7 @@ async fn enriched(
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
 ) -> Result<Response, Absence> {
     let root = daemon.data_dir().join("enrichment");
-    let rows = sovereign_enrichment_catalog::catalog::list_enriched_corpora_in(&root)
+    let rows = sovereign_contracts::daemon_wire::enrich_catalog::list_enriched_corpora_in(&root)
         .map_err(|e| Absence::internal(format!("enrichment catalog: {e}")))?;
     tracing::debug!(root = %root.display(), returned = rows.len(), "enrich_http: enriched corpora listed");
     Ok((StatusCode::OK, Json(rows)).into_response())

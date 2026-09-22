@@ -797,15 +797,17 @@ shipped closure, which is what liftability actually means.
 Each of these was probed this session and REFUSED rather than forced; the
 refusal named the chain, which is the value.
 
-- **The enrichment-catalog reader** (`list_enriched_corpora_in`, `EnrichConfig`,
-  `paths`) cannot move to `sovereign-contracts` as a thin reader: `EnrichConfig`
-  names `corpus_engine::enrichment::pipeline::CustomAtlasSpec` (config.rs:131)
-  and returns `PhaseCache` from an inherent method (config.rs:297). Chain to
-  close `daemon -> catalog` and `cli-llm -> catalog`: (1) move `CustomAtlasSpec`
-  to `understanding-vocab` (precedent note `9b01c041`; the ontology
-  policies/vocabulary already live there), (2) make `phase_cache()` a free fn at
-  its 10 call sites (enrichment-build 6, cli-llm 4), (3) then move config +
-  catalog + paths, admitting `corpus-index` to contracts' leaf budget.
+- **The enrichment-catalog reader** — SOLVED 2026-09-21 for the daemon edge,
+  and the first prescription was WRONG. Moving `EnrichConfig` to contracts (the
+  chain printed here originally) drags `understanding-vocab` below the contract
+  seam, and layer-gate then reports that the thin surfaces transitively link a
+  backend — a real violation, so that attempt was reverted. The honest shape,
+  landed: a SLIM projection in `contracts::daemon_wire::enrich_catalog` that
+  serde-reads only the four fields the wire shape renders, skips unloadable
+  configs, and enforces `schema_version` with the ONE const (moved down; the
+  catalog re-exports it). `daemon -> catalog` closed (82). `cli-llm -> catalog`
+  REMAINS: its refs are the writer-side config (`save`/`ontology`), so it stays
+  until the writer half gets a dial or the cli-llm split moves it.
 - **`SqliteStateStore` ports** (`sovereign-store`, 3 edges: cli-dev, gliner, and
   mesh's dev edge): the concrete type is `sovereign-store/src/sqlite.rs:41` and
   `sovereign-store` itself deps `sovereign-core`, so it is not leaf-eligible.

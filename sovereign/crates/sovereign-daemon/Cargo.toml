@@ -46,7 +46,6 @@ sovereign-time = { workspace = true }
 sovereign-inference = { workspace = true }
 sovereign-gliner = { workspace = true }
 sovereign-tools = { workspace = true }
-sovereign-enrichment-catalog = { workspace = true }
 sovereign-meshapp = { workspace = true }
 sovereign-store = { workspace = true }
 sovereign-authoring-harness = { workspace = true }
