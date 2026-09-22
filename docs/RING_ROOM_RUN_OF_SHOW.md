@@ -80,10 +80,18 @@ svrn mesh media offer          # offer it; withdraw ends the offer
 On the machine I want to watch from:
 
 ```bash
-svrn mesh media <holder>       # prints a localhost URL — open it
+svrn mesh media                 # who offers one, right now — pick a name
+svrn mesh media <member>        # a member name, or a node-id prefix (≥4 chars)
 ```
 
-**What appears:** the library on the rail as "offered to: everyone here" within
+**What appears:** first a list — one block per member offering a media origin,
+with its name, node id, status and the path currently offered, and the line
+"Play one: `svrn mesh media <peer>`". Then, on the second command, a localhost
+URL to open. Names come from the roster (`svrn mesh status` prints both name and
+node id); a member that declares no `media_origin` never appears, and asking for
+one that doesn't offer closes the dial with a sentence rather than a timeout.
+
+The library appears on the rail as "offered to: everyone here" within
 30 s; the title plays with no login typed (first byte within 5 s). The desktop's
 Library rail does the same thing with a click. While the holder is watching it
 themselves, the rail says "in use" and starts nothing.
