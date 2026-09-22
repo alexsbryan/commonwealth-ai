@@ -33,7 +33,9 @@ use std::sync::Arc;
 
 use sovereign_core::traits::InferenceProvider;
 use sovereign_inference::remote::RemoteApiProvider;
-use sovereign_tools::summary_verify::{JudgeSummaryVerifier, SummaryVerifier};
+use sovereign_tools::summary_verify::{
+    JudgeSummaryVerifier, SummaryVerifier, SummaryVerdict,
+};
 
 #[tokio::test]
 #[ignore = "drives a live daemon (SUMMARY_VERIFIER_BASE, default localhost:9741)"]
@@ -102,8 +104,31 @@ async fn test_retest_and_negative_control_over_production_registers() {
     let mut table: Vec<serde_json::Value> = Vec::new();
     let mut flips = 0usize;
     let mut pass_any = 0usize;
-    let mut control_failures = 0usize; // MUST equal rows.len()-1 pairs... see below
+    let mut control_failures = 0usize; // controls that correctly FAILED (both kinds)
     let mut control_pairs = 0usize;
+
+    // Replace the summary's first capitalized word (length > 3) with a
+    // foreign name — the smallest corruption that changes WHO the
+    // summary is about while leaving its shape intact.
+    fn swap_first_proper_noun(summary: &str, foreign: &str) -> String {
+        let mut out = String::with_capacity(summary.len());
+        let mut done = false;
+        for word in summary.split_inclusive(|c: char| !c.is_alphanumeric()) {
+            let stem = word.trim_end_matches(|c: char| !c.is_alphanumeric());
+            if !done
+                && stem.chars().count() > 3
+                && stem.chars().next().is_some_and(char::is_uppercase)
+            {
+                out.push_str(foreign);
+                out.push_str(&word[stem.len()..]);
+                done = true;
+            } else {
+                out.push_str(word);
+            }
+        }
+        assert!(done, "no proper noun found to swap — summary: {summary}");
+        out
+    }
 
     for (i, row) in rows.iter().enumerate() {
         let summary = match &row.summary {
@@ -112,17 +137,29 @@ async fn test_retest_and_negative_control_over_production_registers() {
         };
         let v1 = verifier.verify(&summary, &row.member_texts).await;
         let v2 = verifier.verify(&summary, &row.member_texts).await;
-        let (p1, p2, claims1, claims2) = match (v1, v2) {
-            (Some(a), Some(b)) => {
-                let (ca, cb) = (
-                    (a.claims_total, a.claims_unsupported),
-                    (b.claims_total, b.claims_unsupported),
-                );
-                (a.passed(), b.passed(), Some(ca), Some(cb))
-            }
-            _ => {
+        let (p1, w1, c1) = match &v1 {
+            Some(v) => (
+                v.passed(),
+                v.whole_summary_violation,
+                (v.claims_total, v.claims_unsupported),
+            ),
+            None => {
                 eprintln!(
                     "[{}] verifier returned None (judge unreachable) — row not measured",
+                    row.cluster_key
+                );
+                continue;
+            }
+        };
+        let (p2, w2, c2) = match &v2 {
+            Some(v) => (
+                v.passed(),
+                v.whole_summary_violation,
+                (v.claims_total, v.claims_unsupported),
+            ),
+            None => {
+                eprintln!(
+                    "[{}] verifier returned None on retest — row not measured",
                     row.cluster_key
                 );
                 continue;
@@ -134,34 +171,67 @@ async fn test_retest_and_negative_control_over_production_registers() {
         if p1 || p2 {
             pass_any += 1;
         }
-        // Negative control: this summary against the NEXT cluster's
-        // members (wrap). A pass here is a control FAILURE — the gate
-        // cannot tell its own cluster from a neighbour's.
+        // Negative control 1 — CROSS-CLUSTER: this summary against the
+        // NEXT cluster's members (wrap). A pass here is a control
+        // failure — the gate cannot tell its own cluster from a
+        // neighbour's.
         let other = &rows[(i + 1) % rows.len()];
         let ctrl = verifier.verify(&summary, &other.member_texts).await;
-        let ctrl_pass = matches!(ctrl, Some(v) if v.passed());
+        let ctrl_pass = ctrl.as_ref().is_some_and(SummaryVerdict::passed);
+        let ctrl_viol = ctrl.as_ref().and_then(|v| v.whole_summary_violation);
         control_pairs += 1;
         if !ctrl_pass {
-            control_failures += 1; // named confusingly below as "correctly failed"
+            control_failures += 1;
+        }
+        // Negative control 2 — NAME-SWAP corruption: the summary with its
+        // first capitalized token replaced by a name from ANOTHER cluster.
+        // A probe that cannot catch this has no discrimination at the
+        // unit it claims to judge.
+        let foreign = rows[(i + 3) % rows.len()]
+            .member_texts
+            .iter()
+            .find_map(|t| {
+                t.split(|c: char| !c.is_alphabetic())
+                    .find(|w| {
+                        w.chars().count() > 3 && w.chars().next().is_some_and(char::is_uppercase)
+                    })
+                    .map(str::to_string)
+            })
+            .unwrap_or_else(|| "Zarkon".into());
+        let swapped = swap_first_proper_noun(&summary, &foreign);
+        let corrupt = verifier.verify(&swapped, &row.member_texts).await;
+        let corrupt_pass = corrupt.as_ref().is_some_and(SummaryVerdict::passed);
+        let corrupt_viol = corrupt.as_ref().and_then(|v| v.whole_summary_violation);
+        control_pairs += 1;
+        if !corrupt_pass {
+            control_failures += 1;
         }
         table.push(serde_json::json!({
             "cluster_key": row.cluster_key,
             "summary_chars": summary.chars().count(),
             "pass_run1": p1,
             "pass_run2": p2,
-            "claims1": claims1,
-            "claims2": claims2,
-            "control_against": other.cluster_key,
-            "control_passed": ctrl_pass,
+            "claims1": c1,
+            "claims2": c2,
+            "whole1": w1,
+            "whole2": w2,
+            "control_cross_cluster": ctrl_pass,
+            "control_cross_cluster_against": other.cluster_key,
+            "control_name_swap": corrupt_pass,
+            "control_cross_cluster_violation": ctrl_viol,
+            "control_name_swap_violation": corrupt_viol,
+            "name_swap_token": foreign,
         }));
         eprintln!(
-            "[{:<24}] pass1={} pass2={} {} | control({})={} [want false]",
+            "[{:<24}] pass1={} pass2={} {} | cross({})={} [want false] | name-swap({})={} [want false]",
             row.cluster_key,
             p1,
             p2,
             if p1 != p2 { "<— FLIP" } else { "" },
             other.cluster_key,
             ctrl_pass,
+            foreign,
+            corrupt_pass,
         );
     }
 
