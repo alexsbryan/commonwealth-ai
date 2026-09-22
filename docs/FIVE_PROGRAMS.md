@@ -792,6 +792,36 @@ from `[dependencies]` to `[dev-dependencies]` makes the line re-read as DEV
 rather than closing it. It is still worth doing: it removes the edge from the
 shipped closure, which is what liftability actually means.
 
+### Seams with prerequisite chains — MEASURED 2026-09-21 (87 at 1c307943c)
+
+Each of these was probed this session and REFUSED rather than forced; the
+refusal named the chain, which is the value.
+
+- **The enrichment-catalog reader** (`list_enriched_corpora_in`, `EnrichConfig`,
+  `paths`) cannot move to `sovereign-contracts` as a thin reader: `EnrichConfig`
+  names `corpus_engine::enrichment::pipeline::CustomAtlasSpec` (config.rs:131)
+  and returns `PhaseCache` from an inherent method (config.rs:297). Chain to
+  close `daemon -> catalog` and `cli-llm -> catalog`: (1) move `CustomAtlasSpec`
+  to `understanding-vocab` (precedent note `9b01c041`; the ontology
+  policies/vocabulary already live there), (2) make `phase_cache()` a free fn at
+  its 10 call sites (enrichment-build 6, cli-llm 4), (3) then move config +
+  catalog + paths, admitting `corpus-index` to contracts' leaf budget.
+- **`SqliteStateStore` ports** (`sovereign-store`, 3 edges: cli-dev, gliner, and
+  mesh's dev edge): the concrete type is `sovereign-store/src/sqlite.rs:41` and
+  `sovereign-store` itself deps `sovereign-core`, so it is not leaf-eligible.
+  Shape: a `StateStore` trait in `sovereign-contracts` mirroring the existing
+  `RecipeNotes` port, the impl staying in the owner, and construction moving to
+  the composition root (a caller that receives the store rather than opening it).
+- **`sovereign-daemon`'s 30 edges** are the dial program in one place: ~8 to
+  `commonwealth-*` (the mesh membership the daemon implements — §4 rule 6 says
+  it dials the cmnwlth rails process instead), ~5 to `corpus-engine*`, plus
+  code/ingest crates reached by its routes. Each is a wire call or a trait in a
+  leaf; none is a repoint (a repoint from [svrn] to [ingest]/[code] is still red).
+- **The `recipe_author` `FeatureStore` port** (`sovereign-tools -> recipe-author`,
+  plus the daemon/cli-llm/mesh consumers of the tools re-export): a trait in
+  `sovereign-contracts` mirroring `RecipeNotes`, then all shim consumers repoint
+  to `sovereign_recipe_author::*` directly.
+
 ### The decisions — these are the operator's, and they are meant to be few
 
 - [x] **`atos` is CUT COMPLETELY** (operator, 2026-09-21). Footprint:
