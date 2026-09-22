@@ -514,10 +514,18 @@ def board_md(b):
 def run(args):
     bank = tomllib.loads(Path(args.bank).read_text(encoding="utf-8"))
     runs, synth_models, skipped = load_runs(args.runs)
-    judge = Judge(http_transport(args.daemon, args.model, args.seed, args.max_tokens, args.timeout), args.out, args.workers,
-                  salt=f"{args.model}|{args.seed}|")
-    board = judge_runs(judge, bank, runs, args.out)
+    # The cache key carries the RESOLVED model, not the alias asked for. An
+    # alias moves: `commonwealth/primary` pointed at Qwen3.6-35B ...Q6_K when
+    # this board was built and at ...IQ4_NL on 2026-09-21. Keyed on the alias,
+    # a re-run silently fills one board's `raw/` with two judges' records and
+    # nothing on the board says so — 17 such records were written and removed
+    # by hand that day. An alias the daemon will not resolve is keyed as
+    # `unresolved:<alias>`, which collides with nothing, rather than falling
+    # back to the alias and colliding with everything (ARCH §18.3).
     resolved = resolve_alias(args.daemon, args.model)
+    judge = Judge(http_transport(args.daemon, args.model, args.seed, args.max_tokens, args.timeout), args.out, args.workers,
+                  salt=f"{resolved or 'unresolved:' + args.model}|{args.seed}|")
+    board = judge_runs(judge, bank, runs, args.out)
     reported = board["judge"]["reported_models"]
     board.update({"schema": "ei7-essay-board/v1", "bank": bank["bank"].get("name"), "runs_dir": str(args.runs), "seed": args.seed,
                   "skipped_runs": skipped, "synth_models": sorted(synth_models),
@@ -622,6 +630,30 @@ def self_test():
             ("kinship names same model, same family, and refuses to guess",
              lambda: "SAME MODEL" in kinship_line(["Qwen3-35B"], ["Qwen3-35B"]) and "same model family (qwen)" in kinship_line(["commonwealth/Qwen3.5-4B"], ["Qwen3.6-35B"])
              and "could-not-judge" in kinship_line([], ["Qwen3.6-35B"]) and "different" in kinship_line(["gemma-3"], ["Qwen3"])),
+            # The failing input is the real one: `full` scored against bare on a
+            # bank where the walk reached a Summary on 2 of 12 (2026-09-21).
+            ("a factor reached on under half the questions is called NOT TESTABLE on the board",
+             lambda: (
+                 "NOT TESTABLE" in board_md({**b, "bank": "stub", "kinship": "", "synth_models": [],
+                                             "judge_model": {"requested": "x", "resolved": None, "reported": []},
+                                             "factor_reach": {"full": {"questions": 12, "reached": {"summary": 2}}}})
+                 and "full (2/12)" in board_md({**b, "bank": "stub", "kinship": "", "synth_models": [],
+                                                "judge_model": {"requested": "x", "resolved": None, "reported": []},
+                                                "factor_reach": {"full": {"questions": 12, "reached": {"summary": 2}}}})
+                 # Reached on most questions: the factor IS under test, no warning.
+                 and "NOT TESTABLE" not in board_md({**b, "bank": "stub", "kinship": "", "synth_models": [],
+                                                     "judge_model": {"requested": "x", "resolved": None, "reported": []},
+                                                     "factor_reach": {"full": {"questions": 12, "reached": {"summary": 9}}}})
+                 # A board written before this field exists renders as it did.
+                 and "NOT TESTABLE" not in board_md({**b, "bank": "stub", "kinship": "", "synth_models": [],
+                                                     "judge_model": {"requested": "x", "resolved": None, "reported": []}}))),
+            ("reach is counted once per question, not once per run, and unions across runs",
+             lambda: factor_reach({"full": {
+                 1: {"q1": {"atlas_walk": {"nodes": [{"kind": "Summary"}, {"kind": "Summary"}]}},
+                     "q2": {"atlas_walk": {"nodes": [{"kind": "State"}]}}},
+                 2: {"q1": {"atlas_walk": {"nodes": [{"kind": "State"}]}},
+                     "q2": {"atlas_walk": {"nodes": [{"kind": "Summary"}]}}},
+             }}) == {"full": {"questions": 2, "reached": {"summary": 2, "state": 2}}}),
         ]
         failed = 0
         for name, fn in cases:
