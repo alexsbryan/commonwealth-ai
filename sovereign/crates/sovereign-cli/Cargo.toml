@@ -79,27 +79,13 @@ clap = { workspace = true }
 # process — no exec hop, which is what nc-19 bought and this must not spend.
 #
 # Optional, and pulled ONLY by `awareness` — never by `default` or
-# `dev-tools`. That matters: unlike `sovereign-cli-dev`, this crate has no thin
-# `default-features = false` surface, so linking it means llama.cpp, the
-# grammars and arrow. The end-user dispatcher gains nothing, which is the whole
-# point of `awareness` being opt-in.
-#
-# Path dep rather than a `[workspace.dependencies]` entry: this is the crate's
-# first consumer, and the edge is easier to read where it is paid — same
-# reasoning as `sovereign-cli-dev` above.
-sovereign-cli-llm = { path = "../sovereign-cli-llm", optional = true }
-# The workbench, LINKED rather than exec'd. `sovereign-cli-dev` grew a `[lib]`
-# target on 2026-08-21; with `default-features = false` it is two workspace
-# crates wide (`corpus-engine-scip` + `sovereign-cli-shared`, both already
-# here), so `svrn code converge` runs in THIS process instead of exec'ing a
-# 414 MB sibling that may be stale. `workbench` — sovereign-mesh/llama.cpp,
-# sovereign-tools/arrow+parquet, corpus-engine's grammars — stays off; the
-# remaining `code` subcommands still exec. Optional + pulled by `dev-tools`
-# only, so the shipped end-user dispatcher gains nothing.
+# `dev-tools`. That matters: this crate has no thin `default-features = false`
+# surface, so linking it means llama.cpp, the grammars and arrow. The end-user
+# dispatcher gains nothing, which is the whole point of `awareness` being opt-in.
 #
 # Path dep rather than a `[workspace.dependencies]` entry: this is the crate's
 # first consumer, and the edge is easier to read where it is paid.
-sovereign-cli-dev = { path = "../sovereign-cli-dev", default-features = false, optional = true }
+sovereign-cli-llm = { path = "../sovereign-cli-llm", optional = true }
 corpus-engine = { workspace = true }
 corpus-index = { workspace = true }
 corpus-engine-scip = { workspace = true, optional = true }
@@ -168,9 +154,6 @@ dev-tools = [
     "dep:commonwealth-work",
     "dep:oicp-types",
     "sovereign-cli-shared/rail-client",
-    # The linked workbench surface — `InProcessCodeVerb`. Thin by construction
-    # (`default-features = false`); see the dep comment above.
-    "dep:sovereign-cli-dev",
     "deep-research",
 ]
 # The thin local-only research loop (T1): gated corpus + web search,
