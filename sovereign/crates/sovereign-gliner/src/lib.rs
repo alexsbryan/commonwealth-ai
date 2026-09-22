@@ -25,8 +25,8 @@
 //!   default on any ingest path.
 //! - [`GlinerChunkExtractor`] — the corpus-engine `ChunkEntityExtractor`
 //!   impl for the daemon ingest path.
-//! - [`load_gliner_extractor`] — the daemon/desktop bootstrap that wires
-//!   both together over the canonical state store.
+//! - [`load_gliner_extractor`] — the bootstrap that wires both together
+//!   over an injected `ChunkEntityStore` port.
 //!
 //! The two backends are separate types, not one type with a model knob:
 //! the generations have different ONNX input contracts, and each

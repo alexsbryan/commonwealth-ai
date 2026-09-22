@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! `GlinerChunkExtractor::extract_for_conversation` — driven end to end
-//! against a recording inference seam and a real state store.
+//! against a recording inference seam and a no-op chunk-entity port.
 //!
 //! **Why not a unit test on the bound.** `bounded_input.rs` already tests
 //! `BoundedInputs` directly. What that cannot show is whether the
@@ -20,16 +20,17 @@
 //! one `inference()` call. `a_thousand_short_chunks_reach_the_seam_in_bounded_batches`
 //! is that case.
 
-use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 use corpus_engine::enrichment::tiered::ChunkEntityExtractor;
 use corpus_index::index::EnrichmentChunkRow;
+use sovereign_contracts::daemon_wire::conv_tiered::{
+    ChunkEntityProgressRow, ChunkEntityRow, ChunkEntityStore,
+};
 use sovereign_contracts::error::Result;
 use sovereign_gliner::bounded_input::{MAX_BATCH_CHUNKS, MAX_CHUNK_CHARS};
 use sovereign_gliner::gliner_ner::EntityMention;
 use sovereign_gliner::{GlinerChunkExtractor, LabeledEntityExtractor};
-use sovereign_store::sqlite::SqliteStateStore;
 
 /// Stands in for GLiNER and records the SHAPE of every call — which is
 /// the whole assertion: what the model is handed, not what the caller
@@ -74,8 +75,50 @@ fn row(id: u64, content: String) -> EnrichmentChunkRow {
     }
 }
 
-fn store(dir: &Path) -> Arc<SqliteStateStore> {
-    Arc::new(SqliteStateStore::open(&dir.join("state.db")).expect("open state store"))
+/// Stands in for the state store: `extract_for_conversation` only writes
+/// through `save_chunk_entities_for_conv`, and these tests assert on the
+/// inference seam's shape, never on persistence.
+struct NoopStore;
+
+#[async_trait::async_trait]
+impl ChunkEntityStore for NoopStore {
+    async fn list_ner_processed_chunk_ids(
+        &self,
+        _corpus_id: &str,
+    ) -> Result<std::collections::HashSet<u64>> {
+        Ok(std::collections::HashSet::new())
+    }
+    async fn save_chunk_entities(&self, _rows: &[ChunkEntityRow]) -> Result<()> {
+        Ok(())
+    }
+    async fn record_ner_processed_chunks(
+        &self,
+        _corpus_id: &str,
+        _chunk_ids: &[u64],
+    ) -> Result<()> {
+        Ok(())
+    }
+    async fn get_chunk_entity_progress(
+        &self,
+        _corpus_id: &str,
+    ) -> Result<Option<ChunkEntityProgressRow>> {
+        Ok(None)
+    }
+    async fn upsert_chunk_entity_progress(&self, _row: &ChunkEntityProgressRow) -> Result<()> {
+        Ok(())
+    }
+    async fn save_chunk_entities_for_conv(
+        &self,
+        _corpus_id: &str,
+        _conv_uuid: &str,
+        _rows: &[ChunkEntityRow],
+    ) -> Result<()> {
+        Ok(())
+    }
+}
+
+fn store() -> Arc<dyn ChunkEntityStore> {
+    Arc::new(NoopStore)
 }
 
 /// Assert the seam never saw an oversized batch or an oversized text.
@@ -99,9 +142,8 @@ fn assert_bounded(seam: &RecordingSeam) {
 /// The order's named failing input.
 #[tokio::test]
 async fn a_forty_by_sixty_thousand_conversation_reaches_the_seam_bounded() {
-    let dir = tempfile::tempdir().unwrap();
     let seam = Arc::new(RecordingSeam::default());
-    let extractor = GlinerChunkExtractor::new(store(dir.path()), seam.clone());
+    let extractor = GlinerChunkExtractor::new(store(), seam.clone());
 
     let big = "word ".repeat(12_000);
     assert_eq!(big.len(), 60_000);
@@ -123,9 +165,8 @@ async fn a_forty_by_sixty_thousand_conversation_reaches_the_seam_bounded() {
 /// The axis the incident actually took: many short chunks, one call.
 #[tokio::test]
 async fn a_thousand_short_chunks_reach_the_seam_in_bounded_batches() {
-    let dir = tempfile::tempdir().unwrap();
     let seam = Arc::new(RecordingSeam::default());
-    let extractor = GlinerChunkExtractor::new(store(dir.path()), seam.clone());
+    let extractor = GlinerChunkExtractor::new(store(), seam.clone());
 
     // 1,500 bytes each — `threaded_turns`'s soft target, so this is what a
     // real Claude Code transcript conversation looks like.
@@ -157,9 +198,8 @@ async fn a_thousand_short_chunks_reach_the_seam_in_bounded_batches() {
 /// short conversation still reaches the seam in one call, unchanged.
 #[tokio::test]
 async fn a_small_conversation_is_still_one_call() {
-    let dir = tempfile::tempdir().unwrap();
     let seam = Arc::new(RecordingSeam::default());
-    let extractor = GlinerChunkExtractor::new(store(dir.path()), seam.clone());
+    let extractor = GlinerChunkExtractor::new(store(), seam.clone());
 
     let chunks: Vec<EnrichmentChunkRow> = (0..3)
         .map(|i| row(i, format!("Ailsa asked about the ferry ({i})")))

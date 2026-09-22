@@ -3,10 +3,10 @@
 //! sovereign-tools' `enrichment_bootstrap` (2026-07-17) with the rest of the
 //! GLiNER surface; the non-gliner folder-tiered helpers stay in sovereign-tools.
 
-use std::path::Path;
 use std::sync::Arc;
 
 use corpus_engine::enrichment::tiered::ChunkEntityExtractor;
+use sovereign_contracts::daemon_wire::conv_tiered::ChunkEntityStore;
 
 use crate::chunk_extractor::GlinerChunkExtractor;
 use crate::labeled::{configured_model_id, load_labeled_extractor, LabeledEntityExtractor};
@@ -16,8 +16,9 @@ use crate::labeled::{configured_model_id, load_labeled_extractor, LabeledEntityE
 /// handle (for a NoteStore T2 `GlinerFn` adapter, when the caller wires
 /// notes) alongside the trait-object wrapper (for the engine's tiered
 /// runner and the folder driver). Both `None` when the model isn't
-/// installed or the state store can't be opened — tiered ingest then falls
-/// back to RAPTOR-derived entities.
+/// installed — tiered ingest then falls back to RAPTOR-derived entities.
+/// The chunk-entity store is INJECTED as a port, so this crate never opens
+/// `sovereign.db` (the host owns that open).
 ///
 /// **Which generation runs is [`configured_model_id`]'s call, not this
 /// function's** (P2.1). The raw handle is the generation-agnostic
@@ -25,7 +26,7 @@ use crate::labeled::{configured_model_id, load_labeled_extractor, LabeledEntityE
 /// concrete `GlinerExtractor` would have silently dropped note-side NER
 /// the moment the ingest path moved to GLiNER2.
 pub fn load_gliner_extractor(
-    data_dir: &Path,
+    store: Arc<dyn ChunkEntityStore>,
 ) -> (
     Option<Arc<dyn LabeledEntityExtractor>>,
     Option<Arc<dyn ChunkEntityExtractor>>,
@@ -40,19 +41,6 @@ pub fn load_gliner_extractor(
         );
         return (None, None);
     }
-
-    let store_path = data_dir.join("sovereign.db");
-    let store = match sovereign_store::sqlite::SqliteStateStore::open(&store_path) {
-        Ok(s) => Arc::new(s),
-        Err(e) => {
-            tracing::warn!(
-                store_path = %store_path.display(),
-                error = %e,
-                "enrichment_bootstrap: cannot open state store for entity extractor — skipping"
-            );
-            return (None, None);
-        }
-    };
 
     match load_labeled_extractor(&model_id, None) {
         Ok(extractor) => {

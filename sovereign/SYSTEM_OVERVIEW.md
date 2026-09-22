@@ -148,7 +148,7 @@ crates/
 ├── sovereign-inference      # llama.cpp slots, remote OpenAI-compat, hybrid, idle residency
 ├── sovereign-store          # SQLite + Postgres + in-memory StateStore
 ├── sovereign-tools          # Built-in tools (search, knowledge, docs, web, MCP, code-intel)
-├── sovereign-gliner         # GLiNER (ONNX) NER — its own crate to keep ONNX off sovereign-tools
+├── sovereign-gliner         # GLiNER (ONNX) NER — its own crate to keep ONNX off sovereign-tools; store reached via the `ChunkEntityStore` port, not sovereign-store
 ├── sovereign-work-atlas     # Coordination atlas for agents on the mesh
 ├── sovereign-enrichment-catalog # The enrichment store below every host that reads it
 ├── sovereign-enrichment-build   # The enrichment orchestrator, outside the inference stack

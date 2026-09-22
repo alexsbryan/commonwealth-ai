@@ -89,14 +89,15 @@ pub fn build_node_roster(data_dir: &Path, self_node_id: NodeId) -> Option<NodeRo
 /// (`sovereign_gliner::configured_model_id`); nothing on this side of the
 /// call knows or needs to know which backend it got.
 pub fn load_gliner_extractor(
-    data_dir: &Path,
+    store: Arc<dyn sovereign_core::daemon_wire::conv_tiered::ChunkEntityStore>,
 ) -> (
     Option<Arc<dyn sovereign_gliner::LabeledEntityExtractor>>,
     Option<Arc<dyn corpus_engine::enrichment::tiered::ChunkEntityExtractor>>,
 ) {
     // Delegated to the shared builder so the desktop's embedded daemon wires
-    // an identical stack. See `sovereign_tools::enrichment_bootstrap`.
-    sovereign_gliner::load_gliner_extractor(data_dir)
+    // an identical stack. The store is opened once by `run_daemon` and passed
+    // in, so neither this crate nor gliner opens a second handle.
+    sovereign_gliner::load_gliner_extractor(store)
 }
 
 /// Build the single shared `CorpusEngine` (powers `/mcp` tools AND

@@ -10,13 +10,13 @@ use async_trait::async_trait;
 use corpus_engine::enrichment::tiered::{ChunkEntityExtractor, ChunkNerOutcome};
 use corpus_index::error::{Error, Result};
 use corpus_index::index::{CorpusIndex, EnrichmentChunkRow};
-use sovereign_store::sqlite::SqliteStateStore;
+use sovereign_contracts::daemon_wire::conv_tiered::ChunkEntityStore;
 
 use crate::bounded_input::BoundedInputs;
 use crate::labeled::LabeledEntityExtractor;
 
 /// Concrete `ChunkEntityExtractor` impl for the daemon ingest path.
-/// Wraps a [`LabeledEntityExtractor`] + `Arc<SqliteStateStore>` and
+/// Wraps a [`LabeledEntityExtractor`] + `Arc<dyn ChunkEntityStore>` and
 /// persists rows into `chunk_entities` per-conversation. Fires
 /// from `corpus_engine::enrichment::tiered::run_tiered_enrichment`
 /// ahead of the LLM-heavy `TieredEnrichmentProvider` call.
@@ -26,12 +26,15 @@ use crate::labeled::LabeledEntityExtractor;
 /// persistence, dedup, and progress-provenance code. Which one runs is
 /// decided once, in [`crate::load_labeled_extractor`] — never here.
 pub struct GlinerChunkExtractor {
-    store: Arc<SqliteStateStore>,
+    store: Arc<dyn ChunkEntityStore>,
     extractor: Arc<dyn LabeledEntityExtractor>,
 }
 
 impl GlinerChunkExtractor {
-    pub fn new(store: Arc<SqliteStateStore>, extractor: Arc<dyn LabeledEntityExtractor>) -> Self {
+    pub fn new(
+        store: Arc<dyn ChunkEntityStore>,
+        extractor: Arc<dyn LabeledEntityExtractor>,
+    ) -> Self {
         Self { store, extractor }
     }
 

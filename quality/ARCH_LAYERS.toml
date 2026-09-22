@@ -263,8 +263,9 @@ crates = [
     # pinned_worker_source, entry_endpoint, admission. A stub until the host
     # half moves in.
     "sovereign-serving-host",
-    # GLiNER NER inference (ort/gline-rs carve-out). Depends on sovereign-core
-    # + sovereign-store (same layer) + corpus-engine (lower); consumed from
+    # GLiNER NER inference (ort/gline-rs carve-out). Takes the state store as an
+    # injected `ChunkEntityStore` port (sovereign-contracts) rather than naming
+    # sovereign-store; deps sovereign-core + corpus-engine (lower). Consumed from
     # capabilities (sovereign-tools) and hosts.
     "sovereign-gliner",
 ]

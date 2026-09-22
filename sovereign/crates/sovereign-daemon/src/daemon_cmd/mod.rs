@@ -694,7 +694,10 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
     // The raw `Arc<GlinerExtractor>` is hoisted alongside the
     // trait-object wrapper so the NoteStore T2 path can install
     // it as a `GlinerFn` adapter without re-loading the model.
-    let (gliner_raw, chunk_entity_extractor) = bootstrap::load_gliner_extractor(&data_dir);
+    // The store opened above is handed to gliner as a port (no second handle).
+    let chunk_entity_store: Arc<dyn sovereign_core::daemon_wire::conv_tiered::ChunkEntityStore> =
+        state_store_concrete.clone();
+    let (gliner_raw, chunk_entity_extractor) = bootstrap::load_gliner_extractor(chunk_entity_store);
 
     let (engine, embed_model_id): (Arc<CorpusEngine>, String) = bootstrap::build_corpus_engine(
         &data_dir,

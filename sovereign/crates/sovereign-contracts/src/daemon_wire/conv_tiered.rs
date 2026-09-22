@@ -5,6 +5,45 @@
 //! DTOs, so they live here; `sovereign_core::conv_tiered` re-exports them
 //! at the historical path (the lib.rs:65 pattern).
 
+use crate::error::Result;
+
+/// The chunk-entity slice the GLiNER ingest path needs, as a port — so
+/// `sovereign-gliner` takes `Arc<dyn ChunkEntityStore>` instead of naming
+/// `sovereign_store` (the §11 NoteStore precedent: `AgentNotes`).
+#[async_trait::async_trait]
+pub trait ChunkEntityStore: Send + Sync {
+    /// The "already NER-processed" set for a corpus, entity-bearing chunks
+    /// unioned with explicit processed-but-empty markers.
+    async fn list_ner_processed_chunk_ids(
+        &self,
+        corpus_id: &str,
+    ) -> Result<std::collections::HashSet<u64>>;
+
+    /// Bulk-upsert mentions scoped by chunk id (no conv grouping).
+    async fn save_chunk_entities(&self, rows: &[ChunkEntityRow]) -> Result<()>;
+
+    /// Mark chunks NER ran on, entities or not, so entity-less chunks
+    /// converge in the incremental delta.
+    async fn record_ner_processed_chunks(&self, corpus_id: &str, chunk_ids: &[u64]) -> Result<()>;
+
+    /// Per-corpus extraction progress, or `None` before the first pass.
+    async fn get_chunk_entity_progress(
+        &self,
+        corpus_id: &str,
+    ) -> Result<Option<ChunkEntityProgressRow>>;
+
+    /// Upsert per-corpus extraction progress.
+    async fn upsert_chunk_entity_progress(&self, row: &ChunkEntityProgressRow) -> Result<()>;
+
+    /// Replace all mentions for one conversation, transactionally.
+    async fn save_chunk_entities_for_conv(
+        &self,
+        corpus_id: &str,
+        conv_uuid: &str,
+        rows: &[ChunkEntityRow],
+    ) -> Result<()>;
+}
+
 /// One per-chunk entity mention from the GliNER NER pass. Persisted
 /// in the `chunk_entities` table (migration:
 /// `run_chunk_entities_migration`). One chunk can produce many
