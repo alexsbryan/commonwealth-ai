@@ -869,6 +869,19 @@ refusal named the chain, which is the value.
   join-key VALIDATION re-homed below the contract seam first. Chain: extract
   `validate_join_key_format` (pure) from `membership.rs`, then the format move.
 
+### Probe REVERTED 2026-09-21 (82 at d69595b16)
+
+- **`sovereign-cli-llm -> commonwealth-state`** (portfolio + newsworthy open the
+  daemon's `MeshStore` SQLite directly — a §4 rule-1 violation). A wire was built
+  (daemon `state_http.rs` routes + `turn-client` `state_get/scan/set`) and then
+  REVERTED: the daemon's `MeshStore` is `in_memory()` (bootstrap.rs:2548,
+  daemon_services.rs:831), so routing portfolio through it would silently stop
+  persisting across a daemon restart (today it is `~/.svrnmesh/portfolio.db`).
+  Prerequisite before this edge can close: the daemon's state store must be
+  PERSISTENT, or the portfolio store must keep its file owner and expose it.
+  The route/client code is described in this session's transcript; do not rebuild
+  it without settling persistence first.
+
 ### The decisions — these are the operator's, and they are meant to be few
 
 - [x] **`atos` is CUT COMPLETELY** (operator, 2026-09-21). Footprint:
