@@ -1,0 +1,12 @@
+2026-09-22T03:52:52Z supervisor: director charter loaded from /Users/alexsbryan/dev/commonwealth-ai/ralph/next/the-link/CHARTER.md
+2026-09-22T03:52:52Z supervisor: operator STOP — leaving it stopped
+2026-09-22T03:53:23Z supervisor: director charter loaded from /Users/alexsbryan/dev/commonwealth-ai/ralph/next/the-link/CHARTER.md
+2026-09-22T03:53:23Z unit REVIEW-build-the-link-inventory — --model zai-coding-plan/glm-5.3-flash
+2026-09-22T03:53:23Z prompt: ralph/next/the-link/PROMPT.md sha256=531abd063f5bddad
+2026-09-22T04:15:23Z unit tl-1-checkpoint-export — --model zai-coding-plan/glm-5.3-flash
+2026-09-22T04:56:24Z unit tl-1-checkpoint-verifies — --model zai-coding-plan/glm-5.3-flash
+2026-09-22T05:23:25Z unit tl-2-link-carries-its-couriers — --model zai-coding-plan/glm-5.3-flash
+2026-09-22T05:44:55Z unit tl-2-offline-leg-exports — --model zai-coding-plan/glm-5.3-flash
+campaign: needs-human — # NEEDS_HUMAN — the-link / tl-2-offline-leg-exports
+2026-09-22T06:52:56Z supervisor: campaign stopped — # NEEDS_HUMAN — the-link / tl-2-offline-leg-exports
+2026-09-22T06:52:56Z supervisor: dispatching resolution session 1 — # NEEDS_HUMAN — the-link / tl-2-offline-leg-exports
