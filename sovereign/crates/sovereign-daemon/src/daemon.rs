@@ -2087,19 +2087,38 @@ impl EmbeddedDaemon {
                 .cloned()
                 .collect()
         };
-        let mut out = Vec::with_capacity(members.len());
-        for m in members {
+        // Concurrent and bounded. Sequential iteration let ONE stalling
+        // remote_info hold every reader of this snapshot: while a large
+        // ingest churned the endpoint (2026-09-22, sf-assessor-roll),
+        // /v1/mesh/media took >8s against ~1ms idle and the desktop's
+        // offers poll timed out naming the route. join_all preserves roster
+        // order; a probe over the bound reports no path — the "no record"
+        // reading — NAMED in the log rather than substituted silently.
+        const PROBE_BOUND: std::time::Duration = std::time::Duration::from_secs(1);
+        let probes = members.into_iter().map(|m| {
+            let endpoint = endpoint.clone();
             let pubkey = m.node_pubkey.expect("filtered to Some above");
-            let path =
-                sovereign_mesh::iroh_access::MeshIrohAccess::peer_path_on(&endpoint, &pubkey.0)
-                    .await;
-            out.push(MemberReach {
-                node_id: m.node_id,
-                name: m.name.clone(),
-                path,
-            });
-        }
-        out
+            async move {
+                let probe =
+                    sovereign_mesh::iroh_access::MeshIrohAccess::peer_path_on(&endpoint, &pubkey.0);
+                let path = match tokio::time::timeout(PROBE_BOUND, probe).await {
+                    Ok(path) => path,
+                    Err(_) => {
+                        tracing::warn!(
+                            peer = %m.name,
+                            "iroh path probe exceeded 1s; reporting no path for this read"
+                        );
+                        None
+                    }
+                };
+                MemberReach {
+                    node_id: m.node_id,
+                    name: m.name,
+                    path,
+                }
+            }
+        });
+        futures::future::join_all(probes).await
     }
 
     /// The founder's OWN iroh reachability (Track W): is this node relay-homed +
