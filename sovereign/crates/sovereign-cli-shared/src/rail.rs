@@ -104,6 +104,31 @@ pub async fn rail_log(namespace: &str) -> Result<serde_json::Value, String> {
     resp.json().await.map_err(|e| format!("bad response: {e}"))
 }
 
+/// One namespace's record, frozen — the v1 checkpoint document the daemon
+/// composes from its own journal and roster.
+///
+/// Unlike [`rail_log`] this targets the INTERNAL listener
+/// (`sovereign_contracts::setup_config::internal_daemon_base`), because the
+/// checkpoint route is mounted there on purpose: freezing a copy of a node's
+/// record is a local operator's act, not something a mesh peer does — a peer
+/// syncs by digest. The path carries the namespace (no query string), which
+/// is the route's own shape.
+pub async fn rail_checkpoint(namespace: &str) -> Result<serde_json::Value, String> {
+    let url = format!(
+        "{}/internal/ring/checkpoint/{namespace}",
+        sovereign_contracts::setup_config::internal_daemon_base()
+    );
+    let resp = client()?
+        .get(&url)
+        .send()
+        .await
+        .map_err(|e| format!("cannot reach the daemon at {url}: {e}"))?;
+    if !resp.status().is_success() {
+        return Err(error_text(resp).await);
+    }
+    resp.json().await.map_err(|e| format!("bad response: {e}"))
+}
+
 /// One namespace's roster and its admitted acts, together — the pair every
 /// warrant question needs.
 ///

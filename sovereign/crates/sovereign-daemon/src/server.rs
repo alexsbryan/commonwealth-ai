@@ -511,6 +511,14 @@ pub fn internal_router(state: AppState) -> Router {
         // the bounded in-memory buffer on `AppState` and nothing else, so a
         // restart is the whole of its retention policy.
         .route("/internal/ring/live", post(routes_internal::ring_live))
+        // One ring's record, frozen — the v1 checkpoint document. A READ,
+        // not a replicated-state sender: a peer syncs by digest, it does not
+        // freeze copies of this node's record, so this serves the loopback
+        // callers the gate admits and nobody finer-grained.
+        .route(
+            "/internal/ring/checkpoint/{ns}",
+            get(routes_internal::ring_checkpoint),
+        )
         // Runtime slot management — load/unload extras chat slots
         // without daemon restart. Complements the static
         // `[models.extra]` config table (loaded at startup) by

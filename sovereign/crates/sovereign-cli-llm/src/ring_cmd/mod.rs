@@ -72,6 +72,7 @@ pub async fn run(args: &[String]) -> i32 {
         Some("introduce") => run_introduce(&args[1..]).await,
         Some("dev") => run_dev(&args[1..]).await,
         Some("log") => run_log(&args[1..]).await,
+        Some("checkpoint") => run_checkpoint(&args[1..]).await,
         Some("seal") => run_seal(&args[1..]).await,
         _ => {
             eprintln!(
@@ -82,6 +83,7 @@ pub async fn run(args: &[String]) -> i32 {
                  \x20 svrn ring introduce <person> --key <node-pubkey-hex> --reason <why> --ring <ns>\n\
                  \x20 svrn ring dev <ns> [--dir <bundle-dir>] [--port <n>]\n\
                  \x20 svrn ring log <ns> [--json]\n\
+                 \x20 svrn ring checkpoint <ns> [--out <file>]\n\
                  \x20 svrn ring seal <ns>\n\n\
                  new     scaffold a ring app (index.html, app.js, its reducer and its tests).\n\
                  roster  bind a person's name to the node key they sign with, and show why\n\
@@ -92,6 +94,9 @@ pub async fn run(args: &[String]) -> i32 {
                  dev     mint a rail grant and serve the app at http://127.0.0.1:4318/.\n\
                  log     the acts on this journal, in the order every node applies them,\n\
                  \x20       and everything the rail could not account for.\n\
+                 checkpoint\n\
+                 \x20       the ring's record, frozen: the journal verbatim, the roster it\n\
+                 \x20       was admitted under, and the digest that vouches it is complete.\n\
                  seal    retire everything this node wrote before now, and delete it.\n\n\
                  A ring namespace is created by its first write — there is nothing to\n\
                  provision. Start with `roster add`, because an op signed by a key no\n\
@@ -191,8 +196,69 @@ fn http_client() -> Result<reqwest::Client, String> {
 /// here needs the functions, so one `use` line serves both and a route renamed
 /// on the daemon still breaks the build at every caller.
 pub(crate) use sovereign_cli_shared::rail::{
-    error_text, rail_append, rail_log, RAIL_APPEND_PATH, RAIL_LIVE_PATH, RAIL_LOG_PATH,
+    error_text, rail_append, rail_checkpoint, rail_log, RAIL_APPEND_PATH, RAIL_LIVE_PATH,
+    RAIL_LOG_PATH,
 };
+
+// ── checkpoint ───────────────────────────────────────────────
+
+/// `svrn ring checkpoint <ns> [--out <file>]` — the ring's record, frozen.
+///
+/// The document is the DAEMON's, composed from the journal and roster it
+/// admits under — this verb only carries it to a file or a terminal. With
+/// `--out` it writes the JSON to the file (the form `ring checkpoint
+/// --verify` reads, and the form that travels by courier); without it the
+/// document is printed.
+async fn run_checkpoint(args: &[String]) -> i32 {
+    let Some(namespace) = args
+        .first()
+        .filter(|a| !a.starts_with("--"))
+        .map(String::as_str)
+    else {
+        eprintln!("ring checkpoint: which ring? `svrn ring checkpoint <namespace>`");
+        return 2;
+    };
+    let out = match args.iter().position(|a| a == "--out") {
+        Some(i) => match args.get(i + 1) {
+            Some(path) if !path.starts_with("--") => Some(path),
+            _ => {
+                eprintln!("ring checkpoint: --out needs a file path");
+                return 2;
+            }
+        },
+        None => None,
+    };
+    let document = match rail_checkpoint(namespace).await {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("ring checkpoint: {e}");
+            return 1;
+        }
+    };
+    let rendered = match serde_json::to_string_pretty(&document) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("ring checkpoint: the daemon's answer is not renderable JSON: {e}");
+            return 1;
+        }
+    };
+    match out {
+        Some(path) => {
+            if let Err(e) = std::fs::write(path, &rendered) {
+                eprintln!("ring checkpoint: cannot write {path}: {e}");
+                return 1;
+            }
+            let acts = document
+                .get("ops")
+                .and_then(|o| o.as_array())
+                .map(|a| a.len())
+                .unwrap_or(0);
+            println!("{namespace} — {acts} act(s) frozen to {path}");
+        }
+        None => println!("{rendered}"),
+    }
+    0
+}
 
 /// Mint a grant that reaches exactly one namespace's rail and nothing else.
 async fn mint_rail_grant(namespace: &str) -> Result<String, String> {
@@ -890,6 +956,26 @@ mod tests {
             true,
             "the guard reads the ONE constant, not a second spelling of it"
         );
+    }
+
+    /// `checkpoint` is `ring log`'s shape: a namespace or a refusal that
+    /// names the command. Refused before any daemon is contacted.
+    #[tokio::test]
+    async fn a_checkpoint_without_a_namespace_refuses_with_the_command() {
+        let no_args: Vec<String> = Vec::new();
+        let out_only = ["--out".to_string(), "x.json".to_string()];
+        for args in [no_args.as_slice(), out_only.as_slice()] {
+            let code = run_checkpoint(args).await;
+            assert_eq!(code, 2, "usage exit for {args:?}");
+        }
+    }
+
+    /// `--out` without a path would silently drop the document the operator
+    /// asked to freeze — refused at the parse, before the daemon.
+    #[tokio::test]
+    async fn an_out_without_a_path_is_refused() {
+        let code = run_checkpoint(&["house-expenses".to_string(), "--out".to_string()]).await;
+        assert_eq!(code, 2);
     }
 }
 
