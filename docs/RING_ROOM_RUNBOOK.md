@@ -5,10 +5,6 @@ install the CLI, run `svrn setup`, and the commands below work. The full
 account of what a person watches and why each step is shaped this way is
 `docs/RING_ROOM_RUN_OF_SHOW.md`.
 
-Three things are config lines rather than verbs today — the wall's guest door,
-the wall's app list, and the holder's media origin. They are called out where
-they appear; everything else is CLI.
-
 ---
 
 ## 0. Every machine
@@ -36,24 +32,20 @@ is running, and what knowledge each hosts.
 
 ## 1. The wall — the one machine in the room
 
-It needs a screen and a folder to serve. Scaffold an app (or use one you have):
+It needs a screen and a folder to serve. Scaffold an app (or use one you have),
+declare it to the room, and bind the door:
 
 ```bash
 svrn ring new ./house-expenses
+svrn ring serve house-expenses --dir ./house-expenses --bind 192.168.1.20:19947
+svrn daemon restart          # the door serves what you declared
 ```
 
-**Config, once** (`~/.svrnmesh/config.toml`), then restart the daemon: the
-room-facing address the door listens on, and the apps the room may open.
-
-```toml
-[daemon]
-guest_bind = "192.168.1.20:19947"
-guest_pages = { house-expenses = "/path/to/house-expenses" }
-```
-
-A bare path means the room may read and write that app; write
-`guests = "read"` for one it may only look at. Each app is served at
-`/ring/<name>/`.
+`--bind` is this machine's room-facing address, the one the door listens on;
+the app is served at `/ring/house-expenses/`. Add `--read` for an app guests
+may only look at. `svrn ring serve` with no arguments shows what this door
+declares, and `svrn ring serve --clear house-expenses` stops serving one app.
+One `--wall` link (below) then reaches every app declared this way.
 
 The wall's own screen, for the people in the room:
 
@@ -88,17 +80,14 @@ svrn corpus ingest <folder> --corpus <id> --share
 
 ## 3. The holder — the machine with the library
 
-**Config, once** (`[iroh]` in `~/.svrnmesh/config.toml`): where the media
-server answers locally.
-
-```toml
-[iroh]
-media_origin = "127.0.0.1:8096"        # Jellyfin's default
-```
-
 ```bash
-svrn mesh media offer        # offer it to the whole mesh; withdraw ends the offer
+svrn mesh media origin 8096   # where your media server answers (Jellyfin's default port)
+svrn daemon restart
+svrn mesh media offer         # offer it to the whole mesh; withdraw ends the offer
 ```
+
+`svrn mesh media origin` with no arguments shows what this node declares;
+`--clear` stops offering it.
 
 **What you should see:** the library appears on the wall's Library rail as
 "offered to: everyone here" within 30 s; a title's first byte within 5 s;

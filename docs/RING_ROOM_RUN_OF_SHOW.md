@@ -279,18 +279,17 @@ confirmed on that machine before the walk rather than assumed. BeefyMac goes on 
 WiFi that is not the tailnet, with the Halo elsewhere, because the scan bar's
 goodhart clause says a run over a VPN proves nothing about the room's WiFi.
 
-The guest door is off unless configured. On BeefyMac, `[daemon] guest_bind`
-takes the room-facing `host:port`, and the apps on the wall go in
-`[daemon.guest_pages]` — one line per rail namespace,
-`ring-doc = "/path/to/bundle"`, or
-`house-expenses = { dir = "/path/to/bundle", guests = "read" }` for an app the
-room may only look at. Registering an app there is how you say it admits
-guests; a namespace the daemon writes itself (`mesh-measurements`, the work
-plane) is refused at config load. Each app is served at `/ring/<namespace>/`,
-and the bare `/ring/` is an index of the ones the scanned grant reaches.
-(`[daemon] guest_page_dir` still puts a single app at the bare `/ring/`
-instead, which is what the stand-in used before the wall grant; set it and the
-index is not served.)
+The guest door is off unless configured. `svrn ring serve <namespace> --dir
+<bundle> --bind <room address:port>` writes both halves — the door's address
+(`[daemon] guest_bind`) and the app's registration (`[daemon.guest_pages]`) —
+and `--read` narrows an app the room may only look at; `svrn ring serve` alone
+shows what is declared and `--clear` ends one. Restart the daemon to serve it.
+A namespace the daemon writes itself (`mesh-measurements`, the work
+plane) is refused by the verb, the same refusal the config load would give.
+Each app is served at `/ring/<namespace>/`, and the bare `/ring/` is an index
+of the ones the scanned grant reaches. (`[daemon] guest_page_dir` still puts a
+single app at the bare `/ring/` instead, which is what the stand-in used before
+the wall grant; set it and the index is not served.)
 
 ONE QR serves the whole wall, and a phone that typed its name on one app is the
 same person on the next — set `[daemon] guest_sessions = "grant"` if you want
