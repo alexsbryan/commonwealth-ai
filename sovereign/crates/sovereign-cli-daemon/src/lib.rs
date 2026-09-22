@@ -22,12 +22,6 @@ mod panic_hook;
 mod setup_cmd;
 mod setup_config;
 
-/// Keep the mesh self-manifest in step with the distributed primary's
-/// lifecycle. Re-exported so the acceptance test can drive the REAL wiring
-/// rather than a copy of it — the bug this closes was a missing subscription,
-/// which a reimplementation in the test would silently paper over.
-pub use sovereign_daemon::bootstrap::spawn_self_manifest_refresh;
-
 use sovereign_cli_shared::tracing_init::init_tracing;
 use sovereign_contracts::launch::Launch;
 
@@ -156,28 +150,12 @@ pub fn run_with_args(raw_args: Vec<String>) -> i32 {
     // FOURTH list that disagreed with this one on ordering.
     let launch = Launch::parse(&raw_args, Launch::Bare);
 
-    // Compute-child re-exec (DISTRIBUTED_PILOT_READINESS.md P1): the daemon's
-    // ComputeChildManager spawns `current_exe() --compute-child …`. This is a
-    // distinct inference process with its OWN runtime; it must skip the
-    // daemon's rebrand migration / panic hook / 8 MiB runtime below (it
-    // inherits the stack env vars set above). The success path never returns
-    // — the child `fast_exit`s on SIGTERM.
-    //
-    // DELIBERATE BEHAVIOURAL DELTA (2026-08-24): this used to match only
-    // `args[0]`, while the desktop matched the flag at ANY position. A child
-    // re-exec carries `current_exe`'s argv, so the flag can legitimately sit
-    // behind other arguments — the first-only form silently fell through to
-    // verb dispatch and printed "unknown subcommand". `Launch::parse` finds it
-    // at any position, so the two entry points now agree by construction.
-    if let Launch::ComputeChild { args } = &launch {
-        return sovereign_compute::child_main::run(args);
-    }
-
+    // `--compute-child` is owned by the `sovereign-daemon` [[bin]], not this crate.
     // RPC-worker re-exec: the embedded engine's supervisor spawns
     // `current_exe() --rpc-worker …` when SOVEREIGN_RPC_WORKER_PROCESS is set,
     // so a `GGML_ASSERT` reached by a mesh peer aborts THIS process instead of
     // the daemon holding the mesh key and the conversation store. Like the
-    // compute child it skips the rebrand migration, the panic hook and the
+    // daemon's compute child, it skips the rebrand migration, the panic hook and the
     // daemon runtime below: it owns no data root, and it needs no tokio — the
     // ggml accept loop is blocking and synchronous.
     if let Launch::RpcWorker { args } = &launch {
@@ -283,13 +261,13 @@ async fn dispatch(launch: Launch, raw_args: &[String]) -> i32 {
                 2
             }
         },
-        // Handled before the runtime is built; listed so the match stays
-        // exhaustive rather than falling through a wildcard.
-        Launch::ComputeChild { .. } => unreachable!("compute-child returns in run_with_args"),
         Launch::RpcWorker { .. } => unreachable!("rpc-worker returns in run_with_args"),
-        // Other binaries' launches. Named explicitly so that adding a variant
-        // forces a decision here instead of silently landing in a `_` arm.
-        Launch::Desktop | Launch::Server | Launch::Smoketest { .. } => {
+        // Other binaries' launches, incl. the compute-child the sovereign-daemon [[bin]] owns.
+        // Named explicitly so that adding a variant forces a decision here instead of a `_` arm.
+        Launch::ComputeChild { .. }
+        | Launch::Desktop
+        | Launch::Server
+        | Launch::Smoketest { .. } => {
             eprintln!(
                 "sovereign-cli-daemon: {} is not a launch this binary serves",
                 launch.as_str()

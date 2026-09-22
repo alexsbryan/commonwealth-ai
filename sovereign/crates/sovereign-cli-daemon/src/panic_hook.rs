@@ -97,8 +97,8 @@ pub(crate) fn install(data_dir: PathBuf) {
 ///
 /// That is not a theoretical edge. Under the desktop's supervised
 /// topology the daemon child is spawned with `Stdio::piped()` for both
-/// stdout and stderr (`sovereign_compute::supervisor`), so both fds are
-/// pipes to the parent UI process. When the user quits, the parent exits
+/// stdout and stderr (the supervisor sets `Stdio::piped()`), so both fds
+/// are pipes to the parent UI process. When the user quits, the parent exits
 /// and every subsequent write from the child fails with EPIPE. Any log
 /// line emitted during that window panicked, and this hook's own
 /// `eprintln!` then panicked again — a guaranteed SIGABRT and a macOS

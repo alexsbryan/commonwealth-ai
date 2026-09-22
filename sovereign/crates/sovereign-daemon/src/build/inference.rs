@@ -397,83 +397,84 @@ pub fn load_provider(
     // `arc` engine is still returned for the RPC-worker reload path. Default
     // OFF → `inner` is installed unchanged.
     let mut distributed_primary: Option<Arc<sovereign_compute::manager::DynamicChildSlot>> = None;
-    let provider: Arc<dyn InferenceProvider> =
-        if config.compute.enabled && (!config.compute.slot.is_empty() || child_owns_primary) {
-            let binary =
-                std::env::current_exe().unwrap_or_else(|_| PathBuf::from("sovereign-cli-daemon"));
-            let crash_dir = config.data.dir.join("compute-crash-logs");
-            // The distributed primary's identity: the shared-model id when the
-            // node declares one (that is what peers address it by), else the
-            // GGUF's own stem. Both are accepted as `model_id` on the way in.
-            let distributed_spec = child_owns_primary.then(|| {
-                let stem = models
-                    .primary
-                    .file_stem()
-                    .map(|s| s.to_string_lossy().into_owned())
-                    .unwrap_or_else(|| "primary".to_string());
-                let name = config
-                    .shared_model
-                    .model_id
-                    .clone()
-                    .unwrap_or_else(|| stem.clone());
-                // The primary-role ALIASES must claim the child too, not just
-                // the shared-model name and the GGUF stem.
-                //
-                // A request naming `commonwealth/primary` is asking for the
-                // primary slot, and on a node with a distributed primary the
-                // child IS that slot. `DistributedPrimaryRoute::claims` matched
-                // only name and stem, so the alias fell through to the
-                // in-process engine — whose primary is deliberately NOT resident
-                // in this mode — and got served by the always-hot `fast` slot
-                // instead. Measured live 2026-07-29 on RuggedFox, same prompt in
-                // the same minute: `commonwealth/primary` returned 11 tokens at
-                // ~111 tok/s (the 0.8B), while the GGUF stem returned 170 tokens
-                // from the 122B. Every client using the advertised alias got the
-                // small model and no error — including `svrn mesh bench`, which
-                // filed the fast slot's rate under the 122B's name.
-                //
-                // Derived from `SLOT_ALIAS_POLICY` rather than spelled out here.
-                // Resolution and mesh advertisement already drifted apart once
-                // (slot_aliases.rs, 2026-05-19); routing is a third view of the
-                // same policy and must not become a third place to forget.
-                let model_ids = distributed_primary_model_ids(&stem);
-                sovereign_compute::manager::DistributedPrimarySpec {
-                    handoff_path: config
-                        .data
-                        .dir
-                        .join("compute-distribution")
-                        .join(format!("{name}.json")),
-                    name,
-                    model: models.primary.clone(),
-                    context_size: Some(models.effective_context_size()),
-                    n_gpu_layers: None,
-                    model_ids,
-                }
-            });
-            match sovereign_compute::manager::build_compute_layer_with_distributed(
-                &config.compute,
-                Arc::clone(&inner),
-                binary,
-                crash_dir,
-                distributed_spec,
-            ) {
-                Some((facade, _manager)) => {
-                    distributed_primary = facade.distributed_slot();
-                    tracing::info!(
-                        target: "compute_child",
-                        slots = config.compute.slot.len(),
-                        distributed_primary = distributed_primary.is_some(),
-                        "compute-child routing facade installed"
-                    );
-                    // The facade holds the manager alive; children are
-                    // SIGTERM'd on daemon death via PR_SET_PDEATHSIG.
-                    facade as Arc<dyn InferenceProvider>
-                }
-                None => inner,
+    let provider: Arc<dyn InferenceProvider> = if config.compute.enabled
+        && (!config.compute.slot.is_empty() || child_owns_primary)
+    {
+        // `current_exe()`'s fallback is this crate's own [[bin]] name.
+        let binary = std::env::current_exe().unwrap_or_else(|_| PathBuf::from("sovereign-daemon"));
+        let crash_dir = config.data.dir.join("compute-crash-logs");
+        // The distributed primary's identity: the shared-model id when the
+        // node declares one (that is what peers address it by), else the
+        // GGUF's own stem. Both are accepted as `model_id` on the way in.
+        let distributed_spec = child_owns_primary.then(|| {
+            let stem = models
+                .primary
+                .file_stem()
+                .map(|s| s.to_string_lossy().into_owned())
+                .unwrap_or_else(|| "primary".to_string());
+            let name = config
+                .shared_model
+                .model_id
+                .clone()
+                .unwrap_or_else(|| stem.clone());
+            // The primary-role ALIASES must claim the child too, not just
+            // the shared-model name and the GGUF stem.
+            //
+            // A request naming `commonwealth/primary` is asking for the
+            // primary slot, and on a node with a distributed primary the
+            // child IS that slot. `DistributedPrimaryRoute::claims` matched
+            // only name and stem, so the alias fell through to the
+            // in-process engine — whose primary is deliberately NOT resident
+            // in this mode — and got served by the always-hot `fast` slot
+            // instead. Measured live 2026-07-29 on RuggedFox, same prompt in
+            // the same minute: `commonwealth/primary` returned 11 tokens at
+            // ~111 tok/s (the 0.8B), while the GGUF stem returned 170 tokens
+            // from the 122B. Every client using the advertised alias got the
+            // small model and no error — including `svrn mesh bench`, which
+            // filed the fast slot's rate under the 122B's name.
+            //
+            // Derived from `SLOT_ALIAS_POLICY` rather than spelled out here.
+            // Resolution and mesh advertisement already drifted apart once
+            // (slot_aliases.rs, 2026-05-19); routing is a third view of the
+            // same policy and must not become a third place to forget.
+            let model_ids = distributed_primary_model_ids(&stem);
+            sovereign_compute::manager::DistributedPrimarySpec {
+                handoff_path: config
+                    .data
+                    .dir
+                    .join("compute-distribution")
+                    .join(format!("{name}.json")),
+                name,
+                model: models.primary.clone(),
+                context_size: Some(models.effective_context_size()),
+                n_gpu_layers: None,
+                model_ids,
             }
-        } else {
-            inner
-        };
+        });
+        match sovereign_compute::manager::build_compute_layer_with_distributed(
+            &config.compute,
+            Arc::clone(&inner),
+            binary,
+            crash_dir,
+            distributed_spec,
+        ) {
+            Some((facade, _manager)) => {
+                distributed_primary = facade.distributed_slot();
+                tracing::info!(
+                    target: "compute_child",
+                    slots = config.compute.slot.len(),
+                    distributed_primary = distributed_primary.is_some(),
+                    "compute-child routing facade installed"
+                );
+                // The facade holds the manager alive; children are
+                // SIGTERM'd on daemon death via PR_SET_PDEATHSIG.
+                facade as Arc<dyn InferenceProvider>
+            }
+            None => inner,
+        }
+    } else {
+        inner
+    };
 
     Ok((
         provider,

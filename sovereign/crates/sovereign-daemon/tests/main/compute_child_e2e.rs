@@ -22,7 +22,7 @@ use sovereign_compute::manager::ComputeChildManager;
 use sovereign_contracts::{CompletionRequest, InferenceProvider, StreamFrame};
 
 /// The daemon binary — its `--compute-child` arm runs the mock child.
-const BIN: &str = env!("CARGO_BIN_EXE_sovereign-cli-daemon");
+const BIN: &str = env!("CARGO_BIN_EXE_sovereign-daemon");
 
 async fn wait_all_serving(mgr: &ComputeChildManager, timeout: Duration) -> bool {
     let start = Instant::now();

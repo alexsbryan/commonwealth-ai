@@ -608,7 +608,7 @@ via load-balance skew on the next big-model validation).
   `ComputeRoutedProvider`/`ChildProvider`/`ComputeChildManager`). Wired
   into `load_provider` behind `[compute] enabled` (default OFF → zero behaviour
   change; full-workspace lint `fail:0` + tests green). Crash-isolation
-  acceptance PASSED via `sovereign-cli-daemon/tests/compute_child_e2e.rs`:
+  acceptance PASSED via `sovereign-daemon/tests/main/compute_child_e2e.rs`:
   `kill -9` and the uncatchable `kill -6` (SIGABRT) of a mock child mid-stream
   each yield a terminal `StreamFrame::Error` (bounded, no hang), the supervisor
   respawns the child to `serving`, and a post-recovery completion succeeds

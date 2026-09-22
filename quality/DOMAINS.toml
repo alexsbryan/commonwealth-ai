@@ -1996,7 +1996,7 @@ why = "6 refs / 2 files. Doc at :489 - keyed by NodeId from X-Node-Id, 'the ONLY
 [[noun]]
 name = "NoPeers"
 crate = "sovereign-cli-daemon"
-file = "sovereign/crates/sovereign-cli-daemon/tests/main/named_model_routes_after_child_serves_e2e.rs:112"
+file = "sovereign/crates/sovereign-daemon/tests/main/named_model_routes_after_child_serves_e2e.rs:112"
 visibility = "test"
 concept = "C10"
 context = "serving"

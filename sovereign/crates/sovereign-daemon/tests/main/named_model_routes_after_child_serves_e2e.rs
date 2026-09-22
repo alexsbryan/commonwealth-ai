@@ -48,7 +48,7 @@ use sovereign_daemon::daemon::InferenceVenue;
 use sovereign_serving_host::peer_inference::{InferenceRouter, VenueHost, VenueSource};
 
 /// The daemon binary — its `--compute-child` arm runs the mock child.
-const BIN: &str = env!("CARGO_BIN_EXE_sovereign-cli-daemon");
+const BIN: &str = env!("CARGO_BIN_EXE_sovereign-daemon");
 
 const SLOT_NAME: &str = "shared-primary";
 const STEM: &str = "Qwen3.5-122B-A10B-UD-Q5_K_XL-00001-of-00003";
@@ -198,7 +198,10 @@ async fn a_named_request_for_the_distributed_primary_routes_once_the_child_serve
     ));
 
     // The real wiring under test.
-    sovereign_cli_daemon::spawn_self_manifest_refresh(Arc::clone(&mip), Some(Arc::clone(&slot)));
+    sovereign_daemon::bootstrap::spawn_self_manifest_refresh(
+        Arc::clone(&mip),
+        Some(Arc::clone(&slot)),
+    );
 
     // ── 1. A model we cannot serve must not be advertised.
     let before = mip.complete(&named(SLOT_NAME)).await;

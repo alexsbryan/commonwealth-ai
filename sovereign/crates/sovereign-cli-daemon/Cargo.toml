@@ -30,9 +30,6 @@ path = "src/main.rs"
 [dependencies]
 sovereign-core = { workspace = true }
 sovereign-inference = { workspace = true }
-# Compute-child process boundary (P1): the `--compute-child` re-exec arm in
-# run_with_args + the daemon-side ComputeChildManager/provider facade.
-sovereign-compute = { workspace = true }
 # OS service registration (launchd / systemd / Task Scheduler). Extracted from
 # this crate so a surface can register the daemon WITHOUT linking it — the
 # `sv-no-daemon-management` bar. The daemon is its first consumer, not its
@@ -44,9 +41,8 @@ sovereign-mesh = { workspace = true, features = ["treesitter"] }
 # `daemon_bin.rs` execs). The residue this crate still links: the wizard's
 # in-process EmbeddedDaemon (a NAMED SEAM — terminal.rs:575 needs
 # `peer_inference_endpoints`, which no HTTP route exposes), the pidfile
-# path + rpc-worker flag parser (`startup`, `bootstrap`), doctor's
-# containment guard (`build::containment`), and the
-# `spawn_self_manifest_refresh` re-export the named-model e2e drives.
+# path + rpc-worker flag parser (`startup`, `bootstrap`), and doctor's
+# containment guard (`build::containment`).
 sovereign-daemon = { workspace = true, features = ["treesitter"] }
 # The rented-pod modules lifted out of sovereign-mesh (domains REVIEW-audit-3);
 # reached directly rather than through sovereign-mesh's shim.
@@ -56,11 +52,8 @@ sovereign-daemon = { workspace = true, features = ["treesitter"] }
 # The serving host lifted out of sovereign-mesh (domains
 # REVIEW-build-serving-move-*); the daemon reached the router and the ports
 # directly rather than through sovereign-mesh's shim
-# (domains REVIEW-build-serving-repoint-daemon). Since the de-embed the only
-# consumer left in this crate is tests/main/named_model_routes_after_child_
-# serves_e2e.rs (the InferenceRouter/VenueHost harness) — kept as a main dep
-# because the integration test binary links against it.
-sovereign-serving-host = { path = "../sovereign-serving-host" }
+# (domains REVIEW-build-serving-repoint-daemon). Its tests moved with the
+# inference e2e to `sovereign-daemon`, so this crate no longer links it.
 sovereign-cli-shared = { workspace = true, features = ["scip"] }
 # Dep-history note (kept from the atlas/enrich era): `commonwealth-state`,
 # `commonwealth-core` and `commonwealth-api` (now `sovereign-api`) WERE HERE
