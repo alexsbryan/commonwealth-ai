@@ -38,6 +38,10 @@
 //! `--no-n0` on either side builds the endpoint with no n0 relay and no n0 DNS
 //! (`RelayConfig::from_parts(.., "none")`): two nodes on one flat LAN, or a
 //! mesh that runs its own infrastructure, need nothing else.
+//!
+//! This is the transport level. One level up — a port on a laptop that people
+//! reach by name, with the caller's verified key already in a request header —
+//! is `docs/PUBLISH_AN_APP.md` and `svrn run --as <name> -- python app.py`.
 
 #[cfg(not(feature = "iroh"))]
 fn main() {
