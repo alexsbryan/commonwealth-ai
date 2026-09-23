@@ -72,7 +72,21 @@ pub(crate) fn guest_bind_url() -> Option<String> {
                 .next()
         })
         .map(|c| c.ip);
-    advertised_base(bind, best.as_deref())
+    // NO configured bind means the door's DEFAULT address, not "no address"
+    // (2026-09-22): `guest_door::serve` now binds 0.0.0.0:DEFAULT_GUEST_PORT
+    // while a live grant exists — exactly what `svrn ring host` would have
+    // written — so an unconfigured machine advertises its own LAN address on
+    // the default port, same as a wildcard bind. This function runs at grant
+    // mint time, when the grant that opens the door is being made.
+    let wildcard_default;
+    let bind = match bind.filter(|b| !b.trim().is_empty()) {
+        Some(b) => b,
+        None => {
+            wildcard_default = format!("0.0.0.0:{port}");
+            wildcard_default.as_str()
+        }
+    };
+    advertised_base(Some(bind), best.as_deref())
 }
 
 /// The QR module margin, in modules. Four is the quiet zone the QR standard

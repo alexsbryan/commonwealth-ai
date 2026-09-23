@@ -375,9 +375,25 @@ pub async fn serve(
     pages: Arc<GuestPages>,
     turn_host: Option<Arc<crate::daemon::EmbeddedDaemon>>,
 ) {
-    let Some(bind) = bind else {
-        tracing::debug!("guest door: off ([daemon] guest_bind unset)");
-        return std::future::pending().await;
+    // NO [daemon] guest_bind means DEFAULT, not never (2026-09-22, operator
+    // primitive: "the grant was just giving the port and the rest handled
+    // automagically"). The default is exactly what `svrn ring host` writes
+    // when no --bind names one — every interface on the door's port — so an
+    // unconfigured machine and a `ring host`-ed machine listen in the same
+    // place. This is safe by LIFETIME, not by address: the loop below binds
+    // only while a live grant exists and closes at zero, so minting a grant
+    // IS the authorization to open the door, and revoking the last one
+    // closes it. Before this, the unset case returned `pending` forever and
+    // the promised QR had no door to point at.
+    let (bind, bind_source) = match bind {
+        Some(b) if !b.trim().is_empty() => (b, "config"),
+        _ => (
+            format!(
+                "0.0.0.0:{}",
+                sovereign_contracts::guest_pages::DEFAULT_GUEST_PORT
+            ),
+            "default",
+        ),
     };
     let addr: SocketAddr = match bind.parse() {
         Ok(a) => a,
@@ -402,6 +418,7 @@ pub async fn serve(
         };
         info!(
             %addr,
+            bind_source,
             live_rail_grants = live,
             pages = ?pages,
             "guest door: open"
