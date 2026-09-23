@@ -398,11 +398,14 @@ pub struct KnownMeshDto {
 /// eligibility state machine's own view) and `iroh_transport:
 /// Vec<daemon::MemberReach>` (over `commonwealth_media::PeerTransportPath`,
 /// cross-family). The route keeps the whole type; this is the subset a
-/// client is owed. The two cannot drift silently: `sovereign-mesh`'s
-/// `wire_view_drift` test serialises the real `StatusResponse` and parses
-/// this from it, field by field (ARCH principle 5 — a pin with a failing
-/// input you can name). A field a client needs that is not here is added
-/// HERE and pinned there, never read off a second parse.
+/// client is owed. `node_class` / `entry_node` are flat strings the route
+/// already carried; the transport rows come down as [`MemberReachView`],
+/// which flattens the one cross-family type it closes over. The two cannot
+/// drift silently: `sovereign-mesh`'s `wire_view_drift` test serialises the
+/// real `StatusResponse` and parses this from it, field by field (ARCH
+/// principle 5 — a pin with a failing input you can name). A field a client
+/// needs that is not here is added HERE and pinned there, never read off a
+/// second parse.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct MeshStatusSummary {
     /// The daemon is in a mesh and serving it.
@@ -441,6 +444,62 @@ pub struct MeshStatusSummary {
         alias = "founder_reachability"
     )]
     pub self_reachability: Option<SelfReachability>,
+    /// What kind of participant THIS node is — `holder`, `terminal`, or
+    /// `unconfigured` (the route's `NodeClass::id`). Empty for a daemon that
+    /// predates the field, which prints nothing rather than guessing
+    /// "holder" (§18.3).
+    #[serde(default)]
+    pub node_class: String,
+    /// The entry node a `terminal` forwards every turn and embedding to.
+    /// `None` on a holder.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub entry_node: Option<String>,
+    /// Per-peer iroh connection path (`direct` / `relayed` / `mixed` /
+    /// `idle` for each known peer). Empty when iroh isn't running — the
+    /// mesh is on the IP path.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub iroh_transport: Vec<MemberReachView>,
+}
+
+/// One row of `StatusResponse.iroh_transport` — a peer's live iroh
+/// connection path — as a client that does not link the daemon reads it,
+/// deserialised from the SAME bytes. Flattens the one type that keeps
+/// `MemberReach` itself up in the daemon: its `path` is
+/// `commonwealth_media::PeerTransportPath`, cross-family, so the view
+/// spells its fields out here and `wire_view_drift` pins the two
+/// field-for-field. The `node_id` the route carries is not read by any
+/// client (the roster row above already names the peer) and serde drops it.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MemberReachView {
+    /// The peer's display name.
+    pub name: String,
+    /// The live path, `None` before the endpoint has any record of the
+    /// peer (never dialed, or not iroh-reachable).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub path: Option<PeerTransportPathView>,
+}
+
+/// The flattened read of `commonwealth_media::PeerTransportPath` — field
+/// names are ITS serde names, so the bytes parse unchanged.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PeerTransportPathView {
+    /// `direct` (active IP path, hole-punched), `relayed` (active only
+    /// via a relay), `mixed` (both active), `idle` (known peer, no
+    /// active path this moment), or `unknown` (endpoint has no record).
+    pub path: String,
+    /// The relay URL in active use, if the path rides one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub relay: Option<String>,
+    /// Count of active direct (IP) addresses to this peer.
+    pub active_direct_addrs: usize,
+    /// Those addresses, written out. Defaulted on the wire so an older
+    /// peer's status still deserializes.
+    #[serde(default)]
+    pub active_direct_socket_addrs: Vec<String>,
+    /// Whether the path classification counts as "relayed" for the
+    /// health term — the one reading both surfaces share.
+    #[serde(default)]
+    pub relayed_reading: bool,
 }
 
 // ─── `GET /status` — the serving host's identity ─────────────────

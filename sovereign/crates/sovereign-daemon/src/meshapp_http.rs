@@ -35,22 +35,15 @@ use crate::loopback_guard::{LocalOnly, LoopbackRouter};
 
 // ─── The clamps (one decider, ARCH §10.6) ──────────────────────
 
-/// `meshapp_graph` / `meshapp_findings`-adjacent node listing.
-pub const GRAPH_LIMIT_DEFAULT: usize = 50;
-pub const GRAPH_LIMIT_MAX: usize = 500;
-/// `meshapp_search_entities`.
-pub const ENTITY_LIMIT_DEFAULT: usize = 25;
-pub const ENTITY_LIMIT_MAX: usize = 100;
-/// `meshapp_claims` / `meshapp_questions`.
-pub const ATOM_LIMIT_DEFAULT: usize = 100;
-pub const ATOM_LIMIT_MAX: usize = 500;
-/// `meshapp_subgraph`.
-pub const SUBGRAPH_LIMIT_DEFAULT: usize = 30;
-pub const SUBGRAPH_LIMIT_MAX: usize = 80;
-/// `meshapp_document_feed`.
-pub const FEED_DOCS_DEFAULT: usize = 14;
-pub const FEED_DOCS_MIN: usize = 1;
-pub const FEED_DOCS_MAX: usize = 90;
+// Wire vocabulary of these routes, defined in
+// `sovereign_contracts::daemon_wire::meshapp` beside the DTOs they clamp
+// (svt-3) — the `svrn meshapp dev` server parses the same ops without
+// linking this crate. Re-exported so every route-side use keeps resolving.
+pub use sovereign_contracts::daemon_wire::meshapp::{
+    clamp, ATOM_LIMIT_DEFAULT, ATOM_LIMIT_MAX, ENTITY_LIMIT_DEFAULT, ENTITY_LIMIT_MAX,
+    FEED_DOCS_DEFAULT, FEED_DOCS_MAX, FEED_DOCS_MIN, GRAPH_LIMIT_DEFAULT, GRAPH_LIMIT_MAX,
+    SUBGRAPH_LIMIT_DEFAULT, SUBGRAPH_LIMIT_MAX,
+};
 
 // ─── Query shapes ──────────────────────────────────────────────
 
@@ -558,15 +551,6 @@ async fn index_path(daemon: &Arc<EmbeddedDaemon>, corpus_id: &str) -> Result<Pat
 async fn graph_for(daemon: &Arc<EmbeddedDaemon>, corpus_id: &str) -> Result<Graph, Absence> {
     let path = index_path(daemon, corpus_id).await?;
     sovereign_meshapp::load_graph(&path).map_err(|e| absent_or_internal(corpus_id, &e))
-}
-
-/// `limit` → the applied value. An absent limit takes the default; an
-/// over-large one is CLAMPED and served, not refused.
-///
-/// `pub` with the consts above so the CLI's `meshapp dev` server applies the
-/// SAME clamp rather than re-inlining the literals (ARCH §10.6).
-pub fn clamp(requested: Option<usize>, default: usize, max: usize) -> usize {
-    requested.unwrap_or(default).min(max)
 }
 
 /// A `sovereign-meshapp` failure → a status. The library answers

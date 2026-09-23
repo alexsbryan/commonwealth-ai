@@ -20,12 +20,13 @@ use axum::{
 };
 use serde::Deserialize;
 
-// The clamps are `meshapp_http`'s — ONE decider for every surface that serves
-// these ops (ARCH §10.6). This dev server used to re-inline the same five
-// literal pairs; a bound changed there and not here would have made the two
-// explorers disagree with nothing red.
-use sovereign_daemon::meshapp_http::{
-    self, ENTITY_LIMIT_DEFAULT, ENTITY_LIMIT_MAX, FEED_DOCS_DEFAULT, FEED_DOCS_MAX, FEED_DOCS_MIN,
+// The clamps live with the DTOs they clamp, in
+// `sovereign_contracts::daemon_wire::meshapp` — ONE decider for every
+// surface that serves these ops (ARCH §10.6). This dev server used to
+// re-inline the same five literal pairs; a bound changed there and not here
+// would have made the two explorers disagree with nothing red.
+use sovereign_contracts::daemon_wire::meshapp::{
+    clamp, ENTITY_LIMIT_DEFAULT, ENTITY_LIMIT_MAX, FEED_DOCS_DEFAULT, FEED_DOCS_MAX, FEED_DOCS_MIN,
     GRAPH_LIMIT_DEFAULT, GRAPH_LIMIT_MAX, SUBGRAPH_LIMIT_DEFAULT, SUBGRAPH_LIMIT_MAX,
 };
 
@@ -307,14 +308,14 @@ async fn op_handler(
             sovereign_meshapp::graph_nodes(
                 &g,
                 a.node_type.as_deref(),
-                meshapp_http::clamp(a.limit, GRAPH_LIMIT_DEFAULT, GRAPH_LIMIT_MAX),
+                clamp(a.limit, GRAPH_LIMIT_DEFAULT, GRAPH_LIMIT_MAX),
             )
         })),
         "subgraph" => text(sovereign_meshapp::load_graph(idx).map(|g| {
             sovereign_meshapp::subgraph(
                 &g,
                 a.node_type.as_deref(),
-                meshapp_http::clamp(a.limit, SUBGRAPH_LIMIT_DEFAULT, SUBGRAPH_LIMIT_MAX),
+                clamp(a.limit, SUBGRAPH_LIMIT_DEFAULT, SUBGRAPH_LIMIT_MAX),
             )
         })),
         "node" => {
@@ -331,12 +332,11 @@ async fn op_handler(
                 &g,
                 a.query.as_deref().unwrap_or_default(),
                 a.node_type.as_deref(),
-                meshapp_http::clamp(a.limit, ENTITY_LIMIT_DEFAULT, ENTITY_LIMIT_MAX),
+                clamp(a.limit, ENTITY_LIMIT_DEFAULT, ENTITY_LIMIT_MAX),
             )
         })),
         "document_feed" => {
-            let limit =
-                meshapp_http::clamp(a.limit, FEED_DOCS_DEFAULT, FEED_DOCS_MAX).max(FEED_DOCS_MIN);
+            let limit = clamp(a.limit, FEED_DOCS_DEFAULT, FEED_DOCS_MAX).max(FEED_DOCS_MIN);
             text(sovereign_meshapp::document_feed(idx, limit).await)
         }
         "reconciliation" => Ok(to_val(sovereign_meshapp::reconciliation(idx))),
@@ -404,9 +404,9 @@ async fn static_handler(State(ctx): State<Arc<DevCtx>>, uri: Uri) -> Response {
     serve_under(&ctx.bundle_dir, rel, shim)
 }
 
-/// The bundle-escape guard now faces the LAN through the guest door, so it
-/// has one implementation, there.
-pub(crate) use sovereign_daemon::guest_door::serve_under;
+/// The bundle-escape guard, shared with the guest door and `svrn ring dev` —
+/// one implementation, in `sovereign_mesh::guest_pages`.
+pub(crate) use sovereign_mesh::guest_pages::serve_under;
 
 /// The dev `window.meshApp`: same method surface as `meshapp_shim.js`, but over
 /// `fetch('/__meshapp/<op>')` instead of Tauri IPC. The corpus id the bundle

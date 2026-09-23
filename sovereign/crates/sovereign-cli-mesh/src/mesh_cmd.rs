@@ -3087,21 +3087,22 @@ async fn cmd_status(args: &[String]) -> i32 {
         }
     };
 
-    let status: sovereign_daemon::mesh_http::StatusResponse = match serde_json::from_str(&body) {
-        Ok(s) => s,
-        Err(e) => {
-            // Daemon version drift — fall back to raw JSON pass-through
-            // so the operator at least sees the data even when our
-            // local DTO doesn't match.
-            eprintln!("mesh status: response shape mismatch ({e}); printing raw JSON.");
-            println!("{body}");
-            return 1;
-        }
-    };
+    let status: sovereign_contracts::daemon_wire::MeshStatusSummary =
+        match serde_json::from_str(&body) {
+            Ok(s) => s,
+            Err(e) => {
+                // Daemon version drift — fall back to raw JSON pass-through
+                // so the operator at least sees the data even when our
+                // local DTO doesn't match.
+                eprintln!("mesh status: response shape mismatch ({e}); printing raw JSON.");
+                println!("{body}");
+                return 1;
+            }
+        };
 
     // Filter to self when requested. Most addr-only / scripting uses
     // want exactly this node's address.
-    let members: Vec<&sovereign_daemon::mesh_http::MemberDto> = if self_only {
+    let members: Vec<&sovereign_contracts::daemon_wire::MemberDto> = if self_only {
         status.members.iter().filter(|m| m.is_self).collect()
     } else {
         status.members.iter().collect()
@@ -3266,14 +3267,15 @@ async fn cmd_transport(args: &[String]) -> i32 {
             return 1;
         }
     };
-    let status: sovereign_daemon::mesh_http::StatusResponse = match serde_json::from_str(&body) {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln!("mesh transport: response shape mismatch ({e}); printing raw JSON.");
-            println!("{body}");
-            return 1;
-        }
-    };
+    let status: sovereign_contracts::daemon_wire::MeshStatusSummary =
+        match serde_json::from_str(&body) {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("mesh transport: response shape mismatch ({e}); printing raw JSON.");
+                println!("{body}");
+                return 1;
+            }
+        };
 
     if json_out {
         match serde_json::to_string_pretty(&status.iroh_transport) {

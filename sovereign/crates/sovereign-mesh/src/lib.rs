@@ -46,6 +46,14 @@ pub use sovereign_scheduler::decision_trace; // shim: moved by domains REVIEW-bu
 pub mod deep_link;
 pub use deep_link::{parse_deep_link, DeepLink};
 pub mod gossip;
+/// The guest page's browser side — page prefix, `window.ring` shim and the
+/// bundle-escape guard — one implementation for the daemon's door and the
+/// CLI's dev servers (fp-30's de-embed).
+pub mod guest_pages;
+/// The `/v1/mesh/measurements` answer shapes beside `mesh_measurements`'
+/// policy; the daemon's route re-exports them and the CLI's reader pins
+/// against them (fp-30's de-embed).
+pub mod measurements_wire;
 pub mod mesh_measurements;
 pub use sovereign_serving_host::guest_lender; // shim: moved by domains REVIEW-build-serving-move-throughput-guest
 pub mod guest_source;

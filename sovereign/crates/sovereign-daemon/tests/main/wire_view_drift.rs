@@ -20,12 +20,13 @@ use sovereign_contracts::daemon_wire::{
 use sovereign_daemon::corpus_watch_http::IngestOutcome;
 use sovereign_daemon::lc_http::IngestProgress;
 use sovereign_daemon::mesh_http::{KnownMeshDto, MemberDto, StatusResponse};
+use sovereign_mesh::iroh_access::PeerTransportPath;
 
 fn full_status() -> StatusResponse {
     StatusResponse {
         running: true,
         node_class: "holder".into(),
-        entry_node: None,
+        entry_node: Some("entry-node:9741".into()),
         meshes: vec![KnownMeshDto {
             mesh_id: "ab".into(),
             name: "m".into(),
@@ -60,7 +61,17 @@ fn full_status() -> StatusResponse {
         peer_inflight_ceiling: 4,
         fanout_inflight_current: 0,
         active_corpus_ingests: 1,
-        iroh_transport: Vec::new(),
+        iroh_transport: vec![sovereign_daemon::daemon::MemberReach {
+            node_id: commonwealth_core::ids::NodeId::from_u128(7),
+            name: "peer-one".into(),
+            path: Some(PeerTransportPath {
+                path: "mixed".into(),
+                relay: Some("https://relay".into()),
+                active_direct_addrs: 2,
+                active_direct_socket_addrs: vec!["10.0.0.9:41231".into()],
+                relayed_reading: true,
+            }),
+        }],
         self_reachability: Some(SelfReachability {
             dial: Some("k@relay".into()),
             endpoint_id: "e".into(),
@@ -99,6 +110,8 @@ fn mesh_status_summary_reads_the_route_answer_field_for_field() {
     assert_eq!(view.join_key, route.join_key);
     assert_eq!(view.join_link, route.join_link);
     assert_eq!(view.client_token, route.client_token);
+    assert_eq!(view.node_class, route.node_class);
+    assert_eq!(view.entry_node, route.entry_node);
     // Rows are the SAME type on both sides now; equality of bytes is the pin.
     assert_eq!(
         serde_json::to_value(&view.meshes).unwrap(),
@@ -112,11 +125,39 @@ fn mesh_status_summary_reads_the_route_answer_field_for_field() {
         serde_json::to_value(&view.self_reachability).unwrap(),
         serde_json::to_value(&route.self_reachability).unwrap()
     );
+    // The transport rows are the flattened read (`MemberReachView` over the
+    // route's `MemberReach`): the view deliberately drops `node_id` (the
+    // roster row above already names the peer), so the pin is field for
+    // field over what it DOES carry — name and the whole path object.
+    assert_eq!(view.iroh_transport.len(), route.iroh_transport.len());
+    for (view_row, route_row) in view.iroh_transport.iter().zip(&route.iroh_transport) {
+        assert_eq!(view_row.name, route_row.name);
+        assert_eq!(
+            serde_json::to_value(&view_row.path).unwrap(),
+            serde_json::to_value(&route_row.path).unwrap()
+        );
+    }
+    // The flattened path view answers the fields the `mesh transport`
+    // renderer reads off it, spelled as the route's type spells them.
+    let row = &view.iroh_transport[0];
+    assert_eq!(row.name, "peer-one");
+    let path = row.path.as_ref().unwrap();
+    assert_eq!(path.path, "mixed");
+    assert_eq!(path.relay.as_deref(), Some("https://relay"));
+    assert_eq!(path.active_direct_addrs, 2);
+    assert_eq!(path.active_direct_socket_addrs, vec!["10.0.0.9:41231"]);
+    assert!(path.relayed_reading);
     // The bytes a client is handed round-trip through the view unchanged
     // for every field it carries — the view adds nothing the route did not.
+    // `iroh_transport` is the one exemption: its rows are the FLATTENED
+    // read (the route's rows also carry `node_id`, which no client reads),
+    // pinned field for field above.
     let reserialised = serde_json::to_value(&view).unwrap();
     let full = serde_json::to_value(&route).unwrap();
     for (k, v) in reserialised.as_object().unwrap() {
+        if k == "iroh_transport" {
+            continue;
+        }
         assert_eq!(
             full.get(k),
             Some(v),

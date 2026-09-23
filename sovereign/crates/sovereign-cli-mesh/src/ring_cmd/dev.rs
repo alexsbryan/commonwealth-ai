@@ -208,7 +208,7 @@ async fn op_handler(
 }
 
 async fn shim_handler(State(ctx): State<Arc<RingCtx>>) -> Response {
-    let js = sovereign_daemon::guest_door::ring_shim(&ctx.namespace, None);
+    let js = sovereign_mesh::guest_pages::ring_shim(&ctx.namespace, None);
     ([(header::CONTENT_TYPE, "text/javascript")], js).into_response()
 }
 

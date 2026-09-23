@@ -12390,7 +12390,6 @@ dependencies = [
  "sha2 0.10.9",
  "sovereign-cli-shared",
  "sovereign-contracts",
- "sovereign-daemon",
  "sovereign-inference",
  "sovereign-mesh",
  "sovereign-meshapp",

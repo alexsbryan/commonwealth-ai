@@ -576,22 +576,12 @@ pub struct PublishMeasurementResponse {
     pub refused: Option<String>,
 }
 
-/// One peer's measurement, as `GET /v1/mesh/measurements` returns it.
-#[derive(Debug, Serialize)]
-pub struct MemberMeasurementDto {
-    /// Hex node id of the publisher, resolved from the journal line's `actor`
-    /// through the ring roster — not from anything inside the payload, which
-    /// the publisher controls. The `actor` is the public key that SIGNED the
-    /// line, which is the one field a writer cannot forge for someone else
-    /// (ARCH §18.1).
-    pub origin_node: String,
-    /// Friendly mesh name, as the roster resolved the signing key. Absent only
-    /// when this build could not name the node behind an admitted key.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub origin_name: Option<String>,
-    /// What they measured.
-    pub record: sovereign_mesh::mesh_measurements::MeasurementRecord,
-}
+/// One peer's measurement, as `GET /v1/mesh/measurements` returns it, and
+/// the response body — wire types, so defined in
+/// `sovereign_mesh::measurements_wire` beside `MeasurementRecord` (svt-3)
+/// and re-exported here; the CLI's reader pins against them without
+/// linking this crate.
+pub use sovereign_mesh::measurements_wire::{MemberMeasurementDto, MemberMeasurementsResponse};
 
 /// Query for `GET /v1/mesh/measurements`.
 #[derive(Debug, Deserialize, Default)]
@@ -630,22 +620,6 @@ where
             "1" | "true" | "yes" | "y" | "on"
         ),
     })
-}
-
-/// Response body for `GET /v1/mesh/measurements`.
-#[derive(Debug, Serialize)]
-pub struct MemberMeasurementsResponse {
-    /// Peer records, newest first. Excludes this node's own — the CLI already
-    /// holds those on disk, and they are the authoritative copy — unless
-    /// [`MemberMeasurementsQuery::include_self`] was set.
-    pub records: Vec<MemberMeasurementDto>,
-    /// Journal lines that were admitted but could not be read as measurements,
-    /// usually a peer on an incompatible schema, PLUS everything admission
-    /// could not account for at all — an unplaceable signer, a hole in a peer's
-    /// sequence, a torn line. Reported rather than swallowed: a reader seeing
-    /// `records: []` deserves to know whether the ring is quiet or whether this
-    /// answer covers a subset (ARCH §18.3).
-    pub unreadable: usize,
 }
 
 /// Publish a locally-taken measurement onto this node's ring journal.

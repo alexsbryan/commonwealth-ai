@@ -14,7 +14,7 @@ use sovereign_mesh::deep_link::build_https_guest_link;
 /// the namespace is typed once rather than twice. A base already spelling a
 /// `/ring/` page is returned as typed, never rewritten.
 pub(crate) fn wall_page_base(base: &str, rail: Option<&str>, wall: bool) -> String {
-    let prefix = sovereign_daemon::guest_door::PAGE_PREFIX;
+    let prefix = sovereign_mesh::guest_pages::PAGE_PREFIX;
     if base.contains(prefix) {
         return base.to_string();
     }
