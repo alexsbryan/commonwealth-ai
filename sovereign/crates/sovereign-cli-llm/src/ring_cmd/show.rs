@@ -217,7 +217,7 @@ async fn shim_handler(State(ctx): State<Arc<RingCtx>>) -> Response {
 async fn static_handler(State(ctx): State<Arc<RingCtx>>, uri: Uri) -> Response {
     let rel = uri.path().trim_start_matches('/');
     let rel = if rel.is_empty() { "index.html" } else { rel };
-    let shim = (rel == "index.html").then_some("/__ring_dev.js");
+    let shim = (rel == "index.html").then_some("__ring_dev.js");
     crate::meshapp_cmd::serve_under(&ctx.bundle_dir, rel, shim)
 }
 
