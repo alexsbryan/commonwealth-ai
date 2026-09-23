@@ -215,3 +215,85 @@ A `DEFAULTS_LEDGER.md` REJECTED row naming the measurement and the bar it
 failed, the flag stays default-off, and the verdict data (per-item
 distributions, labels, latencies) is committed beside this file. No prose
 report.
+
+## 2026-09-23 — Also considered
+
+Appended before any result. None of the bars above change. Open question 3
+(a Jev arm) is closed as no, by the first entry below.
+
+**Jev as a model or as a comparison arm.** Rejected. The approach transfers
+and the product does not. Typed questions over a state, a small closed set of
+answer types, a probability per answer, and ground truth by outcome are
+already here: the forced-choice funnel, llguidance, and `stable_prefix_len`
+for several questions over one state. Jev's remaining advantages are a model
+trained for calibration and speed. The first is approximated locally by
+post-hoc calibration (temperature or Platt scaling fitted on this document's
+fit splits, against our own outcomes). The second only matters on hot paths,
+which the latency bar and the embedding fallback already cover. A comparison
+arm would buy an external reference point at the cost of a third-party
+dependency, text leaving the machine, and self-reported numbers. The gold
+sets this plan builds are the reference.
+
+**Router tool pick (`router.rs:1200`).** Not pursued. The label set is the
+registered tool ids, which are open and multi-token, and a wrong pick is
+recoverable within the turn. Low value per error.
+
+**Enum fields inside Phase 1 extraction** (`entity_type`, `claim_kind`,
+stance, attribute enums; `pipelines/ontology_schema.rs`,
+`typed_schemas/argumentative.rs`). Not pursued. These values are chosen in the
+middle of generating a JSON object, and forced choice reads one next token at
+the end of a prompt. Distributions there need per-field logit capture during
+constrained decoding, which is new engine work. Revisit only if the tracks
+here show that probabilities pay.
+
+**Phase 6 tension / same-as classifier**
+(`corpus-engine/src/enrichment/atlas/analysis/tension_classifier.rs`).
+The strongest ingest candidate, not yet a track. One call per candidate pair.
+Today it returns `is_tension` plus a `relation` enum and a confidence the model
+writes itself, defaulting to 0.7 when omitted (`:174`), and the confidence
+only sorts (`governance_view.rs:622`). A single four-way choice
+(Tension / SameAs / Compatible / Neither) would give one distribution and
+remove the self-contradiction `verdict()` has to reconcile (`:163`). A
+probability would allow three outcomes: merge, review queue, or drop. The
+tension half has a gold set (governance, maple-house); the same-as half does
+not. It becomes Track C by its own appended pre-registration, if the operator
+wants it.
+
+**Phase 0 section classifier** (`enrichment/pipeline/section_classifier.rs`).
+Deferred. The label chooses the Phase 1 schema, so an error fails extraction
+outright, and the v2 axes' `primary_weight` is a distribution the model
+currently writes instead of one that is measured. Cost is low because results
+are cached by content hash and the axes can share a prefix. Blocked on
+measurement: no gold set of section labels exists.
+
+**Meta-atlas bridge adjudicator** (`meta_atlas/bridge/adjudicate.rs:88`).
+Deferred. Five labels, reached only by pairs a deterministic signal stack left
+uncertain, so it is shaped for a real probability. The meta-atlas work is
+parked.
+
+**Entity-merge judge.** Not built. `MergeSignal::JudgeConfirmed` is declared
+(`reconciliation/signals.rs:37`) and nothing in the enrichment path produces
+it. If it is built, it is built as a yes/no on the funnel, not retrofitted.
+
+**GLiNER label sets** (`sovereign-gliner/src/gliner_ner.rs:51`). Out of scope.
+GLiNER already emits a per-span score. Its gap is different: the label sets
+are hardcoded and the ontology does not feed them.
+
+**SoL-Pi as installed in pi.** Deferred. Nearly free to try, but pi is not
+installed on this host, Node here is v20 against the required 22.19, and pi is
+unpinned while SoL-Pi pins 0.85.1. It would also only improve pi sessions.
+The paper's own ablation favours ObservationPack (+5.3% score, −6% tokens) and
+Action Fusion (+4.1%, −12%). Online Context Compact carries all of the
+stack's capability loss (−6.4%).
+
+**SoL-Pi Action Fusion in `write_file`** (`sovereign-agent-tools/src/primitive.rs:183`).
+Not pursued now. Fusing a cargo build into a write conflicts with the
+one-cargo-at-a-time rule and `with-cargo-lock.sh`, and the agent-coding
+battery (8 problems) is too small to see a 4% effect.
+
+**SoL-Pi ObservationPack in `tool_result_cache`.** Not pursued. The cache
+already expires results after five turns, so the saving is smaller here than
+in pi, and handles give up prompt-cache prefix reuse.
+
+**SoL-Pi Evidence-Preserving Reducer** for build, lint and test output. The
+next effort after this one, as stated above.
