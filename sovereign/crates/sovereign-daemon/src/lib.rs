@@ -193,6 +193,7 @@ pub mod routes_guest_session;
 pub mod routes_inference;
 pub mod routes_internal;
 pub mod routes_knowledge;
+pub mod routes_mesh_kv;
 pub mod routes_oicp;
 pub mod routes_oicp_ingest;
 pub mod routes_ollama;

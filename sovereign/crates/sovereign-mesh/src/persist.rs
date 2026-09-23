@@ -25,8 +25,12 @@ use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::mesh::{MemberRecord, Mesh, MeshPeering};
 use serde::{Deserialize, Serialize};
 
-/// Filename at `<data_dir>/mesh.json`.
-pub const MESH_FILE: &str = "mesh.json";
+/// Filename at `<data_dir>/mesh.json`. ONE definition lives beside its
+/// identity reader (`sovereign_contracts::node_identity::MESH_JSON_FILE`,
+/// five-programs fp-33) so the writer and the reader cannot drift on which
+/// file identity comes from; re-exported here at the historical name
+/// (ARCH §10.6).
+pub use sovereign_contracts::node_identity::MESH_JSON_FILE as MESH_FILE;
 
 /// Filename at `<data_dir>/join_key.secret` — plaintext join key for
 /// the currently-active mesh. Persisted so the active-mesh UI can
@@ -47,20 +51,21 @@ pub const JOIN_KEY_FILE: &str = "join_key.secret";
 /// `set_client_exposed` / `client_exposed` / `clear_client_exposed`.
 pub const CLIENT_EXPOSED_FILE: &str = "client-exposed";
 
-/// Filename at `<data_dir>/node_id` — 16 raw bytes, mode 0600.
-///
-/// This is the daemon's stable identity across mesh create/join
-/// cycles. Generated exactly once on first boot, and never
-/// regenerated. Without this, every `create_mesh` and every
-/// `join_mesh` would call `NodeId::generate()` and stamp out a
-/// fresh 16-byte random ID, causing:
-///   - Zombie accumulation: each rejoin adds a new member to the
-///     founder's mesh, old "us" entries never get GC'd.
-///   - Failed self-identification: status / collaborate handlers
-///     can't find a stable "me" record across restarts.
-///   - Churning UI: the member's displayed identity changes every
-///     time the daemon restarts.
-pub const NODE_ID_FILE: &str = "node_id";
+// ── Node identity (five-programs fp-33) ──────────────────────────────────
+// The `node_id` file, the mesh.json identity read, and the FULL precedence
+// decider moved to `sovereign_contracts::node_identity`: the files are
+// cross-program contracts — the daemon writes them, every CLI surface that
+// stamps records reads them — and the workbench must resolve its identity
+// without linking this crate. Every historically-public item stays
+// reachable at its historical path (ARCH §10.6); `save_node_id` was
+// module-private and stays that way (imported for the precedence tests
+// below, which still pin the write/read round-trip against real
+// `PersistedMesh`-written files — the pin that keeps the contracts-side
+// mesh.json projection honest).
+use sovereign_contracts::node_identity::save_node_id;
+pub use sovereign_contracts::node_identity::{
+    load_node_id, load_or_generate_self_node_id, node_id_file, resolve_self_node_id, NODE_ID_FILE,
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PersistedMesh {
@@ -150,12 +155,15 @@ impl PersistedMesh {
     }
 }
 
-/// Directory holding one subdirectory per mesh this node has joined.
-pub const MESHES_DIR: &str = "meshes";
-
-/// Pointer file naming the ACTIVE mesh (hex `MeshId`). Absent = no mesh, or a
-/// legacy layout not yet migrated.
-pub const ACTIVE_FILE: &str = "active";
+// The multi-mesh layout vocabulary — the `meshes/` directory, the `active`
+// pointer and its raw read — moved to `sovereign_contracts::node_identity`
+// beside the identity reader that must follow the same layout (five-programs
+// fp-33); re-exported here at their historical paths (ARCH §10.6). The typed
+// `active_mesh_id` stays: `MeshId` is commonwealth-core's, which contracts
+// may not name.
+pub use sovereign_contracts::node_identity::{
+    active_mesh_hex, active_pointer, ACTIVE_FILE, MESHES_DIR,
+};
 
 /// `<root>/meshes`.
 pub fn meshes_dir(root: &Path) -> PathBuf {
@@ -167,16 +175,10 @@ pub fn mesh_dir(root: &Path, mesh_id: &MeshId) -> PathBuf {
     meshes_dir(root).join(mesh_id.to_hex())
 }
 
-/// `<root>/active`.
-pub fn active_pointer(root: &Path) -> PathBuf {
-    root.join(ACTIVE_FILE)
-}
-
 /// Which mesh is active, if any. `None` on a clean install, or on a legacy
 /// layout that [`migrate_legacy_layout`] has not run against yet.
 pub fn active_mesh_id(root: &Path) -> Option<MeshId> {
-    let raw = fs::read_to_string(active_pointer(root)).ok()?;
-    MeshId::from_hex(raw.trim())
+    active_mesh_hex(root).and_then(|hex| MeshId::from_hex(&hex))
 }
 
 /// Point `active` at `mesh_id`. Atomic; creates `<root>` if needed.
@@ -340,177 +342,6 @@ pub fn migrate_legacy_layout(root: &Path) -> std::io::Result<bool> {
         "mesh: migrated to the multi-mesh layout"
     );
     Ok(true)
-}
-
-pub fn node_id_file(data_dir: &Path) -> PathBuf {
-    data_dir.join(NODE_ID_FILE)
-}
-
-/// Load this daemon's stable `NodeId` from `<data_dir>/node_id`.
-/// On first boot (file missing), generate a fresh ID and persist it
-/// atomically before returning.
-///
-/// Once this has returned a given NodeId for a given data_dir, every
-/// future call returns the same value — the identity survives
-/// `sovereign mesh leave` (we leave `node_id` in place on leave so
-/// the user re-joins with their familiar identity), crashes,
-/// reinstalls that preserve `~/.svrnmesh`, etc. The only way to
-/// churn identity is for the user to manually `rm ~/.svrnmesh/node_id`.
-///
-/// Errors: any filesystem/serialization failure bubbles up as an
-/// `io::Error`. Callers currently log-and-continue by falling back
-/// to `NodeId::generate()` for the in-memory value, trading identity
-/// stability for availability — see [`load_or_generate_self_node_id`]
-/// for the convenience wrapper that does this.
-pub fn load_node_id(data_dir: &Path) -> std::io::Result<Option<NodeId>> {
-    let path = node_id_file(data_dir);
-    match fs::read(&path) {
-        Ok(bytes) => {
-            if bytes.len() != 16 {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    format!(
-                        "node_id file at {} is {} bytes, expected 16",
-                        path.display(),
-                        bytes.len()
-                    ),
-                ));
-            }
-            let arr: [u8; 16] = bytes.try_into().unwrap();
-            // NodeId is defined via macro in commonwealth-core with
-            // `[u8; 16]` as its single field. We can't construct it
-            // directly from outside that crate — go through the
-            // serde path using a tiny JSON shim.
-            let id: NodeId = serde_json::from_value(serde_json::json!(arr))
-                .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
-            Ok(Some(id))
-        }
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
-        Err(e) => Err(e),
-    }
-}
-
-/// Persist this daemon's stable `NodeId`. Idempotent — calling
-/// twice with the same ID is a no-op from the caller's perspective,
-/// but still rewrites the file (tmp-then-rename, so atomic).
-fn save_node_id(data_dir: &Path, id: &NodeId) -> std::io::Result<()> {
-    fs::create_dir_all(data_dir)?;
-    let target = node_id_file(data_dir);
-    let tmp = target.with_extension("id.tmp");
-    {
-        let mut f = fs::File::create(&tmp)?;
-        f.write_all(id.as_bytes())?;
-        f.sync_all()?;
-    }
-    fs::rename(&tmp, &target)?;
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let _ = fs::set_permissions(&target, fs::Permissions::from_mode(0o600));
-    }
-    Ok(())
-}
-
-/// Resolve this node's persistent id with the FULL precedence the
-/// daemon applies on resume: the `node_id` file, then the id baked
-/// into `mesh.json`, then generate-and-persist. Every surface that
-/// stamps records other processes will read (work-atlas claims, mesh
-/// measurements) MUST use this, against the ROOT data dir — calling
-/// `load_or_generate_self_node_id` against some other directory mints
-/// a second identity for the same workstation. That exact bug shipped:
-/// the CLI derived its atlas identity from `<root>/indexes`, so one
-/// machine ran as two nodes and self-filtering misfired (2026-07-31).
-pub fn resolve_self_node_id(data_dir: &Path) -> NodeId {
-    let from_file = load_node_id(data_dir).ok().flatten();
-    let persisted = load(data_dir).ok().flatten();
-
-    // ── The file may hold ANOTHER MACHINE's id ──────────────────────────────
-    // File-first precedence assumes the `node_id` file is either correct or
-    // absent. There is a third state: it holds an id belonging to a DIFFERENT
-    // member of this mesh — a data dir copied between workstations, a restored
-    // backup, a bind-mount pointed at the wrong host. That is not a stale
-    // self-id, it is a collision, and adopting it makes two nodes claim one
-    // identity: self-filtering inverts (your own edits read as a peer's),
-    // attribution lands on the wrong machine, and peers coordinating around
-    // the atlas steer around a node that is not the one editing.
-    //
-    // Observed 2026-08-20 on this workstation: `<data_dir>/node_id` had held a
-    // peer's id since April while `mesh.json` and `/status` both reported the
-    // real one, so every locally-observed work-atlas row was stamped with the
-    // peer's id and the pre-commit collision guard warned on its own author's
-    // edits. Same family as the 2026-07-31 incident above; that one minted a
-    // second identity from the wrong directory, this one adopts a real peer's.
-    //
-    // `mesh.json` wins here and only here. It is the identity the mesh agreed
-    // on and the one the daemon presents, and the tie-break is not a guess: an
-    // id that names a known peer cannot also be us. Outside this case the file
-    // keeps precedence, so a fresh join cannot rotate a stable identity.
-    if let (Some(file_id), Some(mesh)) = (from_file, persisted.as_ref()) {
-        if file_id != mesh.self_node_id && mesh.members.iter().any(|m| m.node_id == file_id) {
-            tracing::error!(
-                node_id_file = %file_id,
-                mesh_self = %mesh.self_node_id,
-                data_dir = %data_dir.display(),
-                "node_id: the node_id file holds a PEER's identity — adopting mesh.json's \
-                 self_node_id and repairing the file. Two nodes sharing one id breaks \
-                 self-filtering and misattributes this machine's work to that peer."
-            );
-            if let Err(e) = save_node_id(data_dir, &mesh.self_node_id) {
-                // Non-fatal: the returned id is already correct for this
-                // process. Unrepaired, the warning simply fires again next boot.
-                tracing::warn!(
-                    error = %e,
-                    "node_id: could not repair the node_id file; identity is correct \
-                     for this process but the divergence will recur on restart"
-                );
-            }
-            return mesh.self_node_id;
-        }
-    }
-
-    match from_file {
-        Some(id) => id,
-        None => match persisted {
-            Some(p) => p.self_node_id,
-            None => load_or_generate_self_node_id(data_dir),
-        },
-    }
-}
-
-/// Load-or-generate wrapper with graceful fallback. First boot
-/// writes the file; subsequent boots return the persisted ID.
-/// On I/O error writing the generated ID, returns the fresh ID
-/// anyway and logs — the daemon is still usable, just loses
-/// identity stability until the file can be written.
-pub fn load_or_generate_self_node_id(data_dir: &Path) -> NodeId {
-    match load_node_id(data_dir) {
-        Ok(Some(id)) => id,
-        Ok(None) => {
-            let fresh = NodeId::generate();
-            if let Err(e) = save_node_id(data_dir, &fresh) {
-                tracing::warn!(
-                    error = %e,
-                    data_dir = %data_dir.display(),
-                    "node_id persistence failed — daemon will run with a fresh \
-                     ID this session; rejoins will appear as a new peer to \
-                     the founder"
-                );
-            } else {
-                tracing::info!(
-                    node_id = %fresh,
-                    "node_id: generated + persisted stable identity (first boot)"
-                );
-            }
-            fresh
-        }
-        Err(e) => {
-            tracing::warn!(
-                error = %e,
-                "node_id: failed to load persisted ID — using fresh this session"
-            );
-            NodeId::generate()
-        }
-    }
 }
 
 /// Persist the plaintext `join_key` for the active mesh. Atomic

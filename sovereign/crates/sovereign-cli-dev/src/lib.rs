@@ -24,9 +24,10 @@
 //!
 //! ## The `workbench` feature, and why the dispatcher turns it off
 //!
-//! The workbench's dependency tree is enormous: `sovereign-mesh` (llama.cpp),
-//! `sovereign-tools` (arrow + parquet + the enrichment catalog), `axum`,
-//! `corpus-engine` with the tree-sitter grammars. Linking THAT into the
+//! The workbench's dependency tree is enormous: `sovereign-tools` (arrow +
+//! parquet + the enrichment catalog), `axum`, `corpus-engine` with the
+//! tree-sitter grammars — and, until fp-33, `sovereign-mesh` (llama.cpp),
+//! which left when the work-atlas surfaces learned to dial the daemon. Linking THAT into the
 //! dispatcher would be the "absorb a large dependency to move a percentage"
 //! failure, so every heavy dependency is optional and every module that needs
 //! one is `#[cfg(feature = "workbench")]`.
@@ -82,6 +83,8 @@ mod dry_report_cmd;
 #[cfg(feature = "workbench")]
 mod git_archaeology_cmd;
 #[cfg(feature = "workbench")]
+mod mesh_kv_client;
+#[cfg(feature = "workbench")]
 #[cfg(feature = "workbench")]
 #[cfg(feature = "workbench")]
 mod phases;
@@ -129,7 +132,7 @@ pub(crate) use sovereign_cli_shared::{observation, project_toml};
 ///
 /// **Invariant for new arms:** everything an arm reaches must compile with the
 /// `workbench` feature OFF. An arm that needs `sovereign-tools`,
-/// `sovereign-mesh` or `corpus-engine`'s grammars belongs in the sibling
+/// `sovereign-daemon` or `corpus-engine`'s grammars belongs in the sibling
 /// binary, not here — dragging those into the dispatcher is the cost this
 /// split exists to refuse. `cargo build -p sovereign-cli-dev
 /// --no-default-features` is the check, and it is what enforces the rule

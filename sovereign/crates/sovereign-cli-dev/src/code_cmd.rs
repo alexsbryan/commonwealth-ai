@@ -1821,23 +1821,16 @@ async fn daemon_brief_overlaps(
     Some(acc.finish())
 }
 
-/// Fallback when the daemon is down: the repo-local `.sovereign/mesh.db`.
-/// Only ever holds claims written by CLI tool invocations on this
-/// machine — the daemon's live atlas is in-memory and unreachable
-/// here — but stale-claim visibility beats nothing.
+/// Fallback when the daemon is down. Since fp-33 there is no repo-local
+/// `mesh.db` to read — the store is the daemon's, dialed — so an
+/// unreachable daemon simply yields no overlaps; the daemon-first
+/// attempt upstream has already said so by name. Stale-claim
+/// visibility beats nothing only when the store is reachable.
 fn local_brief_overlaps(
     repo_root: &Path,
     working_set: &[PathBuf],
 ) -> Vec<sovereign_code::brief::WorkInFlightEntry> {
-    let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-    let Some(sovereign_dir) = sovereign_cli_shared::repo::find_sovereign_dir(&cwd) else {
-        return Vec::new();
-    };
-    let mesh_db = sovereign_dir.join("mesh.db");
-    if !mesh_db.exists() {
-        return Vec::new();
-    }
-    let Ok(mesh_store) = sovereign_mesh::peer_adapter::MeshReplicatedKv::open(&mesh_db) else {
+    let Ok(mesh_store) = crate::mesh_kv_client::DaemonReplicatedKv::new() else {
         return Vec::new();
     };
     let node_id = crate::atlas_identity::atlas_node_id();

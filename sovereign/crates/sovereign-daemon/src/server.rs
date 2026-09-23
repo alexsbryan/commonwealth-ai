@@ -12,6 +12,7 @@ use crate::routes_edit_predictions;
 use crate::routes_inference;
 use crate::routes_internal;
 use crate::routes_knowledge;
+use crate::routes_mesh_kv;
 use crate::routes_oicp;
 use crate::routes_oicp_ingest;
 use crate::routes_ollama;
@@ -99,6 +100,11 @@ pub fn client_router_for(state: AppState, surface: ClientSurface) -> Router {
     // credential is read.
     let operator_routes: Router<AppState> = if surface.serves_operator_routes() {
         routes_internal::client_token_routes()
+            // The mesh-KV serving surface (fp-33): the workbench's atlas
+            // stores dial this instead of opening a mesh store directly.
+            // Operator-only — a claim store is local coordination, exactly
+            // like the token and guest-grant routes beside it.
+            .merge(routes_mesh_kv::router())
             .route(
                 "/internal/inference/warmup",
                 post(routes_internal::inference_warmup),

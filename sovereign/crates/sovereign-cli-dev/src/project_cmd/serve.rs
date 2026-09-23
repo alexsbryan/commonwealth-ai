@@ -481,23 +481,19 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
     ));
     // Work atlas — coordination layer for agents sharing this repo.
     // The serve path runs the GC loop and exposes the three claim
-    // tools alongside the code-intel surface. Per spec §10 the
-    // origin-remote MUST gate is checked at *boot*: a repo with no
-    // origin still gets a serve, but every `declare_scope` call
-    // fails with an actionable error rather than silently writing
-    // partial state.
-    let atlas_mesh_db = sovereign_dir.join("mesh.db");
-    if let Some(parent) = atlas_mesh_db.parent() {
-        let _ = std::fs::create_dir_all(parent);
-    }
-    let atlas_mesh_store = Arc::new(
-        sovereign_mesh::peer_adapter::MeshReplicatedKv::open(&atlas_mesh_db)
-            .or_else(|_| sovereign_mesh::peer_adapter::MeshReplicatedKv::in_memory())
-            .expect("work atlas mesh store"),
+    // tools alongside the code-intel surface. The store is the
+    // daemon's, dialed (fp-33) — there is no repo-local mesh.db;
+    // with the daemon down every claim operation reports the
+    // absence by name. Per spec §10 the origin-remote MUST gate is
+    // checked at *boot*: a repo with no origin still gets a serve,
+    // but every `declare_scope` call fails with an actionable error
+    // rather than silently writing partial state.
+    let atlas_mesh_store: Arc<dyn sovereign_work_atlas::ReplicatedKv> = Arc::new(
+        crate::mesh_kv_client::DaemonReplicatedKv::new().expect("work atlas mesh store client"),
     );
     let atlas_node_id = crate::atlas_identity::atlas_node_id();
     let atlas_store = Arc::new(sovereign_work_atlas::WorkAtlasStore::new(
-        Arc::clone(&atlas_mesh_store) as Arc<dyn sovereign_work_atlas::ReplicatedKv>,
+        Arc::clone(&atlas_mesh_store),
         atlas_node_id,
     ));
     let atlas_cfg_path = sovereign_cli_shared::dirs::work_atlas_toml();

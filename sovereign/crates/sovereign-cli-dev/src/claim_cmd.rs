@@ -1,14 +1,16 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! `svrn claim` — CLI surface for the work atlas.
 //!
-//! DAEMON-FIRST: the daemon's work-atlas store is the one peers,
+//! DAEMON-ONLY for state: the daemon's work-atlas store is the one peers,
 //! gossip, and CodeWatcher observations share, so every subcommand
-//! calls the daemon's MCP tools when it answers. The in-process
-//! repo-local `.sovereign/mesh.db` is a FALLBACK for daemon-down
-//! operation only, and says so loudly — a claim written there is
-//! invisible to every other process. (The previous header claimed the
-//! daemon and CLI share that file; they never did — the daemon's
-//! store is in-memory. Root-caused 2026-07-31.)
+//! calls the daemon's MCP tools when it answers. When the daemon is
+//! unreachable the subcommand proceeds against the daemon-DIALED store
+//! (`mesh_kv_client`), whose every operation reports the absence by
+//! name — since fp-33 there is no repo-local `mesh.db` to fall back
+//! to: a claim that cannot reach the daemon says so, it does not land
+//! in an island nobody else reads. (The previous header claimed the
+//! daemon and CLI share a repo-local file; they never did — the
+//! daemon's store is in-memory. Root-caused 2026-07-31.)
 //!
 //! Output is human-readable by default; `--format json` mirrors
 //! `svrn tools` for scripting.
@@ -16,9 +18,9 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use sovereign_mesh::peer_adapter::MeshReplicatedKv;
 use uuid::Uuid;
 
+use crate::mesh_kv_client::DaemonReplicatedKv;
 use sovereign_cli_shared::mcp_client::{daemon_tool_call, DaemonCallError};
 use sovereign_work_atlas::{
     model::{AgentKind, Privacy},
@@ -47,9 +49,9 @@ async fn daemon_first(tool: &str, args: serde_json::Value) -> DaemonFirst {
         }
         Err(DaemonCallError::Unreachable(_)) => {
             eprintln!(
-                "warning: daemon unreachable — using the repo-local store. Records here are \
-                 NOT visible to the daemon, MCP peers, or the mesh; re-declare once the \
-                 daemon is back if coordination matters."
+                "warning: daemon unreachable — the work-atlas store lives with the daemon, \
+                 so this subcommand will fail until it is back; re-run once it is up if \
+                 coordination matters."
             );
             DaemonFirst::Fallback
         }
@@ -408,7 +410,7 @@ async fn run_list(rest: &[String]) -> i32 {
     {
         DaemonFirst::Payload(p) => {
             let now = now_secs();
-            let my_node = sovereign_mesh::persist::resolve_self_node_id(
+            let my_node = sovereign_contracts::node_identity::resolve_self_node_id(
                 &sovereign_cli_shared::dirs::sovereign_root(),
             )
             .to_string();
@@ -804,21 +806,19 @@ fn open_atlas() -> Result<CliCtx, i32> {
             return Err(1);
         }
     };
-    let sovereign_dir = repo_root.join(".sovereign");
-    let _ = std::fs::create_dir_all(&sovereign_dir);
-    let mesh_path = sovereign_dir.join("mesh.db");
-    let mesh = match MeshReplicatedKv::open(&mesh_path) {
-        Ok(m) => m,
-        Err(e) => {
-            eprintln!("claim: mesh open {}: {e}", mesh_path.display());
-            return Err(1);
-        }
-    };
-    // Identity from the ROOT data dir with the daemon's precedence
-    // (node_id file → mesh.json → generate). The previous hardcoded
-    // `~/.svrnmesh/indexes` minted a SECOND node id for this
-    // workstation (2026-07-31).
-    let node_id = sovereign_mesh::persist::resolve_self_node_id(
+    // The store is the daemon's, dialed (fp-33): there is no repo-local
+    // mesh.db to open, and every operation a daemon-down session attempts
+    // reports the absence by name. Construction itself cannot fail on
+    // daemon presence.
+    let mesh = DaemonReplicatedKv::new().map_err(|e| {
+        eprintln!("claim: work-atlas store client: {e}");
+        1
+    })?;
+    // Identity from the ROOT data dir with the daemon's full precedence
+    // (node_id file → mesh.json → generate), now from the contracts home.
+    // The previous hardcoded `~/.svrnmesh/indexes` minted a SECOND node id
+    // for this workstation (2026-07-31).
+    let node_id = sovereign_contracts::node_identity::resolve_self_node_id(
         &sovereign_cli_shared::dirs::sovereign_root(),
     );
     let store = Arc::new(WorkAtlasStore::new(Arc::new(mesh), node_id));

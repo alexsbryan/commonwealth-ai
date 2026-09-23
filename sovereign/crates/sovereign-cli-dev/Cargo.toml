@@ -39,10 +39,10 @@ required-features = ["workbench"]
 # (no features) and small third-party crates the dispatcher already carries.
 # `InProcessCodeVerb` and everything it reaches must live inside that budget.
 #
-# WORKBENCH (default) is everything else — `sovereign-mesh` drags llama.cpp,
-# `sovereign-tools` drags arrow + parquet + the enrichment catalog,
-# `corpus-engine` drags the tree-sitter grammars. Linking those into a
-# dispatcher to move a metric is the failure this split refuses.
+# WORKBENCH (default) is everything else — `sovereign-tools` drags arrow +
+# parquet + the enrichment catalog, `corpus-engine` drags the tree-sitter
+# grammars, `sovereign-daemon` drags the serving cluster. Linking those into
+# a dispatcher to move a metric is the failure this split refuses.
 [dependencies]
 # ── Always-on: the thin, linkable surface ──
 # `converge_cmd`'s entire dependency surface. Read-only SQLite over the SCIP
@@ -64,12 +64,12 @@ sovereign-cli-shared = { workspace = true }
 # The measurement that put it here is still worth knowing: taking the HTTP
 # client directly rather than through `sovereign-inference` (which merely
 # re-exports it while linking llama.cpp unconditionally) saved 3.5 KB of a
-# 395 MB debug binary. llama.cpp still arrives transitively via
-# `sovereign-mesh`, which depends on `sovereign-inference` unconditionally
-# across 8 files of inference-serving guts. The workbench only sheds
-# llama.cpp when `sovereign-mesh` leaves its default build — which needs
-# `sovereign_mesh::projects` (the only thing the index path uses from it)
-# extracted to a leaf crate. Do not cite the swap as the size win.
+# 395 MB debug binary. `sovereign-mesh` — which pulls `sovereign-inference`
+# unconditionally across 8 files of inference-serving guts — left this
+# crate's dependency list with fp-33: the work-atlas surfaces dial the
+# daemon's `/v1/mesh/kv` routes (`mesh_kv_client`), and node identity comes
+# from `sovereign_contracts::node_identity`. The workbench no longer links
+# llama.cpp at all.
 # `dev-tools` (git archaeology in BriefTool) travels with
 # `sovereign-code` since the 2026-09-21 lift.
 sovereign-code = { workspace = true, features = ["treesitter", "dev-tools"] }
@@ -79,9 +79,9 @@ sovereign-tools = { workspace = true, features = [
 sovereign-enrichment-build = { workspace = true }
 sovereign-contracts = { workspace = true }
 sovereign-time = { workspace = true }
-sovereign-mesh = { workspace = true, features = ["treesitter"], optional = true }
 # The mesh host cluster (domains dm-daemon-mesh-edge): `project_cmd::serve`
-# mounts `mcp_router`, so it rides the same `workbench` gate as the mesh dep.
+# mounts `mcp_router`, so it rides the same `workbench` gate as the other
+# heavy optional deps.
 sovereign-daemon = { workspace = true, optional = true }
 # `project_cmd::cmd_serve` registers work-atlas claim handlers when
 # the daemon comes up; pulled in directly here rather than via
@@ -114,6 +114,9 @@ kernel-types = { workspace = true, features = ["wire-fixture"], optional = true 
 # `sovereign-cli`, so an always-on entry costs the dispatcher nothing new.
 # axum + tower-http serve the workbench's MCP HTTP surface and are gated.
 async-trait = { workspace = true }
+# `ReplicatedKv::set`'s value type, which `mesh_kv_client` implements the
+# trait in terms of (fp-33).
+bytes = { workspace = true }
 axum = { workspace = true, optional = true }
 tower-http = { workspace = true, optional = true }
 futures = { workspace = true }
@@ -123,7 +126,10 @@ tokio = { workspace = true }
 toml = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
-reqwest = { workspace = true }
+# `mesh_kv_client` — the sync `ReplicatedKv` port dials the daemon's
+# `/v1/mesh/kv` routes on reqwest's blocking client (fp-33; the
+# `sovereign-eval` feature-add precedent).
+reqwest = { workspace = true, features = ["blocking"] }
 uuid = { workspace = true }
 arc-swap = { workspace = true }
 dirs = "5"
@@ -153,7 +159,6 @@ sovereign-contracts = { workspace = true, features = ["test-fixtures"] }
 default = ["workbench"]
 workbench = [
     "dep:sovereign-tools",
-    "dep:sovereign-mesh",
     "dep:sovereign-daemon",
     "dep:sovereign-work-atlas",
     "dep:corpus-engine",

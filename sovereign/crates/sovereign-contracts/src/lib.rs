@@ -97,6 +97,14 @@ pub mod middleware;
 pub mod mobile_host;
 pub mod model_family;
 pub mod models_manifest;
+/// The node-identity FILES — the `node_id` file and the identity fields of
+/// `mesh.json`, with the ONE precedence decider every stamping surface shares.
+/// The files are cross-program contracts (the daemon writes them, every CLI
+/// surface reads them); moved here from `sovereign-mesh::persist` by
+/// five-programs fp-33 so the workbench learns which node it is without
+/// linking the mesh substrate. `sovereign_mesh::persist` re-exports the
+/// public items at their historical paths (ARCH §10.6).
+pub mod node_identity;
 /// The agent working-memory port — `AgentNotes`, the widened sibling of
 /// `recipe::notes::RecipeNotes`, so a program outside `code/` reads and writes
 /// notes without naming `corpus-engine-notes`.

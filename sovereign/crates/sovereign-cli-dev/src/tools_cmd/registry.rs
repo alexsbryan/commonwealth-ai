@@ -218,23 +218,15 @@ pub(super) async fn open_tools_registry() -> Result<ToolsEnv, String> {
             .declared(),
     ));
     // Work atlas — coordination layer for agents sharing the repo.
-    // Best-effort: `.sovereign/mesh.db` is the REPO-LOCAL atlas, and
-    // it is NOT the store a running daemon writes — that is the whole
-    // reason the note four lines down is true. `code_cmd.rs:1825` has
-    // the right framing (a fallback for when the daemon is down);
-    // this comment claimed the opposite and then contradicted itself
-    // in its own last sentence. Falling back to in-memory keeps the
-    // CLI usable in a fresh checkout, with the understanding that
-    // nothing the CLI writes here is visible to a separately-running
-    // daemon.
-    let mesh_db = sovereign_dir.join("mesh.db");
-    if let Some(parent) = mesh_db.parent() {
-        let _ = std::fs::create_dir_all(parent);
-    }
-    let mesh_store = Arc::new(
-        sovereign_mesh::peer_adapter::MeshReplicatedKv::open(&mesh_db)
-            .or_else(|_| sovereign_mesh::peer_adapter::MeshReplicatedKv::in_memory())
-            .map_err(|e| format!("work atlas mesh store: {e}"))?,
+    // The store is the daemon's, dialed (fp-33): claims declared
+    // through these tools land in the store the daemon serves and
+    // gossips from, not in a repo-local mesh.db nobody else read.
+    // With the daemon down, every claim operation reports the
+    // absence by name — the tools stay registered so `svrn tools
+    // list` still shows the surface.
+    let mesh_store: Arc<dyn sovereign_work_atlas::ReplicatedKv> = Arc::new(
+        crate::mesh_kv_client::DaemonReplicatedKv::new()
+            .map_err(|e| format!("work atlas mesh store client: {e}"))?,
     );
     // Identity MUST come from the ROOT data dir with the daemon's full
     // precedence (node_id file → mesh.json → generate). Resolving
@@ -243,7 +235,7 @@ pub(super) async fn open_tools_registry() -> Result<ToolsEnv, String> {
     // (2026-07-31).
     let node_id = crate::atlas_identity::atlas_node_id();
     let atlas_store = Arc::new(sovereign_work_atlas::WorkAtlasStore::new(
-        Arc::clone(&mesh_store) as Arc<dyn sovereign_work_atlas::ReplicatedKv>,
+        Arc::clone(&mesh_store),
         node_id,
     ));
     let atlas_cfg = sovereign_work_atlas::WorkAtlasConfig::defaults();

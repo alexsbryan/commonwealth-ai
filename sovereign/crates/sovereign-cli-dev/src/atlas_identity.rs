@@ -27,8 +27,12 @@ use kernel_types::NodeId;
 ///
 /// Always the ROOT data dir with the daemon's full precedence (`node_id` file
 /// → `mesh.json` → generate), matching what the daemon itself resolves in
-/// `bootstrap::resolve_self_node_id`. Do not inline this; a second spelling is
+/// `bootstrap::resolve_self_node_id`. The decider lives in
+/// `sovereign_contracts::node_identity` (moved there by fp-33 so this crate
+/// stops linking the mesh substrate); do not inline it, a second spelling is
 /// how the two broken call sites happened.
 pub(crate) fn atlas_node_id() -> NodeId {
-    sovereign_mesh::persist::resolve_self_node_id(&sovereign_cli_shared::dirs::sovereign_root())
+    sovereign_contracts::node_identity::resolve_self_node_id(
+        &sovereign_cli_shared::dirs::sovereign_root(),
+    )
 }
