@@ -42,10 +42,13 @@ the doc from their own machine and write into the same `ring-doc` namespace as
 me, in one order. The roster row is the load-bearing half: an act signed by a
 key no roster claims is a gap in the journal, not somebody's edit.
 
-*(`svrn ring host ring-doc --dir sovereign/apps/ring-doc --bind
-<room-address:port>` is the same declaration aimed at phones rather than
-members: it writes the door's address and the bundle into the daemon's config.
-The next step is the narrower half of that.)*
+*(One thing is set once per machine, not per app: the door's listen address,
+`[daemon] guest_bind` in `~/.svrnmesh/config.toml`. `svrn ring host <ns> --dir
+<bundle>` writes it — every interface on the door's port (`0.0.0.0:9744`),
+unless `--bind <addr:port>` names one — and the ADDRESS a guest link carries is
+derived per host, so a wildcard bind is never advertised. With that set, every
+app after the first is `publish` then a grant; the door reads the same
+registration and needs nothing declared per app.)*
 
 ## 3. I grant access to people who just have phones
 
