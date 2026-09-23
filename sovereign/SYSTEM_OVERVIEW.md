@@ -13,10 +13,10 @@ measurements, the orders — is
 [`SYSTEM_OVERVIEW_DETAIL.md`](./SYSTEM_OVERVIEW_DETAIL.md), which keeps this
 numbering, so `§4` here is `§4` there. Open it before changing something, to
 learn what already went wrong. Also [`HISTORY.md`](./HISTORY.md) (how the
-shape came to be), [`DEFAULTS_LEDGER.md`](./DEFAULTS_LEDGER.md) (everything
-shipped default-off or dark, with its flip condition and review-by date), and
-[`../quality/SIZE_DEBT_LEDGER.md`](../quality/SIZE_DEBT_LEDGER.md) (the
-arch-gate acceptance record).
+shape came to be) and [`DEFAULTS_LEDGER.md`](./DEFAULTS_LEDGER.md) (everything
+shipped default-off or dark, with its flip condition and review-by date). The
+arch-gate acceptance record is the baseline diff itself — see
+`quality/baselines/`; there is no separate ledger file.
 
 **This file has a ceiling and it is deliberate.** It reached 10.4k lines by
 accreting an incident log inside a map — single table cells ran three thousand
@@ -1240,8 +1240,8 @@ closed: a push range it cannot diff gates everything.
 
 **A ratchet failure is not fixed by `--update-baseline` on your working tree**
 — that absorbs your own growth along with everything else. Re-pin at
-`origin/main` and ledger the acceptance in
-[`../quality/SIZE_DEBT_LEDGER.md`](../quality/SIZE_DEBT_LEDGER.md).
+`origin/main` and say in the commit body what the lines bought: the baseline
+diff is the record, and there is no separate ledger file.
 `--tighten` is always safe.
 
 Concurrent agents serialize on `scripts/with-cargo-lock.sh`: cargo's package
@@ -1422,12 +1422,11 @@ than a surprise. A big file or a documented gap without an entry is a bug; one
 with an entry is sequenced work. When an entry completes its chronicle moves
 to [`HISTORY.md`](./HISTORY.md) and the row is dropped.
 
-**The live deferral tables and the full acceptance ledger are
-[`../quality/SIZE_DEBT_LEDGER.md`](../quality/SIZE_DEBT_LEDGER.md).** They
-left this file because they are an append-only record keyed to the arch-gate
-workflow — the gate tells you to add a row, and the rows accumulate forever —
-which is a ledger's job and not a map's. `quality/` is where the gate
-baselines already live.
+**The acceptance record is the arch-gate baseline diff in `quality/baselines/`;
+there is no separate ledger file.** The deferral tables left this file because
+they are an append-only record keyed to the arch-gate workflow — the gate tells
+you to re-pin, and the re-pin diff is the acceptance, which is a ledger's job
+and not a map's. `quality/` is where the gate baselines already live.
 
 When `cargo xtask arch-gate` reports a NEW oversized file, add a row there and
 re-baseline, or split the file. Three standing classes live in that ledger:
