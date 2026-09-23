@@ -40,6 +40,13 @@ on:
       tag:
         description: "Tag to attach the release to (e.g. cli-v0.1.0). Blank = workflow ref."
         required: false
+      intel:
+        description: "macOS Intel leg: self-hosted (needs the Intel Mac running ./run.sh) or skip (scripts/release-cli-local.sh cross-builds it into the same draft)."
+        type: choice
+        options:
+          - self-hosted
+          - skip
+        default: self-hosted
   # Callable by the manual "Release (manual)" orchestrator (release.yml) so one
   # button ships CLI + desktop together. `inputs.tag` is populated for both
   # workflow_dispatch and workflow_call; left blank, the version-check /
@@ -52,6 +59,11 @@ on:
         required: false
         type: string
         default: ""
+      intel:
+        description: "self-hosted | skip — see workflow_dispatch."
+        required: false
+        type: string
+        default: "self-hosted"
 
 # There was no concurrency control here either. The macos-arm64 leg bills at
 # 10x, so a duplicate or superseded run is real money for artifacts nobody
@@ -64,40 +76,58 @@ permissions:
   contents: write # create / upload to a GitHub Release
 
 jobs:
+  # The matrix is DATA, because one leg is not always runnable. GitHub retired
+  # the hosted macos-13 (Intel) image, so macos-x86_64 needs a self-hosted
+  # Intel Mac (manual-start: `./run.sh`; setup lives in the desktop
+  # RELEASING.md "macOS Intel (x86_64) — self-hosted runner" section). When
+  # that machine is not running, the leg queues indefinitely and the draft can
+  # never publish — so `intel: skip` drops it here, and
+  # scripts/release-cli-local.sh cross-builds the same target from an Apple
+  # Silicon Mac into this release's draft, regenerating SHA256SUMS across the
+  # CI-built sidecars. Linux x86_64 sits on ubuntu-22.04 (older glibc → runs
+  # on newer distros too). macos-arm64 was enabled 2026-07-02: landing's
+  # installer already maps M-series Macs to that target, so its ABSENCE 404'd
+  # every Apple Silicon install. Windows stays commented out: no leg yet,
+  # hosted or local.
+  setup:
+    name: plan the matrix
+    runs-on: ubuntu-22.04
+    outputs:
+      matrix: ${{ steps.m.outputs.matrix }}
+    steps:
+      - name: Matrix, from the intel input
+        id: m
+        shell: bash
+        run: |
+          set -euo pipefail
+          intel="${{ inputs.intel }}"
+          if [ "$intel" = "self-hosted" ]; then
+            cat > matrix.json <<'JSON'
+          {"platform":[
+            {"name":"linux-x86_64","runner":"ubuntu-22.04","target":"x86_64-unknown-linux-gnu"},
+            {"name":"macos-arm64","runner":"macos-14","target":"aarch64-apple-darwin"},
+            {"name":"macos-x86_64","runner":["self-hosted","macOS","X64"],"target":"x86_64-apple-darwin"}
+          ]}
+          JSON
+          else
+            cat > matrix.json <<'JSON'
+          {"platform":[
+            {"name":"linux-x86_64","runner":"ubuntu-22.04","target":"x86_64-unknown-linux-gnu"},
+            {"name":"macos-arm64","runner":"macos-14","target":"aarch64-apple-darwin"}
+          ]}
+          JSON
+          fi
+          echo "matrix<<MATRIX_EOF" >> "$GITHUB_OUTPUT"
+          cat matrix.json >> "$GITHUB_OUTPUT"
+          echo "MATRIX_EOF" >> "$GITHUB_OUTPUT"
+
   build:
     name: build / ${{ matrix.platform.name }}
+    needs: setup
     runs-on: ${{ matrix.platform.runner }}
     strategy:
       fail-fast: false
-      matrix:
-        platform:
-          # Linux x86_64 + native macOS Intel (self-hosted) are enabled. GitHub's
-          # hosted `macos-13` (Intel) hangs forever on "Waiting for a runner", so
-          # Intel runs on the SAME self-hosted Intel Mac as desktop-release.yml
-          # (labels self-hosted/macOS/X64). Manual-start: `./run.sh` before
-          # tagging. `release` is decoupled (`if: !cancelled()`) so a down runner
-          # can't block the Linux tarball. Runner setup lives in the desktop
-          # RELEASING.md "macOS Intel (x86_64) — self-hosted runner" section.
-          #
-          - name: linux-x86_64
-            runner: ubuntu-22.04 # older glibc → runs on newer distros too
-            target: x86_64-unknown-linux-gnu
-          - name: macos-x86_64
-            runner: [self-hosted, macOS, X64] # native Intel; start ./run.sh before tagging
-            target: x86_64-apple-darwin
-          # Enabled 2026-07-02: landing/install.sh already maps M-series Macs
-          # to this target, so its ABSENCE 404'd every Apple Silicon install.
-          # The old "validate locally first" note is retired by proxy —
-          # desktop-release has been building the same dep stack natively on
-          # this exact macos-14 image for weeks. `fail-fast: false` + the
-          # decoupled release job mean a failure here can't sink the other
-          # legs; validate with one workflow_dispatch run before tagging.
-          - name: macos-arm64
-            runner: macos-14
-            target: aarch64-apple-darwin
-          # - name: windows-x86_64
-          #   runner: windows-2022
-          #   target: x86_64-pc-windows-msvc
+      matrix: ${{ fromJSON(needs.setup.outputs.matrix) }}
 
     steps:
       - uses: actions/checkout@v7
@@ -201,7 +231,10 @@ jobs:
         # mold + clang: pinned as the Linux linker by .cargo/config.toml.
         # LunarG Vulkan SDK: Linux hardcodes llama-cpp-4's `vulkan` feature,
         # so ggml builds with GGML_VULKAN=ON and needs glslc/spirv/libvulkan.
-        # (Mirrors desktop-release.yml — keep in sync. No gtk: CLI bins only.)
+        # GTK/WebKit (2026-09-23): workspace-hack pulls tauri → wry → gdk-sys
+        # into EVERY member's build since the hakari move, so the old "CLI bins
+        # only, no gtk" claim stopped being true; run 35934299606 died on
+        # gdk-3.0.pc. Mirrors desktop-release.yml — keep in sync.
         run: |
           sudo apt-get update
           sudo apt-get install -y ca-certificates curl gnupg
@@ -212,6 +245,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             protobuf-compiler libprotobuf-dev cmake mold clang \
+            libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf \
             libvulkan-dev vulkan-headers spirv-headers spirv-tools shaderc
 
       - name: macOS build deps

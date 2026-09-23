@@ -51,6 +51,14 @@ on:
           - both
           - cli
           - desktop
+      intel:
+        description: "CLI macOS Intel leg: self-hosted (needs the Intel Mac running ./run.sh) or skip (fill it with scripts/release-cli-local.sh)."
+        required: true
+        default: self-hosted
+        type: choice
+        options:
+          - self-hosted
+          - skip
 
 permissions:
   contents: write # push the bump commit + tags; reused workflows create draft Releases
@@ -165,6 +173,7 @@ jobs:
     uses: ./.github/workflows/cli-release.yml
     with:
       tag: cli-v${{ needs.guard.outputs.version }}
+      intel: ${{ inputs.intel }}
     secrets: inherit
 
   desktop:
