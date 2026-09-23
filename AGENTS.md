@@ -248,7 +248,7 @@ work_in_flight(scope="<symbol-or-path>", match_mode="symbol" | "file")
 
 Symbol mode matches SCIP symbol IDs and explicit claims. File mode matches file paths (with prefix matching) and is the right pick for "is anyone editing this file right now?" — observations are file-level in Phase 2.
 
-If the result has live `claims` or `active`-grade `observations`: STOP and tell the user "node <X> is currently working on <scope> with intent <Y>." Don't silently proceed — the whole point of the atlas is to surface this before duplicate work happens.
+Read `branch_relation` before stopping. `same` (a peer on YOUR branch) is a real collision: STOP and tell the user "node <X> is currently working on <scope> on this branch with intent <Y>." `other` (a peer on a DIFFERENT branch) is awareness, not a lease — their work cannot collide with your working tree until one branch merges, so name it in one line ("node <X> has work on <scope> on branch <B>") and proceed; refusing on it stalls work that had nothing to collide with (watched 2026-09-23). `unknown` means a branch is missing on one side: say so, never round it to `same`, and never refuse on it. The tool returns `caller_branch` — what the relations were measured against — precisely so this is a measured fact, not a guess.
 
 **When to declare.** Use `declare_scope(symbols, intent, ttl_seconds?)` whenever you start work that:
 - Will take longer than ~5 minutes (peers querying within that window need to see your claim).

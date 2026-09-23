@@ -106,6 +106,19 @@ impl DeclareScopeTool {
             )
             .map_err(map_err)?;
 
+        // The branch at DECLARATION, not at daemon boot. The session row is
+        // reused across declarations by design (idempotent on the identity
+        // triple), so without this a session born on `main` kept saying
+        // `main` after a `git switch` — and `work_in_flight` classifies
+        // every reader against that value (2026-09-23: a feature-branch
+        // claim read as a lease on main). One reader, one write: the repo
+        // is the source, and this is the moment a claim is stamped.
+        if let Some(branch) = sovereign_contracts::git::current_branch(&self.repo_root) {
+            self.store
+                .refresh_session_branch(session.session_id, &branch)
+                .map_err(map_err)?;
+        }
+
         // Phase 1: SCIP resolution deferred. Store the user's string
         // in `file_path` so subsequent `work_in_flight` queries find
         // it (see `matches_scope` fallback in `store.rs`). Phase 2

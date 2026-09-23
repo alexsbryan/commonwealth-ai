@@ -83,18 +83,32 @@ def touches(scope):
     scope = scope.rstrip("/")
     return any(f == scope or f.startswith(scope + "/") or scope.startswith(f)
                for f in staged)
+def relation_note(entry):
+    # Branching decides whether the warning is a lock or awareness. `other`
+    # means the peer's work is on a different branch: it cannot collide with
+    # THIS working tree, so it is named and the commit proceeds (2026-09-23:
+    # a cross-branch claim was read as a lease and stalled a session).
+    rel = entry.get("branch_relation")
+    br = entry.get("branch")
+    if rel == "other":
+        return f" · branch {br} (other branch — awareness, not a lock)"
+    if rel == "same":
+        return f" · branch {br} (SAME branch — real collision)"
+    return " · branch unknown (not judged — do not read as a lock)"
 warns = []
 for c in atlas.get("claims", []):
     if not is_self(c):
         for s in c.get("scopes", []):
             if touches(s):
                 warns.append(f"  claim   {s}  ({c.get('node_id','?')}) — "
-                             f"{c.get('intent','')[:90]}")
+                             f"{c.get('intent','')[:90]}"
+                             f"{relation_note(c)}")
                 break
 for o in atlas.get("observations", []):
     if not is_self(o) and o.get("file_path", "") in staged:
         warns.append(f"  {o.get('confidence','?'):7} {o['file_path']}  "
-                     f"({o.get('node_id','?')}, {o.get('event_count',0)} edits)")
+                     f"({o.get('node_id','?')}, {o.get('event_count',0)} edits)"
+                     f"{relation_note(o)}")
 if warns:
     print("work-atlas WARNING (advisory, commit proceeds): peers are on "
           "files in this commit —")

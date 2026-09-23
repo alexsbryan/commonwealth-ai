@@ -169,6 +169,31 @@ impl WorkAtlasStore {
         )
     }
 
+    /// Refresh the branch recorded on `session`. Both write paths
+    /// (declaration, observation) call this before stamping their record:
+    /// a session outlives a `git switch`, and a record whose owner says
+    /// `main` while their tree is on a feature branch mis-classifies
+    /// every reader that compares against it — 2026-09-23, where a
+    /// cross-branch claim read as a lease on main and stalled a session.
+    /// No-op when the branch is already current; a session that has since
+    /// dropped is not an error here (the record it belongs to is about to
+    /// be written under the same identity anyway).
+    pub fn refresh_session_branch(
+        &self,
+        session_id: Uuid,
+        branch: &str,
+    ) -> Result<(), WorkAtlasError> {
+        let Some(mut rec) = self.get_session(session_id)? else {
+            return Ok(());
+        };
+        if rec.current_branch.as_deref() == Some(branch) {
+            return Ok(());
+        }
+        rec.current_branch = Some(branch.to_string());
+        rec.last_activity_at = now_secs();
+        self.put_session(&rec)
+    }
+
     pub fn get_session(&self, session_id: Uuid) -> Result<Option<SessionRecord>, WorkAtlasError> {
         for app_id in [Privacy::Public.app_id(), Privacy::Private.app_id()] {
             let key = format!("session:{session_id}");
@@ -567,6 +592,50 @@ mod tests {
         use commonwealth_state::peer_preferences::is_gossip_excluded;
         assert!(is_gossip_excluded(Privacy::Private.app_id()));
         assert!(!is_gossip_excluded(Privacy::Public.app_id()));
+    }
+
+    /// The branch a session records must follow the tree, not the daemon
+    /// boot: a `git switch` mid-session left every later record classified
+    /// against the branch the session was born on (2026-09-23).
+    #[test]
+    fn refresh_session_branch_updates_on_change_and_no_ops_otherwise() {
+        let s = mk_store();
+        let rec = sample_session(Privacy::Public);
+        let id = rec.session_id;
+        s.put_session(&rec).unwrap();
+        assert_eq!(
+            s.get_session(id)
+                .unwrap()
+                .unwrap()
+                .current_branch
+                .as_deref(),
+            Some("main")
+        );
+
+        // Same branch: no-op, still main.
+        s.refresh_session_branch(id, "main").unwrap();
+        assert_eq!(
+            s.get_session(id)
+                .unwrap()
+                .unwrap()
+                .current_branch
+                .as_deref(),
+            Some("main")
+        );
+
+        // Different branch: the session row follows.
+        s.refresh_session_branch(id, "feature/rail").unwrap();
+        assert_eq!(
+            s.get_session(id)
+                .unwrap()
+                .unwrap()
+                .current_branch
+                .as_deref(),
+            Some("feature/rail")
+        );
+
+        // A session that is gone is not an error.
+        s.refresh_session_branch(Uuid::new_v4(), "main").unwrap();
     }
 
     #[test]
