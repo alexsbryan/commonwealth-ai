@@ -74,5 +74,15 @@ required-features = ["iroh"]
 name = "media_bridge_bench"
 required-features = ["iroh"]
 
+# The starter example, not a bench: a key, a dial ticket, one ALPN, and the
+# caller's verified key arriving at the service as a header. `serve` prints a
+# ticket; `dial` reaches it by Ed25519 key; `serve --admit <dialer-pubkey>`
+# closes the gate to every other key. This is the file to read before writing
+# a peer.
+[[example]]
+name = "hello_mesh"
+path = "examples/hello_mesh.rs"
+required-features = ["iroh"]
+
 [lints]
 workspace = true
