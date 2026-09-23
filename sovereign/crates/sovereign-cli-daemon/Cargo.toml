@@ -44,7 +44,6 @@ sovereign-mesh = { workspace = true, features = ["treesitter"] }
 # path + rpc-worker flag parser (`startup`, `bootstrap`), and doctor's
 # containment guard (`build::containment`).
 sovereign-daemon = { workspace = true, features = ["treesitter"] }
-corpus-engine-watchers = { workspace = true, features = ["treesitter"] }
 # The rented-pod modules lifted out of sovereign-mesh (domains REVIEW-audit-3);
 # reached directly rather than through sovereign-mesh's shim.
 # The scheduler half lifted out of sovereign-mesh (domains REVIEW-build-sched-move);

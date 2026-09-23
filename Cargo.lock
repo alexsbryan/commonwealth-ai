@@ -12226,7 +12226,6 @@ dependencies = [
  "async-trait",
  "axum",
  "corpus-engine-scip",
- "corpus-engine-watchers",
  "corpus-index",
  "dirs 5.0.1",
  "futures",

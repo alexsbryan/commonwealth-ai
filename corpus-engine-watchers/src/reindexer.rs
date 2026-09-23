@@ -1491,28 +1491,9 @@ fn working_tree_dirty(root: &Path) -> bool {
     }
 }
 
-/// Read the current `HEAD` SHA of the repository at `root`.
-/// `None` when `root` isn't a git repository or `git` isn't on
-/// PATH (in which case the git-poll signal becomes a no-op and
-/// freshness falls back to FS + lazy).
-pub fn read_git_head(root: &Path) -> Option<String> {
-    let out = std::process::Command::new("git")
-        .arg("rev-parse")
-        .arg("HEAD")
-        .current_dir(root)
-        .output()
-        .ok()?;
-    if !out.status.success() {
-        return None;
-    }
-    let s = String::from_utf8(out.stdout).ok()?;
-    let trimmed = s.trim().to_string();
-    if trimmed.is_empty() {
-        None
-    } else {
-        Some(trimmed)
-    }
-}
+// `read_git_head` lives in the contracts leaf (`sovereign_contracts::git`)
+// so freshness readers need not name this crate (fp-23).
+pub use sovereign_contracts::git::read_git_head;
 
 #[cfg(test)]
 mod tests {

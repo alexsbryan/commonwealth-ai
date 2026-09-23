@@ -2023,9 +2023,9 @@ pub async fn start_freshness_pipeline(
     // come back up without the user running `project register`
     // again. Missing / unreadable registry is non-fatal — the
     // daemon runs happily with zero registered projects.
-    let registry = corpus_engine_watchers::projects::Registry::load().unwrap_or_else(|e| {
+    let registry = sovereign_contracts::watcher_projects::Registry::load().unwrap_or_else(|e| {
         tracing::warn!(error = %e, "could not load project registry; starting empty");
-        corpus_engine_watchers::projects::Registry::default()
+        sovereign_contracts::watcher_projects::Registry::default()
     });
     for entry in registry.entries() {
         reindexer.register(entry.clone()).await;

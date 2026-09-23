@@ -5,7 +5,7 @@
 //! `mcp_router` / `mesh_http` / `admin_http`. All routes are
 //! loopback-only (see [`crate::loopback_guard`]) and intentionally
 //! thin — they translate JSON payloads into calls on the shared
-//! [`Reindexer`] and [`corpus_engine_watchers::projects::Registry`].
+//! [`Reindexer`] and [`sovereign_contracts::watcher_projects::Registry`].
 //!
 //! Routes:
 //! - `GET  /v1/projects`                              — list + per-watcher status
@@ -23,7 +23,7 @@ use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 
 use crate::loopback_guard::{LocalOnly, LoopbackRouter};
-use corpus_engine_watchers::projects::{
+use sovereign_contracts::watcher_projects::{
     ProjectEntry, Registry, WatcherKind, WatcherStatus, WatcherToggles,
 };
 use corpus_engine_watchers::reindexer::{RebuildReason, Reindexer};

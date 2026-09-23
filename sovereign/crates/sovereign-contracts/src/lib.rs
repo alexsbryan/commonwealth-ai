@@ -158,6 +158,10 @@ pub mod venue;
 /// `sovereign-serving-host` (fp-16) so the port vocabulary sits at the
 /// contract floor the daemon and the serving process both name.
 pub mod venue_host;
+/// The watcher `projects` on-disk schema — `ProjectEntry`, `Registry` and
+/// the status enums (fp-2, §12 decision 3). Live watcher state stays in
+/// `corpus-engine-watchers`.
+pub mod watcher_projects;
 /// The ephemeral worker pod's owner↔pod wire protocol — bootstrap blob,
 /// worker token, seed-derived cert and the token verifier. A shared leaf
 /// rather than `sovereign-pods` (Compute's crate) because the protocol has

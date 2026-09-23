@@ -33,3 +33,28 @@ pub fn current_branch(repo_root: &Path) -> Option<String> {
         Some(s)
     }
 }
+
+/// Read the current `HEAD` SHA of the repository at `root`.
+/// `None` when `root` isn't a git repository or `git` isn't on
+/// PATH (in which case the git-poll signal becomes a no-op and
+/// freshness falls back to FS + lazy).
+pub fn read_git_head(root: &Path) -> Option<String> {
+    let out = std::process::Command::new("git")
+        .arg("rev-parse")
+        .arg("HEAD")
+        .current_dir(root)
+        .output()
+        .ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    let s = String::from_utf8(out.stdout).ok()?;
+    let trimmed = s.trim().to_string();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed)
+    }
+}
+
+

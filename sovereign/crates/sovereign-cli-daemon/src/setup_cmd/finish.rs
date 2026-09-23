@@ -233,7 +233,7 @@ fn write_opencode_config(client_port: u16) {
 /// dotfiles repo in the home directory is a real shape, and registering
 /// it would set the daemon to index everything the user owns.
 fn register_setup_repo() {
-    use corpus_engine_watchers::projects::{ProjectEntry, Registry};
+    use sovereign_contracts::watcher_projects::{ProjectEntry, Registry};
 
     let root = sovereign_cli_shared::repo::find_repo_root().map(|r| r.canonicalize().unwrap_or(r));
     let home = sovereign_core::rebrand::user_home().map(|h| h.canonicalize().unwrap_or(h));
@@ -354,7 +354,7 @@ impl Registration {
 fn decide_registration(
     root: Option<&Path>,
     home: Option<&Path>,
-    registry: &corpus_engine_watchers::projects::Registry,
+    registry: &sovereign_contracts::watcher_projects::Registry,
 ) -> Registration {
     let Some(root) = root else {
         return Registration::NotARepo;
@@ -381,7 +381,7 @@ fn decide_registration(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use corpus_engine_watchers::projects::{ProjectEntry, Registry};
+    use sovereign_contracts::watcher_projects::{ProjectEntry, Registry};
 
     fn registry_with(entries: &[(&str, &str)]) -> Registry {
         let mut r = Registry::default();

@@ -32,7 +32,8 @@ use futures::FutureExt;
 use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
 
-use corpus_engine_watchers::projects::{ProjectState, WatcherKind, WatcherStatus};
+use corpus_engine_watchers::projects::ProjectState;
+use sovereign_contracts::watcher_projects::{WatcherKind, WatcherStatus};
 
 /// Crash count past which the supervisor stops auto-restarting.
 /// Five gives room for the typical "I just changed my script and
