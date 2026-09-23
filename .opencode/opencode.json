@@ -12,7 +12,16 @@
       "/Users/alexsbryan/dev/commonwealth-ai/.sovereign/*": "allow",
       "/home/alexbryan/.svrnmesh/ralph/*": "allow",
       "/home/alexbryan/dev/commonwealth-ai/ralph/*": "allow",
-      "/home/alexbryan/dev/commonwealth-ai/.git/info/*": "allow"
+      "/home/alexbryan/dev/commonwealth-ai/.git/info/*": "allow",
+      "/var/folders/*": "allow",
+      "/Users/alexsbryan/dev/*": "allow",
+      "/Users/alexsbryan/.cargo/*": "allow",
+      "/Users/alexsbryan/.rustup/*": "allow",
+      "/Users/alexsbryan/.cache/*": "allow",
+      "/Users/alexsbryan/.svrnmesh/*": "allow",
+      "/Users/alexsbryan/.sovereign/*": "allow",
+      "/Users/alexsbryan/Library/LaunchAgents/*": "allow",
+      "/opt/homebrew/*": "allow"
     }
   },
   "plugin": [
