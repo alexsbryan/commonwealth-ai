@@ -33,6 +33,7 @@
 
 use std::time::Duration;
 
+use mesh_join_vocab::deep_link::{parse_join_argument, DeepLink};
 use sovereign_core::setup_config::{DataSection, NodeSection, SetupConfig};
 
 use super::{run_config_path, run_data_dir, Opts};
@@ -226,7 +227,7 @@ async fn prove_a_served_turn(client: &reqwest::Client, v1: &str) -> Result<Strin
 /// entry node that is not a mesh member, most often a daemon on this same
 /// machine.
 pub(super) async fn run_terminal_setup(entry_raw: &str, opts: &Opts) -> i32 {
-    if let Some(link) = sovereign_mesh::deep_link::parse_join_argument(entry_raw) {
+    if let Some(link) = parse_join_argument(entry_raw) {
         return run_terminal_join(entry_raw, link, opts).await;
     }
     run_terminal_address(entry_raw, opts).await
@@ -234,11 +235,7 @@ pub(super) async fn run_terminal_setup(entry_raw: &str, opts: &Opts) -> i32 {
 
 /// The join-link path: join the mesh, find the node that holds the models,
 /// bind its identity, prove a turn.
-async fn run_terminal_join(
-    raw: &str,
-    link: sovereign_mesh::deep_link::DeepLink,
-    opts: &Opts,
-) -> i32 {
+async fn run_terminal_join(raw: &str, link: DeepLink, opts: &Opts) -> i32 {
     use std::io::Write as _;
 
     println!();

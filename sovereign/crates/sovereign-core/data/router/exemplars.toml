@@ -447,7 +447,7 @@ query = "What does ATOS stand for in our system?"
 #
 # SUPERSEDED 2026-07-29 — that "zero false positives" claim did not
 # survive a bigger bank. On the 11 locator cases in
-# `bench/routing/calibration/axes_v1.toml`, the shipped gate
+# `crates/sovereign-core/data/calibration/axes_v1.toml`, the shipped gate
 # (0.500/0.020) fired on TWO archive-recall questions, and no
 # (min_sim, min_margin) pair existed that cleared them while keeping
 # the true positives. `router fit --axis locator --explain` attributed
@@ -1478,7 +1478,7 @@ query = "Give me a funny short story about a robot learning to garden."
 # ── The measurement that motivated this block ──
 #
 # `sovereign router fit --axis intent` against
-# `bench/routing/calibration/axes_v1.toml`: the shipped gate owned
+# `crates/sovereign-core/data/calibration/axes_v1.toml`: the shipped gate owned
 # 3 of 40 cases — 7.5% coverage, 35% accuracy, 26 missed. The other
 # 92.5% fell through to the LLM Pass-1 classifier, which is where the
 # routing bench's 32 misroutes were being made (18 of them landing on

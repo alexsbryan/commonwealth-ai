@@ -124,10 +124,9 @@ const UNSHARED_RECIPES: &[&str] = &[
 /// 2026-08-25 exists and is driven end-to-end by
 /// `sovereign-mesh/tests/turn_surface.rs`.
 const COMMISSIONING_PROCESSES: &[&str] = &[
-    // THE TARGET. `sovereign daemon run` — the process §3.5 says should be the
-    // only one on this list. It arrived 2026-08-25 (phase 5c); before that the
-    // daemon held every ingredient of an answer and served none.
-    "sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/mod.rs",
+    // THE TARGET. `sovereign daemon run` — the same process; commissioning
+    // moved into sovereign-daemon's boot.rs at the de-embed (2026-09-21).
+    "sovereign/crates/sovereign-daemon/src/daemon_cmd/boot.rs",
     // `svrn chat`. On the shared recipe since 2026-08-25, so what remains is a
     // surface conversion rather than a rewrite: it already refuses to start
     // without a daemon (`probe_or_bail` against `GET /v1/models`) and its

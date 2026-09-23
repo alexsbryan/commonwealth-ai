@@ -159,7 +159,7 @@ crates/
 ├── sovereign-runtime-recipe # THE recipe that commissions a `Runtime` — all four hosts are on it
 ├── sovereign-turn-client    # THE client half of the turn protocol + reachability (`ServingHost`)
 ├── sovereign-mesh           # In-process cmnwlth embed; roster, rail, identity, gossip/ring loops
-├── sovereign-daemon         # The node's host crate — assembly, surface shells, edge, adapters
+├── sovereign-daemon         # The node's host crate — assembly, surface shells, edge, adapters; cross-package MeshStore/work-atlas integration tests
 ├── sovereign-peer-wire      # Wire types both ends of an internal exchange must spell alike
 ├── sovereign-compute        # Supervised compute-child boundary — crash isolation, not parallelism
 ├── sovereign-pods           # Compute's remote isolation — leasing a rented machine
@@ -169,7 +169,7 @@ crates/
 ├── sovereign-server         # Axum REST + WebSocket, multi-tenant (the phone-facing host)
 ├── sovereign-desktop        # Tauri 2 + Svelte 5
 ├── sovereign-cli            # User-facing dispatcher — execs into sibling binaries
-├── sovereign-cli-shared     # Shared lib (dirs, repo, help, prompts, tracing init, cli-contract)
+├── sovereign-cli-shared     # Shared lib (dirs, repo, help, prompts, tracing init, cli-contract; rail client uses the rail-core wire leaf)
 ├── sovereign-cli-daemon     # Long-running host + lifecycle; owns Windows GPU backend selection
 ├── sovereign-cli-dev        # Workbench: ATOS + project lifecycle + code intel + tools
 ├── sovereign-cli-llm        # Model interaction + heavy retrieval (chat/bench/eval/atlas/mesh/ring/job)
@@ -629,7 +629,7 @@ embed cache keys the instruction into its hash. Per-turn embed count is three.
 
 `svrn router fit` is the calibration surface, sweeping exhaustively with
 candidate thresholds at midpoints between observed scores, against
-`bench/routing/calibration/axes_v1.toml` — a bank authored to fail somewhere
+`crates/sovereign-core/data/calibration/axes_v1.toml` — a bank authored to fail somewhere
 (74 cases, 32 `expect = "abstain"`). Two guards keep it honest: a margin floor
 clamped to ≥ 0, and `FitReport::underpowered()` on any axis with fewer than
 five cases per class. **The command writes no constant** — it names the

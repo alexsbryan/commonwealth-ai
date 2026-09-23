@@ -194,28 +194,6 @@ fn alias_amend() {
 }
 
 #[test]
-fn alias_design() {
-    require_siblings!();
-    help_runs(&["design"]);
-    banner_fires(
-        &["project", "design", "--help"],
-        "svrn project design",
-        "svrn design",
-    );
-}
-
-#[test]
-fn alias_plan() {
-    require_siblings!();
-    help_runs(&["plan"]);
-    banner_fires(
-        &["project", "plan", "--help"],
-        "svrn project plan",
-        "svrn plan",
-    );
-}
-
-#[test]
 fn alias_serve() {
     require_siblings!();
     help_runs(&["serve"]);

@@ -15,12 +15,10 @@
 //! same invariant end to end); repeating it here would cost two tokio runtimes
 //! and a rail per test to re-assert somebody else's mechanism.
 //!
-//! Relocated VERBATIM 2026-09-22 from
-//! `sovereign/crates/sovereign-work-atlas/tests/cross_node.rs` (fp-22, the
-//! tests-relocation half): a capability crate's tests do not pin the mesh's
-//! own replication behaviour, so they live beside the store that implements
-//! it. The port-level counterparts over `SoloReplicatedKv` remain in
-//! `sovereign/crates/sovereign-work-atlas/tests/port_fake.rs`.
+//! This integration test lives in the daemon's test host: it is the program
+//! that already links both `commonwealth-state` and `sovereign-work-atlas`.
+//! Store-only tests stay beside MeshStore; port-level counterparts over
+//! `SoloReplicatedKv` stay in `sovereign-work-atlas/tests/port_fake.rs`.
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -47,10 +45,8 @@ use sovereign_work_atlas::WorkAtlasStore;
 /// only worth asserting against them.
 ///
 /// This is the same delegation `sovereign_mesh::peer_adapter::MeshReplicatedKv`
-/// performs, and it is repeated here because this crate cannot reach that one:
-/// `sovereign-mesh` sits in the `mesh-api` layer, above `capabilities`, and
-/// the arrow only points down. Twenty lines in a test file is the cheaper
-/// half of that trade.
+/// performs. The fixture binds the store directly so no daemon or mesh
+/// transport needs to run for these outbox/projection assertions.
 struct MeshPeer(Arc<MeshStore>);
 
 impl MeshPeer {

@@ -324,10 +324,10 @@ five-way partition plus the filesystem rules gives 232. The earlier figure was
 not wrong so much as narrower — it counted normal dependency edges only, which
 is the same undercount the deleted script carried.
 
-**Step 10 — de-embed.** Fourteen construction sites of `EmbeddedDaemon`
-outside `sovereign-daemon` become one dial through `sovereign-turn-client`.
+**Step 10 — de-embed.** Construction sites of `EmbeddedDaemon`
+outside `sovereign-daemon` become dials through `sovereign-turn-client`.
 Done when `grep -rn EmbeddedDaemon sovereign/crates --include=*.rs` returns
-only the `cmnwlth` binary's own main.
+only the `svrn` daemon binary's own main (see the §11 correction).
 
 **Step 11 — size lock.** `cargo xtask size-gate --tighten`, commit the
 baseline, promote size-gate to blocking in `scripts/pre-push.sh`. Every push
@@ -902,16 +902,33 @@ refusal named the chain, which is the value.
   it clears zero gate count. The edge is carried by 18 others: `rpc_worker_main`
   (lib.rs:162), `llama_logs` (lib.rs:130), `hardware::detect_hardware`
   (fim.rs:45, needs llama.cpp), `capacity` (vram_plan.rs:22), `smoketest`.
-  Fix shape: the daemon dials rpc-worker/llama-log/hardware-detect over HTTP
-  (§4 rule 2) rather than relocating a catalog module.
+  The fp-25 row's proposed daemon dial for hardware detection is FALSE for
+  first run: `setup_cmd/mod.rs:120-130` serves `setup --plan --json` before a
+  daemon or config exists; `daemon_cmd/mod.rs:201-239` gates daemon startup
+  on that setup. The post-setup hardware route already exists in
+  `sovereign-daemon/src/assets_http.rs:52,77-91`; the daemon binary already
+  owns an RPC-worker entry (`sovereign-daemon/src/bin/sovereign-daemon.rs:64`). Preserve the
+  first-run standalone setup surface, then separate any post-setup dials from
+  binary ownership before removing the cli-daemon inference link. A daemon
+  route cannot serve a setup command that runs before the daemon.
+
+- **`sovereign-tools -> sovereign-enrichment-catalog`** (fp-28): the TSV's
+  `list_enriched_corpora_in` reader-port premise has zero callers in tools;
+  `sovereign-daemon/src/enrich_http.rs:61` is its caller. Tools instead load
+  full configs (`atlas_context_manager.rs:57`,
+  `local_corpus/atlas_dispatch.rs:83`) and constructs one for watched folders
+  (`local_corpus/watched/enrich.rs:50,98-125`). A list-only trait would leave
+  the dependency red. Reclassify those reads and the writer before cutting.
 
 ## 12. The decision sheet — front-loaded so implementation is mechanical
 
-`docs/FIVE_PROGRAMS_DECISIONS.tsv` is the whole remaining 80, one row per edge:
+`docs/FIVE_PROGRAMS_DECISIONS.tsv` records the §12 edge inventory, one row per edge:
 source, target, refs, use shape, fix shape, missing capability, prerequisite,
 behaviour delta, the ONE decision, effort. It was produced by three read-only
 scouts over the gate output; it is data, not prose, and it replaces re-probing.
-**Every row's fix is already classified; what remains is the decision column.**
+The fp-25 and fp-28 premise checks (§11) found two misclassified fix shapes;
+fp-28's actual writer/reader boundary is still an open decision. Check each
+row's premise against its live callers before using it as a mechanical task.
 
 ### The classes (by fix shape, not by source crate)
 
@@ -964,6 +981,29 @@ substrate is not. So: rail wire types (`RailAct`/`Admission`/`Roster`/`Payload`)
 notes DTO set move to contracts; the crates that produce them stay where they
 are. The scip promotion already proved the mechanism (7 edges, one row) — but it
 was legitimate there because scip is a format/read port, not a store (11).
+
+**3a. The third vocabulary owner, and the N+1 ladder (operator-approved
+2026-09-23).** Decision 3 named two vocabulary owners; `mesh-join-vocab` is the
+third, admitted because the join-key + deep-link format must be named by
+`commonwealth-discovery` and `commonwealth-rails`, and the
+`commonwealth-discovery/rails → sovereign-*` forbid rows (no except) wall every
+sovereign-named home off from them. This is the ladder an N+1 feature follows —
+first match wins:
+
+1. One program uses it → that program's crates (§2's table; `boundary-gate`
+   enforces the map).
+2. Two or more programs speak it on a wire → shared vocabulary:
+   - federation wire (what a node advertises to strangers) → `oicp-types`;
+   - content identity/provenance, brand-free atoms → `kernel-types`;
+   - svrn serving contract (turn/wire DTOs, ports) → `sovereign-contracts`;
+   - a format both families speak that contracts CANNOT host → a new neutral
+     leaf (`mesh-join-vocab` precedent). Operator decision, requiring all
+     three: a named refusal of each existing home, the two programs that share
+     the vocabulary, and the leaf count shown in the burn-down;
+   - none of these → it is not vocabulary: dial, port trait, or split (the
+     class table below). Never a leaf. The leaf test: no fs, no store, and a
+     dep budget a third-party lifter would pay anyway.
+3. A leaf stays honest by the same test re-applied at every later touch.
 
 **4. The replicated store: cmnwlth owns the disk; the daemon keeps a read-through
 cache and dials.** Principle 12, second clause verbatim: a gap in one thing is
@@ -1089,18 +1129,17 @@ authority).**
 
 ### Singletons
 
-- [ ] `sovereign-core/src/router_calibration.rs:1253` embeds
-      `bench/routing/calibration/axes_v1.toml`. Moving the bank breaks
-      `router fit`'s `DEFAULT_BANK_DIR` `read_dir` plus two committed baselines
-      and a python fitter; moving the check to `xtask` means a second
-      `parse_bank` (§8). Third option: relocate the whole routing-calibration
-      corpus into `sovereign-core/data/calibration/` and repoint
-      `DEFAULT_BANK_DIR` — `baseline_dir_for_bank` keeps yielding
-      `calibration-fit/` if the directory keeps the name `calibration`.
-- [ ] `sovereign-code → corpus-engine` (dev) is `tests/e2e_code_intel.rs`
-      building a real `CorpusEngine` and ingesting a recipe. Faking it makes the
-      e2e vacuous, and §18.1 says that is worse than the red line. It needs a
-      package decision, not a cut.
+- [x] `sovereign-core/src/router_calibration.rs:1253` reads the one bank now
+      inside `sovereign-core/data/calibration/` (fp-49). `router fit` and the
+      fitter point at the new path; the `calibration-fit/` baseline key stays.
+- [x] `sovereign-code → corpus-engine` (dev) — CLOSED fp-51 (2026-09-23):
+      `tests/e2e_code_intel.rs` moved WHOLE to `sovereign-daemon/tests/main/`
+      (the daemon already links both crates; fixtures are inline TempDir
+      strings, nothing faked, no path rewrites); the dead
+      `exercise_code_tools` example deleted with its deletion-manifest entry;
+      sovereign-code drops the corpus-engine/arrow/parquet/filetime dev-deps.
+      The `treesitter` cfg stays correct: the gate scripts resolve
+      `sovereign-daemon/treesitter`. boundary-gate 70 → 69.
 - [ ] Two `ScoredChunk` structs: `sovereign-contracts::types`
       (`{chunk: DocumentChunk, score}`, deliberately not serializable) and
       `corpus-index::types` (flattened, serializable). Possibly a deliberate
@@ -1117,7 +1156,8 @@ authority).**
 
 The shared-leaf set went from **10 at declaration to 15 on 2026-09-21**
 (`sovereign-turn-client`, `sovereign-workflow`, `corpus-engine-atos` — that last
-one now deleted with atos — plus two already in flight). Leaves are 21% of the
+one now deleted with atos — plus two already in flight) **and to 16 on
+2026-09-23** (`mesh-join-vocab`, decision 3a). Leaves are 21% of the
 governed set, and every promotion widens all five packages at once. **A path to
 zero that promotes another twenty leaves reaches a number that means nothing.**
 The test, applied on the day and to be applied again: a leaf is shared
@@ -1129,6 +1169,6 @@ promoted even though one row would have closed eight edges.
 
 - [ ] `cd corpus-engine && cargo xtask boundary-gate` exits 0.
 - [ ] `grep -rn EmbeddedDaemon sovereign/crates --include=*.rs` returns only the
-      `cmnwlth` binary's own main (step 10).
+      `svrn` daemon binary's own main (step 10; §11 correction).
 - [ ] `bench`'s per-package leaf budget exists and the row is expressed
       (phase 7), so the evaluator cannot link the thing it measures.

@@ -56,7 +56,6 @@ mod contract_cmd;
 mod daemon_bin;
 #[cfg(feature = "deep-research")]
 mod deep_research_cmd;
-mod design_cmd;
 mod dev_bin;
 mod drift_cmd;
 mod init;
@@ -298,7 +297,6 @@ const DEV_VERBS: &[&str] = &[
     "tools",
     "status",
     "charter",
-    "design",
     "plan",
     "amend",
     "milestone",
@@ -356,7 +354,6 @@ const ALL_VERBS: &[&str] = &[
     "corpus",
     "daemon",
     "deep-research",
-    "design",
     "doctor",
     "drift",
     "enrich",
@@ -431,8 +428,7 @@ const DEV_SUBCOMMANDS: &[(&str, &str)] = &[
     ),
     ("status", "Project status report"),
     ("charter", "Create or amend a project charter"),
-    ("design", "Capture a design session"),
-    ("plan", "Compose + align a project plan"),
+    ("plan", "Validate a project plan"),
     ("amend", "Amend a charter or plan"),
     ("milestone", "Close a project phase"),
     ("drift", "Architectural-drift detection + spec accept"),
@@ -1066,10 +1062,6 @@ async fn async_main() {
             }
             "amend" => {
                 let code = amend_cmd::run(&raw_args[1..]).await;
-                std::process::exit(code);
-            }
-            "design" => {
-                let code = design_cmd::run(&raw_args[1..]).await;
                 std::process::exit(code);
             }
             "plan" => {

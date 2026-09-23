@@ -1954,6 +1954,7 @@ dependencies = [
  "hex",
  "hostname",
  "mdns-sd",
+ "mesh-join-vocab",
  "serde",
  "serde_json",
  "sysinfo 0.35.2",
@@ -2038,17 +2039,13 @@ dependencies = [
  "bytes",
  "commonwealth-core",
  "commonwealth-rail-core",
- "kernel-types",
  "oicp-types",
  "rusqlite",
  "serde",
  "serde_json",
- "sovereign-contracts",
- "sovereign-work-atlas",
  "thiserror 2.0.18",
  "tokio",
  "tracing",
- "uuid",
  "workspace-hack",
 ]
 
@@ -7949,6 +7946,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "mesh-join-vocab"
+version = "0.7.0"
+dependencies = [
+ "blake3",
+ "hex",
+]
+
+[[package]]
 name = "mime"
 version = "0.3.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -12234,6 +12239,7 @@ dependencies = [
  "futures",
  "hostname",
  "libc",
+ "mesh-join-vocab",
  "reqwest 0.12.28",
  "serde",
  "serde_json",
@@ -12242,7 +12248,6 @@ dependencies = [
  "sovereign-core",
  "sovereign-daemon",
  "sovereign-inference",
- "sovereign-mesh",
  "sovereign-service",
  "tempfile",
  "tokio",
@@ -12409,7 +12414,7 @@ name = "sovereign-cli-shared"
 version = "0.7.0"
 dependencies = [
  "clap",
- "commonwealth-rail",
+ "commonwealth-rail-core",
  "corpus-engine",
  "corpus-engine-scip",
  "corpus-index",
@@ -12438,22 +12443,18 @@ version = "0.7.0"
 dependencies = [
  "arc-swap",
  "arch-layers",
- "arrow",
  "arrow-array",
  "async-trait",
  "blake3",
  "chrono",
  "code-facts",
- "corpus-engine",
  "corpus-engine-archaeology",
  "corpus-engine-notes",
  "corpus-engine-scip",
  "corpus-engine-watchers",
  "corpus-index",
- "filetime",
  "futures",
  "lancedb",
- "parquet",
  "serde",
  "serde_json",
  "sha2 0.10.9",
@@ -12563,6 +12564,7 @@ name = "sovereign-daemon"
 version = "0.7.0"
 dependencies = [
  "arc-swap",
+ "arrow",
  "async-trait",
  "axum",
  "bytes",
@@ -12582,6 +12584,7 @@ dependencies = [
  "corpus-index",
  "dirs 5.0.1",
  "ed25519-dalek 2.2.0",
+ "filetime",
  "futures",
  "hex",
  "hostname",
@@ -12592,6 +12595,7 @@ dependencies = [
  "libc",
  "oicp-types",
  "oplog",
+ "parquet",
  "reqwest 0.12.28",
  "serde",
  "serde_json",

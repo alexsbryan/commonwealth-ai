@@ -45,16 +45,5 @@ treesitter = []
 dev-tools = ["dep:corpus-engine-archaeology"]
 
 [dev-dependencies]
-# TEST-ONLY: the e2e builds real LanceDB fixtures. Production graph stays engine-free.
-corpus-engine = { workspace = true }
 tempfile = { workspace = true }
-# e2e_code_intel builds LanceDB fixtures by hand and ages file mtimes.
-arrow = { workspace = true }
-parquet = { workspace = true }
-filetime = "0.2"
 tokio = { workspace = true, features = ["test-util"] }
-
-# Moved from sovereign-tools with the module it exercises.
-[[example]]
-name = "exercise_code_tools"
-required-features = ["treesitter"]

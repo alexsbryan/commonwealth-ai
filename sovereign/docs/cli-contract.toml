@@ -514,22 +514,6 @@ flags = [
   { name = "--port", takes_value = true },
 ]
 [[command]]
-path = "project design"
-binary = "dev"
-feature = "dev-tools"
-flags = [
-  { name = "--import", takes_value = true },
-  { name = "--via", takes_value = true },
-  { name = "--solo" },
-  { name = "--stopgap" },
-  { name = "--port", takes_value = true },
-]
-[[command]]
-path = "project plan"
-binary = "dev"
-feature = "dev-tools"
-flags = [{ name = "--allow-open" }]
-[[command]]
 path = "project charter"
 binary = "dev"
 feature = "dev-tools"
@@ -786,16 +770,11 @@ flags = [
   { name = "--fetch", takes_value = true },
 ]
 
-# drift — bare (spec diff), accept, detect.
+# drift — bare (spec diff), detect.
 [[command]]
 path = "drift"
 binary = "dev"
 feature = "dev-tools"
-[[command]]
-path = "drift accept"
-binary = "dev"
-feature = "dev-tools"
-flags = [{ name = "--reason", takes_value = true }]
 [[command]]
 path = "drift detect"
 binary = "dev"
@@ -1153,15 +1132,10 @@ binary = "dev"
 feature = "dev-tools"
 alias_of = "project amend"
 [[command]]
-path = "design"
-binary = "dev"
-feature = "dev-tools"
-alias_of = "project design"
-[[command]]
 path = "plan"
-binary = "dev"
+binary = "dispatcher"
 feature = "dev-tools"
-alias_of = "project plan"
+hidden = true
 [[command]]
 path = "refresh"
 binary = "dispatcher"
@@ -1207,6 +1181,11 @@ hidden = true
 [[command]]
 path = "memory"
 binary = "dispatcher"
+hidden = true
+[[command]]
+path = "milestone"
+binary = "dispatcher"
+feature = "dev-tools"
 hidden = true
 [[command]]
 path = "stop"
@@ -3465,7 +3444,7 @@ persona = "operator"
 experience = "mesh-federation"
 tier = 3
 visibility = "public"
-doc = "docs/internal/RING_APPLICATIONS.md"
+doc = "docs/PUBLISH_AN_APP.md"
 [[journey.step]]
 run = "mesh offers --who"
 note = """The gossip read, and the one step whose OUTPUT is stable on any host. \
@@ -3948,4 +3927,3 @@ would make this step a report on how conformant the repo happens to be today \
 rather than on whether the reader refuses an unattributable artifact."""
 [journey.step.expect]
 stdout_contains = "IGNORED, mutation run"
-

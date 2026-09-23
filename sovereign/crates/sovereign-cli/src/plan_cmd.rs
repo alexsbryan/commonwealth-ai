@@ -25,7 +25,13 @@ use std::path::Path;
 pub async fn run(args: &[String]) -> i32 {
     match args.first().map(String::as_str) {
         Some("validate") => cmd_validate(&args[1..]).await,
-        _ => crate::dev_bin::exec("project-plan", args),
+        _ => {
+            sovereign_cli_shared::deprecation::announce_retired(
+                "svrn plan",
+                "Project plan composition is retired. Use `svrn plan validate <path>` to check a plan.",
+            );
+            0
+        }
     }
 }
 

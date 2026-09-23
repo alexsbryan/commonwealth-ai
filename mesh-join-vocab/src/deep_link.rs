@@ -337,7 +337,7 @@ pub fn parse_join_argument(arg: &str) -> Option<DeepLink> {
 
     // Bare key fallback: validate format to avoid silently accepting
     // arbitrary strings.
-    if crate::membership::validate_join_key_format(trimmed).is_ok() {
+    if crate::join_key::validate_join_key_format(trimmed).is_ok() {
         return Some(DeepLink::Join {
             join_key: trimmed.to_string(),
             relay_hint: None,

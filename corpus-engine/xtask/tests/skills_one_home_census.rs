@@ -26,14 +26,17 @@
 //!
 //! # Why `xtask` and not `sovereign-cli-daemon`
 //!
-//! It reads THREE crates' sources — the daemon's, `sovereign-contracts`'s
-//! and the desktop's — so it lived in `sovereign-cli-daemon/tests/` and
+//! It reads THREE crates' sources — `sovereign-daemon`'s,
+//! `sovereign-contracts`'s and the desktop's — so it lived in
+//! `sovereign-cli-daemon/tests/` and
 //! climbed out of that crate root to reach the other two. `sovereign-cli-daemon`
 //! is a `[[package]] svrn` member (`quality/ARCH_LAYERS.toml`), which must lift
 //! WITH ITS TESTS, and boundary-gate rule 3c read the climb as exactly that
 //! defect. Moved here 2026-09-21, same reason and same shape as
 //! `atoms_file_census.rs`: `xtask` is in no package, so nothing lifts it, and
 //! the census is std-only string matching that needs no crate it censuses.
+//! The daemon source pin followed the boot into `sovereign-daemon` at the
+//! de-embed (2026-09-21).
 
 use std::path::{Path, PathBuf};
 
@@ -46,7 +49,7 @@ fn crates_dir() -> PathBuf {
 }
 
 fn daemon_cmd_source() -> String {
-    let path = crates_dir().join("sovereign-cli-daemon/src/daemon_cmd/mod.rs");
+    let path = crates_dir().join("sovereign-daemon/src/daemon_cmd/boot.rs");
     std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()))
 }
 

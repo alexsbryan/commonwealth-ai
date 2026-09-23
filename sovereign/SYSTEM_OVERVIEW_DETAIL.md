@@ -2611,7 +2611,7 @@ on the MOVE rather than the topic made the exemplar bank's own
 inconsistencies reachable. `comparison_query` held 12 open-ended qualitative
 comparisons ("Compare Mencius and Xunzi on human nature") while
 `bench/routing/cells_v1.toml` had adjudicated that exact shape as DeepQuery
-back on 2026-06-10 — and `calibration/axes_v1.toml` asserted the opposite
+back on 2026-06-10 — and `sovereign-core/data/calibration/axes_v1.toml` asserted the opposite
 again, calling "put Rawls and Nozick side by side" a *bounded* contrast.
 Three statements of one taxonomy, two of them disagreeing, invisible for
 two months because topic-space embedding never let the shapes meet. The
@@ -2724,7 +2724,7 @@ headroom, and never a threshold placed *on* an observation (in f32,
 subtraction moves the boundary, not the comparison). Objectives are
 `SafeRecall` (default — it encodes the asymmetry every axis documents),
 `Accuracy` (for prior-art comparison) and `MaxCoverage` (the intent axis).
-**(3)** `sovereign/bench/routing/calibration/axes_v1.toml`, a bank
+**(3)** `sovereign/crates/sovereign-core/data/calibration/axes_v1.toml`, a bank
 deliberately authored to **fail somewhere**: 74 cases, every one carrying a
 `note`, of which 32 are `expect = "abstain"` — the repo previously had no
 abstention test anywhere.

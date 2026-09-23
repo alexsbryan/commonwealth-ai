@@ -41,20 +41,18 @@ See and change the models the daemon loads, without hand-editing `config.toml` a
 
 ### `svrn project`
 
-Per-project code intelligence **and** the project-layer half of ATOS (charter + phases). See [CODE_INTELLIGENCE.md](CODE_INTELLIGENCE.md) for the indexing flow and [ATOS.md](ATOS.md) for the charter flow.
+Per-project code intelligence and charter/phase management. See [CODE_INTELLIGENCE.md](CODE_INTELLIGENCE.md) for the indexing flow.
 
 | Subcommand | Description |
 |---|---|
 | `init [--name <id>] [--no-scip] [--no-hooks] [--no-claude-config] [--workspace-root <dir>] [--port <port>]` | Set up code intelligence for the current workspace: symbol index, SCIP call graph, generated `.sovereign/`, `.claude`/`.opencode` wiring, daemon registration. Also available as `svrn init`. See [CODE_INTELLIGENCE.md](CODE_INTELLIGENCE.md). |
-| `design [--import <path>] [--via <agent>] [--solo\|--stopgap] [--port <port>]` | Agent-collaborative `DESIGN.md` session against the Commonwealth daemon. Default launches opencode with the session brief primed; `--solo` drives structural-parser CLI prompts and writes `OPEN_QUESTIONS.md`; `--stopgap` is a provisional in-terminal chat (always flagged as such); `--import <path>` copies an existing doc into `<repo>/DESIGN.md` with diff-confirm |
-| `plan [--allow-open]` | Compose `IMPLEMENTATION_PLAN.md` from `DESIGN.md` + `OPEN_QUESTIONS.md`; upsert rows into `.sovereign/plan.db` (`plan_items` table); defer stale rows from prior generations. Unanswered `OPEN_QUESTIONS.md` entries block unless `--allow-open` (then they surface as `Open risks` on the matching phase) |
 | `charter [--print]` | Create or edit `.sovereign/CHARTER.md` — the team's free-form governance/onboarding doc. First invocation writes a minimal skeleton and opens `$EDITOR`; subsequent invocations just open the existing file. `--print` outputs the current file without spawning the editor |
 | `status` | Show the status of code intelligence + ATOS scaffold (founded? current phase?) |
 | `refresh [--rebuild-index]` | Re-export the SCIP call graph. Auto-rebuilds the LanceDB corpus index when the on-disk meta is stale (missing `_corpus_meta.json`, or `embedding_dimensions == 768` from the legacy zero-vector code-index path); otherwise keeps LanceDB work fast by skipping it. `--rebuild-index` forces a full LanceDB rebuild even when the meta looks current. |
 | `serve` | Start a lightweight MCP server (no model required) |
 | `install-hooks` | Upgrade (or install) the post-commit hook |
 | `found` | **Retired** — founding is implicit now: `svrn init` plus a committed spec is sufficient |
-| `amend [charter\|design]` | `amend charter` (default): diff `CHARTER.md` section-by-section on save, run adversarial Q&A for changed sections, write amendment log + new hash. `amend design`: track edits to `DESIGN.md`'s curated sections (`Anchors`, `Data & interfaces`, `Open questions`), ask targeted adversarial questions, append the Q&A to `DESIGN.md`'s inline `## Amendment log` (newest on top; does NOT bump `charter_version`) |
+| `amend [charter]` | `amend charter` (default): diff `CHARTER.md` section-by-section on save, run adversarial Q&A for changed sections, write amendment log + new hash |
 | `phase status` | Show founding state + current phase |
 | `phase pass [N]` | Run phase N's stop condition from `PHASES.md`; write `phase-N.md` on green |
 | `audit` | One-page reviewer rollup: founding state, phases passed, notes by kind, open questions, drift status |
@@ -602,9 +600,8 @@ Appends one CSV row per run to `~/.svrnmesh/eval/history.csv`. Exit code is non-
 
 ### `svrn drift`
 
-Two surfaces under one verb:
+One surface under this verb:
 
-- **`svrn drift <feature-id>`** / **`svrn drift accept <feature-id> --reason X`** — ATOS spec drift. Diff approved vs. on-disk `spec.md`; accept current spec as new approved content. Replaces `svrn atos spec diff` / `spec accept`.
 - **`svrn drift detect --code <path> --narrative <doc>...`** — narrative-vs-code architectural drift. Produces a unified drift digest. See [DRIFT_DETECTION.md](DRIFT_DETECTION.md).
 
 | `drift detect` flag | Description |
@@ -771,32 +768,6 @@ Common-law governance over a corpus — an event-sourced oplog of tensions and r
 | `ask <corpus> "<question>"` | Grounded, cite-or-abstain Q&A over current law (superseded rules' evidence excluded) |
 
 The journey — what these are for and in what order: [govern a corpus](./GOVERN_A_CORPUS.md).
-
-### `svrn atos`
-
-Feature-layer orchestration — the Agent Task Orchestration System CLI. See [ATOS.md](ATOS.md) for the full flow; this is the command reference only.
-
-| Subcommand | Description |
-|---|---|
-| `provision <id> --charter <path>` | Parse a charter, seed the feature + milestones |
-| `next [<feature-id>]` | Find the next unfinished milestone and hand off to a driver (`claude` / `opencode`) |
-| `start-milestone <id> --brief <path>` | Open a run, spawn the driver; `--red-team` for red-team mode |
-| `end-milestone <id>` | Run the stop condition, close the run, write `milestone-<N>.md` |
-| `archive <id> --reason <text>` | Mark a feature archived |
-| `status [<id>]` | Feature list, or detailed status + artifact checklist for one feature |
-| `promote <note-id> --to feature\|global` | Lift a note to a wider scope |
-| `diff <feature-id> [--ordinal N]` | Side-by-side per-tool activity across A/B driver runs |
-| `run-ab <feature-id> --brief <path> [--driver <name>]` | Run each driver against the same milestone, then diff |
-| `probe-driver [--url <endpoint>]` | Trivial tool-use sanity check against an OpenAI-compatible server |
-| `report <feature-id>` | Render milestone / red-team / epistemic / all reports |
-| `teardown <feature-id> [--dry-run]` | Interactive note-classification pass; writes `epistemic-report.md` |
-| `feature approve <id>` | Commonwealth-native approval fallback (no git commit required) |
-| `spec diff <id>` | Unified diff of current spec vs. approved content |
-| `spec accept <id> [--reason <text>]` | Accept current spec as new approved content, log a `deviation` note |
-| `doctor` | Health check: repo, `.sovereign/`, DB schemas, plugin freshness, per-feature approval + drift |
-| `install-plugin` | (Re)install the opencode plugin at `.opencode/plugins/sovereign-atos.ts` |
-
-Related project-layer commands (under `svrn project`) for the charter-level flow: `found`, `amend`, `phase pass N`, `audit`.
 
 ### `svrn daemon`
 

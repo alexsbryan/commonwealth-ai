@@ -151,6 +151,13 @@ crates = [
     # them. Its in-repo dep list is `kernel-types` alone — see the three
     # [[forbid]] blocks below, without which this entry enforces nothing.
     "oplog",
+    # Mesh join-key + deep-link FORMAT (fp-9/fp-24). Tier-0 for the rail-core
+    # reason: both ends of a mesh join must spell the key and the link the same
+    # way, and the two [[forbid]] rows below (`commonwealth-discovery →
+    # sovereign-*`, `commonwealth-rails → sovereign-*`) pattern-match the
+    # `sovereign-*` prefix, so the shared home cannot carry a sovereign name.
+    # No fs, no store; blake3 + hex are the whole budget.
+    "mesh-join-vocab",
 ]
 
 # The knowledge layer: corpus-engine + its carve-outs. "Self-contained by
@@ -1054,6 +1061,23 @@ name = "serving-policy-core"
 # only in-repo dep is `oicp-types`, already an admitted leaf — the real
 # widening is the crate itself and nothing else.
 allow = ["oicp-types", "workspace-hack"]
+
+[[package_leaf]]
+name = "mesh-join-vocab"
+# The mesh join-key + deep-link FORMAT — hash_join_key, validate_join_key_format
+# (+ JoinKeyError) and the deep_link URL grammar (DeepLink, the parse/build
+# family). Admitted 2026-09-23 under FIVE_PROGRAMS fp-9/fp-24: cli-daemon's
+# setup wizard [svrn] and the discovery/rails side [cmnwlth] must spell the
+# join-link the same way, and the two [[forbid]] rows (`commonwealth-discovery →
+# sovereign-*`, `commonwealth-rails → sovereign-*`) pattern-match the
+# `sovereign-*` prefix — the home is a neutrally-named layer-0 leaf both sides
+# reach downward, not sovereign-contracts (whose leaf budget carries no
+# commonwealth-core error type). The leaf test holds: no fs, no store; the one
+# `SOVEREIGN_JOIN_HOST` env read rides with the format that consumes it (the
+# var is declared in quality/env-flags.toml). commonwealth-discovery re-exports
+# both modules at their historical paths (re-exports, never twins);
+# `Error::InvalidJoinKey` stays commonwealth-core's — accept_join constructs it.
+allow = ["workspace-hack"]
 
 # ── The packages ─────────────────────────────────────────────────────────────
 #

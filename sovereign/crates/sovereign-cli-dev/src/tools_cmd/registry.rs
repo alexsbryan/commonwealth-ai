@@ -532,9 +532,10 @@ async fn build_daemon_notes_embed_fn_or_none(
                     )))
                 })?;
             if !resp.status().is_success() {
-                return Err(corpus_index::Error::Io(std::io::Error::other(
-                    format!("daemon notes embed HTTP {}", resp.status()),
-                )));
+                return Err(corpus_index::Error::Io(std::io::Error::other(format!(
+                    "daemon notes embed HTTP {}",
+                    resp.status()
+                ))));
             }
             let body: serde_json::Value = resp.json().await.map_err(|e| {
                 corpus_index::Error::Io(std::io::Error::other(format!(

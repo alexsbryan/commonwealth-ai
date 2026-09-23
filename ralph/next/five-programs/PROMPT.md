@@ -13,6 +13,57 @@ The campaign's one rule is also yours: **strictly necessary.** Change nothing
 the row does not name — no renames, no nearby cleanup, no new abstraction, no
 comment beyond the one the row asks for (ARCH principle 2).
 
+## The loop — the operator's cadence, verbatim (2026-09-23)
+
+```
+until boundary-gate exits 0 {
+    run the gate;                    # toolbox + cargo lock; group BY TARGET
+    identify gaps;                   # first dep-ready row; scout before cutting
+    close gaps;                      # cutters never cargo/git; you hold the compile
+    if (closures_since_last_full_check % 5 == 0) {
+        run sovereign-test.sh AND sovereign-lint.sh --full;   # both green
+    } else {
+        all-targets build only;      # full resolved feature set
+    }
+}
+```
+
+- The counter lives in STATE.md's header ("closures since last full
+  check"). After YOUR row closes net-decreasing: increment it; if it
+  reaches 5, run the full test + lint pair, repair anything red, then reset
+  it to 0. A rolled-back or delta-0 row does NOT count (fp-29's refusal is
+  the precedent — net +1 as spec'd means refused, not counted).
+- A red test at a check point is repaired IN THE SAME STEP, not queued:
+  classify drift-vs-regression FIRST (read what the census pins, find the
+  commit that moved the code), then fix in the correct direction. A
+  census's failure message is an argument, not an order — fp-53 refused
+  chunk_provenance's own "delete from MANUFACTURED" advice because the
+  producer was alive and the scan was broken. Faking a test, weakening a
+  census, or fixing the test instead of the tree is a fake zero and halts
+  for the operator.
+- Build-only between checks still means the FULL all-targets build with the
+  repo's resolved feature contract — through the scripts, never bare cargo.
+
+## Standing rules — the whole loop obeys these
+
+- **One cargo worker.** Every cargo call goes through
+  `scripts/with-cargo-lock.sh` inside `toolbox run -c sovereign-vulkan`.
+  Cutters never run cargo or git; the session holds the single compile and
+  every commit.
+- **Net-decreasing only.** A move that adds a red edge elsewhere is rolled
+  back and recorded, not kept.
+- **No fake zeros.** Never promote a program-owned store to a leaf; never
+  re-home a crate to hide an edge (§11's daemon correction). A
+  `[[package_leaf]]` admission is an OPERATOR decision requiring all three:
+  the named refusal of each existing home, the two programs that share the
+  vocabulary, and the leaf count shown in the burn-down. The N+1 ladder is
+  FIVE_PROGRAMS §12 decision 3a — first match wins.
+- **All tests green is standing** (operator, 2026-09-23: "doesn't matter
+  who caused them"). Repairing them is loop work, not a detour.
+- **Commit as you go; NOTHING IS EVER PUSHED** — push is the operator's.
+- **DONE** is written only when the gate exits 0 AND §11's three finish
+  conditions hold. Never for anything less.
+
 ## 0. Standing facts (do not re-derive)
 
 - Branch `cut`, tag `pre-cut` = 6bda3417a. NOTHING IS EVER PUSHED — push is
@@ -40,9 +91,10 @@ comment beyond the one the row asks for (ARCH principle 2).
   `toolbox run -c sovereign-vulkan bash -lc '...'` (native host builds die
   on llama-cpp-sys-4). Compile is the gate: scoped
   `./scripts/sovereign-lint.sh --human` per step, `--full` before you
-  declare a unit done. `sovereign-test.sh` is NOT part of the per-step loop
-  (standing operator style), but run it scoped when a row touches test
-  wiring.
+  declare a unit done. The test/lint cadence is the LOOP's, not per-step —
+  see "The loop" above: every 5th net-decreasing closure runs
+  `sovereign-test.sh` + `sovereign-lint.sh --full`, both green, and the
+  all-tests-green invariant is standing.
 - A `[[package_leaf]]` must NOT also be a package member — check which list
   a crate line lives in (layer vs package) in quality/ARCH_LAYERS.toml.
 - `sovereign-contracts` (layer 0) may not name understanding-vocab or

@@ -127,6 +127,9 @@ impl Class {
 /// moved into the boundary), and BOUNDARY_MODULE gained the Boundary
 /// row — in the SAME commit as the boundary code, per the
 /// review-moment contract.
+/// Paths reconciled 2026-09-23 after the cli-mesh carve (e20d2edd2)
+/// and atos cut (2ea67a59f): moved files are repointed; deleted files
+/// have no row.
 #[rustfmt::skip]
 const REGISTRY: &[(&str, Class, usize)] = &[
     // ---- the ONE egress boundary ----
@@ -491,7 +494,7 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     // pattern), so each builds a client for 127.0.0.1 loopback. `mesh rotate`
     // in particular HAD to move: an offline rotation was reverted by the next
     // gossip round. Class unchanged — loopback to our own daemon.
-    ("sovereign/crates/sovereign-cli-llm/src/mesh_cmd.rs", Class::Mesh, 10),
+    ("sovereign/crates/sovereign-cli-mesh/src/mesh_cmd.rs", Class::Mesh, 8),
     // NEW 2026-08-28: `svrn mesh forget-member`, the repair for an
     // endpoint-key collision, posts to the running daemon's
     // /v1/mesh/forget-member. Class Mesh — 127.0.0.1 loopback to our own
@@ -500,7 +503,7 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     // round exactly as `mesh rotate`'s was. One site; the collision WARNING
     // that names this command is pure rendering and builds no client.
     (
-        "sovereign/crates/sovereign-cli-llm/src/mesh_member_cmd.rs",
+        "sovereign/crates/sovereign-cli-mesh/src/mesh_member_cmd.rs",
         Class::Mesh,
         1,
     ),
@@ -512,7 +515,7 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     // the honest class: no third-party model or search traffic passes here,
     // and nothing on this path may construct a RemotePayload/QueryEgress
     // client (that stays in the boundary).
-    ("sovereign/crates/sovereign-cli-llm/src/mesh_guest.rs", Class::Mesh, 1),
+    ("sovereign/crates/sovereign-cli-mesh/src/mesh_guest.rs", Class::Mesh, 1),
     // NEW 2026-09-11: `svrn mesh media <peer>`, the viewer half of federated
     // media. One client, two loopback destinations: our own daemon's
     // `/v1/mesh/media` to mint the bridge, then one `GET /` through that
@@ -524,7 +527,7 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     // 1 -> 2 (2026-09-11): `mesh media fanout <path>` builds its own client to
     // POST the daemon's `/v1/mesh/media/fanout` on loopback; the daemon does
     // the reaching. Same class, same reason.
-    ("sovereign/crates/sovereign-cli-llm/src/mesh_media.rs", Class::Mesh, 2),
+    ("sovereign/crates/sovereign-cli-mesh/src/mesh_media.rs", Class::Mesh, 2),
     // NEW ROW (2026-09-19, ring-room rr-2-media-posture 042a74806): the HOLDER
     // half of `mesh media offer` — the read-only viewer account it provisions
     // on the origin before it declares a credential. One client (`viewer.rs`'s
@@ -537,7 +540,7 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     // this exchange rides the estate's transport, the credential it writes is
     // what LATER dials do carry.
     (
-        "sovereign/crates/sovereign-cli-llm/src/mesh_media/viewer.rs",
+        "sovereign/crates/sovereign-cli-mesh/src/mesh_media/viewer.rs",
         Class::LocalDaemon,
         1,
     ),
@@ -546,15 +549,15 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     // bridge the daemon minted. Same shape and same class as mesh_media's
     // probe: the bytes ride the estate's own transport to a Commonwealth
     // node, and the request carries no estate content.
-    ("sovereign/crates/sovereign-cli-llm/src/mesh_app.rs", Class::Mesh, 1),
+    ("sovereign/crates/sovereign-cli-mesh/src/mesh_app.rs", Class::Mesh, 1),
     // run_cmd.rs (2026-09-12): `svrn run` takes, renews and releases a
     // publish claim against `127.0.0.1:<client_port>/v1/mesh/publish`. Never
     // leaves the machine — the daemon is what reaches anybody.
-    ("sovereign/crates/sovereign-cli-llm/src/run_cmd.rs", Class::LocalDaemon, 1),
+    ("sovereign/crates/sovereign-cli-mesh/src/run_cmd.rs", Class::LocalDaemon, 1),
     // publish_cmd.rs (2026-09-12): bare `svrn publish` asks the daemon what is
     // published, because a claim taken by a running `svrn run` is in no file.
     // Loopback only; the config half of the verb dials nothing at all.
-    ("sovereign/crates/sovereign-cli-llm/src/publish_cmd.rs", Class::LocalDaemon, 1),
+    ("sovereign/crates/sovereign-cli-mesh/src/publish_cmd.rs", Class::LocalDaemon, 1),
     // mesh_skew.rs (2026-09-12, hm-3): explains a mesh route's 404 by asking
     // the daemon which build it is. It CONSTRUCTS no client in production —
     // the caller hands it the one it already built — so all three sites are
@@ -568,7 +571,7 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     // the client the caller already built. Empty `peers` is load-bearing for
     // this class: it selects zero targets, so the control request dials no
     // peer at all and asks no origin anything.
-    ("sovereign/crates/sovereign-cli-llm/src/mesh_skew.rs", Class::TestOnly, 5),
+    ("sovereign/crates/sovereign-cli-mesh/src/mesh_skew.rs", Class::TestOnly, 5),
     // mesh_offers.rs (2026-09-13, ra-4): `svrn mesh offers` builds ONE client
     // and points it only at `127.0.0.1:<client_port>` — the roster read, the
     // fan-out POST and the single-peer reach all go to this node's own
@@ -576,13 +579,13 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     // `mesh_media`'s reason: the fan-out's bytes ride the estate's own
     // transport to member nodes, and the request carries no estate content —
     // the path asked is `/`, and what comes back is the seller's.
-    ("sovereign/crates/sovereign-cli-llm/src/mesh_offers.rs", Class::Mesh, 1),
+    ("sovereign/crates/sovereign-cli-mesh/src/mesh_offers.rs", Class::Mesh, 1),
     // 3 → 2 at sv-surface (2026-09-11): `daemon_reachable` stopped
     // building its own client and asks `ServingHost` instead.
     ("sovereign/crates/sovereign-cli-llm/src/search_gym_cmd/mod.rs", Class::LocalDaemon, 2),
     ("sovereign/crates/sovereign-cli-llm/src/recipe_agent_live_trial.rs", Class::LocalDaemon, 3),
-    ("sovereign/crates/sovereign-cli-llm/src/mesh_bench.rs", Class::Mesh, 3),
-    ("sovereign/crates/sovereign-cli-llm/src/remote_gguf.rs", Class::InboundOnly, 2),
+    ("sovereign/crates/sovereign-cli-mesh/src/mesh_bench.rs", Class::Mesh, 3),
+    ("sovereign/crates/sovereign-cli-mesh/src/remote_gguf.rs", Class::InboundOnly, 2),
     ("sovereign/crates/sovereign-cli-llm/src/corpus_watch_cmd.rs", Class::LocalDaemon, 2),
     ("sovereign/crates/sovereign-cli-llm/src/chat_cmd/bootstrap.rs", Class::LocalDaemon, 2),
     // 1 -> 2 (2026-09-09, sv-surface rung 5): `workflow run` and `corpus
@@ -591,10 +594,10 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     // capabilities-fetch client that was already here. Loopback daemon
     // traffic, class unchanged.
     ("sovereign/crates/sovereign-cli-llm/src/workflow_cmd.rs", Class::LocalDaemon, 2),
-    ("sovereign/crates/sovereign-cli-llm/src/solve_cmd.rs", Class::LocalDaemon, 1),
+    ("sovereign/crates/sovereign-cli-dev/src/solve_cmd.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-cli-llm/src/pipeline_cmd.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-cli-llm/src/mobile_cmd.rs", Class::LocalDaemon, 1),
-    ("sovereign/crates/sovereign-cli-llm/src/mesh_travel.rs", Class::Mesh, 1),
+    ("sovereign/crates/sovereign-cli-mesh/src/mesh_travel.rs", Class::Mesh, 1),
     ("sovereign/crates/sovereign-cli-llm/src/knowledge_gym_cmd/mod.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-cli-llm/src/corpus_snapshot_cmd.rs", Class::InboundOnly, 1),
     ("sovereign/crates/sovereign-cli-llm/src/corpus_cmd/inventory.rs", Class::LocalDaemon, 1),
@@ -620,15 +623,13 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     // the rail routes and the guest-grant mint. Nothing a ring app writes
     // leaves the machine through this client — replication is the daemon's
     // own peer traffic (`ring_sync`), on the mesh class.
-    ("sovereign/crates/sovereign-cli-llm/src/ring_cmd/mod.rs", Class::LocalDaemon, 1),
+    ("sovereign/crates/sovereign-cli-mesh/src/ring_cmd/mod.rs", Class::LocalDaemon, 1),
     // 2 -> 3 on 2026-08-21 (nc-27): `daemon_get` MOVED here from
     // `project_cmd/registry_watch.rs` when that file was deleted as an
     // unreachable fork. Same loopback client, same class — a relocation,
     // not a new egress site.
     ("sovereign/crates/sovereign-cli-dev/src/project_cmd/mod.rs", Class::LocalDaemon, 3),
-    ("sovereign/crates/sovereign-cli-dev/src/plan_enricher.rs", Class::LocalDaemon, 2),
     ("sovereign/crates/sovereign-cli-dev/src/code_map.rs", Class::LocalDaemon, 2),
-    ("sovereign/crates/sovereign-cli-dev/src/atos_cmd/doctor.rs", Class::LocalDaemon, 2),
     ("sovereign/crates/sovereign-cli-dev/src/drift_cmd_orchestrator.rs", Class::LocalDaemon, 1),
     // refactor_cmd/label_model: the name-group adjudication pass. One client,
     // pinned to the local daemon — it posts Rust source snippets and the
@@ -637,11 +638,7 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     // future `--daemon-url` pointing off-box would be the review moment, not
     // a count change.
     ("sovereign/crates/sovereign-cli-dev/src/refactor_cmd/label_model.rs", Class::LocalDaemon, 1),
-    ("sovereign/crates/sovereign-cli-dev/src/design_session.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-cli-dev/src/code_capability_graph.rs", Class::LocalDaemon, 1),
-    ("sovereign/crates/sovereign-cli-dev/src/atos_cmd/run.rs", Class::LocalDaemon, 1),
-    ("sovereign/crates/sovereign-cli-dev/src/atos_cmd/replay.rs", Class::LocalDaemon, 1),
-    ("sovereign/crates/sovereign-cli-dev/src/atos_cmd/ab.rs", Class::LocalDaemon, 1),
 
     // ---- sovereign-cli-daemon (LocalDaemon — daemon self-control) ----
     // `doctor_cmd.rs` was split along its three declared layers; the three
@@ -740,7 +737,7 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     // is a public-record endpoint rather than a model provider or a
     // search engine.
     ("sovereign/crates/sovereign-tools/src/sec_edgar.rs", Class::InboundOnly, 1),
-    ("sovereign/crates/sovereign-tools/src/notes/diff_extract_backend.rs", Class::LocalDaemon, 1),
+    ("corpus-engine-notes/src/mining/diff_extract_backend.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-tools/src/local_corpus/ocr/cleanup.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-tools/src/corpus/manager.rs", Class::InboundOnly, 1),
     ("sovereign/crates/sovereign-tools/src/catalog_ingest.rs", Class::LocalDaemon, 1),
@@ -968,8 +965,17 @@ fn workspace_members(root: &Path) -> Vec<String> {
     let start = text
         .find("members = [")
         .unwrap_or_else(|| panic!("no members list in root Cargo.toml"));
-    let end = text[start..].find(']').expect("unterminated members list") + start;
-    text[start + "members = [".len()..end]
+    // Comments ride inside the members array; a `]` in prose is not syntax (fp-17's leaf note broke the naive parser).
+    let body: String = text[start + "members = [".len()..]
+        .lines()
+        .map(|l| match l.find('#') {
+            Some(i) => &l[..i],
+            None => l,
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    let end = body.find(']').expect("unterminated members list");
+    body[..end]
         .lines()
         .map(|l| l.trim().trim_matches(',').trim_matches('"'))
         .filter(|l| !l.is_empty() && !l.starts_with('#'))

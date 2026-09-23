@@ -129,7 +129,12 @@ fn repo_root() -> PathBuf {
 /// in first-party source, minus test modules.
 fn producers(root: &Path) -> BTreeSet<String> {
     let mut out = BTreeSet::new();
-    for area in ["corpus-engine/src", "sovereign/crates", "studio/crates"] {
+    for area in [
+        "corpus-engine/src",
+        "corpus-engine-atlas-reader/src",
+        "sovereign/crates",
+        "studio/crates",
+    ] {
         walk(&root.join(area), &mut out);
     }
     out

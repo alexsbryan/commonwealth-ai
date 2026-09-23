@@ -62,6 +62,8 @@ mod daemon_variant_census;
 mod daemon_wiring;
 #[path = "main/distributed_primary_respawn_e2e.rs"]
 mod distributed_primary_respawn_e2e;
+#[path = "main/e2e_code_intel.rs"]
+mod e2e_code_intel;
 #[path = "main/embeddings_e2e.rs"]
 mod embeddings_e2e;
 #[path = "main/emitter_origin_concurrency.rs"]
@@ -200,3 +202,5 @@ mod turn_reshape_fidelity;
 mod turn_surface;
 #[path = "main/wire_view_drift.rs"]
 mod wire_view_drift;
+#[path = "main/work_atlas_store.rs"]
+mod work_atlas_store;

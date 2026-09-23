@@ -6,6 +6,7 @@ use commonwealth_core::capabilities::{AvailableResources, HardwareProfile, NodeC
 use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::mesh::{MemberRecord, Mesh, NodeStatus};
 use commonwealth_core::{Error, Result};
+pub use mesh_join_vocab::join_key::{hash_join_key, validate_join_key_format};
 
 /// Generate a human-readable join key in the format `cwth-XXXX-XXXX-XXXX`.
 pub fn generate_join_key() -> String {
@@ -17,11 +18,6 @@ pub fn generate_join_key() -> String {
         hex::encode(&bytes[2..4]),
         hex::encode(&bytes[4..6]),
     )
-}
-
-/// Hash a join key using BLAKE3. The raw key is never persisted — only the hash.
-pub fn hash_join_key(key: &str) -> [u8; 32] {
-    *blake3::hash(key.as_bytes()).as_bytes()
 }
 
 /// Mint a fresh mesh secret for a brand-new mesh — the gossip-auth credential
@@ -57,24 +53,6 @@ pub fn verify_join_key(key: &str, expected_hash: &[u8; 32]) -> bool {
     // blake3::Hash equality is constant-time (prevents timing attacks);
     // a raw `[u8; 32] ==` would short-circuit on the first mismatch.
     blake3::hash(key.as_bytes()) == blake3::Hash::from(*expected_hash)
-}
-
-/// Parse and validate join key format (`cwth-XXXX-XXXX-XXXX` where X is hex).
-pub fn validate_join_key_format(key: &str) -> Result<()> {
-    let parts: Vec<&str> = key.split('-').collect();
-    if parts.len() != 4 || parts[0] != "cwth" {
-        return Err(Error::InvalidJoinKey(
-            "expected format cwth-XXXX-XXXX-XXXX".into(),
-        ));
-    }
-    for part in &parts[1..] {
-        if part.len() != 4 || hex::decode(part).is_err() {
-            return Err(Error::InvalidJoinKey(
-                "each segment must be 4 hex characters".into(),
-            ));
-        }
-    }
-    Ok(())
 }
 
 use commonwealth_core::clock::unix_now_secs as now_secs;
@@ -423,23 +401,21 @@ mod tests {
         let key = generate_join_key();
         assert!(key.starts_with("cwth-"));
         assert_eq!(key.len(), 19); // "cwth-" + 4 + "-" + 4 + "-" + 4
-        validate_join_key_format(&key).unwrap();
+        let parts: Vec<_> = key.split('-').collect();
+        assert_eq!(parts.len(), 4);
+        assert!(parts[1..]
+            .iter()
+            .all(|part| part.len() == 4 && hex::decode(part).is_ok()));
     }
 
     #[test]
     fn invite_key_hash_and_verify() {
-        let key = generate_join_key();
-        let hash = hash_join_key(&key);
-        assert!(verify_join_key(&key, &hash));
-        assert!(!verify_join_key("cwth-0000-0000-0000", &hash));
-    }
-
-    #[test]
-    fn validate_join_key_format_rejects_bad_keys() {
-        assert!(validate_join_key_format("not-a-key").is_err());
-        assert!(validate_join_key_format("cwth-zzzz-0000-0000").is_err());
-        assert!(validate_join_key_format("cwth-00-0000-0000").is_err());
-        assert!(validate_join_key_format("").is_err());
+        let (mesh, key) = init_mesh("Test", "Alice", vec![]);
+        assert!(verify_join_key(&key, &mesh.invite_key_hash));
+        assert!(!verify_join_key(
+            "cwth-0000-0000-0000",
+            &mesh.invite_key_hash
+        ));
     }
 
     #[test]
@@ -451,8 +427,6 @@ mod tests {
         );
         assert_eq!(mesh.name, "Test Mesh");
         assert_eq!(mesh.members.len(), 1);
-        validate_join_key_format(&key).unwrap();
-
         let founder = mesh.members.values().next().unwrap();
         assert_eq!(founder.name, "Alice's Desktop");
         assert_eq!(founder.status, NodeStatus::Online);

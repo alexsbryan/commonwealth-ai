@@ -62,8 +62,17 @@ fn workspace_root() -> std::path::PathBuf {
 fn workspace_members(root: &std::path::Path) -> Vec<String> {
     let text = std::fs::read_to_string(root.join("Cargo.toml")).expect("root Cargo.toml");
     let start = text.find("members = [").expect("no members list");
-    let end = text[start..].find(']').expect("unterminated members") + start;
-    text[start + "members = [".len()..end]
+    // Comments ride inside the members array; a `]` in prose is not syntax (fp-17's leaf note broke the naive parser).
+    let body: String = text[start + "members = [".len()..]
+        .lines()
+        .map(|l| match l.find('#') {
+            Some(i) => &l[..i],
+            None => l,
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    let end = body.find(']').expect("unterminated members");
+    body[..end]
         .lines()
         .map(|l| l.trim().trim_matches(',').trim_matches('"'))
         .filter(|l| !l.is_empty() && !l.starts_with('#'))

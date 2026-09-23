@@ -138,6 +138,10 @@ ocr = ["sovereign-tools/paddle-ocr"]
 iroh-experimental = ["sovereign-mesh/iroh-experimental"]
 
 [dev-dependencies]
+# `e2e_code_intel` synthesizes a Parquet knowledge fixture and backdates file mtimes.
+arrow = { workspace = true }
+parquet = { workspace = true }
+filetime = "0.2"
 # `project_http`'s test module builds a `Reindexer` over a real `ScipGraph`.
 arc-swap = { workspace = true }
 corpus-engine-scip = { workspace = true }

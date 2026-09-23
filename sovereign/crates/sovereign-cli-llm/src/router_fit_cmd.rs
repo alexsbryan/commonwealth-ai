@@ -56,7 +56,7 @@ use sovereign_core::scope_classifier::PersonalScopeClassifier;
 use sovereign_core::traits::InferenceProvider;
 use sovereign_inference::embedded::EmbedOnlyProvider;
 
-const DEFAULT_BANK_DIR: &str = "sovereign/bench/routing/calibration";
+const DEFAULT_BANK_DIR: &str = "sovereign/crates/sovereign-core/data/calibration";
 
 /// The command as a user types it — reached through the dispatcher, so it is
 /// never the binary's own name. Verbatim in the first line of [`HELP`] and in
@@ -72,7 +72,7 @@ USAGE:
 
 OPTIONS:
   --bank <path>              Calibration bank file, or a directory of them.
-                             Default: sovereign/bench/routing/calibration/
+                             Default: sovereign/crates/sovereign-core/data/calibration/
   --axis <name>              Only fit this axis (intent, locator, scope,
                              archive, current_info, effort). Repeatable.
   --objective <name>         safe-recall (default) | accuracy | max-coverage

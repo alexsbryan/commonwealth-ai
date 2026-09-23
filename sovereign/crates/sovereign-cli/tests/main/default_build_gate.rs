@@ -22,7 +22,6 @@ const DEV_VERBS: &[&str] = &[
     "tools",
     "status",
     "charter",
-    "design",
     "plan",
     "amend",
     "milestone",

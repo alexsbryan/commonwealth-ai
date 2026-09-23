@@ -44,7 +44,6 @@ use sovereign_contracts::launch::Launch;
 /// pins this list so the surface cannot silently go dark a fourth time.
 const DAEMON_TRACING_FILTER: &str = "sovereign_cli_daemon=info,\
      sovereign_core=info,\
-     sovereign_mesh=info,\
      sovereign_inference=info,\
      corpus_engine=info,\
      commonwealth_discovery=info,\

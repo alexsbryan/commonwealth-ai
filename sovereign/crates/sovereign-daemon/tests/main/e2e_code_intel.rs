@@ -22,7 +22,7 @@
 //!   traversal, grounded security finding (this file, auth demo fixture)
 //!
 //! Run with:
-//!     cargo test -p sovereign-tools --test main e2e_code_intel
+//!     cargo test -p sovereign-daemon --test main e2e_code_intel
 
 use sovereign_contracts::tool_manifest::DeclaredTool;
 use std::path::PathBuf;

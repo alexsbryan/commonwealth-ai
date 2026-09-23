@@ -24,6 +24,12 @@
       "url": "http://localhost:9741/mcp"
     }
   },
+  "agent": {
+    "general": {
+      "model": "openai/gpt-6-luna",
+      "variant": "max"
+    }
+  },
   "provider": {
     "commonwealth": {
       "npm": "@ai-sdk/openai-compatible",

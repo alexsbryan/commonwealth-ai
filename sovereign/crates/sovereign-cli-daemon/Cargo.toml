@@ -35,7 +35,7 @@ sovereign-inference = { workspace = true }
 # `sv-no-daemon-management` bar. The daemon is its first consumer, not its
 # owner (ARCH §10.6).
 sovereign-service = { workspace = true }
-sovereign-mesh = { workspace = true, features = ["treesitter"] }
+mesh-join-vocab = { workspace = true }
 # The daemon crate, post-de-embed (docs/FIVE_PROGRAMS.md §11 step 10): no
 # longer the in-process run body (that forked to its own `[[bin]]`, which
 # `daemon_bin.rs` execs). The residue this crate still links: the wizard's
@@ -88,9 +88,6 @@ workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 libc = "0.2"
 
 [features]
-# Bench/measurement-only: see sovereign-mesh's feature of the same name.
-iroh-relay-only = ["sovereign-mesh/iroh-relay-only"]
-
 # Windows GPU backend selectors, forwarded to sovereign-inference. No-op on
 # macOS/Linux, which hardcode their backend per-OS; see
 # sovereign-inference/Cargo.toml for the matrix.

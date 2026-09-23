@@ -49,7 +49,13 @@ pub async fn run_tools(raw_args: &[String]) -> i32 {
 
     let rest = &raw_args[1..];
     match first.as_str() {
-        "list" => cmd_list(rest).await,
+        "list" => {
+            if sovereign_cli_shared::help::wants_help(rest) {
+                print_help();
+                return 0;
+            }
+            cmd_list(rest).await
+        }
         "describe" => cmd_describe(rest).await,
         "call" => cmd_call(rest).await,
         other => {

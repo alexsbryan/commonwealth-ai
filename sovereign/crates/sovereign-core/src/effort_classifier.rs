@@ -38,7 +38,7 @@ use crate::types::Effort;
 /// Was 0.04, inherited from the embed-router's default and justified by a
 /// probe whose held-out cases all separated by |margin| ≥ 0.079. Raised to
 /// 0.078 on 2026-07-29 against the 18 effort cases in
-/// `bench/routing/calibration/axes_v1.toml`: at 0.04 the axis fired on two
+/// `crates/sovereign-core/data/calibration/axes_v1.toml`: at 0.04 the axis fired on two
 /// queries that must abstain — "can you put that last bit in a table?" and
 /// "explain thoroughly what HTTP stands for" — both landing at margin
 /// +0.057, while the weakest genuine HIGH sits at +0.099. 0.078 is the

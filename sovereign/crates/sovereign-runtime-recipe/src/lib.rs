@@ -1050,16 +1050,22 @@ mod warmth_census {
             .collect();
 
         for member in ["load_meta_atlas", "load_gliner"] {
-            let decl = code
+            let start = code
                 .iter()
-                .find(|l| l.contains(&format!("fn {member}(")))
+                .position(|l| l.contains(&format!("fn {member}(")))
                 .unwrap_or_else(|| {
                     panic!("{member} is gone — drop it here or say what replaced it")
                 });
+            let sig_end = code[start..]
+                .iter()
+                .position(|l| l.contains(')'))
+                .map(|o| start + o)
+                .unwrap_or(code.len() - 1);
+            let sig = code[start..=sig_end].join(" ");
             assert!(
-                decl.contains("warmth: LaneWarmth"),
+                sig.contains("warmth: LaneWarmth"),
                 "{member} no longer takes the host's declared warmth, so a host \
-                 asking to reach `listening` promptly will block on it anyway:\n  {decl}"
+                 asking to reach `listening` promptly will block on it anyway:\n  {sig}"
             );
 
             let calls: Vec<&&str> = code

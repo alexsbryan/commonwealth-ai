@@ -443,7 +443,7 @@ threshold space from one embedding pass. It measures what accuracy on a
 saturated bench cannot: how much of a bank the embed router OWNS.
 
 **The finding that reframes D6.** Against the 40-case calibration bank
-`bench/routing/calibration/axes_v1.toml`, the shipped intent gate owned
+`crates/sovereign-core/data/calibration/axes_v1.toml`, the shipped intent gate owned
 **3 of 40 cases — 7.5% coverage, 35% accuracy, 26 missed, 0 false
 positives.** The embed router was not misrouting commitments. It had
 very nearly stopped deciding at all, and the LLM Pass-1 classifier

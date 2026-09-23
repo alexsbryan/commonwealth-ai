@@ -33,7 +33,7 @@
 
 use std::collections::BTreeMap;
 
-use commonwealth_rail::{Admission, AdmittedOp, Payload, RailAct, RailGap};
+use commonwealth_rail_core::{Admission, AdmittedOp, Payload, RailAct, RailGap, Roster};
 
 /// The rail's three routes, spelled once for every caller in the workspace.
 ///
@@ -115,11 +115,9 @@ pub async fn rail_log(namespace: &str) -> Result<serde_json::Value, String> {
 /// One implementation, because there are two callers now — `svrn ring roster
 /// show` and `svrn mesh offers --why` — and two would let the roster page and
 /// the catalogue disagree about the same row (ARCH §10.6).
-pub async fn roster_and_admission(
-    namespace: &str,
-) -> Result<(commonwealth_rail::Roster, Admission), String> {
+pub async fn roster_and_admission(namespace: &str) -> Result<(Roster, Admission), String> {
     let v = rail_log(namespace).await?;
-    let roster: commonwealth_rail::Roster = serde_json::from_value(
+    let roster: Roster = serde_json::from_value(
         v.get("roster").cloned().ok_or_else(|| {
             format!("the daemon's log answer carried no `roster` — this build and that daemon do not agree on the shape of `{RAIL_LOG_PATH}`")
         })?,
@@ -152,7 +150,7 @@ pub async fn rail_append(namespace: &str, act: &RailAct) -> Result<serde_json::V
 /// One operator-side `Record` write: wrap `payload` in the act and append it.
 ///
 /// The typed constructor lives with the client so a caller reaches the ONE
-/// rail route without naming `commonwealth-rail`'s act type itself.
+/// rail route without naming the rail journal's act type itself.
 pub async fn rail_append_record(
     namespace: &str,
     payload: Payload,

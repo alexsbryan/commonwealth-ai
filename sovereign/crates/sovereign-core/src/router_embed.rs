@@ -91,7 +91,7 @@ const DEFAULT_LOCATOR_MIN_SIM: f32 = 0.718;
 ///
 /// WHAT THE MOVE COST, AND WHAT THIS RESTORES. The space change alone
 /// dropped this axis from 4 correct fires to 2 on
-/// `bench/routing/calibration/axes_v1.toml` — not because the axis got
+/// `crates/sovereign-core/data/calibration/axes_v1.toml` — not because the axis got
 /// worse, but because margins compressed under the old thresholds. The
 /// three missed cases sat at sim 0.89-0.95 with margins of 0.002-0.015,
 /// i.e. well clear of any floor and just under the old margin gate.

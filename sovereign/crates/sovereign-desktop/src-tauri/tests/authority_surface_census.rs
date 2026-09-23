@@ -44,6 +44,8 @@
 //! path, the desktop could install a corpus the answering process cannot see
 //! — which reads as "no authority declared" and falls through to ungrounded
 //! KnowledgeQuery streaming, the exact fabrication this census exists to stop.
+//! The daemon boot moved to `sovereign-daemon` at the de-embed (2026-09-21),
+//! and the `DAEMON_RS` pin below follows it.
 //!
 //! # The chain LEFT THE DESKTOP at svt-6, and this is the third rewrite
 //!
@@ -106,7 +108,7 @@
 const STATE_RS: &str = include_str!("../src/state.rs");
 const RECIPE_RS: &str = include_str!("../../../sovereign-runtime-recipe/src/lib.rs");
 /// The process that ANSWERS a question about a corpus the desktop installed.
-const DAEMON_RS: &str = include_str!("../../../sovereign-cli-daemon/src/daemon_cmd/mod.rs");
+const DAEMON_RS: &str = include_str!("../../../sovereign-daemon/src/daemon_cmd/boot.rs");
 /// Where the engine that INGESTS is built — and therefore the only place an
 /// acquirer registration can do anything (svt-6). Moved to the host crate at
 /// domains `dm-daemon-cli-composition` (2026-09-17).

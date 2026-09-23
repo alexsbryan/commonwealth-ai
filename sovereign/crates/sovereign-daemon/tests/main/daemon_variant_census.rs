@@ -71,12 +71,12 @@ fn repo_root() -> PathBuf {
 /// [`the_desktop_variant_has_no_first_party_host`] below.
 const LIVE_CONSTRUCTION_SITES: &[(&str, &str, &str)] = &[
     (
-        "sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/mod.rs",
+        "sovereign/crates/sovereign-daemon/src/daemon_cmd/boot.rs",
         "Headless",
         "headless: Some(",
     ),
     (
-        "sovereign/crates/sovereign-cli-llm/src/mesh_cmd.rs",
+        "sovereign/crates/sovereign-cli-daemon/src/setup_cmd/terminal.rs",
         "MeshAdmin",
         "LaunchParts::Admin",
     ),

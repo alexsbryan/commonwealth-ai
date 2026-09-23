@@ -31,6 +31,15 @@ members = [
     # seven references into it. Tier-0 because op ids are GOSSIPED, so the one
     # content-hash derivation must sit below everyone who writes a log.
     "oplog",
+    # Mesh join-key + deep-link FORMAT vocabulary (fp-9/fp-24, 2026-09-23):
+    # `hash_join_key`/`validate_join_key_format` and the deep_link URL grammar
+    # both ends of a mesh join must spell the same way. Deliberately NOT named
+    # `sovereign-*`: the two [[forbid]] rows (`commonwealth-discovery →
+    # sovereign-*`, `commonwealth-rails → sovereign-*`) pattern-match that
+    # prefix and both crates reach this leaf. Layer 0 beside kernel-types; no
+    # fs, no store — the one `SOVEREIGN_JOIN_HOST` env read rides with the
+    # format that consumes it.
+    "mesh-join-vocab",
 
     # Knowledge layer (LanceDB + Tantivy + extractors + chunkers).
     "corpus-engine",
@@ -323,6 +332,7 @@ kernel-types = { path = "kernel-types" }
 serving-policy = { path = "serving-policy" }
 serving-policy-core = { path = "serving-policy-core" }
 oplog = { path = "oplog" }
+mesh-join-vocab = { path = "mesh-join-vocab" }
 corpus-engine = { path = "corpus-engine" }
 corpus-engine-scip = { path = "corpus-engine-scip" }
 corpus-engine-atlas-reader = { path = "corpus-engine-atlas-reader" }

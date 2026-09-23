@@ -143,7 +143,7 @@ const BINARY_AXES: &[(&str, &str)] = &[
 const BANKS: &[(&str, &str)] = &[
     (
         "axes_v1",
-        "sovereign/bench/routing/calibration/axes_v1.toml",
+        "sovereign/crates/sovereign-core/data/calibration/axes_v1.toml",
     ),
     (
         "holdout",
