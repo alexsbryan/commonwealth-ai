@@ -12,8 +12,10 @@
 label = "five-programs"
 session_timeout = 7200
 audit_every = 6
-worker_bin = "scripts/ralph-claude-shim.sh"
-settings = "ralph/claude-settings.json"
+# worker on opencode (the zai coding-plan provider serves glm-5.3-flash there;
+# the claude CLI on this host does not know that model id — verified 2026-09-23)
+worker_bin = ""
+settings = ""
 
 [models]
 worker = "zai-coding-plan/glm-5.3-flash"
