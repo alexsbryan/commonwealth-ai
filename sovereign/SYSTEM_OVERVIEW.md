@@ -757,21 +757,12 @@ undocumented / drifted findings. The deterministic floor runs in public CI as
 
 ### Frontends
 
-<<<<<<< HEAD
-| Frontend | Notes |
-|---|---|
-| `sovereign-cli` (+ siblings) | Dispatcher. `sovereign <verb>` execs into `sovereign-cli-daemon`, `-dev` or `-llm`. Unix execs (same PID); elsewhere spawn-and-wait. Discovery is `current_exe()`'s parent, overridable per sibling |
-| `sovereign-server` | Axum REST + WebSocket, multi-tenant with per-tenant isolation on corpora and documents. Binds `127.0.0.1:8080`; a non-loopback bind with `[auth]` disabled is refused at startup. **Two cargo features, both default ON, drop the surfaces whose safety rests on one operator owning the box**: `dev-routes` (privilege — `/v1/solve`, uploads taking a server-side path, the `/mcp*` routes, `ShellTool`) and `net-tools` (egress — the search tool's web fallback, `web_fetch`, `wikipedia_fetch`) |
-| `sovereign-desktop` | Tauri 2 + Svelte 5, rail `Ask · Library · Reflect · Workshop · ⚙`. Layout is token-driven: `app.css` owns the scale and three global primitives (`.page-body`, `.page-measure`, `.page-header`). Do NOT re-declare padding or overflow on an element carrying `.page-body` — Svelte scoping wins silently and clips content with no way to scroll to it |
-| `sovereign-mobile` | Thin Tauri 2 client — no local inference, Runtime or corpus. Consumes `sovereign-turn-client` and nothing else on the wire. Named ceiling: the client family has no auth seam, so the phone reaches a DAEMON, not an api-key `sovereign-server` |
-=======
 | Frontend            | Purpose                                                                              |
 |---------------------|--------------------------------------------------------------------------------------|
 | `sovereign-cli` (+ siblings) | User-facing dispatcher. `sovereign <verb>` execs into one of three siblings — `sovereign-cli-daemon`, `sovereign-cli-dev`, `sovereign-cli-llm` — based on the verb. Since 2026-08-21 one verb is the exception: `code converge` is served in-process from `sovereign-cli-dev`'s `[lib]` target (linked, `default-features = false`) — see `InProcessCodeVerb` below. Same UX as one binary; faster builds. Discovery: each sibling at `current_exe()`'s parent dir; override via `SOVEREIGN_CLI_{DAEMON,DEV,LLM}_BIN`. Unix execs into the sibling (same PID); other platforms spawn-and-wait. |
 | `sovereign-server`  | Axum REST + WebSocket on configurable port; multi-tenant via `tenant.rs` with per-tenant isolation on corpora and uploaded documents (`ConversationContext.corpus_ceiling` scopes retrieval incl. the round-0 engine search; `DocumentAsset.owner` gates document list/get/delete/ask — the SaaS-hub hardening, 2026-07); server-side `ApprovalChannel` w/ `/v1/tasks/{id}/approve`. **`POST /v1/admin/shutdown`** (2026-09-11, sv-surface svt-2) is how this process is told to stop: inside the auth layer, so it takes the same bearer key every `/v1` route takes and mints no second credential, and REFUSED with a named 403 when `[auth]` is disabled — the layer is a pass-through then, and this binary defaults to a `0.0.0.0` bind. `axum::serve` gained `with_graceful_shutdown` on it plus a 5 s watchdog, because a held-open conversation WebSocket is in-flight for as long as the phone keeps it and would otherwise make an accepted stop indefinite. Before this the binary had NO stop path at all — no route, no signal handler, no pidfile, no run lock — and the only thing that ever stopped it was an external SIGKILL from the desktop's Mobile-access toggle holding its `Child`. **Mobile-facing surface** (`docs/specs/MOBILE.md`): WS `/v1/conversations/{id}/stream` streams `TurnFrame::Token`→`Complete` token-by-token down the requesting socket (not the shared broadcast — avoids cross-tenant leak, and since 2026-08-25 the two channels no longer share a TYPE, so that leak does not compile: per-turn frames are `sovereign_contracts::types::TurnFrame`, the executor's fan-out is the server-local `ExecutorEvent`); `sovereign_contracts::types::projection` surfaces typed `provenance` + `citations` on REST message responses — it moved out of this binary with the protocol so a daemon can project the same metadata; `GET /v1/corpora` lists `CORPUS_REF`s (Knowledge-only, with `scope`/`mesh_shared` privacy posture derived from `IndexInfo.mesh_sharing`); a `scheduler.rs` `FairScheduler` bounds concurrent turns — a weighted-fair queue + per-origin cap with live `TurnFrame::QueuePosition` over WS and `503 + Retry-After` shed (`busy.rs`) on REST, sharing its `serving_policy::fair_sched::SchedCore` policy core with the mesh peer-admission gate (so both are fair by identical rules); reciprocity weights from the contribution ledger rank a contributor's turns up. Secure by default: binds `127.0.0.1:8080`, and a non-loopback bind with `[auth]` disabled is refused at startup (`config::validate_exposure`; explicit `allow_unauthenticated_remote` opt-out) — permissive CORS is applied only when auth is on (`[server] cors = "auto"`). **Note the gap that guard does NOT close:** auth engages only when `mode == "api_key"` **and** `keys` is non-empty, so `mode = "api_key"` with an empty map serves every `/v1/*` route unauthenticated as tenant `"default"` — silently, and with a loopback bind the exposure guard never fires. **Two cargo features, both default ON, drop the surfaces whose safety rests on "one operator owns this box" (`sovereign/deploy/onprem/`).** `dev-routes` gates *privilege*: `/v1/solve` + `/v1/cycle/bdd` (client-supplied `test_command` reaches `sh -c` **inside** the authed router), `/v1/documents/upload` + `/v1/corpora/upload` (ingest an absolute server-side path), the `/mcp*` routes (registered *after* the auth layer, guarded only by `ip.is_loopback()` — which a same-host reverse proxy satisfies for every remote caller), and `ShellTool`. `net-tools` gates *egress*: the `search` tool's web fallback (DuckDuckGo → Google → DuckDuckGo Lite, fired whenever the top **local** retrieval score is thin), `web_fetch` (any URL the model emits; scheme-only validation), and `wikipedia_fetch`. Those three were registered unconditionally and fired on ordinary chat turns; `Permission::Network` does not gate them, because it is consulted at exactly one call site (the plan executor) and the chat path calls `tool.execute()` directly. Under `--no-default-features` `search` survives, built local-only via `SearchTool::new`. |
 | `sovereign-desktop` | Tauri 2 + Svelte 5. The **UX-refactor (P0–P4) reshaped the app around user intent** — rail `Ask · Library · Reflect · Workshop · ⚙`. **Ask** (the branded chat w/ streaming + provenance) is the landing. **Library** (`library/{LibraryView,AddSheet,NotebookDetail}` off the `notebook_list` command) is the knowledge home — a notebook shelf with per-notebook Ask + Explore, plus a "Libraries on the mesh" section (the `mesh_media_offers` command → `GET /v1/mesh/media` and its `?peer=` reach, polled every 10 s; a pick probes the loopback `player_url` with `mesh_media_probe` first and opens it only once the library answers — a silent far end shows a named "did not answer" line instead of an empty browser tab, `player_url` itself never shown; a library its holder is watching shows "in use right now" and carries no `player_url` at all, so the card cannot start a stream); the catalog `KnowledgeStatus` + folder/vault/import ingest fold into Library→Add; the Atlas rail is gone (the atlas surface lives inside a notebook's Explore via `AtlasSurface startingCorpusId` + as a reading deep-link target). **Workshop** (`workshop/WorkshopView`) holds the maker facets Build · Run · Test · Connect tools (MCP) · Open to apps (OpenAI endpoint), with a notebook→Workshop "use→make" bridge. **Settings** shrank to General + Operator (Mesh · Sharing · Mobile) clusters. A follow-on **elegance pass** layered craft on top: a plain-language scope bar in Ask (`AskScopeBar` — "Asking ‹notebook›", gating `CorpusFilterStrip`), per-notebook **conversation memory** (the `notebook_conversations` command → `SqliteStateStore::list_conversations_for_corpus`, a `json_each` filter on `enabled_corpora`; a notebook's Ask resumes its last thread, switched via a **Conversations ▾** dropdown), a card→detail **shared-element morph** (`lib/motion.ts` `crossfade`), and an **Ask↔Explore** Map→Ask bridge ("Ask about this" on an atom → the notebook's Ask, seeded). The per-notebook detail consolidates its chrome into **one header bar** — segmented `Ask | Explore` + a `⋯` overflow for Sources/Settings — with the scope stated by the header (the in-notebook scope bar suppressed via `ChatView hideScope`); the **Home hub was dropped** so the branded Ask flow is the first-run landing. **Layout is token-driven, not per-component.** `app.css` owns a layout scale (`--gutter` / `--gutter-top` / `--gutter-bottom` / `--measure` / `--measure-prose`) plus three global primitives — **`.page-body`** (the scroll container + gutter every surface body needs), **`.page-measure`** (the centred content column), **`.page-header`** (a header band on the same gutter). These are global rather than Svelte-scoped on purpose: the app's surface hosts (`.library-surface`, `.settings-surface`, `.nb-body`, `.app-chrome-content`) are all `height:100%; overflow:hidden` clipping boxes, so **a body that fails to establish its own scroller is clipped with no way to reach the content past the fold**. A July 2026 audit found exactly that — `ConflictsPanel` hid 2,442px of governance decisions behind an `overflow-y:auto` that could never fire (it sat on an auto-height box), and `AddSheet`'s body rendered flush to both window edges because a `padding:0` "embedded" opt-out outlived the host that used to compensate for it. `tests/e2e/specs/library-layout-audit.spec.ts` is the regression gate: it drives every Library route, measures composited geometry, and fails on unreachable content or a body inside the gutter. Do **not** re-declare padding/overflow on an element carrying `.page-body` — Svelte scoping gives the local rule higher specificity and it wins silently. Plus skill manager, `sovereign://` deep-link handler, system tray; reuses the shared `@sovereign/chat-ui` package (`packages/chat-ui`). |
 | `sovereign-mobile` (`/sovereign-mobile`) | Thin Tauri 2 client (iOS + Android) — **no local inference/Runtime/corpus**. Reaches a host's `sovereign-server` over the tailnet, authenticates as a tenant (token in keychain), renders streamed chat. Rust core owns transport (HTTP + WS), SQLite cache of the spec's cached projections, and a fail-closed connectivity monitor; re-emits the SAME `message-chunk`/`message-complete` events the shared chat FSM consumes. Conversations are cached for display and referenced as a conversation `CORPUS_REF` once host-indexed (`indexed_in_corpus`); long-context is host-side (phone sends only the new turn + conversation id, never re-uploads history or embeds); local-only sources are privacy-badged (`scope`/`mesh_shared`). **A Cargo workspace member since 2026-09-09** (`4e1f99f55`; the "written but never compiled" note was stale — the crate compiled before that change) — a census nobody can run is inventory, and `--package sovereign-mobile` resolves now. **It consumes `sovereign-turn-client` and nothing else on the wire** (sv-surface R6): the hand-copied `ServerEvent` mirror in `remote/dto.rs`, its `ProvenanceDto` / `SourceDto` / `CitationDto`, and `remote/client.rs`'s inline `Deserialize` envelopes are deleted, and every frame, prompt, notice, answer and request comes from `sovereign-contracts` through the client crate's re-exports (the direct contract dep is gone and `layer-gate --tighten` banked the fan-in cut 27 → 26 at `4a83373f4`). The `TurnFrame` match is exhaustive with no catch-all, so `Prompt`, `Notice` (`ResolveAck`, `TurnSettled`) and `QueuePosition` are handled — three capabilities the mirror could not represent — and two Tauri commands (`answer_prompt`, `cancel_turn`) plus a `SenderRegistry` give the phone a real answer path. Evidence: `src-tauri/tests/turn_wire.rs` drives a real turn over a real socket against a fixture host serializing contract frames, with the citation and provenance persisted to the cache and the post-`Complete` `ResolveAck` + `TurnSettled` bookend; `src-tauri/tests/census.rs` is the sv-one-client twin census and keeps two permanent plants so its detector stays proven. Named ceiling: the client family has no auth seam (bare `reqwest`, bare `connect_async`), so the phone reaches a DAEMON, not an api-key `sovereign-server` — daemon-first wire compatibility, recorded in `ApiClient::turn`. See `docs/specs/MOBILE.md` and `/sovereign-mobile/HANDOFF.md`. |
->>>>>>> origin
 
 Verbs by sibling: `sovereign-cli` holds the light delegators (`notes`,
 `status`, `drift`, `session`, `design`, `plan`, `init`, `reflect`, `memory`,
@@ -817,64 +808,6 @@ open, and keeps the plan healthy as nodes come and go.
 
 ### Discovery and membership
 
-<<<<<<< HEAD
-Every node persists an Ed25519 keypair; identity is mesh-independent and
-survives `leave` and every switch. mDNS advertises `_commonwealth._tcp.local`;
-gossip is a 10s epidemic loop over 2–3 random peers with timestamp-LWW
-conflict resolution; latency probing is UDP RTT every 30s.
-
-`Mesh` carries **two** credentials and the split is load-bearing:
-`mesh_secret` authorizes gossip and never rotates; `invite_key_hash` admits
-joiners and rotates freely. A gossip round carries a keyed-BLAKE3 `mesh_proof`
-bound to the sender and a 30s window rather than the raw secret; an OFFERED
-proof that fails is a hard refusal, never a fall-through. Rotation is refused
-while the fleet is mixed, and the confirmation is local observation (the
-`GossipAuthArm` that won), never a peer's claim.
-
-**One endpoint key, one member row.** `aliased_endpoint_keys` is the one
-implementation; `merge_from_authenticated` refuses to ADMIT a collision while
-`gossip::one_row_per_endpoint_key` RESOLVES one at the dial site, because
-refusing there strands the machine. Selection fairness is a separate clock
-from liveness: offline-decay reads contact, `select_round_peers` reads
-`peer_last_attempt`, stamped before the dial so refusals and timeouts advance
-it too.
-
-**Encryption, and the honest gap.** A plaintext mesh is the default. A mesh
-created with `require_encryption` flips every node to the iroh dial-by-key
-transport in REQUIRE mode with no plaintext fallback, binds its listeners
-loopback-only, and admits joiners only over an encrypted founder-key-dialed
-channel. **NOT covered: the multi-host tensor-split RPC between
-`llama-server` and `rpc-server` is raw TCP, outside the transport seam, and is
-the sole residual plaintext on an encrypted mesh. Never claim blanket
-end-to-end encryption.** Surface-by-surface posture
-[`../docs/THREAT_MODEL.md`](../docs/THREAT_MODEL.md).
-
-### The PeerTransport seam
-
-`commonwealth-transport` resolves (peer, traffic class) → ordered base URLs in
-exactly one place. `IpTransport` is today's tailnet/LAN overlay;
-`IrohTransport` is dial-by-Ed25519-pubkey QUIC bridged to HTTP through
-localhost byte-tunnels; `RoutedTransport` composes them, concatenating
-candidates ahead of a default so a failed iroh dial degrades to the tailnet
-path on the same request. With iroh enabled every class is iroh-first with
-per-dial IP fallback, and `[iroh] enabled` absent means AUTO (on iff this node
-is in a mesh). Out of seam by design: the join handshake, worker-pod
-transport, loopback self-probes, and the raw-TCP tensor traffic above.
-
-Six ALPNs carry the encrypted mesh, and what a STRANGER gets differs per
-ALPN — **holding the dial string is not a credential**, so the acceptor routes
-on `(ALPN, dialer)` and the key the QUIC handshake proved is the discriminator:
-
-| ALPN | member | stranger |
-|---|---|---|
-| `cwth/client/0` | the PEER listener (no bearer — federated inference carries none, its key is the credential), serving the client router minus `/internal/*` | the bearer-checking listener |
-| `cwth/rpc/0` | the local ggml rpc-server | REFUSED — it authenticates nothing |
-| `cwth/media/0` | the declared `[iroh] media_origin` | REFUSED |
-| `cwth/app/0` | one of several named HTTP apps, chosen by first path segment | REFUSED |
-| `cwth/offer/0` | the declared `[iroh] offer_origin` | REFUSED — the dial string is gossiped, so a downgrade would publish a household's inventory |
-| `cwth/guest/0` | — | admitted; the listener reads the bearer |
-| `cwth/http/0` | internal router | internal router, DELIBERATELY — a joiner is not a member and `/internal/join` is how it becomes one |
-=======
 - **Join keys** — `cwth-XXXX-XXXX-XXXX`.
   `membership::generate_join_key` stores BLAKE3 hash, discards
   plaintext. `verify_join_key` compares BLAKE3 hashes. First node calls
@@ -925,6 +858,20 @@ on `(ALPN, dialer)` and the key the QUIC handshake proved is the discriminator:
     and the honest gap ledger) lives in `../docs/THREAT_MODEL.md`.
 - **Mesh peering** — `peering.rs`; two `PeerTrustLevel`s:
   `ModelAndKnowledgeSharing`, `Full`.
+- **Two credentials, one load-bearing split** — `mesh_secret` authorizes
+  gossip and never rotates; `invite_key_hash` admits joiners and rotates
+  freely. A gossip round carries a keyed-BLAKE3 `mesh_proof` bound to the
+  sender and a 30s window rather than the raw secret; an OFFERED proof
+  that fails is a hard refusal, never a fall-through. Rotation is refused
+  while the fleet is mixed, and the confirmation is local observation
+  (the `GossipAuthArm` that won), never a peer's claim.
+- **One endpoint key, one member row** — `aliased_endpoint_keys` is the
+  one implementation; `merge_from_authenticated` refuses to ADMIT a
+  collision while `gossip::one_row_per_endpoint_key` RESOLVES one at the
+  dial site, because refusing there strands the machine. Selection
+  fairness is a separate clock from liveness: offline-decay reads contact,
+  `select_round_peers` reads `peer_last_attempt`, stamped before the dial
+  so refusals and timeouts advance it too.
 
 ### The PeerTransport seam (commonwealth-transport)
 
@@ -2219,7 +2166,6 @@ prove is the dialer's Ed25519 key, so the acceptor routes on `(ALPN, dialer)`:
 | `cwth/offer/0` | the declared `[iroh] offer_origin` — any HTTP server listing what this operator has to sell or lend; its own allow-list (`[iroh] offer_allow`), a THIRD list separate from media's and apps'; not advertised at all when none is declared | REFUSED — the dial string is public and gossiped, so a downgrade here would publish an inventory of a household's possessions to anyone holding an invite |
 | `cwth/guest/0` | — | admitted; the listener behind it reads the bearer |
 | `cwth/http/0` | internal router, forwarded with the verified identity (`X-Mesh-Member` / `X-Mesh-Node` / `X-Mesh-Pubkey`, any client-supplied `x-mesh-*` stripped) rather than spliced, so an internal route reads WHO from the acceptor and not from a header the caller typed (2026-09-20) | internal router, DELIBERATELY: a joiner is not a member yet and `/internal/join` is how it becomes one. `gossip_authorized` and the join key guard the sensitive routes; the rest are a known open edge, and closing it needs a join-only listener for non-members. Named by its verified key only — the member headers are ABSENT, never a placeholder |
->>>>>>> origin
 
 Federated media and named apps ride that surface: the holder declares an
 origin, the viewer asks its own daemon for a loopback bridge URL, and the
@@ -2229,9 +2175,8 @@ dropped first). Responses are a byte copy, which is why `Range` stays
 byte-exact. `svrn mesh offers` enumerates the roster, so a neighbour
 publishing nothing appears as a ROW carrying that refusal rather than absent.
 
-<<<<<<< HEAD
 ### Scheduling and orchestration
-=======
+
 **Federated media rides that fifth slot end to end** (`TrafficClass::Media`,
 `commonwealth/crates/commonwealth-media/src/reach.rs`, the route and daemon
 glue in `sovereign-daemon/src/media_reach.rs`, 2026-09-11). The holder declares
@@ -2270,7 +2215,6 @@ leaves the path kind to that field. Watched failing:
 and `commonwealth-media reach::tests::an_offline_member_is_refused_by_name_not_handed_a_dead_port`.
 These decisions live in the package crate so the inference daemon and the
 package-only rails daemon compose ONE implementation of them (ARCH §10.6).
->>>>>>> origin
 
 Eight decision points, each with one home:
 
@@ -2285,12 +2229,6 @@ Eight decision points, each with one home:
 | Distributed placement (model > one node) | `sovereign-inference/embedded/rpc_distribution.rs` |
 | Collaborative ingest partitioning | `sovereign-grants/knowledge_assignment.rs` |
 
-<<<<<<< HEAD
-Slot policy is normative in [`docs/SLOT_POLICY.md`](./docs/SLOT_POLICY.md):
-call sites declare a `slot_policy::Workload` requirement bundle rather than
-free-handing `Speed::` literals. The composed OICP scoring product lives ONCE
-in `oicp-types`.
-=======
 **What a member SERVES is gossiped beside how it is reached** (`NodeCapabilities::origins`,
 `OriginKind`, 2026-09-11). `OriginKind` is defined in `oicp_types::origin` since the same
 day (sv-surface svt-3) and re-exported at `commonwealth_core::capabilities::OriginKind`:
@@ -2335,253 +2273,7 @@ with their status, because a person wants to know the library exists. And
 (`MediaReachRefusal::NoOrigin`) instead of minting a bridge the far end will
 close. `MemberDto::origins` carries the same fact on `/v1/mesh/status`. Watched
 failing: `commonwealth-media reach::tests::a_member_that_advertises_no_media_origin_is_refused_by_name`.
->>>>>>> origin
 
-Scheduler quality is instrumented rather than asserted.
-`sovereign-scheduler/decision_log.rs` writes one `RoutingDecision` per
-decision point — the whole candidate set, each `ScoreBreakdown`, each input
-stamped with provenance and age, every excluded peer with its reason;
-`decision_trace.rs` replays by `decision_id`, never adjacency;
-`scheduler_core.rs` is the ranking as a pure total function;
-`predicted_time.rs` is the only ranking in the tree with no tunable constant;
-`decision_replay.rs` re-runs the LIVE scorer and policy over a capture to
-check it reproduces its own verdict. The Tier-1 simulator is
-`sovereign-mesh-test-harness`'s `mesh_sim` module behind the `dst` feature.
-Findings are in `docs/specs/SCHEDULER_QUALITY.md`; **the standing one is F10 —
-the scheduler has no speed signal in production**, so `throughput_factor` is
-neutral 1.0 for every peer, and `svrn mesh bench` deliberately does NOT write
-to `NodeCapabilities.benchmark` (`gossip_never_advertises_a_benchmark` fails
-the build if it is populated).
-
-**Byte-mass-aware split (`plan_shards_weighted`).** Each device gets a
-CONTIGUOUS block range whose *bytes*, not block *count*, are proportional to
-its VRAM. The big open-weight models are MoE and MoE mass is deeply
-non-uniform — routed experts are ~88–93% of the bytes but cold, and a hybrid
-SSM+MoE stack alternates a ~20 MB block with a ~1.3 GB one, a measured 62×
-per-block spread — so count-proportional apportionment hands a small node a
-heavy run and OOMs it. One function serves both the live load and
-`svrn mesh plan`'s preview, so they cannot diverge. Per-device fit is
-`shard_fits(plan, capacities, mass, headroom)`, where **`None` means
-cannot-judge and is not a pass**: an unread tensor table would otherwise clear
-every device on the strength of zeros.
-
-`svrn mesh bench` measures the configuration that is loaded and never loads
-the one it wants to measure — there is no slot argument, so there is no slot
-to get wrong. A record carries the pre-image of its own key (`witness`) and
-the conditions it met (`conditions`), travels on the ring rail rather than the
-gossip KV store, and refuses to travel when invalid. Origin comes from the
-SIGNATURE, never the payload.
-
-Known gap: `commonwealth-inference/orchestrator/` was deleted as dead code,
-taking `GracefulDeparture` and `FaultDetector` with it. `sovereign-compute`'s
-supervisor has no departure countdown and no fault detector, so those two
-parts of FE-139 are unimplemented rather than implemented elsewhere.
-
-### The ring rail
-
-An append-only, Ed25519-authored total order per namespace
-(`commonwealth-rail-core` is the fold — zero I/O, zero clock;
-`commonwealth-rail` is the journal). `Op.actor` is the signing public key, the
-only field on the line a writer cannot forge for someone else.
-
-**The rail carries an opaque `Payload`, and that cut is the design** — the
-transport does not get to know what an act means. `Payload` is a type and not
-a `serde_json::Value` for a specific reason: a signature covers bytes, and
-which bytes a `Value` serializes to depends on `serde_json/preserve_order`, a
-feature any crate added later can flip — which would make every signature in
-every ring stop verifying at once, presenting as a journal gone entirely
-`BadSignature`. So a `Payload` is canonical by construction (objects rebuilt
-with sorted keys, recursively) and floats are refused outright, because
-`1e2` / `100.0` / `100` are one value with three spellings.
-
-`admit(ops, …)` is **a function of the op SET, not of arrival order** —
-nineteen laptops gossip in nineteen orders. Dedupe by re-derived `OpId`, a
-content-derived total order `(ts_unix, actor, seq, id)`, a void set built from
-every correction at once that **never resurrects**, and sorted gaps, so two
-nodes agree on the *report* and not merely the acts. `gaps` is the half that
-refuses to fake completeness: a journal that cannot say "I may be missing
-something" lets an app state a wrong total with full confidence.
-
-**Correction lives in the rail on purpose** — "this earlier act was wrong, and
-it never comes back" is not an expense rule, and it is the rule most easily
-got wrong. **`Introduce` is evidence, never admission**: an introduction
-arriving from a peer moves no roster row, and `svrn ring roster add` is still
-the only writer of a roster.
-
-Replication is its own loop at a 60-second cadence, syncing by digest
-(`{actor → contiguous high-water mark}`, ~600 bytes regardless of history) —
-*contiguous* is load-bearing. The run counts from a SEALED FLOOR, which is
-what lets the rail delete: `RailAct::Seal` retires everything its author wrote
-before it, carries **no actor and no range** (so sealing another's history is
-unwritable rather than refused), and is authored rather than configured. One
-body is capped at `MAX_REQUEST_BODY_BYTES`; convergence is not, because
-`RING_SYNC_OPS_BUDGET_BYTES` chunks both directions and the exchange repeats
-until neither side moves.
-
-Verbs: `svrn ring` (new, roster add, dev, seal, log) and `svrn job` on the
-same rail — `ring` deploys an app to a trust ring, `job` hands that ring a
-unit of compute. Neither opens the journal directly: the roster the DAEMON
-loaded decides which acts are readable.
-
-### HTTP API
-
-**Client API — :9741, binds 127.0.0.1 by default.** The wildcard bind is
-reached only when something explicit asks for it. A non-loopback bind carries
-a bearer token or serves nobody; when the token chain fails entirely the
-posture installs NONE, so `client_auth` refuses every remote caller rather
-than serving unauthenticated.
-
-A non-loopback caller presents one of two bearers. `client_token` is
-daemon-wide. An **ephemeral guest grant** is the narrow one: short-lived,
-revocable, bound to a closed `Scope` enum whose `paths()` is the only route
-allowlist there is. A guest is not a mesh member and cannot mint further
-grants, because no `Scope` variant names `/internal/*`.
-
-| Path | Notes |
-|---|---|
-| `POST /v1/chat/completions` | OpenAI-compatible; `LocalOnly` privacy → 400 |
-| `POST /v1/responses` | OpenAI Responses-API adapter |
-| `GET /v1/models` | Names this daemon can dispatch by name, built from the local OICP manifest + every reachable peer's — the same source `locate_named_model` resolves against, so a listed id resolves and an omitted one does not |
-| `POST /v1/embeddings` | What peers call via `embed_http::http_embed_fn` |
-| `POST /v1/knowledge/search` | Determines target corpora, fans out, merges, reranks |
-| `/v1/apps*`, `/app/{app_id}/{*path}` | Mesh-app install/status + reverse proxy |
-| `GET /status` | Node / mesh / inference / knowledge summary, incl. `process.pid` + `run_id` |
-| `GET /oicp/v1/capabilities` | Provider manifest + federation info |
-| `/api/{version,tags,ps,show,chat,generate,embed,embeddings}` | Ollama-native compatibility shim, pure translation over the OpenAI handlers |
-| `POST /internal/ring/sync`, `/v1/rail/*` | The ring rail: anti-entropy, append, log, and the LIVE lane (delivery, not record — nothing reaches a store or a disk) |
-| `/internal/guest/grant`, `…/revoke`, `…/list` | Mint / kill / list guest grants. On the Operator bind ONLY |
-| `/v1/mesh/*`, `/v1/admin/*`, `/mcp/*` | Loopback-only |
-
-**Which listener serves a route is the guard; "is the caller loopback" is
-not.** The acceptor forwards by connecting `127.0.0.1`, so a loopback peer
-address proves nothing. `ClientSurface` is the one decider and the client
-router binds three times:
-
-| Surface | Reached by | Trusts a loopback peer | Serves `/internal/*` |
-|---|---|---|---|
-| `Operator` | a real local caller on `:9741` | yes | yes |
-| `Peer` | a MEMBER dialling `cwth/client/0` | yes | **no** |
-<<<<<<< HEAD
-| `Guest` | `cwth/guest/0`, a downgraded stranger, the guest door | no | no |
-| `Rail` | a deployed ring app on `127.0.0.1:rail_port` (9743) | no (`UNTRUSTED_LOOPBACK`) | no — serves only `/v1/rail/*` |
-
-The host mounts thirteen further client-router families on that router, each a
-door over an object the daemon already holds, each `loopback_only` at the
-router **and** `enforce_localhost` per handler: corpus status and atoms
-(`reading_http.rs`), atlas and conv-tiered browse (`atlas_http.rs`), meshapp
-projections (`meshapp_http.rs`), the enrichment store (`enrich_http.rs`), the
-local-corpus registry (`lc_http.rs`), governance, insights, notes, features,
-recipe projects, MCP config, turn extras, documents, the corpus catalogue,
-recipe authoring and deep research. Parity is audited by
-`sovereign-mesh/tests/loopback_parity.rs`.
-
-**Internal API — :9742, plaintext under perimeter trust.** No per-request
-auth: gossip, scheduling intent and plans, model transfer, RPC warm, index
-shard push/pull/serve, inter-node knowledge search, latency probe. Binds
-`0.0.0.0` by default — pin `[daemon] internal_bind`, or create the mesh with
-`require_encryption`. **The historical per-session-cert mTLS scaffolding was
-removed; never describe `:9742` as mTLS.**
-
-**The loopback guard has three layers and one trap.** Router-level
-`from_fn(loopback_only)` middleware, per-handler `ConnectInfo` extraction, and
-a pinned listener-shape test. The listener MUST use
-`.into_make_service_with_connect_info::<SocketAddr>()` — bare `axum::serve`
-leaves `ConnectInfo` absent and the guards fail closed for *every* caller.
-
-### Admission and fairness
-
-Two disjoint layers, so a request meets exactly one and is never double-gated.
-`peer_admission_layer` rations traffic that NAMES a node;
-`client_fairness_layer` rations traffic that does not, returning early when
-`X-Node-Id` is present. Both key the same
-`serving_policy::fair_sched::SchedCore<Principal>`, which also backs the chat
-server's turn scheduler, so every admission gate is fair by identical rules.
-Local requests admit unconditionally; peer requests get 503 + `Retry-After`
-when paused, yielding to recent local foreground work, or refused by the
-scheduler.
-
-`fair_share_cap(budget, active)` takes **no weight argument**, so the
-weight-ordering condemned by SCHEDULER_QUALITY F6 is unexpressible rather than
-merely avoided. The client gate's global slot budget is `usize::MAX` so it can
-never refuse on depth — the inference slot queue's predicted-wait shed remains
-THE shed decider — and it uses `try_grant`, leaving no waiter behind.
-
-**One canonical wire form:** `X-Node-Id` is `NodeId::to_hex()`, exactly 32
-lowercase hex chars. The `node-<16hex>` strings on `/status` rows are the
-DISPLAY form and must never be echoed back as a header.
-
-### Foreground yield is bounded
-
-`YieldHook::should_yield()` is a LEVEL predicate with no memory of how long
-the asker has been parked, so any request cadence shorter than the window pins
-it true forever. Every consumer pairs it with `DeferralBudget`, and that
-pairing is the invariant. `MAX_FOREGROUND_DEFERRAL` is 300 s and is
-deliberately **not** an env flag or config field: a liveness bound someone must
-remember to switch on is not a liveness bound. The write side is
-`ForegroundSignal` + `ForegroundLease`, and every `Runtime` turn holds a lease
-for the turn's whole life.
-
-### Knowledge, ledgers, distributed state
-
-`MeshCorpusManager` / `ShardManager` install, list, remove, shard and
-consolidate. `merge_participants` is the ONE merge implementation, and it
-finishes the job: a merge that stops at written chunks produces a corpus
-`installed_indexes()` skips and gossip advertises nothing for, so
-`finalize_canonical` is the last step of the merge itself. When the merge
-lands and the finalize does not, the error is its own variant
-(`MergedNotFinalized`) because the state is neither neighbour — the chunks are
-on disk and the source partitions are gone, so that directory holds the only
-copy.
-
-**The contribution ledger has no balance, no exchange rate and no ranking** —
-units are incommensurable. `LedgerEventKind` records inference served and
-received, knowledge queries, shard transfers, storage and completed job units;
-aggregation is pure. It gossips. Its siblings deliberately do not: the local
-**Activity ledger** ("what is my daemon doing, even as a mesh of one?") and
-**peer preferences** (per-peer affinity multipliers) are both in
-`GOSSIP_EXCLUDED_APP_IDS` — your own usage never leaves the machine.
-
-`commonwealth-state::MeshStore` is a SQLite KV that is a **local PROJECTION of
-the ring rail, not a replica**. Writes insert a `rail_outbox` row in the same
-transaction; the fold picks, per key, the act with the greatest
-`(t, actor, id)` among admitted non-voided ops, where `t` is the ORIGINAL
-write time, so a snapshot re-append after a seal does not hand every key to
-whoever snapshotted last. Acts this build cannot read are COUNTED, never
-dropped silently. Retention is part of the fold, because on a projection
-nothing else can be: a row a local sweep deletes has no incumbent and returns
-on the next round. `MeshStore` is `in_memory()` in production, so the pump's
-first act at boot is to rebuild it from the journals or hold nothing at all.
-Which namespaces replicate is DECLARED in `DAEMON_OWN_NAMESPACES`; no property
-of a namespace string separates `inference` from `house-expenses`, so a rule
-would silently admit every member as an author of an app's journal.
-
-### Desktop and deployment
-
-Desktop production-readiness (W1–W6) is in the detail file. The current shape:
-the desktop **manages no daemon** (`serving_host::ensure_reachable` brings up
-a bundled `sovereign-cli-daemon` sidecar when nothing answers, behind the
-`bundled-backend` feature declared by exactly one surface), commissions no
-`Runtime`, loads no GGUF, and reads the turn socket once per conversation. The
-deletion is structural rather than conventional — those crates left
-`sovereign-desktop/src-tauri/Cargo.toml`, so the ability is gone, not merely
-unused. W6 is the self-service support surface: seven health checks, a
-redacted diagnostic bundle, and a per-answer report, all files on the Desktop
-the user reads before sending, never auto-uploaded.
-
-A **mesh app** runs in a `meshapp-<id>` webview reached only through a
-permission-gated bridge; the app id comes from the host-set webview LABEL
-(unspoofable from JS) and is checked fail-closed. Graph ops live in the
-`sovereign-meshapp` library so the desktop host and `svrn meshapp dev` share
-one source of truth, and `load_graph` dispatches on what the index holds.
-**Isolation caveat:** Tauri v2 does not gate commands per-window
-(tauri#9227), so true isolation for UNTRUSTED third-party apps needs a no-IPC
-bridge — a deferred milestone.
-
-`commonwealth-rails` (`cw-rails`) is the minimal daemon a shim author installs
-beside their media server: join an invite, run, serve three loopback routes.
-It deliberately does NOT admit joiners — a mesh is founded by a full daemon,
-and that absence is most of why it lifts (319 crates in its closure vs 743).
-=======
 | `Guest` | `cwth/guest/0`, a downgraded stranger, and the guest door on `[daemon] guest_bind` (open only while a rail grant is live; also serves `/v1/rail/*`, the ring page (one bundle per rail namespace from the `[daemon.guest_pages]` registry at `/ring/<namespace>/`, whose shim names that namespace on every `/v1/rail/*` call — a wall grant names none by design, so the page is what says which app it is, with `[daemon] guest_page_dir` still putting a single app at the bare `/ring/` and the wall's INDEX served there when it is unset; a PUBLISHED app (`[iroh] apps`, written by `svrn publish <name> <port>`) that a live grant NAMES is proxied to its loopback target instead of served from a bundle, the door answering the app's own shim path with the GUEST shim so a write through it keeps the guest's session, with a single live granted app served at the door's ROOT so its absolute paths resolve and several apps each under `/ring/<name>/`) — that registry is also the DECLARATION of which namespaces admit guests, so a `Scope::Wall` grant (`svrn mesh grant --all-apps`, ONE QR for the wall) reaches every namespace declared there and nothing else on the rail, `--app <ns>` narrows to one (naming a declared app or a published one), an entry may declare `guests = "read"`, and a namespace the daemon owns (`ring_roster::is_daemon_owned`) is refused at config load AND at the route, and `POST /v1/guest/ask` — the door running a grounded turn as its own principal in one conversation per bearer, returning `{answer, epistemic_state}` only, `sovereign-daemon/src/guest_door.rs` + `routes_guest_ask.rs`; and `POST /v1/guest/session`, where a phone claims the NAME it is shown under — one QR serves a room, so the grant says what may be reached and a door-issued session says who; the session belongs to the DOOR and is recognised under any live grant it minted, so a person walking between this wall's apps is named once — `[daemon] guest_sessions = "grant"` is the strict setting that binds it to one link instead, `routes_guest_session.rs` + `sovereign-grants/src/guest_session.rs`) | no | no |
 | `Rail` | a deployed ring app, on `127.0.0.1:rail_port(client_port)` (9743 by default) | no (`UNTRUSTED_LOOPBACK`) | no — and it serves NOTHING but `/v1/rail/*` |
 
@@ -3045,6 +2737,10 @@ tracker has marked unavailable, since real traffic already maintains a
 healthy backend's health — but the bound is what makes the invariant
 hold for the case nobody predicted, including an ordinary user who sends
 a chat every 30 seconds.
+
+- The write side is `ForegroundSignal` + `ForegroundLease`: the signal is
+  what a foreground turn raises, and every `Runtime` turn holds a lease for
+  the turn's whole life.
 
 ### Test harness
 
@@ -4096,7 +3792,6 @@ by the same OICP load balancer. Pods aren't gossiped — owner-
 private, TLS-pinned, authenticated by Ed25519 `WorkerToken`. See
 [`docs/PINNED_WORKER_AS_INFERENCE_PEER.md`](./docs/PINNED_WORKER_AS_INFERENCE_PEER.md)
 and [`docs/EPHEMERAL_WORKER_PODS.md`](./docs/EPHEMERAL_WORKER_PODS.md).
->>>>>>> origin
 
 ---
 
@@ -4162,10 +3857,6 @@ feature contract (`corpus-engine/treesitter` + `sovereign-cli/dev-tools`, plus
 equivalent of.
 
 ```sh
-<<<<<<< HEAD
-./scripts/sovereign-lint.sh --human [--full]   # scoped to your diff, or the workspace
-./scripts/sovereign-test.sh --human
-=======
 # Sovereign desktop
 cd sovereign/crates/sovereign-desktop && npm install && cargo tauri dev
 
@@ -4180,7 +3871,13 @@ target/release/sovereign-cli-daemon daemon run # the long-running host
 # Sovereign HTTP server
 cargo build --release -p sovereign-server
 target/release/sovereign-server --config sovereign/sovereign-server.toml
->>>>>>> origin
+
+The gate every push runs, whichever way you build:
+
+```
+./scripts/sovereign-lint.sh --human [--full]   # scoped to your diff, or the workspace
+./scripts/sovereign-test.sh --human
+```
 ```
 
 Three scoping levers with different reach: `--package` scopes BUILD and RUN;
