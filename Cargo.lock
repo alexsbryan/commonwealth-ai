@@ -12290,7 +12290,6 @@ dependencies = [
  "sovereign-daemon",
  "sovereign-enrichment-build",
  "sovereign-mesh",
- "sovereign-store",
  "sovereign-time",
  "sovereign-tools",
  "sovereign-work-atlas",

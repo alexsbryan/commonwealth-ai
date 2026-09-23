@@ -14,6 +14,12 @@ use crate::types::*;
 mod routing;
 pub use routing::RoutingStore;
 
+/// In-memory `ConversationStore` for logic tests — seeding, never SQL
+/// (fp-32; the `notes::fixtures::RecordingNotes` shape: an off-by-default
+/// double beside the trait, enabled per consumer with `test-fixtures`).
+#[cfg(any(test, feature = "test-fixtures"))]
+pub mod fixtures;
+
 // Re-export observer types so `sovereign_core::StateStoreObserver`
 // works alongside `sovereign_core::StateStore`.
 pub use crate::observer::{

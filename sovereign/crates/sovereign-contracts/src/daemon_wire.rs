@@ -258,12 +258,12 @@ pub struct LegacyDocumentEntry {
 /// from the wire's `skip_serializing_if` — it emitted `"title": null` where
 /// the wire omits the key — which is the exact byte-compat break that one
 /// shared definition makes impossible.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ConversationListEntry {
     /// Conversation id.
     pub id: String,
     /// The title, once one has been derived. Omitted, never `null`.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
     /// Unix seconds.
     pub created_at: i64,

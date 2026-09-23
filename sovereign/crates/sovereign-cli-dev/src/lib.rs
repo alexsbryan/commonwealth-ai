@@ -101,6 +101,8 @@ mod refactor_cmd;
 #[cfg(feature = "workbench")]
 mod refactor_wire;
 #[cfg(feature = "workbench")]
+mod state_store_client;
+#[cfg(feature = "workbench")]
 mod suggest_seams_cmd;
 #[cfg(feature = "workbench")]
 mod tools_cmd;

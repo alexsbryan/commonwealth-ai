@@ -70,7 +70,6 @@ sovereign-cli-shared = { workspace = true }
 # llama.cpp when `sovereign-mesh` leaves its default build — which needs
 # `sovereign_mesh::projects` (the only thing the index path uses from it)
 # extracted to a leaf crate. Do not cite the swap as the size win.
-sovereign-store = { workspace = true, optional = true }
 # `dev-tools` (git archaeology in BriefTool) travels with
 # `sovereign-code` since the 2026-09-21 lift.
 sovereign-code = { workspace = true, features = ["treesitter", "dev-tools"] }
@@ -140,12 +139,19 @@ workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
 
+# `audit_recover`'s logic tests drive `recover_inferred_with_store` through
+# the contracts test double (`traits::fixtures::RecordingConversations`) —
+# the workbench itself no longer links sovereign-store (fp-32), so the
+# in-memory state store is the trait's own fixture. Dev-only: the fixtures
+# stay compiled out of every ordinary build.
+[dev-dependencies]
+sovereign-contracts = { workspace = true, features = ["test-fixtures"] }
+
 [features]
 # ON for every ordinary build, including the binary's own. A consumer that
 # only wants the linkable surface (`sovereign-cli`) turns it off.
 default = ["workbench"]
 workbench = [
-    "dep:sovereign-store",
     "dep:sovereign-tools",
     "dep:sovereign-mesh",
     "dep:sovereign-daemon",
