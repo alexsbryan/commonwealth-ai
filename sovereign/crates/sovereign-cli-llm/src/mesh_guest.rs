@@ -34,6 +34,7 @@
 //! for the guest to resolve.
 
 use sovereign_cli_shared::help::{Help, HelpSection};
+use sovereign_contracts::guest_pages::PAGE_PREFIX;
 use sovereign_mesh::deep_link::{build_guest_link, parse_deep_link, wall_https_link, DeepLink};
 
 use crate::guest_link::{self, GuestLink};
@@ -322,7 +323,7 @@ pub(crate) const HELP_MESH_GRANT: Help = Help {
             ("--label <text>", "Your own note, shown by --list. Never sent to the guest."),
             (
                 "--url <base>",
-                "Base URL the guest should reach you at. Default: this node's declared door\n                    address ([daemon] guest_bind, written by `svrn ring host --bind`),\n                    then its published address. With --app the QR link adds that app's\n                    page path at the door; with --all-apps it points at the door's index.",
+                "Base URL the guest should reach you at. Default: this node's declared door\n                    address ([daemon] guest_bind, written by `svrn ring host --bind`),\n                    then its published address. With --app the QR link adds that app's\n                    page path at the door; with --all-apps it points at the door's index.\n                    A base that already spells the runtime page (…/ring/ — the public\n                    static origin) is kept, and the door route rides the link as path=;\n                    that form also carries the dial string, so phones on other networks\n                    reach the daemon. A door origin (no /ring/) gets neither: the phone\n                    must be able to open the page itself.",
             ),
             (
                 "--qr-svg <path>",
@@ -638,7 +639,17 @@ pub(crate) async fn cmd_grant(args: &[String]) -> i32 {
     // `--all-apps --url https://svrnme.sh/` produced a link with NO `iroh=`
     // because the resolved path was Direct (the LAN probe succeeded), so the
     // promised unknown-network path had no address in it.
-    let dial_for_wall: Option<String> = match (&dial, wall) {
+    //
+    // A `--url` naming a runtime PAGE is the same case with the same
+    // verdict: the phone is expected anywhere (that origin is public), so an
+    // `--app` link to it needs the dial exactly as a wall link does. Both
+    // were watched failing on 2026-09-22: the app link reached the phone
+    // without an address and sat on "Connecting…" until one was appended by
+    // hand.
+    let runtime_origin = url_override
+        .as_deref()
+        .is_some_and(|base| base.contains(PAGE_PREFIX));
+    let dial_for_link: Option<String> = match (&dial, wall || runtime_origin) {
         (Some(d), _) => Some(d.clone()),
         (None, true) => node_dial_string(port).await,
         (None, false) => None,
@@ -651,7 +662,7 @@ pub(crate) async fn cmd_grant(args: &[String]) -> i32 {
             wall,
             expires_at_secs,
             (!summary.is_empty()).then_some(summary),
-            dial_for_wall.as_deref(),
+            dial_for_link.as_deref(),
         )
     });
     if let (Some(path), Some(https)) = (&qr_svg, &https) {

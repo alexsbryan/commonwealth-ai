@@ -269,6 +269,7 @@ mod tests {
             Some("primary; the wall"),
             None,
             Some("5a46ef@https://relay.example/,10.0.0.5:41234"),
+            None,
         );
         let blocks = wall_qr_blocks(&link).expect("encodes");
         let lines: Vec<&str> = blocks.lines().collect();
@@ -311,6 +312,7 @@ mod tests {
             Some("big, rail:wall"),
             None,
             None,
+            None,
         );
         assert_eq!(decode_qr_svg(&wall_qr_svg(&link).expect("encodes")), link);
     }
@@ -334,6 +336,7 @@ mod tests {
             Some("big, rail:wall"),
             Some(&at),
             Some("3b1f0a@https://relay.example:443/,192.168.1.10:41234"),
+            None,
         );
         assert_eq!(decode_qr_svg(&wall_qr_svg(&link).expect("encodes")), link);
     }

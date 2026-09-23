@@ -237,7 +237,10 @@ pub fn build_guest_link(
 /// `at` is the ring's digest marks (`<actor-hex>:<n>` pairs) and `iroh` the
 /// lender's dial string (the join link's `iroh=` param). Both are appended
 /// only when present — a call passing neither produces bytes identical to
-/// the links this minted before the params existed.
+/// the links this minted before the params existed. `path` is the DOOR route
+/// a runtime page whose base is a bare page origin must fetch (the base
+/// cannot spell both the runtime page and the app); appended last, so a call
+/// that does not pass it is also byte-identical to before.
 pub fn build_https_guest_link(
     token: &str,
     base: &str,
@@ -245,6 +248,7 @@ pub fn build_https_guest_link(
     summary: Option<&str>,
     at: Option<&str>,
     iroh: Option<&str>,
+    path: Option<&str>,
 ) -> String {
     let mut params = vec![
         format!("token={}", percent_encode(token)),
@@ -258,6 +262,9 @@ pub fn build_https_guest_link(
     }
     if let Some(d) = iroh {
         params.push(format!("iroh={}", percent_encode(d)));
+    }
+    if let Some(p) = path {
+        params.push(format!("path={}", percent_encode(p)));
     }
     format!("{base}#{}", params.join("&"))
 }
@@ -853,6 +860,7 @@ mod tests {
             Some("rail:wall"),
             None,
             None,
+            None,
         );
         let (before, fragment) = link.split_once('#').expect("a fragment");
         assert!(
@@ -889,8 +897,15 @@ mod tests {
         let base = "http://192.168.1.10:9750/app/ring-doc/";
         let at = "aa11:1,bb22:2,cc33:3";
         let iroh = "3b1f0a@https://relay.example:443/,192.168.1.10:41234";
-        let link =
-            build_https_guest_link("deadbeef", base, 1_787_900_000, None, Some(at), Some(iroh));
+        let link = build_https_guest_link(
+            "deadbeef",
+            base,
+            1_787_900_000,
+            None,
+            Some(at),
+            Some(iroh),
+            None,
+        );
         assert_eq!(
             link,
             "http://192.168.1.10:9750/app/ring-doc/#token=deadbeef&exp=1787900000\
@@ -920,8 +935,32 @@ mod tests {
                 Some("rail:wall"),
                 None,
                 None,
+                None,
             ),
             "http://192.168.1.10:9750/app/ring-doc/#token=deadbeef&exp=1787900000&s=rail%3Awall"
+        );
+    }
+
+    /// `path=` is the door route a bare runtime page must fetch, and it is
+    /// appended last and percent-encoded like every other courier. A caller
+    /// that does not pass one mints the same bytes as before (asserted
+    /// above), which is what keeps this addition from invalidating old QRs.
+    #[test]
+    fn https_guest_link_carries_the_door_route_in_path() {
+        let link = build_https_guest_link(
+            "deadbeef",
+            "https://svrnme.sh/ring/",
+            1_787_900_000,
+            None,
+            None,
+            Some("3b1f0a@https://relay.example./,10.0.0.5:9742"),
+            Some("/ring/ring-doc/"),
+        );
+        assert_eq!(
+            link,
+            "https://svrnme.sh/ring/#token=deadbeef&exp=1787900000\
+             &iroh=3b1f0a%40https%3A%2F%2Frelay.example.%2F%2C10.0.0.5%3A9742\
+             &path=%2Fring%2Fring-doc%2F"
         );
     }
 

@@ -101,8 +101,10 @@ reports honestly where it is.
 ```
 
 - The page path is composed by the minting verb: one app (`--app <ns>`) or
-  the wall index (`--all-apps`). A base already spelling a page path is kept as
-  typed.
+  the wall index (`--all-apps`). A base already spelling a page path is kept
+  (with its directory slash ensured) — that form addresses a runtime page,
+  which cannot also spell the door route in its path, so the route rides the
+  fragment as `path=` (`/ring/<ns>/` for an app, `/ring/` for the wall).
 - **The token is read only from the fragment.** A grant anywhere else — path
   or query — is not read; the parser refuses it. `exp` on the link is
   advisory for the person; the grant store's own expiry is the only decider.
@@ -112,7 +114,7 @@ reports honestly where it is.
 pages, which is the forward-compatibility rule):
 
 ```
-https://<any-gateway>/<ring/<ns>/>#token=…&exp=…&s=…&hash=<b64url>&at=<marks>&iroh=<dial>
+https://<any-gateway>/<ring/<ns>/>#token=…&exp=…&s=…&hash=<b64url>&at=<marks>&iroh=<dial>&path=<route>
 ```
 
 | Field | Carries | Verified by | State |
@@ -121,6 +123,7 @@ https://<any-gateway>/<ring/<ns>/>#token=…&exp=…&s=…&hash=<b64url>&at=<mar
 | `hash=` | SHA-256, base64url, of the runtime bundle | the page, before first render | owed |
 | `at=` | the digest marks — `<actor-hex>:<n>` pairs, comma-separated | the page, against any payload it holds or fetches | designed |
 | `iroh=` | the host's dial string (relay hints and addresses embedded, as join links already carry) | nothing — a dial is a try | param form built for joins |
+| `path=` | the DOOR route the runtime page fetches, when the base is the runtime page itself (`/ring/<ns>/`, `/ring/`) | the host's grant store, per request | built (page reads it; the mint writes it for a page base) |
 
 Two rules keep these honest. **`at=` is a commitment, not a payload**: the
 checkpoint document below is fetched — from a courier, a mirror, an

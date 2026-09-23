@@ -45,19 +45,35 @@ pub fn join_confirmation_from_link(link: &DeepLink) -> Option<JoinConfirmation> 
     }
 }
 
+/// True when `base` already spells a page path — a runtime page origin the
+/// operator is pinning the link to (`https://svrnme.sh/ring/`) rather than a
+/// door origin the URL itself can address (`http://192.168.1.10:9744`).
+///
+/// Accepted with or without the trailing slash: the stripped form is exactly
+/// what a host with `trailingSlash: false` serves, so it must not be read as
+/// "no page path" (the 2026-09-22 wall outage, where that reading composed a
+/// 404 landing).
+fn spells_a_page(base: &str) -> bool {
+    base.contains(PAGE_PREFIX) || base.trim_end_matches('/').ends_with("/ring")
+}
+
 /// The address a phone opens: the door `--url` names, plus the page path of
 /// whatever this grant reaches — the app `--rail` names, or the door's own
 /// index under `--wall`, which lists every app the owner declared. Either way
-/// the namespace is typed once rather than twice. A base already spelling a
-/// `/ring/` page is returned as typed, never rewritten.
+/// the namespace is typed once rather than twice.
+///
+/// A base already spelling a page path is kept, with its directory slash
+/// ensured (`…/ring` → `…/ring/`): that form addresses the runtime page, and
+/// the door route the page should fetch rides the link as `path=` instead —
+/// see [`wall_https_link`].
 ///
 /// ONE composer for the three callers that must agree: the CLI (the QR it
 /// writes), the daemon (the `link` its grant response returns), and the
 /// desktop, which displays that link rather than owning this rule (it does not
 /// link this crate — it is an HTTP client of the daemon).
 pub fn wall_page_base(base: &str, rail: Option<&str>, wall: bool) -> String {
-    if base.contains(PAGE_PREFIX) {
-        return base.to_string();
+    if spells_a_page(base) {
+        return format!("{}/", base.trim_end_matches('/'));
     }
     let root = base.trim_end_matches('/');
     match rail {
@@ -75,6 +91,13 @@ pub fn wall_page_base(base: &str, rail: Option<&str>, wall: bool) -> String {
 /// the "guest from anywhere" case (`docs/RING_APP_LIBRARY.md`, "The page is
 /// an iroh endpoint"; `docs/THE_LINK.md`). Absent on a direct (plain-HTTP)
 /// grant, where the base URL IS the address and there is nothing to dial.
+///
+/// When the base is a runtime PAGE (`spells_a_page`), the link cannot also
+/// spell the door route in the path: the two would collide (`/ring/ring-doc/`
+/// under `https://svrnme.sh/` is a 404 on the static origin — this shipped
+/// until 2026-09-22). So the page URL stays the runtime page and the door
+/// route — the app's page (`/ring/<ns>/`) or the wall index (`/ring/`) —
+/// rides the fragment as `path=`, which the runtime page fetches verbatim.
 pub fn wall_https_link(
     token: &str,
     base: &str,
@@ -84,6 +107,15 @@ pub fn wall_https_link(
     summary: Option<&str>,
     dial: Option<&str>,
 ) -> String {
+    let path = if spells_a_page(base) {
+        match rail {
+            Some(ns) => Some(format!("{PAGE_PREFIX}{ns}/")),
+            None if wall => Some(PAGE_PREFIX.to_string()),
+            None => None,
+        }
+    } else {
+        None
+    };
     build_https_guest_link(
         token,
         &wall_page_base(base, rail, wall),
@@ -91,6 +123,7 @@ pub fn wall_https_link(
         summary,
         None,
         dial,
+        path.as_deref(),
     )
 }
 
@@ -240,6 +273,37 @@ mod tests {
         assert_eq!(wall_page_base(b, None, false), b);
         assert_eq!(wall_page_base(b, None, true), "http://h:9/ring/");
         assert_eq!(wall_page_base(pinned, None, true), pinned);
+    }
+
+    /// A runtime page base cannot also spell the door route — the two paths
+    /// collide. `--url https://svrnme.sh/ --app ring-doc` composed
+    /// `https://svrnme.sh/ring/ring-doc/` until 2026-09-22, a 404 on the
+    /// static origin. The page URL stays the runtime page; the door route
+    /// rides the fragment. The stripped base is normalized, not doubled.
+    #[test]
+    fn a_runtime_page_base_carries_the_door_route_in_the_fragment() {
+        let app = wall_https_link(
+            "tok",
+            "https://svrnme.sh/ring/",
+            Some("ring-doc"),
+            false,
+            1,
+            None,
+            None,
+        );
+        assert_eq!(
+            app,
+            "https://svrnme.sh/ring/#token=tok&exp=1&path=%2Fring%2Fring-doc%2F"
+        );
+        let wall = wall_https_link("tok", "https://svrnme.sh/ring", None, true, 1, None, None);
+        assert_eq!(
+            wall,
+            "https://svrnme.sh/ring/#token=tok&exp=1&path=%2Fring%2F"
+        );
+        assert_eq!(
+            wall_page_base("https://svrnme.sh/ring", Some("doc"), false),
+            "https://svrnme.sh/ring/"
+        );
     }
 
     /// The wall link carries the dial string when the guest has no HTTP path
