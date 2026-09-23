@@ -10,7 +10,7 @@
   "scripts": {
     "dev": "node scripts/dev-server.js",
     "build:ring": "bash scripts/build-ring-runtime.sh",
-    "deploy": "npm run build:ring && vercel deploy --prod && bash scripts/verify-ring-deployed.sh",
+    "deploy": "npm run build:ring && vercel deploy --prod --yes --scope \"${VERCEL_SCOPE:-svrnmesh}\" && bash scripts/verify-ring-deployed.sh",
     "deploy:verify": "bash scripts/verify-ring-deployed.sh"
   }
 }
