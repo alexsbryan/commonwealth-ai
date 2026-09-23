@@ -32,6 +32,7 @@ import dataclasses
 import enum
 import hashlib
 import itertools
+import json
 import os
 import pathlib
 import re
@@ -40,6 +41,7 @@ import signal
 import subprocess
 import sys
 import time
+import urllib.parse
 from concurrent.futures import ThreadPoolExecutor
 
 HASH_RE = re.compile(r"^[0-9a-f]{7,40}$")
@@ -564,10 +566,17 @@ def audit_row(row_id, after):
 
 
 MODEL_KEYS = ("MODEL", "REVIEW_MODEL", "RESOLVE_MODEL", "VARIANT")
+WAIT_LIMIT_KEY = "WAIT_LIMIT_S"
+# Raised from 7200 (2h) on order ralph-model-roster: full gates legitimately
+# exceed 2h on this box and every such wait was a false "never wrote its
+# marker" halt.
+DEFAULT_WAIT_LIMIT_S = 24 * 3600
 
 
 def load_models(path):
-    """Strict KEY=value data; unknown keys and comments are ignored."""
+    """Strict KEY=value data; unknown keys and comments are ignored. The
+    model values stay raw (a roster is a comma-joined string until
+    `parse_roster` splits it) so every consumer sees one format."""
     out = {}
     p = pathlib.Path(path)
     if not p.exists():
@@ -577,9 +586,124 @@ def load_models(path):
         if not line or line.startswith("#") or "=" not in line:
             continue
         key, value = line.split("=", 1)
-        if key.strip() in MODEL_KEYS:
+        if key.strip() in MODEL_KEYS + (WAIT_LIMIT_KEY,):
             out[key.strip()] = value.strip()
     return out
+
+
+def resolve_wait_limit(args, paths):
+    """The one detached-wait decider: an explicit `--marker-timeout`, then
+    WAIT_LIMIT_S in models.env, then DEFAULT_WAIT_LIMIT_S. A bad value is
+    refused by name, never silently defaulted."""
+    given = getattr(args, "marker_timeout", None)
+    if given is not None:
+        if given <= 0:
+            raise ValueError(f"--marker-timeout={given} must be > 0")
+        return given
+    raw = load_models(paths.p(paths.models)).get(WAIT_LIMIT_KEY, "")
+    if not raw:
+        return DEFAULT_WAIT_LIMIT_S
+    try:
+        limit = int(raw)
+    except ValueError:
+        raise ValueError(f"{paths.models}: WAIT_LIMIT_S={raw!r} is not an integer") from None
+    if limit <= 0:
+        raise ValueError(f"{paths.models}: WAIT_LIMIT_S={limit} must be > 0")
+    return limit
+
+
+def parse_roster(value):
+    """MODEL/REVIEW_MODEL roster semantics: `a,b,c` in declared order, blank
+    segments dropped. A single value is a one-model roster — probed the same
+    (the probe replaces the wave-failure discovery)."""
+    return [m.strip() for m in (value or "").split(",") if m.strip()]
+
+
+# The transcript line shapes a halt should carry: quota / permission path /
+# provider error / crash tail (order ralph-model-roster). One shape list, used
+# by both the probe's cause-keeping and the strikeout halt's tail.
+ERROR_SHAPE_RE = re.compile(
+    r"(?i)\b(error|failed|failure|fatal|panic|refused|denied|timeout|timed out"
+    r"|quota|usage limit|rate.?limit|unauthori[sz]ed|forbidden|not found"
+    r"|invalid api key|unexpected server)\b")
+
+PROBE_TIMEOUT_S = 20
+PROBE_PROMPT = "Reply with the single word OK."
+
+
+def error_tail(text, limit=200):
+    """The LAST error-shaped line of a transcript, truncated to one line a
+    director reads; empty when none matches."""
+    for line in reversed((text or "").splitlines()):
+        if line.strip() and ERROR_SHAPE_RE.search(line):
+            return line.strip()[:limit]
+    return ""
+
+
+def halt_tail_suffix(log_path):
+    """` — last error: <line>` from a lane/review transcript, so the halt
+    text alone is diagnostic; empty when the transcript holds no
+    error-shaped line."""
+    try:
+        tail = error_tail(pathlib.Path(log_path).read_text(errors="replace"))
+    except OSError:
+        return ""
+    return f" — last error: {tail}" if tail else ""
+
+
+def _probe_configs(paths):
+    """The opencode configs the probe consults for provider routing: the
+    workdir's, then the user's. An unparseable file is skipped — the probe
+    then falls back to the client itself."""
+    out = []
+    for file in (paths.workdir / ".opencode" / "opencode.json",
+                 pathlib.Path.home() / ".config" / "opencode" / "opencode.json"):
+        try:
+            out.append(json.loads(file.read_text()))
+        except (OSError, ValueError):
+            continue
+    return out
+
+
+def probe_refusal(model, paths):
+    """The probe never runs against the mesh daemon: an entry whose provider
+    is declared with a loopback baseURL (localhost:9741 — the mesh daemon
+    serves inference at /v1) is refused by name, and a bare id names no
+    provider at all (order ralph-model-roster seam: probe the provider, not
+    localhost). Returns "" to probe, else the cause."""
+    provider, _, name = model.partition("/")
+    if not provider or not name:
+        return "names no provider/model pair — not probed"
+    for cfg in _probe_configs(paths):
+        declared = (cfg.get("provider") or {}).get(provider) or {}
+        base = (declared.get("options") or {}).get("baseURL") or ""
+        host = urllib.parse.urlparse(base).hostname or ""
+        if host in ("localhost", "127.0.0.1", "::1"):
+            return f"routes at {base} (the mesh daemon) — the probe never targets localhost"
+    return ""
+
+
+def probe_model(model, paths, timeout=PROBE_TIMEOUT_S):
+    """One minimal chat call per model through the same client lanes use
+    (`<worker_bin> run --model M`), provider-direct. Returns (True, "") when
+    the model answers, else (False, cause kept from the error: quota reset
+    text, provider error, timeout)."""
+    refusal = probe_refusal(model, paths)
+    if refusal:
+        return False, f"{model}: {refusal}"
+    client = worker_bin(paths)
+    try:
+        r = subprocess.run([client, "run", "--model", model, PROBE_PROMPT],
+                           cwd=str(paths.workdir), capture_output=True, text=True,
+                           timeout=timeout)
+    except subprocess.TimeoutExpired:
+        return False, f"timeout after {timeout}s"
+    except OSError as e:
+        return False, f"{client}: {e}"
+    tail = error_tail((r.stdout or "") + (r.stderr or ""))
+    if r.returncode == 0 and not tail:
+        return True, ""
+    return False, tail or f"exit {r.returncode}"
 
 
 REVIEW_TAG_RE = re.compile(r"(?:^|—)\s*review\s*=\s*true\s*(?=—|$)")
@@ -1044,7 +1168,8 @@ class Campaign:
     """The serial driver. Returns a Result; never exits the process."""
 
     def __init__(self, paths, *, session_run, notifier=notify, notify_enabled=True,
-                 sleep=time.sleep, max_stall=3, max_iter=200, marker_timeout=7200,
+                 sleep=time.sleep, max_stall=3, max_iter=200,
+                 marker_timeout=DEFAULT_WAIT_LIMIT_S,
                  wait_poll=120, model="", review_model="", variant=""):
         self.paths = paths
         self.session_run = session_run
@@ -1301,9 +1426,9 @@ class Pool:
     def __init__(self, paths, *, session_for, notifier=notify, notify_enabled=True,
                  lanes=2, base_branch="", conflicts="ralph/conflicts.txt",
                  prompt="ralph/PROMPT.md", state="ralph/STATE.md",
-                 marker_timeout=7200, wait_poll=120, sleep=time.sleep,
+                 marker_timeout=DEFAULT_WAIT_LIMIT_S, wait_poll=120, sleep=time.sleep,
                  model="", review_model="", variant="", max_review_attempts=3,
-                 max_lane_failures=3):
+                 max_lane_failures=3, probe=None):
         self.paths = paths
         self.session_for = session_for
         self.notifier = notifier
@@ -1321,6 +1446,7 @@ class Pool:
         self.variant = variant
         self.max_review_attempts = max_review_attempts
         self.max_lane_failures = max_lane_failures
+        self.probe = probe or (lambda model: probe_model(model, paths))
         self._lane_failures = {}
 
     def _git(self, *args, cwd=None):
@@ -1352,6 +1478,26 @@ class Pool:
     def _halt(self, reason):
         halt(self.paths, reason, notifier=self.notifier, notify_enabled=self.notify_enabled)
         return 3
+
+    def _dispatch_model(self, roster_value):
+        """The roster probe at dispatch (order ralph-model-roster): one
+        minimal chat call per model through the lane client, in declared
+        order; the first healthy model runs the wave/review. Returns (chosen
+        or None, park-reason or None). An empty roster is today's behaviour —
+        no probe, no stamp."""
+        roster = parse_roster(roster_value)
+        if not roster:
+            return None, None
+        causes = {}
+        for model in roster:
+            ok, cause = self.probe(model)
+            if ok:
+                say(f"pool: probe {model} — ok")
+                return model, None
+            causes[model] = cause
+            say(f"pool: probe {model} — {cause}")
+        return None, ("no healthy model in the roster — "
+                      + "; ".join(f"{m}: {c}" for m, c in causes.items()))
 
     def _prompt_text(self):
         return self.paths.p(self.prompt).read_text()
@@ -1426,7 +1572,12 @@ class Pool:
                 return self._halt(f"operator approval required: {unit.id}")
             review = queue.first_ready_review()
             if review is not None:
-                result = self.run_review(review)
+                # A review with no REVIEW_MODEL of its own runs on the worker
+                # model (select_model_args routing) — probe that roster.
+                review_model, park = self._dispatch_model(self.review_model or self.model)
+                if park is not None:
+                    return self._halt(park)
+                result = self.run_review(review, review_model)
                 if result is not None:
                     return result
                 continue
@@ -1435,13 +1586,17 @@ class Pool:
                 say("pool: no ready unit and no ready review — waiting (dependencies unmet?)")
                 self.sleep(60)
                 continue
-            result = self.run_wave(wave)
+            model, park = self._dispatch_model(self.model)
+            if park is not None:
+                return self._halt(park)
+            result = self.run_wave(wave, model)
             if result is not None:
                 return result
 
-    def run_review(self, review):
+    def run_review(self, review, model=None):
         session = self.session_for(self.paths.workdir)
-        model_args = select_model_args(review.id, self.model, self.review_model, self.variant)
+        effective = model if model is not None else self.review_model
+        model_args = select_model_args(review.id, self.model, effective, self.variant)
         log = str(self.paths.workdir / "target" / "ralph" / f"review-{review.id}.out")
         # The session must be told which row it owns: without the note it
         # follows PROMPT §1 and picks the first ready row, which for domains is
@@ -1455,7 +1610,8 @@ class Pool:
             if self.paths.p(self.paths.stop).exists():
                 say("pool: operator STOP — leaving the review")
                 return 0
-            say(f"pool: serial review {review.id} (main tree) attempt {attempt}")
+            say(f"pool: serial review {review.id} (main tree) attempt {attempt}"
+                + (f" · model {effective}" if effective else ""))
             note = (f"Your unit: {review.id} — the pool selected it as the ready review "
                     "row. Open only that row in ralph/STATE.md; do not scan the queue for "
                     "another.\n\n")
@@ -1492,7 +1648,10 @@ class Pool:
                 return self._halt(marker)
             say(f"pool: review {review.id} did not mark [x] (attempt {attempt}) — resuming")
         return self._halt(f"review {review.id} did not finish after "
-                          f"{self.max_review_attempts} attempts")
+                          f"{self.max_review_attempts} attempts"
+                          + halt_tail_suffix(
+                              self.paths.workdir / "target" / "ralph"
+                              / f"review-{review.id}.out"))
 
     def _provision_host_pointers(self, wt):
         """Copy the per-host pointer dirs into a lane worktree.
@@ -1515,7 +1674,7 @@ class Pool:
         except OSError as e:
             say(f"pool: could not provision {dst} from {src}: {e}")
 
-    def run_lane(self, unit):
+    def run_lane(self, unit, model=None):
         wt = self.paths.workdir / ".ralph" / "wt" / unit
         branch = f"ralph/{unit}"
         if not wt.exists():
@@ -1563,7 +1722,8 @@ class Pool:
             note = ("Your worktree has a MERGE IN PROGRESS: the pool merged the base "
                     "branch in and it conflicted. Resolve every conflict, `git add` the "
                     "files, `git commit --no-edit`, then do your unit.\n\n") + note
-        model_args = select_model_args(unit, self.model, self.review_model, self.variant)
+        model_args = select_model_args(unit, model if model is not None else self.model,
+                                       self.review_model, self.variant)
         # One lock per lane: a lane builds in its own worktree/target, so the
         # shared /tmp lock would only serialize lanes against each other and
         # against other campaigns (2026-09-16 speed order).
@@ -1572,10 +1732,13 @@ class Pool:
         session.run(model_args, note + self._prompt_text(),
                     str(self.paths.workdir / "target" / "ralph" / f"lane-{unit}.out"))
 
-    def run_wave(self, wave):
-        say(f"pool: wave {', '.join(wave)}")
+    def run_wave(self, wave, model=None):
+        # The chosen model is stamped on the wave line: one glance at
+        # launchd.log says which provider served the wave (order
+        # ralph-model-roster).
+        say(f"pool: wave {', '.join(wave)}" + (f" · model {model}" if model else ""))
         with ThreadPoolExecutor(max_workers=len(wave)) as ex:
-            list(ex.map(self.run_lane, wave))
+            list(ex.map(lambda unit: self.run_lane(unit, model), wave))
         if self.paths.p(self.paths.stop).exists():
             say("pool: operator STOP — leaving the lanes unmerged (their worktrees resume)")
             return 0
@@ -1617,7 +1780,10 @@ class Pool:
                     f"(failure {n}/{self.max_lane_failures}) — branch {branch} kept")
                 if n >= self.max_lane_failures:
                     return self._halt(f"lane {unit} failed {n} waves — see "
-                                      f"target/ralph/lane-{unit}.out and branch {branch}")
+                                      f"target/ralph/lane-{unit}.out and branch {branch}"
+                                      + halt_tail_suffix(
+                                          self.paths.workdir / "target" / "ralph"
+                                          / f"lane-{unit}.out"))
                 continue
             self._lane_failures.pop(unit, None)
             say(f"pool: lane {unit} finished — merging {branch}")
@@ -1882,7 +2048,8 @@ def cmd_models(args):
             f"MODEL={current.get('MODEL', '')}\n"
             f"REVIEW_MODEL={current.get('REVIEW_MODEL', '')}\n"
             f"RESOLVE_MODEL={current.get('RESOLVE_MODEL', '')}\n"
-            f"VARIANT={current.get('VARIANT', '')}\n")
+            f"VARIANT={current.get('VARIANT', '')}\n"
+            + (f"WAIT_LIMIT_S={current[WAIT_LIMIT_KEY]}\n" if current.get(WAIT_LIMIT_KEY) else ""))
         if not args.no_restart and args.label:
             job = job_name(paths, args.label)
             try:
@@ -1899,6 +2066,7 @@ def cmd_models(args):
     print(f"  REVIEW_MODEL={current.get('REVIEW_MODEL') or '<unset>'}")
     print(f"  RESOLVE_MODEL={current.get('RESOLVE_MODEL') or '<unset>'}")
     print(f"  VARIANT={current.get('VARIANT') or '<unset>'}")
+    print(f"  WAIT_LIMIT_S={current.get(WAIT_LIMIT_KEY) or f'<default {DEFAULT_WAIT_LIMIT_S}>'}")
     return 0
 
 
@@ -1916,7 +2084,7 @@ def cmd_pool(args):
     pool = Pool(paths, session_for=session_for, notify_enabled=args.notify,
                 lanes=args.lanes, base_branch=base, conflicts=args.conflicts,
                 prompt=args.prompt, state=args.state,
-                marker_timeout=args.marker_timeout,
+                marker_timeout=resolve_wait_limit(args, paths),
                 model=models["MODEL"], review_model=models["REVIEW_MODEL"],
                 variant=models["VARIANT"])
     if args.install_launchd:
@@ -2068,7 +2236,7 @@ def cmd_run(args):
         session_run=lambda model_args, prompt, log: session.run(model_args, prompt, log),
         notify_enabled=args.notify,
         max_stall=args.max_stall, max_iter=args.max_iter,
-        marker_timeout=args.marker_timeout,
+        marker_timeout=resolve_wait_limit(args, paths),
         model=models["MODEL"], review_model=models["REVIEW_MODEL"], variant=models["VARIANT"])
     if args.install_launchd:
         ensure_excludes(paths.workdir, runtime_markers(paths))
@@ -2228,7 +2396,8 @@ def build_parser():
             p.add_argument("--label", default="campaign")
         p.add_argument("--session-timeout", type=int, default=None if queue else 3600,
                        help="default: 3600")
-        p.add_argument("--marker-timeout", type=int, default=7200)
+        p.add_argument("--marker-timeout", type=int, default=None,
+                       help="default: WAIT_LIMIT_S from ralph/models.env, else 86400")
         p.add_argument("--notify", action="store_true", default=notify_default)
         p.add_argument("--model", default="")
         p.add_argument("--review-model", default="")
