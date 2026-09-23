@@ -6,11 +6,11 @@ standing facts so no row has to). Catalog: `docs/FIVE_PROGRAMS_DECISIONS.tsv`
 `docs/FIVE_PROGRAMS.md` §12 (six decisions, all taken). Method + refusal
 history: §11.
 
-**closures since last full check: 1** (the loop counter — PROMPT.md "The
+**closures since last full check: 2** (the loop counter — PROMPT.md "The
 loop"; increment on each net-decreasing closure; at 5 run
 `sovereign-test.sh` + `sovereign-lint.sh --full`, repair, reset. Reset
 2026-09-23: fp-48..52 hit 5, the check ran green, fp-53 repaired the suite
-to 13,314/0.)
+to 13,314/0. fp-30 = 1, fp-32 = 2.)
 
 Baseline when this queue was minted: **boundary-gate 79 at 09ff299b8**
 (branch `cut`, Phase A atlas carve landed, arch/clock/docs gates ✓ clean,
