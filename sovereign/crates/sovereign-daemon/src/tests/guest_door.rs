@@ -13,7 +13,37 @@ fn pages(default_dir: Option<&str>, named: &[(&str, &str)]) -> GuestPages {
             .iter()
             .map(|(ns, d)| ((*ns).to_string(), GuestPage::Open(PathBuf::from(*d))))
             .collect(),
+        Default::default(),
     )
+}
+
+/// A gate you have not watched fail: the published-app arm answers only a
+/// grant that NAMES the app — the same rule bundles live under.
+#[test]
+fn a_published_app_is_proxied_only_while_a_grant_names_it() {
+    let reg = GuestPages::new(
+        None,
+        Default::default(),
+        [("my-doc".to_string(), "127.0.0.1:4318".to_string())]
+            .into_iter()
+            .collect(),
+    );
+    let granted = |ns: &str| ns == "my-doc";
+    assert_eq!(
+        route_page(&reg, &granted, "my-doc/assets/app.css"),
+        PageRoute::Proxy {
+            addr: "127.0.0.1:4318".to_string(),
+            rel: "assets/app.css".to_string(),
+            namespace: "my-doc".to_string(),
+        }
+    );
+    let PageRoute::Missing(why) = route_page(&reg, &|_| false, "my-doc/") else {
+        panic!("an ungranted published app was served");
+    };
+    assert!(
+        why.contains("published"),
+        "the refusal must say it is published"
+    );
 }
 
 /// The wall serves the page whose namespace a live grant names, and
@@ -92,7 +122,7 @@ fn a_daemon_owned_namespace_cannot_be_declared_open_to_guests() {
         let mut d = sovereign_core::setup_config::DaemonSection::default();
         d.guest_pages
             .insert(owned.to_string(), GuestPage::Open("/srv/x".into()));
-        let why = GuestPages::from_config(&d)
+        let why = GuestPages::from_config(&d, &Default::default())
             .expect_err("a daemon-owned ring was accepted onto the wall");
         assert!(why.contains(owned), "the refusal must name it: {why}");
     }
@@ -105,7 +135,7 @@ fn an_app_namespace_is_accepted_onto_the_wall() {
     let mut d = sovereign_core::setup_config::DaemonSection::default();
     d.guest_pages
         .insert("house-expenses".into(), GuestPage::Open("/srv/x".into()));
-    let reg = GuestPages::from_config(&d).expect("an app ring is declarable");
+    let reg = GuestPages::from_config(&d, &Default::default()).expect("an app ring is declarable");
     assert!(reg.declared("house-expenses").is_some());
 }
 

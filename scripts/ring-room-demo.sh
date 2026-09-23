@@ -281,10 +281,10 @@ if [ "$TOPOLOGY" = room ]; then
   # `fetch` against the door, exactly as a browser would.
   NODE_IMAGE=([phone]=docker.io/library/node:20-bookworm-slim)
   NOFWD=([phone]=1)
-  # The wall's SECOND screen. Two apps on the wall means two `ring dev`
+  # The wall's SECOND screen. Two apps on the wall means two `ring show`
   # proxies on beefy — one namespace each — and the host-side watcher reads
   # both, so this port is published beside the page port.
-  # NOT client_port + 2: that is the daemon's own rail port, which `ring dev`
+  # NOT client_port + 2: that is the daemon's own rail port, which `ring show`
   # proxies to (`commonwealth_core::config::rail_port`), and binding there
   # fails with "Address already in use" at bring-up.
   DPORT2=19948
@@ -382,12 +382,12 @@ room_model() {
 # FRAGMENT the builder puts it in, and the QR carries that link.
 #
 # The scope is the CALLER's, because the wall has two kinds now and they are
-# two different things: `--wall` is the one code the room scans and it reaches
-# every app the owner registered, and `--rail <ns>` is the narrowing knob —
+# two different things: `--all-apps` is the one code the room scans and it reaches
+# every app the owner registered, and `--app <ns>` is the narrowing knob —
 # one link, one app. The default is the wall.
 room_grant() { # label svg-path [scope-flag scope-arg]
   local label=$1 svg=$2; shift 2
-  local scope=(--wall); [ $# -gt 0 ] && scope=("$@")
+  local scope=(--all-apps); [ $# -gt 0 ] && scope=("$@")
   typed beefy wall "mesh grant --model $MODEL ${scope[*]} --ttl 2h --label $label --url $DOOR --qr-svg $svg" \
     "the wall's own grant, minted at the wall by the member standing there"
   node_exec beefy "$CLI" mesh grant --model "$MODEL" "${scope[@]}" --ttl 2h --label "$label" \
@@ -525,7 +525,7 @@ PY
 leg_doc() {
   sv a ring roster "$RING" > "$D/room-roster-a.txt"
   local n
-  for n in a b c; do opened "$n" doc "$D/$n/dev.out" "the ring-doc page, as ring dev printed it"; done
+  for n in a b c; do opened "$n" doc "$D/$n/dev.out" "the ring-doc page, as ring show printed it"; done
   run_session
 }
 
@@ -715,7 +715,7 @@ leg_join() {
 
   # (a) the doc: its page names it, and its edit is attributed on a.
   start_proxy d 2> "$D/room-join-proxy.err"
-  opened d join "$D/d/dev.out" "the ring-doc page, as ring dev printed it"
+  opened d join "$D/d/dev.out" "the ring-doc page, as ring show printed it"
   join_doc_js
   REPO="$REPO" PD="$(tab_url d)" PA="$(tab_url a)" POLL_S="$JOIN_POLL_S" WATCH_S="$JOIN_WATCH_S" \
     node "$D/join-doc.mjs" > "$D/room-join-doc.json" 2> "$D/room-join-doc.err"
@@ -884,7 +884,7 @@ room_seal_prove() {
   echo "room: seal proven — halo→wall's room address ${from_keeper:-no answer}, phone→wall's room address $from_phone"
 }
 
-# The wall's second screen: `ring dev` for the scaffolded app, on beefy, at
+# The wall's second screen: `ring show` for the scaffolded app, on beefy, at
 # the published second port. `start_proxy`'s shape, with the namespace and the
 # bundle it serves as the only difference — a wall with two apps runs one per
 # app because a dev server holds one grant for one namespace.
@@ -892,13 +892,13 @@ room_proxy2() {
   local deadline
   [ -f "$D/beefy/dev2.pid" ] && node_kill beefy "$D/beefy/dev2.pid" && sleep 1
   node_bg beefy "$D/beefy/dev2.pid" "$D/beefy/dev2.out" "$D/beefy/dev2.out" \
-    "$CLI" ring dev "$RING2" --dir "$APP2" --port "$DPORT2"
+    "$CLI" ring show "$RING2" --dir "$APP2" --port "$DPORT2"
   deadline=$(( $(date +%s) + 60 ))
   while [ "$(date +%s)" -lt "$deadline" ]; do
     node_curl beefy -s --max-time 2 -o /dev/null -w '%{http_code}' -X POST "$(at "$DPORT2")/__ring/log" -d '{}' 2>/dev/null | grep -q 200 && return 0
     sleep 1
   done
-  echo "ring dev for $RING2 never served /__ring/log" >&2
+  echo "ring show for $RING2 never served /__ring/log" >&2
   return 1
 }
 
@@ -938,7 +938,7 @@ room_up() {
   sleep 12
   members_from_mesh 3 || return 3
   # The wall's own screens: the member's page, loopback, exactly as rr-1 runs
-  # it — and one per app, because a `ring dev` serves ONE namespace and the
+  # it — and one per app, because a `ring show` serves ONE namespace and the
   # wall now holds two. The second is the scaffold's, unmodified.
   start_proxy beefy || return 3
   room_proxy2 || return 3
@@ -970,7 +970,7 @@ room_topology_down() {
 }
 
 # ── the narrowing knob ──────────────────────────────────────────────────────
-# `--rail <ns>` is the other grant an owner can mint: one link, one app. It
+# `--app <ns>` is the other grant an owner can mint: one link, one app. It
 # GATES NOTHING here — the wall is one grant and one QR, and clause (d)'s
 # census was taken before this ran — but two things are worth reading off it.
 #
@@ -985,8 +985,8 @@ room_topology_down() {
 # clause can be measured at all.
 leg_room_narrowing() { # member
   local member=$1
-  room_grant narrow-expenses "$D/qr-narrow-expenses.svg" --rail "$RING2"
-  room_grant narrow-doc "$D/qr-narrow-doc.svg" --rail "$RING"
+  room_grant narrow-expenses "$D/qr-narrow-expenses.svg" --app "$RING2"
+  room_grant narrow-doc "$D/qr-narrow-doc.svg" --app "$RING"
   room_phone narrow-expenses "$D/qr-narrow-expenses.svg" "$GUEST_NARROW_ONE" \
     "$RING2:expenses:$APP2" 0 "" "$member" "" "other_app=$RING"
   room_phone narrow-doc "$D/qr-narrow-doc.svg" "$GUEST_NARROW_TWO" \
@@ -1915,17 +1915,26 @@ if topology == "room":
     # 2 — the guest's edit, and never mistakable for a member
     b = bars["ra-room-guest-edit-attributed"]
     edit_w = num(r"within ([\d.]+) s", b["floor_basis"])
-    # RE-READ 2026-09-20, named here rather than edited into ring-room.toml.
-    # Clause (c) is rr-2's promise that ITS work did not diff the rail. The
-    # operator opened the rail to exactly one row of the NEXT campaign
-    # (`rg-1-on-behalf-of`, D1, ledger A52), so `origin/main..HEAD` is no
-    # longer a reading of rr-2's promise — it is a reading of ring-guest's
-    # authorisation. The clause is therefore evaluated at rr-2's own tip,
-    # `origin/main..<ring-guest base>`, which nothing this campaign does can
-    # move; ring-guest's rail diff is printed beside it, unjudged by this bar.
+    # RE-READ 2026-09-22, after the same mechanism broke a third way: the
+    # D1-approved rg-1 rail diff and 6bda3417a's gate-hygiene file reorg
+    # (+824/−796, tests_sealing/journal.rs splits, zero semantics) were
+    # PUSHED to origin/main, so `origin/main..<guest_base>` stopped being
+    # "what others did" and became the approved diff itself — the clause
+    # read red on a the-link run that touched zero rail files (measured,
+    # 2026-09-22, target/ralph/demo.log). No single pin can serve both
+    # this clause and the shed bar's `guest_base..HEAD` range: a base at
+    # or past 6bda3417a empties the shed range and the rg bar abstains;
+    # anything earlier leaves the reorg in the diff. The clause therefore
+    # returns to the registered floor's literal reading (ring-room.toml,
+    # ra-room-guest-edit-attributed, clause c): `git diff --stat origin/main
+    # -- <rail>`, origin/main against the WORKING TREE. That is green for
+    # any run whose tree equals origin/main on the rail whatever history
+    # did, and it re-arms as a tripwire the moment an unpushed campaign
+    # edits rail — which is the standing rule D1 revised for one row only.
+    # Operator direction 2026-09-22 (option a on the same handoff).
     RAIL = ["commonwealth/crates/commonwealth-rail",
             "commonwealth/crates/commonwealth-rail-core"]
-    rail_diff = git("diff", "--stat", "origin/main", guest_base, "--", *RAIL)
+    rail_diff = git("diff", "--stat", "origin/main", "--", *RAIL)
     rail_diff_ring_guest = git("diff", "--stat", guest_base, "HEAD", "--", *RAIL)
     replica = (open(os.path.join(d, "wall-replica.txt")).read().splitlines() + ["", "", ""])[:3] \
         if os.path.exists(os.path.join(d, "wall-replica.txt")) else ["", "", ""]
@@ -2176,13 +2185,13 @@ if topology == "room":
     scans = [x for x in (p1, p2, pc, narrow_x, narrow_d) if x.get("link")]
     on_the_wall_qr = [x for x in (p1, p2, pc) if x.get("link")]
     declared = [v for v in (ns.get("doc"), ns.get("expenses"), ns.get("read_only")) if v]
-    # The GUEST-facing grants. `svrn ring dev` mints a rail grant of its own
+    # The GUEST-facing grants. `svrn ring show` mints a rail grant of its own
     # for the member's screen — one per app the wall shows — and those are the
     # wall's own page talking to its own daemon on loopback, not a link anybody
     # scanned. Counting them would read "a grant per app" off the member's
-    # side of the room (measured 2026-09-20, run 2: two `ring dev:` rows).
+    # side of the room (measured 2026-09-20, run 2: two `ring show:` rows).
     live = [l for l in (w.get("grants") or "").splitlines()
-            if re.search(r"\blive\b", l) and "ring dev:" not in l]
+            if re.search(r"\blive\b", l) and "ring show:" not in l]
     probes = p1.get("probes") or {}
     # Every element that took this phone's name — the goodhart's own question,
     # answered with the record rather than with an assumption. Exactly one of

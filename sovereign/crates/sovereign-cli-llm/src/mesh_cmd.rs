@@ -2756,8 +2756,7 @@ async fn cmd_create(args: &[String]) -> i32 {
 /// `join_link` is the daemon-built deep link (it carries the founder's
 /// no-VPN dial string + TTL when the iroh endpoint is up); the https
 /// form is derived from it so both printed forms share params. `None`
-/// (the offline rotate path — no running daemon, no dial to read)
-/// prints the bare form.
+/// (a daemon that answered with no link) prints the bare-key form.
 fn print_mesh_share(
     headline: &str,
     mesh_name: &str,
@@ -2800,8 +2799,21 @@ fn print_mesh_share(
     println!();
     println!("Share with a friend:");
     println!("  App:  {app_link}");
-    println!("  CLI:  svrn mesh join {join_key}");
+    // The CLI line carries the deep link (with its dial) when there is one: a
+    // bare key only reaches a founder that LAN discovery can see. Quoted, since
+    // the link's `&` is a shell operator — zsh refuses it, bash cuts it there.
+    let cli_arg = shell_quote(join_link.unwrap_or(join_key));
+    println!("  CLI:  svrn mesh join {cli_arg}");
+    if join_link.is_none() {
+        println!("        (the daemon returned no dial link — this bare key only reaches");
+        println!("         a joiner on the same LAN; `svrn mesh status` shows the full link)");
+    }
     println!();
+}
+
+/// Single-quote `s` for a POSIX shell (and zsh): `'` becomes `'\''`.
+fn shell_quote(s: &str) -> String {
+    format!("'{}'", s.replace('\'', r"'\''"))
 }
 
 async fn cmd_join(args: &[String]) -> i32 {
@@ -2901,15 +2913,28 @@ async fn cmd_join(args: &[String]) -> i32 {
 /// than `/` because the daemon's root route returns 405 for GET and
 /// reqwest's `.send()` succeeds against 405 just as well as 200 — the
 /// goal is "is anything listening", not "is the response 2xx".
-pub(crate) async fn daemon_listening_on(port: u16) -> bool {
+/// The daemon's liveness probe, with the REASON it failed.
+///
+/// `daemon_listening_on` is the boolean most callers want; a caller that has
+/// to tell the user something ("minting a grant needs one") must not claim
+/// "no daemon" for a failure that is not absence — a client that could not be
+/// built, a refused connection, or an answer slower than the timeout all land
+/// here with their own words. The timeout is seconds: a daemon busy loading a
+/// model answers late, and late is not absent.
+pub(crate) async fn daemon_probe(port: u16) -> Result<(), String> {
     let url = format!("http://127.0.0.1:{port}/v1/models");
-    let Ok(client) = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_millis(500))
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(3))
         .build()
-    else {
-        return false;
-    };
-    client.get(&url).send().await.is_ok()
+        .map_err(|e| format!("could not build the HTTP client: {e}"))?;
+    match client.get(&url).send().await {
+        Ok(_) => Ok(()),
+        Err(e) => Err(format!("the daemon at {url} did not answer: {e}")),
+    }
+}
+
+pub(crate) async fn daemon_listening_on(port: u16) -> bool {
+    daemon_probe(port).await.is_ok()
 }
 
 /// POST `arg` to the running daemon's `/v1/mesh/join` endpoint and
@@ -3045,9 +3070,10 @@ async fn rotate_via_running_daemon(force: bool) -> i32 {
             .get("join_key")
             .and_then(|v| v.as_str())
             .unwrap_or("(unknown)");
+        let join_link = payload.get("join_link").and_then(|v| v.as_str());
         eprintln!();
         eprintln!("Existing members stay connected — rotation changes only who may JOIN.");
-        print_mesh_share("Join key rotated.", mesh_name, join_key, None, None);
+        print_mesh_share("Join key rotated.", mesh_name, join_key, None, join_link);
         0
     } else {
         let err = payload
@@ -3280,6 +3306,7 @@ async fn cmd_status(args: &[String]) -> i32 {
         }
         if let Some(l) = status.join_link.as_deref() {
             println!("join link: {l}");
+            println!("join with: svrn mesh join {}", shell_quote(l));
         }
     }
     0
@@ -5356,3 +5383,7 @@ mod plan_tests {
         assert_eq!(render_json(&r)["speed"]["stale"], true);
     }
 }
+
+#[cfg(test)]
+#[path = "mesh_cmd_quote_tests.rs"]
+mod quote_tests;

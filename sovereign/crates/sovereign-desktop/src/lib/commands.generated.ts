@@ -235,6 +235,17 @@ export interface CommandArgs {
     displayName: unknown;
     sourcePath: unknown;
   };
+  guest_grant_create: {
+    scope: unknown;
+    models: unknown;
+    baseUrl?: unknown;
+    ttlSecs?: unknown;
+    label?: unknown;
+  };
+  guest_grant_list: Record<string, never>;
+  guest_grant_revoke: {
+    token: unknown;
+  };
   import_anthropic_zip: {
     request: unknown;
   };

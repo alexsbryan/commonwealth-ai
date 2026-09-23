@@ -13,8 +13,10 @@ use std::time::{Duration, Instant};
 use crate::mesh_cmd::daemon_client_port;
 
 mod declare;
+mod origin;
 mod viewer;
 pub(crate) use declare::cmd_media_declare;
+pub(crate) use origin::cmd_media_origin;
 
 pub(crate) async fn cmd_media(args: &[String]) -> i32 {
     if args.first().map(String::as_str) == Some("fanout") {
@@ -22,6 +24,9 @@ pub(crate) async fn cmd_media(args: &[String]) -> i32 {
     }
     if args.first().map(String::as_str) == Some("declare") {
         return cmd_media_declare(&args[1..]);
+    }
+    if args.first().map(String::as_str) == Some("origin") {
+        return cmd_media_origin(&args[1..]);
     }
     if args.first().map(String::as_str) == Some("offer") {
         return cmd_media_offer(&args[1..]).await;
@@ -37,6 +42,7 @@ pub(crate) async fn cmd_media(args: &[String]) -> i32 {
         eprintln!("       svrn mesh media offer [<origin>] [--admit <member>...]");
         eprintln!("       svrn mesh media withdraw");
         eprintln!("       svrn mesh media admit <member>...");
+        eprintln!("       svrn mesh media origin [<addr:port>] [--clear]");
         eprintln!("       svrn mesh media fanout <path> [--peers a,b] [--method M] [--timeout-ms N] [--json]");
         eprintln!(
             "       svrn mesh media declare <header-name>   # value on stdin; --list / --clear"

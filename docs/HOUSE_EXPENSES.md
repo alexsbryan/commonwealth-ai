@@ -90,7 +90,7 @@ existence on its first write.
 ## 3. Open it
 
 ```sh
-svrn ring dev house-expenses --dir ./house-expenses
+svrn ring show house-expenses --dir ./house-expenses
 # ring `house-expenses` is live.
 #   bundle : ./house-expenses
 #   rail   : http://127.0.0.1:9743
@@ -100,7 +100,7 @@ svrn ring dev house-expenses --dir ./house-expenses
 The dev server holds a grant that reaches this one namespace and nothing else
 on the daemon — not `/internal/*`, not the mesh routes, not another ring. The
 grant lives in the server process and dies with it; the browser tab never sees
-it. If the daemon isn't running, `ring dev` refuses to bind rather than serving
+it. If the daemon isn't running, `ring show` refuses to bind rather than serving
 a page that would silently fail to reach its journal.
 
 Add an expense in the form: who paid, how much, what for, and who it splits
@@ -151,7 +151,7 @@ remote, a shared drive, `scp`. There is no publish verb yet (see [what M0 does
 not do](#what-m0-does-not-do-yet)). They run:
 
 ```sh
-svrn ring dev house-expenses --dir ./house-expenses
+svrn ring show house-expenses --dir ./house-expenses
 ```
 
 Their daemon already has the journal, or gets it within a minute: every node
@@ -301,9 +301,9 @@ filing — the rail is meant to be finished.
 ## What M0 does not do yet
 
 **No publish verb.** `svrn ring deploy` does not exist. `window.ring` is
-injected by `ring dev`'s own shim rather than shipped in the mesh-app SDK, so a
+injected by `ring show`'s own shim rather than shipped in the mesh-app SDK, so a
 bundle put through `svrn meshapp publish` comes up without it. Each member runs
-`svrn ring dev` against their own daemon, from their own copy of the folder.
+`svrn ring show` against their own daemon, from their own copy of the folder.
 
 **The roster travels by hand.** It is a per-node file, not gossiped state.
 

@@ -100,8 +100,8 @@ reports honestly where it is.
 <base>/<ring/<ns>/ | ring/>#token=<grant>&exp=<unix>[&s=<label>]
 ```
 
-- The page path is composed by the minting verb: one app (`--rail <ns>`) or
-  the wall index (`--wall`). A base already spelling a page path is kept as
+- The page path is composed by the minting verb: one app (`--app <ns>`) or
+  the wall index (`--all-apps`). A base already spelling a page path is kept as
   typed.
 - **The token is read only from the fragment.** A grant anywhere else — path
   or query — is not read; the parser refuses it. `exp` on the link is
@@ -195,8 +195,8 @@ in-page verifier are owed.
 
 ## The grant, specified
 
-- **Mint.** `svrn mesh grant --wall` (every app the door's registry declares)
-  or `--rail <ns>` (exactly one, refused elsewhere by name), with a TTL. The
+- **Mint.** `svrn mesh grant --all-apps` (every app the door's registry declares)
+  or `--app <ns>` (exactly one, refused elsewhere by name), with a TTL. The
   minting verb composes the page path and renders the QR; the token never
   appears in a path or query.
 - **Bounds.** The grant store checks liveness and expiry per request; the

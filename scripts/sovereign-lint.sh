@@ -174,6 +174,16 @@ contains() {
 }
 escalate_to_workspace=0
 
+# The workspace's member names, once. A changed file can live under a
+# standalone manifest that is NOT a member — a wasm app or a probe with its
+# own `[workspace]` (sovereign/apps/ring-runtime) — and `cargo check -p <name>`
+# would fail with "did not match any packages", which reads as a toolchain
+# error rather than a skip. Resolve the member set up front; if that cannot be
+# done at all, escalate to the workspace, the loud and safe fallback.
+ws_members="$(cd "$REPO_ROOT" && cargo metadata --no-deps --format-version 1 2>/dev/null \
+    | python3 -c 'import json,sys; print("\n".join(p["name"] for p in json.load(sys.stdin).get("packages", [])))' 2>/dev/null || true)"
+[[ -n "$ws_members" ]] || escalate_to_workspace=1
+
 if [[ -n "$raw_paths" ]]; then
     while IFS= read -r path; do
         [[ -z "$path" ]] && continue
@@ -208,7 +218,13 @@ if [[ -n "$raw_paths" ]]; then
             if [[ -f "$dir/Cargo.toml" ]] && grep -q '^\[package\]' "$dir/Cargo.toml"; then
                 name="$(awk -F'=' '/^name[[:space:]]*=/ { gsub(/[[:space:]"]/, "", $2); print $2; exit }' "$dir/Cargo.toml")"
                 if [[ -n "$name" ]]; then
-                    if ! contains "$name" ${crates[@]+"${crates[@]}"}; then
+                    if [[ "$escalate_to_workspace" == "0" ]] && ! grep -qx "$name" <<<"$ws_members"; then
+                        # Not a workspace member: its own build owns it (e.g.
+                        # sovereign/apps/ring-runtime → scripts/build-ring-runtime.sh).
+                        # Say the skip — an unmentioned skip is how a file stops
+                        # being covered without anyone noticing.
+                        echo "scope: skipping $name — not a workspace member ($dir)" >&2
+                    elif ! contains "$name" ${crates[@]+"${crates[@]}"}; then
                         crates+=("$name")
                     fi
                     break

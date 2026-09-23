@@ -34,12 +34,10 @@
 //! for the guest to resolve.
 
 use sovereign_cli_shared::help::{Help, HelpSection};
-use sovereign_mesh::deep_link::{
-    build_guest_link, build_https_guest_link, parse_deep_link, DeepLink,
-};
+use sovereign_mesh::deep_link::{build_guest_link, parse_deep_link, wall_https_link, DeepLink};
 
 use crate::guest_link::{self, GuestLink};
-use crate::mesh_guest_link::{wall_page_base, wall_qr_svg};
+use crate::mesh_guest_link::{guest_bind_url, print_qr_blocks, write_qr_svg};
 
 /// Read the daemon's client port from `SetupConfig` rather than hardcoding
 /// 9741 — a sandbox pointed at its own daemon must not mint against the
@@ -299,7 +297,7 @@ pub(crate) const HELP_MESH_GRANT: Help = Help {
     summary: "Lend named models to someone who is NOT a mesh member, for a bounded window.",
     sections: &[
         HelpSection::Usage(
-            "svrn mesh grant --model <id> [--model <id>…] [--wall | --rail <ns>] [--ttl 2h] [--label <text>]\n\
+            "svrn mesh grant --model <id> [--model <id>…] [--all-apps | --app <ns>] [--ttl 2h] [--label <text>]\n\
              \x20               [--url <base>] [--qr-svg <path>]\n\
              svrn mesh grant --list\n\
              svrn mesh grant --revoke <token>",
@@ -307,15 +305,15 @@ pub(crate) const HELP_MESH_GRANT: Help = Help {
         HelpSection::Flags(&[
             (
                 "--model <id>",
-                "A model this grant may dispatch. Repeatable. Exact ids from `/v1/models`.",
+                "A model this grant may dispatch. Repeatable. Omitted: `primary`, this daemon's primary slot. `svrn model list` prints the ids.",
             ),
             (
-                "--wall",
+                "--all-apps",
                 "Also reach every ring app this door registered for guests in\n                    [daemon.guest_pages]. ONE grant and ONE QR for the whole wall:\n                    the phone lands on the door's index and picks. The owner widens\n                    the wall by registering an app, not by minting another link.",
             ),
             (
-                "--rail <ns>",
-                "The narrowing knob: reach exactly this one rail namespace and no\n                    other. Not combinable with --wall.",
+                "--app <ns>",
+                "The narrowing knob: reach exactly this one app and no\n                    other. Names either an app registered for guests in\n                    [daemon.guest_pages], or one you PUBLISHED with `svrn publish`\n                    ([iroh] apps) — for a published app the door proxies to its\n                    loopback target, so you share it with guests the same way it is\n                    shared with members. Not combinable with --all-apps.",
             ),
             (
                 "--ttl <dur>",
@@ -324,11 +322,11 @@ pub(crate) const HELP_MESH_GRANT: Help = Help {
             ("--label <text>", "Your own note, shown by --list. Never sent to the guest."),
             (
                 "--url <base>",
-                "Base URL the guest should reach you at. Default: this node's published address.\n                    With --rail the QR link adds that app's page path at the door; with\n                    --wall it points at the door's index, which lists them all.",
+                "Base URL the guest should reach you at. Default: this node's declared door\n                    address ([daemon] guest_bind, written by `svrn ring host --bind`),\n                    then its published address. With --app the QR link adds that app's\n                    page path at the door; with --all-apps it points at the door's index.",
             ),
             (
                 "--qr-svg <path>",
-                "Write the https link (<url>#token=…) to <path> as an SVG QR code. Needs --url.",
+                "Write the https link (<url>#token=…) to <path> as an SVG QR code. Uses\n                    --url, or the door's declared address when --url is absent. (On a\n                    terminal the QR is drawn there anyway; this is for a file, e.g.\n                    the wall's screen.)",
             ),
             ("--list", "Show outstanding grants, including revoked and expired ones."),
             ("--revoke <token>", "Kill a link immediately. The token is the one in the link."),
@@ -413,12 +411,12 @@ pub(crate) async fn cmd_grant(args: &[String]) -> i32 {
                     }
                 };
             }
-            "--rail" => {
+            "--app" => {
                 i += 1;
                 rail = match args.get(i) {
                     Some(v) => Some(v.clone()),
                     None => {
-                        eprintln!("--rail needs a namespace");
+                        eprintln!("--app needs an app (a namespace)");
                         return 2;
                     }
                 };
@@ -433,7 +431,7 @@ pub(crate) async fn cmd_grant(args: &[String]) -> i32 {
                     }
                 };
             }
-            "--wall" => wall = true,
+            "--all-apps" => wall = true,
             "--list" => list = true,
             "--revoke" => {
                 i += 1;
@@ -456,23 +454,44 @@ pub(crate) async fn cmd_grant(args: &[String]) -> i32 {
     // a union. Refused here AND at the mint route, so neither surface is the
     // only guard (ARCH 5).
     if wall && rail.is_some() {
-        eprintln!("--wall and --rail are two different grants: the whole wall, or one app.");
-        eprintln!("Drop one. `--wall` reaches every app in [daemon.guest_pages];");
-        eprintln!("`--rail <ns>` reaches that one and refuses the rest by name.");
+        eprintln!("--all-apps and --app are two different grants: every app hosted here, or one.");
+        eprintln!("Drop one. `--all-apps` reaches every app in [daemon.guest_pages];");
+        eprintln!("`--app <ns>` reaches that one and refuses the rest by name.");
         return 2;
     }
 
-    // The https link's base is the address the operator typed; there is no
-    // default a phone could open, so refuse rather than guess one.
+    // Nobody types an address: the door names the port, this machine names the
+    // address (`guest_bind_url`), refusing to advertise a wildcard or loopback
+    // bind. An explicit `--url` still wins outright.
+    if url_override.is_none() {
+        url_override = guest_bind_url();
+    }
+
+    // With neither, there is genuinely no address a phone could open: refuse
+    // rather than guess one, and name the one command that would supply it.
     if qr_svg.is_some() && url_override.is_none() {
-        eprintln!("--qr-svg needs --url <base>: the address a phone opens.");
+        eprintln!("--qr-svg needs an address a phone can open.");
+        eprintln!(
+            "Declare the door once — `svrn ring serve <ns> --dir <bundle> --bind <addr:port>`"
+        );
+        eprintln!("— and this inherits it; or pass `--url <base>` here.");
         return 2;
+    }
+
+    // No --model means "let this grant reach this node's primary": the daemon
+    // advertises the alias `primary` in `/v1/models`, so the default is the
+    // ALIAS rather than a copied id — one source of truth for what "primary"
+    // is, and it follows the operator's next `svrn model set` instead of going
+    // stale. Say it, so the grant's breadth is never silent.
+    let defaulted_model = models.is_empty();
+    if defaulted_model {
+        models.push("primary".to_string());
     }
 
     let port = daemon_client_port();
-    if !crate::mesh_cmd::daemon_listening_on(port).await {
-        eprintln!("No daemon detected on :{port} — minting a grant needs one.");
-        eprintln!("Start it with `svrn daemon start`, then re-run.");
+    if let Err(why) = crate::mesh_cmd::daemon_probe(port).await {
+        eprintln!("{why}");
+        eprintln!("Minting a grant needs a running daemon: `svrn daemon start`.");
         return 1;
     }
 
@@ -481,12 +500,6 @@ pub(crate) async fn cmd_grant(args: &[String]) -> i32 {
     }
     if let Some(token) = revoke {
         return grant_revoke(port, &token).await;
-    }
-
-    if models.is_empty() {
-        eprintln!("A grant must name at least one model: --model <id>");
-        eprintln!("`svrn mesh grant --list` shows what is already outstanding.");
-        return 2;
     }
 
     // Which way in — asked, not inferred. See `resolve_guest_path`.
@@ -582,6 +595,9 @@ pub(crate) async fn cmd_grant(args: &[String]) -> i32 {
     println!("Guest link minted.");
     println!();
     println!("  Grants:   {summary}");
+    if defaulted_model {
+        println!("  Model:    primary (this daemon's primary slot — pass --model to narrow)");
+    }
     match &path {
         GuestPath::Direct { base_url } => println!("  Reach at: {base_url}"),
         // Say WHY the tunnel, not just that there is one: an operator who
@@ -612,36 +628,39 @@ pub(crate) async fn cmd_grant(args: &[String]) -> i32 {
     println!();
     println!("  svrn mesh use '{link}'");
     println!();
-    if let (Some(path), Some(base)) = (&qr_svg, &url_override) {
-        let https = build_https_guest_link(
+    // The link a browser opens, when there is a base: written to a file when
+    // asked, and drawn in the terminal at the end (see `print_qr_blocks`).
+    let https = url_override.as_deref().map(|base| {
+        wall_https_link(
             token,
-            &wall_page_base(base, rail.as_deref(), wall),
+            base,
+            rail.as_deref(),
+            wall,
             expires_at_secs,
             (!summary.is_empty()).then_some(summary),
-            None,
-            None,
-        );
-        let written = wall_qr_svg(&https).and_then(|svg| {
-            std::fs::write(path, svg).map_err(|e| format!("cannot write {path}: {e}"))
-        });
-        match written {
-            Ok(()) => {
-                println!("Or open (the QR code in {path} carries this):");
-                println!();
-                println!("  {https}");
-                println!();
-            }
-            Err(e) => {
-                eprintln!("The grant was minted but its QR code was not written: {e}");
-                eprintln!("Revoke it with `svrn mesh grant --revoke {token}` and re-run.");
-                return 1;
-            }
+            dial.as_deref(),
+        )
+    });
+    if let (Some(path), Some(https)) = (&qr_svg, &https) {
+        if let Err(e) = write_qr_svg(https, path) {
+            eprintln!("The grant was minted but its QR code was not written: {e}");
+            eprintln!("Revoke it with `svrn mesh grant --revoke {token}` and re-run.");
+            return 1;
         }
+        println!("Or open (the QR code in {path} carries this):");
+        println!();
+        println!("  {https}");
+        println!();
     }
     println!("Revoke at any time with:");
     println!();
     println!("  svrn mesh grant --revoke {token}");
     println!();
+
+    // Last so it stays on the screen; a pipe sees nothing (guard inside).
+    if let Some(https) = &https {
+        print_qr_blocks(https)
+    }
     0
 }
 

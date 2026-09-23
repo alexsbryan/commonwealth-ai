@@ -2084,3 +2084,251 @@ None of the eight rows regenerated `quality/conformance/`, and none of their
 test. A row that adds a line above a `covers:` tag owes the regeneration in its
 own commit. Not a queue edit (the rows are `[x]`); recorded so the next queue's
 mint step names it.
+
+## the-link — REVIEW-audit-the-link (2026-09-22, range `71bfde459..7d009553b`)
+
+33 commits. The campaign's product commits (86adab41b inventory · be5baf177 ·
+8cd661e08 · 1b8b1a393 · 6367104bd · 4f08eafdc · 9a4a5aaa6 · 1e2823be8 demo-infra)
+are interleaved with four foreign lanes, attributed per file below: grounding
+(a313c9c18), f26 census split (f8a133275, 3c3130a6e, 2704131bf), summary-verify
+(33d554a87, 225f8ee94), harness (94e56791d), ontology (83b86cbe5, d84f09b3e),
+conformance regen (6b6434a47).
+
+### Gates
+
+- TESTALL `scripts/ralph-check.sh testall` → **exit=100, 13701 pass / 1 fail** —
+  `cli_contract_journeys::every_journey_cites_a_doc_that_exists`: mesh-offers-catalogue
+  cites `docs/internal/RING_APPLICATIONS.md` — foreign, not worker-fixable (NEEDS_HUMAN).
+- PREPUSH `scripts/ralph-check.sh prepush` → **PUSH BLOCKED, 1 blocking: arch-gate** —
+  foreign, not worker-fixable (NEEDS_HUMAN). Scoped lint, rustfmt, docs/layout/layer/
+  boundary/lock/env gates all passed; size-gate + deletion-manifest advisory-failed.
+- `git diff --stat 71bfde459..HEAD -- commonwealth/crates/commonwealth-rail-core`
+  is **EMPTY** (invariant `c3fed9c3` holds — the campaign's loudest check passes by
+  silence). `commonwealth-rail` also untouched; grants, templates untouched.
+
+### The falsifier's reading — per crate, tests apart, vs O §Predictions
+
+Campaign product diff, prod/test split brace-verified and hunk-header corrected:
+
+| path | +prod | +test | − | predicted |
+|---|---|---|---|---|
+| commonwealth-discovery `deep_link.rs` | 38 | 77 | 5 | +55 |
+| sovereign-cli-llm `ring_cmd/mod.rs` | 74 | 20 | 1 | rowspan — +130 |
+| sovereign-cli-llm `ring_cmd/checkpoint_verify.rs` (new) | 248 | 203 | 0 | |
+| sovereign-cli-llm `mesh_guest.rs` | 3 | 0 | 0 | |
+| sovereign-cli-llm `mesh_guest_link.rs` | 0 | 38 | 10 | |
+| sovereign-cli-shared `rail.rs` | 25 | 0 | 0 | **unnamed** |
+| sovereign-daemon `ring_checkpoint.rs`+`mod.rs`+`server.rs` | 122 | 3 | 0 | rowspan — +90 |
+| sovereign-daemon `ring_checkpoint/tests.rs` (new) | — | 233 | 0 | |
+| scripts/ring-room-demo.sh | 211 (193 the-link + 18 `1e2823be8`) | — | 32 | +110 |
+| sovereign/SYSTEM_OVERVIEW.md | 4 (doc, same-commit) | — | 2 | — |
+
+- **the system was shaped to the demo HERE — sovereign-cli-shared/src/rail.rs:199-224**
+  (+25, a crate the prediction did not name): `rail_checkpoint`, the one client for the
+  one route, targeting the internal listener on purpose. The code is the design's shape
+  (one route, one verb, one client); the prediction's crate list was wrong. Record-only.
+- **the system was shaped to the demo HERE — sovereign-daemon/routes_internal/ring_checkpoint/**
+  (+358 vs +90): the route module is 112 prod lines with its doc comment; the 233-line
+  tests.rs drives the REAL handler (`test_app_state_with_seed`), which is what the row's
+  four mandated tests (document shape, digest round-trip through RC's exports, roster
+  embedded, both refusals) cost. Prediction error, not demo-gaming. Record-only.
+- **the system was shaped to the demo HERE — sovereign-cli-llm/src/ring_cmd/checkpoint_verify.rs**
+  (+549 vs +130 across the crate; 248 prod + 203 test in the new file): the four-step
+  verb with its refusal sentences and its five tamper tests. Same character as above.
+- **scripts/ring-room-demo.sh +211 vs +110**: +193 the offline-leg checkpoint addendum
+  (4f08eafdc — export at cut start, cold verify, three forgeries, printer's third
+  campaign) plus +18/−9 from 1e2823be8, the rail clause returned to its registered
+  floor (demo infrastructure, campaign-adjacent, not product). Record-only.
+- commonwealth-discovery: prod +38 sits UNDER the +55 predicted; the +77 test lines are
+  the mandated round-trip/byte-identity/refusal/QR matrix. Within prediction, tests apart.
+- Guest surface "0": held in behavior — `mesh_guest.rs` +3 is the compiler forcing the
+  two new optional builder args (`None, None`) and an `at: _` arm; the byte-identity
+  clause (c) test pins the "changes for nobody" claim.
+
+### Findings against ARCH's twelve
+
+1. **(5, 7 — recorded, not fixed)** A pre-registered predicate was edited after the data
+   existed: `quality/campaigns/the-link.toml:21` in 9a4a5aaa6, under director decision
+   the-link-6. Verified mitigations: the correction is derived from O Demo §2–§3 (the
+   proof homes the order already named), not from the numbers; both cold room runs
+   predate the edit and are preserved; the predicate still fails the run on
+   `tl-checkpoint-verifies` < 1.0 or any rg/rr-2 FAILED clause — it was not moved in one
+   direction only; C2/C3 untouched. Recorded because pre-registrations that move after
+   data exist must leave a trail; the trail is complete (ralph/decisions/the-link-6.md,
+   falsifiers named).
+2. **(3, 4 — foreign, no fix)** d84f09b3e "ontology stuff" — a commit message that names
+   nothing it did, carrying hundreds of `research/ontology-retrieval/**` JSON files plus
+   `sovereign-tools/src/raptor_atlas.rs`. History not rewritten; recorded so the pattern
+   stays visible.
+3. **(1, 6 — verified at the site, no fix)** be5baf177's body claims check out:
+   the unknown-namespace refusal fires BEFORE the creating read
+   (routes_internal/ring_checkpoint.rs:55-64, comment names ARCH 6), one trace line at
+   export with ns/acts/actors (:96-101), ONE journal read (:74), no empty document path.
+4. **(5 — verified)** Both tl-1 commit bodies pasted their PLANT red lines with test
+   names and reverification counts; the verify tests drive the real route handler, not a
+   stand-in (8cd661e08 body, REUSED paragraph).
+5. **(2 — verified)** Behaviour preservation held: the back-compat byte-identity test
+   (deep_link tests), the untouched caller behavior, tl-3's `git diff` EMPTY clause over
+   sovereign/commonwealth crates (6367104bd).
+
+### What each row reused (O §Less)
+
+- inventory 86adab41b: measured the tree, stamped `<BASE>`, corrected rows in place
+  (git-side: STATE.md only — the order copy traveled in 4d733f98e).
+- tl-1-checkpoint-export be5baf177: the append path's own pair (`rail.roster` + ONE
+  `journal.read()`, routes_rail.rs shape), `digest`, the internal-router/gate mount,
+  `ring log`'s verb shape, the rail routes' refusal style.
+- tl-1-checkpoint-verifies 8cd661e08: the export row's document (tests drive the real
+  handler); RC's public exports `admit`/`digest`/`RailGap` Display — zero rail-core or
+  commonwealth-rail edits; the refusal-sentence and usage-exit style.
+- tl-2-link-carries-its-couriers 1b8b1a393: deep_link's builder/parser/percent-encoder;
+  the token-outside-fragment rule EXTENDED (one rule, all protected params); fast_qr's
+  existing `wall_qr_svg` path for the QR clause.
+- tl-3-dial-measured 6367104bd: W:360-380's isolated-copy recipe (probe.wasm reproduced
+  byte-identical: 415,140 B, sha256 9a07541e…9831d7); the DECISIONS ledger; no product code.
+- tl-2-offline-leg-exports 4f08eafdc: M's offline leg end to end, ring_room's cut/heal
+  recording, the scaffold probe ring (the fork is GROWN there, not typed), the verdict
+  printer now reading C beside C2 and C3, admit's dedupe semantics.
+- REVIEW-DEMO-the-link-run 9a4a5aaa6: no product code; instrument untouched.
+
+Nothing new is minted that a §Less item already does: `checkpoint_verify.rs` is the
+campaign's one designed new surface (the four steps as a verb); `rail_checkpoint` is
+the one client that route needs.
+
+### Red gates — foreign, recorded, NEEDS_HUMAN
+
+- TESTALL's one failure: the citation landed in a3bd715f5 (2026-09-13, ring-apps; an
+  ANCESTOR of BASE — `git merge-base --is-ancestor` verified), naming a doc that is
+  GITIGNORED per-host (`.gitignore:67`, `docs/internal/`) and ABSENT on this host
+  (recorded in `quality/campaigns/ring-apps.toml` spec line). The campaign's diff
+  touches neither `sovereign/docs/cli-contract.toml` nor `docs/internal/` (empty).
+  Precedent: the mesh-principal audit stopped identically on this host (DECISIONS a2a688d07).
+- PREPUSH arch-gate [hard]: `sovereign-cli-llm/src/eval_cmd/runner.rs` 2074→2133 (+59,
+  slack 50 — grown by a313c9c18, grounding lane, foreign) and the 800-1200 approach band
+  +446 lines branch-wide. **No the-link file is oversized or in the band**
+  (`checkpoint_verify.rs` 451 < 800). Advisory: size-gate 13 keys grew (the campaign's
+  share: cli-llm +310, daemon +267 — the numbers in the table above); deletion-manifest
+  p0-root-junk losing ground.
+
+## browser-dial — REVIEW-audit-browser-dial (2026-09-22, range `ac44e6fec..51b64f68a`)
+
+BASE `ac44e6fecc8165fbad5c624da21442b6227ccc5a` (stamped by the inventory row into
+O §Predictions as its first act). Six commits after BASE: the campaign's four
+(a1cb78f60 inventory · 5f58c18d4 · ff6d8e561 bd-1 · 51b64f68a queue marks) interleaved
+with two foreign operator-directed lanes — 5825a2fa3 `cli: svrn ring serve + svrn mesh
+media origin` and 7fef0a9dc `runbook: 100% cli`, both committed mid-campaign by a
+concurrent session on `main` (operator direction 2026-09-22, "I want to go 100% cli").
+
+### Gates
+
+- TESTALL `scripts/ralph-check.sh testall` → **exit=100, 13710 pass / 2 fail**, both
+  foreign, triaged:
+  - `cli_contract_journeys::every_journey_cites_a_doc_that_exists` — the known per-host
+    red: `mesh-offers-catalogue` cites `docs/internal/RING_APPLICATIONS.md`, GITIGNORED
+    (`.gitignore:67`) and ABSENT on the Halo, cited at `sovereign/docs/cli-contract.toml`
+    since `a3bd715f5` (2026-09-13, an ANCESTOR of BASE — `git merge-base --is-ancestor`
+    verified). This campaign's diff touches neither `sovereign/docs/cli-contract.toml`
+    nor `docs/internal/` (empty). Recorded identically by A51 (rr-2), A59 (ring-guest)
+    and the-link-7.
+  - `local_only_boot::a_local_only_daemon_spawns_no_network_service` — load flake, not
+    a regression: the 10 s bound on a daemon booting under a 13712-test parallel run
+    (`local_only_boot.rs:277`). Re-run alone
+    (`scripts/ralph-check.sh testfn sovereign-mesh a_local_only_daemon_spawns_no_network_service`)
+    → **exit=0, 1 pass**. The same triage the mesh-principal audit recorded.
+- PREPUSH `scripts/ralph-check.sh prepush` → **exit=1, PUSH BLOCKED, 1 blocking: arch-gate
+  [hard]** — approach band GREW 203149 → 203154 (+5). Attributable in full to the foreign
+  5825a2fa3: `sovereign-cli-llm/src/ring_cmd/mod.rs` 1082 → 1087 (`Some("serve") =>
+  run_serve(...)`, its help line, `mod serve; use serve::run_serve;`). **No browser-dial
+  file is oversized or in the band** — the campaign's commits add no `.rs` line. Advisory:
+  size-gate 13 keys grew, every grown key a foreign lane's (browser-dial adds nothing);
+  deletion-manifest `p0-root-junk` losing ground (135094 > 113934); concept-gate
+  could-not-judge (SCIP graph indexed `36dca4ff`, HEAD `51b64f68`). Every hard gate green:
+  `sovereign-lint-scoped`, `rustfmt`, `docs`/`layout`/`layer`/`boundary`/`lock`/`env`/
+  `clock`/`lifecycle`, `judge-replay-control`, `ralph-decisions`, `nc-thesis`,
+  `judge-funnel-gate`, `instrument-gate`.
+
+### The falsifier's reading — per crate, tests apart, vs O §Predictions
+
+`git diff --numstat ac44e6fec..51b64f68a`, prod/test split by the `#[cfg(test)]` line in
+each file; no `tests/` tree changed.
+
+| path | predicted | +prod | +test | − | reading |
+|---|---|---|---|---|---|
+| sovereign/crates | **+0** | 532 | 146 | 0 | **+678, ALL foreign** — the loudest finding |
+| commonwealth/crates | +0 | 0 | 0 | 0 | ✓ |
+| scripts/ | +0 | 0 | — | — | ✓ |
+| quality/campaigns/browser-dial.toml | +1 file | — | — | — | ✓ — landed pre-BASE at 0e4226967 (ancestor of BASE) |
+| ralph/next/browser-dial/ | +4 files | — | — | — | ✓ — PROMPT+CHARTER pre-BASE; order +1/−1, STATE +2/−2 in range |
+| ralph/DECISIONS.md | +2 entries | +183 | — | — | ✓ — browser-dial-1, -2 rendered |
+| ralph/decisions/browser-dial-{1,2}.md | (the 2 entries' source) | +189 | — | — | ✓ |
+| `target/` | never committed | — | — | — | ✓ `git ls-files target/` empty |
+
+- **the loudest finding: `sovereign/crates` was changed the prediction did not name, and
+  `git diff --stat <BASE>..HEAD -- sovereign/crates commonwealth/crates` is NOT empty
+  (+678).** All four files are the foreign 5825a2fa3 (`ring_cmd/serve.rs` new 427 =
+  344 prod + 83 test; `mesh_media/origin.rs` new 240 = 177 prod + 63 test; `mesh_media.rs`
+  +6; `ring_cmd/mod.rs` +5). The campaign has no share of it: each row's own commit is
+  ledger + queue mark only, and the campaign's predicate — product diff empty over
+  `BASE..HEAD` — reads FALSE **literally**. bd-1's decision named and attributed this at
+  the time (`browser-dial-2.md` "Concurrent foreign product work"); it is not fixable by a
+  product edit here, because the campaign's one absolute forbids exactly that (the exit
+  condition). The operator's call (NEEDS_HUMAN).
+- Every other predicted path holds. `quality/campaigns/browser-dial.toml` and the
+  `ralph/next/browser-dial/` PROMPT/CHARTER landed at 0e4226967, an ancestor of BASE, so
+  they are absent from the range by construction — not drift.
+
+### Findings against ARCH's twelve
+
+No defect of this campaign's is fixed here; there is none to fix (its whole diff is
+ledger + queue). What the twelve were read against, and what held:
+
+1. **(2, 6, 7 — the campaign's own work holds).** The inventory corrected the ledger by
+   ADDING, never replacing (ARCH 6): `docs/internal/`-style host facts — the Mac's
+   verbatim `ring v0.17.14` refusal (exit 101) stands BESIDE the Halo's
+   `Finished \`dev\` profile … in 15.90s` (exit 0), each host's instrument named
+   (toolchain, target std, C compiler), with the falsifier named (a host whose clang
+   cannot target wasm32 — the Mac's own run). One run is not a measurement, so the
+   instrument is named before the outcome (ARCH 7). Zero product branch changed (ARCH 2).
+2. **(1, 4, 6, 7 — bd-1's record holds).** `browser-dial-2.md` names every layer with its
+   verbatim outcome (endpoint bind · relay online · QUIC/ALPN `cwth/guest/0` ·
+   request-write · admission · `HTTP/1.1 200 OK` + the named rail row
+   `ring-658e43cce7830b48`), names what would falsify each, and reports the one path fact
+   that cost a run (hold the bi-stream's send half open, as `HttpBridge::pump` does). The
+   deployed daemon's `GET /v1/rail/log` 404 is named and explained (its process is a
+   5-day-old `(deleted)` binary predating `cc8a4c3ee`) rather than substituted for the
+   throwaway node's 200 (ARCH 6). Citations spot-checked against the tree:
+   `GUEST_ALPN = b"cwth/guest/0"` at `commonwealth-transport/src/iroh.rs:101`; `pump` at
+   `:875`; `an_unrouted_guest_alpn_is_dropped…` at `:1386`; `/v1/rail/log` in
+   `Scope::Rails(_) | Scope::Wall` at `sovereign-grants/src/guest_grant.rs:133`; the guest
+   admission + 403 refusal at `sovereign-daemon/src/client_auth.rs:265,313`. The decision
+   abbreviates that last path as `client_auth.rs` (crate dirs were reorganized); it
+   resolves, no change needed.
+3. **(5 — bar instrument).** `python3 scripts/ralph-decisions.py --check` exit=0
+   (`ralph-decisions passed` in PREPUSH); the rendered ledger is fresh.
+4. **(11 — inventory outranks plan).** The engine decision took the surface the demo
+   already carries (a headless Chrome driven by the repo's vendored `playwright-core`),
+   and the relay is iroh's own n0 relay — no new container, no relay of ours.
+
+### What each row reused (O §Less)
+
+- inventory `a1cb78f60`: W's isolated-copy recipe (own `[workspace]`, manifest KEPT so
+  the build is re-derivable, `iroh = "=1.0.2"`); tl-3's measurement shape (numbers,
+  verbatim outcomes, falsifiers, zero product diff); the DECISIONS ledger.
+- bd-1 `ff6d8e561`: W's isolated-copy recipe for the page build (`iroh =1.0.2`,
+  `wasm-bindgen =0.2.128`; measured that iroh's wasm tree pulls `getrandom 0.4` with
+  `wasm_js`, so W:360-380's `--cfg getrandom_backend` note was not needed); the demo's
+  grant machinery (`POST /internal/guest/grant`, bearer); the node shape
+  `scripts/ring-doc-demo.sh`'s local backend uses (`mkcfg`/`start_daemon`, which
+  `ring-room-demo.sh` sources); tl-3's measurement shape; the phone pattern's existing
+  engine surface (Google Chrome for Testing 147.0.7727.15 headless via the vendored
+  `playwright-core` 1.59.1) — no new image. iroh's n0 relay, never one of ours.
+
+### Red gates — foreign, recorded, NEEDS_HUMAN
+
+- TESTALL's two failures: the per-host doc citation (a3bd715f5, ancestor of BASE) and the
+  `local_only_boot` 10 s load flake — both triaged above, neither worker-fixable without
+  an edit this campaign's absolute forbids.
+- PREPUSH arch-gate [hard]: the +5 band growth is entirely the foreign 5825a2fa3's
+  `ring_cmd/mod.rs`; the campaign's share is zero. A fix is either a product edit (forbidden
+  here) or a working-tree `--update-baseline` (forbidden by PROMPT §7) — the operator's call.
+  Advisory size-gate / deletion-manifest / concept-gate ride as above.

@@ -18,7 +18,7 @@ declared  = "2026-09-21"
 status    = "active"
 
 [predicate]
-statement = "With the room stand-in up, RING_ROOM_TOPOLOGY=room scripts/ring-room-demo.sh verdict all reads PASSED on every tl-* bar, on all six rr-2 bars and all five rg bars, twice from cold, and git diff --stat <BASE>..HEAD -- commonwealth/crates/commonwealth-rail-core is empty."
+statement = "With the room stand-in up, RING_ROOM_TOPOLOGY=room scripts/ring-room-demo.sh verdict all reads PASSED on tl-checkpoint-verifies, on all six rr-2 bars and all five rg bars, twice from cold — tl-link-carries-its-couriers and tl-dial-measured read COULD-NOT-JUDGE by design, their proofs living in the test suite and ralph/DECISIONS.md (order Demo §2-§3; the-link-7) — and git diff --stat <BASE>..HEAD -- commonwealth/crates/commonwealth-rail-core is empty."
 check     = "./scripts/sovereign-test.sh --human --package sovereign-daemon --package sovereign-cli-llm --package commonwealth-discovery --package commonwealth-rail-core"
 
 [[bar]]

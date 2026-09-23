@@ -350,6 +350,21 @@ merged; that merge is what minted this arrangement, and `ledger-1` records it.
 - Chose: One decision, one file, under `ralph/decisions/`, rendered into `ralph/DECISIONS.md` by `scripts/ralph-decisions.py`; new ids are `<campaign>-<n>`, and the A1-A75 series is frozen verbatim in the archive parts rather than reflowed. `ralph/REVIEW_FINDINGS.md` gets `merge=union` instead — it has no ids to corrupt. Both declared in `.gitattributes`, with the keep-ours driver registered by `scripts/install-git-hooks.sh` and a hard `ralph-decisions` row in `quality/instruments.toml` so a stale render cannot be pushed.
 - Because: Two campaigns adding two files is not a conflict at all, and a campaign slug cannot collide across branches the way a global counter does (ARCH 10 — structural, not remembered). Renumbering the legacy series to fit a new scheme would have broken citations in `quality/campaigns/*.toml`, `research/`, and commit bodies for no gain, so the archive is frozen where it stands, the way published commit trailers are.
 
+**browser-dial-1 · 2026-09-22 · REVIEW-build-browser-dial-inventory · seat** — this commit
+- Needed: `the-link-3` (b) recorded a build failure — "iroh 1.0.2 does NOT build for wasm32-unknown-unknown" — from the Mac, and the browser-dial order's Premise 1 says that does not reproduce on the Halo. A ledger that carries only one host's outcome is a host fact recorded as a pin fact (ARCH 7). Bar `bd-wasm-build-reproduced` clause (b) requires the Mac outcome to stand BESIDE the Halo one, with each host's instrument named, never replaced.
+- Chose: reproduced the probe under `target/ralph/browser-dial/iroh-probe/` at `iroh = "=1.0.2"` (manifest kept, own `[workspace]`), on the Halo's `sovereign-vulkan` toolbox: `cargo check --target wasm32-unknown-unknown` → `Compiling ring v0.17.14` … `Finished `dev` profile [unoptimized + debuginfo] target(s) in 15.90s`, exit 0. Recorded it beside the Mac's verbatim refusal, named the conditions for both, and named the falsifier. No product code moved — `git diff` over sovereign/crates and commonwealth/crates for this row is empty.
+- Because: the Mac's `No available targets are compatible with triple "wasm32-unknown-unknown"` is cc-rs reporting that its host C compiler cannot target wasm32; on the Halo, clang 21.1.8 lists `wasm32` in `--print-targets` and ring's build script compiles. The failing input for the claim is a host whose clang cannot target wasm32, which reproduces the Mac refusal verbatim. A pin that is a host fact is worth recording as exactly that — and the pin itself (iroh 1.0.2, ring 0.17.14) is unchanged on both.
+
+**browser-dial-2 · 2026-09-22 · bd-1-browser-dials-relay · director** — this commit
+- Needed: the-link's tl-3 clause (c) — a plain browser dialing a node over iroh's relay — was deferred when clause (b) was recorded as a build failure. Bar `bd-browser-dials-relay` clause (b) requires one grant-scoped `GET /v1/rail/log` to return through a live browser dial, clause (c) requires every layer named with its verbatim outcome, clause (d) requires a zero product diff.
+- Chose: built the page under `target/` (Rust → wasm32-unknown-unknown; `iroh =1.0.2`, `wasm-bindgen =0.2.128`, a real browser endpoint) and opened it in Google Chrome for Testing 147.0.7727.15 (headless) driven by the repo's vendored `playwright-core` 1.59.1. It dialed a live node's `GUEST_ALPN` (`cwth/guest/0`) through the n0 relay and returned **`HTTP/1.1 200 OK`** from `GET /v1/rail/log` with the guest bearer, carrying the named rail row **`ring-658e43cce7830b48`**. WORKED.
+- Because: each layer answered in turn — the wasm endpoint bound, the relay handshake completed, the QUIC connection negotiated `cwth/guest/0` and established, the request rode one bi-stream, and the guest-channel admission read the grant and served the rail. The one non-obvious path fact (a wasm client must hold the bi-stream's send half open until the response, as `HttpBridge::pump` does) is recorded below with both verbatim runs. No product code moved — this row's own `git diff` over sovereign/crates and commonwealth/crates is empty.
+
+**browser-dial-3 · 2026-09-22 · REVIEW-audit-browser-dial · director** — this commit
+- Needed: The audit body was done and committed (`418639ea7`) but the row stayed `[~]` on its two named checks, both red on causes the campaign's diff does not touch. TESTALL exit=100, 13710 pass / 2 fail: `every_journey_cites_a_doc_that_exists` — mesh-offers-catalogue cites `docs/internal/RING_APPLICATIONS.md`, gitignored per-host (`.gitignore:67`), absent here, cited at `sovereign/docs/cli-contract.toml:3627` since `a3bd715f5`, an ancestor of BOTH `origin/main` and BASE — and `local_only_boot::a_local_only_daemon_spawns_no_network_service`, the 10 s boot bound under a 13712-test parallel run (`testfn sovereign-mesh` alone exit=0). PREPUSH exit=1: arch-gate [hard], the approach band 203149 → 203154 (+5), in full the concurrent foreign `5825a2fa3`'s `ring_cmd/mod.rs` 1082 → 1087. The predicate's literal reading — tree-wide `git diff --stat <BASE>..HEAD` over sovereign/crates and commonwealth/crates empty — is FALSE: +678, all of it foreign. The package posed the disposition as operator forks.
+- Chose: Close the audit row on the campaign's OWN share, which is zero. (1) The predicate is read per its two bars' `floor_basis` clause (d), which already scope it "for this row", and per O §Predictions ("sovereign/crates: +0 … a row that needs a product edit has found the order's exit condition"); the tree-wide literal reading is recorded FALSIFIED by the foreign lane, not erased (ARCH 6). (2) The two TESTALL reds are recorded foreign, as this queue's precedent (the-link-7, A51 rr-2, A59 ring-guest) closed the identical red; the restore/rename of the per-host doc stays the operator's. (3) arch-gate [hard] is LEFT RED and packaged — its only fix is a product edit (`ring_cmd/mod.rs` trimmed/split 5 lines), which this campaign's one absolute forbids and which the foreign lane that grew it owns; a working-tree `--update-baseline` is forbidden by PROMPT §7, and a re-pin at origin/main cannot absorb an unpushed commit (`5825a2fa3` is not on origin/main). (4) The dial WORKED — bd-1 returned `HTTP/1.1 200 OK` carrying `ring-658e43cce7830b48` (browser-dial-2) — so the order's DoD (O Demo: the MEASUREMENT closes the order) is met, and the demo-leg follow-on order stays the operator's (campaign.md Stop conditions). Every row is `[x]`.
+- Because: A measurement campaign's contract is a zero product diff and a measured dial; both hold on the campaign's own share (its four commits are ledger + queue mark only; its own `.rs` change is zero). Correcting a row whose premise the tree contradicts is the operator's standing direction (`ralph/PROMPT.md`, 2026-09-17), and closing an audit with a foreign red recorded is the-link-7's settled precedent. The one thing the charter does not clearly cover — a foreign HARD-ratchet regression inside the range whose only fix is a product edit — is why this decision carries REVIEW-AFTER. REVIEW-AFTER: the approach band is left +5 over baseline on foreign, unpushed product code; pre-push stays BLOCKED for the whole branch until the operator or the `5825a2fa3` lane trims/splits `ring_cmd/mod.rs` back under 1082 (or banks a real cut with `arch-gate --tighten`).
+
 **the-link-1 · 2026-09-22 · tl-2-offline-leg-exports · director** — this commit
 - Needed: the row's DEMO-BG/DEMO-WAIT checks are unrunnable on this macOS host (Mach-O `target/debug`, no `room`/`uplink` podman nets, no `sovereign-vulkan` toolbox; `demo-bg`'s `setsid` is util-linux) and the worker packaged this as NEEDS_HUMAN instead of stalling.
 - Chose: the demo checks run on the Halo — where the run-of-show already pins the room demo — as soon as the operator pushes this tree there; the row stays `[~]` until that run passes and `scripts/ralph-mark.sh` lands. The macOS `demo-bg` silent no-op is recorded as a hazard, not fixed here.
@@ -374,6 +389,16 @@ merged; that merge is what minted this arrangement, and `ledger-1` records it.
 - Needed: the supervisor dispatched resolution attempt 3 of 4 on the same NEEDS_HUMAN the-link-4 already resolved ("further resolution sessions of this dispatch cycle: read the-link-1/2/4 in `ralph/DECISIONS.md` and stop — do not re-verify"). The only unblocking action remains `git push`, the charter's operator line.
 - Chose: confirm the halt; no row edit, no re-verification. The package stays with its ask unchanged (options, costs, recommendation: push now). Attempt 4 reads the-link-1/2/4/5 and stops.
 - Because: nothing landed since the-link-4 (only the supervisor's dispatch-log commit 5160a01d3); the venue facts re-checked in one command each (setsid absent, Mach-O build, no `ralph/STOP`); removing the package would re-dispatch a row that cannot run here — the stall-burn the-link-2 documented at 07:15/07:28.
+
+**the-link-6 · 2026-09-22 · REVIEW-DEMO-the-link-run · director** — this commit
+- Needed: The row's expected table ("three `tl-*` PASSED", exit 0 — STATE.md:60, HANDOFF.md:63-64, the-link.toml:21) contradicts the instrument tl-2-offline-leg-exports built, which prints `tl-link-carries-its-couriers` and `tl-dial-measured` as UNCONDITIONAL COULD-NOT-JUDGE naming their proof homes (ring-room-demo.sh:2349-2355, comment :2312-2317 citing ARCH 5), so exit 0 is unreachable. All five checks ran to completion on the Halo: rr-1 at its A38 baseline exactly (answer 0.8 / plug-in 0.0 on `c_answer_names` are the two expected reds, exit 1); both cold room runs read `tl-checkpoint-verifies` 1.0 with all four legs true and `created_unix` strictly inside the cut windows, the three forgeries refused by name, everything else PASSED, no FAILED clause.
+- Chose: Option 1 of the package — accept the instrument's table as the honest reading. Correct the predicate (the-link.toml:21) to name `tl-checkpoint-verifies` PASSED with the two designed CNJs; align STATE.md:60 and HANDOFF.md:63-64; mark REVIEW-DEMO-the-link-run `[x]` on these runs (logs: `target/ralph/tl-rr1-regression.log`, `tl-room-run-1.log`, `tl-room-run-2.log`).
+- Because: The order implies the fix — Demo §3 names `ralph/DECISIONS.md` as the dial bar's proof home and Demo §2's proof is the builder/parser/QR round-trip, i.e. the test suite; neither asks the room run to re-run them. Forcing it would embed cargo in a demo whose contract is "measures binaries, never the tree" (HANDOFF step 3) and add a second row where one correction suffices (charter: strictly necessary). ARCH 5: CNJ is an unmeasured bar making no claim, never a pass — printing PASSED would read 1.0 on kindness, the bars' own goodhart language. the-link-1 already recorded "demo exit 4 … is the four-verdict rule working, not a failure", and tl-2 closed on exactly this table (f6fb719e9; its acceptance, STATE.md:59, required only the six rr-2 and five rg PASSED).
+
+**the-link-7 · 2026-09-22 · REVIEW-audit-the-link · director** — e9d0c4f85 · 49b664b2e · this commit
+- Needed: The audit body was done and committed (5d44de59f) but the row stayed `[~]` on its two named checks, both red on causes the campaign's diff does not touch. TESTALL 13701/1: `every_journey_cites_a_doc_that_exists` — mesh-offers-catalogue cites `docs/internal/RING_APPLICATIONS.md`, gitignored per-host (`.gitignore:67`), absent here, cited since a3bd715f5, an ancestor of BASE. PREPUSH arch-gate [hard]: `runner.rs` past slack and the approach band +446. The package posed both as operator forks; the tree contradicts that framing — a313c9c18 (the runner.rs growth) is ON origin/main, the branch's `origin/main..HEAD` diff has zero `.rs` changes, and the 2074 pin was already 45 lines stale (the file was 2119 when 5bd896d8f froze it).
+- Chose: (1) The file: SPLIT, never re-pinned — the trailing `degraded_router_tests` module (100 test-only lines) moved to `runner/degraded_router_tests.rs` under `#[path]`, the `router.rs`→`router/posture_tests.rs` precedent; runner.rs 2133→2037, back under its pin (e9d0c4f85). (2) The band: re-pinned AT origin/main from a detached worktree per the 2026-09-21 direction's recipe, `approach_band.txt` ONLY — `oversized.txt`/`instruction_surface.txt` deliberately not copied back, because a file pin is never raised (49b664b2e). (3) TESTALL's red: recorded foreign per this queue's own precedent (A51 rr-2, A59 ring-guest — the identical red on this host), row closed on the campaign's share; restore-or-rename of the per-host doc stays the operator's (third report).
+- Because: The direction makes the file-ceiling fix "never re-pinned, never an operator question" and prescribes the origin/main re-pin for ratchets in arrears; the charter's decide-list covers "fixing the code the gate names". The TESTALL red is not a ratchet and its fix (restore or rename a per-host doc this campaign never cited) is outside the charter's leave-list's spirit to guess at — closing on the campaign's share with the red honestly recorded is ARCH 5's four-verdict close, and it is exactly what A51 and A59 did.
 
 ## Flags for the operator
 
@@ -8052,6 +8077,250 @@ mismatch, missing date, missing ledger block, appendix id mismatch — are the
 
 </details>
 
+## browser-dial-1 · 2026-09-22 — the tl-3 (b) build outcome was a host fact, not a pin fact; both records now stand
+
+<details><summary>reasoning, evidence, package</summary>
+
+**The fork.** `the-link-3` (b) closed the dial work on "iroh 1.0.2 does not
+build for wasm32" (Mac). The handoff session then probed the same pins on
+the Halo and got a build. One of the two is not durable: either the pin
+moved (it did not — the lock still pins iroh 1.0.2 and ring 0.17.14) or the
+outcome was never about the pin. The row's job is to reproduce the Halo
+outcome under `target/` with its instrument named, and correct the ledger by
+ADDING it, never by replacing the Mac record.
+
+**The Mac outcome, verbatim (as recorded by `the-link-3`, 2026-09-22, host =
+the operator's Mac; instrument = `cargo check --target wasm32-unknown-unknown`
+in an isolated copy pinning iroh 1.0.2 / ring 0.17.14), exit 101:**
+
+```
+error: failed to run custom build command for 'ring v0.17.14'
+warning: ring@0.17.14: error: unable to create target: 'No available targets are compatible with triple "wasm32-unknown-unknown"'
+```
+
+**The Halo outcome, verbatim (this row, 2026-09-22), exit 0:**
+
+```
+   Compiling ring v0.17.14
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 15.90s
+```
+
+**Conditions named — Halo (the instrument with its parts):**
+
+- Host: the `sovereign-vulkan` toolbox (podman image
+  `docker.io/kyuz0/amd-strix-halo-toolboxes:vulkan-radv`, container
+  `c0142767d629`), Linux.
+- Rust: `rustc 1.95.0 (59807616e 2026-04-14)`, `cargo 1.95.0`.
+- Target std: `wasm32-unknown-unknown` present in `rustup target list
+  --installed`.
+- C compiler: `/usr/bin/clang 21.1.8 (Fedora 21.1.8-4.fc43)`, whose
+  `--print-targets` lists `wasm32 - WebAssembly 32-bit`; `wasm-ld` present.
+  THIS is the part the Mac lacked.
+- Probe: `target/ralph/browser-dial/iroh-probe/Cargo.toml` (never committed),
+  `iroh = "=1.0.2"` with an empty `[workspace]`; its own lock resolved iroh
+  1.0.2, ring 0.17.14, iroh-base 1.2.0. (The workspace lock pins iroh-base
+  1.0.2; the probe's fresh lock takes 1.2.0 through `iroh-dns`'s `^1.2.0`.
+  The difference does not touch ring, which is the failing layer, and the pin
+  under test — iroh 1.0.2 — is exact.)
+- Command: `cargo check --manifest-path
+  target/ralph/browser-dial/iroh-probe/Cargo.toml --target
+  wasm32-unknown-unknown`, through `scripts/with-cargo-lock.sh`.
+
+**Conditions named — Mac:** host C compiler (Xcode clang) with no wasm32
+backend, so cc-rs could not map `wasm32-unknown-unknown` to a target at all;
+iroh 1.0.2 and ring 0.17.14 identical to the Halo's.
+
+**What would falsify this entry:** a host whose clang cannot target
+wasm32 reproducing the Mac refusal, verbatim — which is the Mac's own run.
+The claim is not "iroh builds everywhere"; it is "the tl-3 (b) refusal was
+the Halo's C-compiler condition, not the pin, and the pin is unchanged".
+
+**Clause (d) evidence:** `git diff --stat -- sovereign/crates
+commonwealth/crates` for this row is empty; the only committed changes are
+this ledger entry (plus its render), the row's `BASE` stamp in
+`ralph/next/browser-dial/order.md`, and the queue mark.
+
+**Checks:** CLEAN exit=0; DOCS exit=0; `ralph-decisions.py --check` current.
+
+</details>
+
+## browser-dial-2 · 2026-09-22 — the browser dial is a measured fact: every layer answered
+
+<details><summary>reasoning, evidence, package</summary>
+
+**The claim.** A plain browser, on a network the daemon has never seen, opens the
+guest link and dials the node itself over iroh's relay, then makes one
+grant-scoped rail read. The dial is possible because:
+- the daemon routes `GUEST_ALPN = b"cwth/guest/0"` (`commonwealth-transport/src/iroh.rs:101`)
+  to a loopback Guest listener whose auth layer reads a bearer and admits only a
+  live guest grant whose `permits_path` covers the request (`client_auth.rs:265-311`);
+- `Scope::Rails` grants `permits_path` for `/v1/rail/log`
+  (`sovereign-grants/src/guest_grant.rs:132-135`);
+- the browser half speaks HTTP/1.1 on one QUIC bi-stream, which is exactly what
+  `IrohAcceptor`'s `pump` (`commonwealth-transport/src/iroh.rs:875`) expects —
+  a byte splice to a local hyper listener.
+
+**The page (never committed; all under `target/ralph/browser-dial/`).**
+- `page-build/` — Rust cdylib, `iroh = "=1.0.2"`, `wasm-bindgen = "=0.2.128"`,
+  `wasm-bindgen-futures = "=0.4.78"`, `js-sys = "=0.3.105"`; own `[workspace]`,
+  manifest KEPT so the build is re-derivable.
+- Build: `cargo build --manifest-path …/page-build/Cargo.toml --target
+  wasm32-unknown-unknown` → `Finished \`dev\` profile … in 19.03s` (exit 0).
+  `wasm-bindgen --target web` (CLI 0.2.128) wrote the JS glue. iroh's wasm tree
+  pulls `getrandom 0.4` with `wasm_js` (target-activated), so unlike the
+  getrandom-0.3 note in `docs/RING_APP_LIBRARY.md:360-380` no `--cfg
+  getrandom_backend` was needed.
+- `site/` — the page; `run-page.mjs` — a node server that serves it and a
+  `playwright-core` launcher; `run-live.log` — the run below.
+
+**The live node dialed (a throwaway current-binary node, not the deployed daemon).**
+- `target/debug/sovereign-cli-daemon daemon run`, `SOVEREIGN_DATA_DIR=target/ralph/browser-dial/live`,
+  `client_port=19841`, `[iroh] enabled = true`, `[discovery] mdns = false` — the
+  node shape `scripts/ring-doc-demo.sh`'s local backend uses (`mkcfg`/`start_daemon`),
+  which `scripts/ring-room-demo.sh` sources. Its own mesh, its own key, the same
+  n0 relay the deployed daemon uses.
+- One rail act seeded (`svrn ring introduce alex --key <node> --ring browser-dial-ns`
+  → `ring-658e43cce7830b48`); one grant minted via the internal route
+  (`POST /internal/guest/grant`, `scopes = {rail:"browser-dial-ns"}`, ttl 1200s).
+
+**The layers, verbatim (from `run-live.log`, engine = Google Chrome for Testing 147.0.7727.15):**
+
+```
+PAGE: engine=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/147.0.0.0 Safari/537.36
+LAYER wasm-bindgen/iroh-endpoint: ok — local endpoint ac87abb295b2711ec3444f63c7b79e132fd4c76cf8d66a0cac20ac7015dd11c3 bound, relay mode default
+LAYER relay-connect: ok — endpoint reports online (relay handshake done)
+LAYER tls/alpn+relay-hop: ok — QUIC connection established to 22a72bb42fc2e9c9c1473e629d67862f83ddfe3c382a0a08585ee1dbfe5186ce on GUEST_ALPN
+LAYER tls/alpn: negotiated ALPN = "cwth/guest/0"
+LAYER request-write: ok — 185 bytes of HTTP/1.1 sent on the bi-stream (send half kept open until the response, as the native bridge does)
+LAYER daemon-guest-admission: response received, 632 bytes
+RESPONSE-STATUS: HTTP/1.1 200 OK
+RESPONSE-BODY: … {"namespace":"browser-dial-ns","ops":[{"id":"ring-658e43cce7830b48","actor":"22a72bb42fc2e9c9c1473e629d67862f83ddfe3c382a0a08585ee1dbfe5186ce","person":"alex","seq":0,"ts_unix":1790105778,"voided":false,"payload":{"key":"22a72bb4…","kind":"introduce","person":"alex","reason":"browser-dial bd-1 measurement act"}}],"gaps":[],"held":1,"complete":true, …}
+```
+
+**What would falsify each layer.**
+- *wasm bindgen / iroh-endpoint*: a toolchain without `wasm32-unknown-unknown`
+  std, or a `wasm-bindgen` CLI whose version differs from the crate's, fails to
+  instantiate — the inventory row's build reproduction is the positive control.
+- *relay connect*: a browser with no route to `wss://usw1-1.relay.n0.iroh.link./`
+  never reports `online`; the page's 120 s race would print `TIMEOUT` beside the
+  last emitted LAYER line.
+- *TLS/alpn*: a node that does not advertise `GUEST_ALPN` refuses the connect at
+  ALPN negotiation — `commonwealth-transport/src/iroh.rs:1386`
+  (`an_unrouted_guest_alpn_is_dropped_rather_than_falling_back`) is the watched
+  negative.
+- *guest-channel admission*: a bearer that is not a live grant earns `401`, and a
+  live grant whose `permits_path` does not cover the path earns `403`
+  (`client_auth.rs:313-324`); a route the surface does not mount earns `404`
+  (measured live, below).
+- *request transport*: on the FIRST attempt the page called `send.finish()`
+  immediately after `write_all`, and `read_to_end` returned `Ok(0 bytes)` with no
+  status line. Holding the send half open until after the response — the flow
+  `HttpBridge::pump` uses (`commonwealth-transport/src/iroh.rs:875`, `finish()`
+  only after the local side is done) — returned the 200. This cost one run and is
+  recorded because it is the one path fact a wasm client must get right and the
+  iroh API does not make it obvious.
+
+**Side finding — the deployed daemon is a 5-day-old process, so its
+`/v1/rail/log` 404s; that is a node-version fact, not a dial fact.** The browser
+dialed the operator's live daemon too (grant `Qwen3.5-4B-UD-MTP-Q6_K_XL;
+rail:mesh-measurements`): `/status` → `HTTP/1.1 200 OK`, `/v1/models` →
+`HTTP/1.1 200 OK` (grant-scoped), `GET /v1/rail/log` → `HTTP/1.1 404 Not Found`
+(`content-length: 0`). The 404 is explained, not hand-waved: `ps -o lstart -p 1971`
+= `Thu Sep 17 09:40:56 2026`, and `/proc/1971/exe` reads `(deleted)` — the
+process predates `cc8a4c3ee rr-2-guest-door` (2026-09-19 14:38:46), the commit
+that added `Guest` to `ClientSurface::serves_rail_routes`. A native control on the
+same grant (`svrn mesh use`, exercised on both the full dial string and a
+relay-only one) verified `/v1/models` over the tunnel, so relay and admission are
+not in question. Per the shared protocol the deployed daemon was never restarted;
+the current-binary throwaway node above is what returned 200.
+
+**Concurrent foreign product work — named so the diff is not misread.** The tree
+held uncommitted foreign edits under `sovereign-cli-llm/` (`mesh_media.rs`,
+`ring_cmd/mod.rs`, new `mesh_media/origin.rs`, `ring_cmd/serve.rs`) recorded by the
+inventory row as a concurrent peer's. Mid-session that peer committed them to
+`main`: `5825a2fa3 cli: svrn ring serve + svrn mesh media origin — the room's last
+two config edits become verbs` and `7fef0a9dc runbook: 100% cli`. So
+`git diff --stat <BASE>..HEAD -- sovereign/crates commonwealth/crates` now shows
+those two commits' +678 lines. They are not this row's and not this campaign's;
+this row's own change over those paths is zero.
+
+**Clause (d):** `git diff --stat -- sovereign/crates commonwealth/crates` for this
+row's own commits is empty. Committed artifacts are this ledger entry (plus its
+render) and the queue mark.
+
+</details>
+
+## browser-dial-3 · 2026-09-22 — close on the campaign's own share — both reds foreign, arch-gate left red for the operator
+
+<details><summary>reasoning, evidence, package</summary>
+
+**The fork.** The package offered four forks: (1) accept the zero-own-share
+reading or treat the foreign tree-wide diff as a predicate failure; (2) split
+`ring_cmd/mod.rs`, re-pin, or accept the arch-gate red; (3) the two TESTALL
+reds; (4) close or hold. The charter decides (1) and (3) and the row
+disposition (4), and leaves product edits and the WORKED-dial follow-on to the
+operator; the arch-gate fix (2) is the one case the charter does not cleanly
+cover, because it is a product edit and the charter's one absolute — the
+product diff is empty — forbids the delegate from making it. This decision
+records the resolution and flags that residual.
+
+**Why the predicate is read per-row, not tree-wide.** The predicate statement
+(`quality/campaigns/browser-dial.toml:21`, `.sovereign/features/browser-dial/
+campaign.md:16`) is prose; the scored object is each bar's `floor_basis`
+clause (d), which says "git diff over sovereign/crates and commonwealth/crates
+**for this row** is empty". Both bars read 1.0 on that floor. O §Predictions
+scopes the same claim ("sovereign/crates: +0") to this campaign and names a
+product edit as the order's exit condition. The campaign's own four commits
+change no `.rs` line — `git show --stat` of `a1cb78f60`, `5f58c18d4`,
+`ff6d8e561`, `51b64f68a`, `418639ea7` is ledger/queue/REVIEW_FINDINGS only.
+The tree-wide literal reading IS false; that is the audit's loudest finding and
+it is recorded, not substituted away (ARCH 6).
+
+**Why the TESTALL reds are foreign.** `a3bd715f5` (the citation commit) is an
+ancestor of `origin/main` (verified: `git merge-base --is-ancestor a3bd715f5
+origin/main` → 0) and of BASE; `sovereign/docs/cli-contract.toml` is untouched
+by the campaign range; `docs/internal/` is gitignored wholesale
+(`.gitignore:67`) so the red is per-host by construction. The
+`local_only_boot` failure is load: the same test passes alone
+(`./scripts/ralph-check.sh testfn sovereign-mesh
+a_local_only_daemon_spawns_no_network_service` → exit=0, 1 pass). Both are the
+identical reds the-link-7, A51 (rr-2) and A59 (ring-guest) recorded.
+
+**Why the arch-gate red cannot be cleared here.** Reproduced this session:
+`./scripts/ralph-check.sh arch` → exit=1, "approach band GREW: lines 203149 ->
+203154 (+5)". Sizes: `ring_cmd/mod.rs` 1087 (was 1082 at BASE), the only one of
+the four foreign files in the 800–1200 band (`serve.rs` 427, `mesh_media.rs`
+509, `origin.rs` 240). The three charter-legal levers all fail: trimming
+`ring_cmd/mod.rs` is a product edit; `--update-baseline` is forbidden by PROMPT
+§7; a re-pin at `origin/main` already describes 203149, and `5825a2fa3` is not
+on `origin/main` (`git merge-base --is-ancestor 5825a2fa3 origin/main` → NO).
+So the band is left red on foreign code, and the branch's pre-push stays
+blocked until that lane fixes it.
+
+**What would falsify this decision.** A browser-dial commit that changes a
+`.rs` line (there is none: the campaign's own diff over product paths is
+empty); the arch-gate +5 traceable to a campaign commit (it is `5825a2fa3`'s
+`ring_cmd/mod.rs`: `Some("serve") => run_serve(...)`, its help line, `mod
+serve;`); the per-host doc resolving on a fresh clone (it cannot — the
+directory is gitignored); the `local_only_boot` test failing alone (it passes).
+
+**Evidence reproduced this session:** `./scripts/ralph-check.sh arch` exit=1;
+`testfn sovereign-cli every_journey_cites_a_doc_that_exists` exit=100 / 1 fail,
+"mesh-offers-catalogue cites `docs/internal/RING_APPLICATIONS.md`, which does
+not exist"; `testfn sovereign-mesh
+a_local_only_daemon_spawns_no_network_service` exit=0; `git diff --numstat
+ac44e6fec..HEAD -- sovereign/crates commonwealth/crates` = +678 in exactly the
+four `5825a2fa3` files; `git merge-base --is-ancestor 5825a2fa3 origin/main` →
+NO; `a3bd715f5` an ancestor of both `origin/main` and BASE.
+
+**Loudest finding for the operator (also in `ralph/REVIEW_FINDINGS.md`
+§browser-dial):** the concurrent foreign lane `5825a2fa3` + `7fef0a9dc`
+(operator direction 2026-09-22, "I want to go 100% cli") is inside
+`BASE..HEAD` and is the sole cause of both the predicate's literal falsehood
+and the pre-push block. This campaign neither owns nor may fix it.
+
+</details>
+
 ## the-link-1 · 2026-09-22 — tl-2's demo checks run on the Halo; the row waits there, not here
 
 <details><summary>reasoning, evidence, package</summary>
@@ -8361,5 +8630,148 @@ without a new verification (reopens the-link-4's evidence).
 **The worker's package:** `ralph/NEEDS_HUMAN.md`, kept in the tree — its
 ask (§"Director resolution" and §c) is the operator-facing record and is
 unchanged in substance.
+
+</details>
+
+## the-link-6 · 2026-09-22 — the demo's two designed CNJs are the pass shape; the row's expected table was the stale premise
+
+<details><summary>reasoning, evidence, package</summary>
+
+**The fork.** The built instrument and the row's expected table disagree, and
+the campaign predicate cannot be read as written. Two options were on the
+table: correct the three documents to match the instrument, or add a build
+row giving the two unmeasured bars in-demo legs and rerun both cold room
+runs.
+
+**Why the correction is the covered fork.** The charter's "fixing a row
+whose premise the tree contradicts, when the order already implies the fix"
+— the order step is O §Demo: §3 states the dial item AS the decisions
+appendix ("`ralph/DECISIONS.md` carries the dial entry … No product code
+gates on any of it") and §2's claim is a builder/parser/QR round-trip, the
+exact clauses tl-2's cargo tests prove. The room run exercises neither
+surface: it mints no `at=`/`iroh=` link (D1/D2 keep `at=` to digest marks
+and couriers on the join link's param) and measures no wasm build. The
+instrument says exactly this, by name, in its CNJ reasons.
+
+**Why not the build row.** It fails "strictly necessary" three ways: a
+second row where one correction does; cargo inside a demo that "measures
+binaries, never the tree" (HANDOFF step 3), reading tree state in-run; and
+two more cold room runs (~1 h of podman) to produce PASSED the floors never
+asked the run to produce. It also moves the verdict in the direction the
+change wanted — ARCH 7's tell.
+
+**Evidence (reproduced this session):**
+- `scripts/ring-room-demo.sh:2312-2317` (comment, ARCH 5) and `:2349-2355`
+  (the two unconditional `row(..., None, …)` calls).
+- `scripts/lib/demo_verdicts.py:17-19` — exit 1 if any FAILED, 4 if any
+  COULD-NOT-JUDGE, 0 when every bar PASSED; "an unmeasured bar makes no
+  claim and is never a pass".
+- `target/ralph/tl-room-run-1.log:62-64`, `tl-room-run-2.log:62-64` —
+  `tl-checkpoint-verifies` value 1.0, legs a-d all true, run1 created_unix
+  1790098351 in cut 1790098311..1790098375, run2 1790098624 in
+  1790098584..1790098648; verify exit 0 printing marks; flipped → "step 2
+  (admit) … signature"; truncated → "step 3 (digest) … marks disagree —
+  actor …"; same-seq pair → "used one sequence number twice (#12) — the
+  document forks"; the two CNJs with their proof-site reasons.
+- `target/ralph/tl-rr1-regression.log` — answer 0.8 FAILED, doc 1.0, film
+  1.0, plug-in 0.0 FAILED on `c_answer_names`, nothing-typed 0 PASSED: the
+  A38 baseline unmoved (DECISIONS A38; the same shape the rr-2 close
+  recorded).
+- Consistency: the-link-1 (DECISIONS.md:8108-8111) already expected the two
+  CNJs and called exit 4 "the four-verdict rule working, not a failure";
+  tl-2's close f6fb719e9 accepted exactly this table under an acceptance
+  line that required only six rr-2 + five rg PASSED beside the tl rows.
+  STATE.md:60 / HANDOFF.md:63-64 / the-link.toml:21 are the three documents
+  left behind.
+
+**Nothing reopens tl-2 or tl-3:** their proofs exist and passed — 13,701
+tests green on the Mac (HANDOFF.md:13-14), the dial entry in DECISIONS.md
+(the-link-3). The regression sets (C2, C3, rr-1 baseline) are untouched;
+rail-core untouched; no product file touched by this resolution. The empty
+`the-link-6.md` template a prior session minted but never filled is
+repurposed for this entry, so the ledger stays dense.
+
+**What would falsify this decision:** a run where `tl-checkpoint-verifies`
+reads below 1.0, a FAILED clause on any rg/rr-2 bar, or a CNJ whose reason
+no longer names its proof site — any of those reopens the row. And if a
+future order gains a demo leg that mints an `at=`/`iroh=` link or moves the
+dial numbers into the run's reach, the two bars become measurable and the
+predicate must name them PASSED again — this correction then reads as the
+stale premise.
+
+</details>
+
+## the-link-7 · 2026-09-22 — the audit's two red gates: one split, one re-pin at origin/main, one foreign red recorded
+
+<details><summary>reasoning, evidence, package</summary>
+
+**The fork.** The package offered: maintain the per-host doc locally, or bless
+the foreign-red disposition (TESTALL); lane-owned split or baseline re-pin
+(PREPUSH). The 2026-09-21 operator direction (AGENTS.md, definition of done)
+post-dates the precedents and decides the PREPUSH fork outright: a file past
+its ceiling "is SPLIT … never re-pinned, never an operator question", and any
+other ratchet failure is re-pinned at origin/main, never absorbed from a
+working tree. What remained was execution plus the TESTALL disposition.
+
+**Why the split takes the tests, not the field.** a313c9c18's +14 is a struct
+field (`SynthSnapshot.gate`), its doc comment, and three plumbing lines — a
+field cannot move. The direction's remedy ("move what you added into a sibling
+file") is applied to the nearest coherent test-only mass: the trailing
+`degraded_router_tests` module, 100 lines, whose move is behaviour-preserving
+by construction and follows the repo's worked precedent
+(`sovereign-core/src/router.rs` → `router/posture_tests.rs`, `#[path]` so
+names are unchanged). runner.rs lands at 2037, under the 2074 pin, so the
+file ratchet greens WITHOUT touching any pin.
+
+**Why the band re-pin is honest.** Measured in a detached worktree at
+origin/main (4d733f98e): 206 files / 203149 lines, +446 over the 5bd896d8f
+pin, banked by the grounding lane (value_presence.rs entered the band;
+judge.rs, inner.rs grew), the f26 egress census split, the harness, and
+the-link's own banked rows (deep_link, ring_cmd) — the same lanes
+REVIEW_FINDINGS §the-link attributes. This branch adds no `.rs` lines outside
+two band-invisible files (runner.rs > 1200, the new test file < 800), so the
+fresh pin describes this tree exactly. `--tighten` was not run: banking the
+split's shrinkage is optional polish, not needed for green (strictly
+necessary).
+
+**Why the TESTALL red is recorded, not fixed.** The test's own sentence
+offers "rename the citation or restore the doc". Restoring means authoring a
+per-host handoff doc whose content lives on the Mac; renaming means editing a
+shipped contract citation the ring-apps lane owns — both change observable
+contract surfaces beyond anything this row states, which the charter reserves.
+A51 (rr-2) and A59 (ring-guest) both closed audits on this identical red. It
+is the third report to the operator, per A59's own counting.
+
+**Evidence (reproduced this session):**
+- `git merge-base --is-ancestor a313c9c18 origin/main` → yes; `git diff
+  --numstat a313c9c18..origin/main -- runner.rs` → empty; numstat 5bd896d8f..a313c9c18
+  → +14; `git show 5bd896d8f:…runner.rs | wc -l` → 2119; pin `oversized.txt:74` → 2074.
+- `git diff --numstat origin/main..HEAD -- '*.rs'` → empty (branch adds no code).
+- Split: scoped sovereign-lint clean (`--all-targets`, 2 crates); sovereign-cli-llm
+  1151/1151 green; runner.rs 2037 lines.
+- Re-pin: worktree `arch-gate --update-baseline` → "206 files / 203149 lines";
+  this tree `cargo xtask arch-gate` → exit 0; `scripts/ralph-check.sh prepush`
+  → exit 0, "all gates passed" (size-gate + deletion-manifest advisory-failed as
+  designed; concept-gate declared could-not-judge).
+- TESTALL red: `--package sovereign-cli --filter
+  every_journey_cites_a_doc_that_exists` → 0 passed / 1 failed, "mesh-offers-
+  catalogue cites `docs/internal/RING_APPLICATIONS.md`, which does not exist" —
+  the same sentence the audit recorded.
+- rail-core diff EMPTY (invariant c3fed9c3); regression sets C2/C3/rr-1
+  untouched; no D1-D4 surface touched by any of the three commits.
+
+**What would falsify this decision:** a test red traceable to the split (none
+observed; the moved module's three tests run green in the new file); the band
+pin drifting from this tree again without a code cause (would mean an agent
+re-ran --update-baseline on a dirty tree — the recipe forbids it); the
+per-host doc resolving on a fresh clone (it cannot — `.gitignore:67` ignores
+`docs/internal/` wholesale, so the red is per-host by construction and stays
+the operator's to restore or rename).
+
+**Worker's package (NEEDS_HUMAN, inline):** unit REVIEW-audit-the-link; audit
+body DONE at 5d44de59f (falsifier's reading, the twelve, REUSED report,
+rail-core EMPTY); row held only on the two reds; commands and outputs quoted
+in the package match this session's reproductions (arch-gate's two ✗ lines;
+TESTALL's one failure).
 
 </details>

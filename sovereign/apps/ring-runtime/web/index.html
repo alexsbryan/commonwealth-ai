@@ -1,0 +1,45 @@
+<!doctype html>
+<!--
+  The guest page. Served from ONE static origin (today svrnme.sh) — no server,
+  no certificate, no data. It is opened by scanning a guest QR or following a
+  guest link, whose FRAGMENT carries the grant: token=, exp=, iroh= (the dial
+  string), s= (the label), path= (optional route). The fragment never leaves
+  the browser, so the page loads from public static hosting while the
+  credential stays local to the phone.
+
+  After first load the page needs no origin traffic at all (the service worker
+  caches it), because it is an iroh endpoint: it dials the wall directly over a
+  relay (sovereign/apps/ring-runtime/src/lib.rs).
+
+  The CSP is deliberately strict: no inline script (app.js is external), no
+  remote code. `wasm-unsafe-eval` is required to instantiate WebAssembly;
+  `connect-src` must allow the relay's WebSocket (wss://*.relay.n0.iroh.link
+  by default, plus any self-hosted relay you point the link at). Nothing here
+  is allowed to phone a third party.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; connect-src 'self' wss: https:; img-src 'none'; style-src 'self' 'unsafe-inline'; base-uri 'none'; form-action 'none'">
+<title>Ring guest</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font: 16px/1.5 system-ui, sans-serif; margin: 1.5rem auto; max-width: 46rem; padding: 0 1rem; }
+  h1 { font-size: 1.2rem; }
+  #status { font-weight: 600; }
+  pre { background: #8881; padding: .75rem; border-radius: .5rem; overflow-x: auto; white-space: pre-wrap; word-break: break-word; }
+  #trace { font-size: .8rem; }
+  .bad { color: #c22; }
+  .good { color: #2a2; }
+</style>
+</head>
+<body>
+<h1 id="status">Connecting…</h1>
+<p id="label"></p>
+<pre id="response"></pre>
+<details><summary>Layers</summary><pre id="trace"></pre></details>
+<script type="module" src="./app.js?v=__VERSION__"></script>
+</body>
+</html>

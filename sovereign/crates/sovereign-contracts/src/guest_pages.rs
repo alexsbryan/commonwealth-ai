@@ -31,6 +31,30 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+/// Where a guest door serves the ring page: the path every guest link's base
+/// carries. `http://<guest_bind>/ring/#token=…` for a wall holding one app,
+/// `…/ring/<namespace>/#token=…` for one of several — and the same path a
+/// static origin serves the browser runtime from (svg the guest link composes,
+/// `sovereign_mesh::deep_link::wall_page_base`).
+///
+/// It lives here, with the page contract, because THREE crates need to agree
+/// on it and the only one they all depend on is this leaf: the daemon serves
+/// it, the CLI composes links with it, and the mesh crate composes the same
+/// links for the daemon's grant responses. It was `sovereign_daemon`'s, which
+/// the mesh crate may not depend on (`[[forbid]] sovereign-mesh ->
+/// sovereign-daemon`); the move is 2026-09-22 and the daemon re-exports it, so
+/// every existing name still resolves.
+pub const PAGE_PREFIX: &str = "/ring/";
+
+/// Where the door listens when nobody names a port. NOT `9743`: the rail
+/// listener owns `client_port + 2`, so a default-config daemon already holds
+/// it (measured 2026-09-22 — `ring host` would have collided with its own
+/// rail). This is the slot after that: `9741` client, `9742` internal, `9743`
+/// rail, `9744` guest door. A door bound with no port named binds
+/// `0.0.0.0:<this>`; the address a guest link carries is still DERIVED per
+/// host (never the wildcard) — see `sovereign_mesh::deep_link::advertised_base`.
+pub const DEFAULT_GUEST_PORT: u16 = 9744;
+
 /// What guests may do on a registered page's rail namespace.
 ///
 /// A closed set, and that IS the property (ARCH §9): there is nothing between

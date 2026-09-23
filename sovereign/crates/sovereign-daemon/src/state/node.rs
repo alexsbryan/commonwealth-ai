@@ -85,7 +85,8 @@ impl NodeSeed {
             None => GuestSessionBinding::default(),
             Some(raw) => GuestSessionBinding::parse(raw)?,
         };
-        let guest_pages = crate::guest_door::GuestPages::from_config(&daemon)?;
+        let guest_pages =
+            crate::guest_door::GuestPages::from_config(&daemon, &config.read().await.iroh.apps)?;
         let internal_auth = match daemon.internal_auth.as_deref() {
             None => InternalAuth::default(),
             Some(raw) => InternalAuth::parse(raw)?,

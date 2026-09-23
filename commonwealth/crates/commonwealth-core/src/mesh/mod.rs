@@ -381,9 +381,14 @@ pub struct MeshPeering {
 /// name, or a node_id prefix of at least 4 hex characters (the `node-`
 /// prefix is optional on either side).
 ///
+/// The prefix is matched against the FULL 32-hex id (`to_hex`), not the
+/// 16-hex `Display` form: status tables print 22 characters and the collision
+/// warning prints all 32, and until 2026-09-22 neither resolved — only a
+/// prefix of 16 or fewer did, so the id the repair hint told you to paste
+/// answered "No member matching".
+///
 /// A prefix shorter than 4 is refused rather than matched loosely — a
-/// one-character prefix against a 16-character id is very nearly "any
-/// member", and the callers act on the answer (`forget-member` writes a
+/// one-character prefix is very nearly "any member", and the callers act on the answer (`forget-member` writes a
 /// tombstone; `mesh media <peer>` mints a bridge; `media_allow` admits a
 /// dial). One implementation so every `<peer>` argument on every surface
 /// resolves the same way (ARCH §10.6) — it lives here rather than in
@@ -393,9 +398,8 @@ pub fn member_matches(node_id: NodeId, name: &str, query: &str) -> bool {
     if name == query {
         return true;
     }
-    let id = node_id.to_string();
     let q = query.trim_start_matches("node-");
-    q.len() >= 4 && id.trim_start_matches("node-").starts_with(q)
+    q.len() >= 4 && node_id.to_hex().starts_with(q)
 }
 
 /// Level of trust between peered meshes.
