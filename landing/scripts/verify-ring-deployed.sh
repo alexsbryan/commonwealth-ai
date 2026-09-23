@@ -30,23 +30,43 @@ check() {
   [ -n "$effective" ] || { echo "verify-ring: $URL did not answer"; return 1; }
   grep -q "Ring guest" "$PAGE" || { echo "verify-ring: $effective answered but is not the guest page"; return 1; }
 
-  # (b) the page URL kept its trailing slash — the base every relative asset
-  # resolves against. A strip here is the 2026-09-22 outage.
-  case "$effective" in
-    */) ;;
-    *) echo "verify-ring: the served page URL lost its trailing slash: $effective"
-       echo "  A browser resolves './app.js' against the last path segment, so the"
-       echo "  runtime would be fetched from ${effective%/ring*}/app.js — a 404."
-       echo "  Check landing/vercel.json: no global trailingSlash:false; /ring/ must"
-       echo "  stay /ring/ (the /ring → /ring/ redirect is the canonical form)."
-       return 1 ;;
-  esac
+  # (b)+(c) resolve the script reference the way a browser will, and fetch it.
+  #
+  # Two forms are correct and both are checked, because the page may either
+  # keep its shell RELATIVE (which requires the URL to keep its trailing
+  # slash) or name it ABSOLUTE. The 2026-09-22 outage was the first form with
+  # the slash stripped; an absolute shell survives that same strip, so failing
+  # it on the slash alone would be a false negative. What must never pass is a
+  # page whose runtime does not fetch.
+  local ref asset code relative=0
+  ref="$(grep -oE 'src="\./[^"]+"' "$PAGE" | head -1 | sed 's/^src="//; s/"$//')"
+  if [ -n "$ref" ]; then
+    relative=1
+  else
+    ref="$(grep -oE 'src="/[^"]+"' "$PAGE" | head -1 | sed 's/^src="//; s/"$//')"
+  fi
+  [ -n "$ref" ] || { echo "verify-ring: $effective has no script reference"; return 1; }
 
-  # (c) resolve the script reference the way the browser will, and fetch it
-  local src asset code
-  src="$(grep -oE 'src="\./[^"]+"' "$PAGE" | head -1 | sed 's/src="\.\///; s/"$//')"
-  [ -n "$src" ] || { echo "verify-ring: $effective has no relative script reference"; return 1; }
-  asset="$effective$src"
+  if [ "$relative" = 1 ]; then
+    case "$effective" in
+      */) ;;
+      *) echo "verify-ring: the served page URL lost its trailing slash: $effective"
+         echo "  A browser resolves './app.js' against the last path segment, so the"
+         echo "  runtime would be fetched from ${effective%/ring*}/app.js — a 404."
+         echo "  Check landing/vercel.json: no global trailingSlash:false; /ring/ must"
+         echo "  stay /ring/ (the /ring → /ring/ redirect is the canonical form)."
+         return 1 ;;
+    esac
+    asset="$effective${ref#./}"
+  else
+    # Against the origin the page ACTUALLY served from, not the origin we
+    # asked. The apex 308s to www, and a browser resolves an absolute ref
+    # against the final URL — following the redirect here is what makes this
+    # check the browser's question rather than a nearby one.
+    local base
+    base="$(printf '%s' "$effective" | sed -E 's#^(https?://[^/]+).*#\1#')"
+    asset="$base$ref"
+  fi
   code="$(curl -fsS -o /dev/null -w '%{http_code}' "$asset" 2>/dev/null || true)"
   if [ "$code" != "200" ]; then
     echo "verify-ring: the page loads, but its runtime does not: $asset → ${code:-no answer}"
@@ -54,7 +74,9 @@ check() {
     return 1
   fi
 
-  echo "verify-ring: $effective is live, slash intact, runtime at $asset (200)"
+  local form="absolute"
+  [ "$relative" = 1 ] && form="relative"
+  echo "verify-ring: $effective is live, shell $form, runtime at $asset (200)"
   return 0
 }
 
