@@ -1,7 +1,13 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "cleanUrls": true,
-  "trailingSlash": false,
+  "redirects": [
+    {
+      "source": "/ring",
+      "destination": "/ring/",
+      "permanent": true
+    }
+  ],
   "rewrites": [
     {
       "source": "/api/desktop/updater/:target/:current_version",
