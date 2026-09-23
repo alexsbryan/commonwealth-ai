@@ -390,7 +390,29 @@ pub(super) const REGISTRY: &[(&str, Class, usize)] = &[
     // mobile host on loopback instead of killing a child it no longer holds;
     // `fetch_iroh_dial` is the other. Both talk to 127.0.0.1.
     ("sovereign/crates/sovereign-desktop/src-tauri/src/mobile_host_setup.rs", Class::LocalDaemon, 2),
-    ("sovereign/crates/sovereign-desktop/src-tauri/src/mesh_commands.rs", Class::LocalDaemon, 1),
+    // 1 -> 2 (2026-09-22, merged from local `mesh media` work 11b01ec84):
+    // `probe_media_url` — the click-path probe that reports an HTTP status
+    // instead of opening a dead tab. Loopback-http ONLY by construction
+    // (`is_loopback_http` admits 127.0.0.1 / localhost / [::1] and nothing
+    // else — the same rule the daemon-side bridge contract enforces), so the
+    // class is unchanged: LocalDaemon, never a general fetch gadget.
+    ("sovereign/crates/sovereign-desktop/src-tauri/src/mesh_commands.rs", Class::LocalDaemon, 2),
+    // guest_door.rs (merged from the-ring work, 2026-09-22): the daemon's
+    // guest-facing door proxies an INBOUND guest request to the PUBLISHED
+    // app's own loopback port — `http://{addr}/…` where the address is the
+    // app's 127.0.0.1 bind ("nothing is listening on its loopback port" is
+    // the door's own 502 text). Two `reqwest::Client::new()` sites: the
+    // method-preserving proxy and the index's plain GET. Client construction
+    // is loopback → LocalDaemon; the door's inbound face is not this
+    // census's question (no estate payload is constructed toward a
+    // third party here).
+    ("sovereign/crates/sovereign-daemon/src/guest_door.rs", Class::LocalDaemon, 2),
+    // guest_room_commands.rs (merged from the-ring work, 2026-09-22): the
+    // desktop's guest-grant create/list/revoke + the `/v1/mesh/status` dial
+    // read. Every URL is `state.client_base_url()` — this host's own daemon
+    // (`/internal/guest/grant` and friends). LocalDaemon, same reason as the
+    // turn-client rows above.
+    ("sovereign/crates/sovereign-desktop/src-tauri/src/guest_room_commands.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-desktop/src-tauri/src/commands/reading.rs", Class::LocalDaemon, 1),
     // state.rs ROW REMOVED 2026-09-11 (ef4a3a06f, svt-3a): B4's identity probe
     // read /status.process.pid on a run-lock refusal; the app takes no run
