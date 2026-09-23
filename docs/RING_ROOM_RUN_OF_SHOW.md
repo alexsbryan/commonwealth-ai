@@ -33,6 +33,7 @@ a fresh `svrn ring new my-doc` is the expenses app, not the doc.
 
 ```bash
 svrn publish ring-doc 4318                                                # members reach it by key
+svrn daemon restart                                                       # the door reads the registry at boot
 svrn ring roster add <person> --key <their-node-pubkey> --ring ring-doc   # and their acts are theirs
 ```
 
@@ -41,6 +42,15 @@ the person and the key their acts will be signed with. A member can now open
 the doc from their own machine and write into the same `ring-doc` namespace as
 me, in one order. The roster row is the load-bearing half: an act signed by a
 key no roster claims is a gap in the journal, not somebody's edit.
+
+**The restart is not optional** (checked 2026-09-22): `publish` writes
+`[iroh.apps]` in `~/.svrnmesh/config.toml` and says so itself — *"Restart to
+serve it"* — because the door's registry is read once, at daemon boot. Minting
+a grant for a name published but not restarted mints happily and reaches
+nothing. Do this before any grant exists (a restart drops every outstanding
+grant); during the demo the order is publish → restart → grant. `svrn publish`
+with no arguments lists what is registered, from config when the daemon is
+down.
 
 *(Nothing is set per machine: the door's listen address DEFAULTS to
 `0.0.0.0:9744` while a grant is live — it opens when the first grant is minted
@@ -79,6 +89,11 @@ The `--all-apps --url https://svrnme.sh/` link carries the wall's dial string
 never seen still reaches this daemon, which §9 measures. The same-WiFi form's
 QR carries the machine's LAN address on the default door port and only works
 for phones on that subnet; `--url <base>` overrides the address in either form.
+
+The APP does not have to be running when the grant is minted — the door proxies
+per request and answers 502 naming the unpublished port while the app is down,
+so the grant can be prepared before `svrn ring show` starts. What must be done
+first is the publish + restart (§2): the door only knows registered names.
 
 **The door's life, as verified on a machine with nothing configured.** No setup
 step precedes the first grant: the door's listener is shut, and minting the
