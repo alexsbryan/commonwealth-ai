@@ -140,7 +140,7 @@ pub(crate) async fn cmd_app(args: &[String]) -> i32 {
         return 0;
     };
 
-    let app_url = format!("{}/{app}", reach.url.trim_end_matches('/'));
+    let app_url = app_url(&reach.url, app);
     println!("{app_url}");
     if !probe {
         return 0;
@@ -266,4 +266,30 @@ async fn list_publishers(client: &reqwest::Client, url: &str, port: u16, json_ou
     println!();
     println!("What each publishes:  svrn mesh app <peer>");
     0
+}
+/// The URL a member opens: the bridge base, the app name, and a TRAILING SLASH.
+///
+/// The slash is load-bearing. The bridge serves the app under `/<app>`, and a
+/// page fetched at `/<app>` (no slash) makes the browser resolve the page's own
+/// `./app.js` against `/`, so every relative asset 404s and the app never
+/// boots — measured on the room's doc, reached from a peer.
+fn app_url(base: &str, app: &str) -> String {
+    format!("{}/{app}/", base.trim_end_matches('/'))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_member_app_url_ends_in_a_slash_so_relative_assets_resolve() {
+        assert_eq!(
+            app_url("http://127.0.0.1:28978", "ring-doc"),
+            "http://127.0.0.1:28978/ring-doc/"
+        );
+        assert_eq!(
+            app_url("http://127.0.0.1:28978/", "ring-doc"),
+            "http://127.0.0.1:28978/ring-doc/"
+        );
+    }
 }
