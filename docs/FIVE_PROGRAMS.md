@@ -920,15 +920,65 @@ refusal named the chain, which is the value.
   (`local_corpus/watched/enrich.rs:50,98-125`). A list-only trait would leave
   the dependency red. Reclassify those reads and the writer before cutting.
 
+### Premise checks REFUSED 2026-09-23 (68 at faddc360d) — three more, all recorded
+
+Found by the director's resolution session while verifying fp-25's package.
+Dispositions and full evidence: `ralph/DECISIONS.md` entry `five-programs-2`.
+
+- **`sovereign-cli-llm -> sovereign-cli-mesh`** (fp-26, 1 ref): the row's
+  GRANDFATHER verb came from TSV `missing_capability = keep`, which §12
+  decision 6 already reversed — `guest_route::open_route` is "wire, not keep",
+  and the same TSV row's `fix_shape` cell says `route`. The ONE ref is
+  `chat_cmd/config.rs:315`. The dial cannot land yet: the daemon's guest
+  surface (`routes_guest_ask.rs:50`, `routes_guest_session.rs:52`) has no
+  tunnel-open route. REFUSED alternative — moving `open_route` into cli-llm
+  needs `sovereign_mesh::guest_tunnel` and duplicates the one security decider
+  (principle 8; D6's own last line). Ordered behind fp-8.
+- **`sovereign-tools -> sovereign-recipe-author`** (fp-29, 2 refs): there is no
+  `FeatureStore` in either crate or in contracts — it is an ATOS concept that
+  left corpus-engine (`corpus-engine/src/lib.rs:220`), so the TSV's
+  `missing_capability` misnames the subject. The refs are to a concrete sqlite
+  `RecipeProjectStore` (`sovereign-tools/src/bundles.rs:445,486`). "Drop the
+  pub use shim" is NET +1 and was reproduced: `sovereign-tools` is the only
+  Cargo.toml in the workspace naming `sovereign-recipe-author`, while 7+ sites
+  in sovereign-cli-llm and sovereign-daemon ride the `pub use` at
+  `sovereign-tools/src/lib.rs:68`. A port cannot close it either — the
+  constructor is svrn's (`sovereign-daemon/src/daemon_cmd/boot.rs:790`) and a
+  program-owned store is never a leaf. §12 decision 2's dial is what remains;
+  ordered behind fp-7.
+- **`sovereign-cli-dev -> sovereign-store`** (fp-32, 2 refs): the port half had
+  ALREADY landed — `ConversationStore` is in `sovereign-contracts`
+  (`traits.rs:1030`) — and cli-dev is the composition root of its own
+  `cmd_audit_recover`, so the TSV's "construction at composition root" is
+  vacuous. §4 rule 1 decides the shape instead (`state.db` is svrn's, resolved
+  under `sovereign_cli_shared::dirs::sovereign_root()`,
+  `audit_recover.rs:364-378`). Not a refusal in the end: the row is buildable
+  with NO new route — `recover_inferred_with_store` (`audit_recover.rs:273`) is
+  already the pure loop over `&dyn ConversationStore` and uses exactly
+  `list_conversations` and `get_conversation`, both served at
+  `turn_http.rs:123,125`.
+
+Also corrected 2026-09-23: **fp-8's row named the wrong TSV pairs** for its
+guest_route half. `sovereign-cli-llm -> commonwealth-state` (2 refs) is
+`MeshStore` in newsworthy/portfolio and `-> sovereign-mesh` (12 refs) is
+pinned-pod/persist/capabilities/canonical_pull — neither carries a guest_route
+ref. fp-8's VERB (the daemon's guest tunnel source) is still the right owner;
+the cli-llm client side is fp-26's pair.
+
 ## 12. The decision sheet — front-loaded so implementation is mechanical
 
 `docs/FIVE_PROGRAMS_DECISIONS.tsv` records the §12 edge inventory, one row per edge:
 source, target, refs, use shape, fix shape, missing capability, prerequisite,
 behaviour delta, the ONE decision, effort. It was produced by three read-only
 scouts over the gate output; it is data, not prose, and it replaces re-probing.
-The fp-25 and fp-28 premise checks (§11) found two misclassified fix shapes;
-fp-28's actual writer/reader boundary is still an open decision. Check each
-row's premise against its live callers before using it as a mechanical task.
+Five premise checks (§11) have now found five misclassified cells — fp-25,
+fp-26, fp-28, fp-29, fp-32 — four of them dispositioned by the director
+2026-09-23 (ralph/DECISIONS.md `five-programs-2`); only fp-28's writer/reader
+boundary is still an open decision, and it is the operator's. **Check every
+row's premise against its live callers before using it as a mechanical task.**
+That step is load-bearing, not a formality: the misclassifications cluster in
+`missing_capability` and `fix_shape`, the two cells a scout wrote from the gate
+output rather than from a caller graph.
 
 ### The classes (by fix shape, not by source crate)
 
