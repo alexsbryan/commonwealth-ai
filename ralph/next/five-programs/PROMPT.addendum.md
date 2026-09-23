@@ -18,6 +18,45 @@ are your whole memory. Any other STATE.md under `ralph/` is ANOTHER queue —
 never open it, never mark it. When a row and the tree disagree, you stop (§6);
 you never improvise around it.
 
+<!-- section: loop after=intro -->
+## The loop — the operator's cadence, verbatim (2026-09-23)
+
+```
+until boundary-gate exits 0 {
+    run the gate;                    # toolbox + cargo lock; group BY TARGET
+    identify gaps;                   # first dep-ready row; scout before cutting
+    close gaps;                      # cutters never cargo/git; you hold the compile
+    if (closures_since_last_full_check % 5 == 0) {
+        run sovereign-test.sh AND sovereign-lint.sh --full;   # both green
+    } else {
+        all-targets build only;      # full resolved feature set
+    }
+}
+```
+
+- The counter lives at the top of `{{state}}` ("closures since last full
+  check"). After YOUR row closes net-decreasing: increment it; at 5 run the
+  full test + lint pair, repair anything red IN THE SAME STEP, reset to 0.
+  A rolled-back or delta-0 row does NOT count (fp-29's refusal is the
+  precedent — net +1 as spec'd means refused, not counted).
+- A red test is repaired, never queued: classify drift-vs-regression FIRST
+  (read what the census pins, find the commit that moved the code), then fix
+  in the correct direction. A census's failure message is an argument, not
+  an order — fp-53 refused chunk_provenance's own "delete from
+  MANUFACTURED" advice because the producer was alive and the scan was
+  broken. Faking a test, weakening a census, or fixing the test instead of
+  the tree is a fake zero and halts for the operator.
+- Build-only between checks still means the FULL all-targets build with the
+  repo's resolved feature contract — through the scripts, never bare cargo.
+- Standing rules the whole loop obeys: net-decreasing only (a move that adds
+  a red edge elsewhere is rolled back and recorded); no fake zeros (never
+  promote a program-owned store to a leaf; leaf admissions are OPERATOR
+  decisions per the §12 decision 3a ladder — named refusal of each existing
+  home, the two programs sharing the vocabulary, the leaf count in the
+  burn-down); ALL TESTS GREEN IS STANDING (operator, 2026-09-23: "doesn't
+  matter who caused them"); commit as you go; NOTHING IS EVER PUSHED; DONE
+  only when the gate exits 0 AND §11's three finish conditions hold.
+
 <!-- section: facts after=intro -->
 ## 0. Standing facts (do not re-derive)
 
@@ -40,8 +79,9 @@ you never improvise around it.
   `toolbox run -c sovereign-vulkan bash -lc '...'` (native host builds die on
   llama-cpp-sys-4). Compile is the gate: scoped
   `./scripts/sovereign-lint.sh --human` per step, `--full` when a unit
-  touches a shared crate. `sovereign-test.sh` only when a row touches test
-  wiring.
+  touches a shared crate. The test/lint cadence is the LOOP's, not per-step —
+  see `The loop` above: every 5th net-decreasing closure runs
+  `sovereign-test.sh` + `sovereign-lint.sh --full`, both green.
 - CLEAN trips are REPORT-AFTER: the gate's du and its `cargo clean` are one
   invocation (`dev-build.sh --clean --gate-only`), so a run over the 256G
   ceiling cleans (~300G) and rebuilds (~5 min) — it cannot report first.
