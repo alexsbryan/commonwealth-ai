@@ -66,7 +66,7 @@ app.)*
 
 ```bash
 # The demo's grant — works for a phone on ANY network (cellular, another WiFi):
-svrn mesh grant --all-apps --url https://svrnme.sh/ --qr-svg wall-qr.svg
+svrn mesh grant --all-apps --url https://svrnme.sh/ring/ --qr-svg wall-qr.svg
 
 # Same-WiFi variant — the QR carries this machine's LAN address on the door:
 svrn mesh grant --app ring-doc
@@ -81,6 +81,13 @@ which is why hosting for guests needed no second copy of the app. No address,
 no model id, no file: `--ttl` defaults to 2 h and the grant reaches the
 daemon's primary slot. `svrn mesh grant --list` shows outstanding guests with
 their expiry; `--revoke <token>` ends one early.
+
+With `--url` naming the runtime page (`…/ring/`), the link's page URL is that
+page and the door route rides the fragment as `path=` (`/ring/` for the wall),
+with the host's dial beside it — all composed by the mint (2026-09-22: the
+broken form put the app name in the static origin's path and produced a 404).
+The wall-index fetch over the tunnel needs a daemon whose guest listener
+carries the door's pages (landed 2026-09-23; live check owed).
 
 **Plan for the phones being on their OWN network connections** (operator,
 2026-09-22 — that is the guaranteed case, and the wall form is the demo's).

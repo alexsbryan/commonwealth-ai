@@ -3788,13 +3788,21 @@ impl EmbeddedDaemon {
                 app_state_clone.clone(),
                 crate::server::ClientSurface::Peer,
             );
-            let mut guest_router = crate::server::client_router_for(
+            // The guest listener — what the iroh GUEST_ALPN forward serves —
+            // gets the SAME guest surface as the door, pages included.
+            // Without the merge a phone that tunnelled in was refused
+            // /ring/ with a 403 `out_of_scope` (permits_path knows only rail
+            // and API routes; pages are not in a scope's path set because
+            // they are public shells — the DATA behind them is what the
+            // bearer gates), so "land on the index and pick" only worked on
+            // the LAN. `door_router` is the one owner of that merge; the
+            // pages are grant-filtered by the index itself, exactly as they
+            // are on the door's own bind.
+            let guest_router = crate::guest_door::door_router(
                 app_state_clone.clone(),
-                crate::server::ClientSurface::Guest,
+                guest_pages.clone(),
+                turn_host,
             );
-            if let Some(host) = turn_host {
-                guest_router = guest_router.layer(axum::Extension(host));
-            }
             let rail_router = crate::server::client_router_for(
                 app_state_clone,
                 crate::server::ClientSurface::Rail,
