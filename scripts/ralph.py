@@ -627,7 +627,7 @@ ERROR_SHAPE_RE = re.compile(
     r"|quota|usage limit|rate.?limit|unauthori[sz]ed|forbidden|not found"
     r"|invalid api key|unexpected server)\b")
 
-PROBE_TIMEOUT_S = 20
+PROBE_TIMEOUT_S = 45
 PROBE_PROMPT = "Reply with the single word OK."
 
 
