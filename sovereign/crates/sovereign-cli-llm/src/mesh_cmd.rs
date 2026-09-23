@@ -440,88 +440,10 @@ async fn cmd_soak_gate(args: &[String]) -> i32 {
 }
 
 /// Run a corpus subcommand. Returns the exit code.
-const HELP_MESH: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help {
-    command: "svrn mesh",
-    summary: "Manage the local Commonwealth mesh (create / join / rotate / status).",
-    sections: &[
-        sovereign_cli_shared::help::HelpSection::Usage("svrn mesh <subcommand> [args]"),
-        sovereign_cli_shared::help::HelpSection::Subcommands(&[
-            (
-                "create",
-                "Promote the solo mesh to a joinable mesh; print invite",
-            ),
-            (
-                "join <arg>",
-                "Join an existing mesh (bare key, https url, or sovereign://)",
-            ),
-            (
-                "rotate",
-                "Generate a new shareable join key (invalidates the previous)",
-            ),
-            (
-                "grant --model <id>",
-                "Lend named models to a NON-member for a bounded window; prints a guest link",
-            ),
-            (
-                "use <link>",
-                "Accept a guest link — `svrn chat` then routes to the issuing node",
-            ),
-            (
-                "status",
-                "Show mesh members, hosted knowledge, loaded models",
-            ),
-            (
-                "transport",
-                "Show each peer's live iroh path (direct / relayed / mixed)",
-            ),
-            (
-                "media <peer>",
-                "Print a localhost URL that reaches a member's media server (Jellyfin) by mesh key — no VPN, no port forwarded",
-            ),
-            (
-                "offers",
-                "What the neighbours have for sale or lending — every neighbour a row, the ones that did not answer NAMED; --why adds who vouched for each",
-            ),
-            ("balance", "Show your contribution to the mesh"),
-            ("list", "Show every mesh this node has joined; the active one is marked"),
-            ("switch <mesh>", "Park the active mesh and bring another one up"),
-            ("forget <mesh>", "Drop a parked mesh from this node"),
-            (
-                "forget-member <node>",
-                "Retire one member row — the repair for an endpoint-key collision",
-            ),
-            ("leave", "Leave the current mesh"),
-            ("logs", "Show mesh daemon logs"),
-            (
-                "fetch-model <name>",
-                "Pull a GGUF from a mesh peer over the tailnet (no R2 credentials required)",
-            ),
-            (
-                "warm-cache <gguf>",
-                "Pre-seed the RPC tensor cache from a local GGUF (offline; later serves with zero weight transfer)",
-            ),
-            (
-                "plan <gguf> --devices <gb,..>",
-                "Dry-run the tensor split across a mesh — per-device fit + headroom, offline (no load)",
-            ),
-            (
-                "bench",
-                "Measure how fast the model you are running actually decodes, and record it for `plan`",
-            ),
-            (
-                "check-invariants --nodes <a,b,..>",
-                "Poll /v1/mesh/status across nodes and assert convergence/no-ghost/liveness (soak harness)",
-            ),
-            (
-                "soak-gate <findings.jsonl>",
-                "Gate mesh-soak SLIs (violation rate, load latency) against a committed baseline",
-            ),
-        ]),
-        sovereign_cli_shared::help::HelpSection::Notes(
-            "Run `svrn mesh <subcommand> --help` for subcommand-specific flags.",
-        ),
-    ],
-};
+
+#[path = "mesh_cmd_help.rs"]
+mod mesh_help;
+use mesh_help::HELP_MESH;
 
 /// One machine on the live mesh, as `mesh plan --from-mesh` sees it.
 ///
@@ -3282,7 +3204,14 @@ async fn cmd_status(args: &[String]) -> i32 {
         // node_id is 22 chars including the "node-" prefix; truncate
         // gracefully if a future format grows it.
         let nid: String = m.node_id.chars().take(22).collect();
-        let name: String = m.name.chars().take(12).collect();
+        // Min-width, never a cap: this name is what a person types into
+        // `svrn mesh app <peer>` / `svrn mesh media <peer>`, and a truncated
+        // one does not resolve (measured 2026-09-23: the table printed
+        // `Alexs-MacBoo` for `Alexs-MacBook-Pro-2`, and `mesh app` answered
+        // "no member matching"). Long names push the address column right;
+        // that is the honest trade. `{:<12}` still aligns the common short
+        // case.
+        let name = m.name.as_str();
         // A tombstoned row has no liveness worth reporting — it is not a
         // member. Rendering its last known `status` as "offline" made a
         // successful `forget-member` look like a no-op: the operator repairs
@@ -3382,7 +3311,9 @@ async fn cmd_transport(args: &[String]) -> i32 {
     println!("  {:<12} {:<9} relay / direct", "peer", "path");
     println!("  {:-<12} {:-<9} {:-<30}", "", "", "");
     for p in &status.iroh_transport {
-        let name: String = p.name.chars().take(12).collect();
+        // Min-width, never a cap — same rule as the status table's name
+        // column: a name a person cannot read is a name they cannot type.
+        let name = p.name.as_str();
         let (path, detail) = match &p.path {
             Some(tp) => {
                 // The addresses, not just how many: a count cannot say WHICH
