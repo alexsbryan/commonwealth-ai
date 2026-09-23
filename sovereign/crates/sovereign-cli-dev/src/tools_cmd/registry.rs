@@ -46,7 +46,7 @@ use corpus_index::types::EmbedFn;
 use sovereign_cli_shared::{
     dirs::default_data_dir, repo::find_sovereign_dir, scip::load_merged_graph,
 };
-use sovereign_core::registry::ToolRegistry;
+use sovereign_contracts::registry::ToolRegistry;
 
 /// Small bundle of handles held open across a single `svrn tools`
 /// invocation. Built once in `open_tools_registry`, shared across the

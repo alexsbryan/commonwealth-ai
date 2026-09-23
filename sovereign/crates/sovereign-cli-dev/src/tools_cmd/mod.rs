@@ -27,7 +27,7 @@
 use std::collections::BTreeMap;
 
 use serde_json::Value;
-use sovereign_core::types::{Effect, Scope, ToolContext, ToolDescriptor};
+use sovereign_contracts::types::{Effect, Scope, ToolContext, ToolDescriptor};
 
 mod args;
 mod format;

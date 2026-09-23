@@ -146,7 +146,7 @@ fn parse_args(args: &[String]) -> Result<Args, String> {
 fn daemon_base(explicit: Option<&str>) -> String {
     match explicit {
         Some(url) => url.trim_end_matches('/').to_string(),
-        None => sovereign_core::setup_config::client_daemon_base(),
+        None => sovereign_contracts::setup_config::client_daemon_base(),
     }
 }
 

@@ -41,8 +41,8 @@ use std::sync::Arc;
 use arc_swap::ArcSwap;
 use corpus_engine_notes::NoteStore;
 use corpus_engine_scip::ScipGraph;
-use sovereign_core::registry::ToolRegistry;
-use sovereign_core::traits::Tool;
+use sovereign_contracts::registry::ToolRegistry;
+use sovereign_contracts::traits::Tool;
 use sovereign_tools::mcp_surface::{
     is_mcp_exposed, render_tools_list, resolve_alias, MCP_TOOLS_ALWAYS, MCP_TOOLS_RETIRED,
     MCP_TOOL_ALIASES,
@@ -288,7 +288,7 @@ fn plan_schema_builds_over_real_tool_descriptors() {
     ));
 
     let descriptors = registry.descriptors();
-    let schema = sovereign_core::planner::plan_schema(&descriptors)
+    let schema = sovereign_contracts::planner_schema::plan_schema(&descriptors)
         .expect("every registered tool must declare a maskable `parameters` schema");
 
     let branches = schema["properties"]["steps"]["items"]["oneOf"]

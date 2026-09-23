@@ -55,7 +55,6 @@ corpus-engine-scip = { workspace = true }
 sovereign-cli-shared = { workspace = true }
 
 # ── Workbench-only workspace crates ──
-sovereign-core = { workspace = true, optional = true }
 # oicp-client is NOT a direct dependency here any more (2026-08-20). The one
 # import that wanted it — `RemoteApiProvider`, in `code_cmd.rs`'s copy of
 # `build_daemon_embed_fn` — moved with the rest of `svrn code index` into
@@ -80,6 +79,7 @@ sovereign-tools = { workspace = true, features = [
 ], optional = true }
 sovereign-enrichment-build = { workspace = true }
 sovereign-contracts = { workspace = true }
+sovereign-time = { workspace = true }
 sovereign-mesh = { workspace = true, features = ["treesitter"], optional = true }
 # The mesh host cluster (domains dm-daemon-mesh-edge): `project_cmd::serve`
 # mounts `mcp_router`, so it rides the same `workbench` gate as the mesh dep.
@@ -145,7 +145,6 @@ libc = "0.2"
 # only wants the linkable surface (`sovereign-cli`) turns it off.
 default = ["workbench"]
 workbench = [
-    "dep:sovereign-core",
     "dep:sovereign-store",
     "dep:sovereign-tools",
     "dep:sovereign-mesh",

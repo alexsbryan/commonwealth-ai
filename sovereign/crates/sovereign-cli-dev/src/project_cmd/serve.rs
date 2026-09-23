@@ -386,7 +386,7 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
 
     // ── Register tools ──────────────────────────────────────────
 
-    let mut tools = sovereign_core::ToolRegistry::new();
+    let mut tools = sovereign_contracts::ToolRegistry::new();
     tools.register(Box::new(
         sovereign_code::SymbolLookupTool::new(
             Arc::clone(&engine) as std::sync::Arc<dyn sovereign_code::CodeIndexSource>,

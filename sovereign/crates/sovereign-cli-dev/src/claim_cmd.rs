@@ -857,7 +857,7 @@ fn git_current_branch(repo_root: &Path) -> Option<String> {
     }
 }
 
-use sovereign_core::time::unix_now_u64 as now_secs;
+use sovereign_time::unix_now_u64 as now_secs;
 
 #[cfg(test)]
 mod tests {

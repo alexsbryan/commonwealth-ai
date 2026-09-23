@@ -684,7 +684,7 @@ async fn maybe_rebuild_lancedb_corpus(
     quiet: bool,
 ) -> i32 {
     let meta_path = data_dir.join(corpus_id).join("_corpus_meta.json");
-    let current_embed_stem = sovereign_core::setup_config::SetupConfig::load()
+    let current_embed_stem = sovereign_contracts::setup_config::SetupConfig::load()
         .ok()
         .and_then(|c| c.embed_model_stem());
 

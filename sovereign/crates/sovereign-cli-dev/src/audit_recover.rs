@@ -64,8 +64,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use corpus_engine_notes::{NoteScope, NoteSource, NoteStore};
-use sovereign_core::traits::ConversationStore;
-use sovereign_core::types::Role;
+use sovereign_contracts::traits::ConversationStore;
+use sovereign_contracts::types::Role;
 use sovereign_store::sqlite::SqliteStateStore;
 use sovereign_tools::notes::patterns::{ObservedPattern, PatternRule, ToolPatternMatcher};
 use sovereign_tools::notes::response_mine;
@@ -630,7 +630,7 @@ mod tests {
 
     // ─── Inferred-source recovery from messages table ─────────────
 
-    use sovereign_core::types::{Message, Role};
+    use sovereign_contracts::types::{Message, Role};
 
     fn assistant_msg(convo_id: &str, content: &str, idx: i64) -> Message {
         Message {

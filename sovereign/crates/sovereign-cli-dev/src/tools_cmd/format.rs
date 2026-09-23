@@ -6,7 +6,7 @@
 //! pipeline use.
 
 use serde_json::Value;
-use sovereign_core::types::{Effect, Latency, Scope, StepOutput, ToolDescriptor};
+use sovereign_contracts::types::{Effect, Latency, Scope, StepOutput, ToolDescriptor};
 
 #[derive(Copy, Clone)]
 pub(super) enum OutputMode {

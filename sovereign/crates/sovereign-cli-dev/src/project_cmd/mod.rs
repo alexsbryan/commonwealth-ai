@@ -456,7 +456,7 @@ fn derive_project_id(repo_root: &Path) -> String {
         .to_string()
 }
 
-use sovereign_core::time::unix_now as unix_now_secs;
+use sovereign_time::unix_now as unix_now_secs;
 
 // ─── Observation report (M6.1) ──────────────────────────────
 //
@@ -482,7 +482,7 @@ pub(crate) use sovereign_cli_shared::repo::{find_repo_root, find_sovereign_dir};
 /// way; this side simply had not been updated. Found 2026-07-28 by the
 /// journey harness's sandbox, which runs its daemon on :19741.
 fn daemon_base() -> String {
-    let port = sovereign_core::setup_config::SetupConfig::load()
+    let port = sovereign_contracts::setup_config::SetupConfig::load()
         .map(|c| c.daemon.client_port)
         .unwrap_or(9741);
     format!("http://127.0.0.1:{port}")

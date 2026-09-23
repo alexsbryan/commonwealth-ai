@@ -338,7 +338,7 @@ pub async fn run(
 /// committed / observed / inferred-via-recover) keep the floor
 /// non-empty even when this skips.
 pub async fn run_with_default_backend(repo_root: &Path, notes: &NoteStore) -> ExtractRunSummary {
-    let setup = match sovereign_core::setup_config::SetupConfig::load() {
+    let setup = match sovereign_contracts::setup_config::SetupConfig::load() {
         Ok(s) => s,
         Err(e) => {
             tracing::info!(

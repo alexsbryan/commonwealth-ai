@@ -506,7 +506,7 @@ async fn cmd_check_spec(args: &[String]) -> i32 {
 
     let fuzzy = fuzzy_path.as_deref().map(load_fuzzy).unwrap_or_default();
 
-    let cfg = match sovereign_core::setup_config::SetupConfig::load() {
+    let cfg = match sovereign_contracts::setup_config::SetupConfig::load() {
         Ok(c) => c,
         Err(e) => {
             eprintln!("check-spec: read config: {e}");

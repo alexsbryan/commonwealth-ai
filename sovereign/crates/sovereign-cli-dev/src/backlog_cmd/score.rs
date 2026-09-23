@@ -210,7 +210,7 @@ fn truncate(s: &str, n: usize) -> String {
 
 /// The resident daemon, unless the caller names another one.
 pub fn default_daemon_base() -> String {
-    sovereign_core::setup_config::client_daemon_base()
+    sovereign_contracts::setup_config::client_daemon_base()
 }
 
 /// Score one item. Every failure path refuses with a reason.
