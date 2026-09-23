@@ -5,7 +5,7 @@
 // The version query on the wasm import is stamped at build time (the content
 // hash of the module), so a service worker or CDN cache cannot serve a stale
 // runtime after a rebuild.
-import init, { dial_guest } from './wasm/ring_runtime.js?v=__VERSION__';
+import init, { dial_guest } from '/ring/wasm/ring_runtime.js?v=__VERSION__';
 
 const status = document.getElementById('status');
 const response = document.getElementById('response');
@@ -63,6 +63,6 @@ if (!token || !dial) {
 // registration must never break the dial.
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./sw.js').catch(() => {});
+    navigator.serviceWorker.register('/ring/sw.js').catch(() => {});
   });
 }

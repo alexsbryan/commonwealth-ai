@@ -4,10 +4,10 @@
 // stuck on last week's wasm). The version is also on every shell URL.
 const CACHE = 'ring-runtime-__VERSION__';
 const SHELL = [
-  './',
-  './app.js?v=__VERSION__',
-  './wasm/ring_runtime.js?v=__VERSION__',
-  './wasm/ring_runtime_bg.wasm?v=__VERSION__',
+  '/ring',
+  '/ring/app.js?v=__VERSION__',
+  '/ring/wasm/ring_runtime.js?v=__VERSION__',
+  '/ring/wasm/ring_runtime_bg.wasm?v=__VERSION__',
 ];
 
 self.addEventListener('install', (e) => {
