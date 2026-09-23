@@ -169,26 +169,38 @@ fn cosine(a: &[f32], b: &[f32]) -> f32 {
     dot / (na.sqrt() * nb.sqrt())
 }
 
-/// Pick the first cache source whose stored sentinel probe agrees with the
-/// live `probe` (same embed space, cosine ≥ [`PROBE_MIN_COSINE`]) and whose
-/// schema matches. Candidates are tried in priority order — a user-written
-/// on-disk cache first (it can carry exemplars from a newer release than the
-/// binary), then the binary-baked artifact.
+/// Pick the cache source this boot will use.
+///
+/// A candidate must (1) parse, (2) match [`SCHEMA_VERSION`], (3) agree with the
+/// live `probe` (same embed space, cosine ≥ [`PROBE_MIN_COSINE`]), and
+/// (4) cover the `specs` this boot's classifiers will ask for. Among the
+/// candidates that pass, the one covering MORE of `specs` wins; equal coverage
+/// keeps the documented priority order — a user-written on-disk cache first
+/// (it can carry exemplars from a newer release than the binary), then the
+/// binary-baked artifact.
 ///
 /// The load-bearing property: a candidate that *parses* but fails validation
-/// (wrong schema, or a probe from a different / degenerate embed model — e.g.
-/// a zero-vector cache left behind by a past broken embed slot) no longer
-/// *shadows* a healthy fallback. We advance to the next candidate instead of
-/// giving up. Before this, a parseable-but-stale disk cache short-circuited the
-/// baked fallback and forced a full re-embed of ~300 exemplars on the CPU-only
-/// embed slot every boot (minutes) — the "router is slow to launch" bug.
+/// (wrong schema, a probe from a different / degenerate embed model, or a
+/// missing key) does not *shadow* a healthier fallback. Before coverage was
+/// part of the decider, only the probe was checked, and a probe-valid but
+/// PARTIAL on-disk cache beat a complete baked one. Observed 2026-09-22 on the
+/// CPU-only Intel Mac: a 156-entry disk cache passed the probe against a
+/// 423-entry exemplar set whose `c:` keys had all changed with the classifier
+/// instruction, so it won and the boot re-embedded 267 exemplars live (~8s
+/// each, ~36 minutes). Every restart killed the work before `flush`, so the
+/// cache was never repaired and the daemon never reached its listener inside
+/// the readiness window — "the daemon isn't restarting properly". The freshness
+/// gate already had this fact as [`CacheStaleReason::MissingCoverage`];
+/// selection now reads the same one.
 ///
 /// Pure: no I/O, no inference. Returns the chosen `(entries, source)` or `None`
-/// when nothing validates (caller then re-embeds and flushes a fresh cache).
+/// when no candidate passes the probe (caller then re-embeds and flushes).
 fn select_cache_source(
     candidates: [(Option<CacheFile>, &'static str); 2],
     probe: &[f32],
+    specs: &[(&str, String)],
 ) -> Option<(HashMap<String, Vec<f32>>, &'static str)> {
+    let mut best: Option<(usize, HashMap<String, Vec<f32>>, &'static str)> = None;
     for (parsed, source) in candidates {
         let Some(f) = parsed else { continue };
         if f.schema_version != SCHEMA_VERSION {
@@ -200,24 +212,49 @@ fn select_cache_source(
             continue;
         }
         let sim = cosine(probe, &f.probe);
-        if sim >= PROBE_MIN_COSINE {
+        if sim < PROBE_MIN_COSINE {
             tracing::info!(
                 target: "router.bootstrap",
-                entries = f.entries.len(),
                 probe_cosine = sim,
                 source,
-                "exemplar embed cache validated"
+                "exemplar embed cache: probe mismatch (embed model changed or degenerate cache); trying next source"
             );
-            return Some((f.entries, source));
+            continue;
         }
+        let covered = coverage(&f.entries, specs);
         tracing::info!(
             target: "router.bootstrap",
-            probe_cosine = sim,
             source,
-            "exemplar embed cache: probe mismatch (embed model changed or degenerate cache); trying next source"
+            covered,
+            required = specs.len(),
+            entries = f.entries.len(),
+            probe_cosine = sim,
+            "exemplar embed cache candidate"
         );
+        let better = match &best {
+            None => true,
+            Some((c, _, _)) => covered > *c,
+        };
+        if better {
+            best = Some((covered, f.entries, source));
+        }
+        // A candidate covering every required key cannot be beaten, and
+        // stopping here is what keeps disk-first priority on equal coverage.
+        if covered == specs.len() {
+            break;
+        }
     }
-    None
+    best.map(|(_, entries, source)| (entries, source))
+}
+
+/// How many of `specs` the entry map carries a vector for — the runtime
+/// counterpart of [`check_cache_fresh`]'s membership test, so selection and the
+/// freshness gate agree on what "covered" means.
+fn coverage(entries: &HashMap<String, Vec<f32>>, specs: &[(&str, String)]) -> usize {
+    specs
+        .iter()
+        .filter(|(method, text)| entries.contains_key(&key(method, text)))
+        .count()
 }
 
 impl BootEmbedCache {
@@ -225,7 +262,14 @@ impl BootEmbedCache {
     /// the sentinel probe. Always returns a usable cache — probe or
     /// read failures degrade to an empty (or disabled) cache and the
     /// classifiers embed exactly as they did before this existed.
-    pub async fn open(inference: &dyn InferenceProvider) -> Self {
+    ///
+    /// `specs` is the `(method, text)` set this boot will ask the cache for —
+    /// build it with [`crate::router_bootstrap::exemplar_specs`], the same
+    /// source the freshness gate uses. Selection prefers the source covering
+    /// more of it, so a probe-valid but partial on-disk cache cannot shadow a
+    /// complete baked one (see [`select_cache_source`]). Callers with no
+    /// completeness requirement (calibration, rebuild) pass `&[]`.
+    pub async fn open(inference: &dyn InferenceProvider, specs: &[(&str, String)]) -> Self {
         let path = cache_path();
         let Some(ref p) = path else {
             tracing::info!(target: "router.bootstrap", "exemplar embed cache disabled via env");
@@ -258,7 +302,7 @@ impl BootEmbedCache {
             .ok()
             .and_then(|bytes| serde_json::from_slice::<CacheFile>(&bytes).ok());
         let baked = serde_json::from_str::<CacheFile>(BAKED_ROUTER_EMBED_CACHE).ok();
-        match select_cache_source([(disk, "disk"), (baked, "baked")], &probe) {
+        match select_cache_source([(disk, "disk"), (baked, "baked")], &probe, specs) {
             Some((entries, _source)) => Self {
                 path,
                 entries,
@@ -666,9 +710,12 @@ mod tests {
         let live = vec![1.0f32, 0.0, 0.0];
         let poisoned = cache_with(vec![0.0; 8], 277, SCHEMA_VERSION);
         let baked = cache_with(live.clone(), 303, SCHEMA_VERSION);
-        let (entries, source) =
-            select_cache_source([(Some(poisoned), "disk"), (Some(baked), "baked")], &live)
-                .expect("baked fallback must validate when disk is poisoned");
+        let (entries, source) = select_cache_source(
+            [(Some(poisoned), "disk"), (Some(baked), "baked")],
+            &live,
+            &[],
+        )
+        .expect("baked fallback must validate when disk is poisoned");
         assert_eq!(source, "baked");
         assert_eq!(
             entries.len(),
@@ -685,9 +732,92 @@ mod tests {
         let disk = cache_with(live.clone(), 300, SCHEMA_VERSION);
         let baked = cache_with(live.clone(), 303, SCHEMA_VERSION);
         let (entries, source) =
-            select_cache_source([(Some(disk), "disk"), (Some(baked), "baked")], &live).unwrap();
+            select_cache_source([(Some(disk), "disk"), (Some(baked), "baked")], &live, &[])
+                .unwrap();
         assert_eq!(source, "disk");
         assert_eq!(entries.len(), 300);
+    }
+
+    /// A `CacheFile` carrying REAL keys for `specs`, so coverage is meaningful
+    /// (the `cache_with` fixture uses synthetic `q:{i}` keys).
+    fn cache_with_specs(probe: Vec<f32>, specs: &[(&str, String)]) -> CacheFile {
+        let entries = specs
+            .iter()
+            .map(|(m, t)| (key(m, t), probe.clone()))
+            .collect();
+        CacheFile {
+            schema_version: SCHEMA_VERSION,
+            built_for: None,
+            probe,
+            entries,
+        }
+    }
+
+    /// The 2026-09-22 incident, as a test: a probe-valid on-disk cache that
+    /// covers only part of the exemplar set must NOT shadow a complete baked
+    /// artifact. Before coverage was part of selection, the partial disk cache
+    /// won and the boot re-embedded every missing exemplar live — ~36 minutes
+    /// on the CPU-only Intel Mac, killed by every restart before `flush` could
+    /// repair it, so the daemon could never reach its listener in time.
+    #[test]
+    fn partial_disk_cache_does_not_shadow_a_complete_baked_one() {
+        let live = vec![1.0f32, 0.0, 0.0];
+        let specs: Vec<(&str, String)> = vec![
+            ("c", "classifier a".into()),
+            ("c", "classifier b".into()),
+            ("q", "intent a".into()),
+            ("d", "effort a".into()),
+        ];
+        let disk = cache_with_specs(live.clone(), &specs[..2]);
+        let baked = cache_with_specs(live.clone(), &specs);
+        let (entries, source) = select_cache_source(
+            [(Some(disk), "disk"), (Some(baked), "baked")],
+            &live,
+            &specs,
+        )
+        .expect("the complete source must validate");
+        assert_eq!(source, "baked", "coverage must outrank disk-first priority");
+        assert_eq!(entries.len(), specs.len());
+    }
+
+    /// Equal coverage keeps the documented priority: a complete on-disk cache
+    /// (possibly carrying newer exemplars than the binary) still beats the
+    /// baked artifact.
+    #[test]
+    fn complete_disk_cache_still_wins_on_equal_coverage() {
+        let live = vec![1.0f32, 0.0, 0.0];
+        let specs: Vec<(&str, String)> =
+            vec![("q", "intent a".into()), ("c", "classifier a".into())];
+        let disk = cache_with_specs(live.clone(), &specs);
+        let baked = cache_with_specs(live.clone(), &specs);
+        let (_entries, source) = select_cache_source(
+            [(Some(disk), "disk"), (Some(baked), "baked")],
+            &live,
+            &specs,
+        )
+        .unwrap();
+        assert_eq!(source, "disk");
+    }
+
+    /// When neither source is complete, the better-covered one wins rather
+    /// than whichever happened to be listed first.
+    #[test]
+    fn better_covered_disk_wins_when_baked_is_partial() {
+        let live = vec![1.0f32, 0.0, 0.0];
+        let specs: Vec<(&str, String)> = vec![
+            ("q", "intent a".into()),
+            ("c", "classifier a".into()),
+            ("d", "effort a".into()),
+        ];
+        let disk = cache_with_specs(live.clone(), &specs[..2]);
+        let baked = cache_with_specs(live.clone(), &specs[..1]);
+        let (_entries, source) = select_cache_source(
+            [(Some(disk), "disk"), (Some(baked), "baked")],
+            &live,
+            &specs,
+        )
+        .unwrap();
+        assert_eq!(source, "disk");
     }
 
     #[test]
@@ -699,7 +829,8 @@ mod tests {
         let disk = cache_with(stale.clone(), 277, SCHEMA_VERSION);
         let baked = cache_with(stale, 303, SCHEMA_VERSION);
         assert!(
-            select_cache_source([(Some(disk), "disk"), (Some(baked), "baked")], &live).is_none()
+            select_cache_source([(Some(disk), "disk"), (Some(baked), "baked")], &live, &[])
+                .is_none()
         );
     }
 
@@ -709,7 +840,8 @@ mod tests {
         let disk = cache_with(live.clone(), 10, SCHEMA_VERSION + 1);
         let baked = cache_with(live.clone(), 303, SCHEMA_VERSION);
         let (_entries, source) =
-            select_cache_source([(Some(disk), "disk"), (Some(baked), "baked")], &live).unwrap();
+            select_cache_source([(Some(disk), "disk"), (Some(baked), "baked")], &live, &[])
+                .unwrap();
         assert_eq!(source, "baked");
     }
 
@@ -718,7 +850,7 @@ mod tests {
         let live = vec![1.0f32, 0.0];
         let baked = cache_with(live.clone(), 303, SCHEMA_VERSION);
         let (_entries, source) =
-            select_cache_source([(None, "disk"), (Some(baked), "baked")], &live).unwrap();
+            select_cache_source([(None, "disk"), (Some(baked), "baked")], &live, &[]).unwrap();
         assert_eq!(source, "baked");
     }
 

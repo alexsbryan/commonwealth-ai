@@ -412,8 +412,11 @@ async fn cmd_fit(args: &[String]) -> i32 {
     //
     // NOT flushed: a calibration run must not mutate the artifact it
     // is measuring. Exemplar embeddings hit; only the bank's own
-    // queries are new work.
-    let mut cache = BootEmbedCache::open(&*provider).await;
+    // queries are new work. `&[]` — no coverage requirement: a fit is a
+    // measurement over a live model, and reusing whatever the disk cache
+    // holds is correct even when it is partial (the alternative, the baked
+    // artifact, is no more complete for a working-tree exemplar edit).
+    let mut cache = BootEmbedCache::open(&*provider, &[]).await;
     let built = build_all(&tree, Arc::clone(&provider), &mut cache).await;
     let (router, scope, archive, current_info, effort) = match built {
         Ok(v) => v,

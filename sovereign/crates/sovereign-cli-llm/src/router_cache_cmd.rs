@@ -240,7 +240,12 @@ async fn cmd_rebuild(args: &[String]) -> i32 {
     // `from_toml_str_cached` through it, flush. `BootEmbedCache::open` validates
     // the existing/baked cache via the sentinel probe and reuses matching
     // embeddings (incremental rebuild) or re-embeds on a model change.
-    let mut cache = BootEmbedCache::open(&*provider).await;
+    //
+    // `&[]` — no coverage requirement: this run re-embeds every miss and then
+    // flushes all five sets, so WHICH source it reuses cannot change the
+    // artifact. The boot path passes the real spec set so a partial disk cache
+    // cannot shadow a complete baked one; that hazard does not exist here.
+    let mut cache = BootEmbedCache::open(&*provider, &[]).await;
     let r = async {
         EmbedRouter::from_toml_str_cached(&tree.router, Arc::clone(&provider), Some(&mut cache))
             .await?;
