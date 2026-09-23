@@ -897,3 +897,53 @@ half is true and the inference is false. `deep_pipeline` runs the same
 of writing it to the message (`turn-pipeline-1` inventory 6 names this). So I2's
 3/8 is a RECORDING gap on four rows, not a treatment gap, and the fix is to
 write the key. I2's reader and floor stay as registered.
+
+### 2026-09-23 — Phase-1 attribution over the committed boards: the K0/K1 loss is evidence displacement, and the non-determinism splits three ways
+
+No arm re-ran; every number below is computed from the committed study-1 run
+JSONs by `ontology-proof/ans/attribution/w1_determinism.py` (determinism
+classification) and `w2_displacement.py` (per-question dissection).
+
+**1. The K0 loss and the K1 declines are one mechanism: walk-injected real
+chunks displace similarity's concentrated evidence.** On all four K0 lookups
+`full` loses that `bare` scores 1.0, the gold passage bare cited is absent from
+`full`'s prompt in one of three forms — never-pooled (megara, agrinion,
+histiaea), retrieved-but-cut (`in_prompt=false` at rank 13, demanhur), or
+wrong-sections (agrinion's prompt holds 13 chunks all from the right document
+yet not the INTRODUCTION section that carries the answer). On the K1 decline
+case the reviewer named, `bare` pools 10 chunks from ONE monograph (judge 0.33,
+answers) while `full` pools 24 chunks from 8 documents; the walk reached the
+Kyparissia hoard atom at hop 0 with 153 seeds and none of its chunks entered
+the pool; judge 0.00, and the decline text is the model's own draft — the gate
+only reclassifies a released pure decline (`grounding/inner.rs:1086-1099`).
+The seeds number is policy, not a bug: `max_seeds = max(top_k, 12)`
+(`atlas_grounding.rs:280`) and per-kind seed quotas stack on top of it
+(`ground.rs:777`). The D2 half-reservation bounds virtual (atom-enum/RAPTOR)
+chunks only; walk-injected REAL chunks have no reservation interaction — they
+simply compete for the same slots and char budget, and win by construction
+because they are injected, not scored.
+
+**2. The non-determinism attribution splits three ways.** Of `full`'s 32
+non-deterministic questions, 15 differ in retrieval input (order or membership,
+consistent with near-tie flips under batched reranker/merge decode), 17 have
+byte-identical ordered `retrieved[]` AND identical walk ledgers yet different
+answers. The gate action flips across runs on 24 grounding-only and 13 full
+questions (`citation_grounded`/`annotated_marked`/`abstained_decline` on the
+same recorded inputs). Committed data cannot separate a gate-internal flip from
+a decode flip on those 17, because the runner's gate projection drops `draft`
+and `claim_check_outcome`. The earlier record's "the variability lives in the
+atlas-grounded retrieval path, not the atom-enum" is therefore only half the
+story: retrieval-input differences explain roughly half the mass, and the rest
+is gate-or-decode on inputs the eval JSON records as identical. Owed: project
+the full gate meta (`draft`, `claim_check_outcome`) into the eval JSON — a
+recording change, legal before study 2 — then one planted identical-input pass
+names the flip site.
+
+**3. `chunks_fact_score` has no operand and the "0.22 vs 0.17" claim built on
+it is withdrawn.** The metric keyword-scores expected-fact strings against the
+~190-char `snippet` fields; on a correct bare answer the fact sits at offset
+1291 of an 1807-char `prompt_text`, so the score reads 0.00 where the judge
+reads 1.0. Any gold-in-retrieved comparison computed from it (including the
+"full's retrieval carries more gold: mean 0.22 vs bare 0.17" line above) is an
+instrument artifact, not a measurement. The fix is to score against admitted
+`prompt_text`, not the snippet window.
