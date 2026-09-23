@@ -658,8 +658,23 @@ pub(crate) async fn cmd_grant(args: &[String]) -> i32 {
     println!();
 
     // Last so it stays on the screen; a pipe sees nothing (guard inside).
-    if let Some(https) = &https {
-        print_qr_blocks(https)
+    match &https {
+        Some(https) => print_qr_blocks(https),
+        // NAME the absence (ARCH §6 / §18.3). The run of show PROMISES a QR
+        // at this step; a daemon with no `[daemon] guest_bind` has no
+        // address a phone can open, and silently printing nothing read as a
+        // broken feature (operator, 2026-09-22 — "supposed to generate a QR
+        // code"). One line, one remedy, no guessing an interface to
+        // advertise.
+        None => {
+            eprintln!();
+            eprintln!(
+                "No QR: this daemon advertises no address a phone can open. Set the door's \
+                 listen address once per machine (`svrn ring host <ns> --dir <bundle>` writes \
+                 [daemon] guest_bind in ~/.svrnmesh/config.toml), or pass --url <base>. \
+                 The link above needs the svrn CLI on the guest's machine."
+            );
+        }
     }
     0
 }
