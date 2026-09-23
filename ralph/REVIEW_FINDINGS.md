@@ -2215,3 +2215,98 @@ cause concept-gate declares could-not-judge for. Re-index is
   parent) · dead fixture scaffolding moved verbatim from sovereign-code with
   fp-51; never called on any green path. Pre-existing, not range-created;
   recorded so the next reader does not mistake it for the move's doing.
+
+## REVIEW-audit-fp-auto-2 (2026-09-23, range 5a26b63ac..HEAD — the previous audit's hash)
+
+Range: 4 commits, of which only fp-30's landing (610592c6c) carries product
+code — the other three are STATE.md bookkeeping. Checks: LINT exit=0; TESTALL
+exit=0 (13,314 pass / 0 fail); PREPUSH exit=1, **one blocking lane —
+boundary-gate at 67 violation(s) — the campaign's own declared burn-down
+state**: the count is fp-30's honest 68 → 67, the range adds none, and fp-15
+closes it (the auto-1 precedent for recording an approved red). Advisory
+attention: size-gate, deletion-manifest, concept-gate (below).
+
+### (1) Per-unit net-line ledger, product code (`git log --numstat`, src apart from tests)
+
+| unit | + | − | net |
+|---|---|---|---|
+| fp-30 | 523 | 373 | +150 |
+| non-unit (ralph bookkeeping: dfb168487, 0a41b7b2f, 7de9e0ec5) | 0 | 0 | 0 |
+| TOTAL | 523 | 373 | +150 |
+
+fp-30's +150 is the de-embed's re-export wrap: the moved bodies are re-exported
+at every historical path (`guest_door`, `mesh_http`, `meshapp_http`), and the
+wire views are the row's one genuinely new vocabulary. Tests moved +47/−2
+(`src/tests/guest_door.rs` +4 pin import, `tests/main/wire_view_drift.rs`
++43/−2 field pins).
+
+### (2)+(3) Clone and noun checks — instrument substitution (same root cause as auto-1)
+
+`code converge noun` refuses: 3 indexed code corpora, none built from this
+repo. The `commonwealth-ai` corpus id DOES answer, but it is a STALE index —
+it reports 0 definitions for `MemberReachView`, added to this tree yesterday
+(ARCH 7: an instrument that answers confidently and wrong is worse than one
+that refuses; not used). Substitution, with data — a word-bounded git grep
+sweep over every noun the range defines:
+
+- `MemberReachView` / `PeerTransportPathView` →
+  contracts/src/daemon_wire/mesh.rs:473,485 — the range's only NEW nouns;
+  one definition each.
+- `MemberMeasurementDto` / `MemberMeasurementsResponse` →
+  sovereign-mesh/src/measurements_wire.rs:25,42 — one definition each;
+  `mesh_http` re-exports both at the historical path.
+- the 11 clamp consts + `clamp()` → contracts/src/daemon_wire/meshapp.rs —
+  one definition each; `meshapp_http` re-exports.
+- `serve_under` / `ring_shim` / `RING_SHIM` / `PAGE_PREFIX` /
+  `serve_file` / `content_type` → sovereign-mesh/src/guest_pages.rs — one
+  definition each; `guest_door` re-exports the three pub ones.
+
+No twins, no residue at the old homes. The two `*View` types are deliberate
+flattened reads of cross-family types (the daemon's `MemberReach` closes over
+`commonwealth_media::PeerTransportPath`), pinned field-for-field by
+`wire_view_drift` — duplication by design with a pin, not a clone.
+
+### Findings, fixed (all in this audit's commit)
+
+- **ARCH 3 (the registry lands with the code)** · `quality/DOMAINS.toml` ·
+  fp-30's edits staled two `[[module]]` line counts: `mesh_http.rs` 1838 →
+  1812, `meshapp_http.rs` 587 → 571. Re-measured with `wc -l`.
+- **ARCH 3/6 (range-created coverage hole)** · `quality/DOMAINS.toml` · the
+  two files the range created in sovereign-mesh had no `[[module]]` row —
+  `crate-lines`' coverage assert names untagged files by name
+  (scripts/domains-census.py:988). Rows added for `guest_pages.rs` (295) and
+  `measurements_wire.rs` (54), context = `fabric` (sovereign-mesh's only home
+  context; all 26 tagged mesh files carry it).
+
+### Recorded, not changed
+
+- **Same-name collision, range-created** ·
+  sovereign/crates/sovereign-mesh/src/guest_pages.rs:1 vs
+  sovereign/crates/sovereign-contracts/src/guest_pages.rs:1 · fp-30's move
+  gave sovereign-mesh a `guest_pages` beside contracts' existing one. They are
+  DISJOINT concepts — contracts' is the `[daemon.guest_pages]` config
+  declaration shape (`GuestAccess`, 162 lines; its own doc says "the
+  declaration's shape, not its authority"), mesh's is the served browser
+  surface (prefix/shim/serve guard, 295 lines) — but a grep for the name now
+  finds two modules in adjacent domains. A rename is a convergence decision
+  (which side owns the plain name), not a behaviour-preserving audit fix;
+  recorded for the naming ledger.
+- **crate-lines coverage assert red repo-wide, pre-existing** · 204 untagged
+  files besides the two fixed above (sovereign-daemon's `daemon_cmd/` and
+  `tests/` trees, `commonwealth/*` wholesale, `corpus-engine-atlas-reader`,
+  `sovereign-contracts/src/guest_pages.rs` itself) · none created by this
+  range — `guest_door.rs` was already untagged before fp-30. The domains
+  campaign's registry upkeep, not a five-programs audit fix.
+- **PREPUSH boundary-gate (blocking, declared)** · 67 violation(s), the
+  burn-down this queue exists to close; the range closes one and adds none.
+  Ran range-fed via the push protocol (remote sha = 5a26b63ac), so the
+  auto-1 E2BIG hand-run hazard did not fire.
+- **size-gate (advisory)** · 29 keys grew, the campaign's own (the new leaves
+  `serving-policy-core::tests`, `mesh-join-vocab::tests` read as new and
+  unbaselined). `warn_gate` by design; not re-pinned.
+- **deletion-manifest (advisory)** · `p0-root-junk` GREW 133537 > 113934 —
+  byte-identical to auto-1's finding; the cause (bcba44eb1's dropped
+  deliverable) predates this range. Foreign to the campaign.
+- **concept-gate could-not-judge (declared)** · the same stale-index root
+  cause as the substitution above; re-index is `svrn project refresh`, not
+  this unit's work.

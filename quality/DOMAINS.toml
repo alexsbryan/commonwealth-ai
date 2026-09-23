@@ -404,6 +404,12 @@ lines = 178
 note = ""
 
 [[module]]
+path = "sovereign/crates/sovereign-mesh/src/guest_pages.rs"
+context = "fabric"
+lines = 295
+note = "the guest page's browser side (moved out of sovereign-daemon guest_door by fp-30); the door re-exports it"
+
+[[module]]
 path = "sovereign/crates/sovereign-daemon/src/documents_http.rs"
 context = "host"
 lines = 1172
@@ -597,6 +603,12 @@ lines = 219
 note = "retagged host at dm-daemon-mesh-edge (2026-09-17): the file rode the mesh host cluster's move (E0116, impl EmbeddedDaemon) and splits back to Fabric by REVIEW-build-daemon-embedded-split"
 
 [[module]]
+path = "sovereign/crates/sovereign-mesh/src/measurements_wire.rs"
+context = "fabric"
+lines = 54
+note = "the /v1/mesh/measurements answer shapes beside mesh_measurements (moved out of sovereign-daemon mesh_http by fp-30)"
+
+[[module]]
 path = "sovereign/crates/sovereign-mesh/src/mesh_discovery.rs"
 context = "fabric"
 lines = 475
@@ -605,13 +617,13 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-daemon/src/mesh_http.rs"
 context = "host"
-lines = 1838
+lines = 1812
 note = "membership routes - the mesh's own; was fabric; route shell — DAEMON_CORE.md §4 placement test (2026-09-14)"
 
 [[module]]
 path = "sovereign/crates/sovereign-daemon/src/meshapp_http.rs"
 context = "host"
-lines = 587
+lines = 571
 note = "app-registry explorer, not a membership/ring/rail route"
 
 [[module]]
