@@ -66,6 +66,17 @@ the grant reaches the daemon's primary slot. `--qr-svg wall.svg` writes the file
 instead for a screen; `svrn mesh grant --list` shows outstanding guests with
 their expiry; `--revoke <token>` ends one early.
 
+**The door's life, as verified on a machine with nothing configured.** No setup
+step precedes the first grant: the door's listener is shut, and minting the
+grant above opens it — default `0.0.0.0:9744`, overridden by `[daemon]
+guest_bind` — and the last revoke or expiry closes it again (a grant IS the
+authorization; each mint logs `guest door: open addr=… bind_source=…`). The
+door answers while the app is down too, with a 502 naming the unpublished port —
+a live door in front of a stopped app is not a dead door. **Keep the mint
+output**: `--revoke` takes the FULL token the mint printed, and `--list` shows
+only prefixes, for reading. A grant you did not just mint cannot be revoked
+from the list until that gap is closed.
+
 `svrn mesh grant --all-apps` is the other shape: one link for everything
 registered to guests in `[daemon.guest_pages]`, the phone landing on the door's
 index to pick. Several grants can be live at once — one per app, or several
