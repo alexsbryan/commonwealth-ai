@@ -148,12 +148,24 @@ jobs:
 
           # Tag only the selected targets — a desktop-only release must not
           # mint a cli-v tag that was never built.
+          #
+          # Fetch tags FIRST: actions/checkout does not fetch them, so a guard
+          # run after a previous cut saw no local tag, minted a NEW object, and
+          # the atomic push was rejected — "cli-v0.8.0 already exists", run
+          # 35935119143 (2026-09-23). And an existing tag must point where it
+          # should; this step never silently moves one.
+          git fetch --tags origin
           tags=()
           [ "${{ steps.plan.outputs.cli }}" = "true" ]     && tags+=("cli-v${version}")
           [ "${{ steps.plan.outputs.desktop }}" = "true" ] && tags+=("desktop-v${version}")
           for t in "${tags[@]}"; do
             if git rev-parse -q --verify "refs/tags/$t" >/dev/null; then
-              echo "tag $t already exists — leaving it as-is"
+              have="$(git rev-parse "$t^{}")"
+              if [ "$have" != "$(git rev-parse HEAD)" ]; then
+                echo "::error::tag $t exists and points at $have, not HEAD ($(git rev-parse HEAD)) — refusing to move it." >&2
+                exit 1
+              fi
+              echo "tag $t already exists at HEAD — leaving it as-is"
             else
               git tag -a "$t" -m "$t"
             fi
