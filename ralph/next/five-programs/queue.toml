@@ -16,10 +16,10 @@ worker_bin = "scripts/ralph-claude-shim.sh"
 settings = "ralph/claude-settings.json"
 
 [models]
-worker = "claude-opus-5"
-review = "claude-opus-5"
-resolve = "claude-opus-5"
-variant = "high"
+worker = "zai-coding-plan/glm-5.3-flash"
+review = "zai-coding-plan/glm-5.3-flash"
+resolve = "zai-coding-plan/glm-5.3-flash"
+variant = ""
 
 # The campaign's checks ARE the gates: each unit's commit body carries the
 # boundary-gate count. `layer` and `lint` are ralph-check.sh BUILTINS (host
