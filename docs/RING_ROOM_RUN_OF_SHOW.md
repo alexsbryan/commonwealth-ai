@@ -10,40 +10,54 @@ what the stand-in measures — is at the end.
 
 ---
 
-## 1. I load the doc on the machine in the room
+## 1. I run the doc on the machine in the room
+
+The collaborative doc app lives in this repo — I run it, I don't generate it:
 
 ```bash
-svrn ring new my-doc        # once: scaffold it; I edit ./my-doc
-svrn ring show my-doc        # show it on THIS machine
+svrn ring show ring-doc --dir sovereign/apps/ring-doc
 ```
 
-**What appears:** the doc at `http://127.0.0.1:4318/` (localhost) — my own view,
-no mesh involved. (The demo's `ring-doc` is this app; `house-expenses` is the
-same mechanism with a ledger's vocabulary.)
+**What appears:** the doc at `http://127.0.0.1:4318/` (localhost), plus, above
+it, `rail: http://127.0.0.1:9743` — the journal this page appends its acts to,
+and the namespace `ring-doc` it writes them under. The grant that lets this
+process write is held only while it runs, so closing the window ends my own
+write access too.
 
-## 2. I put it on the mesh
+`svrn ring new <dir>` scaffolds that same shape with a ledger's vocabulary
+(`house-expenses` is the repo's worked version of it). It is for an app of my
+own, and it is why this walk runs `ring-doc` rather than generating a directory:
+a fresh `svrn ring new my-doc` is the expenses app, not the doc.
+
+## 2. I share it on the rail
 
 ```bash
-svrn publish my-doc 4318      # register the app that is already running here
+svrn publish ring-doc 4318                                                # members reach it by key
+svrn ring roster add <person> --key <their-node-pubkey> --ring ring-doc   # and their acts are theirs
 ```
 
-**What appears:** the name and the port, registered — any member of my mesh can
-now reach `my-doc` by key, from their own machine, with no address typed. This
-one registration is also what the guest door reads, so the next step needs
-nothing re-declared: the app is published once and the two audiences differ only
-by the grant.
+**What appears:** the app registered under its name, then one roster row —
+the person and the key their acts will be signed with. A member can now open
+the doc from their own machine and write into the same `ring-doc` namespace as
+me, in one order. The roster row is the load-bearing half: an act signed by a
+key no roster claims is a gap in the journal, not somebody's edit.
 
-*(Members reach it; guests need the grant in the next step. `svrn mesh app <me>
-my-doc` shares it to another of my machines the same way.)*
+*(One thing is set once per machine, not per app: the door's listen address,
+`[daemon] guest_bind` in `~/.svrnmesh/config.toml`. `svrn ring host <ns> --dir
+<bundle>` writes it — every interface on the door's port (`0.0.0.0:9744`),
+unless `--bind <addr:port>` names one — and the ADDRESS a guest link carries is
+derived per host, so a wildcard bind is never advertised. With that set, every
+app after the first is `publish` then a grant; the door reads the same
+registration and needs nothing declared per app.)*
 
 ## 3. I grant access to people who just have phones
 
 ```bash
-svrn mesh grant --app my-doc     # one app, one link
+svrn mesh grant --app ring-doc   # one app, one link
 ```
 
 **What appears:** the link, and the QR drawn right there in the terminal —
-scan it. The grant NAMES `my-doc`, so that is the only app it reaches; the door
+scan it. The grant NAMES `ring-doc`, so that is the only app it reaches; the door
 proxies to the published port, which is why hosting for guests needed no second
 copy of the app. No address, no model id, no file: `--ttl` defaults to 2 h and
 the grant reaches the daemon's primary slot. `--qr-svg wall.svg` writes the file
@@ -65,7 +79,7 @@ reach alongside another has to be built path-relative (`base: './'`).
 **What appears:** they scan, type a name, and edit. On my screen within ~1.4 s
 their edit reads `<name>, guest of <me>` — never the name alone. Within 5 s the
 name is in the doc's roster. The mesh's member list never changes: a guest, not
-a member. `svrn ring log my-doc` shows every act, in the order every machine
+a member. `svrn ring log ring-doc` shows every act, in the order every machine
 applies them.
 
 ## 5. I stream a film from my other machine
@@ -117,7 +131,7 @@ the two replicas are byte-equal within 60 s.
 ## 8. The record survives the cut (the checkpoint leg)
 
 ```bash
-svrn ring checkpoint my-doc --out checkpoint.json   # on a machine that holds the ring
+svrn ring checkpoint ring-doc --out checkpoint.json   # on a machine that holds the ring
 # carry the file anywhere — AirDrop, USB, email to yourself — even to a machine
 # the mesh has never seen:
 svrn ring checkpoint --verify checkpoint.json

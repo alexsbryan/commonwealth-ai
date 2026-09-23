@@ -28,6 +28,9 @@ pub(super) fn print() {
          \x20       the act instead of somebody's memory. It admits NOBODY by itself.\n\
          show    open the app on THIS machine at http://127.0.0.1:4318/.\n\
          host    declare an app to the ROOM and bind the guest door (--clear ends one).\n\
+         \x20       The bind is the door's ONE address for every app — a wildcard on the\n\
+         \x20       door's port unless --bind names one; the guest link's address is\n\
+         \x20       derived per host, so a wildcard is never advertised.\n\
          log     the acts on this journal, in the order every node applies them,\n\
          \x20       and everything the rail could not account for.\n\
          checkpoint\n\
