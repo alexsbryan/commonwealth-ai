@@ -2,7 +2,7 @@
 //! NoteStore ↔ alignment-corpus sync.
 //!
 //! Lets `~/.svrnmesh/notes.db` (the ATOS NoteStore at
-//! [`crate::notes::NoteStore`]) ride the same mesh-replication path
+//! [`corpus_engine_notes::mining::NoteStore`]) ride the same mesh-replication path
 //! as `~/.claude/` markdown. The alignment-workspace extractor calls
 //! [`export_notes_as_docs`] to fold every active row into the
 //! corpus; the projector calls [`import_notes_from_chunks`] when it

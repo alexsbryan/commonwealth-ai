@@ -684,7 +684,7 @@ pub async fn build_daemon_embed_fn() -> std::result::Result<(EmbedFn, String), S
     // `/embeddings`, which is the exact contract we want.
     let provider: Arc<dyn InferenceProvider> =
         Arc::new(RemoteApiProvider::new(&endpoint, None, &embed_model, 8192));
-    let f = sovereign_core::embed_fn::inference_to_embed_fn(provider);
+    let f = corpus_index::embed_fn::inference_to_embed_fn(provider);
     Ok((f, embed_model))
 }
 

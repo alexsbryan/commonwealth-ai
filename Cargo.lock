@@ -2408,6 +2408,7 @@ name = "corpus-engine-notes"
 version = "0.7.0"
 dependencies = [
  "async-trait",
+ "axum",
  "chrono",
  "clap",
  "corpus-engine-yield",
@@ -2508,6 +2509,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.9",
+ "sovereign-contracts",
  "tempfile",
  "thiserror 2.0.18",
  "tokio",

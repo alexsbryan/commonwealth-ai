@@ -24,6 +24,9 @@ description = "The retrieval read-port leaf — the index directory's shape, its
 [dependencies]
 # The neutral kernel — `CorpusId`/`Custody`/`Grain`/`ContentHash`/`Origin`.
 kernel-types = { workspace = true }
+# The `InferenceProvider` half of `embed_fn`'s one adapter (fp-5) — the
+# `EmbedFn` half is this crate's own `types::EmbedFn`.
+sovereign-contracts = { workspace = true }
 # The append-only journal. `Error` carries a `From<oplog::OplogError>` bridge
 # moved here with the error type; oplog is itself a leaf.
 oplog = { workspace = true }

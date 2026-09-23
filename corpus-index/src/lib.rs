@@ -30,6 +30,7 @@
 
 pub mod chunkers;
 pub mod corpus;
+pub mod embed_fn;
 pub mod error;
 pub mod filters;
 pub mod index;

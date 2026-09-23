@@ -23,7 +23,7 @@
 //! Recovery surfaces two streams:
 //!
 //! 1. **`source='observed'`** — replay the
-//!    [`ToolPatternMatcher`](sovereign_tools::notes::patterns::ToolPatternMatcher)
+//!    [`ToolPatternMatcher`](corpus_engine_notes::mining::patterns::ToolPatternMatcher)
 //!    against `tool_call_log` rows for every session that has
 //!    them. Closes "daemon crashed mid-session, lost the
 //!    pattern matches the live path would have written."
@@ -67,8 +67,8 @@ use corpus_engine_notes::{NoteScope, NoteSource, NoteStore};
 use sovereign_contracts::traits::ConversationStore;
 use sovereign_contracts::types::Role;
 use sovereign_store::sqlite::SqliteStateStore;
-use sovereign_tools::notes::patterns::{ObservedPattern, PatternRule, ToolPatternMatcher};
-use sovereign_tools::notes::response_mine;
+use corpus_engine_notes::mining::patterns::{ObservedPattern, PatternRule, ToolPatternMatcher};
+use corpus_engine_notes::mining::response_mine;
 
 /// Maximum sessions inspected in a single recover run. The ring
 /// buffer caps at 10k rows — that's typically far fewer than 10k

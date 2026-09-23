@@ -861,12 +861,14 @@ name = "corpus-index"
 # `corpus-mcp`'s `serve` — and any other thin host — can open an index by
 # corpus id, search it and read its rows without linking `corpus-engine`: the
 # burn-down step (1) of the `corpus-mcp -> corpus-engine` exception below.
-# Its internal closure is three leaves — `kernel-types` (identity),
-# `oplog` (the error bridge) and `corpus-engine-yield` (`unix_now_u64`) — and
+# Its internal closure is four leaves — `kernel-types` (identity),
+# `oplog` (the error bridge), `corpus-engine-yield` (`unix_now_u64`) and
+# `sovereign-contracts` (the `InferenceProvider` half of `embed_fn`'s one
+# adapter, fp-5 — the `EmbedFn` half is this leaf's own `types::EmbedFn`) — and
 # the retrieval stack it wraps (LanceDB/Tantivy/arrow/reqwest) is the surface
 # itself, not a widening a package can avoid. It carries no `build.rs` and no
 # `include_str!`, so all three filesystem rules pass.
-allow = ["kernel-types", "oplog", "corpus-engine-yield"]
+allow = ["kernel-types", "oplog", "corpus-engine-yield", "sovereign-contracts"]
 
 [[package_leaf]]
 name = "sovereign-time"

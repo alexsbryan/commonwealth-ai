@@ -25,6 +25,9 @@ description = "NoteStore + project_docs index + notes ↔ alignment-corpus sync.
 # The read-port leaf — the note-wire vocabulary (fp-3) lives in its `types`
 # module beside `types::EmbedFn`; this crate re-exports it at historical paths.
 corpus-index = { workspace = true }
+# `mining/diff_extract*` — the extraction prompt dials the completion endpoint
+# (fp-5; modules moved from sovereign-tools).
+reqwest = { workspace = true }
 # Shared corpus-engine-subtree leaf: canonical wall-clock helpers (time module).
 corpus-engine-yield = { workspace = true }
 # The middleware seam (`Middleware`, `PipelineContext`, `MiddlewareSession`,
@@ -46,6 +49,8 @@ chrono = { workspace = true }
 uuid = { workspace = true }
 sha2 = { workspace = true }
 rusqlite = { version = "0.35", features = ["bundled"] }
+# `mining/diff_extract_backend` tests spin a mock completion server (fp-5).
+axum = { workspace = true }
 workspace-hack = { version = "0.1", path = "../workspace-hack" }
 
 # NB: NO dep on `corpus-engine`. notes_sync (which is the only

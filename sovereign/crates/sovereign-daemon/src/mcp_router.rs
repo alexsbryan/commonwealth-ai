@@ -179,7 +179,7 @@ pub fn mcp_router(
     // instance per router so per-session cooldown state persists
     // across requests on the same session id. Fire-and-forget after
     // every successful tool dispatch.
-    let pattern_matcher = Arc::new(sovereign_tools::notes::patterns::ToolPatternMatcher::new(
+    let pattern_matcher = Arc::new(corpus_engine_notes::mining::patterns::ToolPatternMatcher::new(
         Arc::clone(&logger),
     ));
     Router::new()
@@ -300,7 +300,7 @@ async fn mcp_handle(
     Extension(call_counter): Extension<Arc<AtomicU64>>,
     Extension(feature_root): Extension<FeatureRoot>,
     Extension(pattern_matcher): Extension<
-        Arc<sovereign_tools::notes::patterns::ToolPatternMatcher>,
+        Arc<corpus_engine_notes::mining::patterns::ToolPatternMatcher>,
     >,
     headers: axum::http::HeaderMap,
     Json(body): Json<Value>,
@@ -412,7 +412,7 @@ async fn dispatch(
     session_id: Arc<String>,
     call_counter: Arc<AtomicU64>,
     feature_root: FeatureRoot,
-    pattern_matcher: Arc<sovereign_tools::notes::patterns::ToolPatternMatcher>,
+    pattern_matcher: Arc<corpus_engine_notes::mining::patterns::ToolPatternMatcher>,
     agent_session_token: String,
 ) -> Option<JsonRpcResponse> {
     // Notifications: no id → no response. We still want to accept the
@@ -488,7 +488,7 @@ async fn handle_tool_call(
     logger: Arc<NoteStore>,
     session_id: Arc<String>,
     call_counter: Arc<AtomicU64>,
-    pattern_matcher: Arc<sovereign_tools::notes::patterns::ToolPatternMatcher>,
+    pattern_matcher: Arc<corpus_engine_notes::mining::patterns::ToolPatternMatcher>,
     agent_session_token: String,
 ) -> JsonRpcResponse {
     let Some(params) = params else {

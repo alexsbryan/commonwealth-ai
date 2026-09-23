@@ -47,7 +47,6 @@ pub mod wikipedia_fetch;
 // and `context_injector` for the new shape.
 pub use sovereign_tools_base::mcp;
 pub mod mcp_surface;
-pub mod notes;
 pub mod parcel_analytics;
 pub mod rag;
 pub mod sec_edgar;

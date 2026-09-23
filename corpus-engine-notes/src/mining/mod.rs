@@ -32,6 +32,6 @@ pub mod patterns;
 // The regex response miner is the note store's question, not the agent tool
 // surface's, so it moved down to `corpus-engine-notes` (DT `workspace`
 // cluster) in domains `dm-decision-extractor-move`. Re-exported here so
-// `sovereign_tools::notes::response_mine` keeps resolving for its remaining
+// `corpus_engine_notes::mining::response_mine` keeps resolving for its remaining
 // caller, `sovereign-cli-dev/src/audit_recover.rs`.
-pub use corpus_engine_notes::response_mine;
+pub use crate::response_mine;
