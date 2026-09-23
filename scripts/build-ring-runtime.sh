@@ -8,7 +8,9 @@
 #   target/ring-runtime/site/   <- upload this
 #
 # Needs the wasm-bindgen CLI matching the crate's wasm-bindgen pin (0.2.128)
-# and the wasm32-unknown-unknown target. Both are checked, not assumed.
+# and the wasm32-unknown-unknown target. Both are checked, not assumed. On
+# macOS the wasm C sources also need an LLVM clang (Apple's has no wasm32
+# backend); Homebrew's is detected and used automatically.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -47,6 +49,31 @@ if [ "$cli" != "$WASM_BINDGEN_MIN" ]; then
 fi
 
 echo "building $APP for wasm32-unknown-unknown (release)…"
+# The dependency tree compiles C for the wasm target through cc-rs, and
+# Apple's clang has no wasm32 backend: without this the build dies inside
+# ring's build script with "No available targets are compatible with triple
+# \"wasm32-unknown-unknown\"" — watched live 2026-09-22, mid-demo, with no
+# clue in the message that a compiler choice was the problem. Homebrew's
+# LLVM does have the backend; default to it on macOS so `npm run deploy`
+# needs no remembered environment. An explicit CC and Linux are untouched.
+if [ "$(uname -s)" = "Darwin" ] && [ -z "${CC_wasm32_unknown_unknown:-}" ]; then
+  found=""
+  for p in /opt/homebrew/opt/llvm/bin /usr/local/opt/llvm/bin; do
+    if [ -x "$p/clang" ]; then
+      export CC_wasm32_unknown_unknown="$p/clang"
+      if [ -x "$p/llvm-ar" ]; then export AR_wasm32_unknown_unknown="$p/llvm-ar"; fi
+      echo "macOS: using $p/clang for the wasm C sources (Apple clang cannot target wasm32)"
+      found=1
+      break
+    fi
+  done
+  if [ -z "$found" ]; then
+    echo "build-ring-runtime: on macOS the wasm build needs an LLVM clang with a" >&2
+    echo "  wasm32 backend (brew install llvm), or pass one explicitly:" >&2
+    echo "  CC_wasm32_unknown_unknown=<path-to-clang> $(basename "$0")" >&2
+    exit 3
+  fi
+fi
 ( cd "$APP" && cargo build --release --target wasm32-unknown-unknown )
 
 rm -rf "$OUT"
@@ -68,9 +95,12 @@ fi
 # The version is the module's content hash, stamped into every shell URL and
 # the service-worker cache name, so a rebuild invalidates a guest's cache
 # instead of serving a stale runtime (sovereign/apps/ring-runtime/web/sw.js).
-VERSION="$(cat "$OUT/wasm/ring_runtime_bg.wasm" "$OUT/wasm/ring_runtime.js" | sha256sum | cut -c1-12)"
+# sha256sum is GNU coreutils; stock macOS has only shasum. Either works.
+if command -v sha256sum >/dev/null; then SHA_CMD="sha256sum"; else SHA_CMD="shasum -a 256"; fi
+VERSION="$(cat "$OUT/wasm/ring_runtime_bg.wasm" "$OUT/wasm/ring_runtime.js" | $SHA_CMD | cut -c1-12)"
 cp "$APP/web/index.html" "$APP/web/app.js" "$APP/web/sw.js" "$OUT/"
-sed -i "s/__VERSION__/${VERSION}/g" "$OUT/index.html" "$OUT/app.js" "$OUT/sw.js"
+sed -i.bak "s/__VERSION__/${VERSION}/g" "$OUT/index.html" "$OUT/app.js" "$OUT/sw.js"
+rm -f "$OUT/index.html.bak" "$OUT/app.js.bak" "$OUT/sw.js.bak"
 
 echo
 echo "built: $OUT  (version ${VERSION})"

@@ -237,3 +237,9 @@ research/deep-research/demo/p5/runs-t1c/
 # cites. Four had landed at the repo root instead, where nothing cites them.
 /score-report-*.json
 
+.vercel
+
+# Guest QRs written by the run of show's mint (docs/RING_ROOM_RUN_OF_SHOW.md
+# §3 writes wall-qr.svg in the cwd). Short-lived credentials: never committed.
+wall-qr.svg
+phone-qr.svg
