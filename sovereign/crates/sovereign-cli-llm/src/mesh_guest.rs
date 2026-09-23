@@ -630,6 +630,19 @@ pub(crate) async fn cmd_grant(args: &[String]) -> i32 {
     println!();
     // The link a browser opens, when there is a base: written to a file when
     // asked, and drawn in the terminal at the end (see `print_qr_blocks`).
+    //
+    // A WALL link carries the dial even when the door answered directly. The
+    // wall exists for phones whose network this node has never seen — the
+    // public origin is on the internet, and `iroh=` is the only address in
+    // the link that can reach this daemon from there. Measured 2026-09-22:
+    // `--all-apps --url https://svrnme.sh/` produced a link with NO `iroh=`
+    // because the resolved path was Direct (the LAN probe succeeded), so the
+    // promised unknown-network path had no address in it.
+    let dial_for_wall: Option<String> = match (&dial, wall) {
+        (Some(d), _) => Some(d.clone()),
+        (None, true) => node_dial_string(port).await,
+        (None, false) => None,
+    };
     let https = url_override.as_deref().map(|base| {
         wall_https_link(
             token,
@@ -638,7 +651,7 @@ pub(crate) async fn cmd_grant(args: &[String]) -> i32 {
             wall,
             expires_at_secs,
             (!summary.is_empty()).then_some(summary),
-            dial.as_deref(),
+            dial_for_wall.as_deref(),
         )
     });
     if let (Some(path), Some(https)) = (&qr_svg, &https) {

@@ -55,16 +55,30 @@ app.)*
 ## 3. I grant access to people who just have phones
 
 ```bash
-svrn mesh grant --app ring-doc   # one app, one link
+# The demo's grant — works for a phone on ANY network (cellular, another WiFi):
+svrn mesh grant --all-apps --url https://svrnme.sh/ --qr-svg wall-qr.svg
+
+# Same-WiFi variant — the QR carries this machine's LAN address on the door:
+svrn mesh grant --app ring-doc
 ```
 
 **What appears:** the link, and the QR drawn right there in the terminal —
-scan it. The grant NAMES `ring-doc`, so that is the only app it reaches; the door
-proxies to the published port, which is why hosting for guests needed no second
-copy of the app. No address, no model id, no file: `--ttl` defaults to 2 h and
-the grant reaches the daemon's primary slot. `--qr-svg wall.svg` writes the file
-instead for a screen; `svrn mesh grant --list` shows outstanding guests with
+scan it. `--qr-svg wall-qr.svg` writes the QR to a file instead, for a screen
+(and for any run whose output is piped — the terminal QR is TTY-only by
+design). The grant NAMES its app (`--app ring-doc`) or reaches the wall's index
+of everything registered (`--all-apps`); the door proxies to the published port,
+which is why hosting for guests needed no second copy of the app. No address,
+no model id, no file: `--ttl` defaults to 2 h and the grant reaches the
+daemon's primary slot. `svrn mesh grant --list` shows outstanding guests with
 their expiry; `--revoke <token>` ends one early.
+
+**Plan for the phones being on their OWN network connections** (operator,
+2026-09-22 — that is the guaranteed case, and the wall form is the demo's).
+The `--all-apps --url https://svrnme.sh/` link carries the wall's dial string
+(`iroh=`) beside the token — a plain phone browser on a network the wall has
+never seen still reaches this daemon, which §9 measures. The same-WiFi form's
+QR carries the machine's LAN address on the default door port and only works
+for phones on that subnet; `--url <base>` overrides the address in either form.
 
 **The door's life, as verified on a machine with nothing configured.** No setup
 step precedes the first grant: the door's listener is shut, and minting the

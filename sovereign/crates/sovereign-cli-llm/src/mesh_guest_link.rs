@@ -63,15 +63,20 @@ pub(crate) fn guest_bind_url() -> Option<String> {
     let cfg = sovereign_core::setup_config::SetupConfig::load().ok()?;
     let bind = cfg.daemon.guest_bind.as_deref();
     let port = bind.and_then(port_of_bind).unwrap_or(DEFAULT_GUEST_PORT);
-    let best = sovereign_mesh::mesh_discovery::relay_candidates(port)
-        .into_iter()
-        .find(|c| c.recommended)
-        .or_else(|| {
-            sovereign_mesh::mesh_discovery::relay_candidates(port)
-                .into_iter()
-                .next()
-        })
-        .map(|c| c.ip);
+    // LAN BEFORE TAILSCALE, deliberately (2026-09-22). `relay_candidates`
+    // ranks tailscale first — right for MESH peers, whose transport lives on
+    // the tailnet — but a GUEST LINK is opened by a phone on the venue's
+    // WiFi, which cannot reach 100.64/10. Measured: the default picked
+    // 100.104.36.28 while the room's phones needed 192.168.1.7. Prefer the
+    // LAN candidate; fall back to the mesh order (a remote guest with the
+    // tailnet, or a host with no LAN interface). `--url` overrides both.
+    let cands = sovereign_mesh::mesh_discovery::relay_candidates(port);
+    let best = cands
+        .iter()
+        .find(|c| c.kind == "lan")
+        .or_else(|| cands.iter().find(|c| c.recommended))
+        .or_else(|| cands.first())
+        .map(|c| c.ip.clone());
     // NO configured bind means the door's DEFAULT address, not "no address"
     // (2026-09-22): `guest_door::serve` now binds 0.0.0.0:DEFAULT_GUEST_PORT
     // while a live grant exists — exactly what `svrn ring host` would have
