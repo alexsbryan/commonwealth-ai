@@ -10,6 +10,7 @@ from dataclasses import replace as dataclasses_replace
 import io
 import os
 import pathlib
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -192,6 +193,93 @@ class ModelTests(unittest.TestCase):
                              ["--model", "w", "--variant", "high"])
             self.assertEqual(ralph.select_model_args("REVIEW-build-x", "w", "r", "high"),
                              ["--model", "r", "--variant", "high"])
+
+    def test_roster_values_parse_and_wait_limit_loads(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            p = write(tmp, "ralph/models.env",
+                      "MODEL=a/1, b/2,,\nREVIEW_MODEL=r/1\nWAIT_LIMIT_S=43200\n")
+            m = ralph.load_models(p)
+            self.assertEqual(m, {"MODEL": "a/1, b/2,,", "REVIEW_MODEL": "r/1",
+                                 "WAIT_LIMIT_S": "43200"})
+            self.assertEqual(ralph.parse_roster(m["MODEL"]), ["a/1", "b/2"])
+            self.assertEqual(ralph.parse_roster(""), [])
+            self.assertEqual(ralph.parse_roster(None), [])
+
+    def test_a_models_rewrite_preserves_wait_limit_s(self):
+        # `models` rewrites models.env wholesale; dropping WAIT_LIMIT_S there
+        # would silently revert the wait limit to the default (never silently
+        # substitute).
+        with tempfile.TemporaryDirectory() as tmp:
+            p = write(tmp, "ralph/models.env", "MODEL=w/x\nWAIT_LIMIT_S=86400\n")
+            rc, out, _ = quiet_main(["models", "--workdir", tmp, "--model", "n/y",
+                                     "--no-restart"])
+            self.assertEqual(rc, 0)
+            text = p.read_text()
+            self.assertIn("MODEL=n/y", text)
+            self.assertIn("WAIT_LIMIT_S=86400", text)
+            self.assertIn("WAIT_LIMIT_S=86400", out)
+
+
+class WaitLimitTests(unittest.TestCase):
+    """WAIT_LIMIT_S in models.env configures the detached-wait limit (default
+    raised 7200 -> 86400): full gates legitimately exceed 2h on this box and
+    every such wait was a false "never wrote its marker" halt."""
+
+    def resolved(self, tmp, *extra):
+        args = ralph.build_parser().parse_args(["run", "--workdir", tmp, *extra])
+        return args, ralph.resolve_wait_limit(args, ralph.paths_for(args))
+
+    def test_wait_limit_s_is_read_and_honored(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            write(tmp, "ralph/STATE.md", "- [ ] dm-a — depends []\n")
+            write(tmp, "ralph/PROMPT.md", "Execute the selected unit.")
+            write(tmp, "ralph/models.env", "WAIT_LIMIT_S=120\n")
+            w = write(tmp, "ralph/waiting", "never.done\n")
+            old = time.time() - 3600          # past 120s, well under the old 7200
+            os.utime(w, (old, old))
+            args, limit = self.resolved(tmp)
+            self.assertEqual(limit, 120)
+            paths = ralph.paths_for(args)
+            c = ralph.Campaign(paths, session_run=lambda *a: 0, notify_enabled=False,
+                               sleep=lambda s: None, marker_timeout=limit)
+            result = c.run()
+            self.assertEqual(result.outcome, ralph.Outcome.HALT)
+            self.assertIn("never.done", result.reason)
+
+    def test_without_wait_limit_s_the_default_is_a_day_not_two_hours(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            write(tmp, "ralph/STATE.md", "- [ ] dm-a — depends []\n")
+            write(tmp, "ralph/PROMPT.md", "Execute the selected unit.")
+            w = write(tmp, "ralph/waiting", "never.done\n")
+            old = time.time() - 7800          # past the old 7200, under 86400
+            os.utime(w, (old, old))
+
+            def tick(secs):                   # the detached run lands on the first poll
+                write(tmp, "never.done", "")
+
+            def session(*a):
+                write(tmp, "ralph/DONE", "")
+                return 0
+            args, limit = self.resolved(tmp)
+            self.assertEqual(limit, 86400)
+            c = ralph.Campaign(ralph.paths_for(args), session_run=session,
+                               notify_enabled=False, sleep=tick, marker_timeout=limit)
+            self.assertEqual(c.run().outcome, ralph.Outcome.DONE)
+
+    def test_an_explicit_marker_timeout_flag_wins_over_models_env(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            write(tmp, "ralph/models.env", "WAIT_LIMIT_S=120\n")
+            _, limit = self.resolved(tmp, "--marker-timeout", "60")
+            self.assertEqual(limit, 60)
+
+    def test_a_bad_wait_limit_s_is_refused_by_name(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            write(tmp, "ralph/models.env", "WAIT_LIMIT_S=soon\n")
+            with self.assertRaisesRegex(ValueError, "WAIT_LIMIT_S='soon'"):
+                self.resolved(tmp)
+            write(tmp, "ralph/models.env", "WAIT_LIMIT_S=0\n")
+            with self.assertRaisesRegex(ValueError, "WAIT_LIMIT_S=0"):
+                self.resolved(tmp)
 
 
 class ModelPrecedenceTests(unittest.TestCase):
@@ -1566,6 +1654,228 @@ class PoolWaitingTests(unittest.TestCase):
             self.assertIn("field-x.done", pkg)
             self.assertIn("49h", pkg)
             self.assertEqual(WaitingLane.runs, 1)
+
+
+class RosterProbeTests(unittest.TestCase):
+    """MODEL/REVIEW_MODEL are rosters (order ralph-model-roster): at wave
+    dispatch the pool probes each model in order — one minimal chat call
+    through the lane client, 20s — and the first healthy one runs the wave,
+    stamped in the log line. An all-dead roster parks the campaign naming
+    every cause, so a director reads one line, not three transcripts."""
+
+    def fixture(self, tmp, rows):
+        subprocess.run(["git", "init", "-q", "-b", "main", tmp], check=True)
+        subprocess.run(["git", "-C", tmp, "config", "user.email", "t@t"], check=True)
+        subprocess.run(["git", "-C", tmp, "config", "user.name", "t"], check=True)
+        write(tmp, "ralph/STATE.md", rows)
+        write(tmp, "ralph/PROMPT.md", "Execute the selected unit.")
+        write(tmp, "seed.txt", "seed")
+        subprocess.run(["git", "-C", tmp, "add", "-A"], check=True)
+        subprocess.run(["git", "-C", tmp, "commit", "-q", "-m", "seed"], check=True)
+        return pathlib.Path(tmp)
+
+    def make(self, root, session_for, **kwargs):
+        paths = ralph.Paths(root)
+        kwargs.setdefault("sleep", lambda s: None)
+        return ralph.Pool(paths, session_for=session_for, notify_enabled=False,
+                          lanes=2, base_branch="main", **kwargs)
+
+    def test_a_dead_first_roster_falls_through_to_the_healthy_model(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.fixture(tmp, "- [ ] dm-a — depends []\n")
+            probed = []
+
+            def probe(model):
+                probed.append(model)
+                if model == "prov/alive":
+                    return True, ""
+                return False, "Usage limit reached for 5 hour (resets 05:37Z)"
+
+            seen = []
+
+            class ModelLane(FakeLane):
+                def run(self, model_args, prompt, log):
+                    seen.append(model_args)
+                    return super().run(model_args, prompt, log)
+
+            pool = self.make(root, lambda cwd, env=None: ModelLane(cwd),
+                             model="prov/dead,prov/alive", probe=probe)
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                self.assertEqual(pool.run(), 0)
+            self.assertEqual(probed, ["prov/dead", "prov/alive"])
+            self.assertEqual(seen[0][:2], ["--model", "prov/alive"])
+            self.assertIn("pool: probe prov/dead — Usage limit reached", out.getvalue())
+            self.assertIn("pool: wave dm-a · model prov/alive", out.getvalue())
+
+    def test_a_single_model_value_is_probed_too(self):
+        # "Single-model values behave exactly as today (the probe still
+        # runs; it replaces the wave-failure discovery)."
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.fixture(tmp, "- [ ] dm-a — depends []\n")
+            probed = []
+
+            def probe(model):
+                probed.append(model)
+                return True, ""
+
+            pool = self.make(root, lambda cwd, env=None: FakeLane(cwd),
+                             model="prov/solo", probe=probe)
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                self.assertEqual(pool.run(), 0)
+            self.assertEqual(probed, ["prov/solo"])
+            self.assertIn("pool: wave dm-a · model prov/solo", out.getvalue())
+
+    def test_an_all_dead_roster_parks_naming_each_cause(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.fixture(tmp, "- [ ] dm-a — depends []\n")
+            causes = {"prov/quota": "Usage limit reached for 5 hour (resets 05:37Z)",
+                      "prov/gone": "Unexpected server error",
+                      "prov/slow": "timeout after 20s"}
+            sessions = []
+            pool = self.make(root, lambda cwd, env=None: sessions.append(cwd),
+                             model=",".join(causes),
+                             probe=lambda m: (False, causes[m]))
+            self.assertEqual(pool.run(), 3)
+            self.assertEqual(sessions, [])          # no lane ever ran
+            self.assertFalse((root / ".ralph" / "wt" / "dm-a").exists())
+            pkg = (root / "ralph/NEEDS_HUMAN.md").read_text()
+            self.assertIn("no healthy model", pkg)
+            for model, cause in causes.items():
+                self.assertIn(f"{model}: {cause}", pkg)
+            self.assertIn("halt: no healthy model", (root / "ralph/STOP").read_text())
+
+    def test_the_review_roster_probes_and_stamps_the_review_line(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.fixture(tmp, "- [ ] REVIEW-a — depends []\n")
+            probed = []
+
+            def probe(model):
+                probed.append(model)
+                if model == "prov/rok":
+                    return True, ""
+                return False, "Unexpected server error"
+
+            seen = []
+
+            class RecordingReview(FakeReview):
+                def run(self, model_args, prompt, log):
+                    seen.append(model_args)
+                    return super().run(model_args, prompt, log)
+
+            pool = self.make(root, lambda cwd: RecordingReview(cwd),
+                             model="prov/worker",
+                             review_model="prov/rdead,prov/rok", probe=probe)
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                self.assertEqual(pool.run(), 0)
+            self.assertEqual(probed, ["prov/rdead", "prov/rok"])
+            self.assertEqual(seen[0][:2], ["--model", "prov/rok"])
+            self.assertIn("serial review REVIEW-a (main tree) attempt 1 · model prov/rok",
+                          out.getvalue())
+
+
+class ProbeTests(unittest.TestCase):
+    def test_the_probe_hits_the_configured_client_and_keeps_causes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = ralph.Paths(pathlib.Path(tmp))
+            echo, false = shutil.which("echo"), shutil.which("false")
+            with mock.patch.dict(os.environ, {"RALPH_OPENCODE_BIN": echo}):
+                self.assertEqual(ralph.probe_model("prov/x", paths), (True, ""))
+            with mock.patch.dict(os.environ, {"RALPH_OPENCODE_BIN": false}):
+                ok, cause = ralph.probe_model("prov/x", paths)
+                self.assertFalse(ok)
+                self.assertIn("exit 1", cause)
+            slow = pathlib.Path(tmp) / "slow-client.sh"
+            slow.write_text("#!/bin/sh\nsleep 5\n")
+            slow.chmod(0o755)
+            with mock.patch.dict(os.environ, {"RALPH_OPENCODE_BIN": str(slow)}):
+                self.assertEqual(ralph.probe_model("prov/x", paths, timeout=1),
+                                 (False, "timeout after 1s"))
+
+    def test_the_probe_never_targets_localhost(self):
+        # The seam: probe the provider, never the mesh daemon. An entry whose
+        # provider is declared with a loopback baseURL is refused by name; a
+        # bare id names no provider at all.
+        with tempfile.TemporaryDirectory() as tmp:
+            write(tmp, ".opencode/opencode.json",
+                  '{"provider": {"mesh": {"options": {"baseURL": '
+                  '"http://localhost:9741/v1"}}}}')
+            paths = ralph.Paths(pathlib.Path(tmp))
+            ok, cause = ralph.probe_model("mesh/fast", paths)
+            self.assertFalse(ok)
+            self.assertIn("localhost", cause)
+            ok, cause = ralph.probe_model("bare", paths)
+            self.assertFalse(ok)
+            self.assertIn("no provider", cause)
+            with mock.patch.dict(os.environ, {"RALPH_OPENCODE_BIN": shutil.which("echo")}):
+                self.assertEqual(ralph.probe_model("prov/x", paths), (True, ""))
+
+
+class HaltTailTests(unittest.TestCase):
+    """A strikeout halt carries the failing lane's last error-shaped
+    transcript line (quota / permission path / provider error / crash tail),
+    so launchd.log alone is diagnostic."""
+
+    def fixture(self, tmp, rows):
+        subprocess.run(["git", "init", "-q", "-b", "main", tmp], check=True)
+        subprocess.run(["git", "-C", tmp, "config", "user.email", "t@t"], check=True)
+        subprocess.run(["git", "-C", tmp, "config", "user.name", "t"], check=True)
+        write(tmp, "ralph/STATE.md", rows)
+        write(tmp, "ralph/PROMPT.md", "Execute the selected unit.")
+        write(tmp, "seed.txt", "seed")
+        subprocess.run(["git", "-C", tmp, "add", "-A"], check=True)
+        subprocess.run(["git", "-C", tmp, "commit", "-q", "-m", "seed"], check=True)
+        return pathlib.Path(tmp)
+
+    def make(self, root, session_for, **kwargs):
+        paths = ralph.Paths(root)
+        kwargs.setdefault("sleep", lambda s: None)
+        return ralph.Pool(paths, session_for=session_for, notify_enabled=False,
+                          lanes=2, base_branch="main", **kwargs)
+
+    def test_a_lane_strikeout_halt_carries_the_last_error_line(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.fixture(tmp, "- [ ] dm-a — depends []\n")
+
+            class DyingLane:
+                def __init__(self, cwd):
+                    self.cwd = pathlib.Path(cwd)
+
+                def run(self, model_args, prompt, log):
+                    p = pathlib.Path(log)
+                    p.parent.mkdir(parents=True, exist_ok=True)
+                    p.write_text("working...\n"
+                                 "provider: Usage limit reached for 5 hour\n"
+                                 "Error: Unexpected server error (500)\n")
+                    return 0                # ends without its done marker
+
+            pool = self.make(root, lambda cwd, env=None: DyingLane(cwd),
+                             max_lane_failures=1)
+            self.assertEqual(pool.run(), 3)
+            pkg = (root / "ralph/NEEDS_HUMAN.md").read_text()
+            self.assertIn("lane dm-a failed 1 waves", pkg)
+            self.assertIn("target/ralph/lane-dm-a.out", pkg)
+            self.assertIn("last error: Error: Unexpected server error (500)", pkg)
+
+    def test_a_review_exhaustion_halt_carries_the_last_error_line(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.fixture(tmp, "- [ ] REVIEW-a — depends []\n")
+
+            class FailingReview:
+                def run(self, model_args, prompt, log):
+                    p = pathlib.Path(log)
+                    p.parent.mkdir(parents=True, exist_ok=True)
+                    p.write_text("analyzing...\napi error: 429 quota exhausted\n")
+                    return 0                # never marks its row [x]
+
+            pool = self.make(root, lambda cwd: FailingReview(),
+                             max_review_attempts=1)
+            self.assertEqual(pool.run(), 3)
+            pkg = (root / "ralph/NEEDS_HUMAN.md").read_text()
+            self.assertIn("review REVIEW-a did not finish after 1 attempts", pkg)
+            self.assertIn("last error: api error: 429 quota exhausted", pkg)
 
 
 class GuardTests(unittest.TestCase):
