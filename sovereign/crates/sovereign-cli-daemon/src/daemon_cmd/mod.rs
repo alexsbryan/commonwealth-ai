@@ -916,10 +916,9 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
                     .into_iter()
                     .map(|s| s.corpus_id)
                     .collect();
-                let now = std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap_or_default()
-                    .as_secs() as i64;
+                // The decider, not a hand-read clock (clock-gate): one place
+                // says what "now" is.
+                let now = sovereign_core::time::unix_now();
                 let mut added = 0usize;
                 for info in indexes {
                     if known.contains(&info.corpus_id) {
