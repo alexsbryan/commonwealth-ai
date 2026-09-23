@@ -23,10 +23,10 @@ use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 
 use crate::loopback_guard::{LocalOnly, LoopbackRouter};
+use corpus_engine_watchers::reindexer::{RebuildReason, Reindexer};
 use sovereign_contracts::watcher_projects::{
     ProjectEntry, Registry, WatcherKind, WatcherStatus, WatcherToggles,
 };
-use corpus_engine_watchers::reindexer::{RebuildReason, Reindexer};
 
 /// Build the project HTTP router. Merged into the daemon's client
 /// router next to `mesh_router`, `admin_router`, and `mcp_router`.

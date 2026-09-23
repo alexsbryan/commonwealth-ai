@@ -771,7 +771,6 @@ pub struct ExportedNoteEntity {
     pub kind: String,
 }
 
-
 /// Fire-and-forget callback the daemon installs to publish
 /// propagation events. The closure adapts the event into whatever
 /// transport the caller owns (most commonly
@@ -787,7 +786,6 @@ pub struct ExportedNoteEntity {
 /// so a failed publish never claims a receipt (order `commons-fluency`
 /// fix 3).
 pub type PropagationSinkFn = Arc<dyn Fn(&NotePropagationEvent) -> bool + Send + Sync>;
-
 
 /// GLiNER entity-extraction function injected by the caller.
 ///
@@ -809,7 +807,6 @@ pub type GlinerFn = Arc<
         + Send
         + Sync,
 >;
-
 
 /// One member of the mesh, as far as note attribution is concerned.
 #[derive(Debug, Clone)]
@@ -1030,4 +1027,3 @@ impl NodeAttribution {
         }
     }
 }
-

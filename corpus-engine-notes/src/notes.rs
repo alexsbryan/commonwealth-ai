@@ -57,8 +57,8 @@ use crate::notes_schema::{
 // notes-side alias was a shape twin of (fp-3, §12 decision 3). Re-exported
 // here at their historical `notes::` paths: a re-export, never a twin.
 pub use corpus_index::types::{
-    EmbedFn, ExportedNoteEmbedding, ExportedNoteEntity, ExportedNoteRow, GlinerFn,
-    NodeAttribution, NodeRoster, NotePropagationEvent, PropagationSinkFn, RosterEntry,
+    EmbedFn, ExportedNoteEmbedding, ExportedNoteEntity, ExportedNoteRow, GlinerFn, NodeAttribution,
+    NodeRoster, NotePropagationEvent, PropagationSinkFn, RosterEntry,
 };
 
 /// Counts surfaced by [`NoteStore::backfill_tier_artifacts`].
@@ -101,7 +101,6 @@ pub struct IngestRemoteReport {
     /// than silently tolerated.
     pub foreign_embeddings_discarded: usize,
 }
-
 
 /// Unit separator (0x1F) used between fields in [`content_hash`]
 /// preimage. Outside the printable-ASCII range, so user content
@@ -618,7 +617,6 @@ fn backfill_content_hashes(conn: &Connection) -> Result<()> {
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-
 
 /// A single row from the tool call ring buffer.
 #[derive(Debug, Clone)]

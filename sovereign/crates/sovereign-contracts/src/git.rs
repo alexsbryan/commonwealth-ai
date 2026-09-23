@@ -56,5 +56,3 @@ pub fn read_git_head(root: &Path) -> Option<String> {
         Some(trimmed)
     }
 }
-
-

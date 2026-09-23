@@ -26,9 +26,7 @@ use sovereign_contracts::traits::InferenceProvider;
 /// The error mapping is the load-bearing part: corpus-engine only understands
 /// `crate::error::Error`, so a provider failure has to arrive as
 /// `Error::Embed` or ingestion reports it as something it is not.
-pub fn inference_to_embed_fn(
-    inference: Arc<dyn InferenceProvider>,
-) -> crate::types::EmbedFn {
+pub fn inference_to_embed_fn(inference: Arc<dyn InferenceProvider>) -> crate::types::EmbedFn {
     Arc::new(move |text: &str| {
         let inf = Arc::clone(&inference);
         let text = text.to_string();
@@ -62,9 +60,7 @@ pub fn inference_to_embed_fn(
 /// atlas on the document side while queries stayed on the query side: a
 /// silent space mismatch, exit 0, grounding quietly worse. That is the
 /// substitution §18.3 forbids, so the query side got its own adapter instead.
-pub fn inference_to_embed_query_fn(
-    inference: Arc<dyn InferenceProvider>,
-) -> crate::types::EmbedFn {
+pub fn inference_to_embed_query_fn(inference: Arc<dyn InferenceProvider>) -> crate::types::EmbedFn {
     Arc::new(move |text: &str| {
         let inf = Arc::clone(&inference);
         let text = text.to_string();

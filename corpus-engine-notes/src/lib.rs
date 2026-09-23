@@ -53,9 +53,9 @@
 //! `update::project_index_watcher`) `map_err` explicitly. Avoids
 //! adding a `From` impl that creates a non-obvious flow.
 
-pub mod mining;
 pub mod decision_extractor;
 pub mod error;
+pub mod mining;
 pub mod note;
 pub mod notes;
 mod notes_schema;

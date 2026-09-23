@@ -63,12 +63,12 @@ use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use corpus_engine_notes::mining::patterns::{ObservedPattern, PatternRule, ToolPatternMatcher};
+use corpus_engine_notes::mining::response_mine;
 use corpus_engine_notes::{NoteScope, NoteSource, NoteStore};
 use sovereign_contracts::traits::ConversationStore;
 use sovereign_contracts::types::Role;
 use sovereign_store::sqlite::SqliteStateStore;
-use corpus_engine_notes::mining::patterns::{ObservedPattern, PatternRule, ToolPatternMatcher};
-use corpus_engine_notes::mining::response_mine;
 
 /// Maximum sessions inspected in a single recover run. The ring
 /// buffer caps at 10k rows — that's typically far fewer than 10k

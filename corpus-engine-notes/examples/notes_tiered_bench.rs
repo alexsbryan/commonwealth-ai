@@ -443,19 +443,16 @@ async fn build_daemon_embed_fn(
                 .send()
                 .await
                 .map_err(|e| {
-                    corpus_index::Error::Io(std::io::Error::other(format!(
-                        "daemon embed: {e}"
-                    )))
+                    corpus_index::Error::Io(std::io::Error::other(format!("daemon embed: {e}")))
                 })?;
             if !resp.status().is_success() {
-                return Err(corpus_index::Error::Io(std::io::Error::other(
-                    format!("daemon embed → HTTP {}", resp.status()),
-                )));
+                return Err(corpus_index::Error::Io(std::io::Error::other(format!(
+                    "daemon embed → HTTP {}",
+                    resp.status()
+                ))));
             }
             let body: serde_json::Value = resp.json().await.map_err(|e| {
-                corpus_index::Error::Io(std::io::Error::other(format!(
-                    "daemon embed parse: {e}"
-                )))
+                corpus_index::Error::Io(std::io::Error::other(format!("daemon embed parse: {e}")))
             })?;
             let vec = body
                 .get("data")

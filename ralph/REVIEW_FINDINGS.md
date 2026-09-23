@@ -2084,3 +2084,134 @@ None of the eight rows regenerated `quality/conformance/`, and none of their
 test. A row that adds a line above a `covers:` tag owes the regeneration in its
 own commit. Not a queue edit (the rows are `[x]`); recorded so the next queue's
 mint step names it.
+
+---
+
+# ralph/REVIEW_FINDINGS.md — five-programs campaign
+
+## REVIEW-audit-fp-auto-1 (2026-09-23, range 38a084b36..HEAD — the queue's start to HEAD, no previous audit)
+
+Range: 43 commits, 193 files, +5652/−2108 all-in. Checks: TESTALL exit=0
+(13,314 pass / 0 fail). PREPUSH on the campaign range (fed via the push
+protocol, remote sha = 38a084b36): **1 blocking lane — boundary-gate at 68
+violation(s) — the campaign's own declared burn-down state** (fp-15 closes it;
+REVIEW-audit-5's precedent for recording an approved red). Advisory attention:
+size-gate (28 keys grew, below), deletion-manifest (item 8), concept-gate
+declared could-not-judge (item 9).
+
+### (1) Per-unit net-line ledger, product code (`git log --numstat`, src apart from tests)
+
+| unit | + | − | net |
+|---|---|---|---|
+| non-unit:five-programs (queue/loop docs) | 8 | 95 | −87 |
+| fp-3 | 427 | 430 | −3 |
+| fp-19 | 0 | 3 | −3 |
+| fp-41 | 23 | 23 | 0 |
+| fp-31 | 19 | 19 | 0 |
+| fp-5 | 30 | 26 | +4 |
+| fp-40 | 334 | 318 | +16 |
+| fp-16 | 66 | 45 | +21 |
+| fp-2 | 365 | 335 | +30 |
+| non-unit:cut (fp-48..53 rode in bdd22b846) | 143 | 94 | +49 |
+| fp-17 | 95 | 37 | +58 |
+| non-unit:the cuts (fp-1 rode in 1d9c7ed5f) | 367 | 169 | +198 |
+| fp-27 | 288 | 26 | +262 |
+| TOTAL | 2165 | 1620 | +545 |
+
+fp-27's +262 is the `sovereign_contracts::notes::fixtures::RecordingNotes`
+test double landing in src while the 171 lines of real-SQL tests it replaced
+moved under `tests/` (excluded here). The campaign's moves are re-export
+wrapped (verified below), which is why twelve units netted +545.
+
+### (2)+(3) Clone and noun checks — instrument substitution
+
+`code dry-report` and `code converge noun` could not run: the daemon has 3
+indexed code corpora, **none of them this repo**, and the MCP `symbols`
+surface answers "no symbol … in any installed code corpus" — the same root
+cause concept-gate declares could-not-judge for. Re-index is
+`svrn project refresh`, not this unit's work. Substitution, with data:
+
+- **Single-definition sweep** (git grep over every struct/enum/trait the range
+  added, 25 nouns): every range noun has exactly ONE definition —
+  `TrafficClass/PeerContact/PeerEndpoint/PeerTransport` →
+  contracts/src/transport.rs, `VenueSource/SlotAliasPolicy/InferenceVenue` →
+  contracts/src/venue.rs, `VenueHost/LedgerEmitter` → contracts/src/venue_host.rs,
+  `WatcherKind/WatcherToggles/Registry(ProjectEntry schema)` →
+  contracts/src/watcher_projects.rs, `RecordingNotes` → contracts/src/notes.rs:139,
+  the ExportedNote*/NotePropagationEvent/NodeRoster/RosterEntry/NodeAttribution
+  set → corpus-index/src/types.rs, `NodePubkey` → kernel-types/src/ids.rs:144,
+  `JoinKeyError` → mesh-join-vocab/src/join_key.rs:6. `EmbedFn` is ONE alias
+  (corpus-index/src/types.rs:36), fp-5's claim verified.
+- **Moves are re-exports, never twins** (grep per fp row): serving-policy →
+  `pub use serving_policy_core` (fp-17); commonwealth-transport/src/lib.rs:111 +
+  origin_alpn.rs:16 → `pub use sovereign_contracts::transport` (fp-40);
+  scheduler venue.rs:26 + slot_aliases.rs:31 → contracts::venue (fp-1);
+  watchers projects.rs:24 → contracts::watcher_projects (fp-2); discovery
+  lib.rs:76 + membership.rs:9 → mesh_join_vocab (fp-52); core ids.rs:18 →
+  kernel_types (fp-40 step 0); cli-shared rail.rs:36 uses rail-core types (fp-48).
+- **Same-name collisions observed, all PRE-EXISTING, none range-created**:
+  `WatcherStatus` ×2 (contracts' project-schema enum vs
+  corpus-engine-watchers/src/watcher_coordinator.rs:223's runtime-health enum —
+  disjoint variants, the latter's own doc distinguishes them);
+  `ProjectEntry` ×2 (watcher schema vs sovereign-daemon/src/features_http.rs:45,
+  the recipe-project web entry); `Registry` ×5 (the range's watcher one plus
+  four unrelated pre-existing). Recorded for the naming ledger; renames are not
+  this row's.
+
+### Findings, fixed (all in this audit's commit)
+
+- **arch-gate — NEW oversized file (hard)** ·
+  `sovereign/crates/sovereign-daemon/tests/main/e2e_code_intel.rs` · fp-51's
+  move-whole relocated a file that was already over the 1200 ceiling at the old
+  path (oversized.txt:183 pinned 1539 at sovereign-code/tests/), and the
+  path-keyed baseline stopped matching. SPLIT, not re-pinned (standing rule):
+  the auth demo fixture + T-21..T-27 (948 lines) moved to
+  `e2e_code_intel/demo_auth.rs` behind `#[path]` (the chat_completion_e2e
+  precedent), parent 655. All 20 tests intact: 13 parent + 4 child pass, 3
+  child ignores are pre-existing (`#[ignore]` with reason, verbatim from
+  before the move).
+- **clock-gate — NEW hand-read clock** · same file :69 ·
+  `SystemTime::now()` → `commonwealth_core::clock::unix_now_secs()` (the
+  decider gossip_route.rs:179 already uses).
+- **rustfmt lane red — 11 in-range files** · drift survived per-unit LINT
+  (which does not run rustfmt) and surfaced here; reformatted in place
+  (+20/−37): corpus-engine-notes ×3, corpus-index ×2, cli-dev audit_×2,
+  contracts git.rs, daemon bootstrap/mcp_router/project_http.
+- **env-gate — stale docs + 2 bankable names** · `--update-doc` regenerated
+  docs/ENV_FLAGS.md; `--tighten` banked 2 names that left env_unregistered.txt.
+  Both are the gate's own blessed commands.
+- **layer-gate — contracts fan-in 40 → 41** · fp-3 (0ca719771) landed after
+  db4bee8c3's accept and gave corpus-index the sovereign-contracts dep —
+  load-bearing: embed_fn.rs:22 imports `InferenceProvider` for the ONE
+  InferenceProvider→EmbedFn adapter, whose error mapping owns corpus-index's
+  Error (fp-3's row records why the type could not live in contracts).
+  Accepted explicitly per the db4bee8c3 protocol (quality/baselines/fan_in.tsv
+  40 → 41 in its own `gate:` commit).
+
+### Recorded, not changed
+
+- **PREPUSH hand-run crashes E2BIG on a long-diverged branch** ·
+  scripts/pre-push.sh:207 · the hook builds `SOVEREIGN_CHANGED_PATHS` as ONE
+  env var; hand-run with no push range it falls back to origin/main..HEAD
+  (2201 files on branch cut ≈ 130 KB), past the kernel's per-string
+  MAX_ARG_STRLEN, and sovereign-cli dies with "Argument list too long" before
+  ANY lane runs. Never fires on a real push (stdin scopes the range) or on
+  this audit (fed 38a084b36 as the remote sha); fires for every future
+  hand-run audit on this branch. The fix (chunk the export or hand the set
+  over a file) is a harness change outside this row — operator's call.
+- **size-gate (advisory)** · 28 keys grew, the campaign's own: new crates read
+  as new keys (corpus-engine-atlas-reader +5321, serving-policy-core::tests,
+  mesh-join-vocab::tests) and contracts +965 is the vocabulary homes landing.
+  `warn_gate` by design; not re-pinned.
+- **deletion-manifest (advisory)** · `p0-root-junk` GREW 133537 > 113934
+  (+19,603) — bcba44eb1 "landing: the ring guest page — built deliverable
+  dropped for deploy" dropped a built deliverable at the repo root. Foreign to
+  this campaign (non-unit commit); the campaign's own lanes show progress
+  (p1-dr-flights −268,120 remaining-to-delete; p2-code-certain −2,543).
+- **concept-gate could-not-judge (declared)** · and the same unavailability
+  muted dry-report/converge — see the substitution above.
+- **`broadcast_plan` `todo!()` stub** ·
+  `sovereign/crates/sovereign-daemon/tests/main/e2e_code_intel.rs:291` (now
+  parent) · dead fixture scaffolding moved verbatim from sovereign-code with
+  fp-51; never called on any green path. Pre-existing, not range-created;
+  recorded so the next reader does not mistake it for the move's doing.

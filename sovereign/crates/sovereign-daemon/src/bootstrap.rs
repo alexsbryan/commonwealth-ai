@@ -156,9 +156,7 @@ pub fn build_corpus_engine(
             let text = text.to_string();
             Box::pin(async move {
                 p.embed(&text).await.map_err(|e| {
-                    corpus_index::Error::Io(std::io::Error::other(format!(
-                        "notes embed: {e}"
-                    )))
+                    corpus_index::Error::Io(std::io::Error::other(format!("notes embed: {e}")))
                 })
             })
         });

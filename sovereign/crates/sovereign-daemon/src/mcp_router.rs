@@ -179,9 +179,9 @@ pub fn mcp_router(
     // instance per router so per-session cooldown state persists
     // across requests on the same session id. Fire-and-forget after
     // every successful tool dispatch.
-    let pattern_matcher = Arc::new(corpus_engine_notes::mining::patterns::ToolPatternMatcher::new(
-        Arc::clone(&logger),
-    ));
+    let pattern_matcher = Arc::new(
+        corpus_engine_notes::mining::patterns::ToolPatternMatcher::new(Arc::clone(&logger)),
+    );
     Router::new()
         // Both URLs accept the full JSON-RPC dispatch.
         // `POST /mcp` is the modern (2025-03-26 Streamable HTTP) entry point.

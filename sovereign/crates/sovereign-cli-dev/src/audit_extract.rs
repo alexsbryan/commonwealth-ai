@@ -40,13 +40,13 @@
 
 use std::path::{Path, PathBuf};
 
-use corpus_engine_notes::{NoteScope, NoteSource, NoteStore};
-use serde::{Deserialize, Serialize};
 use corpus_engine_notes::mining::diff_extract::{
     DecisionExtraction, DecisionExtractorBackend, DiffDecisionExtractor, ExtractionRequest,
     MAX_DIFF_INPUT_BYTES,
 };
 use corpus_engine_notes::mining::diff_extract_backend::{LocalLlmBackend, LocalLlmConfig};
+use corpus_engine_notes::{NoteScope, NoteSource, NoteStore};
+use serde::{Deserialize, Serialize};
 
 /// Path of the audit state file inside the project's
 /// `.sovereign/` directory.
