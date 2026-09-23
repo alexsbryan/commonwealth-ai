@@ -100,6 +100,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # Identity FIRST, for both paths: `bump: none` creates missing
+          # annotated tags below, and `git tag -a` refuses without a
+          # committer. Watched failing in run 35934063369 (2026-09-23): the
+          # config used to live only in the bump branch, so the one path that
+          # is supposed to be able to skip the bump could not tag.
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           bump="${{ inputs.bump }}"
           if [ "$bump" = "none" ]; then
             # Old flow: version already bumped + committed by hand. Verify.
@@ -125,8 +132,6 @@ jobs:
             # lockfile. `update --workspace` rewrites only the member
             # entries — no dependency changes, no network, no compilation.
             cargo update --workspace
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
             git add Cargo.toml Cargo.lock \
               sovereign/crates/sovereign-desktop/src-tauri/tauri.conf.json \
               sovereign/crates/sovereign-desktop/package.json
