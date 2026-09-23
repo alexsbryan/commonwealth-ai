@@ -2010,6 +2010,10 @@ impl EmbeddedDaemon {
     ///   - the daemon resumed an older mesh from before this cache
     ///     existed (the share UI hides the invite card and prompts
     ///     a rotate to recover a link)
+    ///   - the cached key no longer hashes to the mesh's invite
+    ///     credential — a rotation was adopted from a peer and the new
+    ///     key's plaintext never travels; serving the stale key would
+    ///     render an invitation the founder refuses
     ///
     /// The `join_link` is reconstructed on demand from the cached
     /// key + the current mesh name via [`sovereign_mesh::deep_link::build_join_link`],
@@ -2030,10 +2034,41 @@ impl EmbeddedDaemon {
             DaemonState::Stopped => return None,
         };
         drop(state);
-        let (mesh_name, require_encryption) = {
+        let (mesh_name, require_encryption, invite_key_hash) = {
             let mesh = app_state.inner.fabric.mesh.read().await;
-            (mesh.name.clone(), mesh.require_encryption)
+            (
+                mesh.name.clone(),
+                mesh.require_encryption,
+                mesh.invite_key_hash,
+            )
         };
+        // A cached plaintext is a link only while it still opens the door.
+        //
+        // A rotation this node did not perform arrives as hash + version (the
+        // merge in `Mesh::merge_invite_from`), and the cached plaintext —
+        // `self.join_key`, restored from `join_key.secret` — is left behind by
+        // design: the new key's plaintext never travels. Serving the stale key
+        // renders an invitation the founder refuses ("join key does not
+        // match", measured live 2026-09-23), which reads as a working link and
+        // costs whoever tries it. Serve NOTHING and say why: the share surface
+        // already hides the card on `None` and prompts a rotate.
+        if commonwealth_discovery::membership::hash_join_key(&key) != invite_key_hash {
+            // One warn per process: a status poll repeats, and the divergence
+            // does not change until a rotate.
+            static WARNED: std::sync::atomic::AtomicBool =
+                std::sync::atomic::AtomicBool::new(false);
+            if !WARNED.swap(true, std::sync::atomic::Ordering::Relaxed) {
+                warn!(
+                    "invite: the cached join key no longer matches this mesh's \
+                     invite hash — a rotation was adopted or an older secret was \
+                     restored, so NO join link is served. `svrn mesh rotate` mints \
+                     a fresh one."
+                );
+            } else {
+                tracing::debug!("invite: still diverged; no join link served");
+            }
+            return None;
+        }
         // Live-read the dial string on every call — the desktop's
         // status poll merges this in, so the share card upgrades
         // itself as the relay connects (and a rotated invite keeps its
