@@ -645,7 +645,13 @@ register change is priced in both directions or it is not judged.
 step accounts for what it did to the pool. `apply_atlas_grounding` is a CALLER
 of `corpus_engine::enrichment::atlas::ground`, the same walk `corpus-mcp`
 drives, so the two cannot diverge. The evidence budget is spent ACROSS the
-ideas the walk reached, not down the ranked list.
+ideas the walk reached, not down the ranked list. With
+`retrieval.pipeline=debug`, content fingerprints track passages through every
+step and the KnowledgeQuery handler's subsequent cohesion expansion, rerank,
+late summaries and prompt admission; the pipeline's `scope_audit` is not the
+final prompt pool. Atlas grounding reports raw request counts separately
+from the pipeline's chunk-equivalent injection ledger because one request can
+yield multiple passages.
 
 **An answer over missing knowledge says so, and CODE guarantees it.**
 `UnavailabilityReason` is a closed enum, `corpus_unavailability()` is the one

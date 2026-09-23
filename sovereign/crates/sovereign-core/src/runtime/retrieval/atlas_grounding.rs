@@ -412,15 +412,11 @@ impl Runtime {
             added: graph_added,
             considered: resolve.considered,
         });
-        let ledger = StepLedger::injected(resolve.considered)
-            .drop(DropReason::OutOfScope, resolve.out_of_scope)
-            .drop(DropReason::EvidenceUnresolvable, resolve.unresolvable)
-            .drop(DropReason::TitleMismatch, resolve.title_mismatch)
-            .drop(DropReason::Duplicate, resolve.duplicate)
-            // Candidates past the fetch budget were never attempted. They
-            // are a DECISION, not a failure, and the accounting identity
-            // requires them named.
-            .drop(DropReason::BudgetExhausted, resolve.budget_exhausted());
+        // The resolver counts REQUESTS in `considered`, while the pipeline
+        // ledger counts CHUNKS. A section request can yield several chunks;
+        // mixing the two makes a healthy walk fail the pipeline audit.
+        // The raw request count stays on the fetch event and walk echo.
+        let ledger = atlas_injection_ledger(&resolve, graph_added);
 
         // Adaptive triage: bump article slug per atlas to climb
         // the Tier-2 enrichment queue.
@@ -490,6 +486,36 @@ impl corpus_engine::enrichment::atlas::ground::EvidenceFetcher for RuntimeEviden
             )
             .await
     }
+}
+
+/// Convert resolver request outcomes to the pipeline's chunk-equivalent
+/// ledger. Failed requests each count as one dropped candidate; successful
+/// requests count by the chunks they produced. The resolver's original
+/// request count is independently reported in its fetch ledger.
+fn atlas_injection_ledger(
+    resolve: &corpus_engine::enrichment::atlas::ground::ResolveLedger,
+    added: usize,
+) -> crate::runtime::retrieval_ledger::StepLedger {
+    use crate::runtime::retrieval_ledger::{DropReason, StepLedger};
+
+    let duplicates = resolve.duplicate + resolve.added.saturating_sub(added);
+    // This is the resolver's existing saturating request estimate: when
+    // requests yield multiple chunks it may undercount unattempted requests.
+    // Do not mistake this pipeline (chunk-unit) identity for a proof that
+    // every source request was attempted.
+    let budget_exhausted = resolve.budget_exhausted();
+    let considered = added
+        + resolve.out_of_scope
+        + resolve.unresolvable
+        + resolve.title_mismatch
+        + duplicates
+        + budget_exhausted;
+    StepLedger::injected(considered)
+        .drop(DropReason::OutOfScope, resolve.out_of_scope)
+        .drop(DropReason::EvidenceUnresolvable, resolve.unresolvable)
+        .drop(DropReason::TitleMismatch, resolve.title_mismatch)
+        .drop(DropReason::Duplicate, duplicates)
+        .drop(DropReason::BudgetExhausted, budget_exhausted)
 }
 
 /// One walked [`SummaryNode`] as a virtual chunk, for the LATE append site.
@@ -579,6 +605,51 @@ pub(crate) fn append_atlas_summaries(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn one_section_request_may_yield_multiple_chunks_without_a_ledger_violation() {
+        use crate::runtime::retrieval_ledger::DropReason;
+        use corpus_engine::enrichment::atlas::ground::ResolveLedger;
+
+        // The pilot's failing shape was eight requests and twelve passages;
+        // the pipeline ledger must account for the passages, not mistake the
+        // request count for an upper bound on them.
+        let ledger = atlas_injection_ledger(
+            &ResolveLedger {
+                considered: 8,
+                added: 12,
+                ..Default::default()
+            },
+            12,
+        );
+        assert_eq!(ledger.considered, Some(12));
+        assert!(ledger.accounted.is_empty());
+
+        let missing = atlas_injection_ledger(
+            &ResolveLedger {
+                considered: 4,
+                unresolvable: 4,
+                ..Default::default()
+            },
+            0,
+        );
+        assert_eq!(missing.considered, Some(4));
+        assert_eq!(
+            missing.accounted.get(&DropReason::EvidenceUnresolvable),
+            Some(&4)
+        );
+
+        let duplicates = atlas_injection_ledger(
+            &ResolveLedger {
+                considered: 8,
+                added: 12,
+                ..Default::default()
+            },
+            10,
+        );
+        assert_eq!(duplicates.considered, Some(12));
+        assert_eq!(duplicates.accounted.get(&DropReason::Duplicate), Some(&2));
+    }
 
     /// The map's `DEFAULT_BUDGET` and this file's live fetch budget are ONE
     /// number and must move together.

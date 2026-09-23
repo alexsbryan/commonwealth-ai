@@ -1280,14 +1280,14 @@ impl Runtime {
         // hit. The session store guards both; this call is safe
         // on short turns — it just returns `None`.
         //
-        // Emit on every non-empty retrieval (not just on
-        // `top_source_repeat_count >= 2`). The user is staring at
+        // Emit on every non-empty retrieval (not just when the pool is
+        // dominant). The user is staring at
         // the typing-dots spinner and the most useful thing we
         // can tell them after retrieval finishes is "we read N
         // chunks across these sources." When the top source
         // dominates we say so; otherwise we report the spread.
         if !plan.chunks.is_empty() {
-            let txt = if plan.shape.top_source_repeat_count >= 2 {
+            let txt = if crate::runtime::evidence::is_dominant_source_pool(&plan.shape) {
                 format!(
                     "Read {} chunks — {} from one source, so I'll keep the answer focused.",
                     plan.chunks.len(),
@@ -1446,7 +1446,7 @@ impl Runtime {
         // user's message by reference without cloning into the
         // async move. The result is serialised into message
         // metadata inside the spawn.
-        let had_dominant_source = shape.top_source_repeat_count >= 2;
+        let had_dominant_source = crate::runtime::evidence::is_dominant_source_pool(&shape);
         let retrieval_missed = shape.is_off_target();
         let top_source_title_owned = if shape.top_source_key.1.is_empty() {
             None

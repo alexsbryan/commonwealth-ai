@@ -419,6 +419,10 @@ impl Runtime {
             peer_attribution,
             ..
         } = pipeline_state;
+        let mut evidence_ids =
+            tracing::enabled!(target: "retrieval.pipeline", tracing::Level::DEBUG).then(|| {
+                crate::runtime::retrieval_pipeline::evidence_trace::content_fingerprints(&chunks)
+            });
 
         // Epistemic demand set (EPISTEMIC_STATE.md P1a) — built from
         // the pipeline's own signals (entities + heuristic
@@ -945,6 +949,13 @@ impl Runtime {
                 (chunks, max_knowledge_chars(), false)
             }
         };
+        evidence_ids = crate::runtime::retrieval_pipeline::evidence_trace::checkpoint(
+            "cohesion_expansion",
+            message,
+            evidence_ids,
+            &chunks,
+            None,
+        );
 
         // Pre-flight retrieval-bundle budget. The configured
         // `knowledge_char_budget` (8000 / 16000 chars) is the
@@ -1091,6 +1102,13 @@ impl Runtime {
         let folder_meta = self.folder_metadata_snapshot().await;
         self.rerank_conv_chunks_via_ppr(message, &mut chunks, &display_categories, &lane)
             .await;
+        evidence_ids = crate::runtime::retrieval_pipeline::evidence_trace::checkpoint(
+            "conv_ppr_rerank",
+            message,
+            evidence_ids,
+            &chunks,
+            None,
+        );
         // Late summary injection: append whole-work summaries AFTER the full
         // leaf pipeline (reweight → … → ppr-rerank) so they cannot perturb leaf
         // retrieval/ranking — QA-neutral by construction. The position was
@@ -1123,6 +1141,13 @@ impl Runtime {
             &atlas_summaries,
             "KnowledgeQuery",
         );
+        evidence_ids = crate::runtime::retrieval_pipeline::evidence_trace::checkpoint(
+            "late_summaries",
+            message,
+            evidence_ids,
+            &chunks,
+            None,
+        );
         // 4d-agentic. Bounded agentic evidence loop (prototype, env-gated
         // SOVEREIGN_AGENTIC_KQ=1). When the evidence fails a fast
         // forced-choice sufficiency check, the model formulates 1-3
@@ -1153,6 +1178,13 @@ impl Runtime {
             agentic_entity_anchored = entity_anchored;
             agentic_corpus_anchored = corpus_anchored;
         }
+        evidence_ids = crate::runtime::retrieval_pipeline::evidence_trace::checkpoint(
+            "agentic_evidence",
+            message,
+            evidence_ids,
+            &chunks,
+            None,
+        );
         let conv_briefing = self
             .build_conv_briefing_block(&chunks, &display_categories, &lane)
             .await;
@@ -1184,6 +1216,13 @@ impl Runtime {
         // from "the prompt carried 8". Every evidence count taken from
         // the pool alone overstated what the model saw.
         let chunks_in_prompt = formatted_doc.admitted;
+        let _ = crate::runtime::retrieval_pipeline::evidence_trace::checkpoint(
+            "prompt_admission",
+            message,
+            evidence_ids,
+            &chunks,
+            Some(&chunks_in_prompt),
+        );
         let doc_context = formatted_doc.text;
         // Code-intelligence-in-chat (Inc 2 slice 2b): when retrieval surfaced
         // code-intel *summary* chunks, append each matched symbol's call-graph
@@ -2027,7 +2066,7 @@ impl Runtime {
             .latest_for_conversation(conversation_id)
             .map(|s| s.id)
             .unwrap_or_default();
-        let had_dominant_source = plan.shape.top_source_repeat_count >= 2;
+        let had_dominant_source = crate::runtime::evidence::is_dominant_source_pool(&plan.shape);
         let retrieval_missed = plan.shape.is_off_target();
         let top_source_title = if plan.shape.top_source_key.1.is_empty() {
             None

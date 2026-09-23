@@ -22,7 +22,8 @@ impl Runtime {
     ///
     /// Preconditions: caller has computed an `EvidenceShape` and
     /// decided this case warrants expansion (FastFocused route +
-    /// `top_source_repeat_count >= 2`). This function does not re-check
+    /// `is_dominant_source_pool` — repeat ≥ 2 AND the top source holds
+    /// at least a fifth of the pool). This function does not re-check
     /// those conditions — it just expands.
     pub(crate) async fn expand_from_dominant_source(
         &self,

@@ -947,3 +947,151 @@ reads 1.0. Any gold-in-retrieved comparison computed from it (including the
 "full's retrieval carries more gold: mean 0.22 vs bare 0.17" line above) is an
 instrument artifact, not a measurement. The fix is to score against admitted
 `prompt_text`, not the snippet window.
+
+### 2026-09-23 — correction to Phase-1 attribution: titles are not passage identities
+
+The preceding entry's non-determinism breakdown and several causal claims are
+**withdrawn**. Its script keyed `retrieved[]` on `url or title`, but ANS chunks
+have null URLs and chunk IDs and many distinct passages share the same title.
+It therefore called different evidence identical and attributed answer changes
+to the gate or decoder. Recomputed using admitted `prompt_text` plus snippet
+and corpus/title: `full` differs in recorded evidence on **41/47** questions
+(28 with different answers, 13 with the same answer); grounding-only differs
+on **40/47** (31 with different answers, 9 with the same answer). On full,
+NONE has a different answer on stable recorded evidence. The atlas walk ledger
+can be identical while the actual passage text changes. Neither a gate-internal
+nor a decoder-internal flip is established; the 15/47 near-tie and 24/13 gate
+counts cannot name a cause. `w1_determinism.py` now tests the recorded content.
+For unadmitted chunks the JSON holds only a 200-character snippet, so equality
+is a lower bound on differences, not a full prompt hash.
+
+K0 loss survives the correction but its **stage is not identified**. In all
+three runs, each of the four answers bare got right has its answer-bearing
+quote in bare's admitted text and NOT in grounding-only's or full's. A title
+match had called the Demanhur gold chunk "retrieved at rank 13, cut"; the
+rank-13 chunk shares a title with it but has DIFFERENT content, so that
+diagnosis is false. The other "never-pooled" diagnoses made the same mistake:
+the eval projection cannot distinguish search rejection, atlas injection,
+rerank, merge selection and prompt truncation when an exact passage is missing.
+On `list-igch0076`, grounding-only has Kyparissia text in three admitted
+passages and scores 0.667, exceeding bare's 0.333; full has none and scores
+0.0. The full-arm failure cannot be assigned wholly to the walk; atom-enum is
+a candidate, not a proven cause. `w2_displacement.py` now checks exact admitted
+quotes and content overlap in all three arms. The claim that walk chunks "win
+by construction because they are injected, not scored" is false: they pass
+through `reweight_and_sort`, dedupe and `cap_and_reserve`
+(`runtime/retrieval_pipeline.rs:1035-1080`). The quoted evidence is absent;
+the step that loses it needs per-step content-identity tracing before an
+admission policy is changed.
+
+**Instrument started (not a study arm):** `retrieval.pipeline=debug` now emits
+ordered SHA-256 content fingerprints before/after each step, keyed by question
+hash. Its helper's same-title/different-passage fixture passed, and a
+`chaos-secret-agent` one-question retrieval-only pilot emitted all 22 steps.
+The pilot failed an existing ledger gate: `atlas_grounding` reported eight
+requests considered and twelve chunks added, a legitimate one-to-many section
+fetch that the generic pipeline audit wrongly treated as one-to-one. The
+pipeline ledger now normalises to chunk-equivalent outcomes while the raw
+request count stays in the fetch event and walk echo; a fixture pins 8→12,
+including the zero-yield failure and post-fetch duplicate cases. This is an
+instrument repair, not an answer-quality result.
+
+**Replay, same day.** The rebuilt debug CLI ran the one-question
+`chaos-secret-agent` pilot retrieval-only to completion: 22/22 step traces
+landed, and the previously failing 8-request/12-chunk atlas step now reports
+12 chunk-equivalent outcomes; zero ledger violations, exit 0. A separate
+single-question ANS diagnostic (the already-read Agrinion lookup, no judge,
+not a study board) ran on the CURRENT binary: retrieval-only bare and
+grounding-only both retained its answer phrase; grounded synth with atom-enum
+off AND on both admitted “summer of 1962” and answered it. This does not
+erase study 1's four K0 losses: the binary, model availability, and runtime
+path are not frozen to that board, and a single diagnostic is not bar 1.
+It does rule out using that historical lookup as proof that a new walk-reserve
+policy is needed **today**. First compare the remaining current failures and
+find the first losing step; do not tune against the old bank.
+
+One more current grounded synth diagnostic, Histiaea oxidation (atom-enum
+off), also admitted its answer phrase and correctly cited sea water. These
+two one-off successes are neither a K0 board nor evidence of the bar passing;
+they do keep the lookup reservation proposal unearned on this binary.
+
+`ontology-proof/ans/attribution/trace_first_loss.py` now joins the full
+LanceDB passage body (not a title/snippet) to the 22-step debug trace. On the
+installed ANS corpus the Agrinion quote resolves uniquely to row 634,
+fingerprint `48ef52181477`; a live grounded retrieval trace retains that hash
+through the final step. A planted cap-stage drop is detected by the same
+analyser. The historical stage cannot be proven from study-1 artifacts alone:
+the manifest says `dirty: true`, saves no binary hash or step trace, and its
+`chunks_listing_sha256` hashes names and sizes rather than contents. The
+installed recipe/ontology hashes and chunk listing DO match; these facts do
+not reconstruct the missing executable or historical step decisions.
+
+**Current first-loss proof (single-question diagnostic, no study board).**
+`lookup-demanhur-first-notice` still declines on today's binary with atlas
+grounding, both atom-enum ON (two runs) and OFF (one run). The unique answer
+passage is ANS Lance row 983, content fingerprint `faaec2a84712`. In all
+three traces it is in the 20-chunk pool after `scope_audit`, then absent from
+the 7-chunk pool after **`cohesion_expansion`** and from every later checkpoint
+through `prompt_admission`. The route chooses `DominantSource`, reason
+`fast_single_source`; `expand_from_dominant_source` replaces the pool with the
+dominant-title neighbourhood and bounded other-source grounding. This proves
+the first permanent loss is that post-pipeline replacement, not the atlas
+fetch, merge, formatter, or gate. The proof is for the CURRENT binary only;
+study 1's dirty historical executable cannot be reconstructed from its saved
+manifest. No retrieval behavior was tuned against this bank.
+
+**Why that replacement lost it.** A grounding-only replay recorded row 983 at
+rank 4 (zero-based index 3) in the 20-chunk pre-expansion pool. The top chunk's
+exact `(corpus, title)` was `ei7-ans::Newell NNM 19 (1923) › NOTES`; it appeared
+twice, meeting `EVIDENCE_MIN_TOP_SOURCE_REPEAT = 2`, although the pool held
+**16 distinct sources**. `decide_expansion_strategy` therefore chose
+`DominantSource` for this FastFocused lookup. The expander kept five chunks
+from the winning `NOTES` title (including neighbours) and only
+`EXPANSION_GROUNDING_CHUNKS = 2` other-title chunks; 16 candidates hit its
+`dropped_noise` counter. The answering passage has the *different section*
+title `THE DEMANHUR HOARD` and was not among the two retained
+non-dominant chunks.
+This is the structural mismatch: two hits under one section title are being
+treated as sufficient evidence to collapse a sixteen-source pool to that
+section, while a relevant passage from another section of the same work is
+ treated as expendable "other-source grounding." The threshold, grouping and
+ bounded replacement are shared product rules, not ANS-specific declarations.
+ `source_doc_id` does not supply a ready-made work key here: both the gold row
+ and the `NOTES` rows point to the same `ans-subset.md` containing all nine
+ works. Changing the grouping key to that field would collapse them all into
+ one source, not recover the book/section distinction.
+
+**Fix pre-registered before its verification runs (2026-09-23).** The change:
+dominance becomes a SHARE — `is_dominant_source_pool` requires the top
+`(corpus, title)` to hold `repeat >= 2` AND `repeat * 5 >= count`; one
+predicate, used by `decide_expansion_strategy` and the three display sites
+(narration, next-step offers ×2) that previously re-derived `repeat >= 2`.
+The 1/5 floor is forced by contracts that must survive: the pinned expansion
+test's 3/10 (30%) depth case, the measured-good 7/20 (35%) wiki deepening,
+and the chaos single-book pilot (repeat = pool). The moved band is pools with
+`2 <= repeat < count/5` — measured instance: the Demanhur 2/20. Predictions,
+checked against a pre-fix baseline already captured (`ei7-expansion-
+baseline.json`: all three ANS lookups DominantSource; chaos pilot 20×
+DominantSource + 4 breadth-arcs NoExpansion):
+- unit: the seven pinned expansion tests pass unchanged; 2/20-with-16-sources
+  and 3/20 become NoExpansion; 4/20 stays DominantSource;
+- chaos pilot (fixture corpus): every question's strategy byte-identical;
+- Agrinion and Histiaea: may flip DominantSource→NoExpansion (they sit in the
+  moved band); the gold passage must survive to `prompt_admission` either way
+  and the synth answer must not regress;
+- Demanhur: flips to NoExpansion, the passage survives to `prompt_admission`,
+  and the synth answer names Khayat instead of declining.
+The ANS banks are the defect's named failing inputs watched through the fix
+(principle 5), not a tuning surface: the threshold was fixed by the pinned
+contracts before any post-fix run was read.
+
+**Results, all four predictions held (2026-09-23).** Unit: 9/9 expansion
+tests (7 pinned + 2 new). Chaos pilot: 0 strategy diffs across 24 questions.
+Agrinion and Histiaea flipped DominantSource→NoExpansion (retrieved 12→20 and
+8→20), gold passage admitted, gate `citation_grounded`, answers unchanged
+("summer of 1962", "the action of sea water"). Demanhur flipped 7→20, gate
+`citation_grounded`, answer "Mr. Azeez Khayat" citing THE DEMANHUR HOARD —
+the decline is gone. The fix is one share predicate (`repeat >= 2` AND
+`repeat*5 >= count`), not a tuned constant: the moved band is
+`2 <= repeat < count/5`, and every corpus outside it behaves identically.
+These remain single-question diagnostics, not bar 1.
