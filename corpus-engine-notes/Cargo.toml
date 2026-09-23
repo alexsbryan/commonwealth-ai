@@ -22,6 +22,9 @@ description = "NoteStore + project_docs index + notes ↔ alignment-corpus sync.
 # longer depends on the NoteStore.
 
 [dependencies]
+# The read-port leaf — the note-wire vocabulary (fp-3) lives in its `types`
+# module beside `types::EmbedFn`; this crate re-exports it at historical paths.
+corpus-index = { workspace = true }
 # Shared corpus-engine-subtree leaf: canonical wall-clock helpers (time module).
 corpus-engine-yield = { workspace = true }
 # The middleware seam (`Middleware`, `PipelineContext`, `MiddlewareSession`,

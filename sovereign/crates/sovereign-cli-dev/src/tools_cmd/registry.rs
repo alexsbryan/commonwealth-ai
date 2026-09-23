@@ -527,17 +527,17 @@ async fn build_daemon_notes_embed_fn_or_none(
                 .send()
                 .await
                 .map_err(|e| {
-                    corpus_engine_notes::Error::Io(std::io::Error::other(format!(
+                    corpus_index::Error::Io(std::io::Error::other(format!(
                         "daemon notes embed: {e}"
                     )))
                 })?;
             if !resp.status().is_success() {
-                return Err(corpus_engine_notes::Error::Io(std::io::Error::other(
+                return Err(corpus_index::Error::Io(std::io::Error::other(
                     format!("daemon notes embed HTTP {}", resp.status()),
                 )));
             }
             let body: serde_json::Value = resp.json().await.map_err(|e| {
-                corpus_engine_notes::Error::Io(std::io::Error::other(format!(
+                corpus_index::Error::Io(std::io::Error::other(format!(
                     "daemon notes embed parse: {e}"
                 )))
             })?;
@@ -551,7 +551,7 @@ async fn build_daemon_notes_embed_fn_or_none(
                         .collect::<Vec<f32>>()
                 })
                 .ok_or_else(|| {
-                    corpus_engine_notes::Error::Io(std::io::Error::other(
+                    corpus_index::Error::Io(std::io::Error::other(
                         "daemon notes embed: no embedding in response",
                     ))
                 })

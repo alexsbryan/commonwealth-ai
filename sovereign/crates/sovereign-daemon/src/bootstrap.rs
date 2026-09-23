@@ -151,12 +151,12 @@ pub fn build_corpus_engine(
         // `corpus-engine-notes` stays dep-free of `corpus-engine`
         // per `ARCH §8.3` (one-way edge).
         let provider_for_notes = Arc::clone(&provider);
-        let notes_embed: corpus_engine_notes::EmbedFn = Arc::new(move |text: &str| {
+        let notes_embed: corpus_index::types::EmbedFn = Arc::new(move |text: &str| {
             let p = Arc::clone(&provider_for_notes);
             let text = text.to_string();
             Box::pin(async move {
                 p.embed(&text).await.map_err(|e| {
-                    corpus_engine_notes::Error::Io(std::io::Error::other(format!(
+                    corpus_index::Error::Io(std::io::Error::other(format!(
                         "notes embed: {e}"
                     )))
                 })
@@ -178,7 +178,7 @@ pub fn build_corpus_engine(
         // useful signal for read_notes_related).
         if let Some(ref gliner) = gliner_raw {
             let gliner_clone = Arc::clone(gliner);
-            let notes_gliner: corpus_engine_notes::GlinerFn = Arc::new(move |text: &str| {
+            let notes_gliner: corpus_index::types::GlinerFn = Arc::new(move |text: &str| {
                 let g = Arc::clone(&gliner_clone);
                 let text = text.to_string();
                 Box::pin(async move {
@@ -189,7 +189,7 @@ pub fn build_corpus_engine(
                     tokio::task::spawn_blocking(move || g.extract_mentions(&text))
                         .await
                         .map_err(|e| {
-                            corpus_engine_notes::Error::Io(std::io::Error::other(format!(
+                            corpus_index::Error::Io(std::io::Error::other(format!(
                                 "notes gliner: join error {e}"
                             )))
                         })?
@@ -200,7 +200,7 @@ pub fn build_corpus_engine(
                                 .collect::<Vec<_>>()
                         })
                         .map_err(|e| {
-                            corpus_engine_notes::Error::Io(std::io::Error::other(format!(
+                            corpus_index::Error::Io(std::io::Error::other(format!(
                                 "notes gliner: {e}"
                             )))
                         })
@@ -1366,7 +1366,7 @@ pub fn wire_note_propagation_sink(
     // the mesh's own `GOSSIP_EXCLUDED_APP_IDS`).
     let mesh_for_sink = Arc::clone(&peer_store);
     let self_id_for_sink = self_node_id;
-    let sink: corpus_engine_notes::PropagationSinkFn =
+    let sink: corpus_index::types::PropagationSinkFn =
         Arc::new(move |ev: &NotePropagationEvent| {
             // Everything this sink sees rides the public `notes`
             // namespace, tombstones included, so peers converge to the

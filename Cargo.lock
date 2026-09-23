@@ -2411,6 +2411,7 @@ dependencies = [
  "chrono",
  "clap",
  "corpus-engine-yield",
+ "corpus-index",
  "oicp-types",
  "reqwest 0.12.28",
  "rusqlite",
