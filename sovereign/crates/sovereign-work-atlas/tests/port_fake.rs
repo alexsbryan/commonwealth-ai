@@ -18,7 +18,7 @@ use kernel_types::NodeId;
 use sovereign_contracts::peer::{ReplicatedKv, SoloReplicatedKv};
 use uuid::Uuid;
 
-use sovereign_core::time::unix_now_u64;
+use sovereign_time::unix_now_u64;
 use sovereign_work_atlas::model::{
     AgentKind, ClaimRecord, ObservationRecord, ObservationSource, Privacy, SessionRecord, SymbolRef,
 };

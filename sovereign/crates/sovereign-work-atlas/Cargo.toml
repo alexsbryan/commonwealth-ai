@@ -16,7 +16,7 @@ sovereign-contracts = { workspace = true }
 kernel-types = { workspace = true }
 
 # Tool trait, ToolContext, StepOutput. The three MCP tools live in this crate.
-sovereign-core = { workspace = true }
+sovereign-time = { workspace = true }
 
 # AtlasObserver implements `BackgroundWatcher` (+ reads `WatcherStatus`)
 # so it can register with the watcher coordinator. That trait moved to

@@ -506,7 +506,7 @@ fn write_record<T: Serialize>(
     Ok(())
 }
 
-use sovereign_core::time::unix_now_u64 as now_secs;
+use sovereign_time::unix_now_u64 as now_secs;
 
 fn short_hash(s: &str) -> &str {
     &s[..12.min(s.len())]

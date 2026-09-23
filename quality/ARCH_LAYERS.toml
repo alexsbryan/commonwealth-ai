@@ -1284,6 +1284,9 @@ doc = "docs/FIVE_PROGRAMS.md"
 crates = [
     "sovereign-code",
     "sovereign-cli-dev",
+    # Agents' claims about their own work — §12 decision 5 places it here
+    # (fp-41): the daemon dials the three MCP tools, cli-dev owns them.
+    "sovereign-work-atlas",
     "corpus-engine-notes",
     "corpus-engine-watchers",
     "corpus-engine-archaeology",

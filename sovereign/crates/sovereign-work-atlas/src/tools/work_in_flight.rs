@@ -9,12 +9,12 @@ use std::sync::Arc;
 
 use serde_json::{json, Value};
 
-use sovereign_core::error::{Error, Result};
-use sovereign_core::types::{StepOutput, ToolContext};
+use sovereign_contracts::error::{Error, Result};
+use sovereign_contracts::types::{StepOutput, ToolContext};
 
 use crate::confidence::{observation_grade, ConfidenceGrade};
 use crate::store::{ScopeMatch, WorkAtlasStore};
-use sovereign_core::tool_manifest::DeclaredTool;
+use sovereign_contracts::tool_manifest::DeclaredTool;
 
 #[derive(Debug)]
 pub struct WorkInFlightTool {
@@ -175,7 +175,7 @@ impl WorkInFlightTool {
     pub fn declared(self) -> DeclaredTool {
         let state = Arc::new(self);
         let run_state = Arc::clone(&state);
-        sovereign_core::tool_manifest::declared("work_in_flight", move |params, ctx| {
+        sovereign_contracts::tool_manifest::declared("work_in_flight", move |params, ctx| {
             let state = Arc::clone(&run_state);
             async move { state.run(&params, &ctx).await }
         })
@@ -315,7 +315,7 @@ impl WorkInFlightTool {
     }
 }
 
-use sovereign_core::time::unix_now_u64 as now_secs;
+use sovereign_time::unix_now_u64 as now_secs;
 
 impl sovereign_contracts::peer_work::PeerWork for WorkAtlasStore {
     fn in_flight(

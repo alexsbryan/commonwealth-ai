@@ -11,14 +11,14 @@ use std::sync::Arc;
 use serde_json::json;
 use uuid::Uuid;
 
-use sovereign_core::error::{Error, Result};
-use sovereign_core::types::{StepOutput, ToolContext};
+use sovereign_contracts::error::{Error, Result};
+use sovereign_contracts::types::{StepOutput, ToolContext};
 
 use crate::config::WorkAtlasConfig;
 use crate::model::{AgentKind, ClaimRecord, Privacy, SymbolRef};
 use crate::store::{SessionIdentity, WorkAtlasError, WorkAtlasStore};
 use crate::tools::broadcast::ClaimBroadcaster;
-use sovereign_core::tool_manifest::DeclaredTool;
+use sovereign_contracts::tool_manifest::DeclaredTool;
 
 #[derive(Debug)]
 pub struct DeclareScopeTool {
@@ -60,7 +60,7 @@ impl DeclareScopeTool {
     /// `tool-manifests/`. What is left here is the part that runs.
     pub fn declared(self) -> DeclaredTool {
         let state = Arc::new(self);
-        sovereign_core::tool_manifest::declared("declare_scope", move |params, ctx| {
+        sovereign_contracts::tool_manifest::declared("declare_scope", move |params, ctx| {
             let state = Arc::clone(&state);
             async move { state.run(&params, &ctx).await }
         })
@@ -199,4 +199,4 @@ fn map_err(e: WorkAtlasError) -> Error {
     }
 }
 
-use sovereign_core::time::unix_now_u64 as now_secs;
+use sovereign_time::unix_now_u64 as now_secs;
