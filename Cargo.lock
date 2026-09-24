@@ -12728,7 +12728,6 @@ dependencies = [
  "anyhow",
  "chrono",
  "clap",
- "corpus-engine",
  "hex",
  "rand 0.9.4",
  "reqwest 0.12.28",
