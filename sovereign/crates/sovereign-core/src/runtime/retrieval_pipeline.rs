@@ -2317,11 +2317,11 @@ mod tests {
     /// how many left, because a silent drop is as unreadable as no drop.
     #[test]
     fn a_superseded_rules_chunks_leave_the_pool_and_the_note_says_how_many() {
-        use understanding_vocab::atoms::AtomId;
-        use understanding_vocab::atoms::ChunkRef;
         use corpus_engine_atlas_reader::governance::RuleStatus;
         use corpus_engine_atlas_reader::governance_view::{GovernanceView, RuleView};
         use oplog::OpId;
+        use understanding_vocab::atoms::AtomId;
+        use understanding_vocab::atoms::ChunkRef;
 
         fn rule(id: usize, section: &str, status: RuleStatus) -> RuleView {
             RuleView {

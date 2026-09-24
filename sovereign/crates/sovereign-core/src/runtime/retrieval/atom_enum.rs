@@ -1394,7 +1394,10 @@ fn extract_first_json_object(s: &str) -> Option<String> {
 #[cfg(test)]
 mod enumerable_type_tests {
     use super::{enumerable_types, GENERIC_ENTITY_TYPES, MAX_ENUMERABLE_TYPES};
-    use understanding_vocab::ontology::{decl::{OntologyTypeDecl, TypeKind}, OntologyPolicies};
+    use understanding_vocab::ontology::{
+        decl::{OntologyTypeDecl, TypeKind},
+        OntologyPolicies,
+    };
 
     fn policies(types: &[(&str, TypeKind)]) -> OntologyPolicies {
         let mut p = OntologyPolicies::default();

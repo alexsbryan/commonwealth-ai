@@ -143,7 +143,8 @@ impl Runtime {
         // audit line has to be able to tell "the atlas served it" from "the
         // un-migrated v1 file served it" — same digest, different fact
         // (ARCH §18.3).
-        let mut sources: Vec<corpus_engine_atlas_reader::field_model::FieldModelSource> = Vec::new();
+        let mut sources: Vec<corpus_engine_atlas_reader::field_model::FieldModelSource> =
+            Vec::new();
         for corpus_id in &corpora {
             let index = match engine.open_index_for_corpus(corpus_id).await {
                 Ok(idx) => idx,

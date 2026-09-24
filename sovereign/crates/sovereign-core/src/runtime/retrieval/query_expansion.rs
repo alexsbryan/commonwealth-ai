@@ -585,18 +585,21 @@ pub(crate) async fn ppr_propose_and_gate(
             // Frontier pulls are independent point-queries; fetch the
             // uncached ones concurrently (same rationale as the seed
             // pulls above).
-            let fetched: Vec<(String, f64, Vec<corpus_engine_atlas_reader::wikipedia_graph::Neighbor>)> =
-                futures::future::join_all(frontier.into_iter().map(|(title, m)| {
-                    let cached = seed_pulls.remove(&title);
-                    async move {
-                        let nbrs = match cached {
-                            Some(pulled) => pulled,
-                            None => graph.neighbors(&title, PPR_NEIGHBORS_PER_NODE).await,
-                        };
-                        (title, m, nbrs)
-                    }
-                }))
-                .await;
+            let fetched: Vec<(
+                String,
+                f64,
+                Vec<corpus_engine_atlas_reader::wikipedia_graph::Neighbor>,
+            )> = futures::future::join_all(frontier.into_iter().map(|(title, m)| {
+                let cached = seed_pulls.remove(&title);
+                async move {
+                    let nbrs = match cached {
+                        Some(pulled) => pulled,
+                        None => graph.neighbors(&title, PPR_NEIGHBORS_PER_NODE).await,
+                    };
+                    (title, m, nbrs)
+                }
+            }))
+            .await;
             for (_title, m, nbrs) in fetched {
                 let push: Vec<_> = nbrs.into_iter().take(PPR_NEIGHBORS_PER_NODE).collect();
                 let total_w: f64 = push.iter().map(|n| n.occurrence_count.max(1) as f64).sum();
