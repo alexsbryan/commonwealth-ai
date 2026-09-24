@@ -18,6 +18,8 @@
 //! need process isolation, or a `.config/nextest.toml` override keys on
 //! their binary name. Do not fold those in.
 
+#[path = "main/atlas_step_reachability.rs"]
+mod atlas_step_reachability;
 #[path = "main/corpus_store_readiness.rs"]
 mod corpus_store_readiness;
 #[path = "main/delegate_browser_worker.rs"]
@@ -48,5 +50,7 @@ mod tavily_real_e2e;
 mod tier2_resume_gate;
 #[path = "main/tool_tests.rs"]
 mod tool_tests;
+#[path = "main/turn_foreground_lease.rs"]
+mod turn_foreground_lease;
 #[path = "main/watched_folder_e2e.rs"]
 mod watched_folder_e2e;

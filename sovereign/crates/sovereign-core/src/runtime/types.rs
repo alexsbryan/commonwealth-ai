@@ -24,7 +24,8 @@ use super::{EvidenceShape, SynthesisRoute};
 /// response paths. Produced by [`super::Runtime::prepare_knowledge_context`] so
 /// the two paths cannot diverge in how they search, build prompts, or report
 /// provenance.
-pub(crate) struct KnowledgeContext {
+#[doc(hidden)]
+pub struct KnowledgeContext {
     pub(crate) chunks: Vec<corpus_index::types::ScoredChunk>,
     /// Corpora this turn would have searched and could not. Twin of the
     /// field on [`KnowledgeQueryPlan`] — the DeepQuery path carries it here.
@@ -33,7 +34,8 @@ pub(crate) struct KnowledgeContext {
     /// [`KnowledgeQueryPlan`]: `deep_pipeline` runs the same `atlas_grounding`
     /// step, and until 2026-09-21 this path dropped what it produced, so a
     /// walked DeepQuery turn persisted no `atlas_walk` key at all.
-    pub(crate) atlas_walk: Option<AtlasWalkEcho>,
+    #[doc(hidden)]
+    pub atlas_walk: Option<AtlasWalkEcho>,
     pub(crate) prompt: String,
     /// The call-graph block appended to `prompt` for code-intel hits, kept
     /// separately so the DeepQuery grounding gate can seal it into the turn's

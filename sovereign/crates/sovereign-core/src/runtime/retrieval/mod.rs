@@ -110,7 +110,8 @@ impl Runtime {
     /// Search all knowledge sources, build the prompt with retrieved context,
     /// and assemble provenance metadata. Shared between the streaming and
     /// non-streaming response paths so they cannot diverge.
-    pub(crate) async fn prepare_knowledge_context(
+    #[doc(hidden)]
+    pub async fn prepare_knowledge_context(
         &self,
         message: &str,
         context: &ConversationContext,

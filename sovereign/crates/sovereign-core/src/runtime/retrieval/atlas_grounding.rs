@@ -116,7 +116,8 @@ impl Runtime {
     /// It is APPENDED to, never cleared, so a caller that grounds twice in a
     /// turn accumulates rather than losing the first walk's summaries.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) async fn apply_atlas_grounding(
+    #[doc(hidden)]
+    pub async fn apply_atlas_grounding(
         &self,
         query_text: &str,
         embedding: &[f32],

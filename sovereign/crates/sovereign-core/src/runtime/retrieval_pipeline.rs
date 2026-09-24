@@ -2823,11 +2823,10 @@ mod tests {
     }
 }
 
-/// The three tests that answer "does the atlas step reach a wiki-class
-/// store?" — the step list here, and the step's returned `StepLedger` over
-/// a real wiki fixture. A sibling file because they need a `Runtime` and
-/// sovereign-tools' `AtlasContextManager`, and this file is already past
-/// the size ratchet (ARCH §3.1).
+/// The step-list half of "does the atlas step reach a wiki-class store?";
+/// the step-body half is in `sovereign-tools/tests/main/atlas_step_reachability.rs`.
+/// A sibling file because this file is already past the size ratchet
+/// (ARCH §3.1).
 #[cfg(test)]
 #[path = "retrieval_pipeline/atlas_step_reachability_tests.rs"]
 mod atlas_step_reachability_tests;

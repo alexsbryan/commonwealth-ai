@@ -478,6 +478,10 @@ pub(super) const REGISTRY: &[(&str, Class, usize)] = &[
     ("sovereign/crates/sovereign-cli-mesh/src/remote_gguf.rs", Class::InboundOnly, 2),
     ("sovereign/crates/sovereign-cli-llm/src/corpus_watch_cmd.rs", Class::LocalDaemon, 2),
     ("sovereign/crates/sovereign-cli-llm/src/chat_cmd/bootstrap.rs", Class::LocalDaemon, 2),
+    // fp-26 (7e21df175): `svrn chat` asks the local daemon's
+    // `GET /internal/guest/route` for the guest link's base; the daemon owns
+    // the tunnel, so this client never leaves the machine.
+    ("sovereign/crates/sovereign-cli-llm/src/chat_cmd/config.rs", Class::LocalDaemon, 1),
     // 1 -> 2 (2026-09-09, sv-surface rung 5): `workflow run` and `corpus
     // ingest`'s notebook path became job-submission clients of the daemon's
     // /internal/workflows/* — run_assembled's poll client joins the
