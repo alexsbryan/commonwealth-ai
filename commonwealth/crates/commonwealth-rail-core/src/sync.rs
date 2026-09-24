@@ -66,23 +66,18 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use oplog::{Op, OpId};
 
-use crate::{RailAct, RingVerifier, SignedOp};
+use crate::{Digest, RailAct, RingVerifier, SignedOp, View};
 
-/// Per-actor contiguous high-water marks. `{actor_pubkey_hex → n}`.
+/// Per-actor contiguous high-water marks, carried inside [`Digest`]'s
+/// [`View`] entries. `mark` means **"I need nothing at or below this"**,
+/// which is a strict generalisation of the old reading ("I hold every op
+/// `0..=n`"), identical whenever nothing is sealed.
 ///
-/// `n` means **"I need nothing at or below this"** — which is a strict
-/// generalisation of the old reading ("I hold every op `0..=n`"), identical
-/// whenever nothing is sealed. That is why the sealed floor did NOT become a
-/// second field here: a peer's only use for this map is to answer *which ops
-/// do I send*, and `(n, ∞)` is that answer either way.
-///
-/// It matters because this crosses the wire every sixty seconds between peers
-/// that may be on different builds (`sovereign-mesh/src/ring_sync.rs`), and
-/// disk and wire are different compatibility clocks. A digest written by a
-/// build that knows about seals is byte-identical to one written by a build
-/// that does not, for the same holding — so neither side can fail to read the
-/// other, and there is nothing to default and no version to tag.
-pub type Digest = BTreeMap<String, u64>;
+/// It matters because this crosses the wire every sixty seconds between
+/// peers that may be on different builds (`sovereign-mesh/src/ring_sync.rs`),
+/// and disk and wire are different compatibility clocks — which is why the
+/// envelope is versioned and an unversioned marks-only digest is refused by
+/// name (see [`Digest`]'s own docs).
 
 /// Where each actor's history still starts. `{actor_pubkey_hex → seq}`.
 ///
@@ -177,16 +172,19 @@ pub fn digest(ops: &[Op<SignedOp>], namespace: &str, verifier: &dyn RingVerifier
             // none" for the purpose of asking. A sealed actor cannot reach
             // this: the floor IS the seal's own seq, so holding the seal is
             // holding the floor.
-            let mut n = floors.get(actor).copied().unwrap_or(0);
+            let from = floors.get(actor).copied().unwrap_or(0);
+            let mut n = from;
             if !seqs.contains(&n) {
                 return None;
             }
             while seqs.contains(&(n + 1)) {
                 n += 1;
             }
-            Some((actor.to_string(), n))
+            let view = View::of(actor, from, n, authentic.iter().copied());
+            Some((actor.to_string(), view))
         })
-        .collect()
+        .collect::<BTreeMap<_, _>>()
+        .into()
 }
 
 /// Every op this node holds that `theirs` says the peer is missing.
@@ -226,20 +224,34 @@ pub const NO_BUDGET: usize = usize::MAX;
 ///
 /// # Why repeating this terminates (the sync loop's whole safety argument)
 ///
-/// **The first op of a non-empty chunk is always one the peer does not
-/// hold.** A mark of `n` for an actor means their run is contiguous THROUGH
-/// `n`, so they do not hold `n + 1`; the selection filters on `seq > n` and
-/// orders by `(actor, seq)`, so the lowest element it can yield is exactly
-/// that op. A peer therefore ingests at least one new op per non-empty chunk,
-/// both holdings are finite, and the caller's loop
-/// (`sovereign-mesh/src/ring_sync.rs::exchange`) cannot spin against a peer
-/// that is merely behind.
+/// Per call — one exchange carries both directions — every non-empty
+/// selection delivers at least one op at least one side did not hold, or the
+/// call is empty and the sides fold equal.
+///
+/// **`seq > mark` keeps the original property**: a mark of `n` means the run
+/// is contiguous THROUGH `n`, so `n + 1` is not held; the selection orders by
+/// `(actor, seq)`, so the first such op is exactly one the peer lacks.
+///
+/// **A mismatching window travels as one atomic per-actor unit**, and that is
+/// the rest of the argument. A fold mismatch at the same `(from, mark)` means
+/// the held sets differ in the window, so the two directions' units cannot
+/// both be subsets of the other side's holdings — the all-duplicates
+/// direction is paid for by the reverse direction's progress in the same
+/// call. Atomicity is what makes that unconditional under a budget: a split
+/// window could ship the same duplicate prefix forever with the difference
+/// past the cut, so a unit that does not fit is deferred whole (`more`)
+/// unless it is alone in the chunk — then it goes whole, exactly as a single
+/// oversized op does below, and the receiver's body limit refuses it by name
+/// rather than the sender quietly stopping. Holdings only grow (ingest only
+/// adds) and are finite, so the caller's loop
+/// (`sovereign-mesh/src/ring_sync.rs::exchange`) stops.
 ///
 /// # The budget is in WIRE bytes, and one op is never split
 ///
 /// Cost is `serde_json` length plus the array's separating comma — the same
 /// serialisation the receiver's limit compares against, because any other
 /// number would be a second implementation of "how big is this" (ARCH §10.6).
+/// A window unit's cost is the sum over its ops.
 ///
 /// An op that alone exceeds the budget is still sent. A chunk of none would
 /// be the spin this exists to prevent, and the honest failure for an op too
@@ -250,44 +262,97 @@ pub fn ops_missing_from_within(
     theirs: &Digest,
     budget_bytes: usize,
 ) -> (Vec<Op<SignedOp>>, bool) {
-    let mut wanted: Vec<&Op<SignedOp>> = ops
-        .iter()
-        .filter(|op| match theirs.get(&op.actor) {
-            Some(high_water) => op.kind.seq > *high_water,
-            None => true,
-        })
-        .collect();
-    wanted.sort_by(|a, b| (&a.actor, a.kind.seq).cmp(&(&b.actor, b.kind.seq)));
+    let cost_of = |op: &Op<SignedOp>, budget_bytes: usize| match serde_json::to_vec(op) {
+        // `+ 1` for the comma the enclosing array puts between elements.
+        Ok(bytes) => bytes.len() + 1,
+        // Unreachable for an op that came off a wire or out of a journal, but
+        // a price that cannot be computed must not read as free: charge the
+        // whole budget so such an op is only ever sent alone, and let the
+        // receiver — not a silent drop — judge it.
+        Err(_) => budget_bytes,
+    };
 
-    if budget_bytes == NO_BUDGET {
-        return (wanted.into_iter().cloned().collect(), false);
+    // Actors in order, and ops within an actor by `(seq, id)` so the wire
+    // payload is deterministic — two nodes with the same holdings produce
+    // byte-identical bodies, which makes a diff of two captures mean
+    // something (and orders a fork's two branches the same on every node).
+    let mut by_actor: BTreeMap<&str, Vec<&Op<SignedOp>>> = BTreeMap::new();
+    for op in ops {
+        by_actor.entry(op.actor.as_str()).or_default().push(op);
+    }
+    for held in by_actor.values_mut() {
+        held.sort_by_key(|op| (op.kind.seq, op.id.to_string()));
     }
 
     let mut out: Vec<Op<SignedOp>> = Vec::new();
     let mut spent: usize = 0;
-    for op in wanted {
-        let cost = match serde_json::to_vec(op) {
-            // `+ 1` for the comma the enclosing array puts between elements.
-            Ok(bytes) => bytes.len() + 1,
-            // Unreachable for an op that came off a wire or out of a journal,
-            // but a price that cannot be computed must not read as free:
-            // charge the whole budget so such an op is only ever sent alone,
-            // and let the receiver — not a silent drop — judge it.
-            Err(_) => budget_bytes,
+    let mut more = false;
+    for (actor, held) in &by_actor {
+        let Some(view) = theirs.get(*actor) else {
+            // Absent actor: absence asks for everything (module docs) — the
+            // first non-fitting op stops the walk and names `more`.
+            for op in held {
+                let cost = cost_of(op, budget_bytes);
+                if budget_bytes != NO_BUDGET
+                    && !out.is_empty()
+                    && spent.saturating_add(cost) > budget_bytes
+                {
+                    return (out, true);
+                }
+                spent = spent.saturating_add(cost);
+                out.push((*op).clone());
+            }
+            continue;
         };
-        if !out.is_empty() && spent.saturating_add(cost) > budget_bytes {
-            return (out, true);
+        let window: Vec<&Op<SignedOp>> = held
+            .iter()
+            .copied()
+            .filter(|op| op.kind.seq >= view.from && op.kind.seq <= view.mark)
+            .collect();
+        let over: Vec<&Op<SignedOp>> = held
+            .iter()
+            .copied()
+            .filter(|op| op.kind.seq > view.mark)
+            .collect();
+        let mismatch =
+            View::of(*actor, view.from, view.mark, window.iter().copied()).head != view.head;
+        if !mismatch {
+            for op in over {
+                let cost = cost_of(op, budget_bytes);
+                if budget_bytes != NO_BUDGET
+                    && !out.is_empty()
+                    && spent.saturating_add(cost) > budget_bytes
+                {
+                    return (out, true);
+                }
+                spent = spent.saturating_add(cost);
+                out.push((*op).clone());
+            }
+            continue;
+        }
+        // The mismatching window is ONE per-actor unit (the termination
+        // argument above): what is in the claimed run first, then what is
+        // above the mark — all of it in this call, or none of it.
+        let unit: Vec<&Op<SignedOp>> = window.into_iter().chain(over).collect();
+        if unit.is_empty() {
+            continue;
+        }
+        let cost: usize = unit.iter().map(|op| cost_of(op, budget_bytes)).sum();
+        if budget_bytes != NO_BUDGET && !out.is_empty() && spent.saturating_add(cost) > budget_bytes
+        {
+            more = true;
+            continue;
         }
         spent = spent.saturating_add(cost);
-        out.push(op.clone());
+        out.extend(unit.into_iter().map(|op| (*op).clone()));
     }
-    (out, false)
+    (out, more)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tests_support::{key, record, signed, NS};
+    use crate::tests_support::{key, marks, record, signed, NS};
     use crate::{Ed25519Verifier, RailAct};
 
     fn actor(seed: u8) -> String {
@@ -306,7 +371,7 @@ mod tests {
     #[test]
     fn a_contiguous_run_reports_its_last_seq() {
         let ops = vec![op(1, 0, 10), op(1, 1, 11), op(1, 2, 12)];
-        assert_eq!(digest_of(&ops), Digest::from([(actor(1), 2)]));
+        assert_eq!(marks(&digest_of(&ops)), BTreeMap::from([(actor(1), 2)]));
     }
 
     /// **The reason the mark is contiguous.** A node holding 0 and 2 must not
@@ -315,7 +380,7 @@ mod tests {
     #[test]
     fn a_hole_lowers_the_mark_so_the_peer_re_sends_across_it() {
         let held = vec![op(1, 0, 10), op(1, 2, 12)];
-        assert_eq!(digest_of(&held), Digest::from([(actor(1), 0)]));
+        assert_eq!(marks(&digest_of(&held)), BTreeMap::from([(actor(1), 0)]));
 
         let peer_has = vec![op(1, 0, 10), op(1, 1, 11), op(1, 2, 12)];
         let sent = ops_missing_from(&peer_has, &digest_of(&held));
@@ -357,7 +422,7 @@ mod tests {
     fn a_node_republishes_ops_it_did_not_author() {
         let departed = op(3, 0, 10);
         let held = vec![op(1, 0, 11), departed.clone()];
-        let sent = ops_missing_from(&held, &Digest::from([(actor(1), 0)]));
+        let sent = ops_missing_from(&held, &digest_of(&[op(1, 0, 11)]));
         assert_eq!(sent, vec![departed], "someone else's op, still republished");
     }
 
@@ -389,8 +454,8 @@ mod tests {
 
         let compacted = vec![seal(1, 3, 103), op(1, 4, 104)];
         assert_eq!(
-            digest_of(&compacted),
-            Digest::from([(actor(1), 4)]),
+            marks(&digest_of(&compacted)),
+            BTreeMap::from([(actor(1), 4)]),
             "the mark counts from the sealed floor, not from zero"
         );
     }
@@ -458,8 +523,8 @@ mod tests {
             spoofed(9, 1, 5, 15, RailAct::Seal),
         ];
         assert_eq!(
-            digest_of(&held),
-            Digest::from([(actor(1), 2)]),
+            marks(&digest_of(&held)),
+            BTreeMap::from([(actor(1), 2)]),
             "the forged seal retires nothing and the mark stops at what is real"
         );
         let peer_has: Vec<_> = (0..=5).map(|s| op(1, s, 10 + s as i64)).collect();
@@ -484,7 +549,7 @@ mod tests {
             op(1, 2, 12),
             spoofed(9, 1, 3, 13, record("evil")),
         ];
-        assert_eq!(digest_of(&held), Digest::from([(actor(1), 2)]));
+        assert_eq!(marks(&digest_of(&held)), BTreeMap::from([(actor(1), 2)]));
     }
 
     /// **A voided seal retires nothing.** `Correct` voids without erasure and
@@ -509,8 +574,8 @@ mod tests {
             ),
         ];
         assert_eq!(
-            digest_of(&held),
-            Digest::from([(actor(1), 0)]),
+            marks(&digest_of(&held)),
+            BTreeMap::from([(actor(1), 0)]),
             "no floor, and the hole at seq 1 lowers the mark"
         );
     }

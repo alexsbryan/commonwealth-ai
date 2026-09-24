@@ -346,6 +346,115 @@ fn two_partitioned_nodes_converge_on_an_identical_admission() {
     assert_eq!(a.admit(&r, &Ed25519Verifier).unwrap(), fa);
 }
 
+/// **A fork must meet.** One actor signs two different acts at one seq — the
+/// equivocation — and each node holds only its own branch. Marks-only
+/// digests agree at the same mark and exchange NOTHING, so each node keeps a
+/// private history forever while both claim completeness. The content
+/// commitment is what makes the branches meet; admit then excludes both by
+/// name.
+#[test]
+fn two_forked_nodes_exchange_until_both_hold_the_fork() {
+    let (dir_a, dir_b) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+    let (a, b) = (open(dir_a.path()), open(dir_b.path()));
+    let r = ring();
+
+    let prefix = vec![
+        signed(&key(1), 100, 0, record("shared-0")),
+        signed(&key(1), 101, 1, record("shared-1")),
+    ];
+    let left = signed(&key(1), 102, 2, record("left"));
+    let right = signed(&key(1), 102, 2, record("right"));
+    let mut a_holds = prefix.clone();
+    a_holds.push(left);
+    let mut b_holds = prefix.clone();
+    b_holds.push(right);
+    a.ingest_all(&a_holds).unwrap();
+    b.ingest_all(&b_holds).unwrap();
+
+    for round in 0..5 {
+        let for_a = b
+            .ops_missing_from(&a.digest(&Ed25519Verifier).unwrap())
+            .unwrap();
+        let for_b = a
+            .ops_missing_from(&b.digest(&Ed25519Verifier).unwrap())
+            .unwrap();
+        if for_a.is_empty() && for_b.is_empty() {
+            break;
+        }
+        assert!(round < 4, "the exchange is not converging");
+        a.ingest_all(&for_a).unwrap();
+        b.ingest_all(&for_b).unwrap();
+    }
+    assert_eq!(a.read().unwrap().0.len(), 4, "A holds both branches");
+    assert_eq!(b.read().unwrap().0.len(), 4, "B holds both branches");
+
+    let (fa, fb) = (
+        a.admit(&r, &Ed25519Verifier).unwrap(),
+        b.admit(&r, &Ed25519Verifier).unwrap(),
+    );
+    assert!(
+        fa.gaps
+            .iter()
+            .any(|g| matches!(g, RailGap::SequenceFork { .. })),
+        "the fork is named, not silently merged: {:?}",
+        fa.gaps
+    );
+    assert_eq!(fa, fb, "two nodes, one answer");
+    assert!(!fa.is_complete());
+}
+
+/// **The termination pin for the window rule.** A fork at the LAST seq of a
+/// window too large for one budgeted chunk must still converge: a truncated
+/// window resend would ship the same duplicate prefix forever with the
+/// difference past the cut, so the window travels as one atomic unit (sent
+/// whole when it alone exceeds the budget, as a single oversized op is).
+#[test]
+fn a_forked_window_with_a_tiny_budget_still_converges() {
+    let (dir_a, dir_b) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+    let (a, b) = (open(dir_a.path()), open(dir_b.path()));
+    let r = ring();
+
+    let mut a_holds: Vec<_> = (0..20)
+        .map(|s| signed(&key(1), 100 + s as i64, s, record("shared")))
+        .collect();
+    let mut b_holds = a_holds.clone();
+    a_holds.push(signed(&key(1), 120, 20, record("left")));
+    b_holds.push(signed(&key(1), 120, 20, record("right")));
+    a.ingest_all(&a_holds).unwrap();
+    b.ingest_all(&b_holds).unwrap();
+
+    // Room for roughly two ops: a split window would never reach seq 20.
+    let budget = 400;
+    for round in 0..40 {
+        let (for_a, more_a) = b
+            .ops_missing_from_within(&a.digest(&Ed25519Verifier).unwrap(), budget)
+            .unwrap();
+        let (for_b, more_b) = a
+            .ops_missing_from_within(&b.digest(&Ed25519Verifier).unwrap(), budget)
+            .unwrap();
+        if for_a.is_empty() && for_b.is_empty() && !more_a && !more_b {
+            break;
+        }
+        assert!(round < 39, "the exchange is not converging");
+        a.ingest_all(&for_a).unwrap();
+        b.ingest_all(&for_b).unwrap();
+    }
+    let (fa, fb) = (
+        a.admit(&r, &Ed25519Verifier).unwrap(),
+        b.admit(&r, &Ed25519Verifier).unwrap(),
+    );
+    assert_eq!(a.read().unwrap().0.len(), 22, "A holds both branches");
+    assert_eq!(b.read().unwrap().0.len(), 22, "B holds both branches");
+    assert!(
+        fa.gaps
+            .iter()
+            .any(|g| matches!(g, RailGap::SequenceFork { .. })),
+        "the fork is named: {:?}",
+        fa.gaps
+    );
+    assert_eq!(fa, fb);
+}
+
 /// **A peer that dies mid-sync leaves a hole, and the hole is named.**
 ///
 /// Half of B's ops reach A. A must not report a clean answer over what it
@@ -518,8 +627,8 @@ fn a_compacted_journal_stays_complete_and_stops_the_prefix_coming_back() {
 
     // 2. It can still say what it needs, from the floor rather than from zero.
     assert_eq!(
-        a.digest(&Ed25519Verifier).unwrap(),
-        Digest::from([(actor_of(&key(1)), 4)]),
+        marks(&a.digest(&Ed25519Verifier).unwrap()),
+        BTreeMap::from([(actor_of(&key(1)), 4)]),
         "a compacted actor must make a claim, not fall silent"
     );
 

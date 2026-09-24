@@ -83,6 +83,15 @@ pub fn admitted(ops: &[Op<SignedOp>]) -> Admission {
     admit(ops, &[], &ring(), NS, &Ed25519Verifier)
 }
 
+/// The marks projection of a digest — what most sync bars assert on. The
+/// content commitment is asserted where it is the point (`view`'s tests and
+/// the fork bars); everywhere else the mark is the claim under test.
+pub fn marks(d: &crate::Digest) -> BTreeMap<String, u64> {
+    d.iter()
+        .map(|(actor, view)| (actor.clone(), view.mark))
+        .collect()
+}
+
 /// The `what` of every act an app's reducer would see, in order — the shape
 /// most of these tests assert on.
 pub fn applied(a: &Admission) -> Vec<String> {

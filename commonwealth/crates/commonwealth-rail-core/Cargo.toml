@@ -20,6 +20,10 @@ description = "The ring rail's fold — Person/Roster/RailAct/SignedOp, the opaq
 #   serde/serde_json  the wire form. `Payload`'s whole thesis is that a signed
 #                  body is canonical bytes, which is a serde property.
 #   hex            actor + signature spelling, as they appear on the wire.
+#   kernel-types   the ONE hash: `ContentHash` (BLAKE3) for the `View` chain.
+#                  Already in the closure through `oplog`, which derives
+#                  `OpId` from it — named here because this crate now folds
+#                  with it directly.
 #
 # What is deliberately ABSENT, and must stay absent: `commonwealth-core` (a
 # rail is not a mesh), `corpus-engine` (the edge order 1a existed to sever),
@@ -29,6 +33,7 @@ description = "The ring rail's fold — Person/Roster/RailAct/SignedOp, the opaq
 # without which the layer entry would be a green gate enforcing nothing.
 [dependencies]
 oplog = { workspace = true }
+kernel-types = { workspace = true }
 # NOT the workspace entry, deliberately: that one carries `pkcs8` +
 # `rand_core` for the crates that generate and load node keys. The rail
 # does neither — it signs bytes it is handed — so a third party lifting
