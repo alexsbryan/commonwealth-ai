@@ -420,6 +420,11 @@ merged; that merge is what minted this arrangement, and `ledger-1` records it.
 - Chose: the package's option 1. `sovereign-authoring-harness` moves from [bench] to [ingest] in ARCH_LAYERS.toml. The dead `pub use sovereign_authoring_harness as authoring_harness` in sovereign-eval (lib.rs:15-20) and its Cargo.toml dep (:24) are dropped in the same commit. Predicted boundary 64 → 63.
 - Because: principle 12. The crate judges ingest's recipe stages in ingest's own config language. It is driven by ingest's runner and consumed only by svrn (daemon recipe_http.rs, cli-llm recipe_cmd.rs). No bench member uses it. The same file's noun-convergence rung-3 adjudication (ARCH_LAYERS.toml:57-61) already calls it a shipped end-user capability ("the product does NOT ship without it"), and that contradicts [bench]'s "an evaluator that serves no wire". The 2026-09-22 director resolution that kept it in [bench] rested on a dial row that was never minted. REVIEW-AFTER: this reverses a prior director placement. The charter neither reserves package placement for the operator nor explicitly grants it.
 
+**five-programs-15 · 2026-09-24 · fp-58 (sovereign-eval → understanding-vocab: neither arm closes it) · director** — this commit
+- Needed: fp-58 halted (ctl/NEEDS_HUMAN.md). The row offered a daemon dial or moving the miner to [ingest], and the worker's census showed that neither one closes the edge.
+- Chose: park the row, not guess. fp-58 now depends on a new `HUMAN-fp58-bench-atlas-read` row, which carries three options and a recommendation. The HUMAN row sits LAST in the queue so every other ready row drains first. No code changed. The boundary gate stays at 63.
+- Because: every arm that still closes the edge is reserved by the charter. Those arms are admitting understanding-vocab (or its types half) to [bench]'s `leaf_budget`, an `[[exception]]`, and a new path-keyed atoms route (new capability, and runs would need a serving process). The one ladder arm the charter would allow, a port trait, is refused on principle 2: its implementer would be sovereign-cli-llm's bench_cmd, and §11's cli-llm split already sizes that as bench's own group, so the edge would go red again when that split lands.
+
 ## Flags for the operator
 
 - A26: REVIEW-DEMO-rr-1-run will very likely FAIL `ra-room-plug-in-live` again on this host. The bar's window is 60 s, and the CPU 2B took about 1–5 min per answer in this run (room-answer-0..4.json mtimes 19:33→19:49). Passing it takes a faster node or model for the room, or a different bar. Both are design changes for the operator, not tuning.
@@ -8416,5 +8421,28 @@ Refused:
 Consequences for other rows. fp-43 keeps its purpose, now as an ingest dial: the svrn → authoring-harness edges stay red as svrn → [ingest]. The corpus-engine fan-in stays at 17, because the harness's dep remains. fp-57's "fan_in back to 16" check is struck.
 
 Falsified if the fp-57 commit's boundary count is not 63. Also falsified if moving the crate reds any [ingest] edge, or if a bench member turns out to need the harness after all (the build breaks when the eval dep is dropped).
+
+</details>
+
+## five-programs-15 · 2026-09-24 — park fp-58 behind an operator row; recommend admitting understanding-vocab to [bench] with its fs door feature-gated
+
+<details><summary>reasoning, evidence, package</summary>
+
+Reproduced by the director at 2d9a9e59d:
+
+- `cargo xtask boundary-gate` (toolbox, corpus-engine/) → `FAILED (63 violation(s))`, including `[bench] sovereign-eval → understanding-vocab`.
+- flywheel/mining.rs:14-15 imports `atoms::AtomEnvelope` and `read::{read_atlas_atoms, ATLAS_DIRNAME}`. understanding-vocab/src/read.rs:19 has `use std::fs`, and its decode goes through the crate-private `AtomsFileWire` inside the fs fn (:37-44).
+- `mine_claims` has exactly three callers, all inside sovereign-eval: generators/corpus.rs:81 (Present) and :134 (HeldOutSlice withheld path), plus mechanism_fidelity/classes/attribution.rs:110 (and its test at :252). Every one passes a `&Path`.
+- The drivers outside eval are sovereign-cli-llm bench_cmd/{flywheel.rs, mechanism_fidelity.rs, gate.rs, promote.rs, mod.rs}. FIVE_PROGRAMS §11 "The cli-llm split" measures bench_cmd as part of the 60,519-line bench group.
+
+The package's census of the two row arms held (see ctl/NEEDS_HUMAN.resolved-fp58-20260924.md). The director added one arm the package did not price, the port trait, which is 3a rung 2's last bullet, and refused it for the whack-a-mole reason above.
+
+Recommendation to the operator is (a): gate understanding-vocab's `read` door behind a default-on feature and lift the pure bytes → `AtomsFile` decoder out of it. eval then does its own `fs::read` and admits the crate to [bench]'s budget. The added closure is serde, serde_json, blake3 and kernel-types (already budgeted). None of that is the producer the evaluator measures, which is corpus-engine.
+
+Falsified if either of these turns out to be true:
+- an existing [bench] budget leaf already carries the atoms schema;
+- the miner's callers can be served from an installed corpus id without losing the withheld-slice source.
+
+Either one would make a charter-covered arm exist.
 
 </details>
