@@ -546,8 +546,9 @@ pub fn admit(
                 } => (Some(corrects.clone()), replacement.clone()),
                 // A seal is delivery, not meaning: it voids nothing and
                 // carries nothing, so `applies()` is false and no reducer
-                // sees it.
-                RailAct::Seal => (None, None),
+                // sees it. Admit/Remove carry meaning to the MEMBERSHIP
+                // function and never to an app (no-re-division).
+                RailAct::Seal | RailAct::Admit { .. } | RailAct::Remove { .. } => (None, None),
             };
             AdmittedOp {
                 id: a.id.clone(),

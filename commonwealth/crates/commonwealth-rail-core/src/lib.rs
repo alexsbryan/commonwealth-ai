@@ -78,6 +78,7 @@
 
 mod admit;
 mod introduce;
+mod membership;
 mod payload;
 mod sig;
 mod sync;
@@ -91,6 +92,7 @@ use serde::{Deserialize, Serialize};
 
 pub use admit::{admit, body_json, Admission, AdmittedOp, GapClass, RailGap};
 pub use introduce::{trace, trace_op, Introduce, Vouch, VouchStatus};
+pub use membership::{membership, Membership};
 pub use payload::{Payload, PayloadError, MAX_PAYLOAD_BYTES};
 pub use sig::{actor_of, ring_op_message, sign_ring_op};
 pub use sync::{digest, ops_missing_from, ops_missing_from_within, Floors, NO_BUDGET};
@@ -282,6 +284,44 @@ pub enum RailAct {
     /// It carries no payload, so an app's reducer never sees it
     /// ([`AdmittedOp::applies`] is false); it is delivery, not meaning.
     Seal,
+    /// A member says: this person and this key are in the ring. One of the
+    /// two membership acts (`RING_APPLICATIONS.md` "Amendment 2026-09-18");
+    /// membership is computed from the seed plus these and [`Self::Remove`],
+    /// and nothing else on the journal changes it.
+    ///
+    /// The binding rides IN the record — the reason a `roster.json` edit
+    /// cannot retroactively flip a member's past: acts admitted through an
+    /// `Admit` resolve through the record, not through the file. Undo is the
+    /// [`Self::Correct`] that exists: voiding an `Admit` drops that key and
+    /// every key it transitively admitted, because their admissions were
+    /// signed by a key that no longer holds.
+    ///
+    /// Carries no [`Payload`] and never reaches an app reducer — an app that
+    /// read membership would re-divide every past expense the day someone
+    /// joins (the no-re-division property).
+    Admit {
+        person: Person,
+        /// The key being admitted, as actor hex — the same spelling every
+        /// signature on the wire already uses.
+        key: String,
+    },
+    /// A member says: this key is out. The cut is by the removed key's own
+    /// signed seq (`through_seq`) and never by a position in the order —
+    /// `(ts_unix, actor, seq, id)` starts with the author's own timestamp, so
+    /// a positional cutoff could be dodged by backdating, while a seq cutoff
+    /// cannot (admit already refuses a fork on seq). Two cuts compose by
+    /// minimum with no shared order (the OpenSSH KRL shape).
+    ///
+    /// The cut is PROSPECTIVE at its position in the rail's order: past acts
+    /// by the key stay admitted. PKISN's rule falls out of that position
+    /// scoping — a removed key's later `Remove`s do not count, so a cut party
+    /// cannot cut back. Undo is [`Self::Correct`]: voiding the `Remove`
+    /// restores the member and admits what they wrote while removed.
+    Remove {
+        key: String,
+        /// The last seq of the removed key's own chain that this cut covers.
+        through_seq: u64,
+    },
 }
 
 impl RailAct {
@@ -323,7 +363,7 @@ impl RailAct {
         match self {
             Self::Record { payload } => Some(payload),
             Self::Correct { replacement, .. } => replacement.as_ref(),
-            Self::Seal => None,
+            Self::Seal | Self::Admit { .. } | Self::Remove { .. } => None,
         }
     }
 }
