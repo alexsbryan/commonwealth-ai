@@ -1174,7 +1174,11 @@ authority).**
 - [ ] **`bench`'s leaf budget.** The one `[[forbid]]` row §9 admits it cannot
       express — `bench -> *` except `oicp-types` and `sovereign-contracts` —
       needs a per-package leaf budget in `quality/arch-layers/src/packages.rs`,
-      not a hand-copied membership list.
+      not a hand-copied membership list. Contents decided 2026-09-24
+      (five-programs-12): the pair plus `kernel-types` (3a's identity home),
+      `sovereign-time` (empty deps; clock-gate routes at it) and
+      `workspace-hack` (hakari plumbing) — none adds a crate to the closure.
+      `understanding-vocab` stays out: it is ingest's language and reads fs.
 - [ ] **`sovereign-cli → commonwealth-{work,rail}`, priced and refused twice.**
       `oicp-types` cannot serve `quality_check_cmd/distribute.rs` (1,502 lines):
       it needs 15 names that are cmnwlth's work MODEL, fold and refusal decider
