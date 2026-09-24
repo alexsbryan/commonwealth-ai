@@ -500,6 +500,11 @@ merged; that merge is what minted this arrangement, and `ledger-1` records it.
 - Chose: park fp-25 on a new operator row, HUMAN-fp25-setup-host (the fp-7 and fp-10 shape). The rpc-worker half is recorded as landed. Recommendation to the operator: (b), an `[[exception]] package = "svrn"` for cli-daemon → sovereign-inference, which is fp-10's answer applied to first-run setup.
 - Because: every path that closes the edge crosses a line the charter reserves for the operator. Contracts fails the charter's fs-free test: `capacity.rs:96` and `setup_planner.rs:339-401` both call std::fs, and setup_planner also uses reqwest. A new leaf is "admitting a new shared leaf". cli-daemon cannot own setup_planner, because desktop, cli-llm and sovereign-daemon use it too. The exec probe would move GPU detection into a binary the Windows sidecar staging does not build, and that binary has no windows-* features, which is end-user-observable. The exception itself is operator-only. Measured at boundary-gate 56.
 
+**five-programs-31 · 2026-09-24 · fp-11 · director** — this commit
+- Needed: fp-11 halted because its premise failed: it says "DIAL code tools", and no code-program MCP server exists to dial.
+- Chose: park fp-11 on a new operator row, HUMAN-fp11-code-mcp-host (the fp-10 and fp-25 shape). Recommendation to the operator: (b), an `[[exception]] package = "svrn"` for sovereign-daemon → sovereign-code, which is fp-10's answer applied to the MCP host.
+- Because: TSV:15's `decision_needed` is `none`, but its own `missing_capability` cell ("the code program's MCP surface must exist") names new capability. Standing that up means moving mcp_router, the reindexer and the SCIP graph, adding a proxy, then dropping the dep, over 10+ files. That is principle 11's mint, not a row rewrite, and the only no-code close is an exception. Both are the operator's. Measured at boundary-gate 56.
+
 ## Flags for the operator
 
 - A26: REVIEW-DEMO-rr-1-run will very likely FAIL `ra-room-plug-in-live` again on this host. The bar's window is 60 s, and the CPU 2B took about 1–5 min per answer in this run (room-answer-0..4.json mtimes 19:33→19:49). Passing it takes a faster node or model for the room, or a different bar. Both are design changes for the operator, not tuning.
@@ -8796,6 +8801,27 @@ Options the HUMAN row carries: (a) the exec phase. It needs a `--probe-hardware`
 This decision does not cover the stale `:260` cite in docs/ENV_FLAGS.md:116, and it does not cover the gap where sovereign-daemon is not staged for the desktop. Both were noted in the package and are outside this row.
 
 Falsifier: a charter-legal home turns up that closes the edge without an exception, a new leaf, or a staging change. For example, setup_planner and capacity might turn out to have no fs or reqwest use behind a feature, or cli-daemon's Windows sidecar might not need GPU enumeration at setup. In that case the park was wrong, and fp-25 should resume as a worker row.
+
+Gate at decision: boundary-gate 56 violation(s).
+
+</details>
+
+## five-programs-31 · 2026-09-24 — fp-11 has nothing to dial: park on HUMAN-fp11-code-mcp-host
+
+<details><summary>reasoning, evidence, package</summary>
+
+Package: ctl/NEEDS_HUMAN.resolved-fp11-20260924.md. Reproduced at f03daf7ff:
+
+- `scripts/ralph-check.sh boundary` reports 56 violations. `sovereign-daemon → sovereign-code` is on the list.
+- `git grep -c sovereign_code -- sovereign/crates/sovereign-daemon` gives src/tool_registry.rs 34, tests/main/e2e_code_intel.rs 5, and e2e_code_intel/demo_auth.rs 9. The tests are dev-only, so the src file carries the edge by itself.
+- tool_registry.rs:299-315 constructs SessionStateTool, WriteNoteTool and ReadNotesTool from sovereign_code. That is the notes/session_state MCP surface every harness session calls, so it is not just "code intel".
+- tool_registry.rs:38 takes `sovereign_code::ScipGraphHandle`, and daemon_cmd/boot.rs:648 builds the one `corpus_engine_watchers::reindexer::ScipGraphHandle` that is shared with the freshness pipeline. Moving the tools without the reindexer brings back the frozen-snapshot bug.
+- sovereign-cli-dev/src/project_cmd/serve.rs:666,675,696 builds project serve's MCP app from `sovereign_daemon::mcp_router`. That is the cli-dev → daemon edge fp-11 also owns (STATE appendix line for `sovereign-cli-dev → sovereign-daemon`). So "project serve dials the daemon" (§11) and "the daemon dials the code program" (TSV:15) run in opposite directions.
+- TSV:15's behaviour_delta accepts that code tools "stop if the code process is not running". But no process today would be that code process, and the notes tools would go with them. That is a change to the default MCP surface, which is gated behind a decision that does not exist yet.
+
+The HUMAN row gives three options. (a) project serve becomes the code server (REVIEW-mint, multi-row), with a sub-choice on where the notes/session tools live. (b) The exception, recommended: no code, 56 → 55, fp-11 narrows to the cli-dev → daemon mcp_router move. (c) Drop code tools from the daemon's /mcp, which changes the default surface and is not recommended.
+
+Falsifier: a code-program MCP server already exists that the daemon can reach without supervising it, or mcp_router turns out to be movable into a shared leaf in a way that also carries the tool construction out of the daemon. In either case fp-11 is a worker row again and the park was wrong.
 
 Gate at decision: boundary-gate 56 violation(s).
 
