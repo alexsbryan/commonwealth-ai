@@ -12,16 +12,20 @@
 label = "five-programs"
 session_timeout = 7200
 audit_every = 15
-# worker on opencode (the zai coding-plan provider serves glm-5.3-flash there;
-# the claude CLI on this host does not know that model id — verified 2026-09-23)
-worker_bin = ""
-settings = ""
+# worker on the Claude plan via the shim, Opus 5.5 at medium effort (`variant`
+# is --effort there; operator, 2026-09-24): the zai plan
+# answered "Weekly/Monthly Limit Exhausted" until 2026-09-29 and killed three
+# sessions in a row. To return to glm-5.3-flash: worker_bin = "", settings = "",
+# models = "zai-coding-plan/glm-5.3-flash" (opencode routes it; the claude CLI
+# does not know that id).
+worker_bin = "scripts/ralph-claude-shim.sh"
+settings = "ralph/claude-settings.json"
 
 [models]
-worker = "zai-coding-plan/glm-5.3-flash"
-review = "zai-coding-plan/glm-5.3-flash"
-resolve = "zai-coding-plan/glm-5.3-flash"
-variant = ""
+worker = "claude-opus-5-5"
+review = "claude-opus-5-5"
+resolve = "claude-opus-5-5"
+variant = "medium"
 
 # The campaign's checks ARE the gates: each unit's commit body carries the
 # boundary-gate count. `layer` and `lint` are ralph-check.sh BUILTINS (host
