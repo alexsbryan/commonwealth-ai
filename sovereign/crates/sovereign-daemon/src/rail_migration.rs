@@ -96,21 +96,33 @@ pub fn migrate_journals_to_rails(data_dir: &Path) {
             );
             continue;
         }
-        if let Err(e) = std::fs::rename(&from, &to) {
+        if let Err(rename_err) = std::fs::rename(&from, &to) {
             // Different filesystems rename-refuse; fall back to copy+delete
             // rather than leaving the journal unseen.
-            if copy_dir(&from, &to)
-                .and_then(|()| std::fs::remove_dir_all(&from))
-                .is_err()
-            {
+            if let Err(e) = copy_dir(&from, &to) {
                 tracing::error!(
                     error = %e,
+                    rename_error = %rename_err,
                     namespace = %name.to_string_lossy(),
                     from = %from.display(),
                     to = %to.display(),
                     "rail migration: this journal could not be moved — it stays under the \
                      daemon's data dir and is invisible to the serving process until the \
                      operator moves it"
+                );
+                continue;
+            }
+            if let Err(e) = std::fs::remove_dir_all(&from) {
+                // The copy landed: the serving process sees the journal. Only
+                // the daemon-side original is left behind, and the next boot
+                // leaves it alone (the target exists).
+                tracing::warn!(
+                    error = %e,
+                    namespace = %name.to_string_lossy(),
+                    from = %from.display(),
+                    to = %to.display(),
+                    "rail migration: the journal was copied to the serving process's root, \
+                     but the daemon-side original could not be removed — it is now a stale copy"
                 );
                 continue;
             }

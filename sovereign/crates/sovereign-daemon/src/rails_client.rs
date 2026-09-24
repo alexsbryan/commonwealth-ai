@@ -82,28 +82,43 @@ async fn dial(base: &str, path: &str) -> Result<reqwest::Response, RailsDial> {
         })
 }
 
-/// Does the mesh's membership name this key? The serving process answers
-/// from every member row, tombstones included — the ring-roster rule — so
-/// this is the exact question the derived rosters used to answer locally.
-pub async fn roster_names(base: &str, key: NodePubkey) -> Result<bool, RailsDial> {
-    let resp = dial(base, &format!("/v1/mesh/roster-names/{key}")).await?;
+/// One GET door's answer: a non-2xx is `Refused` with the door's body as
+/// prose (`<verb> refused: <status> <body>`), an unparseable 2xx `Unreadable`.
+async fn get_answer<T: serde::de::DeserializeOwned>(
+    base: &str,
+    path: &str,
+    verb: &str,
+) -> Result<T, RailsDial> {
+    let resp = dial(base, path).await?;
     let status = resp.status();
     if !status.is_success() {
         let message = resp.text().await.unwrap_or_default();
         return Err(RailsDial::Refused {
             status,
             kind: None,
-            message: format!("roster-names refused: {status} {message}"),
+            message: format!("{verb} refused: {status} {message}"),
         });
     }
+    resp.json().await.map_err(|e| RailsDial::Unreadable {
+        base: base.to_string(),
+        detail: e.to_string(),
+    })
+}
+
+/// Does the mesh's membership name this key? The serving process answers
+/// from every member row, tombstones included — the ring-roster rule — so
+/// this is the exact question the derived rosters used to answer locally.
+pub async fn roster_names(base: &str, key: NodePubkey) -> Result<bool, RailsDial> {
     #[derive(serde::Deserialize)]
     struct Answer {
         named: bool,
     }
-    let answer: Answer = resp.json().await.map_err(|e| RailsDial::Unreadable {
-        base: base.to_string(),
-        detail: e.to_string(),
-    })?;
+    let answer: Answer = get_answer(
+        base,
+        &format!("/v1/mesh/roster-names/{key}"),
+        "roster-names",
+    )
+    .await?;
     Ok(answer.named)
 }
 
@@ -113,24 +128,11 @@ pub async fn roster_names(base: &str, key: NodePubkey) -> Result<bool, RailsDial
 /// poll over there could not ask, and "nobody answered" is the reading — not
 /// a refusal; refusals and absences are the `Err` arms.
 pub async fn media_presence(base: &str) -> Result<Option<f32>, RailsDial> {
-    let resp = dial(base, "/v1/mesh/media/presence").await?;
-    let status = resp.status();
-    if !status.is_success() {
-        let message = resp.text().await.unwrap_or_default();
-        return Err(RailsDial::Refused {
-            status,
-            kind: None,
-            message: format!("media/presence refused: {status} {message}"),
-        });
-    }
     #[derive(serde::Deserialize)]
     struct Answer {
         media_available: Option<f32>,
     }
-    let answer: Answer = resp.json().await.map_err(|e| RailsDial::Unreadable {
-        base: base.to_string(),
-        detail: e.to_string(),
-    })?;
+    let answer: Answer = get_answer(base, "/v1/mesh/media/presence", "media/presence").await?;
     Ok(answer.media_available)
 }
 

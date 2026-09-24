@@ -2456,3 +2456,145 @@ word-bounded git-grep sweep over every noun the range defines:
   design; not re-pinned.
 - **deletion-manifest (advisory)** · `p0-root-junk` GREW — byte-identical to
   auto-1/auto-2's finding; predates this range. Foreign to the campaign.
+
+## REVIEW-audit-fp-auto-4 (2026-09-24, range 5ae402b29..44723fd06 — the previous audit's hash)
+
+Range: 85 commits; product code in fw-1 (the serving-cluster dial and the
+counted rail flip), fp-44 (cw-rails serves the rail doors), fp-6 (roster
+verbs dial cw-rails), fp-8/fp-26 (guest route), fp-55/56/57 (bench budget,
+eval off corpus-engine, authoring-harness re-place), fp-59/fp-60 (tests and
+the governance view move to the reader leaf). Checks: LINT exit=0; TESTALL
+13,340 pass / 1 fail before this audit, the one red repaired below
+(TEST(sovereign-daemon) after the fixes: 1,274 / 0); PREPUSH range-fed
+(remote sha = 5ae402b29): 1 blocking lane = boundary-gate 62 violation(s),
+the declared burn-down state (79 at mint → 62); size-gate + deletion-manifest
+advisory (warn_gate); concept-gate could-not-judge (graph indexed at
+36dca4ff, 790 files behind); every other lane passed.
+
+### (1) Per-unit net-line ledger, product code (`.rs` + `Cargo.toml`, src apart from tests)
+
+| unit | src + | src − | src net | tests + | tests − | tests net |
+|---|---|---|---|---|---|---|
+| fw-1 | 2587 | 1379 | +1208 | 1391 | 1147 | +244 |
+| fp-44 | 564 | 1 | +563 | 302 | 0 | +302 |
+| fp-6 | 570 | 167 | +403 | 45 | 7 | +38 |
+| fp-8 | 214 | 6 | +208 | 1 | 0 | +1 |
+| fp-55 | 98 | 5 | +93 | 0 | 0 | +0 |
+| fp-26 | 56 | 2 | +54 | 0 | 0 | +0 |
+| fp-56 | 68 | 62 | +6 | 0 | 0 | +0 |
+| fp-59 | 12 | 9 | +3 | 655 | 569 | +86 |
+| ralph | 1 | 1 | +0 | 0 | 0 | +0 |
+| fp-57 | 0 | 7 | −7 | 0 | 0 | +0 |
+| fp-60 | 1426 | 2033 | −607 | 701 | 1 | +700 |
+| TOTAL | 5596 | 3672 | +1924 | 3095 | 1724 | +1371 |
+
+fp-60's −607/+700 is one move: governance_view's inline `mod tests` counted
+as src in corpus-engine and lands as `governance_view/tests.rs` in the leaf.
+By crate: commonwealth-rails +1391, sovereign-daemon +941 (examples −525),
+corpus-engine −1303, corpus-engine-atlas-reader +636, sovereign-mesh +241,
+kernel-types +145. The growth is the serve halves: cw-rails now serves what
+the daemon also still serves (finding below).
+
+### (2) Clone check — instrument could-not-judge
+
+`code dry-report` refuses (`--corpus-id commonwealth-ai`: no chunk index at
+`~/.svrnmesh/indexes/commonwealth-ai/chunks.lance`). Substitution: a
+normalised-line comparison of the serve half against its donor —
+`commonwealth-rails/src/rail.rs` has 309 distinct non-trivial lines, 127 of
+them (41%) also in `sovereign-daemon/src/routes_rail.rs` +
+`routes_rail_live.rs`; and a read of the range's new dial client, where
+`roster_names`/`media_presence` were the same GET→status→parse body (fixed).
+
+### (3) Noun check — 21 nouns the range defines
+
+`code converge noun --corpus-id commonwealth-ai` answers from the graph at
+36dca4ff, so it reports 0 definitions for most of the range's nouns; a
+word-bounded `git grep` of `struct|enum|trait|type <Name>` is the data.
+More than one definition:
+
+- `LiveBuffer` / `LiveBufferInner` · `commonwealth-rails/src/rail.rs:638,643`
+  vs `sovereign-daemon/src/routes_rail_live.rs:74,79` — the same type, copied
+  by fp-44.
+- `RailQuery` · `commonwealth-rails/src/rail.rs:156` vs
+  `sovereign-daemon/src/routes_rail.rs:46` — same query shape, both doors.
+- `ForgetMemberRequest` · `commonwealth-rails/src/api.rs:334` vs
+  `sovereign-daemon/src/roster_repair.rs:90`.
+- `Refusal` · `commonwealth-rails/src/lib.rs:85` (enum) vs
+  `sovereign-daemon/src/rails_client.rs` fn-local parse struct vs
+  `sovereign-tools/src/sec_facts_render.rs:395` (unrelated) — distinct.
+- `Answer` · 12 fn-local deserialize shapes in `rails_client.rs` vs
+  `kernel-types/src/answer.rs:351` — local wire reads, not a twin.
+
+### Findings, fixed (this audit's commit)
+
+- **TESTALL drift (fp-60's own)** · `conformance_tags_are_fresh` could not
+  read `quality/conformance/corpus-engine-atlas-reader.toml`: fp-60 moved
+  seven `covers:` tests (EN-19 ×3, ST-25 ×4) into the leaf. Regenerated with
+  the command the failure prints (`ralph-check.sh conformance`); the seven
+  claims move whole, assert counts unchanged.
+- **ARCH 8 (one contract, spelled twice in one new file)** ·
+  `sovereign-daemon/src/rails_client.rs:111,130` · `roster_names` and
+  `media_presence` repeated the same dial → status → `Refused{"<verb>
+  refused: …"}` → json → `Unreadable` body. Both now call `get_answer`
+  (:87); every message and variant is unchanged.
+- **ARCH 1/6 (a log that says the wrong thing)** ·
+  `sovereign-daemon/src/rail_migration.rs:99-127` · the cross-device
+  fallback folded copy and source-removal into one `is_err()`: a journal
+  whose copy LANDED but whose original could not be removed was logged as
+  "could not be moved … invisible to the serving process", and the error
+  field carried the rename's error, never the copy's. Split: a copy failure
+  logs the copy's error (rename's beside it), a removal failure warns that
+  the journal moved and the original is a stale copy. Control flow is
+  unchanged.
+
+### Recorded, not changed
+
+- **ARCH 8/12 — the rail's doors served twice, with two live buffers** ·
+  `commonwealth-rails/src/rail.rs:627-700` vs
+  `sovereign-daemon/src/routes_rail_live.rs:43-110` (and `RailQuery`,
+  `ForgetMemberRequest` above). The flip moved the journals, but pages still
+  reach `/v1/rail/{log,append,live}` on the daemon (`guest_pages.rs:143`,
+  `server.rs:277-285`); cw-rails' `/v1/rail/live` has no in-tree caller. A
+  payload pushed at one process's live door is never drained at the other's.
+  `LIVE_BUFFER_CAPACITY` (256) and `LIVE_PAYLOAD_MAX_BYTES` (4096) are two
+  constants each, both commented as "ONE decider". `commonwealth-rail-core`
+  is the only crate both reach, and its charter says "the FOLD and nothing
+  else", so homing the caps there is a placement decision. It retires with
+  the daemon-side doors: HUMAN-fp54's guest re-mount.
+- **ARCH 6/11 — the served presence poll reads a file nothing writes** ·
+  `commonwealth-rails/src/presence.rs:51,59` reads
+  `secrets/media-house/viewer_user`; no code writes that file.
+  `svrn mesh media offer` records the viewer as `[iroh] media_viewer_user`
+  in the daemon's config (`sovereign-cli-mesh/src/mesh_media/offer.rs:36`,
+  SYSTEM_OVERVIEW.md:2253), the key the daemon side read
+  (`sovereign-mesh/src/media_route.rs:20`). After fp-46 a node set up by the
+  documented flow publishes `None` presence forever.
+  The absence is named (debug event, :145-148), so it is not silent, but the
+  capability regressed. Fix = a writer in `offer`, or rails reading the old
+  key: an operator call.
+- **ARCH 8 — cw-rails' data-dir resolution mirrored in the daemon** ·
+  `sovereign-daemon/src/rail_migration.rs:36` vs
+  `commonwealth-rails/src/config.rs:125-137` (`CW_RAILS_DIR`, else
+  `~/.commonwealth-rails`). Acknowledged in the module header as a mirrored
+  convention; the daemon cannot name cw-rails. If rails' resolution ever
+  changes, the migration writes where rails does not look.
+- **Migration hazard, partial copy** · `rail_migration.rs:100` · if
+  `copy_dir` fails part-way, the partial target stays; the next boot sees
+  `to.exists()` and skips, so the partial journal is what the serving
+  process reads. Removing the partial target on failure changes behaviour;
+  left for the owner. Cross-device rename is the only path that reaches it.
+- **ARCH 6 (minor, carried verbatim)** · `commonwealth-rails/src/rail.rs:325,
+  335,525` `serde_json::to_value(..).unwrap_or_default()` turns a serialise
+  failure into `null` on the wire; copied from
+  `sovereign-daemon/src/routes_rail.rs:362,553`. Derived types, practically
+  infallible. `presence.rs:59` `.ok()` folds a permission error into
+  "no viewer".
+- **Instruments, could-not-judge** · dry-report has no chunk index;
+  converge-noun and concept-gate read a graph 790 files behind. Rebuild is
+  `svrn project refresh --name commonwealth-ai --local`, not this unit's
+  work.
+- **size-gate (advisory)** · 43 keys grew, the campaign's own
+  (`corpus-engine-atlas-reader` 0 → 7023 unbaselined; cw-rails +1195;
+  contracts +1371). Not re-pinned.
+- **deletion-manifest (advisory)** · `p0-root-junk` GREW 113934 → 133537;
+  foreign to the campaign, as in auto-1..3.
