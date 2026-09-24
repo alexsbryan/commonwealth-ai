@@ -983,6 +983,14 @@ pinned-pod/persist/capabilities/canonical_pull — neither carries a guest_route
 ref. fp-8's VERB (the daemon's guest tunnel source) is still the right owner;
 the cli-llm client side is fp-26's pair.
 
+Corrected 2026-09-24 (director, five-programs-19): **fp-8's pump half was
+already done** — fw-1/fp-54 put the rail journal behind `RailsRingRail`, and
+the pump's local `outbox_take` is D4's store flip (fp-42). What fp-8 keeps is
+D6's serve half: one loopback daemon door that returns the base URL of the
+tunnel `StoredGuestLink` opens for the stored link. fp-26 dials it. The cost
+is that a guest with a stored link now needs a local daemon to chat, which D6
+implies and no row had priced.
+
 ## 12. The decision sheet — front-loaded so implementation is mechanical
 
 `docs/FIVE_PROGRAMS_DECISIONS.tsv` records the §12 edge inventory, one row per edge:
