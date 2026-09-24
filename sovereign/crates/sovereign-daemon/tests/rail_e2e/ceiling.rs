@@ -163,7 +163,9 @@ async fn one_budgeted_chunk_carries_less_than_a_whole_journal() {
     let body = RingSyncRequest {
         namespace: NS.to_string(),
         digest: journal.digest(&commonwealth_rail::Ed25519Verifier).unwrap(),
-        ops: journal.ops_missing_from(&Digest::new()).unwrap(),
+        ops: journal
+            .ops_missing_from(&commonwealth_rail::Ed25519Verifier, &Digest::new())
+            .unwrap(),
     };
     assert_eq!(body.ops.len(), N, "an empty digest asks for everything");
     let per_op = serde_json::to_vec(&body).unwrap().len() / N;
@@ -212,7 +214,11 @@ async fn push_until_converged(peer: AppState, journal: &RingJournal) -> (usize, 
         )
         .await;
         let (ops, more) = journal
-            .ops_missing_from_within(&theirs.digest, RING_SYNC_OPS_BUDGET_BYTES)
+            .ops_missing_from_within(
+                &commonwealth_rail::Ed25519Verifier,
+                &theirs.digest,
+                RING_SYNC_OPS_BUDGET_BYTES,
+            )
             .unwrap();
         if ops.is_empty() {
             assert!(!more, "nothing to send cannot also mean more remains");
@@ -278,7 +284,9 @@ async fn the_budgeted_chunk_is_served_where_the_whole_journal_is_refused() {
         let push = RingSyncRequest {
             namespace: NS.to_string(),
             digest: journal.digest(&commonwealth_rail::Ed25519Verifier).unwrap(),
-            ops: journal.ops_missing_from(&Digest::new()).unwrap(),
+            ops: journal
+                .ops_missing_from(&commonwealth_rail::Ed25519Verifier, &Digest::new())
+                .unwrap(),
         };
         let bytes = serde_json::to_vec(&push).unwrap().len();
         let (status, _) = sync_raw(peer, &push).await;
@@ -296,7 +304,11 @@ async fn the_budgeted_chunk_is_served_where_the_whole_journal_is_refused() {
     let (_sender, journal) = node(sender_dir.path(), &key, 10_000);
     let (peer, _) = node(receiver.path(), &SigningKey::from_bytes(&[2u8; 32]), 0);
     let (ops, more) = journal
-        .ops_missing_from_within(&Digest::new(), RING_SYNC_OPS_BUDGET_BYTES)
+        .ops_missing_from_within(
+            &commonwealth_rail::Ed25519Verifier,
+            &Digest::new(),
+            RING_SYNC_OPS_BUDGET_BYTES,
+        )
         .unwrap();
     assert!(
         more,
@@ -490,7 +502,9 @@ async fn a_seal_shortens_the_exchange_only_once_the_retired_lines_are_deleted() 
     let push = |journal: &RingJournal| RingSyncRequest {
         namespace: NS.to_string(),
         digest: journal.digest(&commonwealth_rail::Ed25519Verifier).unwrap(),
-        ops: journal.ops_missing_from(&Digest::new()).unwrap(),
+        ops: journal
+            .ops_missing_from(&commonwealth_rail::Ed25519Verifier, &Digest::new())
+            .unwrap(),
     };
 
     // ARM 1 — sealed, not compacted. The selection is unchanged, so the

@@ -328,10 +328,10 @@ fn two_partitioned_nodes_converge_on_an_identical_admission() {
 
     // Heal, both directions, one exchange each way.
     let for_a = b
-        .ops_missing_from(&a.digest(&Ed25519Verifier).unwrap())
+        .ops_missing_from(&Ed25519Verifier, &a.digest(&Ed25519Verifier).unwrap())
         .unwrap();
     let for_b = a
-        .ops_missing_from(&b.digest(&Ed25519Verifier).unwrap())
+        .ops_missing_from(&Ed25519Verifier, &b.digest(&Ed25519Verifier).unwrap())
         .unwrap();
     assert_eq!(a.ingest_all(&for_a).unwrap(), 1);
     assert_eq!(b.ingest_all(&for_b).unwrap(), 1);
@@ -353,7 +353,7 @@ fn two_partitioned_nodes_converge_on_an_identical_admission() {
 
     // And the exchange is idempotent: running it again moves nothing.
     let again = b
-        .ops_missing_from(&a.digest(&Ed25519Verifier).unwrap())
+        .ops_missing_from(&Ed25519Verifier, &a.digest(&Ed25519Verifier).unwrap())
         .unwrap();
     assert!(again.is_empty());
     assert_eq!(a.ingest_all(&for_a).unwrap(), 0);
@@ -387,10 +387,10 @@ fn two_forked_nodes_exchange_until_both_hold_the_fork() {
 
     for round in 0..5 {
         let for_a = b
-            .ops_missing_from(&a.digest(&Ed25519Verifier).unwrap())
+            .ops_missing_from(&Ed25519Verifier, &a.digest(&Ed25519Verifier).unwrap())
             .unwrap();
         let for_b = a
-            .ops_missing_from(&b.digest(&Ed25519Verifier).unwrap())
+            .ops_missing_from(&Ed25519Verifier, &b.digest(&Ed25519Verifier).unwrap())
             .unwrap();
         if for_a.is_empty() && for_b.is_empty() {
             break;
@@ -441,10 +441,18 @@ fn a_forked_window_with_a_tiny_budget_still_converges() {
     let budget = 400;
     for round in 0..40 {
         let (for_a, more_a) = b
-            .ops_missing_from_within(&a.digest(&Ed25519Verifier).unwrap(), budget)
+            .ops_missing_from_within(
+                &Ed25519Verifier,
+                &a.digest(&Ed25519Verifier).unwrap(),
+                budget,
+            )
             .unwrap();
         let (for_b, more_b) = a
-            .ops_missing_from_within(&b.digest(&Ed25519Verifier).unwrap(), budget)
+            .ops_missing_from_within(
+                &Ed25519Verifier,
+                &b.digest(&Ed25519Verifier).unwrap(),
+                budget,
+            )
             .unwrap();
         if for_a.is_empty() && for_b.is_empty() && !more_a && !more_b {
             break;
@@ -506,7 +514,7 @@ fn a_half_delivered_peer_is_a_named_hole_not_a_clean_answer() {
         "A holds nothing contiguous from B, so it must claim nothing"
     );
     let repair = b
-        .ops_missing_from(&a.digest(&Ed25519Verifier).unwrap())
+        .ops_missing_from(&Ed25519Verifier, &a.digest(&Ed25519Verifier).unwrap())
         .unwrap();
     assert_eq!(
         repair.len(),
@@ -658,7 +666,7 @@ fn a_compacted_journal_stays_complete_and_stops_the_prefix_coming_back() {
 
     // 3. So the peer that still holds the retired prefix sends none of it.
     assert!(
-        b.ops_missing_from(&a.digest(&Ed25519Verifier).unwrap())
+        b.ops_missing_from(&Ed25519Verifier, &a.digest(&Ed25519Verifier).unwrap())
             .unwrap()
             .is_empty(),
         "the retired prefix must not come back every sixty seconds"
@@ -997,7 +1005,7 @@ fn a_peers_introduction_arrives_readable_and_changes_no_roster_row() {
 
     // Ring-sync, the way a peer delivers: digest out, missing ops back in.
     let for_me = b
-        .ops_missing_from(&a.digest(&Ed25519Verifier).unwrap())
+        .ops_missing_from(&Ed25519Verifier, &a.digest(&Ed25519Verifier).unwrap())
         .unwrap();
     assert_eq!(
         a.ingest_all(&for_me).unwrap(),

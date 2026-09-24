@@ -1997,6 +1997,7 @@ version = "0.7.0"
 dependencies = [
  "ed25519-dalek 2.2.0",
  "hex",
+ "kernel-types",
  "oplog",
  "serde",
  "serde_json",
@@ -2057,6 +2058,7 @@ dependencies = [
  "getrandom 0.3.4",
  "hex",
  "iroh",
+ "kernel-types",
  "rustls",
  "serde",
  "serde_json",
@@ -13255,6 +13257,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "understanding-vocab",
+ "unicode-normalization",
  "uuid",
  "walkdir",
  "workspace-hack",

@@ -1819,6 +1819,7 @@ mod tests {
             claims_total: 3,
             claims_unsupported: 2,
             whole_summary_violation: Some(0.9),
+            name_violations: Vec::new(),
         })
     }
 
@@ -1827,6 +1828,7 @@ mod tests {
             claims_total: 3,
             claims_unsupported: 0,
             whole_summary_violation: Some(0.1),
+            name_violations: Vec::new(),
         })
     }
 

@@ -374,6 +374,7 @@ async fn ten_thousand_ops_do_not_fit_one_chunk() {
     let (_state, journal, rail) = node(dir.path(), &key, 10_000);
     let (chunk, more) = journal
         .ops_missing_from_within(
+            &commonwealth_rail::Ed25519Verifier,
             &commonwealth_rail::Digest::new(),
             RING_SYNC_OPS_BUDGET_BYTES,
         )

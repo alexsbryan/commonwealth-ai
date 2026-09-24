@@ -215,8 +215,21 @@ impl RingJournal {
     ///
     /// The honest TOTAL, and therefore the wrong thing to put on a wire: use
     /// [`RingJournal::ops_missing_from_within`] for that.
-    pub fn ops_missing_from(&self, theirs: &Digest) -> Result<Vec<Op<SignedOp>>, RailError> {
-        Ok(ops_missing_from(&self.read()?.0, theirs))
+    ///
+    /// Takes the verifier for the reason [`RingJournal::digest`] does: the
+    /// peer's claim folds only authenticated ops, so ours must be judged by
+    /// the same scheme or a forged line reads as a fork that never heals.
+    pub fn ops_missing_from(
+        &self,
+        verifier: &dyn RingVerifier,
+        theirs: &Digest,
+    ) -> Result<Vec<Op<SignedOp>>, RailError> {
+        Ok(ops_missing_from(
+            &self.read()?.0,
+            &self.namespace,
+            verifier,
+            theirs,
+        ))
     }
 
     /// [`RingJournal::ops_missing_from`], stopped at `budget_bytes` of
@@ -231,11 +244,14 @@ impl RingJournal {
     /// the rail stays a crate a ring app can lift without an HTTP server.
     pub fn ops_missing_from_within(
         &self,
+        verifier: &dyn RingVerifier,
         theirs: &Digest,
         budget_bytes: usize,
     ) -> Result<(Vec<Op<SignedOp>>, bool), RailError> {
         Ok(ops_missing_from_within(
             &self.read()?.0,
+            &self.namespace,
+            verifier,
             theirs,
             budget_bytes,
         ))

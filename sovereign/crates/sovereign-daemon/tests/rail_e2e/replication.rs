@@ -141,7 +141,9 @@ async fn two_nodes_converge_through_the_sync_route() {
     .await;
     assert_eq!(led_a.ingest_all(&first.ops).unwrap(), 1);
 
-    let for_b = led_a.ops_missing_from(&first.digest).unwrap();
+    let for_b = led_a
+        .ops_missing_from(&commonwealth_rail::Ed25519Verifier, &first.digest)
+        .unwrap();
     assert_eq!(for_b.len(), 1);
     let second = sync_once(
         state_b.clone(),

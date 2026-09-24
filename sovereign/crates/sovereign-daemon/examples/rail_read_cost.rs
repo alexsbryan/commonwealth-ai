@@ -357,7 +357,9 @@ fn main() {
             // ONE-EXCHANGE PAYLOAD BYTES: what a fresh peer (empty digest)
             // is sent, or must push. Envelope matches RingSyncRequest /
             // RingSyncResponse field-for-field.
-            let missing = j.ops_missing_from(&Digest::new()).unwrap();
+            let missing = j
+                .ops_missing_from(&commonwealth_rail::Ed25519Verifier, &Digest::new())
+                .unwrap();
             assert_eq!(missing.len(), n, "an empty digest must ask for all of it");
             let req = serde_json::json!({
                 "namespace": ns,
@@ -398,7 +400,9 @@ fn main() {
         // Seed generously past the ceiling once, then take prefixes.
         let cap = 20_000usize;
         seed(&j, &k, &actor, cap, *mk);
-        let all = j.ops_missing_from(&Digest::new()).unwrap();
+        let all = j
+            .ops_missing_from(&commonwealth_rail::Ed25519Verifier, &Digest::new())
+            .unwrap();
         let dg = j.digest(&commonwealth_rail::Ed25519Verifier).unwrap();
         let body_bytes = |n: usize| {
             serde_json::to_vec(&serde_json::json!({

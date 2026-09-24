@@ -292,7 +292,11 @@ pub async fn ring_sync(
     // the pull direction converged at a size where the identical peer being
     // pushed to was refused — and an unbounded body is also an unbounded
     // allocation on a route any peer that can route here may call.
-    let selection = journal.ops_missing_from_within(&req.digest, RING_SYNC_OPS_BUDGET_BYTES);
+    let selection = journal.ops_missing_from_within(
+        &commonwealth_rail::Ed25519Verifier,
+        &req.digest,
+        RING_SYNC_OPS_BUDGET_BYTES,
+    );
     let (digest, (ops, more_for_caller)) = match (
         journal.digest(&commonwealth_rail::Ed25519Verifier),
         selection,

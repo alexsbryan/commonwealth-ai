@@ -121,6 +121,35 @@ pub(crate) fn sealed_floors<'a>(
     floors
 }
 
+/// The ops whose signature verifies under their claimed actor — the ONE
+/// reading of "what this node honestly holds" (ARCH 8). [`digest`] folds a
+/// head over it, and [`ops_missing_from_within`] must fold the peer's window
+/// over the same set: a check that folded everything held would compare a
+/// forged line against a head that never counted it, see a mismatch no
+/// exchange can heal, and resend the actor's whole window every call.
+fn authentic<'a>(
+    ops: &'a [Op<SignedOp>],
+    namespace: &str,
+    verifier: &dyn RingVerifier,
+) -> Vec<&'a Op<SignedOp>> {
+    ops.iter()
+        .filter(|op| {
+            verifier.verify(
+                &op.actor,
+                namespace,
+                op.ts_unix,
+                op.kind.seq,
+                &crate::body_json(
+                    &op.kind.act,
+                    op.kind.on_behalf_of.as_deref(),
+                    op.kind.view.as_ref(),
+                ),
+                &op.kind.sig,
+            )
+        })
+        .collect()
+}
+
 /// What this node can honestly claim to need nothing below, per actor.
 ///
 /// An op that does not verify under its claimed actor counts for nothing —
@@ -136,23 +165,7 @@ pub(crate) fn sealed_floors<'a>(
 /// the actor's sealed floor, so a node that has compacted a retired prefix
 /// still makes a claim instead of falling silent.
 pub fn digest(ops: &[Op<SignedOp>], namespace: &str, verifier: &dyn RingVerifier) -> Digest {
-    let authentic: Vec<&Op<SignedOp>> = ops
-        .iter()
-        .filter(|op| {
-            verifier.verify(
-                &op.actor,
-                namespace,
-                op.ts_unix,
-                op.kind.seq,
-                &crate::body_json(
-                    &op.kind.act,
-                    op.kind.on_behalf_of.as_deref(),
-                    op.kind.view.as_ref(),
-                ),
-                &op.kind.sig,
-            )
-        })
-        .collect();
+    let authentic = authentic(ops, namespace, verifier);
     let mut voided: BTreeSet<OpId> = BTreeSet::new();
     for op in &authentic {
         if let RailAct::Correct { corrects, .. } = &op.kind.act {
@@ -204,8 +217,13 @@ pub fn digest(ops: &[Op<SignedOp>], namespace: &str, verifier: &dyn RingVerifier
 /// This is [`ops_missing_from_within`] with no budget, and it is the honest
 /// TOTAL: what a caller wants when it is measuring, not when it is sending.
 /// Everything that puts ops on a wire uses the budgeted form.
-pub fn ops_missing_from(ops: &[Op<SignedOp>], theirs: &Digest) -> Vec<Op<SignedOp>> {
-    ops_missing_from_within(ops, theirs, NO_BUDGET).0
+pub fn ops_missing_from(
+    ops: &[Op<SignedOp>],
+    namespace: &str,
+    verifier: &dyn RingVerifier,
+    theirs: &Digest,
+) -> Vec<Op<SignedOp>> {
+    ops_missing_from_within(ops, namespace, verifier, theirs, NO_BUDGET).0
 }
 
 /// The budget that never binds — what [`ops_missing_from`] passes.
@@ -237,8 +255,12 @@ pub const NO_BUDGET: usize = usize::MAX;
 /// `(actor, seq)`, so the first such op is exactly one the peer lacks.
 ///
 /// **A mismatching window travels as one atomic per-actor unit**, and that is
-/// the rest of the argument. A fold mismatch at the same `(from, mark)` means
-/// the held sets differ in the window, so the two directions' units cannot
+/// the rest of the argument. Both folds run over AUTHENTICATED ops — the
+/// peer's head by [`digest`], ours here by the same [`authentic`] filter —
+/// because holdings the two folds count differently can never agree: a forged
+/// line in the window once read as a permanent fork and resent the whole unit
+/// every call. A fold mismatch at the same `(from, mark)` then means the
+/// authenticated sets differ in the window, so the two directions' units cannot
 /// both be subsets of the other side's holdings — the all-duplicates
 /// direction is paid for by the reverse direction's progress in the same
 /// call. Atomicity is what makes that unconditional under a budget: a split
@@ -263,6 +285,8 @@ pub const NO_BUDGET: usize = usize::MAX;
 /// quietly stops.
 pub fn ops_missing_from_within(
     ops: &[Op<SignedOp>],
+    namespace: &str,
+    verifier: &dyn RingVerifier,
     theirs: &Digest,
     budget_bytes: usize,
 ) -> (Vec<Op<SignedOp>>, bool) {
@@ -275,6 +299,8 @@ pub fn ops_missing_from_within(
         // receiver — not a silent drop — judge it.
         Err(_) => budget_bytes,
     };
+
+    let trusted = authentic(ops, namespace, verifier);
 
     // Actors in order, and ops within an actor by `(seq, id)` so the wire
     // payload is deterministic — two nodes with the same holdings produce
@@ -318,8 +344,11 @@ pub fn ops_missing_from_within(
             .copied()
             .filter(|op| op.kind.seq > view.mark)
             .collect();
+        // Folded over what is AUTHENTIC in the window, exactly as the peer's
+        // head was ([`authentic`]); the unit below still carries everything
+        // held — author-blind, store it and gossip it.
         let mismatch =
-            View::of(*actor, view.from, view.mark, window.iter().copied()).head != view.head;
+            View::of(actor, view.from, view.mark, trusted.iter().copied()).head != view.head;
         if !mismatch {
             for op in over {
                 let cost = cost_of(op, budget_bytes);
@@ -338,6 +367,13 @@ pub fn ops_missing_from_within(
         // argument above): what is in the claimed run first, then what is
         // above the mark — all of it in this call, or none of it.
         let unit: Vec<&Op<SignedOp>> = window.into_iter().chain(over).collect();
+        tracing::debug!(
+            actor = %crate::actor_prefix(actor),
+            from = view.from,
+            mark = view.mark,
+            ops = unit.len(),
+            "rail sync: window_mismatch — the claimed run folds differently here, sending it as one unit"
+        );
         if unit.is_empty() {
             continue;
         }
@@ -387,7 +423,7 @@ mod tests {
         assert_eq!(marks(&digest_of(&held)), BTreeMap::from([(actor(1), 0)]));
 
         let peer_has = vec![op(1, 0, 10), op(1, 1, 11), op(1, 2, 12)];
-        let sent = ops_missing_from(&peer_has, &digest_of(&held));
+        let sent = ops_missing_from(&peer_has, NS, &Ed25519Verifier, &digest_of(&held));
         assert_eq!(
             sent.iter().map(|o| o.kind.seq).collect::<Vec<_>>(),
             vec![1, 2],
@@ -402,7 +438,10 @@ mod tests {
         let held = vec![op(1, 3, 13)];
         assert!(digest_of(&held).is_empty());
         let peer_has = vec![op(1, 0, 10), op(1, 1, 11), op(1, 3, 13)];
-        assert_eq!(ops_missing_from(&peer_has, &digest_of(&held)).len(), 3);
+        assert_eq!(
+            ops_missing_from(&peer_has, NS, &Ed25519Verifier, &digest_of(&held)).len(),
+            3
+        );
     }
 
     /// An actor we have never heard of is absent, and absence asks for
@@ -411,13 +450,16 @@ mod tests {
     #[test]
     fn an_unknown_actor_gets_their_whole_history() {
         let peer_has = vec![op(2, 0, 10), op(2, 1, 11)];
-        assert_eq!(ops_missing_from(&peer_has, &Digest::new()).len(), 2);
+        assert_eq!(
+            ops_missing_from(&peer_has, NS, &Ed25519Verifier, &Digest::new()).len(),
+            2
+        );
     }
 
     #[test]
     fn a_peer_that_is_already_caught_up_is_sent_nothing() {
         let ops = vec![op(1, 0, 10), op(1, 1, 11)];
-        assert!(ops_missing_from(&ops, &digest_of(&ops)).is_empty());
+        assert!(ops_missing_from(&ops, NS, &Ed25519Verifier, &digest_of(&ops)).is_empty());
     }
 
     /// Replication is author-blind: a node republishes what it HOLDS, so a
@@ -426,7 +468,7 @@ mod tests {
     fn a_node_republishes_ops_it_did_not_author() {
         let departed = op(3, 0, 10);
         let held = vec![op(1, 0, 11), departed.clone()];
-        let sent = ops_missing_from(&held, &digest_of(&[op(1, 0, 11)]));
+        let sent = ops_missing_from(&held, NS, &Ed25519Verifier, &digest_of(&[op(1, 0, 11)]));
         assert_eq!(sent, vec![departed], "someone else's op, still republished");
     }
 
@@ -476,14 +518,14 @@ mod tests {
         let compacted = vec![seal(1, 3, 103), op(1, 4, 104)];
         let peer_holds: Vec<_> = retired.iter().chain(&compacted).cloned().collect();
         assert!(
-            ops_missing_from(&peer_holds, &digest_of(&compacted)).is_empty(),
+            ops_missing_from(&peer_holds, NS, &Ed25519Verifier, &digest_of(&compacted)).is_empty(),
             "the retired prefix is not wanted and must not be sent"
         );
 
         // And the seal still travels to a peer that has not got it yet: a
         // node cannot honour a floor it has never seen.
         assert_eq!(
-            ops_missing_from(&peer_holds, &digest_of(&retired))
+            ops_missing_from(&peer_holds, NS, &Ed25519Verifier, &digest_of(&retired))
                 .iter()
                 .map(|o| o.kind.seq)
                 .collect::<Vec<_>>(),
@@ -534,7 +576,7 @@ mod tests {
         );
         let peer_has: Vec<_> = (0..=5).map(|s| op(1, s, 10 + s as i64)).collect();
         assert_eq!(
-            ops_missing_from(&peer_has, &digest_of(&held))
+            ops_missing_from(&peer_has, NS, &Ed25519Verifier, &digest_of(&held))
                 .iter()
                 .map(|o| o.kind.seq)
                 .collect::<Vec<_>>(),
@@ -555,6 +597,31 @@ mod tests {
             spoofed(9, 1, 3, 13, record("evil")),
         ];
         assert_eq!(marks(&digest_of(&held)), BTreeMap::from([(actor(1), 2)]));
+    }
+
+    /// **A forged line inside a window must not read as a fork.** The peer's
+    /// head folds only authenticated ops ([`digest`]); a mismatch check that
+    /// folded everything held saw a disagreement no exchange could heal, and
+    /// resent the actor's whole window every call, forever — two nodes with
+    /// IDENTICAL holdings, one pushed line between them.
+    #[test]
+    fn identical_holdings_with_a_forged_line_in_the_window_send_nothing() {
+        let held = vec![
+            op(1, 0, 10),
+            spoofed(9, 1, 1, 11, record("evil")),
+            op(1, 1, 11),
+            op(1, 2, 12),
+        ];
+        assert!(
+            ops_missing_from(&held, NS, &Ed25519Verifier, &digest_of(&held)).is_empty(),
+            "same holdings, nothing to send"
+        );
+        let forked = vec![op(1, 0, 10), op(1, 1, 11), op(1, 1, 99), op(1, 2, 12)];
+        assert_eq!(
+            ops_missing_from(&forked, NS, &Ed25519Verifier, &digest_of(&held)).len(),
+            4,
+            "the control: a REAL fork in the same window still travels as the unit"
+        );
     }
 
     /// **A voided seal retires nothing.** `Correct` voids without erasure and
@@ -590,8 +657,8 @@ mod tests {
         let a = vec![op(1, 0, 10), op(2, 0, 11), op(1, 1, 12)];
         let b = vec![op(1, 1, 12), op(1, 0, 10), op(2, 0, 11)];
         assert_eq!(
-            ops_missing_from(&a, &Digest::new()),
-            ops_missing_from(&b, &Digest::new())
+            ops_missing_from(&a, NS, &Ed25519Verifier, &Digest::new()),
+            ops_missing_from(&b, NS, &Ed25519Verifier, &Digest::new())
         );
     }
 
@@ -606,8 +673,12 @@ mod tests {
     #[test]
     fn the_unbudgeted_form_is_the_budgeted_one_with_no_budget() {
         let held: Vec<_> = (0..20).map(|s| op(1, s, 100 + s as i64)).collect();
-        let (all, more) = ops_missing_from_within(&held, &Digest::new(), NO_BUDGET);
-        assert_eq!(all, ops_missing_from(&held, &Digest::new()));
+        let (all, more) =
+            ops_missing_from_within(&held, NS, &Ed25519Verifier, &Digest::new(), NO_BUDGET);
+        assert_eq!(
+            all,
+            ops_missing_from(&held, NS, &Ed25519Verifier, &Digest::new())
+        );
         assert!(!more, "a budget that cannot bind never truncates");
     }
 
@@ -616,7 +687,8 @@ mod tests {
     fn a_budget_nothing_reaches_sends_everything_and_reports_no_more() {
         let held: Vec<_> = (0..20).map(|s| op(1, s, 100 + s as i64)).collect();
         let whole = wire_bytes(&held);
-        let (sent, more) = ops_missing_from_within(&held, &Digest::new(), whole * 2);
+        let (sent, more) =
+            ops_missing_from_within(&held, NS, &Ed25519Verifier, &Digest::new(), whole * 2);
         assert_eq!(sent.len(), 20);
         assert!(!more);
     }
@@ -628,7 +700,8 @@ mod tests {
     fn a_budget_that_binds_sends_the_lowest_ops_and_reports_more() {
         let held: Vec<_> = (0..20).map(|s| op(1, s, 100 + s as i64)).collect();
         let five = wire_bytes(&held[..5]);
-        let (sent, more) = ops_missing_from_within(&held, &Digest::new(), five);
+        let (sent, more) =
+            ops_missing_from_within(&held, NS, &Ed25519Verifier, &Digest::new(), five);
         assert!(more, "the budget cut it short and must say so");
         assert!(
             (1..20).contains(&sent.len()),
@@ -652,7 +725,7 @@ mod tests {
     #[test]
     fn an_op_bigger_than_the_whole_budget_is_still_sent_alone() {
         let held: Vec<_> = (0..3).map(|s| op(1, s, 100 + s as i64)).collect();
-        let (sent, more) = ops_missing_from_within(&held, &Digest::new(), 1);
+        let (sent, more) = ops_missing_from_within(&held, NS, &Ed25519Verifier, &Digest::new(), 1);
         assert_eq!(sent.len(), 1, "exactly one, never zero");
         assert_eq!(sent[0].kind.seq, 0);
         assert!(more);
@@ -670,7 +743,8 @@ mod tests {
         let mut peer: Vec<Op<SignedOp>> = Vec::new();
         let mut rounds = 0;
         loop {
-            let (chunk, more) = ops_missing_from_within(&held, &digest_of(&peer), budget);
+            let (chunk, more) =
+                ops_missing_from_within(&held, NS, &Ed25519Verifier, &digest_of(&peer), budget);
             if chunk.is_empty() {
                 assert!(!more, "nothing to send cannot also mean more remains");
                 break;

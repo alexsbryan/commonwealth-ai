@@ -601,11 +601,14 @@ pub async fn exchange(
 
         // ── Call 2 — give them one chunk of what they lack, out of
         // everything we now hold.
-        let (for_peer, more_for_peer) =
-            match journal.ops_missing_from_within(&first.digest, RING_SYNC_OPS_BUDGET_BYTES) {
-                Ok(v) => v,
-                Err(e) => return out.stopped(ExchangeStop::Failed(format!("local journal: {e}"))),
-            };
+        let (for_peer, more_for_peer) = match journal.ops_missing_from_within(
+            &commonwealth_rail::Ed25519Verifier,
+            &first.digest,
+            RING_SYNC_OPS_BUDGET_BYTES,
+        ) {
+            Ok(v) => v,
+            Err(e) => return out.stopped(ExchangeStop::Failed(format!("local journal: {e}"))),
+        };
         let offered = for_peer.len();
         let pushed = if for_peer.is_empty() {
             0

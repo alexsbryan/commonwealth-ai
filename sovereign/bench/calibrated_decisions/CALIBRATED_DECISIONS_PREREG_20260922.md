@@ -3,7 +3,7 @@
 Written 2026-09-22, before any result is collected, against `main` @ 592e40eee.
 The bars below are fixed when this file is committed. Nothing is edited after
 the first result lands; changes append under a dated heading.
-Discipline inherited from `VERIFIER_ECONOMY_PREREG_20260819.md` §"Shared discipline".
+Discipline inherited from `bench/VERIFIER_ECONOMY_PREREG_20260819.md` §"Shared discipline".
 
 ## Why this, and why now
 
@@ -297,3 +297,118 @@ in pi, and handles give up prompt-cache prefix reuse.
 
 **SoL-Pi Evidence-Preserving Reducer** for build, lint and test output. The
 next effort after this one, as stated above.
+
+## 2026-09-23 — Retrieval and the gate, read against Jev's architecture
+
+Appended before any result, against `main` @ 22a41304c. None of the bars above
+change. Source: an outside reconstruction of Jev
+(archerhume.com, "Jev's architecture unmasked"), not the vendor. Its numbers are
+the author's measurements of the hosted service.
+
+**What the reconstruction claims.** Jev is a causal transformer, probably
+sparse MoE, used prefill-only: a shared state is encoded once, each question is
+an isolated branch over that state's KV, and probabilities are read off a
+linear head. There is no decoding. Question tokens cost about twice what state
+tokens cost, and 1,500 questions over a short state take about 610 ms. The
+model is trained against outcomes with a proper scoring rule. Options interact:
+adding an irrelevant fifth option moved the relative odds of two others by
+−0.28 log-odds (95% CI −0.36 to −0.19).
+
+**What does not transfer.** Speed that comes from the model and the hardware.
+Jev's ~160 ms for a 30k-token state is prefill on a remote fleet. Here the
+primary tier restores a pinned ~6k-token prefix in 26–43 ms but prefills one
+cold in about 7.7 s (`bench/chaos_monkey/results/gate_call_census_20260814_landed.txt`).
+Any decision that needs a fresh primary prefill per call stays slow. Savings
+come from sharing state and cutting calls, not from a faster reader.
+
+**What transfers.** Encoding the state once and asking many typed questions of
+it, and setting thresholds from outcomes. The gate already does the first
+once: `claim_violation_joint` (`grounding/judge/batched.rs:479`) renders one
+`EvidenceFamily` window per audit pass and every sibling call hits it. The
+rest of the path does not. The wall-clock is in the gate: about 57 s per turn
+across 8–13 per-claim judges of 0.9–3.0 s each, against a retrieval p50 of
+about 3 s (`docs/RETRIEVAL_REDESIGN.md:387`).
+
+Six items, in the order proposed.
+
+**R1. Per-step elapsed time in the retrieval runner.** Instrumentation, no bar.
+`RetrievalPipeline::run` (`retrieval_pipeline.rs:702`) logs chunk counts per
+step but no time, so no step's cost can be read from a trace. Add `elapsed_ms`
+to the `retrieval.pipeline: step` event. In the same commit, fix the module
+doc table (`:29-73`), which lists 12 core steps where `shared_core_steps()`
+has 18.
+
+**R2. Gate verdicts as relevance labels for retrieval.** Instrumentation first,
+then a measurement. Every gated answer already yields a support probability
+for each (claim, chunk) pair. Stamp each chunk with the step that introduced
+it, and log the best-support chunk for each claim with its probability. That
+gives ground truth by outcome for retrieval: which injectors bring in evidence
+that supports a shipped claim, and which only add tokens. It is the measurement
+against which these hand-set values get tested:
+
+- `RELEVANCE_DISTANCE_PULL` 0.3 (`retrieval_helpers.rs:363`)
+- `RANK_K` 20 and `ARTICLE_DECAY` 0.7 (`merge_select.rs:43,52`)
+- the lexical `noise_floor` (`retrieval_helpers.rs:628`)
+- the obligations lane, which costs 3.44 s at its join (`retrieval_pipeline.rs:1713`)
+
+A label from an abstained or regenerated answer is kept, with its gate state
+beside it. A chunk the gate never judged is `never_ran`, not unsupported.
+
+**R3. One evidence prefix across sufficiency, synthesis and the gate.** Speed.
+These calls still prefill the evidence cold:
+
+- the evidence-sufficiency judge (`evidence_loop/mod.rs:515`, prefix `None`)
+- `verify_grounding`'s per-chunk loop (`grounding/judge.rs:578`, through `claim_chunk_support`)
+- `claim_list` and `surgery`
+
+If the sealed evidence is the same bytes at the head of each prompt, it is
+prefilled once per answer. Unverified: whether synthesis orders its prompt so
+its prefix can match `EvidenceFamily`'s. Check that before building anything.
+
+Proposed bars, to be fixed in an appended pre-registration before any run:
+
+- gate wall-clock p50 and p95 per turn fall, with disjoint intervals;
+- every gate verdict on the frozen holdout is unchanged;
+- the prefix-hit census shows each named call hitting.
+
+**R4. `verify_grounding` as one N-way choice.** Speed and a changed quantity.
+Today it asks up to 12 sequential A/B questions, "does chunk *i* support the
+claim?", and takes `violation_prob = 1 − max support`. The N-way form asks once,
+"which passage states or implies the claim? A…L, M = none", on the funnel this
+document builds, over the R3 prefix.
+
+Because options interact, `p(M)` is not the same quantity as
+`1 − max support`. So the 0.45 / 0.96 gap is re-measured on the
+contamination-free holdout, not carried over. Instrument validation check 2
+(position bias) must pass at N = 13, not only at N = 3. Kill if the gap
+closes, or if any fabricated holdout claim scores below the threshold.
+
+**R5. Parallel claim branches off the pinned prefix.** Speed, engine-dependent.
+The 8–13 per-claim judges run one after another. With a shared prefix they are
+independent short suffixes, which is Jev's isolated-branch shape.
+
+Unverified: whether the embedded engine can fork a restored KV across concurrent
+requests on the primary slot. That is answered by reading the engine before any
+bar is written. If it cannot, R5 is dropped, not built as engine work under
+this effort.
+
+**R6. Calibrate the existing reranker; do not make it resident.** Quality. The
+Qwen3-Reranker-0.6B is already a yes/no-logit decision model. It was rejected
+as a resident slot on latency, not on quality (`DEFAULTS_LEDGER.md:2399+`):
+mean RR went from 0.263 to 0.397 while search p50 went from 557 ms to 4,566 ms.
+
+Fit Platt scaling to its logit on R2's labels, on a fit split. Then use the
+probability only where one number replaces several heuristics. The main
+candidate is `cap_and_reserve` (`retrieval_pipeline.rs:1979`) choosing by
+p(relevant) per token under the budget, instead of greedy per-article decay.
+Run the reranker only when the pool is ambiguous, not on every query. It is
+blocked on R2's labels and gets its own appended bars (MRR on the held-out
+split, and a search p50 rise capped before data).
+
+**Not pursued.** The retrieval-time fast-slot calls (`demand_plan`,
+`title_expand`). They are off by default, and the fast slot returns a sampled
+token, not a distribution, which this document already records as measured dead.
+
+**Where this goes next.** The larger plan these items sit under (the pipeline
+as a decision process, the fast-slot readout question, and a model trained for
+decisions) is `CALIBRATED_DECISIONS_MODEL_20260923.md`.

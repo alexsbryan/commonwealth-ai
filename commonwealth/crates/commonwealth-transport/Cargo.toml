@@ -7,6 +7,10 @@ license.workspace = true
 
 [dependencies]
 commonwealth-core = { workspace = true }
+# The shared wire identity (GUEST_ALPN in `alpn`) — layer 0, beside the
+# kernel hash types `oplog` already folds with. The wasm guest runtime
+# spells the same constant from its standalone closure (ROOT_CAUSE_FIXES B3).
+kernel-types = { workspace = true }
 async-trait = { workspace = true }
 tracing = { workspace = true }
 ed25519-dalek = { workspace = true }
