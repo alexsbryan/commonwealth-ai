@@ -2292,12 +2292,11 @@ Eight decision points, each with one home:
 | Distributed placement (model > one node) | `sovereign-inference/embedded/rpc_distribution.rs` |
 | Collaborative ingest partitioning | `sovereign-grants/knowledge_assignment.rs` |
 
-<<<<<<< HEAD
 Slot policy is normative in [`docs/SLOT_POLICY.md`](./docs/SLOT_POLICY.md):
 call sites declare a `slot_policy::Workload` requirement bundle rather than
 free-handing `Speed::` literals. The composed OICP scoring product lives ONCE
 in `oicp-types`.
-=======
+
 **What a member SERVES is gossiped beside how it is reached** (`NodeCapabilities::origins`,
 `OriginKind`, 2026-09-11). `OriginKind` is defined in `oicp_types::origin` since the same
 day (sv-surface svt-3) and re-exported at `commonwealth_core::capabilities::OriginKind`:
@@ -2320,12 +2319,16 @@ rides the same stamp** (2026-09-19): what the holder's origin can serve right
 now — `0.0` the holder is watching it, `1.0` free, `None` nobody answered, and
 a `None` is never read as free. It is written by the holder's presence poll
 (`sovereign-daemon/src/media_presence.rs`, every 10 s) through the SAME
-`POST /internal/node/activity` the inference half uses, decided by
-`commonwealth_media::presence` against the origin's sessions and the viewer
-account in `[iroh] media_viewer_user`. The poll asks with the HOUSE credential
-(`<data_dir>/secrets/media-house/`, `commonwealth_media::house_dir_under`) —
-the install-stage credential `offer` spends and then replaces, kept on the
-holder's machine and carried by no dial, because Jellyfin 12 shows a
+`POST /internal/node/activity` the inference half uses. Since five-programs
+fp-46 the poll's DECISION lives in cw-rails (`commonwealth-rails/src/presence.rs`):
+origin, HOUSE credential and viewer account are its to hold,
+`commonwealth_media::presence` decides against the origin's sessions, and the
+daemon reads `GET /v1/mesh/media/presence`, publishing the served value and
+naming the absence in the log when the serving process does not answer
+(fp-47). The HOUSE credential — the install-stage credential `offer` spends
+and then replaces, kept under the serving process's own data root
+(`<data_dir>/secrets/media-house/`, `commonwealth_media::house_dir_under`)
+and carried by no dial, because Jellyfin 12 shows a
 read-only user only the sessions it may remote-control and so the DECLARED
 viewer token reads the holder's own playback as "free" (2026-09-19); the gossip stamp drops it whenever this
 node publishes no media origin, so a reading cannot outlive its offer.
@@ -2342,7 +2345,6 @@ with their status, because a person wants to know the library exists. And
 (`MediaReachRefusal::NoOrigin`) instead of minting a bridge the far end will
 close. `MemberDto::origins` carries the same fact on `/v1/mesh/status`. Watched
 failing: `commonwealth-media reach::tests::a_member_that_advertises_no_media_origin_is_refused_by_name`.
->>>>>>> origin
 
 Scheduler quality is instrumented rather than asserted.
 `sovereign-scheduler/decision_log.rs` writes one `RoutingDecision` per

@@ -98,6 +98,33 @@ pub async fn roster_names(base: &str, key: NodePubkey) -> Result<bool, RailsDial
     Ok(answer.named)
 }
 
+/// The media-presence poll's last reading, as the serving process holds it.
+///
+/// `Ok(None)` is the route's served VALUE `{"media_available": null}` — the
+/// poll over there could not ask, and "nobody answered" is the reading — not
+/// a refusal; refusals and absences are the `Err` arms.
+pub async fn media_presence(base: &str) -> Result<Option<f32>, RailsDial> {
+    let resp = dial(base, "/v1/mesh/media/presence").await?;
+    let status = resp.status();
+    if !status.is_success() {
+        let message = resp.text().await.unwrap_or_default();
+        return Err(RailsDial::Refused {
+            status,
+            kind: None,
+            message: format!("media/presence refused: {status} {message}"),
+        });
+    }
+    #[derive(serde::Deserialize)]
+    struct Answer {
+        media_available: Option<f32>,
+    }
+    let answer: Answer = resp.json().await.map_err(|e| RailsDial::Unreadable {
+        base: base.to_string(),
+        detail: e.to_string(),
+    })?;
+    Ok(answer.media_available)
+}
+
 /// Retire one member row, on the process that owns the roster.
 pub async fn forget_member(
     base: &str,

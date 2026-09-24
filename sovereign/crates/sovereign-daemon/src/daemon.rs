@@ -3402,10 +3402,12 @@ impl EmbeddedDaemon {
             internal_port,
         );
 
-        // The holder's media-presence poll (`crate::media_presence`): this
-        // process reporting to itself, so loopback regardless of internal_bind.
+        // The holder's media-presence poll (`crate::media_presence`): the
+        // reading is the mesh's serving process's, the report is this
+        // process's own, so both halves stay loopback regardless of
+        // internal_bind.
         tokio::spawn(crate::media_presence::run(
-            self.media_route.clone(),
+            app_state.inner.node.rails_base.clone(),
             format!("http://127.0.0.1:{internal_port}"),
         ));
 
