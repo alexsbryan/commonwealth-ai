@@ -75,13 +75,24 @@ pub fn router(daemon: Arc<RailsDaemon>) -> Router {
         // log over this node's own journals, and the live lane's local
         // buffer half. The bodies mirror the daemon's `routes_rail` doors;
         // the guest half does not exist here — the namespace is always the
-        // caller's explicit one.
+        // caller's explicit one. The sync doors (fp-54) are the round's
+        // read/write surface over the same journals — rail-core JSON, no
+        // sovereign-* wire types.
         .route("/v1/rail/append", post(crate::rail::append))
         .route("/v1/rail/log", get(crate::rail::log))
         .route(
             "/v1/rail/live",
             post(crate::rail::live_push).get(crate::rail::live_drain),
         )
+        .route("/v1/rail/namespaces", get(crate::rail::namespaces))
+        .route("/v1/rail/actor", get(crate::rail::actor))
+        .route("/v1/rail/digest", get(crate::rail::journal_digest))
+        .route("/v1/rail/roster", get(crate::rail::journal_roster))
+        .route("/v1/rail/read", get(crate::rail::journal_read))
+        .route("/v1/rail/missing", post(crate::rail::journal_missing))
+        .route("/v1/rail/ingest", post(crate::rail::journal_ingest))
+        .route("/v1/rail/admit", post(crate::rail::journal_admit))
+        .route("/v1/rail/compact", post(crate::rail::journal_compact))
         .with_state(daemon)
 }
 

@@ -10,12 +10,13 @@ use axum::http::StatusCode;
 use commonwealth_core::capabilities::OriginKind;
 use commonwealth_core::ids::{NodeId, NodePubkey};
 use commonwealth_core::mesh::{MemberRecord, Mesh, NodeStatus};
-use commonwealth_rail::{Person, RailAct, RingRail, RingSigner, SigningKey};
+use commonwealth_rail::{Digest, Person, RingRail, RingSigner, SigningKey};
 use tokio::sync::RwLock;
 
 use super::{
-    append_act, derive_roster, drain_answer, journal_of, push_answer, LiveBuffer,
-    MembershipRosterSource,
+    admit_answer, append_act, compact_answer, derive_roster, digest_answer, drain_answer,
+    ingest_answer, journal_of, missing_answer, push_answer, read_answer, roster_answer, LiveBuffer,
+    MembershipRosterSource, MissingBody,
 };
 
 fn key(seed: u8) -> SigningKey {
@@ -244,6 +245,149 @@ async fn a_seal_renders_its_prune() {
     );
     assert_eq!(retired["removed"], 2, "both sealed-over acts retire");
     assert_eq!(retired["kept"], 1, "the seal itself stays");
+}
+
+/// The sync doors are the round's read/write surface: a caller that holds
+/// nothing is offered everything; a caller that holds it all is offered
+/// nothing; ingesting what is already held moves nothing; and the roster
+/// door answers WITH its origin so a caller never pairs two reads that could
+/// disagree.
+#[tokio::test]
+async fn the_sync_doors_digest_missing_and_ingest_one_journal() {
+    let mesh = mesh_with(vec![member(ME, "alex", None, false)]);
+    let (_dir, rail, _mesh) = rail_with(mesh);
+    let journal = journal_of(&rail, "ledger").unwrap();
+    for amount in 1..=2 {
+        let body = serde_json::json!({ "op": "record", "payload": { "amount" : amount } });
+        assert_eq!(
+            append_act(&rail, &journal, body).await.status(),
+            StatusCode::OK
+        );
+    }
+
+    // digest: one actor, contiguous through seq 1. A digest IS the
+    // actor→high-water map, so the JSON is that map and nothing else.
+    let out = body_of(digest_answer(&journal)).await;
+    assert_eq!(out["namespace"], "ledger");
+    assert_eq!(
+        out["digest"][RingSigner::actor(&key(7)).as_str()],
+        1,
+        "one actor, two ops, high-water seq 1"
+    );
+
+    // missing against an empty digest: everything, and `more` is false.
+    let out = body_of(missing_answer(
+        &journal,
+        MissingBody {
+            digest: Digest::default(),
+            budget: None,
+        },
+    ))
+    .await;
+    assert_eq!(out["ops"].as_array().unwrap().len(), 2);
+    assert_eq!(out["more"], false);
+    let offered = out["ops"].clone();
+
+    // missing against the digest it just got: nothing left to send.
+    let full: Digest =
+        serde_json::from_value(body_of(digest_answer(&journal)).await["digest"].clone()).unwrap();
+    let out = body_of(missing_answer(
+        &journal,
+        MissingBody {
+            digest: full.clone(),
+            budget: None,
+        },
+    ))
+    .await;
+    assert_eq!(out["ops"].as_array().unwrap().len(), 0);
+    assert_eq!(out["more"], false);
+
+    // ingest of what is already held: zero new — the steady state.
+    let out = body_of(ingest_answer(
+        &journal,
+        serde_json::from_value(serde_json::json!({ "ops": offered })).unwrap(),
+    ))
+    .await;
+    assert_eq!(out["ingested"], 0);
+
+    // read: the raw lines, refused or not.
+    let out = body_of(read_answer(&journal)).await;
+    assert_eq!(out["ops"].as_array().unwrap().len(), 2);
+    assert_eq!(out["skipped"], 0);
+
+    // roster WITH its origin — derived here, no roster file anywhere.
+    let out = body_of(roster_answer(&rail, &journal).await).await;
+    assert_eq!(out["origin"], "derived");
+    assert!(out["roster"]["members"]["alex"].is_array());
+
+    // admit against THAT roster: complete, both lines held.
+    let out = body_of(admit_answer(
+        &journal,
+        serde_json::from_value(serde_json::json!({ "roster": out["roster"].clone() })).unwrap(),
+    ))
+    .await;
+    assert_eq!(out["held"], 2);
+    assert_eq!(out["complete"], true);
+    assert_eq!(out["gaps"].as_array().unwrap().len(), 0);
+}
+
+/// The budget is a budget, not a cap: a byte-starved `missing` returns what
+/// fits and says `more`, so the caller knows to come back — the shape that
+/// makes one refused whole-journal send impossible to misread as an empty
+/// ring.
+#[tokio::test]
+async fn a_budgeted_missing_returns_what_fits_and_names_more() {
+    let mesh = mesh_with(vec![member(ME, "alex", None, false)]);
+    let (_dir, rail, _mesh) = rail_with(mesh);
+    let journal = journal_of(&rail, "ledger").unwrap();
+    for amount in 1..=3 {
+        let body = serde_json::json!({ "op": "record", "payload": { "amount" : amount } });
+        assert_eq!(
+            append_act(&rail, &journal, body).await.status(),
+            StatusCode::OK
+        );
+    }
+    let out = body_of(missing_answer(
+        &journal,
+        MissingBody {
+            digest: Digest::default(),
+            budget: Some(1),
+        },
+    ))
+    .await;
+    assert_eq!(
+        out["ops"].as_array().unwrap().len(),
+        1,
+        "one op always ships — a budget that returned nothing would read as \
+         an empty ring"
+    );
+    assert_eq!(out["more"], true, "there IS more, and the answer says so");
+}
+
+/// Compact through the door retires exactly what the roster's seals
+/// authorise — the same numbers the append door's `retired` renders, because
+/// they are one prune seen from two doors.
+#[tokio::test]
+async fn compact_retires_below_the_authenticated_floors() {
+    let mesh = mesh_with(vec![member(ME, "alex", None, false)]);
+    let (_dir, rail, _mesh) = rail_with(mesh);
+    let journal = journal_of(&rail, "ledger").unwrap();
+    for _ in 0..2 {
+        let body = serde_json::json!({ "op": "record", "payload": { "amount": 1 } });
+        assert_eq!(
+            append_act(&rail, &journal, body).await.status(),
+            StatusCode::OK
+        );
+    }
+    let out = body_of(compact_answer(
+        &journal,
+        // No seal yet: nothing is below any floor, so nothing may move.
+        serde_json::from_value(serde_json::json!({ "roster": body_of(roster_answer(&rail, &journal).await).await["roster"].clone() })).unwrap(),
+    ))
+    .await;
+    assert_eq!(out["removed"], 0);
+    assert_eq!(out["kept"], 2);
+    assert_eq!(out["gaps_cleared"], 0);
 }
 
 /// The live lane bounds its memory and reports what it drops: 257 pushes

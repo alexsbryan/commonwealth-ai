@@ -2,7 +2,10 @@
 //! The ring rail's doors — the surface a ring app writes its own state to.
 //!
 //! `POST /v1/rail/append`, `GET /v1/rail/log`, `POST+GET /v1/rail/live`,
-//! mounted beside the mesh routes in [`crate::api`]. The append and log
+//! mounted beside the mesh routes in [`crate::api`], and — since fp-54's
+//! serve half — the sync doors the ring round reads its journals through
+//! (`digest`, `missing`, `ingest`, `roster`, `read`, `admit`, `compact`,
+//! `namespaces`, `actor`), all rail-core-typed. The append and log
 //! bodies mirror the inference daemon's `routes_rail` door for door — same
 //! paths, same server-assigned fields, same retire rendering, same gap
 //! sentences — so a page written against one daemon behaves the same against
@@ -41,8 +44,8 @@ use axum::Json;
 use commonwealth_core::ids::{NodeId, NodePubkey};
 use commonwealth_core::mesh::Mesh;
 use commonwealth_rail::{
-    admit, Compaction, Ed25519Verifier, Person, RailAct, RailError, RingJournal, RingRail, Roster,
-    RosterOrigin, RosterSource,
+    admit, Compaction, Digest, Ed25519Verifier, Op, Person, RailAct, RailError, RingJournal,
+    RingRail, Roster, RosterOrigin, RosterSource, SignedOp, NO_BUDGET,
 };
 use serde::Deserialize;
 use tokio::sync::RwLock;
@@ -348,6 +351,250 @@ pub async fn log(State(daemon): State<Arc<RailsDaemon>>, Query(q): Query<RailQue
         Err(refusal) => return refusal,
     };
     log_answer(&daemon.rail, &journal).await
+}
+
+// ── The sync doors ───────────────────────────────────────────
+//
+// The anti-entropy surface a peer's ring round reads and writes the journal
+// through: digest, missing, ingest, plus the roster/origin/admit/compact
+// reads the round and the KV pump decide by. Every body and answer is
+// rail-core JSON (`Digest`, `Op<SignedOp>`, `Roster`, `Admission`) — the
+// daemon-to-daemon exchange bodies (`sovereign_peer_wire::RingSyncRequest`)
+// are typed over these same shapes, so a receiver can compose its wire
+// answer from these doors field for field without a second spelling of any
+// of them (ARCH §10.6). The wire struct itself stays daemon-side: this
+// binary is built and lifted outside the monorepo and names no
+// sovereign-* crate.
+//
+// They are primitives, not the exchange: the caller composes its round from
+// them, the way the local `RingJournal` calls composed it before the
+// journals moved here. A `missing` answer carries `more` for exactly the
+// reason `ops_missing_from_within` returns it — "everything you lack" and
+// "as much as fits" must not be confusable.
+
+/// GET /v1/rail/namespaces — every ring this daemon holds.
+pub async fn namespaces(State(daemon): State<Arc<RailsDaemon>>) -> Response {
+    match daemon.rail.namespaces() {
+        Ok(ns) => Json(serde_json::json!({ "namespaces": ns })).into_response(),
+        Err(e) => err(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+    }
+}
+
+/// GET /v1/rail/actor — the identity every line this daemon signs carries.
+///
+/// The one "who am I talking to" read the KV pump's actor-key parse and a
+/// peer's roster reasoning both start from; it is the hex pubkey, so the
+/// answer is exactly what a roster names a member by.
+pub async fn actor(State(daemon): State<Arc<RailsDaemon>>) -> Response {
+    Json(serde_json::json!({ "actor": daemon.rail.signer().actor() })).into_response()
+}
+
+/// GET /v1/rail/digest?namespace= — the journal's per-actor high-water marks.
+fn digest_answer(journal: &Arc<RingJournal>) -> Response {
+    match journal.digest() {
+        Ok(d) => Json(serde_json::json!({
+            "namespace": journal.namespace(),
+            "digest": d,
+        }))
+        .into_response(),
+        Err(e) => err(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+    }
+}
+
+/// POST /v1/rail/missing?namespace= — what this journal holds that the
+/// caller's digest says it lacks, stopped at the caller's byte budget.
+#[derive(Debug, Deserialize)]
+pub struct MissingBody {
+    /// What the caller holds. Absent means "I hold nothing", which asks for
+    /// everything — the peer-wire body's own default.
+    #[serde(default)]
+    pub digest: Digest,
+    /// Wire-byte budget for the returned ops. Absent is the budget that
+    /// never binds (`NO_BUDGET`); the ring round always names one.
+    #[serde(default)]
+    pub budget: Option<usize>,
+}
+
+fn missing_answer(journal: &Arc<RingJournal>, body: MissingBody) -> Response {
+    match journal.ops_missing_from_within(&body.digest, body.budget.unwrap_or(NO_BUDGET)) {
+        Ok((ops, more)) => Json(serde_json::json!({
+            "namespace": journal.namespace(),
+            "ops": ops,
+            "more": more,
+        }))
+        .into_response(),
+        Err(e) => err(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+    }
+}
+
+/// POST /v1/rail/ingest?namespace= — admit the caller's ops as-signed and
+/// report how many were new. Ingestion stays signature-checked by the rail;
+/// this door adds no second judgement beside the fold (ARCH §10.6).
+#[derive(Debug, Default, Deserialize)]
+pub struct IngestBody {
+    #[serde(default)]
+    pub ops: Vec<Op<SignedOp>>,
+}
+
+fn ingest_answer(journal: &Arc<RingJournal>, body: IngestBody) -> Response {
+    match journal.ingest_all(&body.ops) {
+        Ok(n) => Json(serde_json::json!({
+            "namespace": journal.namespace(),
+            "ingested": n,
+        }))
+        .into_response(),
+        Err(e) => err(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+    }
+}
+
+/// GET /v1/rail/roster?namespace= — the namespace's roster AND the origin
+/// that answered, in one body. The origin is the one decider a caller needs
+/// to know whether the answer was read from a hand-written file or derived
+/// from membership; shipping both keeps a caller from pairing two reads that
+/// could disagree.
+async fn roster_answer(rail: &RingRail, journal: &Arc<RingJournal>) -> Response {
+    let origin = match rail.roster(journal).await {
+        Ok(r) => {
+            let origin = rail.roster_origin(journal.namespace());
+            Json(serde_json::json!({
+                "namespace": journal.namespace(),
+                "origin": match origin {
+                    RosterOrigin::File => "file",
+                    RosterOrigin::Derived => "derived",
+                },
+                "roster": r,
+            }))
+        }
+        Err(e) => return err(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+    };
+    origin.into_response()
+}
+
+fn read_answer(journal: &Arc<RingJournal>) -> Response {
+    match journal.read() {
+        Ok((ops, skipped)) => Json(serde_json::json!({
+            "namespace": journal.namespace(),
+            "ops": ops,
+            "skipped": skipped.len(),
+        }))
+        .into_response(),
+        Err(e) => err(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+    }
+}
+
+/// The roster a caller's admit/compact runs against, in the body.
+///
+/// The caller's roster, not a fresh server-side read: the round reads the
+/// roster once through the roster door and then decides by it, and admit
+/// against a DIFFERENT roster than the one the decision used would make the
+/// door's answer and the caller's log disagree. The roster travels with the
+/// request the way it travelled with the local call.
+#[derive(Debug, Deserialize)]
+pub struct RosterBody {
+    pub roster: Roster,
+}
+
+fn admit_answer(journal: &Arc<RingJournal>, body: RosterBody) -> Response {
+    match journal.admit(&body.roster, &Ed25519Verifier) {
+        Ok(admission) => {
+            // `Admission` serialises (ops, gaps, held, floors); `complete`
+            // rides beside them because a UI that hid it would be hiding a
+            // subset — the log door's own rule.
+            let mut v = serde_json::to_value(&admission).unwrap_or_default();
+            if let Some(obj) = v.as_object_mut() {
+                obj.insert(
+                    "complete".into(),
+                    serde_json::Value::Bool(admission.is_complete()),
+                );
+                obj.insert(
+                    "namespace".into(),
+                    serde_json::Value::String(journal.namespace().to_string()),
+                );
+            }
+            Json(v).into_response()
+        }
+        Err(e) => err(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+    }
+}
+
+fn compact_answer(journal: &Arc<RingJournal>, body: RosterBody) -> Response {
+    match journal.compact(&body.roster, &Ed25519Verifier) {
+        Ok(done) => Json(serde_json::json!({
+            "namespace": journal.namespace(),
+            "removed": done.removed,
+            "kept": done.kept,
+            "gaps_cleared": done.gaps_cleared,
+            "floors": done.floors,
+        }))
+        .into_response(),
+        Err(e) => err(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+    }
+}
+
+/// The routed POST forms: namespace/journal extraction once, then the
+/// answer fn — the same shape the append door is.
+macro_rules! journal_route {
+    ($name:ident, $answer:ident, $body:ty) => {
+        pub async fn $name(
+            State(daemon): State<Arc<RailsDaemon>>,
+            Query(q): Query<RailQuery>,
+            Json(body): Json<$body>,
+        ) -> Response {
+            let namespace = match namespace_of(&q) {
+                Ok(ns) => ns,
+                Err(refusal) => return refusal,
+            };
+            let journal = match journal_of(&daemon.rail, &namespace) {
+                Ok(j) => j,
+                Err(refusal) => return refusal,
+            };
+            $answer(&journal, body)
+        }
+    };
+}
+
+journal_route!(journal_missing, missing_answer, MissingBody);
+journal_route!(journal_ingest, ingest_answer, IngestBody);
+journal_route!(journal_admit, admit_answer, RosterBody);
+journal_route!(journal_compact, compact_answer, RosterBody);
+
+/// The routed GET forms take no body.
+macro_rules! journal_get_route {
+    ($name:ident, $answer:ident) => {
+        pub async fn $name(
+            State(daemon): State<Arc<RailsDaemon>>,
+            Query(q): Query<RailQuery>,
+        ) -> Response {
+            let namespace = match namespace_of(&q) {
+                Ok(ns) => ns,
+                Err(refusal) => return refusal,
+            };
+            let journal = match journal_of(&daemon.rail, &namespace) {
+                Ok(j) => j,
+                Err(refusal) => return refusal,
+            };
+            $answer(&journal)
+        }
+    };
+}
+
+journal_get_route!(journal_digest, digest_answer);
+journal_get_route!(journal_read, read_answer);
+
+/// GET /v1/rail/roster.
+pub async fn journal_roster(
+    State(daemon): State<Arc<RailsDaemon>>,
+    Query(q): Query<RailQuery>,
+) -> Response {
+    let namespace = match namespace_of(&q) {
+        Ok(ns) => ns,
+        Err(refusal) => return refusal,
+    };
+    let journal = match journal_of(&daemon.rail, &namespace) {
+        Ok(j) => j,
+        Err(refusal) => return refusal,
+    };
+    roster_answer(&daemon.rail, &journal).await
 }
 
 // ── The live lane ────────────────────────────────────────────
