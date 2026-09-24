@@ -48,6 +48,7 @@ mod corpus_sync;
 mod enrichment_status;
 mod gossip;
 mod guest_grant;
+mod guest_route;
 mod knowledge;
 mod mesh_admin;
 mod model_files;
@@ -70,6 +71,7 @@ pub use corpus_ingest::{
     ProgressSnapshotResponse,
 };
 pub use guest_grant::{guest_grant_issue, guest_grant_list, guest_grant_revoke};
+pub use guest_route::{guest_route, GuestRouteResponse};
 pub use ring_live::ring_live;
 pub use ring_sync::ring_sync;
 // The ring-sync wire body lives in the shared leaf both ends can name

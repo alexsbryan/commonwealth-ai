@@ -207,6 +207,10 @@ pub struct NodePart {
     /// `routes_rail::namespace_for`, which is what scopes a wall grant — the
     /// resource declares, the credential identifies.
     pub guest_pages: Arc<crate::guest_door::GuestPages>,
+    /// The holder's stored guest link and the mesh tunnel it opens, for the
+    /// daemon's lifetime — served at `/internal/guest/route` so a CLI dials
+    /// this instead of holding a tunnel itself (§12 D6).
+    pub guest_route: Arc<sovereign_mesh::guest_lender::StoredGuestLink>,
     /// Unix-seconds timestamp of the last foreground inference request
     /// observed at `chat_completions`. `0` means "never touched" — the
     /// initial state at boot. Bumped via

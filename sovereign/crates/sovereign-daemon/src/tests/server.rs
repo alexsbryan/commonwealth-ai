@@ -419,6 +419,7 @@ async fn the_peer_and_guest_surfaces_do_not_serve_the_operator_only_routes() {
         "/internal/inference/warmup",
         "/internal/guest/grant",
         "/internal/guest/grant/revoke",
+        "/internal/guest/route",
     ];
     const TOKEN: &str = "deadbeefcafef00ddeadbeefcafef00ddeadbeefcafef00ddeadbeefcafef00d";
 

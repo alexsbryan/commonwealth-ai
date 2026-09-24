@@ -1084,6 +1084,10 @@ impl AppState {
                     rails_base: node_seed.rails_base,
                     guest_sessions: Arc::new(GuestSessionStore::new(node_seed.guest_sessions)),
                     guest_pages: Arc::new(node_seed.guest_pages),
+                    guest_route: Arc::new(sovereign_mesh::guest_lender::StoredGuestLink::new(
+                        Arc::new(sovereign_mesh::guest_source::GuestLinkFileReader::new()),
+                        Arc::new(sovereign_mesh::guest_source::MeshTunnelOpener),
+                    )),
                     // 0 sentinel = no foreground activity observed yet.
                     // The yield hook treats 0 as "never active", regardless
                     // of the window — so a fresh boot doesn't accidentally

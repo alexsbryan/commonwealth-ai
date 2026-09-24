@@ -2460,7 +2460,7 @@ grants, because no `Scope` variant names `/internal/*`.
 | `GET /oicp/v1/capabilities` | Provider manifest + federation info |
 | `/api/{version,tags,ps,show,chat,generate,embed,embeddings}` | Ollama-native compatibility shim, pure translation over the OpenAI handlers |
 | `POST /internal/ring/sync`, `/v1/rail/*` | The ring rail: anti-entropy, append, log, and the LIVE lane (delivery, not record — nothing reaches a store or a disk). The journals live at `cw-rails` since fp-54: `/v1/rail/*` dials the serving process's doors through the rail port, and guest WRITE is refused with a named absence (the serving door carries no sessions, so a guest stamp cannot be authenticated) |
-| `/internal/guest/grant`, `…/revoke`, `…/list` | Mint / kill / list guest grants. On the Operator bind ONLY |
+| `/internal/guest/grant`, `…/revoke`, `…/list`; `GET /internal/guest/route` | Mint / kill / list guest grants; the holder's side answers the base URL its stored link reaches (opening the mesh tunnel), 412/502 named absence otherwise. On the Operator bind ONLY |
 | `/v1/mesh/*`, `/v1/admin/*`, `/mcp/*` | Loopback-only |
 
 **Which listener serves a route is the guard; "is the caller loopback" is
