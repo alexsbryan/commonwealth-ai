@@ -500,7 +500,10 @@ mod offer;
 use offer::{cmd_media_admit, cmd_media_offer, cmd_media_withdraw};
 // The offer helpers the test module drives; reached through `use super::*`.
 #[cfg(test)]
-use offer::{clear_offer, probe_origin, set_offer, stored_origin, WELL_KNOWN_ORIGINS};
+use offer::{
+    clear_offer, keep_for_poll, poll_house_dir, probe_origin, set_offer, stored_origin,
+    WELL_KNOWN_ORIGINS,
+};
 
 #[cfg(test)]
 mod tests;

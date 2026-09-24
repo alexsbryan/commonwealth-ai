@@ -2250,7 +2250,9 @@ glue in `sovereign-daemon/src/media_reach.rs`, 2026-09-11). The holder declares
 origin; `mesh media withdraw` removes all of it). Since 2026-09-19 `offer` also
 creates the READ-ONLY account members reach the library as, reads its policy
 back key by key, declares that account's token in place of the admin-equivalent
-`/Auth/Keys` key, and records its id as `[iroh] media_viewer_user`
+`/Auth/Keys` key, and keeps its id beside the house credential in `cw-rails`'
+house store (`commonwealth_media::rails_data_dir`, fp-70 — the presence poll is
+rails'; the daemon migrates an older `[iroh] media_viewer_user` once at boot)
 (`sovereign-cli-mesh/src/mesh_media/viewer.rs`). It runs `daemon reload`,
 which swaps the live `MediaRoute` (`sovereign-mesh/src/media_route.rs`) with no
 restart; a value that does not parse refuses the boot or the reload. The viewer asks its own daemon — `GET /v1/mesh/media?peer=<name-or-id>`,

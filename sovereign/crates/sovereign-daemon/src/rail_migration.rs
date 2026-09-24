@@ -12,11 +12,15 @@
 //! Both processes spell the layout the same way — `<data_dir>/rings/<ns>/` —
 //! because `commonwealth-rail` is the ONE spelling of it (`rings_root`), so
 //! a move is a directory rename and nothing inside changes. The target root
-//! mirrors `cw-rails`' own data-dir resolution (`$CW_RAILS_DIR`, else
-//! `~/.commonwealth-rails`), the same mirrored-convention move
-//! `rails_client::DEFAULT_RAILS_BASE` makes for the port: the two programs
-//! are built separately, so the convention is documented on both sides
-//! rather than imported across the lift boundary.
+//! is `cw-rails`' own default data dir, resolved by the ONE decider both
+//! processes call, `commonwealth_media::rails_data_dir` (`$CW_RAILS_DIR`, else
+//! `~/.commonwealth-rails`; fp-70 collapsed the mirror this module used to
+//! carry).
+//!
+//! The media presence poll's inputs move the same way (fp-70): the house
+//! credential `svrn mesh media offer` kept under this daemon's root, and the
+//! viewer id it wrote into `[iroh] media_viewer_user`, both land in rails'
+//! house store ([`migrate_media_to_rails`]).
 //!
 //! Never clobbers: a namespace already present at the target stays there and
 //! the source is LEFT in place with a warning, so the worst case of a double
@@ -31,16 +35,9 @@ fn source_root(data_dir: &Path) -> PathBuf {
     data_dir.join("rings")
 }
 
-/// Where the serving process keeps journals, resolved the way `cw-rails`
-/// resolves its data dir: the env var, else `~/.commonwealth-rails`.
+/// Where the serving process keeps journals: its default data dir.
 fn rails_data_dir() -> PathBuf {
-    if let Some(d) = std::env::var_os("CW_RAILS_DIR") {
-        return PathBuf::from(d);
-    }
-    let home = std::env::var_os("HOME")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("."));
-    home.join(".commonwealth-rails")
+    commonwealth_media::rails_data_dir()
 }
 
 /// Copy a directory tree. `std::fs::rename` is the path this module expects
@@ -135,6 +132,91 @@ pub fn migrate_journals_to_rails(data_dir: &Path) {
     }
 }
 
+/// Move the media presence poll's inputs into rails' house store, once: the
+/// house credential under `data_dir` (never overwriting one already at the
+/// target) and the viewer id in `config_path`'s `[iroh] media_viewer_user`
+/// (written to the viewer file, then removed from the config). A node with
+/// neither is a debug no-op, so every boot after the first is one.
+pub fn migrate_media_to_rails(data_dir: &Path, config_path: &Path, rails_dir: &Path) {
+    let target = commonwealth_media::house_dir_under(rails_dir);
+    migrate_house_credential(data_dir, &target);
+    migrate_viewer_key(config_path, &target);
+}
+
+fn migrate_house_credential(data_dir: &Path, target: &Path) {
+    let from = commonwealth_media::house_dir_under(data_dir).join("authorization");
+    let to = target.join("authorization");
+    let value = match std::fs::read_to_string(&from) {
+        Ok(v) => v,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            tracing::debug!(from = %from.display(), "media migration: no house credential under the daemon's root");
+            return;
+        }
+        Err(e) => {
+            tracing::warn!(error = %e, from = %from.display(), "media migration: the house credential could not be read; it stays and the presence poll will not see it");
+            return;
+        }
+    };
+    if to.exists() {
+        tracing::warn!(
+            from = %from.display(),
+            to = %to.display(),
+            "media migration: rails already holds a house credential — the daemon-side copy is LEFT in place, nothing was overwritten"
+        );
+        return;
+    }
+    if let Err(e) = commonwealth_media::write_declared_in(target, "authorization", &value) {
+        tracing::error!(error = %e, from = %from.display(), to = %to.display(), "media migration: the house credential could not be written to rails' store; it stays where it is");
+        return;
+    }
+    if let Err(e) = std::fs::remove_file(&from) {
+        tracing::warn!(error = %e, from = %from.display(), "media migration: the house credential was copied to rails' store, but the daemon-side original could not be removed");
+    }
+    tracing::info!(from = %from.display(), to = %to.display(), "media migration: the house credential moved to rails' store");
+}
+
+fn migrate_viewer_key(config_path: &Path, target: &Path) {
+    let text = match std::fs::read_to_string(config_path) {
+        Ok(t) => t,
+        Err(e) => {
+            tracing::debug!(error = %e, config = %config_path.display(), "media migration: no config to read a viewer id from");
+            return;
+        }
+    };
+    let mut doc = match text.parse::<toml_edit::DocumentMut>() {
+        Ok(d) => d,
+        Err(e) => {
+            tracing::warn!(error = %e, config = %config_path.display(), "media migration: config.toml did not parse; `[iroh] media_viewer_user` is left alone");
+            return;
+        }
+    };
+    let Some(iroh) = doc.get_mut("iroh").and_then(|i| i.as_table_mut()) else {
+        tracing::debug!(config = %config_path.display(), "media migration: no [iroh] table, no viewer id to move");
+        return;
+    };
+    let Some(id) = iroh
+        .get("media_viewer_user")
+        .and_then(|v| v.as_str())
+        .map(str::to_string)
+    else {
+        tracing::debug!(config = %config_path.display(), "media migration: no `[iroh] media_viewer_user`");
+        return;
+    };
+    let to = target.join(commonwealth_media::VIEWER_FILE);
+    if to.exists() {
+        tracing::warn!(to = %to.display(), "media migration: rails already holds a viewer id — kept; the config key is removed");
+    } else if let Err(e) = commonwealth_media::write_viewer_in(target, &id) {
+        tracing::error!(error = %e, to = %to.display(), "media migration: the viewer id could not be written to rails' store; the config key stays");
+        return;
+    }
+    iroh.remove("media_viewer_user");
+    if let Err(e) = std::fs::write(config_path, doc.to_string()) {
+        tracing::warn!(error = %e, config = %config_path.display(), "media migration: the viewer id is in rails' store, but the config key could not be removed");
+        return;
+    }
+    tracing::info!(from = %config_path.display(), to = %to.display(), "media migration: the viewer id moved from `[iroh] media_viewer_user` to rails' store");
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -192,5 +274,61 @@ mod tests {
             fs::read_to_string(rails_dir.path().join("rings/work/oplog.jsonl")).unwrap(),
             "{\"seq\":9}"
         );
+    }
+
+    /// fp-70: a node offered before the fix holds the house credential under
+    /// the daemon's root and the viewer id in config.toml. Both land in rails'
+    /// house store, the key leaves the config (comments kept), and a second
+    /// boot is a no-op.
+    #[test]
+    fn media_inputs_move_to_rails_and_a_second_boot_is_a_no_op() {
+        let daemon_dir = tempfile::tempdir().unwrap();
+        let rails_dir = tempfile::tempdir().unwrap();
+        let old_house = commonwealth_media::house_dir_under(daemon_dir.path());
+        commonwealth_media::write_declared_in(&old_house, "authorization", "house-key").unwrap();
+        let config = daemon_dir.path().join("config.toml");
+        fs::write(
+            &config,
+            "# mine\n[iroh]\nmedia_origin = \"127.0.0.1:8096\"\nmedia_viewer_user = \"viewer-id-1\"\n",
+        )
+        .unwrap();
+
+        migrate_media_to_rails(daemon_dir.path(), &config, rails_dir.path());
+        let house = commonwealth_media::house_dir_under(rails_dir.path());
+        let moved = (
+            vec![("authorization".to_string(), "house-key".to_string())],
+            Some("viewer-id-1".to_string()),
+        );
+        assert_eq!(commonwealth_media::read_house_in(&house), moved);
+        assert!(!old_house.join("authorization").exists());
+        let text = fs::read_to_string(&config).unwrap();
+        assert!(!text.contains("media_viewer_user"), "{text}");
+        assert!(text.contains("# mine") && text.contains("media_origin"));
+
+        migrate_media_to_rails(daemon_dir.path(), &config, rails_dir.path());
+        assert_eq!(commonwealth_media::read_house_in(&house), moved);
+        assert_eq!(fs::read_to_string(&config).unwrap(), text);
+    }
+
+    /// Never clobbers: a house credential already in rails' store stays, and
+    /// the daemon-side one is left in place.
+    #[test]
+    fn a_house_credential_already_at_rails_is_not_overwritten() {
+        let daemon_dir = tempfile::tempdir().unwrap();
+        let rails_dir = tempfile::tempdir().unwrap();
+        let old_house = commonwealth_media::house_dir_under(daemon_dir.path());
+        let house = commonwealth_media::house_dir_under(rails_dir.path());
+        commonwealth_media::write_declared_in(&old_house, "authorization", "stale").unwrap();
+        commonwealth_media::write_declared_in(&house, "authorization", "current").unwrap();
+        migrate_media_to_rails(
+            daemon_dir.path(),
+            &daemon_dir.path().join("config.toml"),
+            rails_dir.path(),
+        );
+        assert_eq!(
+            commonwealth_media::read_house_in(&house).0,
+            vec![("authorization".to_string(), "current".to_string())]
+        );
+        assert!(old_house.join("authorization").exists());
     }
 }

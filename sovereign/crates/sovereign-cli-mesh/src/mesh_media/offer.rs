@@ -15,7 +15,6 @@ pub(super) fn set_offer(
     doc: &mut toml_edit::DocumentMut,
     origin: std::net::SocketAddr,
     admit: &[String],
-    viewer_user: Option<&str>,
 ) -> Result<(), String> {
     let iroh = doc
         .entry("iroh")
@@ -29,19 +28,17 @@ pub(super) fn set_offer(
         let names: toml_edit::Array = admit.iter().map(String::as_str).collect();
         iroh.insert("media_allow", toml_edit::value(names));
     }
-    // `None` LEAVES the recorded viewer alone rather than clearing it: only
-    // `offer` mints a viewer, and `admit` — which shares this writer — must
-    // not silently un-record the account the presence poll reads.
-    if let Some(id) = viewer_user {
-        iroh.insert("media_viewer_user", toml_edit::value(id));
-    }
     Ok(())
 }
 
-/// Remove every key `offer` wrote. The inverse, and the whole of it: origin,
-/// admit list and viewer account go together, because each one describes an
-/// offer that no longer exists.
-pub(super) fn clear_offer(doc: &mut toml_edit::DocumentMut) -> bool {
+/// Remove everything `offer` wrote. The inverse, and the whole of it: origin,
+/// admit list and the viewer account file in `house_dir` go together, because
+/// each one describes an offer that no longer exists. (`media_viewer_user` is
+/// the pre-fp-70 home of the viewer id, removed wherever it still stands.)
+pub(super) fn clear_offer(doc: &mut toml_edit::DocumentMut, house_dir: &std::path::Path) -> bool {
+    if let Err(e) = commonwealth_media::write_viewer_in(house_dir, "") {
+        tracing::warn!(error = %e, dir = %house_dir.display(), "media withdraw: the viewer account file could not be removed");
+    }
     let Some(iroh) = doc.get_mut("iroh").and_then(|i| i.as_table_mut()) else {
         return false;
     };
@@ -50,6 +47,47 @@ pub(super) fn clear_offer(doc: &mut toml_edit::DocumentMut) -> bool {
     iroh.remove("media_allow");
     iroh.remove("media_viewer_user");
     had
+}
+
+/// The house store the presence poll reads: `cw-rails`' own default data dir,
+/// because the poll is rails' and so are its inputs (five-programs fp-70, §4
+/// rule 1). Before fp-70 `offer` wrote under `svrnmesh_root`, which rails never
+/// reads, so the poll published no presence at all.
+pub(super) fn poll_house_dir() -> std::path::PathBuf {
+    commonwealth_media::house_dir_under(&commonwealth_media::rails_data_dir())
+}
+
+/// Keep what the presence poll asks with: the credential being replaced (the
+/// HOUSE's — the one account on this origin that can see the holder's own
+/// sessions) and the viewer account id that tells those sessions apart. Both
+/// on this machine only, 0600. The house credential is skipped when there is
+/// nothing to keep: on a second offer `provision` hands back the token already
+/// declared, and storing that as the house credential would lose the elevated
+/// one.
+pub(super) fn keep_for_poll(
+    house_dir: &std::path::Path,
+    before: &[(String, String)],
+    viewer: &viewer::Viewer,
+) {
+    if let Some((_, install)) = before
+        .iter()
+        .find(|(n, val)| n == "authorization" && *val != viewer.credential)
+    {
+        if let Err(e) = commonwealth_media::write_declared_in(house_dir, "authorization", install)
+        {
+            eprintln!(
+                "mesh media offer: the house credential could not be kept — {e}; this \
+                 node will publish no \"in use\" signal"
+            );
+        }
+    }
+    if let Err(e) = commonwealth_media::write_viewer_in(house_dir, &viewer.id) {
+        eprintln!(
+            "mesh media offer: the viewer account could not be recorded — {e}; this \
+             node will publish no \"in use\" signal"
+        );
+    }
+    tracing::info!(dir = %house_dir.display(), "media offer: house credential and viewer account kept for the presence poll");
 }
 
 /// Where a media server listens when nobody said: Jellyfin's HTTP port, then
@@ -167,40 +205,20 @@ pub(super) async fn cmd_media_offer(args: &[String]) -> i32 {
     // and refusing to offer at all would be a worse answer than a loud one.
     let root = sovereign_contracts::rebrand::svrnmesh_root();
     let dir = commonwealth_media::dir_under(&root);
-    let house_dir = commonwealth_media::house_dir_under(&root);
     let before = commonwealth_media::read_declared_in(&dir);
-    let viewer = match viewer::provision(origin, &before).await {
+    match viewer::provision(origin, &before).await {
         Ok(v) => {
-            // The credential being replaced is the HOUSE's — the one account
-            // on this origin that can see the holder's own sessions. Kept
-            // here, on this machine only, so the presence poll still has an
-            // asker after the declaration becomes the viewer's read-only
-            // token. Skipped when there is nothing to keep: on a second offer
-            // `provision` hands back the token already declared, and storing
-            // that as the house credential would lose the elevated one.
-            if let Some((_, install)) = before
-                .iter()
-                .find(|(n, val)| n == "authorization" && *val != v.credential)
-            {
-                if let Err(e) =
-                    commonwealth_media::write_declared_in(&house_dir, "authorization", install)
-                {
-                    eprintln!(
-                        "mesh media offer: the house credential could not be kept — {e}; this \
-                         node will publish no \"in use\" signal"
-                    );
-                }
-            }
+            // Kept before the declaration becomes the viewer's read-only
+            // token, so the presence poll still has an asker.
+            keep_for_poll(&poll_house_dir(), &before, &v);
             if let Err(e) =
                 commonwealth_media::write_declared_in(&dir, "authorization", &v.credential)
             {
                 eprintln!(
                     "mesh media offer: the viewer was created but could not be declared — {e}"
                 );
-                None
             } else {
                 println!("Viewers reach this library as a read-only account (policy read back).");
-                Some(v)
             }
         }
         Err(e) => {
@@ -208,16 +226,9 @@ pub(super) async fn cmd_media_offer(args: &[String]) -> i32 {
             eprintln!("mesh media offer: no read-only viewer account — {e}");
             eprintln!("  The offer stands with whatever credential is declared, and this node");
             eprintln!("  will publish no \"in use\" signal until a viewer account exists.");
-            None
         }
-    };
-    write_offer(
-        path,
-        doc,
-        origin,
-        &admit,
-        viewer.as_ref().map(|v| v.id.as_str()),
-    )
+    }
+    write_offer(path, doc, origin, &admit)
 }
 
 /// `svrn mesh media withdraw` — stop offering this machine's library. The
@@ -247,7 +258,7 @@ pub(super) fn cmd_media_withdraw(args: &[String]) -> i32 {
             return 1;
         }
     };
-    let had = clear_offer(&mut doc);
+    let had = clear_offer(&mut doc, &poll_house_dir());
     if let Err(e) = crate::publish_cmd::write_doc(&path, &doc) {
         eprintln!("mesh media withdraw: could not write the config — {e}");
         return 1;
@@ -304,7 +315,7 @@ pub(super) fn cmd_media_admit(args: &[String]) -> i32 {
             return 1;
         }
     };
-    write_offer(path, doc, origin, args, None)
+    write_offer(path, doc, origin, args)
 }
 
 /// Write the offer into the config and reload the daemon — the one tail
@@ -314,9 +325,8 @@ fn write_offer(
     mut doc: toml_edit::DocumentMut,
     origin: std::net::SocketAddr,
     admit: &[String],
-    viewer_user: Option<&str>,
 ) -> i32 {
-    if let Err(e) = set_offer(&mut doc, origin, admit, viewer_user)
+    if let Err(e) = set_offer(&mut doc, origin, admit)
         .and_then(|()| crate::publish_cmd::write_doc(&path, &doc))
     {
         eprintln!("mesh media offer: could not write the config — {e}");

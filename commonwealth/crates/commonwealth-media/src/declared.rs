@@ -103,6 +103,58 @@ pub fn house_dir_under(state_root: &Path) -> PathBuf {
     state_root.join("secrets").join("media-house")
 }
 
+/// Env var naming `cw-rails`' data dir when its `--data-dir` flag is absent.
+pub const RAILS_DATA_DIR_ENV: &str = "CW_RAILS_DIR";
+
+/// `cw-rails`' default data dir: `$CW_RAILS_DIR`, else `~/.commonwealth-rails`.
+///
+/// The ONE decider (five-programs fp-70, ARCH 8): rails' own
+/// `Config::resolve_data_dir` falls back to it, and the processes that hand
+/// rails its inputs — `svrn mesh media offer` writing the house credential,
+/// the inference daemon's one-time journal and media handovers — resolve the
+/// same dir through it rather than mirroring the convention. It lives here
+/// because this is the one crate all three already depend on.
+pub fn rails_data_dir() -> PathBuf {
+    if let Some(d) = std::env::var_os(RAILS_DATA_DIR_ENV) {
+        return PathBuf::from(d);
+    }
+    let home = std::env::var_os("HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("."));
+    home.join(".commonwealth-rails")
+}
+
+/// The viewer account's file inside [`house_dir_under`] — the origin's id for
+/// the read-only user every member arrives as, which the holder's presence
+/// poll needs to tell the holder's sessions from the house's. The filename is
+/// the schema, as for the credential files.
+pub const VIEWER_FILE: &str = "viewer_user";
+
+/// Read the house store: the credential headers the poll asks its origin with,
+/// and the viewer account id. [`VIEWER_FILE`] is never returned as a header —
+/// it is an id, not something the origin is sent.
+pub fn read_house_in(house_dir: &Path) -> (Vec<(String, String)>, Option<String>) {
+    let mut viewer = None;
+    let headers = read_declared_in(house_dir)
+        .into_iter()
+        .filter_map(|(name, value)| {
+            if name == VIEWER_FILE {
+                viewer = Some(value);
+                None
+            } else {
+                Some((name, value))
+            }
+        })
+        .collect();
+    (headers, viewer)
+}
+
+/// Store (or, with an empty id, remove) the viewer account id beside the house
+/// credential — same 0600/0700 hardening, same writer.
+pub fn write_viewer_in(house_dir: &Path, id: &str) -> std::io::Result<()> {
+    write_declared_in(house_dir, VIEWER_FILE, id)
+}
+
 /// Every declared header, as [`crate::admit_media`] wants them. Empty when the
 /// directory is absent, which is the common case and not an error.
 ///
@@ -252,6 +304,25 @@ mod tests {
             )],
             "the house credential is still readable by the holder's own poll"
         );
+    }
+
+    /// The viewer id lives beside the house credential but never rides out as
+    /// a header; an empty write removes it.
+    #[test]
+    fn the_viewer_file_is_read_apart_from_the_house_headers() {
+        let root = tempfile::tempdir().unwrap();
+        let house = house_dir_under(root.path());
+        write_declared_in(&house, "authorization", "house-key").unwrap();
+        write_viewer_in(&house, "viewer-id-1\n").unwrap();
+        assert_eq!(
+            read_house_in(&house),
+            (
+                vec![("authorization".to_string(), "house-key".to_string())],
+                Some("viewer-id-1".to_string())
+            )
+        );
+        write_viewer_in(&house, "").unwrap();
+        assert_eq!(read_house_in(&house).1, None, "withdraw removes the viewer");
     }
 
     #[test]

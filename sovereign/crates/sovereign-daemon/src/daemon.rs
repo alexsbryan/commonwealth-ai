@@ -3098,6 +3098,13 @@ impl EmbeddedDaemon {
         // process loads the SAME node key through the ONE loader, so a line
         // written there verifies under the roster every peer already holds.
         crate::rail_migration::migrate_journals_to_rails(&self.data_dir);
+        // fp-70: the media presence poll is rails' too, so its inputs (the
+        // house credential and viewer id `offer` kept here) move beside it.
+        crate::rail_migration::migrate_media_to_rails(
+            &self.data_dir,
+            &SetupConfig::default_path(),
+            &commonwealth_media::rails_data_dir(),
+        );
         let ring_rail: Option<Arc<dyn sovereign_mesh::rail_port::RingRailPort>> = Some(Arc::new(
             crate::rails_client::RailsRingRail::new(crate::rails_client::DEFAULT_RAILS_BASE),
         ));

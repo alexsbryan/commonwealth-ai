@@ -39,7 +39,8 @@ use std::time::Duration;
 /// The member-facing account and the credential that reaches it.
 pub(crate) struct Viewer {
     /// The account's id in the origin's own user space — what
-    /// `[iroh] media_viewer_user` records so the presence poll can tell the
+    /// `offer` keeps beside the house credential (`commonwealth_media::VIEWER_FILE`)
+    /// so the presence poll can tell the
     /// holder's sessions from the house's.
     pub(crate) id: String,
     /// The whole `authorization` header value viewers' requests carry.

@@ -25,8 +25,10 @@
 //!
 //! The **viewer account** — the origin's id for the read-only user every
 //! member arrives as — lives beside the credential as
-//! `secrets/media-house/viewer_user` (one 0600 text file; the filename is the
-//! schema, the same rule the credential files follow). Missing any input, the
+//! `secrets/media-house/viewer_user` ([`commonwealth_media::VIEWER_FILE`],
+//! read and written only through that crate). Both are written there by
+//! `svrn mesh media offer`, which resolves this process's default data dir
+//! through the same [`commonwealth_media::rails_data_dir`]. Missing any input, the
 //! poll publishes `None` — nobody answered — rather than guessing at `FREE`,
 //! because a viewer starts a stream on `FREE` (principle 6).
 
@@ -47,20 +49,11 @@ pub const POLL_INTERVAL: Duration = Duration::from_secs(10);
 /// answer" this round rather than stall the next.
 const ASK_TIMEOUT: Duration = Duration::from_secs(3);
 
-/// The viewer account's file, inside [`house_dir_under`].
-const VIEWER_FILE: &str = "viewer_user";
-
 /// Read the poll's two credential-store inputs: the house headers and the
 /// viewer account id. Absent files are empty arms, never errors — a node
 /// nobody has offered for simply has an empty dir.
 fn read_credentials(daemon: &RailsDaemon) -> (Vec<(String, String)>, Option<String>) {
-    let dir = house_dir_under(&daemon.node.data_dir);
-    let house = commonwealth_media::read_declared_in(&dir);
-    let viewer = std::fs::read_to_string(dir.join(VIEWER_FILE))
-        .ok()
-        .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty());
-    (house, viewer)
+    commonwealth_media::read_house_in(&house_dir_under(&daemon.node.data_dir))
 }
 
 /// Ask the origin once and turn its answer into what this node publishes.

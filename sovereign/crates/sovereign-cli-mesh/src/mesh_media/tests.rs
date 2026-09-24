@@ -7,7 +7,7 @@ use sovereign_contracts::setup_config::IrohSection;
 fn offered(admit: &[&str]) -> IrohSection {
     let mut doc: toml_edit::DocumentMut = "[iroh]\n# kept\nenabled = true\n".parse().unwrap();
     let admit: Vec<String> = admit.iter().map(|s| s.to_string()).collect();
-    set_offer(&mut doc, "127.0.0.1:8096".parse().unwrap(), &admit, None).unwrap();
+    set_offer(&mut doc, "127.0.0.1:8096".parse().unwrap(), &admit).unwrap();
     assert!(doc.to_string().contains("# kept"), "comments survive");
     toml::from_str(&doc["iroh"].to_string()).unwrap()
 }
@@ -58,11 +58,11 @@ fn admit_narrows_the_stored_origin() {
     );
     let broken: toml_edit::DocumentMut = "[iroh]\nmedia_origin = \"jellyfin\"\n".parse().unwrap();
     assert!(stored_origin(&broken).is_err(), "unparseable is not absent");
-    set_offer(&mut doc, "127.0.0.1:8920".parse().unwrap(), &[], None).unwrap();
+    set_offer(&mut doc, "127.0.0.1:8920".parse().unwrap(), &[]).unwrap();
     let origin = stored_origin(&doc)
         .unwrap()
         .expect("offer stored its origin");
-    set_offer(&mut doc, origin, &["LittleMac".into()], None).unwrap();
+    set_offer(&mut doc, origin, &["LittleMac".into()]).unwrap();
     let iroh: IrohSection = toml::from_str(&doc["iroh"].to_string()).unwrap();
     assert_eq!(iroh.media_origin.as_deref(), Some("127.0.0.1:8920"));
     assert!(reaches(&iroh, &member("LittleMac", 0xb0b252e4 << 96)));
@@ -90,22 +90,42 @@ fn offered_to_line_names_everyone_or_the_admitted() {
     );
 }
 
-/// `offer` records the viewer account it minted, and `admit` — which shares
-/// the writer — leaves it alone rather than un-recording it.
+/// fp-70: the poll is `cw-rails`', so `offer` keeps the house credential AND
+/// the viewer id in rails' house store — resolved by each side from its OWN
+/// default root under one HOME, as a real install does. The failing input is
+/// the pre-fp-70 verb, which wrote under `svrnmesh_root`: rails never reads
+/// there, so the poll saw no house credential and published no presence.
 #[test]
-fn offer_records_the_viewer_account_and_admit_keeps_it() {
-    let mut doc: toml_edit::DocumentMut = "[iroh]\n".parse().unwrap();
-    let origin = "127.0.0.1:8096".parse().unwrap();
-    set_offer(&mut doc, origin, &[], Some("viewer-id-1")).unwrap();
-    let iroh: IrohSection = toml::from_str(&doc["iroh"].to_string()).unwrap();
-    assert_eq!(iroh.media_viewer_user.as_deref(), Some("viewer-id-1"));
+fn offer_keeps_house_and_viewer_where_the_rails_poll_reads_them() {
+    let home = tempfile::tempdir().unwrap();
+    std::env::set_var("HOME", home.path());
+    std::env::remove_var("CW_RAILS_DIR");
+    std::env::remove_var("SVRNMESH_DATA_DIR");
+    let before = vec![("authorization".to_string(), "house-key".to_string())];
+    let v = viewer::Viewer {
+        id: "viewer-id-1".into(),
+        credential: "viewer-key".into(),
+    };
+    keep_for_poll(&poll_house_dir(), &before, &v);
 
-    set_offer(&mut doc, origin, &["LittleMac".into()], None).unwrap();
-    let iroh: IrohSection = toml::from_str(&doc["iroh"].to_string()).unwrap();
+    // What rails' poll reads: its default data dir, then the house store.
+    let rails_root = commonwealth_media::rails_data_dir();
+    assert_eq!(rails_root, home.path().join(".commonwealth-rails"));
     assert_eq!(
-        iroh.media_viewer_user.as_deref(),
-        Some("viewer-id-1"),
-        "narrowing the admit list must not un-record the viewer account"
+        commonwealth_media::read_house_in(&commonwealth_media::house_dir_under(&rails_root)),
+        (before.clone(), Some("viewer-id-1".to_string()))
+    );
+    // Nothing under the offer's own daemon root, the dir rails never reads.
+    let svrnmesh = sovereign_contracts::rebrand::svrnmesh_root();
+    assert!(!commonwealth_media::house_dir_under(&svrnmesh).exists());
+
+    // withdraw: the viewer is gone, the house credential stays.
+    let mut doc: toml_edit::DocumentMut = "[iroh]\n".parse().unwrap();
+    set_offer(&mut doc, "127.0.0.1:8096".parse().unwrap(), &[]).unwrap();
+    assert!(clear_offer(&mut doc, &poll_house_dir()));
+    assert_eq!(
+        commonwealth_media::read_house_in(&commonwealth_media::house_dir_under(&rails_root)),
+        (before, None)
     );
 }
 
@@ -119,11 +139,14 @@ fn withdraw_clears_every_key_offer_wrote() {
         &mut doc,
         "127.0.0.1:8096".parse().unwrap(),
         &["LittleMac".into()],
-        Some("viewer-id-1"),
     )
     .unwrap();
+    let house = tempfile::tempdir().unwrap();
 
-    assert!(clear_offer(&mut doc), "there was an offer to withdraw");
+    assert!(
+        clear_offer(&mut doc, house.path()),
+        "there was an offer to withdraw"
+    );
     let iroh: IrohSection = toml::from_str(&doc["iroh"].to_string()).unwrap();
     assert_eq!(iroh.media_origin, None);
     assert!(iroh.media_allow.is_empty());
@@ -136,7 +159,7 @@ fn withdraw_clears_every_key_offer_wrote() {
     assert!(doc.to_string().contains("# kept"), "comments survive");
 
     assert!(
-        !clear_offer(&mut doc),
+        !clear_offer(&mut doc, house.path()),
         "a second withdrawal reports that there was nothing to withdraw"
     );
 }
@@ -146,7 +169,8 @@ fn withdraw_clears_every_key_offer_wrote() {
 #[test]
 fn withdraw_with_no_iroh_table_reports_nothing_to_withdraw() {
     let mut doc: toml_edit::DocumentMut = "[daemon]\nclient_port = 9741\n".parse().unwrap();
-    assert!(!clear_offer(&mut doc));
+    let house = tempfile::tempdir().unwrap();
+    assert!(!clear_offer(&mut doc, house.path()));
 }
 
 /// The three presence renderings, including the one that is not silence: a
@@ -178,7 +202,6 @@ fn offer_writes_no_credential_into_the_config_the_mesh_reads() {
         &mut doc,
         "127.0.0.1:8096".parse().unwrap(),
         &["LittleMac".into()],
-        Some("viewer-id-1"),
     )
     .unwrap();
     let written = doc.to_string();
@@ -189,7 +212,7 @@ fn offer_writes_no_credential_into_the_config_the_mesh_reads() {
         );
     }
     let iroh: IrohSection = toml::from_str(&doc["iroh"].to_string()).unwrap();
-    assert_eq!(iroh.media_viewer_user.as_deref(), Some("viewer-id-1"));
+    assert_eq!(iroh.media_viewer_user, None, "the viewer id lives in rails' house store");
 }
 
 /// The two stores are different directories, so a house credential cannot be
