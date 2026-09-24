@@ -490,6 +490,11 @@ merged; that merge is what minted this arrangement, and `ledger-1` records it.
 - Chose: fp-58 (a), build the types-half admission. fp-7 (a), both sites stay daemon-side, and fp-7/fp-29 close at delta 0. fp-9 (b), the daemon keeps bootstrap, admission and mDNS by `[[exception]]`. fp-10 (b), serving stays in the daemon by `[[exception]]` until Phase B is its own reviewed program. fp-54 (b), the daemon-issued guest attestation (REVIEW-mint-fp-guest-attest). fp-42 (c), a pure-Rust serving shape for the replicated state; the rails lift keeps its pure-Rust property (REVIEW-mint-fp-state-pure-rust). fp-47: none of the three offered arms, "do it right — the most root cause solution" (REVIEW-mint-fp-app-registry-one-owner). Media viewer: one store in the house dir (fp-70).
 - Because: operator's word, asked by the seat with the director's recommendation first on every row. On fp-47 the seat's census before minting found five-programs-27's falsifier true. cw-rails already holds a `PublishedApps`, its publish doors and a live `cwth/app/0` arm (commonwealth-rails/src/lib.rs:195, api.rs:282-321, acceptor.rs:84-96). The knot is therefore a second registry and a second app arm in the daemon (daemon.rs:288, sovereign-mesh/src/iroh_access.rs:511), not a surface rails refuses. The mint row carries those sites.
 
+**five-programs-29 · 2026-09-24 · fp-24 · director** — this commit
+- Needed: fp-24's worker halted: the row says to repoint cli-daemon's 2 join-key refs and drop sovereign-mesh, but that edge is already closed.
+- Chose: mark fp-24 `[x]` as subsumed by fp-52 (bdd22b846), with no closure counted. Nothing depends on it, so nothing is re-pointed.
+- Because: reproduced at 33952f8ef. cli-daemon's Cargo.toml has `mesh-join-vocab` (line 38) and no `sovereign-mesh` dep; `git grep sovereign_mesh` in the crate finds nothing; TSV line 63 records the pair `CLOSED fp-52`; boundary-gate 58, and cli-daemon's only line is `→ sovereign-inference`.
+
 ## Flags for the operator
 
 - A26: REVIEW-DEMO-rr-1-run will very likely FAIL `ra-room-plug-in-live` again on this host. The bar's window is 60 s, and the CPU 2B took about 1–5 min per answer in this run (room-answer-0..4.json mtimes 19:33→19:49). Passing it takes a faster node or model for the room, or a different bar. Both are design changes for the operator, not tuning.
@@ -8749,5 +8754,19 @@ Three answers take the director's interim keeps by `[[exception]]` (fp-9, fp-10)
 Three answers are new work: fp-54 (b), fp-42 (c) and fp-47's root-cause collapse. They land as REVIEW-mint rows under caps, and each mint halts with its census rather than growing past its cap. fp-70 is the one build row the operator added outside the HUMAN set. It repairs presence, which fp-46 broke on `cut`, before any push.
 
 State at the answer: boundary-gate 60 violation(s). Full suite 13,341/0 and lint --full 0 errors at fp-67's check. Nothing pushed.
+
+</details>
+
+## five-programs-29 · 2026-09-24 — fp-24 is subsumed by fp-52
+
+<details><summary>reasoning, evidence, package</summary>
+
+fp-52 was minted as "fp-24's chain". When it landed it made the leaf and did fp-24's repoint in the same move (STATE.md fp-52 row: "cli-daemon repoints its 2 deep_link refs, drops sovereign-mesh … boundary-gate 69 → 68"). Nobody closed the parent row. fp-24's check, "gate drops 1", cannot pass because the drop was already banked at 68. The closure goes to fp-52 and fp-24 gets none.
+
+The package asked whether dependents should move to fp-52. `grep "depends \[[^]]*fp-24"` over STATE.md finds none. The other mentions are the old "fp-24 bench dial" label in the 2026-09-22 open-questions text and fp-18. That was a separate authoring-harness idea that was never queued under this id, and five-programs-14 (fp-57) superseded it. Those lines are history and are not rewritten.
+
+Falsifier: a `sovereign-mesh` dependency or a `sovereign_mesh::` path turns up anywhere in sovereign-cli-daemon (cfg-gated or dev-deps included), or boundary-gate lists `sovereign-cli-daemon → sovereign-mesh`.
+
+Gate at decision: boundary-gate 58 violation(s).
 
 </details>
