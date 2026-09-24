@@ -168,7 +168,7 @@ mod tests {
             joined_at: 100,
             last_seen: 100,
             status: NodeStatus::Online,
-            capabilities: crate::gossip::minimal_capabilities(100, &[OriginKind::Media]),
+            capabilities: crate::gossip::minimal_capabilities(100, &[OriginKind::Media], None),
             addresses: Vec::new(),
             node_pubkey: key,
             relay_url: None,

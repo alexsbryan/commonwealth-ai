@@ -44,6 +44,14 @@ pub fn router(daemon: Arc<RailsDaemon>) -> Router {
         .route("/v1/mesh/status", get(status))
         .route("/v1/mesh/media", get(media))
         .route("/v1/mesh/app", get(app))
+        // The offer catalogue (five-programs fp-46): what the house has going
+        // spare, behind its own origin kind and its own allow list — the same
+        // kind-generic answer the media and app spellings serve.
+        .route("/v1/mesh/offers", get(offers))
+        // The presence poll's last reading (five-programs fp-46):
+        // `media_available` as this node's own poll read it, `null` when
+        // nobody answered — "could not ask", never "free".
+        .route("/v1/mesh/media/presence", get(media_presence))
         // One handler, two paths: the media spelling is the generic body with
         // `kind` absent, not a second implementation.
         .route("/v1/mesh/fanout", post(origin_fanout))
@@ -179,6 +187,30 @@ pub async fn media(state: State<Arc<RailsDaemon>>, q: Query<MediaQuery>) -> impl
 /// rule says nobody should have wanted for an app anyway.
 pub async fn app(state: State<Arc<RailsDaemon>>, q: Query<MediaQuery>) -> impl IntoResponse {
     origin(state, q, OriginKind::App).await
+}
+
+/// `GET /v1/mesh/offers` — the same two questions for OFFERED ORIGINS, the
+/// third kind: what this node has going spare, behind `cwth/offer/0` and its
+/// own `offer_allow` grant. One handler with the other two spellings because
+/// the catalogue, the reach and the refusals ARE one implementation
+/// (`origin` is kind-generic); only the kind differs.
+pub async fn offers(state: State<Arc<RailsDaemon>>, q: Query<MediaQuery>) -> impl IntoResponse {
+    origin(state, q, OriginKind::Offer).await
+}
+
+/// `GET /v1/mesh/media/presence` — the presence poll's last reading.
+///
+/// `{"media_available": <number|null>}`: `1.0` free, `0.0` the holder is
+/// watching, `null` nobody answered. `null` is served as a VALUE, never as a
+/// refusal, so a client reads the field the same way it reads the gossiped
+/// capability — and a poll that cannot ask is reported, not defaulted
+/// (principle 6).
+pub async fn media_presence(State(daemon): State<Arc<RailsDaemon>>) -> impl IntoResponse {
+    let reading = *daemon
+        .media_presence
+        .read()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    Json(serde_json::json!({ "media_available": reading }))
 }
 
 async fn origin(

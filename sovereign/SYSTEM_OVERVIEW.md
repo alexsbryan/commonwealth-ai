@@ -2588,7 +2588,11 @@ bridge — a deferred milestone.
 beside their media server: join an invite, run, serve three loopback routes —
 plus, since five-programs fp-44, the ring rail's doors
 (`/v1/rail/{append,log,live}`) over journals under its own data root, signed
-with the same node key the mesh identity uses. It deliberately does NOT admit
+with the same node key the mesh identity uses — and, since five-programs
+fp-46, the media-presence poll (credentials under the store
+`commonwealth_media::house_dir_under` derives, `GET /v1/mesh/media/presence`
+serving the reading into gossip) and the
+`/v1/mesh/offers` mount. It deliberately does NOT admit
 joiners — a mesh is founded by a full daemon, and that absence is most of why
 it lifts (319 crates in its closure vs 743 at the 2026-09-11 measure; the rail
 doors cost three more).

@@ -101,6 +101,14 @@ pub mod custody;
 pub mod hash;
 pub mod ids;
 pub mod judgement;
+/// Who a verified dialer is, and how a `<peer>` argument resolves —
+/// `MemberIdentity`, `verified_headers` and `member_matches`. Moved here from
+/// `commonwealth-media` / `commonwealth-core` by five-programs fp-46
+/// (§12 decision 3): the member view crosses the package line, and the
+/// standing `[[forbid]]` rows keep the two commonwealth owners free of every
+/// sovereign-* crate, so the neutral kernel is the one home both may name.
+/// The owners re-import every item at its historical path (ARCH §10.6).
+pub mod member;
 pub mod origin;
 // The instrument registry's schema. Feature-gated so the default four-dep
 // budget in Cargo.toml still holds for a lift of this leaf — `toml` is only

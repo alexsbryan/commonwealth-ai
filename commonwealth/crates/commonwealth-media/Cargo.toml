@@ -11,6 +11,10 @@ commonwealth-core = { workspace = true }
 # member's dial is forwarded to); `fanout` for the one attributed row per
 # member the catalogue half returns.
 commonwealth-transport = { workspace = true, features = ["iroh", "fanout"] }
+# `MemberIdentity` + `verified_headers` live at the neutral kernel since
+# five-programs fp-46 (§12 decision 3); this crate re-imports them at their
+# historical paths.
+kernel-types = { workspace = true }
 serde = { workspace = true }
 # The fan-out row hands back the origin's JSON already parsed beside the raw
 # body, so every shim does not re-parse it as its first line.

@@ -73,6 +73,7 @@ pub mod gossip;
 pub mod identity;
 pub mod internal;
 pub mod join;
+pub mod presence;
 pub mod rail;
 
 pub use config::Config;
@@ -200,6 +201,11 @@ pub struct RailsDaemon {
     /// nothing here reaches a store, a journal or a disk. See
     /// [`rail::LiveBuffer`].
     pub rail_live: rail::LiveBuffer,
+    /// The presence poll's last reading (`presence::run_forever` writes it,
+    /// the gossip round stamps it into `NodeCapabilities::media_available`,
+    /// `GET /v1/mesh/media/presence` serves it). `None` is "nobody answered",
+    /// never "free" — the poll publishes its arms, not a guess.
+    pub media_presence: Arc<std::sync::RwLock<Option<f32>>>,
     /// Where `POST /internal/gossip` is served. Ephemeral loopback, reachable
     /// only through the acceptor.
     pub internal_addr: SocketAddr,
@@ -262,6 +268,7 @@ impl RailsDaemon {
             published_apps,
             rail,
             rail_live: rail::LiveBuffer::default(),
+            media_presence: Arc::new(std::sync::RwLock::new(None)),
             internal_addr,
             _internal: internal,
             _acceptor: acceptor,
@@ -284,6 +291,10 @@ impl RailsDaemon {
         let daemon = Arc::new(self);
         let api = api::serve(daemon.clone(), listen).await?;
         let gossip = tokio::spawn(gossip::run_forever(daemon.clone()));
+        // The presence poll (five-programs fp-46): the reading lands in
+        // `media_presence`, which the gossip round and the presence route
+        // read. A tick that cannot ask is a logged `None`, never an exit.
+        let presence = tokio::spawn(presence::run_forever(daemon.clone()));
         tracing::info!(
             target: "rails",
             api = %listen,
@@ -295,6 +306,7 @@ impl RailsDaemon {
         // is a logged round, never an exit.
         let _ = api.await;
         gossip.abort();
+        presence.abort();
         Ok(())
     }
 

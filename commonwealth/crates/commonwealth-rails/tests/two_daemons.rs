@@ -80,6 +80,7 @@ fn record(node: &RailsNode, addrs: Vec<std::net::SocketAddr>, offers: bool) -> M
         capabilities: gossip::minimal_capabilities(
             1,
             if offers { &[OriginKind::Media] } else { &[] },
+            None,
         ),
         addresses: Vec::new(),
         node_pubkey: Some(node.pubkey()),
