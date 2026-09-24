@@ -14,8 +14,8 @@
 
 use crate::cognitive::item::{Item, Scoring};
 use crate::cognitive::runner::ItemResult;
-use sovereign_contracts::oicp::tool_calls::extract_json_block;
 use serde::{Deserialize, Serialize};
+use sovereign_contracts::oicp::tool_calls::extract_json_block;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Outcome {
