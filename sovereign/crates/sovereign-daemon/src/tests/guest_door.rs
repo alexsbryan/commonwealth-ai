@@ -17,6 +17,42 @@ fn pages(default_dir: Option<&str>, named: &[(&str, &str)]) -> GuestPages {
     )
 }
 
+/// **B2's bar: every door-served response carries the door's CSP.** Walks
+/// the door's routes through the real `door_router` — the wall, a page, a
+/// miss through the proxy fallback, and a guest-surface route — and asserts
+/// the policy on every response, refusals included (a refusal is still a
+/// door-served response). These four are the census's WALK, named rather
+/// than exhaustive: the layer on the router is what covers every route, and
+/// a new one is covered on the day it is added. Watched failing first —
+/// with the layer removed, every path came back bare.
+#[tokio::test]
+async fn every_door_served_response_carries_the_csp() {
+    use axum::body::Body;
+    use tower::ServiceExt;
+
+    let state = crate::state::test_app_state_with_seed(crate::state::fabric::FabricSeed::default());
+    let app = door_router(state, std::sync::Arc::new(pages(Some("wall"), &[])), None);
+    let expected =
+        sovereign_contracts::egress::csp(sovereign_contracts::egress::ConnectSrc::SameOrigin);
+    for path in [
+        "/",
+        "/ring/index.html",
+        "/ring/missing.html",
+        "/v1/guest/ask",
+    ] {
+        let req = axum::http::Request::builder()
+            .uri(path)
+            .body(Body::empty())
+            .unwrap();
+        let resp = app.clone().oneshot(req).await.unwrap();
+        let got = resp
+            .headers()
+            .get(axum::http::header::CONTENT_SECURITY_POLICY)
+            .and_then(|v| v.to_str().ok());
+        assert_eq!(got, Some(expected.as_str()), "{path} must carry the CSP");
+    }
+}
+
 /// A gate you have not watched fail: the published-app arm answers only a
 /// grant that NAMES the app — the same rule bundles live under.
 #[test]

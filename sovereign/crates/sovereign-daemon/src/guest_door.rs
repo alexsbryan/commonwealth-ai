@@ -351,16 +351,43 @@ pub fn door_router(
     if let Some(host) = turn_host {
         guest = guest.layer(axum::Extension(host));
     }
-    if pages.is_empty() {
-        return guest;
-    }
-    guest.merge(
-        Router::new()
-            .route(PAGE_PREFIX, get(page_index))
-            .route("/ring/{*rel}", get(page_file))
-            .fallback(root_proxy)
-            .with_state(PageState { pages, grants }),
-    )
+    let router = if pages.is_empty() {
+        guest
+    } else {
+        guest.merge(
+            Router::new()
+                .route(PAGE_PREFIX, get(page_index))
+                .route("/ring/{*rel}", get(page_file))
+                .fallback(root_proxy)
+                .with_state(PageState { pages, grants }),
+        )
+    };
+    // Every door-served response carries the door's CSP (ROOT_CAUSE_FIXES B2) —
+    // refusals, pages, the shim, the wall and proxied app responses alike.
+    // A layer on the router is the structural form: a new route is covered on
+    // the day it is added, and no response builder has to remember.
+    router.layer(axum::middleware::from_fn(with_csp))
+}
+
+/// The door's response policy, applied to everything it serves.
+async fn with_csp(
+    req: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> axum::response::Response {
+    let mut resp = next.run(req).await;
+    // APPEND, never overwrite: a proxied app may send its own, stricter
+    // policy, and browsers enforce every policy header — the effective
+    // result is the stricter of the two. Overwriting would let the door
+    // LOOSEN what an app asked for.
+    resp.headers_mut().append(
+        axum::http::header::CONTENT_SECURITY_POLICY,
+        axum::http::HeaderValue::from_bytes(
+            sovereign_contracts::egress::csp(sovereign_contracts::egress::ConnectSrc::SameOrigin)
+                .as_bytes(),
+        )
+        .expect("the door's CSP is static"),
+    );
+    resp
 }
 
 /// Serve the door on `bind` for as long as the daemon runs: listen while a
