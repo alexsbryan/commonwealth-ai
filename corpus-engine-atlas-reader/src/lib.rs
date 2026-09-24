@@ -44,3 +44,4 @@ pub mod resolve;
 pub mod section_cache;
 pub mod store;
 pub mod summary;
+pub mod wikipedia_graph;
