@@ -485,6 +485,11 @@ merged; that merge is what minted this arrangement, and `ledger-1` records it.
 - Chose: gate both rows on new operator rows, HUMAN-fp42-state-store-cost and HUMAN-fp47-app-registry, using the fp-7/fp-9/fp-10 shape. Each row carries its options and a recommendation. No code changed. Boundary gate FAILED at 60 violations (`RALPH_QUEUE=five-programs scripts/ralph-check.sh boundary`, at 9f7ca8630).
 - Because: both forks belong to the operator under the charter. fp-42's is the state-wire durable store owner, which the charter names outright, and it also means widening a forbid row. fp-47's arms are either an end-user reachability change or reversing a surface rails disclaims (five-programs-20/-21 precedent). Five-programs-9 argued that a HUMAN row would be redundant with the scout finding. The loop proved it is not: `pick_wave` gates on deps, not on prose.
 
+**five-programs-28 · 2026-09-24 · the seven HUMAN rows + the media viewer regression · operator** — this commit
+- Needed: the loop drained at boundary 60 (f67e67419). Every open non-HUMAN row depended on one of seven operator rows (five-programs-27), and REVIEW-audit-fp-auto-4 recorded a media-presence regression outside the gate.
+- Chose: fp-58 (a), build the types-half admission. fp-7 (a), both sites stay daemon-side, and fp-7/fp-29 close at delta 0. fp-9 (b), the daemon keeps bootstrap, admission and mDNS by `[[exception]]`. fp-10 (b), serving stays in the daemon by `[[exception]]` until Phase B is its own reviewed program. fp-54 (b), the daemon-issued guest attestation (REVIEW-mint-fp-guest-attest). fp-42 (c), a pure-Rust serving shape for the replicated state; the rails lift keeps its pure-Rust property (REVIEW-mint-fp-state-pure-rust). fp-47: none of the three offered arms, "do it right — the most root cause solution" (REVIEW-mint-fp-app-registry-one-owner). Media viewer: one store in the house dir (fp-70).
+- Because: operator's word, asked by the seat with the director's recommendation first on every row. On fp-47 the seat's census before minting found five-programs-27's falsifier true. cw-rails already holds a `PublishedApps`, its publish doors and a live `cwth/app/0` arm (commonwealth-rails/src/lib.rs:195, api.rs:282-321, acceptor.rs:84-96). The knot is therefore a second registry and a second app arm in the daemon (daemon.rs:288, sovereign-mesh/src/iroh_access.rs:511), not a surface rails refuses. The mint row carries those sites.
+
 ## Flags for the operator
 
 - A26: REVIEW-DEMO-rr-1-run will very likely FAIL `ra-room-plug-in-live` again on this host. The bar's window is 60 s, and the CPU 2B took about 1–5 min per answer in this run (room-answer-0..4.json mtimes 19:33→19:49). Passing it takes a faster node or model for the room, or a different bar. Both are design changes for the operator, not tuning.
@@ -8732,5 +8737,17 @@ After the edit, `python3 scripts/ralph.py plan --queue five-programs` serves HUM
 Recommendations are written on the rows. fp-42: (b), keep D4's interim. fp-47: (c), flip only the presence half and keep PublishedApps daemon-side.
 
 Falsified if a later census shows either fork is settled by an existing §12 decision (then the HUMAN row was unnecessary and the row should have been rescoped), or if cw-rails already binds `cwth/app/0` (then fp-47's option (b) was never a reversal).
+
+</details>
+
+## five-programs-28 · 2026-09-24 — the operator answers the seven HUMAN rows
+
+<details><summary>reasoning, evidence, package</summary>
+
+Three answers take the director's interim keeps by `[[exception]]` (fp-9, fp-10) or delta 0 (fp-7). Gate 0 therefore includes declared keeps until Phase B (a cmnwlth serving host) and the de-embed (finish condition 2) are built. Each exception row names its reason and the HUMAN row that granted it, so deleting the row reverses it.
+
+Three answers are new work: fp-54 (b), fp-42 (c) and fp-47's root-cause collapse. They land as REVIEW-mint rows under caps, and each mint halts with its census rather than growing past its cap. fp-70 is the one build row the operator added outside the HUMAN set. It repairs presence, which fp-46 broke on `cut`, before any push.
+
+State at the answer: boundary-gate 60 violation(s). Full suite 13,341/0 and lint --full 0 errors at fp-67's check. Nothing pushed.
 
 </details>
