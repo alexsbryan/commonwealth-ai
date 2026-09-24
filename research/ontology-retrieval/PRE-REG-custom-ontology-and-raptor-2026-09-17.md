@@ -1095,3 +1095,23 @@ the decline is gone. The fix is one share predicate (`repeat >= 2` AND
 `repeat*5 >= count`), not a tuned constant: the moved band is
 `2 <= repeat < count/5`, and every corpus outside it behaves identically.
 These remain single-question diagnostics, not bar 1.
+
+**Exposure census, same day — does the defect class scale across the bar?**
+The evidence-shape routing line logs `count / top_source_repeat /
+distinct_sources` for every question, so `attribution/exposure_census.py`
+classifies all 47 bank questions on the production-default path
+(grounding on, atom-enum off — the configuration carrying the K0 regression)
+without running synthesis or reading any answer score. Result, 45/47
+attributed: **K0 10 of 13 measured lookups (77%) were in the moved band** —
+the old trigger collapsed them exactly as it did Demanhur — and 3 were
+never-dominant, 0 still-dominant. **K1: 16 of 32 (50%) exposed**, which gives
+the production-default K1 losses (0.298/0.216 vs bare 0.385, diagnostic arms)
+a candidate mechanism covering half the kind. Two K0 rows failed trace
+attribution and are counted NO_SHAPE. Exposure is incidence of the defect
+CLASS, not a measured loss rate — whether each exposed question actually lost
+its answer depended on whether its gold fit the 7-chunk window (Demanhur did
+not; Agrinion and Histiaea did) — and the answer-quality read across the bar
+belongs to study 2. On this corpus the legitimate-dominance case never
+occurs on the shipped path, so post-fix the collapse simply never fires here;
+its remaining legitimate use on other corpora was verified byte-identical
+(chaos pilot, 24 questions).
