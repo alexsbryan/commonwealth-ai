@@ -365,6 +365,7 @@ fn an_admitted_line_this_build_cannot_read_is_counted_not_swallowed() {
         &me,
         roster.roster(),
         None,
+        &Ed25519Verifier,
     )
     .unwrap();
 

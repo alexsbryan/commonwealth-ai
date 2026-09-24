@@ -48,6 +48,7 @@ fn body_of_size(target: usize) -> Payload {
                 payload: payload.clone(),
             },
             None,
+            None,
         )
         .len();
         if got >= target {
@@ -90,7 +91,7 @@ fn signed(key: &SigningKey, namespace: &str, seq: u64, act: RailAct) -> Op<Signe
         namespace,
         ts,
         seq,
-        &commonwealth_rail::body_json(&act, None),
+        &commonwealth_rail::body_json(&act, None, None),
     );
     Op::new(
         SignedOp {
@@ -98,6 +99,7 @@ fn signed(key: &SigningKey, namespace: &str, seq: u64, act: RailAct) -> Op<Signe
             sig,
             act,
             on_behalf_of: None,
+            view: None,
         },
         ts,
         key.actor(),

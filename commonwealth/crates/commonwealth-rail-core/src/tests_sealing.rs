@@ -136,7 +136,7 @@ fn a_sealed_prefix_is_retired_rather_than_reported_as_a_hole() {
 #[test]
 fn a_seal_the_rail_refused_retires_nothing() {
     let act = RailAct::Seal;
-    let body = body_json(&act, None);
+    let body = body_json(&act, None, None);
     let forged = Op::new(
         SignedOp {
             seq: 3,
@@ -144,6 +144,7 @@ fn a_seal_the_rail_refused_retires_nothing() {
             sig: sign_ring_op(&key(3), NS, 103, 3, &body),
             act,
             on_behalf_of: None,
+            view: None,
         },
         103,
         actor_of(&key(1)),
@@ -242,14 +243,146 @@ fn a_seal_retires_only_the_history_of_the_key_that_signed_it() {
 fn an_act_naming_nobody_signs_the_bytes_it_always_did() {
     let act = record("milk");
     assert_eq!(
-        body_json(&act, None),
+        body_json(&act, None, None),
         serde_json::to_string(&act).unwrap(),
         "an absent name must not reach the signed bytes"
     );
     assert!(
-        body_json(&act, Some("dee")).ends_with(r#","on_behalf_of":"dee"}"#),
+        body_json(&act, Some("dee"), None).ends_with(r#","on_behalf_of":"dee"}"#),
         "a stated name goes last: {}",
-        body_json(&act, Some("dee"))
+        body_json(&act, Some("dee"), None)
+    );
+}
+
+// ── the view an act commits to ──────────────────────────────
+
+fn claimed_view(head_fill: char) -> crate::Digest {
+    crate::Digest::from(std::collections::BTreeMap::from([(
+        String::from("c0ffee"),
+        crate::View {
+            from: 0,
+            mark: 3,
+            head: head_fill.to_string().repeat(64),
+        },
+    )]))
+}
+
+/// **The signed body carries the view, last.** The two with-view vectors are
+/// the wire contract (ROOT_CAUSE_FIXES A3): frozen by hand from the layout
+/// rule — act, then `on_behalf_of`, then `view`, each skipped when absent —
+/// and watched failing against the old bytes before the field reached them.
+#[test]
+fn the_signed_body_golden_vectors() {
+    let act = record("milk");
+    let view = claimed_view('a');
+    let view_json = format!(
+        r#"{{"v":2,"entries":{{"c0ffee":{{"from":0,"mark":3,"head":"{}"}}}}}}"#,
+        "a".repeat(64)
+    );
+
+    // The bytes every pre-view op on every replica signed.
+    assert_eq!(
+        body_json(&act, None, None),
+        serde_json::to_string(&act).unwrap()
+    );
+    // The view goes last and is skipped when absent.
+    assert_eq!(
+        body_json(&act, None, Some(&view)),
+        format!(
+            r#"{{"op":"record","payload":{{"kind":"thing","what":"milk"}},"view":{view_json}}}"#
+        ),
+        "an act with a view signs it, last"
+    );
+    assert_eq!(
+        body_json(&act, Some("dee"), Some(&view)),
+        format!(
+            r#"{{"op":"record","payload":{{"kind":"thing","what":"milk"}},"on_behalf_of":"dee","view":{view_json}}}"#
+        ),
+        "name before view, both after the act"
+    );
+}
+
+/// **The view is inside the signature.** A stamp a peer could rewrite in
+/// flight would make every act claim whichever history suited the carrier
+/// (ARCH §18.1 — the `on_behalf_of` rule one field later).
+#[test]
+fn a_view_rewritten_after_signing_is_refused() {
+    let act = record("milk");
+    let view = claimed_view('a');
+    let body = body_json(&act, None, Some(&view));
+    let op = Op::new(
+        SignedOp {
+            seq: 0,
+            sig: sign_ring_op(&key(1), NS, 100, 0, &body),
+            act,
+            on_behalf_of: None,
+            view: Some(view),
+        },
+        100,
+        actor_of(&key(1)),
+    );
+    assert!(
+        admitted(std::slice::from_ref(&op)).gaps.is_empty(),
+        "the honest op verifies"
+    );
+
+    let mut rewritten = op;
+    rewritten.kind.view = Some(claimed_view('b'));
+    let f = admitted(std::slice::from_ref(&rewritten));
+    assert!(
+        f.gaps
+            .iter()
+            .any(|g| matches!(g, RailGap::BadSignature { .. })),
+        "a rewritten view must break the signature: {:?}",
+        f.gaps
+    );
+}
+
+/// **An equivocation pair is its own evidence pack.** Two acts at one seq,
+/// each line carrying the view its author claimed when writing it: each act
+/// alone proves its own claimed history (it is signed over), and the pair
+/// shows the divergence with nothing but the two lines. Admission's half —
+/// both branches excluded — is already pinned where forks are audited.
+#[test]
+fn an_equivocation_carries_two_claimed_views() {
+    let (view_a, view_b) = (claimed_view('a'), claimed_view('b'));
+    let build = |act: RailAct, view: &crate::Digest| {
+        let body = body_json(&act, None, Some(view));
+        Op::new(
+            SignedOp {
+                seq: 2,
+                sig: sign_ring_op(&key(1), NS, 102, 2, &body),
+                act,
+                on_behalf_of: None,
+                view: Some(view.clone()),
+            },
+            102,
+            actor_of(&key(1)),
+        )
+    };
+    let left = build(record("left"), &view_a);
+    let right = build(record("right"), &view_b);
+
+    // The evidence rides the wire form — parse it back and the claimed views
+    // are still there, still signed.
+    for (op, expected) in [(&left, &view_a), (&right, &view_b)] {
+        let wire = serde_json::to_string(op).unwrap();
+        let back: Op<SignedOp> = serde_json::from_str(&wire).unwrap();
+        assert_eq!(
+            back.kind.view.as_ref(),
+            Some(expected),
+            "the claim survives the wire"
+        );
+    }
+    assert_ne!(left.kind.view, right.kind.view, "two claimed histories");
+
+    let f = admitted(&[left, right]);
+    assert!(
+        f.gaps
+            .iter()
+            .any(|g| matches!(g, RailGap::SequenceFork { .. })),
+        "both branches are excluded by name: {:?}",
+        f.gaps
     );
 }
 

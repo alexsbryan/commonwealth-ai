@@ -86,6 +86,7 @@ async fn append_record(rail: &commonwealth_rail::RingRail, ns: &str, amount: u64
             rail.signer(),
             &roster,
             None,
+            &commonwealth_rail::Ed25519Verifier,
         )
         .unwrap_or_else(|e| panic!("append to {ns}: {e}"));
 }

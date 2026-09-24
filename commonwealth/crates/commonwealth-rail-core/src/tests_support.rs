@@ -65,7 +65,7 @@ pub fn signed_for(
     act: RailAct,
     on_behalf_of: Option<&str>,
 ) -> Op<SignedOp> {
-    let body = body_json(&act, on_behalf_of);
+    let body = body_json(&act, on_behalf_of, None);
     let signature = sign_ring_op(k, ns, ts, seq, &body);
     Op::new(
         SignedOp {
@@ -73,6 +73,7 @@ pub fn signed_for(
             sig: signature,
             act,
             on_behalf_of: on_behalf_of.map(str::to_string),
+            view: None,
         },
         ts,
         actor_of(k),

@@ -142,6 +142,7 @@ async fn append(rail: &RingRail, key: &SigningKey, ns: &str, amount: u64) {
             &key.clone(),
             &roster,
             None,
+            &commonwealth_rail::Ed25519Verifier,
         )
         .unwrap_or_else(|e| panic!("append to {ns}: {e}"));
 }

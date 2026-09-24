@@ -111,6 +111,7 @@ async fn two_nodes_converge_through_the_sync_route() {
             &key_a,
             &roster,
             None,
+            &commonwealth_rail::Ed25519Verifier,
         )
         .unwrap();
     led_b
@@ -121,6 +122,7 @@ async fn two_nodes_converge_through_the_sync_route() {
             &key_b,
             &roster,
             None,
+            &commonwealth_rail::Ed25519Verifier,
         )
         .unwrap();
     assert_ne!(

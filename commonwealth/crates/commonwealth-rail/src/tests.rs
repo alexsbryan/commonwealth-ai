@@ -56,11 +56,15 @@ fn appending_assigns_contiguous_sequence_numbers_per_actor() {
     let journal = open(dir.path());
     let r = ring();
     for i in 0..3 {
-        let op = journal.append(record("x"), &key(1), &r, None).unwrap();
+        let op = journal
+            .append(record("x"), &key(1), &r, None, &Ed25519Verifier)
+            .unwrap();
         assert_eq!(op.kind.seq, i);
     }
     // A second actor writing to the same journal keeps its OWN counter.
-    let op = journal.append(record("y"), &key(2), &r, None).unwrap();
+    let op = journal
+        .append(record("y"), &key(2), &r, None, &Ed25519Verifier)
+        .unwrap();
     assert_eq!(op.kind.seq, 0);
 
     let f = journal.admit(&r, &Ed25519Verifier).unwrap();
@@ -75,7 +79,9 @@ fn a_journal_line_is_one_flat_object_that_reads_back() {
     let dir = tempfile::tempdir().unwrap();
     let journal = open(dir.path());
     let r = ring();
-    let written = journal.append(record("milk"), &key(1), &r, None).unwrap();
+    let written = journal
+        .append(record("milk"), &key(1), &r, None, &Ed25519Verifier)
+        .unwrap();
 
     let raw = std::fs::read_to_string(journal.dir().join("ring_oplog.jsonl")).unwrap();
     let v: serde_json::Value = serde_json::from_str(raw.trim()).unwrap();
@@ -98,7 +104,7 @@ fn a_journal_line_is_one_flat_object_that_reads_back() {
 fn the_door_refuses_to_author_under_a_key_the_ring_does_not_know() {
     let dir = tempfile::tempdir().unwrap();
     let journal = open(dir.path());
-    let stranger = journal.append(record("x"), &key(42), &ring(), None);
+    let stranger = journal.append(record("x"), &key(42), &ring(), None, &Ed25519Verifier);
     let Err(e @ RailError::NotInRoster { .. }) = stranger else {
         panic!("the door authored an op nobody in the ring can read");
     };
@@ -113,7 +119,9 @@ fn the_door_refuses_to_author_under_a_key_the_ring_does_not_know() {
     assert_eq!(journal.read().unwrap().0.len(), 0, "nothing was written");
 
     // A member writes fine.
-    assert!(journal.append(record("x"), &key(1), &ring(), None).is_ok());
+    assert!(journal
+        .append(record("x"), &key(1), &ring(), None, &Ed25519Verifier)
+        .is_ok());
 }
 
 /// The rail no longer judges what an act MEANS, and that is the trade the
@@ -132,7 +140,9 @@ fn the_door_has_no_opinion_about_what_an_act_says() {
         }))
         .unwrap(),
     };
-    assert!(journal.append(nonsense, &key(1), &ring(), None).is_ok());
+    assert!(journal
+        .append(nonsense, &key(1), &ring(), None, &Ed25519Verifier)
+        .is_ok());
 }
 
 /// A payload with no canonical form never becomes a journal line, and if one
@@ -143,7 +153,9 @@ fn a_payload_with_no_canonical_form_is_a_malformed_line() {
     let dir = tempfile::tempdir().unwrap();
     let journal = open(dir.path());
     let r = ring();
-    journal.append(record("whole"), &key(1), &r, None).unwrap();
+    journal
+        .append(record("whole"), &key(1), &r, None, &Ed25519Verifier)
+        .unwrap();
     let path = journal.dir().join("ring_oplog.jsonl");
     let mut raw = std::fs::read_to_string(&path).unwrap();
     raw.push_str(
@@ -304,8 +316,10 @@ fn two_partitioned_nodes_converge_on_an_identical_admission() {
     let r = ring();
 
     // Partitioned: neither node can see the other's write.
-    a.append(record("groceries"), &key(1), &r, None).unwrap();
-    b.append(record("beer"), &key(2), &r, None).unwrap();
+    a.append(record("groceries"), &key(1), &r, None, &Ed25519Verifier)
+        .unwrap();
+    b.append(record("beer"), &key(2), &r, None, &Ed25519Verifier)
+        .unwrap();
     assert_ne!(
         a.admit(&r, &Ed25519Verifier).unwrap(),
         b.admit(&r, &Ed25519Verifier).unwrap(),
@@ -464,8 +478,10 @@ fn a_half_delivered_peer_is_a_named_hole_not_a_clean_answer() {
     let (dir_a, dir_b) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
     let (a, b) = (open(dir_a.path()), open(dir_b.path()));
     let r = ring();
-    b.append(record("first"), &key(2), &r, None).unwrap();
-    b.append(record("second"), &key(2), &r, None).unwrap();
+    b.append(record("first"), &key(2), &r, None, &Ed25519Verifier)
+        .unwrap();
+    b.append(record("second"), &key(2), &r, None, &Ed25519Verifier)
+        .unwrap();
 
     // Only the SECOND op lands — the connection dropped after one of them.
     let all = b.read().unwrap().0;
@@ -510,7 +526,9 @@ fn a_torn_last_line_is_reported_rather_than_quietly_dropped() {
     let dir = tempfile::tempdir().unwrap();
     let journal = open(dir.path());
     let r = ring();
-    journal.append(record("whole"), &key(1), &r, None).unwrap();
+    journal
+        .append(record("whole"), &key(1), &r, None, &Ed25519Verifier)
+        .unwrap();
     let path = journal.dir().join("ring_oplog.jsonl");
     let mut raw = std::fs::read_to_string(&path).unwrap();
     raw.push_str("{\"id\":\"ring-abc\",\"v\":1,\"ts_un");
@@ -564,7 +582,9 @@ fn deleting_a_prefix_with_no_seal_behind_it_makes_holes() {
     let journal = open(dir.path());
     let r = ring();
     for what in ["one", "two", "three", "after"] {
-        journal.append(record(what), &key(1), &r, None).unwrap();
+        journal
+            .append(record(what), &key(1), &r, None, &Ed25519Verifier)
+            .unwrap();
     }
     truncate_by_hand(&journal, 3);
 
@@ -599,11 +619,15 @@ fn a_compacted_journal_stays_complete_and_stops_the_prefix_coming_back() {
     // under the ordinary key, taking the next ordinary seq. There is no
     // second authoring path and no setting.
     for what in ["one", "two", "three"] {
-        a.append(record(what), &key(1), &r, None).unwrap();
+        a.append(record(what), &key(1), &r, None, &Ed25519Verifier)
+            .unwrap();
     }
-    let seal = a.append(RailAct::Seal, &key(1), &r, None).unwrap();
+    let seal = a
+        .append(RailAct::Seal, &key(1), &r, None, &Ed25519Verifier)
+        .unwrap();
     assert_eq!(seal.kind.seq, 3, "a seal is just the actor's next op");
-    a.append(record("after"), &key(1), &r, None).unwrap();
+    a.append(record("after"), &key(1), &r, None, &Ed25519Verifier)
+        .unwrap();
 
     // B is a peer that received everything and has NOT compacted.
     b.ingest_all(&a.read().unwrap().0).unwrap();
@@ -657,7 +681,9 @@ fn compacting_a_journal_with_no_seal_removes_nothing() {
     let journal = open(dir.path());
     let r = ring();
     for what in ["one", "two", "three"] {
-        journal.append(record(what), &key(1), &r, None).unwrap();
+        journal
+            .append(record(what), &key(1), &r, None, &Ed25519Verifier)
+            .unwrap();
     }
     let done = journal.compact(&r, &Ed25519Verifier).unwrap();
     assert_eq!((done.removed, done.kept), (0, 3));
@@ -681,16 +707,19 @@ fn a_forged_seal_deletes_nothing_from_disk() {
     let journal = open(dir.path());
     let r = ring();
     for what in ["one", "two", "three"] {
-        journal.append(record(what), &key(1), &r, None).unwrap();
+        journal
+            .append(record(what), &key(1), &r, None, &Ed25519Verifier)
+            .unwrap();
     }
     let act = RailAct::Seal;
-    let body = body_json(&act, None);
+    let body = body_json(&act, None, None);
     let forged = Op::new(
         SignedOp {
             seq: 3,
             sig: sign_ring_op(&key(3), NS, 103, 3, &body),
             act,
             on_behalf_of: None,
+            view: None,
         },
         103,
         actor_of(&key(1)),
@@ -713,11 +742,14 @@ fn compaction_prunes_a_peers_retired_prefix_too() {
     let (a, b) = (open(dir_a.path()), open(dir_b.path()));
     let r = ring();
     for what in ["one", "two"] {
-        a.append(record(what), &key(1), &r, None).unwrap();
+        a.append(record(what), &key(1), &r, None, &Ed25519Verifier)
+            .unwrap();
     }
-    a.append(RailAct::Seal, &key(1), &r, None).unwrap();
+    a.append(RailAct::Seal, &key(1), &r, None, &Ed25519Verifier)
+        .unwrap();
     // Bo has written too, and has NOT sealed — bo's history is untouched.
-    b.append(record("bo-one"), &key(2), &r, None).unwrap();
+    b.append(record("bo-one"), &key(2), &r, None, &Ed25519Verifier)
+        .unwrap();
     b.ingest_all(&a.read().unwrap().0).unwrap();
 
     let done = b.compact(&r, &Ed25519Verifier).unwrap();
@@ -739,8 +771,12 @@ fn an_op_a_correction_names_survives_a_seal_above_it() {
     let dir = tempfile::tempdir().unwrap();
     let journal = open(dir.path());
     let r = ring();
-    let first = journal.append(record("one"), &key(1), &r, None).unwrap();
-    journal.append(record("two"), &key(1), &r, None).unwrap();
+    let first = journal
+        .append(record("one"), &key(1), &r, None, &Ed25519Verifier)
+        .unwrap();
+    journal
+        .append(record("two"), &key(1), &r, None, &Ed25519Verifier)
+        .unwrap();
     journal
         .append(
             RailAct::Correct {
@@ -750,9 +786,12 @@ fn an_op_a_correction_names_survives_a_seal_above_it() {
             &key(2),
             &r,
             None,
+            &Ed25519Verifier,
         )
         .unwrap();
-    journal.append(RailAct::Seal, &key(1), &r, None).unwrap();
+    journal
+        .append(RailAct::Seal, &key(1), &r, None, &Ed25519Verifier)
+        .unwrap();
 
     let done = journal.compact(&r, &Ed25519Verifier).unwrap();
     assert_eq!(
@@ -782,8 +821,12 @@ fn compaction_refuses_a_journal_it_cannot_fully_read() {
     let dir = tempfile::tempdir().unwrap();
     let journal = open(dir.path());
     let r = ring();
-    journal.append(record("one"), &key(1), &r, None).unwrap();
-    journal.append(RailAct::Seal, &key(1), &r, None).unwrap();
+    journal
+        .append(record("one"), &key(1), &r, None, &Ed25519Verifier)
+        .unwrap();
+    journal
+        .append(RailAct::Seal, &key(1), &r, None, &Ed25519Verifier)
+        .unwrap();
     let path = journal.dir().join("ring_oplog.jsonl");
     let mut raw = std::fs::read_to_string(&path).unwrap();
     raw.push_str("{not json\n");
@@ -872,12 +915,14 @@ fn a_refused_line_under_a_real_floor_goes_and_is_counted() {
     let journal = open(dir.path());
     let r = ring();
     for what in ["one", "two"] {
-        journal.append(record(what), &key(1), &r, None).unwrap();
+        journal
+            .append(record(what), &key(1), &r, None, &Ed25519Verifier)
+            .unwrap();
     }
     // Cy's signature over a line claiming to be alex's: refused by admission,
     // still on the disk, still counted in `held`.
     let act = record("forged");
-    let body = body_json(&act, None);
+    let body = body_json(&act, None, None);
     journal
         .ingest(&Op::new(
             SignedOp {
@@ -885,6 +930,7 @@ fn a_refused_line_under_a_real_floor_goes_and_is_counted() {
                 sig: sign_ring_op(&key(3), NS, 102, 2, &body),
                 act,
                 on_behalf_of: None,
+                view: None,
             },
             102,
             actor_of(&key(1)),
@@ -898,7 +944,9 @@ fn a_refused_line_under_a_real_floor_goes_and_is_counted() {
     );
 
     // Alex seals above all three. The seal is real, so the floor is real.
-    journal.append(RailAct::Seal, &key(1), &r, None).unwrap();
+    journal
+        .append(RailAct::Seal, &key(1), &r, None, &Ed25519Verifier)
+        .unwrap();
     let done = journal.compact(&r, &Ed25519Verifier).unwrap();
     assert_eq!(done.removed, 3, "two real acts and the forgery under them");
     assert_eq!(done.gaps_cleared, 1, "the BadSignature went with them");
@@ -943,7 +991,9 @@ fn a_peers_introduction_arrives_readable_and_changes_no_roster_row() {
             .payload()
             .unwrap(),
     };
-    let written = b.append(intro, &key(2), &r, None).unwrap();
+    let written = b
+        .append(intro, &key(2), &r, None, &Ed25519Verifier)
+        .unwrap();
 
     // Ring-sync, the way a peer delivers: digest out, missing ops back in.
     let for_me = b

@@ -94,12 +94,21 @@ impl RingJournal {
     /// caller that could sign without deciding about it would be a second
     /// answer to what these bytes are (ARCH §10.6). `None` is every caller
     /// that writes its own acts.
+    ///
+    /// The act's `view` is stamped HERE, never caller-supplied: this
+    /// journal's [`digest`] over everything authentic it holds, the writer's
+    /// claimed view of the ring at the moment of writing (the DAG heads of
+    /// `RING_APP_LIBRARY.md` §19 step 0). It needs the verifier for the same
+    /// reason `digest` does — an unauthenticated line is not part of anyone's
+    /// honest view — so the scheme that judged the holdings is named at the
+    /// door like every other answer of this shape.
     pub fn append(
         &self,
         act: RailAct,
         signer: &dyn RingSigner,
         roster: &Roster,
         on_behalf_of: Option<&str>,
+        verifier: &dyn RingVerifier,
     ) -> Result<Op<SignedOp>, RailError> {
         let actor = signer.actor();
         // Authoring under a key the ring does not carry produces an op that
@@ -144,7 +153,8 @@ impl RingJournal {
             .duration_since(UNIX_EPOCH)
             .map(|d| d.as_secs() as i64)
             .unwrap_or(0);
-        let body = body_json(&act, on_behalf_of);
+        let view = digest(&existing, &self.namespace, verifier);
+        let body = body_json(&act, on_behalf_of, Some(&view));
         let signature = signer.sign(&self.namespace, ts_unix, seq, &body);
         let op = Op::new(
             SignedOp {
@@ -152,6 +162,7 @@ impl RingJournal {
                 sig: signature,
                 act,
                 on_behalf_of: on_behalf_of.map(str::to_string),
+                view: Some(view),
             },
             ts_unix,
             actor.clone(),
@@ -293,7 +304,7 @@ impl RingJournal {
         roster: &Roster,
         verifier: &dyn RingVerifier,
     ) -> Result<Sealed, RailError> {
-        let op = self.append(RailAct::Seal, signer, roster, None)?;
+        let op = self.append(RailAct::Seal, signer, roster, None, verifier)?;
         let retired = self.compact(roster, verifier);
         if let Err(e) = &retired {
             tracing::warn!(

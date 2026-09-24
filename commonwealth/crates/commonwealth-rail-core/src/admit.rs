@@ -336,7 +336,11 @@ pub fn admit(
                 derived: derived.clone(),
             });
         }
-        let body = body_json(&op.kind.act, op.kind.on_behalf_of.as_deref());
+        let body = body_json(
+            &op.kind.act,
+            op.kind.on_behalf_of.as_deref(),
+            op.kind.view.as_ref(),
+        );
         // Whatever the verifier cannot vouch for is a gap, never an act. A
         // `false` here is a refusal and is reported as one — there is no
         // answer that means "could not tell, carry on" (ARCH §18.3).
@@ -556,23 +560,37 @@ pub(crate) fn derived_id(op: &Op<SignedOp>) -> OpId {
 
 /// The exact bytes the signature covers — the act, in declaration order, with
 /// its payload canonical (see [`Payload`](crate::Payload)), followed by
-/// `on_behalf_of` when the writer stated one.
+/// `on_behalf_of` when the writer stated one, followed by `view` when the
+/// writer committed to one.
 ///
 /// The name is inside the signature because a stamp a peer could strip or
-/// rewrite in flight would attribute an act to whoever last handled it. It is
-/// LAST and omitted when `None`, so the bytes for an act with no name are
-/// byte-identical to what this function returned before the field existed and
-/// every op already on every replica verifies unchanged.
-pub fn body_json(act: &RailAct, on_behalf_of: Option<&str>) -> String {
+/// rewrite in flight would attribute an act to whoever last handled it. The
+/// view is inside for the same reason one field later: a rewritten view
+/// would make every act claim whichever history suited the carrier. Both are
+/// LAST-in-order and omitted when `None`, so the bytes for an act with
+/// neither are byte-identical to what this function returned before the
+/// fields existed and every op already on every replica verifies unchanged.
+pub fn body_json(
+    act: &RailAct,
+    on_behalf_of: Option<&str>,
+    view: Option<&crate::Digest>,
+) -> String {
     // A borrowing mirror of `SignedOp`'s signed half rather than a second
     // spelling of the rule: the act flattens in exactly as it serialises
-    // alone, and the one added field sits after it.
+    // alone, and the two added fields sit after it.
     #[derive(serde::Serialize)]
     struct Body<'a> {
         #[serde(flatten)]
         act: &'a RailAct,
         #[serde(skip_serializing_if = "Option::is_none")]
         on_behalf_of: Option<&'a str>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        view: Option<&'a crate::Digest>,
     }
-    serde_json::to_string(&Body { act, on_behalf_of }).unwrap_or_default()
+    serde_json::to_string(&Body {
+        act,
+        on_behalf_of,
+        view,
+    })
+    .unwrap_or_default()
 }

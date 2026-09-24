@@ -436,7 +436,13 @@ pub async fn append(
             .map(|done| (done.op, Some(retire(&done.retired))))
     } else {
         journal
-            .append(act, rail.signer(), &roster, on_behalf_of.as_deref())
+            .append(
+                act,
+                rail.signer(),
+                &roster,
+                on_behalf_of.as_deref(),
+                &commonwealth_rail::Ed25519Verifier,
+            )
             .map(|op| (op, None))
     };
     match appended {

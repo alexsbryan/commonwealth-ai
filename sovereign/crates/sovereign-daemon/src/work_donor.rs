@@ -1179,7 +1179,13 @@ async fn append(app_state: &AppState, rail: &RingRail, act: &WorkAct) -> Result<
     let journal = rail.journal(WORK_NAMESPACE).map_err(|e| e.to_string())?;
     let roster = rail.roster(&journal).await.map_err(|e| e.to_string())?;
     journal
-        .append(RailAct::Record { payload }, rail.signer(), &roster, None)
+        .append(
+            RailAct::Record { payload },
+            rail.signer(),
+            &roster,
+            None,
+            &Ed25519Verifier,
+        )
         .map_err(|e| e.to_string())?;
     app_state.ring_write_nudge().notify_one();
     Ok(())

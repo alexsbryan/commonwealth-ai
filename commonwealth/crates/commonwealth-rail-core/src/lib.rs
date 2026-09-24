@@ -369,6 +369,25 @@ pub struct SignedOp {
     /// `rail_ops_written_before_on_behalf_of_still_verify` holds to.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub on_behalf_of: Option<String>,
+    /// The author's view of the ring at the moment of writing: every actor's
+    /// [`View`] over what this writer held (the sync digest's entries). It is
+    /// the act citing its context — the DAG heads of
+    /// `RING_APP_LIBRARY.md` §19 step 0 — so an equivocation carries two
+    /// claimed histories in its own two lines, and a future cut
+    /// (`Remove{key, through_seq}`) is weighable against what its remover
+    /// claimed to have seen.
+    ///
+    /// **Self-asserted and unforgable-by-others, like the name above it:** a
+    /// writer claims their own view; nobody can rewrite it in flight because
+    /// it is inside the signature. The journal stamps it at the signing door
+    /// — a caller-supplied `view` is as meaningless as a caller-supplied
+    /// `on_behalf_of`. Absent today for every hand-built fixture and every
+    /// op written before the field existed, and they verify unchanged.
+    ///
+    /// LAST and skipped when absent, for the byte-compatibility reason this
+    /// struct now owes twice (the `on_behalf_of` comment above).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub view: Option<crate::Digest>,
 }
 
 impl Journaled for SignedOp {

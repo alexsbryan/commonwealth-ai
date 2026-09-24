@@ -303,6 +303,7 @@ mod tests {
                     rail.signer(),
                     &roster,
                     None,
+                    &Ed25519Verifier,
                 )
                 .unwrap();
         }
@@ -400,7 +401,7 @@ mod tests {
             }))
             .unwrap(),
         };
-        let body = body_json(&act, None);
+        let body = body_json(&act, None, None);
         let sig = sign_ring_op(&key(), NS, existing.ts_unix, existing.kind.seq, &body);
         let planted = Op::new(
             SignedOp {
@@ -408,6 +409,7 @@ mod tests {
                 sig,
                 act,
                 on_behalf_of: None,
+                view: None,
             },
             existing.ts_unix,
             actor.clone(),
@@ -442,7 +444,7 @@ mod tests {
             }))
             .unwrap(),
         };
-        let body = body_json(&act, None);
+        let body = body_json(&act, None, None);
         let sig = sign_ring_op(&key(), NS, existing.ts_unix, existing.kind.seq, &body);
         let substitute = Op::new(
             SignedOp {
@@ -450,6 +452,7 @@ mod tests {
                 sig,
                 act,
                 on_behalf_of: None,
+                view: None,
             },
             existing.ts_unix,
             actor.clone(),

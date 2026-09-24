@@ -265,13 +265,14 @@ async fn work_namespace_seals_and_keeps_live_leases() {
     let sign = |key: &SigningKey, seq: u64, ts: i64, act: &WorkAct| -> Op<SignedOp> {
         let payload = commonwealth_work::to_payload(act).expect("a work act is payloadable");
         let act = RailAct::Record { payload };
-        let sig = sign_ring_op(key, WORK_NAMESPACE, ts, seq, &body_json(&act, None));
+        let sig = sign_ring_op(key, WORK_NAMESPACE, ts, seq, &body_json(&act, None, None));
         Op::new(
             SignedOp {
                 seq,
                 sig,
                 act,
                 on_behalf_of: None,
+                view: None,
             },
             ts,
             actor_of(key),

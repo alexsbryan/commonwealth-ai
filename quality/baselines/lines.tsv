@@ -14,8 +14,8 @@
 1219	commonwealth/crates/commonwealth-media
 989	commonwealth/crates/commonwealth-media::tests
 1073	commonwealth/crates/commonwealth-rail
-2294	commonwealth/crates/commonwealth-rail-core
-494	commonwealth/crates/commonwealth-rail-core::tests
+2423	commonwealth/crates/commonwealth-rail-core
+495	commonwealth/crates/commonwealth-rail-core::tests
 2	commonwealth/crates/commonwealth-rail::tests
 1706	commonwealth/crates/commonwealth-rails
 879	commonwealth/crates/commonwealth-rails::tests
@@ -24,7 +24,7 @@
 1881	commonwealth/crates/commonwealth-transport
 2286	commonwealth/crates/commonwealth-transport::tests
 3207	commonwealth/crates/commonwealth-work
-1860	commonwealth/crates/commonwealth-work::tests
+1867	commonwealth/crates/commonwealth-work::tests
 69837	corpus-engine
 1297	corpus-engine-archaeology
 582	corpus-engine-archaeology::tests

@@ -144,7 +144,11 @@ pub fn digest(ops: &[Op<SignedOp>], namespace: &str, verifier: &dyn RingVerifier
                 namespace,
                 op.ts_unix,
                 op.kind.seq,
-                &crate::body_json(&op.kind.act, op.kind.on_behalf_of.as_deref()),
+                &crate::body_json(
+                    &op.kind.act,
+                    op.kind.on_behalf_of.as_deref(),
+                    op.kind.view.as_ref(),
+                ),
                 &op.kind.sig,
             )
         })
@@ -495,7 +499,7 @@ mod tests {
     /// verifies it. `Op::new` is the same builder the honest fixtures use, so
     /// the id is self-consistent and only the signature gives it away.
     fn spoofed(signer: u8, claimed: u8, seq: u64, ts: i64, act: RailAct) -> Op<SignedOp> {
-        let body = crate::body_json(&act, None);
+        let body = crate::body_json(&act, None, None);
         let sig = crate::sign_ring_op(&key(signer), crate::tests_support::NS, ts, seq, &body);
         Op::new(
             SignedOp {
@@ -503,6 +507,7 @@ mod tests {
                 sig,
                 act,
                 on_behalf_of: None,
+                view: None,
             },
             ts,
             actor(claimed),
