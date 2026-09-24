@@ -146,4 +146,3 @@ pub enum SkippedLine {
     /// it would be guessing at semantics this build does not have.
     NewerVersion { line: u64, v: u32 },
 }
-
