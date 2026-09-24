@@ -131,10 +131,16 @@ struct EntityForms {
 }
 
 impl SummaryNameRegistry {
-    /// Read the atlas's Entity atoms from `ontology.json`. Fails when
-    /// the file cannot be read or parsed — the CALLER decides whether
-    /// that is absence (corpora without an atlas) or a defect.
-    pub fn from_atlas_ontology(path: &std::path::Path) -> Result<Self, String> {
+    /// Read the atlas's EXTRACTED Entity atoms from `atlas/atoms.json`
+    /// — the writer's extracted-atoms artifact. `ontology.json` beside
+    /// it is the DECLARATION (policies, not atoms): the 2026-09-24
+    /// census armed against it, the veto silently stayed off, and the
+    /// run's own stats line (`name registry 0 names`) was the only
+    /// tell. This doc comment and the fixture shape below are the pin
+    /// against repeating that. Fails when the file cannot be read or
+    /// parsed — the CALLER decides whether that is absence (corpora
+    /// without an atlas) or a defect.
+    pub fn from_atlas_atoms(path: &std::path::Path) -> Result<Self, String> {
         let raw =
             std::fs::read_to_string(path).map_err(|e| format!("read {}: {e}", path.display()))?;
         let value: serde_json::Value =
@@ -220,7 +226,7 @@ impl SummaryNameRegistry {
     }
 }
 /// the instrument and tests. Production loads via
-/// [`SummaryNameRegistry::from_atlas_ontology`].
+/// [`SummaryNameRegistry::from_atlas_atoms`].
 #[derive(Debug, Clone, serde::Deserialize)]
 pub struct RegistryEntityFixture {
     /// Canonical form, used in verdicts.
@@ -354,7 +360,7 @@ impl JudgeSummaryVerifier {
     /// probe still owns faithfulness, and the summary line's
     /// `name registry 0 names` makes the neutered state visible.
     pub fn attach_atlas_registry(self, index_dir: &std::path::Path) -> (Self, usize) {
-        let path = index_dir.join("atlas").join("ontology.json");
+        let path = index_dir.join("atlas").join("atoms.json");
         if !path.exists() {
             tracing::info!(
                 path = %path.display(),
@@ -362,7 +368,7 @@ impl JudgeSummaryVerifier {
             );
             return (self, 0);
         }
-        match SummaryNameRegistry::from_atlas_ontology(&path) {
+        match SummaryNameRegistry::from_atlas_atoms(&path) {
             Ok(registry) if !registry.is_empty() => {
                 let n = registry.len();
                 tracing::info!(
@@ -762,13 +768,13 @@ mod tests {
         std::fs::write(
             &path,
             r#"{"atoms":[
-                {"atom_type":"Entity","data":{"canonical_name":"Winnie Verloc","aliases":["Winnie"],"entity_type":"person"}},
+                {"atom_type":"Entity","data":{"id":"entity-0001","canonical_name":"Winnie Verloc","aliases":["Winnie"],"entity_type":"person"}},
                 {"atom_type":"Claim","data":{"id":"claim-1","text":"x"}},
-                {"atom_type":"Entity","data":{"canonical_name":"Adolf Verloc","aliases":[]}}
+                {"atom_type":"Entity","data":{"id":"entity-0002","canonical_name":"Adolf Verloc","aliases":[]}}
             ]}"#,
         )
-        .expect("write ontology fixture");
-        let registry = SummaryNameRegistry::from_atlas_ontology(&path).expect("registry parses");
+        .expect("write atoms fixture");
+        let registry = SummaryNameRegistry::from_atlas_atoms(&path).expect("registry parses");
         assert_eq!(
             registry.len(),
             2,

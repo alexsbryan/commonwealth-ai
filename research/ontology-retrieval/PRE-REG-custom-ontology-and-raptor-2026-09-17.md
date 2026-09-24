@@ -1189,3 +1189,42 @@ the pre-declared 0-false-veto gate the veto is recorded NOT-yet-armed for
 ratified use; the abstractive re-derivation census runs next with the veto
 TELEMETRY visible in stats, and the arm decision reads the census's larger
 faithful sample.
+
+### 2026-09-24 — RAPTOR chain step 2: the abstractive re-derivation census — survival 2-3/14, the veto is innocent, the bottleneck is the writer/judge pair
+
+Three full rebuilds of the composed literary corpus's tree (14 nodes) under
+the rebuilt gate, current binary, artifacts and logs under
+`raptor-proof/census-backup-20260923/` (the study-1 tree snapshotted beside
+them):
+
+- run A: 3/14 abstractive · run B: 2/14 (0 first-attempt + 2 retry) ·
+  run C (veto ARMED, 106 entities): 2/14 (1 + 1). **Abstractive survival is
+  2-3 of 14 (~15-21%), stable across configurations.**
+- Run C's stats: `verified 14 · pass 1 · retry 13 (pass 1) · extractive
+  fallback 12 · verifier failures 0 · name registry 106 names`. **The name
+  veto fired ZERO times on production-generated summaries** — on top of the
+  instrument's 2/12 on synthesized ones, the false-veto side now has 0/14 on
+  real builder output. The veto is NOT what suppresses RAPTOR; the fallback
+  mass is gestalt-probe failures (every probe answered; 12-13 summaries
+  scored ≥ τ).
+- Two instrument defects the census caught and fixed en route, both worth
+  the record: the registry loader first armed against `ontology.json` —
+  the DECLARATION — instead of `atoms.json`, the extracted-atoms artifact,
+  and the veto silently stayed off (the stats line was the only tell; the
+  loader now reads atoms.json with the distinction pinned in its doc); and
+  the run before that replayed the old tree from the DB-resident
+  `conv_raptor_nodes` until `--force`, reporting a census without an LLM
+  call. Both were caught by numbers that refused to make sense, not by
+  trusting green output.
+- Attribution limit, recorded for study 2: probe violation PROBABILITY
+  values are not persisted — only pass/fallback. So "writer too weak vs
+  judge too strict at τ=0.8" is inseparable from these runs; a recording
+  change (violation values into the checkpoint/DB) is study-2 work.
+  Synthesis runs on the fast 4B slot (`Workload::EnrichBulk` routing), so
+  the writer under test is the 4B, not the 35B.
+- Chain consequence: step 3 (the K4 read) is blocked on capability, not
+  measurement — with 12/14 floor summaries, RAPTOR's arms would re-measure
+  the extractive floor study 1 already measured. The next lever is the
+  writer/judge pair (bigger writer slot, or the τ margin re-read on the
+  4B-written distribution), which is engine work priced on fixtures, then
+  the census re-run.
