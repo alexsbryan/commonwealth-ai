@@ -94,6 +94,7 @@
 //! `sovereign-time` without creating the exact backflow edge it exists to
 //! forbid.
 
+pub mod alpn;
 pub mod answer;
 pub mod attribution;
 pub mod conformance;

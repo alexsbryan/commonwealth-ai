@@ -19,8 +19,10 @@
 use wasm_bindgen::prelude::*;
 
 /// The ALPN the daemon routes to its guest-checking listener.
-/// `commonwealth-transport/src/iroh.rs`: `GUEST_ALPN`.
-pub const GUEST_ALPN: &[u8] = b"cwth/guest/0";
+/// The guest ALPN — imported from `kernel-types`, the one definition both
+/// ends of the dial spell (ROOT_CAUSE_FIXES B3). Was a duplicate literal
+/// here; the import is the bar that keeps the two ends from drifting.
+pub use kernel_types::alpn::GUEST_ALPN;
 
 /// Push one layer line to the page's `__trace` collector, if the page defined
 /// one. Best-effort: a missing collector must not break the dial.

@@ -86,7 +86,7 @@ pub const CLIENT_ALPN: &[u8] = b"cwth/client/0";
 /// bearer who is NOT a mesh member.
 ///
 /// Distinct from [`CLIENT_ALPN`] because the two want opposite trust. A
-/// connection on `CLIENT_ALPN` is forwarded to the daemon's own client
+/// connection on [`CLIENT_ALPN`] is forwarded to the daemon's own client
 /// listener, which admits loopback before it reads a bearer — that is
 /// correct for the mesh peers and the paired phone that ride it (peer
 /// federated inference carries no `Authorization` header at all), and it is
@@ -98,7 +98,13 @@ pub const CLIENT_ALPN: &[u8] = b"cwth/client/0";
 /// router whose auth layer does not trust loopback
 /// (`sovereign_daemon::client_auth::ClientAuthPolicy`). A guest connection
 /// cannot reach the trusted listener, and a peer's inference is untouched.
-pub const GUEST_ALPN: &[u8] = b"cwth/guest/0";
+///
+/// The BYTES live in `kernel-types` (`alpn`) — the wasm guest runtime dials
+/// the same spelling from a standalone closure and imports them there
+/// (ROOT_CAUSE_FIXES B3: one definition, the second site imports). Re-exported
+/// here so every call site keeps spelling
+/// `commonwealth_transport::iroh::GUEST_ALPN`.
+pub use kernel_types::alpn::GUEST_ALPN;
 
 // The three origin protocols moved to `origin_alpn.rs` (2026-09-13, adding
 // `OFFER_ALPN`): this file is past ARCH §3.2's ceiling and a third ALPN with
