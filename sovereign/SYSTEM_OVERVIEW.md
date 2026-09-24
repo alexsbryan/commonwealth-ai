@@ -2005,7 +2005,7 @@ that ended it", plus the loop's own tests in
 `MAX_REQUEST_BODY_BYTES` = 8 MiB (`server.rs:40`), so the per-body figure is in
 BYTES and every one names its fixture: **9,599 ops** at 873.9 B/op (order 2's
 594-byte ledger body), 13,731 at 609 B/op, 15,164 at a work-atlas
-observation's 552 B/op (re-derived by `examples/rail_read_cost.rs`). Until 2f
+observation's 552 B/op (pinned in `tests/rail_e2e/ceiling.rs`). Until 2f
 that was the CONVERGENCE ceiling, and crossing it was silent: `DefaultBodyLimit`
 answers **413 before the handler runs**, so the gauge could not fire; the gauge
 was computed on the RESPONSE, the direction nothing bounds, so the rail's one
