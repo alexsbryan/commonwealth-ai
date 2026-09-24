@@ -1,0 +1,322 @@
+{
+  "rows_measured": 12,
+  "could_not_judge": 0,
+  "test_retest_flips": 0,
+  "pass_any": 10,
+  "negative_control_failed_correctly": 19,
+  "negative_control_pairs": 24,
+  "name_veto_faithful_vetoes": 2,
+  "name_veto_swap_vetoes": 5,
+  "name_veto_swap_pairs": 12,
+  "rows": [
+    {
+      "cluster_key": "cluster-000",
+      "summary_chars": 1897,
+      "pass_run1": true,
+      "pass_run2": true,
+      "claims1": [
+        0,
+        0
+      ],
+      "claims2": [
+        0,
+        0
+      ],
+      "whole1": 0.5937417253115898,
+      "whole2": 0.5937417253115898,
+      "control_cross_cluster": false,
+      "control_cross_cluster_against": "cluster-001",
+      "control_name_swap": false,
+      "control_cross_cluster_violation": 0.9785074136991038,
+      "control_name_swap_violation": null,
+      "name_swap_token": "Beck",
+      "faithful_name_violations": [],
+      "control_name_swap_veto": [
+        "Beck",
+        "Beck",
+        "Old Beck"
+      ]
+    },
+    {
+      "cluster_key": "cluster-001",
+      "summary_chars": 1883,
+      "pass_run1": true,
+      "pass_run2": true,
+      "claims1": [
+        0,
+        0
+      ],
+      "claims2": [
+        0,
+        0
+      ],
+      "whole1": 0.7220960000000001,
+      "whole2": 0.7220960000000001,
+      "control_cross_cluster": false,
+      "control_cross_cluster_against": "cluster-002",
+      "control_name_swap": true,
+      "control_cross_cluster_violation": null,
+      "control_name_swap_violation": 0.7893272842134542,
+      "name_swap_token": "Salve",
+      "faithful_name_violations": [],
+      "control_name_swap_veto": []
+    },
+    {
+      "cluster_key": "cluster-002",
+      "summary_chars": 2164,
+      "pass_run1": true,
+      "pass_run2": true,
+      "claims1": [
+        0,
+        0
+      ],
+      "claims2": [
+        0,
+        0
+      ],
+      "whole1": 0.70263106,
+      "whole2": 0.70263106,
+      "control_cross_cluster": false,
+      "control_cross_cluster_against": "cluster-003",
+      "control_name_swap": false,
+      "control_cross_cluster_violation": null,
+      "control_name_swap_violation": 0.8232096,
+      "name_swap_token": "Salve",
+      "faithful_name_violations": [],
+      "control_name_swap_veto": []
+    },
+    {
+      "cluster_key": "cluster-003",
+      "summary_chars": 2064,
+      "pass_run1": true,
+      "pass_run2": true,
+      "claims1": [
+        0,
+        0
+      ],
+      "claims2": [
+        0,
+        0
+      ],
+      "whole1": 0.7442710041979406,
+      "whole2": 0.7442710041979406,
+      "control_cross_cluster": false,
+      "control_cross_cluster_against": "cluster-004",
+      "control_name_swap": false,
+      "control_cross_cluster_violation": null,
+      "control_name_swap_violation": 0.8142918929995675,
+      "name_swap_token": "They",
+      "faithful_name_violations": [],
+      "control_name_swap_veto": []
+    },
+    {
+      "cluster_key": "cluster-004",
+      "summary_chars": 1796,
+      "pass_run1": false,
+      "pass_run2": false,
+      "claims1": [
+        0,
+        0
+      ],
+      "claims2": [
+        0,
+        0
+      ],
+      "whole1": null,
+      "whole2": null,
+      "control_cross_cluster": false,
+      "control_cross_cluster_against": "cluster-005",
+      "control_name_swap": false,
+      "control_cross_cluster_violation": null,
+      "control_name_swap_violation": null,
+      "name_swap_token": "Elizabeth",
+      "faithful_name_violations": [
+        "Rio de Janeiro"
+      ],
+      "control_name_swap_veto": [
+        "Rio de Janeiro"
+      ]
+    },
+    {
+      "cluster_key": "cluster-005",
+      "summary_chars": 1471,
+      "pass_run1": true,
+      "pass_run2": true,
+      "claims1": [
+        0,
+        0
+      ],
+      "claims2": [
+        0,
+        0
+      ],
+      "whole1": 0.6063723236176606,
+      "whole2": 0.6063723236176606,
+      "control_cross_cluster": false,
+      "control_cross_cluster_against": "cluster-006",
+      "control_name_swap": true,
+      "control_cross_cluster_violation": null,
+      "control_name_swap_violation": 0.7530514,
+      "name_swap_token": "Salve",
+      "faithful_name_violations": [],
+      "control_name_swap_veto": []
+    },
+    {
+      "cluster_key": "cluster-006",
+      "summary_chars": 1266,
+      "pass_run1": true,
+      "pass_run2": true,
+      "claims1": [
+        0,
+        0
+      ],
+      "claims2": [
+        0,
+        0
+      ],
+      "whole1": 0.5641067261535965,
+      "whole2": 0.5641067261535965,
+      "control_cross_cluster": false,
+      "control_cross_cluster_against": "cluster-007",
+      "control_name_swap": false,
+      "control_cross_cluster_violation": 0.9697887947220387,
+      "control_name_swap_violation": null,
+      "name_swap_token": "Arendal",
+      "faithful_name_violations": [],
+      "control_name_swap_veto": [
+        "Arendal"
+      ]
+    },
+    {
+      "cluster_key": "cluster-007",
+      "summary_chars": 1864,
+      "pass_run1": true,
+      "pass_run2": true,
+      "claims1": [
+        0,
+        0
+      ],
+      "claims2": [
+        0,
+        0
+      ],
+      "whole1": 0.583131520843424,
+      "whole2": 0.583131520843424,
+      "control_cross_cluster": false,
+      "control_cross_cluster_against": "cluster-008",
+      "control_name_swap": true,
+      "control_cross_cluster_violation": null,
+      "control_name_swap_violation": 0.583131520843424,
+      "name_swap_token": "Elizabeth",
+      "faithful_name_violations": [],
+      "control_name_swap_veto": []
+    },
+    {
+      "cluster_key": "cluster-008",
+      "summary_chars": 1858,
+      "pass_run1": false,
+      "pass_run2": false,
+      "claims1": [
+        0,
+        0
+      ],
+      "claims2": [
+        0,
+        0
+      ],
+      "whole1": null,
+      "whole2": null,
+      "control_cross_cluster": false,
+      "control_cross_cluster_against": "cluster-009",
+      "control_name_swap": false,
+      "control_cross_cluster_violation": null,
+      "control_name_swap_violation": null,
+      "name_swap_token": "Elizabeth",
+      "faithful_name_violations": [
+        "Rio de Janeiro"
+      ],
+      "control_name_swap_veto": [
+        "Elizabeth Kristiansen",
+        "Rio de Janeiro"
+      ]
+    },
+    {
+      "cluster_key": "cluster-009",
+      "summary_chars": 1775,
+      "pass_run1": true,
+      "pass_run2": true,
+      "claims1": [
+        0,
+        0
+      ],
+      "claims2": [
+        0,
+        0
+      ],
+      "whole1": 0.6169610185088306,
+      "whole2": 0.6169610185088306,
+      "control_cross_cluster": false,
+      "control_cross_cluster_against": "cluster-010",
+      "control_name_swap": true,
+      "control_cross_cluster_violation": null,
+      "control_name_swap_violation": 0.7420754519452817,
+      "name_swap_token": "Arendal",
+      "faithful_name_violations": [],
+      "control_name_swap_veto": []
+    },
+    {
+      "cluster_key": "cluster-010",
+      "summary_chars": 1961,
+      "pass_run1": true,
+      "pass_run2": true,
+      "claims1": [
+        0,
+        0
+      ],
+      "claims2": [
+        0,
+        0
+      ],
+      "whole1": 0.5727949956323003,
+      "whole2": 0.5727949956323003,
+      "control_cross_cluster": false,
+      "control_cross_cluster_against": "cluster-011",
+      "control_name_swap": false,
+      "control_cross_cluster_violation": null,
+      "control_name_swap_violation": null,
+      "name_swap_token": "Juno",
+      "faithful_name_violations": [],
+      "control_name_swap_veto": [
+        "Juno",
+        "Juno",
+        "Juno",
+        "Juno",
+        "Juno"
+      ]
+    },
+    {
+      "cluster_key": "cluster-011",
+      "summary_chars": 2055,
+      "pass_run1": true,
+      "pass_run2": true,
+      "claims1": [
+        0,
+        0
+      ],
+      "claims2": [
+        0,
+        0
+      ],
+      "whole1": 0.5458568463757054,
+      "whole2": 0.5458568463757054,
+      "control_cross_cluster": false,
+      "control_cross_cluster_against": "cluster-000",
+      "control_name_swap": true,
+      "control_cross_cluster_violation": null,
+      "control_name_swap_violation": 0.5859722414027759,
+      "name_swap_token": "Mina",
+      "faithful_name_violations": [],
+      "control_name_swap_veto": []
+    }
+  ]
+}

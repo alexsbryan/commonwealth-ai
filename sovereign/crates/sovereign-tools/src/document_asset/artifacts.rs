@@ -111,12 +111,35 @@ pub(crate) async fn build_raptor_nodes_with_checkpoint(
         (crate::raptor_atlas::SummaryMode::Extractive, _)
         | (_, crate::summary_verify::VerifyPolicy::Off) => None,
         (crate::raptor_atlas::SummaryMode::Abstractive, policy) => {
+            // The name veto's vocabulary is the corpus's OWN atlas
+            // vocabulary, loaded from the index root the checkpoint
+            // slot lives under. Absent atlas → veto off at info;
+            // unreadable ontology → veto off at warn (a defect, named).
+            // Either way `registry_names` lands in the run's stats line,
+            // so a neutered gate cannot pass as an armed one.
+            let stats = Arc::new(crate::summary_verify::VerifyStats::default());
+            let (verifier, registry_names) = {
+                let base = crate::summary_verify::JudgeSummaryVerifier::new(Arc::clone(inference));
+                match checkpoint.map(|cp| cp.index_dir().to_path_buf()) {
+                    Some(index_dir) => {
+                        let (v, n) = base.attach_atlas_registry(&index_dir);
+                        (v, n)
+                    }
+                    None => {
+                        tracing::info!(
+                            "summary verifier: no index dir on this build — name veto off"
+                        );
+                        (base, 0)
+                    }
+                }
+            };
+            stats
+                .registry_names
+                .store(registry_names, std::sync::atomic::Ordering::Relaxed);
             Some(Arc::new(crate::summary_verify::VerifyCtx {
-                verifier: Arc::new(crate::summary_verify::JudgeSummaryVerifier::new(
-                    Arc::clone(inference),
-                )),
+                verifier: Arc::new(verifier),
                 policy,
-                stats: Arc::new(crate::summary_verify::VerifyStats::default()),
+                stats,
             }))
         }
     };

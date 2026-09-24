@@ -1145,3 +1145,47 @@ evidence is on the path of nearly every correct lookup, and on the one
 question where bare failed, the ontology's contribution was present in
 full's winning answer. Whether this holds at three runs with noise bands,
 across K1, and against the pod model pair is exactly study 2.
+
+### 2026-09-23 — RAPTOR chain step 1: the name veto built, measured both directions; gate verdict: NOT armed
+
+The operator asked whether we were rebuilding brittle string matching. The
+design is constrained against exactly that: the vocabulary is the corpus's
+own atlas Entity atoms (`canonical_name` + aliases, entity-level carry —
+"Verloc" carried ⇒ "Winnie Verloc" is cohesion, the case that killed the
+deleted per-name veto), and the normalization set is CLOSED at four —
+case/whitespace, diacritic fold (Histiæa ≡ Histiaea, this corpus spells both
+ways), possessive strip, separator equivalence — with a test pinning the set.
+No stopwords, no prefixes, no morphology, no per-corpus exceptions; a false
+veto is fixed by a test plus a normalization here, never an exception. The
+verifier vetoes deterministically BEFORE the judge probe, records
+`name_violations`, and `VerifyStats` prints the registry's armed state so a
+neutered gate cannot pass as an armed one.
+
+**Instrument (12 clusters rebuilt from the composed corpus's stored tree,
+106 entities, summaries synthesized by primary, probes on fast,
+`raptor-proof/name-veto-instrument/`):**
+- test-retest 0 flips; cross-cluster controls 12/12 correctly failed.
+- **Faithful vetoes 2/12 — the declared gate was 0, so the veto is NOT
+  ratified as clean.** Both vetoes are the same entity, "Rio de Janeiro",
+  on the two rows that ALSO failed the gestalt probe (clusters 004, 008;
+  pass-any 10/12 is exactly the other ten) — the veto introduced no verdict
+  flips on faithful rows, and both instruments independently rejected those
+  two summaries. Diagnosis: the synthesized summaries name Rio; the member
+  windows carry no form of it. That is the cohesion-vs-corruption boundary
+  and the instrument cannot separate embellishment from misattribution
+  there; a larger faithful-sample measurement is owed before arming.
+- Swap controls: veto fired 5/12 ("Beck", "Arendal", "Elizabeth
+  Kristiansen", "Juno"×5 — deterministic per-entity attribution), the
+  gestalt caught others; combined 7/12 corrupted rows failed. The misses
+  split two ways, both named: swaps into NON-ENTITIES ("They", "Salve" as
+  common word) are out of a vocabulary veto's scope by construction, and
+  swaps whose substituted name appears in the same cluster's members
+  ("Elizabeth") are lexically carried — no carry-based veto can see them;
+  only semantics can.
+
+State: machinery landed and gated by data (registry arms only where an
+atlas ontology exists; stats line reports `name registry N names`), but per
+the pre-declared 0-false-veto gate the veto is recorded NOT-yet-armed for
+ratified use; the abstractive re-derivation census runs next with the veto
+TELEMETRY visible in stats, and the arm decision reads the census's larger
+faithful sample.

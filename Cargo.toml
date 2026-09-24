@@ -462,6 +462,9 @@ regex = "1"
 # isolated workdir (bench candidate snapshots, sovereign-tdd
 # workdir gate tests, atos lifecycle tests, …).
 tempfile = "3"
+# Diacritic folding for name matching (summary_verify): one version, already
+# in the lock via idna — a direct edge instead of a hand-rolled accent table.
+unicode-normalization = "0.1.25"
 
 # Persistence
 rusqlite = { version = "0.35", features = ["bundled"] }

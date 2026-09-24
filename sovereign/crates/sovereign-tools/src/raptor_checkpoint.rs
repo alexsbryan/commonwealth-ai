@@ -138,6 +138,18 @@ impl RaptorCheckpointHandle {
         }
     }
 
+    /// The index root this slot lives under. `at_note` lays out
+    /// `<index_dir>/_raptor_checkpoint/note-<slot>`, so two parents up
+    /// is the root — pinned by the accessor test below, because a
+    /// layout change here must move this with it (the summary
+    /// verifier's name registry loads from this root).
+    pub fn index_dir(&self) -> &Path {
+        self.dir
+            .parent()
+            .and_then(Path::parent)
+            .unwrap_or(&self.dir)
+    }
+
     /// Compute the deterministic input hash for a build. Sorting by
     /// `chunk_id` makes the order-independent — kmeans is order-
     /// sensitive but we persist its output, so the input set's
@@ -579,6 +591,11 @@ mod tests {
 
         // Distinct on-disk slots.
         assert_ne!(note_a.dir, note_b.dir);
+
+        // The index-root accessor is the layout contract `at_note`
+        // creates: two parents up from the slot, for every slot.
+        assert_eq!(note_a.index_dir(), tmp.path());
+        assert_eq!(note_b.index_dir(), tmp.path());
 
         // Note A finishes and writes its manifest…
         note_a.ensure_manifest().unwrap();

@@ -33,7 +33,9 @@ use std::sync::Arc;
 
 use sovereign_core::traits::InferenceProvider;
 use sovereign_inference::remote::RemoteApiProvider;
-use sovereign_tools::summary_verify::{JudgeSummaryVerifier, SummaryVerdict, SummaryVerifier};
+use sovereign_tools::summary_verify::{
+    JudgeSummaryVerifier, SummaryNameRegistry, SummaryVerdict, SummaryVerifier,
+};
 
 #[tokio::test]
 #[ignore = "drives a live daemon (SUMMARY_VERIFIER_BASE, default localhost:9741)"]
@@ -49,7 +51,30 @@ async fn test_retest_and_negative_control_over_production_registers() {
     // a valid probe for the VERIFIER's behavior.
     let synth_model =
         std::env::var("SUMMARY_VERIFIER_SYNTH_MODEL").unwrap_or_else(|_| "primary".into());
-
+    // The name veto's vocabulary — one entity form per line (canonical
+    // names and aliases), as the corpus's own atlas emits them. Absent
+    // = the veto is off and this run measures the gestalt probe only;
+    // present, the run measures BOTH directions of the veto: faithful
+    // rows must not veto (the deleted containment veto's 9/12 is the
+    // number to beat) and the name-swap controls must.
+    let registry: Option<Arc<SummaryNameRegistry>> =
+        match std::env::var("SUMMARY_VERIFIER_REGISTRY") {
+            Ok(path) => {
+                // JSON: [{"display": "...", "forms": ["canonical",
+                // "alias", ...]}, ...] — the atlas's entity grouping,
+                // so the instrument measures the production veto shape
+                // (entity-level carry, aliases ride with their entity).
+                let raw = std::fs::read_to_string(&path)
+                    .unwrap_or_else(|e| panic!("read registry {path}: {e}"));
+                let fixtures: Vec<sovereign_tools::summary_verify::RegistryEntityFixture> =
+                    serde_json::from_str(&raw)
+                        .unwrap_or_else(|e| panic!("parse registry {path}: {e}"));
+                let reg = SummaryNameRegistry::from_entities(fixtures);
+                eprintln!("name veto armed: {} entities", reg.len());
+                Some(Arc::new(reg))
+            }
+            Err(_) => None,
+        };
     #[derive(serde::Deserialize)]
     struct Row {
         cluster_key: String,
@@ -67,7 +92,10 @@ async fn test_retest_and_negative_control_over_production_registers() {
 
     let provider: Arc<dyn InferenceProvider> =
         Arc::new(RemoteApiProvider::new(&base, None, &model, 8192));
-    let verifier = JudgeSummaryVerifier::new(provider.clone());
+    let mut verifier = JudgeSummaryVerifier::new(provider.clone());
+    if let Some(reg) = &registry {
+        verifier = verifier.with_name_registry(Arc::clone(reg));
+    }
     let synth_provider: Arc<dyn InferenceProvider> =
         Arc::new(RemoteApiProvider::new(&base, None, &synth_model, 8192));
 
@@ -105,6 +133,12 @@ async fn test_retest_and_negative_control_over_production_registers() {
     let mut could_not_judge = 0usize;
     let mut control_failures = 0usize; // controls that correctly FAILED (both kinds)
     let mut control_pairs = 0usize;
+    // Name-veto tallies, both directions (registry armed only):
+    // faithful rows vetoed (want 0 — the deleted veto's 9/12 to beat)
+    // and name-swap controls vetoed (want every one).
+    let mut faithful_vetoes = 0usize;
+    let mut swap_vetoes = 0usize;
+    let mut swap_pairs = 0usize;
 
     // Replace the summary's first capitalized word (length > 3) with a
     // foreign name — the smallest corruption that changes WHO the
@@ -127,15 +161,20 @@ async fn test_retest_and_negative_control_over_production_registers() {
                 *counts.entry(w).or_insert(0) += 1;
             }
         }
+        // Prefer a name repeated across the summary (the
+        // consistently-misattributed shape); an abstractive summary can
+        // legitimately lack one — fall back to any capitalized word
+        // rather than aborting the whole run.
         let target = counts
             .iter()
             .filter(|(_, n)| **n >= 2)
             .max_by_key(|(_, n)| **n)
+            .or_else(|| counts.iter().max_by_key(|(_, n)| **n))
             .map(|(w, _)| *w)
             .unwrap_or("");
         assert!(
             !target.is_empty(),
-            "no repeated capitalized name found to swap — summary: {summary}"
+            "no capitalized name found to swap — summary: {summary}"
         );
         let mut out = String::with_capacity(summary.len());
         let mut rest = summary;
@@ -178,6 +217,13 @@ async fn test_retest_and_negative_control_over_production_registers() {
                 continue;
             }
         };
+        let faithful_veto = v1
+            .as_ref()
+            .map(|v| v.name_violations.clone())
+            .unwrap_or_default();
+        if !faithful_veto.is_empty() {
+            faithful_vetoes += 1;
+        }
         let (p2, w2, c2) = match &v2 {
             Some(v) => (
                 v.passed(),
@@ -216,26 +262,46 @@ async fn test_retest_and_negative_control_over_production_registers() {
         if !ctrl_pass {
             control_failures += 1;
         }
-        // Negative control 2 — NAME-SWAP corruption: the summary with its
-        // first capitalized token replaced by a name from ANOTHER cluster.
-        // A probe that cannot catch this has no discrimination at the
-        // unit it claims to judge.
-        let foreign = rows[(i + 3) % rows.len()]
+        // Negative control 2 — NAME-SWAP corruption: the summary with a
+        // repeated capitalized name replaced by an ENTITY from ANOTHER
+        // cluster. The corruption class the veto exists for is
+        // entity-for-entity misattribution; a foreign that is not a
+        // vocabulary entity (a common word, a nationality) is out of the
+        // veto's scope by construction, so the control PREFERS a
+        // registry entity and only falls back to an invented name
+        // (caught by the veto via absence from the vocabulary itself).
+        let registry_forms: Option<&SummaryNameRegistry> = registry.as_deref();
+        let foreign_candidates: Vec<String> = rows[(i + 3) % rows.len()]
             .member_texts
             .iter()
-            .find_map(|t| {
+            .flat_map(|t| {
                 t.split(|c: char| !c.is_alphabetic())
-                    .find(|w| {
+                    .filter(|w| {
                         w.chars().count() > 3 && w.chars().next().is_some_and(char::is_uppercase)
                     })
                     .map(str::to_string)
+                    .collect::<Vec<_>>()
             })
+            .collect();
+        let foreign = foreign_candidates
+            .iter()
+            .find(|w| registry_forms.is_some_and(|r| r.forms_of(w).iter().next().is_some()))
+            .or(foreign_candidates.first())
+            .cloned()
             .unwrap_or_else(|| "Zarkon".into());
         let swapped = swap_first_proper_noun(&summary, &foreign);
         let corrupt = verifier.verify(&swapped, &row.member_texts).await;
         let corrupt_pass = corrupt.as_ref().is_some_and(SummaryVerdict::passed);
         let corrupt_viol = corrupt.as_ref().and_then(|v| v.whole_summary_violation);
+        let corrupt_veto = corrupt
+            .as_ref()
+            .map(|v| v.name_violations.clone())
+            .unwrap_or_default();
         control_pairs += 1;
+        swap_pairs += 1;
+        if !corrupt_veto.is_empty() {
+            swap_vetoes += 1;
+        }
         if !corrupt_pass {
             control_failures += 1;
         }
@@ -254,6 +320,8 @@ async fn test_retest_and_negative_control_over_production_registers() {
             "control_cross_cluster_violation": ctrl_viol,
             "control_name_swap_violation": corrupt_viol,
             "name_swap_token": foreign,
+            "faithful_name_violations": faithful_veto,
+            "control_name_swap_veto": corrupt_veto,
         }));
         eprintln!(
             "[{:<24}] pass1={} pass2={} {} | cross({})={} [want false] | name-swap({})={} [want false]",
@@ -270,8 +338,9 @@ async fn test_retest_and_negative_control_over_production_registers() {
 
     let measured = table.len();
     eprintln!(
-        "\n== verifier instrument: {} rows measured · could-not-judge {} · flips {} · pass-any {} · controls correctly failed {}/{}",
-        measured, could_not_judge, flips, pass_any, control_failures, control_pairs
+        "\n== verifier instrument: {} rows measured · could-not-judge {} · flips {} · pass-any {} · controls correctly failed {}/{} · name veto: faithful {}/{} (want 0) swaps {}/{} (want all)",
+        measured, could_not_judge, flips, pass_any, control_failures, control_pairs,
+        faithful_vetoes, measured, swap_vetoes, swap_pairs
     );
     let out = serde_json::json!({
         "rows_measured": measured,
@@ -280,6 +349,9 @@ async fn test_retest_and_negative_control_over_production_registers() {
         "pass_any": pass_any,
         "negative_control_failed_correctly": control_failures,
         "negative_control_pairs": control_pairs,
+        "name_veto_faithful_vetoes": faithful_vetoes,
+        "name_veto_swap_vetoes": swap_vetoes,
+        "name_veto_swap_pairs": swap_pairs,
         "rows": table,
     });
     let out_path = std::env::var("SUMMARY_VERIFIER_OUTPUT")
