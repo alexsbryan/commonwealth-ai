@@ -12595,6 +12595,7 @@ dependencies = [
  "if-addrs",
  "kernel-types",
  "libc",
+ "mesh-join-vocab",
  "oicp-types",
  "oplog",
  "parquet",

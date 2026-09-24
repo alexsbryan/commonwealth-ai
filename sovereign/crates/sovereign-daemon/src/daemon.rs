@@ -1562,7 +1562,7 @@ impl EmbeddedDaemon {
             .clone()
             .unwrap_or_else(|| "Joined Mesh".to_string());
 
-        membership::validate_join_key_format(&join_key)
+        mesh_join_vocab::join_key::validate_join_key_format(&join_key)
             .map_err(|e| MeshError::InvalidJoinKey(e.to_string()))?;
 
         let (_, internal_port) = self.resolved_ports().await;
@@ -2162,7 +2162,7 @@ impl EmbeddedDaemon {
         let app_state = self.app_state().await.ok_or(MeshError::NotRunning)?;
 
         let new_key = commonwealth_discovery::membership::generate_join_key();
-        let new_hash = commonwealth_discovery::membership::hash_join_key(&new_key);
+        let new_hash = mesh_join_vocab::join_key::hash_join_key(&new_key);
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_secs())

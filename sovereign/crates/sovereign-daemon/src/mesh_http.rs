@@ -1586,7 +1586,7 @@ mod tests {
         let hash_before = live_invite_key_hash(&daemon).await;
         assert_eq!(
             hash_before,
-            commonwealth_discovery::membership::hash_join_key(&original_key),
+            mesh_join_vocab::join_key::hash_join_key(&original_key),
             "precondition: the live mesh gates on the key create just minted"
         );
 
@@ -1604,7 +1604,7 @@ mod tests {
         let hash_after = live_invite_key_hash(&daemon).await;
         assert_eq!(
             hash_after,
-            commonwealth_discovery::membership::hash_join_key(&new_key),
+            mesh_join_vocab::join_key::hash_join_key(&new_key),
             "the running daemon still gates on the OLD hash — rotation touched \
              disk and the cached plaintext but not the live Mesh, so \
              /internal/join keeps admitting the old key and gossip keeps \

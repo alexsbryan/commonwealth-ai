@@ -1532,6 +1532,17 @@ reason = "`kickstart_daemon` — `id -u`, then `launchctl kickstart -k gui/<uid>
 # names no host, so the edge is gone and the row above would be STALE. The
 # integration tests that assemble the real node bind `AppState` through a
 # test-only (dev) edge, which layer-gate never enforces.
+#
+# One package row since 2026-09-24 (fp-9, operator answer (b) to
+# HUMAN-fp9-membership-owner): commonwealth-rails disclaims both roles below
+# (its lib.rs "does not admit joiners" / "does not join over LAN/mDNS").
+
+[[exception]]
+package = "svrn"
+from = "sovereign-daemon"
+to = "commonwealth-discovery"
+reason = "the svrn daemon founds, admits and advertises the mesh (membership::init_mesh_with_identity, init_mesh_with_node_id, generate_join_key, accept_join_with_identity; mdns::MdnsDiscovery) until the de-embed moves `Mesh` out of it (HUMAN-fp9-membership-owner, operator answer (b), 2026-09-24). The pure join-key half already reads mesh-join-vocab."
+tracking = "five-programs fp-9"
 
 
 # Populated by the first layer-gate census, 2026-07-11. Removing an entry —
