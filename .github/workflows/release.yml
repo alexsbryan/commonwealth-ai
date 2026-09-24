@@ -160,12 +160,11 @@ jobs:
           [ "${{ steps.plan.outputs.desktop }}" = "true" ] && tags+=("desktop-v${version}")
           for t in "${tags[@]}"; do
             if git rev-parse -q --verify "refs/tags/$t" >/dev/null; then
-              have="$(git rev-parse "$t^{}")"
-              if [ "$have" != "$(git rev-parse HEAD)" ]; then
-                echo "::error::tag $t exists and points at $have, not HEAD ($(git rev-parse HEAD)) — refusing to move it." >&2
-                exit 1
-              fi
-              echo "tag $t already exists at HEAD — leaving it as-is"
+              # Wherever it points is the release commit: main moves after a
+              # tag (workflow fix-ups land; the tag stays), and the build
+              # checks the TAG out below. Requiring equality with HEAD failed
+              # this release on its own follow-up commits (run 35936227476).
+              echo "tag $t exists ($(git rev-parse "$t^{}")) — leaving it as-is"
             else
               git tag -a "$t" -m "$t"
             fi
