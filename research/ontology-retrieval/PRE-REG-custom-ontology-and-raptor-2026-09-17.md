@@ -1111,7 +1111,37 @@ attribution and are counted NO_SHAPE. Exposure is incidence of the defect
 CLASS, not a measured loss rate — whether each exposed question actually lost
 its answer depended on whether its gold fit the 7-chunk window (Demanhur did
 not; Agrinion and Histiaea did) — and the answer-quality read across the bar
-belongs to study 2. On this corpus the legitimate-dominance case never
-occurs on the shipped path, so post-fix the collapse simply never fires here;
-its remaining legitimate use on other corpora was verified byte-identical
-(chaos pilot, 24 questions).
+ belongs to study 2. On this corpus the legitimate-dominance case never
+ occurs on the shipped path, so post-fix the collapse simply never fires here;
+ its remaining legitimate use on other corpora was verified byte-identical
+ (chaos pilot, 24 questions).
+
+### 2026-09-23 — operator-directed K0 recheck on the repaired binary, with the neutering proof
+
+Operator direction: "get an answer, and prove parity did not come from
+neutering the ontology at retrieval." `attribution/k0_recheck.py` ran the 15
+K0 questions (derived bank, frozen rows unedited), one run per arm, judge on,
+current binary/host, artefacts under `attribution/k0-recheck-20260923/`.
+This is a diagnostic board, not bar ratification: n=15, single run, local
+models (`commonwealth/primary` IQ4_NL synth, local fast judge) differ from
+study-1's pod pair, so absolute scores do not compare across binaries.
+
+**K0 answer: full 1.000, bare 0.933, zero declines in full.** Bar 1's
+direction (full ≥ bare − band) is satisfied with the gap in full's favour;
+the 0.067 delta is one question and within single-run noise, so the claim is
+"no K0 penalty," not "full beats bare." The bare miss is
+`lookup-thessaly-1914-size` — the same lookup bare missed in study 1 — while
+full answered it with `gate=released` and 16 ontology-sourced chunks in its
+prompt (6 walk + 10 atom-enum).
+
+**The neutering proof, by construction:** the trace fingerprints give the
+exact hash sets each ontology step injected, and `prompt_admission` gives
+what reached the model. In the full arm the walk injected evidence on 15/15
+questions and its chunks reached the recorded prompt on **12/15**; atom-enum
+reached prompts on **3/15** (megara, troxell-issues, thessaly — 10 virtual
+chunks each); **83 ontology-sourced hashes reached full's prompts** against
+bare's 0. Parity was not achieved by starving the retrieval path — the map's
+evidence is on the path of nearly every correct lookup, and on the one
+question where bare failed, the ontology's contribution was present in
+full's winning answer. Whether this holds at three runs with noise bands,
+across K1, and against the pod model pair is exactly study 2.
