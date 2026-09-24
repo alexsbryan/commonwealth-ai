@@ -21,96 +21,65 @@ use axum::extract::{Extension, Json};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use serde::Deserialize;
-use tracing::{info, warn};
+use tracing::info;
 
 use crate::daemon::{EmbeddedDaemon, MeshError};
 use crate::loopback_guard::LocalOnly;
-use sovereign_mesh::persist;
+use crate::rails_client::{self, RailsDial};
 
-/// What [`EmbeddedDaemon::forget_member`] retired. The type moved to Fabric
-/// with its tombstone core at domains `REVIEW-build-daemon-membership-lifecycle`
-/// (DC §4.1: the roster mutations are Fabric's); re-exported here so the CLI's
-/// `roster_repair::ForgottenMember` path keeps resolving.
+/// What retiring one member row reports. The type lives with the verb in
+/// `commonwealth_core::mesh_identity` and is re-exported through
+/// `sovereign_mesh::fabric`; this path is the CLI's historical spelling.
 pub use sovereign_mesh::fabric::ForgottenMember;
 
 impl EmbeddedDaemon {
-    /// Retire one member row: tombstone it locally and let the ordinary
-    /// gossip round carry the removal mesh-wide.
+    /// Retire one member row — by DIALING the mesh's serving process
+    /// (FIVE_PROGRAMS fp-6 / §12 decision 2: the mesh owns the roster, and a
+    /// daemon mutating its own copy is a component holding another's
+    /// lifecycle). The tombstone is written where the roster's readers
+    /// converge, persisted there, and carried back to this daemon by the
+    /// ordinary gossip round.
     ///
-    /// # The closure loop for an endpoint-key collision
-    ///
-    /// `merge_from_authenticated` now REFUSES to create an alias, but a
-    /// roster that already holds one had no repair: `svrn mesh` could forget a
-    /// whole parked mesh or leave the active one, and nothing in between. So
-    /// the confirmed `BeefyMac`/`Alexs-MacBook-Pro-2` collision on mesh
-    /// `27ba8166…` was diagnosable and not fixable, and every read through
-    /// that roster — liveness, rotate's online-peer guard, guest routing —
-    /// stayed wrong. A rule that can be checked and enforced but not repaired
-    /// is two thirds of a loop.
-    ///
-    /// # Why a tombstone rather than a delete
-    ///
-    /// Deleting the row locally would work until the next gossip round, when
-    /// a peer still holding it hands it straight back. `removed_at` is the
-    /// mesh's removal primitive and it converges: it wins the
-    /// [`commonwealth_core::mesh::MemberRecord::effective_at`] LWW against
-    /// any older `last_seen`, and it is what `leave` already uses.
-    ///
-    /// It is also self-limiting in the right way. A GHOST — a stale row for a
-    /// machine that re-registered under a new node_id — has nothing left to
-    /// defend it, so the tombstone sticks. A row belonging to a daemon that
-    /// is genuinely alive gets re-announced on that node's next round, since
-    /// a node is authoritative for itself. The repair therefore cannot evict
-    /// a live member even by mistake, which is why `force` is a guard against
-    /// operator surprise rather than against damage.
-    ///
-    /// The roster mutation itself is Fabric's
-    /// ([`sovereign_mesh::fabric::FabricPart::forget_member`]); the daemon
-    /// maps Fabric's refusal onto its own [`MeshError`] and persists the
-    /// tombstone so a restart does not resurrect the row before gossip carries
-    /// it (DC §4.1 "`MeshError` maps at the daemon boundary").
+    /// Until fp-6 this called `FabricPart::forget_member` in-process; the
+    /// why of the verb (the closure loop, the tombstone rather than a
+    /// delete) moved with the implementation to
+    /// `commonwealth_core::mesh_identity::Mesh::forget_member`, which the
+    /// serving route calls. What stays here is the boundary: absence is
+    /// REPORTED (`ServingUnreachable` — the serving process is a required
+    /// service per the TSV's behaviour delta), and the named refusal arms
+    /// map back onto [`MeshError`] so the CLI's answers do not change.
     pub async fn forget_member(
         &self,
         query: &str,
         force: bool,
     ) -> Result<ForgottenMember, MeshError> {
         let app_state = self.app_state().await.ok_or(MeshError::NotRunning)?;
-        let self_id = app_state.self_node_id();
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_secs())
-            .unwrap_or(0);
+        let base = app_state.inner.node.rails_base.clone();
 
-        let outcome = app_state
-            .inner
-            .fabric
-            .forget_member(query, force, now)
+        let outcome = rails_client::forget_member(&base, query, force)
             .await
             .map_err(|e| match e {
-                sovereign_mesh::fabric::ForgetMemberError::UnknownMember(q) => {
-                    MeshError::UnknownMember(q)
+                RailsDial::Absent { .. } => MeshError::ServingUnreachable(base.clone()),
+                RailsDial::Unreadable { base, detail } => {
+                    MeshError::Network(format!("unreadable answer from {base}: {detail}"))
                 }
-                sovereign_mesh::fabric::ForgetMemberError::CannotForgetSelf => {
-                    MeshError::CannotForgetSelf
-                }
-                sovereign_mesh::fabric::ForgetMemberError::MemberStillLive(n) => {
-                    MeshError::MemberStillLive(n)
-                }
+                RailsDial::Refused { kind, message, .. } => match kind.as_deref() {
+                    // The two arms this daemon can reconstruct exactly: the
+                    // sentences are one implementation's (`Mesh::forget_member`
+                    // owns them), so the mapped error reads as before.
+                    Some("unknown-member") => MeshError::UnknownMember(query.to_string()),
+                    Some("cannot-forget-self") => MeshError::CannotForgetSelf,
+                    _ => MeshError::RefusedByServing(message),
+                },
             })?;
-
-        if !outcome.already_retired && self.persistence_enabled() {
-            let mesh = app_state.inner.fabric.mesh.read().await;
-            if let Err(e) = persist::save(self.data_dir(), &mesh, self_id) {
-                warn!(error = %e, "forget-member: mesh.json could not be written");
-            }
-        }
 
         info!(
             member = %outcome.name,
             node_id = %outcome.node_id,
             was_aliased = outcome.was_aliased,
             already_retired = outcome.already_retired,
-            "forget-member: member row retired; gossip carries the tombstone"
+            base = %base,
+            "forget-member: retired on the mesh's serving process; gossip carries the tombstone"
         );
         Ok(outcome)
     }
@@ -144,14 +113,23 @@ pub async fn mesh_forget_member(
             Json(serde_json::json!({ "error": e.to_string() })),
         )
             .into_response(),
+        // The mesh's serving process did not answer. 503, and the sentence
+        // names it: the roster is served by cw-rails, and this route holds no
+        // answer of its own (principle 6 — absence reported, never defaulted).
+        Err(e @ MeshError::ServingUnreachable(_)) => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({ "error": e.to_string() })),
+        )
+            .into_response(),
         Err(e @ MeshError::NotRunning) => (
             StatusCode::CONFLICT,
             Json(serde_json::json!({ "error": e.to_string() })),
         )
             .into_response(),
-        // CannotForgetSelf and MemberStillLive are both "the request is
-        // coherent but we will not do it" — 409, not 400: nothing about the
-        // syntax is wrong, the roster's state is what refuses.
+        // CannotForgetSelf, MemberStillLive and RefusedByServing are all
+        // "the request is coherent but we will not do it" — 409, not 400:
+        // nothing about the syntax is wrong, the roster's state is what
+        // refuses.
         Err(e) => (
             StatusCode::CONFLICT,
             Json(serde_json::json!({ "error": e.to_string() })),

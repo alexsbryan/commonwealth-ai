@@ -162,34 +162,13 @@ impl DialInfoReader {
     }
 }
 
-/// What [`FabricPart::forget_member`] retired. Moved here with the tombstone
-/// core at domains `REVIEW-build-daemon-membership-lifecycle` (DC §4.1: the
-/// roster mutations are Fabric's). The daemon's HTTP shell serializes it; the
-/// wire shape is unchanged.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct ForgottenMember {
-    pub name: String,
-    pub node_id: NodeId,
-    /// The row was one of a colliding pair — this call was a repair rather
-    /// than a removal. Reported so the CLI can say which it did.
-    pub was_aliased: bool,
-    /// Already a tombstone when we got here; nothing was written. Distinct
-    /// from a fresh retirement so a caller never reports work it did not do.
-    pub already_retired: bool,
-}
-
-/// Why [`FabricPart::forget_member`] refused. The daemon maps each arm onto its
-/// own `MeshError` at the boundary (DC §4.1: "`MeshError` maps at the daemon
-/// boundary"), so Fabric does not name the host's error type.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ForgetMemberError {
-    /// No member row matched the query.
-    UnknownMember(String),
-    /// The query resolved to this node's own row.
-    CannotForgetSelf,
-    /// The member is online and unaliased; a `force` is required.
-    MemberStillLive(String),
-}
+/// What [`FabricPart::forget_member`] retired. The type moved to
+/// `commonwealth_core::mesh_identity` with the tombstone core at domains
+/// `REVIEW-build-daemon-membership-lifecycle`, and again to serve the
+/// `cw-rails` route (FIVE_PROGRAMS fp-6 / §12 decision 2: the roster verbs
+/// are the mesh serving process's). Re-exported here so every historical
+/// path keeps resolving.
+pub use commonwealth_core::mesh_identity::{ForgetMemberError, ForgottenMember};
 
 /// Everything Fabric's part is constructed with (DC §4.2 "Construction is
 /// staged, and parts are total"): the values that exist before the part is
@@ -717,51 +696,6 @@ impl FabricPart {
     ) -> Result<ForgottenMember, ForgetMemberError> {
         let self_id = self.identity.current();
         let mut mesh = self.mesh.write().await;
-
-        let aliased: std::collections::HashSet<NodeId> = mesh
-            .aliased_endpoint_keys()
-            .into_iter()
-            .flat_map(|a| a.members.into_iter().map(|(id, _)| id))
-            .collect();
-
-        let target = mesh
-            .members
-            .values()
-            .find(|m| commonwealth_core::mesh::member_matches(m.node_id, &m.name, query))
-            .map(|m| m.node_id)
-            .ok_or_else(|| ForgetMemberError::UnknownMember(query.to_string()))?;
-
-        if target == self_id {
-            return Err(ForgetMemberError::CannotForgetSelf);
-        }
-
-        let record = mesh.members.get(&target).expect("just resolved");
-        let was_aliased = aliased.contains(&target);
-        let name = record.name.clone();
-
-        if !record.is_active() {
-            // Idempotent: already retired, nothing to do and nothing to
-            // report as if it had happened.
-            return Ok(ForgottenMember {
-                name,
-                node_id: target,
-                was_aliased,
-                already_retired: true,
-            });
-        }
-        let live = record.status == commonwealth_core::mesh::NodeStatus::Online;
-        if live && !was_aliased && !force {
-            return Err(ForgetMemberError::MemberStillLive(name));
-        }
-        let record = mesh.members.get_mut(&target).expect("just resolved");
-        record.removed_at = Some(now);
-        record.last_seen = record.last_seen.max(now);
-        record.status = commonwealth_core::mesh::NodeStatus::Offline;
-        Ok(ForgottenMember {
-            name,
-            node_id: target,
-            was_aliased,
-            already_retired: false,
-        })
+        mesh.forget_member(self_id, query, force, now)
     }
 }

@@ -1081,6 +1081,7 @@ impl AppState {
                     internal_auth: node_seed.internal_auth,
                     client_tokens: node_seed.client_tokens,
                     named_client_tokens: node_seed.named_client_tokens,
+                    rails_base: node_seed.rails_base,
                     guest_sessions: Arc::new(GuestSessionStore::new(node_seed.guest_sessions)),
                     guest_pages: Arc::new(node_seed.guest_pages),
                     // 0 sentinel = no foreground activity observed yet.

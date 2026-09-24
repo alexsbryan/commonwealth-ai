@@ -14,7 +14,7 @@
 use std::collections::BTreeMap;
 
 use crate::ids::{NodeId, NodePubkey};
-use crate::mesh::{MemberRecord, Mesh};
+use crate::mesh::{member_matches, MemberRecord, Mesh, NodeStatus};
 
 /// One endpoint key held by more than one LIVE member.
 ///
@@ -25,6 +25,45 @@ pub struct AliasedEndpointKey {
     pub node_pubkey: NodePubkey,
     /// Every live member carrying it, as `(node_id, name)`. Always length >= 2.
     pub members: Vec<(NodeId, String)>,
+}
+
+/// What retiring one member row reports. Lived in `sovereign-mesh::fabric`
+/// until the roster verbs moved to the mesh's serving process
+/// (FIVE_PROGRAMS fp-6 / §12 decision 2): the verb operates on the mesh, so
+/// its types live beside it, and both the daemon's fabric delegate and the
+/// `cw-rails` route serialize this same definition.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ForgottenMember {
+    pub name: String,
+    pub node_id: NodeId,
+    /// The row was one of a colliding pair — this call was a repair rather
+    /// than a removal. Reported so the CLI can say which it did.
+    pub was_aliased: bool,
+    /// Already a tombstone when we got here; nothing was written. Distinct
+    /// from a fresh retirement so a caller never reports work it did not do.
+    pub already_retired: bool,
+}
+
+/// Why retiring a member row refused. The sentences are THE operator-facing
+/// contract of the verb — one implementation, so the serving route's refusal
+/// and the daemon's mapped arm read identically — and the callers map each
+/// arm onto their own error at their boundary, so the mesh does not name
+/// either host's type.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum ForgetMemberError {
+    /// No member row matched the query.
+    #[error("No member matching '{0}' — `svrn mesh status` lists the roster")]
+    UnknownMember(String),
+    /// The query resolved to this node's own row.
+    #[error("That is this node — use `svrn mesh leave` to give up membership")]
+    CannotForgetSelf,
+    /// The member is online and unaliased; a `force` is required.
+    #[error(
+        "'{0}' is online and not part of an endpoint-key collision — retiring it \
+         would be an eviction, and its next gossip round would undo it anyway. \
+         Pass --force if that is really what you mean"
+    )]
+    MemberStillLive(String),
 }
 
 /// One member's claim on an endpoint key — the only input
@@ -192,6 +231,99 @@ impl Mesh {
         }
         let key = record.node_pubkey?;
         self.endpoint_key_claimant(key, record.node_id)
+    }
+
+    /// Retire one member row: tombstone it and let the ordinary gossip round
+    /// carry the removal mesh-wide.
+    ///
+    /// # The closure loop for an endpoint-key collision
+    ///
+    /// `merge_from_authenticated` now REFUSES to create an alias, but a
+    /// roster that already holds one had no repair: `svrn mesh` could forget a
+    /// whole parked mesh or leave the active one, and nothing in between. So
+    /// the confirmed `BeefyMac`/`Alexs-MacBook-Pro-2` collision on mesh
+    /// `27ba8166…` was diagnosable and not fixable, and every read through
+    /// that roster — liveness, rotate's online-peer guard, guest routing —
+    /// stayed wrong. A rule that can be checked and enforced but not repaired
+    /// is two thirds of a loop.
+    ///
+    /// # Why a tombstone rather than a delete
+    ///
+    /// Deleting the row locally would work until the next gossip round, when
+    /// a peer still holding it hands it straight back. `removed_at` is the
+    /// mesh's removal primitive and it converges: it wins the
+    /// [`MemberRecord::effective_at`] LWW against any older `last_seen`, and
+    /// it is what `leave` already uses.
+    ///
+    /// It is also self-limiting in the right way. A GHOST — a stale row for a
+    /// machine that re-registered under a new node_id — has nothing left to
+    /// defend it, so the tombstone sticks. A row belonging to a daemon that
+    /// is genuinely alive gets re-announced on that node's next round, since
+    /// a node is authoritative for itself. The repair therefore cannot evict
+    /// a live member even by mistake, which is why `force` is a guard against
+    /// operator surprise rather than against damage.
+    ///
+    /// `self_id` is the caller's own node id: retiring your own row is
+    /// leaving, not repairing, and is refused so a node cannot tombstone
+    /// itself while it keeps gossiping (every peer would ignore it anyway —
+    /// authoritative-for-self).
+    ///
+    /// One implementation, two callers (§10.6): the daemon's fabric delegate
+    /// (which held the body until fp-6) and the `cw-rails` route the daemon
+    /// now dials. A second copy of the refusal arms would drift exactly
+    /// where the collision repair is decided.
+    pub fn forget_member(
+        &mut self,
+        self_id: NodeId,
+        query: &str,
+        force: bool,
+        now: u64,
+    ) -> Result<ForgottenMember, ForgetMemberError> {
+        let aliased: std::collections::HashSet<NodeId> = self
+            .aliased_endpoint_keys()
+            .into_iter()
+            .flat_map(|a| a.members.into_iter().map(|(id, _)| id))
+            .collect();
+
+        let target = self
+            .members
+            .values()
+            .find(|m| member_matches(m.node_id, &m.name, query))
+            .map(|m| m.node_id)
+            .ok_or_else(|| ForgetMemberError::UnknownMember(query.to_string()))?;
+
+        if target == self_id {
+            return Err(ForgetMemberError::CannotForgetSelf);
+        }
+
+        let record = self.members.get(&target).expect("just resolved");
+        let was_aliased = aliased.contains(&target);
+        let name = record.name.clone();
+
+        if !record.is_active() {
+            // Idempotent: already retired, nothing to do and nothing to
+            // report as if it had happened.
+            return Ok(ForgottenMember {
+                name,
+                node_id: target,
+                was_aliased,
+                already_retired: true,
+            });
+        }
+        let live = record.status == NodeStatus::Online;
+        if live && !was_aliased && !force {
+            return Err(ForgetMemberError::MemberStillLive(name));
+        }
+        let record = self.members.get_mut(&target).expect("just resolved");
+        record.removed_at = Some(now);
+        record.last_seen = record.last_seen.max(now);
+        record.status = NodeStatus::Offline;
+        Ok(ForgottenMember {
+            name,
+            node_id: target,
+            was_aliased,
+            already_retired: false,
+        })
     }
 }
 

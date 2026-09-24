@@ -54,10 +54,13 @@
 //! proved, never a header the caller typed) and refuses a namespace whose
 //! roster does not name that key.
 //!
-//! The roster comes from `RingRail::roster`, the rail's one reader, so a ring
-//! with no `roster.json` — every app ring by default, and the seven
-//! `REGISTERED_NAMESPACES` — still admits every member, and the file-rostered
-//! work plane narrows. The sender applies the SAME test before it offers
+//! The roster answer comes from `RingRail::roster_origin`'s one decision: a
+//! hand-written `roster.json` is read from the rail (the rail's one reader),
+//! and a DERIVED roster — every app ring by default, and the seven
+//! `REGISTERED_NAMESPACES` — is the mesh's membership, asked of the mesh's
+//! serving process since fp-6 (§12 decision 2). Either way a ring with no
+//! file still admits every member, and the file-rostered work plane narrows.
+//! The sender applies the SAME test before it offers
 //! (`sovereign_mesh::ring_roster::roster_names`); this half is what makes the
 //! filter a rule rather than a courtesy, because a peer that skips its own
 //! filter still has to get past this one.
@@ -127,8 +130,16 @@ fn err(status: StatusCode, msg: impl Into<String>) -> Response {
 ///   without a roster check, which is the half still open; see the module
 ///   header.
 ///
-/// An unreadable roster refuses. Under-share, never over-share — the same
-/// posture `ring_sync`'s prune takes when it cannot read one.
+/// An unreadable roster — or a serving process that does not answer the
+/// derived-roster question — refuses. Under-share, never over-share: the
+/// same posture `ring_sync`'s prune takes when it cannot read one.
+///
+/// WHERE the answer comes from, for a verified member: a hand-written
+/// `roster.json` is this daemon's ring storage and is read here; a DERIVED
+/// roster is the mesh's membership, and since fp-6 (§12 decision 2) that
+/// question dials the mesh's serving process (`cw-rails`) instead of being
+/// answered from this daemon's own converging copy. The rail's
+/// `roster_origin` is the one decider of which half a namespace is.
 async fn roster_refusal(
     state: &AppState,
     attached: &Option<axum::Extension<sovereign_serving_host::admission::AttachedPrincipal>>,
@@ -200,32 +211,85 @@ async fn roster_refusal(
             return None;
         }
     };
-
-    let roster = match rail.roster(journal).await {
-        Ok(r) => r,
+    // A member with no advertised key is on no roster at all — derived or
+    // hand-written — so the absence is decided before the question of WHERE
+    // the roster answer comes from even arises. Under-share, never
+    // over-share (the same reading `roster_names` gave it before the derived
+    // half dialed).
+    let Some(key) = state.member_pubkey(asker).await else {
+        tracing::warn!(
+            namespace,
+            asker = %asker,
+            keyed = false,
+            "ring sync: refused — this ring's roster does not name the asker"
+        );
+        return Some(format!("{asker} is not on {namespace}'s roster"));
+    };
+    // WHERE the roster answer comes from, decided by the rail's ONE origin
+    // decider. A hand-written `roster.json` is THIS daemon's ring storage —
+    // one data directory, one owner — so the file-rostered rings still read
+    // locally. Every DERIVED roster is the mesh's membership, and since fp-6
+    // (§12 decision 2) that question is asked of the mesh's serving process
+    // instead of answered from this daemon's own converging copy: one
+    // decider for "who is in the mesh", not a second derivation here.
+    if rail.roster_origin(namespace) == commonwealth_rail::RosterOrigin::File {
+        let roster = match rail.roster(journal).await {
+            Ok(r) => r,
+            Err(e) => {
+                tracing::warn!(
+                    namespace,
+                    asker = %asker,
+                    error = %e,
+                    "ring sync: refused — this namespace's roster is unreadable, so \
+                     nobody can be shown to be on it"
+                );
+                return Some(format!("{namespace}'s roster is unreadable on this node"));
+            }
+        };
+        if sovereign_mesh::ring_roster::roster_names(&roster, Some(key)) {
+            tracing::debug!(namespace, asker = %asker, "ring sync: the roster names the asker");
+            return None;
+        }
+        tracing::warn!(
+            namespace,
+            asker = %asker,
+            keyed = true,
+            "ring sync: refused — this ring's roster does not name the asker"
+        );
+        return Some(format!("{asker} is not on {namespace}'s roster"));
+    }
+    match crate::rails_client::roster_names(&state.inner.node.rails_base, key).await {
+        Ok(true) => {
+            tracing::debug!(
+                namespace,
+                asker = %asker,
+                "ring sync: the mesh's serving process names the asker"
+            );
+            None
+        }
+        Ok(false) => {
+            tracing::warn!(
+                namespace,
+                asker = %asker,
+                "ring sync: refused — the mesh's membership does not name the asker"
+            );
+            Some(format!("{asker} is not on {namespace}'s roster"))
+        }
         Err(e) => {
+            // The serving process did not answer. Refuse: under-share, never
+            // over-share — the same posture the unreadable-file arm above
+            // takes, and the absence is named (principle 6) rather than
+            // defaulted to a local answer.
             tracing::warn!(
                 namespace,
                 asker = %asker,
                 error = %e,
-                "ring sync: refused — this namespace's roster is unreadable, so \
-                 nobody can be shown to be on it"
+                "ring sync: refused — the mesh's serving process did not answer \
+                 the roster question"
             );
-            return Some(format!("{namespace}'s roster is unreadable on this node"));
+            Some(format!("{namespace}'s roster cannot be checked: {e}"))
         }
-    };
-    let key = state.member_pubkey(asker).await;
-    if sovereign_mesh::ring_roster::roster_names(&roster, key) {
-        tracing::debug!(namespace, asker = %asker, "ring sync: the roster names the asker");
-        return None;
     }
-    tracing::warn!(
-        namespace,
-        asker = %asker,
-        keyed = key.is_some(),
-        "ring sync: refused — this ring's roster does not name the asker"
-    );
-    Some(format!("{asker} is not on {namespace}'s roster"))
 }
 
 /// The body arrives as raw [`Bytes`] rather than `Json<RingSyncRequest>` for

@@ -5246,6 +5246,23 @@ pub enum MeshError {
     /// `switch_mesh` was given the mesh that is already active.
     #[error("Already active in '{0}'")]
     MeshAlreadyActive(String),
+
+    /// The mesh's serving process (cw-rails) did not answer a roster verb.
+    /// Since fp-6 (§12 decision 2) the roster is the serving cluster's to
+    /// hold and mutate; this daemon dials it and — principle 6 — reports the
+    /// absence by name instead of answering from its own converging copy.
+    #[error(
+        "the mesh's serving process is not reachable at {0} — the roster is \
+         served by cw-rails, and this daemon alone holds no answer; start it \
+         and retry"
+    )]
+    ServingUnreachable(String),
+
+    /// The serving process refused a roster verb. The sentence is the mesh's
+    /// own (`Mesh::forget_member` owns the refusals — one implementation),
+    /// forwarded verbatim.
+    #[error("{0}")]
+    RefusedByServing(String),
 }
 
 /// Result of [`EmbeddedDaemon::rotate_invite`].

@@ -22,8 +22,10 @@
 //! iroh acceptor does rather than relying on the round to carry one.
 
 use std::collections::HashMap;
+use std::net::SocketAddr;
 use std::sync::Arc;
 
+use axum::{routing::get, Json, Router};
 use commonwealth_core::ids::{MeshId, NodeId, NodePubkey};
 use commonwealth_core::mesh::{MemberRecord, Mesh};
 use commonwealth_rail::{Person, RailAct, RingRail, RingSigner, Roster};
@@ -82,12 +84,40 @@ fn file_roster(named: &[(&str, &SigningKey)]) -> Roster {
     Roster::new(members)
 }
 
+/// A stand-in for the mesh's serving process (fp-6): a DERIVED roster's
+/// membership question is dialed, so the test answers it the way `cw-rails`
+/// does — from this node's own membership, tombstones included, which is
+/// exactly the answer set the local derivation used to produce. The seam the
+/// test proves is the route's: the derived question leaves the process and
+/// the answer that comes back is the one honored.
+async fn rails_fixture(mesh: &Mesh) -> SocketAddr {
+    let keys: Vec<NodePubkey> = mesh
+        .members
+        .values()
+        .filter_map(|m| m.node_pubkey)
+        .collect();
+    let app = Router::new().route(
+        "/v1/mesh/roster-names/{pubkey}",
+        get(
+            |axum::extract::Path(pubkey): axum::extract::Path<String>| async move {
+                let named = hex::decode(pubkey.trim())
+                    .ok()
+                    .and_then(|bytes| <[u8; 32]>::try_from(bytes).ok())
+                    .is_some_and(|k| keys.contains(&NodePubkey(k)));
+                Json(serde_json::json!({ "named": named }))
+            },
+        ),
+    );
+    common::spawn_router(app).await
+}
+
 /// A daemon with ring storage under `dir`, signing as `key`, with membership
 /// installed as the rail's derived-roster source exactly as the daemon does.
 ///
 /// `NS_FILE` gets `rostered` written to its `roster.json`; `NS_OPEN` and
-/// `NS_REGISTERED` get no file, so they are answered by membership.
-fn node(
+/// `NS_REGISTERED` get no file, so they are answered by membership — dialed
+/// at the node's `rails_base` since fp-6.
+async fn node(
     dir: &std::path::Path,
     key: &SigningKey,
     self_id: NodeId,
@@ -103,6 +133,7 @@ fn node(
     // directory, and a round can only offer a ring this node holds.
     rail.journal(NS_OPEN).unwrap();
     rail.journal(NS_REGISTERED).unwrap();
+    let rails_base = rails_fixture(&mesh).await;
     let state = AppState::new_with_platform_and_engine_and_gauge_and_fabric_and_serving_and_node(
         self_id,
         mesh,
@@ -115,7 +146,10 @@ fn node(
             ..Default::default()
         },
         Default::default(),
-        Default::default(),
+        sovereign_daemon::state::node::NodeSeed {
+            rails_base: format!("http://{rails_base}"),
+            ..Default::default()
+        },
     );
     sovereign_mesh::ring_roster::MeshRosterSource::install(
         &rail,
@@ -190,7 +224,8 @@ async fn three_nodes(
         cast.b,
         mesh_with(vec![keyed_member(cast.b, "bea", &cast.kb, "127.0.0.1:2")]),
         &both,
-    );
+    )
+    .await;
     let b_addr = common::spawn_router(internal_router(b_state)).await;
     let (c_state, c_rail) = node(
         dirs.2.path(),
@@ -198,7 +233,8 @@ async fn three_nodes(
         cast.c,
         mesh_with(vec![keyed_member(cast.c, "cass", &cast.kc, "127.0.0.1:3")]),
         &both,
-    );
+    )
+    .await;
     let c_addr = common::spawn_router(internal_router(c_state)).await;
 
     let (a_state, a_rail) = node(
@@ -211,7 +247,8 @@ async fn three_nodes(
             keyed_member(cast.c, "cass", &cast.kc, &c_addr.to_string()),
         ]),
         a_rostered,
-    );
+    )
+    .await;
     ((a_state, a_rail), b_rail, c_rail)
 }
 
@@ -324,7 +361,8 @@ async fn the_sync_route_refuses_a_member_the_roster_does_not_name() {
         cast.a,
         a_mesh,
         &[("alex", &cast.ka), ("bea", &cast.kb)],
-    );
+    )
+    .await;
     append(&a_rail, &cast.ka, NS_FILE, 3).await;
     let a_addr = common::spawn_router(internal_router(a_state)).await;
 

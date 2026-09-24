@@ -55,6 +55,13 @@ pub fn router(daemon: Arc<RailsDaemon>) -> Router {
             axum::routing::delete(unpublish_app),
         )
         .route("/v1/mesh/publish/{claim_id}/renew", post(renew_app))
+        // The roster verbs (FIVE_PROGRAMS fp-6 / §12 decision 2): retiring a
+        // member row and the ring-roster membership test are the MESH's to
+        // answer — the inference daemon dials these instead of mutating its
+        // own copy. Same paths and bodies as the daemon's routes, so a client
+        // works against either.
+        .route("/v1/mesh/forget-member", post(forget_member))
+        .route("/v1/mesh/roster-names/{pubkey}", get(roster_names))
         .with_state(daemon)
 }
 
@@ -262,6 +269,112 @@ pub async fn unpublish_app(
             .into_response(),
         Err(e) => publish_refusal(e),
     }
+}
+
+/// `POST /v1/mesh/forget-member` body — the same shape the inference daemon's
+/// route takes, so its client posts one body to either.
+#[derive(Debug, Deserialize)]
+pub struct ForgetMemberRequest {
+    /// Member name, or a node_id prefix of at least 4 hex characters.
+    pub member: String,
+    /// Retire the row even though the member is online and not aliased.
+    #[serde(default)]
+    pub force: bool,
+}
+
+/// `POST /v1/mesh/forget-member` — retire one member row: tombstone it in
+/// THIS process's mesh (the one the roster readers converge on), persist the
+/// mesh file, and let gossip carry the removal. The mutation is
+/// [`commonwealth_core::mesh_identity::Mesh::forget_member`] — the same
+/// implementation the daemon's fabric delegate calls — so the refusal arms
+/// cannot drift between the two processes (ARCH §10.6).
+///
+/// Status codes match the daemon's route: 404 for an unknown member, 409 for
+/// the two "coherent but refused" arms. The body carries a `kind` beside the
+/// sentence so a client can tell those two arms apart without parsing prose.
+pub async fn forget_member(
+    State(daemon): State<Arc<RailsDaemon>>,
+    Json(req): Json<ForgetMemberRequest>,
+) -> axum::response::Response {
+    let now = commonwealth_core::clock::unix_now_secs();
+    let outcome = {
+        let mut mesh = daemon.mesh.write().await;
+        mesh.forget_member(daemon.node.self_id, &req.member, req.force, now)
+    };
+    match outcome {
+        Ok(outcome) => {
+            let mesh = daemon.mesh.read().await;
+            if let Err(e) = crate::identity::save_mesh(&daemon.node.data_dir, &mesh) {
+                tracing::warn!(
+                    target: "rails",
+                    error = %e,
+                    "forget-member: mesh.json could not be written"
+                );
+            }
+            tracing::info!(
+                target: "rails",
+                member = %outcome.name,
+                node_id = %outcome.node_id,
+                was_aliased = outcome.was_aliased,
+                already_retired = outcome.already_retired,
+                "forget-member: member row retired; gossip carries the tombstone"
+            );
+            (StatusCode::OK, Json(serde_json::json!(outcome))).into_response()
+        }
+        Err(e @ commonwealth_core::mesh_identity::ForgetMemberError::UnknownMember(_)) => {
+            forget_refusal(StatusCode::NOT_FOUND, "unknown-member", e)
+        }
+        Err(e @ commonwealth_core::mesh_identity::ForgetMemberError::CannotForgetSelf) => {
+            forget_refusal(StatusCode::CONFLICT, "cannot-forget-self", e)
+        }
+        Err(e @ commonwealth_core::mesh_identity::ForgetMemberError::MemberStillLive(_)) => {
+            forget_refusal(StatusCode::CONFLICT, "member-still-live", e)
+        }
+    }
+}
+
+/// The refusal shape for `forget-member`: the sentence under `error` (the
+/// same sentence the daemon's own route would have carried — one
+/// implementation), plus `kind` naming the arm.
+fn forget_refusal(
+    code: StatusCode,
+    kind: &'static str,
+    e: commonwealth_core::mesh_identity::ForgetMemberError,
+) -> axum::response::Response {
+    tracing::info!(target: "rails", status = code.as_u16(), error = %e, "api: forget-member refused");
+    (
+        code,
+        Json(serde_json::json!({ "error": e.to_string(), "kind": kind })),
+    )
+        .into_response()
+}
+
+/// `GET /v1/mesh/roster-names/{pubkey}` — does the mesh's membership name
+/// this key? This is the ring-roster membership test (fp-6): a ring roster
+/// derived from membership keeps TOMBSTONED rows — a departed member's
+/// journal lines still count, and dropping them would turn its signing
+/// history into gaps — so unlike `/status` this answer does not filter
+/// `removed_at`. The key is `NodePubkey`'s own lowercase-hex `Display`.
+pub async fn roster_names(
+    State(daemon): State<Arc<RailsDaemon>>,
+    axum::extract::Path(pubkey): axum::extract::Path<String>,
+) -> axum::response::Response {
+    let key = match hex::decode(pubkey.trim())
+        .map_err(|_| "the key is not hex")
+        .and_then(|bytes| <[u8; 32]>::try_from(bytes).map_err(|_| "the key is not 32 bytes"))
+    {
+        Ok(bytes) => commonwealth_core::ids::NodePubkey(bytes),
+        Err(why) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({ "error": why })),
+            )
+                .into_response()
+        }
+    };
+    let mesh = daemon.mesh.read().await;
+    let named = mesh.members.values().any(|m| m.node_pubkey == Some(key));
+    (StatusCode::OK, Json(serde_json::json!({ "named": named }))).into_response()
 }
 
 /// `POST /v1/mesh/publish` body — the same shape the inference daemon takes,
