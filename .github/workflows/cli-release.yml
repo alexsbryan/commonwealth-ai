@@ -367,6 +367,13 @@ jobs:
           draft: true # publish manually after a smoke test, per desktop-release
           tag_name: ${{ steps.tag.outputs.tag }}
           name: ${{ steps.tag.outputs.tag }}
+          # The per-platform sidecars are load-bearing for the MIXED flow: when
+          # the macOS Intel leg is skipped (no self-hosted runner), the local
+          # cross-build uploads into this draft and regenerates SHA256SUMS FROM
+          # THE RELEASE'S sidecars — without these, the regeneration drops the
+          # CI platforms. Watched on cli-v0.8.0: SHA256SUMS came out 103 bytes,
+          # one Intel line, the two CI hashes gone.
           files: |
             dist/*.tar.gz
+            dist/*.sha256
             dist/SHA256SUMS
