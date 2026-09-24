@@ -27,24 +27,32 @@ use crate::edges::EdgesFile;
 /// Full path is `~/.svrnmesh/indexes/<corpus>/atlas/`.
 pub const ATLAS_DIRNAME: &str = "atlas";
 
-/// Read the atoms file back from disk. Used by Phase 6 / Phase 7
-/// subcommands that run standalone after Phase 3b already wrote
-/// the atlas directory.
+/// Decode the bytes of an `atoms.json`. No IO.
 ///
 /// The parse goes through [`AtomsFileWire`] — the crate-private twin that is
 /// the only `Deserialize` for this file — so this function is the only
-/// constructor that parses `atoms.json` (DM §10.5 "The correction").
+/// constructor that parses `atoms.json` (DM §10.5 "The correction");
+/// [`read_atlas_atoms`] calls it.
+pub fn parse_atoms(data: &[u8]) -> serde_json::Result<AtomsFile> {
+    let wire: AtomsFileWire = serde_json::from_slice(data)?;
+    Ok(wire.into())
+}
+
+/// Read the atoms file back from disk. Used by Phase 6 / Phase 7
+/// subcommands that run standalone after Phase 3b already wrote
+/// the atlas directory.
+#[cfg(feature = "read")]
 pub fn read_atlas_atoms(atlas_dir: &Path) -> io::Result<AtomsFile> {
     let path = atlas_dir.join("atoms.json");
     let data = fs::read(&path)?;
-    let wire: AtomsFileWire = serde_json::from_slice(&data).map_err(|e| {
+    parse_atoms(&data).map_err(|e| {
         io::Error::new(io::ErrorKind::InvalidData, format!("parse atoms.json: {e}"))
-    })?;
-    Ok(wire.into())
+    })
 }
 
 /// Read the edges file back from disk. Companion to
 /// [`read_atlas_atoms`].
+#[cfg(feature = "read")]
 pub fn read_atlas_edges(atlas_dir: &Path) -> io::Result<EdgesFile> {
     // NOTE: callers on the hot atom-detail path must go through
     // `atlas_view::atom_detail::cached_edges`, not this directly — the

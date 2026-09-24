@@ -23,6 +23,13 @@ description = "The atlas vocabulary — atoms, edges, the kind taxonomy, canonic
 # leaf, so the closure stays provably tiny. Declared as a `[[package_leaf]]` in
 # `quality/ARCH_LAYERS.toml`; boundary-gate keeps this comment honest.
 
+[features]
+# The `std::fs` half of the read door (`read_atlas_atoms`/`read_atlas_edges`).
+# Default-on for every consumer; `sovereign-eval` turns it off and decodes its
+# own bytes with `read::parse_atoms` (five-programs fp-58).
+default = ["read"]
+read = []
+
 [dependencies]
 kernel-types = { workspace = true }
 serde = { workspace = true }

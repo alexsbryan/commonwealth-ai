@@ -1350,18 +1350,20 @@ doc = "docs/FIVE_PROGRAMS.md"
 # `sovereign-contracts` and nothing else, because an evaluator that links the
 # thing it measures can be tuned by the same edit that fixes a bug. The
 # `leaf_budget` below spells that (fp-55, decision five-programs-12), plus
-# three leaves that add ZERO crates to the closure, so none is "the thing it
-# measures":
+# three leaves that add ZERO workspace crates to the closure and one the
+# operator admitted, so none is "the thing it measures":
 #   - `kernel-types` — §12 decision 3a's named vocabulary home for content
 #     identity (operator-approved 2026-09-23); zero internal deps.
 #   - `sovereign-time` — EMPTY `[dependencies]`, and clock-gate routes non-core
 #     crates at it (its leaf comment above); refusing it here re-creates the
 #     two-gates-opposite defect that comment records.
 #   - `workspace-hack` — hakari plumbing, not a contract (its leaf comment).
-# `understanding-vocab` is deliberately NOT in it: it is not a 3a vocabulary
-# home but Understanding's (ingest's) language, and its `read` door does
-# `std::fs` (understanding-vocab/src/read.rs), so it fails 3a's leaf test for
-# an evaluator. Its bench edge is red with a repair row.
+#   - `understanding-vocab` — admitted by the operator (HUMAN-fp58, answer
+#     (a), 2026-09-24): the evaluator's claim-miner reads ingest's atoms.json.
+#     Its closure is serde/serde_json/blake3 + `kernel-types` (already here),
+#     and eval links it with `default-features = false`, so the `std::fs`
+#     `read` door (understanding-vocab/src/read.rs) is not in eval's build;
+#     eval reads its own bytes and calls `read::parse_atoms` (fp-58).
 #
 # `sovereign-eval` is here "minus its product links" (§2) — the link is
 # `corpus-engine`, and it is a red line, which is the whole point of the row.
@@ -1374,7 +1376,7 @@ crates = [
     "sovereign-agent-tools",
     "sovereign-tdd",
 ]
-leaf_budget = ["oicp-types", "sovereign-contracts", "kernel-types", "sovereign-time", "workspace-hack"]
+leaf_budget = ["oicp-types", "sovereign-contracts", "kernel-types", "sovereign-time", "workspace-hack", "understanding-vocab"]
 
 # ── THE THIN-SURFACE RULE — can this client BECOME what it talks to? ─────────
 #

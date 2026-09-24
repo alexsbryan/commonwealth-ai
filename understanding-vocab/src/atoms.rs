@@ -1528,7 +1528,7 @@ impl AtomEnvelope {
 /// `atoms` is crate-private and this type is deliberately NOT `Deserialize`:
 /// the derive is a constructor, so it would let any caller outside vocab mint a
 /// file from a string. The wire shape is [`AtomsFileWire`] and
-/// [`crate::read::read_atlas_atoms`] is the only parser (DM §10.5). `Serialize`
+/// [`crate::read::parse_atoms`] is the only parser (DM §10.5). `Serialize`
 /// stays — it is not a constructor, and every writer needs it.
 #[derive(Debug, Clone, Serialize)]
 pub struct AtomsFile {
