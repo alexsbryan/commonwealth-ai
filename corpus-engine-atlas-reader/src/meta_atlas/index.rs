@@ -14,8 +14,8 @@ use std::sync::Arc;
 
 use understanding_vocab::canonical::lookup_key;
 
-use super::{Anchor, MetaAtlasFile, MetaAtom};
 use super::{default_meta_atlas_path, read_meta_atlas};
+use super::{Anchor, MetaAtlasFile, MetaAtom};
 
 /// Read-only lookup wrapper. Keyed by normalised canonical key with
 /// alias fallthrough and Move 5.1 token-index disambiguation.
@@ -277,11 +277,11 @@ impl MetaAtlasIndex {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use understanding_vocab::atoms::{AtomId, ChunkRef};
     use crate::meta_atlas::{Anchor, MetaAtom};
     use corpus_index::stream_axes::Stability;
-    use understanding_vocab::articulation::{Articulation, ArticulationVector};
     use std::collections::BTreeSet;
+    use understanding_vocab::articulation::{Articulation, ArticulationVector};
+    use understanding_vocab::atoms::{AtomId, ChunkRef};
 
     fn anchor(corpus: &str, art: ArticulationVector, salience: f32) -> Anchor {
         Anchor {
