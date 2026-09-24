@@ -896,7 +896,7 @@ pub fn desktop_services_with_planner(
     planner: Box<dyn sovereign_contracts::traits::Planner>,
 ) -> sovereign_daemon::DaemonServices {
     let mut runtime = stub_runtime_parts(Arc::clone(&provider), Some(Arc::clone(&store)));
-    runtime.corpus_engine = Some(Arc::clone(&engine));
+    runtime.corpus_engine = Some(Arc::clone(&engine) as _);
     runtime.planner = planner;
     desktop_services(DesktopParts {
         provider,

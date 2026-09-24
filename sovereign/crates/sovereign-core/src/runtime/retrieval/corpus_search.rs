@@ -630,7 +630,7 @@ impl Runtime {
     /// corpora and their scores so a run can prove what was pruned and why.
     async fn corpus_relevance_prefilter(
         &self,
-        engine: &std::sync::Arc<corpus_engine::CorpusEngine>,
+        engine: &std::sync::Arc<dyn corpus_index::source::CorpusReadPort>,
         eligible: Vec<corpus_index::types::IndexInfo>,
         query_embedding: &[f32],
         label: &str,

@@ -284,7 +284,7 @@ pub struct Runtime {
     /// coach-A/B dead-turn class, 2026-07-11). See
     /// `collaboration::PostStreamPreemption`.
     pub(crate) post_stream_preemption: collaboration::PostStreamPreemption,
-    pub corpus_engine: Option<Arc<corpus_engine::CorpusEngine>>,
+    pub corpus_engine: Option<Arc<dyn corpus_index::source::CorpusReadPort>>,
     /// Optional note store. Populated by the daemon bootstrap; absent
     /// in the chat-CLI path where commitment persistence isn't wired.
     /// Consumed by `handle_commissive_query` to write `kind="commitment"`
@@ -454,7 +454,7 @@ pub struct RuntimeParts {
     pub inference_config: InferenceConfig,
     /// The turn's enrichment stack, in one value (Phase 4b).
     pub lane: lane::LaneSources,
-    pub corpus_engine: Option<Arc<corpus_engine::CorpusEngine>>,
+    pub corpus_engine: Option<Arc<dyn corpus_index::source::CorpusReadPort>>,
     pub note_store: Option<Arc<dyn sovereign_contracts::notes::AgentNotes>>,
     pub compaction: Option<Arc<crate::memory_compaction::CompactionWorker>>,
     pub mesh_knowledge: Option<Arc<dyn crate::traits::MeshKnowledgeSource>>,

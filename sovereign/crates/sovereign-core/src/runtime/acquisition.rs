@@ -331,7 +331,7 @@ pub(crate) fn acquisition_routes_enabled() -> bool {
 pub struct RouteContext {
     /// Engine handle for the recipe catalog + installed-corpus diff.
     /// `None` = connectors-only catalog (still useful).
-    pub engine: Option<Arc<corpus_engine::CorpusEngine>>,
+    pub engine: Option<Arc<dyn corpus_index::source::CorpusReadPort>>,
     /// The turn's coverage-probe verdict, when one ran. **Pass the
     /// probe's own `Option`, never a defaulted stand-in** — `Gap::
     /// coverage` is already `probe.unwrap_or(ClaimUncovered)`, and
@@ -358,7 +358,7 @@ pub async fn routes_for_gap(
     let mut registry_rows: Vec<(String, String, String, String)> = Vec::new();
     let mut installed: std::collections::HashSet<String> = std::collections::HashSet::new();
     if let Some(engine) = &ctx.engine {
-        for e in engine.registry().list_entries() {
+        for e in engine.builtin_corpora() {
             registry_rows.push((
                 e.id.clone(),
                 e.name.clone(),

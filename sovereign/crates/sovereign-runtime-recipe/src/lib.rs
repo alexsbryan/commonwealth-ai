@@ -433,7 +433,7 @@ pub async fn common_parts(inputs: RecipeInputs, progress: &dyn RecipeProgress) -
     .await;
 
     let parts = RuntimeParts {
-        corpus_engine: Some(Arc::clone(&corpus_engine)),
+        corpus_engine: Some(Arc::clone(&corpus_engine) as _),
         note_store,
         ..RuntimeParts::new(
             inference,

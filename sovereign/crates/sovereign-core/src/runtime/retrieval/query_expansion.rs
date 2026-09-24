@@ -123,7 +123,7 @@ impl Runtime {
 /// clones, so the task runs detached from the pipeline borrow.
 pub(crate) struct PprLane {
     pub graph: std::sync::Arc<dyn corpus_engine::WikipediaGraphApi>,
-    pub engine: std::sync::Arc<corpus_engine::CorpusEngine>,
+    pub engine: std::sync::Arc<dyn corpus_index::source::CorpusReadPort>,
     pub rerank_fn: corpus_index::types::RerankFn,
     pub gliner: Option<std::sync::Arc<dyn crate::traits::EntityExtractor>>,
 }
@@ -169,7 +169,7 @@ impl Runtime {
 /// substantive question-token overlap, and tag them
 /// (`obligation_entity`) for the merge selector's demand slots.
 pub(crate) async fn fetch_entity_obligations(
-    engine: std::sync::Arc<corpus_engine::CorpusEngine>,
+    engine: std::sync::Arc<dyn corpus_index::source::CorpusReadPort>,
     rerank_fn: Option<corpus_index::types::RerankFn>,
     message: String,
     enabled_corpora: Option<Vec<String>>,

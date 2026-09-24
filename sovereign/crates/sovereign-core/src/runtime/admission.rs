@@ -96,7 +96,7 @@ impl AdmittedTurn {
     /// daemon actually runs at, on the DEFAULT module target so the daemon's
     /// filter allowlist cannot drop it — never defaulted into a claim of
     /// admission (ARCH §18.3).
-    pub(crate) fn open(engine: &Arc<corpus_engine::CorpusEngine>) -> Option<Self> {
+    pub(crate) fn open(engine: &Arc<dyn corpus_index::source::CorpusReadPort>) -> Option<Self> {
         let Some(lease) = engine.foreground_lease() else {
             // `info`, and NO custom target. The daemon's `EnvFilter` is an
             // allowlist of literal target strings plus module paths

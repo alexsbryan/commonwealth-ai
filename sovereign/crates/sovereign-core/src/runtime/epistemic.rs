@@ -617,7 +617,7 @@ const COVERAGE_PROBE_MAX_CORPORA: usize = 12;
 /// bounded ANN probe per corpus. Free function so streaming spawns
 /// (which hold an engine clone, not the Runtime) can call it.
 pub async fn coverage_probe(
-    engine: Option<&std::sync::Arc<corpus_engine::CorpusEngine>>,
+    engine: Option<&std::sync::Arc<dyn corpus_index::source::CorpusReadPort>>,
     embedding: &[f32],
     enabled_corpora: Option<&[String]>,
 ) -> Option<CoverageProbeResult> {

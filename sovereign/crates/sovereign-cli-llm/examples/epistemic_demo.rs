@@ -110,7 +110,7 @@ async fn demo_one(
     };
     // `None` scope: probe all installed corpora (the demo has no sealed
     // notebook scope). Sealed turns pass the enabled corpora here.
-    let probe = epistemic::coverage_probe(Some(engine), &embedding, None).await;
+    let probe = epistemic::coverage_probe(Some(&(Arc::clone(engine) as _)), &embedding, None).await;
     println!("\n── AFTER (I1 epistemic ledger — live signals, this machine) ──");
     let coverage = match &probe {
         Some(p) => {
@@ -145,7 +145,7 @@ async fn demo_one(
         question.chars().take(160).collect::<String>()
     );
     let ctx = acquisition::RouteContext {
-        engine: Some(Arc::clone(engine)),
+        engine: Some(Arc::clone(engine) as _),
         coverage: Some(coverage),
     };
     let t2 = std::time::Instant::now();
