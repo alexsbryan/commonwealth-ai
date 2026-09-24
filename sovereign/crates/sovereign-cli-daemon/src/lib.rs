@@ -149,16 +149,14 @@ pub fn run_with_args(raw_args: Vec<String>) -> i32 {
     // FOURTH list that disagreed with this one on ordering.
     let launch = Launch::parse(&raw_args, Launch::Bare);
 
-    // `--compute-child` is owned by the `sovereign-daemon` [[bin]], not this crate.
-    // RPC-worker re-exec: the embedded engine's supervisor spawns
-    // `current_exe() --rpc-worker …` when SOVEREIGN_RPC_WORKER_PROCESS is set,
-    // so a `GGML_ASSERT` reached by a mesh peer aborts THIS process instead of
-    // the daemon holding the mesh key and the conversation store. Like the
-    // daemon's compute child, it skips the rebrand migration, the panic hook and the
-    // daemon runtime below: it owns no data root, and it needs no tokio — the
-    // ggml accept loop is blocking and synchronous.
-    if let Launch::RpcWorker { args } = &launch {
-        return sovereign_inference::rpc_worker_main::run(args);
+    // `--compute-child` and `--rpc-worker` are owned by the `sovereign-daemon`
+    // [[bin]], not this crate: both are `current_exe()` re-execs of the serving
+    // process, and `daemon run` here execs that binary (five-programs fp-10/fp-25).
+    // An `--rpc-worker` argv that reaches this binary anyway (a hand-typed
+    // `svrn daemon --rpc-worker`) is handed to the owner unchanged, before the
+    // migration and runtime below, so it lands where it always did.
+    if let Launch::RpcWorker { .. } = &launch {
+        return daemon_bin::exec(&raw_args);
     }
 
     // Rebrand back-compat (see sovereign_core::rebrand): idempotent, non-destructive.
@@ -260,7 +258,7 @@ async fn dispatch(launch: Launch, raw_args: &[String]) -> i32 {
                 2
             }
         },
-        Launch::RpcWorker { .. } => unreachable!("rpc-worker returns in run_with_args"),
+        Launch::RpcWorker { .. } => unreachable!("rpc-worker is exec'd in run_with_args"),
         // Other binaries' launches, incl. the compute-child the sovereign-daemon [[bin]] owns.
         // Named explicitly so that adding a variant forces a decision here instead of a `_` arm.
         Launch::ComputeChild { .. }
