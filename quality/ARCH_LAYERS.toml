@@ -1148,12 +1148,11 @@ allow = ["workspace-hack"]
 # `svrn -> code`, `bench -> *`). Three of the four are ALREADY what a package
 # row says — a member may reach its own package and the shared leaves and
 # nothing else — so spelling them again would be two implementations of one
-# rule, the defect ARCH §10.6 names. They are not added. The fourth is real and
-# is NOT expressible today: `bench -> *` except `oicp-types` and
-# `sovereign-contracts` narrows the leaf budget for one package, and the
-# `[[package_leaf]]` set is GLOBAL. Recorded here as the open item; the fix is
-# a per-package leaf budget in `quality/arch-layers/src/packages.rs`, not a
-# hand-copy of the membership list into forbid rows.
+# rule, the defect ARCH §10.6 names. They are not added. The fourth is real:
+# `bench -> *` except `oicp-types` and `sovereign-contracts` narrows the leaf
+# budget for one package, and the `[[package_leaf]]` set is GLOBAL. Since
+# fp-55 it is spelled as bench's `leaf_budget` (`quality/arch-layers/src/
+# packages.rs`), not a hand-copy of the membership list into forbid rows.
 
 [[package]]
 name = "svrn"
@@ -1344,9 +1343,20 @@ doc = "docs/FIVE_PROGRAMS.md"
 #
 # The tightest of the five by design — §9 wants it reaching `oicp-types` and
 # `sovereign-contracts` and nothing else, because an evaluator that links the
-# thing it measures can be tuned by the same edit that fixes a bug. It cannot
-# be spelled that tightly yet (the leaf set is global; see the header), so the
-# package rule is what holds until a per-package leaf budget exists.
+# thing it measures can be tuned by the same edit that fixes a bug. The
+# `leaf_budget` below spells that (fp-55, decision five-programs-12), plus
+# three leaves that add ZERO crates to the closure, so none is "the thing it
+# measures":
+#   - `kernel-types` — §12 decision 3a's named vocabulary home for content
+#     identity (operator-approved 2026-09-23); zero internal deps.
+#   - `sovereign-time` — EMPTY `[dependencies]`, and clock-gate routes non-core
+#     crates at it (its leaf comment above); refusing it here re-creates the
+#     two-gates-opposite defect that comment records.
+#   - `workspace-hack` — hakari plumbing, not a contract (its leaf comment).
+# `understanding-vocab` is deliberately NOT in it: it is not a 3a vocabulary
+# home but Understanding's (ingest's) language, and its `read` door does
+# `std::fs` (understanding-vocab/src/read.rs), so it fails 3a's leaf test for
+# an evaluator. Its bench edge is red with a repair row.
 #
 # `sovereign-eval` is here "minus its product links" (§2) — the links are
 # `corpus-engine` and `sovereign-authoring-harness`, and they are red lines,
@@ -1360,6 +1370,7 @@ crates = [
     "sovereign-agent-tools",
     "sovereign-tdd",
 ]
+leaf_budget = ["oicp-types", "sovereign-contracts", "kernel-types", "sovereign-time", "workspace-hack"]
 
 # ── THE THIN-SURFACE RULE — can this client BECOME what it talks to? ─────────
 #

@@ -171,11 +171,16 @@ pub fn run() -> i32 {
                 .iter()
                 .any(|f| f.starts_with(&format!("[{}]", pkg.name)))
             {
+                // A declared leaf_budget IS the package's closure; the global
+                // leaf list would misstate it.
+                let (label, names) = match &pkg.leaf_budget {
+                    Some(budget) => ("leaf budget", budget.join(", ")),
+                    None => ("shared leaves", leaves.join(", ")),
+                };
                 eprintln!(
-                    "\n  closure for [{}]: {} + shared leaves ({})",
+                    "\n  closure for [{}]: {} + {label} ({names})",
                     pkg.name,
                     pkg.crates.join(", "),
-                    leaves.join(", ")
                 );
             }
         }

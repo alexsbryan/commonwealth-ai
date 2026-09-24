@@ -317,8 +317,18 @@ pub fn deps_with_kinds(manifest: &str) -> Vec<(String, DepKind)> {
         let Some((name, _)) = t.split_once('=') else {
             continue;
         };
-        let name = name.trim().trim_matches('"');
-        if !name.is_empty() {
+        // A dotted key (`foo.workspace = true`) names the dep before its
+        // first `.`; until fp-55 it read as `foo.workspace`, matched no
+        // member, and dropped the edge silently. Cargo names hold no `.`.
+        // `foo.features = […]` beside it is the same dep, not a second edge.
+        let key = name.trim();
+        let dotted = key.split_once('.');
+        let name = dotted
+            .map_or(key, |(head, _)| head)
+            .trim()
+            .trim_matches('"');
+        let repeat = dotted.is_some() && out.iter().any(|(n, dk)| n == name && *dk == k);
+        if !name.is_empty() && !repeat {
             out.push((name.to_string(), k));
         }
     }
@@ -421,6 +431,29 @@ extra = [\"dep:serde\"]\n";
         assert!(deps.contains(&("winapi".into(), DepKind::Normal)));
         // [features] table entries are not deps.
         assert!(!deps.iter().any(|(n, _)| n == "extra"));
+    }
+
+    /// The shape sovereign-eval and sovereign-authoring-harness used to keep
+    /// `bench → corpus-engine` invisible to both gates until fp-55.
+    #[test]
+    fn dotted_key_deps_are_named_by_their_head() {
+        let manifest = "\
+[package]\n\
+version.workspace = true\n\
+[dependencies]\n\
+corpus-engine.workspace = true\n\
+corpus-engine.features = [\"treesitter\"]\n\
+serde = { workspace = true }\n\
+[dev-dependencies]\n\
+tempfile.workspace = true\n";
+        let deps = deps_with_kinds(manifest);
+        assert!(deps.contains(&("corpus-engine".into(), DepKind::Normal)));
+        assert!(deps.contains(&("tempfile".into(), DepKind::Dev)));
+        // Two dotted keys under one dep are one edge, not two.
+        assert_eq!(deps.iter().filter(|(n, _)| n == "corpus-engine").count(), 1);
+        // The dotted form never leaks through as a name, and [package]
+        // keys are not deps.
+        assert!(!deps.iter().any(|(n, _)| n.contains('.') || n == "version"));
     }
 
     #[test]
