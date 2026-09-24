@@ -638,6 +638,31 @@ exit_file="${RUN_DIR}/cargo.exit"
 
 start_ms=$(($(date +%s%N) / 1000000))
 
+# What a nextest run left behind, from three facts the block below gathers:
+# the report matched to this run ($junit_path), the run ID it printed
+# ($our_run_id) and its exit ($nextest_rc).
+#   report        a report this run wrote; hand it to the adapter.
+#   empty         nextest's own exit 4, "no tests to run"; the empty-run guard
+#                 below names it.
+#   build-failed  no run ID and a non-zero exit. nextest prints `Nextest run ID`
+#                 after the build finishes and before the first test starts,
+#                 so a run that never printed one died before any test ran
+#                 (compiling, or listing a binary): the error is in the raw log
+#                 and the exit is nextest's own, never a lost report. Before
+#                 2026-09-24 this fell into `mismatch` and was reported as exit
+#                 5 blaming a concurrent run; two ralph sessions went hunting
+#                 for one after a host-side build with no clang.
+#   mismatch      a run that started and left no report of its own. Its counts
+#                 are someone else's (exit 5).
+# scripts/tests/sovereign-test-outcome.sh drives this with each case.
+nextest_outcome() {
+    if [[ -n "$junit_path" ]]; then echo report
+    elif [[ "$nextest_rc" == "4" ]]; then echo empty
+    elif [[ -z "$our_run_id" && "$nextest_rc" != "0" ]]; then echo build-failed
+    else echo mismatch
+    fi
+}
+
 # stdin from /dev/null throughout: the pipes below only redirect cargo's
 # STDOUT, so without this the test binaries inherit the caller's interactive
 # terminal as stdin. A prompt helper that guards on `stdin().is_terminal()`
@@ -696,20 +721,22 @@ if [[ "$ENGINE" == "nextest" ]]; then
     done
 
     nextest_rc="$(cat "$exit_file" 2>/dev/null || echo 1)"
-    if [[ -n "$junit_path" ]]; then
-        "$NEXTEST_ADAPTER" "$junit_path" > "$out_jsonl" 2>>"$raw_log"
-    elif [[ "$nextest_rc" == "4" ]]; then
-        # nextest's own "no tests to run". A missing report is EXPECTED here,
-        # not a lost one — the empty-run guard names this outcome.
-        : > "$out_jsonl"
-    else
-        # No report we can attribute to this run. Never fall through to the
-        # adapter's empty 0/0 summary — that is indistinguishable from a
-        # genuinely green run, which is the whole failure class this gate is
-        # being hardened against.
-        JUNIT_MISMATCH=1
-        : > "$out_jsonl"
-    fi
+    case "$(nextest_outcome)" in
+        report)
+            "$NEXTEST_ADAPTER" "$junit_path" > "$out_jsonl" 2>>"$raw_log" ;;
+        empty|build-failed)
+            # A missing report is EXPECTED for both, not a lost one: the
+            # empty-run guard names the first, and the non-zero exit carries
+            # the second to the "Cargo exited N" branch, which quotes cargo.
+            : > "$out_jsonl" ;;
+        *)
+            # No report we can attribute to this run. Never fall through to the
+            # adapter's empty 0/0 summary — that is indistinguishable from a
+            # genuinely green run, which is the whole failure class this gate is
+            # being hardened against.
+            JUNIT_MISMATCH=1
+            : > "$out_jsonl" ;;
+    esac
 
     # Doctest pass — appended to the same log and JSONL stream, through the
     # libtest adapter (cargo test --doc still speaks libtest). Opt-in; see
@@ -1056,7 +1083,7 @@ if [[ $HUMAN -eq 1 ]]; then
                 echo " ✘ Cargo exited $exit_val with no test failures parsed."
                 echo "    fail: 0 above is not a verdict — a target that failed to compile"
                 echo "    produces no per-test lines for the counter to see."
-                cargo_targets="$(grep -E '^error: ([0-9]+ targets? failed|doctest failed)' "$raw_log" 2>/dev/null | tail -3)"
+                cargo_targets="$(grep -E '^error: ([0-9]+ targets? failed|doctest failed|could not compile )' "$raw_log" 2>/dev/null | tail -3)"
                 named_targets="$(grep -E '^[[:space:]]+`-p .+`$' "$raw_log" 2>/dev/null | tail -6)"
                 uncounted="$(grep -E '^test result: FAILED\.' "$raw_log" 2>/dev/null | tail -5)"
                 if [[ -n "$cargo_targets" || -n "$named_targets" ]]; then
