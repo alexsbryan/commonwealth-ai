@@ -18,7 +18,9 @@
 //!    corrections stop voiding. Known limit of the replaceable rule, stated
 //!    rather than discovered: a key whose `Admit` is voided in the SAME batch
 //!    as its corrections may still land those voids (one pass of the fixpoint
-//!    cannot see the other's removal). A candidate future leg.
+//!    cannot see the other's removal). The same layer binds structurally, so
+//!    a key that a `Remove` cut (rather than an un-admit) can still land
+//!    voids — a candidate future leg.
 //! 2. **One walk in the rail's order** `(ts_unix, actor, seq, id)` over the
 //!    survivors: an act counts iff its signer holds standing at the act's
 //!    position — the seed's keys to start, plus keys admitted by counting
@@ -43,9 +45,13 @@ use crate::{OpId, Person, RailAct, Roster, SignedOp};
 /// What one fold of the membership acts concludes.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Membership {
-    /// key → person, from the seed and every counting `Admit`. The binding an
-    /// act's `person` resolves through — in the record, not the file.
+    /// key → person, from the seed and every counting `Admit`. CUMULATIVE: a
+    /// cut key keeps its binding — names stay stable and every past act keeps
+    /// the person it always had (leg 4) — it only leaves [`Self::standing`].
     pub bindings: BTreeMap<String, Person>,
+    /// Who holds standing NOW: the seed plus counting `Admit`s, minus
+    /// counting `Remove`s.
+    pub standing: BTreeSet<String>,
     /// Derived ids of the acts that count: the signer held standing at the
     /// act's position in the rail's order. Everything else is held and
     /// reported, never counted.
@@ -125,18 +131,20 @@ pub fn membership<'a>(
                 .collect::<Vec<_>>()
         })
         .collect();
+    let mut live: BTreeMap<String, Person> = bindings.clone();
     let mut counted: BTreeSet<OpId> = BTreeSet::new();
     for op in order {
-        if !bindings.contains_key(&op.actor) {
+        if !live.contains_key(&op.actor) {
             continue;
         }
         counted.insert(derived_id(op));
         match &op.kind.act {
             RailAct::Admit { person, key } => {
                 bindings.insert(key.clone(), person.clone());
+                live.insert(key.clone(), person.clone());
             }
             RailAct::Remove { key, .. } => {
-                bindings.remove(key);
+                live.remove(key);
             }
             _ => {}
         }
@@ -144,6 +152,7 @@ pub fn membership<'a>(
 
     Membership {
         bindings,
+        standing: live.into_keys().collect(),
         counted,
         voided,
     }
@@ -292,7 +301,7 @@ mod tests {
         );
         let m = membership([&cut, &while_out, &undo], &seed);
         assert!(
-            m.bindings.contains_key(&actor_of(&key(2))),
+            m.standing.contains(&actor_of(&key(2))),
             "voiding the Remove restores the member"
         );
         assert!(

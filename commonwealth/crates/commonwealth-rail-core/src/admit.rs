@@ -120,6 +120,13 @@ pub enum RailGap {
     /// and a typo'd citation must not flip every node's completeness bit
     /// forever (ROOT_CAUSE_FIXES A2).
     DanglingCorrection { by: OpId, missing: OpId },
+    /// The signer is bound in the record but held no standing at this act's
+    /// position — written while removed, or before their own
+    /// [`Admit`](crate::RailAct::Admit) in the order. The act counts for
+    /// nothing and is named rather than dropped: it may be real data (voiding
+    /// the [`Remove`](crate::RailAct::Remove) admits it back — leg 3 of
+    /// `ra-membership-is-order-free`).
+    NotAMember { id: OpId, actor: String },
 }
 
 /// What a gap means for the fold's answer — the one classification (ARCH
@@ -160,6 +167,7 @@ impl RailGap {
             | Self::NewerVersionLine { .. }
             | Self::BadSignature { .. }
             | Self::UnknownSigner { .. }
+            | Self::NotAMember { .. }
             | Self::SequenceFork { .. }
             | Self::SequenceHole { .. } => GapClass::Absence,
             Self::TamperedId { .. } | Self::DanglingCorrection { .. } => GapClass::Contradiction,
@@ -200,6 +208,10 @@ impl std::fmt::Display for RailGap {
                 f,
                 "an op whose signature does not verify ({})",
                 Self::short(id)
+            ),
+            Self::NotAMember { actor, .. } => write!(
+                f,
+                "an op by actor {actor} was written while they held no standing in the ring"
             ),
             Self::UnknownSigner { actor, .. } => write!(
                 f,
@@ -378,8 +390,8 @@ pub fn admit(
         })
         .collect();
 
-    // ── signature, then membership ───────────────────────────
-    let mut admitted: BTreeMap<OpId, Candidate<'_>> = BTreeMap::new();
+    // ── signature ───────────────────────────────────────────
+    let mut authentic: BTreeMap<OpId, &Op<SignedOp>> = BTreeMap::new();
     for op in ops {
         let derived = derived_id(op);
         if derived != op.id {
@@ -410,19 +422,39 @@ pub fn admit(
             });
             continue;
         }
-        let Some(person) = roster.person_for(&op.actor) else {
+        // Dedupe: the same op reaching us twice is the normal case under
+        // gossip, not an anomaly.
+        authentic.insert(derived, op);
+    }
+
+    // ── membership: the seed plus two act kinds, one function ─────────
+    //
+    // `roster` is the SEED (RING_APPLICATIONS.md "Amendment 2026-09-18"):
+    // what is in the ring is decided by `membership`, and an act resolves
+    // through the bindings its own record carries — so key churn cannot
+    // re-flip the past (leg 4 of `ra-membership-is-order-free`).
+    let m = crate::membership::membership(authentic.values().copied(), roster);
+
+    let mut admitted: BTreeMap<OpId, Candidate<'_>> = BTreeMap::new();
+    for (id, op) in authentic {
+        let Some(person) = m.person_for(&op.actor) else {
             gaps.push(RailGap::UnknownSigner {
-                id: derived,
+                id,
                 actor: op.actor.clone(),
             });
             continue;
         };
-        // Dedupe: the same op reaching us twice is the normal case under
-        // gossip, not an anomaly.
+        if !m.counted.contains(&id) && !m.voided.contains(&id) {
+            gaps.push(RailGap::NotAMember {
+                id,
+                actor: op.actor.clone(),
+            });
+            continue;
+        }
         admitted.insert(
-            derived.clone(),
+            id.clone(),
             Candidate {
-                id: derived,
+                id,
                 person: person.clone(),
                 op,
             },
@@ -457,18 +489,12 @@ pub fn admit(
 
     // ── the void set: commutative, and it never resurrects ───
     //
-    // Built from every surviving correction at once, with no regard for
-    // order and no regard for whether the correction is itself corrected.
-    // Both choices are the same choice: the set must not depend on a walk.
-    // Correcting a correction therefore cancels ITS replacement and leaves
-    // the original voided — to bring something back, write it again. That is
-    // what "compensating entry, visible" means, and it is why this is one
-    // scan rather than a liveness pass.
-    //
-    // Computed BEFORE the floors on purpose: a seal that a correction voids
-    // retires nothing, and the scan below that reads the floors is not the
-    // place to discover that.
-    let mut voided: BTreeSet<OpId> = BTreeSet::new();
+    // The set itself is computed in ONE place — `membership`, which applies
+    // it before its walk so a correction that lands late still drops what it
+    // targets and everything that target admitted. This pass only NAMES the
+    // corrections whose target nobody here holds: the ask, never a hole
+    // (GapClass::Contradiction).
+    let voided = m.voided;
     for a in admitted.values() {
         if let RailAct::Correct { corrects, .. } = &a.op.kind.act {
             if !admitted.contains_key(corrects) {
@@ -477,7 +503,6 @@ pub fn admit(
                     missing: corrects.clone(),
                 });
             }
-            voided.insert(corrects.clone());
         }
     }
 

@@ -364,6 +364,10 @@ fn every_gap_class_is_classified() {
             id: id.clone(),
             actor: actor.clone(),
         },
+        RailGap::NotAMember {
+            id: id.clone(),
+            actor: actor.clone(),
+        },
         RailGap::SequenceFork {
             actor: actor.clone(),
             seq: 3,
@@ -398,6 +402,84 @@ fn every_gap_class_is_classified() {
             "{gap:?} hides nothing — a claim the record makes"
         );
     }
+}
+
+/// **Leg 4 — the lost laptop.** A replacement key admitted under the same
+/// person, with the old key removed through its last seq, leaves every past
+/// act admitted — the red-team's retroactivity hole answered by record-bound
+/// resolution: the binding an act resolves through is IN the record, so key
+/// churn cannot re-flip the past. The companion teeth keep it off the
+/// vacuous pass: the new key counts under the old person's name, and the old
+/// key's post-cut write does not count. Watched red first against the fold
+/// where Admit/Remove are inert (re-resolution then falls back to the file).
+#[test]
+fn a_replacement_key_leaves_every_past_act_admitted() {
+    let old = signed(&key(4), 100, 0, record("old-key-writes"));
+    let past = signed(&key(4), 101, 1, record("more-past"));
+    let admit_new = signed(
+        &key(1),
+        102,
+        0,
+        RailAct::Admit {
+            person: Person::from("dee"),
+            key: actor_of(&key(5)),
+        },
+    );
+    let cut_old = signed(
+        &key(1),
+        103,
+        1,
+        RailAct::Remove {
+            key: actor_of(&key(4)),
+            through_seq: 1,
+        },
+    );
+    let new_writes = signed(&key(5), 104, 0, record("new-key-writes"));
+    let old_after_cut = signed(&key(4), 105, 2, record("after-the-cut"));
+    let after_cut_id = old_after_cut.id.clone();
+
+    // The seed names dee with the OLD key — the replacement changes the key,
+    // not the person.
+    let mut members = std::collections::BTreeMap::new();
+    members.insert(Person::from("alex"), vec![actor_of(&key(1))]);
+    members.insert(Person::from("dee"), vec![actor_of(&key(4))]);
+    let seed = Roster::new(members);
+
+    let f = admit(
+        &[
+            old.clone(),
+            past,
+            admit_new,
+            cut_old,
+            new_writes.clone(),
+            old_after_cut,
+        ],
+        &[],
+        &seed,
+        NS,
+        &Ed25519Verifier,
+    );
+    assert!(
+        f.ops.iter().any(|o| o.id == old.id),
+        "every past act of the old key stays admitted"
+    );
+    let kept = f.ops.iter().find(|o| o.id == old.id).unwrap();
+    assert_eq!(
+        kept.person,
+        Person::from("dee"),
+        "under the person it always had"
+    );
+    assert!(
+        f.ops
+            .iter()
+            .any(|o| o.id == new_writes.id && o.person == Person::from("dee")),
+        "the replacement key counts under the same person"
+    );
+    assert!(
+        !f.ops.iter().any(|o| o.id == after_cut_id),
+        "and the old key's post-cut write does not count: {:?}",
+        f.gaps
+    );
 }
 
 /// **An un-upgraded node must say its answer covers a subset.** A

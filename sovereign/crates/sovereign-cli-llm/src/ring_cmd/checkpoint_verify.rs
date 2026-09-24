@@ -182,6 +182,7 @@ fn authenticity_refusal(gap: &RailGap, ops: &[Op<SignedOp>]) -> Option<String> {
         RailGap::MalformedLine { .. }
         | RailGap::NewerVersionLine { .. }
         | RailGap::SequenceHole { .. }
+        | RailGap::NotAMember { .. }
         | RailGap::DanglingCorrection { .. } => None,
     }
 }
