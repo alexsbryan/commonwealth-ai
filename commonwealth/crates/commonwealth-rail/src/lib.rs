@@ -83,16 +83,10 @@ pub trait RosterSource: Send + Sync {
     fn roster(&self) -> Pin<Box<dyn Future<Output = Result<Roster, RailError>> + Send + '_>>;
 }
 
-/// Which reader answered [`RingRail::roster`], so the decision is visible at
-/// `tracing=debug` and a caller that needs to know (the CLI refusing to write
-/// a file nothing reads) can ask without re-deriving it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum RosterOrigin {
-    /// `<ring>/roster.json`, written by `svrn ring roster add`.
-    File,
-    /// A [`RosterSource`] installed for this namespace; the file is ignored.
-    Derived,
-}
+// `RosterOrigin` moved to the fold (fp-54: the serving process reports the
+// origin beside the roster, and a fold-only consumer still reads it); the
+// glob re-export below keeps every historical path spelling it through this
+// crate.
 
 // ── The rail's storage ───────────────────────────────────────
 
