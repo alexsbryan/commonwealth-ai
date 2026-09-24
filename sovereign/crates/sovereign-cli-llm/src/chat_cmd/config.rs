@@ -312,9 +312,48 @@ pub async fn parse_globals_for_chat(args: &[String]) -> Result<(ChatGlobals, Vec
     // to the local daemon: answering a guest's question with a different
     // machine's model and not saying so is the §18.3 substitution this whole
     // surface refuses.
-    let base = sovereign_cli_mesh::guest_route::open_route(&link).await?;
+    let base = daemon_guest_route(&globals.daemon_base).await?;
     apply_guest_link(&mut globals, Some(link), base);
     Ok((globals, rest))
+}
+
+/// Ask the local daemon where the stored guest link resolves to
+/// (`GET /internal/guest/route`). The daemon owns the mesh tunnel (§12 D6),
+/// so this verb never opens one itself; no daemon, no link, or a tunnel that
+/// will not open each come back as a named error, never a local base.
+async fn daemon_guest_route(daemon_base: &str) -> Result<String, String> {
+    let url = format!("{daemon_base}/internal/guest/route");
+    let resp = reqwest::Client::new()
+        .get(&url)
+        .timeout(std::time::Duration::from_secs(60))
+        .send()
+        .await
+        .map_err(|e| {
+            format!(
+                "a guest link is stored, but the local daemon at {daemon_base} did not answer \
+                 ({e}). The daemon opens the route to the lender; start it with \
+                 `svrn daemon start`. There is no fallback to answering locally."
+            )
+        })?;
+    let status = resp.status();
+    let text = resp
+        .text()
+        .await
+        .map_err(|e| format!("{url} answered {status} with an unreadable body: {e}"))?;
+    let body: serde_json::Value = serde_json::from_str(&text)
+        .map_err(|e| format!("{url} answered {status} with a non-JSON body ({e}): {text}"))?;
+    if !status.is_success() {
+        let error = body["error"].as_str().unwrap_or(&text);
+        tracing::info!(%status, error, "guest link: daemon reported no route");
+        return Err(format!(
+            "could not route the guest link ({status}): {error}"
+        ));
+    }
+    let base = body["base_url"]
+        .as_str()
+        .ok_or_else(|| format!("{url} answered {status} without a base_url"))?;
+    tracing::debug!(base, "guest link: daemon served the route");
+    Ok(base.to_string())
 }
 
 /// The env prefixes the grounding gate reads its knobs under
@@ -398,6 +437,22 @@ pub fn print_daemon_served_turn_notes(globals: &ChatGlobals) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// No daemon is a named error, never a base: a fallback that answered
+    /// locally would come back `Ok` and fail this.
+    #[tokio::test]
+    async fn no_local_daemon_is_a_named_absence_not_a_route() {
+        let port = std::net::TcpListener::bind("127.0.0.1:0")
+            .unwrap()
+            .local_addr()
+            .unwrap()
+            .port();
+        let error = daemon_guest_route(&format!("http://127.0.0.1:{port}"))
+            .await
+            .unwrap_err();
+        assert!(error.contains("did not answer"), "{error}");
+        assert!(error.contains("no fallback"), "{error}");
+    }
 
     fn a_link(url: &str) -> GuestLink {
         GuestLink {
