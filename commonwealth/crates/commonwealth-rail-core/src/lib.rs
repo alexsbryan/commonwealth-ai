@@ -430,10 +430,30 @@ pub struct SignedOp {
     pub view: Option<crate::Digest>,
 }
 
+/// The line format version the membership act cohort ships at
+/// (`RailAct::Admit` / [`RailAct::Remove`]). The original three kinds stay at
+/// `Journaled::VERSION` (1) — see [`SignedOp::line_version`].
+pub const MEMBERSHIP_LINE_VERSION: u32 = 2;
+
 impl Journaled for SignedOp {
     const FILE: &'static str = "ring_oplog.jsonl";
     const ID_PREFIX: &'static str = "ring";
     const LABEL: &'static str = "ring_rail";
+    /// This build reads the membership cohort's lines too (see
+    /// [`Self::line_version`]).
+    const UNDERSTANDS: u32 = MEMBERSHIP_LINE_VERSION;
+    /// The membership acts — [`RailAct::Admit`] and [`RailAct::Remove`] —
+    /// ship at the bumped line version and the original three keep the bytes
+    /// they always had, so an un-upgraded node names exactly the acts it
+    /// cannot read `NewerVersionLine` (leg 5 of `ra-membership-is-order-free`)
+    /// and a ring with no membership act folds byte-identically to the build
+    /// before.
+    fn line_version(&self) -> u32 {
+        match self.act {
+            RailAct::Admit { .. } | RailAct::Remove { .. } => MEMBERSHIP_LINE_VERSION,
+            _ => Self::VERSION,
+        }
+    }
 }
 
 // ── Errors ───────────────────────────────────────────────────

@@ -386,6 +386,74 @@ fn an_equivocation_carries_two_claimed_views() {
     );
 }
 
+/// Leg 5's stamp half: the membership acts ship at the bumped line version
+/// and the original three keep the bytes they always had — so an un-upgraded
+/// node names exactly the acts it cannot read, and nothing else changes
+/// version.
+#[test]
+fn the_membership_acts_ship_at_a_bumped_line_version() {
+    let wrote = signed(&key(1), 100, 0, record("x"));
+    let sealed = signed(&key(1), 101, 1, RailAct::Seal);
+    let corrected = signed(
+        &key(1),
+        102,
+        2,
+        RailAct::Correct {
+            corrects: wrote.id.clone(),
+            replacement: None,
+        },
+    );
+    let admitted_someone = signed(
+        &key(1),
+        103,
+        3,
+        RailAct::Admit {
+            person: Person::from("bo"),
+            key: crate::actor_of(&key(2)),
+        },
+    );
+    let cut = signed(
+        &key(1),
+        104,
+        4,
+        RailAct::Remove {
+            key: crate::actor_of(&key(2)),
+            through_seq: 0,
+        },
+    );
+    assert_eq!(
+        (wrote.v, sealed.v, corrected.v),
+        (1, 1, 1),
+        "Record, Correct and Seal keep the version they always had"
+    );
+    assert_eq!(
+        (admitted_someone.v, cut.v),
+        (MEMBERSHIP_LINE_VERSION, MEMBERSHIP_LINE_VERSION),
+        "the membership acts ship at the bump"
+    );
+}
+
+/// The back-compat stop condition of the membership amendment, pinned
+/// byte-for-byte: a ring with no `Admit` in its journal must admit exactly
+/// as it did before membership existed. Frozen from this fixture's first
+/// post-landing fold (RFC style — generated once, then pinned); every field
+/// of the Admission is in the string, so any drift in the no-act path is a
+/// diff here rather than an invisible behaviour change.
+#[test]
+fn a_ring_with_no_membership_acts_admits_exactly_as_before() {
+    let ops: Vec<Op<SignedOp>> = include_str!("fixtures/rail_ops_before_on_behalf_of.jsonl")
+        .lines()
+        .filter(|l| !l.trim().is_empty())
+        .map(|l| serde_json::from_str(l).expect("the fixture is a journal line"))
+        .collect();
+    let f = admitted(&ops);
+    assert_eq!(
+        serde_json::to_string(&(&f.ops, &f.gaps, &f.floors)).unwrap(),
+        r#"[[{"id":"ring-10b53bd03defce30","actor":"8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c","person":"alex","seq":0,"ts_unix":1700000000,"voided":true,"payload":{"kind":"thing","what":"milk"}},{"id":"ring-ced6c95b3f4dac0f","actor":"8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394","person":"bo","seq":0,"ts_unix":1700000001,"corrects":"ring-10b53bd03defce30","voided":false},{"id":"ring-75e6702c797ca7e8","actor":"ed4928c628d1c2c6eae90338905995612959273a5c63f93636c14614ac8737d1","person":"cy","seq":0,"ts_unix":1700000002,"voided":false}],[],{"ed4928c628d1c2c6eae90338905995612959273a5c63f93636c14614ac8737d1":0}]"#,
+        "a ring with no membership act folds byte-identically to the build before"
+    );
+}
+
 /// Ops written before `on_behalf_of` existed, captured from this crate at
 /// f51b66112 and committed verbatim. Every replica holds lines like these;
 /// if adding the field moved a byte, they would all become `BadSignature`

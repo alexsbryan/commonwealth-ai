@@ -130,10 +130,23 @@ pub trait Journaled: Serialize + DeserializeOwned {
     /// hashed input, so ids from two tenants can never collide even if the
     /// same body were written at the same second by the same actor.
     const ID_PREFIX: &'static str;
-    /// Line format version this build writes. Bump only when a reader must
-    /// opt in to new semantics; [`Oplog::read_all`] skips lines declaring a
-    /// higher `v` rather than silently misreading them.
+    /// Line format version this build writes for entries in the base
+    /// format. Bump only when a reader must opt in to new semantics;
+    /// [`Oplog::read_all`] skips lines declaring a higher `v` rather than
+    /// silently misreading them.
     const VERSION: u32 = 1;
+    /// The highest line format version this build understands on read.
+    /// Lines declaring more are skipped as [`SkippedLine::NewerVersion`]
+    /// BEFORE their body is parsed — an act whose KIND this build has never
+    /// seen must be named NewerVersion, never Malformed (leg 5 of
+    /// `ra-membership-is-order-free`).
+    const UNDERSTANDS: u32 = Self::VERSION;
+    /// The version stamp this entry carries. A kind whose semantics came
+    /// after the base format returns the bumped version, so an un-upgraded
+    /// node names it NewerVersion and nothing else changes byte.
+    fn line_version(&self) -> u32 {
+        Self::VERSION
+    }
     /// Short label for tracing and error text (`"governance_oplog"`).
     const LABEL: &'static str;
 }
@@ -199,13 +212,14 @@ impl<K: Journaled> Op<K> {
         // and therefore the id — is deterministic across runs and builds.
         let body = serde_json::to_string(&kind).unwrap_or_default();
         let input = format!("{}|{ts_unix}|{actor}|{body}", K::ID_PREFIX);
+        let v = kind.line_version();
         Self {
             id: OpId(format!(
                 "{}-{}",
                 K::ID_PREFIX,
                 kernel_types::ContentHash::of_str(&input).short()
             )),
-            v: K::VERSION,
+            v,
             ts_unix,
             actor,
             kind,
@@ -438,20 +452,31 @@ impl<K: Journaled> Oplog<K> {
                 continue;
             }
             let line_no = lineno as u64 + 1;
-            match serde_json::from_str::<Op<K>>(&line) {
-                Ok(op) if op.v > K::VERSION => {
+            // The version gate runs BEFORE the body parse (leg 5 of
+            // `ra-membership-is-order-free`): an act whose KIND this build
+            // has never seen fails serde, and a parse-first gate would name
+            // that Malformed exactly when NewerVersion is the honest answer.
+            #[derive(serde::Deserialize)]
+            struct LinePeek {
+                v: u32,
+            }
+            if let Ok(peek) = serde_json::from_str::<LinePeek>(&line) {
+                if peek.v > K::UNDERSTANDS {
                     tracing::warn!(
                         log = K::LABEL,
                         path = %self.path.display(),
                         line = line_no,
-                        v = op.v,
+                        v = peek.v,
                         "oplog: skipping op from a newer format version"
                     );
                     skipped.push(SkippedLine::NewerVersion {
                         line: line_no,
-                        v: op.v,
+                        v: peek.v,
                     });
+                    continue;
                 }
+            }
+            match serde_json::from_str::<Op<K>>(&line) {
                 Ok(op) => out.push(op),
                 Err(err) => {
                     tracing::warn!(
@@ -680,6 +705,32 @@ mod tests {
         assert!(raw.ends_with('\n'), "every line is newline-terminated");
         assert_eq!(raw.lines().count(), 2);
         assert_eq!(log.read_all().unwrap().len(), 2);
+    }
+
+    /// Leg 5 of `ra-membership-is-order-free`, at the envelope level: a line
+    /// declaring a version this build does not understand is skipped BEFORE
+    /// its body is parsed — never as `MalformedLine`, never as an admitted
+    /// op. A parse-first gate gets this exactly backwards for the lines that
+    /// matter most: an act whose KIND a build has never seen fails serde and
+    /// reads as Malformed, when the version bump exists to name it.
+    #[test]
+    fn a_newer_version_line_is_skipped_before_its_body_is_parsed() {
+        let dir = tempfile::tempdir().unwrap();
+        let log: Oplog<Probe> = Oplog::new(dir.path());
+        fs::write(
+            log.path(),
+            format!(
+                r#"{{"id":"probe-0000000000000000","v":{},"ts_unix":7,"actor":"ingest","kind":{{"op":"an_act_this_build_has_never_seen"}}}}"#,
+                Probe::VERSION + 1
+            ),
+        )
+        .unwrap();
+        let (ops, skipped) = log.read_all_with_skips().unwrap();
+        assert!(ops.is_empty(), "nothing admitted");
+        assert!(
+            matches!(skipped.as_slice(), [SkippedLine::NewerVersion { v, .. }] if *v == Probe::VERSION + 1),
+            "the version gate names it — never a Malformed misread of the unknown kind: {skipped:?}"
+        );
     }
 
     #[test]
