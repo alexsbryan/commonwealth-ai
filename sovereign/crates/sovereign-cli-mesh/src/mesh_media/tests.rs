@@ -212,7 +212,10 @@ fn offer_writes_no_credential_into_the_config_the_mesh_reads() {
         );
     }
     let iroh: IrohSection = toml::from_str(&doc["iroh"].to_string()).unwrap();
-    assert_eq!(iroh.media_viewer_user, None, "the viewer id lives in rails' house store");
+    assert_eq!(
+        iroh.media_viewer_user, None,
+        "the viewer id lives in rails' house store"
+    );
 }
 
 /// The two stores are different directories, so a house credential cannot be

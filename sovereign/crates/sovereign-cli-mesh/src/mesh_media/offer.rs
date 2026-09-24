@@ -73,8 +73,8 @@ pub(super) fn keep_for_poll(
         .iter()
         .find(|(n, val)| n == "authorization" && *val != viewer.credential)
     {
-        if let Err(e) = commonwealth_media::write_declared_in(house_dir, "authorization", install)
-        {
+        if let Err(e) = commonwealth_media::write_declared_in(house_dir, "authorization", install) {
+            tracing::warn!(error = %e, dir = %house_dir.display(), "media offer: house credential not kept");
             eprintln!(
                 "mesh media offer: the house credential could not be kept — {e}; this \
                  node will publish no \"in use\" signal"
@@ -82,6 +82,7 @@ pub(super) fn keep_for_poll(
         }
     }
     if let Err(e) = commonwealth_media::write_viewer_in(house_dir, &viewer.id) {
+        tracing::warn!(error = %e, dir = %house_dir.display(), "media offer: viewer account id not recorded");
         eprintln!(
             "mesh media offer: the viewer account could not be recorded — {e}; this \
              node will publish no \"in use\" signal"
@@ -326,8 +327,8 @@ fn write_offer(
     origin: std::net::SocketAddr,
     admit: &[String],
 ) -> i32 {
-    if let Err(e) = set_offer(&mut doc, origin, admit)
-        .and_then(|()| crate::publish_cmd::write_doc(&path, &doc))
+    if let Err(e) =
+        set_offer(&mut doc, origin, admit).and_then(|()| crate::publish_cmd::write_doc(&path, &doc))
     {
         eprintln!("mesh media offer: could not write the config — {e}");
         return 1;
