@@ -134,10 +134,10 @@ Never print a whole log into the session; grep it. A PLANT that stays green is
   trimmed; (c) what the operator must decide, numbered, with file:line;
   (d) "edit or mark the row in {{state}}, then
   `rm {{control_dir}}/STOP {{control_dir}}/NEEDS_HUMAN.md`". Leave the tree compiling. Commit
-  nothing broken. Then stop. The package alone halts the loop; never create
-  `{{control_dir}}/STOP` yourself. The supervisor reads an empty STOP as the
-  operator's and exits without sending your package to a resolution session
-  (fp-44 and fp-57, 2026-09-24).
+  nothing broken. Then stop.
+  The package alone halts the loop; never create `{{control_dir}}/STOP` yourself.
+  The supervisor reads an empty STOP as the operator's and exits without sending
+  your package to a resolution session (fp-44 and fp-57, 2026-09-24).
 - **`{{control_dir}}/DONE`** — only when every row in `{{state}}` is `[x]`.
 
 <!-- section: hard-rules -->

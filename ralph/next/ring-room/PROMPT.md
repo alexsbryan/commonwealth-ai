@@ -122,6 +122,9 @@ Never print a whole log into the session; grep it. A PLANT that stays green is
   (d) "edit or mark the row in ralph/next/ring-room/STATE.md, then
   `rm ralph/STOP ralph/NEEDS_HUMAN.md`". Leave the tree compiling. Commit
   nothing broken. Then stop.
+  The package alone halts the loop; never create `ralph/STOP` yourself.
+  The supervisor reads an empty STOP as the operator's and exits without sending
+  your package to a resolution session (fp-44 and fp-57, 2026-09-24).
 - **`ralph/DONE`** — only when every row in `ralph/next/ring-room/STATE.md` is `[x]`.
 
 ## 7. Hard rules

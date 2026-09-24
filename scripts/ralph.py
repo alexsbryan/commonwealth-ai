@@ -559,6 +559,35 @@ AUDIT_ROW_BODY = (
     "— read: `sovereign/ARCH_PRINCIPLES.md` — check: LINT")
 
 
+# The one reading of "units since the last audit": audit_every's trigger, the
+# inserted row's subject and `plan` all ask it. Rows are not closed in file
+# order (minted rows land mid-file, parked rows stay put, and an audit row is
+# inserted above the unit in flight), so counting the `[x]` rows BELOW the last
+# audit row also counts older rows that sit lower. On 2026-09-24 five-programs'
+# audit-5 fired five units after audit-4 because eleven rows closed on
+# 2026-09-22/23 sat below it. Time is in git: every close is a `ralph: <id> done`
+# commit of the queue file (scripts/ralph-mark.sh), so this counts those after
+# the newest audit's. A queue file with no such commit (a legacy launch line, a
+# queue that never marked through the script) keeps Queue's positional count.
+MARK_SUBJECT = re.compile(r"^ralph: (\S+) done$")
+
+
+def units_since_audit(paths, queue):
+    r = subprocess.run(["git", "-C", str(paths.workdir), "log", "--format=%s", "--",
+                        paths.state], capture_output=True, text=True)
+    marks = ([m.group(1) for s in r.stdout.splitlines() if (m := MARK_SUBJECT.match(s))]
+             if r.returncode == 0 else [])
+    if not marks:
+        return queue.units_since_audit()
+    n = 0
+    for unit_id in marks:                    # newest first
+        if unit_id.startswith(AUDIT_PREFIX):
+            break
+        if not unit_id.startswith("HUMAN-"):
+            n += 1
+    return n
+
+
 def audit_row(row_id, after):
     return f"- [ ] {row_id} — depends [{after}] — {AUDIT_ROW_BODY}"
 
@@ -1126,7 +1155,7 @@ class Campaign:
         every = self.paths.manifest.audit_every if self.paths.manifest else None
         return bool(every and unit.status is Status.PENDING
                     and not unit.id.startswith(AUDIT_PREFIX)
-                    and queue.units_since_audit() >= every)
+                    and units_since_audit(self.paths, queue) >= every)
 
     def _insert_audit(self, queue, unit):
         """(the inserted row, git's refusal or ""). The id's <prefix> is the
@@ -1142,7 +1171,7 @@ class Campaign:
             prefix = self.paths.queue
         stem = f"{AUDIT_PREFIX}{prefix}-auto-"
         row_id = f"{stem}{1 + sum(r.id.startswith(stem) for r in queue.rows)}"
-        n = queue.units_since_audit()
+        n = units_since_audit(self.paths, queue)
         last_done = [r.id for r in queue.rows if r.status is Status.DONE][-1]
         queue.insert_before(unit.id, audit_row(row_id, last_done))
         subject = f"ralph: audit due after {n} units — {row_id}"
@@ -1766,7 +1795,7 @@ def cmd_plan(args):
     unit = queue.current()
     print(f"prompt: {prompt_text(paths)[1]}  queue: {paths.state}")
     every = paths.manifest.audit_every if paths.manifest else None
-    print(f"units since audit: {queue.units_since_audit()}"
+    print(f"units since audit: {units_since_audit(paths, queue)}"
           f"{f' (audit every {every})' if every else ''}  head: {head_of(paths.workdir)[:9]}")
     print(f"done: {queue.done_count()}/{len(queue.rows)}")
     if unit is None:

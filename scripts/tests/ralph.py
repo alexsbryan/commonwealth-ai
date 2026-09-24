@@ -79,6 +79,37 @@ class AuditCountTests(unittest.TestCase):
                                 "- [~] u-4 — depends []\n")
             self.assertEqual(q.units_since_audit(), 2)
 
+    def test_counts_closes_after_the_last_audit_close_not_rows_below_it(self):
+        # The failing input: u-old closed BEFORE the audit but sits BELOW it, as
+        # minted and parked rows do. Positionally that is 2 units; by time, 1.
+        with tempfile.TemporaryDirectory() as tmp:
+            git_repo(tmp)
+            state = "ralph/STATE.md"
+
+            def close(text, subject):
+                write(tmp, state, text)
+                subprocess.run(["git", "-C", tmp, "add", state], check=True)
+                subprocess.run(["git", "-C", tmp, "commit", "-q", "-m", subject], check=True)
+
+            close("- [ ] u-new — depends []\n- [x] u-old abc0001 — depends []\n",
+                  "ralph: u-old done")
+            close("- [x] REVIEW-audit-u-auto-1 abc0002 — depends []\n"
+                  "- [ ] u-new — depends []\n- [x] u-old abc0001 — depends []\n",
+                  "ralph: REVIEW-audit-u-auto-1 done")
+            close("- [x] REVIEW-audit-u-auto-1 abc0002 — depends []\n"
+                  "- [x] u-new abc0003 — depends []\n- [x] u-old abc0001 — depends []\n",
+                  "ralph: u-new done")
+            q = ralph.Queue(pathlib.Path(tmp) / state)
+            self.assertEqual(q.units_since_audit(), 2)          # the positional reading
+            self.assertEqual(ralph.units_since_audit(ralph.Paths(pathlib.Path(tmp)), q), 1)
+
+    def test_a_queue_never_marked_through_git_keeps_the_positional_count(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            git_repo(tmp)
+            q = self.queue(tmp, "- [x] u-1 abcdef1 — depends []\n- [x] u-2 abcdef2 — depends []\n")
+            commit_all(tmp, "seed")
+            self.assertEqual(ralph.units_since_audit(ralph.Paths(pathlib.Path(tmp)), q), 2)
+
     def test_counts_from_the_top_when_no_audit_has_run(self):
         with tempfile.TemporaryDirectory() as tmp:
             q = self.queue(tmp, "- [x] u-1 abcdef1 — depends []\n- [x] u-2 abcdef2 — depends []\n"
@@ -855,13 +886,30 @@ class HostTests(unittest.TestCase):
 class ShimTests(unittest.TestCase):
     def test_a_dropped_variant_is_said_once(self):
         # The empty prompt makes the shim exit 2 BEFORE it reaches `claude`: no session.
+        # `thinking`/`fast` are opencode variants, not claude effort levels.
         r = subprocess.run([str(SCRIPTS / "ralph-claude-shim.sh"), "run", "--model", "m",
-                            "--variant", "high", "--variant", "max", ""],
+                            "--variant", "thinking", "--variant", "fast", ""],
                            capture_output=True, text=True)
         self.assertEqual(r.returncode, 2)
         self.assertIn("empty prompt", r.stderr)
         self.assertEqual(r.stderr.count("--variant"), 1, r.stderr)
-        self.assertIn("high", r.stderr)
+        self.assertIn("thinking", r.stderr)
+
+    def test_an_effort_level_variant_reaches_claude_as_effort(self):
+        # A stub `claude` on PATH prints its argv, so this sees the call the shim makes.
+        with tempfile.TemporaryDirectory() as tmp:
+            stub = pathlib.Path(tmp) / "claude"
+            stub.write_text('#!/bin/sh\necho "argv: $*" >&2\n')
+            stub.chmod(0o755)
+            env = {**os.environ, "PATH": f"{tmp}:{os.environ['PATH']}",
+                   "RALPH_PERMISSION_BRIDGE": "0"}
+            r = subprocess.run([str(SCRIPTS / "ralph-claude-shim.sh"), "run", "--model", "m",
+                                "--variant", "medium", "do the unit"],
+                               capture_output=True, text=True, env=env)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("--effort medium", r.stderr)
+        self.assertIn("effort=medium", r.stderr)
+        self.assertNotIn("dropping --variant", r.stderr)
 
 
 class ReviewRoutingTests(unittest.TestCase):
