@@ -455,6 +455,11 @@ merged; that merge is what minted this arrangement, and `ledger-1` records it.
 - Chose: park fp-9 behind a new operator row, HUMAN-fp9-membership-owner, placed last with three options and a recommendation. This follows the fp-7 and fp-58 precedent. The row's dead "mint a leaf" arm is struck: mesh-join-vocab already holds both pure functions, so that half is now a repoint that rides with the operator's answer. No code changed. Boundary gate FAILED at 62 violations (`RALPH_QUEUE=five-programs scripts/ralph-check.sh boundary`, at ce4e2aeac).
 - Because: both ways of closing the edge are the operator's under the charter. One grows a surface that commonwealth-rails disclaims by name (five-programs-20 already sent disclaimed surfaces to the operator, principle 11) and changes what a lone svrn daemon can do. The other needs an `[[exception]]` row. Parking keeps the loop moving, and `current()` now serves fp-10.
 
+**five-programs-22 · 2026-09-24 · fp-10 (model serving has no serving host) · director** — this commit
+- Needed: fp-10's worker halted before editing. The row says the daemon's inference, rpc-worker and compute supervisions "become serving-surface clients", but the daemon is the only process that serves a model, and the host §12 D2 names (cw-rails) is forbidden every sovereign-* edge.
+- Chose: park fp-10 behind a new operator row, HUMAN-fp10-serving-host, placed last with three options and a recommendation (keep by `[[exception]]` until Phase B is minted). Same shape as five-programs-21 (fp-9). No code changed. Boundary gate FAILED at 62 violations (package run at ba832a97d, both daemon→inference/compute edges red).
+- Because: every arm that closes the edges is the operator's under the charter — a new serving binary reverses D2's "do not build a new binary" and is Phase B, not a row; an `[[exception]]` row is reserved; doing the row literally makes every inference route on a stock install report absence, an end-user behaviour change. The loop keeps moving: fp-14, fp-42 and fp-47 are dep-ready.
+
 ## Flags for the operator
 
 - A26: REVIEW-DEMO-rr-1-run will very likely FAIL `ra-room-plug-in-live` again on this host. The bar's window is 60 s, and the CPU 2B took about 1–5 min per answer in this run (room-answer-0..4.json mtimes 19:33→19:49). Passing it takes a faster node or model for the room, or a different bar. Both are design changes for the operator, not tuning.
@@ -8591,5 +8596,23 @@ Why I did not decide the fork: (a) reverses two recorded disclaimers in rails an
 Residual risk, not acted on because it is out of scope: fp-42 and fp-47 are also dep-ready, carry scout findings that are still unresolved, and are not behind a HUMAN row. When the loop reaches either one it will halt again the same way.
 
 Falsified if the operator's answer or a later census shows a process other than the svrn daemon already founding or admitting (then option (c), dialing that process, existed and parking was unnecessary), or if the mesh-join-vocab repoint alone drops the edge (it would not while daemon.rs:1294 remains).
+
+</details>
+
+## five-programs-22 · 2026-09-24 — fp-10 parked on the owner of model serving
+
+<details><summary>reasoning, evidence, package</summary>
+
+Package: ctl/NEEDS_HUMAN.resolved-fp10-20260924.md. Reproduced at ba832a97d:
+
+- `grep -rn sovereign_inference sovereign/crates/sovereign-daemon/src` → 43 lines over 14 files; `sovereign_compute` → 20 in src, 6 in tests. The package said 42 / 19+6; the extra line each is within a doc comment and changes nothing.
+- build/inference.rs:271 `sovereign_inference::engine_factory::build_engine(config)`; :454 `sovereign_compute::manager::build_compute_layer_with_distributed`; bin/sovereign-daemon.rs:59 `sovereign_compute::child_main::run`, :64 `sovereign_inference::rpc_worker_main::run`. The daemon constructs the engine and re-execs both children.
+- quality/ARCH_LAYERS.toml:676-679 `[[forbid]] from = "commonwealth-rails" to = "sovereign-*"`, no except, reason: the binary is lifted out of the monorepo. cw-rails cannot own engine construction.
+- sovereign-inference/src/embedded/rpc_distribution.rs:2385-2390 re-execs `current_exe()` for the rpc-worker; sovereign-cli-daemon/src/lib.rs:161 carries the second `rpc_worker_main::run` site. fp-25 depends on whichever binary owns serving.
+- docs/FIVE_PROGRAMS.md:1037-1046 (D2) and :1128 (Phase B, "make the serving binary own the verbs", ~20 edges). fp-16 (d1aaa2843) recorded the same missing prerequisite for the mesh dial.
+
+Why I did not decide: (a) a new cmnwlth serving binary reverses D2's text and is a phase; (b) is an `[[exception]]` row; (c) re-homing the daemon's serving half is a placement move of phase size. A literal stub dial is forbidden by §11 ("do not fake") and changes every chat answer. Recommendation (b) is written on the HUMAN row.
+
+Falsified if a census finds a process other than the svrn daemon (or a sovereign CLI) already constructing an engine that a cmnwlth-package binary could expose — then (a) is an extension, not a new binary, and parking was unnecessary — or if ARCH_LAYERS gains a sovereign-inference except on the cw-rails forbid.
 
 </details>
