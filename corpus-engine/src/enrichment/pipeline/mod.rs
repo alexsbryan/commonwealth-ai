@@ -56,7 +56,7 @@ pub use atlas::{
     SeedOrigin, SeedStrategy, StateType,
 };
 pub use atlas_clustering::{cluster_all_facets, cluster_facet, FacetClusterResult};
-pub use chapter_manifest::{ChapterEntry, ChapterManifest};
+pub use chapter_manifest::{ChapterEntry, ChapterManifest, ChapterManifestWrite};
 pub use exemplar_bank::{Exemplar, ExemplarBank, ExemplarKind, ExemplarLint};
 pub use phase_cache::{CacheModelIdentity, PhaseCache, PhaseCacheMeta, PhaseCacheStatus};
 pub use pipelines::configurable_atlas::{CustomAtlasSpec, CustomVocabulary};

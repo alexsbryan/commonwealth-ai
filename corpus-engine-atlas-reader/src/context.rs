@@ -624,6 +624,38 @@ pub trait AtlasContextProvider: Send + Sync {
     }
 }
 
+/// Read `<atlas_dir>/../chapters.json` into the section join.
+///
+/// The path is derived from the dir the caller already opened — same rule
+/// as the graph's `index_root`, so no call site can pass a manifest that
+/// disagrees with the store it belongs to. A missing or unparseable
+/// manifest yields an empty join, which the resolver reports.
+pub fn read_section_rows(
+    atlas_dir: &std::path::Path,
+) -> std::collections::HashMap<String, Vec<u64>> {
+    let Some(corpus_dir) = atlas_dir.parent() else {
+        return std::collections::HashMap::new();
+    };
+    let path = corpus_dir.join("chapters.json");
+    match crate::chapter_manifest::ChapterManifest::load(&path) {
+        Ok(Some(m)) => m
+            .chapters
+            .into_iter()
+            .filter(|c| !c.chunk_ids.is_empty())
+            .map(|c| (c.id, c.chunk_ids))
+            .collect(),
+        Ok(None) => std::collections::HashMap::new(),
+        Err(e) => {
+            tracing::warn!(
+                manifest = %path.display(),
+                error = %e,
+                "atlas: chapters.json unreadable; section evidence falls back to search"
+            );
+            std::collections::HashMap::new()
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -24,8 +24,9 @@ use crate::error::{Error, Result};
 /// `turn_prepass::splice_ambient_field_digests`.
 pub const FIELD_CHECKPOINT_FILENAME: &str = "_field_skeleton_checkpoint.json";
 
-/// The field-model JSON artifact. Written only by `JsonAndLance` domains.
-pub const FIELD_SKELETON_FILENAME: &str = "field_skeleton.json";
+/// The field-model JSON artifact. Written only by `JsonAndLance` domains. Its
+/// one spelling is the atlas-reader leaf's, whose field-model fallback reads it.
+pub use corpus_engine_atlas_reader::field_model::LEGACY_ARTIFACT as FIELD_SKELETON_FILENAME;
 
 /// Write the field-model pipeline's own resume checkpoint.
 ///

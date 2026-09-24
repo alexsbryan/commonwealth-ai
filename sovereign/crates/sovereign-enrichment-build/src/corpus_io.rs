@@ -14,7 +14,8 @@ use corpus_engine::chunkers::sectioned::{
     ChapterRegexDetector, SectionDetector, SectionedChunker, TocAnchoredDetector,
 };
 use corpus_engine::enrichment::pipeline::{
-    is_placeholder_literal, ChapterInput, ChapterManifest, ChunkRecord, CorpusContext,
+    is_placeholder_literal, ChapterInput, ChapterManifest, ChapterManifestWrite, ChunkRecord,
+    CorpusContext,
 };
 use corpus_engine::error::{Error, Result};
 use corpus_engine::{CorpusEngine, EmbedFn};

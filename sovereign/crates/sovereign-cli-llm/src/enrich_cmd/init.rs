@@ -21,7 +21,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use corpus_engine::chunkers::sectioned::{ChapterRegexDetector, SectionedChunker};
-use corpus_engine::enrichment::pipeline::ChapterManifest;
+use corpus_engine::enrichment::pipeline::{ChapterManifest, ChapterManifestWrite};
 use corpus_engine::CorpusEngine;
 use corpus_index::types::EmbedFn;
 

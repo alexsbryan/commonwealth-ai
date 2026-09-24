@@ -33,12 +33,12 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use super::governance::{derive_active, ActiveSet, GovernanceOpKind, RuleStatus};
-use crate::enrichment::atlas::atoms::{AtomEnvelope, AtomId, Claim};
-use crate::enrichment::ontology::{
-    clock::section_date, AttrFamily, ChangePolicy, OntologyPolicies,
-};
-use crate::error::{Error, Result};
+use crate::atoms::{AtomEnvelope, AtomId, Claim};
 use crate::oplog::Op;
+use corpus_index::error::{Error, Result};
+use understanding_atlas::enrichment::ontology::clock::section_date;
+use understanding_vocab::ontology::decl::AttrFamily;
+use understanding_vocab::ontology::{ChangePolicy, OntologyPolicies};
 
 /// What [`derive_active_with_policy`] needs to know about one rule atom.
 ///
@@ -195,7 +195,7 @@ fn are_linked(a: &RuleFacts, b: &RuleFacts, by_id: &BTreeMap<&AtomId, &RuleFacts
 ///    when it is a range;
 /// 2. `attributes["document_date"]`, when something upstream stamped one;
 /// 3. the evidence chunk id, read by
-///    [`crate::enrichment::ontology::clock::section_date`] — which finds a
+///    [`understanding_atlas::enrichment::ontology::clock::section_date`] — which finds a
 ///    date only when the section id carries one, and returns `None`
 ///    otherwise rather than guessing.
 ///
@@ -208,7 +208,7 @@ pub(crate) fn read_rule_facts(dir: &Path, policies: &OntologyPolicies) -> Result
     if !path.exists() {
         return Ok(Vec::new());
     }
-    let file = crate::enrichment::atlas::read_atlas_atoms(dir)
+    let file = understanding_vocab::read::read_atlas_atoms(dir)
         .map_err(|e| Error::Extraction(format!("governance_view: atoms.json: {e}")))?;
 
     // The reified merges, indexed by the rules they join, so a `same_as`

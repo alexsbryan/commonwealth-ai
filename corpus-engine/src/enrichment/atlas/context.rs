@@ -1,17 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! The atlas context CORPUS side — the one write path + the chapters join.
+//! The atlas context CORPUS side — the one write path.
 //!
 //! The atlas context (graph, views, walk, bag builders) moved to the
 //! `corpus-engine-atlas-reader` leaf on 2026-09-21 (FIVE_PROGRAMS §12
-//! decision 1) and is re-exported below in full. What stays here is what
+//! decision 1) and is re-exported below in full — including
+//! [`read_section_rows`], the `chapters.json` read, which followed its parser
+//! (`ChapterManifest::load`) into the leaf with fp-60. What stays here is what
 //! only the ENGINE side owns:
 //!
-//! - [`read_section_rows`] — the `chapters.json` read. That manifest is
-//!   corpus state in the INDEX ROOT (not the atlas dir), so its one parser
-//!   (`pipeline::chapter_manifest`) stays host-side and the leaf graph
-//!   receives the join as data: every `AtlasGraph::load_from_disk` caller
-//!   passes this fn's result explicitly. A graph opened without it has an
-//!   empty join, which the resolver reports — never a silent default.
 //! - [`build_persistent_ann_seed_table`] — the ANN backfill WRITE.
 
 pub use corpus_engine_atlas_reader::context::*;
@@ -73,36 +69,6 @@ pub async fn build_persistent_ann_seed_table(
     std::fs::create_dir_all(&dir).map_err(|e| format!("create ANN table dir: {e}"))?;
     AnnSeedTable::build(&dir, &rows).await?;
     Ok(AnnBuildStats { resolved, total })
-}
-
-/// Read `<atlas_dir>/../chapters.json` into the section join.
-///
-/// The path is derived from the dir the caller already opened — same rule
-/// as the graph's `index_root`, so no call site can pass a manifest that
-/// disagrees with the store it belongs to. A missing or unparseable
-/// manifest yields an empty join, which the resolver reports.
-pub fn read_section_rows(atlas_dir: &Path) -> std::collections::HashMap<String, Vec<u64>> {
-    let Some(corpus_dir) = atlas_dir.parent() else {
-        return std::collections::HashMap::new();
-    };
-    let path = corpus_dir.join("chapters.json");
-    match crate::enrichment::pipeline::chapter_manifest::ChapterManifest::load(&path) {
-        Ok(Some(m)) => m
-            .chapters
-            .into_iter()
-            .filter(|c| !c.chunk_ids.is_empty())
-            .map(|c| (c.id, c.chunk_ids))
-            .collect(),
-        Ok(None) => std::collections::HashMap::new(),
-        Err(e) => {
-            tracing::warn!(
-                manifest = %path.display(),
-                error = %e,
-                "atlas: chapters.json unreadable; section evidence falls back to search"
-            );
-            std::collections::HashMap::new()
-        }
-    }
 }
 
 #[cfg(test)]

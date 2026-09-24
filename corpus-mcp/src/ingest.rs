@@ -47,7 +47,9 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::{bail, Context, Result};
-use corpus_engine::enrichment::pipeline::{EnrichProgress, EnrichProgressFn, PipelineRegistry};
+use corpus_engine::enrichment::pipeline::{
+    ChapterManifestWrite, EnrichProgress, EnrichProgressFn, PipelineRegistry,
+};
 use corpus_engine::{CorpusEngine, CorpusSpec, Recipe};
 use sovereign_enrichment_build::{
     build_with_progress_with_embedder, config::EnrichConfig, corpus_io, paths, ParsedBuild,

@@ -51,7 +51,9 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use corpus_engine::enrichment::pipeline::{assign_chunks_to_sections, ChapterManifest};
+use corpus_engine::enrichment::pipeline::{
+    assign_chunks_to_sections, ChapterManifest, ChapterManifestWrite,
+};
 use corpus_index::index::EnrichmentChunkRow;
 use sovereign_cli_shared::dirs::sovereign_root;
 

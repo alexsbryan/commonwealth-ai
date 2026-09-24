@@ -18,13 +18,20 @@
 pub mod ann_store;
 // The vocabulary door, re-exported so carved modules can say `crate::atoms`.
 pub use understanding_vocab::{atoms, edges};
+// The shared journal, at the `crate::oplog` path the governance modules name.
+pub use understanding_atlas::oplog;
 
 pub mod axis_catalog;
+pub mod chapter_manifest;
 pub mod citation;
 pub mod context;
 pub mod context_filter;
 pub mod context_loader;
 pub mod evidence_site;
+pub mod field_model;
+pub mod governance;
+pub mod governance_change;
+pub mod governance_view;
 pub mod ground;
 pub mod inventory;
 pub mod linalg;

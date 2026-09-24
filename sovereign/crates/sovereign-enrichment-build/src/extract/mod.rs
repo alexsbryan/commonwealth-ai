@@ -14,8 +14,8 @@ use super::inference_client::{
 use super::paths;
 use corpus_engine::enrichment::pipeline::{
     checkpoint_processed_ids, collapse_phase1_checkpoint, read_phase1_checkpoint, ChapterManifest,
-    ChapterSelection, Phase1Output, Phase1Progress, PhaseFailureKind, PhaseRunner,
-    PipelineRegistry, RetryMode, RunOutputWriter,
+    ChapterManifestWrite, ChapterSelection, Phase1Output, Phase1Progress, PhaseFailureKind,
+    PhaseRunner, PipelineRegistry, RetryMode, RunOutputWriter,
 };
 use std::sync::Arc;
 
