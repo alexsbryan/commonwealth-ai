@@ -21,7 +21,8 @@ use super::super::Runtime;
 /// decisions inside `search_corpus` (kill-switch, kind filter, allow-list
 /// seal, permit ordering, the concurrency bound, the round-robin cap) be
 /// tested against a fake instead of a real `CorpusEngine` with real indexes
-/// (ARCH §5.3, §12.2). Production has one implementor, `CorpusEngine`.
+/// (ARCH §5.3, §12.2). Production derives it from the corpus read port's
+/// list/open half (`corpus_index::source::IndexSource`) — not a second port.
 #[async_trait::async_trait]
 pub(crate) trait SealedIndexSource: Send + Sync {
     async fn usable(&self) -> corpus_index::Result<Vec<SealedIndexRef>>;
@@ -48,10 +49,12 @@ pub(crate) struct SealedIndexRef {
     pub path: PathBuf,
 }
 
+/// Over `Arc<T>` so an `Arc<dyn CorpusReadPort>` wraps without a newtype.
 #[async_trait::async_trait]
-impl SealedIndexSource for corpus_engine::CorpusEngine {
+impl<T: corpus_index::source::IndexSource + ?Sized> SealedIndexSource for Arc<T> {
     async fn usable(&self) -> corpus_index::Result<Vec<SealedIndexRef>> {
         Ok(self
+            .as_ref()
             .usable_indexes()
             .await?
             .into_iter()
@@ -231,7 +234,7 @@ impl Runtime {
             engine: self
                 .corpus_engine
                 .clone()
-                .map(|e| e as Arc<dyn SealedIndexSource>),
+                .map(|e| Arc::new(e) as Arc<dyn SealedIndexSource>),
             allowed_corpora: allowed,
             pinned: Vec::new(),
         }

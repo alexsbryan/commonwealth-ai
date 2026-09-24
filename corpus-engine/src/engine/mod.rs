@@ -4273,3 +4273,31 @@ impl corpus_index::source::IndexSource for CorpusEngine {
         CorpusEngine::open_index(self, path).await
     }
 }
+
+/// The wider read port: every method delegates to the inherent one of the same name.
+#[async_trait::async_trait]
+impl corpus_index::source::CorpusReadPort for CorpusEngine {
+    async fn embed(&self, text: &str) -> Result<Vec<f32>> {
+        CorpusEngine::embed(self, text).await
+    }
+
+    async fn installed_indexes(&self) -> Result<Vec<IndexInfo>> {
+        CorpusEngine::installed_indexes(self).await
+    }
+
+    async fn open_index_for_corpus(&self, corpus_id: &str) -> Result<CorpusIndex> {
+        CorpusEngine::open_index_for_corpus(self, corpus_id).await
+    }
+
+    fn index_dir(&self) -> &Path {
+        CorpusEngine::index_dir(self)
+    }
+
+    fn foreground_lease(&self) -> Option<crate::ForegroundLease> {
+        CorpusEngine::foreground_lease(self)
+    }
+
+    fn builtin_corpora(&self) -> Vec<crate::types::BuiltinCorpus> {
+        CorpusEngine::builtin_corpora(self)
+    }
+}

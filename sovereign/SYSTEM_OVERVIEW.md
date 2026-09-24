@@ -36,7 +36,7 @@ commonwealth-ai/
 ├── serving-policy/            # Re-export shim for the serving-policy arithmetic (tier-0)
 ├── serving-policy-core/       # Fair-share scheduling + pipeline aliases ([[package_leaf]] vocabulary leaf)
 ├── corpus-engine/             # Knowledge layer (LanceDB + Tantivy)
-├── corpus-index/              # Retrieval read-port leaf — CorpusIndex, persisted settings, the engine Error
+├── corpus-index/              # Retrieval read-port leaf — CorpusIndex, the IndexSource/CorpusReadPort traits, persisted settings, the engine Error
 ├── corpus-engine-scip/        # SCIP call graph + per-language exporter dispatch
 ├── corpus-engine-atlas-reader/ # Resolved-atlas READ surface (read-only leaf; writes stay in corpus-engine)
 ├── corpus-engine-notes/       # NoteStore + project_docs index

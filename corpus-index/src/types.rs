@@ -258,6 +258,33 @@ pub enum CorpusKind {
     Catalog,
 }
 
+// ─── Builtin Corpus ─────────────────────────────────────
+
+/// One registry catalog row — the DTO `source::CorpusReadPort::builtin_corpora`
+/// carries across the port (moved from corpus-engine, five-programs fp-64).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BuiltinCorpus {
+    pub id: String,
+    pub name: String,
+    pub description: String,
+    pub size_compressed_gb: f64,
+    pub size_indexed_gb: f64,
+    pub license: String,
+    pub mesh_sharing: bool,
+    /// If set, this corpus is a layer/satellite of `parent_corpus_id`.
+    /// Sourced from the registry snapshot; the desktop hides children
+    /// from the top-level picker and renders them as toggles under the
+    /// parent row. `None` for top-level corpora.
+    #[serde(default)]
+    pub parent_corpus_id: Option<String>,
+    /// Catalog presentation tier — `"featured" | "preview" | "hidden"`.
+    /// Mirrors `RegistryEntry::catalog_status`. `None` defaults to
+    /// `"preview"` on the desktop side so newly-registered recipes
+    /// land under "Coming soon" until explicitly promoted.
+    #[serde(default)]
+    pub catalog_status: Option<String>,
+}
+
 // ─── Index Info ─────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

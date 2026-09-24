@@ -19,8 +19,8 @@ use crate::error::Result;
 
 // The index row types are DEFINED in the `corpus-index` leaf.
 pub use corpus_index::types::{
-    BatchEmbedFn, ChunkRange, CorpusKind, DedupPicker, EmbedFn, IncompleteIngest, IndexInfo,
-    RerankConfig, RerankFn, ScoredChunk, DEFAULT_EMBED_DIM,
+    BatchEmbedFn, BuiltinCorpus, ChunkRange, CorpusKind, DedupPicker, EmbedFn, IncompleteIngest,
+    IndexInfo, RerankConfig, RerankFn, ScoredChunk, DEFAULT_EMBED_DIM,
 }; // shim: moved by domains REVIEW-build-index-read-port
 
 // ─── Inference Function ─────────────────────────────────
@@ -81,31 +81,6 @@ pub struct IngestResult {
     /// Non-zero warrants inspection of the source file on the ingesting node.
     #[serde(default)]
     pub docs_skipped: u64,
-}
-
-// ─── Builtin Corpus ─────────────────────────────────────
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct BuiltinCorpus {
-    pub id: String,
-    pub name: String,
-    pub description: String,
-    pub size_compressed_gb: f64,
-    pub size_indexed_gb: f64,
-    pub license: String,
-    pub mesh_sharing: bool,
-    /// If set, this corpus is a layer/satellite of `parent_corpus_id`.
-    /// Sourced from the registry snapshot; the desktop hides children
-    /// from the top-level picker and renders them as toggles under the
-    /// parent row. `None` for top-level corpora.
-    #[serde(default)]
-    pub parent_corpus_id: Option<String>,
-    /// Catalog presentation tier — `"featured" | "preview" | "hidden"`.
-    /// Mirrors `RegistryEntry::catalog_status`. `None` defaults to
-    /// `"preview"` on the desktop side so newly-registered recipes
-    /// land under "Coming soon" until explicitly promoted.
-    #[serde(default)]
-    pub catalog_status: Option<String>,
 }
 
 // ─── Corpus Spec ────────────────────────────────────────
