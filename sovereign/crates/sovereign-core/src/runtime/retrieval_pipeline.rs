@@ -338,7 +338,7 @@ pub struct PipelineState<'ctx> {
     /// rerank, cap) is precisely what must not see it. Empty when the walk
     /// reached no Summary — which, on a corpus whose atlases carry none, is
     /// the honest and expected value.
-    pub atlas_summaries: Vec<corpus_engine::enrichment::atlas::ground::SummaryNode>,
+    pub atlas_summaries: Vec<corpus_engine_atlas_reader::ground::SummaryNode>,
     /// The atlas walk's evidence path and counters, carried out of
     /// `apply_atlas_grounding` as a value (see [`AtlasWalkEcho`]).
     ///
@@ -726,7 +726,7 @@ impl Runtime {
                 let atlas = engine
                     .index_dir()
                     .join(cid)
-                    .join(corpus_engine::enrichment::atlas::ATLAS_DIRNAME);
+                    .join(understanding_vocab::read::ATLAS_DIRNAME);
                 atlas
                     .join("governance_oplog.jsonl")
                     .exists()
@@ -799,7 +799,7 @@ fn step_governance_active_set<'a, 'ctx>(
     st: &'a mut PipelineState<'ctx>,
 ) -> StepFuture<'a> {
     Box::pin(async move {
-        use corpus_engine::enrichment::governance_view::{
+        use corpus_engine_atlas_reader::governance_view::{
             chunk_to_section_map_status, GovernanceView,
         };
         let atlas_dirs = rt.governance_atlas_dirs(st.enabled_corpora);
@@ -2317,10 +2317,10 @@ mod tests {
     /// how many left, because a silent drop is as unreadable as no drop.
     #[test]
     fn a_superseded_rules_chunks_leave_the_pool_and_the_note_says_how_many() {
-        use corpus_engine::enrichment::atlas::atoms::AtomId;
-        use corpus_engine::enrichment::atlas::atoms::ChunkRef;
-        use corpus_engine::enrichment::governance::RuleStatus;
-        use corpus_engine::enrichment::governance_view::{GovernanceView, RuleView};
+        use understanding_vocab::atoms::AtomId;
+        use understanding_vocab::atoms::ChunkRef;
+        use corpus_engine_atlas_reader::governance::RuleStatus;
+        use corpus_engine_atlas_reader::governance_view::{GovernanceView, RuleView};
         use oplog::OpId;
 
         fn rule(id: usize, section: &str, status: RuleStatus) -> RuleView {

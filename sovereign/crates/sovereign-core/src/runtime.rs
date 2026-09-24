@@ -798,7 +798,7 @@ impl Runtime {
     /// (the field is interior-mutable for exactly this). Idempotent;
     /// overwrites any prior index. A poisoned lock is recovered rather
     /// than panicking — a failed warm must never wedge retrieval.
-    pub fn install_meta_atlas(&self, index: Arc<corpus_engine::meta_atlas::MetaAtlasIndex>) {
+    pub fn install_meta_atlas(&self, index: Arc<corpus_engine_atlas_reader::meta_atlas::MetaAtlasIndex>) {
         self.lane_sources.meta_atlas.store(Some(index));
     }
 

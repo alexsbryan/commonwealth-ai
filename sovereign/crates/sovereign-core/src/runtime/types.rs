@@ -168,7 +168,7 @@ pub struct MetaAtlasHitRecord {
 
 /// One node the atlas walk passed through, as a serde value.
 ///
-/// Echo of `corpus_engine::enrichment::atlas::ground::MapNode`, which derives
+/// Echo of `corpus_engine_atlas_reader::ground::MapNode`, which derives
 /// no `Serialize` — the same reason `MetaAtlasHitEcho` exists on the bench
 /// side: the measurement schema must not move when a walk internal does. The
 /// two enum-typed fields (`kind`, `via`) come across as their `label()`

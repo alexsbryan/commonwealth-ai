@@ -18,13 +18,11 @@ kernel-types = { workspace = true }
 # `sovereign_time`; it is now a re-export so there is ONE implementation
 # (ARCH principle 8, domains row dm-time-reexport).
 sovereign-time = { workspace = true }
-# `treesitter` feature dropped 2026-05-22: sovereign-core's
-# corpus-engine usages (FeatureStore, NoteStore, EmbedFn, etc) are
-# not treesitter-gated. The only "ScipGraph" / "symbol_lookup"
-# strings here are tool-name literals in intent_policy + dossier;
-# no source-level dependency on the gated APIs.
-corpus-engine = { workspace = true }
+# No `corpus-engine` (fp-66, §12 D1): core reads the atlas through the reader
+# leaf and the corpus through `corpus_index::source::CorpusReadPort`.
 corpus-engine-atlas-reader = { workspace = true }
+# `ForegroundLease` for the admitted turn (runtime/admission.rs).
+corpus-engine-yield = { workspace = true }
 # The retrieval read-port leaf — ScoredChunk/IndexInfo/types+index, no engine.
 corpus-index = { workspace = true }
 oplog = { workspace = true }

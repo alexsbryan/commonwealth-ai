@@ -22,7 +22,7 @@
 //! # The token is the turn's foreground lease
 //!
 //! `1426177dd` already established the noun: a turn is FOREGROUND for its
-//! whole life, and holds a `corpus_engine::ForegroundLease` so background
+//! whole life, and holds a `corpus_engine_yield::ForegroundLease` so background
 //! work parks for the entire turn. That lease IS the admission fact — the
 //! daemon saying "a person is waiting on this, I accepted it". No second
 //! priority concept is minted here; in particular this is NOT
@@ -82,7 +82,7 @@ pub(crate) struct AdmittedTurn {
     token: TurnAdmission,
     /// The turn's foreground lease. Held, never read: its whole job is to be
     /// alive for as long as this value is.
-    _lease: corpus_engine::ForegroundLease,
+    _lease: corpus_engine_yield::ForegroundLease,
 }
 
 impl AdmittedTurn {

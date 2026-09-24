@@ -512,7 +512,7 @@ pub(crate) fn gate_evidence_targets(
 pub(crate) fn gate_evidence_locators(
     chunks: &[corpus_index::types::ScoredChunk],
 ) -> Vec<Option<String>> {
-    use corpus_engine::enrichment::governance_view::{chunk_to_section_map, section_titles};
+    use corpus_engine_atlas_reader::governance_view::{chunk_to_section_map, section_titles};
     use std::collections::HashMap;
 
     let indexes_root = crate::setup_config::SetupConfig::load()

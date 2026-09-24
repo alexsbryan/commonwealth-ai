@@ -1337,9 +1337,9 @@ pub(crate) const MAX_ENUMERABLE_TYPES: usize = 24;
 /// match one; offering it would be a name the model can pick and the walk can
 /// never satisfy.
 pub(crate) fn enumerable_types(
-    vocabs: &[&corpus_engine::enrichment::ontology::OntologyPolicies],
+    vocabs: &[&understanding_vocab::ontology::OntologyPolicies],
 ) -> Vec<String> {
-    use corpus_engine::enrichment::ontology::TypeKind;
+    use understanding_vocab::ontology::decl::TypeKind;
     let mut out: Vec<String> = GENERIC_ENTITY_TYPES.iter().map(|s| s.to_string()).collect();
     for policies in vocabs {
         for t in &policies.shape.types {
@@ -1394,7 +1394,7 @@ fn extract_first_json_object(s: &str) -> Option<String> {
 #[cfg(test)]
 mod enumerable_type_tests {
     use super::{enumerable_types, GENERIC_ENTITY_TYPES, MAX_ENUMERABLE_TYPES};
-    use corpus_engine::enrichment::ontology::{OntologyPolicies, OntologyTypeDecl, TypeKind};
+    use understanding_vocab::ontology::{decl::{OntologyTypeDecl, TypeKind}, OntologyPolicies};
 
     fn policies(types: &[(&str, TypeKind)]) -> OntologyPolicies {
         let mut p = OntologyPolicies::default();

@@ -122,7 +122,7 @@ impl Runtime {
 /// The owned components the spawned PPR lane needs — all cheap Arc
 /// clones, so the task runs detached from the pipeline borrow.
 pub(crate) struct PprLane {
-    pub graph: std::sync::Arc<dyn corpus_engine::WikipediaGraphApi>,
+    pub graph: std::sync::Arc<dyn corpus_engine_atlas_reader::wikipedia_graph::WikipediaGraphApi>,
     pub engine: std::sync::Arc<dyn corpus_index::source::CorpusReadPort>,
     pub rerank_fn: corpus_index::types::RerankFn,
     pub gliner: Option<std::sync::Arc<dyn crate::traits::EntityExtractor>>,
@@ -531,12 +531,12 @@ pub(crate) async fn ppr_propose_and_gate(
         }
         let mut seed_pulls: std::collections::HashMap<
             String,
-            Vec<corpus_engine::WikipediaNeighbor>,
+            Vec<corpus_engine_atlas_reader::wikipedia_graph::Neighbor>,
         > = std::collections::HashMap::new();
         // The wide pulls are independent Lance point-queries —
         // sequential they cost ~200ms × seeds (measured pulls=1042ms
         // of a 1222ms walk); concurrent, wall = the slowest one.
-        let pulled: Vec<Vec<corpus_engine::WikipediaNeighbor>> =
+        let pulled: Vec<Vec<corpus_engine_atlas_reader::wikipedia_graph::Neighbor>> =
             futures::future::join_all(live_seeds.iter().map(|s| graph.neighbors(s, PPR_SEED_PULL)))
                 .await;
         for (i, (s, nbrs)) in live_seeds.iter().zip(pulled).enumerate() {
@@ -585,7 +585,7 @@ pub(crate) async fn ppr_propose_and_gate(
             // Frontier pulls are independent point-queries; fetch the
             // uncached ones concurrently (same rationale as the seed
             // pulls above).
-            let fetched: Vec<(String, f64, Vec<corpus_engine::WikipediaNeighbor>)> =
+            let fetched: Vec<(String, f64, Vec<corpus_engine_atlas_reader::wikipedia_graph::Neighbor>)> =
                 futures::future::join_all(frontier.into_iter().map(|(title, m)| {
                     let cached = seed_pulls.remove(&title);
                     async move {

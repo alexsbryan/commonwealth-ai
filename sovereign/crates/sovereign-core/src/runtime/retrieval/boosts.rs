@@ -7,7 +7,7 @@ use super::super::*;
 impl Runtime {
     /// Canonical-entity boost (Move 4). For every question entity that
     /// resolves through the cross-corpus
-    /// [`corpus_engine::meta_atlas::MetaAtlasIndex`], pick the top
+    /// [`corpus_engine_atlas_reader::meta_atlas::MetaAtlasIndex`], pick the top
     /// anchor per articulation axis (max 3 — one per
     /// `Inventory|Argument|Trace`), run a focused per-corpus search
     /// against that anchor's corpus, inject the returned chunks into
@@ -79,7 +79,7 @@ impl Runtime {
             }
 
             for axis in understanding_vocab::articulation::Articulation::ALL.iter() {
-                let anchor = match corpus_engine::meta_atlas::MetaAtlasIndex::top_anchor_for_axis(
+                let anchor = match corpus_engine_atlas_reader::meta_atlas::MetaAtlasIndex::top_anchor_for_axis(
                     &atom,
                     *axis,
                     MIN_AXIS_WEIGHT,

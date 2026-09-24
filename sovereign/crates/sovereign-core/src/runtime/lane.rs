@@ -101,11 +101,11 @@ pub struct Lane {
     pub atlas_context: Option<Arc<dyn crate::atlas_context::AtlasContextProvider>>,
     /// Structural link graph for a corpus that exposes one (today:
     /// Wikipedia) — one-hop neighbour expansion and `(contested)` markers.
-    pub wikipedia_graph: Option<Arc<dyn corpus_engine::WikipediaGraphApi>>,
+    pub wikipedia_graph: Option<Arc<dyn corpus_engine_atlas_reader::wikipedia_graph::WikipediaGraphApi>>,
     /// Cross-corpus meta-atlas index. Snapshotted out of the Runtime's
     /// `RwLock` at lane-build time — see the module docs on why a per-stage
     /// read is a bug and not merely a cost.
-    pub meta_atlas: Option<Arc<corpus_engine::meta_atlas::MetaAtlasIndex>>,
+    pub meta_atlas: Option<Arc<corpus_engine_atlas_reader::meta_atlas::MetaAtlasIndex>>,
     /// The cross-encoder pass.
     pub rerank: Rerank,
     /// Entity extractor for entity-aware history retrieval and hybrid
@@ -147,7 +147,7 @@ impl Lane {
 #[derive(Clone, Default)]
 pub struct LaneSources {
     pub atlas_context: Option<Arc<dyn crate::atlas_context::AtlasContextProvider>>,
-    pub wikipedia_graph: Option<Arc<dyn corpus_engine::WikipediaGraphApi>>,
+    pub wikipedia_graph: Option<Arc<dyn corpus_engine_atlas_reader::wikipedia_graph::WikipediaGraphApi>>,
     /// A CELL, not a value — the one member that can arrive after
     /// construction. `canonical_atoms.json` is ~900MB and parsing it was the
     /// bulk of the desktop splash's `BuildingRuntime` phase, so the desktop
@@ -155,7 +155,7 @@ pub struct LaneSources {
     /// warm via [`Runtime::install_meta_atlas`]. `ArcSwapOption` rather than
     /// `RwLock<Option<_>>` because every turn reads it and only one writer
     /// ever fires.
-    pub meta_atlas: Arc<arc_swap::ArcSwapOption<corpus_engine::meta_atlas::MetaAtlasIndex>>,
+    pub meta_atlas: Arc<arc_swap::ArcSwapOption<corpus_engine_atlas_reader::meta_atlas::MetaAtlasIndex>>,
     pub rerank: Rerank,
     pub gliner: Option<Arc<dyn crate::traits::EntityExtractor>>,
     pub conv_tiered: Option<Arc<dyn crate::conv_tiered::ConvTieredReader>>,

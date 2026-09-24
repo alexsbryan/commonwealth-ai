@@ -122,7 +122,7 @@ impl Runtime {
         query_text: &str,
         embedding: &[f32],
         chunks: &mut Vec<corpus_index::types::ScoredChunk>,
-        summaries_out: &mut Vec<corpus_engine::enrichment::atlas::ground::SummaryNode>,
+        summaries_out: &mut Vec<corpus_engine_atlas_reader::ground::SummaryNode>,
         walk_out: &mut Option<crate::runtime::AtlasWalkEcho>,
         label: &str,
         scope: Option<&str>,
@@ -131,7 +131,7 @@ impl Runtime {
         lane: &crate::runtime::Lane,
     ) -> crate::runtime::retrieval_ledger::StepLedger {
         use crate::runtime::retrieval_ledger::{DropReason, StepLedger};
-        use corpus_engine::enrichment::atlas::ground;
+        use corpus_engine_atlas_reader::ground;
         // THE THREE WAYS THIS STEP DOES NOTHING, each said out loud.
         //
         // All three used to return an empty ledger in silence, and from outside
@@ -238,7 +238,7 @@ impl Runtime {
         // for a wiki-class corpus there is no `AtlasGraph` to hand back. Asking
         // for the concrete type here is what kept wikipedia on the
         // bag-of-atoms branch below no matter what store it had.
-        let graphs: Vec<Arc<dyn corpus_engine::enrichment::atlas::AtlasProvider>> = corpus_ids
+        let graphs: Vec<Arc<dyn corpus_engine_atlas_reader::provider::AtlasProvider>> = corpus_ids
             .iter()
             .filter_map(|id| {
                 let p = provider.walk_provider(id);
@@ -313,7 +313,7 @@ impl Runtime {
         // Already the trait — `walk_provider` widened at the source, so the
         // walk below neither knows nor needs to know which store is behind
         // them.
-        let graph_refs: Vec<&dyn corpus_engine::enrichment::atlas::AtlasProvider> =
+        let graph_refs: Vec<&dyn corpus_engine_atlas_reader::provider::AtlasProvider> =
             graphs.iter().map(|g| g.as_ref()).collect();
         let max_seeds = ctxs.first().map(|c| c.top_k).unwrap_or(3).max(12);
         let (policy, policy_source) = ground::navigation_policy_for(&graph_refs);
@@ -322,7 +322,7 @@ impl Runtime {
         // tables were built in (see `embed_fn.rs`). Built per call and cheap —
         // `shared_classifier` embeds the exemplars once per process.
         let embed = crate::embed_fn::inference_to_embed_query_fn(Arc::clone(&self.inference));
-        let inventory = corpus_engine::enrichment::atlas::AtlasInventory::of(&graph_refs);
+        let inventory = corpus_engine_atlas_reader::inventory::AtlasInventory::of(&graph_refs);
         let selection =
             ground::select_walk(query_text, &policy, policy_source, &inventory, Some(&embed)).await;
         tracing::debug!(
@@ -550,7 +550,7 @@ impl corpus_engine_atlas_reader::resolve::EvidenceFetcher for RuntimeEvidenceFet
 /// prompt, and a rollup that the prompt cannot label is worse than one whose
 /// tag is a legacy name. The RESERVE decision no longer reads it (§10.6).
 pub(crate) fn atlas_summary_chunk(
-    node: &corpus_engine::enrichment::atlas::ground::SummaryNode,
+    node: &corpus_engine_atlas_reader::ground::SummaryNode,
 ) -> corpus_index::types::ScoredChunk {
     let corpus_id = node.site.chunk_corpus().as_str().to_string();
     let mut metadata = std::collections::HashMap::new();
@@ -592,7 +592,7 @@ pub(crate) fn atlas_summary_chunk(
 /// tail and admitted at zero for four months.
 pub(crate) fn append_atlas_summaries(
     chunks: &mut Vec<corpus_index::types::ScoredChunk>,
-    summaries: &[corpus_engine::enrichment::atlas::ground::SummaryNode],
+    summaries: &[corpus_engine_atlas_reader::ground::SummaryNode],
     label: &str,
 ) -> usize {
     if summaries.is_empty() {
@@ -667,8 +667,8 @@ mod tests {
 #[cfg(test)]
 mod atlas_summary_append_tests {
     use super::{append_atlas_summaries, atlas_summary_chunk};
-    use corpus_engine::enrichment::atlas::evidence_site::EvidenceSite;
-    use corpus_engine::enrichment::atlas::ground::SummaryNode;
+    use corpus_engine_atlas_reader::evidence_site::EvidenceSite;
+    use corpus_engine_atlas_reader::ground::SummaryNode;
     use corpus_index::{index::ChunkProvenance, types::ScoredChunk};
 
     fn leaf(i: usize) -> ScoredChunk {
