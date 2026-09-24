@@ -425,6 +425,11 @@ merged; that merge is what minted this arrangement, and `ledger-1` records it.
 - Chose: park the row, not guess. fp-58 now depends on a new `HUMAN-fp58-bench-atlas-read` row, which carries three options and a recommendation. The HUMAN row sits LAST in the queue so every other ready row drains first. No code changed. The boundary gate stays at 63.
 - Because: every arm that still closes the edge is reserved by the charter. Those arms are admitting understanding-vocab (or its types half) to [bench]'s `leaf_budget`, an `[[exception]]`, and a new path-keyed atoms route (new capability, and runs would need a serving process). The one ladder arm the charter would allow, a port trait, is refused on principle 2: its implementer would be sovereign-cli-llm's bench_cmd, and §11's cli-llm split already sizes that as bench's own group, so the edge would go red again when that split lands.
 
+**five-programs-16 · 2026-09-24 · fp-54 (rail flip held open by the guest-stamp fork) · director** — this commit
+- Needed: fp-54 halted (ctl/NEEDS_HUMAN.md). The counted flip landed at 24070aeb8, but the row stayed `[ ]` for one operator fork: re-mount guest rail writes, or keep refusing them.
+- Chose: close fp-54 `[x] 24070aeb8` and move the fork to a new last-placed row, `HUMAN-fp54-guest-write-remount`. That row carries three options and a recommendation. The director does not pick one. No code behaviour changed; one stale comment in routes_rail.rs now points at the new row. Boundary gate 63, unchanged.
+- Because: the row's gate edge is closed. The re-mount closes no edge and is either new auth machinery or a permanent end-user regression, and both are the operator's under the charter. Holding a done counted row open behind that fork only stalls the loop. This is the same shape as five-programs-15.
+
 ## Flags for the operator
 
 - A26: REVIEW-DEMO-rr-1-run will very likely FAIL `ra-room-plug-in-live` again on this host. The bar's window is 60 s, and the CPU 2B took about 1–5 min per answer in this run (room-answer-0..4.json mtimes 19:33→19:49). Passing it takes a faster node or model for the room, or a different bar. Both are design changes for the operator, not tuning.
@@ -8444,5 +8449,23 @@ Falsified if either of these turns out to be true:
 - the miner's callers can be served from an installed corpus id without losing the withheld-slice source.
 
 Either one would make a charter-covered arm exist.
+
+</details>
+
+## five-programs-16 · 2026-09-24 — close fp-54 at its flip; the guest-write re-mount becomes an operator row
+
+<details><summary>reasoning, evidence, package</summary>
+
+Reproduced by the director at 70659b774:
+
+- `cargo xtask boundary-gate` (toolbox, corpus-engine/) → `FAILED (63 violation(s))`. No `sovereign-daemon → commonwealth-rail` line appears in the output. sovereign-daemon/Cargo.toml:26 names only `commonwealth-rail-core`. The package said "stays at 62". That was stale by one: fp-55's `[bench] sovereign-eval → understanding-vocab` is the 63rd, and it is parked on HUMAN-fp58.
+- commonwealth-rails/src/rail.rs:212-229: the append door warns and drops `on_behalf_of` before signing.
+- sovereign-daemon/src/routes_rail.rs:414-431: a stamped append gets a named 503. Reads are untouched.
+- The only prior ruling on a guest-stamp wire is archived ring-guest D1 (`_archive-ledger.md:253`, "signed `on_behalf_of` … in rail-core"). No live decision picks a re-mount.
+- rails and the daemon both derive the node key from `commonwealth_transport::identity::load_or_generate_node_key` (rails lib.rs:140, daemon.rs:1293). That is why option (b), a daemon-signed attestation that rails verifies, needs no session state in cw-rails.
+
+Why not decide (a) here: keeping the refusal as the design would permanently remove a working pre-flip capability (`guests = "write"`). That is end-user-observable behaviour the charter reserves. Why not (b) here: it is new auth machinery, meaning a new wire shape in rail-core, which is outside "strictly necessary".
+
+Falsified if a live decision or FIVE_PROGRAMS §12 line already chooses the guest-stamp wire (then that decision governs and the HUMAN row is struck), or if the boundary gate still lists a daemon→commonwealth-rail edge (then fp-54 is not done).
 
 </details>

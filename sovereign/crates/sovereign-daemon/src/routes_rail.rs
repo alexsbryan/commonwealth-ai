@@ -419,7 +419,7 @@ pub async fn append(
     // misattribution [`stamp_from`] exists to prevent. This door refuses
     // rather than ships it, and names the gap (principle 6). Reads are
     // untouched; re-mounting guest writes wants the stamp's wire shape
-    // decided by the director (recorded on fp-54).
+    // decided by the operator (row HUMAN-fp54-guest-write-remount).
     if on_behalf_of.is_some() {
         return err(
             StatusCode::SERVICE_UNAVAILABLE,
