@@ -957,6 +957,17 @@ Dispositions and full evidence: `ralph/DECISIONS.md` entry `five-programs-2`.
   already the pure loop over `&dyn ConversationStore` and uses exactly
   `list_conversations` and `get_conversation`, both served at
   `turn_http.rs:123,125`.
+- **`sovereign-cli-dev -> corpus-engine`** (fp-34, 16 refs, the same day's
+  second package — entry `five-programs-4`): the fix cell "daemon project
+  index route" names a capability that already exists (`POST
+  /internal/corpus/{corpus}/index/build`, `corpus_catalog_http.rs:176`,
+  already desktop-dialed) and a caller that does not — cli-dev has NO
+  index-build site; its build verbs are cli-shared's `code index` (fp-5's
+  recorded D5 keep) and sovereign-cli's `project init` (§11:1197-1203's
+  closing condition, the NEEDS-OPERATOR line). Build arm struck; the row
+  rescoped to the read-mount proxy client, `depends [fp-11]`;
+  `code finalize`/`code watch` need NEW daemon surfaces and stay
+  NEEDS-OPERATOR (new capability is the operator's, principle 11).
 
 Also corrected 2026-09-23: **fp-8's row named the wrong TSV pairs** for its
 guest_route half. `sovereign-cli-llm -> commonwealth-state` (2 refs) is
@@ -971,10 +982,11 @@ the cli-llm client side is fp-26's pair.
 source, target, refs, use shape, fix shape, missing capability, prerequisite,
 behaviour delta, the ONE decision, effort. It was produced by three read-only
 scouts over the gate output; it is data, not prose, and it replaces re-probing.
-Five premise checks (§11) have now found five misclassified cells — fp-25,
-fp-26, fp-28, fp-29, fp-32 — four of them dispositioned by the director
-2026-09-23 (ralph/DECISIONS.md `five-programs-2`); only fp-28's writer/reader
-boundary is still an open decision, and it is the operator's. **Check every
+Six premise checks (§11) have now found six misclassified cells — fp-25,
+fp-26, fp-28, fp-29, fp-32, fp-34 — five of them dispositioned by the director
+2026-09-23 (ralph/DECISIONS.md `five-programs-2`, `five-programs-4`); only
+fp-28's writer/reader boundary is still an open decision, and it is the
+operator's. **Check every
 row's premise against its live callers before using it as a mechanical task.**
 That step is load-bearing, not a formality: the misclassifications cluster in
 `missing_capability` and `fix_shape`, the two cells a scout wrote from the gate
