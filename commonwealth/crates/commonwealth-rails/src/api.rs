@@ -3,7 +3,8 @@
 //!
 //! `GET /v1/mesh/status` · `GET /v1/mesh/media[?peer=]` ·
 //! `GET /v1/mesh/app[?peer=]` · `POST /v1/mesh/fanout` (and its media
-//! spelling) · the four `/v1/mesh/publish` routes. Every answer is
+//! spelling) · the four `/v1/mesh/publish` routes · the two roster verbs ·
+//! the ring rail's doors, `/v1/rail/{append,log,live}`, in [`crate::rail`]. Every answer is
 //! `commonwealth_media`'s — the same functions the inference daemon's
 //! `/v1/mesh/*` routes call, so a shim written against one daemon behaves the
 //! same against the other (ARCH §10.6), and `svrn run` publishes into either
@@ -62,6 +63,17 @@ pub fn router(daemon: Arc<RailsDaemon>) -> Router {
         // works against either.
         .route("/v1/mesh/forget-member", post(forget_member))
         .route("/v1/mesh/roster-names/{pubkey}", get(roster_names))
+        // The ring rail's doors (FIVE_PROGRAMS fp-44): durable append and
+        // log over this node's own journals, and the live lane's local
+        // buffer half. The bodies mirror the daemon's `routes_rail` doors;
+        // the guest half does not exist here — the namespace is always the
+        // caller's explicit one.
+        .route("/v1/rail/append", post(crate::rail::append))
+        .route("/v1/rail/log", get(crate::rail::log))
+        .route(
+            "/v1/rail/live",
+            post(crate::rail::live_push).get(crate::rail::live_drain),
+        )
         .with_state(daemon)
 }
 

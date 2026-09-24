@@ -18,6 +18,13 @@ commonwealth-media = { workspace = true }
 # `deep_link::parse_join_argument` for the invite, and
 # `membership::validate_join_key_format` for the bare-key form.
 commonwealth-discovery = { workspace = true }
+# The ring rail's journal half (five-programs fp-44): `/v1/rail/{append,log,
+# live}` are DURABLE doors — seq/signature/timestamp/id assigned on disk — and
+# rail-core performs no I/O by its own oath, so the journal crate is the one
+# to name. The lift is exactly three packages (rail, rail-core, oplog; comm
+# over the two `cargo tree --edges normal` closures); the forbid row for this
+# daemon carries the exception with the same commit.
+commonwealth-rail = { workspace = true }
 # The node key's type. Already in commonwealth-transport's closure, so
 # naming it here adds nothing a lift has to carry.
 ed25519-dalek = { workspace = true }

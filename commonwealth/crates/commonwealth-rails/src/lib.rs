@@ -73,6 +73,7 @@ pub mod gossip;
 pub mod identity;
 pub mod internal;
 pub mod join;
+pub mod rail;
 
 pub use config::Config;
 
@@ -190,6 +191,15 @@ pub struct RailsDaemon {
     /// one (see `acceptor`), so everything here arrived through the loopback
     /// publish API and goes away with the process that took it.
     pub published_apps: commonwealth_media::PublishedApps,
+    /// The ring rail: journals under THIS process's data root (`rings/`),
+    /// signed with the node key, membership as every ring's default roster.
+    /// The doors over it are [`rail`]. Constructed in `start`, so it lives
+    /// exactly as long as the daemon.
+    pub rail: Arc<commonwealth_rail::RingRail>,
+    /// The live lane's arrived-payload buffer — delivery, not record;
+    /// nothing here reaches a store, a journal or a disk. See
+    /// [`rail::LiveBuffer`].
+    pub rail_live: rail::LiveBuffer,
     /// Where `POST /internal/gossip` is served. Ephemeral loopback, reachable
     /// only through the acceptor.
     pub internal_addr: SocketAddr,
@@ -204,6 +214,21 @@ impl RailsDaemon {
         let mesh = Arc::new(RwLock::new(mesh));
         let contacts: Arc<Mutex<HashMap<NodeId, u64>>> = Arc::new(Mutex::new(HashMap::new()));
         let transport: Arc<dyn PeerTransport> = Arc::new(IrohTransport::new(node.endpoint.clone()));
+
+        // The ring rail's storage (five-programs fp-44): one journal
+        // directory per ring namespace under THIS process's data dir,
+        // signed with the same identity key the endpoint proves. Rails and
+        // the inference daemon load `node_key` through the ONE loader
+        // (`commonwealth_transport::identity::load_or_generate_node_key`),
+        // so a line either writes verifies under the roster every peer
+        // already holds — the signer identity does not change. Membership
+        // is every ring's default roster, derived at read time; the mesh
+        // Arc below is what the source reads, held weakly beside the rail.
+        let rail = Arc::new(commonwealth_rail::RingRail::new(
+            &node.data_dir,
+            Arc::new(node.key.clone()),
+        ));
+        rail::MembershipRosterSource::install(&rail, &mesh, node.self_id, Some(node.pubkey()));
 
         let (internal_addr, internal) = internal::serve(
             mesh.clone(),
@@ -235,6 +260,8 @@ impl RailsDaemon {
             contacts,
             gauge: Arc::new(AtomicUsize::new(0)),
             published_apps,
+            rail,
+            rail_live: rail::LiveBuffer::default(),
             internal_addr,
             _internal: internal,
             _acceptor: acceptor,

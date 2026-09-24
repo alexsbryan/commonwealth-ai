@@ -2585,9 +2585,13 @@ one source of truth, and `load_graph` dispatches on what the index holds.
 bridge — a deferred milestone.
 
 `commonwealth-rails` (`cw-rails`) is the minimal daemon a shim author installs
-beside their media server: join an invite, run, serve three loopback routes.
-It deliberately does NOT admit joiners — a mesh is founded by a full daemon,
-and that absence is most of why it lifts (319 crates in its closure vs 743).
+beside their media server: join an invite, run, serve three loopback routes —
+plus, since five-programs fp-44, the ring rail's doors
+(`/v1/rail/{append,log,live}`) over journals under its own data root, signed
+with the same node key the mesh identity uses. It deliberately does NOT admit
+joiners — a mesh is founded by a full daemon, and that absence is most of why
+it lifts (319 crates in its closure vs 743 at the 2026-09-11 measure; the rail
+doors cost three more).
 =======
 | `Guest` | `cwth/guest/0`, a downgraded stranger, and the guest door on `[daemon] guest_bind` (open only while a rail grant is live; also serves `/v1/rail/*`, the ring page (one bundle per rail namespace from the `[daemon.guest_pages]` registry at `/ring/<namespace>/`, whose shim names that namespace on every `/v1/rail/*` call — a wall grant names none by design, so the page is what says which app it is, with `[daemon] guest_page_dir` still putting a single app at the bare `/ring/` and the wall's INDEX served there when it is unset) — that registry is also the DECLARATION of which namespaces admit guests, so a `Scope::Wall` grant (`svrn mesh grant --wall`, ONE QR for the wall) reaches every namespace declared there and nothing else on the rail, `--rail <ns>` narrows to one, an entry may declare `guests = "read"`, and a namespace the daemon owns (`ring_roster::is_daemon_owned`) is refused at config load AND at the route, and `POST /v1/guest/ask` — the door running a grounded turn as its own principal in one conversation per bearer, returning `{answer, epistemic_state}` only, `sovereign-daemon/src/guest_door.rs` + `routes_guest_ask.rs`; and `POST /v1/guest/session`, where a phone claims the NAME it is shown under — one QR serves a room, so the grant says what may be reached and a door-issued session says who; the session belongs to the DOOR and is recognised under any live grant it minted, so a person walking between this wall's apps is named once — `[daemon] guest_sessions = "grant"` is the strict setting that binds it to one link instead, `routes_guest_session.rs` + `sovereign-grants/src/guest_session.rs`) | no | no |
 | `Rail` | a deployed ring app, on `127.0.0.1:rail_port(client_port)` (9743 by default) | no (`UNTRUSTED_LOOPBACK`) | no — and it serves NOTHING but `/v1/rail/*` |
