@@ -18,13 +18,13 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
-use understanding_vocab::atoms::{AtomEnvelope, AtomId, ChunkRef};
 use corpus_engine_atlas_reader::investigation_graph::{
     read_outputs as read_investigation_graph, ExtractionExcerpt as InvEvidence,
     InvestigationEntity as InvEntity, PatternFinding, PatternKind, Relationship as InvRelationship,
     INVESTIGATION_DIRNAME,
 };
 use corpus_index::index::CorpusIndex;
+use understanding_vocab::atoms::{AtomEnvelope, AtomId, ChunkRef};
 
 // ─── The failure type ────────────────────────────────────────────────
 

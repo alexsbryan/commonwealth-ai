@@ -220,4 +220,3 @@ pub fn flags(atoms: &[Entity]) -> Vec<ParcelFlag> {
     }
     out
 }
-

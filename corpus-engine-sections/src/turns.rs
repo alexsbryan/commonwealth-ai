@@ -35,7 +35,6 @@ impl TurnAuthor {
     }
 }
 
-
 fn turn_header_regex() -> &'static Regex {
     static CELL: OnceLock<Regex> = OnceLock::new();
     // Matches `### [YYYY-MM-DD HH:MM] sender` or

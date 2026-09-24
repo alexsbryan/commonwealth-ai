@@ -42,7 +42,6 @@
 //! corpora so retrieval and bench code does not branch on corpus
 //! type.
 
-
 use super::{floor_char_boundary, Chunker, TextChunk};
 
 pub use corpus_engine_sections::turns::{parse_turns, ParsedTurn, TurnAuthor}; // shim: moved by fp-67

@@ -15,10 +15,10 @@ use std::collections::HashSet;
 use std::path::Path;
 
 use corpus_engine_atlas_reader::parcel_analytics::{compute_aggregates, flags, FlagKind};
-use understanding_vocab::atoms::Entity;
-use understanding_vocab::atoms::AtomEnvelope;
-use understanding_vocab::taxonomy::EntityType;
 use sovereign_contracts::daemon_wire::{ParcelAnalyticsDto, ParcelDto};
+use understanding_vocab::atoms::AtomEnvelope;
+use understanding_vocab::atoms::Entity;
+use understanding_vocab::taxonomy::EntityType;
 
 use crate::MeshAppError;
 
