@@ -399,30 +399,6 @@ pub fn admit(
     }
     admitted.retain(|id, _| !forked.contains(id));
 
-    // Holes are audited from each actor's SEALED FLOOR, not from zero, or a
-    // node that has retired what a seal covers reports one hole per retired
-    // op — permanently, to every housemate, while being in perfect health.
-    // That report is what made compaction indistinguishable from breakage.
-    //
-    // The floors come from ops that survived BOTH the signature/roster checks
-    // above and the fork exclusion just now: a seal the rail refused, or one
-    // it cannot choose between, retires nothing. Suppressing a hole is a claim
-    // of completeness, and a claim of completeness may only rest on an act the
-    // rail could actually authenticate (ARCH §18.3).
-    let floors = crate::sync::sealed_floors(admitted.values().map(|c| c.op));
-    for (actor, by_seq) in &seqs {
-        let floor = floors.get(*actor).copied().unwrap_or(0);
-        let highest = by_seq.keys().copied().next_back().unwrap_or(0);
-        for n in floor..=highest {
-            if !by_seq.contains_key(&n) {
-                gaps.push(RailGap::SequenceHole {
-                    actor: (*actor).to_string(),
-                    missing: n,
-                });
-            }
-        }
-    }
-
     // ── the void set: commutative, and it never resurrects ───
     //
     // Built from every surviving correction at once, with no regard for
@@ -432,6 +408,10 @@ pub fn admit(
     // the original voided — to bring something back, write it again. That is
     // what "compensating entry, visible" means, and it is why this is one
     // scan rather than a liveness pass.
+    //
+    // Computed BEFORE the floors on purpose: a seal that a correction voids
+    // retires nothing, and the scan below that reads the floors is not the
+    // place to discover that.
     let mut voided: BTreeSet<OpId> = BTreeSet::new();
     for a in admitted.values() {
         if let RailAct::Correct { corrects, .. } = &a.op.kind.act {
@@ -442,6 +422,31 @@ pub fn admit(
                 });
             }
             voided.insert(corrects.clone());
+        }
+    }
+
+    // Holes are audited from each actor's SEALED FLOOR, not from zero, or a
+    // node that has retired what a seal covers reports one hole per retired
+    // op — permanently, to every housemate, while being in perfect health.
+    // That report is what made compaction indistinguishable from breakage.
+    //
+    // The floors come from ops that survived BOTH the signature/roster checks
+    // above and the fork exclusion just now, minus what the void set just
+    // retired: a seal the rail refused, one it cannot choose between, or one
+    // the log itself corrected retires nothing. Suppressing a hole is a claim
+    // of completeness, and a claim of completeness may only rest on an act the
+    // rail could actually authenticate (ARCH §18.3).
+    let floors = crate::sync::sealed_floors(admitted.values().map(|c| c.op), &voided);
+    for (actor, by_seq) in &seqs {
+        let floor = floors.get(*actor).copied().unwrap_or(0);
+        let highest = by_seq.keys().copied().next_back().unwrap_or(0);
+        for n in floor..=highest {
+            if !by_seq.contains_key(&n) {
+                gaps.push(RailGap::SequenceHole {
+                    actor: (*actor).to_string(),
+                    missing: n,
+                });
+            }
         }
     }
 
@@ -545,7 +550,7 @@ pub fn admit(
 /// Identity from essence (ARCH §7.5). A rewritten `id` field therefore cannot
 /// make an op impersonate another op's correction target; it just gets
 /// reported.
-fn derived_id(op: &Op<SignedOp>) -> OpId {
+pub(crate) fn derived_id(op: &Op<SignedOp>) -> OpId {
     Op::new(op.kind.clone(), op.ts_unix, op.actor.clone()).id
 }
 

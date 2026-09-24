@@ -293,7 +293,10 @@ pub async fn ring_sync(
     // pushed to was refused — and an unbounded body is also an unbounded
     // allocation on a route any peer that can route here may call.
     let selection = journal.ops_missing_from_within(&req.digest, RING_SYNC_OPS_BUDGET_BYTES);
-    let (digest, (ops, more_for_caller)) = match (journal.digest(), selection) {
+    let (digest, (ops, more_for_caller)) = match (
+        journal.digest(&commonwealth_rail::Ed25519Verifier),
+        selection,
+    ) {
         (Ok(d), Ok(o)) => (d, o),
         (Err(e), _) | (_, Err(e)) => return err(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
     };

@@ -401,8 +401,12 @@ async fn a_seal_bounds_the_ring_and_the_snapshot_keeps_every_live_key() {
         "the peer's disk holds only the seal, the snapshot and its mark"
     );
     assert_eq!(
-        a_journal.digest().unwrap(),
-        b_journal.digest().unwrap(),
+        a_journal
+            .digest(&commonwealth_rail::Ed25519Verifier)
+            .unwrap(),
+        b_journal
+            .digest(&commonwealth_rail::Ed25519Verifier)
+            .unwrap(),
         "two nodes, one claim"
     );
 

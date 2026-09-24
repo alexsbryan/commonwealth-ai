@@ -99,7 +99,7 @@ fn a_measurement_published_on_a_is_readable_on_b_through_the_rail() {
     publish(&a, &key_a, on_a.roster(), &record).expect("A can author on its own journal");
 
     // One anti-entropy exchange, exactly as `ring_sync` performs it.
-    let theirs = b.digest().unwrap();
+    let theirs = b.digest(&commonwealth_rail::Ed25519Verifier).unwrap();
     let ops = a.ops_missing_from(&theirs).unwrap();
     assert_eq!(ops.len(), 1, "A offers the one op B lacks");
     assert_eq!(b.ingest_all(&ops).unwrap(), 1);

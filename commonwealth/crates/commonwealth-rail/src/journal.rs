@@ -190,11 +190,12 @@ impl RingJournal {
         Ok(true)
     }
 
-    /// What this node can honestly claim to hold, per actor — the ~600-byte
-    /// payload a peer needs in order to work out what to send back.
-    /// See [`digest`] for why the mark is contiguous.
-    pub fn digest(&self) -> Result<Digest, RailError> {
-        Ok(digest(&self.read()?.0))
+    /// What this node can honestly claim to need nothing below, per actor —
+    /// the ~600-byte payload a peer needs in order to work out what to send
+    /// back. See [`digest`] for why the mark is contiguous and why an op that
+    /// does not verify under its claimed actor counts for nothing.
+    pub fn digest(&self, verifier: &dyn RingVerifier) -> Result<Digest, RailError> {
+        Ok(digest(&self.read()?.0, &self.namespace, verifier))
     }
 
     /// Every op this node holds that `theirs` says the peer is missing.

@@ -170,6 +170,41 @@ fn a_seal_the_rail_refused_retires_nothing() {
     assert!(!f.is_complete());
 }
 
+/// **A seal the log itself calls wrong retires nothing.** `Correct` voids
+/// without erasure and the void set is commutative — but the floors were
+/// computed before the void set existed, so a voided seal kept suppressing
+/// its author's holes in `admit`, `digest` and `compact` alike. Seq 1 is
+/// missing here; it is a hole precisely because the seal that claimed to
+/// retire it is voided.
+#[test]
+fn a_corrected_seal_retires_nothing() {
+    let seal = signed(&key(1), 102, 2, RailAct::Seal);
+    let correct = signed(
+        &key(1),
+        103,
+        3,
+        RailAct::Correct {
+            corrects: seal.id.clone(),
+            replacement: None,
+        },
+    );
+    let f = admitted(&[signed(&key(1), 100, 0, record("kept")), seal, correct]);
+
+    assert!(
+        !f.floors.contains_key(&actor_of(&key(1))),
+        "a voided seal raises no floor: {:?}",
+        f.floors
+    );
+    assert!(
+        f.gaps.contains(&RailGap::SequenceHole {
+            actor: actor_of(&key(1)),
+            missing: 1,
+        }),
+        "seq 1 is a hole again — the retirement was itself corrected: {:?}",
+        f.gaps
+    );
+}
+
 /// **A seal is bounded by the key that signed it.** `RailAct::Seal` carries no
 /// actor, so sealing somebody else's history is unwritable rather than
 /// refused — but the floor derivation still has to key on the signer and not,

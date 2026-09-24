@@ -130,12 +130,24 @@ async fn two_nodes_converge_through_the_sync_route() {
     );
 
     // A dials B. Call 1 pulls; call 2 pushes what B's digest says it lacks.
-    let first = sync_once(state_b.clone(), NS, led_a.digest().unwrap(), Vec::new()).await;
+    let first = sync_once(
+        state_b.clone(),
+        NS,
+        led_a.digest(&commonwealth_rail::Ed25519Verifier).unwrap(),
+        Vec::new(),
+    )
+    .await;
     assert_eq!(led_a.ingest_all(&first.ops).unwrap(), 1);
 
     let for_b = led_a.ops_missing_from(&first.digest).unwrap();
     assert_eq!(for_b.len(), 1);
-    let second = sync_once(state_b.clone(), NS, led_a.digest().unwrap(), for_b).await;
+    let second = sync_once(
+        state_b.clone(),
+        NS,
+        led_a.digest(&commonwealth_rail::Ed25519Verifier).unwrap(),
+        for_b,
+    )
+    .await;
     assert_eq!(second.ingested, 1);
 
     // One answer, on both nodes, with nothing missing. The answer is the ACT
@@ -158,7 +170,13 @@ async fn two_nodes_converge_through_the_sync_route() {
     assert_eq!(who, vec!["alex", "bo"], "both acts, both attributed");
 
     // Steady state: another exchange moves nothing and changes nothing.
-    let again = sync_once(state_b, NS, led_a.digest().unwrap(), Vec::new()).await;
+    let again = sync_once(
+        state_b,
+        NS,
+        led_a.digest(&commonwealth_rail::Ed25519Verifier).unwrap(),
+        Vec::new(),
+    )
+    .await;
     assert!(again.ops.is_empty());
     assert_eq!(again.ingested, 0);
     assert_eq!(led_a.admit(&roster, &Ed25519Verifier).unwrap(), fa);

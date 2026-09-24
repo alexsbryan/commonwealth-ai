@@ -313,8 +313,12 @@ fn two_partitioned_nodes_converge_on_an_identical_admission() {
     );
 
     // Heal, both directions, one exchange each way.
-    let for_a = b.ops_missing_from(&a.digest().unwrap()).unwrap();
-    let for_b = a.ops_missing_from(&b.digest().unwrap()).unwrap();
+    let for_a = b
+        .ops_missing_from(&a.digest(&Ed25519Verifier).unwrap())
+        .unwrap();
+    let for_b = a
+        .ops_missing_from(&b.digest(&Ed25519Verifier).unwrap())
+        .unwrap();
     assert_eq!(a.ingest_all(&for_a).unwrap(), 1);
     assert_eq!(b.ingest_all(&for_b).unwrap(), 1);
 
@@ -334,7 +338,9 @@ fn two_partitioned_nodes_converge_on_an_identical_admission() {
     assert_eq!(acts, vec!["beer", "groceries"]);
 
     // And the exchange is idempotent: running it again moves nothing.
-    let again = b.ops_missing_from(&a.digest().unwrap()).unwrap();
+    let again = b
+        .ops_missing_from(&a.digest(&Ed25519Verifier).unwrap())
+        .unwrap();
     assert!(again.is_empty());
     assert_eq!(a.ingest_all(&for_a).unwrap(), 0);
     assert_eq!(a.admit(&r, &Ed25519Verifier).unwrap(), fa);
@@ -369,10 +375,14 @@ fn a_half_delivered_peer_is_a_named_hole_not_a_clean_answer() {
 
     // And the digest asks for the hole rather than claiming the high mark.
     assert!(
-        !a.digest().unwrap().contains_key(&actor_of(&key(2))),
+        !a.digest(&Ed25519Verifier)
+            .unwrap()
+            .contains_key(&actor_of(&key(2))),
         "A holds nothing contiguous from B, so it must claim nothing"
     );
-    let repair = b.ops_missing_from(&a.digest().unwrap()).unwrap();
+    let repair = b
+        .ops_missing_from(&a.digest(&Ed25519Verifier).unwrap())
+        .unwrap();
     assert_eq!(
         repair.len(),
         2,
@@ -508,14 +518,16 @@ fn a_compacted_journal_stays_complete_and_stops_the_prefix_coming_back() {
 
     // 2. It can still say what it needs, from the floor rather than from zero.
     assert_eq!(
-        a.digest().unwrap(),
+        a.digest(&Ed25519Verifier).unwrap(),
         Digest::from([(actor_of(&key(1)), 4)]),
         "a compacted actor must make a claim, not fall silent"
     );
 
     // 3. So the peer that still holds the retired prefix sends none of it.
     assert!(
-        b.ops_missing_from(&a.digest().unwrap()).unwrap().is_empty(),
+        b.ops_missing_from(&a.digest(&Ed25519Verifier).unwrap())
+            .unwrap()
+            .is_empty(),
         "the retired prefix must not come back every sixty seconds"
     );
     assert_eq!(a.ingest_all(&[]).unwrap(), 0);
@@ -825,7 +837,9 @@ fn a_peers_introduction_arrives_readable_and_changes_no_roster_row() {
     let written = b.append(intro, &key(2), &r, None).unwrap();
 
     // Ring-sync, the way a peer delivers: digest out, missing ops back in.
-    let for_me = b.ops_missing_from(&a.digest().unwrap()).unwrap();
+    let for_me = b
+        .ops_missing_from(&a.digest(&Ed25519Verifier).unwrap())
+        .unwrap();
     assert_eq!(
         a.ingest_all(&for_me).unwrap(),
         1,

@@ -160,7 +160,7 @@ async fn one_budgeted_chunk_carries_less_than_a_whole_journal() {
 
     let body = RingSyncRequest {
         namespace: NS.to_string(),
-        digest: journal.digest().unwrap(),
+        digest: journal.digest(&commonwealth_rail::Ed25519Verifier).unwrap(),
         ops: journal.ops_missing_from(&Digest::new()).unwrap(),
     };
     assert_eq!(body.ops.len(), N, "an empty digest asks for everything");
@@ -202,7 +202,13 @@ async fn push_until_converged(peer: AppState, journal: &RingJournal) -> (usize, 
     loop {
         // Call 1 — learn what they hold. A digest is ~600 bytes whatever the
         // journal weighs, which is why this half was never the problem.
-        let theirs = sync_once(peer.clone(), NS, journal.digest().unwrap(), Vec::new()).await;
+        let theirs = sync_once(
+            peer.clone(),
+            NS,
+            journal.digest(&commonwealth_rail::Ed25519Verifier).unwrap(),
+            Vec::new(),
+        )
+        .await;
         let (ops, more) = journal
             .ops_missing_from_within(&theirs.digest, RING_SYNC_OPS_BUDGET_BYTES)
             .unwrap();
@@ -213,7 +219,7 @@ async fn push_until_converged(peer: AppState, journal: &RingJournal) -> (usize, 
         let offered = ops.len();
         let push = RingSyncRequest {
             namespace: NS.to_string(),
-            digest: journal.digest().unwrap(),
+            digest: journal.digest(&commonwealth_rail::Ed25519Verifier).unwrap(),
             ops,
         };
         let bytes = serde_json::to_vec(&push).unwrap().len();
@@ -269,7 +275,7 @@ async fn the_budgeted_chunk_is_served_where_the_whole_journal_is_refused() {
 
         let push = RingSyncRequest {
             namespace: NS.to_string(),
-            digest: journal.digest().unwrap(),
+            digest: journal.digest(&commonwealth_rail::Ed25519Verifier).unwrap(),
             ops: journal.ops_missing_from(&Digest::new()).unwrap(),
         };
         let bytes = serde_json::to_vec(&push).unwrap().len();
@@ -297,7 +303,7 @@ async fn the_budgeted_chunk_is_served_where_the_whole_journal_is_refused() {
     );
     let push = RingSyncRequest {
         namespace: NS.to_string(),
-        digest: journal.digest().unwrap(),
+        digest: journal.digest(&commonwealth_rail::Ed25519Verifier).unwrap(),
         ops,
     };
     let bytes = serde_json::to_vec(&push).unwrap().len();
@@ -354,8 +360,10 @@ async fn a_journal_past_the_old_ceiling_converges_onto_a_node_that_has_never_see
         after.gaps
     );
     assert_eq!(
-        peer_journal.digest().unwrap(),
-        journal.digest().unwrap(),
+        peer_journal
+            .digest(&commonwealth_rail::Ed25519Verifier)
+            .unwrap(),
+        journal.digest(&commonwealth_rail::Ed25519Verifier).unwrap(),
         "two nodes, one claim"
     );
 }
@@ -389,7 +397,9 @@ async fn the_pull_direction_is_budgeted_and_converges_by_repeating() {
         let body = sync_once(
             holder.clone(),
             NS,
-            fresh_journal.digest().unwrap(),
+            fresh_journal
+                .digest(&commonwealth_rail::Ed25519Verifier)
+                .unwrap(),
             Vec::new(),
         )
         .await;
@@ -421,8 +431,10 @@ async fn the_pull_direction_is_budgeted_and_converges_by_repeating() {
     assert_eq!(admitted.ops.len(), N);
     assert!(admitted.is_complete(), "gaps: {:?}", admitted.gaps);
     assert_eq!(
-        fresh_journal.digest().unwrap(),
-        journal.digest().unwrap(),
+        fresh_journal
+            .digest(&commonwealth_rail::Ed25519Verifier)
+            .unwrap(),
+        journal.digest(&commonwealth_rail::Ed25519Verifier).unwrap(),
         "two nodes, one answer"
     );
 }
@@ -475,7 +487,7 @@ async fn a_seal_shortens_the_exchange_only_once_the_retired_lines_are_deleted() 
 
     let push = |journal: &RingJournal| RingSyncRequest {
         namespace: NS.to_string(),
-        digest: journal.digest().unwrap(),
+        digest: journal.digest(&commonwealth_rail::Ed25519Verifier).unwrap(),
         ops: journal.ops_missing_from(&Digest::new()).unwrap(),
     };
 
@@ -547,8 +559,10 @@ async fn a_seal_shortens_the_exchange_only_once_the_retired_lines_are_deleted() 
         "the seal itself carries no payload"
     );
     assert_eq!(
-        peer_journal.digest().unwrap(),
-        journal.digest().unwrap(),
+        peer_journal
+            .digest(&commonwealth_rail::Ed25519Verifier)
+            .unwrap(),
+        journal.digest(&commonwealth_rail::Ed25519Verifier).unwrap(),
         "two nodes, one claim"
     );
 }

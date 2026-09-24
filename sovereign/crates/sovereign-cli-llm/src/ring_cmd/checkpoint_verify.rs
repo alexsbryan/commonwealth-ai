@@ -98,7 +98,7 @@ pub(crate) fn verify_document(
     }
 
     // ── step 3: digest equality — the completeness claim ────────
-    let computed = digest(&ops);
+    let computed = digest(&ops, ns, &Ed25519Verifier);
     let mut actors: std::collections::BTreeSet<&str> =
         computed.keys().map(String::as_str).collect();
     actors.extend(stated.keys().map(String::as_str));

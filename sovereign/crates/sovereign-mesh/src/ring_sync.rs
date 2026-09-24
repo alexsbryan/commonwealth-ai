@@ -561,7 +561,7 @@ pub async fn exchange(
 
     for chunk in 1..=MAX_CHUNKS_PER_EXCHANGE {
         // ── Call 1 — learn what they have, take one chunk of what we lack.
-        let mine = match journal.digest() {
+        let mine = match journal.digest(&commonwealth_rail::Ed25519Verifier) {
             Ok(d) => d,
             Err(e) => return out.stopped(ExchangeStop::Failed(format!("local journal: {e}"))),
         };
@@ -610,7 +610,7 @@ pub async fn exchange(
         let pushed = if for_peer.is_empty() {
             0
         } else {
-            let refreshed = match journal.digest() {
+            let refreshed = match journal.digest(&commonwealth_rail::Ed25519Verifier) {
                 Ok(d) => d,
                 Err(e) => return out.stopped(ExchangeStop::Failed(format!("local journal: {e}"))),
             };

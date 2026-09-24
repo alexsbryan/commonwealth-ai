@@ -194,8 +194,10 @@ async fn a_journal_past_the_one_exchange_ceiling_converges_onto_a_fresh_peer() {
     assert_eq!(admitted.ops.len(), N);
     assert!(admitted.is_complete(), "gaps: {:?}", admitted.gaps);
     assert_eq!(
-        peer_journal.digest().unwrap(),
-        journal.digest().unwrap(),
+        peer_journal
+            .digest(&commonwealth_rail::Ed25519Verifier)
+            .unwrap(),
+        journal.digest(&commonwealth_rail::Ed25519Verifier).unwrap(),
         "two nodes, one claim"
     );
 }
@@ -236,8 +238,10 @@ async fn a_peers_seal_prunes_this_nodes_disk_in_the_round_it_arrives() {
     let admitted = journal.admit(&solo_roster(&key), &Ed25519Verifier).unwrap();
     assert!(admitted.is_complete(), "gaps: {:?}", admitted.gaps);
     assert_eq!(
-        journal.digest().unwrap(),
-        peer_journal.digest().unwrap(),
+        journal.digest(&commonwealth_rail::Ed25519Verifier).unwrap(),
+        peer_journal
+            .digest(&commonwealth_rail::Ed25519Verifier)
+            .unwrap(),
         "two nodes, one claim"
     );
 }

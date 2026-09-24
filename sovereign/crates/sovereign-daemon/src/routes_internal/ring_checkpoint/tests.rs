@@ -154,7 +154,11 @@ async fn the_stated_digest_is_what_the_carried_ops_compute_to() {
     let stated: commonwealth_rail::Digest =
         serde_json::from_value(doc["digest"].clone()).expect("digest is the rail's Digest shape");
     assert_eq!(
-        commonwealth_rail::digest(&ops),
+        commonwealth_rail::digest(
+            &ops,
+            doc["ns"].as_str().expect("the v1 shape carries ns"),
+            &commonwealth_rail::Ed25519Verifier,
+        ),
         stated,
         "the completeness claim: the document holds every act through every mark it names"
     );

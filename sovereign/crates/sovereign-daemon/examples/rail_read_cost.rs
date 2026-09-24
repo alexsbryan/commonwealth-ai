@@ -343,7 +343,7 @@ fn main() {
                     .map(|_| {
                         sample(
                             || {
-                                black_box(j.digest().unwrap());
+                                black_box(j.digest(&commonwealth_rail::Ed25519Verifier).unwrap());
                             },
                             1,
                         )
@@ -359,12 +359,12 @@ fn main() {
             assert_eq!(missing.len(), n, "an empty digest must ask for all of it");
             let req = serde_json::json!({
                 "namespace": ns,
-                "digest": j.digest().unwrap(),
+                "digest": j.digest(&commonwealth_rail::Ed25519Verifier).unwrap(),
                 "ops": missing,
             });
             let resp = serde_json::json!({
                 "namespace": ns,
-                "digest": j.digest().unwrap(),
+                "digest": j.digest(&commonwealth_rail::Ed25519Verifier).unwrap(),
                 "ops": missing,
                 "ingested": 0usize,
             });
@@ -397,7 +397,7 @@ fn main() {
         let cap = 20_000usize;
         seed(&j, &k, &actor, cap, *mk);
         let all = j.ops_missing_from(&Digest::new()).unwrap();
-        let dg = j.digest().unwrap();
+        let dg = j.digest(&commonwealth_rail::Ed25519Verifier).unwrap();
         let body_bytes = |n: usize| {
             serde_json::to_vec(&serde_json::json!({
                 "namespace": ns, "digest": dg, "ops": &all[..n],

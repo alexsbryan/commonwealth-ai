@@ -64,9 +64,9 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use oplog::Op;
+use oplog::{Op, OpId};
 
-use crate::{RailAct, SignedOp};
+use crate::{RailAct, RingVerifier, SignedOp};
 
 /// Per-actor contiguous high-water marks. `{actor_pubkey_hex → n}`.
 ///
@@ -91,9 +91,7 @@ pub type Digest = BTreeMap<String, u64>;
 /// `commonwealth_rail::RingJournal::compact` deletes from THAT map rather than
 /// deriving its own. A prune keyed on a second reading of the seals would be
 /// two answers to "what is retired" with the destructive one unwatched
-/// (ARCH §10.6) — and the two would differ exactly where it is most expensive,
-/// because [`sealed_floors`] over raw holdings trusts a seal that admission
-/// refused.
+/// (ARCH §10.6).
 pub type Floors = BTreeMap<String, u64>;
 
 /// The ONE reading of a [`Seal`](crate::RailAct::Seal) (ARCH §10.6).
@@ -101,21 +99,26 @@ pub type Floors = BTreeMap<String, u64>;
 /// An actor's floor is the `seq` of their own highest seal, because a seal
 /// retires everything its author wrote before it. Never having sealed is a
 /// floor of zero, which is exactly the behaviour this rail had before seals
-/// existed.
+/// existed. A seal in `voided` contributes no floor: the retirement was itself
+/// corrected, and a correction voids without exception.
 ///
-/// **Which ops you hand it is the whole safety question.** [`admit`](crate::admit)
-/// hands it only ops that passed the signature and roster checks, so a forged
-/// or unclaimed seal retires nothing — a seal is the one act that makes the
-/// rail stop asking for history, and treating an unauthenticated one as
-/// authoritative would let a single pushed line erase a member's past on every
-/// node that received it (ARCH §18.3). [`digest`] hands it the whole holding,
-/// which is the same trust the contiguous mark beside it has always had:
-/// the digest says what to ASK for, and being wrong there costs a round, while
-/// being wrong in `admit` states a total over a subset and calls it complete.
-pub(crate) fn sealed_floors<'a>(ops: impl IntoIterator<Item = &'a Op<SignedOp>>) -> Floors {
+/// **Which ops you hand it is the whole safety question**, and both callers
+/// hand it only ops they authenticated: [`admit`](crate::admit) — ops that
+/// passed the signature and roster checks and survived fork exclusion;
+/// [`digest`] — ops whose signature verified under their claimed actor. The
+/// `actor` field is just what the line claimed until a verifier says
+/// otherwise, and a seal is the one act that makes the rail stop asking for
+/// history: one unauthenticated seal line would raise the floor AND satisfy
+/// it, retiring a member's whole past on every node that received it
+/// (ARCH §18.3). That is why being wrong here is not "a round" — the peer
+/// never re-sends below a floor, so the loss does not heal.
+pub(crate) fn sealed_floors<'a>(
+    ops: impl IntoIterator<Item = &'a Op<SignedOp>>,
+    voided: &BTreeSet<OpId>,
+) -> Floors {
     let mut floors = Floors::new();
     for op in ops {
-        if matches!(op.kind.act, RailAct::Seal) {
+        if matches!(op.kind.act, RailAct::Seal) && !voided.contains(&crate::admit::derived_id(op)) {
             let floor = floors.entry(op.actor.clone()).or_insert(0);
             *floor = (*floor).max(op.kind.seq);
         }
@@ -125,15 +128,41 @@ pub(crate) fn sealed_floors<'a>(ops: impl IntoIterator<Item = &'a Op<SignedOp>>)
 
 /// What this node can honestly claim to need nothing below, per actor.
 ///
+/// An op that does not verify under its claimed actor counts for nothing —
+/// not toward a floor, not toward a mark. Until verification the `actor`
+/// field is only what the line claimed, and a digest that believed it would
+/// advertise history its holder does not have: a forged line at the next
+/// contiguous seq silently loses the real op there, and a forged seal loses
+/// everything it claims to retire (see [`sealed_floors`]).
+///
 /// See the module docs: this is the **contiguous** mark, so a hole below the
 /// maximum lowers it and the peer re-sends from there. Healing a hole is
 /// therefore automatic rather than a separate repair path. The run counts from
 /// the actor's sealed floor, so a node that has compacted a retired prefix
 /// still makes a claim instead of falling silent.
-pub fn digest(ops: &[Op<SignedOp>]) -> Digest {
-    let floors = sealed_floors(ops);
+pub fn digest(ops: &[Op<SignedOp>], namespace: &str, verifier: &dyn RingVerifier) -> Digest {
+    let authentic: Vec<&Op<SignedOp>> = ops
+        .iter()
+        .filter(|op| {
+            verifier.verify(
+                &op.actor,
+                namespace,
+                op.ts_unix,
+                op.kind.seq,
+                &crate::body_json(&op.kind.act, op.kind.on_behalf_of.as_deref()),
+                &op.kind.sig,
+            )
+        })
+        .collect();
+    let mut voided: BTreeSet<OpId> = BTreeSet::new();
+    for op in &authentic {
+        if let RailAct::Correct { corrects, .. } = &op.kind.act {
+            voided.insert(corrects.clone());
+        }
+    }
+    let floors = sealed_floors(authentic.iter().copied(), &voided);
     let mut by_actor: BTreeMap<&str, BTreeSet<u64>> = BTreeMap::new();
-    for op in ops {
+    for op in &authentic {
         by_actor
             .entry(op.actor.as_str())
             .or_default()
@@ -258,8 +287,8 @@ pub fn ops_missing_from_within(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tests_support::{key, record, signed};
-    use crate::RailAct;
+    use crate::tests_support::{key, record, signed, NS};
+    use crate::{Ed25519Verifier, RailAct};
 
     fn actor(seed: u8) -> String {
         crate::actor_of(&key(seed))
@@ -269,10 +298,15 @@ mod tests {
         signed(&key(seed), ts, seq, record("x"))
     }
 
+    /// The digest under the shipped verifier — what the bars assert on.
+    fn digest_of(ops: &[Op<SignedOp>]) -> Digest {
+        digest(ops, NS, &Ed25519Verifier)
+    }
+
     #[test]
     fn a_contiguous_run_reports_its_last_seq() {
         let ops = vec![op(1, 0, 10), op(1, 1, 11), op(1, 2, 12)];
-        assert_eq!(digest(&ops), Digest::from([(actor(1), 2)]));
+        assert_eq!(digest_of(&ops), Digest::from([(actor(1), 2)]));
     }
 
     /// **The reason the mark is contiguous.** A node holding 0 and 2 must not
@@ -281,10 +315,10 @@ mod tests {
     #[test]
     fn a_hole_lowers_the_mark_so_the_peer_re_sends_across_it() {
         let held = vec![op(1, 0, 10), op(1, 2, 12)];
-        assert_eq!(digest(&held), Digest::from([(actor(1), 0)]));
+        assert_eq!(digest_of(&held), Digest::from([(actor(1), 0)]));
 
         let peer_has = vec![op(1, 0, 10), op(1, 1, 11), op(1, 2, 12)];
-        let sent = ops_missing_from(&peer_has, &digest(&held));
+        let sent = ops_missing_from(&peer_has, &digest_of(&held));
         assert_eq!(
             sent.iter().map(|o| o.kind.seq).collect::<Vec<_>>(),
             vec![1, 2],
@@ -297,9 +331,9 @@ mod tests {
     #[test]
     fn an_actor_whose_first_op_is_missing_is_absent_from_the_digest() {
         let held = vec![op(1, 3, 13)];
-        assert!(digest(&held).is_empty());
+        assert!(digest_of(&held).is_empty());
         let peer_has = vec![op(1, 0, 10), op(1, 1, 11), op(1, 3, 13)];
-        assert_eq!(ops_missing_from(&peer_has, &digest(&held)).len(), 3);
+        assert_eq!(ops_missing_from(&peer_has, &digest_of(&held)).len(), 3);
     }
 
     /// An actor we have never heard of is absent, and absence asks for
@@ -314,7 +348,7 @@ mod tests {
     #[test]
     fn a_peer_that_is_already_caught_up_is_sent_nothing() {
         let ops = vec![op(1, 0, 10), op(1, 1, 11)];
-        assert!(ops_missing_from(&ops, &digest(&ops)).is_empty());
+        assert!(ops_missing_from(&ops, &digest_of(&ops)).is_empty());
     }
 
     /// Replication is author-blind: a node republishes what it HOLDS, so a
@@ -349,13 +383,13 @@ mod tests {
     fn a_compacted_actor_is_advertised_from_its_seal_instead_of_not_at_all() {
         let no_seal = vec![op(1, 3, 103), op(1, 4, 104)];
         assert!(
-            digest(&no_seal).is_empty(),
+            digest_of(&no_seal).is_empty(),
             "control: nothing sealed, nothing contiguous from 0, nothing to claim"
         );
 
         let compacted = vec![seal(1, 3, 103), op(1, 4, 104)];
         assert_eq!(
-            digest(&compacted),
+            digest_of(&compacted),
             Digest::from([(actor(1), 4)]),
             "the mark counts from the sealed floor, not from zero"
         );
@@ -373,19 +407,111 @@ mod tests {
         let compacted = vec![seal(1, 3, 103), op(1, 4, 104)];
         let peer_holds: Vec<_> = retired.iter().chain(&compacted).cloned().collect();
         assert!(
-            ops_missing_from(&peer_holds, &digest(&compacted)).is_empty(),
+            ops_missing_from(&peer_holds, &digest_of(&compacted)).is_empty(),
             "the retired prefix is not wanted and must not be sent"
         );
 
         // And the seal still travels to a peer that has not got it yet: a
         // node cannot honour a floor it has never seen.
         assert_eq!(
-            ops_missing_from(&peer_holds, &digest(&retired))
+            ops_missing_from(&peer_holds, &digest_of(&retired))
                 .iter()
                 .map(|o| o.kind.seq)
                 .collect::<Vec<_>>(),
             vec![3, 4],
             "the seal itself is an op, and it is how the floor propagates"
+        );
+    }
+
+    // ── authenticity: an unauthenticated line counts for nothing ──
+
+    /// A line whose signature is `signer`'s while its `actor` field claims
+    /// somebody else: the shape one hostile journal line takes before anyone
+    /// verifies it. `Op::new` is the same builder the honest fixtures use, so
+    /// the id is self-consistent and only the signature gives it away.
+    fn spoofed(signer: u8, claimed: u8, seq: u64, ts: i64, act: RailAct) -> Op<SignedOp> {
+        let body = crate::body_json(&act, None);
+        let sig = crate::sign_ring_op(&key(signer), crate::tests_support::NS, ts, seq, &body);
+        Op::new(
+            SignedOp {
+                seq,
+                sig,
+                act,
+                on_behalf_of: None,
+            },
+            ts,
+            actor(claimed),
+        )
+    }
+
+    /// **A forged seal must not retire a member's past.** The floor is a
+    /// `max` ratchet — one pushed line claiming `actor(1)` at seq 5 makes the
+    /// digest claim 5 and every peer stop sending seq 3..=5 forever. Before
+    /// this bar the digest trusted `op.actor` off the wire; the signature is
+    /// the only field a writer cannot forge for somebody else.
+    #[test]
+    fn a_forged_seal_does_not_raise_the_floor() {
+        let held = vec![
+            op(1, 0, 10),
+            op(1, 1, 11),
+            op(1, 2, 12),
+            spoofed(9, 1, 5, 15, RailAct::Seal),
+        ];
+        assert_eq!(
+            digest_of(&held),
+            Digest::from([(actor(1), 2)]),
+            "the forged seal retires nothing and the mark stops at what is real"
+        );
+        let peer_has: Vec<_> = (0..=5).map(|s| op(1, s, 10 + s as i64)).collect();
+        assert_eq!(
+            ops_missing_from(&peer_has, &digest_of(&held))
+                .iter()
+                .map(|o| o.kind.seq)
+                .collect::<Vec<_>>(),
+            vec![3, 4, 5],
+            "the real ops the forgery tried to retire still come back"
+        );
+    }
+
+    /// The same hole one step down the ratchet: a forged record at the next
+    /// contiguous seq extends the mark, and the real op at that seq is never
+    /// requested — one silent lost op per pushed line.
+    #[test]
+    fn a_forged_record_does_not_extend_the_mark() {
+        let held = vec![
+            op(1, 0, 10),
+            op(1, 1, 11),
+            op(1, 2, 12),
+            spoofed(9, 1, 3, 13, record("evil")),
+        ];
+        assert_eq!(digest_of(&held), Digest::from([(actor(1), 2)]));
+    }
+
+    /// **A voided seal retires nothing.** `Correct` voids without erasure and
+    /// the void set is commutative — but the floor was computed before the
+    /// void set saw the light, so a seal the log itself calls wrong kept
+    /// suppressing its author's holes. Seq 1 is missing here and must come
+    /// back precisely because the seal that claimed to retire it is voided.
+    #[test]
+    fn a_voided_seal_retires_nothing() {
+        let seal = seal(1, 2, 102);
+        let held = vec![
+            op(1, 0, 10),
+            seal.clone(),
+            signed(
+                &key(1),
+                103,
+                3,
+                RailAct::Correct {
+                    corrects: seal.id.clone(),
+                    replacement: None,
+                },
+            ),
+        ];
+        assert_eq!(
+            digest_of(&held),
+            Digest::from([(actor(1), 0)]),
+            "no floor, and the hole at seq 1 lowers the mark"
         );
     }
 
@@ -474,15 +600,15 @@ mod tests {
         let mut peer: Vec<Op<SignedOp>> = Vec::new();
         let mut rounds = 0;
         loop {
-            let (chunk, more) = ops_missing_from_within(&held, &digest(&peer), budget);
+            let (chunk, more) = ops_missing_from_within(&held, &digest_of(&peer), budget);
             if chunk.is_empty() {
                 assert!(!more, "nothing to send cannot also mean more remains");
                 break;
             }
-            let before = digest(&peer);
+            let before = digest_of(&peer);
             peer.extend(chunk);
             assert_ne!(
-                digest(&peer),
+                digest_of(&peer),
                 before,
                 "round {rounds} sent a chunk that moved nothing — this is the spin"
             );
@@ -490,7 +616,7 @@ mod tests {
             assert!(rounds <= 40, "a 40-op journal must not need 40+ rounds");
         }
         assert_eq!(peer.len(), 40, "converged, in {rounds} rounds");
-        assert_eq!(digest(&peer), digest(&held), "two nodes, one claim");
+        assert_eq!(digest_of(&peer), digest_of(&held), "two nodes, one claim");
         assert!(rounds > 1, "the control: this budget really did chunk");
     }
 }

@@ -104,7 +104,7 @@ pub async fn ring_checkpoint(
         "ns": namespace,
         "created_unix": commonwealth_core::clock::unix_now_secs(),
         "roster": roster,
-        "digest": commonwealth_rail::digest(&ops),
+        "digest": commonwealth_rail::digest(&ops, &namespace, &commonwealth_rail::Ed25519Verifier),
         "ops": lines,
     }))
     .into_response()
