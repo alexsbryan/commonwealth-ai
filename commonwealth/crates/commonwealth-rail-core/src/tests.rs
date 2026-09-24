@@ -302,6 +302,104 @@ fn a_voided_op_is_still_visible_but_is_never_applied() {
 
 // ── lines this build cannot read ─────────────────────────────
 
+/// **A dangling correction is named beside a complete answer.** One typo'd
+/// `Correct` citing an op nobody holds must not flip every node's
+/// completeness bit forever (ROOT_CAUSE_FIXES A2): nothing is hidden from
+/// the fold — the record cites what nobody here can resolve, and that is a
+/// contradiction to name, not an absence to carry. It heals when the cited
+/// op arrives; until then the answer is complete and contested.
+#[test]
+fn a_dangling_correction_is_named_beside_a_complete_answer() {
+    let target = OpId::from_raw("nosuchop");
+    let f = admitted(&[
+        signed(&key(1), 100, 0, record("fine")),
+        signed(
+            &key(1),
+            101,
+            1,
+            RailAct::Correct {
+                corrects: target,
+                replacement: None,
+            },
+        ),
+    ]);
+    assert!(
+        f.is_complete(),
+        "a citation nobody can resolve hides no data: {:?}",
+        f.gaps
+    );
+    assert!(
+        f.gaps
+            .iter()
+            .any(|g| matches!(g, RailGap::DanglingCorrection { .. })),
+        "and the contradiction is named: {:?}",
+        f.gaps
+    );
+}
+
+/// **Every gap kind has a named verdict.** One classification table (ARCH
+/// §10.6), split by coverage: can this gap hide acts that belong in the
+/// fold? A refused or forked act CAN — it may be real data the fold turned
+/// away (the pinned "an unverifiable op makes this a subset"). A tampered id
+/// cannot ("this changes no outcome" — the act folds under its derived id),
+/// and a dangling citation cannot (it is the ask, not a hole). The A2
+/// pre-registration's parenthetical grouped fork and tamper with dangling;
+/// fork stays Absence here because dropping both branches loses the seq's
+/// real content — the coverage question is the one `is_complete` answers.
+#[test]
+fn every_gap_class_is_classified() {
+    let actor = actor_of(&key(1));
+    let id = OpId::from_raw("ring-000000000000");
+    let absences = [
+        RailGap::MalformedLine {
+            line: 1,
+            error: "torn".into(),
+        },
+        RailGap::NewerVersionLine { line: 2, v: 2 },
+        RailGap::BadSignature {
+            id: id.clone(),
+            actor: actor.clone(),
+        },
+        RailGap::UnknownSigner {
+            id: id.clone(),
+            actor: actor.clone(),
+        },
+        RailGap::SequenceFork {
+            actor: actor.clone(),
+            seq: 3,
+            ids: vec![id.clone()],
+        },
+        RailGap::SequenceHole {
+            actor: actor.clone(),
+            missing: 4,
+        },
+    ];
+    for gap in &absences {
+        assert_eq!(
+            gap.class(),
+            GapClass::Absence,
+            "{gap:?} can hide acts that belong in the fold"
+        );
+    }
+    let contradictions = [
+        RailGap::TamperedId {
+            claimed: id.clone(),
+            derived: id.clone(),
+        },
+        RailGap::DanglingCorrection {
+            by: id.clone(),
+            missing: id.clone(),
+        },
+    ];
+    for gap in &contradictions {
+        assert_eq!(
+            gap.class(),
+            GapClass::Contradiction,
+            "{gap:?} hides nothing — a claim the record makes"
+        );
+    }
+}
+
 /// **An un-upgraded node must say its answer covers a subset.** A
 /// newer-format line it cannot read becomes a gap; admitting the rest and
 /// reporting it bare is the §18.3 failure.

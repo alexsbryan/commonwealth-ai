@@ -155,7 +155,12 @@ fn refusal(step: &str, why: &str) -> String {
 }
 
 /// Whether this gap means the document carries an inauthentic or forked act
-/// (`Some`, the refusal's why) or merely an incomplete one (`None`, rendered).
+/// (`Some`, the refusal's why) or merely an incomplete or contested one
+/// (`None`, rendered). A document-level POLICY over gap kinds — the four
+/// whose acts cannot stand beside any fold — while `RailGap::class()`
+/// answers the fold's own question (can this gap hide acts). Explicit arms,
+/// no catch-all: a new gap kind must make this decision again, not inherit
+/// a default (ARCH §18.3).
 fn authenticity_refusal(gap: &RailGap, ops: &[Op<SignedOp>]) -> Option<String> {
     match gap {
         RailGap::BadSignature { actor, .. } => {
@@ -174,7 +179,10 @@ fn authenticity_refusal(gap: &RailGap, ops: &[Op<SignedOp>]) -> Option<String> {
         RailGap::SequenceFork { actor, seq, .. } => Some(format!(
             "actor {actor} used one sequence number twice (#{seq}) — the document forks"
         )),
-        _ => None,
+        RailGap::MalformedLine { .. }
+        | RailGap::NewerVersionLine { .. }
+        | RailGap::SequenceHole { .. }
+        | RailGap::DanglingCorrection { .. } => None,
     }
 }
 

@@ -111,13 +111,61 @@ pub enum RailGap {
         seq: u64,
         ids: Vec<OpId>,
     },
-    /// A correction naming an op we do not hold. Harmless to the order (the
-    /// void is recorded and applies the moment the target arrives), but it
-    /// means we are missing an op that may itself carry something.
+    /// A correction naming an op we do not hold. The correction itself folds;
+    /// its citation resolves to nothing here. Harmless to the order (the void
+    /// is recorded and applies the moment the target arrives), and it hides
+    /// no act from the fold — if the target is real and missing, its author's
+    /// run reports the [`SequenceHole`], and if that author is wholly absent
+    /// this gap names the exact op to ask for. It is the ask, not silence,
+    /// and a typo'd citation must not flip every node's completeness bit
+    /// forever (ROOT_CAUSE_FIXES A2).
     DanglingCorrection { by: OpId, missing: OpId },
 }
 
+/// What a gap means for the fold's answer — the one classification (ARCH
+/// §10.6), asked the question `is_complete` exists to answer: **can this gap
+/// be hiding acts that belong in the fold?**
+///
+/// The line matters more than it looks: a refusal is a refusal, never an
+/// absence (ARCH §18.3), and an absence is never silence — but "the fold is
+/// missing data" and "the record contradicts itself" are different facts and
+/// one typo'd [`Correct`](crate::RailAct::Correct) used to masquerade as the
+/// former forever. The split is by coverage, not by scariness: a forged or
+/// forked act is Absence precisely because it may be REAL data the fold
+/// refused (the acts are real but they are a subset), while a tampered id or
+/// a dangling citation is Contradiction because every act that could be
+/// folded is folded — the gap is a fact about a claim the record makes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GapClass {
+    /// The fold may lack acts that belong in it — an unreadable line, a
+    /// refused or unattributable act (which may be real), a forked-out seq,
+    /// a seq that never arrived. [`Admission::is_complete`] is false exactly
+    /// on these.
+    Absence,
+    /// Every act that could be folded is folded: the gap is a claim the
+    /// record makes that nothing here can stand behind — an id its content
+    /// does not derive, or a correction citing an op nobody holds. Named
+    /// beside a complete answer.
+    Contradiction,
+}
+
 impl RailGap {
+    /// The one classification of what a gap means (ARCH §10.6). Consumers
+    /// ask their own question of it — completeness is `class() ==
+    /// Absence`; `ring checkpoint --verify` refuses a document on the gaps
+    /// whose acts cannot stand — but there is one answer per kind here.
+    pub fn class(&self) -> GapClass {
+        match self {
+            Self::MalformedLine { .. }
+            | Self::NewerVersionLine { .. }
+            | Self::BadSignature { .. }
+            | Self::UnknownSigner { .. }
+            | Self::SequenceFork { .. }
+            | Self::SequenceHole { .. } => GapClass::Absence,
+            Self::TamperedId { .. } | Self::DanglingCorrection { .. } => GapClass::Contradiction,
+        }
+    }
+
     /// Shorten an op id for a sentence. The full 22 characters are in the
     /// JSON; a person reading a line needs enough to match it, not all of it.
     fn short(id: &OpId) -> String {
@@ -266,10 +314,14 @@ pub struct Admission {
 }
 
 impl Admission {
-    /// Whether this answer covers everything we know about. A `false` here is
-    /// the signal a UI must not hide: the acts are real but they are a subset.
+    /// Whether this answer covers every act that could be in it. `false` is
+    /// the signal a UI must not hide: the acts are real but they are a
+    /// subset — a gap of [`GapClass::Absence`] can be hiding acts that
+    /// belong in the fold. [`GapClass::Contradiction`] gaps do not flip it:
+    /// they are named beside a complete answer (a tampered id changes no
+    /// outcome; a dangling citation is the ask, not a hole).
     pub fn is_complete(&self) -> bool {
-        self.gaps.is_empty()
+        !self.gaps.iter().any(|g| g.class() == GapClass::Absence)
     }
 
     /// The ops an app's reducer should apply, in order. The one definition
