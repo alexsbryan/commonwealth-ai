@@ -1192,6 +1192,15 @@ crates = [
     "sovereign-cli-shared",
     "sovereign-cli-daemon",
     "sovereign-cli-llm",
+    # The Runtime commissioning recipe (TOPOLOGY phase 5c): ONE recipe fills
+    # `RuntimeParts` for every host that commissions a Runtime (svrn chat, the
+    # daemon; the desktop left at svt-3). Here since fp-4 (2026-09-23, §12
+    # decision 5): the assembly is svrn's own lifetime — it was claimed by
+    # [ingest] for its enrichment lane, but that lane is the turn's retrieval
+    # enrichment, and the atlas WRITERS stayed in ingest. The
+    # `corpus-engine`/`sovereign-gliner` edges turned red with the move and are
+    # the burn-down's to close.
+    "sovereign-runtime-recipe",
     # The workflow runner + its HTTP router, claimed 2026-09-21. Its consumers
     # are cli-llm's `workflow` verb, the daemon's trigger and cli-daemon's
     # route mount; `sovereign-studio`/`sovereign-desktop` name it too and are
@@ -1219,15 +1228,20 @@ doc = "docs/FIVE_PROGRAMS.md"
 # build` orchestrates, `-catalog` is the store layout) is the same argument:
 # these are atlas WRITERS.
 #
-# `sovereign-gliner` (entity extraction) and `sovereign-runtime-recipe` (the
-# daemon-side recipe runner) are here for what they do, and both reach `svrn`
-# crates today — two red lines that say the ingest work is still running inside
-# the knowledge server's process.
+# `sovereign-gliner` (entity extraction) is here for what it does, and is
+# clean today: leaves (`sovereign-contracts`, `sovereign-time`,
+# `corpus-index`) plus `corpus-engine`, a member.
+#
+# `sovereign-runtime-recipe` LEFT for [svrn] (fp-4, 2026-09-23, §12 decision 5):
+# the crate was claimed here for its enrichment lane, but that lane is the
+# TURN's retrieval enrichment — the Runtime's own lifetime, not the ingest
+# pipeline — and its red [ingest]→[svrn] lines said so. The ingest lane the
+# decision keeps in this package is the atlas WRITERS above
+# (enrichment-build/-catalog), which never were that crate's code.
 crates = [
     "corpus-engine",
     "sovereign-pipeline",
     "sovereign-recipe-author",
-    "sovereign-runtime-recipe",
     "sovereign-gliner",
     "sovereign-enrichment-build",
     "sovereign-enrichment-catalog",
