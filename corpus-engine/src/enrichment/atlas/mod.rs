@@ -50,7 +50,7 @@ pub mod registry;
 pub mod resolution;
 pub mod resolution_identity;
 pub mod resolution_ontology;
-pub mod resolve;
+pub use corpus_engine_atlas_reader::resolve;
 pub mod schema_validation;
 pub mod seed_population;
 pub use understanding_vocab::stable_key;

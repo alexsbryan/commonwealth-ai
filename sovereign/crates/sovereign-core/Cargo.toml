@@ -24,6 +24,7 @@ sovereign-time = { workspace = true }
 # strings here are tool-name literals in intent_policy + dossier;
 # no source-level dependency on the gated APIs.
 corpus-engine = { workspace = true }
+corpus-engine-atlas-reader = { workspace = true }
 # The retrieval read-port leaf — ScoredChunk/IndexInfo/types+index, no engine.
 corpus-index = { workspace = true }
 oplog = { workspace = true }

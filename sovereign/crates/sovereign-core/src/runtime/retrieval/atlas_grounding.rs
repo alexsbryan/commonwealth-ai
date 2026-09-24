@@ -386,7 +386,7 @@ impl Runtime {
             corpus_ceiling,
             lane,
         };
-        let (fetched, resolve) = corpus_engine::enrichment::atlas::resolve::resolve_evidence(
+        let (fetched, resolve) = corpus_engine_atlas_reader::resolve::resolve_evidence(
             &grounding.requests,
             grounding.budget,
             enabled_corpora,
@@ -498,7 +498,7 @@ struct RuntimeEvidenceFetcher<'a> {
     lane: &'a crate::runtime::Lane,
 }
 
-impl corpus_engine::enrichment::atlas::resolve::EvidenceFetcher for RuntimeEvidenceFetcher<'_> {
+impl corpus_engine_atlas_reader::resolve::EvidenceFetcher for RuntimeEvidenceFetcher<'_> {
     async fn by_row(
         &self,
         corpus: &kernel_types::CorpusId,

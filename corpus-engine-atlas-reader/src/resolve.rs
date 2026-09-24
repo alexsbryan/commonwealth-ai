@@ -2,7 +2,7 @@
 //! The resolve step — evidence requests into cited chunks.
 //!
 //! The second half of `EPISTEMIC_INDEX.md` §1's Walk row: "`ground(...)` ->
-//! evidence requests, then resolve to chunks". [`super::ground`] decides
+//! evidence requests, then resolve to chunks". [`crate::ground`] decides
 //! WHICH ideas the question reaches; this file decides which of their
 //! evidence anchors actually become passages, and why the rest did not.
 //!
@@ -18,10 +18,10 @@ use std::collections::HashSet;
 
 use kernel_types::CorpusId;
 
-use crate::types::ScoredChunk;
+use corpus_index::types::ScoredChunk;
 
-use super::context::ChunkRequest;
-use super::evidence_site::ChunkSelector;
+use crate::context::ChunkRequest;
+use crate::evidence_site::ChunkSelector;
 
 // ═══════════════════════════════════════════════════════════════════════
 // The resolve step
@@ -410,12 +410,12 @@ mod tests {
             chunk_id: Some(id),
             source_doc_id: None,
             vector_distance: None,
-            provenance: crate::index::ChunkProvenance::off_the_wire(),
+            provenance: corpus_index::index::ChunkProvenance::off_the_wire(),
         };
         assert_eq!(dedup_key(&mk(1)), dedup_key(&mk(999)));
     }
 
-    use super::super::evidence_site::EvidenceSite;
+    use crate::evidence_site::EvidenceSite;
     use kernel_types::CorpusId;
 
     fn mk_chunk(id: u64, body: &str) -> ScoredChunk {
@@ -429,7 +429,7 @@ mod tests {
             chunk_id: Some(id),
             source_doc_id: None,
             vector_distance: None,
-            provenance: crate::index::ChunkProvenance::acquired_from_estate("c"),
+            provenance: corpus_index::index::ChunkProvenance::acquired_from_estate("c"),
         }
     }
 

@@ -40,6 +40,7 @@ pub mod provider;
 pub mod question_kind;
 pub mod raptor_read;
 pub mod raw;
+pub mod resolve;
 pub mod section_cache;
 pub mod store;
 pub mod summary;
