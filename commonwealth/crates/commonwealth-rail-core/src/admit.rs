@@ -59,7 +59,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use oplog::{Op, OpId};
+use oplog_types::{Op, OpId};
 
 use crate::payload::Payload;
 use crate::{Person, RailAct, RingVerifier, Roster, SignedOp};
@@ -77,7 +77,7 @@ use crate::{Person, RailAct, RingVerifier, Roster, SignedOp};
 #[serde(tag = "gap", rename_all = "snake_case")]
 pub enum RailGap {
     /// A journal line this build could not parse. From
-    /// [`SkippedLine::Malformed`](oplog::SkippedLine) — a torn
+    /// [`SkippedLine::Malformed`](oplog_types::SkippedLine) — a torn
     /// write, or a payload that has no canonical form (see
     /// [`Payload`](crate::Payload)).
     MalformedLine { line: u64, error: String },
@@ -359,12 +359,12 @@ struct Candidate<'a> {
 /// one.
 pub fn admit(
     ops: &[Op<SignedOp>],
-    skipped: &[oplog::SkippedLine],
+    skipped: &[oplog_types::SkippedLine],
     roster: &Roster,
     namespace: &str,
     verifier: &dyn RingVerifier,
 ) -> Admission {
-    use oplog::SkippedLine;
+    use oplog_types::SkippedLine;
 
     let mut gaps: Vec<RailGap> = skipped
         .iter()

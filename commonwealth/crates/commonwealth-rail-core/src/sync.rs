@@ -64,7 +64,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use oplog::{Op, OpId};
+use oplog_types::{Op, OpId};
 
 use crate::{Digest, RailAct, RingVerifier, SignedOp, View};
 

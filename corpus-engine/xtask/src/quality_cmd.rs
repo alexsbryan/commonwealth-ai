@@ -27,7 +27,7 @@
 
 use crate::{
     arch_gate, boundary_gate, clock_gate, concept_gate, docs_gate, env_gate, instrument_gate,
-    judge_funnel_gate, layer_gate, layout_gate, lifecycle_gate, lock_gate,
+    judge_funnel_gate, layer_gate, layout_gate, lifecycle_gate, lock_gate, purity_gate,
 };
 
 /// Whether a gate's verdict may fail this command.
@@ -76,6 +76,9 @@ pub fn run() -> i32 {
         // indexed commit.
         ("clock-gate", Enforcement::Hard, &|| {
             clock_gate::run(&no_args)
+        }),
+        ("purity-gate", Enforcement::Hard, &|| {
+            purity_gate::run(&no_args)
         }),
         // Hard, and it reads the working tree: HALF TWO of sv-surface's
         // `sv-no-daemon-management` bar (`layer-gate`'s [thin_surfaces] pass is

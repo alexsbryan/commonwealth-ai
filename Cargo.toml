@@ -26,6 +26,7 @@ members = [
     # seven references into it. Tier-0 because op ids are GOSSIPED, so the one
     # content-hash derivation must sit below everyone who writes a log.
     "oplog",
+    "oplog-types",
 
     # Knowledge layer (LanceDB + Tantivy + extractors + chunkers).
     "corpus-engine",
@@ -315,6 +316,7 @@ oicp-types = { path = "oicp-types" }
 kernel-types = { path = "kernel-types" }
 serving-policy = { path = "serving-policy" }
 oplog = { path = "oplog" }
+oplog-types = { path = "oplog-types" }
 corpus-engine = { path = "corpus-engine" }
 corpus-engine-scip = { path = "corpus-engine-scip" }
 corpus-engine-atos = { path = "corpus-engine-atos" }

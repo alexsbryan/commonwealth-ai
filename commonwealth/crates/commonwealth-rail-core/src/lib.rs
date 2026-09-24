@@ -103,7 +103,7 @@ pub use view::{Digest, View, DIGEST_V};
 /// (`commonwealth-api/src/routes_internal/ring_sync.rs`,
 /// `sovereign-mesh/src/ring_sync.rs`), and a caller that had to name `oplog`
 /// separately would be free to reach a different version of it.
-pub use oplog::{Journaled, Op, OpId, SkippedLine};
+pub use oplog_types::{Journaled, Op, OpId, SkippedLine};
 
 // A consumer cannot use this crate without both of these, and until 2026-09-04
 // neither was exported — so the only shipped `RingSigner` impl was for a type

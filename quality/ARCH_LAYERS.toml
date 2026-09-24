@@ -515,6 +515,16 @@ from = "oplog"
 to = "commonwealth-*"
 reason = "same rule pointing the other way — corpus-engine's three tenants write this journal too, so a mesh dependency would make the knowledge layer link the mesh to append a line"
 
+# ROOT_CAUSE_FIXES B4 (2026-09-23): the zero-I/O half. This row is the EDGE
+# leg of the claim "the fold links no filesystem code at all"; what an edge
+# rule cannot see — std::fs behind an allowed edge — is `purity-gate`'s
+# source census and wasm32 leg. Together with the type/writer split
+# (`oplog-types` is pure; `oplog` is the fs writer).
+[[forbid]]
+from = "commonwealth-rail-core"
+to = "oplog"
+reason = "the canon links no filesystem code at all: `oplog-types` is the pure envelope and `oplog` is the fs writer — a dependency back is the zero-I/O claim dying silently (purity-gate watches the rest)"
+
 # The ring rail, split out of commonwealth-knowledge on 2026-09-04 (cw-lift
 # 1b). Each rule is TWO ROWS, `commonwealth-rail` and `commonwealth-rail-core`
 # named explicitly, so the fold and the journal cannot drift apart on what they

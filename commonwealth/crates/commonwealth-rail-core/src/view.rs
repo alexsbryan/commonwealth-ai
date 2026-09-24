@@ -20,7 +20,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use kernel_types::ContentHash;
-use oplog::Op;
+use oplog_types::Op;
 use serde::{Deserialize, Serialize};
 
 use crate::SignedOp;

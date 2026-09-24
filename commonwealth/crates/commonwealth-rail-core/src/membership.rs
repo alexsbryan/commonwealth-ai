@@ -37,7 +37,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use oplog::Op;
+use oplog_types::Op;
 
 use crate::admit::derived_id;
 use crate::{OpId, Person, RailAct, Roster, SignedOp};
