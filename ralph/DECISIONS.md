@@ -460,6 +460,11 @@ merged; that merge is what minted this arrangement, and `ledger-1` records it.
 - Chose: park fp-10 behind a new operator row, HUMAN-fp10-serving-host, placed last with three options and a recommendation (keep by `[[exception]]` until Phase B is minted). Same shape as five-programs-21 (fp-9). No code changed. Boundary gate FAILED at 62 violations (package run at ba832a97d, both daemon→inference/compute edges red).
 - Because: every arm that closes the edges is the operator's under the charter — a new serving binary reverses D2's "do not build a new binary" and is Phase B, not a row; an `[[exception]]` row is reserved; doing the row literally makes every inference route on a stock install report absence, an end-user behaviour change. The loop keeps moving: fp-14, fp-42 and fp-47 are dep-ready.
 
+**five-programs-23 · 2026-09-24 · REVIEW-mint-fp-cli-llm-split (neither half prices below 0) · director** — this commit
+- Needed: the mint worker measured both split halves and halted at the cap: driving either half below 0 needs at least 18 rows against a cap of 8, and most of them are leaf admissions.
+- Chose: close the row by its own exit clause ("a half whose reach cannot fall below 0 stays in cli-llm with its edges named in the appendix"). No rows minted and no code changed. The row's eight appendix edges become NEEDS-OPERATOR lines. The chat-dial residue row is not minted because its premise is already spent. Boundary gate FAILED at 62 violations (reproduced at a8bc46f14, EXIT=1).
+- Because: five-programs-11 already rules that a split is minted only when its priced delta is below 0. The census prices bench at +12 and ingest at ≥+5. Every arm that lowers those numbers is the operator's call: a leaf home for `cli_shared::help` / `core::setup_config` (§12 3a), bench dialling the daemon for its whole turn (§9, a drive rewrite), or dialling local GGUF loads (a behaviour change).
+
 ## Flags for the operator
 
 - A26: REVIEW-DEMO-rr-1-run will very likely FAIL `ra-room-plug-in-live` again on this host. The bar's window is 60 s, and the CPU 2B took about 1–5 min per answer in this run (room-answer-0..4.json mtimes 19:33→19:49). Passing it takes a faster node or model for the room, or a different bar. Both are design changes for the operator, not tuning.
@@ -8614,5 +8619,21 @@ Package: ctl/NEEDS_HUMAN.resolved-fp10-20260924.md. Reproduced at ba832a97d:
 Why I did not decide: (a) a new cmnwlth serving binary reverses D2's text and is a phase; (b) is an `[[exception]]` row; (c) re-homing the daemon's serving half is a placement move of phase size. A literal stub dial is forbidden by §11 ("do not fake") and changes every chat answer. Recommendation (b) is written on the HUMAN row.
 
 Falsified if a census finds a process other than the svrn daemon (or a sovereign CLI) already constructing an engine that a cmnwlth-package binary could expose — then (a) is an extension, not a new binary, and parking was unnecessary — or if ARCH_LAYERS gains a sovereign-inference except on the cw-rails forbid.
+
+</details>
+
+## five-programs-23 · 2026-09-24 — cli-llm split closed with no rows; its edges go to the operator
+
+<details><summary>reasoning, evidence, package</summary>
+
+Package: ctl/NEEDS_HUMAN.resolved-fpclillm-20260924.md. Reproduced at a8bc46f14:
+
+- `cargo xtask boundary-gate` (toolbox, corpus-engine/) → FAILED (62), EXIT=1.
+- `python3 target/ralph/five-programs/split_reach.py bench`: core 204 refs / 44 files, eval 58, cli_shared 56 / 35, tools 36, corpus_engine 28, inference 21, gliner 10, corpus_index 9, turn_client 5, store 4. Refs leaving the group: crate::chat_cmd 32 / 15 files, enrich_cmd 11. `… ingest`: corpus_engine 265 / 70, cli_shared 125 / 66, core 91 / 41, tools 65, corpus_index 45, enrichment_build 25, workflow_host 20, pods 19, mesh 11. These match the package's figures.
+- `grep -rhoE 'sovereign_inference::[a-z_]+' sovereign-cli-llm/src`: remote 25, embedded 2, reranker_standalone 1. sovereign-inference/src/lib.rs:26-28 is `pub mod remote { pub use oicp_client::*; }`. EmbedOnlyProvider::load is called at router_cache_cmd.rs:231 and router_fit_cmd.rs:403, and StandaloneReranker::load at inner_chaos/recall.rs:752. The package said "28 of 31". The unit differs (grep occurrences vs gate refs), but the shape is the same.
+
+Why I did not mint: a repoint row for the 25 `::remote` refs leaves the edge red while the 3 loads stay, so it yields nothing, and the charter rules out adding scope. A split row that nets positive is what five-programs-11 forbids. Why I did not decide the package's questions 2-4: each one either admits a leaf (charter: operator) or changes which model produces vectors or how bench drives a turn (end-user-observable). The questions stand in the package with their options.
+
+Falsified if a census finds an existing leaf that already exports the help/setup_config vocabulary (a repoint, not an admission), or if bench's in-process turn reach turns out smaller than 15 files once chat_cmd::bootstrap is counted, so that one dial row prices the bench half below 0.
 
 </details>
