@@ -2598,3 +2598,85 @@ More than one definition:
   contracts +1371). Not re-pinned.
 - **deletion-manifest (advisory)** · `p0-root-junk` GREW 113934 → 133537;
   foreign to the campaign, as in auto-1..3.
+
+## REVIEW-audit-fp-auto-5 (2026-09-24, range 5ed108bca..8d04851ad — the previous audit's hash)
+
+Range: 15 commits, 8 of them product code: fp-61 (atlas resolve step into
+the reader leaf), fp-62 (WikipediaGraphApi + Neighbor/ArticleRecord into the
+leaf), fp-63 (MetaAtlasIndex read half into the leaf), fp-64 (CorpusReadPort
+minted in corpus-index, BuiltinCorpus moved there), fp-65 (sovereign-core's
+engine handles retyped to `Arc<dyn CorpusReadPort>`). Every unit reports
+BOUNDARY 62 → 62, delta 0 as its row expected. Checks, all in the
+sovereign-vulkan toolbox: TESTALL exit=0, 13,341 pass / 0 fail (build 205 s,
+tests ~149 s); PREPUSH range-fed (remote sha = 5ed108bca): 1 blocking lane =
+boundary-gate 62 violation(s), the declared burn-down state; size-gate and
+deletion-manifest advisory; concept-gate could-not-judge; every other lane
+passed; LINT exit=0 (arch-gate ✓). A first TESTALL from the host exited 101
+on `linker clang not found` / `stdbool.h` — the host posture, not the tree.
+
+### (1) Per-unit net-line ledger, product code (`.rs` + `Cargo.toml`, src apart from tests)
+
+| unit | src + | src − | src net | tests + | tests − | tests net |
+|---|---|---|---|---|---|---|
+| fp-64 | 89 | 31 | +58 | 0 | 0 | +0 |
+| fp-63 | 91 | 65 | +26 | 0 | 0 | +0 |
+| fp-62 | 79 | 72 | +7 | 0 | 0 | +0 |
+| fp-61 | 16 | 13 | +3 | 0 | 0 | +0 |
+| fp-65 | 12 | 12 | +0 | 1 | 1 | +0 |
+| TOTAL | 287 | 193 | +94 | 1 | 1 | +0 |
+
+fp-64's +58 is the new port (25 lines of trait in `corpus-index/src/source.rs`,
+28 of delegating impl in `corpus-engine/src/engine/mod.rs:4277`); the rest is
+moved code plus re-export lines at the historical paths.
+
+### (2) Clone check — instrument could-not-judge
+
+`code dry-report --scope <dir> --corpus-id commonwealth-ai` refuses for
+corpus-index and corpus-engine-atlas-reader: no chunk index at
+`~/.svrnmesh/indexes/commonwealth-ai/chunks.lance`. Substitution: a read of
+every moved body with `git diff -M`. The moves are verbatim apart from path
+rewrites (`crate::` → `corpus_index::` / `understanding_vocab::`), and every
+donor body is deleted, replaced by a `pub use` at the old path. No twin.
+fp-65's one behavioural-looking edit, `engine.registry().list_entries()` →
+`engine.builtin_corpora()` (`sovereign-core/src/runtime/acquisition.rs:361`),
+is row-for-row the same: `builtin_corpora` is `registry.catalog()`, which maps
+`list_entries()` field by field (`corpus-engine/src/registry.rs:311-326`), and
+the caller reads id/name/description/catalog_status, all four carried.
+
+### (3) Noun check — 10 nouns the range defines or moves
+
+`code converge noun` answers from a stale graph (0 users for
+`CorpusReadPort`); a word-bounded `git grep` of `struct|enum|trait|type <Name>`
+is the data. Every noun has exactly one definition: MetaAtom, Anchor,
+AtlasSeen, MetaAtlasFile (`corpus-engine-atlas-reader/src/meta_atlas/mod.rs:22,
+32,48,56`), MetaAtlasIndex (`meta_atlas/index.rs:23`), Neighbor, ArticleRecord,
+WikipediaGraphApi (`wikipedia_graph.rs:12,33,56`), CorpusReadPort
+(`corpus-index/src/source.rs:27`), BuiltinCorpus (`corpus-index/src/types.rs:266`).
+
+### Findings, fixed
+
+None needed a fix in this audit's commit.
+
+### Recorded, not changed
+
+- **ARCH 4 (commit body ahead of its diff), repaired in-range** · b36390f5f
+  is a bare rename (1 file, 0 insertions) whose message describes path edits
+  and a green TEST it could not have built alone; bea827cf1 ("the path edits
+  b36390f5f's message describes") landed them. History is not rewritten; the
+  pair reads correctly together.
+- **ARCH 3/4 (stale plan paths)** · `quality/DOMAINS.toml:4067,4208` still
+  list `corpus-engine/src/enrichment/atlas/resolve.rs` and
+  `corpus-engine/src/meta_atlas/index.rs`, and `:4022` names
+  `meta_atlas/index.rs` as a corpus-engine host file; fp-61 and fp-63 moved
+  both into the reader leaf. The file was already stale for the Phase A moves
+  (`ground.rs`, `inventory.rs` at `:4059,4061` no longer exist in
+  corpus-engine), so it reads as the pre-carve plan, not a live map; no gate
+  reads these paths (TESTALL and PREPUSH green). Refreshing it is one pass
+  for its owner, not a per-row edit.
+- **Instruments, could-not-judge** · dry-report has no chunk index;
+  converge-noun reads a stale graph. Rebuild is
+  `svrn project refresh --name commonwealth-ai --local`.
+- **size-gate (advisory)** · 43 keys grew, as at auto-4; the leaf moved
+  `corpus-engine-atlas-reader` 7023 → 7503 with this range's moves. Not re-pinned.
+- **deletion-manifest (advisory)** · `p0-root-junk` 133537 > 113934, unchanged
+  since auto-4, foreign to the campaign.
