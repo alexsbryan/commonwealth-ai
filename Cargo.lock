@@ -1971,6 +1971,7 @@ dependencies = [
  "commonwealth-core",
  "commonwealth-transport",
  "hex",
+ "kernel-types",
  "reqwest 0.12.28",
  "serde",
  "serde_json",
