@@ -35,6 +35,7 @@ pub mod governance_view;
 pub mod ground;
 pub mod inventory;
 pub mod linalg;
+pub mod meta_atlas;
 pub mod projection;
 pub mod provider;
 pub mod question_kind;

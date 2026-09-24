@@ -12,9 +12,9 @@ use std::collections::{BTreeSet, HashMap};
 use std::path::Path;
 use std::sync::Arc;
 
-use crate::atlas_canonical::lookup_key;
+use understanding_vocab::canonical::lookup_key;
 
-use super::builder::{Anchor, MetaAtlasFile, MetaAtom};
+use super::{Anchor, MetaAtlasFile, MetaAtom};
 use super::{default_meta_atlas_path, read_meta_atlas};
 
 /// Read-only lookup wrapper. Keyed by normalised canonical key with
@@ -110,7 +110,7 @@ impl MetaAtlasIndex {
     }
 
     /// Look up by a raw surface form. Normalises via
-    /// [`crate::atlas_canonical::lookup_key`].
+    /// [`understanding_vocab::canonical::lookup_key`].
     ///
     /// Move 5.1: for single-word surface forms (e.g. "Einstein") the
     /// lookup fans out across all canonical_keys whose token-split
@@ -258,7 +258,7 @@ impl MetaAtlasIndex {
     /// "best Trace anchor", and injects up to three chunks.
     pub fn top_anchor_for_axis(
         atom: &MetaAtom,
-        axis: crate::stream_axes::Articulation,
+        axis: understanding_vocab::articulation::Articulation,
         min_weight: f32,
     ) -> Option<&Anchor> {
         atom.anchors
@@ -277,9 +277,10 @@ impl MetaAtlasIndex {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::enrichment::atlas::{AtomId, ChunkRef};
-    use crate::meta_atlas::builder::{Anchor, MetaAtom};
-    use crate::stream_axes::{Articulation, ArticulationVector, Stability};
+    use understanding_vocab::atoms::{AtomId, ChunkRef};
+    use crate::meta_atlas::{Anchor, MetaAtom};
+    use corpus_index::stream_axes::Stability;
+    use understanding_vocab::articulation::{Articulation, ArticulationVector};
     use std::collections::BTreeSet;
 
     fn anchor(corpus: &str, art: ArticulationVector, salience: f32) -> Anchor {
