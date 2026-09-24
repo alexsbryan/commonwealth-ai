@@ -18,8 +18,8 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
-use corpus_engine::enrichment::atlas::{AtomEnvelope, AtomId, ChunkRef};
-use corpus_engine::enrichment::investigation::graph::{
+use understanding_vocab::atoms::{AtomEnvelope, AtomId, ChunkRef};
+use corpus_engine_atlas_reader::investigation_graph::{
     read_outputs as read_investigation_graph, ExtractionExcerpt as InvEvidence,
     InvestigationEntity as InvEntity, PatternFinding, PatternKind, Relationship as InvRelationship,
     INVESTIGATION_DIRNAME,
@@ -184,7 +184,7 @@ fn load_atlas_as_investigation(
     index_path: &Path,
 ) -> Result<(Vec<InvEntity>, Vec<InvRelationship>, Vec<PatternFinding>), MeshAppError> {
     let atlas_dir = index_path.join("atlas");
-    let file = corpus_engine::enrichment::atlas::read_atlas_atoms(&atlas_dir)
+    let file = understanding_vocab::read::read_atlas_atoms(&atlas_dir)
         .map_err(|e| MeshAppError::io("read atoms", e))?;
     let sec_to_chunk = read_chapter_chunk_map(index_path)?;
     let recon = read_reconciliation_index(&atlas_dir);
@@ -552,7 +552,7 @@ pub fn load_claims(index_path: &Path, limit: usize) -> Result<Vec<ClaimDto>, Mes
     if !atlas_dir.is_dir() {
         return Ok(Vec::new());
     }
-    let file = corpus_engine::enrichment::atlas::read_atlas_atoms(&atlas_dir)
+    let file = understanding_vocab::read::read_atlas_atoms(&atlas_dir)
         .map_err(|e| MeshAppError::io("read atoms", e))?;
     let sec_to_chunk = read_chapter_chunk_map(index_path)?;
     let names = entity_name_map(&file.atoms());
@@ -587,7 +587,7 @@ pub fn load_questions(index_path: &Path, limit: usize) -> Result<Vec<QuestionDto
     if !atlas_dir.is_dir() {
         return Ok(Vec::new());
     }
-    let file = corpus_engine::enrichment::atlas::read_atlas_atoms(&atlas_dir)
+    let file = understanding_vocab::read::read_atlas_atoms(&atlas_dir)
         .map_err(|e| MeshAppError::io("read atoms", e))?;
     let sec_to_chunk = read_chapter_chunk_map(index_path)?;
     let mut out = Vec::new();

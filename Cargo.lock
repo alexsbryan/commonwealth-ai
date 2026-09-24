@@ -12907,7 +12907,8 @@ name = "sovereign-meshapp"
 version = "0.7.0"
 dependencies = [
  "chrono",
- "corpus-engine",
+ "corpus-engine-atlas-reader",
+ "corpus-engine-sections",
  "corpus-index",
  "rusqlite",
  "serde",
@@ -12916,6 +12917,7 @@ dependencies = [
  "sovereign-time",
  "tempfile",
  "tokio",
+ "understanding-vocab",
  "workspace-hack",
 ]
 

@@ -32,7 +32,7 @@ use std::path::Path;
 use chrono::{Datelike, NaiveDateTime, Timelike};
 use serde::{Deserialize, Serialize};
 
-use corpus_engine::chunkers::threaded_turns::{parse_turns, ParsedTurn, TurnAuthor};
+use corpus_engine_sections::turns::{parse_turns, ParsedTurn, TurnAuthor};
 use corpus_index::index::CorpusIndex;
 
 pub mod semantic;
