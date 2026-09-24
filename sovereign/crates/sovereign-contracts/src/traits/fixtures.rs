@@ -44,13 +44,6 @@ pub struct RecordingConversations {
     msgs: Mutex<Vec<Message>>,
 }
 
-fn now_unix() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0)
-}
-
 impl RecordingConversations {
     fn row(&self, id: &str) -> Option<ConvoRow> {
         self.convos
@@ -209,7 +202,7 @@ impl ConversationStore for RecordingConversations {
             .get_mut(id)
             .ok_or_else(|| Error::NotFound(format!("conversation {id}")))?;
         row.title = Some(title.to_string());
-        row.updated_at = now_unix();
+        row.updated_at = sovereign_time::unix_now();
         Ok(())
     }
 

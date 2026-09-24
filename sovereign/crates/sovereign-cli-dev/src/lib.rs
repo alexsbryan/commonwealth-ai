@@ -85,8 +85,6 @@ mod git_archaeology_cmd;
 #[cfg(feature = "workbench")]
 mod mesh_kv_client;
 #[cfg(feature = "workbench")]
-#[cfg(feature = "workbench")]
-#[cfg(feature = "workbench")]
 mod phases;
 #[cfg(feature = "workbench")]
 mod rough_edges_cmd;

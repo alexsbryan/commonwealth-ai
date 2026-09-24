@@ -4321,7 +4321,8 @@ every accessor above it moves together. Env overrides are declared in
 
 **Repo-local `.sovereign/`:** `project.toml` + `project.json`, `sovereign.toml`
 (per-repo daemon/watcher posture — watchers deliberately off in this repo),
-`notes.db`, `mesh.db`, `features.db`, `SOVEREIGN.md`.
+`notes.db`, `features.db`, `SOVEREIGN.md`. (No `mesh.db` since five-programs
+fp-33: the work-atlas store is the daemon's, dialed over `/v1/mesh/kv`.)
 
 **Per-user root `~/.svrnmesh`:** `config.toml` (`SetupConfig` — THE per-user
 config), `work-atlas.toml`, `projects.json`, the indexes / drift / arch /

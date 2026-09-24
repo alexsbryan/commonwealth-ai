@@ -639,6 +639,13 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     // a count change.
     ("sovereign/crates/sovereign-cli-dev/src/refactor_cmd/label_model.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-cli-dev/src/code_capability_graph.rs", Class::LocalDaemon, 1),
+    // +2 (2026-09-23, five-programs fp-32/fp-33): the workbench's two DIAL
+    // clients — the state store and the mesh KV are the daemon's, so
+    // `audit --recover` and the work-atlas surfaces read them over the
+    // daemon's own /v1 routes, one client construction each. Estate content
+    // never leaves the machine: LocalDaemon, like every row above.
+    ("sovereign/crates/sovereign-cli-dev/src/mesh_kv_client.rs", Class::LocalDaemon, 1),
+    ("sovereign/crates/sovereign-cli-dev/src/state_store_client.rs", Class::LocalDaemon, 1),
 
     // ---- sovereign-cli-daemon (LocalDaemon — daemon self-control) ----
     // `doctor_cmd.rs` was split along its three declared layers; the three

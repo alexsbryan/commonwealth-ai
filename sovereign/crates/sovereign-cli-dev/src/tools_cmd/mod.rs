@@ -308,11 +308,12 @@ async fn cmd_call(args: &[String]) -> i32 {
 
     // Coordination tools are only CORRECT against the daemon's
     // work-atlas store — the one peers, gossip, and CodeWatcher
-    // observations share. The in-process registry below writes a
-    // repo-local mesh.db nobody else reads (a claim declared there is
-    // invisible to every other process — root-caused 2026-07-31), so
-    // these four go daemon-first and fall back local only when no
-    // daemon answers, loudly.
+    // observations share. The in-process registry below holds the
+    // daemon-DIALED store (fp-33 — no repo-local mesh.db exists to
+    // write; a local island would be invisible to every other
+    // process, root-caused 2026-07-31), so these four go daemon-first
+    // and every operation a daemon-down session attempts reports the
+    // absence by name.
     const DAEMON_AUTHORITATIVE: &[&str] = &[
         "declare_scope",
         "release_scope",

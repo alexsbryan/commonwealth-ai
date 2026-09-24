@@ -1008,9 +1008,11 @@ async fn cmd_brief(args: &[String]) -> i32 {
 
     // ── Work in flight (best-effort) ──────────────────────────
     // Peer claims + edit observations overlapping the working set,
-    // read from the same mesh.db the daemon writes. Any failure
-    // (no daemon ever ran here, fresh checkout) degrades to an
-    // empty section — the brief must not fail on coordination
+    // read over the daemon's `/mcp` `work_in_flight` tool — the
+    // daemon's atlas store is the one peers, gossip, and
+    // CodeWatcher share (fp-33: there is no repo-local mesh.db to
+    // read). Any failure (daemon down, fresh install) degrades to
+    // an empty section — the brief must not fail on coordination
     // signals being unavailable.
     let work_in_flight = collect_brief_overlaps(&repo_root, &working_set).await;
 
@@ -1743,8 +1745,8 @@ async fn cmd_search(args: &[String]) -> i32 {
 /// `work_in_flight` tool. One prefix query on the absolute repo root
 /// catches all observations (stored absolute) and absolute-scoped
 /// claims; observations are then filtered to working-set membership
-/// client-side. Falls back to the repo-local `.sovereign/mesh.db`
-/// (which only ever holds CLI-written claims) and finally to an
+/// client-side. Falls back to the daemon-DIALED store (`mesh_kv_client`,
+/// fp-33 — there is no repo-local mesh.db) and finally to an
 /// empty section — the brief must never fail on coordination
 /// signals being unavailable.
 async fn collect_brief_overlaps(
@@ -1782,12 +1784,25 @@ async fn daemon_brief_overlaps(
             }
         }
     });
-    let resp = client
+    let resp = match client
         .post("http://localhost:9741/mcp/message")
         .json(&body)
         .send()
         .await
-        .ok()?;
+    {
+        Ok(resp) => resp,
+        Err(e) => {
+            // The absence is NAMED here, not downstream: `None` reads as
+            // "fall through to the (empty) dialed store", and without this
+            // line a daemon-down brief shows an empty Work-in-flight
+            // section with no word of why.
+            eprintln!(
+                "warning: daemon unreachable — the brief's work-in-flight section is \
+                 empty; start the daemon to see live signals ({e})"
+            );
+            return None;
+        }
+    };
     if !resp.status().is_success() {
         return None;
     }

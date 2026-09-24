@@ -68,7 +68,7 @@ impl DaemonReplicatedKv {
         })?;
         let status = resp.status();
         let body = resp.text().map_err(|e| {
-            ReplicatedKvError::Backend(format!("cannot reach the daemon at {url}: {e}"))
+            ReplicatedKvError::Backend(format!("the daemon's answer at {url} is unreadable: {e}"))
         })?;
         if !status.is_success() {
             return Err(ReplicatedKvError::Backend(format!(

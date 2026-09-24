@@ -2310,3 +2310,149 @@ flattened reads of cross-family types (the daemon's `MemberReach` closes over
 - **concept-gate could-not-judge (declared)** · the same stale-index root
   cause as the substitution above; re-index is `svrn project refresh`, not
   this unit's work.
+
+## REVIEW-audit-fp-auto-3 (2026-09-23, range 014179bd3..HEAD — the previous audit's hash)
+
+Range: 7 commits, of which two carry product code — fp-32 (22e4953f6, the
+`audit --recover` conversation-store dial) and fp-33 (e3c223fcb, the mesh-KV
+dial + the node-identity move to contracts). Checks: LINT exit=0; TESTALL
+exit=0 (13,316 pass / 0 fail — after the two drift repairs below, which are
+fp-32/33's own, unseen by their scoped test runs); PREPUSH range-fed per the
+auto-2 protocol (remote sha = 014179bd3): 1 blocking lane = boundary-gate at
+65 violation(s), the campaign's declared burn-down state — the range closes
+one edge and adds none; size-gate + deletion-manifest advisory (warn_gate by
+design); concept-gate declared could-not-judge; clock-gate cleared below.
+
+### (1) Per-unit net-line ledger, product code (`git log --numstat`, src apart from tests)
+
+| unit | + | − | net |
+|---|---|---|---|
+| fp-32 | 513 | 48 | +465 |
+| fp-33 | 780 | 279 | +501 (contracts +421, daemon +127, cli-dev +122, mesh −169) |
+| non-unit (ralph bookkeeping ×5) | 9 | 8 | +1 |
+| TOTAL | 1302 | 335 | +967 |
+
+The growth is the campaign's own shape: two DIAL clients (+376), the
+node-identity leaf (+421 incl. its tests), the daemon's serving surface
+(+127), against persist.rs's −169 (the move out, re-exported). fixtures.rs's
++233 is the test double, compiled out of ordinary builds
+(`test-fixtures`-gated).
+
+### (2)+(3) Clone and noun checks — instrument substitution (same root cause as auto-1/auto-2)
+
+`code dry-report` refuses (no chunk index at
+`~/.svrnmesh/indexes/commonwealth-ai/chunks.lance`); `code converge noun`
+refuses (3 indexed corpora, none built from this repo). Substitution — a
+word-bounded git-grep sweep over every noun the range defines:
+
+- `KvLookup`/`KvScanQuery`/`KvSetBody` (peer.rs:137,144,156),
+  `DaemonReplicatedKv` (mesh_kv_client.rs:36),
+  `DaemonConversationStore` (state_store_client.rs:73),
+  `ConversationListWire`/`ConversationWire`/`MessageWire`
+  (state_store_client.rs:37,46,61), `RecordingConversations`/`ConvoRow`
+  (traits/fixtures.rs:42,26), `MeshFileIdentity`/`MeshFileMember`/
+  `MeshIdentity` (node_identity.rs:269,276,282), `mod b64_bytes`
+  (peer.rs:112) — ONE definition each, no twins.
+- The layout vocabulary moved from persist.rs is single-homed in
+  `sovereign_contracts::node_identity` (MESHES_DIR/ACTIVE_FILE/active_pointer/
+  active_mesh_hex); `sovereign-mesh` re-exports at the historical paths and
+  keeps only the typed `MeshId` half (`active_mesh_id`, `mesh_file`) that
+  contracts cannot name. The writer/reader pin is structural: mesh's tests
+  write real files through `PersistedMesh::from_live` and resolve through the
+  re-exported decider.
+- `sovereign-daemon/src/bootstrap.rs:32` still defines `resolve_self_node_id`
+  but as a one-line delegate through the re-export — not a twin.
+
+### Findings, fixed (this audit's commit)
+
+- **ARCH 6 (a misnamed absence)** · `mesh_kv_client.rs:66` · `send_json`'s
+  body-read failure said "cannot reach the daemon at {url}" though the daemon
+  had answered and the read of its body failed; reworded to the fp-32
+  client's family ("the daemon's answer at {url} is unreadable").
+- **ARCH 3/4 (docs the range falsified, left behind)** ·
+  `code_cmd.rs` collect_brief_overlaps doc (:1746) and the brief's
+  Work-in-flight comment (:1009) still said the brief reads the repo-local
+  `.sovereign/mesh.db` "the daemon writes" — a file the daemon never wrote
+  (in-memory store, root-caused 2026-07-31) and which fp-33 removed the last
+  reader of. `tools_cmd/mod.rs:308` still said the in-process registry
+  "writes a repo-local mesh.db … fall[s] back local only when no daemon
+  answers". All reworded to the dial. `sovereign/SYSTEM_OVERVIEW.md`'s
+  repo-local file list dropped `mesh.db` for the same reason.
+- **ARCH 6/1 (an absence with no event, under a comment claiming there was
+  one)** · `code_cmd.rs` `daemon_brief_overlaps` returned `None` silently on
+  transport failure while fp-33's new `local_brief_overlaps` doc claimed
+  "the daemon-first attempt upstream has already said so by name" — it said
+  nothing, so a daemon-down `svrn code brief` showed an empty
+  Work-in-flight section with no word of why. The send-failure site now
+  eprintlns the named absence (claim_cmd's wording shape), making fp-33's
+  comment true.
+- **ARCH 3** · `lib.rs:87-89` · three identical stacked
+  `#[cfg(feature = "workbench")]` before `mod phases;` (pre-existing, caught
+  in the range's diff context) — collapsed to one.
+- **TESTALL drift, repaired in the loop's direction** (fp-32/33 ran scoped
+  tests only; the loop counter was 3 of 5, so no full check was due — this
+  audit's TESTALL was the first full run):
+  - `f26_egress_census` · the two new DIAL clients were UNREGISTERED
+    (1 reqwest site each). Registered `Class::LocalDaemon` with the dated
+    comment (the rd-1 audit precedent; estate content never leaves the
+    machine).
+  - `conformance_tags_are_fresh` ·
+    `quality/conformance/sovereign-mesh.toml` line pin 1089 → 920 (fp-33's
+    persist.rs rewrite moved the tagged line); regenerated with
+    UPDATE_CONFORMANCE_TAGS, the command the failure itself prints.
+- **PREPUSH blocking — clock-gate (fp-32's own)** ·
+  `traits/fixtures.rs:47` hand-read `SystemTime::now()` in the new test
+  double. Now asks the decider, `sovereign_time::unix_now()` (contracts
+  already depends on sovereign-time; it cannot name sovereign-core, which is
+  the leaf ordering the gate's message presupposes). The helper is deleted.
+
+### Recorded, not changed
+
+- **ARCH 8 — one format, two reader families across the cw/svrn seam** ·
+  `sovereign-contracts/src/node_identity.rs:51,107,144` vs
+  `commonwealth/crates/commonwealth-rails/src/identity.rs:40,81,102` ·
+  `NODE_ID_FILE`/`load_node_id`/`save_node_id`/`mesh_file` exist in both.
+  Rails' own comment acknowledges it ("one FORMAT with two readers, not two
+  formats") and the workspaces are peers that cannot name each other. The
+  asymmetry that matters: contracts' resolver refuses to adopt a known
+  peer's id (the 2026-08-20 incident) while rails'
+  `load_or_generate_node_id` is file-first with no such tie-break. Unifying
+  is a package-boundary decision (the fp-42/fp-46 class), not an audit fix.
+- **ARCH 8/9 — same plain name, two crates, same envelope** ·
+  `state_store_client.rs:37,46` vs
+  `sovereign-turn-client/src/lib.rs:3639,3652` · fp-32 added private
+  `ConversationListWire`/`ConversationWire` beside turn-client's private
+  parse shapes of the same daemon envelope. Deliberate per-client reads per
+  daemon_wire's charter, different field sets (turn-client carries
+  provenance/citations; cli-dev carries typed `Role`) — but a grep for the
+  name finds two modules in adjacent domains. Which side renames is a
+  convergence decision (the auto-2 guest_pages precedent).
+- **ARCH 8 — a transport contract spelled twice, both sides added in this
+  range** · `state_store_client.rs` `get_json` vs `mesh_kv_client.rs`
+  `send_json` · send → status → text → !success → parse with the same three
+  error wordings, differing in async/blocking and
+  `Error::Storage`/`ReplicatedKvError::Backend`. fp-25/34/44/45 each mint
+  another dial client; the third is the moment to extract one helper beside
+  `daemon_v1_base` in sovereign-cli-shared, which both already call.
+- **Instrument, could-not-judge** · `code dry-report` / `code converge noun`
+  refuse on this host (above); the grep substitution is the data. The corpus
+  rebuild is `svrn project init`, not this unit's work (the audit-6
+  precedent).
+- **PREPUSH hand-run hazard, recurrence** · the fall-back range
+  origin/main..HEAD is now 2,213 files; exported as the one
+  `SOVEREIGN_CHANGED_PATHS` string (pre-push.sh:207) it exceeds
+  MAX_ARG_STRLEN (128 KiB) and the exec dies E2BIG before any gate runs.
+  Auto-1 hit this and auto-2 recorded the range-fed protocol that avoids it;
+  this audit ran range-fed (remote sha = 014179bd3) and confirms the
+  fallback path is now structurally broken for this branch — worth a script
+  fix (scope handoff without a giant env string), which is an operator call,
+  never a queue edit.
+- **Out-of-range residue, named for the next pass** ·
+  `sovereign-mesh/src/peer_adapter.rs:66` and
+  `sovereign-daemon/examples/rail_read_cost.rs:445` still describe the
+  deleted workstation `mesh.db`; both files are outside this range's diffs.
+- **size-gate (advisory)** · keys grew, the campaign's own (the new
+  `node_identity`/client files read as unbaselined growth). `warn_gate` by
+  design; not re-pinned.
+- **deletion-manifest (advisory)** · `p0-root-junk` GREW — byte-identical to
+  auto-1/auto-2's finding; predates this range. Foreign to the campaign.
