@@ -1533,9 +1533,11 @@ reason = "`kickstart_daemon` — `id -u`, then `launchctl kickstart -k gui/<uid>
 # integration tests that assemble the real node bind `AppState` through a
 # test-only (dev) edge, which layer-gate never enforces.
 #
-# One package row since 2026-09-24 (fp-9, operator answer (b) to
+# Package rows since 2026-09-24. fp-9 (operator answer (b) to
 # HUMAN-fp9-membership-owner): commonwealth-rails disclaims both roles below
 # (its lib.rs "does not admit joiners" / "does not join over LAN/mDNS").
+# fp-10 (operator answer (b) to HUMAN-fp10-serving-host): serving stays in
+# the daemon; deleting the two rows is Phase B's closing act.
 
 [[exception]]
 package = "svrn"
@@ -1543,6 +1545,20 @@ from = "sovereign-daemon"
 to = "commonwealth-discovery"
 reason = "the svrn daemon founds, admits and advertises the mesh (membership::init_mesh_with_identity, init_mesh_with_node_id, generate_join_key, accept_join_with_identity; mdns::MdnsDiscovery) until the de-embed moves `Mesh` out of it (HUMAN-fp9-membership-owner, operator answer (b), 2026-09-24). The pure join-key half already reads mesh-join-vocab."
 tracking = "five-programs fp-9"
+
+[[exception]]
+package = "svrn"
+from = "sovereign-daemon"
+to = "sovereign-inference"
+reason = "the svrn daemon is the serving process until Phase B is minted as its own reviewed program (HUMAN-fp10-serving-host, operator answer (b), 2026-09-24): it builds the engine (build/inference.rs engine_factory::build_engine) and re-execs the rpc-worker child (bin/sovereign-daemon.rs Launch::RpcWorker); commonwealth-rails is forbidden every sovereign-* edge, so no cmnwlth process can host it today."
+tracking = "five-programs fp-10"
+
+[[exception]]
+package = "svrn"
+from = "sovereign-daemon"
+to = "sovereign-compute"
+reason = "the svrn daemon is the serving process until Phase B is minted as its own reviewed program (HUMAN-fp10-serving-host, operator answer (b), 2026-09-24): it builds the compute layer (build/inference.rs build_compute_layer_with_distributed) and re-execs the compute child (bin/sovereign-daemon.rs Launch::ComputeChild)."
+tracking = "five-programs fp-10"
 
 
 # Populated by the first layer-gate census, 2026-07-11. Removing an entry —
