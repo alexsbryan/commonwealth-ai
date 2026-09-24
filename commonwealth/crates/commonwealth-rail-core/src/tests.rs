@@ -482,6 +482,51 @@ fn a_replacement_key_leaves_every_past_act_admitted() {
     );
 }
 
+/// **One renderer, and it must survive a name.** Gap sentences shorten ids
+/// and actors for humans; a byte slice panics on a char boundary and takes
+/// the log route down with it (ROOT_CAUSE_FIXES B1). The char-safe renderers
+/// in `lib.rs` are the only spelling (ARCH §10.6) — multi-byte input is the
+/// bar because ASCII passes either way.
+#[test]
+fn a_gap_renders_multi_byte_names_without_panicking() {
+    let wide_actor = "日本語のキー";
+    let wide_id = OpId::from_raw("日本語のノード");
+    let gaps = [
+        RailGap::BadSignature {
+            id: wide_id.clone(),
+            actor: wide_actor.to_string(),
+        },
+        RailGap::UnknownSigner {
+            id: wide_id.clone(),
+            actor: wide_actor.to_string(),
+        },
+        RailGap::NotAMember {
+            id: wide_id.clone(),
+            actor: wide_actor.to_string(),
+        },
+        RailGap::SequenceHole {
+            actor: wide_actor.to_string(),
+            missing: 4,
+        },
+        RailGap::SequenceFork {
+            actor: wide_actor.to_string(),
+            seq: 5,
+            ids: vec![wide_id.clone()],
+        },
+        RailGap::TamperedId {
+            claimed: wide_id.clone(),
+            derived: wide_id.clone(),
+        },
+        RailGap::DanglingCorrection {
+            by: wide_id.clone(),
+            missing: wide_id,
+        },
+    ];
+    for gap in &gaps {
+        assert!(!gap.to_string().is_empty(), "{gap:?} renders");
+    }
+}
+
 /// **An un-upgraded node must say its answer covers a subset.** A
 /// newer-format line it cannot read becomes a gap; admitting the rest and
 /// reporting it bare is the §18.3 failure.

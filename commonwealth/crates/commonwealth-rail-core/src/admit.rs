@@ -173,17 +173,6 @@ impl RailGap {
             Self::TamperedId { .. } | Self::DanglingCorrection { .. } => GapClass::Contradiction,
         }
     }
-
-    /// Shorten an op id for a sentence. The full 22 characters are in the
-    /// JSON; a person reading a line needs enough to match it, not all of it.
-    fn short(id: &OpId) -> String {
-        let s = id.as_str();
-        if s.len() > 12 {
-            format!("{}…", &s[..12])
-        } else {
-            s.to_string()
-        }
-    }
 }
 
 /// One sentence a person can act on.
@@ -207,7 +196,7 @@ impl std::fmt::Display for RailGap {
             Self::BadSignature { id, .. } => write!(
                 f,
                 "an op whose signature does not verify ({})",
-                Self::short(id)
+                crate::short_id(id.as_str())
             ),
             Self::NotAMember { actor, .. } => write!(
                 f,
@@ -216,27 +205,27 @@ impl std::fmt::Display for RailGap {
             Self::UnknownSigner { actor, .. } => write!(
                 f,
                 "an op signed by {}… — nobody in the roster claims that key",
-                &actor[..actor.len().min(12)]
+                crate::actor_prefix(actor)
             ),
             Self::TamperedId { claimed, .. } => write!(
                 f,
                 "a journal line whose id ({}) does not match its content",
-                Self::short(claimed)
+                crate::short_id(claimed.as_str())
             ),
             Self::SequenceHole { actor, missing } => write!(
                 f,
                 "an op from {}… has not reached this node yet (#{missing})",
-                &actor[..actor.len().min(12)]
+                crate::actor_prefix(actor)
             ),
             Self::SequenceFork { actor, seq, .. } => write!(
                 f,
                 "{}… used one sequence number twice (#{seq}) — both ops are excluded",
-                &actor[..actor.len().min(12)]
+                crate::actor_prefix(actor)
             ),
             Self::DanglingCorrection { missing, .. } => write!(
                 f,
                 "a correction of {}, which this node does not hold",
-                Self::short(missing)
+                crate::short_id(missing.as_str())
             ),
         }
     }
