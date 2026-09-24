@@ -1537,7 +1537,7 @@ reason = "`kickstart_daemon` — `id -u`, then `launchctl kickstart -k gui/<uid>
 # HUMAN-fp9-membership-owner): commonwealth-rails disclaims both roles below
 # (its lib.rs "does not admit joiners" / "does not join over LAN/mDNS").
 # fp-10 (operator answer (b) to HUMAN-fp10-serving-host): serving stays in
-# the daemon; deleting the three rows (fp-10 + fp-68) is Phase B's closing act.
+# the daemon; deleting the four rows (fp-10 + fp-68 + fp-69) is Phase B's closing act.
 
 [[exception]]
 package = "svrn"
@@ -1566,6 +1566,13 @@ from = "sovereign-daemon"
 to = "sovereign-serving-host"
 reason = "the svrn daemon is the serving process until Phase B is minted as its own reviewed program (HUMAN-fp10-serving-host, operator answer (b), 2026-09-24): it hosts admission, venue routing and the InferenceRouter behind its /v1 routes in-process; the port traits already moved to sovereign-contracts (fp-16), and no cmnwlth serving surface exists to dial."
 tracking = "five-programs fp-68"
+
+[[exception]]
+package = "svrn"
+from = "sovereign-runtime-recipe"
+to = "sovereign-inference"
+reason = "the svrn daemon is the serving process until Phase B is minted as its own reviewed program (HUMAN-fp10-serving-host, operator answer (b), 2026-09-24): the recipe's enrichment lane loads the standalone reranker in-process (lib.rs sovereign_inference::reranker_standalone::load_from_env), a model load of the serving-host class, and no cmnwlth serving surface exists to dial."
+tracking = "five-programs fp-69"
 
 
 # Populated by the first layer-gate census, 2026-07-11. Removing an entry —
