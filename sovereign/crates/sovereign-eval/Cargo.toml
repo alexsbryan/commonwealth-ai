@@ -21,7 +21,6 @@ sovereign-contracts = { workspace = true }
 # closure, so the flywheel's claim-miner reads atoms.json without naming the
 # engine that writes it (domains dm-vocab-bypass-rest).
 understanding-vocab = { workspace = true }
-sovereign-authoring-harness.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true

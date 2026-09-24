@@ -416,7 +416,7 @@ problem. By target, the 119 dependency edges are:
 | ingest orchestration (`enrichment-*`, gliner, recipe, pipeline) | 16 | spread |
 | svrn crates, reached from outside | 16 | mesh's test harness, cli-dev, gliner |
 | `code` + unassigned (`work-atlas`, `atos`) | 11 | daemon, cli-dev, cli-llm |
-| bench (`authoring-harness`, `eval`, `tdd`) | 4 | daemon, cli-llm |
+| bench (`eval`, `tdd`) + ingest (`authoring-harness`, moved at fp-57) | 4 | daemon, cli-llm |
 
 Plus two filesystem rules: `corpus-engine/build.rs` and
 `sovereign-core/src/router_calibration.rs:1253`.
@@ -566,7 +566,7 @@ cli-dev `drift_cmd_orchestrator.rs:617`), `plan_schema` (core→inference dev, m
 `sovereign-contracts`), `guest_route::open_route` (a security decider — KEEP the edge),
 `enrich_cmd::paths`/`inference_client` (already leaf re-exports — repoint the consumers),
 the enrichment catalog reader (`list_enriched_corpora_in` — port trait in contracts),
-the authoring-harness drive (`run_over_frozen_sample` — bench host or leaf).
+the authoring-harness drive (`run_over_frozen_sample` — an ingest dial since fp-57, row fp-43).
 
 ### The scip reader split — the next big lever, spec'd (100 violations at 28fc22ff4)
 

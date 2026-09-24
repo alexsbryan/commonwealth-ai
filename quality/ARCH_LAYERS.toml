@@ -1241,8 +1241,13 @@ doc = "docs/FIVE_PROGRAMS.md"
 # pipeline — and its red [ingest]→[svrn] lines said so. The ingest lane the
 # decision keeps in this package is the atlas WRITERS above
 # (enrichment-build/-catalog), which never were that crate's code.
+#
+# `sovereign-authoring-harness` is here (fp-57, decision five-programs-14): it
+# judges recipe stages in ingest's config language (`Recipe`, `StageOutputs`),
+# and svrn is its only consumer.
 crates = [
     "corpus-engine",
+    "sovereign-authoring-harness",
     "sovereign-pipeline",
     "sovereign-recipe-author",
     "sovereign-gliner",
@@ -1358,14 +1363,13 @@ doc = "docs/FIVE_PROGRAMS.md"
 # `std::fs` (understanding-vocab/src/read.rs), so it fails 3a's leaf test for
 # an evaluator. Its bench edge is red with a repair row.
 #
-# `sovereign-eval` is here "minus its product links" (§2) — the links are
-# `corpus-engine` and `sovereign-authoring-harness`, and they are red lines,
-# which is the whole point of the row. `sovereign-authoring-harness` is the
-# verdict layer over the harness runner's `StageOutput`s: a judge, so it is
-# bench's, and the `svrn` daemon reaching it is a finding.
+# `sovereign-eval` is here "minus its product links" (§2) — the link is
+# `corpus-engine`, and it is a red line, which is the whole point of the row.
+# `sovereign-authoring-harness` LEFT for [ingest] (fp-57, decision
+# five-programs-14): it judges ingest's recipe stages in ingest's own config
+# language, is driven by ingest's runner, and no bench member uses it.
 crates = [
     "sovereign-eval",
-    "sovereign-authoring-harness",
     "sovereign-agent-bench",
     "sovereign-agent-tools",
     "sovereign-tdd",
