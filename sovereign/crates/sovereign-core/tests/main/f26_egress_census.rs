@@ -892,22 +892,38 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     // Online mesh member through the `PeerTransport` seam — ring peers, never a third party.
     ("sovereign/crates/sovereign-daemon/src/routes_rail_live.rs", Class::Mesh, 1),
     // NEW ROW (2026-09-19, ring-room rr-2-media-posture c24fe521a): the
-    // holder's media-presence poll. Four sites, one of them production —
-    // `run`'s client (`media_presence.rs:158`) — with two destinations. One is
+    // holder's media-presence poll. RECOUNTED (2026-09-24, fp-47's dial,
+    // 884ed301c): the origin ask moved to the serving process — this file
+    // reads `GET /v1/mesh/media/presence` through `rails_client`'s ONE
+    // shared client — leaving ONE site here, the self-report to
     // `{internal_url}/internal/node/activity`, this process reporting to
-    // itself, loopback whatever `internal_bind` says (`daemon.rs:3383-3385`).
-    // The other is `[iroh] media_origin`, and `OperatorSurface` rather than
-    // `LocalDaemon` is the honest class for it: `MediaRoute::parse` refuses a
-    // string that is not a host:port and constrains nothing else
-    // (`sovereign-mesh/src/media_route.rs:58-72`), so the address the operator
+    // itself, loopback whatever `internal_bind` says (`daemon.rs:3383-3385`),
+    // still `LocalDaemon` for that half. The operator-configured media origin
+    // is no longer asked by THIS file at all; the poll's own row is
+    // `commonwealth-rails/src/presence.rs` below.
+    (
+        "sovereign/crates/sovereign-daemon/src/media_presence.rs",
+        Class::LocalDaemon,
+        1,
+    ),
+    // NEW ROW (2026-09-24, fp-54's flip): the shared dial client for every
+    // serving-process verb — roster-names, presence, forget-member, and the
+    // ring rail's port (`RailsRingRail`). One construction, one destination:
+    // the loopback `rails_base` (default 127.0.0.1:9747), the mesh's serving
+    // process this daemon already trusts with its roster answers since fp-6.
+    ("sovereign/crates/sovereign-daemon/src/rails_client.rs", Class::LocalDaemon, 1),
+    // NEW ROW (2026-09-24, fw-1 wave: the journals moved to the serving
+    // process, so the presence poll moved with the media origin it reads).
+    // Four sites, one of them production — `run`'s poll client — dialing
+    // `[media] origin` from rails.toml, and `OperatorSurface` rather than
+    // `LocalDaemon` is the honest class for it: the address the operator
     // put in the config is the address asked — usually the Jellyfin on this
     // machine, not necessarily. It carries the HOUSE credential and asks
     // `GET /Sessions`; no estate content goes out and no third-party host is
-    // reachable from here. The other three sites are the inline `#[cfg(test)]`
-    // module's fixtures against an origin it spawns itself, the same shape as
-    // `mesh_skew.rs`'s.
+    // reachable from here. The other three sites are the inline test
+    // module's fixtures against an origin it spawns itself.
     (
-        "sovereign/crates/sovereign-daemon/src/media_presence.rs",
+        "commonwealth/crates/commonwealth-rails/src/presence.rs",
         Class::OperatorSurface,
         4,
     ),

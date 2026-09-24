@@ -86,11 +86,15 @@ async fn two_nodes_converge_through_the_sync_route() {
         Roster::new(m)
     };
     let build = |dir: &std::path::Path, key: &SigningKey| {
-        let rail = Arc::new(RingRail::new(dir, Arc::new(key.clone())));
-        rail.journal(NS).unwrap().set_roster(&roster).unwrap();
+        let rail = LocalRingRail::new(dir, Arc::new(key.clone()));
+        rail.inner()
+            .journal(NS)
+            .unwrap()
+            .set_roster(&roster)
+            .unwrap();
         let state = bare_state_with_seed(
             sovereign_daemon::state::FabricSeed {
-                ring_rail: Some(rail.clone()),
+                ring_rail: Some(Arc::new(rail.clone())),
                 ..Default::default()
             },
             sovereign_grants::GuestSessionBinding::Door,
@@ -100,7 +104,10 @@ async fn two_nodes_converge_through_the_sync_route() {
     };
     let (state_a, rail_a) = build(dir_a.path(), &key_a);
     let (state_b, rail_b) = build(dir_b.path(), &key_b);
-    let (led_a, led_b) = (rail_a.journal(NS).unwrap(), rail_b.journal(NS).unwrap());
+    let (led_a, led_b) = (
+        rail_a.inner().journal(NS).unwrap(),
+        rail_b.inner().journal(NS).unwrap(),
+    );
 
     // Partitioned writes.
     led_a

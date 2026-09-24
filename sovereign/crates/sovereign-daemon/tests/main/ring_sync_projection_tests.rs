@@ -1,12 +1,13 @@
 use axum::response::IntoResponse;
 use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::mesh::Mesh;
-use commonwealth_rail::{
-    actor_of, body_json, sign_ring_op, Ed25519Verifier, Op, Payload, Person, RailAct, RingJournal,
-    RingRail, Roster, SignedOp, SigningKey,
+use commonwealth_rail_core::{
+    actor_of, body_json, sign_ring_op, Ed25519Verifier, Op, Payload, Person, RailAct, Roster,
+    SignedOp, SigningKey,
 };
 use sovereign_daemon::server::internal_router;
 use sovereign_daemon::state::AppState;
+use sovereign_mesh::rail_port::{LocalRingRail, RingJournal};
 use sovereign_mesh::ring_sync::*;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -50,8 +51,8 @@ pub fn kv_node(
     key: &SigningKey,
     self_id: NodeId,
     mesh: commonwealth_core::mesh::Mesh,
-) -> (AppState, Arc<RingRail>) {
-    let rail = Arc::new(RingRail::new(dir, Arc::new(key.clone())));
+) -> (AppState, LocalRingRail) {
+    let rail = LocalRingRail::new(dir, Arc::new(key.clone()));
     let state = AppState::new_with_platform_and_engine_and_gauge_and_fabric(
         self_id,
         mesh,
@@ -60,12 +61,12 @@ pub fn kv_node(
         None,
         None,
         sovereign_daemon::state::FabricSeed {
-            ring_rail: Some(rail.clone()),
+            ring_rail: Some(Arc::new(rail.clone())),
             ..Default::default()
         },
     );
     sovereign_mesh::ring_roster::MeshRosterSource::install(
-        &rail,
+        rail.inner(),
         &state.inner.fabric.mesh,
         &state.inner.fabric.identity,
         state.self_node_pubkey(),
@@ -187,8 +188,7 @@ async fn a_local_store_write_reaches_a_peers_store_through_the_ring() {
     );
 
     let url = serve(internal_router(b_state.clone())).await;
-    let journal = a_rail.journal(KV).unwrap();
-    let out = exchange(&reqwest::Client::new(), &url, &a_rail, &journal, None).await;
+    let out = exchange(&reqwest::Client::new(), &url, &a_rail, KV, None).await;
     assert!(out.stop.is_none(), "the exchange failed: {:?}", out.stop);
     assert_eq!(out.pushed, 1, "the write landed on the peer's journal");
 
@@ -240,7 +240,7 @@ async fn a_delete_travels_and_an_older_write_does_not_resurrect_the_key() {
     // so the delete below is unambiguously later. `set` stamps `now`, and
     // a set/delete pair inside one second is a tie the fold breaks by
     // actor and id rather than by intent.
-    let a_journal = a_rail.journal(KV).unwrap();
+    let a_journal = a_rail.inner().journal(KV).unwrap();
     assert_eq!(
         a_journal
             .ingest_all(&[kv_op(KV, &ka, 0, "k", Some(b"live"), now - 100)])
@@ -252,7 +252,7 @@ async fn a_delete_travels_and_an_older_write_does_not_resurrect_the_key() {
 
     let b_url = serve(internal_router(b_state.clone())).await;
     let client = reqwest::Client::new();
-    let out = exchange(&client, &b_url, &a_rail, &a_journal, None).await;
+    let out = exchange(&client, &b_url, &a_rail, KV, None).await;
     assert!(out.stop.is_none(), "{:?}", out.stop);
     sovereign_mesh::rail_kv_pump::project_all_on_disk(&*b_state.inner.fabric).await;
     assert_eq!(
@@ -265,7 +265,7 @@ async fn a_delete_travels_and_an_older_write_does_not_resurrect_the_key() {
     assert!(a_state.inner.fabric.mesh_store.delete(KV, "k").unwrap());
     let pumped = sovereign_mesh::rail_kv_pump::pump_once(&*a_state.inner.fabric).await;
     assert_eq!(pumped.appended, 1, "the tombstone is an act like any other");
-    let out = exchange(&client, &b_url, &a_rail, &a_journal, None).await;
+    let out = exchange(&client, &b_url, &a_rail, KV, None).await;
     assert!(out.stop.is_none(), "{:?}", out.stop);
     sovereign_mesh::rail_kv_pump::project_all_on_disk(&*b_state.inner.fabric).await;
     assert_eq!(
@@ -275,7 +275,7 @@ async fn a_delete_travels_and_an_older_write_does_not_resurrect_the_key() {
     );
 
     // A write B signed, older than the tombstone, arriving after it.
-    let b_journal = b_rail.journal(KV).unwrap();
+    let b_journal = b_rail.inner().journal(KV).unwrap();
     assert_eq!(
         b_journal
             .ingest_all(&[kv_op(KV, &kb, 0, "k", Some(b"stale"), now - 50)])
@@ -290,7 +290,7 @@ async fn a_delete_travels_and_an_older_write_does_not_resurrect_the_key() {
     );
     // …and it does not resurrect it on the node that deleted it either,
     // once the op gets there.
-    let out = exchange(&client, &b_url, &a_rail, &a_journal, None).await;
+    let out = exchange(&client, &b_url, &a_rail, KV, None).await;
     assert!(out.stop.is_none(), "{:?}", out.stop);
     assert_eq!(out.pulled, 1, "B's older write came over");
     sovereign_mesh::rail_kv_pump::project_all_on_disk(&*a_state.inner.fabric).await;
@@ -340,7 +340,7 @@ async fn a_seal_bounds_the_ring_and_the_snapshot_keeps_every_live_key() {
         (0, 0),
         "below the threshold the pump seals nothing"
     );
-    let a_journal = a_rail.journal(KV).unwrap();
+    let a_journal = a_rail.inner().journal(KV).unwrap();
     assert_eq!(a_journal.read().unwrap().0.len(), 4);
 
     // ── 2,000 older writes of the same keys: history, already superseded.
@@ -353,8 +353,8 @@ async fn a_seal_bounds_the_ring_and_the_snapshot_keeps_every_live_key() {
     // because B was never told anything.
     let a_url = serve(internal_router(a_state.clone())).await;
     let client = reqwest::Client::new();
-    let b_journal = b_rail.journal(KV).unwrap();
-    let out = exchange(&client, &a_url, &b_rail, &b_journal, None).await;
+    let b_journal = b_rail.inner().journal(KV).unwrap();
+    let out = exchange(&client, &a_url, &b_rail, KV, None).await;
     assert!(out.stop.is_none(), "{:?}", out.stop);
     assert_eq!(
         b_journal.read().unwrap().0.len(),
@@ -393,7 +393,7 @@ async fn a_seal_bounds_the_ring_and_the_snapshot_keeps_every_live_key() {
     );
 
     // ── The peer meets the seal and retires the same prefix.
-    let out = exchange(&client, &a_url, &b_rail, &b_journal, None).await;
+    let out = exchange(&client, &a_url, &b_rail, KV, None).await;
     assert!(out.stop.is_none(), "{:?}", out.stop);
     assert_eq!(
         b_journal.read().unwrap().0.len(),
@@ -466,9 +466,9 @@ async fn a_seal_carries_a_delete_the_peer_never_received() {
     // B takes the whole live set, including the key that is about to go.
     let a_url = serve(internal_router(a_state.clone())).await;
     let client = reqwest::Client::new();
-    let a_journal = a_rail.journal(KV).unwrap();
-    let b_journal = b_rail.journal(KV).unwrap();
-    let out = exchange(&client, &a_url, &b_rail, &b_journal, None).await;
+    let a_journal = a_rail.inner().journal(KV).unwrap();
+    let b_journal = b_rail.inner().journal(KV).unwrap();
+    let out = exchange(&client, &a_url, &b_rail, KV, None).await;
     assert!(out.stop.is_none(), "{:?}", out.stop);
     sovereign_mesh::rail_kv_pump::project_all_on_disk(&*b_state.inner.fabric).await;
     assert_eq!(
@@ -497,7 +497,7 @@ async fn a_seal_carries_a_delete_the_peer_never_received() {
     assert_eq!(mark_of(&held), Some(held[0].kind.seq));
 
     // ── The round that meets the seal.
-    let out = exchange(&client, &a_url, &b_rail, &b_journal, None).await;
+    let out = exchange(&client, &a_url, &b_rail, KV, None).await;
     assert!(out.stop.is_none(), "{:?}", out.stop);
     assert!(
         !carries_write_for(&b_journal.read().unwrap().0, "gone"),

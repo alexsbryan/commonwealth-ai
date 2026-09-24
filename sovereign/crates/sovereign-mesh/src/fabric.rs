@@ -186,7 +186,7 @@ pub struct FabricSeed {
     /// The dial-info signing closure, built from the node `SigningKey`.
     pub self_dial_signer: Option<Arc<DialSigner>>,
     /// The ring rail's storage, built from the data dir and identity key.
-    pub ring_rail: Option<Arc<commonwealth_rail::RingRail>>,
+    pub ring_rail: Option<Arc<dyn crate::rail_port::RingRailPort>>,
     /// The mutation persistence hook, installed at construction rather than
     /// through the `Arc::get_mut` installer that could silently no-op.
     pub mesh_mutation_hook: Option<MeshMutationHook>,
@@ -239,15 +239,17 @@ pub struct FabricPart {
     /// [`crate::state::AppState::sign_dial_info`].
     pub self_dial_signer: Option<Arc<DialSigner>>,
     /// The ring rail's storage: where each ring namespace's journal lives,
-    /// and how this node signs the ops it writes. Set at construction; a
-    /// daemon with no data directory has nowhere to put a ledger, and the
-    /// rail then REFUSES rather than inventing a location or answering from
-    /// an empty in-memory one (ARCH §18.3).
+    /// and how this node signs the ops it writes — the port the round, the
+    /// pump and the rail routes read through, local journals or the serving
+    /// cluster's doors (`crate::rail_port`). Set at
+    /// construction; a daemon with no data directory has nowhere to put a
+    /// ledger, and the rail then REFUSES rather than inventing a location or
+    /// answering from an empty in-memory one (ARCH §18.3).
     ///
     /// The signer is a closure-shaped seam for the same reason
     /// [`Self::self_dial_signer`] is: `AppState` never holds raw key
     /// material and this crate needs no crypto dependency.
-    pub ring_rail: Option<Arc<commonwealth_rail::RingRail>>,
+    pub ring_rail: Option<Arc<dyn crate::rail_port::RingRailPort>>,
     /// "A local write is queued; run the ring round now rather than at the
     /// next sixty-second tick."
     ///
@@ -452,7 +454,7 @@ impl FabricPart {
     }
 
     /// The ring rail's storage, or `None` if the daemon has none.
-    pub fn ring_rail(&self) -> Option<Arc<commonwealth_rail::RingRail>> {
+    pub fn ring_rail(&self) -> Option<Arc<dyn crate::rail_port::RingRailPort>> {
         self.ring_rail.clone()
     }
 

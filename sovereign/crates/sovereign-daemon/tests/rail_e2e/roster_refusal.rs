@@ -18,7 +18,7 @@ use std::net::SocketAddr;
 use axum::extract::{ConnectInfo, State};
 use axum::http::StatusCode;
 use axum::Extension;
-use commonwealth_rail::SigningKey;
+use commonwealth_rail_core::SigningKey;
 use sovereign_daemon::internal_principal::ProvedMeshMember;
 use sovereign_daemon::routes_internal::ring_sync;
 use sovereign_peer_wire::RingSyncRequest;

@@ -1325,14 +1325,6 @@ pub fn reconcile_local_measurements(daemon: Arc<EmbeddedDaemon>) {
         let Some(rail) = app_state.ring_rail() else {
             return;
         };
-        let namespace = sovereign_mesh::mesh_measurements::MEASUREMENTS_APP_ID;
-        let journal = match rail.journal(namespace) {
-            Ok(j) => j,
-            Err(e) => {
-                tracing::warn!(error = %e, "mesh-measurements: ring journal unavailable");
-                return;
-            }
-        };
         let roster = sovereign_mesh::ring_roster::MeshRoster::from_membership(
             &*app_state.inner.fabric.mesh.read().await,
             app_state.self_node_id(),
@@ -1340,11 +1332,11 @@ pub fn reconcile_local_measurements(daemon: Arc<EmbeddedDaemon>) {
         );
         let file = sovereign_mesh::mesh_measurements::load();
         sovereign_mesh::measurements_rail::republish(
-            &journal,
-            rail.signer(),
+            rail.as_ref(),
             roster.roster(),
             file.records(),
-        );
+        )
+        .await;
     });
 }
 

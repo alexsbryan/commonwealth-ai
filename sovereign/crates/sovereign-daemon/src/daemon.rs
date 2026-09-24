@@ -3088,20 +3088,19 @@ impl EmbeddedDaemon {
                 )
             },
         ));
-        // The ring rail's storage. One journal directory per ring namespace
-        // under the data dir, signed with this same identity key —
-        // `RingSigner` is implemented for `SigningKey`, so the key stays here
-        // and `AppState` holds a trait object rather than key material,
-        // exactly as the dial signer above does.
-        //
-        // Present unconditionally: a rail with no storage REFUSES (503)
-        // instead of answering an empty ledger, so leaving it out on some
-        // paths would make "this daemon cannot keep a ledger" and "your ring
-        // is empty" the same observation.
-        let ring_rail = Some(Arc::new(commonwealth_rail::RingRail::new(
-            &self.data_dir,
-            Arc::new(identity_key.clone()),
-        )));
+        // The ring rail's journals moved to the serving process's data root
+        // (fp-54, §4 rule 1 — one data directory, one owner). The one-time
+        // handover runs before any rail surface answers; from here on this
+        // daemon holds no journal and every rail read or write dials
+        // `cw-rails` through the port (`rails_client::RailsRingRail`), which
+        // reports ABSENCE when the serving process is down — never an empty
+        // ledger (ARCH §18.3). The signer does not change: the serving
+        // process loads the SAME node key through the ONE loader, so a line
+        // written there verifies under the roster every peer already holds.
+        crate::rail_migration::migrate_journals_to_rails(&self.data_dir);
+        let ring_rail: Option<Arc<dyn sovereign_mesh::rail_port::RingRailPort>> = Some(Arc::new(
+            crate::rails_client::RailsRingRail::new(crate::rails_client::DEFAULT_RAILS_BASE),
+        ));
         // The persistence hook fires on every `Mesh` mutation from a route
         // handler (`/internal/join`, `/internal/gossip`). It closes the race
         // window where the founder accepts a new member but crashes before
@@ -3259,22 +3258,13 @@ impl EmbeddedDaemon {
         // drop local inference. DC §4.2 "Construction is staged, and parts are
         // total".)
 
-        // The daemon's own ring namespace has no hand-written roster: its
-        // membership IS the roster, and the rail's one reader has to know
-        // that or the append route refuses this node's own key there. The
-        // source holds the state WEAKLY. The rail's lookup is at read time, so
-        // nothing between the rail's construction and this line could have
-        // read the wrong roster.
-        if let Some(rail) = app_state.ring_rail() {
-            if let Err(e) = sovereign_mesh::ring_roster::MeshRosterSource::install(
-                &rail,
-                &app_state.inner.fabric.mesh,
-                &app_state.inner.fabric.identity,
-                app_state.self_node_pubkey(),
-            ) {
-                tracing::error!(error = %e, "ring rail: the daemon's own namespace could not register its roster source");
-            }
-        }
+        // The daemon's own rings' roster installation died with the local
+        // rail (fp-54): the journals live at the serving process now, and ITS
+        // `MembershipRosterSource` derives every ring nobody narrowed from
+        // the membership it holds. The registered-namespace list
+        // (`sovereign_mesh::ring_roster::REGISTERED_NAMESPACES`) guards the
+        // same rings there by derivation; the file-rostered work plane stays
+        // narrowed by the file that moved with it.
 
         // Apply foreground-yield config from setup_config and install
         // the AppState-backed YieldHook on the corpus engine.

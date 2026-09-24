@@ -186,6 +186,7 @@ fn retire(retired: &Result<Compaction, RailError>) -> serde_json::Value {
             "removed": done.removed,
             "kept": done.kept,
             "gaps_cleared": done.gaps_cleared,
+            "floors": done.floors,
         }),
         Err(e) => serde_json::json!({ "refused": e.to_string() }),
     }
@@ -252,22 +253,43 @@ async fn append_act(
     };
     match appended {
         Ok((op, retired)) => {
+            // The whole op rides beside the flat fields, so a dialing client
+            // that speaks the rail's TYPES (the mesh round's port, since the
+            // journals moved here) reads back an `Op<SignedOp>` instead of
+            // re-deriving one from the render (ARCH §10.6). The flat fields
+            // stay: they are what a page renders, and the daemon's append
+            // door answers with exactly them.
             let mut out = serde_json::json!({
                 "id": op.id,
                 "seq": op.kind.seq,
                 "actor": op.actor,
                 "ts_unix": op.ts_unix,
                 "namespace": journal.namespace(),
+                "op": op,
             });
             if let Some(retired) = retired {
                 out["retired"] = retired;
             }
             Json(out).into_response()
         }
-        Err(e @ RailError::NotInRoster { .. }) => err(
-            StatusCode::UNPROCESSABLE_ENTITY,
-            not_in_roster_refusal(rail.roster_origin(journal.namespace()), &e),
-        ),
+        Err(e @ RailError::NotInRoster { .. }) => {
+            // `kind` carries the refusal TYPED, not only as prose: the KV
+            // pump's defer-on-not-in-roster is a real decision that must
+            // survive the dial, and a client matching on the sentence would
+            // be prose matching (ARCH principle 9). `actor` names whose key
+            // was refused.
+            let (actor, namespace) = match &e {
+                RailError::NotInRoster { actor, namespace } => (actor.clone(), namespace.clone()),
+                _ => (String::new(), String::new()),
+            };
+            let refusal = serde_json::json!({
+                "error": not_in_roster_refusal(rail.roster_origin(journal.namespace()), &e),
+                "kind": "not_in_roster",
+                "actor": actor,
+                "namespace": namespace,
+            });
+            (StatusCode::UNPROCESSABLE_ENTITY, Json(refusal)).into_response()
+        }
         Err(RailError::Rejected(why)) => err(StatusCode::UNPROCESSABLE_ENTITY, why),
         Err(e) => err(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
     }

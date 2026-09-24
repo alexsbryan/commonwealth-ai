@@ -9,12 +9,13 @@
 use axum::response::IntoResponse;
 use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::mesh::Mesh;
-use commonwealth_rail::{
-    actor_of, body_json, sign_ring_op, Ed25519Verifier, Op, Payload, Person, RailAct, RingJournal,
-    RingRail, Roster, SignedOp, SigningKey,
+use commonwealth_rail_core::{
+    actor_of, body_json, sign_ring_op, Ed25519Verifier, Op, Payload, Person, RailAct, Roster,
+    SignedOp, SigningKey,
 };
 use sovereign_daemon::server::internal_router;
 use sovereign_daemon::state::AppState;
+use sovereign_mesh::rail_port::{LocalRingRail, RingJournal};
 use sovereign_mesh::ring_sync::*;
 use sovereign_peer_wire::{RingSyncRequest, RingSyncResponse, RING_SYNC_OPS_BUDGET_BYTES};
 use std::collections::HashMap;
@@ -118,15 +119,15 @@ pub fn node(
     dir: &std::path::Path,
     key: &SigningKey,
     n: usize,
-) -> (AppState, Arc<RingJournal>, Arc<RingRail>) {
-    let rail = Arc::new(RingRail::new(dir, Arc::new(key.clone())));
-    let journal = rail.journal(NS).unwrap();
+) -> (AppState, Arc<RingJournal>, LocalRingRail) {
+    let rail = LocalRingRail::new(dir, Arc::new(key.clone()));
+    let journal = rail.inner().journal(NS).unwrap();
     journal.set_roster(&solo_roster(key)).unwrap();
     if n > 0 {
         assert_eq!(journal.ingest_all(&ops(key, n)).unwrap(), n);
     }
     let state = bare_state_with_seed(sovereign_daemon::state::FabricSeed {
-        ring_rail: Some(rail.clone()),
+        ring_rail: Some(Arc::new(rail.clone())),
         ..Default::default()
     });
     (state, journal, rail)
@@ -182,7 +183,7 @@ async fn a_journal_past_the_one_exchange_ceiling_converges_onto_a_fresh_peer() {
         node(peer_dir.path(), &SigningKey::from_bytes(&[2u8; 32]), 0);
 
     let url = serve(internal_router(peer_state)).await;
-    let out = exchange(&reqwest::Client::new(), &url, &rail, &journal, None).await;
+    let out = exchange(&reqwest::Client::new(), &url, &rail, NS, None).await;
 
     assert!(out.stop.is_none(), "the exchange failed: {:?}", out.stop);
     assert_eq!(out.pushed, N, "every op landed on the peer");
@@ -224,7 +225,7 @@ async fn a_peers_seal_prunes_this_nodes_disk_in_the_round_it_arrives() {
     assert_eq!(journal.read().unwrap().0.len(), 3, "control: we hold three");
 
     let url = serve(internal_router(peer_state)).await;
-    let out = exchange(&reqwest::Client::new(), &url, &rail, &journal, None).await;
+    let out = exchange(&reqwest::Client::new(), &url, &rail, NS, None).await;
 
     assert!(out.stop.is_none(), "the exchange failed: {:?}", out.stop);
     assert_eq!(out.pulled, 1, "one op came over, and it was the seal");
@@ -259,8 +260,8 @@ async fn a_peers_seal_prunes_the_daemons_own_namespace_whose_roster_is_derived()
 
     // A node on the daemon's namespace: no roster file, ever.
     let node_on_own = |dir: &std::path::Path, with_source: bool| {
-        let rail = Arc::new(RingRail::new(dir, Arc::new(key.clone())));
-        let journal = rail.journal(OWN).unwrap();
+        let rail = LocalRingRail::new(dir, Arc::new(key.clone()));
+        let journal = rail.inner().journal(OWN).unwrap();
         assert_eq!(journal.ingest_all(&ops_in(OWN, &key, 3)).unwrap(), 3);
         let state = AppState::new_with_platform_and_engine_and_gauge_and_fabric(
             me,
@@ -270,13 +271,13 @@ async fn a_peers_seal_prunes_the_daemons_own_namespace_whose_roster_is_derived()
             None,
             None,
             sovereign_daemon::state::FabricSeed {
-                ring_rail: Some(rail.clone()),
+                ring_rail: Some(Arc::new(rail.clone())),
                 ..Default::default()
             },
         );
         if with_source {
             MeshRosterSource::install(
-                &rail,
+                rail.inner(),
                 &state.inner.fabric.mesh,
                 &state.inner.fabric.identity,
                 state.self_node_pubkey(),
@@ -297,7 +298,7 @@ async fn a_peers_seal_prunes_the_daemons_own_namespace_whose_roster_is_derived()
     let (a, b) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
     let (_s, journal, rail) = node_on_own(a.path(), false);
     let url = serve(internal_router(sealed_peer(b.path()))).await;
-    let out = exchange(&reqwest::Client::new(), &url, &rail, &journal, None).await;
+    let out = exchange(&reqwest::Client::new(), &url, &rail, OWN, None).await;
     assert_eq!(out.pulled, 1, "{:?}", out.stop);
     assert_eq!(
         journal.read().unwrap().0.len(),
@@ -311,13 +312,13 @@ async fn a_peers_seal_prunes_the_daemons_own_namespace_whose_roster_is_derived()
     // The door admits this node's own key on its own ring — the refusal
     // `svrn ring seal mesh-measurements` used to hit. Asserted first so a
     // failure below is about the prune and not about the roster.
-    let roster = rail.roster(&journal).await.unwrap();
+    let roster = rail.inner().roster(&journal).await.unwrap();
     assert!(
         roster.person_for(&actor_of(&key)).is_some(),
         "the derived roster does not claim our key: {roster:?}"
     );
     let url = serve(internal_router(sealed_peer(d.path()))).await;
-    let out = exchange(&reqwest::Client::new(), &url, &rail, &journal, None).await;
+    let out = exchange(&reqwest::Client::new(), &url, &rail, OWN, None).await;
     assert_eq!(out.pulled, 1, "{:?}", out.stop);
     let held = journal.read().unwrap().0;
     assert_eq!(
@@ -353,7 +354,7 @@ async fn an_ordinary_op_arriving_prunes_nothing() {
         .unwrap();
 
     let url = serve(internal_router(peer_state)).await;
-    let out = exchange(&reqwest::Client::new(), &url, &rail, &journal, None).await;
+    let out = exchange(&reqwest::Client::new(), &url, &rail, NS, None).await;
 
     assert_eq!(out.pulled, 1);
     assert_eq!(journal.read().unwrap().0.len(), 4, "nothing was retired");
@@ -369,7 +370,7 @@ async fn ten_thousand_ops_do_not_fit_one_chunk() {
     let (_state, journal, rail) = node(dir.path(), &key, 10_000);
     let (chunk, more) = journal
         .ops_missing_from_within(
-            &commonwealth_rail::Digest::new(),
+            &commonwealth_rail_core::Digest::new(),
             RING_SYNC_OPS_BUDGET_BYTES,
         )
         .unwrap();
@@ -414,7 +415,7 @@ async fn a_second_call_that_fails_still_reports_what_the_first_call_pulled() {
                 }
                 axum::Json(RingSyncResponse {
                     namespace: req.namespace,
-                    digest: commonwealth_rail::Digest::new(),
+                    digest: commonwealth_rail_core::Digest::new(),
                     ops: gift,
                     ingested: 0,
                 })
@@ -428,7 +429,7 @@ async fn a_second_call_that_fails_still_reports_what_the_first_call_pulled() {
     let key = SigningKey::from_bytes(&[1u8; 32]);
     let (_state, journal, rail) = node(dir.path(), &key, 3);
 
-    let out = exchange(&reqwest::Client::new(), &url, &rail, &journal, None).await;
+    let out = exchange(&reqwest::Client::new(), &url, &rail, NS, None).await;
     assert!(
         matches!(out.stop, Some(ExchangeStop::Refused { .. })),
         "a 413 is a refusal, not an unreachable peer: {:?}",
@@ -461,7 +462,7 @@ async fn a_peer_that_answers_403_is_refused_rather_than_unreachable() {
     let key = SigningKey::from_bytes(&[1u8; 32]);
     let (_state, journal, rail) = node(dir.path(), &key, 3);
 
-    let out = exchange(&reqwest::Client::new(), &url, &rail, &journal, None).await;
+    let out = exchange(&reqwest::Client::new(), &url, &rail, NS, None).await;
     match out.stop {
         Some(ExchangeStop::Refused { sent_bytes, status }) => {
             assert_eq!(status, 403);
@@ -485,7 +486,7 @@ async fn a_peer_that_answers_413_is_refused_rather_than_unreachable() {
     let key = SigningKey::from_bytes(&[1u8; 32]);
     let (_state, journal, rail) = node(dir.path(), &key, 3);
 
-    let out = exchange(&reqwest::Client::new(), &url, &rail, &journal, None).await;
+    let out = exchange(&reqwest::Client::new(), &url, &rail, NS, None).await;
     match out.stop {
         Some(ExchangeStop::Refused { sent_bytes, status }) => {
             assert!(
@@ -504,7 +505,7 @@ async fn a_peer_that_answers_413_is_refused_rather_than_unreachable() {
         &reqwest::Client::new(),
         "http://127.0.0.1:1/internal/ring/sync",
         &rail,
-        &journal,
+        NS,
         None,
     )
     .await;
@@ -533,7 +534,7 @@ async fn a_peer_whose_digest_never_moves_stops_the_loop_instead_of_spinning() {
                 // black hole that stays reachable.
                 axum::Json(RingSyncResponse {
                     namespace: req.namespace,
-                    digest: commonwealth_rail::Digest::new(),
+                    digest: commonwealth_rail_core::Digest::new(),
                     ops: Vec::new(),
                     ingested: 0,
                 })
@@ -545,7 +546,7 @@ async fn a_peer_whose_digest_never_moves_stops_the_loop_instead_of_spinning() {
     let key = SigningKey::from_bytes(&[1u8; 32]);
     let (_state, journal, rail) = node(dir.path(), &key, 3);
 
-    let out = exchange(&reqwest::Client::new(), &url, &rail, &journal, None).await;
+    let out = exchange(&reqwest::Client::new(), &url, &rail, NS, None).await;
     assert!(out.stop.is_none());
     assert_eq!(out.pulled, 0);
     assert_eq!(out.pushed, 0);

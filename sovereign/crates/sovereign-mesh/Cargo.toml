@@ -69,6 +69,11 @@ commonwealth-state = { path = "../../../commonwealth/crates/commonwealth-state" 
 # rail sites were its only references — so the mesh no longer links the
 # knowledge layer to install a journal.
 commonwealth-rail = { workspace = true }
+# The port's vocabulary (`rail_port.rs`): the trait's signatures are the
+# rail-core types the serving cluster's doors speak, so the DAEMON's dialing
+# implementation — which may not name the journal crate — still compiles
+# against the same trait the local one implements.
+commonwealth-rail-core = { workspace = true }
 # The work plane's vocabulary and its fold (cw-lift 5c). The pump seals the
 # `work` namespace and re-appends its live set, and the live set of a queue is
 # `WorkProjection::fold` — a DIRECT dep on the crate that owns the fold, for

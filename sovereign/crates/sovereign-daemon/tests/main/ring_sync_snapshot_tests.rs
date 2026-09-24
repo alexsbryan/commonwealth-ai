@@ -1,9 +1,9 @@
 use axum::response::IntoResponse;
 use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::mesh::Mesh;
-use commonwealth_rail::{
-    actor_of, body_json, sign_ring_op, Ed25519Verifier, Op, Payload, Person, RailAct, RingJournal,
-    RingRail, Roster, SignedOp, SigningKey,
+use commonwealth_rail_core::{
+    actor_of, body_json, sign_ring_op, Ed25519Verifier, Op, Payload, Person, RailAct, Roster,
+    SignedOp, SigningKey,
 };
 use sovereign_daemon::server::internal_router;
 use sovereign_daemon::state::AppState;
@@ -59,8 +59,8 @@ async fn a_snapshot_that_arrives_in_two_chunks_retires_nothing_until_the_mark() 
             .appended,
         3
     );
-    let a_journal = a_rail.journal(KV).unwrap();
-    let b_journal = b_rail.journal(KV).unwrap();
+    let a_journal = a_rail.inner().journal(KV).unwrap();
+    let b_journal = b_rail.inner().journal(KV).unwrap();
 
     // B holds A's pre-seal history.
     let pre = a_journal.read().unwrap().0;
@@ -172,15 +172,14 @@ async fn an_excluded_namespace_never_enters_the_outbox_nor_a_peers_store() {
 
     let pumped = sovereign_mesh::rail_kv_pump::pump_once(&*a_state.inner.fabric).await;
     assert_eq!(pumped.appended, 1, "{pumped:?}");
-    let namespaces = a_rail.namespaces().unwrap();
+    let namespaces = a_rail.inner().namespaces().unwrap();
     assert!(
         !namespaces.iter().any(|n| n == PRIVATE),
         "a private namespace has no journal at all: {namespaces:?}"
     );
 
     let url = serve(internal_router(b_state.clone())).await;
-    let journal = a_rail.journal(KV).unwrap();
-    let out = exchange(&reqwest::Client::new(), &url, &a_rail, &journal, None).await;
+    let out = exchange(&reqwest::Client::new(), &url, &a_rail, KV, None).await;
     assert!(out.stop.is_none(), "{:?}", out.stop);
     sovereign_mesh::rail_kv_pump::project_all_on_disk(&*b_state.inner.fabric).await;
 
@@ -244,14 +243,14 @@ async fn a_peers_private_namespace_is_taken_by_the_rail_and_refused_by_the_proje
     // A is hostile: it writes the private namespace onto its own journal
     // directly, which is what a peer running patched code would do. Its own
     // store is never asked, so the outbox guard (d) pins is not in the way.
-    let a_private = a_rail.journal(PRIVATE).unwrap();
+    let a_private = a_rail.inner().journal(PRIVATE).unwrap();
     assert_eq!(
         a_private
             .ingest_all(&[kv_op(PRIVATE, &ka, 0, "secret", Some(b"mine"), now)])
             .unwrap(),
         1
     );
-    let a_public = a_rail.journal(KV).unwrap();
+    let a_public = a_rail.inner().journal(KV).unwrap();
     assert_eq!(
         a_public
             .ingest_all(&[kv_op(KV, &ka, 0, "public", Some(b"shared"), now)])
@@ -262,15 +261,22 @@ async fn a_peers_private_namespace_is_taken_by_the_rail_and_refused_by_the_proje
     // Both namespaces go to B through the real route.
     let url = serve(internal_router(b_state.clone())).await;
     let client = reqwest::Client::new();
-    for journal in [&a_private, &a_public] {
-        let out = exchange(&client, &url, &a_rail, journal, None).await;
+    for (ns, _journal) in [(PRIVATE, &a_private), (KV, &a_public)] {
+        let out = exchange(&client, &url, &a_rail, ns, None).await;
         assert!(out.stop.is_none(), "{:?}", out.stop);
     }
 
     // The rail took both — B holds the private line on disk. If this fails
     // the test below proves nothing, because nothing arrived.
     assert_eq!(
-        b_rail.journal(PRIVATE).unwrap().read().unwrap().0.len(),
+        b_rail
+            .inner()
+            .journal(PRIVATE)
+            .unwrap()
+            .read()
+            .unwrap()
+            .0
+            .len(),
         1,
         "the ingest is author-blind and namespace-blind, and that is the design"
     );
@@ -319,6 +325,7 @@ async fn a_round_projects_the_namespace_even_when_it_pulled_nothing() {
     let mut mesh_for_b = kv_mesh(&ka, &kb, a_id, b_id);
     let (a_state, a_rail) = kv_node(&a_dir, &ka, a_id, kv_mesh(&ka, &kb, a_id, b_id));
     a_rail
+        .inner()
         .journal(KV)
         .unwrap()
         .ingest_all(&[kv_op(KV, &ka, 0, "from-a", Some(b"a"), now)])
@@ -332,6 +339,7 @@ async fn a_round_projects_the_namespace_even_when_it_pulled_nothing() {
     }
     let (b_state, b_rail) = kv_node(db.path(), &kb, b_id, mesh_for_b);
     b_rail
+        .inner()
         .journal(KV)
         .unwrap()
         .ingest_all(&[kv_op(KV, &kb, 0, "from-b", Some(b"b"), now)])
@@ -384,7 +392,7 @@ async fn a_retention_sweep_is_not_undone_by_the_next_projection() {
     // Two ledger events A signed: one a day past the aggregation window,
     // one inside it. Days apart from the boundary, so no clock tick
     // between the plant and the sweep can move which side either is on.
-    let a_journal = a_rail.journal(LEDGER).unwrap();
+    let a_journal = a_rail.inner().journal(LEDGER).unwrap();
     assert_eq!(
         a_journal
             .ingest_all(&[
@@ -396,7 +404,7 @@ async fn a_retention_sweep_is_not_undone_by_the_next_projection() {
     );
 
     let url = serve(internal_router(b_state.clone())).await;
-    let out = exchange(&reqwest::Client::new(), &url, &a_rail, &a_journal, None).await;
+    let out = exchange(&reqwest::Client::new(), &url, &a_rail, LEDGER, None).await;
     assert!(out.stop.is_none(), "the exchange failed: {:?}", out.stop);
     sovereign_mesh::rail_kv_pump::project_all_on_disk(&*b_state.inner.fabric).await;
     assert!(
@@ -454,7 +462,7 @@ async fn an_authors_own_retention_sweep_is_not_undone_and_puts_nothing_on_the_ra
     let now = commonwealth_core::clock::unix_now_secs();
     let window = u64::from(commonwealth_core::contributions::DEFAULT_WINDOW_DAYS) * 86_400;
     let floor = now - window;
-    let a_journal = a_rail.journal(LEDGER).unwrap();
+    let a_journal = a_rail.inner().journal(LEDGER).unwrap();
     assert_eq!(
         a_journal
             .ingest_all(&[

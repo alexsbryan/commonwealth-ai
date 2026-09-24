@@ -4,8 +4,16 @@ use commonwealth_core::ids::NodeId;
 use commonwealth_rail::{Ed25519Verifier, Payload, Person, RingJournal, RingSigner};
 
 use super::{publish, read, republish, to_payload};
+use crate::rail_port::LocalRingRail;
 use crate::ring_roster::tests::{key, member, mesh_of, pubkey_of};
 use crate::ring_roster::MeshRoster;
+
+/// The module functions go through the PORT, and these tests pin them against
+/// the local journals — one port over the directory the raw `RingJournal`
+/// handles below read, so both spellings see the same lines.
+fn port(dir: &std::path::Path, me: &commonwealth_rail::SigningKey) -> LocalRingRail {
+    LocalRingRail::new(dir, std::sync::Arc::new(me.clone()))
+}
 
 /// The crate's ONE measurement fixture. `mesh_http`'s endpoint tests read the
 /// same record this module journals, or neither proves anything about the
@@ -79,8 +87,8 @@ fn a_measurement_record_cannot_be_a_rail_payload_directly() {
 /// transfer is the rail's own anti-entropy primitives — the pair
 /// `ring_sync::exchange` calls — and B admits under a roster derived from its
 /// own membership view, which is the only kind of roster this namespace has.
-#[test]
-fn a_measurement_published_on_a_is_readable_on_b_through_the_rail() {
+#[tokio::test]
+async fn a_measurement_published_on_a_is_readable_on_b_through_the_rail() {
     let (dir_a, dir_b) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
     let (key_a, key_b) = (key(21), key(22));
     let (id_a, id_b) = (NodeId::from_u128(1), NodeId::from_u128(2));
@@ -93,14 +101,21 @@ fn a_measurement_published_on_a_is_readable_on_b_through_the_rail() {
     let on_a = MeshRoster::derive(&mesh, id_a, Some(pubkey_of(&key_a)));
     let on_b = MeshRoster::derive(&mesh, id_b, Some(pubkey_of(&key_b)));
 
-    let a = journal(dir_a.path());
+    let a = port(dir_a.path(), &key_a);
     let b = journal(dir_b.path());
     let record = a_measurement(17.35, 1_700_000_000);
-    publish(&a, &key_a, on_a.roster(), &record).expect("A can author on its own journal");
+    publish(&a, on_a.roster(), &record)
+        .await
+        .expect("A can author on its own journal");
 
     // One anti-entropy exchange, exactly as `ring_sync` performs it.
     let theirs = b.digest().unwrap();
-    let ops = a.ops_missing_from(&theirs).unwrap();
+    let ops = a
+        .inner()
+        .journal(mm::MEASUREMENTS_APP_ID)
+        .unwrap()
+        .ops_missing_from(&theirs)
+        .unwrap();
     assert_eq!(ops.len(), 1, "A offers the one op B lacks");
     assert_eq!(b.ingest_all(&ops).unwrap(), 1);
 
@@ -124,7 +139,11 @@ fn a_measurement_published_on_a_is_readable_on_b_through_the_rail() {
     // is authoritative, and echoing it back would show the operator their own
     // run wearing their own node name.
     let mine = read(
-        &a.admit(on_a.roster(), &Ed25519Verifier).unwrap(),
+        &a.inner()
+            .journal(mm::MEASUREMENTS_APP_ID)
+            .unwrap()
+            .admit(on_a.roster(), &Ed25519Verifier)
+            .unwrap(),
         Some(&RingSigner::actor(&key_a)),
     );
     assert!(mine.found.is_empty());
@@ -142,8 +161,8 @@ fn a_measurement_published_on_a_is_readable_on_b_through_the_rail() {
 /// so the same journal admits the same ops the instant the key arrives —
 /// under the same actor, because a node's signing key is `load_or_generate`
 /// on disk and does not change when its advertisement does.
-#[test]
-fn an_op_from_an_unidentified_peer_is_a_gap_that_heals_when_its_key_arrives() {
+#[tokio::test]
+async fn an_op_from_an_unidentified_peer_is_a_gap_that_heals_when_its_key_arrives() {
     let dir = tempfile::tempdir().unwrap();
     let (me, peer) = (key(31), key(32));
     let (id_me, id_peer) = (NodeId::from_u128(1), NodeId::from_u128(2));
@@ -158,11 +177,11 @@ fn an_op_from_an_unidentified_peer_is_a_gap_that_heals_when_its_key_arrives() {
         Some(pubkey_of(&peer)),
     );
     publish(
-        &their_journal,
-        &peer,
+        &port(theirs.path(), &peer),
         their_roster.roster(),
         &a_measurement(11.08, 1_700_000_100),
     )
+    .await
     .unwrap();
 
     let ours = journal(dir.path());
@@ -226,8 +245,8 @@ fn an_op_from_an_unidentified_peer_is_a_gap_that_heals_when_its_key_arrives() {
 /// refused at the door, with a sentence, and nothing is lost — the run is
 /// already in `mesh-measurements.json`, and `republish` carries it the moment
 /// an identity exists.
-#[test]
-fn a_node_that_cannot_place_its_own_key_refuses_to_publish() {
+#[tokio::test]
+async fn a_node_that_cannot_place_its_own_key_refuses_to_publish() {
     let dir = tempfile::tempdir().unwrap();
     let me = key(41);
     let id = NodeId::from_u128(1);
@@ -237,11 +256,11 @@ fn a_node_that_cannot_place_its_own_key_refuses_to_publish() {
     assert!(roster.is_empty());
 
     let err = publish(
-        &journal(dir.path()),
-        &me,
+        &port(dir.path(), &me),
         roster.roster(),
         &a_measurement(9.0, 1),
     )
+    .await
     .expect_err("authoring under an unclaimed key is refused");
     assert!(
         err.contains("nobody in the") && err.contains("roster claims that key"),
@@ -254,8 +273,8 @@ fn a_node_that_cannot_place_its_own_key_refuses_to_publish() {
 /// `to_wire` refuses an invalid run, and the rail inherits that refusal
 /// rather than restating it. A failed run is glassbox material for the
 /// operator who caused it and noise to everyone else.
-#[test]
-fn an_invalid_run_never_reaches_the_journal() {
+#[tokio::test]
+async fn an_invalid_run_never_reaches_the_journal() {
     let dir = tempfile::tempdir().unwrap();
     let me = key(51);
     let id = NodeId::from_u128(1);
@@ -268,7 +287,9 @@ fn an_invalid_run_never_reaches_the_journal() {
     bad.verdict = mm::Verdict::Invalid {
         problems: vec!["no content frames".into()],
     };
-    let err = publish(&journal(dir.path()), &me, roster.roster(), &bad).expect_err("refused");
+    let err = publish(&port(dir.path(), &me), roster.roster(), &bad)
+        .await
+        .expect_err("refused");
     assert_eq!(err, "an invalid run does not travel");
     assert!(journal(dir.path()).read().unwrap().0.is_empty());
 }
@@ -277,8 +298,8 @@ fn an_invalid_run_never_reaches_the_journal() {
 /// nothing. Idempotence is by CONTENT (`wire_key`) and not by op id: an op id
 /// folds in `seq` and a timestamp, so an id-keyed check would mint a fresh
 /// line on every start and the journal would grow without bound.
-#[test]
-fn a_republish_appends_once_and_never_again() {
+#[tokio::test]
+async fn a_republish_appends_once_and_never_again() {
     let dir = tempfile::tempdir().unwrap();
     let me = key(61);
     let id = NodeId::from_u128(1);
@@ -297,24 +318,34 @@ fn a_republish_appends_once_and_never_again() {
         invalid,
     ];
 
-    let j = journal(dir.path());
-    let first = republish(&j, &me, roster.roster(), &local);
+    let rail = port(dir.path(), &me);
+    let first = republish(&rail, roster.roster(), &local).await;
     assert_eq!(first.appended, 2);
     assert_eq!(first.withheld, 1, "the invalid run stays home");
     assert_eq!(first.already_held, 0);
 
-    let second = republish(&j, &me, roster.roster(), &local);
+    let second = republish(&rail, roster.roster(), &local).await;
     assert_eq!(second.appended, 0, "a second boot appends nothing");
     assert_eq!(second.already_held, 2);
-    assert_eq!(j.read().unwrap().0.len(), 2, "and the journal did not grow");
+    assert_eq!(
+        rail.inner()
+            .journal(mm::MEASUREMENTS_APP_ID)
+            .unwrap()
+            .read()
+            .unwrap()
+            .0
+            .len(),
+        2,
+        "and the journal did not grow"
+    );
 }
 
 /// A reader scanning a list wants the run they just took at the top. The
 /// journal's own order is `(ts_unix, actor, id)` — the total order every node
 /// agrees on, which is a delivery property and not a reading one — so the
 /// recency sort is this module's and is pinned here.
-#[test]
-fn measurements_are_returned_newest_first() {
+#[tokio::test]
+async fn measurements_are_returned_newest_first() {
     let dir = tempfile::tempdir().unwrap();
     let me = key(71);
     let id = NodeId::from_u128(1);
@@ -323,10 +354,13 @@ fn measurements_are_returned_newest_first() {
         id,
         Some(pubkey_of(&me)),
     );
-    let j = journal(dir.path());
+    let rail = port(dir.path(), &me);
     for at in [1_700_000_100u64, 1_700_000_900, 1_700_000_500] {
-        publish(&j, &me, roster.roster(), &a_measurement(7.0, at)).unwrap();
+        publish(&rail, roster.roster(), &a_measurement(7.0, at))
+            .await
+            .unwrap();
     }
+    let j = journal(dir.path());
     // `None` excludes nothing — the diagnostic path, and the only way to see
     // what this node has actually put on the ring.
     let seen = read(&j.admit(roster.roster(), &Ed25519Verifier).unwrap(), None);
@@ -339,8 +373,8 @@ fn measurements_are_returned_newest_first() {
 /// newer schema, or a second act somebody adds to this namespace later — is
 /// COUNTED. "Nobody has measured this" and "somebody has, in a dialect we do
 /// not speak" send an operator to different places (ARCH §18.3).
-#[test]
-fn an_admitted_line_this_build_cannot_read_is_counted_not_swallowed() {
+#[tokio::test]
+async fn an_admitted_line_this_build_cannot_read_is_counted_not_swallowed() {
     let dir = tempfile::tempdir().unwrap();
     let me = key(81);
     let id = NodeId::from_u128(1);
@@ -349,14 +383,11 @@ fn an_admitted_line_this_build_cannot_read_is_counted_not_swallowed() {
         id,
         Some(pubkey_of(&me)),
     );
+    let rail = port(dir.path(), &me);
+    publish(&rail, roster.roster(), &a_measurement(11.08, 1_700_000_000))
+        .await
+        .unwrap();
     let j = journal(dir.path());
-    publish(
-        &j,
-        &me,
-        roster.roster(),
-        &a_measurement(11.08, 1_700_000_000),
-    )
-    .unwrap();
     // A well-formed rail act that is not one of ours.
     j.append(
         commonwealth_rail::RailAct::Record {
@@ -386,8 +417,8 @@ fn an_admitted_line_this_build_cannot_read_is_counted_not_swallowed() {
 ///
 /// Per CONFIGURATION, not per publisher: a second config measured once is
 /// still there.
-#[test]
-fn a_publishers_history_is_capped_at_the_depth_their_own_file_keeps() {
+#[tokio::test]
+async fn a_publishers_history_is_capped_at_the_depth_their_own_file_keeps() {
     let dir = tempfile::tempdir().unwrap();
     let me = key(91);
     let id = NodeId::from_u128(1);
@@ -396,23 +427,24 @@ fn a_publishers_history_is_capped_at_the_depth_their_own_file_keeps() {
         id,
         Some(pubkey_of(&me)),
     );
-    let j = journal(dir.path());
+    let rail = port(dir.path(), &me);
 
     let over = mm::MAX_RUNS_PER_KEY + 3;
     for i in 0..over {
         publish(
-            &j,
-            &me,
+            &rail,
             roster.roster(),
             &a_measurement(10.0, 1_700_000_000 + i as u64),
         )
+        .await
         .unwrap();
     }
     // A different configuration — same machine, a different context length.
     let mut other = a_measurement(10.0, 1_700_000_000);
     other.key.n_ctx = 8192;
-    publish(&j, &me, roster.roster(), &other).unwrap();
+    publish(&rail, roster.roster(), &other).await.unwrap();
 
+    let j = journal(dir.path());
     let seen = read(&j.admit(roster.roster(), &Ed25519Verifier).unwrap(), None);
     assert_eq!(
         j.read().unwrap().0.len(),

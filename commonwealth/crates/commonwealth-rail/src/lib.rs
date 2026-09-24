@@ -301,29 +301,11 @@ impl RingRail {
 }
 
 // ── What a compaction did ────────────────────────────────────
-
-/// What one [`RingJournal::compact`] removed, and the floors it removed by.
-///
-/// A count and not a `()` because "the journal is now shorter" and "there was
-/// nothing to shorten" are different facts, and a caller that cannot tell them
-/// apart cannot report either honestly. `removed: 0` is a normal, successful
-/// answer — it is what every ring that has never sealed gets.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct Compaction {
-    /// Lines deleted from the journal.
-    pub removed: usize,
-    /// Lines still on it afterwards.
-    pub kept: usize,
-    /// Gaps the journal had before and does not have now — refused lines that
-    /// sat below a floor their claimed author authenticated. Reported because
-    /// a gap vanishing is a change to what this node claims completeness over,
-    /// and a destructive path may not make that change silently (ARCH §18.3).
-    pub gaps_cleared: usize,
-    /// The AUTHENTICATED floors this prune deleted below — [`admit`]'s own map,
-    /// carried through rather than re-derived, so the number above and the
-    /// reason for it cannot disagree.
-    pub floors: Floors,
-}
+//
+// `Compaction` moved to `commonwealth-rail-core` beside the `Floors` map it
+// carries through: it is vocabulary, not storage, and the compact door's
+// answer crosses back to a dialing client as this type. The glob re-export
+// above keeps `commonwealth_rail::Compaction` resolving.
 
 /// One [`RingJournal::seal`]: the seal act, and the prune it authorises.
 ///

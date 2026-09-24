@@ -379,18 +379,11 @@ async fn the_door_claims_a_name_once_and_refuses_the_three_collisions() {
     assert_eq!(status, StatusCode::CONFLICT, "{body}");
     assert!(body.contains("already someone else in this room"), "{body}");
 
-    // The handle is accepted on the routes behind the door…
-    let act = serde_json::json!({
-        "op": "record",
-        "payload": { "kind": "doc-change", "doc": "ring-doc", "update": "AA==" },
-    });
-    let mut req = request(
-        "POST",
-        "/v1/rail/append",
-        LAN_PEER,
-        Some(GUEST_TOKEN),
-        Some(act),
-    );
+    // The handle is accepted on the routes behind the door — observed on a
+    // READ, because guest WRITES are refused while the journals live at the
+    // serving process (fp-54; the refusal is pinned in
+    // `a_guest_write_is_refused_while_the_journals_live_at_the_serving_process`).
+    let mut req = request("GET", "/v1/rail/log", LAN_PEER, Some(GUEST_TOKEN), None);
     req.headers_mut().insert(
         axum::http::HeaderName::from_static("x-ring-session"),
         axum::http::HeaderValue::from_str(&handle).unwrap(),
@@ -411,16 +404,16 @@ async fn the_door_claims_a_name_once_and_refuses_the_three_collisions() {
 }
 
 /// **The door writes whose words an act was, and a lying page gets nowhere.**
-/// The page here sends a `guest` of its own in the payload — the field the
-/// rail used to believe — and the act is still attributed to the name the
-/// session holds. The log hands the finished name back, so an app renders
-/// `person` and is right without knowing guests exist.
-///
-/// This replaces the append-time member-name refusal: that check read a field
-/// the page supplied, and its subject now lives where the name is CLAIMED
-/// (`the_door_claims_a_name_once_and_refuses_the_three_collisions`).
+/// The journals live at the mesh's serving process since fp-54, and its door
+/// carries no sessions — a guest's name could not be authenticated there, so
+/// this door REFUSES the write rather than file a guest's words under the
+/// member's name (principle 6: named absence, never a silent substitution).
+/// The name the door holds still decides: the page's `on_behalf_of` and its
+/// payload `guest` field are equally unread, and the log carries no act at
+/// all — which is the point. Re-mounting guest writes wants the stamp's wire
+/// shape decided (recorded on fp-54).
 #[tokio::test]
-async fn the_door_stamps_the_guest_and_the_page_cannot() {
+async fn a_guest_write_is_refused_while_the_journals_live_at_the_serving_process() {
     let dir = tempfile::tempdir().unwrap();
     let key = SigningKey::from_bytes(&[1u8; 32]);
     let a = with_guest(
@@ -457,7 +450,8 @@ async fn the_door_stamps_the_guest_and_the_page_cannot() {
     };
 
     // The page names somebody else, in the payload and beside it. Neither is
-    // read: the door already knows who is holding this phone.
+    // read, and nothing is written: the door refuses before the body is even
+    // parsed as an act.
     let (status, body) = door(
         a.clone(),
         &page,
@@ -474,22 +468,25 @@ async fn the_door_stamps_the_guest_and_the_page_cannot() {
         ),
     )
     .await;
-    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(
+        status,
+        StatusCode::SERVICE_UNAVAILABLE,
+        "a guest write must be refused, not attributed to the member: {body}"
+    );
+    assert!(
+        body.contains("serving process") && body.contains("sessions"),
+        "the refusal must name the gap: {body}"
+    );
 
+    // And the log carries nothing — no act under the member's name, and no
+    // page-supplied name either.
     let (_, log) = door(a, &page, with_handle("GET", "/v1/rail/log", None)).await;
     let log: serde_json::Value = serde_json::from_str(&log).unwrap();
-    let op = &log["ops"][0];
-    let person = op["person"].as_str().expect("a person");
-    assert!(
-        person.starts_with("ana, guest of "),
-        "the door's name did not reach the log: {person}"
-    );
-    assert_eq!(op["guest"]["name"], "ana");
     assert_eq!(
-        op["on_behalf_of"], "ana",
-        "the name must be what was SIGNED"
+        log["ops"].as_array().map(Vec::len),
+        Some(0),
+        "no act may appear, attributed to anyone: {log}"
     );
-    assert!(!person.contains("zoe"), "the page's claim won: {person}");
 }
 
 /// The second app on this wall: its own grant, its own bearer, its own QR —
@@ -509,6 +506,8 @@ fn second_app(state: &AppState, key: &SigningKey) {
     state
         .ring_rail()
         .expect("a rail")
+        .as_local()
+        .expect("the test rail is the local implementation")
         .journal(DOC_NS)
         .unwrap()
         .set_roster(&Roster::new(members))
@@ -581,8 +580,11 @@ async fn a_name_claimed_on_one_app_is_the_same_person_on_the_next() {
 
     let handle = claimed(a.clone(), &page, GUEST_TOKEN, "ana").await;
 
-    // The doc, on the same wall, under its own bearer: no second prompt, and
-    // the door names the writer from the handle it already knows.
+    // The doc, on the same wall, under its own bearer: no second prompt. The
+    // append is REFUSED — guest writes live at the serving process now and it
+    // carries no sessions — but the refusal is the journal gap (503), not an
+    // auth failure, which is the proof that the handle walked: under the doc's
+    // bearer the door still knows who is holding this phone.
     let (status, body) = door(
         a.clone(),
         &page,
@@ -598,7 +600,13 @@ async fn a_name_claimed_on_one_app_is_the_same_person_on_the_next() {
         ),
     )
     .await;
-    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(
+        status,
+        StatusCode::SERVICE_UNAVAILABLE,
+        "a walked handle must reach the write door (and be refused as a guest \
+         write), not be treated as unknown: {body}"
+    );
+    assert!(body.contains("serving process"), "{body}");
 
     let (_, log) = door(
         a.clone(),
@@ -610,11 +618,6 @@ async fn a_name_claimed_on_one_app_is_the_same_person_on_the_next() {
     assert_eq!(
         log["namespace"], DOC_NS,
         "reach followed the handle instead of the bearer presented"
-    );
-    let person = log["ops"][0]["person"].as_str().expect("a person");
-    assert!(
-        person.starts_with("ana, guest of "),
-        "the name did not walk to the second app: {person}"
     );
 
     // And nothing of it reached the app the name was claimed on.
@@ -736,12 +739,23 @@ async fn one_wall_bearer_reaches_every_declared_app_and_is_refused_the_rest() {
         )
     };
 
-    // The declared, writable app: one bearer, and the guest's name on the act.
+    // The declared, writable app: one bearer. The write is refused with the
+    // serving-process gap (guest writes are not served since fp-54) — the
+    // bearer reached the door, which is what this wall tests.
     let (status, body) = door(a.clone(), &page, append(NS)).await;
-    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(
+        status,
+        StatusCode::SERVICE_UNAVAILABLE,
+        "the declared app's write is the named guest-write refusal: {body}"
+    );
     let (status, body) = door(a.clone(), &page, log(NS)).await;
     assert_eq!(status, StatusCode::OK);
-    assert!(body.contains("ana, guest of alex"), "{body}");
+    let ns_log: serde_json::Value = serde_json::from_str(&body).unwrap();
+    assert_eq!(
+        ns_log["ops"].as_array().map(Vec::len),
+        Some(0),
+        "and nothing was filed: {ns_log}"
+    );
 
     // The second app on the same wall, registered read-only. The SAME bearer
     // reads it — narrowing what a guest may DO is not narrowing what they see.

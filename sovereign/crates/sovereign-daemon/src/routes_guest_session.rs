@@ -75,7 +75,7 @@ pub struct ClaimRequest {
 /// THE implementation of that comparison. `routes_rail::append` calls this one
 /// rather than keeping its own: two spellings of "is this a member's name" is a
 /// decider with two answers (ARCH 8).
-pub(crate) fn names_a_member(roster: &commonwealth_rail::Roster, name: &str) -> bool {
+pub(crate) fn names_a_member(roster: &commonwealth_rail_core::Roster, name: &str) -> bool {
     let name = name.trim();
     roster
         .members
@@ -142,11 +142,7 @@ pub async fn claim_name(
         );
     };
     for namespace in &namespaces {
-        let journal = match rail.journal(namespace) {
-            Ok(j) => j,
-            Err(e) => return refuse(axum::http::StatusCode::BAD_REQUEST, e.to_string()),
-        };
-        let roster = match rail.roster(&journal).await {
+        let roster = match rail.roster(namespace).await {
             Ok(r) => r,
             Err(e) => return refuse(axum::http::StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
         };

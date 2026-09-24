@@ -43,7 +43,7 @@ fn body_of_size(target: usize) -> Payload {
     let mut filler = target.saturating_sub(40);
     loop {
         let payload = Payload::new(serde_json::json!({ "b": "x".repeat(filler) })).unwrap();
-        let got = commonwealth_rail::body_json(
+        let got = commonwealth_rail_core::body_json(
             &RailAct::Record {
                 payload: payload.clone(),
             },
@@ -85,12 +85,12 @@ fn seed(journal: &RingJournal, key: &SigningKey, n: usize) -> usize {
 /// signs it — so its `OpId` is distinct and its signature actually verifies.
 fn signed(key: &SigningKey, namespace: &str, seq: u64, act: RailAct) -> Op<SignedOp> {
     let ts = 1_700_000_000i64 + seq as i64;
-    let sig = commonwealth_rail::sign_ring_op(
+    let sig = commonwealth_rail_core::sign_ring_op(
         key,
         namespace,
         ts,
         seq,
-        &commonwealth_rail::body_json(&act, None),
+        &commonwealth_rail_core::body_json(&act, None),
     );
     Op::new(
         SignedOp {
@@ -118,15 +118,15 @@ fn node(
     key: &SigningKey,
     n: usize,
 ) -> (AppState, std::sync::Arc<RingJournal>) {
-    let rail = Arc::new(RingRail::new(dir, Arc::new(key.clone())));
-    let journal = rail.journal(NS).unwrap();
+    let rail = LocalRingRail::new(dir, Arc::new(key.clone()));
+    let journal = rail.inner().journal(NS).unwrap();
     if n > 0 {
         journal.set_roster(&solo_roster(key)).unwrap();
         assert_eq!(seed(&journal, key, n), n, "the fixture must land in full");
     }
     let state = bare_state_with_seed(
         sovereign_daemon::state::FabricSeed {
-            ring_rail: Some(rail),
+            ring_rail: Some(Arc::new(rail)),
             ..Default::default()
         },
         sovereign_grants::GuestSessionBinding::Door,

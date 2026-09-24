@@ -221,7 +221,7 @@ pub async fn run_one_round(fabric: &FabricPart) -> RoundOutcome {
     let Some(rail) = fabric.ring_rail() else {
         return outcome;
     };
-    let namespaces = match rail.namespaces() {
+    let namespaces = match rail.namespaces().await {
         Ok(n) => n,
         Err(e) => {
             warn!(error = %e, "ring sync: cannot enumerate namespaces");
@@ -289,19 +289,12 @@ pub async fn run_one_round(fabric: &FabricPart) -> RoundOutcome {
 
     for namespace in &namespaces {
         outcome.namespaces += 1;
-        let journal = match rail.journal(namespace) {
-            Ok(l) => l,
-            Err(e) => {
-                warn!(namespace, error = %e, "ring sync: cannot open journal");
-                continue;
-            }
-        };
         // ── A ring is OFFERED to its roster, and to nobody else.
         //
         // Per NAMESPACE and not per round: one peer may be on one ring and not
         // another, so a round-level peer set cannot answer this. The roster is
-        // read through `RingRail::roster`, the rail's one reader — so a
-        // namespace whose roster is DERIVED from membership (every ring with no
+        // read through the rail's ONE reader — so a namespace whose roster is
+        // DERIVED from membership (every ring with no
         // `roster.json`, and the seven `REGISTERED_NAMESPACES`) still names
         // every member and this filter passes everyone, while the work plane,
         // which is file-rostered on purpose, narrows.
@@ -309,7 +302,7 @@ pub async fn run_one_round(fabric: &FabricPart) -> RoundOutcome {
         // An UNREADABLE roster offers nothing for this namespace. Under-share,
         // never over-share — the same posture `prune_what_the_peer_retired`
         // takes when it cannot read one.
-        let roster = match rail.roster(&journal).await {
+        let roster = match rail.roster(namespace).await {
             Ok(r) => r,
             Err(e) => {
                 warn!(
@@ -349,7 +342,7 @@ pub async fn run_one_round(fabric: &FabricPart) -> RoundOutcome {
             let mut refused = false;
             for ep in &endpoints {
                 let url = format!("{}/internal/ring/sync", ep.base_url);
-                let ex = exchange(http, &url, &rail, &journal, stamp.as_ref()).await;
+                let ex = exchange(http, &url, rail.as_ref(), namespace, stamp.as_ref()).await;
                 // Counted BEFORE the verdict is read. `ingest_all` has already
                 // written these lines to disk, so they are progress whether or
                 // not a later call in the same exchange failed — the old shape
@@ -412,13 +405,11 @@ pub async fn run_one_round(fabric: &FabricPart) -> RoundOutcome {
         //   pull would be blind to exactly the direction the pump's nudge
         //   creates, and a write would reach a peer's disk immediately and its
         //   store never.
-        if let Ok(j) = rail.journal(namespace) {
-            if crate::rail_kv_pump::project_namespace(fabric, &rail, &j)
-                .await
-                .is_some()
-            {
-                outcome.namespaces_projected += 1;
-            }
+        if crate::rail_kv_pump::project_namespace(fabric, rail.as_ref(), namespace)
+            .await
+            .is_some()
+        {
+            outcome.namespaces_projected += 1;
         }
     }
     outcome
@@ -509,19 +500,15 @@ impl ExchangeOutcome {
 /// nothing on the daemon's own namespace. A refusal is logged and the exchange
 /// carries on: the ops are ingested and durable, and a journal that stayed
 /// long is a worse outcome than a stalled round, not a reason to make one.
-async fn prune_what_the_peer_retired(
-    rail: &commonwealth_rail::RingRail,
-    journal: &commonwealth_rail::RingJournal,
-) {
-    let namespace = journal.namespace();
-    let roster = match rail.roster(journal).await {
+async fn prune_what_the_peer_retired(rail: &dyn crate::rail_port::RingRailPort, namespace: &str) {
+    let roster = match rail.roster(namespace).await {
         Ok(r) => r,
         Err(e) => {
             warn!(namespace, error = %e, "ring sync: a seal arrived and the roster is unreadable, so nothing was pruned");
             return;
         }
     };
-    match journal.compact(&roster, &commonwealth_rail::Ed25519Verifier) {
+    match rail.journal_compact(namespace, &roster).await {
         Ok(done) if done.removed > 0 => {
             info!(
                 namespace,
@@ -548,20 +535,19 @@ async fn prune_what_the_peer_retired(
 pub async fn exchange(
     http: &reqwest::Client,
     url: &str,
-    rail: &commonwealth_rail::RingRail,
-    journal: &commonwealth_rail::RingJournal,
+    rail: &dyn crate::rail_port::RingRailPort,
+    namespace: &str,
     // This node's proof that it holds the mesh secret, or `None` on a mesh
     // with no credential. Carried through rather than minted here: one
     // function mints it, and it is the round that holds the mesh.
     stamp: Option<&commonwealth_transport::mesh_proof::MeshProofStamp>,
 ) -> ExchangeOutcome {
-    let namespace = journal.namespace();
     let mut out = ExchangeOutcome::default();
     let mut last_peer_digest: Option<commonwealth_rail::Digest> = None;
 
     for chunk in 1..=MAX_CHUNKS_PER_EXCHANGE {
         // ── Call 1 — learn what they have, take one chunk of what we lack.
-        let mine = match journal.digest() {
+        let mine = match rail.journal_digest(namespace).await {
             Ok(d) => d,
             Err(e) => return out.stopped(ExchangeStop::Failed(format!("local journal: {e}"))),
         };
@@ -580,7 +566,7 @@ pub async fn exchange(
             Ok(r) => r,
             Err(stop) => return out.stopped(stop),
         };
-        let pulled = match journal.ingest_all(&first.ops) {
+        let pulled = match rail.journal_ingest_all(namespace, &first.ops).await {
             Ok(n) => n,
             Err(e) => return out.stopped(ExchangeStop::Failed(format!("local journal: {e}"))),
         };
@@ -591,7 +577,7 @@ pub async fn exchange(
                 .iter()
                 .any(|o| matches!(o.kind.act, commonwealth_rail::RailAct::Seal))
         {
-            prune_what_the_peer_retired(rail, journal).await;
+            prune_what_the_peer_retired(rail, namespace).await;
         }
 
         // The peer's OWN report of what it holds — the one progress signal
@@ -601,16 +587,18 @@ pub async fn exchange(
 
         // ── Call 2 — give them one chunk of what they lack, out of
         // everything we now hold.
-        let (for_peer, more_for_peer) =
-            match journal.ops_missing_from_within(&first.digest, RING_SYNC_OPS_BUDGET_BYTES) {
-                Ok(v) => v,
-                Err(e) => return out.stopped(ExchangeStop::Failed(format!("local journal: {e}"))),
-            };
+        let (for_peer, more_for_peer) = match rail
+            .journal_ops_missing_from_within(namespace, &first.digest, RING_SYNC_OPS_BUDGET_BYTES)
+            .await
+        {
+            Ok(v) => v,
+            Err(e) => return out.stopped(ExchangeStop::Failed(format!("local journal: {e}"))),
+        };
         let offered = for_peer.len();
         let pushed = if for_peer.is_empty() {
             0
         } else {
-            let refreshed = match journal.digest() {
+            let refreshed = match rail.journal_digest(namespace).await {
                 Ok(d) => d,
                 Err(e) => return out.stopped(ExchangeStop::Failed(format!("local journal: {e}"))),
             };

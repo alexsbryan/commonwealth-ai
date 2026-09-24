@@ -6,9 +6,10 @@
 //! against the real router in `crate::ring_sync::tests`.
 
 use commonwealth_core::ids::NodeId;
-use commonwealth_rail::{Ed25519Verifier, RailAct, RingRail, SigningKey};
+use commonwealth_rail_core::{Ed25519Verifier, RailAct, SigningKey};
 use sovereign_daemon::state::AppState;
 use sovereign_mesh::rail_kv_pump::*;
+use sovereign_mesh::rail_port::LocalRingRail;
 use sovereign_mesh::ring_roster::tests::{member, mesh_of, pubkey_of};
 use std::sync::Arc;
 
@@ -43,12 +44,12 @@ async fn every_declared_namespace_is_one_the_rail_and_the_store_agree_about() {
     let me = NodeId::from_u128(1);
     let dir = tempfile::tempdir().unwrap();
     let state = AppState::new(me, mesh_of(vec![member(me, "me", Some(pubkey_of(&key)))]));
-    let rail = RingRail::new(dir.path(), Arc::new(key));
+    let rail = LocalRingRail::new(dir.path(), Arc::new(key));
 
     // The charset check lives in `derive_roster`, so a namespace the rail
     // would refuse to open cannot be installed either.
     sovereign_mesh::ring_roster::MeshRosterSource::install(
-        &rail,
+        rail.inner(),
         &state.inner.fabric.mesh,
         &state.inner.fabric.identity,
         state.self_node_pubkey(),
@@ -59,10 +60,12 @@ async fn every_declared_namespace_is_one_the_rail_and_the_store_agree_about() {
     for ns in DAEMON_OWN_NAMESPACES {
         assert!(seen.insert(*ns), "{ns} is declared twice");
         // The charset check: a namespace the rail would refuse to open.
-        rail.journal(ns).unwrap_or_else(|e| panic!("{ns}: {e}"));
+        rail.inner()
+            .journal(ns)
+            .unwrap_or_else(|e| panic!("{ns}: {e}"));
         assert_eq!(
-            rail.roster_origin(ns),
-            commonwealth_rail::RosterOrigin::Derived,
+            rail.inner().roster_origin(ns),
+            commonwealth_rail_core::RosterOrigin::Derived,
             "{ns} still reads a roster file"
         );
         assert_eq!(
@@ -101,7 +104,7 @@ async fn a_node_in_no_mesh_keeps_its_writes_queued_until_membership_exists() {
     let me = NodeId::from_u128(7);
     let dir = tempfile::tempdir().unwrap();
     // A mesh with nobody in it: this node cannot place its own key.
-    let rail = Arc::new(RingRail::new(dir.path(), Arc::new(key.clone())));
+    let local = LocalRingRail::new(dir.path(), Arc::new(key.clone()));
     let state = AppState::new_with_platform_and_engine_and_gauge_and_fabric(
         me,
         mesh_of(vec![]),
@@ -110,12 +113,12 @@ async fn a_node_in_no_mesh_keeps_its_writes_queued_until_membership_exists() {
         None,
         None,
         sovereign_daemon::state::FabricSeed {
-            ring_rail: Some(rail.clone()),
+            ring_rail: Some(Arc::new(local.clone())),
             ..Default::default()
         },
     );
     sovereign_mesh::ring_roster::MeshRosterSource::install(
-        &rail,
+        local.inner(),
         &state.inner.fabric.mesh,
         &state.inner.fabric.identity,
         state.self_node_pubkey(),
@@ -182,7 +185,7 @@ async fn a_node_in_no_mesh_keeps_its_writes_queued_until_membership_exists() {
 #[tokio::test]
 async fn work_namespace_seals_and_keeps_live_leases() {
     use commonwealth_core::ids::HandoffId;
-    use commonwealth_rail::{
+    use commonwealth_rail_core::{
         actor_of, body_json, sign_ring_op, Op, Person, RingSigner, Roster, SignedOp,
     };
     use commonwealth_work::projection::{WorkProjection, WorkUnitStatus};
@@ -193,7 +196,7 @@ async fn work_namespace_seals_and_keeps_live_leases() {
     let submitter = SigningKey::from_bytes(&[4u8; 32]);
     let me = NodeId::from_u128(9);
     let dir = tempfile::tempdir().unwrap();
-    let rail = Arc::new(RingRail::new(dir.path(), Arc::new(donor.clone())));
+    let local = LocalRingRail::new(dir.path(), Arc::new(donor.clone()));
     let state = AppState::new_with_platform_and_engine_and_gauge_and_fabric(
         me,
         mesh_of(vec![member(me, "me", Some(pubkey_of(&donor)))]),
@@ -202,12 +205,12 @@ async fn work_namespace_seals_and_keeps_live_leases() {
         None,
         None,
         sovereign_daemon::state::FabricSeed {
-            ring_rail: Some(rail.clone()),
+            ring_rail: Some(Arc::new(local.clone())),
             ..Default::default()
         },
     );
     sovereign_mesh::ring_roster::MeshRosterSource::install(
-        &rail,
+        local.inner(),
         &state.inner.fabric.mesh,
         &state.inner.fabric.identity,
         state.self_node_pubkey(),
@@ -216,7 +219,7 @@ async fn work_namespace_seals_and_keeps_live_leases() {
 
     assert_eq!(projector_for(WORK_NAMESPACE), Some(Projector::Work));
 
-    let journal = rail.journal(WORK_NAMESPACE).unwrap();
+    let journal = local.inner().journal(WORK_NAMESPACE).unwrap();
     let mut members = std::collections::BTreeMap::new();
     members.insert(Person::from("donor"), vec![donor.actor()]);
     members.insert(Person::from("submitter"), vec![submitter.actor()]);
@@ -225,8 +228,8 @@ async fn work_namespace_seals_and_keeps_live_leases() {
     // The operator's file narrows `work` and the membership default must
     // not outrank it — the submitter is in no mesh row, only in this file.
     assert_eq!(
-        rail.roster_origin(WORK_NAMESPACE),
-        commonwealth_rail::RosterOrigin::File,
+        local.inner().roster_origin(WORK_NAMESPACE),
+        commonwealth_rail_core::RosterOrigin::File,
         "the default roster would orphan the operator's roster.json"
     );
 

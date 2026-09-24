@@ -132,12 +132,12 @@ fn abandoned_handoff(corpus: &str) -> (WorkProjection, HandoffId, String) {
         sign(2, 1200, 3, &WorkAct::Lease(unit_ref(handoff, &c))),
     ];
 
-    let projection = WorkProjection::fold(&commonwealth_rail::admit(
+    let projection = WorkProjection::fold(&commonwealth_rail_core::admit(
         &ops,
         &[],
         &ring(),
         commonwealth_work::WORK_NAMESPACE,
-        &commonwealth_rail::Ed25519Verifier,
+        &commonwealth_rail_core::Ed25519Verifier,
     ));
 
     let h = projection

@@ -28,10 +28,11 @@ use std::sync::Arc;
 use axum::{routing::get, Json, Router};
 use commonwealth_core::ids::{MeshId, NodeId, NodePubkey};
 use commonwealth_core::mesh::{MemberRecord, Mesh};
-use commonwealth_rail::{Person, RailAct, RingRail, RingSigner, Roster};
+use commonwealth_rail_core::{Person, RailAct, RingSigner, Roster};
 use ed25519_dalek::SigningKey;
 use sovereign_daemon::server::internal_router;
 use sovereign_daemon::state::AppState;
+use sovereign_mesh::rail_port::{LocalRingRail, RingJournal};
 
 use crate::common;
 
@@ -123,16 +124,17 @@ async fn node(
     self_id: NodeId,
     mesh: Mesh,
     rostered: &[(&str, &SigningKey)],
-) -> (AppState, Arc<RingRail>) {
-    let rail = Arc::new(RingRail::new(dir, Arc::new(key.clone())));
-    rail.journal(NS_FILE)
+) -> (AppState, LocalRingRail) {
+    let rail = LocalRingRail::new(dir, Arc::new(key.clone()));
+    rail.inner()
+        .journal(NS_FILE)
         .unwrap()
         .set_roster(&file_roster(rostered))
         .unwrap();
     // Opened so the namespace exists on disk: `RingRail::namespaces` reads the
     // directory, and a round can only offer a ring this node holds.
-    rail.journal(NS_OPEN).unwrap();
-    rail.journal(NS_REGISTERED).unwrap();
+    rail.inner().journal(NS_OPEN).unwrap();
+    rail.inner().journal(NS_REGISTERED).unwrap();
     let rails_base = rails_fixture(&mesh).await;
     let state = AppState::new_with_platform_and_engine_and_gauge_and_fabric_and_serving_and_node(
         self_id,
@@ -142,7 +144,7 @@ async fn node(
         None,
         None,
         sovereign_daemon::state::fabric::FabricSeed {
-            ring_rail: Some(Arc::clone(&rail)),
+            ring_rail: Some(Arc::new(rail.clone())),
             ..Default::default()
         },
         Default::default(),
@@ -152,7 +154,7 @@ async fn node(
         },
     );
     sovereign_mesh::ring_roster::MeshRosterSource::install(
-        &rail,
+        rail.inner(),
         &state.inner.fabric.mesh,
         &state.inner.fabric.identity,
         Some(NodePubkey(key.verifying_key().to_bytes())),
@@ -162,13 +164,17 @@ async fn node(
 }
 
 /// Sign and append one act onto `ns`, through the rail's own door.
-async fn append(rail: &RingRail, key: &SigningKey, ns: &str, amount: u64) {
-    let journal = rail.journal(ns).unwrap();
-    let roster = rail.roster(&journal).await.expect("a readable roster");
+async fn append(rail: &LocalRingRail, key: &SigningKey, ns: &str, amount: u64) {
+    let journal = rail.inner().journal(ns).unwrap();
+    let roster = rail
+        .inner()
+        .roster(&journal)
+        .await
+        .expect("a readable roster");
     journal
         .append(
             RailAct::Record {
-                payload: commonwealth_rail::Payload::new(
+                payload: commonwealth_rail_core::Payload::new(
                     serde_json::json!({ "kind": "expense", "amount": amount }),
                 )
                 .expect("a well-formed record payload"),
@@ -181,11 +187,14 @@ async fn append(rail: &RingRail, key: &SigningKey, ns: &str, amount: u64) {
 }
 
 /// The ops `rail` holds on `ns`, in the journal's own order.
-fn ops(rail: &RingRail, ns: &str) -> Vec<commonwealth_rail::Op<commonwealth_rail::SignedOp>> {
-    rail.journal(ns).unwrap().read().unwrap().0
+fn ops(
+    rail: &LocalRingRail,
+    ns: &str,
+) -> Vec<commonwealth_rail_core::Op<commonwealth_rail_core::SignedOp>> {
+    rail.inner().journal(ns).unwrap().read().unwrap().0
 }
 
-fn held(rail: &RingRail, ns: &str) -> usize {
+fn held(rail: &LocalRingRail, ns: &str) -> usize {
     ops(rail, ns).len()
 }
 
@@ -216,7 +225,7 @@ async fn three_nodes(
     cast: &Cast,
     dirs: &(tempfile::TempDir, tempfile::TempDir, tempfile::TempDir),
     a_rostered: &[(&str, &SigningKey)],
-) -> ((AppState, Arc<RingRail>), Arc<RingRail>, Arc<RingRail>) {
+) -> ((AppState, LocalRingRail), LocalRingRail, LocalRingRail) {
     let both = [("alex", &cast.ka), ("bea", &cast.kb)];
     let (b_state, b_rail) = node(
         dirs.1.path(),
@@ -315,8 +324,10 @@ async fn a_derived_roster_still_reaches_every_member() {
                 .fabric
                 .ring_rail()
                 .expect("rail installed")
-                .roster_origin(ns),
-            commonwealth_rail::RosterOrigin::Derived,
+                .roster_origin(ns)
+                .await
+                .unwrap(),
+            commonwealth_rail_core::RosterOrigin::Derived,
             "{ns} must be answered by membership or this test is not the case \
              it names"
         );
@@ -369,7 +380,7 @@ async fn the_sync_route_refuses_a_member_the_roster_does_not_name() {
     let ask = |ns: &str, id: NodeId, key: &SigningKey, name: &str| {
         let body = serde_json::json!({
             "namespace": ns,
-            "digest": commonwealth_rail::Digest::default(),
+            "digest": commonwealth_rail_core::Digest::default(),
             "ops": [],
         });
         let req = reqwest::Client::new()
@@ -437,6 +448,7 @@ async fn a_member_added_to_the_roster_receives_the_whole_journal_next_round() {
 
     // The one operation: C's key joins the roster file. Nothing restarts.
     a_rail
+        .inner()
         .journal(NS_FILE)
         .unwrap()
         .set_roster(&file_roster(&[

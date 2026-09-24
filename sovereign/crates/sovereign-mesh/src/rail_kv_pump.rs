@@ -102,13 +102,14 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use crate::fabric::FabricPart;
-use commonwealth_rail::{Ed25519Verifier, RailAct, RailError, RingJournal, RingRail, Roster};
+use commonwealth_rail::{RailAct, RailError, Roster};
 use commonwealth_state::{rail_kv, MeshStore, Outboxed};
 use commonwealth_work::projection::{WorkProjection, WorkUnitStatus};
 use commonwealth_work::{ActorKey, UnitRef, WorkAct, WorkActKind};
 use tokio::sync::Notify;
 use tracing::{debug, info, warn};
 
+use crate::rail_port::RingRailPort;
 use crate::ring_roster::MeshRoster;
 
 /// How often the outbox is drained.
@@ -257,22 +258,11 @@ pub async fn pump_once(fabric: &FabricPart) -> PumpOutcome {
     }
 
     for (namespace, rows) in by_namespace {
-        let journal = match rail.journal(&namespace) {
-            Ok(j) => j,
-            Err(e) => {
-                // The namespace itself is unusable, so every row for it is
-                // refused rather than left to be retried forever.
-                let ids: Vec<i64> = rows.iter().map(|r| r.id).collect();
-                warn!(namespace, error = %e, queued = ids.len(),
-                      "rail kv pump: this namespace has no journal, so its queued writes were dropped");
-                out.refused += ids.len();
-                ack(&store, &ids);
-                continue;
-            }
-        };
         // THE door (ARCH §10.6). For these namespaces it answers from
-        // membership, because `MeshRosterSource::install` declared them.
-        let roster = match rail.roster(&journal).await {
+        // membership, because `MeshRosterSource::install` declared them —
+        // locally — or, since the flip, the serving process derives it the
+        // same way from the membership it holds.
+        let roster = match rail.roster(&namespace).await {
             Ok(r) => r,
             Err(e) => {
                 // Left queued: an unreadable roster is a condition that heals,
@@ -303,7 +293,10 @@ pub async fn pump_once(fabric: &FabricPart) -> PumpOutcome {
                     continue;
                 }
             };
-            match journal.append(RailAct::Record { payload }, rail.signer(), &roster, None) {
+            match rail
+                .journal_append(&namespace, RailAct::Record { payload }, &roster)
+                .await
+            {
                 Ok(appended) => {
                     debug!(
                         namespace,
@@ -342,7 +335,7 @@ pub async fn pump_once(fabric: &FabricPart) -> PumpOutcome {
         out.appended += appended_here;
 
         if appended_here > 0 {
-            seal_if_due(fabric, &rail, &journal, &roster, &mut out).await;
+            seal_if_due(fabric, rail.as_ref(), &namespace, &roster, &mut out).await;
         }
     }
 
@@ -351,10 +344,15 @@ pub async fn pump_once(fabric: &FabricPart) -> PumpOutcome {
     // journal. So its journal grows with nothing above draining it, and the
     // seal check has to be reached some other way. Here is that way, and the
     // constant is the same one (ARCH §10.6).
-    if let Ok(journal) = rail.journal(MEASUREMENTS_NAMESPACE) {
-        if let Ok(roster) = rail.roster(&journal).await {
-            seal_if_due(fabric, &rail, &journal, &roster, &mut out).await;
-        }
+    if let Ok(roster) = rail.roster(MEASUREMENTS_NAMESPACE).await {
+        seal_if_due(
+            fabric,
+            rail.as_ref(),
+            MEASUREMENTS_NAMESPACE,
+            &roster,
+            &mut out,
+        )
+        .await;
     }
 
     // `work` never enters the outbox either, and for the same structural
@@ -369,10 +367,8 @@ pub async fn pump_once(fabric: &FabricPart) -> PumpOutcome {
     // whose operator has not written `rings/work/roster.json` has no roster —
     // and a namespace this node cannot append to is one it must not seal. The
     // failure direction is always "do not retire" (ARCH §18.3).
-    if let Ok(journal) = rail.journal(WORK_NAMESPACE) {
-        if let Ok(roster) = rail.roster(&journal).await {
-            seal_if_due(fabric, &rail, &journal, &roster, &mut out).await;
-        }
+    if let Ok(roster) = rail.roster(WORK_NAMESPACE).await {
+        seal_if_due(fabric, rail.as_ref(), WORK_NAMESPACE, &roster, &mut out).await;
     }
 
     out
@@ -411,16 +407,21 @@ pub const WORK_NAMESPACE: &str = commonwealth_work::WORK_NAMESPACE;
 /// seal.
 async fn seal_if_due(
     fabric: &FabricPart,
-    rail: &RingRail,
-    journal: &RingJournal,
+    rail: &dyn RingRailPort,
+    namespace: &str,
     roster: &Roster,
     out: &mut PumpOutcome,
 ) {
-    let namespace = journal.namespace();
-    let mine = rail.signer().actor();
+    let mine = match rail.actor().await {
+        Ok(a) => a,
+        Err(e) => {
+            warn!(namespace, error = %e, "rail kv pump: the port would not name this node's actor, so no seal check ran");
+            return;
+        }
+    };
 
-    let held = match journal.read() {
-        Ok((ops, _)) => ops,
+    let held = match rail.journal_read(namespace).await {
+        Ok(ops) => ops,
         Err(e) => {
             warn!(namespace, error = %e, "rail kv pump: the journal could not be read for the seal check");
             return;
@@ -431,7 +432,7 @@ async fn seal_if_due(
         return;
     }
 
-    let admission = match journal.admit(roster, &Ed25519Verifier) {
+    let admission = match rail.journal_admit(namespace, roster).await {
         Ok(a) => a,
         Err(e) => {
             warn!(namespace, error = %e, "rail kv pump: the journal could not be admitted for the seal check");
@@ -480,7 +481,7 @@ async fn seal_if_due(
         _ => None,
     };
 
-    let sealed = match journal.seal(rail.signer(), roster, &Ed25519Verifier) {
+    let sealed = match rail.journal_seal(namespace, roster).await {
         Ok(s) => s,
         Err(e) => {
             warn!(namespace, error = %e, "rail kv pump: the seal was refused, so nothing was retired");
@@ -488,7 +489,8 @@ async fn seal_if_due(
         }
     };
     out.sealed += 1;
-    match &sealed.retired {
+    let (sealed_op, retired) = sealed;
+    match &retired {
         Ok(done) => info!(
             namespace,
             own_above_floor,
@@ -496,7 +498,7 @@ async fn seal_if_due(
             kept = done.kept,
             "rail kv pump: sealed the daemon's own namespace"
         ),
-        // Already warned by `RingJournal::seal`. The snapshot still runs: the
+        // Already warned by the seal. The snapshot still runs: the
         // seal is on disk, so a peer WILL prune to the floor it names, and the
         // live set has to be above that floor whether or not our own prune
         // happened.
@@ -510,9 +512,9 @@ async fn seal_if_due(
     out.snapshot_rows += snapshot(
         fabric,
         rail,
-        journal,
+        namespace,
         roster,
-        sealed.op.kind.seq,
+        sealed_op.kind.seq,
         live_work.as_ref(),
     )
     .await;
@@ -547,14 +549,12 @@ async fn seal_if_due(
 /// counted in `snapshot_rows`, which stays what it says: live rows re-appended.
 async fn snapshot(
     fabric: &FabricPart,
-    rail: &RingRail,
-    journal: &RingJournal,
+    rail: &dyn RingRailPort,
+    namespace: &str,
     roster: &Roster,
     floor: u64,
     live_work: Option<&WorkProjection>,
 ) -> usize {
-    let namespace = journal.namespace();
-
     // ONE decider for which vocabulary this namespace speaks (ARCH §10.6) —
     // the same selector the receive half reads, rather than a second set of
     // name comparisons that could drift from it.
@@ -568,8 +568,7 @@ async fn snapshot(
             // AT the seal, not at the next boot, or the window between them is
             // a ring with no measurements in it.
             let file = crate::mesh_measurements::load();
-            let done =
-                crate::measurements_rail::republish(journal, rail.signer(), roster, file.records());
+            let done = crate::measurements_rail::republish(rail, roster, file.records()).await;
             info!(
                 namespace,
                 appended = done.appended,
@@ -579,7 +578,9 @@ async fn snapshot(
             );
             return done.appended;
         }
-        Some(Projector::Work) => return snapshot_work(rail, journal, roster, floor, live_work),
+        Some(Projector::Work) => {
+            return snapshot_work(rail, namespace, roster, floor, live_work).await;
+        }
         Some(Projector::Kv) => {}
     }
 
@@ -607,7 +608,10 @@ async fn snapshot(
                 continue;
             }
         };
-        match journal.append(RailAct::Record { payload }, rail.signer(), roster, None) {
+        match rail
+            .journal_append(namespace, RailAct::Record { payload }, roster)
+            .await
+        {
             Ok(_) => appended += 1,
             Err(e) => warn!(namespace, key = %row.key, error = %e,
                             "rail kv pump: a live row could not be snapshotted and is now below the floor"),
@@ -615,21 +619,28 @@ async fn snapshot(
     }
     match rail_kv::snapshot_mark(floor)
         .map_err(|e| e.to_string())
-        .and_then(|payload| {
-            journal
-                .append(RailAct::Record { payload }, rail.signer(), roster, None)
-                .map_err(|e| e.to_string())
-        }) {
-        Ok(_) => info!(
-            namespace,
-            appended,
-            peers_rows_skipped = skipped,
-            floor,
-            "rail kv pump: snapshotted this node's live rows above the new floor, and closed it"
-        ),
-        // The rows are on the journal and every one of them still projects.
-        // What is lost is the CLAIM that they are all of them, so no peer
-        // retires anything of ours until the next seal marks one.
+        .and_then(|payload| Ok(RailAct::Record { payload }))
+    {
+        Ok(act) => match rail.journal_append(namespace, act, roster).await {
+            Ok(_) => info!(
+                namespace,
+                appended,
+                peers_rows_skipped = skipped,
+                floor,
+                "rail kv pump: snapshotted this node's live rows above the new floor, and closed it"
+            ),
+            // The rows are on the journal and every one of them still projects.
+            // What is lost is the CLAIM that they are all of them, so no peer
+            // retires anything of ours until the next seal marks one.
+            Err(e) => warn!(
+                namespace,
+                appended,
+                floor,
+                error = %e,
+                "rail kv pump: the snapshot could not be closed, so peers will keep \
+                 whatever of ours they already hold"
+            ),
+        },
         Err(e) => warn!(
             namespace,
             appended,
@@ -681,14 +692,13 @@ async fn snapshot(
 /// Neither is reachable until this node writes [`SEAL_AFTER_OWN_OPS`] work acts
 /// of its own, and both want the live set widened rather than this rule bent —
 /// the rung that adds a donor's completion history is the rung to do it in.
-fn snapshot_work(
-    rail: &RingRail,
-    journal: &RingJournal,
+async fn snapshot_work(
+    rail: &dyn RingRailPort,
+    namespace: &str,
     roster: &Roster,
     floor: u64,
     live_work: Option<&WorkProjection>,
 ) -> usize {
-    let namespace = journal.namespace();
     let Some(projection) = live_work else {
         // Unreachable by construction — `seal_if_due` folds exactly when
         // `projector_for` says `Work` — and loud rather than a silent zero,
@@ -701,7 +711,16 @@ fn snapshot_work(
         );
         return 0;
     };
-    let mine = match ActorKey::parse(rail.signer().actor()) {
+    let mine = match rail.actor().await {
+        Ok(a) => a,
+        Err(e) => {
+            warn!(namespace, error = %e,
+                  "rail kv pump: the port would not name this node's actor, so its live leases \
+                   were not snapshotted");
+            return 0;
+        }
+    };
+    let mine = match ActorKey::parse(&mine) {
         Ok(a) => a,
         Err(e) => {
             warn!(namespace, error = %e,
@@ -721,10 +740,12 @@ fn snapshot_work(
         .filter(|a| a.kind() == WorkActKind::Offer)
         .count();
 
-    let appended = acts
-        .iter()
-        .filter(|act| append_work_act(rail, journal, roster, act))
-        .count();
+    let mut appended = 0usize;
+    for act in &acts {
+        if append_work_act(rail, namespace, roster, act).await {
+            appended += 1;
+        }
+    }
     info!(
         namespace,
         appended,
@@ -742,15 +763,24 @@ fn snapshot_work(
 /// is the same failure direction the KV snapshot takes on a row it cannot
 /// re-append: one act that will not travel must not cost the rest of the live
 /// set the floor it was about to be lifted above (ARCH §18.3).
-fn append_work_act(rail: &RingRail, journal: &RingJournal, roster: &Roster, act: &WorkAct) -> bool {
-    match commonwealth_work::to_payload(act).and_then(|payload| {
-        journal
-            .append(RailAct::Record { payload }, rail.signer(), roster, None)
-            .map_err(|e| e.to_string())
-    }) {
-        Ok(_) => true,
+async fn append_work_act(
+    rail: &dyn RingRailPort,
+    namespace: &str,
+    roster: &Roster,
+    act: &WorkAct,
+) -> bool {
+    match commonwealth_work::to_payload(act).and_then(|payload| Ok(RailAct::Record { payload })) {
+        Ok(rail_act) => match rail.journal_append(namespace, rail_act, roster).await {
+            Ok(_) => true,
+            Err(e) => {
+                warn!(namespace, act = %act.kind(), error = %e,
+                      "rail kv pump: a live work act could not be snapshotted and is now below the \
+                       floor");
+                false
+            }
+        },
         Err(e) => {
-            warn!(namespace = journal.namespace(), act = %act.kind(), error = %e,
+            warn!(namespace, act = %act.kind(), error = %e,
                   "rail kv pump: a live work act could not be snapshotted and is now below the \
                    floor");
             false
@@ -889,23 +919,22 @@ pub fn projector_for(namespace: &str) -> Option<Projector> {
 /// and a `0` for both would hide the second (ARCH §18.2).
 pub async fn project_namespace(
     fabric: &FabricPart,
-    rail: &RingRail,
-    journal: &RingJournal,
+    rail: &dyn RingRailPort,
+    namespace: &str,
 ) -> Option<usize> {
-    let namespace = journal.namespace().to_string();
     // `projector_for` says which branch this is and traces it; the skip needs
     // no second sentence here (ARCH §10.6).
-    if projector_for(&namespace) != Some(Projector::Kv) {
+    if projector_for(namespace) != Some(Projector::Kv) {
         return None;
     }
-    let roster = match rail.roster(journal).await {
+    let roster = match rail.roster(namespace).await {
         Ok(r) => r,
         Err(e) => {
             warn!(namespace = %namespace, error = %e, "rail kv pump: the roster is unreadable, nothing projected");
             return None;
         }
     };
-    let admission = match journal.admit(&roster, &Ed25519Verifier) {
+    let admission = match rail.journal_admit(namespace, &roster).await {
         Ok(a) => a,
         Err(e) => {
             warn!(namespace = %namespace, error = %e, "rail kv pump: the journal would not admit, nothing projected");
@@ -983,7 +1012,7 @@ pub async fn project_all_on_disk(fabric: &FabricPart) -> usize {
     let Some(rail) = fabric.ring_rail() else {
         return 0;
     };
-    let namespaces = match rail.namespaces() {
+    let namespaces = match rail.namespaces().await {
         Ok(n) => n,
         Err(e) => {
             warn!(error = %e, "rail kv pump: cannot enumerate namespaces, nothing projected at boot");
@@ -992,10 +1021,10 @@ pub async fn project_all_on_disk(fabric: &FabricPart) -> usize {
     };
     let mut projected = 0usize;
     for namespace in &namespaces {
-        let Ok(journal) = rail.journal(namespace) else {
-            continue;
-        };
-        if project_namespace(fabric, &rail, &journal).await.is_some() {
+        if project_namespace(fabric, rail.as_ref(), namespace)
+            .await
+            .is_some()
+        {
             projected += 1;
         }
     }

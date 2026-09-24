@@ -145,14 +145,13 @@ async fn roster_refusal(
     attached: &Option<axum::Extension<sovereign_serving_host::admission::AttachedPrincipal>>,
     proved: bool,
     peer: Option<std::net::SocketAddr>,
-    rail: &commonwealth_rail::RingRail,
-    journal: &commonwealth_rail::RingJournal,
+    rail: &dyn sovereign_mesh::rail_port::RingRailPort,
+    namespace: &str,
 ) -> Option<String> {
     use crate::internal_gate::admitted_without_a_principal;
 
     use sovereign_serving_host::admission::Principal;
 
-    let namespace = journal.namespace();
     // An ABSENT extension is a request that reached this handler with no
     // resolver in front — not a caller that presented nothing. It reads as
     // `Anonymous` here for one reason and it is named rather than assumed:
@@ -226,14 +225,19 @@ async fn roster_refusal(
         return Some(format!("{asker} is not on {namespace}'s roster"));
     };
     // WHERE the roster answer comes from, decided by the rail's ONE origin
-    // decider. A hand-written `roster.json` is THIS daemon's ring storage —
-    // one data directory, one owner — so the file-rostered rings still read
-    // locally. Every DERIVED roster is the mesh's membership, and since fp-6
-    // (§12 decision 2) that question is asked of the mesh's serving process
-    // instead of answered from this daemon's own converging copy: one
-    // decider for "who is in the mesh", not a second derivation here.
-    if rail.roster_origin(namespace) == commonwealth_rail::RosterOrigin::File {
-        let roster = match rail.roster(journal).await {
+    // decider, asked through the port (the journals live at the serving
+    // process since fp-54). A hand-written `roster.json` is read from the
+    // serving process's ring storage — one data directory, one owner — and
+    // its members are checked here. Every DERIVED roster is the mesh's
+    // membership, and since fp-6 (§12 decision 2) that question is asked of
+    // the mesh's serving process's roster answer instead of being answered
+    // from this daemon's own converging copy: one decider for "who is in the
+    // mesh", not a second derivation here.
+    if matches!(
+        rail.roster_origin(namespace).await,
+        Ok(commonwealth_rail_core::RosterOrigin::File)
+    ) {
+        let roster = match rail.roster(namespace).await {
             Ok(r) => r,
             Err(e) => {
                 tracing::warn!(
@@ -325,10 +329,6 @@ pub async fn ring_sync(
             "this node has no ring storage installed",
         );
     };
-    let journal = match rail.journal(&req.namespace) {
-        Ok(l) => l,
-        Err(e) => return err(StatusCode::BAD_REQUEST, e.to_string()),
-    };
 
     // ── A ring is SERVED to its roster, and to nobody else.
     //
@@ -340,15 +340,15 @@ pub async fn ring_sync(
         &attached,
         proved.is_some(),
         peer.map(|axum::Extension(c)| c.0),
-        &rail,
-        &journal,
+        rail.as_ref(),
+        &req.namespace,
     )
     .await
     {
         return err(StatusCode::FORBIDDEN, refusal);
     }
 
-    let ingested = match journal.ingest_all(&req.ops) {
+    let ingested = match rail.journal_ingest_all(&req.namespace, &req.ops).await {
         Ok(n) => n,
         Err(e) => return err(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
     };
@@ -356,11 +356,16 @@ pub async fn ring_sync(
     // the pull direction converged at a size where the identical peer being
     // pushed to was refused — and an unbounded body is also an unbounded
     // allocation on a route any peer that can route here may call.
-    let selection = journal.ops_missing_from_within(&req.digest, RING_SYNC_OPS_BUDGET_BYTES);
-    let (digest, (ops, more_for_caller)) = match (journal.digest(), selection) {
-        (Ok(d), Ok(o)) => (d, o),
-        (Err(e), _) | (_, Err(e)) => return err(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
-    };
+    let selection = rail
+        .journal_ops_missing_from_within(&req.namespace, &req.digest, RING_SYNC_OPS_BUDGET_BYTES)
+        .await;
+    let (digest, (ops, more_for_caller)) =
+        match (rail.journal_digest(&req.namespace).await, selection) {
+            (Ok(d), Ok(o)) => (d, o),
+            (Err(e), _) | (_, Err(e)) => {
+                return err(StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
+            }
+        };
 
     let body = RingSyncResponse {
         namespace: req.namespace.clone(),

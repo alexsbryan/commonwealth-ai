@@ -21,10 +21,11 @@ use std::time::{Duration, Instant};
 
 use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::mesh::Mesh;
-use commonwealth_rail::{Person, RingRail, RingSigner, Roster};
+use commonwealth_rail_core::{Person, RingSigner, Roster};
 use ed25519_dalek::SigningKey;
 use sovereign_daemon::server::{client_router, internal_router};
 use sovereign_daemon::state::AppState;
+use sovereign_mesh::rail_port::LocalRingRail;
 
 use crate::common;
 
@@ -91,15 +92,16 @@ fn node(
     key: &SigningKey,
     self_id: NodeId,
     mesh: Mesh,
-) -> (AppState, Arc<RingRail>) {
+) -> (AppState, LocalRingRail) {
     // The token and the rail are construction arguments now (domains
     // REVIEW-build-appstate-*-installs, DC §4.2 "Construction is staged, and
     // parts are total"); the seed-shaped entry point is the tests' door.
-    let rail = Arc::new(RingRail::new(dir, Arc::new(key.clone())));
+    let rail = LocalRingRail::new(dir, Arc::new(key.clone()));
     let mut members = std::collections::BTreeMap::new();
     members.insert(Person::from("alex"), vec![key_a().actor()]);
     members.insert(Person::from("bea"), vec![key_b().actor()]);
-    rail.journal(NS)
+    rail.inner()
+        .journal(NS)
         .unwrap()
         .set_roster(&Roster::new(members))
         .unwrap();
@@ -111,7 +113,7 @@ fn node(
         None,
         None,
         sovereign_daemon::state::fabric::FabricSeed {
-            ring_rail: Some(Arc::clone(&rail)),
+            ring_rail: Some(Arc::new(rail.clone())),
             ..Default::default()
         },
         Default::default(),
@@ -124,8 +126,8 @@ fn node(
 }
 
 /// How many ops `rail`'s `NS` journal holds on disk.
-fn held(rail: &RingRail) -> usize {
-    rail.journal(NS).unwrap().read().unwrap().0.len()
+fn held(rail: &LocalRingRail) -> usize {
+    rail.inner().journal(NS).unwrap().read().unwrap().0.len()
 }
 
 /// **An act appended over HTTP on A is held by B within two seconds.**

@@ -49,10 +49,8 @@
 //! representation, and it is the one both the file and the wire already use.
 
 use crate::mesh_measurements as mm;
-use commonwealth_rail::{
-    Admission, Ed25519Verifier, Op, Payload, Person, RailAct, RingJournal, RingSigner, Roster,
-    SignedOp,
-};
+use crate::rail_port::RingRailPort;
+use commonwealth_rail::{Admission, Op, Payload, Person, RailAct, Roster, SignedOp};
 
 /// What a `mesh-measurements` journal line says it is. Present so a reader —
 /// `svrn ring log`, a future second act on this namespace — can tell the act
@@ -95,22 +93,21 @@ pub fn from_payload(payload: &Payload) -> Option<mm::MeasurementRecord> {
 /// Sign one locally-taken record onto this node's journal.
 ///
 /// `roster` is derived from mesh membership
-/// ([`MeshRoster`](crate::ring_roster::MeshRoster)) and is what
-/// [`RingJournal::append`] checks our own key against. A node that cannot
-/// place its own key is REFUSED here rather than allowed to write ops every
-/// peer would report as `UnknownSigner` — and the refusal is a sentence, not
-/// a silent drop. Nothing is lost by refusing: `svrn mesh bench` writes
+/// ([`MeshRoster`](crate::ring_roster::MeshRoster)) and is what the append
+/// checks our own key against. A node that cannot place its own key is
+/// REFUSED here rather than allowed to write ops every peer would report as
+/// `UnknownSigner` — and the refusal is a sentence, not a silent drop.
+/// Nothing is lost by refusing: `svrn mesh bench` writes
 /// `~/.svrnmesh/mesh-measurements.json` before it ever POSTs, and
 /// [`republish`] carries the file onto the journal once an identity exists.
-pub fn publish(
-    journal: &RingJournal,
-    signer: &dyn RingSigner,
+pub async fn publish(
+    rail: &dyn RingRailPort,
     roster: &Roster,
     record: &mm::MeasurementRecord,
 ) -> Result<Op<SignedOp>, String> {
     let payload = to_payload(record)?;
-    journal
-        .append(RailAct::Record { payload }, signer, roster, None)
+    rail.journal_append(mm::MEASUREMENTS_APP_ID, RailAct::Record { payload }, roster)
+        .await
         .map_err(|e| e.to_string())
 }
 
@@ -253,9 +250,8 @@ pub struct Republished {
 /// timestamp, so re-appending the same record would mint a new line every
 /// boot. What is compared is [`mm::wire_key`], which is derived from the
 /// record itself.
-pub fn republish(
-    journal: &RingJournal,
-    signer: &dyn RingSigner,
+pub async fn republish(
+    rail: &dyn RingRailPort,
     roster: &Roster,
     records: &[mm::MeasurementRecord],
 ) -> Republished {
@@ -263,8 +259,16 @@ pub fn republish(
     if records.is_empty() {
         return out;
     }
-    let mine = signer.actor();
-    let held: std::collections::BTreeSet<String> = match journal.admit(roster, &Ed25519Verifier) {
+    let namespace = mm::MEASUREMENTS_APP_ID;
+    let mine = match rail.actor().await {
+        Ok(a) => a,
+        Err(e) => {
+            tracing::warn!(error = %e, "mesh-measurements: the rail would not name this node's actor, republish skipped");
+            return out;
+        }
+    };
+    let held: std::collections::BTreeSet<String> = match rail.journal_admit(namespace, roster).await
+    {
         Ok(admission) => admission
             .ops
             .iter()
@@ -285,7 +289,7 @@ pub fn republish(
             out.already_held += 1;
             continue;
         }
-        match publish(journal, signer, roster, record) {
+        match publish(rail, roster, record).await {
             Ok(_) => out.appended += 1,
             Err(why) => {
                 out.withheld += 1;

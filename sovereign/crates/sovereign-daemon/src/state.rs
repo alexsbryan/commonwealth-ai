@@ -545,7 +545,7 @@ impl AppState {
     }
 
     /// The ring rail's storage, or `None` if the daemon has none.
-    pub fn ring_rail(&self) -> Option<Arc<commonwealth_rail::RingRail>> {
+    pub fn ring_rail(&self) -> Option<Arc<dyn sovereign_mesh::rail_port::RingRailPort>> {
         self.inner.fabric.ring_rail.clone()
     }
 

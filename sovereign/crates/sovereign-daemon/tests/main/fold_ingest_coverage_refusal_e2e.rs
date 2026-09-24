@@ -50,7 +50,7 @@
 
 use std::sync::{Arc, Mutex};
 
-use commonwealth_rail::{RingRail, SigningKey};
+use commonwealth_rail_core::SigningKey;
 use commonwealth_work::WORK_NAMESPACE;
 use corpus_index::corpus::Corpus;
 use corpus_index::index::CorpusIndex;
@@ -59,6 +59,7 @@ use sovereign_daemon::state::AppState;
 use sovereign_grants::auto_recover::{
     merge_from_fold_coverage, try_recover_stranded_partitions, RecoveryOutcome,
 };
+use sovereign_mesh::rail_port::LocalRingRail;
 use tempfile::TempDir;
 
 use crate::common::corpus_at;
@@ -354,8 +355,11 @@ impl tracing_subscriber::fmt::MakeWriter<'_> for BufWriter {
 /// now (DC §4.2 "Construction is staged, and parts are total").
 fn fold_seed(rail_dir: &std::path::Path, corpus: &str) -> sovereign_daemon::state::FabricSeed {
     let signer: SigningKey = key(1);
-    let rail = Arc::new(RingRail::new(rail_dir, Arc::new(signer)));
-    let journal = rail.journal(WORK_NAMESPACE).expect("the work journal");
+    let local = LocalRingRail::new(rail_dir, Arc::new(signer));
+    let journal = local
+        .inner()
+        .journal(WORK_NAMESPACE)
+        .expect("the work journal");
     journal.set_roster(&ring()).expect("write the roster");
     let (ops, _handoff) = terminal_handoff_ops(corpus);
     let appended = journal.ingest_all(&ops).expect("ingest the fixture ops");
@@ -366,7 +370,7 @@ fn fold_seed(rail_dir: &std::path::Path, corpus: &str) -> sovereign_daemon::stat
          different handoff than the one this test is about",
     );
     sovereign_daemon::state::FabricSeed {
-        ring_rail: Some(rail),
+        ring_rail: Some(Arc::new(local)),
         ..Default::default()
     }
 }

@@ -99,7 +99,7 @@ use std::sync::Arc;
 use commonwealth_core::ids::{HandoffId, MeshId};
 use commonwealth_core::knowledge::{HandoffPhase, WorkUnit};
 use commonwealth_core::mesh::Mesh;
-use commonwealth_rail::{
+use commonwealth_rail_core::{
     actor_of, admit, body_json, sign_ring_op, Ed25519Verifier, Op, Person, RailAct, Roster,
     SignedOp, SigningKey,
 };

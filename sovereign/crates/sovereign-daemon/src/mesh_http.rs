@@ -655,10 +655,6 @@ async fn publish_measurement(
     let Some(rail) = app_state.ring_rail() else {
         return refuse("this daemon keeps no ring journal".into());
     };
-    let journal = match rail.journal(sovereign_mesh::mesh_measurements::MEASUREMENTS_APP_ID) {
-        Ok(j) => j,
-        Err(e) => return refuse(format!("the ring journal could not be opened: {e}")),
-    };
 
     // Derived here from membership this node already holds, and never accepted
     // over the wire — there is no roster route, and its absence is the safety
@@ -672,7 +668,10 @@ async fn publish_measurement(
     // answer the same condition with `svrn ring roster add … --self` — the
     // right instruction for a ring whose roster is written by hand, and one
     // that does not apply to a namespace whose roster IS the membership.
-    if !roster.claims(&rail.signer().actor()) {
+    let Ok(self_actor) = rail.actor().await else {
+        return refuse("the serving process did not name this node's signing identity".into());
+    };
+    if !roster.claims(&self_actor) {
         return refuse(
             "this node is not in a mesh yet, so a run it published would be \
              unreadable to every peer — `svrn mesh create` or join one first. \
@@ -680,12 +679,8 @@ async fn publish_measurement(
                 .into(),
         );
     }
-    match sovereign_mesh::measurements_rail::publish(
-        &journal,
-        rail.signer(),
-        roster.roster(),
-        &record,
-    ) {
+    match sovereign_mesh::measurements_rail::publish(rail.as_ref(), roster.roster(), &record).await
+    {
         Ok(op) => {
             tracing::info!(
                 target = "mesh_measurements",
@@ -742,19 +737,18 @@ async fn peer_measurements(
     let Some(rail) = app_state.ring_rail() else {
         return empty();
     };
-    let journal = match rail.journal(sovereign_mesh::mesh_measurements::MEASUREMENTS_APP_ID) {
-        Ok(j) => j,
-        Err(e) => {
-            tracing::warn!(error = %e, "mesh-measurements: ring journal unavailable");
-            return empty();
-        }
-    };
     let roster = sovereign_mesh::ring_roster::MeshRoster::from_membership(
         &*app_state.inner.fabric.mesh.read().await,
         app_state.self_node_id(),
         app_state.self_node_pubkey(),
     );
-    let admission = match journal.admit(roster.roster(), &commonwealth_rail::Ed25519Verifier) {
+    let admission = match rail
+        .journal_admit(
+            sovereign_mesh::mesh_measurements::MEASUREMENTS_APP_ID,
+            roster.roster(),
+        )
+        .await
+    {
         Ok(a) => a,
         Err(e) => {
             // NOT `empty()`. A journal we could not open and a ring with
@@ -773,9 +767,17 @@ async fn peer_measurements(
         }
     };
 
-    // `None` drops the own-author filter entirely; see `include_self`.
-    let mine = rail.signer().actor();
-    let exclude = (!q.include_self).then_some(mine.as_str());
+    // `None` drops the own-author filter entirely; see `include_self`. A
+    // serving process that will not even name this node's identity cannot be
+    // asked for its journal either, so the failure is loud and rare.
+    let own_actor = rail.actor().await;
+    let exclude = match &own_actor {
+        Ok(mine) => (!q.include_self).then_some(mine.as_str()),
+        Err(e) => {
+            tracing::warn!(error = %e, "mesh-measurements: the serving process did not name this node's signing identity; the own-author filter is OFF");
+            None
+        }
+    };
     let seen = sovereign_mesh::measurements_rail::read(&admission, exclude);
     (StatusCode::OK, Json(peer_view(seen, &roster))).into_response()
 }
@@ -1705,7 +1707,7 @@ mod tests {
     // is left here is the MAPPING: how an admitted op becomes the DTO the CLI
     // reads.
 
-    use commonwealth_rail::{Person, RingSigner};
+    use commonwealth_rail_core::{Person, RingSigner};
     use sovereign_mesh::measurements_rail::{RailMeasurement, RailMeasurements};
     use sovereign_mesh::ring_roster::tests::{key, member, mesh_of, pubkey_of};
     use sovereign_mesh::ring_roster::MeshRoster;

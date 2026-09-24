@@ -81,6 +81,7 @@ pub mod persist;
 pub use sovereign_scheduler::predicted_time; // shim: moved by domains REVIEW-build-sched-move // shim: moved by domains REVIEW-build-mesh-workbench-deferred
 pub mod rail_bind;
 pub mod rail_kv_pump;
+pub mod rail_port;
 pub use understanding_vocab::reading_formatters; // shim: moved by domains dm-mesh-move-reading-formatters // shim: moved by domains REVIEW-build-mesh-workbench-deferred
 pub mod ring_roster;
 pub mod ring_sync;

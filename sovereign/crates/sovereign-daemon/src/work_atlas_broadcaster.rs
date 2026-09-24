@@ -100,7 +100,8 @@ impl ClaimBroadcaster for MeshBroadcaster {
 mod tests {
     use super::*;
     use commonwealth_core::ids::NodeId;
-    use commonwealth_rail::{RingRail, SigningKey};
+    use commonwealth_rail_core::SigningKey;
+    use sovereign_mesh::rail_port::LocalRingRail;
     use std::sync::Arc;
     use std::time::Duration;
 
@@ -108,10 +109,12 @@ mod tests {
     const PRIVATE: &str = sovereign_contracts::peer::WORK_ATLAS_APP_ID_PRIVATE;
 
     /// A node whose rail derives its roster from its own membership — the same
-    /// three calls `ring_sync`'s tests make and the daemon makes.
+    /// three calls `ring_sync`'s tests make. The LOCAL rail stands in for the
+    /// serving process's: the roster installation and the journal on disk are
+    /// what these tests pin, and both live on this implementation.
     fn node(dir: &std::path::Path, key: &SigningKey, id: NodeId) -> AppState {
         use sovereign_mesh::ring_roster::tests::{member, mesh_of, pubkey_of};
-        let rail = Arc::new(RingRail::new(dir, Arc::new(key.clone())));
+        let local = LocalRingRail::new(dir, Arc::new(key.clone()));
         let state = AppState::new_with_platform_and_engine_and_gauge_and_fabric(
             id,
             mesh_of(vec![member(id, "a", Some(pubkey_of(key)))]),
@@ -120,12 +123,12 @@ mod tests {
             None,
             None,
             crate::state::FabricSeed {
-                ring_rail: Some(rail.clone()),
+                ring_rail: Some(Arc::new(local.clone())),
                 ..Default::default()
             },
         );
         sovereign_mesh::ring_roster::MeshRosterSource::install(
-            &rail,
+            local.inner(),
             &state.inner.fabric.mesh,
             &state.inner.fabric.identity,
             state.self_node_pubkey(),
@@ -181,6 +184,7 @@ mod tests {
             .ring_rail()
             .unwrap()
             .namespaces()
+            .await
             .unwrap()
             .iter()
             .any(|n| n == PUBLIC));
@@ -227,6 +231,7 @@ mod tests {
                 .ring_rail()
                 .unwrap()
                 .namespaces()
+                .await
                 .unwrap()
                 .iter()
                 .any(|n| n == PRIVATE),

@@ -32,11 +32,10 @@ use axum::extract::{Query, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
-use commonwealth_rail::{
-    AdmittedOp, Compaction, RailAct, RailError, RingJournal, RingRail, RosterOrigin,
-};
+use commonwealth_rail_core::{AdmittedOp, Compaction, RailAct, RailError, RosterOrigin};
 use serde::Deserialize;
 use sovereign_grants::GuestGrant;
+use sovereign_mesh::rail_port::RingRailPort;
 
 use crate::client_auth::Guest;
 use crate::guest_door::GuestPages;
@@ -243,17 +242,23 @@ fn refuse_read_only(
     ))
 }
 
-/// Resolve the namespace AND the journal behind it, or the refusal to return.
+/// Resolve the namespace AND the rail behind it, or the refusal to return.
 ///
-/// The two failures are different and are kept different. A namespace the
-/// caller may not touch is a 403 about them; a rail with no storage installed
-/// is a 503 about this daemon. Collapsing either into an empty success would
-/// hand the app a plausible `[]` and let it carry on (ARCH §18.3).
-pub(crate) fn journal_for(
+/// The three failures are different and are kept different. A namespace the
+/// caller may not touch is a 403 about them; a serving process that does not
+/// answer is a 503 about the mesh; a namespace with no journal there is a 400
+/// about the name. Collapsing either into an empty success would hand the app
+/// a plausible `[]` and let it carry on (ARCH §18.3).
+///
+/// Since fp-54 the rail is the serving process's — the door dials, the
+/// journals moved (`crate::rails_client::RailsRingRail`). The guest-door
+/// decision above is unchanged and stays HERE: what a caller may touch is
+/// this daemon's grant answer, not the caller's.
+pub(crate) async fn door_for(
     state: &AppState,
     guest: Option<&Guest>,
     requested: Option<&str>,
-) -> Result<(Arc<RingRail>, Arc<RingJournal>), Response> {
+) -> Result<(Arc<dyn RingRailPort>, String), Response> {
     let namespace = namespace_for(&state.guest_pages(), guest, requested)?;
     let rail = state.ring_rail().ok_or_else(|| {
         err(
@@ -262,10 +267,12 @@ pub(crate) fn journal_for(
              to keep a journal — start it with a data directory",
         )
     })?;
-    let journal = rail
-        .journal(&namespace)
-        .map_err(|e| err(StatusCode::BAD_REQUEST, e.to_string()))?;
-    Ok((rail, journal))
+    // The namespace-existence check the local journal open used to make now
+    // rides the first read: a namespace the serving process holds no journal
+    // for answers an empty roster/ops set, which is the same fact the local
+    // rail answered with on first touch (nothing is created until the first
+    // append).
+    Ok((rail, namespace))
 }
 
 /// Render what [`RingJournal::seal`]'s prune did, for the append body.
@@ -391,7 +398,7 @@ pub async fn append(
     Json(body): Json<serde_json::Value>,
 ) -> Response {
     let guest = guest.as_ref().map(|e| &e.0);
-    let (rail, journal) = match journal_for(&state, guest, q.namespace.as_deref()) {
+    let (rail, namespace) = match door_for(&state, guest, q.namespace.as_deref()).await {
         Ok(pair) => pair,
         Err(refusal) => return refusal,
     };
@@ -399,12 +406,29 @@ pub async fn append(
     // and long before anything is signed: a refused write must leave no trace
     // on the journal, and the cheapest way to promise that is to refuse before
     // there is anything to write.
-    if let Some(refusal) = refuse_read_only(&state.guest_pages(), guest, journal.namespace()) {
+    if let Some(refusal) = refuse_read_only(&state.guest_pages(), guest, &namespace) {
         return refusal;
     }
     // Read before the body becomes an act, because `RailAct` does not carry
     // this field and serde drops it on the way in.
     let on_behalf_of = stamp_from(guest, &body);
+    // A guest's stamp cannot cross the dial. The serving process's door has
+    // no sessions — its recorded rule is to drop any claimed name and sign as
+    // the node — so the act would land with NO attribution, and the wall
+    // would read the member's name over the guest's words: the exact
+    // misattribution [`stamp_from`] exists to prevent. This door refuses
+    // rather than ships it, and names the gap (principle 6). Reads are
+    // untouched; re-mounting guest writes wants the stamp's wire shape
+    // decided by the director (recorded on fp-54).
+    if on_behalf_of.is_some() {
+        return err(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "guest writes are not served while the journals live at the mesh's \
+             serving process: it carries no sessions, so a guest's name could \
+             not be authenticated there, and this door will not file a \
+             guest's words under the member's name",
+        );
+    }
     // Taken as a `Value` and converted here rather than as `Json<RailAct>`,
     // so a refusal is the rail's own sentence instead of axum's rejection
     // prose wrapped around serde's prose wrapped around it (ARCH §10.6).
@@ -415,53 +439,64 @@ pub async fn append(
     // Through the rail's ONE roster reader, not the file: the daemon's own
     // namespace derives its roster from membership, and reading the file here
     // refused this node's own key on that ring (ARCH §10.6).
-    let roster = match rail.roster(&journal).await {
+    let roster = match rail.roster(&namespace).await {
         Ok(r) => r,
+        // The namespace-validity check the local journal open used to make:
+        // a name this rail would never open is the caller's mistake, and 400
+        // is its status on both halves of every route here.
+        Err(e @ RailError::BadNamespace(_)) => return err(StatusCode::BAD_REQUEST, e.to_string()),
         Err(e) => return err(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
     };
     // Sealing is the one act with a second half, and the pair lives on the
-    // journal (`RingJournal::seal`) rather than here — the daemon's own KV
+    // rail (`journal_seal`) rather than here — the daemon's own KV
     // pump seals too, and two spellings of "seal, then compact, and a refused
     // compaction is not a failed seal" is a decider with two answers
     // (ARCH §10.6).
     let sealed = matches!(act, RailAct::Seal);
     let appended = if sealed {
-        // A seal takes no stamp: it is delivery, not words. `applies()` is
-        // false for it, no reducer sees it, and there is nothing it could be
-        // said on behalf of. Named here rather than left to be noticed,
-        // because "every act carries the guest's name" is otherwise read as
-        // covering this one too.
-        journal
-            .seal(rail.signer(), &roster, &commonwealth_rail::Ed25519Verifier)
-            .map(|done| (done.op, Some(retire(&done.retired))))
+        rail.journal_seal(&namespace, &roster)
+            .await
+            .map(|(op, retired)| (op, Some(retired)))
     } else {
-        journal
-            .append(act, rail.signer(), &roster, on_behalf_of.as_deref())
+        rail.journal_append(&namespace, act, &roster)
+            .await
             .map(|op| (op, None))
     };
     match appended {
         Ok((op, retired)) => {
-            // The write is on disk; ask the ring round to run NOW rather than
-            // at its sixty-second tick. Same door the KV pump and the work
-            // donor use (`sovereign-mesh/src/work_donor.rs:1184`) — this
-            // route does not talk to a peer, it asks `ring_sync` to.
+            // The write is on disk (at the serving process); ask the ring
+            // round to run NOW rather than at its sixty-second tick. Same
+            // door the KV pump and the work donor use — this route does not
+            // talk to a peer, it asks `ring_sync` to.
             state.ring_write_nudge().notify_one();
             let mut out = serde_json::json!({
                 "id": op.id,
                 "seq": op.kind.seq,
                 "actor": op.actor,
                 "ts_unix": op.ts_unix,
-                "namespace": journal.namespace(),
+                "namespace": namespace,
             });
             if let Some(retired) = retired {
-                out["retired"] = retired;
+                out["retired"] = retire(&retired);
             }
             Json(out).into_response()
         }
-        Err(e @ RailError::NotInRoster { .. }) => err(
-            StatusCode::UNPROCESSABLE_ENTITY,
-            not_in_roster_refusal(rail.roster_origin(journal.namespace()), &e),
-        ),
+        Err(e @ RailError::NotInRoster { .. }) => {
+            let origin = rail.roster_origin(&namespace).await.unwrap_or_else(|_| {
+                tracing::warn!(
+                    namespace,
+                    "rail: the roster origin could not be read for a not-in-roster refusal"
+                );
+                RosterOrigin::File
+            });
+            err(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                not_in_roster_refusal(origin, &e),
+            )
+        }
+        // A namespace this rail would never open is the caller's mistake —
+        // the local journal open used to answer 400 with this same sentence.
+        Err(e @ RailError::BadNamespace(_)) => err(StatusCode::BAD_REQUEST, e.to_string()),
         Err(RailError::Rejected(why)) => err(StatusCode::UNPROCESSABLE_ENTITY, why),
         Err(e) => err(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
     }
@@ -487,28 +522,24 @@ pub async fn log(
     Query(q): Query<RailQuery>,
 ) -> Response {
     let guest = guest.as_ref().map(|e| &e.0);
-    let (rail, journal) = match journal_for(&state, guest, q.namespace.as_deref()) {
+    let (rail, namespace) = match door_for(&state, guest, q.namespace.as_deref()).await {
         Ok(pair) => pair,
         Err(refusal) => return refusal,
     };
-    let roster = match rail.roster(&journal).await {
+    let roster = match rail.roster(&namespace).await {
         Ok(r) => r,
+        Err(e @ RailError::BadNamespace(_)) => return err(StatusCode::BAD_REQUEST, e.to_string()),
         Err(e) => return err(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
     };
-    // ONE read, admitted from those exact bytes. Reading the journal twice —
-    // once for the lines, once inside `admit` — would let a write land between
-    // them and ship an answer that does not match the ops beside it.
-    let (ops, skipped) = match journal.read() {
-        Ok(pair) => pair,
+    // ONE admission, on the serving side, against THIS roster — the roster
+    // the answer ships beside, so the ops and the roster cannot disagree.
+    let admission = match rail.journal_admit(&namespace, &roster).await {
+        Ok(a) => a,
+        // A namespace this rail would never open is the caller's mistake —
+        // the local journal open used to answer 400 with this same sentence.
+        Err(e @ RailError::BadNamespace(_)) => return err(StatusCode::BAD_REQUEST, e.to_string()),
         Err(e) => return err(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
     };
-    let admission = commonwealth_rail::admit(
-        &ops,
-        &skipped,
-        &roster,
-        journal.namespace(),
-        &commonwealth_rail::Ed25519Verifier,
-    );
     // Each gap ships its own sentence. The renderer is `RailGap`'s `Display`
     // and it lives in the rail — carrying the rendered string means the
     // terminal, a ring app's page and the append door's 422 all say the same
@@ -527,7 +558,7 @@ pub async fn log(
         })
         .collect();
     Json(serde_json::json!({
-        "namespace": journal.namespace(),
+        "namespace": namespace,
         // Not `admission.ops` verbatim: a guest act's attribution is finished
         // HERE, once, for the wall's page, the scaffold's page and
         // `svrn ring log` alike — see [`shipped`].

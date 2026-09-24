@@ -32,9 +32,8 @@ use axum::extract::ConnectInfo;
 use axum::http::{Request, StatusCode};
 use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::mesh::Mesh;
-use commonwealth_rail::{
-    Digest, Ed25519Verifier, Op, Payload, Person, RailAct, RingJournal, RingRail, RingSigner,
-    Roster, SignedOp,
+use commonwealth_rail_core::{
+    Digest, Ed25519Verifier, Op, Payload, Person, RailAct, RingSigner, Roster, SignedOp,
 };
 use ed25519_dalek::SigningKey;
 use sovereign_daemon::routes_internal::{
@@ -43,6 +42,7 @@ use sovereign_daemon::routes_internal::{
 use sovereign_daemon::server::client_router;
 use sovereign_daemon::state::AppState;
 use sovereign_grants::Scope;
+use sovereign_mesh::rail_port::{LocalRingRail, RingJournal};
 use tower::ServiceExt;
 
 const LOOPBACK: &str = "127.0.0.1:55001";
@@ -140,20 +140,21 @@ fn state_with_rail_sessions(
     sessions: sovereign_grants::GuestSessionBinding,
     pages: sovereign_daemon::guest_door::GuestPages,
 ) -> AppState {
-    let rail = Arc::new(RingRail::new(root, Arc::new(key.clone())));
+    let rail = LocalRingRail::new(root, Arc::new(key.clone()));
     let mut members = std::collections::BTreeMap::new();
     members.insert(Person::from("alex"), vec![key.actor()]);
     members.insert(
         Person::from("bo"),
         vec!["bo-has-not-joined-yet".to_string()],
     );
-    rail.journal(NS)
+    rail.inner()
+        .journal(NS)
         .unwrap()
         .set_roster(&Roster::new(members))
         .unwrap();
     bare_state_with_seed(
         sovereign_daemon::state::FabricSeed {
-            ring_rail: Some(rail),
+            ring_rail: Some(Arc::new(rail)),
             ..Default::default()
         },
         sessions,
