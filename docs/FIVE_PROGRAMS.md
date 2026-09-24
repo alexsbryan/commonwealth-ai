@@ -629,7 +629,14 @@ owns the program's data. The split:
 - [ ] Deps that die with the split: `sovereign-eval`, `sovereign-gliner`,
       `oplog`, `sovereign-code`; six declared deps already have ZERO refs
       (`commonwealth-{media,rail,transport}`, `oicp-types`, `sovereign-meshapp`,
-      `sovereign-work-atlas`) — drop them first, that is free.
+      `sovereign-work-atlas`) — drop them first, that is free. (Spent: they
+      left at 51cd76669.)
+- [ ] PRICED 2026-09-24 (fw-4, struck; five-programs-11): the split as a
+      straight move is NET-INCREASING at boundary-gate 62 — it closes ≤ 5 of
+      cli-llm's 14 edges and each new crate opens edges into non-leaf [svrn]
+      members (core, cli-shared, tools, store, chat_cmd's Runtime bootstrap),
+      ≥ 10 together. The dials that remove the halves' svrn reach come first;
+      `REVIEW-mint-fp-cli-llm-split` prices them.
 - [ ] Verification: `boundary-gate`'s own count line is the only burn-down
       number; `scripts/evidence-verdict.py <commit>` for any test-evidence
       claim. Commit bodies quote the script output, never an interpretation.
