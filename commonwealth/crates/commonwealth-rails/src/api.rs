@@ -93,6 +93,8 @@ pub fn router(daemon: Arc<RailsDaemon>) -> Router {
         .route("/v1/rail/ingest", post(crate::rail::journal_ingest))
         .route("/v1/rail/admit", post(crate::rail::journal_admit))
         .route("/v1/rail/compact", post(crate::rail::journal_compact))
+        // The `work` queue, folded where its journal lives (fp-45).
+        .route("/v1/work/projection", get(crate::work::projection))
         .with_state(daemon)
 }
 

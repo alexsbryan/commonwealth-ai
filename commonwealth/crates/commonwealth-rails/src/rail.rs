@@ -158,7 +158,7 @@ pub struct RailQuery {
     pub namespace: Option<String>,
 }
 
-fn err(status: StatusCode, msg: impl Into<String>) -> Response {
+pub(crate) fn err(status: StatusCode, msg: impl Into<String>) -> Response {
     (status, Json(serde_json::json!({ "error": msg.into() }))).into_response()
 }
 

@@ -99,6 +99,8 @@ use crate::act::{self, RailWorkAct, UnitRef, WorkAct};
 use crate::actor::ActorKey;
 use crate::seal;
 
+mod wire;
+
 // -----------------------------------------------------------------
 // Time
 // -----------------------------------------------------------------
@@ -146,7 +148,7 @@ fn lease_is_live(expires_at_ms: u64, now_ms: u64) -> bool {
 /// The states are exactly `worklist.rs`'s: `pending -> claimed -> done`, with
 /// `claimed -> pending` on a lapse or a retryable failure and
 /// `claimed -> failed` once the attempts are spent.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum WorkUnitStatus {
     /// Waiting to be taken. `prior_attempts` is 0 on submission and N after N
     /// leases that did not finish, so [`MAX_UNIT_ATTEMPTS`] counts total
@@ -215,7 +217,7 @@ impl WorkUnitStatus {
 }
 
 /// One unit as the journal leaves it: the submitted unit, and where it is.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ProjectedUnit {
     /// The unit exactly as its `Submit` carried it, seal verified.
     pub unit: JobUnit,
@@ -268,7 +270,7 @@ impl ProjectedUnit {
 // -----------------------------------------------------------------
 
 /// One submitted handoff and its units.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct WorkHandoff {
     /// Who submitted it — from ADMISSION, never from the payload. Only this
     /// actor may revoke it.
@@ -364,7 +366,7 @@ impl WorkHandoff {
 /// has no loser, and here the loser is the point. The losing actor started
 /// work it must now cancel, and this row is how it finds out — the fact the
 /// HTTP path spells `HeartbeatResult::Reclaimed`.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct LostLease {
     pub handoff: HandoffId,
     pub unit_hash: String,
@@ -522,9 +524,10 @@ pub fn expired(proj: &WorkProjection, now_ms: u64) -> ReapStats {
 // -----------------------------------------------------------------
 
 /// The `work` namespace, folded.
-#[derive(Debug, Clone, Default, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct WorkProjection {
     /// Every handoff an admitted `Submit` opened, by id.
+    #[serde(with = "wire::handoffs_as_pairs")]
     pub handoffs: BTreeMap<HandoffId, WorkHandoff>,
     /// The live offer per donor — latest admitted `Offer` wins, which is
     /// simply the last one in the total order.

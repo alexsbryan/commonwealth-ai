@@ -2136,7 +2136,9 @@ rev it runs at, and which nodes may take it — through `ring_cmd::rail_append`,
 the same append client `ring` uses, and then stops. It does not wait, poll or
 place: a submitter that also chose a donor would be a second decider for a
 lease (§10.6). `job status` reads `GET /v1/rail/log` and folds it with the SAME
-`commonwealth_work::WorkProjection::fold` the daemon's donor loop runs, which
+`commonwealth_work::WorkProjection::fold` `cw-rails` runs for the daemon's
+donor loop (`GET /v1/work/projection`, fp-45 — the donor reads the fold, it
+never admits the journal), which
 is what the package crate is for — the terminal, the daemon and a lifted
 third-party peer are three readers of ONE function and cannot disagree about
 who holds a lease. It goes over HTTP and never opens the journal for `ring

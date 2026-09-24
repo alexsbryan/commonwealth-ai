@@ -25,6 +25,10 @@ commonwealth-discovery = { workspace = true }
 # over the two `cargo tree --edges normal` closures); the forbid row for this
 # daemon carries the exception with the same commit.
 commonwealth-rail = { workspace = true }
+# The `work` fold (fp-45): `/v1/work/projection` folds the journal this
+# daemon owns. Default features only — `process` (tokio's process half, the
+# executor seam) stays off; the forbid row's except carries the cost (+1).
+commonwealth-work = { workspace = true }
 # The node key's type. Already in commonwealth-transport's closure, so
 # naming it here adds nothing a lift has to carry.
 ed25519-dalek = { workspace = true }

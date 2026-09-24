@@ -608,3 +608,22 @@ fn unknown_is_never_produced_by_the_pure_decider() {
         );
     }
 }
+
+/// The folded queue survives the JSON trip `cw-rails`' `/v1/work/projection`
+/// puts it through (fp-45): the handoff map is keyed by a 16-byte id JSON
+/// cannot use as an object key, so it travels as pairs and must come back
+/// equal — a donor deciding over a lossy copy decides over a different queue.
+#[test]
+fn the_projection_round_trips_through_its_wire_form() {
+    let (submit, a, _b) = submission();
+    let proj = fold(&[
+        op(1, 100, 0, &submit),
+        op(2, 110, 0, &WorkAct::Offer(offer(&["process:v1"], None))),
+        op(2, 200, 1, &lease(&a)),
+        op(3, 300, 0, &lease(&a)),
+    ]);
+    assert!(!proj.handoffs.is_empty() && !proj.lost_leases.is_empty());
+    let wire = serde_json::to_string(&proj).expect("the projection serialises");
+    let back: WorkProjection = serde_json::from_str(&wire).expect("and parses back");
+    assert_eq!(back, proj);
+}

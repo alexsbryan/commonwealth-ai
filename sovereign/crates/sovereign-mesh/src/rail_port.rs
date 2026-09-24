@@ -108,6 +108,9 @@ pub trait RingRailPort: Send + Sync {
         theirs: &Digest,
         budget_bytes: usize,
     ) -> RailFut<'_, (Vec<Op<SignedOp>>, bool)>;
+    /// The `work` namespace folded where its journal lives (fp-45): the
+    /// donor receives the queue and never admits the journal itself.
+    fn work_projection(&self) -> RailFut<'_, commonwealth_work::projection::WorkProjection>;
 
     /// The local journal surface, when this port IS the local
     /// implementation. Tests use it to place a roster file or read a
@@ -255,6 +258,15 @@ impl RingRailPort for LocalRingRail {
         Box::pin(async move {
             self.journal(&namespace)?
                 .ops_missing_from_within(&theirs, budget_bytes)
+        })
+    }
+
+    fn work_projection(&self) -> RailFut<'_, commonwealth_work::projection::WorkProjection> {
+        Box::pin(async move {
+            let journal = self.journal(commonwealth_work::WORK_NAMESPACE)?;
+            let roster = self.0.roster(&journal).await?;
+            let admission = journal.admit(&roster, &commonwealth_rail_core::Ed25519Verifier)?;
+            Ok(commonwealth_work::projection::WorkProjection::fold(&admission))
         })
     }
 

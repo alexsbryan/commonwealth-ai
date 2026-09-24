@@ -75,6 +75,7 @@ pub mod internal;
 pub mod join;
 pub mod presence;
 pub mod rail;
+pub mod work;
 
 pub use config::Config;
 

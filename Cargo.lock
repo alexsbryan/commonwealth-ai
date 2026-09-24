@@ -2018,6 +2018,7 @@ dependencies = [
  "commonwealth-media",
  "commonwealth-rail",
  "commonwealth-transport",
+ "commonwealth-work",
  "ed25519-dalek 2.2.0",
  "hex",
  "hostname",

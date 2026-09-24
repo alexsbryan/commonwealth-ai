@@ -6,8 +6,8 @@
 //!
 //! `commonwealth_work` is the vocabulary, the fold and the one predicate, and
 //! it has no I/O and no clock. This is the half that has both: a supervised
-//! task beside [`sovereign_mesh::ring_sync`]'s and [`sovereign_mesh::rail_kv_pump`]'s that folds
-//! the `work` namespace every [`DONOR_POLL_INTERVAL`], asks
+//! task beside [`sovereign_mesh::ring_sync`]'s and [`sovereign_mesh::rail_kv_pump`]'s that reads
+//! the `work` fold (served by `cw-rails`, fp-45) every [`DONOR_POLL_INTERVAL`], asks
 //! [`may_take`](commonwealth_work::refusal::may_take) about each queued unit,
 //! and for the ones it may take appends a `Lease`, runs the unit, heartbeats a
 //! `Renew`, and appends a `Complete` or a `Fail`.
@@ -583,11 +583,16 @@ async fn take_round(
     taken
 }
 
-/// Fold the `work` namespace as it stands right now.
+/// The `work` namespace, folded as it stands right now.
 ///
-/// `None` when this node has no rail, an unreadable roster or a journal that
-/// will not admit — each traced, and each a condition that heals, so the
-/// round is skipped rather than the loop exiting.
+/// The fold runs where the journal lives — `cw-rails`' `/v1/work/projection`
+/// behind the port since fp-45 — so this reads the folded queue and never
+/// admits the journal itself.
+///
+/// `None` when this node has no rail, or the serving process could not fold
+/// (unreadable roster, a journal that will not admit, the process absent) —
+/// each traced, and each a condition that heals, so the round is skipped
+/// rather than the loop exiting.
 pub(crate) async fn fold_now(
     app_state: &AppState,
 ) -> Option<(
@@ -597,17 +602,10 @@ pub(crate) async fn fold_now(
     u64,
 )> {
     let rail = app_state.ring_rail()?;
-    let roster = match rail.roster(WORK_NAMESPACE).await {
-        Ok(r) => r,
+    let proj = match rail.work_projection().await {
+        Ok(p) => p,
         Err(e) => {
-            debug!(target: TRACE_TARGET, error = %e, "work donor: the `work` roster is unreadable, nothing folded");
-            return None;
-        }
-    };
-    let admission = match rail.journal_admit(WORK_NAMESPACE, &roster).await {
-        Ok(a) => a,
-        Err(e) => {
-            warn!(target: TRACE_TARGET, error = %e, "work donor: the `work` journal would not admit, nothing folded");
+            warn!(target: TRACE_TARGET, error = %e, "work donor: the `work` queue could not be folded, nothing to take");
             return None;
         }
     };
@@ -625,7 +623,6 @@ pub(crate) async fn fold_now(
             return None;
         }
     };
-    let proj = WorkProjection::fold(&admission);
     Some((rail, proj, self_key, now_ms()))
 }
 
