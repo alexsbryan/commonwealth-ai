@@ -29,8 +29,8 @@
 //! infer from a short list that something was missing (§18.3).
 
 use corpus_engine::enrichment::atlas::ground::{Degradation, Grounding, MapNode};
-use corpus_engine_atlas_reader::resolve::{EvidenceFetcher, ResolvedChunk};
 use corpus_engine::CorpusId;
+use corpus_engine_atlas_reader::resolve::{EvidenceFetcher, ResolvedChunk};
 use corpus_index::index::CorpusIndex;
 use corpus_index::types::ScoredChunk;
 use serde_json::{json, Value};
