@@ -355,8 +355,9 @@ pub(super) const REGISTRY_TAIL: &[(&str, Class, usize)] = &[
     // `cw-rails media` is a client of THIS daemon's own loopback API — the
     // same bytes a `curl` would send, and they never leave the machine.
     ("commonwealth/crates/commonwealth-rails/src/cli.rs", Class::LocalDaemon, 1),
-    // The `#[cfg(test)]` modules of the kv doors (fp-77) and the ledger doors
-    // (fp-78): each client talks to a router the test itself served on loopback.
-    ("commonwealth/crates/commonwealth-rails/src/kv/tests.rs", Class::TestOnly, 2),
+    // The `#[cfg(test)]` modules of the kv doors (fp-77, fp-107, fp-109) and the
+    // ledger doors (fp-78): each client talks to a router the test itself served
+    // on loopback.
+    ("commonwealth/crates/commonwealth-rails/src/kv/tests.rs", Class::TestOnly, 4),
     ("commonwealth/crates/commonwealth-rails/src/ledger/tests.rs", Class::TestOnly, 1),
 ];
