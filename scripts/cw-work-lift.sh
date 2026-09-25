@@ -158,6 +158,11 @@ wsdeps = ws.get("dependencies", {})
 # this reads what was actually copied — one of the two can be stale.
 FORBIDDEN = re.compile(r"^(sovereign-|corpus-engine|commonwealth-(knowledge|inference|api)$)")
 
+# cargo-hakari's build shim, shed exactly as scripts/cw-rails-lift.sh sheds it
+# (fp-solo-lift): a monorepo build-speed pin, not a semantic dep, and the
+# sandbox has no hakari to resolve `../../../workspace-hack` against.
+SHIM = "workspace-hack"
+
 def manifest(path): return tomllib.loads(open(path).read())
 def tables(m):
     for t in ("dependencies", "dev-dependencies", "build-dependencies"):
@@ -169,6 +174,7 @@ def tables(m):
 # package carries its tests.
 seeds = {"commonwealth-work": os.path.join(repo, "commonwealth/crates/commonwealth-work")}
 found, hand_paths, referenced, queue = {}, [], set(), list(seeds.items())
+shim_holders = set()
 while queue:
     name, cdir = queue.pop()
     if name in found: continue
@@ -176,6 +182,9 @@ while queue:
     for table, dep, spec in tables(manifest(os.path.join(cdir, "Cargo.toml"))):
         if FORBIDDEN.match(dep):
             print(f"FORBIDDEN {name} -> {dep} ({table})"); sys.exit(4)
+        if dep == SHIM:
+            shim_holders.add(name)
+            continue
         if spec.get("workspace"):
             referenced.add(dep)
             entry = wsdeps.get(dep)
@@ -221,6 +230,20 @@ os.makedirs(os.path.join(sandbox, "crates"))
 ignore = shutil.ignore_patterns("target", ".git")
 for name, cdir in found.items():
     shutil.copytree(cdir, os.path.join(sandbox, "crates", name), ignore=ignore)
+
+# Shed the shim from every copied manifest, line-wise so comments survive; a
+# non-comment line still naming it after the strip is a planner failure.
+shim_line = re.compile(r"^" + re.escape(SHIM) + r"\s*=")
+for name in sorted(shim_holders):
+    p = os.path.join(sandbox, "crates", name, "Cargo.toml")
+    lines = open(p).read().splitlines(keepends=True)
+    kept = [ln for ln in lines if not shim_line.match(ln)]
+    leftovers = [ln for ln in kept if SHIM in ln and not ln.lstrip().startswith("#")]
+    if len(kept) == len(lines) or leftovers:
+        print(f"SHIM-STRIP-MISS {name}: declares {SHIM} in a shape this planner cannot strip")
+        sys.exit(4)
+    open(p, "w").write("".join(kept))
+print(f"STRIPPED {SHIM} from {len(shim_holders)} manifest(s): {' '.join(sorted(shim_holders))}")
 
 def render(v):
     if isinstance(v, bool): return "true" if v else "false"
