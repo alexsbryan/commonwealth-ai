@@ -108,7 +108,6 @@ async fn a_node_in_no_mesh_keeps_its_writes_queued_until_membership_exists() {
     let state = AppState::new_with_platform_and_engine_and_gauge_and_fabric(
         me,
         mesh_of(vec![]),
-        Arc::new(commonwealth_state::MeshStore::in_memory().unwrap()),
         Arc::new(sovereign_meshapp_registry::registry::AppRegistry::new()),
         None,
         None,
@@ -200,7 +199,6 @@ async fn work_namespace_seals_and_keeps_live_leases() {
     let state = AppState::new_with_platform_and_engine_and_gauge_and_fabric(
         me,
         mesh_of(vec![member(me, "me", Some(pubkey_of(&donor)))]),
-        Arc::new(commonwealth_state::MeshStore::in_memory().unwrap()),
         Arc::new(sovereign_meshapp_registry::registry::AppRegistry::new()),
         None,
         None,

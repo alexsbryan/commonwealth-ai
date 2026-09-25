@@ -40,7 +40,6 @@ use commonwealth_core::mesh::{
     SecretDisclosure,
 };
 use commonwealth_core::{partition, TestClock};
-use commonwealth_state::MeshStore;
 use corpus_engine::CorpusEngine;
 use sovereign_contracts::self_claims::{LocalClaims, SelfClaims};
 use sovereign_mesh::fabric::{FabricPart, FabricSeed};
@@ -68,13 +67,10 @@ struct DstNodeState {
 
 impl DstNodeState {
     fn new(id: NodeId, mesh: Mesh) -> Self {
-        #[allow(clippy::expect_used)]
-        let store = Arc::new(MeshStore::in_memory().expect("in-memory MeshStore"));
         Self {
             fabric: Arc::new(FabricPart::new(
                 id,
                 mesh,
-                store,
                 Arc::new(AppRegistry::new()),
                 FabricSeed::default(),
             )),

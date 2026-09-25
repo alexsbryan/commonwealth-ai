@@ -189,11 +189,24 @@ async fn snapshot_emits_nothing_when_no_corpus_engine_attached() {
     // on the engine field would silently produce empty snapshots
     // every hour.
     let tmp = tempfile::tempdir().unwrap();
-    let daemon = EmbeddedDaemon::new(
-        tmp.path().to_path_buf(),
-        SetupConfig::unconfigured(),
-        mesh_admin_services(),
-    );
+    // The same stand-in door as the test above: Fabric keeps no emitter
+    // since five-programs fp-111, so the contribution port is what we read.
+    let double = Arc::new(RecordingLedger::new(NodeId::from_u128(0)));
+    let door = common::spawn_router(axum::Router::new().route(
+        "/v1/ledger/contributions",
+        axum::routing::post({
+            let double = Arc::clone(&double);
+            move |axum::Json(body): axum::Json<serde_json::Value>| async move {
+                let kind = serde_json::from_value(body["record"].clone()).unwrap();
+                double.record(kind).await.unwrap();
+                axum::Json(())
+            }
+        }),
+    ))
+    .await;
+    let mut config = SetupConfig::unconfigured();
+    config.daemon.rails_base = Some(format!("http://{door}"));
+    let daemon = EmbeddedDaemon::new(tmp.path().to_path_buf(), config, mesh_admin_services());
     // Intentionally NO `set_corpus_engine` call.
     daemon
         .create_mesh("no-engine test", "node")
@@ -202,20 +215,11 @@ async fn snapshot_emits_nothing_when_no_corpus_engine_attached() {
 
     tokio::time::sleep(Duration::from_millis(200)).await;
 
-    let app_state = daemon
-        .app_state()
-        .await
-        .expect("app_state present after create_mesh");
-    let events = app_state
-        .inner
-        .fabric
-        .contribution_emitter
-        .events()
-        .expect("emitter.events() ok");
+    let events = double.recorded_contributions();
 
     let snapshot_count = events
         .iter()
-        .filter(|e| matches!(e.kind, LedgerEventKind::StorageSnapshot { .. }))
+        .filter(|e| matches!(e, LedgerEventKind::StorageSnapshot { .. }))
         .count();
     assert_eq!(
         snapshot_count, 0,

@@ -96,8 +96,8 @@ impl StoreSeed {
 
 impl AppState {
     /// Test-support: every seed plus the [`StoreSeed`], with Fabric over its
-    /// own in-memory `MeshStore` as [`AppState::new`] builds it — so a test
-    /// hands in its store ports and names no store.
+    /// own private store as [`AppState::new`] builds it — so a test hands in
+    /// its store ports and names no store.
     pub fn new_with_seeds(
         self_node_id: NodeId,
         mesh: Mesh,
@@ -108,12 +108,9 @@ impl AppState {
         node_seed: node::NodeSeed,
         store_seed: StoreSeed,
     ) -> Self {
-        #[allow(clippy::expect_used)]
-        let mesh_store = Arc::new(MeshStore::in_memory().expect("in-memory MeshStore failed"));
         let fabric = Arc::new(fabric::FabricPart::new(
             self_node_id,
             mesh,
-            mesh_store,
             Arc::new(AppRegistry::new()),
             fabric_seed,
         ));

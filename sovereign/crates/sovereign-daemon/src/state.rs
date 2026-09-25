@@ -8,7 +8,6 @@ use tokio::sync::RwLock;
 use async_trait::async_trait;
 use commonwealth_core::ids::NodeId;
 use commonwealth_core::mesh::Mesh;
-use commonwealth_state::MeshStore;
 use corpus_engine::CorpusEngine;
 use oicp_types::model_aliases::ModelAliasTable;
 use serving_policy_core::fair_sched::{reciprocity_weight, SchedCore, TryGrant};
@@ -746,11 +745,8 @@ impl AppState {
     }
 
     pub fn new(self_node_id: NodeId, mesh: Mesh) -> Self {
-        // Test-support constructor (callers in tests/ + the test-harness);
-        // in-memory MeshStore creation is infallible — fail-fast is correct.
-        #[allow(clippy::expect_used)]
-        let mesh_store = Arc::new(MeshStore::in_memory().expect("in-memory MeshStore failed"));
-        Self::new_with_platform(self_node_id, mesh, mesh_store, Arc::new(AppRegistry::new()))
+        // Test-support constructor (callers in tests/ + the test-harness).
+        Self::new_with_platform(self_node_id, mesh, Arc::new(AppRegistry::new()))
     }
 
     /// [`Self::new`] with Serving's construction seed — the test-support shape
@@ -761,12 +757,9 @@ impl AppState {
         mesh: Mesh,
         serving_seed: serving::ServingSeed,
     ) -> Self {
-        #[allow(clippy::expect_used)]
-        let mesh_store = Arc::new(MeshStore::in_memory().expect("in-memory MeshStore failed"));
         Self::new_with_platform_and_engine_and_serving(
             self_node_id,
             mesh,
-            mesh_store,
             Arc::new(AppRegistry::new()),
             None,
             serving_seed,
@@ -777,12 +770,9 @@ impl AppState {
     /// for a test that configures a client token (DC §4.2 "Construction is
     /// staged, and parts are total").
     pub fn new_with_node(self_node_id: NodeId, mesh: Mesh, node_seed: node::NodeSeed) -> Self {
-        #[allow(clippy::expect_used)]
-        let mesh_store = Arc::new(MeshStore::in_memory().expect("in-memory MeshStore failed"));
         Self::new_with_platform_and_engine_and_gauge_and_fabric_and_serving_and_node(
             self_node_id,
             mesh,
-            mesh_store,
             Arc::new(AppRegistry::new()),
             None,
             None,
@@ -796,10 +786,9 @@ impl AppState {
     pub fn new_with_platform(
         self_node_id: NodeId,
         mesh: Mesh,
-        mesh_store: Arc<MeshStore>,
         app_registry: Arc<AppRegistry>,
     ) -> Self {
-        Self::new_with_platform_and_engine(self_node_id, mesh, mesh_store, app_registry, None)
+        Self::new_with_platform_and_engine(self_node_id, mesh, app_registry, None)
     }
 
     /// Create state with an optional `CorpusEngine` attached. The
@@ -819,14 +808,12 @@ impl AppState {
     pub fn new_with_platform_and_engine(
         self_node_id: NodeId,
         mesh: Mesh,
-        mesh_store: Arc<MeshStore>,
         app_registry: Arc<AppRegistry>,
         corpus_engine: Option<Arc<CorpusEngine>>,
     ) -> Self {
         Self::new_with_platform_and_engine_and_gauge(
             self_node_id,
             mesh,
-            mesh_store,
             app_registry,
             corpus_engine,
             None,
@@ -843,7 +830,6 @@ impl AppState {
     pub fn new_with_platform_and_engine_and_gauge(
         self_node_id: NodeId,
         mesh: Mesh,
-        mesh_store: Arc<MeshStore>,
         app_registry: Arc<AppRegistry>,
         corpus_engine: Option<Arc<CorpusEngine>>,
         in_flight_gauge: Option<sovereign_core::in_flight::LocalInFlightGauge>,
@@ -851,7 +837,6 @@ impl AppState {
         Self::new_with_platform_and_engine_and_gauge_and_fabric(
             self_node_id,
             mesh,
-            mesh_store,
             app_registry,
             corpus_engine,
             in_flight_gauge,
@@ -869,7 +854,6 @@ impl AppState {
     pub fn new_with_platform_and_engine_and_gauge_and_fabric(
         self_node_id: NodeId,
         mesh: Mesh,
-        mesh_store: Arc<MeshStore>,
         app_registry: Arc<AppRegistry>,
         corpus_engine: Option<Arc<CorpusEngine>>,
         in_flight_gauge: Option<sovereign_core::in_flight::LocalInFlightGauge>,
@@ -878,7 +862,6 @@ impl AppState {
         Self::new_with_platform_and_engine_and_gauge_and_fabric_and_serving(
             self_node_id,
             mesh,
-            mesh_store,
             app_registry,
             corpus_engine,
             in_flight_gauge,
@@ -896,7 +879,6 @@ impl AppState {
     pub fn new_with_platform_and_engine_and_serving(
         self_node_id: NodeId,
         mesh: Mesh,
-        mesh_store: Arc<MeshStore>,
         app_registry: Arc<AppRegistry>,
         corpus_engine: Option<Arc<CorpusEngine>>,
         serving_seed: serving::ServingSeed,
@@ -904,7 +886,6 @@ impl AppState {
         Self::new_with_platform_and_engine_and_gauge_and_fabric_and_serving(
             self_node_id,
             mesh,
-            mesh_store,
             app_registry,
             corpus_engine,
             None,
@@ -923,7 +904,6 @@ impl AppState {
     pub fn new_with_platform_and_engine_and_gauge_and_fabric_and_serving(
         self_node_id: NodeId,
         mesh: Mesh,
-        mesh_store: Arc<MeshStore>,
         app_registry: Arc<AppRegistry>,
         corpus_engine: Option<Arc<CorpusEngine>>,
         in_flight_gauge: Option<sovereign_core::in_flight::LocalInFlightGauge>,
@@ -933,7 +913,6 @@ impl AppState {
         Self::new_with_platform_and_engine_and_gauge_and_fabric_and_serving_and_node(
             self_node_id,
             mesh,
-            mesh_store,
             app_registry,
             corpus_engine,
             in_flight_gauge,
@@ -953,7 +932,6 @@ impl AppState {
     pub fn new_with_platform_and_engine_and_gauge_and_fabric_and_serving_and_node(
         self_node_id: NodeId,
         mesh: Mesh,
-        mesh_store: Arc<MeshStore>,
         app_registry: Arc<AppRegistry>,
         corpus_engine: Option<Arc<CorpusEngine>>,
         in_flight_gauge: Option<sovereign_core::in_flight::LocalInFlightGauge>,
@@ -970,14 +948,16 @@ impl AppState {
         let fabric = Arc::new(fabric::FabricPart::new(
             self_node_id,
             mesh,
-            Arc::clone(&mesh_store),
             Arc::clone(&app_registry),
             fabric_seed,
         ));
+        // Every test keeps ONE store: the ports seed over Fabric's own
+        // (five-programs fp-111).
+        let store_seed = store::StoreSeed::local(Arc::clone(&fabric.mesh_store), self_node_id);
         Self::assemble_with_fabric(
             self_node_id,
             fabric,
-            store::StoreSeed::local(mesh_store, self_node_id),
+            store_seed,
             corpus_engine,
             in_flight_gauge,
             serving_seed,
@@ -2165,7 +2145,6 @@ pub fn test_app_state_with_seed(seed: fabric::FabricSeed) -> AppState {
     AppState::new_with_platform_and_engine_and_gauge_and_fabric(
         NodeId::from_u128(1),
         mesh,
-        Arc::new(MeshStore::in_memory().expect("in-memory MeshStore")),
         Arc::new(AppRegistry::new()),
         None,
         None,
@@ -2195,7 +2174,6 @@ pub fn test_app_state_with_inference(service: Arc<dyn LocalInferenceService>) ->
     AppState::new_with_platform_and_engine_and_serving(
         NodeId::from_u128(1),
         mesh,
-        Arc::new(MeshStore::in_memory().expect("in-memory MeshStore")),
         Arc::new(AppRegistry::new()),
         None,
         serving::ServingSeed {

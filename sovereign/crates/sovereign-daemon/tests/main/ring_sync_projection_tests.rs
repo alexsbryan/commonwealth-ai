@@ -56,7 +56,6 @@ pub fn kv_node(
     let state = AppState::new_with_platform_and_engine_and_gauge_and_fabric(
         self_id,
         mesh,
-        Arc::new(commonwealth_state::MeshStore::in_memory().unwrap()),
         Arc::new(sovereign_meshapp_registry::registry::AppRegistry::new()),
         None,
         None,

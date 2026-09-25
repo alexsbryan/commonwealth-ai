@@ -117,7 +117,6 @@ mod tests {
         let state = AppState::new_with_platform_and_engine_and_gauge_and_fabric(
             id,
             mesh_of(vec![member(id, "a", Some(pubkey_of(key)))]),
-            Arc::new(commonwealth_state::MeshStore::in_memory().unwrap()),
             Arc::new(sovereign_meshapp_registry::registry::AppRegistry::new()),
             None,
             None,

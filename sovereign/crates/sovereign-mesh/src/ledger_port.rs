@@ -47,7 +47,7 @@ pub struct LedgerAbsent(pub String);
 /// [`crate::rail_port::RailFut`] uses.
 pub type LedgerFut<'a, T> = Pin<Box<dyn Future<Output = Result<T, LedgerAbsent>> + Send + 'a>>;
 
-/// `AppState.fabric.contribution_emitter` as a port.
+/// `ContributionEmitter` as a port.
 pub trait ContributionLedgerPort: Send + Sync {
     /// The node id every event this port records is written as.
     fn self_node_id(&self) -> NodeId;

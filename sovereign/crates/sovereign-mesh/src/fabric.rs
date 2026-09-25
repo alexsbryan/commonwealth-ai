@@ -22,7 +22,7 @@ use commonwealth_core::mesh::{IrohDialInfo, Mesh};
 use commonwealth_core::Clock;
 use commonwealth_media::fanout::{FanoutRequest, FanoutResponse};
 use commonwealth_media::{MediaOffer, MediaReach, MediaReachRefusal, PeerTransportPath};
-use commonwealth_state::{ContributionEmitter, MeshStore};
+use commonwealth_state::MeshStore;
 use commonwealth_transport::PeerTransport;
 use sovereign_contracts::identity::IdentityReader;
 use sovereign_contracts::peer::ConvergenceRecord;
@@ -382,14 +382,6 @@ pub struct FabricPart {
     /// Seeded on `create_mesh`/`join_mesh`/`try_resume`, swapped by
     /// `rotate_invite`, cleared on `leave`/`park`.
     pub join_key: JoinKeyReader,
-
-    /// Dimensional contribution emitter. Each route handler records
-    /// `LedgerEvent`s through this on completion (per write site
-    /// listed in the Mesh Health design). Cheap to clone; emission
-    /// is `tokio::spawn`-friendly. The emitter holds its own handle
-    /// to `MeshStore` so it survives `AppState` clones and can be
-    /// passed into spawned tasks without lifetime gymnastics.
-    pub contribution_emitter: ContributionEmitter,
 }
 
 /// The accessors the three mesh loops call — moved here from `AppState` with
@@ -405,11 +397,14 @@ impl FabricPart {
     pub fn new(
         self_node_id: NodeId,
         mesh: Mesh,
-        mesh_store: Arc<MeshStore>,
         app_registry: Arc<AppRegistry>,
         seed: FabricSeed,
     ) -> Self {
-        let contribution_emitter = ContributionEmitter::new((*mesh_store).clone(), self_node_id);
+        // Fabric's own store, private to it: the node's replicated KV is
+        // cw-rails' (five-programs fp-88, fp-111). In-memory creation is
+        // infallible — fail-fast is correct.
+        #[allow(clippy::expect_used)]
+        let mesh_store = Arc::new(MeshStore::in_memory().expect("in-memory MeshStore failed"));
         Self {
             identity: IdentityReader::new(self_node_id),
             mesh: Arc::new(RwLock::new(mesh)),
@@ -431,7 +426,6 @@ impl FabricPart {
             fanout_inflight: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
             on_mesh_mutation: seed.mesh_mutation_hook,
             convergence: seed.convergence,
-            contribution_emitter,
             join_key: seed.join_key,
         }
     }

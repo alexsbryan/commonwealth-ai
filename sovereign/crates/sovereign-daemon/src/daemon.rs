@@ -3021,12 +3021,9 @@ impl EmbeddedDaemon {
         // (if one was installed via `set_corpus_engine`). Without
         // this, Commonwealth's knowledge handlers can only return
         // stubs — the whole reason Peer A couldn't see Peer B's SEP
-        // corpus. Fabric's own store is private to it for every variant: the
-        // node's replicated KV is cw-rails', reached through `RailsKv` below
-        // (five-programs fp-88).
-        let mesh_store = Arc::new(
-            commonwealth_state::MeshStore::in_memory().expect("in-memory MeshStore failed"),
-        );
+        // corpus. Fabric builds its own private store: the node's replicated
+        // KV is cw-rails', reached through `RailsKv` below (five-programs
+        // fp-88, fp-111).
         let app_registry = Arc::new(sovereign_meshapp_registry::registry::AppRegistry::new());
 
         // ── Fabric's values exist before its part is built ────────
@@ -3249,7 +3246,6 @@ impl EmbeddedDaemon {
         let fabric = Arc::new(sovereign_mesh::fabric::FabricPart::new(
             node_id,
             mesh,
-            mesh_store,
             Arc::clone(&app_registry),
             fabric_seed,
         ));
