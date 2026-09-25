@@ -266,7 +266,8 @@ iroh-relay-only = ["commonwealth-transport/iroh-relay-only"]
 # `worker_e2e.rs` writes a temporary SCIP root.
 tempfile = "3"
 # `tests/main/work_atlas_store.rs` drives the atlas over `MeshReplicatedKv`
-# (five-programs fp-84). A dev edge only: layer-gate exempts it.
+# (five-programs fp-84). A dev edge only: layer-gate exempts it, boundary-gate
+# COUNTS it ([cmnwlth] -> [code]; five-programs-49, NEEDS-OPERATOR).
 sovereign-work-atlas = { workspace = true }
 [lints]
 workspace = true
