@@ -138,7 +138,6 @@ fn vendor_recipes(recipes_root: &Path, dest_root: &Path) {
     }
 }
 
-
 /// Copy the canonical registry catalog into the bundled-snapshot slot.
 fn vendor_registry(recipes_root: &Path, out_dir: &Path) {
     let src = recipes_root.join("registry.toml");
