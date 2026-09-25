@@ -550,6 +550,11 @@ merged; that merge is what minted this arrangement, and `ledger-1` records it.
 - Chose: option (C). Local-only stays unjournaled and the clause leaves the row, which makes the package's forks 2 and 3 moot. On sealing, each journal gets exactly one sealer, the owner of its writers. cw-rails pumps and seals only the KV namespaces its own store feeds. fp-77 no longer forwards the daemon's `/v1/mesh/kv/*` routes, so no namespace has writers in two stores; routes_mesh_kv.rs moves to fp-82. The `mesh-measurements` and `work` seal arms stay in the daemon, and fp-80 and fp-83 now say so.
 - Because: every daemon store is `in_memory()` today, so a local-only row does not survive a restart now either. Dropping the clause preserves behaviour, while keeping it would add a capability, a second door into the store, and a rename (charter size rule). A seal's snapshot mark retires every row of this actor it does not name, so two sealers over two stores would retire each other's rows (ARCH 8: one decider).
 
+**five-programs-41 · 2026-09-24 · fp-77 · director** — this commit
+- Needed: fp-77's code landed (76742239f) but LAYER exited 1: fan-in of `commonwealth-state` grew 4 → 5, and the worker may not raise a ratchet the row does not name.
+- Chose: accept the growth explicitly, `quality/baselines/fan_in.tsv` `commonwealth-state` 4 → 5, one line; mark fp-77 `[x]`.
+- Because: the new dependent is the row's own step (1) edge (five-programs-40), taken with the closure the operator's pure-Rust answer demands (+1 first-party, 0 third-party, no sqlite). No narrower crate can carry the store, and fp-87 removes two dependents, leaving 3. Precedent: fe309bfb5 (contracts 40 → 41, accepted explicitly for a row-named edge).
+
 ## Flags for the operator
 
 - A26: REVIEW-DEMO-rr-1-run will very likely FAIL `ra-room-plug-in-live` again on this host. The bar's window is 60 s, and the CPU 2B took about 1–5 min per answer in this run (room-answer-0..4.json mtimes 19:33→19:49). Passing it takes a faster node or model for the room, or a different bar. Both are design changes for the operator, not tuning.
@@ -9039,5 +9044,22 @@ Package: ctl/NEEDS_HUMAN.resolved-fp77-20260924.md. The director reproduced it a
 The charter covers this as a false row premise: the smaller, behaviour-preserving step, plus principle 8. REVIEW-AFTER: fp-76's local-only journal class has no appender now (principle 12, "the uses go to zero and the ability stays"). Making local-only rows durable is new capability, and it is the operator's to order. The costs the package priced: narrow the outbox guard or add a store-level opt-in, add a self-actor-only rehydrate door beside `apply_projection`, and rename the two `wikipedia-newsworthy:*` ids.
 
 Falsified if some daemon store turns out to be durable (a `MeshStore::open` or `MeshReplicatedKv::open` on a live boot path), which would make dropping the clause a regression. Also falsified if the daemon's pump reliably projects cw-rails' own-actor appends before it seals, which would make the twin-seal hazard unreal and forwarding the routes in fp-77 safe.
+
+</details>
+
+## five-programs-41 · 2026-09-24 — commonwealth-state fan-in 4 → 5, accepted for fp-77's named edge
+
+<details><summary>reasoning, evidence, package</summary>
+
+Package: ctl/NEEDS_HUMAN.resolved-fp77b-20260924.md. The director reproduced it at 06c889d34.
+
+- `scripts/ralph-check.sh layer` before the edit: exit=1, "layer-gate FAILED (0 layer violations, 1 fan-in)".
+- `cargo tree -i commonwealth-state -e normal,build --depth 1 --workspace`: commonwealth-rails, sovereign-cli-llm, sovereign-daemon, sovereign-grants, sovereign-mesh — five, the new one is cw-rails. fp-87 closes sovereign-daemon → commonwealth-state and sovereign-cli-llm → commonwealth-state, so the cap can be tightened to 3 there (`layer-gate --tighten`).
+- No narrower crate: `commonwealth-rail → commonwealth-state` is forbidden by name and `commonwealth-work` does not depend on the store, so neither of cw-rails' existing deps can re-export it.
+- After the edit: layer-gate "fan-in within caps", exit 0.
+
+The charter reserves `[[exception]]` rows and package_leaf widening beyond what a queue row names; this is neither, but it is also not named outright, hence REVIEW-AFTER: the fan-in cap is a ratchet the charter does not list. The edge itself was decided in five-programs-40; the cap follows it mechanically.
+
+Falsified if a narrower home for `MeshStore` + `rail_kv` exists that cw-rails could depend on without commonwealth-state (then the edge, not the cap, was wrong), or if fp-87 lands without the fan-in falling back to 3.
 
 </details>
