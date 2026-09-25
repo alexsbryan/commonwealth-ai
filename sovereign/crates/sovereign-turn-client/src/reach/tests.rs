@@ -347,7 +347,9 @@ fn locate_sibling_prefers_env_then_exe_dir_then_path() {
         p
     };
     let (in_env, in_exe, in_path) = (place(&env_dir), place(&exe_dir), place(&path_dir));
+    // canonicalize() needs the exe to exist, as the real current_exe does.
     let exe = Some(exe_dir.join("the-client"));
+    std::fs::write(exe.as_ref().unwrap(), "").unwrap();
     let path = Some(path_dir.clone().into_os_string());
     let canon = |p: &std::path::Path| std::fs::canonicalize(p).unwrap();
 
