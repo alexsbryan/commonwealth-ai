@@ -430,6 +430,26 @@ impl FabricPart {
         }
     }
 
+    /// The two backings over Fabric's own private store — the replicated KV
+    /// and the `LocalLedger` — so a caller builds store ports without naming
+    /// the store (five-programs fp-87, decision five-programs-60).
+    pub fn local_store_backings(
+        &self,
+        self_node_id: NodeId,
+    ) -> (
+        Arc<dyn sovereign_contracts::peer::ReplicatedKv>,
+        Arc<crate::ledger_port::LocalLedger>,
+    ) {
+        let kv: Arc<dyn sovereign_contracts::peer::ReplicatedKv> = Arc::new(
+            crate::peer_adapter::MeshReplicatedKv::over(Arc::clone(&self.mesh_store)),
+        );
+        let ledger = Arc::new(crate::ledger_port::LocalLedger::new(
+            Arc::clone(&self.mesh_store),
+            self_node_id,
+        ));
+        (kv, ledger)
+    }
+
     /// This node's identity pubkey, if the node has one.
     pub fn self_node_pubkey(&self) -> Option<commonwealth_core::ids::NodePubkey> {
         self.self_node_pubkey

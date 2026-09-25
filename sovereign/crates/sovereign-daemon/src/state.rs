@@ -953,7 +953,7 @@ impl AppState {
         ));
         // Every test keeps ONE store: the ports seed over Fabric's own
         // (five-programs fp-111).
-        let store_seed = store::StoreSeed::local(Arc::clone(&fabric.mesh_store), self_node_id);
+        let store_seed = store::StoreSeed::local(&fabric, self_node_id);
         Self::assemble_with_fabric(
             self_node_id,
             fabric,

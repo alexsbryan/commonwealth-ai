@@ -21,7 +21,6 @@ use std::sync::Arc;
 
 use commonwealth_core::ids::NodeId;
 use commonwealth_core::mesh::Mesh;
-use commonwealth_state::MeshStore;
 use corpus_engine::CorpusEngine;
 use sovereign_contracts::peer::ReplicatedKv;
 use sovereign_mesh::ledger_port::{
@@ -64,15 +63,9 @@ impl StoreSeed {
         }
     }
 
-    /// Every port over the node's own `MeshStore` through `LocalLedger`.
-    pub fn local(mesh_store: Arc<MeshStore>, self_node_id: NodeId) -> Self {
-        let kv_port: Arc<dyn sovereign_contracts::peer::ReplicatedKv> = Arc::new(
-            sovereign_mesh::peer_adapter::MeshReplicatedKv::over(Arc::clone(&mesh_store)),
-        );
-        let local_ledger = Arc::new(sovereign_mesh::ledger_port::LocalLedger::new(
-            Arc::clone(&mesh_store),
-            self_node_id,
-        ));
+    /// Every port over Fabric's private store through `LocalLedger`.
+    pub fn local(fabric: &fabric::FabricPart, self_node_id: NodeId) -> Self {
+        let (kv_port, local_ledger) = fabric.local_store_backings(self_node_id);
         let activity_emitter: Arc<dyn sovereign_mesh::ledger_port::ActivityLedgerPort> =
             local_ledger.clone();
         let peer_preferences: Arc<dyn sovereign_mesh::ledger_port::PeerPreferencesPort> =

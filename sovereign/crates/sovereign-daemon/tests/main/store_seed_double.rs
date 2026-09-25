@@ -2,7 +2,7 @@
 //! The store seed is the seam a backing enters `AppState` through
 //! (five-programs fp-97): an AppState built by `AppState::new_with_seeds` over
 //! the recording double routes a served knowledge query's contribution write
-//! to the double, not to any `MeshStore`.
+//! to the double, not to Fabric's private store.
 use std::sync::Arc;
 
 use commonwealth_core::ids::NodeId;

@@ -14,6 +14,7 @@ async fn main() {
         "meshapp" => meshapp_cmd::run(rest).await,
         "ring" => ring_cmd::run(rest).await,
         "job" => job_cmd::run(rest).await,
+        "kv-export" => kv_export::run(rest).await,
         "mesh" => mesh_cmd::run_mesh(rest).await,
         "publish" => publish_cmd::run(rest).await,
         "unpublish" => publish_cmd::run_unpublish(rest).await,

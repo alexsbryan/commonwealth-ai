@@ -73,6 +73,7 @@ mod mcp_cmd;
 mod mcp_demo_server;
 mod meta_atlas_cmd;
 mod mobile_cmd;
+mod legacy_store;
 mod newsworthy_cmd;
 mod pipeline_cmd;
 mod portfolio_cmd;

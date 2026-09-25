@@ -94,9 +94,6 @@ sovereign-cli-shared = { workspace = true, features = ["scip", "mcp-client", "ra
 # the runner that reads its trailing line speak one verdict vocabulary rather
 # than two (noun-convergence rung nc-10-judgement). Layer 0, edge points DOWN.
 kernel-types = { workspace = true }
-# `svrn portfolio` / `svrn newsworthy` store through commonwealth-state's
-# gossip-excluded `MeshStore`; no sovereign crate owns that type yet.
-commonwealth-state = { path = "../../../commonwealth/crates/commonwealth-state", features = ["sqlite"] }
 #
 # `commonwealth-knowledge` (now `sovereign-grants`) is ABSENT since cw-lift
 # 1d, and its absence is the
@@ -181,6 +178,8 @@ awareness = ["dep:rusqlite"]
 # and four test modules here still take it (egress_reds, errors, reset,
 # integration_tests). A feature rather than a second copy of the lock (§10.6).
 sovereign-enrichment-build = { workspace = true, features = ["test-support"] }
+# The local-only list `portfolio-private` must stay in (fp-87) — a leaf.
+commonwealth-rail-core = { workspace = true }
 
 [lints]
 workspace = true

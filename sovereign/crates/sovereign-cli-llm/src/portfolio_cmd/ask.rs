@@ -54,12 +54,16 @@ pub async fn cmd_ask(args: &[String]) -> i32 {
             }
         };
         match super::get_portfolio(&store, name) {
-            Some(c) if !c.is_empty() => c,
-            Some(_) => {
+            Err(e) => {
+                eprintln!("error: {e}");
+                return 1;
+            }
+            Ok(Some(c)) if !c.is_empty() => c,
+            Ok(Some(_)) => {
                 eprintln!("error: portfolio `{name}` is empty — add corpora with `svrn portfolio add {name} <corpus-id ...>`");
                 return 1;
             }
-            None => {
+            Ok(None) => {
                 eprintln!("error: no portfolio named `{name}`");
                 return 1;
             }
