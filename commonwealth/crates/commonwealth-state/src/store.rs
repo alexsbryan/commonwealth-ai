@@ -3,7 +3,8 @@
 //!
 //! Each entry is scoped to an `app_id` + `key`. Conflict resolution is LWW
 //! (last-write-wins) using a Unix-second `timestamp`. The underlying storage
-//! is SQLite (WAL mode) via `SqliteBackend`.
+//! is a pure-Rust in-memory backend, or SQLite (WAL mode) via `SqliteBackend`
+//! for [`MeshStore::open`] under the `sqlite` feature.
 //!
 //! **What this store holds is decided by the fold, not by its writers.** Since
 //! cw-lift 4 an entry is replicated by the ring rail rather than by gossip, and
@@ -16,6 +17,7 @@
 //! - `merge_entry` is the receive half and deliberately queues nothing.
 //! - An excluded `app_id` never enters the outbox and is refused inbound.
 
+#[cfg(feature = "sqlite")]
 use std::path::Path;
 use std::sync::Arc;
 
@@ -23,7 +25,7 @@ use bytes::Bytes;
 
 use commonwealth_core::ids::NodeId;
 
-use crate::backend::SqliteBackend;
+use crate::backend::Backend;
 use crate::error::{Error, Result};
 use crate::rail_kv::KvOp;
 
@@ -98,19 +100,33 @@ pub struct Applied {
 /// The distributed KV store. Thread-safe; clone freely (backed by `Arc`).
 #[derive(Clone)]
 pub struct MeshStore {
-    backend: Arc<SqliteBackend>,
+    backend: Arc<Backend>,
 }
 
 impl MeshStore {
-    /// Open (or create) the store at `path`.
+    /// Open (or create) the store at `path`. The one door to SQLite, so the
+    /// only one behind the `sqlite` feature.
+    #[cfg(feature = "sqlite")]
     pub fn open(path: &Path) -> Result<Self> {
-        let backend = SqliteBackend::open(path)?;
+        let backend = crate::backend::SqliteBackend::open(path)?;
         Ok(Self {
-            backend: Arc::new(backend),
+            backend: Arc::new(Backend::Sqlite(backend)),
         })
     }
 
-    /// Create an in-memory store (useful for tests).
+    /// Create an in-memory store — the pure-Rust backend, whatever features
+    /// are on.
+    #[cfg(not(all(test, feature = "sqlite")))]
+    pub fn in_memory() -> Result<Self> {
+        Ok(Self {
+            backend: Arc::new(Backend::Memory(Default::default())),
+        })
+    }
+
+    /// This crate's OWN tests with `sqlite` on: the same suite over SQLite's
+    /// in-memory database, so `cargo test -p commonwealth-state` with and
+    /// without the feature runs every test against both backends.
+    #[cfg(all(test, feature = "sqlite"))]
     pub fn in_memory() -> Result<Self> {
         use rusqlite::Connection;
         use std::sync::Mutex;
@@ -120,14 +136,13 @@ impl MeshStore {
             .map_err(|e| Error::Backend(format!("in-memory pragma failed: {e}")))?;
         // The SAME DDL the file store runs. This used to be a second copy,
         // which is how a table added to one and not the other passes every
-        // test (ARCH §10.6) — and in production this IS the store, so the
-        // copy that mattered was this one.
+        // test (ARCH §10.6).
         conn.execute_batch(crate::backend::SCHEMA)
             .map_err(|e| Error::Backend(format!("in-memory init failed: {e}")))?;
         Ok(Self {
-            backend: Arc::new(crate::backend::SqliteBackend {
+            backend: Arc::new(Backend::Sqlite(crate::backend::SqliteBackend {
                 conn: Mutex::new(conn),
-            }),
+            })),
         })
     }
 

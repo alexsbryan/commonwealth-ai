@@ -96,7 +96,7 @@ sovereign-cli-shared = { workspace = true, features = ["scip", "mcp-client", "ra
 kernel-types = { workspace = true }
 # `svrn portfolio` / `svrn newsworthy` store through commonwealth-state's
 # gossip-excluded `MeshStore`; no sovereign crate owns that type yet.
-commonwealth-state = { path = "../../../commonwealth/crates/commonwealth-state" }
+commonwealth-state = { path = "../../../commonwealth/crates/commonwealth-state", features = ["sqlite"] }
 #
 # `commonwealth-knowledge` (now `sovereign-grants`) is ABSENT since cw-lift
 # 1d, and its absence is the

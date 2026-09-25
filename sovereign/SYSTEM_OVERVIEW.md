@@ -201,7 +201,7 @@ crates/
 ├── commonwealth-rail-core    # The ring rail's FOLD — Person/Roster/RailAct/SignedOp. Zero I/O
 ├── commonwealth-rail         # The ring rail's JOURNAL — one JSONL log per namespace
 ├── commonwealth-work         # The WORK PLANE on the rail — WorkAct codec, unit seal, lease predicate
-├── commonwealth-state        # MeshStore — SQLite KV; a local PROJECTION of the ring rail
+├── commonwealth-state        # MeshStore — KV (pure-Rust in-memory; SQLite file store behind `sqlite`); a local PROJECTION of the ring rail
 ├── commonwealth-media        # Federated media — who offers a library, who may reach one
 └── commonwealth-rails        # `cw-rails` — the minimal daemon a shim author installs
 ```
@@ -3091,7 +3091,7 @@ portfolio, knowledge fan-out, ledger accuracy. Deterministic timing
 
 ### Distributed state + apps
 
-`commonwealth-state::MeshStore` — SQLite KV (WAL mode):
+`commonwealth-state::MeshStore` — KV over a pure-Rust in-memory backend, or SQLite (WAL mode) for `MeshStore::open` behind the default-off `sqlite` feature:
 `StoreEntry { app_id, key, value: Bytes, timestamp, origin: NodeId }`,
 LWW conflict resolution, per-`app_id` namespace, `RetentionGc` for TTL at
 the window `commonwealth-state::retention` declares.

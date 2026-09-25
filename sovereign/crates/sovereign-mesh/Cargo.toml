@@ -58,7 +58,7 @@ commonwealth-media = { path = "../../../commonwealth/crates/commonwealth-media" 
 # Needed because `AppState::new_with_platform_and_engine` requires
 # an explicit `MeshStore` / `AppRegistry` — we construct in-memory
 # variants of each when `EmbeddedDaemon` builds its state.
-commonwealth-state = { path = "../../../commonwealth/crates/commonwealth-state" }
+commonwealth-state = { path = "../../../commonwealth/crates/commonwealth-state", features = ["sqlite"] }
 # The ring rail's storage type, installed onto `AppState` at startup. A
 # DIRECT dep on the crate that OWNS `RingRail`, not on a re-export shim, so
 # this crate and sovereign-api cannot end up on two versions of one

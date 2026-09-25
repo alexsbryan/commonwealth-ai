@@ -1,12 +1,108 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! SQLite backend for the mesh store.
+//! The mesh store's backends: a pure-Rust in-memory one ([`memory`]), always
+//! built, and the SQLite file store behind the default-off `sqlite` feature
+//! (HUMAN-fp42 = (c): the in-memory store carries no C toolchain).
 
+#[cfg(feature = "sqlite")]
 use std::path::Path;
+#[cfg(feature = "sqlite")]
 use std::sync::Mutex;
 
+#[cfg(feature = "sqlite")]
 use rusqlite::{params, Connection, OptionalExtension};
 
-use crate::error::{Error, Result};
+#[cfg(feature = "sqlite")]
+use crate::error::Error;
+use crate::error::Result;
+
+mod memory;
+pub use memory::MemoryBackend;
+
+/// Which backend a `MeshStore` stands on — a closed set (ARCH §9).
+pub enum Backend {
+    Memory(MemoryBackend),
+    #[cfg(feature = "sqlite")]
+    Sqlite(SqliteBackend),
+}
+
+/// One method, both backends: each arm is the same call on the same surface.
+macro_rules! dispatch {
+    ($self:ident, $b:ident => $call:expr) => {
+        match $self {
+            Backend::Memory($b) => $call,
+            #[cfg(feature = "sqlite")]
+            Backend::Sqlite($b) => $call,
+        }
+    };
+}
+
+impl Backend {
+    pub fn get(&self, app_id: &str, key: &str) -> Result<Option<RawEntry>> {
+        dispatch!(self, b => b.get(app_id, key))
+    }
+
+    pub fn upsert_if_newer(
+        &self,
+        app_id: &str,
+        key: &str,
+        value: &[u8],
+        timestamp: u64,
+        origin: &[u8],
+    ) -> Result<bool> {
+        dispatch!(self, b => b.upsert_if_newer(app_id, key, value, timestamp, origin))
+    }
+
+    pub fn upsert_if_newer_and_enqueue(
+        &self,
+        app_id: &str,
+        key: &str,
+        value: &[u8],
+        timestamp: u64,
+        origin: &[u8],
+    ) -> Result<bool> {
+        dispatch!(self, b => b.upsert_if_newer_and_enqueue(app_id, key, value, timestamp, origin))
+    }
+
+    pub fn delete_and_enqueue(&self, app_id: &str, key: &str, t: u64) -> Result<bool> {
+        dispatch!(self, b => b.delete_and_enqueue(app_id, key, t))
+    }
+
+    pub fn delete_if_not_newer(&self, app_id: &str, key: &str, t: u64) -> Result<bool> {
+        dispatch!(self, b => b.delete_if_not_newer(app_id, key, t))
+    }
+
+    pub fn keys_with_origin(&self, app_id: &str, origin: &[u8]) -> Result<Vec<String>> {
+        dispatch!(self, b => b.keys_with_origin(app_id, origin))
+    }
+
+    pub fn delete_of_origin(&self, app_id: &str, key: &str, origin: &[u8]) -> Result<bool> {
+        dispatch!(self, b => b.delete_of_origin(app_id, key, origin))
+    }
+
+    pub fn outbox_take(&self, limit: usize) -> Result<Vec<OutboxRawRow>> {
+        dispatch!(self, b => b.outbox_take(limit))
+    }
+
+    pub fn outbox_ack(&self, ids: &[i64]) -> Result<usize> {
+        dispatch!(self, b => b.outbox_ack(ids))
+    }
+
+    pub fn outbox_len(&self) -> Result<usize> {
+        dispatch!(self, b => b.outbox_len())
+    }
+
+    pub fn scan_with_prefix(&self, app_id: &str, prefix: &str) -> Result<Vec<AllRow>> {
+        dispatch!(self, b => b.scan_with_prefix(app_id, prefix))
+    }
+
+    pub fn delete_older_than(&self, cutoff_timestamp: u64) -> Result<usize> {
+        dispatch!(self, b => b.delete_older_than(cutoff_timestamp))
+    }
+
+    pub fn delete_older_than_in_app(&self, app_id: &str, cutoff_timestamp: u64) -> Result<usize> {
+        dispatch!(self, b => b.delete_older_than_in_app(app_id, cutoff_timestamp))
+    }
+}
 
 /// The store's tables, in ONE spelling.
 ///
@@ -15,6 +111,7 @@ use crate::error::{Error, Result};
 /// happened to agree. They stopped agreeing the moment a second table
 /// appeared (ARCH §10.6): a `rail_outbox` added here and forgotten there is a
 /// crate whose tests all pass and whose deployed writes go nowhere.
+#[cfg(feature = "sqlite")]
 pub(crate) const SCHEMA: &str = "\
 CREATE TABLE IF NOT EXISTS store (
     app_id    TEXT NOT NULL,
@@ -43,10 +140,12 @@ CREATE TABLE IF NOT EXISTS rail_outbox (
 CREATE INDEX IF NOT EXISTS rail_outbox_id ON rail_outbox (id);
 ";
 
+#[cfg(feature = "sqlite")]
 pub struct SqliteBackend {
     pub(crate) conn: Mutex<Connection>,
 }
 
+#[cfg(feature = "sqlite")]
 impl SqliteBackend {
     pub fn open(path: &Path) -> Result<Self> {
         let conn = Connection::open(path)
@@ -352,6 +451,7 @@ impl SqliteBackend {
 // (ARCH §10.6). They take a `&Connection` so a `Transaction` (which derefs to
 // one) can pass itself in.
 
+#[cfg(feature = "sqlite")]
 fn upsert_if_newer_on(
     conn: &Connection,
     app_id: &str,
@@ -395,6 +495,7 @@ fn upsert_if_newer_on(
     Ok(true)
 }
 
+#[cfg(feature = "sqlite")]
 fn delete_on(conn: &Connection, app_id: &str, key: &str) -> Result<bool> {
     let n = conn
         .execute(
@@ -414,6 +515,7 @@ fn delete_on(conn: &Connection, app_id: &str, key: &str) -> Result<bool> {
 /// predicate, applied where the bytes leave, so a private namespace is off the
 /// wire by construction rather than by every caller remembering. Pinned by
 /// `an_excluded_namespace_never_enters_the_outbox`.
+#[cfg(feature = "sqlite")]
 fn enqueue_on(
     conn: &Connection,
     app_id: &str,
