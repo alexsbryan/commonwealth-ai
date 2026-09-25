@@ -9,6 +9,9 @@
 //! one crate up) survives killing cw-rails, because the next `rails_kv()`
 //! re-ensures it. Two racing `ensure_rails` calls both return Ok with ONE
 //! cw-rails on `rails.lock`, and the loser's refusal is in `rails.log`.
+//! With no rails.toml, the brought-up cw-rails serves the port the daemon's
+//! `rails_base` names, and a local-only daemon's runs with n0 services off
+//! (five-programs-66).
 //!
 //! Its own test binary, not a `tests/main/` module: it sets `CW_RAILS_DIR`
 //! and `CW_RAILS_BIN` in this process, so `ensure_rails` here resolves the
@@ -276,5 +279,124 @@ fn a_meshless_node_brings_cw_rails_up_and_its_state_survives_a_restart() {
         written.contains("is held by another cw-rails"),
         "the loser's refusal is in {}:\n{written}",
         log.display()
+    );
+}
+
+/// One loopback GET's body, or `None` while nothing listens.
+fn body(port: u16, path: &str) -> Option<String> {
+    let mut s = TcpStream::connect(("127.0.0.1", port)).ok()?;
+    s.set_read_timeout(Some(Duration::from_secs(10))).ok()?;
+    write!(
+        s,
+        "GET {path} HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n"
+    )
+    .ok()?;
+    let mut raw = String::new();
+    s.read_to_string(&mut raw).ok()?;
+    raw.split_once("\r\n\r\n").map(|(_, b)| b.to_string())
+}
+
+/// A terminal-class daemon with `rails_base` pinned to `rails_port` and a
+/// cw-rails root holding NO rails.toml, so nothing but the bring-up argv can
+/// put cw-rails on that port (five-programs-66).
+struct PinnedBoot {
+    _reaper: Reaper,
+    _daemon: Killed,
+    _root: tempfile::TempDir,
+    rails_port: u16,
+    lock: PathBuf,
+    log: PathBuf,
+}
+
+fn boot_pinned(local_only: bool) -> PinnedBoot {
+    let rails_bin = cw_rails_bin();
+    let root = tempfile::tempdir().expect("tempdir");
+    let (home, data, rails_dir) = (
+        root.path().join("home"),
+        root.path().join("data"),
+        root.path().join("rails"),
+    );
+    for d in [&home, &data, &rails_dir] {
+        std::fs::create_dir_all(d).expect("dir");
+    }
+    let (client, internal, rails_port) = (free_port(), free_port(), free_port());
+    let (lock, log) = (rails_dir.join("rails.lock"), rails_dir.join("rails.log"));
+    let reaper = Reaper(lock.clone());
+    let config = root.path().join("config.toml");
+    std::fs::write(
+        &config,
+        format!(
+            "[node]\nentry_node = \"00000000000000000000000000000001\"\n\n\
+             [daemon]\nclient_port = {client}\ninternal_port = {internal}\n\
+             rails_base = \"http://127.0.0.1:{rails_port}\"\n\n[data]\ndir = \"{}\"\n",
+            data.display()
+        ),
+    )
+    .expect("config");
+    let stderr = root.path().join("daemon.stderr.log");
+    let daemon = Killed(
+        Command::new(BIN)
+            .args(["run", "--config"])
+            .arg(&config)
+            .env("HOME", &home)
+            .env("SVRNMESH_DATA_DIR", root.path().join("svrnmesh"))
+            .env("CW_RAILS_DIR", &rails_dir)
+            .env("CW_RAILS_BIN", &rails_bin)
+            .env("RUST_LOG", "info")
+            // The one decider reads the env over config (LocalOnlyProfile).
+            .env("SOVEREIGN_LOCAL_ONLY", if local_only { "1" } else { "0" })
+            .stdout(Stdio::null())
+            .stderr(Stdio::from(std::fs::File::create(&stderr).expect("stderr")))
+            .spawn()
+            .expect("spawn sovereign-daemon"),
+    );
+    wait_until(
+        "cw-rails answered on the pinned rails_base port",
+        Duration::from_secs(60),
+        &stderr,
+        || status(rails_port, "/v1/mesh/status") == Some(200),
+    );
+    PinnedBoot {
+        _reaper: reaper,
+        _daemon: daemon,
+        _root: root,
+        rails_port,
+        lock,
+        log,
+    }
+}
+
+/// PROOF (2): with no rails.toml, the only thing naming the port is the
+/// daemon's `rails_base` — cw-rails serves it because the bring-up passes it.
+#[test]
+fn a_pinned_rails_base_is_the_port_the_brought_up_cw_rails_serves() {
+    let boot = boot_pinned(false);
+    assert_eq!(holders(&boot.lock).len(), 1, "boot brought up ONE cw-rails");
+    let written = std::fs::read_to_string(&boot.log).expect("rails.log");
+    assert!(
+        written.contains(&format!("127.0.0.1:{}", boot.rails_port)),
+        "cw-rails names the pinned port in {}:\n{written}",
+        boot.log.display()
+    );
+}
+
+/// PROOF (3): a local-only node's cw-rails runs with n0 severed — its status
+/// says so, and its log names no n0 relay.
+#[test]
+fn a_local_only_boot_brings_cw_rails_up_with_n0_services_off() {
+    let boot = boot_pinned(true);
+    let doc: serde_json::Value =
+        serde_json::from_str(&body(boot.rails_port, "/v1/mesh/status").expect("status body"))
+            .expect("status json");
+    assert_eq!(
+        doc["relay"]["n0_services"],
+        serde_json::json!(false),
+        "a local-only node's cw-rails reports n0 services off: {doc}"
+    );
+    let written = std::fs::read_to_string(&boot.log).expect("rails.log");
+    assert!(
+        !written.contains("iroh.link"),
+        "a local-only cw-rails names no n0 relay, but {} does:\n{written}",
+        boot.log.display()
     );
 }
