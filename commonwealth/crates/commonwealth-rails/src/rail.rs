@@ -11,8 +11,9 @@
 //! sentences — so a page written against one daemon behaves the same against
 //! the other (ARCH §10.6). What is deliberately NOT mirrored is the guest
 //! half: there are no grants and no sessions here (loopback IS the auth),
-//! so the namespace is always named explicitly and no caller can stamp an
-//! act on another's behalf.
+//! so the namespace is always named explicitly and a caller can stamp an act
+//! on another's behalf only with a roster member's signed
+//! `GuestAttestation` (decision five-programs-34; see `append_act`).
 //!
 //! **The journals live under THIS process's data root**, never the daemon's
 //! (§4 rule 1 — one data directory, one owner; a second process never opens
@@ -44,8 +45,9 @@ use axum::Json;
 use commonwealth_core::ids::{NodeId, NodePubkey};
 use commonwealth_core::mesh::Mesh;
 use commonwealth_rail::{
-    admit, Compaction, Digest, Ed25519Verifier, Op, Person, RailAct, RailError, RingJournal,
-    RingRail, Roster, RosterOrigin, RosterSource, SignedOp, NO_BUDGET,
+    admit, AttestRefusal, Compaction, Digest, Ed25519Verifier, GuestAttestation, Op, Person,
+    RailAct, RailError, RingJournal, RingRail, Roster, RosterOrigin, RosterSource, SignedOp,
+    NO_BUDGET,
 };
 use serde::Deserialize;
 use tokio::sync::RwLock;
@@ -210,23 +212,49 @@ fn journal_of(rail: &RingRail, namespace: &str) -> Result<Arc<RingJournal>, Resp
 ///
 /// The body is the act alone. `seq`, the signature, the timestamp and the id
 /// are all this daemon's to assign; an app that could choose its own sequence
-/// number or actor could write as somebody else. A body that carries
-/// `on_behalf_of` is dropped HERE, before anything is signed, and warned:
-/// there are no sessions on a rails daemon, so the door signs as the node
-/// and a caller cannot stamp — the same drop the daemon's `stamp_from`
-/// makes for its session-less callers.
+/// number or actor could write as somebody else.
+///
+/// There are no sessions on a rails daemon, so a caller cannot stamp by
+/// saying so: a bare `on_behalf_of` is dropped HERE, before anything is
+/// signed, and warned — the same drop the daemon's `stamp_from` makes for
+/// its session-less callers. A body may instead carry an `attestation` (a
+/// [`GuestAttestation`] the daemon's guest door signed per session,
+/// decision five-programs-34): it is verified against this namespace's
+/// roster and the clock, and on success the act is signed as the node with
+/// `on_behalf_of` = the attested name. A refused attestation is a 403
+/// naming the [`AttestRefusal`], and nothing is written.
 async fn append_act(
     rail: &RingRail,
     journal: &Arc<RingJournal>,
     body: serde_json::Value,
 ) -> Response {
-    if let Some(claimed) = body.get("on_behalf_of").and_then(|v| v.as_str()) {
-        tracing::warn!(
-            target: "rails",
-            namespace = journal.namespace(),
-            claimed,
-            "rail: dropped an on_behalf_of — this door signs as the node, a caller cannot stamp"
-        );
+    let attestation = match body.get("attestation") {
+        None => None,
+        Some(v) => match serde_json::from_value::<GuestAttestation>(v.clone()) {
+            Ok(a) => Some(a),
+            Err(e) => {
+                tracing::warn!(
+                    target: "rails",
+                    namespace = journal.namespace(),
+                    error = %e,
+                    "rail: refused an append — the attestation is not one"
+                );
+                return err(
+                    StatusCode::UNPROCESSABLE_ENTITY,
+                    format!("the attestation is malformed: {e}"),
+                );
+            }
+        },
+    };
+    if attestation.is_none() {
+        if let Some(claimed) = body.get("on_behalf_of").and_then(|v| v.as_str()) {
+            tracing::warn!(
+                target: "rails",
+                namespace = journal.namespace(),
+                claimed,
+                "rail: dropped an on_behalf_of — no attestation, so this door signs as the node"
+            );
+        }
     }
     // Taken as a `Value` and converted here rather than as `Json<RailAct>`,
     // so a refusal is the rail's own sentence instead of axum's rejection
@@ -240,6 +268,40 @@ async fn append_act(
         Ok(r) => r,
         Err(e) => return err(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
     };
+    let stamp = match &attestation {
+        None => None,
+        Some(a) => {
+            let now = commonwealth_core::clock::unix_now_secs() as i64;
+            match a.verify(&roster, journal.namespace(), now) {
+                Ok(()) => {
+                    tracing::debug!(
+                        target: "rails",
+                        namespace = journal.namespace(),
+                        name = %a.name,
+                        signer = %a.signer,
+                        "rail: attestation honoured — signing as the node on the guest's behalf"
+                    );
+                    Some(a.name.as_str())
+                }
+                Err(refusal) => {
+                    tracing::warn!(
+                        target: "rails",
+                        namespace = journal.namespace(),
+                        name = %a.name,
+                        signer = %a.signer,
+                        refusal = refusal.name(),
+                        "rail: refused an append — the attestation does not hold"
+                    );
+                    let body = serde_json::json!({
+                        "error": refusal.to_string(),
+                        "kind": refusal.name(),
+                        "namespace": journal.namespace(),
+                    });
+                    return (StatusCode::FORBIDDEN, Json(body)).into_response();
+                }
+            }
+        }
+    };
     let sealed = matches!(act, RailAct::Seal);
     let appended = if sealed {
         // A seal takes no stamp: it is delivery, not words.
@@ -248,7 +310,7 @@ async fn append_act(
             .map(|done| (done.op, Some(retire(&done.retired))))
     } else {
         journal
-            .append(act, rail.signer(), &roster, None)
+            .append(act, rail.signer(), &roster, stamp)
             .map(|op| (op, None))
     };
     match appended {

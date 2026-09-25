@@ -10,7 +10,9 @@ use axum::http::StatusCode;
 use commonwealth_core::capabilities::OriginKind;
 use commonwealth_core::ids::{NodeId, NodePubkey};
 use commonwealth_core::mesh::{MemberRecord, Mesh, NodeStatus};
-use commonwealth_rail::{Digest, Person, RingRail, RingSigner, SigningKey};
+use commonwealth_rail::{
+    AttestRefusal, Digest, GuestAttestation, Person, RingRail, RingSigner, SigningKey,
+};
 use tokio::sync::RwLock;
 
 use super::{
@@ -160,6 +162,79 @@ async fn append_signs_as_the_node_and_assigns_the_fields() {
         out.get("retired").is_none(),
         "a record has no prune to render"
     );
+}
+
+/// A mesh of this node (key 7) and one other member, "halo" (key 3), who
+/// signs the guest door's attestations; key 99 is claimed by nobody.
+fn attested(seed: u8, namespace: &str, expires_at: i64) -> serde_json::Value {
+    let a = GuestAttestation::sign(&key(seed), "guest-ana", namespace, expires_at);
+    serde_json::json!({
+        "op": "record",
+        "payload": { "amount": 4 },
+        "attestation": a,
+    })
+}
+
+fn guest_mesh() -> Arc<RwLock<Mesh>> {
+    mesh_with(vec![
+        member(ME, "alex", None, false),
+        member(2, "halo", Some(pubkey_of(&key(3))), false),
+    ])
+}
+
+const LATER: i64 = 4_000_000_000;
+
+/// A roster member's attestation lands the act signed by the node and
+/// attributed to the guest.
+#[tokio::test]
+async fn a_valid_attestation_lands_attributed_to_the_guest() {
+    let (_dir, rail, _mesh) = rail_with(guest_mesh());
+    let journal = journal_of(&rail, "ledger").unwrap();
+    let resp = append_act(&rail, &journal, attested(3, "ledger", LATER)).await;
+    assert_eq!(resp.status(), StatusCode::OK);
+    let out = body_of(resp).await;
+    assert_eq!(out["actor"], RingSigner::actor(&key(7)), "the node signs");
+    let (ops, _) = journal.read().unwrap();
+    assert_eq!(ops.len(), 1);
+    assert_eq!(ops[0].kind.on_behalf_of.as_deref(), Some("guest-ana"));
+}
+
+/// Forged, expired and foreign-key attestations are each a 403 naming the
+/// refusal, and the journal is untouched.
+#[tokio::test]
+async fn a_refused_attestation_names_its_refusal_and_writes_nothing() {
+    let (_dir, rail, _mesh) = rail_with(guest_mesh());
+    let journal = journal_of(&rail, "ledger").unwrap();
+    let mut forged = attested(3, "ledger", LATER);
+    forged["attestation"]["name"] = "guest-anb".into();
+    let cases = [
+        (forged, AttestRefusal::Forged),
+        (attested(3, "ledger", 1), AttestRefusal::Expired),
+        (
+            attested(99, "ledger", LATER),
+            AttestRefusal::SignerNotInRoster,
+        ),
+        (attested(3, "lending", LATER), AttestRefusal::WrongNamespace),
+    ];
+    for (body, want) in cases {
+        let resp = append_act(&rail, &journal, body).await;
+        assert_eq!(resp.status(), StatusCode::FORBIDDEN, "{want:?}");
+        assert_eq!(body_of(resp).await["kind"], want.name());
+    }
+    let (ops, _) = journal.read().unwrap();
+    assert!(ops.is_empty(), "a refused attestation writes nothing");
+}
+
+/// An unstamped append is unchanged: signed as the node, no name on it.
+#[tokio::test]
+async fn an_unstamped_append_carries_no_name() {
+    let (_dir, rail, _mesh) = rail_with(guest_mesh());
+    let journal = journal_of(&rail, "ledger").unwrap();
+    let body = serde_json::json!({ "op": "record", "payload": { "amount": 4 } });
+    let resp = append_act(&rail, &journal, body).await;
+    assert_eq!(resp.status(), StatusCode::OK);
+    let (ops, _) = journal.read().unwrap();
+    assert_eq!(ops[0].kind.on_behalf_of, None);
 }
 
 /// Nobody in the mesh → every op this node writes would be unreadable to
