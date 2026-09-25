@@ -264,11 +264,7 @@ pub async fn knowledge_search(
     // future refinement once the merge-dedupe is proven.
     let mut fanout_jobs: HashMap<
         NodeId,
-        (
-            String,
-            commonwealth_transport::PeerContact,
-            Vec<String>,
-        ),
+        (String, commonwealth_transport::PeerContact, Vec<String>),
     > = HashMap::new();
     for offering in &peer_offerings {
         let relevant: Vec<String> = offering

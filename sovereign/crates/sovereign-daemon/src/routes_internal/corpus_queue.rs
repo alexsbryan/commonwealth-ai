@@ -48,10 +48,7 @@ pub async fn peer_control_urls(state: &AppState, local_node_id: NodeId) -> Vec<(
     let mut urls = Vec::with_capacity(contacts.len());
     for contact in &contacts {
         if let Some(ep) = transport
-            .endpoints(
-                contact,
-                commonwealth_transport::TrafficClass::ControlPlane,
-            )
+            .endpoints(contact, commonwealth_transport::TrafficClass::ControlPlane)
             .await
             .into_iter()
             .next()

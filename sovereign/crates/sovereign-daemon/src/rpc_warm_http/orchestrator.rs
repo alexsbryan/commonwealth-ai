@@ -120,11 +120,8 @@ async fn orchestrate_warm(
         // hand-built raw URL stays as the final fallback and is the only
         // candidate for env-configured workers (no directory entry).
         let worker_node = daemon.rpc_endpoint_node(&assignment.endpoint);
-        let mut candidates: Vec<(
-            String,
-            String,
-            Option<commonwealth_transport::PeerEndpoint>,
-        )> = Vec::new();
+        let mut candidates: Vec<(String, String, Option<commonwealth_transport::PeerEndpoint>)> =
+            Vec::new();
         if let Some(node) = worker_node {
             for ep in daemon.model_transfer_endpoints(node).await {
                 candidates.push((
