@@ -744,6 +744,8 @@ pub(super) async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
         )
         .await;
 
+    super::corpus_registry::reconcile_corpus_registry(&engine, state_store.as_ref()).await;
+
     // The watched-folder singleton must be installed before the daemon starts
     // serving, but the ROUTE is now part of the daemon's declared capability
     // rather than something this call installs — so a failed subsystem yields

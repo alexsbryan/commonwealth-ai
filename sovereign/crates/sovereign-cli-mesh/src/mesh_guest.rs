@@ -34,11 +34,10 @@
 //! for the guest to resolve.
 
 use sovereign_cli_base::help::{Help, HelpSection};
-use sovereign_mesh::deep_link::{
-    build_guest_link, build_https_guest_link, parse_deep_link, DeepLink,
-};
+use sovereign_contracts::guest_pages::PAGE_PREFIX;
+use sovereign_mesh::deep_link::{build_guest_link, parse_deep_link, wall_https_link, DeepLink};
 
-use crate::mesh_guest_link::{wall_page_base, wall_qr_svg};
+use crate::mesh_guest_link::{guest_bind_url, print_qr_blocks, write_qr_svg};
 use sovereign_cli_base::guest_link::{self, GuestLink};
 
 /// Read the daemon's client port from `SetupConfig` rather than hardcoding
@@ -299,7 +298,7 @@ pub(crate) const HELP_MESH_GRANT: Help = Help {
     summary: "Lend named models to someone who is NOT a mesh member, for a bounded window.",
     sections: &[
         HelpSection::Usage(
-            "svrn mesh grant --model <id> [--model <id>…] [--wall | --rail <ns>] [--ttl 2h] [--label <text>]\n\
+            "svrn mesh grant --model <id> [--model <id>…] [--all-apps | --app <ns>] [--ttl 2h] [--label <text>]\n\
              \x20               [--url <base>] [--qr-svg <path>]\n\
              svrn mesh grant --list\n\
              svrn mesh grant --revoke <token>",
@@ -307,15 +306,15 @@ pub(crate) const HELP_MESH_GRANT: Help = Help {
         HelpSection::Flags(&[
             (
                 "--model <id>",
-                "A model this grant may dispatch. Repeatable. Exact ids from `/v1/models`.",
+                "A model this grant may dispatch. Repeatable. Omitted: `primary`, this daemon's primary slot. `svrn model list` prints the ids.",
             ),
             (
-                "--wall",
+                "--all-apps",
                 "Also reach every ring app this door registered for guests in\n                    [daemon.guest_pages]. ONE grant and ONE QR for the whole wall:\n                    the phone lands on the door's index and picks. The owner widens\n                    the wall by registering an app, not by minting another link.",
             ),
             (
-                "--rail <ns>",
-                "The narrowing knob: reach exactly this one rail namespace and no\n                    other. Not combinable with --wall.",
+                "--app <ns>",
+                "The narrowing knob: reach exactly this one app and no\n                    other. Names either an app registered for guests in\n                    [daemon.guest_pages], or one you PUBLISHED with `svrn publish`\n                    ([iroh] apps) — for a published app the door proxies to its\n                    loopback target, so you share it with guests the same way it is\n                    shared with members. Not combinable with --all-apps.",
             ),
             (
                 "--ttl <dur>",
@@ -324,11 +323,11 @@ pub(crate) const HELP_MESH_GRANT: Help = Help {
             ("--label <text>", "Your own note, shown by --list. Never sent to the guest."),
             (
                 "--url <base>",
-                "Base URL the guest should reach you at. Default: this node's published address.\n                    With --rail the QR link adds that app's page path at the door; with\n                    --wall it points at the door's index, which lists them all.",
+                "Base URL the guest should reach you at. Default: this node's declared door\n                    address ([daemon] guest_bind, written by `svrn ring host --bind`),\n                    then its published address. With --app the QR link adds that app's\n                    page path at the door; with --all-apps it points at the door's index.\n                    A base that already spells the runtime page (…/ring/ — the public\n                    static origin) is kept, and the door route rides the link as path=;\n                    that form also carries the dial string, so phones on other networks\n                    reach the daemon. A door origin (no /ring/) gets neither: the phone\n                    must be able to open the page itself.",
             ),
             (
                 "--qr-svg <path>",
-                "Write the https link (<url>#token=…) to <path> as an SVG QR code. Needs --url.",
+                "Write the https link (<url>#token=…) to <path> as an SVG QR code. Uses\n                    --url, or the door's declared address when --url is absent. (On a\n                    terminal the QR is drawn there anyway; this is for a file, e.g.\n                    the wall's screen.)",
             ),
             ("--list", "Show outstanding grants, including revoked and expired ones."),
             ("--revoke <token>", "Kill a link immediately. The token is the one in the link."),
@@ -413,12 +412,12 @@ pub(crate) async fn cmd_grant(args: &[String]) -> i32 {
                     }
                 };
             }
-            "--rail" => {
+            "--app" => {
                 i += 1;
                 rail = match args.get(i) {
                     Some(v) => Some(v.clone()),
                     None => {
-                        eprintln!("--rail needs a namespace");
+                        eprintln!("--app needs an app (a namespace)");
                         return 2;
                     }
                 };
@@ -433,7 +432,7 @@ pub(crate) async fn cmd_grant(args: &[String]) -> i32 {
                     }
                 };
             }
-            "--wall" => wall = true,
+            "--all-apps" => wall = true,
             "--list" => list = true,
             "--revoke" => {
                 i += 1;
@@ -456,23 +455,51 @@ pub(crate) async fn cmd_grant(args: &[String]) -> i32 {
     // a union. Refused here AND at the mint route, so neither surface is the
     // only guard (ARCH 5).
     if wall && rail.is_some() {
-        eprintln!("--wall and --rail are two different grants: the whole wall, or one app.");
-        eprintln!("Drop one. `--wall` reaches every app in [daemon.guest_pages];");
-        eprintln!("`--rail <ns>` reaches that one and refuses the rest by name.");
+        eprintln!("--all-apps and --app are two different grants: every app hosted here, or one.");
+        eprintln!("Drop one. `--all-apps` reaches every app in [daemon.guest_pages];");
+        eprintln!("`--app <ns>` reaches that one and refuses the rest by name.");
         return 2;
     }
 
-    // The https link's base is the address the operator typed; there is no
-    // default a phone could open, so refuse rather than guess one.
+    // Nobody types an address: the door names the port, this machine names the
+    // address (`guest_bind_url`), refusing to advertise a wildcard or loopback
+    // bind. An explicit `--url` still wins outright.
+    if url_override.is_none() {
+        url_override = guest_bind_url();
+    }
+
+    // With neither, there is genuinely no address a phone could open: refuse
+    // rather than guess one, and name the one command that would supply it.
     if qr_svg.is_some() && url_override.is_none() {
-        eprintln!("--qr-svg needs --url <base>: the address a phone opens.");
+        eprintln!("--qr-svg needs an address a phone can open.");
+        eprintln!(
+            "Declare the door once — `svrn ring serve <ns> --dir <bundle> --bind <addr:port>`"
+        );
+        eprintln!("— and this inherits it; or pass `--url <base>` here.");
         return 2;
+    }
+
+    // No --model means "let this grant reach this node's primary": the daemon
+    // advertises the alias `primary` in `/v1/models`, so the default is the
+    // ALIAS rather than a copied id — one source of truth for what "primary"
+    // is, and it follows the operator's next `svrn model set` instead of going
+    // stale. Say it, so the grant's breadth is never silent.
+    let defaulted_model = models.is_empty();
+    if defaulted_model {
+        models.push("primary".to_string());
     }
 
     let port = daemon_client_port();
-    if !crate::mesh_cmd::daemon_listening_on(port).await {
-        eprintln!("No daemon detected on :{port} — minting a grant needs one.");
-        eprintln!("Start it with `svrn daemon start`, then re-run.");
+    // One probe through the one decider, with its reason: "no daemon" is the
+    // wrong sentence for a refused connection or a daemon answering late
+    // (busy loading a model — hence 3 s, not the 2 s default).
+    let door = sovereign_turn_client::ServingHost::at(
+        sovereign_contracts::setup_config::client_daemon_base_for(port),
+    )
+    .probe_timeout(std::time::Duration::from_secs(3));
+    if let Err(why) = door.probe().await {
+        eprintln!("{why}");
+        eprintln!("Minting a grant needs a running daemon: `svrn daemon start`.");
         return 1;
     }
 
@@ -481,12 +508,6 @@ pub(crate) async fn cmd_grant(args: &[String]) -> i32 {
     }
     if let Some(token) = revoke {
         return grant_revoke(port, &token).await;
-    }
-
-    if models.is_empty() {
-        eprintln!("A grant must name at least one model: --model <id>");
-        eprintln!("`svrn mesh grant --list` shows what is already outstanding.");
-        return 2;
     }
 
     // Which way in — asked, not inferred. See `resolve_guest_path`.
@@ -582,6 +603,9 @@ pub(crate) async fn cmd_grant(args: &[String]) -> i32 {
     println!("Guest link minted.");
     println!();
     println!("  Grants:   {summary}");
+    if defaulted_model {
+        println!("  Model:    primary (this daemon's primary slot — pass --model to narrow)");
+    }
     match &path {
         GuestPath::Direct { base_url } => println!("  Reach at: {base_url}"),
         // Say WHY the tunnel, not just that there is one: an operator who
@@ -612,34 +636,77 @@ pub(crate) async fn cmd_grant(args: &[String]) -> i32 {
     println!();
     println!("  svrn mesh use '{link}'");
     println!();
-    if let (Some(path), Some(base)) = (&qr_svg, &url_override) {
-        let https = build_https_guest_link(
+    // The link a browser opens, when there is a base: written to a file when
+    // asked, and drawn in the terminal at the end (see `print_qr_blocks`).
+    //
+    // A WALL link carries the dial even when the door answered directly. The
+    // wall exists for phones whose network this node has never seen — the
+    // public origin is on the internet, and `iroh=` is the only address in
+    // the link that can reach this daemon from there. Measured 2026-09-22:
+    // `--all-apps --url https://svrnme.sh/` produced a link with NO `iroh=`
+    // because the resolved path was Direct (the LAN probe succeeded), so the
+    // promised unknown-network path had no address in it.
+    //
+    // A `--url` naming a runtime PAGE is the same case with the same
+    // verdict: the phone is expected anywhere (that origin is public), so an
+    // `--app` link to it needs the dial exactly as a wall link does. Both
+    // were watched failing on 2026-09-22: the app link reached the phone
+    // without an address and sat on "Connecting…" until one was appended by
+    // hand.
+    let runtime_origin = url_override
+        .as_deref()
+        .is_some_and(|base| base.contains(PAGE_PREFIX));
+    let dial_for_link: Option<String> = match (&dial, wall || runtime_origin) {
+        (Some(d), _) => Some(d.clone()),
+        (None, true) => node_dial_string(port).await,
+        (None, false) => None,
+    };
+    let https = url_override.as_deref().map(|base| {
+        wall_https_link(
             token,
-            &wall_page_base(base, rail.as_deref(), wall),
+            base,
+            rail.as_deref(),
+            wall,
             expires_at_secs,
             (!summary.is_empty()).then_some(summary),
-        );
-        let written = wall_qr_svg(&https).and_then(|svg| {
-            std::fs::write(path, svg).map_err(|e| format!("cannot write {path}: {e}"))
-        });
-        match written {
-            Ok(()) => {
-                println!("Or open (the QR code in {path} carries this):");
-                println!();
-                println!("  {https}");
-                println!();
-            }
-            Err(e) => {
-                eprintln!("The grant was minted but its QR code was not written: {e}");
-                eprintln!("Revoke it with `svrn mesh grant --revoke {token}` and re-run.");
-                return 1;
-            }
+            dial_for_link.as_deref(),
+        )
+    });
+    if let (Some(path), Some(https)) = (&qr_svg, &https) {
+        if let Err(e) = write_qr_svg(https, path) {
+            eprintln!("The grant was minted but its QR code was not written: {e}");
+            eprintln!("Revoke it with `svrn mesh grant --revoke {token}` and re-run.");
+            return 1;
         }
+        println!("Or open (the QR code in {path} carries this):");
+        println!();
+        println!("  {https}");
+        println!();
     }
     println!("Revoke at any time with:");
     println!();
     println!("  svrn mesh grant --revoke {token}");
     println!();
+
+    // Last so it stays on the screen; a pipe sees nothing (guard inside).
+    match &https {
+        Some(https) => print_qr_blocks(https),
+        // NAME the absence (ARCH §6 / §18.3). The run of show PROMISES a QR
+        // at this step; a daemon with no `[daemon] guest_bind` has no
+        // address a phone can open, and silently printing nothing read as a
+        // broken feature (operator, 2026-09-22 — "supposed to generate a QR
+        // code"). One line, one remedy, no guessing an interface to
+        // advertise.
+        None => {
+            eprintln!();
+            eprintln!(
+                "No QR: this daemon advertises no address a phone can open. Set the door's \
+                 listen address once per machine (`svrn ring host <ns> --dir <bundle>` writes \
+                 [daemon] guest_bind in ~/.svrnmesh/config.toml), or pass --url <base>. \
+                 The link above needs the svrn CLI on the guest's machine."
+            );
+        }
+    }
     0
 }
 
@@ -877,6 +944,7 @@ pub(crate) async fn cmd_use(args: &[String]) -> i32 {
             token,
             url,
             dial,
+            at: _,
             expires_at,
             summary,
         }) => GuestLink {
@@ -1025,112 +1093,5 @@ async fn verify_link(link: &GuestLink) -> Result<Vec<String>, String> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn ttl_accepts_the_suffixes_the_help_advertises() {
-        assert_eq!(parse_ttl("90"), Ok(90));
-        assert_eq!(parse_ttl("90s"), Ok(90));
-        assert_eq!(parse_ttl("30m"), Ok(1_800));
-        assert_eq!(parse_ttl("2h"), Ok(7_200));
-        assert_eq!(parse_ttl("1d"), Ok(86_400));
-    }
-
-    #[test]
-    fn ttl_refuses_rather_than_defaulting() {
-        // Each of these once had a "reasonable" reading. A grant is a security
-        // object: an unparseable window must not become a default one.
-        assert!(parse_ttl("soon").is_err());
-        assert!(parse_ttl("2 hours").is_err());
-        assert!(parse_ttl("0").is_err());
-        assert!(parse_ttl("0h").is_err());
-        assert!(parse_ttl("").is_err());
-        assert!(parse_ttl("-1h").is_err());
-    }
-
-    #[test]
-    fn loopback_binds_are_recognised_in_every_form_config_allows() {
-        assert!(bind_is_loopback("127.0.0.1"));
-        assert!(bind_is_loopback("127.0.0.53"));
-        assert!(bind_is_loopback("::1"));
-        assert!(bind_is_loopback("localhost"));
-        assert!(bind_is_loopback("  127.0.0.1  "));
-        assert!(!bind_is_loopback("0.0.0.0"));
-        assert!(!bind_is_loopback("192.168.1.10"));
-        assert!(!bind_is_loopback("::"));
-    }
-
-    /// The link carries a BASE; `RemoteApiProvider` appends `/v1`. An operator
-    /// pasting the URL they use with curl must not produce `/v1/v1`.
-    #[test]
-    fn base_url_normalisation_strips_v1_and_adds_a_scheme() {
-        assert_eq!(normalise_base("box:9741"), "http://box:9741");
-        assert_eq!(normalise_base("http://box:9741/"), "http://box:9741");
-        assert_eq!(normalise_base("http://box:9741/v1"), "http://box:9741");
-        assert_eq!(normalise_base("http://box:9741/v1/"), "http://box:9741");
-        assert_eq!(normalise_base("https://box/v1"), "https://box");
-    }
-
-    #[test]
-    fn an_explicit_url_wins_over_discovery() {
-        assert_eq!(
-            guest_base_url(Some("10.0.0.7:9741"), 9741).unwrap(),
-            "http://10.0.0.7:9741"
-        );
-    }
-
-    /// The cloud-peer case. Reads the env var directly (rather than through a
-    /// seam) because that is what the daemon does, and a guest link carrying a
-    /// different address than `MemberRecord.addresses` would be the bug.
-    ///
-    /// Serialised with the other env-touching test by running them in one
-    /// body: `cargo test` shares a process, and two tests mutating the same
-    /// var race.
-    #[test]
-    fn the_advertise_override_beats_interface_enumeration_but_not_an_explicit_url() {
-        // No other test in this module reads or writes this var, so the
-        // shared-process mutation is contained.
-        std::env::set_var("SOVEREIGN_ADVERTISE_ADDR", "100.112.195.45");
-        assert_eq!(
-            guest_base_url(None, 9741).unwrap(),
-            "http://100.112.195.45:9741",
-            "a containerised daemon publishes the tailnet IP, not the docker bridge"
-        );
-        assert_eq!(
-            guest_base_url(Some("box.example:9741"), 9741).unwrap(),
-            "http://box.example:9741",
-            "--url is still the most specific instruction"
-        );
-        std::env::remove_var("SOVEREIGN_ADVERTISE_ADDR");
-    }
-
-    /// What a guest is told, and what they must never be told. The tunnel's
-    /// local port is this machine's; naming it would say the work happens
-    /// here, which is the opposite of the truth.
-    #[test]
-    fn a_dialled_link_is_described_by_the_lender_never_by_the_local_bridge() {
-        let mut link = GuestLink {
-            token: "tok".into(),
-            url: "http://box:9741".into(),
-            dial: None,
-            expires_at: 9_000,
-            summary: None,
-        };
-        assert_eq!(describe(&link), "http://box:9741");
-        link.dial = Some("beef@https://relay.example".into());
-        assert_eq!(describe(&link), "http://box:9741 (over the mesh tunnel)");
-        assert!(
-            !describe(&link).contains("127.0.0.1"),
-            "the guest is told whose machine answers, not which local port carries it"
-        );
-    }
-
-    #[test]
-    fn durations_render_at_the_scale_an_operator_reads() {
-        assert_eq!(human_duration(45), "45s");
-        assert_eq!(human_duration(90), "1m");
-        assert_eq!(human_duration(7_200), "2h0m");
-        assert_eq!(human_duration(90_000), "1d1h");
-    }
-}
+#[path = "mesh_guest_tests.rs"]
+mod tests;

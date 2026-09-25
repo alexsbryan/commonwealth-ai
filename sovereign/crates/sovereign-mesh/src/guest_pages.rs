@@ -23,11 +23,11 @@ use std::path::Path;
 use axum::http::{header, StatusCode};
 use axum::response::{IntoResponse, Response};
 
-/// Where the door serves the ring page. The link a guest scans is
-/// `http://<guest_bind><PAGE_PREFIX>#token=…`, or
-/// `http://<guest_bind><PAGE_PREFIX><namespace>/#token=…` for a wall holding
-/// more than one app.
-pub const PAGE_PREFIX: &str = "/ring/";
+/// Where the door serves the ring page. Defined once in
+/// `sovereign_contracts::guest_pages` — the daemon, the CLI and this crate
+/// must agree on it — and re-exported here so the page surface names it
+/// beside the functions that serve under it.
+pub use sovereign_contracts::guest_pages::PAGE_PREFIX;
 
 /// Serve `rel` from inside `root`, or 404 — **never from outside it**.
 ///
@@ -195,7 +195,11 @@ pub const RING_SHIM: &str = r#"(function () {
   };
   const send = async (op, ctype, body) => {
     if (RAIL === null) {
-      return fetch('/__ring/' + op, { method: 'POST', headers: { 'content-type': ctype }, body });
+      // Relative, not root-absolute: `svrn ring show`'s page is served at `/`
+      // on its own port and under `/<app>/` when a member reaches it through
+      // the app bridge, and only the page knows which. Resolving against the
+      // page keeps both working.
+      return fetch('__ring/' + op, { method: 'POST', headers: { 'content-type': ctype }, body });
     }
     await session();
     const [method, path] = ROUTES[op];
@@ -293,3 +297,16 @@ pub const RING_SHIM: &str = r#"(function () {
   });
 })();
 "#;
+
+#[cfg(test)]
+mod tests {
+    /// The dev transport's op URL resolves against the PAGE, never the
+    /// origin root: a member reaches `ring show` through the app bridge under
+    /// `/<app>/`, and a root-absolute `/__ring/` would post to the bridge
+    /// root instead of the app (81b0558f1).
+    #[test]
+    fn the_dev_shim_posts_ops_relative_to_the_page() {
+        assert!(super::RING_SHIM.contains("fetch('__ring/' + op"));
+        assert!(!super::RING_SHIM.contains("fetch('/__ring/"));
+    }
+}

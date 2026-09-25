@@ -1,0 +1,102 @@
+{
+ "essay-pilot-and-his-wife-arc": [
+  "P1",
+  "P2",
+  "P3",
+  "P4",
+  "P5",
+  "P6",
+  "P7",
+  "P8",
+  "P9",
+  "P10",
+  "P11",
+  "P12",
+  "P13"
+ ],
+ "essay-pilot-and-his-wife-conflict": [
+  "P3",
+  "P4",
+  "P5",
+  "P8",
+  "P10",
+  "P12"
+ ],
+ "essay-pilot-and-his-wife-change": [
+  "P2",
+  "P3",
+  "P4",
+  "P8",
+  "P10",
+  "P11",
+  "P12"
+ ],
+ "essay-pilot-and-his-wife-relationship": [
+  "P2",
+  "P3",
+  "P4",
+  "P5",
+  "P8",
+  "P9",
+  "P10",
+  "P11"
+ ],
+ "essay-pilot-and-his-wife-secondary": [
+  "P2",
+  "P3",
+  "P4",
+  "P8",
+  "P9",
+  "P10",
+  "P11",
+  "P12"
+ ],
+ "essay-pilot-and-his-wife-themes": [
+  "P10",
+  "P11",
+  "P12",
+  "P13",
+  "P14"
+ ],
+ "essay-pilot-and-his-wife-setting": [
+  "P1",
+  "P5",
+  "P6"
+ ],
+ "essay-pilot-and-his-wife-turning-point": [
+  "P3",
+  "P4"
+ ],
+ "essay-pilot-and-his-wife-ending": [
+  "P9",
+  "P10",
+  "P12",
+  "P13"
+ ],
+ "essay-pilot-and-his-wife-inner-conflicts": [
+  "P3",
+  "P4",
+  "P10",
+  "P11",
+  "P12",
+  "P13"
+ ],
+ "essay-pilot-and-his-wife-setup": [
+  "P1",
+  "P2",
+  "P3",
+  "P4",
+  "P5",
+  "P6",
+  "P7",
+  "P8",
+  "P9"
+ ],
+ "essay-pilot-and-his-wife-society": [
+  "P10",
+  "P11",
+  "P12",
+  "P13",
+  "P14"
+ ]
+}

@@ -15,6 +15,7 @@
 pub use commonwealth_discovery::deep_link::*;
 
 use sovereign_contracts::daemon_wire::JoinConfirmation;
+use sovereign_contracts::guest_pages::PAGE_PREFIX;
 
 /// Build a join confirmation from a parsed deep link.
 pub fn join_confirmation_from_link(link: &DeepLink) -> Option<JoinConfirmation> {
@@ -42,6 +43,88 @@ pub fn join_confirmation_from_link(link: &DeepLink) -> Option<JoinConfirmation> 
         // is the exact conflation this whole surface exists to prevent.
         DeepLink::Guest { .. } => None,
     }
+}
+
+/// True when `base` already spells a page path — a runtime page origin the
+/// operator is pinning the link to (`https://svrnme.sh/ring/`) rather than a
+/// door origin the URL itself can address (`http://192.168.1.10:9744`).
+///
+/// Accepted with or without the trailing slash: the stripped form is exactly
+/// what a host with `trailingSlash: false` serves, so it must not be read as
+/// "no page path" (the 2026-09-22 wall outage, where that reading composed a
+/// 404 landing).
+fn spells_a_page(base: &str) -> bool {
+    base.contains(PAGE_PREFIX) || base.trim_end_matches('/').ends_with("/ring")
+}
+
+/// The address a phone opens: the door `--url` names, plus the page path of
+/// whatever this grant reaches — the app `--rail` names, or the door's own
+/// index under `--wall`, which lists every app the owner declared. Either way
+/// the namespace is typed once rather than twice.
+///
+/// A base already spelling a page path is kept, with its directory slash
+/// ensured (`…/ring` → `…/ring/`): that form addresses the runtime page, and
+/// the door route the page should fetch rides the link as `path=` instead —
+/// see [`wall_https_link`].
+///
+/// ONE composer for the three callers that must agree: the CLI (the QR it
+/// writes), the daemon (the `link` its grant response returns), and the
+/// desktop, which displays that link rather than owning this rule (it does not
+/// link this crate — it is an HTTP client of the daemon).
+pub fn wall_page_base(base: &str, rail: Option<&str>, wall: bool) -> String {
+    if spells_a_page(base) {
+        return format!("{}/", base.trim_end_matches('/'));
+    }
+    let root = base.trim_end_matches('/');
+    match rail {
+        Some(ns) => format!("{root}{PAGE_PREFIX}{ns}/"),
+        None if wall => format!("{root}{PAGE_PREFIX}"),
+        None => base.to_string(),
+    }
+}
+
+/// The wall QR's https link: the page base, plus the DIAL STRING when the
+/// guest must tunnel in.
+///
+/// The dial rides the fragment beside the token, so a browser that cannot
+/// reach this machine over HTTP can still reach it by key over the relay —
+/// the "guest from anywhere" case (`docs/RING_APP_LIBRARY.md`, "The page is
+/// an iroh endpoint"; `docs/THE_LINK.md`). Absent on a direct (plain-HTTP)
+/// grant, where the base URL IS the address and there is nothing to dial.
+///
+/// When the base is a runtime PAGE (`spells_a_page`), the link cannot also
+/// spell the door route in the path: the two would collide (`/ring/ring-doc/`
+/// under `https://svrnme.sh/` is a 404 on the static origin — this shipped
+/// until 2026-09-22). So the page URL stays the runtime page and the door
+/// route — the app's page (`/ring/<ns>/`) or the wall index (`/ring/`) —
+/// rides the fragment as `path=`, which the runtime page fetches verbatim.
+pub fn wall_https_link(
+    token: &str,
+    base: &str,
+    rail: Option<&str>,
+    wall: bool,
+    expires_at_secs: u64,
+    summary: Option<&str>,
+    dial: Option<&str>,
+) -> String {
+    let path = if spells_a_page(base) {
+        match rail {
+            Some(ns) => Some(format!("{PAGE_PREFIX}{ns}/")),
+            None if wall => Some(PAGE_PREFIX.to_string()),
+            None => None,
+        }
+    } else {
+        None
+    };
+    build_https_guest_link(
+        token,
+        &wall_page_base(base, rail, wall),
+        expires_at_secs,
+        summary,
+        None,
+        dial,
+        path.as_deref(),
+    )
 }
 
 #[cfg(test)]
@@ -174,5 +257,77 @@ mod tests {
         // And it is not accepted by the join-argument parser at all, so
         // `svrn mesh join <guest link>` cannot silently half-work.
         assert!(parse_join_argument(&url).is_none());
+    }
+
+    /// The page path a guest link reaches: the app `--rail` names, or the
+    /// door's index under `--wall`. A base the operator already spelled a page
+    /// path into is never rewritten.
+    #[test]
+    fn the_wall_link_composes_the_page_path_from_the_rail() {
+        let (b, pinned) = ("http://h:9", "http://h:9/ring/");
+        assert_eq!(
+            wall_page_base(b, Some("wall"), false),
+            "http://h:9/ring/wall/"
+        );
+        assert_eq!(wall_page_base(pinned, Some("w"), false), pinned);
+        assert_eq!(wall_page_base(b, None, false), b);
+        assert_eq!(wall_page_base(b, None, true), "http://h:9/ring/");
+        assert_eq!(wall_page_base(pinned, None, true), pinned);
+    }
+
+    /// A runtime page base cannot also spell the door route — the two paths
+    /// collide. `--url https://svrnme.sh/ --app ring-doc` composed
+    /// `https://svrnme.sh/ring/ring-doc/` until 2026-09-22, a 404 on the
+    /// static origin. The page URL stays the runtime page; the door route
+    /// rides the fragment. The stripped base is normalized, not doubled.
+    #[test]
+    fn a_runtime_page_base_carries_the_door_route_in_the_fragment() {
+        let app = wall_https_link(
+            "tok",
+            "https://svrnme.sh/ring/",
+            Some("ring-doc"),
+            false,
+            1,
+            None,
+            None,
+        );
+        assert_eq!(
+            app,
+            "https://svrnme.sh/ring/#token=tok&exp=1&path=%2Fring%2Fring-doc%2F"
+        );
+        let wall = wall_https_link("tok", "https://svrnme.sh/ring", None, true, 1, None, None);
+        assert_eq!(
+            wall,
+            "https://svrnme.sh/ring/#token=tok&exp=1&path=%2Fring%2F"
+        );
+        assert_eq!(
+            wall_page_base("https://svrnme.sh/ring", Some("doc"), false),
+            "https://svrnme.sh/ring/"
+        );
+    }
+
+    /// The wall link carries the dial string when the guest has no HTTP path
+    /// to the machine — the "guest from anywhere" case — and invents none on
+    /// a direct grant. The builder's own round-trip is pinned beside this.
+    #[test]
+    fn the_wall_link_carries_the_dial_string_when_the_guest_must_tunnel() {
+        let dial = "5a46ef@https://usw1-1.relay.n0.iroh.link./,10.89.60.11:55686";
+        let tunnelled = wall_https_link(
+            "tok",
+            "https://svrnme.sh",
+            None,
+            true,
+            1_790_112_357,
+            None,
+            Some(dial),
+        );
+        match parse_https_guest_link(&tunnelled) {
+            Some(DeepLink::Guest { dial: got, .. }) => assert_eq!(got.as_deref(), Some(dial)),
+            _ => panic!("the wall link did not parse as a guest link: {tunnelled}"),
+        }
+
+        // A direct grant has no dial string, and the link must stay as it was.
+        let direct = wall_https_link("tok", "http://10.0.0.1:19947", None, true, 1, None, None);
+        assert!(!direct.contains("iroh="), "{direct}");
     }
 }

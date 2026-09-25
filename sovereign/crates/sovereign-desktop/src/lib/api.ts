@@ -1342,6 +1342,13 @@ export async function meshMediaOffers(): Promise<MeshMediaOffer[]> {
   return invoke("mesh_media_offers");
 }
 
+/** One real GET through a member's media bridge — the click-time check
+ *  that the library actually answers before a browser tab is opened at
+ *  it (the CLI probes; the desktop used to open blind). */
+export async function meshMediaProbe(playerUrl: string): Promise<number> {
+  return invoke("mesh_media_probe", { playerUrl });
+}
+
 /** Roll a fresh memorable node-name suggestion (e.g. "mac-peer").
  *  The 🎲 button next to the node-name input calls this; the user
  *  still has to press Save for the name to persist. */
@@ -2249,8 +2256,9 @@ export async function atlasListAtoms(
 export async function atlasSubgraph(
   corpusId: string,
   maxNodes?: number,
+  highlight?: string,
 ): Promise<AtlasSubgraph> {
-  return invoke("atlas_subgraph", { corpusId, maxNodes });
+  return invoke("atlas_subgraph", { corpusId, maxNodes, highlight });
 }
 
 /** Full inspector record for one atom — type-specific atom body,
@@ -2744,4 +2752,53 @@ export async function checkForUpdate(): Promise<UpdateInfo | null> {
  *  update. Errors propagate so the UI can surface a retry path. */
 export async function installUpdate(): Promise<void> {
   return invoke("install_update");
+}
+
+// ─── The room: guest grants ────────────────────────────────────────────────
+// A guest grant is the operator's side of someone who is not a member. The
+// daemon composes the link (the page path, token, and — when this node has
+// one — its iroh dial string); this app displays it and its QR.
+
+export interface GuestGrant {
+  token: string;
+  expires_at_ms: number;
+  summary: string;
+  /** Present when a base url was given; the string a QR encodes. */
+  link: string | null;
+}
+
+export interface GuestGrantRow {
+  /** First 8 hex chars — enough to identify a row; never the whole bearer. */
+  token_prefix: string;
+  summary: string;
+  label: string | null;
+  expires_at_ms: number;
+  revoked: boolean;
+  live: boolean;
+}
+
+export async function createGuestGrant(args: {
+  scope: string;
+  models: string[];
+  baseUrl: string;
+  ttlSecs: number;
+  label: string;
+}): Promise<GuestGrant> {
+  return invoke("guest_grant_create", {
+    scope: args.scope,
+    models: args.models,
+    baseUrl: args.baseUrl,
+    ttlSecs: args.ttlSecs,
+    label: args.label,
+  });
+}
+
+export async function listGuestGrants(): Promise<GuestGrantRow[]> {
+  return invoke("guest_grant_list");
+}
+
+/** Revoke by the full token (from the link). Idempotent: false when it was
+ *  already gone. */
+export async function revokeGuestGrant(token: string): Promise<boolean> {
+  return invoke("guest_grant_revoke", { token });
 }

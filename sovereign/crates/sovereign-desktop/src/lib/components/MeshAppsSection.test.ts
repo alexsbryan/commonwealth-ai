@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, within } from "@testing-library/svelte";
 import * as api from "../api";
 import MeshAppsSection from "./MeshAppsSection.svelte";
@@ -36,7 +36,7 @@ const READ_GRANTS = {
 // The catalog is manifest-driven: the component renders whatever loadCatalog
 // returns. These three manifests stand in for the bundled meshapp.json files.
 const MANIFESTS = [
-  { id: "lvt", name: "SF Land-Value Tax", version: "0.1.0", blurb: "Parcels.", corpus: "sf-assessor-roll", entry: "index.html", grants: READ_GRANTS, trust: "unsigned" },
+  { id: "lvt", name: "SF Land-Value Tax", version: "0.1.0", blurb: "Parcels.", corpus: "sf-assessor-roll", entry: "index.html", grants: READ_GRANTS, trust: "unsigned", corpus_data: { size_indexed_gb: 0.2, recipe: "recipe.toml" } },
   { id: "uap", name: "Project Blue Book", version: "0.1.0", blurb: "UFO archive.", corpus: "uap-blue-book", entry: "index.html", grants: READ_GRANTS, trust: "unsigned" },
   { id: "enron", name: "Enron Task Force", version: "0.2.0", blurb: "Enron email.", corpus: "enron-sample-multi-wide", entry: "index.html", grants: READ_GRANTS, trust: "unsigned" },
 ];
@@ -67,6 +67,8 @@ describe("MeshAppsSection", () => {
     vi.mocked(api.installCorpus).mockResolvedValue(undefined);
     vi.mocked(api.stageCorpusRecipe).mockResolvedValue(undefined);
   });
+
+  afterEach(() => vi.unstubAllGlobals());
 
   it("offers 'Get data' when the corpus isn't downloaded yet", async () => {
     vi.mocked(api.listCorpora).mockResolvedValue(corpora("not_installed"));
@@ -131,5 +133,43 @@ describe("MeshAppsSection", () => {
     // still shows Install & Open (which /^open$/ does not match).
     expect(await screen.findByRole("button", { name: /^open$/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /uninstall/i })).toBeInTheDocument();
+  });
+
+  // The vite dev server answers unknown paths with index.html and HTTP 200
+  // (SPA fallback). Before the guard, that HTML was staged as the corpus
+  // recipe and every install failed with "TOML parse error at line 1:
+  // <!doctype html>" — while re-poisoning ~/.svrnmesh/recipes on each click.
+  it("refuses to stage an SPA-fallback HTML body as the recipe", async () => {
+    vi.mocked(api.listCorpora).mockResolvedValue(corpora("not_installed"));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({ ok: true, text: async () => "<!doctype html>\n<html lang=\"en\"></html>" }),
+    );
+    render(MeshAppsSection);
+    const card = (await screen.findByText("SF Land-Value Tax")).closest(".app-card") as HTMLElement;
+    const btn = within(card).getByRole("button", { name: /get data/i });
+    await fireEvent.click(btn);
+    await vi.waitFor(() => {
+      expect(screen.getByText(/did not return a recipe/)).toBeInTheDocument();
+    });
+    expect(api.stageCorpusRecipe).not.toHaveBeenCalled();
+    expect(api.installCorpus).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+
+  it("skips recipe staging for apps that declare no bundled recipe", async () => {
+    vi.mocked(api.listCorpora).mockResolvedValue(corpora("not_installed"));
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+    render(MeshAppsSection);
+    const card = (await screen.findByText("Project Blue Book")).closest(".app-card") as HTMLElement;
+    const btn = within(card).getByRole("button", { name: /get data/i });
+    await fireEvent.click(btn);
+    await vi.waitFor(() => {
+      expect(api.installCorpus).toHaveBeenCalledWith("uap-blue-book");
+    });
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(api.stageCorpusRecipe).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
   });
 });

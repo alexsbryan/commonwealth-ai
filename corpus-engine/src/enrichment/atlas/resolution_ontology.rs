@@ -52,6 +52,11 @@ pub struct ResolutionPolicy<'a> {
     /// rigidification of a role-typed atom (which loses the role from the
     /// atom but not from the attribute).
     ref_attributes: BTreeMap<&'a str, &'a str>,
+    /// Section id → section title, for the section-context ref derivation
+    /// ([`derive_section_context_refs`]). Empty unless the build driver
+    /// supplies the chapters' titles — every pre-existing caller and test
+    /// keeps the empty map and the pass is inert.
+    section_titles: std::collections::HashMap<String, String>,
 }
 
 impl<'a> ResolutionPolicy<'a> {
@@ -68,7 +73,18 @@ impl<'a> ResolutionPolicy<'a> {
         Self {
             index: TypeIndex::from_policies(policies),
             ref_attributes,
+            section_titles: std::collections::HashMap::new(),
         }
+    }
+
+    /// Carry the corpus's section titles (id → title). One producer — the
+    /// build driver, which reads `chapters.json` beside the atlas dir.
+    pub fn with_section_titles(
+        mut self,
+        titles: std::collections::HashMap<String, String>,
+    ) -> Self {
+        self.section_titles = titles;
+        self
     }
 
     /// Does this corpus declare any type? False for version 0 and for a
@@ -329,6 +345,126 @@ pub fn check_event_participants(
 }
 
 // ── `ref` attributes become atom ids ─────────────────────────
+
+/// Derive UNFILLED declared `ref` attributes from the section's own title.
+///
+/// Measured (ei7-ans, 2026-09-22): the model fills a ref when the ROW
+/// states it (`mint` 247/362 — "Mint: MILETUS" is printed) and almost never
+/// when the relation is SECTION CONTEXT (`hoard` 49/362; zero unresolved
+/// hoard refs prove absence of emission). A coin inside "Newell NNM 19 ›
+/// THE DEMANHUR HOARD › CATALOGUE" belongs to the Demanhur hoard by
+/// construction — the title says so — and the declared-ontology
+/// enumeration path walks exactly that edge. The prompt-side instruction
+/// ([`render_attribute_shape`]'s ref-context block) nudges emission; this
+/// pass makes the link STRUCTURAL: the resolver knows the title, and stamps
+/// the ref where the model left it empty.
+///
+/// Rules, in order:
+/// - the entity's own declared type must declare the attribute (a `ruler`
+///   in a hoard catalogue gets no `hoard` stamp — only `coin` declares it);
+/// - a ref the model DID emit is untouched — its statement outranks context;
+/// - candidates are entities of the ref's target type whose canonical name
+///   (≥4 chars, folded) some SEGMENT of the section's own breadcrumb
+///   contains — restricting to the section's own segments is what keeps
+///   another hoard's title from ever being a candidate (reviewer ruling
+///   2026-09-22: structural, not best-guess);
+/// - EXACTLY ONE distinct candidate stamps; zero or more-than-one ABSTAINS
+///   with a tracing event — ambiguity is reported, never resolved by
+///   longest-match or salience;
+/// - the stamp writes the NAME, not the id: the normal
+///   [`snap_ref_attributes`] pass resolves it one step later, so an
+///   unresolvable derivation lands in the SAME failure ledger as an
+///   unresolvable emission instead of forging an id.
+///
+/// Returns `(entity index, attribute, target canonical_name)` triples for
+/// the caller to apply to its owned entity set. Every stamp is logged.
+pub fn derive_section_context_refs(
+    policy: &ResolutionPolicy<'_>,
+    entities: &[Entity],
+) -> Vec<(usize, String, String)> {
+    let mut stamps = Vec::new();
+    if policy.ref_attributes.is_empty() || policy.section_titles.is_empty() {
+        return stamps;
+    }
+    for (i, entity) in entities.iter().enumerate() {
+        let type_name = entity.entity_type.as_str_repr();
+        // Only the attrs THIS entity's declared type carries — the flat
+        // corpus-wide map alone cannot say whose attribute it is.
+        let declared_here: Vec<(&str, &str)> = policy
+            .ref_attributes
+            .iter()
+            .filter(|(attr, _)| {
+                policy
+                    .index
+                    .effective_attributes(type_name)
+                    .iter()
+                    .any(|a| a.name == **attr)
+            })
+            .map(|(a, of)| (*a, *of))
+            .collect();
+        if declared_here.is_empty() {
+            continue;
+        }
+        let Some(title) = policy.section_titles.get(&entity.first_appearance.chunk_id) else {
+            continue;
+        };
+        let folded_segments: Vec<String> =
+            title.split('›').map(|s| s.trim().to_lowercase()).collect();
+        for (attr, of) in declared_here {
+            let model_stated = entity
+                .attributes
+                .get(attr)
+                .and_then(|v| v.as_str())
+                .is_some_and(|s| !s.trim().is_empty());
+            if model_stated {
+                continue; // the model's own statement wins
+            }
+            // Candidates: target-type entities named by THIS section's own
+            // breadcrumb segments. Unique-or-abstain.
+            let mut matched: Vec<&str> = Vec::new();
+            for target in entities {
+                if target.id == entity.id
+                    || target.entity_type.as_str_repr() != of
+                    || target.canonical_name.chars().count() < 4
+                {
+                    continue;
+                }
+                let folded_name = target.canonical_name.to_lowercase();
+                if folded_segments.iter().any(|seg| seg.contains(&folded_name))
+                    && !matched.contains(&target.canonical_name.as_str())
+                {
+                    matched.push(target.canonical_name.as_str());
+                }
+            }
+            match matched.as_slice() {
+                [only] => {
+                    tracing::info!(
+                        entity = %entity.canonical_name,
+                        attribute = attr,
+                        target = only,
+                        section = %entity.first_appearance.chunk_id,
+                        "atlas/resolution 3c: ref derived from the section's own breadcrumb"
+                    );
+                    stamps.push((i, attr.to_string(), only.to_string()));
+                }
+                [] => {}
+                many => {
+                    // Ambiguity is a fact about the atlas (duplicate hoard
+                    // atoms naming one hoard are the common shape), not a
+                    // choice to make: abstain, and say why.
+                    tracing::info!(
+                        entity = %entity.canonical_name,
+                        attribute = attr,
+                        candidates = ?many,
+                        section = %entity.first_appearance.chunk_id,
+                        "atlas/resolution 3c: breadcrumb names more than one candidate — abstaining"
+                    );
+                }
+            }
+        }
+    }
+    stamps
+}
 
 /// Replace every declared `ref` attribute value with the atom id it names.
 ///
@@ -710,5 +846,114 @@ mod tests {
         assert_eq!(failures.len(), 1);
         assert_eq!(failures[0].kind, PhaseFailureKind::UnresolvedAttributeRef);
         assert!(failures[0].reason.contains("Nowhere-at-all"));
+    }
+
+    /// The section-context derivation, on the shapes that produced it: a
+    /// coin inside a hoard-catalogue section gets the hoard the title
+    /// names; a ruler in the same section gets nothing (its type does not
+    /// declare the attribute); the model's own statement outranks context;
+    /// the longest contained name wins; no title, no stamp.
+    #[test]
+    fn section_context_derives_unfilled_refs_from_the_sections_own_title() {
+        use crate::enrichment::ontology::{AttrDecl, AttrFamily};
+        let p = policies(vec![
+            OntologyTypeDecl {
+                name: "coin".into(),
+                kind: TypeKind::Entity,
+                attributes: vec![AttrDecl {
+                    name: "hoard".into(),
+                    family: AttrFamily::Ref { of: "hoard".into() },
+                    description: String::new(),
+                }],
+                ..Default::default()
+            },
+            entity_decl("hoard", None),
+        ]);
+        let policy = ResolutionPolicy::new(&p);
+
+        let mut coin = atom(
+            "entity-0001",
+            "Tetradrachm of Sidon",
+            EntityType::Other("coin".into()),
+        );
+        coin.first_appearance = ChunkRef::new("sec_demanhur", None);
+        let ruler = atom("entity-0002", "Philip II", EntityType::Person);
+        let demanhur = atom(
+            "entity-0003",
+            "Demanhur hoard",
+            EntityType::Other("hoard".into()),
+        );
+        let mut corinth_short = atom(
+            "entity-0004",
+            "Corinth hoard",
+            EntityType::Other("hoard".into()),
+        );
+        corinth_short.salience = 0.9;
+        // A SHORTER name the same title also contains, at HIGHER salience:
+        // longest contained name must beat salience, or the pass stamps
+        // the vaguest hoard it can find.
+        let mut corinth_bare = atom("entity-0005", "Corinth", EntityType::Other("hoard".into()));
+        corinth_bare.salience = 0.99;
+        let mut stated = atom(
+            "entity-0006",
+            "Stater of Aegina",
+            EntityType::Other("coin".into()),
+        );
+        stated.first_appearance = ChunkRef::new("sec_demanhur", None);
+        stated.attributes.insert(
+            "hoard".into(),
+            serde_json::Value::String("Corinth hoard".into()),
+        );
+        let mut corinth_coin = atom(
+            "entity-0007",
+            "Stater of Salamis",
+            EntityType::Other("coin".into()),
+        );
+        corinth_coin.first_appearance = ChunkRef::new("sec_corinth", None);
+        // A coin whose section carries no title in the map: no stamp.
+        let mut untitled = atom(
+            "entity-0008",
+            "Drachm of Akanthos",
+            EntityType::Other("coin".into()),
+        );
+        untitled.first_appearance = ChunkRef::new("sec_untitled", None);
+
+        let entities = vec![
+            coin,
+            ruler,
+            demanhur,
+            corinth_short,
+            corinth_bare,
+            stated,
+            corinth_coin,
+            untitled,
+        ];
+        let titles: std::collections::HashMap<String, String> = [
+            (
+                "sec_demanhur".to_string(),
+                "Newell NNM 19 (1923) › THE DEMANHUR HOARD › CATALOGUE OF THE VARIETIES"
+                    .to_string(),
+            ),
+            (
+                "sec_corinth".to_string(),
+                "Troxell NS 21 (1997) › A. The Corinth Hoard".to_string(),
+            ),
+        ]
+        .into_iter()
+        .collect();
+        let policy = policy.with_section_titles(titles);
+
+        let mut stamps = derive_section_context_refs(&policy, &entities);
+        stamps.sort();
+        assert_eq!(
+            stamps,
+            vec![(0, "hoard".to_string(), "Demanhur hoard".to_string())],
+            "only the Demanhur coin stamps. The Corinth coin ABSTAINS: its \
+             breadcrumb names two candidate hoards (the reviewer's \
+             unique-or-abstain rule — ambiguity is reported, never resolved \
+             by longest-match), the ruler's type declares no hoard ref, the \
+             already-stated coin outranks context, and the untitled section \
+             cannot derive: {stamps:?}"
+        );
     }
 }

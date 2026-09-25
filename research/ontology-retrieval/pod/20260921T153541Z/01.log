@@ -1,0 +1,299 @@
+
+== closed-book screen  [15:35:41]
+arm closed-book run 1 -> research/ontology-retrieval/raptor-proof/runs/pilot-and-his-wife/closed-book/run-1
+  host http://127.0.0.1:9841  synth Qwen3.6-35B-A3B-MTP-UD-Q6_K  judge Qwen3.5-4B-UD-Q6_K_XL
+svrnmesh: bridged 1 legacy SOVEREIGN_* env var(s) to SVRNMESH_* (the SOVEREIGN_* prefix is deprecated — update your scripts)
+loaded bank `raptor-proof-pilot-and-his-wife-v1` — 30 questions, target corpus `raptor-pilot-and-his-wife`
+Daemon: http://127.0.0.1:9841
+Chat model:  Qwen3.6-35B-A3B-MTP-UD-Q6_K
+Embed model: qwen-embedding-0.6b
+Database:    /Users/alexsbryan/.sovereign/sovereign.db
+Indexes:     /Users/alexsbryan/.svrnmesh/indexes
+Temperature: 0 (override)
+Corpora:     alignment (4090 chunks), arch-principles (58 chunks), arch-tour-fixture (40 chunks), atos-experiment-oicp-types (55 chunks), brothers-karamazov-book-1 (41 chunks), chaos-saltgrass (30 chunks), chaos-secret-agent (316 chunks), climb-ostrom (5 chunks), commonwealth (2590 chunks), commonwealth-ai-arch-principles (72 chunks), commonwealth-ai-system-overview (60 chunks), conversation-history (91 chunks), conversations-anthropic (16404 chunks), conversations-personal (267 chunks), corpus-engine (6252 chunks), drift-target (0 chunks), e2e-notebook (2 chunks), ei7-ans (1093 chunks), ei7-recensus-fineprint (1870 chunks), enron-sample-multi-tiny (900 chunks), enron-sample-multi-wide (8829 chunks), enron-sample-tiny (468 chunks), federalist-starter (31 chunks), folder-fixture-vault-8a83955f975c (111 chunks), folder-governance-corpus-bf503493df46 (0 chunks), institutional-notes (9 chunks), maple-house (24 chunks), obsidian-vault-959ee8a8f330 (3175 chunks), oicp-types (76 chunks), proxy-cik0000012927 (121 chunks), proxy-cik0000034088 (311 chunks), qc-arch-tour-01500518 (40 chunks), qc-arch-tour-250f6f45 (40 chunks), qc-arch-tour-4dd212fb (40 chunks), qc-arch-tour-52c92f2d (40 chunks), qc-arch-tour-695ffb90 (40 chunks), qc-arch-tour-6c7947a7 (40 chunks), qc-arch-tour-8899c85d (40 chunks), qc-arch-tour-adhoc (40 chunks), qc-arch-tour-d1255ea4 (40 chunks), qc-probe (40 chunks), raptor-eagle-cliff (254 chunks), raptor-pilot-and-his-wife (244 chunks), sec-cik0000320193 (115 chunks), sep (187967 chunks), sovereign (15352 chunks), sovereign-cli (1218 chunks), spike-fineprint-census (699 chunks), spike-fineprint-census-pod (699 chunks), system-overview (57 chunks), tokei (308 chunks), tokei-readme (25 chunks), uap-blue-book (710 chunks), uap-blue-book-index (10750 chunks), watched-9ef2f912ea2e (1530 chunks), watched-fixture-495a8a964229 (10 chunks), wikipedia (2029882 chunks), wikipedia-newsworthy (61 chunks)
+Tools:       wiring
+Tools:       no per-user switches on this host
+Tools:       core-turn: 6 tools
+Tools:       web: 1 tools
+Tools:       knowledge-front-door: 2 tools, withheld knowledge_lookup:auto-escalate (the operator has not opted in to automatic web escalation)
+Tools:       wikipedia: 1 tools
+Tools:       shell: 1 tools
+Tools:       11 registered
+Router:      assembling classifier stack
+Router classifier stack: embed=true scope=true effort=true current_info=true
+Lane:        gathering enrichment sources
+Lane scope:  sealed to `raptor-pilot-and-his-wife`
+[2m2026-09-21T15:35:45.567916Z[0m [32m INFO[0m atlas-context: scanning indexes dir for atlases [3mcandidate_count[0m[2m=[0m1820
+[2m2026-09-21T15:35:45.821540Z[0m [32m INFO[0m atlas-context: init complete (graphs without a loaded context parse on first use) [3mcontexts[0m[2m=[0m0 [3mgraphs[0m[2m=[0m0 [3mgraphs_available[0m[2m=[0m1820
+Atlas: 0 corpus context(s) loaded from cache
+Meta-atlas:  not loaded (lane spans one corpus)
+Bridge:      not loaded (lane spans one corpus)
+closed-book mode — each question is a RAW MODEL turn (no retrieval, no router, no grounding gate, no atlas). Answers come from the model's parametric memory alone; `retrieved` is empty by construction.
+isolation mode — retrieval scoped to corpus `raptor-pilot-and-his-wife`
+wrote run JSON to research/ontology-retrieval/raptor-proof/runs/pilot-and-his-wife/closed-book/run-1/eval.json
+  verdict: recorded (the comparison judges it)
+closed-book: n=30 mean judge=0.339 known(>=0.5)=12
+
+== atlas  [15:37:03]
+svrnmesh: bridged 1 legacy SOVEREIGN_* env var(s) to SVRNMESH_* (the SOVEREIGN_* prefix is deprecated — update your scripts)
+Detected 32 section(s):
+    1. CHAPTER I. — On the stern, pine-clad southern coast of Norway, off the
+    2. CHAPTER II. — After old Jacob had fallen into ill health, lighterman Kristiansen used
+    3. CHAPTER III. — Salve came out to the rock again the next autumn, after a voyage to
+    4. CHAPTER IV. — The old Juno, to which Salve belonged, was lying at that time at
+    5. CHAPTER V. — The party, meanwhile, that had left the ship, were passing the night
+    6. CHAPTER VI. — The Juno arrived in due course at Boston, where Salve invested a
+    7. CHAPTER VII. — Out on Little Torungen meanwhile noteworthy events had occurred, which
+    8. CHAPTER VIII. — As for Salve, during the first few days after coming home he was a happy
+    9. CHAPTER IX. — All these events had come upon Elizabeth with overwhelming suddenness.
+   10. CHAPTER X. — The outer side of Tromoe, which lies off the entrance to Arendal, has
+   11. CHAPTER XI. — The house in the town was undergoing repairs this year, which kept the
+   12. CHAPTER XII. — It was some months after. The Juno lay ready to sail in the roads of
+   13. CHAPTER XIII. — They stood slowly away to the north-east along the coast of Brazil.
+   14. CHAPTER XIV. — With a view to bring himself into harmony with his surroundings, he
+   15. CHAPTER XV. — It was into a badly-lighted tavern, with two or three rooms leading out
+   16. CHAPTER XVI. — The Stars and Stripes lay in the roads with the Union flag at her gaff.
+   17. CHAPTER XVII. — They doubled Cape Horn, and came to Valparaiso. But, on the morning they
+   18. CHAPTER XVIII. — An opportunity offered almost immediately for taking a passage home with
+   19. CHAPTER XIX. — Skipper Garvloit, into whose family Elizabeth had come, occupied one of
+   20. CHAPTER XX. — When Madam Garvloit had made some excuse next morning to leave the two
+  ... and 12 more
+
+  ✓ wrote /Users/alexsbryan/.svrnmesh/indexes/raptor-pilot-and-his-wife/chapters.json (32 chapters)
+  ✓ wrote /Users/alexsbryan/.svrnmesh/enrichment/raptor-pilot-and-his-wife/config.json
+  ✓ pipeline      = literary_atlas
+  ✓ chat_model    = commonwealth/primary
+  ✓ embed_model   = qwen3-embedding-0.6b
+
+  Next: svrn enrich extract raptor-pilot-and-his-wife --chapters sec_0001,sec_0002,sec_0003
+svrnmesh: bridged 1 legacy SOVEREIGN_* env var(s) to SVRNMESH_* (the SOVEREIGN_* prefix is deprecated — update your scripts)
+  · --resume: checkpoint at /Users/alexsbryan/.svrnmesh/enrichment/raptor-pilot-and-his-wife/runs/_phase1_checkpoint.jsonl is empty (or missing); proceeding with full selection.
+  running phase 1 (full) over 32 chapter(s) — checkpoint: /Users/alexsbryan/.svrnmesh/enrichment/raptor-pilot-and-his-wife/runs/_phase1_checkpoint.jsonl
+    · 0 exemplar(s) loaded, 32 chapter(s) to process
+    [1/32] sec_0001… 7 e, 2 q
+    [2/32] sec_0002… 3 e, 2 q
+    [3/32] sec_0003… 5 e, 1 q
+    [4/32] sec_0004… 5 e, 2 q
+    [5/32] sec_0005… 5 e, 1 q
+    [6/32] sec_0006… 4 e, 2 q
+    [7/32] sec_0007… 3 e, 2 q
+    [8/32] sec_0008… 3 e, 2 q
+    [9/32] sec_0009… 2 e, 2 q
+    [10/32] sec_0010… 7 e, 2 q
+    [11/32] sec_0011… 2 e, 2 q
+    [12/32] sec_0012… 4 e, 2 q
+    [13/32] sec_0013… 3 e, 2 q
+    [14/32] sec_0014… 2 e, 1 q
+    [15/32] sec_0015… 5 e, 2 q
+    [16/32] sec_0016… 5 e, 2 q
+    [17/32] sec_0017… 2 e, 1 q
+    [18/32] sec_0018… 2 e, 2 q
+    [19/32] sec_0019… 2 e, 1 q
+    [20/32] sec_0020… 7 e, 2 q
+    [21/32] sec_0021… 4 e, 1 q
+    [22/32] sec_0022… 2 e, 2 q
+    [23/32] sec_0023… 3 e, 2 q
+    [24/32] sec_0024… 5 e, 2 q
+    [25/32] sec_0025… 4 e, 2 q
+    [26/32] sec_0026… 4 e, 2 q
+    [27/32] sec_0027… 2 e, 2 q
+    [28/32] sec_0028… 4 e, 2 q
+    [29/32] sec_0029… 4 e, 2 q
+    [30/32] sec_0030… 2 e, 1 q
+    [31/32] sec_0031… 4 e, 2 q
+    [32/32] sec_0032… 8 e, 1 q
+  ✓ 32 ok, 0 failed — /Users/alexsbryan/.svrnmesh/enrichment/raptor-pilot-and-his-wife/runs/questions-full-001.json
+  · token spend: 32 call(s), 159783 prompt + 33482 completion = 193265 total
+  ✓ cache updated (cache/questions.json)
+svrnmesh: bridged 1 legacy SOVEREIGN_* env var(s) to SVRNMESH_* (the SOVEREIGN_* prefix is deprecated — update your scripts)
+  · finalize: 32 entries → 32 successes + 0 failures
+  ✓ wrote run-file /Users/alexsbryan/.svrnmesh/enrichment/raptor-pilot-and-his-wife/runs/questions-finalize-001.json
+  ✓ updated cache/questions.json
+svrnmesh: bridged 1 legacy SOVEREIGN_* env var(s) to SVRNMESH_* (the SOVEREIGN_* prefix is deprecated — update your scripts)
+Daemon: http://127.0.0.1:9841
+Chat model:  Qwen3.6-35B-A3B-UD-MTP-IQ4_NL
+Embed model: qwen-embedding-0.6b
+Database:    /Users/alexsbryan/.sovereign/sovereign.db
+Indexes:     /Users/alexsbryan/.svrnmesh/indexes
+[2m2026-09-21T15:41:03.234117Z[0m [33m WARN[0m installed_indexes: corpus_id collision — multiple physical indexes advertise the same corpus_id. The dropped one is invisible to search until you rename it out-of-band (any name containing '.', e.g. '<name>.retired') or remove it. Without dedup, retrieval and the reading desk could disagree on which chunk a (corpus_id, chunk_id) pair resolves to. (Logged once per unique collision per process.) [3mcorpus_id[0m[2m=[0mfolder-governance-corpus-bf503493df46 [3mkept[0m[2m=[0m/Users/alexsbryan/.svrnmesh/indexes/folder-governance-corpus-bf503493df46 [3mdropped[0m[2m=[0m/Users/alexsbryan/.svrnmesh/indexes/folder-governance-corpus-bf503493df46-partition-node-37f17554b6c4ff29
+Corpora:     alignment (4090 chunks), arch-principles (58 chunks), arch-tour-fixture (40 chunks), atos-experiment-oicp-types (55 chunks), brothers-karamazov-book-1 (41 chunks), chaos-saltgrass (30 chunks), chaos-secret-agent (316 chunks), climb-ostrom (5 chunks), commonwealth (2590 chunks), commonwealth-ai-arch-principles (72 chunks), commonwealth-ai-system-overview (60 chunks), conversation-history (91 chunks), conversations-anthropic (16404 chunks), conversations-personal (267 chunks), corpus-engine (6252 chunks), drift-target (0 chunks), e2e-notebook (2 chunks), ei7-ans (1093 chunks), ei7-recensus-fineprint (1870 chunks), enron-sample-multi-tiny (900 chunks), enron-sample-multi-wide (8829 chunks), enron-sample-tiny (468 chunks), federalist-starter (31 chunks), folder-fixture-vault-8a83955f975c (111 chunks), folder-governance-corpus-bf503493df46 (0 chunks), institutional-notes (9 chunks), maple-house (24 chunks), obsidian-vault-959ee8a8f330 (3175 chunks), oicp-types (76 chunks), proxy-cik0000012927 (121 chunks), proxy-cik0000034088 (311 chunks), qc-arch-tour-01500518 (40 chunks), qc-arch-tour-250f6f45 (40 chunks), qc-arch-tour-4dd212fb (40 chunks), qc-arch-tour-52c92f2d (40 chunks), qc-arch-tour-695ffb90 (40 chunks), qc-arch-tour-6c7947a7 (40 chunks), qc-arch-tour-8899c85d (40 chunks), qc-arch-tour-adhoc (40 chunks), qc-arch-tour-d1255ea4 (40 chunks), qc-probe (40 chunks), raptor-eagle-cliff (254 chunks), raptor-pilot-and-his-wife (244 chunks), sec-cik0000320193 (115 chunks), sep (187967 chunks), sovereign (15352 chunks), sovereign-cli (1218 chunks), spike-fineprint-census (699 chunks), spike-fineprint-census-pod (699 chunks), system-overview (57 chunks), tokei (308 chunks), tokei-readme (25 chunks), uap-blue-book (710 chunks), uap-blue-book-index (10750 chunks), watched-9ef2f912ea2e (1530 chunks), watched-fixture-495a8a964229 (10 chunks), wikipedia (2029882 chunks), wikipedia-newsworthy (61 chunks)
+Tools:       wiring
+Tools:       no per-user switches on this host
+Tools:       core-turn: 6 tools
+Tools:       web: 1 tools
+Tools:       knowledge-front-door: 2 tools, withheld knowledge_lookup:auto-escalate (the operator has not opted in to automatic web escalation)
+Tools:       wikipedia: 1 tools
+Tools:       shell: 1 tools
+Tools:       11 registered
+Router:      assembling classifier stack
+Router classifier stack: embed=true scope=true effort=true current_info=true
+Lane:        gathering enrichment sources
+Lane scope:  all corpora
+[2m2026-09-21T15:41:04.785159Z[0m [32m INFO[0m wiki columnar store is format v1 (no atom_id/chunk_id): neighbor API serves, grounding-walk provider will refuse; rebuild with `atlas wikipedia build-graph` [3mdir[0m[2m=[0m/Users/alexsbryan/.svrnmesh/indexes/wikipedia/atlas
+[2m2026-09-21T15:41:04.785747Z[0m [32m INFO[0m wikipedia graph loaded (v2) [3mcorpus[0m[2m=[0mwikipedia [3mbackend[0m[2m=[0m"columnar"
+Wiki graph:  51845 articles, 7853503 edges
+Atlas: 0 corpus context(s) loaded from cache
+Meta-atlas:  1563346 canonical atoms across 15 corpus(es)
+Bridge:      0 cross-corpus edges
+=== enrich build — raptor-pilot-and-his-wife ===
+  8 step(s) planned
+    1. seed
+    2. cluster
+    3. name
+    4. resolve
+    5. gaps
+    6. configure
+    7. report
+    8. backfill
+
+─── [1/8] seed ───
+  running stage 1a (seed) on first section: sec_0001
+  ✓ 19 seed entity(ies):
+    - Old Jacob [person]  (aka: Jacob)
+    - Elizabeth [person]
+    - Little Torungen [place]  (aka: Torungen)
+    - Great Torungen Lighthouses [institution]  (aka: Great Torungen Light)
+    - Little Torungen Lighthouses [place]
+    - Arendal [place]  (aka: the town of Arendal)
+    - Norway [place]
+    - Oxoe light [institution]
+    - Jomfruland up by Krageroe [place]  (aka: Krageroe)
+    - Christiansand [place]
+    - Tromoe [place]
+    - Exploits of Danish and Norwegian Naval Heroes [work]  (aka: the book)
+    - Naiad [person]  (aka: frigate Naiad)
+    - Dictator [person]
+    - Samso [person]
+    - Kiel [person]
+    - Lolland [person]
+    - Calypso [person]  (aka: brig Calypso)
+    - Heather Islands [place]
+  ✓ cache: /Users/alexsbryan/.svrnmesh/enrichment/raptor-pilot-and-his-wife/cache/seed.json
+
+─── [2/8] cluster ───
+  running phase 2 (atlas) for raptor-pilot-and-his-wife
+    · 3 cluster(s): question
+    · 2 cluster(s): claim
+    · 3 cluster(s): entity_state
+    · 2 cluster(s): relation_state
+    · 4 cluster(s): event
+    · 72 sketch(es) classified as noise
+  ✓ wrote /Users/alexsbryan/.svrnmesh/enrichment/raptor-pilot-and-his-wife/runs/atlas-clusters-full-001.json
+  ✓ cache updated
+
+─── [3/8] name ───
+  running phase 3 (atlas) — naming 14 cluster(s) across 5 facet(s)
+    [1/14] question_cl_0000 (question)… How romantic love and personal integrity survive the corrosive pressures of s…
+    [2/14] question_cl_0001 (question)… How distrust, silence, and past wounds corrode the possibility of marital sur…
+    [3/14] question_cl_0002 (question)… How financial instability and social pretension strain family dignity and coh…
+    [4/14] claim_cl_0000 (claim)… that marital trust requires the surrender of pride and suspicion, which other…
+    [5/14] claim_cl_0001 (claim)… that the maritime world operates as a self-contained ecosystem of illicit exc…
+    [6/14] entity_state_cl_0000 (entity_state)… Old Jacob's movement from defensive obstinacy and snappishness to reluctant e…
+    [7/14] entity_state_cl_0001 (entity_state)… Elizabeth's movement from innocent, fear-constrained curiosity through social…
+    [8/14] entity_state_cl_0002 (entity_state)… Gjert's oscillation between eager anticipation for his naval future and fearf…
+    [9/14] relation_state_cl_0000 (relation_state)… Elizabeth Raklev's entrapment within the Beck family's coercive web, shifting…
+    [10/14] relation_state_cl_0001 (relation_state)… Salve–Elizabeth's oscillation between corrosive estrangement and desperate re…
+    [11/14] event_cl_0000 (event)… The sequence of betrayals and violent rejections that sever Salve's ties with…
+    [12/14] event_cl_0001 (event)… The unraveling of Elizabeth's romantic entanglements through rejected proposa…
+    [13/14] event_cl_0002 (event)… The escalating cycle of jealousy, separation, and reconciliation that tests t…
+    [14/14] event_cl_0003 (event)… The escalating pressure of Gjert's father that forces Elizabeth into silence …
+  ✓ 14 named cluster(s) — /Users/alexsbryan/.svrnmesh/enrichment/raptor-pilot-and-his-wife/runs/atlas-named-clusters-full-001.json
+
+─── [4/8] resolve ───
+  · resolve cached — /Users/alexsbryan/.svrnmesh/indexes/raptor-pilot-and-his-wife/atlas/atoms.json exists; skipping.
+    To force re-run: rm /Users/alexsbryan/.svrnmesh/indexes/raptor-pilot-and-his-wife/atlas/atoms.json
+
+─── [5/8] gaps ───
+  · gaps cached — /Users/alexsbryan/.svrnmesh/indexes/raptor-pilot-and-his-wife/atlas/gaps.json exists; skipping.
+    To force re-run: rm /Users/alexsbryan/.svrnmesh/indexes/raptor-pilot-and-his-wife/atlas/gaps.json
+
+─── [6/8] configure ───
+  loaded atlas: 7 entity / 3 relation / 4 claim / 4 question / 3 event synopsis(es), 2 section(s)
+  dispatching Phase 8 configuration prompt…
+[2m2026-09-21T15:43:32.426655Z[0m [32m INFO[0m atlas write: ANN seed table deferred; this corpus cannot ground until `svrn atlas backfill-ann` runs [3mcorpus[0m[2m=[0m"raptor-pilot-and-his-wife" [3matlas[0m[2m=[0m/Users/alexsbryan/.svrnmesh/indexes/raptor-pilot-and-his-wife/atlas [3mreason[0m[2m=[0m"atlas-configuration rewrite; the build's Backfill step is last in the plan and reseeds"
+  ✓ 3 configuration(s) produced
+    · [config-0001] The Rock as Stage for Masculine Performance (confidence 0.85) — 7 constituent atom(s)
+    · [config-0002] Narrative Authority vs. Empirical Skepticism (confidence 0.75) — 4 constituent atom(s)
+    · [config-0003] The Transmission of Isolation Through Storytelling (confidence 0.65) — 4 constituent atom(s)
+
+─── [7/8] report ───
+  · report cached — /Users/alexsbryan/.svrnmesh/indexes/raptor-pilot-and-his-wife/atlas/schema_validation.json exists; skipping.
+    To force re-run: rm /Users/alexsbryan/.svrnmesh/indexes/raptor-pilot-and-his-wife/atlas/schema_validation.json
+
+─── [8/8] backfill ───
+  · backfill cached file at /Users/alexsbryan/.svrnmesh/indexes/raptor-pilot-and-his-wife/atlas/atoms_ann.lance is older than atlas/atoms.json (the atlas was re-resolved since it was embedded); invalidating cache.
+[2m2026-09-21T15:43:32.442294Z[0m [32m INFO[0m backfill-ann: seed population derived from the navigation map [3mcorpus[0m[2m=[0m"raptor-pilot-and-his-wife" [3mpopulation[0m[2m=[0mentity,event,state,relation,claim,configuration,argument,summary [3msource[0m[2m=[0mdeclared by raptor-pilot-and-his-wife
+[2m2026-09-21T15:43:32.444691Z[0m [32m INFO[0m atlas-context: filtered atoms.json (pre-embed) [3mcorpus[0m[2m=[0m"raptor-pilot-and-his-wife" [3mpopulation[0m[2m=[0mentity,event,state,relation,claim,configuration,argument,summary [3mseen[0m[2m=[0m{Entity: 7, Event: 3, State: 8, Relation: 3, Claim: 4, Question: 4, Configuration: 3, Summary: 14} [3mkept[0m[2m=[0m{Entity: 7, Event: 3, State: 8, Relation: 3, Claim: 4, Configuration: 3, Summary: 14} [3munrenderable[0m[2m=[0m{} [3mkept_tensions[0m[2m=[0m0 [3mtotal_tensions[0m[2m=[0m0 [3mdrop_kind[0m[2m=[0m4 [3mdrop_placeholder[0m[2m=[0m0 [3mmin_description_chars[0m[2m=[0m10 [3mdrop_short_desc[0m[2m=[0m0 [3mdrop_depth[0m[2m=[0m0 [3mdrop_cap[0m[2m=[0m0 [3mtop_k[0m[2m=[0m3
+[2m2026-09-21T15:43:40.266034Z[0m [32m INFO[0m atlas-context: embedded [3mcorpus[0m[2m=[0m"raptor-pilot-and-his-wife" [3mentries[0m[2m=[0m42 [3melapsed_ms[0m[2m=[0m7821
+[2m2026-09-21T15:43:40.282995Z[0m [32m INFO[0m backfill-ann: wrote ANN seed table [3mcorpus[0m[2m=[0m"raptor-pilot-and-his-wife" [3mresolved[0m[2m=[0m42 [3mtotal[0m[2m=[0m42 [3mpopulation[0m[2m=[0mentity,event,state,relation,claim,configuration,argument,summary [3mtable[0m[2m=[0m/Users/alexsbryan/.svrnmesh/indexes/raptor-pilot-and-his-wife/atlas/atoms_ann.lance
+  · wrote /Users/alexsbryan/.svrnmesh/indexes/raptor-pilot-and-his-wife/atlas/atoms_ann.lance — 42/42 entries resolved to atom-ids
+
+=== build complete — raptor-pilot-and-his-wife ===
+
+== raptor tree + Summary atoms  [15:43:40]
+svrnmesh: bridged 1 legacy SOVEREIGN_* env var(s) to SVRNMESH_* (the SOVEREIGN_* prefix is deprecated — update your scripts)
+RAPTOR retrofit plan for corpus 'raptor-pilot-and-his-wife':
+  documents:  1
+  chunks:     244
+  doc-type:   Narrative
+  summaries:  Abstractive
+  furniture:  kept (pass --strip-furniture to drop)
+  by bucket:  large=1
+
+Building RAPTOR trees via daemon http://localhost:9741 (chat=primary, embed=embed)…
+Summary verification: ON — every abstractive summary judged against its member texts (T1 P1.2)
+
+      [t3-profile] raptor_tree=0.0s (nodes=14)
+  [1/1] pilot-and-his-wife  244 chunks · large · 14 nodes · 0.1s
+
+RAPTOR retrofit complete for 'raptor-pilot-and-his-wife':
+  documents built:  1
+  nodes persisted:  14  (conv_raptor_nodes, corpus_id='raptor-pilot-and-his-wife')
+  elapsed:          0.1s
+  avg per document: 0.1s
+
+The atom-graph atlas (atlas/atoms.json) is untouched — RAPTOR nodes are additive.
+[2m2026-09-21T15:43:40.820962Z[0m [32m INFO[0m raptor index: built [3mrows[0m[2m=[0m14 [3mdim[0m[2m=[0m1024 [3mindexed[0m[2m=[0mfalse [3msource_version[0m[2m=[0m1789975660
+RAPTOR summary-node ANN index: built raptor_summaries.lance (14 summary nodes)
+svrnmesh: bridged 1 legacy SOVEREIGN_* env var(s) to SVRNMESH_* (the SOVEREIGN_* prefix is deprecated — update your scripts)
+Projecting RAPTOR summaries into 'raptor-pilot-and-his-wife' atlases…
+summary-atoms: degraded: no readable RAPTOR checkpoint under /Users/alexsbryan/.sovereign/indexes/raptor-pilot-and-his-wife — every Summary atom is written WITHOUT evidence chunks and without Composes edges
+  14 summary rows -> 0 atoms in 0 atlases (0 with evidence, 0 with children), 0 Composes edges, 0 seed rows; 14 already projected (skipped)
+  degraded: no readable RAPTOR checkpoint under /Users/alexsbryan/.sovereign/indexes/raptor-pilot-and-his-wife — every Summary atom is written WITHOUT evidence chunks and without Composes edges
+atoms=46 summary=14
+
+== arm bare run 1  [15:43:40]
+arm bare run 1 -> research/ontology-retrieval/raptor-proof/runs/pilot-and-his-wife/bare/run-1
+  host http://127.0.0.1:9841  synth Qwen3.6-35B-A3B-MTP-UD-Q6_K  judge Qwen3.5-4B-UD-Q6_K_XL
+svrnmesh: bridged 4 legacy SOVEREIGN_* env var(s) to SVRNMESH_* (the SOVEREIGN_* prefix is deprecated — update your scripts)
+loaded bank `raptor-proof-pilot-and-his-wife-v1` — 30 questions, target corpus `raptor-pilot-and-his-wife`
+Daemon: http://127.0.0.1:9841
+Chat model:  Qwen3.6-35B-A3B-MTP-UD-Q6_K
+Embed model: qwen-embedding-0.6b
+Database:    /Users/alexsbryan/.sovereign/sovereign.db
+Indexes:     /Users/alexsbryan/.svrnmesh/indexes
+Temperature: 0 (override)
+Corpora:     alignment (4090 chunks), arch-principles (58 chunks), arch-tour-fixture (40 chunks), atos-experiment-oicp-types (55 chunks), brothers-karamazov-book-1 (41 chunks), chaos-saltgrass (30 chunks), chaos-secret-agent (316 chunks), climb-ostrom (5 chunks), commonwealth (2590 chunks), commonwealth-ai-arch-principles (72 chunks), commonwealth-ai-system-overview (60 chunks), conversation-history (91 chunks), conversations-anthropic (16404 chunks), conversations-personal (267 chunks), corpus-engine (6252 chunks), drift-target (0 chunks), e2e-notebook (2 chunks), ei7-ans (1093 chunks), ei7-recensus-fineprint (1870 chunks), enron-sample-multi-tiny (900 chunks), enron-sample-multi-wide (8829 chunks), enron-sample-tiny (468 chunks), federalist-starter (31 chunks), folder-fixture-vault-8a83955f975c (111 chunks), folder-governance-corpus-bf503493df46 (0 chunks), institutional-notes (9 chunks), maple-house (24 chunks), obsidian-vault-959ee8a8f330 (3175 chunks), oicp-types (76 chunks), proxy-cik0000012927 (121 chunks), proxy-cik0000034088 (311 chunks), qc-arch-tour-01500518 (40 chunks), qc-arch-tour-250f6f45 (40 chunks), qc-arch-tour-4dd212fb (40 chunks), qc-arch-tour-52c92f2d (40 chunks), qc-arch-tour-695ffb90 (40 chunks), qc-arch-tour-6c7947a7 (40 chunks), qc-arch-tour-8899c85d (40 chunks), qc-arch-tour-adhoc (40 chunks), qc-arch-tour-d1255ea4 (40 chunks), qc-probe (40 chunks), raptor-eagle-cliff (254 chunks), raptor-pilot-and-his-wife (244 chunks), sec-cik0000320193 (115 chunks), sep (187967 chunks), sovereign (15352 chunks), sovereign-cli (1218 chunks), spike-fineprint-census (699 chunks), spike-fineprint-census-pod (699 chunks), system-overview (57 chunks), tokei (308 chunks), tokei-readme (25 chunks), uap-blue-book (710 chunks), uap-blue-book-index (10750 chunks), watched-9ef2f912ea2e (1530 chunks), watched-fixture-495a8a964229 (10 chunks), wikipedia (2029882 chunks), wikipedia-newsworthy (61 chunks)
+Tools:       wiring
+Tools:       no per-user switches on this host
+Tools:       core-turn: 6 tools
+Tools:       web: 1 tools
+Tools:       knowledge-front-door: 2 tools, withheld knowledge_lookup:auto-escalate (the operator has not opted in to automatic web escalation)
+Tools:       wikipedia: 1 tools
+Tools:       shell: 1 tools
+Tools:       11 registered
+Router:      assembling classifier stack
+Router classifier stack: embed=true scope=true effort=true current_info=true
+Lane:        gathering enrichment sources
+Lane scope:  sealed to `raptor-pilot-and-his-wife`
+[2m2026-09-21T15:43:44.473199Z[0m [32m INFO[0m atlas-context: scanning indexes dir for atlases [3mcandidate_count[0m[2m=[0m1820
+[2m2026-09-21T15:43:44.689307Z[0m [32m INFO[0m atlas-context: init complete (graphs without a loaded context parse on first use) [3mcontexts[0m[2m=[0m0 [3mgraphs[0m[2m=[0m0 [3mgraphs_available[0m[2m=[0m1820
+Atlas: 0 corpus context(s) loaded from cache
+Meta-atlas:  not loaded (lane spans one corpus)
+Bridge:      not loaded (lane spans one corpus)
+synth mode — driving full chat pipeline. This will take ~one chat-completion per question; sit tight.
+isolation mode — retrieval scoped to corpus `raptor-pilot-and-his-wife`
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What profession is the main character of this stor" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is the main character's name?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)

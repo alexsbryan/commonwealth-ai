@@ -1,0 +1,28 @@
+{
+ "kind": "coverage",
+ "key": "essay-pilot-and-his-wife-setup--full-r3",
+ "prompt": "Below are numbered plot points of a novel and an answer written about the novel.\nLabel every point by what the answer says about it:\n\"correct\" = the answer states it\n\"contradicted\" = the answer says something that conflicts with it\n\"absent\" = the answer does not mention it\nReturn only JSON with one entry per point: {\"P1\": \"correct\", \"P2\": \"absent\"}\n\nPoints:\nP1. The novel portrays the life of a sailor named Salve Kristiansen.\nP2. Salve loves Elisabeth and she returns his affection.\nP3. Elisabeth is attracted to a young officer who wishes to marry her.\nP4. Elisabeth spurns the officer because her old love for Salve prevails.\nP5. Salve leaves his native land in desperation before he can reconcile with Elisabeth.\nP6. Salve sails toward foreign shores after leaving home.\nP7. Salve returns to his old home years later.\nP8. Salve finds that Elisabeth has remained true to him during his absence.\nP9. Salve marries Elisabeth upon his return.\nP10. The thought of Elisabeth's momentary hesitation makes life miserable for both spouses.\nP11. Ten years elapse while Salve and Elisabeth struggle with their marital issues.\nP12. Salve and Elisabeth finally come to a clear understanding of one another.\nP13. Salve and Elisabeth lay the foundation for a happy life together.\nP14. The novel emphasizes the need of implicit confidence and trust in marriage.\n\nAnswer:\nThe early events of *The Pilot and His Wife* establish a volatile domestic foundation through the marriage between Salve Kristiansen, a reclusive and temperamental pilot, and Elizabeth, whose patience is gradually eroded by his behavior. The narrative begins with their move to Merdoe, where Salve's unapproachable demeanor and fear of his own temper create an atmosphere of tension; he often goes back to sea immediately after returning home if provoked, leaving Elizabeth in despair. This dynamic sets up the central conflict of the novel: Elizabeth\u2019s internal struggle as she endures years of \"monotony\" while secretly harboring resentment, yet maintaining her affection for him because she knows he has a \"heart,\" even though others only see his harsh exterior.\n\nSimultaneously, the early chapters introduce the Beck family\u2014Captain Beck (Salve's superior) and Carl Beck (his son)\u2014who represent social ambition and domestic rigidity. The arrival of Carl Beck in Arendal to manage shipbuilding creates friction with Salve, who becomes increasingly difficult to get on with; this rivalry intensifies Elizabeth's isolation when she stops visiting Arendal entirely due to her husband's irritability toward Captain Beck. Furthermore, the introduction of Fru Beck as Carl\u2019s cold, precise wife highlights a different kind of marital dynamic\u2014one based on \"social power\" rather than passion\u2014which contrasts sharply with the turbulent but loving bond between Salve and Elizabeth, foreshadowing themes of emotional suppression versus open affection.\n\nThese early tensions culminate in the pivotal scene where Elizabeth encounters Salve at \"The Star,\" a tavern they both frequent. Her reaction\u2014entering with \"downcast eyes, and scarlet in the face\"\u2014and his subsequent feeling that he has been separated from her \"farther... than ever he had been\" marks the breaking point of their marriage's stability. This moment sets up the novel\u2019s trajectory toward separation; it reveals that while Salve feels crushed by her pride, she is simultaneously proud of herself for enduring him, creating an emotional chasm that will eventually force them apart physically (as noted when eleven months later they are on separate voyages). The early setup thus frames the tragedy not as a sudden collapse, but as the inevitable result of years where Elizabeth suffered in silence and Salve retreated into isolation.\n\nNot in your sources, but from general knowledge: The novel concludes with their tragic deaths at sea during a storm, driven by this accumulated estrangement. Want me to read *The Pilot and His Wife* in depth? It would take about 15 minutes.\n\n---\n*Verification note: these statements could not be confirmed against your sources \u2014 treat them as unverified:*\n- The narrative begins with Salve and Elizabeth moving to Merdoe, where his fear of his own temper creates tension.\n- The narrative begins with their move to Merdoe, where Salve's unapproachable demeanor and fear of his own temper create an atmosphere of tension\n- Simultaneously, the early chapters introduce the Beck family\u2014Captain Beck (Salve's superior) and Carl Beck (his son)\u2014who represent social ambition and domestic \u2026\n- These early tensions culminate in the pivotal scene where Elizabeth encounters Salve at \"The Star,\" a tavern they both frequent.",
+ "attempts": [
+  {
+   "nudged": false,
+   "reply": "{\n\"P1\": \"correct\",\n\"P2\": \"contradicted\",\n\"P3\": \"absent\",\n\"P4\": \"absent\",\n\"P5\": \"absent\",\n\"P6\": \"absent\",\n\"P7\": \"absent\",\n\"P8\": \"absent\",\n\"P9\": \"absent\",\n\"P10\": \"correct\",\n\"P11\": \"correct\",\n\"P12\": \"contradicted\",\n\"P13\": \"contradicted\",\n\"P14\": \"absent\"\n}",
+   "model": "Qwen3.6-35B-A3B-MTP-UD-Q6_K"
+  }
+ ],
+ "parsed": {
+  "P1": "correct",
+  "P2": "contradicted",
+  "P3": "absent",
+  "P4": "absent",
+  "P5": "absent",
+  "P6": "absent",
+  "P7": "absent",
+  "P8": "absent",
+  "P9": "absent",
+  "P10": "correct",
+  "P11": "correct",
+  "P12": "contradicted",
+  "P13": "contradicted",
+  "P14": "absent"
+ }
+}

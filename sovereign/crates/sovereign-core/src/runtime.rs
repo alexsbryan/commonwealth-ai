@@ -117,6 +117,7 @@ mod anchoring;
 pub mod capabilities;
 mod code_trace;
 mod collaboration;
+mod coverage_first;
 pub mod epistemic;
 mod evidence;
 mod gk_rescue;

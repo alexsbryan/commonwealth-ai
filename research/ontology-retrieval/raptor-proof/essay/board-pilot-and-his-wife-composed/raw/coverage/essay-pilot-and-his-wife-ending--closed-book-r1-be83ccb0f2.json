@@ -1,0 +1,28 @@
+{
+ "kind": "coverage",
+ "key": "essay-pilot-and-his-wife-ending--closed-book-r1",
+ "prompt": "Below are numbered plot points of a novel and an answer written about the novel.\nLabel every point by what the answer says about it:\n\"correct\" = the answer states it\n\"contradicted\" = the answer says something that conflicts with it\n\"absent\" = the answer does not mention it\nReturn only JSON with one entry per point: {\"P1\": \"correct\", \"P2\": \"absent\"}\n\nPoints:\nP1. The novel portrays the life of a sailor named Salve Kristiansen.\nP2. Salve loves Elisabeth and she returns his affection.\nP3. Elisabeth is attracted to a young officer who wishes to marry her.\nP4. Elisabeth spurns the officer because her old love for Salve prevails.\nP5. Salve leaves his native land in desperation before he can reconcile with Elisabeth.\nP6. Salve sails toward foreign shores after leaving home.\nP7. Salve returns to his old home years later.\nP8. Salve finds that Elisabeth has remained true to him during his absence.\nP9. Salve marries Elisabeth upon his return.\nP10. The thought of Elisabeth's momentary hesitation makes life miserable for both spouses.\nP11. Ten years elapse while Salve and Elisabeth struggle with their marital issues.\nP12. Salve and Elisabeth finally come to a clear understanding of one another.\nP13. Salve and Elisabeth lay the foundation for a happy life together.\nP14. The novel emphasizes the need of implicit confidence and trust in marriage.\n\nAnswer:\nIt appears there is a misunderstanding in the premise of your question: **There is no widely recognized novel titled *The Pilot and His Wife*.**\n\nThis title does not correspond to any major work in English literature, classic or contemporary. It may be one of the following:\n\n1. A confusion with another title, such as:\n   - ***The Pilot*** by James Fenimore Cooper (part of the *Leatherstocking Tales*), which features characters like Natty Bumppo but has no central character known simply as \u201cthe pilot\u201d married to a wife whose story arc resolves in a notable way.\n   - ***Pilot\u2019s Wife*** by Ann Marlowe, a non-fiction memoir about a widow dealing with grief after her husband (a commercial airline captain) dies in a crash. This is not a novel and does have a clear resolution centered on healing and acceptance.\n   - ***The Captain\u2019s Daughter*** or other aviation-themed novels that might be misremembered.\n\n2. A very obscure, self-published, or regional work not included in standard literary databases.\n\n3. A hypothetical or fictional title used in an exam question or creative writing prompt.\n\n### If you meant *Pilot\u2019s Wife* by Ann Marlowe:\n- **Resolution**: The book resolves emotionally rather than plot-wise. Ann Marlowe comes to terms with her husband\u2019s death, rebuilds her life, finds community support, and ultimately begins to heal from profound grief. It ends on a note of cautious optimism and acceptance.\n- **Left Open**: While she heals, the open questions are existential\u2014how one lives after loss without forgetting\u2014and whether closure is truly possible. These remain universal human concerns left unresolved but acknowledged.\n\n### Recommendation:\nPlease double-check the title. If you meant a different novel (e.g., *The Pilot* by James Fenimore Cooper, or perhaps *Outlander*, which features pilots in later books), please provide more details such as:\n- Author\u2019s name\n- Plot summary\n- Characters\u2019 names\n\nI\u2019d be happy to analyze the ending of the correct work once clarified!",
+ "attempts": [
+  {
+   "nudged": false,
+   "reply": "{\n\"P1\": \"absent\",\n\"P2\": \"absent\",\n\"P3\": \"absent\",\n\"P4\": \"absent\",\n\"P5\": \"absent\",\n\"P6\": \"absent\",\n\"P7\": \"absent\",\n\"P8\": \"absent\",\n\"P9\": \"absent\",\n\"P10\": \"absent\",\n\"P11\": \"absent\",\n\"P12\": \"absent\",\n\"P13\": \"absent\",\n\"P14\": \"absent\"\n}",
+   "model": "Qwen3.6-35B-A3B-MTP-UD-Q6_K"
+  }
+ ],
+ "parsed": {
+  "P1": "absent",
+  "P2": "absent",
+  "P3": "absent",
+  "P4": "absent",
+  "P5": "absent",
+  "P6": "absent",
+  "P7": "absent",
+  "P8": "absent",
+  "P9": "absent",
+  "P10": "absent",
+  "P11": "absent",
+  "P12": "absent",
+  "P13": "absent",
+  "P14": "absent"
+ }
+}

@@ -603,6 +603,12 @@ pub(crate) async fn gate_answer_inner(
     let mut text = draft;
     let mut action = ACT_RELEASED;
     let mut retried = false;
+    // Members a multi-member value-span veto refused BY NAME (member-split,
+    // 2026-09-22). Non-empty only on a mixed span — some members supported —
+    // where abstaining would refuse content the veto never judged. The
+    // terminal exits release the answer with [`verification_note`] naming
+    // exactly these, the longform ladder's annotated contract.
+    let mut unsupported_release: Vec<String> = Vec::new();
     let mut final_vp: Option<f64> = None;
     // Why `final_vp` is what it is. A vp of 0.0 from a path the gate
     // never ran (long-form out-of-scope, no input) is NOT a pass —
@@ -709,8 +715,19 @@ pub(crate) async fn gate_answer_inner(
                         // synthesis — the caller decides what replaces
                         // the failed text (typically: keep the prior
                         // verified answer).
-                        text = grounded_abstention(&claim, chunks.len().min(12));
-                        action = ACT_ABSTAINED_NO_RETRY;
+                        if !v.unsupported_values.is_empty() {
+                            // Mixed span: the veto refused a strict subset of
+                            // the answer's specifics. Release the draft with
+                            // the refused members flagged — refusing the
+                            // whole answer would destroy the supported
+                            // members the veto never judged.
+                            action = ACT_ANNOTATED_MARKED;
+                            text =
+                                format!("{text}\n\n{}", verification_note(&v.unsupported_values));
+                        } else {
+                            text = grounded_abstention(&claim, chunks.len().min(12));
+                            action = ACT_ABSTAINED_NO_RETRY;
+                        }
                         emit_gate_progress(
                             progress,
                             NarrationPhase::ClaimCheckComplete {
@@ -735,6 +752,7 @@ pub(crate) async fn gate_answer_inner(
                                 "claim_check_outcome": final_outcome,
                                                 "threshold": tau,
                                                 "mode": "single_claim",
+                                                "unsupported_values": v.unsupported_values,
                                                 "draft": draft_for_meta,
                                             }),
                                 native,
@@ -913,8 +931,21 @@ pub(crate) async fn gate_answer_inner(
                                 Some(v2) => {
                                     final_vp = Some(v2.violation_prob);
                                     final_outcome = Some(v2.outcome);
-                                    text = grounded_abstention(&claim, chunks.len().min(12));
-                                    action = ACT_ABSTAINED;
+                                    if !v2.unsupported_values.is_empty() {
+                                        // Mixed span on the retry: release the
+                                        // retry text with the refused members
+                                        // flagged — same contract as the
+                                        // no-retry exit above.
+                                        unsupported_release = v2.unsupported_values.clone();
+                                        action = ACT_ANNOTATED_MARKED;
+                                        text = format!(
+                                            "{second}\n\n{}",
+                                            verification_note(&v2.unsupported_values)
+                                        );
+                                    } else {
+                                        text = grounded_abstention(&claim, chunks.len().min(12));
+                                        action = ACT_ABSTAINED;
+                                    }
                                     if let Some(rec) = gate_claims.first_mut() {
                                         rec.violation_prob = Some(v2.violation_prob);
                                     }
@@ -1133,6 +1164,7 @@ pub(crate) async fn gate_answer_inner(
                     "claim_check_outcome": final_outcome,
                 "threshold": tau,
                 "mode": "single_claim",
+                "unsupported_values": unsupported_release,
                 "draft": draft_for_meta,
             }),
             native,

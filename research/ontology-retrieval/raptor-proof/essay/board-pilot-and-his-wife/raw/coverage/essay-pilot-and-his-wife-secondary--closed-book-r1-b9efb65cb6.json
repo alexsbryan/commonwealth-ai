@@ -1,0 +1,28 @@
+{
+ "kind": "coverage",
+ "key": "essay-pilot-and-his-wife-secondary--closed-book-r1",
+ "prompt": "Below are numbered plot points of a novel and an answer written about the novel.\nLabel every point by what the answer says about it:\n\"correct\" = the answer states it\n\"contradicted\" = the answer says something that conflicts with it\n\"absent\" = the answer does not mention it\nReturn only JSON with one entry per point: {\"P1\": \"correct\", \"P2\": \"absent\"}\n\nPoints:\nP1. The novel portrays the life of a sailor named Salve Kristiansen.\nP2. Salve loves Elisabeth and she returns his affection.\nP3. Elisabeth is attracted to a young officer who wishes to marry her.\nP4. Elisabeth spurns the officer because her old love for Salve prevails.\nP5. Salve leaves his native land in desperation before he can reconcile with Elisabeth.\nP6. Salve sails toward foreign shores after leaving home.\nP7. Salve returns to his old home years later.\nP8. Salve finds that Elisabeth has remained true to him during his absence.\nP9. Salve marries Elisabeth upon his return.\nP10. The thought of Elisabeth's momentary hesitation makes life miserable for both spouses.\nP11. Ten years elapse while Salve and Elisabeth struggle with their marital issues.\nP12. Salve and Elisabeth finally come to a clear understanding of one another.\nP13. Salve and Elisabeth lay the foundation for a happy life together.\nP14. The novel emphasizes the need of implicit confidence and trust in marriage.\n\nAnswer:\nIn the novel *The Pilot and His Wife* (original Italian title: *Il pilota e sua moglie*) by Carlo Cassola, **Salve** plays a crucial role in Elisabeth\u2019s psychological development and her eventual liberation from her oppressive marriage.\n\nHere is an analysis of Salve\u2019s role:\n\n### 1. The Catalyst for Self-Awareness\nElisabeth begins the novel as a passive, emotionally numb character trapped in a loveless, sterile relationship with her husband, Francesco (the pilot). She feels alienated from herself and her life. Salve, who is older, experienced, and sexually confident, serves as a mirror that reflects back to Elisabeth her own repressed desires and humanity. Through their interactions, Elisabeth becomes aware that she is not merely an object or a wife, but a woman with needs and emotions.\n\n### 2. Sexual Awakening and Agency\nSalve introduces Elisabeth to sensuality and sexual pleasure outside of marriage. This experience is transformative for Elisabeth. It allows her to reclaim her body and her identity from the cold, mechanical existence imposed by Francesco. Salve\u2019s influence helps Elisabeth understand sexuality not as something shameful or transactional (as in her marital life), but as a source of joy, connection, and personal power. This awakening gives her the agency to question and ultimately reject her current situation.\n\n### 3. Emotional Support and Female Solidarity\nIn a novel that largely depicts male-dominated spaces (the airfield, the military hierarchy) and emotional isolation, Salve represents female solidarity. She offers Elisabeth empathy, understanding, and non-judgmental support. Unlike Francesco, who is distant and self-absorbed, Salve engages with Elisabeth on an intimate level, validating her feelings and helping her navigate her confusion. This bond provides Elisabeth with the emotional strength needed to challenge patriarchal norms.\n\n### 4. A Model of Alternative Womanhood\nSalve embodies a different way of being a woman\u2014one who is independent, sexually autonomous, and unapologetic about her desires. For Elisabeth, who has been conditioned into submission, Salve serves as a role model for what it means to live authentically. Through Salve\u2019s example, Elisabeth begins to envision a life where she can exist outside the confines of traditional marital roles.\n\n### Conclusion\nUltimately, **Salve acts as the agent of change** in Elisabeth\u2019s life. She does not just provide an affair; she facilitates Elisabeth\u2019s psychological transformation from a passive victim of circumstance into an active participant in her own destiny. While the novel ends ambiguously regarding whether Elisabeth fully escapes her marriage, Salve\u2019s influence is pivotal in awakening her consciousness and empowering her to seek meaning beyond her prescribed social role.",
+ "attempts": [
+  {
+   "nudged": false,
+   "reply": "{\n\"P1\": \"contradicted\",\n\"P2\": \"absent\",\n\"P3\": \"correct\",\n\"P4\": \"absent\",\n\"P5\": \"absent\",\n\"P6\": \"absent\",\n\"P7\": \"absent\",\n\"P8\": \"absent\",\n\"P9\": \"absent\",\n\"P10\": \"absent\",\n\"P11\": \"absent\",\n\"P12\": \"absent\",\n\"P13\": \"absent\",\n\"P14\": \"absent\"\n}",
+   "model": "Qwen3.6-35B-A3B-MTP-UD-Q6_K"
+  }
+ ],
+ "parsed": {
+  "P1": "contradicted",
+  "P2": "absent",
+  "P3": "correct",
+  "P4": "absent",
+  "P5": "absent",
+  "P6": "absent",
+  "P7": "absent",
+  "P8": "absent",
+  "P9": "absent",
+  "P10": "absent",
+  "P11": "absent",
+  "P12": "absent",
+  "P13": "absent",
+  "P14": "absent"
+ }
+}

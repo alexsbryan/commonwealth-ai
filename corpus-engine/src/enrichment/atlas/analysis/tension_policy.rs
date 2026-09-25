@@ -221,6 +221,20 @@ pub fn drop_non_comparable_pairs(
     report.fields = fields.clone();
     report.claims_considered = claims.len();
 
+    // `same = []`: the author waived comparability. The loops below would
+    // reach the same result — no field to disagree on, so nothing dropped —
+    // but they would log "declared comparability applied" over an empty
+    // field list, which reads as a criterion that found nothing rather than
+    // one that was never asked for. Say which it was (ARCH 1).
+    if fields.is_empty() {
+        tracing::debug!(
+            target: "atlas.tensions",
+            candidates = candidates.len(),
+            "drop_non_comparable_pairs: `same = []` waives comparability — no pair dropped"
+        );
+        return report;
+    }
+
     // Which `attributed_to` targets are named speakers, and therefore may
     // NOT stand in for the subject. Same index the same-speaker filter
     // builds, for the same reason.
@@ -299,14 +313,13 @@ pub fn drop_non_comparable_pairs(
     report
 }
 
-/// The `same` fields to apply: the author's list, or
-/// [`DEFAULT_SAME_FIELDS`] when they declared none.
+/// The `same` fields to apply: the author's list when they wrote one — the
+/// EMPTY list included, which waives the criterion — or
+/// [`DEFAULT_SAME_FIELDS`] when they wrote no `same` key at all.
 fn same_fields(policies: &OntologyPolicies) -> Vec<String> {
-    let declared = &policies.derivation.tension.same;
-    if declared.is_empty() {
-        DEFAULT_SAME_FIELDS.iter().map(|s| s.to_string()).collect()
-    } else {
-        declared.clone()
+    match &policies.derivation.tension.same {
+        Some(declared) => declared.clone(),
+        None => DEFAULT_SAME_FIELDS.iter().map(|s| s.to_string()).collect(),
     }
 }
 
@@ -503,6 +516,48 @@ mod tests {
         assert_eq!(report.by_field.get("subject").copied(), Some(1));
     }
 
+    /// The literary shape: conflict BETWEEN two characters. Two claims with
+    /// different subjects is exactly what the default `same` rules out, so
+    /// until `same` could be declared EMPTY the relation at the centre of a
+    /// novel had no expression. Same fixture twice; the only difference is
+    /// whether the author wrote `same = []`.
+    #[test]
+    fn empty_same_keeps_the_cross_subject_pairs_the_default_drops() {
+        let mut policies = OntologyPolicies::default();
+        policies.shape.types.push(OntologyTypeDecl {
+            name: "conviction".into(),
+            kind: TypeKind::Claim,
+            ..Default::default()
+        });
+        // Two characters, each holding a conviction — different subjects.
+        let claims = vec![
+            claim(1, Some("conviction"), Some(1)),
+            claim(2, Some("conviction"), Some(2)),
+        ];
+
+        let mut default_criterion = vec![pair("cand-0001", 1, 2)];
+        let report = drop_non_comparable_pairs(&mut default_criterion, &claims, &[], &policies);
+        assert!(
+            default_criterion.is_empty(),
+            "the default `same` drops a pair whose subjects differ"
+        );
+        assert_eq!(report.by_field.get("subject").copied(), Some(1));
+
+        policies.derivation.tension.same = Some(Vec::new());
+        let mut waived = vec![pair("cand-0001", 1, 2)];
+        let report = drop_non_comparable_pairs(&mut waived, &claims, &[], &policies);
+        assert_eq!(
+            waived.len(),
+            1,
+            "`same = []` waives comparability; the pair survives to the classifier"
+        );
+        assert_eq!(report.dropped, 0);
+        assert!(
+            report.fields.is_empty(),
+            "the report names the criterion actually applied — none"
+        );
+    }
+
     #[test]
     fn declared_time_field_compares_by_overlap_not_equality() {
         // The governance shape: `same = ["subject", "valid"]`.
@@ -517,7 +572,7 @@ mod tests {
             }],
             ..Default::default()
         });
-        policies.derivation.tension.same = vec!["subject".into(), "valid".into()];
+        policies.derivation.tension.same = Some(vec!["subject".into(), "valid".into()]);
 
         let mut overlapping = claim(1, Some("rule"), Some(1));
         overlapping

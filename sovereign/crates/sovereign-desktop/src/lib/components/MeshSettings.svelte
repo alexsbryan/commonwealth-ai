@@ -31,6 +31,7 @@
   import { meshMembership } from "../stores/meshMembership.svelte";
   import MeshDiagnosticsPanel from "./MeshDiagnosticsPanel.svelte";
   import MeshList from "./MeshList.svelte";
+  import RoomGrants from "./RoomGrants.svelte";
   import type {
     CreateMeshResponse,
     KnownMesh,
@@ -749,6 +750,11 @@
         {joinBox}
       />
     {/if}
+
+    <!-- The room: guest links and their QR. A guest is not a member, so this
+         sits beside the invite card rather than inside it — different
+         credential, different lifetime, different story. -->
+    <RoomGrants />
 
     <!-- Invite card — present whenever the daemon has cached the
          plaintext key. Hidden for legacy meshes (no join_key.secret

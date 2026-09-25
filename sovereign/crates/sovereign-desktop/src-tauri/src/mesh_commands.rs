@@ -744,6 +744,55 @@ pub async fn mesh_media_offers(
     media_offers(&mesh_client(&state)).await
 }
 
+/// `mesh_media_probe(playerUrl)` — one real GET through a media bridge
+/// BEFORE a browser tab is pointed at it. This is the CLI's documented
+/// pattern ("a caller does one real GET / through the bridge if it wants
+/// an HTTP status rather than a port"), which the desktop skipped:
+/// clicking a member's library opened the bridge URL blind, and a member
+/// whose origin is down served the browser an empty reply (2026-09-22,
+/// RuggedFox — dial succeeds, far side closes without a byte, nothing in
+/// the log). Loopback-http only, so this can never become a general
+/// fetch gadget pointed at arbitrary hosts.
+#[tauri::command]
+pub async fn mesh_media_probe(player_url: String) -> Result<u16, String> {
+    probe_media_url(&player_url).await
+}
+
+/// The loopback trust rule `player_url` itself enforces on the daemon
+/// side, restated here so the probe cannot be aimed anywhere the bridge
+/// contract would not have handed out.
+fn is_loopback_http(url: &str) -> bool {
+    match url.strip_prefix("http://") {
+        Some(rest) => matches!(
+            rest.split(':').next().unwrap_or(""),
+            "127.0.0.1" | "localhost" | "[::1]"
+        ),
+        None => false,
+    }
+}
+
+async fn probe_media_url(url: &str) -> Result<u16, String> {
+    if !is_loopback_http(url) {
+        return Err(format!(
+            "refusing to probe `{url}` — only loopback http bridge URLs are probeable"
+        ));
+    }
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+        .map_err(|e| e.to_string())?;
+    match client.get(url).send().await {
+        // Any HTTP status is success — the question was "does a library
+        // answer", not "is it healthy"; a 401 from the origin still beats
+        // a browser tab that never loads.
+        Ok(resp) => Ok(resp.status().as_u16()),
+        Err(e) => Err(format!(
+            "the bridge connected but the library did not answer ({e}) — \
+             the member's media origin may be down on their side"
+        )),
+    }
+}
+
 #[cfg(test)]
 mod media_offers_tests;
 

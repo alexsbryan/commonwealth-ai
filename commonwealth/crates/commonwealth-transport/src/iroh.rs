@@ -573,7 +573,7 @@ impl HttpBridge {
                             return;
                         }
                     };
-                    pump(tcp, send, recv).await;
+                    pump(tcp, send, recv, PumpSide::Bridge, peer_label.clone(), alpn).await;
                 });
             }
         });
@@ -872,21 +872,92 @@ pub fn preferred_bridge_port(pubkey: &NodePubkey, alpn: &[u8]) -> u16 {
     20_000 + (h % 12_768) as u16
 }
 
+/// Copy with a byte count that survives an error on the write side:
+/// `tokio::io::copy` returns `Err` with the partial count lost, and a far
+/// end that RESETS the stream after reading would otherwise look like
+/// "the client sent nothing" — exactly the case the zero-answer warn
+/// exists to name.
+async fn copy_count<R, W>(mut r: R, mut w: W) -> u64
+where
+    R: tokio::io::AsyncRead + Unpin,
+    W: tokio::io::AsyncWrite + Unpin,
+{
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let mut buf = [0u8; 8192];
+    let mut total: u64 = 0;
+    loop {
+        match r.read(&mut buf).await {
+            Ok(0) => break,
+            Ok(n) => {
+                if w.write_all(&buf[..n]).await.is_err() {
+                    break;
+                }
+                total += n as u64;
+            }
+            Err(_) => break,
+        }
+    }
+    let _ = w.shutdown().await;
+    total
+}
+
+/// Which end of a tunnel `pump` is splicing — the warn's direction and
+/// wording depend on it. On the BRIDGE side the client's request flows
+/// tcp→iroh and the answer iroh→tcp; on the ACCEPTOR side it is the
+/// mirror, and "nothing came back" indicts the LOCAL forward target.
+#[derive(Clone, Copy)]
+enum PumpSide {
+    Bridge,
+    Acceptor,
+}
+
 async fn pump(
     tcp: tokio::net::TcpStream,
     mut send: iroh::endpoint::SendStream,
     mut recv: iroh::endpoint::RecvStream,
+    side: PumpSide,
+    peer: String,
+    alpn: &[u8],
 ) {
     let (mut tcp_r, mut tcp_w) = tcp.into_split();
-    let up = async {
-        let _ = tokio::io::copy(&mut tcp_r, &mut send).await;
-        let _ = send.finish();
-    };
-    let down = async {
-        let _ = tokio::io::copy(&mut recv, &mut tcp_w).await;
-        let _ = tokio::io::AsyncWriteExt::shutdown(&mut tcp_w).await;
-    };
-    tokio::join!(up, down);
+    // Bytes counted per direction so a tunnel that swallows a request can be
+    // NAMED. A far side that accepts the stream, reads the bytes, and closes
+    // (or resets) without answering is the silent signature of a down origin
+    // (observed 2026-09-22: a media bridge served every caller "empty reply
+    // from server" with zero log lines on EITHER side — the dial succeeds,
+    // so the existing dial/open_bi warns never fire).
+    let (request, answer) =
+        tokio::join!(async { copy_count(&mut tcp_r, &mut send).await }, async {
+            copy_count(&mut recv, &mut tcp_w).await
+        },);
+    match side {
+        PumpSide::Bridge => {
+            // request = client→peer, answer = peer→client.
+            if request > 0 && answer == 0 {
+                tracing::warn!(
+                    target: "transport",
+                    peer = %peer,
+                    alpn = %String::from_utf8_lossy(alpn),
+                    request_bytes = request,
+                    "iroh bridge: the peer accepted the stream but answered nothing — \
+                     its origin or forward is down on the far side"
+                );
+            }
+        }
+        PumpSide::Acceptor => {
+            // request = dialer→origin, answer = origin→dialer.
+            if request > 0 && answer == 0 {
+                tracing::warn!(
+                    target: "transport",
+                    dialer = %peer,
+                    alpn = %String::from_utf8_lossy(alpn),
+                    request_bytes = request,
+                    "iroh acceptor: the local forward accepted the request but the \
+                     origin answered nothing — is the forwarded-to listener running?"
+                );
+            }
+        }
+    }
 }
 
 #[async_trait::async_trait]
@@ -1098,6 +1169,10 @@ impl IrohAcceptor {
                                         Streams::ByName(Arc::clone(m), Arc::clone(h))
                                     }
                                 };
+                                // The pump's zero-answer warn names the ALPN;
+                                // clone it so the next accepted stream still
+                                // has it.
+                                let alpn = alpn.clone();
                                 tokio::spawn(async move {
                                     let (forward_to, identity) = match streams {
                                         Streams::ByName(apps, headers) => {
@@ -1115,7 +1190,15 @@ impl IrohAcceptor {
                                             // bridge side — see HttpBridge::spawn.
                                             tcp.set_nodelay(true).ok();
                                             match identity {
-                                                None => pump(tcp, send, recv).await,
+                                        None => pump(
+                                            tcp,
+                                            send,
+                                            recv,
+                                            PumpSide::Acceptor,
+                                            hex::encode(dialer.0),
+                                            &alpn,
+                                        )
+                                        .await,
                                                 Some(headers) => {
                                                     crate::iroh_identity_forward::pump_with_identity(
                                                         tcp, send, recv, headers,

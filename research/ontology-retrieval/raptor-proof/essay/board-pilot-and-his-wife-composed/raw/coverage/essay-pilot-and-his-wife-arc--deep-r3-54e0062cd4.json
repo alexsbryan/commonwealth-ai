@@ -1,0 +1,28 @@
+{
+ "kind": "coverage",
+ "key": "essay-pilot-and-his-wife-arc--deep-r3",
+ "prompt": "Below are numbered plot points of a novel and an answer written about the novel.\nLabel every point by what the answer says about it:\n\"correct\" = the answer states it\n\"contradicted\" = the answer says something that conflicts with it\n\"absent\" = the answer does not mention it\nReturn only JSON with one entry per point: {\"P1\": \"correct\", \"P2\": \"absent\"}\n\nPoints:\nP1. The novel portrays the life of a sailor named Salve Kristiansen.\nP2. Salve loves Elisabeth and she returns his affection.\nP3. Elisabeth is attracted to a young officer who wishes to marry her.\nP4. Elisabeth spurns the officer because her old love for Salve prevails.\nP5. Salve leaves his native land in desperation before he can reconcile with Elisabeth.\nP6. Salve sails toward foreign shores after leaving home.\nP7. Salve returns to his old home years later.\nP8. Salve finds that Elisabeth has remained true to him during his absence.\nP9. Salve marries Elisabeth upon his return.\nP10. The thought of Elisabeth's momentary hesitation makes life miserable for both spouses.\nP11. Ten years elapse while Salve and Elisabeth struggle with their marital issues.\nP12. Salve and Elisabeth finally come to a clear understanding of one another.\nP13. Salve and Elisabeth lay the foundation for a happy life together.\nP14. The novel emphasizes the need of implicit confidence and trust in marriage.\n\nAnswer:\nThe novel opens with Salve Kristiansen, a celebrated but reclusive pilot from Arendal who has retreated to Merdoe due to his volatile temper and the pressure of Captain Beck's rise in the town. His wife, Elizabeth, endures years of emotional suppression as he becomes increasingly tyrannical at home, often fleeing back to sea after minor domestic slights. The narrative then shifts focus to introduce Carl Beck, a wealthy shipbuilder whose charming exterior masks an extraordinary vanity and social dependence; his cold marriage to Fru Beck highlights the contrast between their public adoration and private reserve.\n\nThe central plot arc converges when Salve travels to Amsterdam for timber trade while still married to Elizabeth. There, he encounters her again unexpectedly at \"The Star,\" a pub she runs with great pride despite his earlier abandonment of their relationship. Their reunion is marked by a profound emotional distance; Salve feels crushed by her newfound independence and dignity, viewing himself as petty compared to her grandeur, which deepens his despair rather than reconciling them. This encounter triggers a desperate vow in Salve's mind that \"That dear head shall be mine,\" leading him back to Arendal to plead for forgiveness and marriage once more.\n\nHowever, the novel does not conclude with this immediate reconciliation. The final provided passages describe the domestic dynamics of the Becks and Elizabeth's internal struggle against Salve's tyranny, hinting at future developments but stopping before revealing the ultimate resolution of their tragic history or the fate of Carl Beck's cold marriage. Not in your sources, but from general knowledge: the story concludes tragically with both couples separated by death; Salve dies alone after a failed attempt to reconcile, while Fru Beck eventually succumbs to her own heartbreak following Carl's infidelity. Want me to read any specific section on request?\n\n---\n*Verification note: these statements could not be confirmed against your sources \u2014 treat them as unverified:*\n- The story concludes tragically with both couples separated by death, including Salve dying alone after a failed reconciliation attempt.\n- The narrative then shifts focus to introduce Carl Beck, a wealthy shipbuilder whose charming exterior masks an extraordinary vanity and social dependence; his c\u2026\n- That dear head shall be mine,\n- Not in your sources, but from general knowledge: the story concludes tragically with both couples separated by death; Salve dies alone after a failed attempt to",
+ "attempts": [
+  {
+   "nudged": false,
+   "reply": "{\n\"P1\": \"correct\",\n\"P2\": \"contradicted\",\n\"P3\": \"absent\",\n\"P4\": \"contradicted\",\n\"P5\": \"correct\",\n\"P6\": \"correct\",\n\"P7\": \"correct\",\n\"P8\": \"contradicted\",\n\"P9\": \"contradicted\",\n\"P10\": \"absent\",\n\"P11\": \"absent\",\n\"P12\": \"contradicted\",\n\"P13\": \"contradicted\",\n\"P14\": \"absent\"\n}",
+   "model": "Qwen3.6-35B-A3B-MTP-UD-Q6_K"
+  }
+ ],
+ "parsed": {
+  "P1": "correct",
+  "P2": "contradicted",
+  "P3": "absent",
+  "P4": "contradicted",
+  "P5": "correct",
+  "P6": "correct",
+  "P7": "correct",
+  "P8": "contradicted",
+  "P9": "contradicted",
+  "P10": "absent",
+  "P11": "absent",
+  "P12": "contradicted",
+  "P13": "contradicted",
+  "P14": "absent"
+ }
+}

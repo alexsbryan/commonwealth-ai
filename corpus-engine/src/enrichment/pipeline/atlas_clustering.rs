@@ -843,6 +843,7 @@ mod tests {
                 participants: vec!["Jane".into(), "Rochester".into()],
                 label: label.into(),
                 anchor: String::new(),
+                state_type: None,
             }
         }
         let sections = vec![SectionExtraction {

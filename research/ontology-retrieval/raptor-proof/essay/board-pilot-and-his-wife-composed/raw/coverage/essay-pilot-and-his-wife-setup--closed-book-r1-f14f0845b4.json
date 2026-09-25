@@ -1,0 +1,28 @@
+{
+ "kind": "coverage",
+ "key": "essay-pilot-and-his-wife-setup--closed-book-r1",
+ "prompt": "Below are numbered plot points of a novel and an answer written about the novel.\nLabel every point by what the answer says about it:\n\"correct\" = the answer states it\n\"contradicted\" = the answer says something that conflicts with it\n\"absent\" = the answer does not mention it\nReturn only JSON with one entry per point: {\"P1\": \"correct\", \"P2\": \"absent\"}\n\nPoints:\nP1. The novel portrays the life of a sailor named Salve Kristiansen.\nP2. Salve loves Elisabeth and she returns his affection.\nP3. Elisabeth is attracted to a young officer who wishes to marry her.\nP4. Elisabeth spurns the officer because her old love for Salve prevails.\nP5. Salve leaves his native land in desperation before he can reconcile with Elisabeth.\nP6. Salve sails toward foreign shores after leaving home.\nP7. Salve returns to his old home years later.\nP8. Salve finds that Elisabeth has remained true to him during his absence.\nP9. Salve marries Elisabeth upon his return.\nP10. The thought of Elisabeth's momentary hesitation makes life miserable for both spouses.\nP11. Ten years elapse while Salve and Elisabeth struggle with their marital issues.\nP12. Salve and Elisabeth finally come to a clear understanding of one another.\nP13. Salve and Elisabeth lay the foundation for a happy life together.\nP14. The novel emphasizes the need of implicit confidence and trust in marriage.\n\nAnswer:\nIt appears there is a misunderstanding regarding the title of the novel. **There is no widely recognized classic or contemporary literary work titled *The Pilot and His Wife*.**\n\nHowever, this query likely refers to one of two possibilities:\n\n1.  **\"The Pilgrim's Progress\"** by John Bunyan \u2013 A very common allegorical novel where early events (such as Christian\u2019s departure from the City of Destruction) set up later trials and spiritual milestones.\n2.  **\"Moby-Dick\"** by Herman Melville \u2013 Sometimes confused due to maritime themes; early chapters establish Ishmael\u2019s worldview and Queequeg\u2019s friendship, which foreshadow later encounters with Ahab and the whale.\n3.  **A lesser-known or self-published work**, or a misremembered title such as *\"The Pilot\"* (a 19th-century novel by James Fenimore Cooper? No, Cooper wrote *The Pilot*, but it is about Captain Boatswain Bosun, not \"his wife\" in a central romantic plot that defines the structure).\n\nGiven the phrasing \u201c*The Pilot and His Wife*,\u201d it is most likely a confusion with **\"The Pilgrim's Progress\"** or possibly **\"Wives and Daughters\"** (Elizabeth Gaskell) mixed with nautical terms, but none fit perfectly.\n\nAlternatively, you may be referring to **\"The Old Man and the Sea\"** by Ernest Hemingway, where early events (Santiago\u2019s bad luck, his relationship with the boy, Manolin) set up the later struggle with the marlin.\n\n### If You Meant *\"The Pilgrim's Progress\"*:\n- **Early Events:** Christian receives his burden from Evangelist and leaves the City of Destruction. He meets Help at the Cross, shedding his burden temporarily.\n- **Setup for Later Events:** These establish the allegorical framework: sin/burden \u2192 repentance/cross \u2192 ongoing spiritual warfare. The initial ease after conversion foreshadows later struggles in Vanity Fair and Slough of Despond, teaching that faith is a continuous journey, not a one-time event.\n\n### If You Meant *\"Moby-Dick\"*:\n- **Early Events:** Ishmael\u2019s philosophical musings on whaling; his cohabitation with Queequeg; boarding the *Pequod*.\n- **Setup for Later Events:** Establishes themes of fate, obsession, and racial harmony/conflict. Ishmael\u2019s survival (the final chapter) is set up by early hints that he is an observer rather than the central tragic figure like Ahab.\n\n---\n\n**Please clarify if you meant a different title.** For example:\n- Did you mean **\"The Pilot\"** by James Fenimore Cooper?\n- Or perhaps **\"Rebecca\"** (*\"I am not in love with my husband...\"* \u2013 no pilot)?\n- Or **\"Life of Pi\"**?\n\nIf you can provide the correct author or more plot details, I can give a precise analysis of how early events foreshadow later ones.",
+ "attempts": [
+  {
+   "nudged": false,
+   "reply": "{\n\"P1\": \"absent\",\n\"P2\": \"absent\",\n\"P3\": \"absent\",\n\"P4\": \"absent\",\n\"P5\": \"absent\",\n\"P6\": \"absent\",\n\"P7\": \"absent\",\n\"P8\": \"absent\",\n\"P9\": \"absent\",\n\"P10\": \"absent\",\n\"P11\": \"absent\",\n\"P12\": \"absent\",\n\"P13\": \"absent\",\n\"P14\": \"absent\"\n}",
+   "model": "Qwen3.6-35B-A3B-MTP-UD-Q6_K"
+  }
+ ],
+ "parsed": {
+  "P1": "absent",
+  "P2": "absent",
+  "P3": "absent",
+  "P4": "absent",
+  "P5": "absent",
+  "P6": "absent",
+  "P7": "absent",
+  "P8": "absent",
+  "P9": "absent",
+  "P10": "absent",
+  "P11": "absent",
+  "P12": "absent",
+  "P13": "absent",
+  "P14": "absent"
+ }
+}

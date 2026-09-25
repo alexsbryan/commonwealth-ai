@@ -1,0 +1,101 @@
+svrnmesh: bridged 5 legacy SOVEREIGN_* env var(s) to SVRNMESH_* (the SOVEREIGN_* prefix is deprecated — update your scripts)
+loaded bank `ontology-proof-ans-v1` — 47 questions, target corpus `ei7-ans`
+Daemon: http://127.0.0.1:9841
+Chat model:  commonwealth/primary
+Embed model: qwen-embedding-0.6b
+Database:    /Users/alexsbryan/.sovereign/sovereign.db
+Indexes:     /Users/alexsbryan/.svrnmesh/indexes
+Temperature: 0 (override)
+Corpora:     alignment (4090 chunks), arch-principles (58 chunks), arch-tour-fixture (40 chunks), atos-experiment-oicp-types (55 chunks), brothers-karamazov-book-1 (41 chunks), chaos-saltgrass (30 chunks), chaos-secret-agent (316 chunks), climb-ostrom (5 chunks), commonwealth (2590 chunks), commonwealth-ai-arch-principles (72 chunks), commonwealth-ai-system-overview (60 chunks), conversation-history (91 chunks), conversations-anthropic (16404 chunks), conversations-personal (267 chunks), corpus-engine (6252 chunks), drift-target (0 chunks), e2e-notebook (2 chunks), ei7-ans (1093 chunks), ei7-recensus-fineprint (1870 chunks), enron-sample-multi-tiny (900 chunks), enron-sample-multi-wide (8829 chunks), enron-sample-tiny (468 chunks), federalist-starter (31 chunks), folder-fixture-vault-8a83955f975c (111 chunks), folder-governance-corpus-bf503493df46 (0 chunks), institutional-notes (9 chunks), maple-house (24 chunks), obsidian-vault-959ee8a8f330 (3175 chunks), oicp-types (76 chunks), proxy-cik0000012927 (121 chunks), proxy-cik0000034088 (311 chunks), qc-arch-tour-01500518 (40 chunks), qc-arch-tour-250f6f45 (40 chunks), qc-arch-tour-4dd212fb (40 chunks), qc-arch-tour-52c92f2d (40 chunks), qc-arch-tour-695ffb90 (40 chunks), qc-arch-tour-6c7947a7 (40 chunks), qc-arch-tour-8899c85d (40 chunks), qc-arch-tour-adhoc (40 chunks), qc-arch-tour-d1255ea4 (40 chunks), qc-probe (40 chunks), raptor-eagle-cliff (254 chunks), raptor-pilot-and-his-wife (244 chunks), raptor-pilot-and-his-wife-composed (244 chunks), sec-cik0000320193 (115 chunks), sep (187967 chunks), sovereign (15352 chunks), sovereign-cli (1218 chunks), spike-fineprint-census (699 chunks), spike-fineprint-census-pod (699 chunks), system-overview (57 chunks), tokei (308 chunks), tokei-readme (25 chunks), uap-blue-book (710 chunks), uap-blue-book-index (10750 chunks), watched-9ef2f912ea2e (1530 chunks), watched-fixture-495a8a964229 (10 chunks), wikipedia (2029882 chunks), wikipedia-newsworthy (61 chunks)
+Tools:       wiring
+Tools:       no per-user switches on this host
+Tools:       core-turn: 6 tools
+Tools:       web: 1 tools
+Tools:       knowledge-front-door: 2 tools, withheld knowledge_lookup:auto-escalate (the operator has not opted in to automatic web escalation)
+Tools:       wikipedia: 1 tools
+Tools:       shell: 1 tools
+Tools:       11 registered
+Router:      assembling classifier stack
+Router classifier stack: embed=true scope=true effort=true current_info=true
+Lane:        gathering enrichment sources
+Lane scope:  sealed to `ei7-ans`
+[2m2026-09-22T19:34:37.600088Z[0m [32m INFO[0m atlas-context: scanning indexes dir for atlases [3mcandidate_count[0m[2m=[0m1821
+[2m2026-09-22T19:34:37.667155Z[0m [32m INFO[0m atlas-context: init complete (graphs without a loaded context parse on first use) [3mcontexts[0m[2m=[0m0 [3mgraphs[0m[2m=[0m0 [3mgraphs_available[0m[2m=[0m1821
+Atlas: 0 corpus context(s) loaded from cache
+Meta-atlas:  not loaded (lane spans one corpus)
+Bridge:      not loaded (lane spans one corpus)
+synth mode — driving full chat pipeline. This will take ~one chat-completion per question; sit tight.
+isolation mode — retrieval scoped to corpus `ei7-ans`
+[router] "Which mints are represented among the coins of the" → KnowledgeQuery (embed: sim=0.894 margin=0.016 nearest="Who painted Guernica?" scope=None effort=None)
+[2m2026-09-22T19:34:44.315984Z[0m [32m INFO[0m atlas-context: bag built from ANN seed table [3mcorpus[0m[2m=[0m"ei7-ans" [3mentries[0m[2m=[0m3493
+[2m2026-09-22T19:34:44.316038Z[0m [32m INFO[0m atlas-graph: loaded [3mcorpus[0m[2m=[0m"ei7-ans" [3matoms[0m[2m=[0m4091 [3medges[0m[2m=[0m3309 [3mload_ms[0m[2m=[0m134
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Which mints are represented among the coins of the" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Which mints are represented among the coins of the" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Which mints are represented among the coins of the" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Which mints are represented among the coins of the" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Which coin denominations are represented in the Si" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Which mints are represented among the coins of the" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Which mints are represented among the coins of the" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Which mints are represented among the coins of the" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] "Which mints are represented among the coins of the" → KnowledgeQuery (embed: sim=0.894 margin=0.015 nearest="Who painted Guernica?" scope=None effort=None)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Which mints are represented among the coins of the" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Which mints are represented among the coins of the" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Which mints are represented among the coins of the" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Which mints are represented among the coins of the" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] "Which mints are represented among the coins of the" → KnowledgeQuery (embed: sim=0.890 margin=0.018 nearest="Who painted Guernica?" scope=None effort=None)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Which mints are represented among the coins of the" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Which mints are represented among the coins of the" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] "Which mints are represented among the coins of the" → KnowledgeQuery (embed: sim=0.882 margin=0.024 nearest="Who painted Guernica?" scope=None effort=None)
+[router] "Which mints are represented among the coins of the" → KnowledgeQuery (embed: sim=0.886 margin=0.021 nearest="Who painted Guernica?" scope=None effort=None)
+[router] "Which mints are represented among the coins of the" → KnowledgeQuery (embed: sim=0.882 margin=0.020 nearest="Who painted Guernica?" scope=None effort=None)
+[router] "Which mints are represented among the coins of the" → KnowledgeQuery (embed: sim=0.881 margin=0.021 nearest="Who painted Guernica?" scope=None effort=None)
+[router] "Which mints are represented among the coins of the" → KnowledgeQuery (embed: sim=0.882 margin=0.021 nearest="Who painted Guernica?" scope=None effort=None)
+[router] "Which mints are represented among the coins of the" → KnowledgeQuery (embed: sim=0.884 margin=0.019 nearest="Who painted Guernica?" scope=None effort=None)
+[router] "Which mints are represented among the coins of the" → KnowledgeQuery (embed: sim=0.887 margin=0.020 nearest="Who painted Guernica?" scope=None effort=None)
+[router] "Which mints are represented among the coins of the" → KnowledgeQuery (embed: sim=0.895 margin=0.017 nearest="Who painted Guernica?" scope=None effort=None)
+[router] "Which mints are represented among the coins of the" → KnowledgeQuery (embed: sim=0.890 margin=0.018 nearest="Who painted Guernica?" scope=None effort=None)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Which mints are represented among the coins of the" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] "Which mints are represented among the coins of the" → KnowledgeQuery (embed: sim=0.905 margin=0.015 nearest="Who painted Guernica?" scope=None effort=None)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Which mints are represented among the coins of the" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Which mints are represented among the coins of the" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] "Which mints are represented among the coins of the" → KnowledgeQuery (embed: sim=0.916 margin=0.019 nearest="Who painted Guernica?" scope=None effort=None)
+[router] "Which mints are represented among the coins of the" → KnowledgeQuery (embed: sim=0.890 margin=0.024 nearest="Who painted Guernica?" scope=None effort=None)
+[router] "When did the American Numismatic Society finally a" → KnowledgeQuery (embed: sim=0.924 margin=0.027 nearest="Who attended the Yalta Conference?" scope=None effort=None)
+[router] "In Thompson's study of the Agrinion hoard, how man" → KnowledgeQuery (embed: sim=0.901 margin=0.023 nearest="What year did Einstein publish his special relativity paper?" scope=None effort=None)
+[router] "By what modern name does Newell call the island on" → KnowledgeQuery (embed: sim=0.923 margin=0.018 nearest="What year did Einstein publish his special relativity paper?" scope=None effort=None)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "In what kind of containers does Newell conclude th" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Who first brought the Demanhur hoard to Newell's a" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "According to Dattari's letter, into how many parts" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] "In Troxell's study of the Amphipolis Alexander tet" → KnowledgeQuery (embed: sim=0.880 margin=0.016 nearest="How does Ostrom characterize successful commons institutions?" scope=None effort=None)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "In the pattern Newell established for the Alexande" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] "How many Bœotian, Sicyonian and Æginetan coins wer" → KnowledgeQuery (embed: sim=0.889 margin=0.024 nearest="What year did Einstein publish his special relativity paper?" scope=None effort=None)
+[router] "When was the Andritsaena hoard offered for sale by" → KnowledgeQuery (embed: sim=0.893 margin=0.031 nearest="What year did Einstein publish his special relativity paper?" scope=None effort=None)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "With which famous gold object, now in Boston, did " → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "To what does Newell attribute the peculiar oxidati" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+[router] "About how many staters is the hoard recorded by St" → DeepQuery (coarse=REASONING, confidence=1.00)
+[router] "When was the letter written in which the ANS's cor" → KnowledgeQuery (embed: sim=0.916 margin=0.022 nearest="What year did Einstein publish his special relativity paper?" scope=None effort=None)
+[router] "How did Naville judge the Pozzi Collection stater " → DeepQuery (coarse=REASONING, confidence=1.00)
+wrote run JSON to research/ontology-retrieval/ontology-proof/ans/runs-coverage-first/run-1/eval.json

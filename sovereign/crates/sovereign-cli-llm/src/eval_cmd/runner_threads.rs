@@ -305,6 +305,11 @@ async fn run_one_turn(
                 .unwrap_or("")
                 .to_string(),
             source: c.get("source").and_then(|v| v.as_str()).map(str::to_string),
+            in_prompt: c.get("in_prompt").and_then(|v| v.as_bool()),
+            prompt_text: c
+                .get("prompt_text")
+                .and_then(|v| v.as_str())
+                .map(str::to_string),
         })
         .collect();
 

@@ -164,7 +164,20 @@ impl AtlasObserver {
             self.repo_root.clone(),
             self.current_branch.clone(),
         ) {
-            Ok(s) => Some(s),
+            Ok(s) => {
+                // Mirror `declare_scope`: the session row is reused across a
+                // long-lived observer, so the branch it was born with goes
+                // stale after a `git switch`, and every observation then
+                // classifies against the wrong branch (2026-09-23). The repo
+                // is the source; refresh on change, warn and continue on
+                // failure (an observation is still worth recording).
+                if let Some(branch) = sovereign_contracts::git::current_branch(&self.repo_root) {
+                    if let Err(e) = self.store.refresh_session_branch(s.session_id, &branch) {
+                        tracing::warn!(error = %e, "work_atlas:observer branch refresh failed");
+                    }
+                }
+                Some(s)
+            }
             Err(e) => {
                 tracing::warn!(error = %e, "work_atlas:observer ambient session failed");
                 None

@@ -66,6 +66,7 @@ use sovereign_tools::conv_tiered_provider::{
 };
 
 use crate::chat_cmd::bootstrap::SplitInferenceProvider;
+use crate::enrich_cmd::raptor_census::{census, census_refusal};
 use sovereign_cli_shared::help;
 
 /// Parsed `enrich raptor` invocation.
@@ -481,6 +482,23 @@ pub async fn cmd_raptor(args: &[String]) -> i32 {
     let mut stale_rebuilt = 0usize;
     let mut empty = 0usize;
     let mut nodes_total = 0usize;
+    // Which mechanism actually wrote each persisted summary, counted from
+    // the nodes' own `summarizer_model` stamps. In `Abstractive` mode
+    // extractive is the FALLBACK path (raptor_atlas.rs: LLM error, parse
+    // failure, or a summary the verifier fails), and until 2026-09-21
+    // nothing counted how often it fired: `raptor-pilot-and-his-wife`
+    // persisted 14 nodes of which 13 were verbatim extraction — both
+    // level-1 nodes among them — and this command printed
+    // "documents built: 1 · nodes persisted: 14" and exited 0. Two RAPTOR
+    // boards were read off that tree before the stamps were looked at.
+    let mut abstractive_nodes = 0usize;
+    let mut extractive_nodes = 0usize;
+    // Documents whose persisted nodes could not be READ. Held apart from the
+    // two counts because a failed read is not evidence of anything: folding it
+    // in as zero-extractive would let a store error certify a tree.
+    let mut census_unreadable = 0usize;
+    let abstractive_requested =
+        parsed.summary_mode == sovereign_tools::raptor_atlas::SummaryMode::Abstractive;
 
     for (idx, (doc_id, _)) in docs.into_iter().enumerate() {
         // Doc-level resume. The per-doc RAPTOR checkpoint shares ONE dir
@@ -490,10 +508,25 @@ pub async fn cmd_raptor(args: &[String]) -> i32 {
         // build restart-cheap: a re-launch flies past completed docs and
         // picks up where it stopped. `--force` rebuilds regardless.
         if !parsed.force {
-            let existing = verify_store
+            let existing = match verify_store
                 .list_conv_raptor_nodes(&parsed.corpus_id, &doc_id)
                 .await
-                .unwrap_or_default();
+            {
+                Ok(n) => n,
+                Err(e) => {
+                    // Resume semantics are unchanged (an unreadable document
+                    // falls through to rebuild, as `unwrap_or_default` did),
+                    // but the census must not treat a failed READ as "zero
+                    // extractive nodes" — that is a silent substitution in the
+                    // input to a gate, and it would certify a tree nobody read.
+                    census_unreadable += 1;
+                    tracing::warn!(
+                        doc = %doc_id, error = %e,
+                        "raptor: node read failed; the summariser census cannot judge this document"
+                    );
+                    Vec::new()
+                }
+            };
             if !existing.is_empty() {
                 if let Some((current_pv, stem)) = &expected {
                     // --refresh-stale: rebuild exactly the documents
@@ -536,6 +569,7 @@ pub async fn cmd_raptor(args: &[String]) -> i32 {
                         }
                         None => {
                             fresh += 1;
+                            census(&existing, &mut abstractive_nodes, &mut extractive_nodes);
                             continue;
                         }
                     }
@@ -546,6 +580,13 @@ pub async fn cmd_raptor(args: &[String]) -> i32 {
                         );
                     }
                     resumed += 1;
+                    // A RESUMED tree is the one most likely to be stale
+                    // extraction: `build_raptor_atlas_with_checkpoint` treats a
+                    // checkpoint with `completed_at` set as "skipping LLM
+                    // build", so a tree that fell back wholesale once replays
+                    // in 0.0s forever after. Censusing only what this run BUILT
+                    // would let exactly that case pass the gate below.
+                    census(&existing, &mut abstractive_nodes, &mut extractive_nodes);
                     continue;
                 }
             }
@@ -628,11 +669,27 @@ pub async fn cmd_raptor(args: &[String]) -> i32 {
             .await
         {
             Ok(()) => {
-                let node_count = verify_store
+                // These rows were already read for `node_count`; the census
+                // takes the stamps off the same read rather than re-querying.
+                let persisted = match verify_store
                     .list_conv_raptor_nodes(&parsed.corpus_id, &doc_id)
                     .await
-                    .map(|n| n.len())
-                    .unwrap_or(0);
+                {
+                    Ok(n) => n,
+                    Err(e) => {
+                        // Same rule as the resume path: an unread document is
+                        // not a document with no extractive nodes.
+                        census_unreadable += 1;
+                        tracing::warn!(
+                            doc = %doc_id, error = %e,
+                            "raptor: node read failed; the summariser census cannot judge this document"
+                        );
+                        Vec::new()
+                    }
+                };
+                let node_count = persisted.len();
+                let (_, doc_extractive) =
+                    census(&persisted, &mut abstractive_nodes, &mut extractive_nodes);
                 let furniture_note = if dropped > 0 {
                     format!(" (-{dropped} furniture)")
                 } else {
@@ -656,8 +713,17 @@ pub async fn cmd_raptor(args: &[String]) -> i32 {
                 } else {
                     nodes_total += node_count;
                     built += 1;
+                    // An abstractive run that fell back reports it HERE, per
+                    // document, not only in the summary: on a multi-day pass
+                    // the summary arrives hours after the document whose
+                    // summariser started failing.
+                    let fallback_note = if abstractive_requested && doc_extractive > 0 {
+                        format!(" · {doc_extractive}/{node_count} extractive fallback")
+                    } else {
+                        String::new()
+                    };
                     println!(
-                        "  [{}/{total_docs}] {doc_id}  {kept} chunks{furniture_note} · {} · {node_count} nodes · {:.1}s",
+                        "  [{}/{total_docs}] {doc_id}  {kept} chunks{furniture_note} · {} · {node_count} nodes{fallback_note} · {:.1}s",
                         idx + 1,
                         bucket.label(),
                         t.elapsed().as_secs_f64(),
@@ -694,6 +760,9 @@ pub async fn cmd_raptor(args: &[String]) -> i32 {
         "  nodes persisted:  {nodes_total}  (conv_raptor_nodes, corpus_id='{}')",
         parsed.corpus_id
     );
+    if abstractive_requested && (abstractive_nodes + extractive_nodes) > 0 {
+        println!("  summarised by a model: {abstractive_nodes}  ·  extractive fallback: {extractive_nodes}");
+    }
     println!("  elapsed:          {:.1}s", elapsed.as_secs_f64());
     if built > 0 {
         println!(
@@ -749,6 +818,20 @@ pub async fn cmd_raptor(args: &[String]) -> i32 {
     // shouldn't sink a multi-day pass.
     if empty > 0 || (built == 0 && failed > 0) {
         return 1;
+    }
+    // The summariser census's verdict. Policy and wording live beside the
+    // counting in `raptor_census`, so the bar exists once.
+    if abstractive_requested {
+        if let Some(msg) = census_refusal(
+            &parsed.corpus_id,
+            abstractive_nodes,
+            extractive_nodes,
+            census_unreadable,
+            &index_path,
+        ) {
+            eprintln!("\n{msg}");
+            return 1;
+        }
     }
     0
 }

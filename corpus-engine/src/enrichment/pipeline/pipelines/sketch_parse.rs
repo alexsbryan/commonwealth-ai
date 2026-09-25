@@ -107,7 +107,7 @@ impl RawSectionExtraction {
                 .collect(),
             entities_developed: vec_of_some(self.entities_developed)
                 .into_iter()
-                .filter_map(RawEntityStateSketch::into_sketch)
+                .filter_map(|s| s.into_sketch(policy))
                 .collect(),
             relations_introduced: vec_of_some(self.relations_introduced)
                 .into_iter()
@@ -115,7 +115,7 @@ impl RawSectionExtraction {
                 .collect(),
             relations_developed: vec_of_some(self.relations_developed)
                 .into_iter()
-                .filter_map(RawRelationStateSketch::into_sketch)
+                .filter_map(|s| s.into_sketch(policy))
                 .collect(),
             events: vec_of_some(self.events)
                 .into_iter()
@@ -295,10 +295,13 @@ pub(super) struct RawEntityStateSketch {
     entity_name: String,
     label: String,
     anchor: String,
+    /// Declared state type the model named, if the corpus declares any
+    /// whose `of` is an entity. Canonicalised by `declared_type`.
+    state_type: Option<String>,
 }
 
 impl RawEntityStateSketch {
-    fn into_sketch(self) -> Option<EntityStateSketch> {
+    fn into_sketch(self, policy: &ParsePolicy) -> Option<EntityStateSketch> {
         let entity = self.entity_name.trim().to_string();
         let label = self.label.trim().to_string();
         if entity.is_empty() || label.is_empty() {
@@ -308,10 +311,17 @@ impl RawEntityStateSketch {
             );
             return None;
         }
+        let state_type = declared_type(
+            &policy.entity_state_types,
+            self.state_type,
+            "entity-state",
+            &label,
+        );
         Some(EntityStateSketch {
             entity_name: entity,
             label,
             anchor: self.anchor,
+            state_type,
         })
     }
 }
@@ -369,10 +379,13 @@ pub(super) struct RawRelationStateSketch {
     participants: Vec<Option<String>>,
     label: String,
     anchor: String,
+    /// Declared state type the model named, if the corpus declares any
+    /// whose `of` is a relation. Canonicalised by `declared_type`.
+    state_type: Option<String>,
 }
 
 impl RawRelationStateSketch {
-    fn into_sketch(self) -> Option<RelationStateSketch> {
+    fn into_sketch(self, policy: &ParsePolicy) -> Option<RelationStateSketch> {
         let participants = vec_of_some(self.participants);
         let label = self.label.trim().to_string();
         if participants.len() < 2 || label.is_empty() {
@@ -383,10 +396,17 @@ impl RawRelationStateSketch {
             );
             return None;
         }
+        let state_type = declared_type(
+            &policy.relation_state_types,
+            self.state_type,
+            "relation-state",
+            &label,
+        );
         Some(RelationStateSketch {
             participants,
             label,
             anchor: self.anchor,
+            state_type,
         })
     }
 }

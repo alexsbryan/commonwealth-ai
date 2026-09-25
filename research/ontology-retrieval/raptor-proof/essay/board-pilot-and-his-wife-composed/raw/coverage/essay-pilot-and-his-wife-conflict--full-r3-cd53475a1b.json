@@ -1,0 +1,28 @@
+{
+ "kind": "coverage",
+ "key": "essay-pilot-and-his-wife-conflict--full-r3",
+ "prompt": "Below are numbered plot points of a novel and an answer written about the novel.\nLabel every point by what the answer says about it:\n\"correct\" = the answer states it\n\"contradicted\" = the answer says something that conflicts with it\n\"absent\" = the answer does not mention it\nReturn only JSON with one entry per point: {\"P1\": \"correct\", \"P2\": \"absent\"}\n\nPoints:\nP1. The novel portrays the life of a sailor named Salve Kristiansen.\nP2. Salve loves Elisabeth and she returns his affection.\nP3. Elisabeth is attracted to a young officer who wishes to marry her.\nP4. Elisabeth spurns the officer because her old love for Salve prevails.\nP5. Salve leaves his native land in desperation before he can reconcile with Elisabeth.\nP6. Salve sails toward foreign shores after leaving home.\nP7. Salve returns to his old home years later.\nP8. Salve finds that Elisabeth has remained true to him during his absence.\nP9. Salve marries Elisabeth upon his return.\nP10. The thought of Elisabeth's momentary hesitation makes life miserable for both spouses.\nP11. Ten years elapse while Salve and Elisabeth struggle with their marital issues.\nP12. Salve and Elisabeth finally come to a clear understanding of one another.\nP13. Salve and Elisabeth lay the foundation for a happy life together.\nP14. The novel emphasizes the need of implicit confidence and trust in marriage.\n\nAnswer:\nThe central conflict of *The Pilot and His Wife* is the tragic divergence between two marriages: one defined by tyranny and emotional isolation, the other by superficial harmony masking deep resentment.\n\n**Salve's Marriage (Tyranny)**\nIn his marriage to Elizabeth, Salve becomes increasingly difficult due to a combination of alcoholism (\"taken to drink\") and an \"unapproachability\" that masks a volatile temper. He never receives the medal for saving life nor achieves full certification as a certificated pilot despite his repute. The passage describes how years of self-suppression turned him into a tyrant who would go back to sea immediately after returning home if provoked, sometimes in weather where he might not return at all. His behavior is characterized by contemptuous remarks about Captain Beck's incapacity and an inability to express himself directly, forcing Elizabeth to navigate traps laid specifically to catch her bad humor.\n\n**The Becks' Marriage (Superficiality)**\nIn contrast, the marriage of Carl and Fru Beck appears perfect on the surface. Carl is described as \"a pink of chivalry\" with his wife being his \"timepiece,\" ensuring his social success. However, this relationship is built on a foundation of coldness; they talk best when strangers are present, and she views him as lacking constancy and truth. The conflict here culminates in an *eclaircissement* triggered by Carl's intimate relations with another officer's wife. When confronted, Carl admits he was motivated only by vanity and policy, not love. Fru Beck delivers a devastating blow to her husband's pride, declaring that all hope for their union has been extinguished because he is no longer a man worthy of her devotion.\n\n**Resolution**\nThe novel resolves these conflicts through separation rather than reconciliation or victory. Salve remains trapped in his domestic hell; the text notes that while others see him as hard and harsh, Elizabeth alone knows \"what a heart he had in reality,\" yet she suffers silently knowing there will be no brighter days soon. Similarly, Fru Beck accepts that Carl is \"not a man\" and lives with despair, acknowledging his nature was deficient from the start even if blinded by love initially. The ultimate resolution for both couples is permanent estrangement: Salve leaves Elizabeth behind to go on voyages (eventually taking passage to New York), leaving her isolated in Arendal, while the Becks remain emotionally severed after their confrontation.\n\nNot in your sources, but from general knowledge...\nWant me to read *The Pilot and His Wife* in depth? It would take about 15 minutes.\n\n---\n*Verification note: these statements could not be confirmed against your sources \u2014 treat them as unverified:*\n- The Becks' conflict culminates when Carl admits his intimate relations with another officer's wife were motivated by vanity and policy.\n- Salve leaves Elizabeth behind for voyages including passage to New York, resulting in permanent estrangement from both couples.\n- what a heart he had in reality,",
+ "attempts": [
+  {
+   "nudged": false,
+   "reply": "{\n\"P1\": \"correct\",\n\"P2\": \"contradicted\",\n\"P3\": \"absent\",\n\"P4\": \"contradicted\",\n\"P5\": \"correct\",\n\"P6\": \"correct\",\n\"P7\": \"absent\",\n\"P8\": \"contradicted\",\n\"P9\": \"contradicted\",\n\"P10\": \"correct\",\n\"P11\": \"absent\",\n\"P12\": \"contradicted\",\n\"P13\": \"contradicted\",\n\"P14\": \"absent\"\n}",
+   "model": "Qwen3.6-35B-A3B-MTP-UD-Q6_K"
+  }
+ ],
+ "parsed": {
+  "P1": "correct",
+  "P2": "contradicted",
+  "P3": "absent",
+  "P4": "contradicted",
+  "P5": "correct",
+  "P6": "correct",
+  "P7": "absent",
+  "P8": "contradicted",
+  "P9": "contradicted",
+  "P10": "correct",
+  "P11": "absent",
+  "P12": "contradicted",
+  "P13": "contradicted",
+  "P14": "absent"
+ }
+}

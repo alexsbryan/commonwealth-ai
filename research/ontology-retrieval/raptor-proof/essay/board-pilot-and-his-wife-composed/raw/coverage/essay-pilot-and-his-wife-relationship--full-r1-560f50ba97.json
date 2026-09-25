@@ -1,0 +1,28 @@
+{
+ "kind": "coverage",
+ "key": "essay-pilot-and-his-wife-relationship--full-r1",
+ "prompt": "Below are numbered plot points of a novel and an answer written about the novel.\nLabel every point by what the answer says about it:\n\"correct\" = the answer states it\n\"contradicted\" = the answer says something that conflicts with it\n\"absent\" = the answer does not mention it\nReturn only JSON with one entry per point: {\"P1\": \"correct\", \"P2\": \"absent\"}\n\nPoints:\nP1. The novel portrays the life of a sailor named Salve Kristiansen.\nP2. Salve loves Elisabeth and she returns his affection.\nP3. Elisabeth is attracted to a young officer who wishes to marry her.\nP4. Elisabeth spurns the officer because her old love for Salve prevails.\nP5. Salve leaves his native land in desperation before he can reconcile with Elisabeth.\nP6. Salve sails toward foreign shores after leaving home.\nP7. Salve returns to his old home years later.\nP8. Salve finds that Elisabeth has remained true to him during his absence.\nP9. Salve marries Elisabeth upon his return.\nP10. The thought of Elisabeth's momentary hesitation makes life miserable for both spouses.\nP11. Ten years elapse while Salve and Elisabeth struggle with their marital issues.\nP12. Salve and Elisabeth finally come to a clear understanding of one another.\nP13. Salve and Elisabeth lay the foundation for a happy life together.\nP14. The novel emphasizes the need of implicit confidence and trust in marriage.\n\nAnswer:\nThe main relationship in *The Pilot and His Wife* is the marriage between **Salve Kristiansen** (the pilot) and his wife, **Elizabeth**.\n\nOver the course of the story, their union strains from a passionate early romance into a cold, distant coexistence defined by Salve\u2019s narcissism and Elizabeth\u2019s profound loneliness. The specific factors that strain their marriage include:\n\n**1. Salve\u2019s Self-Love and Vanity**\nElizabeth eventually confronts Salve with the core truth of their estrangement: \"It is yourself, and yourself only, you have loved all along; and when you took me as your wife, you merely took another to help you.\" She argues that he was never truly devoted to her as an individual, but rather used her as support for his own ego. His self-love is described as being [unverified excerpt: far too much taken up with the small flatteries... and the homage of which he was the object,] leaving him blind to Elizabeth's needs or the compliment she paid him by adapting to social circles.\n\n**2. Salve\u2019s Absence at Sea**\nSalve spends long periods away on voyages (such as a trip from Memel in the Baltic), leaving Elizabeth isolated on their home at Merdoe. The text describes the \"dulness and loneliness\" of her life during these years, where she endures waiting for his return while receiving little emotional reward for her suffering. His temperament is described as restless; he often leaves again shortly after returning if provoked by minor domestic friction.\n\n**3. Social Friction and Elizabeth's Adaptation**\nWhen they move to Arendal, Elizabeth attempts to conquer social circles that previously rejected her, gaining influence through talent rather than appearance. However, Salve fails to appreciate this effort or recognize the strain it places on their dynamic. He remains oblivious to her internal struggles until a decisive confrontation occurs regarding his past intimacy with an officer\u2019s wife\u2014a relationship driven more by vanity than love\u2014which causes a rift in their early marriage that never fully heals.\n\n**4. The Final Breakdown**\nThe tension culminates when Elizabeth stays at her aunt\u2019s house during an illness, refusing to return home immediately. She tells him she has found life \"lonely enough\" and accuses him of being unfaithful to their emotional bond. Salve reacts with cold indifference (\"I daresay you find it lonely and dull at home\"), leading Elizabeth to declare that he is mad and that the connection between them is extinguished like a light blown out.\n\n---\n*Verification note: these statements could not be confirmed against your sources \u2014 treat them as unverified:*\n- Elizabeth accuses Salve of being unfaithful to their emotional bond regarding an intimacy with an officer\u2019s wife.\n- Salve\u2019s narcissism and Elizabeth\u2019s profound loneliness\n- It is yourself, and yourself only, you have loved all along; and when you took me as your wife, you merely took another to help you.\n- far too much taken up with the small flatteries... and the homage of which he was the object,",
+ "attempts": [
+  {
+   "nudged": false,
+   "reply": "{\n\"P1\": \"correct\",\n\"P2\": \"contradicted\",\n\"P3\": \"absent\",\n\"P4\": \"absent\",\n\"P5\": \"absent\",\n\"P6\": \"absent\",\n\"P7\": \"absent\",\n\"P8\": \"absent\",\n\"P9\": \"absent\",\n\"P10\": \"correct\",\n\"P11\": \"correct\",\n\"P12\": \"contradicted\",\n\"P13\": \"contradicted\",\n\"P14\": \"absent\"\n}",
+   "model": "Qwen3.6-35B-A3B-MTP-UD-Q6_K"
+  }
+ ],
+ "parsed": {
+  "P1": "correct",
+  "P2": "contradicted",
+  "P3": "absent",
+  "P4": "absent",
+  "P5": "absent",
+  "P6": "absent",
+  "P7": "absent",
+  "P8": "absent",
+  "P9": "absent",
+  "P10": "correct",
+  "P11": "correct",
+  "P12": "contradicted",
+  "P13": "contradicted",
+  "P14": "absent"
+ }
+}

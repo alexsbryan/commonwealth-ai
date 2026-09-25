@@ -1,0 +1,11 @@
+# What the Vercel CLI excludes from an upload.
+#
+# Kept separate from .gitignore ON PURPOSE: the CLI honours .vercelignore in
+# preference to .gitignore, and `ring/` must be UPLOADED while staying out of
+# git (it is a build artifact, rebuilt by `npm run deploy`). Listing the same
+# exclusions here, minus ring/, makes the upload independent of git's view.
+.vercel/
+.env
+.env*
+node_modules/
+.DS_Store

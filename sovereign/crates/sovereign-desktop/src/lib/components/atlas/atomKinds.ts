@@ -99,3 +99,22 @@ export const ATOM_TYPE_COLOR: Record<string, string> = {
 export function atomTypeColor(t: string): string {
   return ATOM_TYPE_COLOR[t] ?? "#9aa0b5";
 }
+
+/** Colour for a DECLARED type's own noun (`hoard`, `mint`, `data_type`).
+ *
+ *  Declared types are an open set — one corpus's nouns are another's
+ *  absence — so a fixed table cannot key them (ARCH principle 9: open
+ *  sets are registries, and the palette here is a deterministic
+ *  function standing in for one). The hash keeps a noun's colour stable
+ *  across sessions and corpora without any central assignment, and the
+ *  constrained HSL range (fixed saturation/lightness, full hue) keeps
+ *  every declared type distinguishable from the kind palette's blues
+ *  and greys while remaining readable as a family. */
+export function declaredTypeColor(declared: string): string {
+  let h = 0;
+  for (let i = 0; i < declared.length; i++) {
+    h = (h * 31 + declared.charCodeAt(i)) >>> 0;
+  }
+  const hue = h % 360;
+  return `hsl(${hue}, 62%, 46%)`;
+}

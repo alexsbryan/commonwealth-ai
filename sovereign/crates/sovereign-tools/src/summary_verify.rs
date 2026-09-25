@@ -24,8 +24,21 @@ use sovereign_core::traits::InferenceProvider;
 
 /// Same support threshold the faithfulness lane (`bench faithfulness`)
 /// and the runtime gate use — the lane's rates predict this gate's
-/// behavior only while these stay identical.
+/// behavior only while these stay identical. This governs the PER-CLAIM
+/// register; the whole-summary probe has its own calibrated cut
+/// ([`WHOLE_SUMMARY_TAU`]) because it is a different unit.
 pub const SUPPORTED_TAU: f64 = 0.5;
+/// The whole-summary probe's calibrated cut, set 2026-09-22 from BOTH
+/// distributions (instrument: sovereign-cli-llm
+/// `tests/summary_verifier_instrument.rs`, 12 clusters, production
+/// registers): faithful summaries scored 0.469–0.653 (n=10); cross-cluster
+/// corruption scored 0.960–0.984 (n=6). A cut at 0.8 separates with ≥0.14
+/// margin on each side. NOT the per-claim 0.5 — that would fail every
+/// faithful summary (the defect this replaced); NOT a one-directional
+/// tune — the corruption side sits 0.16 above the cut. Single-name
+/// corruption is NOT this probe's job (a swapped token in ~1,900 chars
+/// moves the gestalt by +0.04–0.10); the deterministic veto owns names.
+pub const WHOLE_SUMMARY_TAU: f64 = 0.8;
 /// Early exit once a passage clearly supports the claim (gate parity).
 pub const EARLY_EXIT_SUPPORT: f64 = 0.95;
 /// Max member passages probed per claim (gate/lane parity, CHUNK_CAP).
@@ -34,21 +47,47 @@ pub const MEMBER_CAP: usize = 12;
 const MAX_CLAIMS: usize = 4;
 /// The claim-extraction "question" for a RAPTOR summary (lane parity).
 const NODE_QUESTION: &str = "Summarize the passages.";
+/// The whole-summary faithfulness claim, prefixed to the summary text
+/// and judged against the cluster's own member window by the audit
+/// pass's joint register (`claim_violation_joint`) — the same
+/// multi-passage forced-choice the deep-research audit runs, not a new
+/// register.
+///
+/// WHY A WHOLE-SUMMARY PROBE (measured 2026-09-22, instrument
+/// `sovereign-cli-llm tests/summary_verifier_instrument.rs`, 6 clusters,
+/// production registers): the incumbent conjunction — zero unsupported
+/// over ≤4 claims, each ≥ τ from the fast judge — failed 6/6
+/// abstractive summaries DETERMINISTICALLY (0 test-retest flips;
+/// negative control 6/6 correct), with failures at 0-of-2 and 0-of-3
+/// claims. No counting rule fixes a probe that scores narrative
+/// paraphrase under τ claim-by-claim; the unit was wrong. The summary
+/// is judged once, as a whole, against all its members — the per-claim
+/// decomposition now feeds stats and the retry hint, never the pass
+/// bar.
+const FAITHFULNESS_CLAIM_PREFIX: &str =
+    "This summary is faithful to the passages: every person, event, and \
+     relation it asserts appears in them.\n\nSUMMARY:\n\"\"\"\n";
 
 /// Outcome of verifying one summary against its member texts.
 #[derive(Debug, Clone)]
 pub struct SummaryVerdict {
     pub claims_total: usize,
     pub claims_unsupported: usize,
+    /// The whole-summary faithfulness probe's violation probability
+    /// (lower = more faithful). `None` = the probe did not answer —
+    /// the verdict is not a measurement and `passed()` is false.
+    pub whole_summary_violation: Option<f64>,
 }
 
 impl SummaryVerdict {
-    /// Blocking pass bar: at least one claim extracted AND zero
-    /// unsupported. Zero-claim decomposition is NOT a pass — an
-    /// unverifiable summary is treated like a failing one (the safe
-    /// direction; the extractive floor is always available).
+    /// Blocking pass bar: the whole-summary probe answered and came in
+    /// under τ ([`WHOLE_SUMMARY_TAU`]). Claim
+    /// decomposition no longer decides — it feeds `claims_unsupported`
+    /// and the retry hint (see [`FAITHFULNESS_CLAIM_PREFIX`] for the
+    /// measurement that changed this). A probe that did not answer is
+    /// not a pass: an unverifiable summary still falls to the floor.
     pub fn passed(&self) -> bool {
-        self.claims_total > 0 && self.claims_unsupported == 0
+        matches!(self.whole_summary_violation, Some(v) if v < WHOLE_SUMMARY_TAU)
     }
 }
 
@@ -74,6 +113,35 @@ impl JudgeSummaryVerifier {
 #[async_trait::async_trait]
 impl SummaryVerifier for JudgeSummaryVerifier {
     async fn verify(&self, summary: &str, member_texts: &[String]) -> Option<SummaryVerdict> {
+        let members: Vec<String> = member_texts.iter().take(MEMBER_CAP).cloned().collect();
+        // THE PASS DECIDER — one whole-summary probe over the
+        // cluster's own member window, through the audit pass's joint
+        // register. `n_stable = members.len()`: a single call shares the
+        // whole window (the deep-research audit's single-call shape).
+        let faithfulness_claim = format!("{FAITHFULNESS_CLAIM_PREFIX}{summary}\n\"\"\"");
+        let whole = sovereign_core::runtime::claim_violation_joint(
+            &self.inference,
+            &faithfulness_claim,
+            &members,
+            members.len(),
+            members.len(),
+            ShardingPrivacy::LocalOnly,
+        )
+        .await?;
+        if whole < WHOLE_SUMMARY_TAU {
+            // Passed: decomposition is stats-only here, and skipping the
+            // per-claim fan-out is the economics win of judging the unit
+            // once. Zero-claim extraction no longer blocks a probe that
+            // answered.
+            return Some(SummaryVerdict {
+                claims_total: 0,
+                claims_unsupported: 0,
+                whole_summary_violation: Some(whole),
+            });
+        }
+        // Failed the whole-summary bar: decompose for the retry hint and
+        // the stats line. Decomposition failing is not a verifier failure
+        // here — the pass decision is already made and recorded.
         let claims = extract_claim_list(
             &self.inference,
             NODE_QUESTION,
@@ -81,23 +149,15 @@ impl SummaryVerifier for JudgeSummaryVerifier {
             MAX_CLAIMS,
             ShardingPrivacy::LocalOnly,
         )
-        .await?;
-        if claims.is_empty() {
-            // Decomposition produced nothing — unverifiable, not a pass.
-            return Some(SummaryVerdict {
-                claims_total: 0,
-                claims_unsupported: 0,
-            });
-        }
+        .await
+        .unwrap_or_default();
         let mut unsupported = 0usize;
         for claim in &claims {
             let mut max_support = 0.0f64;
-            let mut checked = 0usize;
-            // Clusters are small (leaf target ~20); when MEMBER_CAP
-            // truncates, members go in build order — the faithfulness
-            // lane's claim-conditioned ranking matters for 200-chunk
-            // windows, not here.
-            for passage in member_texts.iter().take(MEMBER_CAP) {
+            // Clusters are small (leaf target ~20); members go in build
+            // order — the faithfulness lane's claim-conditioned ranking
+            // matters for 200-chunk windows, not here.
+            for passage in &members {
                 match claim_chunk_support(
                     &self.inference,
                     passage,
@@ -107,7 +167,6 @@ impl SummaryVerifier for JudgeSummaryVerifier {
                 .await
                 {
                     Some(s) => {
-                        checked += 1;
                         if s > max_support {
                             max_support = s;
                         }
@@ -118,11 +177,6 @@ impl SummaryVerifier for JudgeSummaryVerifier {
                     None => {}
                 }
             }
-            if checked == 0 {
-                // Judge dead for every probe — verifier failure, not a
-                // verdict. A fabricated verdict would poison the gate.
-                return None;
-            }
             if max_support < SUPPORTED_TAU {
                 unsupported += 1;
             }
@@ -130,6 +184,7 @@ impl SummaryVerifier for JudgeSummaryVerifier {
         Some(SummaryVerdict {
             claims_total: claims.len(),
             claims_unsupported: unsupported,
+            whole_summary_violation: Some(whole),
         })
     }
 }
@@ -266,21 +321,46 @@ mod tests {
     }
 
     #[test]
-    fn zero_claims_is_not_a_pass() {
-        let v = SummaryVerdict {
+    fn the_whole_summary_probe_decides_and_an_unanswered_probe_is_not_a_pass() {
+        // The pass bar is the whole-summary probe (2026-09-22); claim
+        // counts no longer decide it in either direction.
+        let probe_passed = SummaryVerdict {
             claims_total: 0,
             claims_unsupported: 0,
+            whole_summary_violation: Some(0.1),
         };
-        assert!(!v.passed());
-        let ok = SummaryVerdict {
+        assert!(probe_passed.passed());
+        // The measured faithful band's top (0.653) must pass the calibrated
+        // cut — this is the pin that the 2026-09-22 calibration cannot be
+        // silently reverted to the per-claim 0.5 (which failed everything).
+        let in_faithful_band = SummaryVerdict {
+            claims_total: 0,
+            claims_unsupported: 0,
+            whole_summary_violation: Some(0.65),
+        };
+        assert!(
+            in_faithful_band.passed(),
+            "the faithful band's measured maximum (0.653) must clear WHOLE_SUMMARY_TAU"
+        );
+        let probe_failed_with_clean_claims = SummaryVerdict {
             claims_total: 3,
             claims_unsupported: 0,
+            whole_summary_violation: Some(0.9),
         };
-        assert!(ok.passed());
-        let bad = SummaryVerdict {
+        assert!(
+            !probe_failed_with_clean_claims.passed(),
+            "zero unsupported claims must not outvote the probe that answered"
+        );
+        // The incumbent bar this replaces, pinned as the negative case:
+        // claims were the decider, and zero-claims meant not-a-pass.
+        let claims_only_pass = SummaryVerdict {
             claims_total: 3,
-            claims_unsupported: 1,
+            claims_unsupported: 0,
+            whole_summary_violation: None,
         };
-        assert!(!bad.passed());
+        assert!(
+            !claims_only_pass.passed(),
+            "no probe answer is not a pass — unverifiable falls to the floor"
+        );
     }
 }

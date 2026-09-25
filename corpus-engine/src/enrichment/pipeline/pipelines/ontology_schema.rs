@@ -18,6 +18,7 @@
 use serde_json::{json, Value};
 
 use super::literary_atlas::phase1_section_extraction_schema;
+use super::parse_policy::state_is_of_relation;
 use crate::enrichment::ontology::{
     AttrDecl, AttrFamily, OntologyPolicies, OntologyTypeDecl, TypeIndex, TypeKind,
 };
@@ -103,6 +104,23 @@ pub fn phase1_schema_for(policies: &OntologyPolicies) -> Value {
 
         add_type_slot(defs, "event_sketch", "event_type", &events);
         attach_attributes(defs, "event_sketch", &index, &events);
+
+        // Declared states split across the two state facets by `of` — the
+        // SAME rule the reader routes on, called rather than restated, so a
+        // type cannot land in the prompt's entity slot and the reader's
+        // relation map. No `attach_attributes`: the `State` atom carries no
+        // attribute bag, and `recipe validate` refuses attributes on a state
+        // type rather than putting keys in the schema that nothing stores.
+        let (relation_states, entity_states): (Vec<_>, Vec<_>) = of_kind(policies, TypeKind::State)
+            .into_iter()
+            .partition(|t| state_is_of_relation(policies, t));
+        add_type_slot(defs, "entity_state_sketch", "state_type", &entity_states);
+        add_type_slot(
+            defs,
+            "relation_state_sketch",
+            "state_type",
+            &relation_states,
+        );
 
         add_type_slot(defs, "claim_sketch", "claim_kind", &claims);
         // `subject` goes in BEFORE the attribute bag. Property order is the
@@ -433,6 +451,54 @@ mod tests {
             .iter()
             .map(|x| x.as_str().unwrap_or_default().to_string())
             .collect()
+    }
+
+    /// `of` is the whole routing rule, and getting it wrong is silent: a
+    /// state offered on the entity slot but held in the reader's relation
+    /// map is dropped as an unknown type on every section.
+    #[test]
+    fn declared_states_reach_the_facet_their_of_names() {
+        let mut policies = OntologyPolicies::default();
+        for (name, kind, of) in [
+            ("character", TypeKind::Entity, None),
+            ("bond", TypeKind::Relation, None),
+            ("inner_state", TypeKind::State, Some("character")),
+            ("bond_state", TypeKind::State, Some("bond")),
+        ] {
+            policies.shape.types.push(OntologyTypeDecl {
+                name: name.into(),
+                kind,
+                of: of.map(str::to_string),
+                ..Default::default()
+            });
+        }
+
+        let schema = phase1_schema_for(&policies);
+        assert_eq!(
+            strings(&sketch(&schema, "entity_state_sketch")["properties"]["state_type"]["enum"]),
+            vec!["inner_state"],
+            "a state `of` an entity is offered on entities_developed"
+        );
+        assert_eq!(
+            strings(&sketch(&schema, "relation_state_sketch")["properties"]["state_type"]["enum"]),
+            vec!["bond_state"],
+            "a state `of` a relation is offered on relations_developed — the pair"
+        );
+    }
+
+    /// A corpus that declares no state type gets the shipped schema back:
+    /// no `state_type` key on either facet, nothing for a model to fill.
+    #[test]
+    fn a_corpus_declaring_no_state_keeps_the_generic_state_sketches() {
+        let schema = phase1_schema_for(&numismatics());
+        for facet in ["entity_state_sketch", "relation_state_sketch"] {
+            assert!(
+                sketch(&schema, facet)["properties"]
+                    .get("state_type")
+                    .is_none(),
+                "{facet} gained a state_type slot with no state type declared"
+            );
+        }
     }
 
     // ── Phase 6 extras ───────────────────────────────────────

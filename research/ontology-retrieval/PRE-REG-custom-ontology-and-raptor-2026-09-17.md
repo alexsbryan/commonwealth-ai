@@ -746,6 +746,128 @@ slot is healthy (0.85 s for a small completion) and the committed pilot record
 is the earlier one, unchanged. A second rental, and the daemon's state, are the
 operator's call; the measurements are in `ralph/NEEDS_HUMAN.md`.
 
+### 2026-09-22 — study 1 closes; three mechanism repairs landed mid-study, and any board after them is study 2
+
+The non-goals clause (no tuning of the walk, declarations, prompts or thresholds
+against these banks) applies to three pieces of work landed after the final
+boards. None was tuned ON a bank; each was diagnosed on an instrument (boards,
+census, classifier race) and priced on fixtures or controls. They are recorded
+here because the discipline says so, and because any future board over these
+banks is a NEW study under them:
+
+1. **Enumeration exemplars replaced** (understanding-vocab navigation.rs).
+   Measured in the classifier's own space: the bank's 32 K1 questions lost to
+   `lookup` 32/32 with the shipped exemplars, and the margin gate abstained
+   (0.009–0.017 vs 0.02). The replacement set (concrete membership phrasings,
+   subjects kept generic) wins 32/32 raw with thematic/trajectory/tension/
+   lookup controls unflipped. Admission at the 0.02 global margin is still
+   unresolved — the reviewer's ruling is that a global absolute margin is the
+   wrong shape for centroids at 0.87–0.92 mutual cosine (controls themselves
+   fail it); mean-centring or a difference-vector margin is study-2 work.
+2. **Section-context ref derivation** (corpus-engine resolution_ontology.rs,
+   in flight at close): unfilled declared ref attributes may be derived from
+   the section's own breadcrumb at resolution time. Motivation measured by the
+   ref census: coins carry a `hoard` ref 49/362 (13.5%), the Corinth hoard
+   zero — the K1 relation was never extracted, so the typed enumeration had
+   nothing to enumerate. Candidate restriction is to the section's OWN
+   breadcrumb segments with abstain-on-ambiguity (reviewer ruling); the
+   prompt-side instruction alone moved emission 1/23 on the best sections.
+3. **The summary verifier's pass bar rebuilt** (sovereign-tools
+   summary_verify.rs): the incumbent conjunction failed 6/6 abstractive
+   summaries DETERMINISTICALLY (instrument: 0 test-retest flips; cross-cluster
+   control 6/6 correct) — every "RAPTOR" summary this study measured is
+   extractive floor. The pass bar is now ONE whole-summary gestalt probe
+   (`claim_violation_joint` over the member window) at its OWN calibrated cut,
+   `WHOLE_SUMMARY_TAU = 0.8`, set from BOTH distributions on the 12-cluster
+   instrument: faithful summaries 0.469–0.653 (n=10), cross-cluster
+   corruption 0.960–0.984 (n=6) — ≥0.14 margin per side. A deterministic
+   name veto (containment: every proper noun carried by a member) was built
+   and measured — 9 of 12 faithful summaries false-vetoed under the strict
+   rule, 2 of 12 under a repetition rule, every incident a new stopword or
+   title to hand-add. **DELETED by operator direction 2026-09-22: no
+   stopword / string-heuristic matching.** The single-name corruption hole
+   (a swapped token moves the gestalt +0.04–0.10 and passes) is MEASURED and
+   left open; its principled replacement is a registry check whose
+   vocabulary is the atlas's own extracted entity names (data, not a guessed
+   word class), a build-side threading job not yet scheduled. RAPTOR remains
+   UNTESTED in its abstractive form; the board's negative is over floor
+   summaries and carries that qualifier forever.
+
+### 2026-09-22 — corrections to the boards' record (reviewer re-derivation)
+
+- The decline attribution is 42 vs 9 across BOTH kinds; K1-only it is 33 vs 9.
+- The "full's retrieval carries more gold" claim is thin: on full's K1
+  declines the mean gold-fact ratio in retrieved chunks is 0.22 vs bare's
+  0.17, and only 7 of 26 reach 0.3. The damning case is concrete, not
+  statistical: list-igch0076 had the Kyparissia hoard atom at hop 0, 3 of 6
+  gold mints in the chunks, and the model still declined.
+- **K0 is the headline the first write-up under-read**: full 0.571 vs bare
+  0.857 on lookups — bar 1 ("doesn't hurt lookups") goes the wrong way by
+  0.29. Formally could-not-judge (n=14 < 20 after exclusions); the direction
+  is not in doubt.
+- **I4's noise band is an instrument defect**: bare answered byte-identically
+  on 46 of 47 questions across three runs and deep on 47 of 47 — three runs
+  of those arms is one measurement, and the band always floors to 0.05. Full
+  is the arm that varies (19 of 47 identical; K1 per-run means 0.213/0.232/
+  0.220 — the −0.16 stands far outside that spread). Full's
+  non-reproducibility for identical input is itself a finding; one tracing
+  pass to attribute it (walk vs atom-enum) is owed.
+- A diagnostic arm — `ATLAS_GROUNDING=1, ATOM_ENUM=0`, the SHIPPED production
+  default — was run after close to answer whether the decline behaviour ships
+  to production or comes from the experimental atom-enum. It is a diagnostic
+  in the board's layout, not a study arm; the frozen five are untouched.
+
+### 2026-09-23 — demo-coverage gaps, named (operator: "honest gaps at first")
+
+- **A1 authoring record was never cut contemporaneously.** The ANS declaration
+  was authored across two commits on 2026-09-20 and the bank followed the same
+  night; no separate record existed at freeze. `ontology-proof/ans/authoring-record.md`
+  is a RECONSTRUCTED record (git author, the two commits, 116 lines, current
+  validate output) with the reconstruction stated in the file. The pre-reg's
+  authoring-time operand ("under an hour", claim 3) has no measurement for this
+  corpus and is not claimed.
+- **Blind-preference tallies (bar 4) do not exist.** Bar 4 needs the outside
+  reader recruited before any arm; with both boards negative the bar is moot,
+  but the reader was never recruited — recorded so a study-2 pass does not
+  inherit an unstated omission.
+- **i3 ablation and I5 oracle remain never-ran** on both boards (named on the
+  scoreboards).
+- **B11 map beat is written, not yet filmed**: capture needs the desktop's
+  Rust rebuilt (the `declared_type` wire field) and the ANS corpus on the demo
+  profile's shelf; both are capture-run steps, not study work.
+
+### 2026-09-22 — the diagnostic arms: production's default carries the loss; the decline is atom-enum's
+
+Three diagnostic runs on the pod (board identity, chat model pinned
+`commonwealth/primary` → Q6_K), artefacts under
+`runs-grounding-only/` and `runs-coverage-first/`. Not study arms; the
+pre-reg's five are untouched, and per the Deviations entry above any board
+after the mechanism repairs is study 2.
+
+- **`ATLAS_GROUNDING=1, ATOM_ENUM=0` (production's shipped default), 2 runs,
+  pre-prompt-change binary:** K1 0.298 / 0.216 vs bare 0.385; K0 0.667 /
+  0.600 vs bare 0.857. The shipped default alone carries most of the K0 loss
+  (−0.19) and a K1 loss; the atom-enum adds roughly −0.08/−0.10 more in the
+  full arm. **Declines are not the shipped path's mechanism**: 6 of 47
+  decline-class rows here against full's 42 — production *releases* answers
+  that score worse.
+- **Non-determinism attributed:** grounding-only repeated its answers
+  byte-identically on 17 of 47 questions, full on 19 of 47, while bare (46/47)
+  and deep (47/47) are effectively deterministic. The variability lives in the
+  atlas-grounded retrieval path, not the atom-enum; one tracing pass on the
+  walk's run-to-run input differences is owed.
+- **`SOVEREIGN_COVERAGE_FIRST=1` on the current tree (peer's unflagged prompt
+  change + flag), 1 run:** K1 0.234, K0 0.667 — the flag plus the prompt
+  change keeps declines low (5 rows) but does NOT recover the gap to bare.
+  The flag's own delta is confounded with the unflagged prompt change; a
+  flag-off arm on the same binary was declined as low-value (both arms sit
+  far below bare). The flag's own flip condition (a) is not met on this bank;
+  its full-arm measurement remains its authors' to run.
+- **Caveats:** K0 n=15 (formally could-not-judge at n≥20); one corpus (the
+  SEP/Wikipedia nulls suggest the effect may be corpus-dependent — the ANS
+  atlas is custom, theirs shallow); single/double runs, with K1's own
+  run-to-run spread (0.082) the honest band.
+
 ### 2026-09-21 — I7's grounded set was wrong about DeepQuery (operator decision A75)
 
 **What was wrong.** Record 2 above calls a row grounded when its route is
@@ -775,3 +897,53 @@ half is true and the inference is false. `deep_pipeline` runs the same
 of writing it to the message (`turn-pipeline-1` inventory 6 names this). So I2's
 3/8 is a RECORDING gap on four rows, not a treatment gap, and the fix is to
 write the key. I2's reader and floor stay as registered.
+
+### 2026-09-23 — Phase-1 attribution over the committed boards: the K0/K1 loss is evidence displacement, and the non-determinism splits three ways
+
+No arm re-ran; every number below is computed from the committed study-1 run
+JSONs by `ontology-proof/ans/attribution/w1_determinism.py` (determinism
+classification) and `w2_displacement.py` (per-question dissection).
+
+**1. The K0 loss and the K1 declines are one mechanism: walk-injected real
+chunks displace similarity's concentrated evidence.** On all four K0 lookups
+`full` loses that `bare` scores 1.0, the gold passage bare cited is absent from
+`full`'s prompt in one of three forms — never-pooled (megara, agrinion,
+histiaea), retrieved-but-cut (`in_prompt=false` at rank 13, demanhur), or
+wrong-sections (agrinion's prompt holds 13 chunks all from the right document
+yet not the INTRODUCTION section that carries the answer). On the K1 decline
+case the reviewer named, `bare` pools 10 chunks from ONE monograph (judge 0.33,
+answers) while `full` pools 24 chunks from 8 documents; the walk reached the
+Kyparissia hoard atom at hop 0 with 153 seeds and none of its chunks entered
+the pool; judge 0.00, and the decline text is the model's own draft — the gate
+only reclassifies a released pure decline (`grounding/inner.rs:1086-1099`).
+The seeds number is policy, not a bug: `max_seeds = max(top_k, 12)`
+(`atlas_grounding.rs:280`) and per-kind seed quotas stack on top of it
+(`ground.rs:777`). The D2 half-reservation bounds virtual (atom-enum/RAPTOR)
+chunks only; walk-injected REAL chunks have no reservation interaction — they
+simply compete for the same slots and char budget, and win by construction
+because they are injected, not scored.
+
+**2. The non-determinism attribution splits three ways.** Of `full`'s 32
+non-deterministic questions, 15 differ in retrieval input (order or membership,
+consistent with near-tie flips under batched reranker/merge decode), 17 have
+byte-identical ordered `retrieved[]` AND identical walk ledgers yet different
+answers. The gate action flips across runs on 24 grounding-only and 13 full
+questions (`citation_grounded`/`annotated_marked`/`abstained_decline` on the
+same recorded inputs). Committed data cannot separate a gate-internal flip from
+a decode flip on those 17, because the runner's gate projection drops `draft`
+and `claim_check_outcome`. The earlier record's "the variability lives in the
+atlas-grounded retrieval path, not the atom-enum" is therefore only half the
+story: retrieval-input differences explain roughly half the mass, and the rest
+is gate-or-decode on inputs the eval JSON records as identical. Owed: project
+the full gate meta (`draft`, `claim_check_outcome`) into the eval JSON — a
+recording change, legal before study 2 — then one planted identical-input pass
+names the flip site.
+
+**3. `chunks_fact_score` has no operand and the "0.22 vs 0.17" claim built on
+it is withdrawn.** The metric keyword-scores expected-fact strings against the
+~190-char `snippet` fields; on a correct bare answer the fact sits at offset
+1291 of an 1807-char `prompt_text`, so the score reads 0.00 where the judge
+reads 1.0. Any gold-in-retrieved comparison computed from it (including the
+"full's retrieval carries more gold: mean 0.22 vs bare 0.17" line above) is an
+instrument artifact, not a measurement. The fix is to score against admitted
+`prompt_text`, not the snippet window.

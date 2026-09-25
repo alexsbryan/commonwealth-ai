@@ -469,10 +469,46 @@ the caption says exactly that.
 
 ---
 
+### B11 — A map in your own words
+
+**Claim.** Declare how your field thinks — hoards, mints, coins, rulers —
+and the Map reads in those nouns, with the path one real answer took lit
+across it. The map and the reach are measured; the ANSWER-quality claim is
+a separate study and currently negative-with-attribution (PRE-REG
+Deviations, 2026-09-22) — this beat films the shape of the thing, not a
+win, and says so.
+
+**Choreography.** Boot → Library → open the ANS notebook's Explore tab →
+toggle **Map**. First the declared-type colours read (the ontology's own
+nouns, not the generic eleven-kind palette). Then the same view reloads
+with `?highlight=<ids>` — the walk ledger's atom ids from the board's
+`lookup-agrinion-acquired` answer, run 1 — and one answer's evidence path
+lights across the map while everything off it dims.
+
+**Proof.**
+- Precondition, checked against the same `atoms.json` the Tauri command
+  reads: the corpus's atoms carry the declared nouns (`hoard`, `mint`). An
+  undeclared corpus fails the beat rather than filming a generic map.
+- The highlight ids are the persisted `atlas_walk` nodes of the named
+  board run — "replayed from the study's own data, not computed live"
+  (pre-reg, the map shot). Baked in the spec, traceable to
+  `runs/full/run-1/eval.json`.
+- `declared_type` rides the subgraph wire only since 2026-09-22; a desktop
+  Rust older than that renders the generic palette and the hook fails.
+
+**Determinism.** No model calls during capture: the map is built from the
+installed `atoms.json`, the path is a baked id list. The only trust
+surface is the corpus's presence on the shelf.
+
+**Exports.** `b11-custom-ontology-map`. GIF on the `path-lit` mark.
+
+---
+
 ## 3. Beat → surface → risk
 
 | Beat | Surface | Hardest thing to keep honest |
 |---|---|---|
+| B11 | Library → Explore → Map | The declared-type colours and the lit path are real data; the beat must NOT be narrated as an answer-quality win (that study is negative-with-attribution) |
 | B1 | Ask + reading surface | Model may not emit an inline `[Source:]` marker → click-through unavailable |
 | B2 | Inner Work | Witness prose is nondeterministic; only structure is assertable |
 | B3 | Mesh apps | Unfilmable by Playwright (§2.1); the numbers on screen are checked by a human against gate-printed atlas counts |

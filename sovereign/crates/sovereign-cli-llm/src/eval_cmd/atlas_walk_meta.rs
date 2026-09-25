@@ -66,6 +66,7 @@ mod tests {
     fn fixture_echo() -> AtlasWalkEcho {
         AtlasWalkEcho {
             kind: "entity_lookup".to_string(),
+            kind_source: "classified".to_string(),
             nodes: vec![
                 AtlasWalkNodeEcho {
                     atlas: "wikish".to_string(),

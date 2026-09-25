@@ -52,7 +52,8 @@
 # needs it (the netns sibling), so on `--backend local` leg 3 cannot judge.
 #
 # `verdict` prints one co-lineage measurement line per bar as its LAST lines,
-# floors and directions READ from quality/campaigns/ring-room.toml.
+# floors and directions READ from the three campaign files (the-link,
+# ring-guest, ring-room).
 set -uo pipefail
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
@@ -82,9 +83,10 @@ source "$REPO/scripts/ring-doc-demo.sh" _sourced
 
 ROOM_CAMPAIGN="$REPO/quality/campaigns/ring-room.toml"
 # The room's own six are the REGRESSION set and are read from the file above,
-# never edited. `ring-guest`'s five are this campaign's and are read from its
-# own file: two campaigns, one run, one `verdict all`.
+# never edited. `ring-guest`'s five and `the-link`'s three are read from their
+# own files: three campaigns, one run, one `verdict all`.
 GUEST_CAMPAIGN="$REPO/quality/campaigns/ring-guest.toml"
+LINK_CAMPAIGN="$REPO/quality/campaigns/the-link.toml"
 # The commit the ring-guest campaign starts from. Two bars read a diff against
 # it — the scaffold's, which must be empty, and the rail's, which is the one
 # row the operator opened (D1).
@@ -279,10 +281,10 @@ if [ "$TOPOLOGY" = room ]; then
   # `fetch` against the door, exactly as a browser would.
   NODE_IMAGE=([phone]=docker.io/library/node:20-bookworm-slim)
   NOFWD=([phone]=1)
-  # The wall's SECOND screen. Two apps on the wall means two `ring dev`
+  # The wall's SECOND screen. Two apps on the wall means two `ring show`
   # proxies on beefy — one namespace each — and the host-side watcher reads
   # both, so this port is published beside the page port.
-  # NOT client_port + 2: that is the daemon's own rail port, which `ring dev`
+  # NOT client_port + 2: that is the daemon's own rail port, which `ring show`
   # proxies to (`commonwealth_core::config::rail_port`), and binding there
   # fails with "Address already in use" at bring-up.
   DPORT2=19948
@@ -380,12 +382,12 @@ room_model() {
 # FRAGMENT the builder puts it in, and the QR carries that link.
 #
 # The scope is the CALLER's, because the wall has two kinds now and they are
-# two different things: `--wall` is the one code the room scans and it reaches
-# every app the owner registered, and `--rail <ns>` is the narrowing knob —
+# two different things: `--all-apps` is the one code the room scans and it reaches
+# every app the owner registered, and `--app <ns>` is the narrowing knob —
 # one link, one app. The default is the wall.
 room_grant() { # label svg-path [scope-flag scope-arg]
   local label=$1 svg=$2; shift 2
-  local scope=(--wall); [ $# -gt 0 ] && scope=("$@")
+  local scope=(--all-apps); [ $# -gt 0 ] && scope=("$@")
   typed beefy wall "mesh grant --model $MODEL ${scope[*]} --ttl 2h --label $label --url $DOOR --qr-svg $svg" \
     "the wall's own grant, minted at the wall by the member standing there"
   node_exec beefy "$CLI" mesh grant --model "$MODEL" "${scope[@]}" --ttl 2h --label "$label" \
@@ -523,7 +525,7 @@ PY
 leg_doc() {
   sv a ring roster "$RING" > "$D/room-roster-a.txt"
   local n
-  for n in a b c; do opened "$n" doc "$D/$n/dev.out" "the ring-doc page, as ring dev printed it"; done
+  for n in a b c; do opened "$n" doc "$D/$n/dev.out" "the ring-doc page, as ring show printed it"; done
   run_session
 }
 
@@ -713,7 +715,7 @@ leg_join() {
 
   # (a) the doc: its page names it, and its edit is attributed on a.
   start_proxy d 2> "$D/room-join-proxy.err"
-  opened d join "$D/d/dev.out" "the ring-doc page, as ring dev printed it"
+  opened d join "$D/d/dev.out" "the ring-doc page, as ring show printed it"
   join_doc_js
   REPO="$REPO" PD="$(tab_url d)" PA="$(tab_url a)" POLL_S="$JOIN_POLL_S" WATCH_S="$JOIN_WATCH_S" \
     node "$D/join-doc.mjs" > "$D/room-join-doc.json" 2> "$D/room-join-doc.err"
@@ -882,7 +884,7 @@ room_seal_prove() {
   echo "room: seal proven — halo→wall's room address ${from_keeper:-no answer}, phone→wall's room address $from_phone"
 }
 
-# The wall's second screen: `ring dev` for the scaffolded app, on beefy, at
+# The wall's second screen: `ring show` for the scaffolded app, on beefy, at
 # the published second port. `start_proxy`'s shape, with the namespace and the
 # bundle it serves as the only difference — a wall with two apps runs one per
 # app because a dev server holds one grant for one namespace.
@@ -890,13 +892,13 @@ room_proxy2() {
   local deadline
   [ -f "$D/beefy/dev2.pid" ] && node_kill beefy "$D/beefy/dev2.pid" && sleep 1
   node_bg beefy "$D/beefy/dev2.pid" "$D/beefy/dev2.out" "$D/beefy/dev2.out" \
-    "$CLI" ring dev "$RING2" --dir "$APP2" --port "$DPORT2"
+    "$CLI" ring show "$RING2" --dir "$APP2" --port "$DPORT2"
   deadline=$(( $(date +%s) + 60 ))
   while [ "$(date +%s)" -lt "$deadline" ]; do
     node_curl beefy -s --max-time 2 -o /dev/null -w '%{http_code}' -X POST "$(at "$DPORT2")/__ring/log" -d '{}' 2>/dev/null | grep -q 200 && return 0
     sleep 1
   done
-  echo "ring dev for $RING2 never served /__ring/log" >&2
+  echo "ring show for $RING2 never served /__ring/log" >&2
   return 1
 }
 
@@ -936,7 +938,7 @@ room_up() {
   sleep 12
   members_from_mesh 3 || return 3
   # The wall's own screens: the member's page, loopback, exactly as rr-1 runs
-  # it — and one per app, because a `ring dev` serves ONE namespace and the
+  # it — and one per app, because a `ring show` serves ONE namespace and the
   # wall now holds two. The second is the scaffold's, unmodified.
   start_proxy beefy || return 3
   room_proxy2 || return 3
@@ -968,7 +970,7 @@ room_topology_down() {
 }
 
 # ── the narrowing knob ──────────────────────────────────────────────────────
-# `--rail <ns>` is the other grant an owner can mint: one link, one app. It
+# `--app <ns>` is the other grant an owner can mint: one link, one app. It
 # GATES NOTHING here — the wall is one grant and one QR, and clause (d)'s
 # census was taken before this ran — but two things are worth reading off it.
 #
@@ -983,8 +985,8 @@ room_topology_down() {
 # clause can be measured at all.
 leg_room_narrowing() { # member
   local member=$1
-  room_grant narrow-expenses "$D/qr-narrow-expenses.svg" --rail "$RING2"
-  room_grant narrow-doc "$D/qr-narrow-doc.svg" --rail "$RING"
+  room_grant narrow-expenses "$D/qr-narrow-expenses.svg" --app "$RING2"
+  room_grant narrow-doc "$D/qr-narrow-doc.svg" --app "$RING"
   room_phone narrow-expenses "$D/qr-narrow-expenses.svg" "$GUEST_NARROW_ONE" \
     "$RING2:expenses:$APP2" 0 "" "$member" "" "other_app=$RING"
   room_phone narrow-doc "$D/qr-narrow-doc.svg" "$GUEST_NARROW_TWO" \
@@ -1413,8 +1415,118 @@ print(' '.join(m.get('name','') for m in ms
   return 0
 }
 
+# One forgery's verdict line, echoed for the leg log; the bar's judgment is
+# the report's, re-derived from the recorded exits and sentences.
+ck_refusal() { # label rc outfile needle
+  if [ "$2" -eq 1 ] && grep -q "checkpoint verify: step" "$3" 2>/dev/null && grep -q "$4" "$3"; then
+    echo "checkpoint: the $1 forgery was refused by name"
+  else
+    echo "checkpoint: the $1 forgery was NOT refused as expected (exit=$2, wanted: $4)" >&2
+  fi
+}
+
+# The checkpoint probe (the-link): the keeper verifies the wall's mid-cut
+# export COLD — nobody asked it, it reads the file — and then three forgeries
+# are refused by name, in the same run (C tl-checkpoint-verifies (a)-(d)).
+# Two are file-level: a flipped signature byte (the line still parses, the id
+# still derives, only the signature breaks) and a truncated ops tail (the
+# completeness claim fails, naming the actor). The third cannot be typed into
+# a file: a same-seq pair admit will judge needs both sides SIGNED, and only
+# the key holder can equivocate. So the fork is grown on the scaffold's ring —
+# the ring the wall leg already appends probes to: a real act; the journal's
+# line rolled back under the live daemon (append takes its sequence number
+# from disk); a second real act, different body, re-using the number.
+# Nothing measures that ring after this leg, and the containers are the run's
+# own throwaways.
+room_checkpoint_probe() { # doc-export cut_at heal_at
+  local doc=$1 cut=$2 heal=$3
+  local flipped="$D/room-checkpoint-flipped.json" truncated="$D/room-checkpoint-truncated.json"
+  local forkdoc="$D/room-checkpoint-fork.json" fork2="$D/room-checkpoint-fork2.json"
+  local rc_v rc_b rc_t rc_f
+  [ -n "${RING2:-}" ] || { echo "checkpoint: no probe ring outside the room topology" >&2; return 0; }
+  # (a) cold, on the machine that was never asked.
+  node_exec halo "$CLI" ring checkpoint --verify "$doc" > "$D/room-checkpoint-verify.out" 2>&1
+  rc_v=$?
+  [ $rc_v -eq 0 ] && echo "checkpoint: the keeper verified the mid-cut export cold" \
+    || echo "checkpoint: the keeper did NOT verify the honest export (exit=$rc_v)" >&2
+  # (b) one flipped signature byte.
+  python3 - "$doc" "$flipped" <<'PY'
+import json, sys
+doc = json.load(open(sys.argv[1]))
+op = json.loads(doc["ops"][0])
+op["sig"] = ("1" if op["sig"][0] == "0" else "0") + op["sig"][1:]
+doc["ops"][0] = json.dumps(op, separators=(",", ":"), ensure_ascii=False)
+json.dump(doc, open(sys.argv[2], "w"), ensure_ascii=False)
+PY
+  node_exec halo "$CLI" ring checkpoint --verify "$flipped" > "$D/room-checkpoint-flipped.out" 2>&1
+  rc_b=$?; ck_refusal "flipped-signature" "$rc_b" "$D/room-checkpoint-flipped.out" "signature that does not verify"
+  # (c) the last ops line removed.
+  python3 - "$doc" "$truncated" <<'PY'
+import json, sys
+doc = json.load(open(sys.argv[1]))
+doc["ops"].pop()
+json.dump(doc, open(sys.argv[2], "w"), ensure_ascii=False)
+PY
+  node_exec halo "$CLI" ring checkpoint --verify "$truncated" > "$D/room-checkpoint-truncated.out" 2>&1
+  rc_t=$?; ck_refusal "truncated-tail" "$rc_t" "$D/room-checkpoint-truncated.out" "marks disagree"
+  # (d) the planted same-seq pair, grown not typed (see the header note).
+  local probe=$RING2 journal="$D/beefy/rings/$RING2/ring_oplog.jsonl"
+  local body='{"op":"record","payload":{"kind":"expense","payer":"'"$FOUNDER"'","amount_cents":1,"description":"checkpoint fork probe: SEQUENCE NUMBER PLANT %s","participants":[]}}'
+  node_curl beefy -s --max-time 20 -X POST \
+    "$(at "${CPORT[beefy]}")/v1/rail/append?namespace=$probe" \
+    -H 'content-type: application/json' \
+    -d "$(printf "$body" first)" > "$D/room-fork-x.out" 2>&1
+  node_exec beefy "$CLI" ring checkpoint "$probe" --out "$forkdoc" \
+    > "$D/room-checkpoint-fork-export.out" 2>&1
+  python3 - "$journal" <<'PY'
+import sys
+p = sys.argv[1]
+lines = open(p).readlines()
+kept = [l for l in lines if "SEQUENCE NUMBER PLANT first" not in l]
+if len(kept) == len(lines):
+    sys.exit(f"checkpoint: the plant's line is not in {p}; the journal rolled back nothing")
+open(p, "w").writelines(kept)
+PY
+  [ $? -eq 0 ] || echo "checkpoint: the journal rollback failed; the planted pair would not be a fork" >&2
+  node_curl beefy -s --max-time 20 -X POST \
+    "$(at "${CPORT[beefy]}")/v1/rail/append?namespace=$probe" \
+    -H 'content-type: application/json' \
+    -d "$(printf "$body" second)" > "$D/room-fork-y.out" 2>&1
+  node_exec beefy "$CLI" ring checkpoint "$probe" --out "$fork2" \
+    > "$D/room-checkpoint-fork2-export.out" 2>&1
+  python3 - "$forkdoc" "$fork2" <<'PY'
+import json, sys
+f = json.load(open(sys.argv[1]))
+g = json.load(open(sys.argv[2]))
+f["ops"].append(g["ops"][-1])
+json.dump(f, open(sys.argv[1], "w"), ensure_ascii=False)
+PY
+  node_exec halo "$CLI" ring checkpoint --verify "$forkdoc" > "$D/room-checkpoint-fork.out" 2>&1
+  rc_f=$?; ck_refusal "same-seq-pair" "$rc_f" "$D/room-checkpoint-fork.out" "the document forks"
+  # One summary artifact the verdict printer reads.
+  python3 - "$D" "$cut" "$heal" "$rc_v" "$rc_b" "$rc_t" "$rc_f" > "$D/room-checkpoint.json" <<'PY'
+import json, os, sys
+d, cut, heal, v, b, t, f = sys.argv[1:8]
+def js(p):
+    try: return json.load(open(os.path.join(d, p)))
+    except Exception: return None
+def out(p):
+    try: return open(os.path.join(d, p)).read().strip()
+    except OSError: return ""
+doc = js("room-checkpoint-doc.json") or {}
+json.dump({"ns": doc.get("ns"), "created_unix": doc.get("created_unix"),
+           "acts": len(doc.get("ops") or []), "cut_at": int(cut), "heal_at": int(heal),
+           "export_out": out("room-checkpoint-export.out"),
+           "verify": {"exit": int(v), "output": out("room-checkpoint-verify.out")},
+           "flipped": {"exit": int(b), "output": out("room-checkpoint-flipped.out")},
+           "truncated": {"exit": int(t), "output": out("room-checkpoint-truncated.out")},
+           "fork": {"exit": int(f), "output": out("room-checkpoint-fork.out"),
+                    "ns": (js("room-checkpoint-fork.json") or {}).get("ns")}}, sys.stdout)
+PY
+}
+
 leg_room_offline() {
-  local out="$D/room-offline.json" q wallpid before_beefy after_beefy after_halo t0 conv="" survivor="" status_online="" cut_at heal_at
+  local out="$D/room-offline.json" q wallpid before_beefy after_beefy after_halo t0 conv="" survivor="" status_online="" cut_at heal_at cp_doc
   q=$(BANK="$BANK" python3 -c "import json,os; print(json.loads(os.environ['BANK'])[1][1])")
   : > "$D-wall-cut.ndjson"
   REPO="$REPO" PA="$(tab_url beefy)" OUT="$D-wall-cut.ndjson" POLL_MS=250 WATCH_S=900 \
@@ -1428,6 +1540,15 @@ leg_room_offline() {
   survivor=$(room_assert_cut)
   status_online=$(cat "$D/room-cut-status.out" 2>/dev/null)
   echo "${survivor:-the cut is a cut: no logged peer address answers an OICP fetch from beefy}${status_online:+ [recorded, not gating: mesh status on beefy still calls $status_online online]}" > "$D/room-cut-assert.out"
+  # The checkpoint addendum: the wall freezes the doc's record WHILE the room
+  # is cut. Taken here, at the window's start, so the document's created_unix
+  # lands strictly inside it — that is what makes "made while the room was
+  # cut" checkable rather than asserted (C tl-checkpoint-verifies (a)). The
+  # route is the wall daemon's own loopback; the cut took the uplink, never
+  # the room.
+  cp_doc="$D/room-checkpoint-doc.json"
+  node_exec beefy "$CLI" ring checkpoint "$RING" --out "$cp_doc" \
+    > "$D/room-checkpoint-export.out" 2>&1
   sleep 10
   room_phone phone-cut "$WALL_QR" "$GUEST_CUT" "$RING:doc" 1 "$q" ""
   kill "$wallpid" 2>/dev/null
@@ -1462,21 +1583,24 @@ json.dump({"question": q, "beefy_at_cut": before, "beefy_after": after_b, "halo_
            "status_online_at_cut": status_online or None,
            "cut_not_a_cut": survivor or None}, sys.stdout)
 PY
+  room_checkpoint_probe "$cp_doc" "$cut_at" "$heal_at"
 }
 
 # ── the census + the five rows ───────────────────────────────────────────────
 # The bars this topology is judged on, in order. ONE reader, so the verdict
 # loop and the could-not-judge short-circuit cannot disagree about the set.
-# The ROOM topology reports eleven bars: `ring-guest`'s five, which are what
-# this campaign is proving, then `ring-room`'s six, which are the regression
-# it must not move. Read from the two campaign files, in that order.
+# The ROOM topology reports fourteen bars: `the-link`'s three, which are what
+# this campaign is proving, then `ring-guest`'s five and `ring-room`'s six,
+# which are the regression it must not move. Read from the three campaign
+# files, in that order.
 room_bar_ids() {
   if [ "$TOPOLOGY" = room ]; then
     python3 -c "
 import sys, tomllib
-guest = [b['id'] for b in tomllib.load(open(sys.argv[1],'rb'))['bar']]
-room  = [b['id'] for b in tomllib.load(open(sys.argv[2],'rb'))['bar'] if b.get('rung')=='rr-2']
-print(' '.join(guest + room))" "$GUEST_CAMPAIGN" "$ROOM_CAMPAIGN"
+link  = [b['id'] for b in tomllib.load(open(sys.argv[1],'rb'))['bar']]
+guest = [b['id'] for b in tomllib.load(open(sys.argv[2],'rb'))['bar']]
+room  = [b['id'] for b in tomllib.load(open(sys.argv[3],'rb'))['bar'] if b.get('rung')=='rr-2']
+print(' '.join(link + guest + room))" "$LINK_CAMPAIGN" "$GUEST_CAMPAIGN" "$ROOM_CAMPAIGN"
   else
     echo "ra-room-answer-names-the-machine ra-room-doc-name-from-membership ra-room-film-from-the-library-rail ra-room-plug-in-live ra-room-nothing-typed"
   fi
@@ -1497,17 +1621,18 @@ for b in (ids if want == 'all' else [want]):
 }
 
 report() { # bar|all
-  python3 - "$D" "$ROOM_CAMPAIGN" "$1" "$TYPED" "$CMDLOG" "$ROOM_SCRIPT" "${CPORT[*]} ${IPORT[*]} ${DPORT[*]} ${DPORT2:-}" "${IP[*]}" "$TOPOLOGY" "${IP[phone]:-}" "$(room_bar_ids)" "$GUEST_CAMPAIGN" "$GUEST_BASE" <<'PY'
+  python3 - "$D" "$ROOM_CAMPAIGN" "$1" "$TYPED" "$CMDLOG" "$ROOM_SCRIPT" "${CPORT[*]} ${IPORT[*]} ${DPORT[*]} ${DPORT2:-}" "${IP[*]}" "$TOPOLOGY" "${IP[phone]:-}" "$(room_bar_ids)" "$GUEST_CAMPAIGN" "$GUEST_BASE" "$LINK_CAMPAIGN" <<'PY'
 import json, os, re, subprocess, sys, tomllib
-d, campaign, want, typed_p, cmdlog_p, script_p, ports, ips, topology, phone_ip, bar_ids, guest_campaign, guest_base = sys.argv[1:14]
-# Two campaigns, one table. Ids are unique across the two files, so one map is
+d, campaign, want, typed_p, cmdlog_p, script_p, ports, ips, topology, phone_ip, bar_ids, guest_campaign, guest_base, link_campaign = sys.argv[1:15]
+# Three campaigns, one table. Ids are unique across the files, so one map is
 # the right shape — and a collision would be a bar defined twice, which is the
 # thing that map would hide, so it is refused here.
 bars = {b["id"]: b for b in tomllib.load(open(campaign, "rb"))["bar"]}
-for b in tomllib.load(open(guest_campaign, "rb"))["bar"]:
-    if b["id"] in bars:
-        raise SystemExit(f"{b['id']} is declared in both campaign files; one bar, one home")
-    bars[b["id"]] = b
+for f in (guest_campaign, link_campaign):
+    for b in tomllib.load(open(f, "rb"))["bar"]:
+        if b["id"] in bars:
+            raise SystemExit(f"{b['id']} is declared in both campaign files; one bar, one home")
+        bars[b["id"]] = b
 REPO = os.path.dirname(script_p) + "/.."
 def git(*args):
     return subprocess.run(["git", *args], capture_output=True, text=True, cwd=REPO).stdout.strip()
@@ -1790,17 +1915,26 @@ if topology == "room":
     # 2 — the guest's edit, and never mistakable for a member
     b = bars["ra-room-guest-edit-attributed"]
     edit_w = num(r"within ([\d.]+) s", b["floor_basis"])
-    # RE-READ 2026-09-20, named here rather than edited into ring-room.toml.
-    # Clause (c) is rr-2's promise that ITS work did not diff the rail. The
-    # operator opened the rail to exactly one row of the NEXT campaign
-    # (`rg-1-on-behalf-of`, D1, ledger A52), so `origin/main..HEAD` is no
-    # longer a reading of rr-2's promise — it is a reading of ring-guest's
-    # authorisation. The clause is therefore evaluated at rr-2's own tip,
-    # `origin/main..<ring-guest base>`, which nothing this campaign does can
-    # move; ring-guest's rail diff is printed beside it, unjudged by this bar.
+    # RE-READ 2026-09-22, after the same mechanism broke a third way: the
+    # D1-approved rg-1 rail diff and 6bda3417a's gate-hygiene file reorg
+    # (+824/−796, tests_sealing/journal.rs splits, zero semantics) were
+    # PUSHED to origin/main, so `origin/main..<guest_base>` stopped being
+    # "what others did" and became the approved diff itself — the clause
+    # read red on a the-link run that touched zero rail files (measured,
+    # 2026-09-22, target/ralph/demo.log). No single pin can serve both
+    # this clause and the shed bar's `guest_base..HEAD` range: a base at
+    # or past 6bda3417a empties the shed range and the rg bar abstains;
+    # anything earlier leaves the reorg in the diff. The clause therefore
+    # returns to the registered floor's literal reading (ring-room.toml,
+    # ra-room-guest-edit-attributed, clause c): `git diff --stat origin/main
+    # -- <rail>`, origin/main against the WORKING TREE. That is green for
+    # any run whose tree equals origin/main on the rail whatever history
+    # did, and it re-arms as a tripwire the moment an unpushed campaign
+    # edits rail — which is the standing rule D1 revised for one row only.
+    # Operator direction 2026-09-22 (option a on the same handoff).
     RAIL = ["commonwealth/crates/commonwealth-rail",
             "commonwealth/crates/commonwealth-rail-core"]
-    rail_diff = git("diff", "--stat", "origin/main", guest_base, "--", *RAIL)
+    rail_diff = git("diff", "--stat", "origin/main", "--", *RAIL)
     rail_diff_ring_guest = git("diff", "--stat", guest_base, "HEAD", "--", *RAIL)
     replica = (open(os.path.join(d, "wall-replica.txt")).read().splitlines() + ["", "", ""])[:3] \
         if os.path.exists(os.path.join(d, "wall-replica.txt")) else ["", "", ""]
@@ -2051,13 +2185,13 @@ if topology == "room":
     scans = [x for x in (p1, p2, pc, narrow_x, narrow_d) if x.get("link")]
     on_the_wall_qr = [x for x in (p1, p2, pc) if x.get("link")]
     declared = [v for v in (ns.get("doc"), ns.get("expenses"), ns.get("read_only")) if v]
-    # The GUEST-facing grants. `svrn ring dev` mints a rail grant of its own
+    # The GUEST-facing grants. `svrn ring show` mints a rail grant of its own
     # for the member's screen — one per app the wall shows — and those are the
     # wall's own page talking to its own daemon on loopback, not a link anybody
     # scanned. Counting them would read "a grant per app" off the member's
-    # side of the room (measured 2026-09-20, run 2: two `ring dev:` rows).
+    # side of the room (measured 2026-09-20, run 2: two `ring show:` rows).
     live = [l for l in (w.get("grants") or "").splitlines()
-            if re.search(r"\blive\b", l) and "ring dev:" not in l]
+            if re.search(r"\blive\b", l) and "ring show:" not in l]
     probes = p1.get("probes") or {}
     # Every element that took this phone's name — the goodhart's own question,
     # answered with the record rather than with an assumption. Exactly one of
@@ -2175,6 +2309,51 @@ if topology == "room":
             shed_by=shed[:2],
             rr2_values=rr2)
 
+# ── the-link: the checkpoint, frozen mid-cut and verified cold ──────────────
+# Every clause is a sentence from tl-checkpoint-verifies' floor_basis in
+# quality/campaigns/the-link.toml, read off the offline leg's probe. The two
+# bars this instrument cannot measure say so rather than reading 1.0 on
+# kindness (ARCH 5): their proof lives in the test suite and the decisions
+# appendix, not in this run.
+if topology == "room":
+    ck = load("room-checkpoint.json") or {}
+    if not ck:
+        row("tl-checkpoint-verifies", None, "the offline leg ran no checkpoint probe")
+    else:
+        verify, flipped, truncated, fork = (ck.get(k) or {} for k in
+                                            ("verify", "flipped", "truncated", "fork"))
+        created, cut, heal = ck.get("created_unix"), ck.get("cut_at"), ck.get("heal_at")
+        v_out = verify.get("output") or ""
+        legs = {
+            # (a) the export's own created_unix sitting strictly inside the cut
+            # window is what makes "made while the room was cut" checkable; the
+            # keeper's exit 0 printing the marks is the cold verification.
+            "a_made_inside_the_cut_verified_cold":
+                None not in (created, cut, heal) and cut < created < heal
+                and verify.get("exit") == 0 and "verified" in v_out and "mark" in v_out,
+            "b_flipped_signature_refused_naming_the_step":
+                flipped.get("exit") == 1 and "step 2 (admit)" in (flipped.get("output") or "")
+                and "signature" in (flipped.get("output") or ""),
+            "c_truncated_tail_refused_naming_the_actor":
+                truncated.get("exit") == 1 and "step 3 (digest)" in (truncated.get("output") or "")
+                and "marks disagree" in (truncated.get("output") or "")
+                and "actor " in (truncated.get("output") or ""),
+            "d_same_seq_pair_refused_as_a_fork":
+                fork.get("exit") == 1 and "the document forks" in (fork.get("output") or "")}
+        row("tl-checkpoint-verifies", 1.0 if all(legs.values()) else 0.0, "", legs=legs,
+            ns=ck.get("ns"), created_unix=created, cut_window={"cut_at": cut, "heal_at": heal},
+            acts=ck.get("acts"), export_out=ck.get("export_out"),
+            verify=v_out[:400], flipped=(flipped.get("output") or "")[:300],
+            truncated=(truncated.get("output") or "")[:300], fork=(fork.get("output") or "")[:300],
+            fork_ns=fork.get("ns"))
+    row("tl-link-carries-its-couriers", None,
+        "its proof is the test suite's — builder/parser round-trip, byte-identity, the "
+        "fragment refusals and the QR are cargo tests (tl-2-link-carries-its-couriers); "
+        "this run mints no at=/iroh= link and exercises none of it")
+    row("tl-dial-measured", None,
+        "the three numbers land in ralph/DECISIONS.md under tl-3-dial-measured; this "
+        "instrument measures none of them")
+
 order = bar_ids.split()
 # The table, the floor comparison and the exit rule are scripts/lib/demo_verdicts.py:
 # threat-gaps-demo.sh prints the same table, and two copies of one threshold
@@ -2203,14 +2382,14 @@ case "${1:-}" in
   up)   : > "$CMDLOG"; : > "$TYPED"; if [ "$TOPOLOGY" = room ]; then room_up; else cmd_up; fi ;;
   down) if [ "$TOPOLOGY" = room ]; then room_topology_down; else room_down; fi; echo "stopped" ;;
   verdict)
-    # A bar id from EITHER campaign: the room's regression six, or the five
-    # this campaign is proving. One run reports both.
+    # A bar id from ANY of the three campaigns: the-link's three, ring-guest's
+    # five, or the room's regression six. One run reports all fourteen.
     python3 -c "
 import sys, tomllib
-ids = [b['id'] for f in sys.argv[1:3] for b in tomllib.load(open(f,'rb'))['bar']]
-sys.exit(0 if sys.argv[3] in ids + ['all'] else 1)" \
-      "$ROOM_CAMPAIGN" "$GUEST_CAMPAIGN" "${2:-}" \
-      || { echo "verdict: name a bar or all — see quality/campaigns/ring-room.toml and ring-guest.toml" >&2; exit 2; }
+ids = [b['id'] for f in sys.argv[1:4] for b in tomllib.load(open(f,'rb'))['bar']]
+sys.exit(0 if sys.argv[4] in ids + ['all'] else 1)" \
+      "$LINK_CAMPAIGN" "$GUEST_CAMPAIGN" "$ROOM_CAMPAIGN" "${2:-}" \
+      || { echo "verdict: name a bar or all — see quality/campaigns/the-link.toml, ring-guest.toml and ring-room.toml" >&2; exit 2; }
     # The demo builds what it measures, or it says so and judges nothing.
     stale=$(stale_binaries)
     [ -z "$stale" ] || { room_cnj_rows "$stale" "$2"; echo "$stale" >&2; exit 3; }

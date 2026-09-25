@@ -180,6 +180,7 @@ pub fn parse_phase1_narrative(response: &str) -> Result<NarrativeExtension> {
                         entity_name,
                         label,
                         anchor,
+                        state_type: None,
                     })
                 })
                 .collect()
@@ -243,6 +244,7 @@ pub fn parse_phase1_narrative(response: &str) -> Result<NarrativeExtension> {
             participants,
             label,
             anchor,
+            state_type: None,
         })
         .collect();
 

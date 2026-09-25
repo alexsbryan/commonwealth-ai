@@ -1,0 +1,25 @@
+{
+ "kind": "relevance",
+ "key": "essay-pilot-and-his-wife-setup",
+ "prompt": "Below are numbered plot points of a novel and an exam question about it.\nWhich points should a good answer to the question draw on?\nReturn only JSON: {\"relevant\": [\"P1\", \"P4\"]}\n\nQuestion: How do the early events of the novel The Pilot and His Wife set up its later ones?\n\nPoints:\nP1. The novel portrays the life of a sailor named Salve Kristiansen.\nP2. Salve loves Elisabeth and she returns his affection.\nP3. Elisabeth is attracted to a young officer who wishes to marry her.\nP4. Elisabeth spurns the officer because her old love for Salve prevails.\nP5. Salve leaves his native land in desperation before he can reconcile with Elisabeth.\nP6. Salve sails toward foreign shores after leaving home.\nP7. Salve returns to his old home years later.\nP8. Salve finds that Elisabeth has remained true to him during his absence.\nP9. Salve marries Elisabeth upon his return.\nP10. The thought of Elisabeth's momentary hesitation makes life miserable for both spouses.\nP11. Ten years elapse while Salve and Elisabeth struggle with their marital issues.\nP12. Salve and Elisabeth finally come to a clear understanding of one another.\nP13. Salve and Elisabeth lay the foundation for a happy life together.\nP14. The novel emphasizes the need of implicit confidence and trust in marriage.",
+ "attempts": [
+  {
+   "nudged": false,
+   "reply": "{\n  \"relevant\": [\n    \"P1\",\n    \"P2\",\n    \"P3\",\n    \"P4\",\n    \"P5\",\n    \"P6\",\n    \"P7\",\n    \"P8\",\n    \"P9\"\n  ]\n}",
+   "model": "Qwen3.6-35B-A3B-MTP-UD-Q6_K"
+  }
+ ],
+ "parsed": {
+  "relevant": [
+   "P1",
+   "P2",
+   "P3",
+   "P4",
+   "P5",
+   "P6",
+   "P7",
+   "P8",
+   "P9"
+  ]
+ }
+}

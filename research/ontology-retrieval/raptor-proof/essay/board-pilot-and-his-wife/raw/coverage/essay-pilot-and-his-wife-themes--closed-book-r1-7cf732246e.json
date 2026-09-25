@@ -1,0 +1,28 @@
+{
+ "kind": "coverage",
+ "key": "essay-pilot-and-his-wife-themes--closed-book-r1",
+ "prompt": "Below are numbered plot points of a novel and an answer written about the novel.\nLabel every point by what the answer says about it:\n\"correct\" = the answer states it\n\"contradicted\" = the answer says something that conflicts with it\n\"absent\" = the answer does not mention it\nReturn only JSON with one entry per point: {\"P1\": \"correct\", \"P2\": \"absent\"}\n\nPoints:\nP1. The novel portrays the life of a sailor named Salve Kristiansen.\nP2. Salve loves Elisabeth and she returns his affection.\nP3. Elisabeth is attracted to a young officer who wishes to marry her.\nP4. Elisabeth spurns the officer because her old love for Salve prevails.\nP5. Salve leaves his native land in desperation before he can reconcile with Elisabeth.\nP6. Salve sails toward foreign shores after leaving home.\nP7. Salve returns to his old home years later.\nP8. Salve finds that Elisabeth has remained true to him during his absence.\nP9. Salve marries Elisabeth upon his return.\nP10. The thought of Elisabeth's momentary hesitation makes life miserable for both spouses.\nP11. Ten years elapse while Salve and Elisabeth struggle with their marital issues.\nP12. Salve and Elisabeth finally come to a clear understanding of one another.\nP13. Salve and Elisabeth lay the foundation for a happy life together.\nP14. The novel emphasizes the need of implicit confidence and trust in marriage.\n\nAnswer:\nIt appears there is a misunderstanding regarding the title. **There is no widely known or canonical novel titled *The Pilot and His Wife*.**\n\nHowever, this query may be referring to one of the following possibilities:\n\n1.  ***The Captain\u2019s Daughter* by Alexander Pushkin**: This Russian classic features Pyotr Grinyov (often misremembered as \"the pilot\" due to military/naval connotations) and his wife Masha. Major themes include honor, loyalty, love across class boundaries, and the chaos of revolution.\n2.  ***Moby-Dick* by Herman Melville**: Features Captain Ahab (a sea captain/pilot figure) but focuses on obsession, fate, and nature\u2014not a \"wife\" central theme in the same way.\n3.  **A lesser-known or self-published work**, or possibly a confusion with:\n    *   ***The Pilot** by James Fenimore Cooper*: This is actually a novel about maritime adventure during the American Revolution, featuring characters like Jasper Owen and Louisa Van Gleabough. It does not center on a \u201cpilot\u2019s wife\u201d as its primary thematic focus, though romantic subplots exist. Themes include patriotism, naval warfare, honor, and colonial identity.\n4.  **Misremembered title**: Possibly referring to *The Old Man and the Sea* (Hemingway), where themes of endurance and dignity are central, but there is no wife character in the main narrative.\n\n### If you meant *The Pilot* by James Fenimore Cooper:\n**Major Themes:**\n- **Patriotism and Loyalty**: Characters navigate allegiance during the American Revolution.\n- **Honor and Reputation**: Personal integrity is tested through duels, trials, and social expectations.\n- **Love vs. Duty**: Romantic relationships conflict with military or familial obligations.\n- **Class and Social Mobility**: Tensions between aristocratic backgrounds and democratic ideals.\n\n**Key Events Carrying These Themes:**\n- Jasper Owen\u2019s involvement in naval conflicts illustrates patriotism and duty.\n- The trial of Captain Delancey highlights legal justice versus personal honor.\n- Louisa Van Gleabough\u2019s romantic entanglements reflect societal pressures on women and class distinctions.\n\n### If you meant *The Captain\u2019s Daughter* by Alexander Pushkin:\n**Major Themes:**\n- **Honor and Integrity**: Grinyov maintains his principles despite pressure to betray them.\n- **Love and Devotion**: His steadfast love for Masha drives much of the plot.\n- **Freedom vs. Authority**: Contrasts between imperial control ( Pugachev\u2019s rebellion) and individual conscience.\n- **Social Class and Duty**: Tensions between aristocratic expectations and moral choices.\n\n**Key Events Carrying These Themes:**\n- Grinyov\u2019s refusal to swear allegiance to Pugachev demonstrates honor over survival.\n- His rescue of Masha from Pugachev shows devotion overcoming danger.\n- The final reconciliation with the Empress Catherine II underscores themes of mercy and justice.\n\n---\n\n\ufffd **Recommendation**:  \nCould you clarify which book you mean? If it is *The Pilot* by James Fenimore Cooper, I can provide a more detailed thematic analysis specific to that text. If it is another work entirely (e.g., a contemporary novel or non-Western literature), please provide additional details such as author name or plot summary.",
+ "attempts": [
+  {
+   "nudged": false,
+   "reply": "{\n\"P1\": \"absent\",\n\"P2\": \"absent\",\n\"P3\": \"absent\",\n\"P4\": \"absent\",\n\"P5\": \"absent\",\n\"P6\": \"absent\",\n\"P7\": \"absent\",\n\"P8\": \"absent\",\n\"P9\": \"absent\",\n\"P10\": \"absent\",\n\"P11\": \"absent\",\n\"P12\": \"absent\",\n\"P13\": \"absent\",\n\"P14\": \"absent\"\n}",
+   "model": "Qwen3.6-35B-A3B-MTP-UD-Q6_K"
+  }
+ ],
+ "parsed": {
+  "P1": "absent",
+  "P2": "absent",
+  "P3": "absent",
+  "P4": "absent",
+  "P5": "absent",
+  "P6": "absent",
+  "P7": "absent",
+  "P8": "absent",
+  "P9": "absent",
+  "P10": "absent",
+  "P11": "absent",
+  "P12": "absent",
+  "P13": "absent",
+  "P14": "absent"
+ }
+}

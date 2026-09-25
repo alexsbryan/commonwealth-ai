@@ -1,0 +1,341 @@
+{
+ "arm": "full",
+ "tree": {
+  "summary_atoms": 14,
+  "by_level": {
+   "1": 2,
+   "0": 12
+  },
+  "verbatim_1.0": 13
+ },
+ "rows": [
+  {
+   "run": "run-1",
+   "question_id": "essay-pilot-and-his-wife-themes",
+   "intent": "DeepQuery",
+   "pool": 28,
+   "summaries_appended": 8,
+   "raptor": [
+    {
+     "position": 0,
+     "admitted": null,
+     "level": 0,
+     "chars": 398,
+     "verbatim": 0.0
+    },
+    {
+     "position": 1,
+     "admitted": null,
+     "level": 0,
+     "chars": 508,
+     "verbatim": 1.0
+    },
+    {
+     "position": 2,
+     "admitted": null,
+     "level": 0,
+     "chars": 530,
+     "verbatim": 1.0
+    },
+    {
+     "position": 3,
+     "admitted": null,
+     "level": 0,
+     "chars": 551,
+     "verbatim": 1.0
+    },
+    {
+     "position": 4,
+     "admitted": null,
+     "level": 0,
+     "chars": 640,
+     "verbatim": 1.0
+    },
+    {
+     "position": 5,
+     "admitted": null,
+     "level": 0,
+     "chars": 577,
+     "verbatim": 1.0
+    },
+    {
+     "position": 6,
+     "admitted": null,
+     "level": 0,
+     "chars": 648,
+     "verbatim": 1.0
+    },
+    {
+     "position": 7,
+     "admitted": null,
+     "level": 0,
+     "chars": 815,
+     "verbatim": 1.0
+    }
+   ]
+  },
+  {
+   "run": "run-1",
+   "question_id": "essay-pilot-and-his-wife-society",
+   "intent": "DeepQuery",
+   "pool": 25,
+   "summaries_appended": 5,
+   "raptor": [
+    {
+     "position": 0,
+     "admitted": null,
+     "level": 0,
+     "chars": 398,
+     "verbatim": 0.0
+    },
+    {
+     "position": 1,
+     "admitted": null,
+     "level": 0,
+     "chars": 530,
+     "verbatim": 1.0
+    },
+    {
+     "position": 2,
+     "admitted": null,
+     "level": 0,
+     "chars": 508,
+     "verbatim": 1.0
+    },
+    {
+     "position": 3,
+     "admitted": null,
+     "level": 0,
+     "chars": 640,
+     "verbatim": 1.0
+    },
+    {
+     "position": 4,
+     "admitted": null,
+     "level": 0,
+     "chars": 815,
+     "verbatim": 1.0
+    }
+   ]
+  },
+  {
+   "run": "run-2",
+   "question_id": "essay-pilot-and-his-wife-themes",
+   "intent": "DeepQuery",
+   "pool": 28,
+   "summaries_appended": 8,
+   "raptor": [
+    {
+     "position": 0,
+     "admitted": null,
+     "level": 0,
+     "chars": 398,
+     "verbatim": 0.0
+    },
+    {
+     "position": 1,
+     "admitted": null,
+     "level": 0,
+     "chars": 508,
+     "verbatim": 1.0
+    },
+    {
+     "position": 2,
+     "admitted": null,
+     "level": 0,
+     "chars": 530,
+     "verbatim": 1.0
+    },
+    {
+     "position": 3,
+     "admitted": null,
+     "level": 0,
+     "chars": 551,
+     "verbatim": 1.0
+    },
+    {
+     "position": 4,
+     "admitted": null,
+     "level": 0,
+     "chars": 640,
+     "verbatim": 1.0
+    },
+    {
+     "position": 5,
+     "admitted": null,
+     "level": 0,
+     "chars": 577,
+     "verbatim": 1.0
+    },
+    {
+     "position": 6,
+     "admitted": null,
+     "level": 0,
+     "chars": 648,
+     "verbatim": 1.0
+    },
+    {
+     "position": 7,
+     "admitted": null,
+     "level": 0,
+     "chars": 815,
+     "verbatim": 1.0
+    }
+   ]
+  },
+  {
+   "run": "run-2",
+   "question_id": "essay-pilot-and-his-wife-society",
+   "intent": "DeepQuery",
+   "pool": 25,
+   "summaries_appended": 5,
+   "raptor": [
+    {
+     "position": 0,
+     "admitted": null,
+     "level": 0,
+     "chars": 398,
+     "verbatim": 0.0
+    },
+    {
+     "position": 1,
+     "admitted": null,
+     "level": 0,
+     "chars": 530,
+     "verbatim": 1.0
+    },
+    {
+     "position": 2,
+     "admitted": null,
+     "level": 0,
+     "chars": 508,
+     "verbatim": 1.0
+    },
+    {
+     "position": 3,
+     "admitted": null,
+     "level": 0,
+     "chars": 640,
+     "verbatim": 1.0
+    },
+    {
+     "position": 4,
+     "admitted": null,
+     "level": 0,
+     "chars": 815,
+     "verbatim": 1.0
+    }
+   ]
+  },
+  {
+   "run": "run-3",
+   "question_id": "essay-pilot-and-his-wife-themes",
+   "intent": "DeepQuery",
+   "pool": 28,
+   "summaries_appended": 8,
+   "raptor": [
+    {
+     "position": 0,
+     "admitted": null,
+     "level": 0,
+     "chars": 398,
+     "verbatim": 0.0
+    },
+    {
+     "position": 1,
+     "admitted": null,
+     "level": 0,
+     "chars": 508,
+     "verbatim": 1.0
+    },
+    {
+     "position": 2,
+     "admitted": null,
+     "level": 0,
+     "chars": 530,
+     "verbatim": 1.0
+    },
+    {
+     "position": 3,
+     "admitted": null,
+     "level": 0,
+     "chars": 551,
+     "verbatim": 1.0
+    },
+    {
+     "position": 4,
+     "admitted": null,
+     "level": 0,
+     "chars": 640,
+     "verbatim": 1.0
+    },
+    {
+     "position": 5,
+     "admitted": null,
+     "level": 0,
+     "chars": 577,
+     "verbatim": 1.0
+    },
+    {
+     "position": 6,
+     "admitted": null,
+     "level": 0,
+     "chars": 648,
+     "verbatim": 1.0
+    },
+    {
+     "position": 7,
+     "admitted": null,
+     "level": 0,
+     "chars": 815,
+     "verbatim": 1.0
+    }
+   ]
+  },
+  {
+   "run": "run-3",
+   "question_id": "essay-pilot-and-his-wife-society",
+   "intent": "DeepQuery",
+   "pool": 25,
+   "summaries_appended": 5,
+   "raptor": [
+    {
+     "position": 0,
+     "admitted": null,
+     "level": 0,
+     "chars": 398,
+     "verbatim": 0.0
+    },
+    {
+     "position": 1,
+     "admitted": null,
+     "level": 0,
+     "chars": 530,
+     "verbatim": 1.0
+    },
+    {
+     "position": 2,
+     "admitted": null,
+     "level": 0,
+     "chars": 508,
+     "verbatim": 1.0
+    },
+    {
+     "position": 3,
+     "admitted": null,
+     "level": 0,
+     "chars": 640,
+     "verbatim": 1.0
+    },
+    {
+     "position": 4,
+     "admitted": null,
+     "level": 0,
+     "chars": 815,
+     "verbatim": 1.0
+    }
+   ]
+  }
+ ],
+ "admitted_null_because": "eval.json rows carry no in_prompt / prompt_text; RetrievedChunk (eval_cmd/runner.rs) drops them"
+}

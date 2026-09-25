@@ -66,6 +66,7 @@ pub mod phase_cmd;
 pub mod promote;
 pub mod query;
 pub mod raptor;
+pub mod raptor_census;
 pub mod raptor_index;
 pub mod reset;
 pub mod schema_review;

@@ -289,7 +289,7 @@ A flag here is one whose absence does not fail anything; it just makes the green
 | `ci:suites` | `hook-selftests`, `pre-push-fail-closed`, `settings-wiring-self-test`, `shell-selftests` |
 | `ci:test` | `bench-compile`, `cli-journey-selftest`, `dst-scenarios`, `sovereign-test` |
 | `nightly` | `contract-nightly` |
-| `prepush` | `arch-gate`, `boundary-gate`, `clock-gate`, `concept-gate`, `deletion-manifest`, `docs-gate`, `env-gate`, `hakari-verify`, `hook-wiring`, `instrument-gate`, `judge-funnel-gate`, `judge-replay-control`, `layer-gate`, `layout-gate`, `lifecycle-gate`, `lock-gate`, `ralph-decisions`, `rustfmt`, `size-gate`, `sovereign-lint-scoped` |
+| `prepush` | `arch-gate`, `boundary-gate`, `clock-gate`, `concept-gate`, `deletion-manifest`, `docs-gate`, `domains-census-self-test`, `env-gate`, `hakari-verify`, `hook-wiring`, `instrument-gate`, `judge-funnel-gate`, `judge-replay-control`, `layer-gate`, `layout-gate`, `lifecycle-gate`, `lock-gate`, `nc-thesis`, `ralph-decisions`, `rustfmt`, `size-gate`, `sovereign-lint-scoped` |
 | `run-if-stale` | `co-sweep`, `contract-nightly`, `daemon-concurrency-soak`, `daemon-concurrency-soak-control`, `daemon-concurrency-soak-selftest`, `daemon-soak-report`, `daemon-soak-report-selftest`, `judge-replay-bank`, `judge-replay-bank-feed`, `oicp-conformance` |
 | `smoke:0` | `desktop-check`, `desktop-e2e-synthetic`, `desktop-vitest`, `sovereign-lint`, `sovereign-test` |
 | `smoke:1` | `desktop-ttfi`, `mtp-probe`, `smoke-attach-mode`, `throughput-probe` |
@@ -364,7 +364,7 @@ A flag here is one whose absence does not fail anything; it just makes the green
 - `dm-census-shared-edges` — quality/campaigns/domains.toml (bar dm-shared-edges — the count this measures) · runs in: by-hand
 - `dm-census-word-owners` — quality/campaigns/domains.toml (bar dm-word-owners — the count this measures) · runs in: by-hand
 - `doc-coverage` — .github/workflows/weekly.yml (header) · runs in: weekly:doc-coverage
-- `domains-census-self-test` — scripts/domains-census.py (module header — the planted controls) · runs in: by-hand
+- `domains-census-self-test` — scripts/domains-census.py (module header — the planted controls) · runs in: by-hand, prepush
 - `drift-detect` — sovereign/crates/sovereign-cli/src/posture_cmd.rs (drift_row) · runs in: by-hand
 - `enrichment-f1` — sovereign/bench/literary/README.md · runs in: check
 - `evidence-verdict` — AGENTS.md §Code Intelligence (the tool table row: "Does the test my commit body cites actually SEE the change?") · runs in: by-hand
@@ -385,7 +385,7 @@ A flag here is one whose absence does not fail anything; it just makes the green
 - `mesh-soak-gate` — commonwealth/docs/MESH_QA.md · runs in: weekly:soak, by-hand
 - `module-cycles` — .github/workflows/weekly.yml (header) · runs in: weekly:cycles
 - `mtp-probe` — sovereign/bench/README.md · runs in: smoke:1
-- `nc-thesis` — scripts/nc-thesis.py (module header — is the product claim a TYPE?) · runs in: by-hand
+- `nc-thesis` — scripts/nc-thesis.py (module header — is the product claim a TYPE?) · runs in: by-hand, prepush
 - `oicp-conformance` — sovereign/crates/sovereign-cli/src/posture_cmd.rs (oicp_conformance_row) · runs in: run-if-stale
 - `pre-commit` — scripts/pre-commit.sh (header) · runs in: by-hand
 - `pre-push` — scripts/pre-push.sh (header — the one-minute budget) · runs in: by-hand
@@ -415,5 +415,5 @@ Nothing is on no map. Check that before believing it.
 
 ---
 
-**128 instruments, 24 with a negative control, 55 unmeasured cost, 55 by-hand only.** (0 run nowhere at all.)
+**128 instruments, 24 with a negative control, 55 unmeasured cost, 53 by-hand only.** (0 run nowhere at all.)
 

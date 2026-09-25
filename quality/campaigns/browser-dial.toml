@@ -1,0 +1,48 @@
+# Flight rules — read raw. Verdicts come from measurement rows, never prose here.
+#
+# CHILD of the-link, opened by operator direction 2026-09-22 ("queue it —
+# this is a critical piece of the demo"). It is the-link's tl-3 clause (c),
+# which never ran because clause (b)'s recorded build failure does not
+# reproduce on the Halo: iroh 1.0.2 and ring 0.17.14 both build for
+# wasm32-unknown-unknown here (probed in the handoff session, rustc 1.95.0,
+# toolbox clang, target std installed). Zero product code; the honest
+# negative passes (the-link D3, inherited).
+#
+# PRE-REGISTERED 2026-09-22 by the seat, before any row ran and before the
+# dial has been attempted on any host.
+id        = "browser-dial"
+parent    = "the-link"
+objective = "A plain browser on a network the daemon has never seen — no shared LAN, no domain, no tunnel, no tailnet of ours — dials the node over iroh's relay with the guest link's fragment and makes one grant-scoped call. This campaign MEASURES that moment; wiring it into the demo is a follow-on order that only a WORKED verdict opens."
+spec      = "ralph/next/browser-dial/order.md (Demo, Premises, Decisions, Predictions); ralph/DECISIONS.md the-link-3 (the entry this campaign corrects); docs/RING_APP_LIBRARY.md:360-380,546-553 (the wasm recipe and the browser claim); docs/THE_LINK.md (the link, specified)"
+declared  = "2026-09-22"
+status    = "active"
+
+[predicate]
+statement = "The browser dial is a measured fact on the record — the DECISIONS entry carries the dial's verbatim outcome naming the layer that answered or failed, the build correction carries BOTH hosts' outcomes with their instruments named, and git diff --stat <BASE>..HEAD over sovereign/crates and commonwealth/crates is empty."
+check     = "python3 scripts/ralph-decisions.py --check"
+
+[[bar]]
+id           = "bd-wasm-build-reproduced"
+demo         = "The locked iroh builds for the browser on this host, with every condition named — and the ledger says so beside the Mac's original refusal, not instead of it"
+rung         = "bd-0"
+one_line     = "CLAIM: the tl-3 build outcome was a host fact, not a pin fact, and the record now carries both with their instruments"
+derives_from = "the handoff session's probes (2026-09-22): iroh =1.0.2 and =1.2.0 both `Finished dev profile` for wasm32-unknown-unknown with ring v0.17.14 in the tree, rustc 1.95.0, target std installed, inside the sovereign-vulkan toolbox; the Mac's verbatim failure (`ring v0.17.14 … 'No available targets are compatible with triple \"wasm32-unknown-unknown\"`) is ring's cc-mapping refusal — ring needs a C compiler even for wasm (ARCH 7: one run is not a measurement; the correction names both instruments)"
+floor        = 1.0
+floor_basis  = "structural: 1.0 iff (a) the probe is reproduced under `target/` (never committed) at iroh =1.0.2 with the Cargo.toml preserved and the outcome verbatim, (b) the DECISIONS correction entry carries the Mac outcome verbatim BESIDE the Halo reproduction with host, toolchain, target-std and C-compiler named for each — the old record is never replaced, the delta is the finding, (c) the entry names what would falsify it (a host whose clang cannot target wasm reproducing the Mac refusal, verbatim), (d) git diff over sovereign/crates and commonwealth/crates for this row is empty. Any false is 0.0."
+target       = 1.0
+direction    = "higher_is_better"
+goodhart     = "reads 1.0 on a bare `Finished` line if the conditions are not named — a build fact without its instrument is a premise again (clause (b) is the point); reads 1.0 while erasing the Mac record (never silently substitute)"
+status       = "open"
+
+[[bar]]
+id           = "bd-browser-dials-relay"
+demo         = "A page under target/ running in a real browser engine dials a live node's guest channel through iroh's relay and makes one grant-scoped GET /v1/rail/log"
+rung         = "bd-1"
+one_line     = "CLAIM: the zero-infrastructure hop is a measured fact — worked with the layer that answered named, or failed with the failing layer's verbatim error"
+derives_from = "the guest link already carries the `iroh=` dial string (the-link D2, landed); the daemon serves grant-scoped rail reads over HTTP (the room demo's phone, every run); iroh's wasm surface builds at our pin (this campaign's bd-wasm-build-reproduced); UNKNOWN and read before building: whether the daemon's iroh plane admits a GUEST at all — peers dial peers, the phone used plain HTTP (`sovereign-mesh/src/iroh_access.rs`, the door's auth path)"
+floor        = 1.0
+floor_basis  = "structural: 1.0 iff (a) the page runs in a real browser engine (named), loads from target/, never committed, and dials the live node's relay-reachable endpoint at the LOCKED iroh, (b) one grant-scoped GET /v1/rail/log with the guest bearer returns through the dial — status and a named rail row pasted, or the refusal verbatim, (c) every layer on the way is named with its verbatim outcome (relay connect, TLS/alpn, wasm bindgen, the daemon's guest-channel admission) — an honest negative reads 1.0 with all layers named, (d) git diff over sovereign/crates and commonwealth/crates for this row is empty. Any false is 0.0."
+target       = 1.0
+direction    = "higher_is_better"
+goodhart     = "reads 1.0 for 'it should work' optimism — every claim is a pasted line from the run (clause (c)); reads 1.0 while quietly widening the guest door or standing up new infrastructure — clause (d) and the charter's stop own both"
+status       = "open"

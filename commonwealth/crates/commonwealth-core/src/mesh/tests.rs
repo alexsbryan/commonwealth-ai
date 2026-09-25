@@ -839,5 +839,5 @@ fn a_pre_split_peers_payload_still_parses() {
 }
 
 // `member_matches`' own tests moved beside its definition
-// (`sovereign_contracts::member`) with five-programs fp-46; this module's
+// (`kernel_types::member`) with five-programs fp-46; this module's
 // remaining consumers exercise it through the historical re-import.

@@ -1,0 +1,28 @@
+{
+ "kind": "coverage",
+ "key": "essay-pilot-and-his-wife-setup--closed-book-r1",
+ "prompt": "Below are numbered plot points of a novel and an answer written about the novel.\nLabel every point by what the answer says about it:\n\"correct\" = the answer states it\n\"contradicted\" = the answer says something that conflicts with it\n\"absent\" = the answer does not mention it\nReturn only JSON with one entry per point: {\"P1\": \"correct\", \"P2\": \"absent\"}\n\nPoints:\nP1. The novel portrays the life of a sailor named Salve Kristiansen.\nP2. Salve loves Elisabeth and she returns his affection.\nP3. Elisabeth is attracted to a young officer who wishes to marry her.\nP4. Elisabeth spurns the officer because her old love for Salve prevails.\nP5. Salve leaves his native land in desperation before he can reconcile with Elisabeth.\nP6. Salve sails toward foreign shores after leaving home.\nP7. Salve returns to his old home years later.\nP8. Salve finds that Elisabeth has remained true to him during his absence.\nP9. Salve marries Elisabeth upon his return.\nP10. The thought of Elisabeth's momentary hesitation makes life miserable for both spouses.\nP11. Ten years elapse while Salve and Elisabeth struggle with their marital issues.\nP12. Salve and Elisabeth finally come to a clear understanding of one another.\nP13. Salve and Elisabeth lay the foundation for a happy life together.\nP14. The novel emphasizes the need of implicit confidence and trust in marriage.\n\nAnswer:\nIt appears there is a misunderstanding regarding the title of the work. **There is no widely recognized classic novel titled *The Pilot and His Wife*.**\n\nHowever, it is highly likely you are referring to one of the following works with similar titles or themes:\n\n1.  ***The Pilot*** (1821) by James Fenimore Cooper \u2013 This is part of his *Leatherstocking Tales* series but does not prominently feature a \"wife\" in the titular sense; the main character is Natty Bumppo (Hawkeye), who remains unmarried throughout most of his life.\n2.  ***The Captain\u2019s Daughter*** (*Kapitanskaya Dochka*) by Alexander Pushkin \u2013 Sometimes confused due to naval/military themes.\n3.  ***Moby-Dick*** by Herman Melville \u2013 Features a captain (Ahab) and crew, but no central \"pilot's wife.\"\n4.  **Short Stories or Lesser-Known Novels**: There are obscure short stories or regional novels with similar titles, but none achieve canonical status where \"early events setting up later ones\" would be a standard literary analysis question without more context.\n\n### Possible Intended Work: *The Pilot* by James Fenimore Cooper?\n\nIf you meant **\"The Pilot\"** by James Fenimore Cooper (1821), which is about the American privateer John Paul Jones during the Revolutionary War:\n\n-   **Early Events**: The novel opens with the introduction of Captain Delancy and his crew, establishing themes of loyalty, duty to country, and the moral complexities of war.\n-   **Setup for Later Events**: \n    -   The early depiction of naval discipline and camaraderie foreshadows the challenges faced in later battles.\n    -   The character of Dolly Baldy, a loyal servant/friend, represents steadfastness that contrasts with betrayal or cowardice shown later.\n    -   Political tensions between different factions (Patriots vs. Loyalists) introduced early on drive the conflict and personal dilemmas encountered by characters throughout the narrative.\n\n### Possible Intended Work: *The Wife* by Tessa Hadley? Or Other Novels With \"Wife\" in Title?\n\nIf you meant a novel where **marriage/relationship dynamics** are central to plot structure (e.g., *Jane Eyre*, *Great Expectations*, *Middlemarch*), please clarify the title.\n\n---\n\n### Recommendation:\n\nTo provide an accurate literary analysis, could you please confirm:\n\n1.  The **correct title** of the novel.\n2.  The **author\u2019s name**.\n3.  Whether it is a classic work or a more contemporary/textbook-specific reading.\n\nOnce clarified, I can explain how early events (such as character introductions, inciting incidents, or thematic motifs) set up later developments like climax, resolution, and character arcs.",
+ "attempts": [
+  {
+   "nudged": false,
+   "reply": "{\n\"P1\": \"absent\",\n\"P2\": \"absent\",\n\"P3\": \"absent\",\n\"P4\": \"absent\",\n\"P5\": \"absent\",\n\"P6\": \"absent\",\n\"P7\": \"absent\",\n\"P8\": \"absent\",\n\"P9\": \"absent\",\n\"P10\": \"absent\",\n\"P11\": \"absent\",\n\"P12\": \"absent\",\n\"P13\": \"absent\",\n\"P14\": \"absent\"\n}",
+   "model": "Qwen3.6-35B-A3B-MTP-UD-Q6_K"
+  }
+ ],
+ "parsed": {
+  "P1": "absent",
+  "P2": "absent",
+  "P3": "absent",
+  "P4": "absent",
+  "P5": "absent",
+  "P6": "absent",
+  "P7": "absent",
+  "P8": "absent",
+  "P9": "absent",
+  "P10": "absent",
+  "P11": "absent",
+  "P12": "absent",
+  "P13": "absent",
+  "P14": "absent"
+ }
+}

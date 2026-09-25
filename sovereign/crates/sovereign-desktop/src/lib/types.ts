@@ -2812,6 +2812,9 @@ export interface AtlasNode {
   atom_type: string;
   salience?: number;
   degree: number;
+  /** The declared type's own noun (`hoard`, `mint`) on a declared corpus
+   *  — the map colours by it when present (stage 0b). Absent otherwise. */
+  declared_type?: string;
 }
 /** One edge. `edge_type` is the `EdgeType` serde string; `crux` is the
  *  disagreement a "Tension" edge turns on. */

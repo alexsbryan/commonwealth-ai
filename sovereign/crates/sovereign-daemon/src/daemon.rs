@@ -2010,6 +2010,10 @@ impl EmbeddedDaemon {
     ///   - the daemon resumed an older mesh from before this cache
     ///     existed (the share UI hides the invite card and prompts
     ///     a rotate to recover a link)
+    ///   - the cached key no longer hashes to the mesh's invite
+    ///     credential — a rotation was adopted from a peer and the new
+    ///     key's plaintext never travels; serving the stale key would
+    ///     render an invitation the founder refuses
     ///
     /// The `join_link` is reconstructed on demand from the cached
     /// key + the current mesh name via [`sovereign_mesh::deep_link::build_join_link`],
@@ -2030,10 +2034,41 @@ impl EmbeddedDaemon {
             DaemonState::Stopped => return None,
         };
         drop(state);
-        let (mesh_name, require_encryption) = {
+        let (mesh_name, require_encryption, invite_key_hash) = {
             let mesh = app_state.inner.fabric.mesh.read().await;
-            (mesh.name.clone(), mesh.require_encryption)
+            (
+                mesh.name.clone(),
+                mesh.require_encryption,
+                mesh.invite_key_hash,
+            )
         };
+        // A cached plaintext is a link only while it still opens the door.
+        //
+        // A rotation this node did not perform arrives as hash + version (the
+        // merge in `Mesh::merge_invite_from`), and the cached plaintext —
+        // `self.join_key`, restored from `join_key.secret` — is left behind by
+        // design: the new key's plaintext never travels. Serving the stale key
+        // renders an invitation the founder refuses ("join key does not
+        // match", measured live 2026-09-23), which reads as a working link and
+        // costs whoever tries it. Serve NOTHING and say why: the share surface
+        // already hides the card on `None` and prompts a rotate.
+        if commonwealth_discovery::membership::hash_join_key(&key) != invite_key_hash {
+            // One warn per process: a status poll repeats, and the divergence
+            // does not change until a rotate.
+            static WARNED: std::sync::atomic::AtomicBool =
+                std::sync::atomic::AtomicBool::new(false);
+            if !WARNED.swap(true, std::sync::atomic::Ordering::Relaxed) {
+                warn!(
+                    "invite: the cached join key no longer matches this mesh's \
+                     invite hash — a rotation was adopted or an older secret was \
+                     restored, so NO join link is served. `svrn mesh rotate` mints \
+                     a fresh one."
+                );
+            } else {
+                tracing::debug!("invite: still diverged; no join link served");
+            }
+            return None;
+        }
         // Live-read the dial string on every call — the desktop's
         // status poll merges this in, so the share card upgrades
         // itself as the relay connects (and a rotated invite keeps its
@@ -2087,19 +2122,38 @@ impl EmbeddedDaemon {
                 .cloned()
                 .collect()
         };
-        let mut out = Vec::with_capacity(members.len());
-        for m in members {
+        // Concurrent and bounded. Sequential iteration let ONE stalling
+        // remote_info hold every reader of this snapshot: while a large
+        // ingest churned the endpoint (2026-09-22, sf-assessor-roll),
+        // /v1/mesh/media took >8s against ~1ms idle and the desktop's
+        // offers poll timed out naming the route. join_all preserves roster
+        // order; a probe over the bound reports no path — the "no record"
+        // reading — NAMED in the log rather than substituted silently.
+        const PROBE_BOUND: std::time::Duration = std::time::Duration::from_secs(1);
+        let probes = members.into_iter().map(|m| {
+            let endpoint = endpoint.clone();
             let pubkey = m.node_pubkey.expect("filtered to Some above");
-            let path =
-                sovereign_mesh::iroh_access::MeshIrohAccess::peer_path_on(&endpoint, &pubkey.0)
-                    .await;
-            out.push(MemberReach {
-                node_id: m.node_id,
-                name: m.name.clone(),
-                path,
-            });
-        }
-        out
+            async move {
+                let probe =
+                    sovereign_mesh::iroh_access::MeshIrohAccess::peer_path_on(&endpoint, &pubkey.0);
+                let path = match tokio::time::timeout(PROBE_BOUND, probe).await {
+                    Ok(path) => path,
+                    Err(_) => {
+                        tracing::warn!(
+                            peer = %m.name,
+                            "iroh path probe exceeded 1s; reporting no path for this read"
+                        );
+                        None
+                    }
+                };
+                MemberReach {
+                    node_id: m.node_id,
+                    name: m.name,
+                    path,
+                }
+            }
+        });
+        futures::future::join_all(probes).await
     }
 
     /// The founder's OWN iroh reachability (Track W): is this node relay-homed +
@@ -3795,13 +3849,21 @@ impl EmbeddedDaemon {
                 app_state_clone.clone(),
                 crate::server::ClientSurface::Peer,
             );
-            let mut guest_router = crate::server::client_router_for(
+            // The guest listener — what the iroh GUEST_ALPN forward serves —
+            // gets the SAME guest surface as the door, pages included.
+            // Without the merge a phone that tunnelled in was refused
+            // /ring/ with a 403 `out_of_scope` (permits_path knows only rail
+            // and API routes; pages are not in a scope's path set because
+            // they are public shells — the DATA behind them is what the
+            // bearer gates), so "land on the index and pick" only worked on
+            // the LAN. `door_router` is the one owner of that merge; the
+            // pages are grant-filtered by the index itself, exactly as they
+            // are on the door's own bind.
+            let guest_router = crate::guest_door::door_router(
                 app_state_clone.clone(),
-                crate::server::ClientSurface::Guest,
+                guest_pages.clone(),
+                turn_host,
             );
-            if let Some(host) = turn_host {
-                guest_router = guest_router.layer(axum::Extension(host));
-            }
             let rail_router = crate::server::client_router_for(
                 app_state_clone,
                 crate::server::ClientSurface::Rail,

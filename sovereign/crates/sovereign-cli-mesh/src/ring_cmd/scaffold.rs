@@ -45,6 +45,13 @@ pub(super) fn run_new(args: &[String]) -> i32 {
                 .unwrap_or_default(),
         )
     });
+    // The namespace the commands below need is this directory's name (the same
+    // slug the rail uses); printing it beats printing `<namespace>`.
+    let ns = dir
+        .file_name()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_default();
+
     if dir.join("index.html").exists() {
         // Not an error, and it writes nothing. Re-running the scaffold is
         // what somebody does when they have lost the thread, and the useful
@@ -53,7 +60,7 @@ pub(super) fn run_new(args: &[String]) -> i32 {
         // the one that keeps their edits.
         println!("This directory is already a ring app: {}", dir.display());
         println!();
-        println!("  svrn ring dev <namespace> --dir {}", dir.display());
+        println!("  svrn ring show {ns}                 # open it on this screen");
         return 0;
     }
     if let Err(e) = std::fs::create_dir_all(&dir) {
@@ -81,8 +88,9 @@ pub(super) fn run_new(args: &[String]) -> i32 {
         dir.display()
     );
     println!();
-    println!("  svrn ring roster add <you> --self --ring <namespace>");
-    println!("  svrn ring dev <namespace> --dir {}", dir.display());
+    println!("  svrn ring roster add <you> --self --ring {ns}");
+    println!("  svrn ring show {ns}                 # open it on this screen");
+    println!("  svrn ring host {ns}                 # then hand the room a QR");
     0
 }
 

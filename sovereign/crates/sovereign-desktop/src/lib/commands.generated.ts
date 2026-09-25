@@ -59,6 +59,7 @@ export interface CommandArgs {
   atlas_subgraph: {
     corpusId: unknown;
     maxNodes?: unknown;
+    highlight?: unknown;
   };
   attach_restart_daemon: Record<string, never>;
   build_corpus_index: {
@@ -233,6 +234,17 @@ export interface CommandArgs {
     corpusId: unknown;
     displayName: unknown;
     sourcePath: unknown;
+  };
+  guest_grant_create: {
+    scope: unknown;
+    models: unknown;
+    baseUrl?: unknown;
+    ttlSecs?: unknown;
+    label?: unknown;
+  };
+  guest_grant_list: Record<string, never>;
+  guest_grant_revoke: {
+    token: unknown;
   };
   import_anthropic_zip: {
     request: unknown;
@@ -459,6 +471,9 @@ export interface CommandArgs {
   mesh_list: Record<string, never>;
   mesh_list_peer_preferences: Record<string, never>;
   mesh_media_offers: Record<string, never>;
+  mesh_media_probe: {
+    playerUrl: unknown;
+  };
   mesh_preview_join_link: {
     link: unknown;
   };

@@ -219,6 +219,12 @@ context_size = $CTX
 [discovery]
 mdns = false
 seed_addrs = []
+$( [ -n "$join_link" ] || printf '%s\n' '' \
+  '# SOLO: admit no peer request at all. It joins no mesh and learns no peer, so' \
+  '# nothing should ever ask; zero makes that a refusal and not a default of 1' \
+  '# (setup_config.rs `default_max_peer_inflight`). A --mesh pod keeps the default:' \
+  '# serving peers is what it was rented for.' \
+  '[daemon]' 'max_peer_inflight = 0' )
 CFG
 
 # MTP (speculative decode off the model's own nextn head) is ON by default;

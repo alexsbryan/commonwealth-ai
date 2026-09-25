@@ -10,7 +10,7 @@ arguments = false
 # (`Pipeline::emits`) and ratcheted by
 # `builtin_navigation_rows_name_only_kinds_the_pipeline_emits`. Kinds the
 # pre-registered table lists and no built-in build produces are absent on
-# purpose: `Position`/`Opposition` atoms, `Causes` and `OpposesIn` edges, and
+# purpose: `Position`/`Opposition` atoms, `OpposesIn` edges, and
 # `Grounds`, which the resolvers write from an atom to a CHUNK — it has no
 # seat in the atom CSR and a row walking it walks nothing. Exemplars describe
 # question SHAPES this genre's readers ask, never a bank's sentences.

@@ -18,7 +18,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use super::{
     AttrFamily, Force, OntologyLanguageRegistry, OntologyPolicies, SupersessionClock, TypeKind,
 };
-use crate::enrichment::atlas::analysis::TensionStrategy;
+use crate::enrichment::atlas::analysis::{TensionStrategy, SAME_FIELD_CLOCK, SAME_FIELD_SUBJECT};
 use crate::enrichment::pipeline::atlas::EntityType;
 use crate::recipe::OntologyBlock;
 
@@ -260,6 +260,40 @@ fn check_declarations(p: &OntologyPolicies, errors: &mut Vec<String>) {
                 ));
             }
         }
+
+        if t.kind == TypeKind::State {
+            // A state is a condition OF something. `of` is what routes it to
+            // a Phase-1 facet — an entity puts it on `entities_developed`, a
+            // relation on `relations_developed` — and a state that names
+            // neither cannot be extracted or attached to an atom. It used to
+            // load and then do nothing at all.
+            if t.of.is_none() {
+                errors.push(format!(
+                    "ontology type `{}` is a state and declares no `of`. A state is a \
+                     condition of something: name the declared entity it belongs to, or \
+                     the declared relation when the state is of the PAIR (`of = \"bond\"`).",
+                    t.name
+                ));
+            }
+            // The `State` atom has no attribute bag — unlike entity, relation
+            // and claim atoms. Putting the keys in the extraction schema would
+            // ask the model for values nothing can store, so refuse here
+            // rather than drop them after the call (ARCH §6).
+            if !t.attributes.is_empty() {
+                errors.push(format!(
+                    "ontology type `{}` is a state and declares attributes ({}). The \
+                     `State` atom carries no attributes, so they would be extracted and \
+                     dropped. Put them on the entity or relation the state is `of`, or \
+                     fold the distinction into separate state types.",
+                    t.name,
+                    t.attributes
+                        .iter()
+                        .map(|a| a.name.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ));
+            }
+        }
     }
 
     for (claim, clock) in &p.change.supersedes {
@@ -291,6 +325,33 @@ fn check_declarations(p: &OntologyPolicies, errors: &mut Vec<String>) {
         }
     }
 
+    // `seed.entity_types` is `Vec<EntityType>`, and `EntityType` carries an
+    // `Other(String)` arm — so a misspelling deserialises happily into a type
+    // no entity will ever have, and the row seeds NOTHING with no complaint.
+    // Every other navigation field (`kinds`, `walk`) is a closed enum that
+    // refuses an unknown spelling at load; this one could not, so it is
+    // checked here against the same resolvable set the reference facets use.
+    let entity_names: BTreeSet<&str> = types
+        .iter()
+        .filter(|t| t.kind == TypeKind::Entity)
+        .map(|t| t.name.as_str())
+        .chain(EntityType::NAMED.iter().copied())
+        .collect();
+    for (kind, walk) in p.navigation.rows() {
+        for et in &walk.seed.entity_types {
+            let spelling = et.as_str_repr();
+            if !entity_names.contains(spelling) {
+                errors.push(format!(
+                    "navigation.{}: seed.entity_types names `{spelling}`, which is \
+                     neither a base entity kind nor a declared entity type \
+                     (entity types: {}). A name nothing carries seeds nothing.",
+                    kind.as_str(),
+                    join_or_none(entity_names.iter().copied())
+                ));
+            }
+        }
+    }
+
     let tension = &p.derivation.tension;
     for b in &tension.between {
         if !claim_names.contains(b.as_str()) {
@@ -300,7 +361,11 @@ fn check_declarations(p: &OntologyPolicies, errors: &mut Vec<String>) {
             ));
         }
     }
-    if !tension.same.is_empty() {
+    // `same = []` waives the criterion and names no field, so there is
+    // nothing here to resolve; it is legible on its own and the rules below
+    // have no input to run on. Omitting the key entirely (`None`) takes the
+    // default and is likewise nothing to check.
+    if let Some(same) = tension.same.as_ref().filter(|s| !s.is_empty()) {
         if tension.between.is_empty() {
             errors.push(
                 "tension.same is set but tension.between is empty; name the claim types \
@@ -314,11 +379,17 @@ fn check_declarations(p: &OntologyPolicies, errors: &mut Vec<String>) {
                 .filter_map(|b| p.type_decl(b))
                 .flat_map(|t| t.attributes.iter().map(|a| a.name.as_str()))
                 .collect();
-            for s in &tension.same {
-                if s != "subject" && !attrs.contains(s.as_str()) {
+            for s in same {
+                // The two reserved fields resolve off the claim itself rather
+                // than off a declared attribute (`tension_fields::field_value`).
+                // `clock` was missing here, so the documented default —
+                // `DEFAULT_SAME_FIELDS`, subject plus clock — refused to
+                // validate when an author wrote it out explicitly.
+                if s != SAME_FIELD_SUBJECT && s != SAME_FIELD_CLOCK && !attrs.contains(s.as_str()) {
                     errors.push(format!(
-                        "tension.same names `{s}`, which is neither `subject` nor an \
-                         attribute declared on {} (attributes: {})",
+                        "tension.same names `{s}`, which is neither `{SAME_FIELD_SUBJECT}`, \
+                         `{SAME_FIELD_CLOCK}`, nor an attribute declared on {} \
+                         (attributes: {})",
                         tension.between.join(", "),
                         join_or_none(attrs.iter().copied())
                     ));

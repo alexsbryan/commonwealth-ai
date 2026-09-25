@@ -212,10 +212,10 @@ pub struct SynthSnapshot {
     /// Diagnostic: the same fact rule applied to the *snippets* in
     /// `retrieved_chunks` rather than the answer. Lets the report
     /// distinguish "retrieval missed the fact" from "retrieval had the
-    /// fact but the model didn't surface it." Snippets are truncated
-    /// to ~200 chars by the runtime, so this is a lower bound on what
-    /// retrieval actually saw — read alongside the retrieval-mode
-    /// baseline for the unbiased number.
+    /// fact but the model didn't surface it." Scored over the FULL
+    /// chunk text since the `snippet` cap was removed, so it is now
+    /// what retrieval saw rather than a lower bound on it. Values from
+    /// before that change are strictly lower and not comparable.
     pub chunks_fact_score: ScoreSnapshot,
     /// Instructor-mode (LLM-as-judge) score: per fact, did a fast-slot
     /// model decide the concept was conveyed by the answer? Catches
@@ -228,24 +228,17 @@ pub struct SynthSnapshot {
     /// decisions without re-running. Empty when `--no-judge`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub judge_evidence: Vec<crate::eval_cmd::score::JudgeFactDetail>,
+    /// The grounding gate's typed decision for this turn (action id,
+    /// retried, violation_prob, refused span members), read back from
+    /// the persisted message metadata. `None` when the turn's route
+    /// never gated — which is itself a fact about the row, not a
+    /// default. Without it a board cannot attribute a zero to the gate
+    /// vs retrieval after the fact (ei7-ans, 2026-09-22).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gate: Option<crate::eval_cmd::gate_meta::GateDecisionEcho>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RetrievedChunk {
-    pub corpus_id: String,
-    pub title: Option<String>,
-    pub url: Option<String>,
-    pub score: f32,
-    /// Truncated to ~600 chars to keep run files readable; the full
-    /// chunk lives in the index if the developer wants to drill in.
-    pub snippet: String,
-    /// Provenance tag from the chunk's `metadata.source` — "raptor",
-    /// "atlas", "atom-enum", or absent for organically-retrieved
-    /// chunks. Makes structural-layer injection visible in the run file
-    /// so a bench can confirm (not infer) which layer surfaced a hit.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub source: Option<String>,
-}
+pub use crate::eval_cmd::retrieved_chunk::RetrievedChunk;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScoreSnapshot {
@@ -917,8 +910,12 @@ async fn run_question_prod(
             title: c.title.clone(),
             url: c.url.clone(),
             score: c.score,
-            snippet: truncate(&c.content.replace('\n', " "), 600),
+            snippet: c.content.replace('\n', " "),
             source: None,
+            // retrieval mode builds no prompt — `None` is
+            // "not known here", never a defaulted true.
+            in_prompt: None,
+            prompt_text: None,
         })
         .collect();
 
@@ -1493,8 +1490,12 @@ async fn run_question(
             title: c.title.clone(),
             url: c.url.clone(),
             score: c.score,
-            snippet: truncate(&c.content.replace('\n', " "), 600),
+            snippet: c.content.replace('\n', " "),
             source: None,
+            // retrieval mode builds no prompt — `None` is
+            // "not known here", never a defaulted true.
+            in_prompt: None,
+            prompt_text: None,
         })
         .collect();
     let atlas_navigation_packed = atlas_navigation
@@ -1504,8 +1505,12 @@ async fn run_question(
             title: c.title.clone(),
             url: c.url.clone(),
             score: c.score,
-            snippet: truncate(&c.content.replace('\n', " "), 600),
+            snippet: c.content.replace('\n', " "),
             source: None,
+            // retrieval mode builds no prompt — `None` is
+            // "not known here", never a defaulted true.
+            in_prompt: None,
+            prompt_text: None,
         })
         .collect();
 
@@ -1793,6 +1798,10 @@ async fn run_question_synth(
     // (written at `runtime/streaming.rs`, beside `meta_atlas_hits`).
     let atlas_walk = atlas_walk_from_metadata(metadata.as_ref(), &q.id);
 
+    // The gate's typed decision, off the same block (written beside
+    // `provenance` in knowledge_query.rs / streaming.rs).
+    let gate = crate::eval_cmd::gate_meta::gate_decision_from_metadata(metadata.as_ref(), &q.id);
+
     let titles: Vec<String> = retrieved_chunks_meta
         .iter()
         .filter_map(|c| c.get("title").and_then(|t| t.as_str()))
@@ -1840,6 +1849,11 @@ async fn run_question_synth(
                 .unwrap_or("")
                 .to_string(),
             source: c.get("source").and_then(|v| v.as_str()).map(str::to_string),
+            in_prompt: c.get("in_prompt").and_then(|v| v.as_bool()),
+            prompt_text: c
+                .get("prompt_text")
+                .and_then(|v| v.as_str())
+                .map(str::to_string),
         })
         .collect();
 
@@ -1900,6 +1914,7 @@ async fn run_question_synth(
         chunks_fact_score,
         judge_fact_score,
         judge_evidence,
+        gate,
     };
 
     let row = EvalResult {
@@ -2004,6 +2019,7 @@ fn empty_synth_result(q: &Question, err: String, stream_wall_ms: u64) -> EvalRes
             chunks_fact_score: score_facts_in_text(&q.expected_facts, "").into(),
             judge_fact_score: None,
             judge_evidence: Vec::new(),
+            gate: None,
         }),
         loose_source_score: None,
         loose_source_evidence: Vec::new(),
@@ -2015,103 +2031,10 @@ fn empty_synth_result(q: &Question, err: String, stream_wall_ms: u64) -> EvalRes
     row.with_error(err)
 }
 
+// The degraded-router tests live in a sibling file: keeping them inline put
+// this file past its arch-gate slack (ARCH §3.1) when the grounding gate's
+// echo field landed (a313c9c18). `#[path]`, so the names are unchanged — the
+// module stays a child of `runner` and reads private items through `super::*`.
 #[cfg(test)]
-mod degraded_router_tests {
-    use super::*;
-    use sovereign_contracts::types::{ResponseProvenance, RouterStamp};
-
-    /// The legacy shape from `router_stamp_tests::the_field_is_backward_compatible`
-    /// — the minimum a `ResponseProvenance` needs to parse.
-    fn provenance() -> ResponseProvenance {
-        serde_json::from_str(
-            r#"{"intent":"SIMPLE","search_method":null,"sources":[],
-                "inference_backend":"m","oicp_match":null,
-                "total_latency_ms":1,"tokens_used":2}"#,
-        )
-        .expect("legacy provenance parses")
-    }
-
-    /// SERIALISED BY SERDE, never hand-written, and that is the whole point of
-    /// this test. The key this reads (`router`) and the four field names inside
-    /// it are `ResponseProvenance`'s and `RouterStamp`'s to choose. A hand-typed
-    /// `"router"` here would keep passing after a `#[serde(rename)]` renamed the
-    /// wire field, and the detector would then silently never fire again —
-    /// which is exactly the failure it exists to catch (ARCH §18.1).
-    fn as_metadata(stamp: Option<RouterStamp>) -> serde_json::Value {
-        let mut p = provenance();
-        p.router = stamp;
-        serde_json::to_value(&p).expect("provenance serialises")
-    }
-
-    #[test]
-    fn a_turn_routed_by_no_classifier_is_not_a_measurement() {
-        let degraded = as_metadata(Some(RouterStamp::from_liveness(false, false, false, false)));
-        let why = degraded_router(Some(&degraded))
-            .expect("all four classifiers dead is the degraded host");
-        assert!(
-            why.contains("not a measurement"),
-            "the reason reaches the report and one example is printed by \
-             `classify_retrieval` — it has to say what happened; got {why}"
-        );
-    }
-
-    /// The two ways a healthy run reaches here, and neither may be excluded.
-    /// Collapsing either into "degraded" would silently shrink every bank.
-    #[test]
-    fn a_partial_router_and_an_absent_one_are_both_measurements() {
-        let partial = as_metadata(Some(RouterStamp::from_liveness(true, false, false, false)));
-        assert_eq!(
-            degraded_router(Some(&partial)),
-            None,
-            "one live classifier still routed — degradation is a degree, and \
-             `routed_by_none` is the one implementation of the question (§10.6)"
-        );
-
-        let absent = as_metadata(None);
-        assert_eq!(
-            degraded_router(Some(&absent)),
-            None,
-            "a turn that does not REPORT a router is not a turn that reports a \
-             dead one; old messages have no `router` key at all"
-        );
-
-        assert_eq!(
-            degraded_router(None),
-            None,
-            "no provenance block at all is not evidence of degradation"
-        );
-    }
-
-    /// The exclusion has to survive the trip through `EvalResult`, because that
-    /// is the only shape `drop_unmeasured` can see.
-    #[test]
-    fn the_degraded_row_carries_the_error_drop_unmeasured_filters_on() {
-        let row = EvalResult {
-            error: None,
-            question_id: "q1".into(),
-            category: "c".into(),
-            question: "why".into(),
-            retrieved: Vec::new(),
-            source_score: score_sources(&[], &[]).into(),
-            fact_score: score_facts_in_text(&[], "").into(),
-            embed_ms: 0,
-            search_ms: 0,
-            corpora_hit: Vec::new(),
-            vector_eligible: false,
-            synth: None,
-            loose_source_score: None,
-            loose_source_evidence: Vec::new(),
-            essay_readiness: None,
-            atlas_navigation: Vec::new(),
-            meta_atlas_hits: Vec::new(),
-            atlas_walk: None,
-        };
-        let degraded = as_metadata(Some(RouterStamp::default()));
-        let why = degraded_router(Some(&degraded)).expect("default stamp is all-false");
-        assert!(
-            row.with_error(why).error.is_some(),
-            "a row whose scores are arithmetic over an unrouted answer must not \
-             reach the baseline diff as a measurement"
-        );
-    }
-}
+#[path = "runner/degraded_router_tests.rs"]
+mod degraded_router_tests;

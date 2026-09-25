@@ -3,7 +3,7 @@
 #
 # Three throwaway daemons on ONE host under their own `SOVEREIGN_DATA_DIR`, on
 # real iroh, one mesh, the three keys rostered on all three. Each daemon gets
-# its own `svrn ring dev` proxy, and a node driver runs the ring-doc PAGE's
+# its own `svrn ring show` proxy, and a node driver runs the ring-doc PAGE's
 # loop three times over (sovereign/apps/ring-doc/adapter.js — the same
 # functions app.js calls, with app.js's own debounce and poll constants read
 # out of app.js) against the three proxies. Headless because the bars are
@@ -40,13 +40,13 @@
 #           node (`--device /dev/dri`); empty (the default) is all-CPU.
 #   podman  three containers ring-doc-a|b|c on a `ring-doc` network, the repo
 #           bind-mounted at its own path so target/debug/* runs unchanged. Each
-#           daemon and its `ring dev` run INSIDE their container and stay on
+#           daemon and its `ring show` run INSIDE their container and stay on
 #           that container's loopback, as the product requires. The host
 #           browser (and the driver) reaches a node's page through a python3
 #           forwarder IN the container, container-address:DPORT → 127.0.0.1:DPORT,
 #           published on the host's DPORT. The forwarder is this instrument's,
 #           not the product's: it stands in for "the browser on that machine",
-#           and `svrn ring dev` gains no bind flag for it.
+#           and `svrn ring show` gains no bind flag for it.
 # Every command that runs on or talks to a node goes through `sv`/`node_exec`/
 # `node_curl`; every verdict row is the same code on both backends.
 #
@@ -72,7 +72,7 @@ CAMPAIGN="$REPO/quality/campaigns/ring-doc.toml"
 RING=ring-doc
 export SOVEREIGN_NO_STALE_WARN=1
 
-# client · internal (rail = client + 2) · the `ring dev` proxy. Clear of the
+# client · internal (rail = client + 2) · the `ring show` proxy. Clear of the
 # daemon's 9741 and of ring-offers-demo's 197xx.
 declare -A CPORT=([a]=19841 [b]=19851 [c]=19861)
 declare -A IPORT=([a]=19842 [b]=19852 [c]=19862)
@@ -108,7 +108,7 @@ declare -A NET_FLAGS=()
 declare -A PNET=([a]=$NET [b]=$NET [c]=$NET)
 declare -A XNET=()
 # A SECOND published port on a node, beside its page port. A wall holding two
-# apps runs a `ring dev` per app — one namespace each — and the host-side wall
+# apps runs a `ring show` per app — one namespace each — and the host-side wall
 # watcher reads both. Unset everywhere but there, so rr-1's three nodes publish
 # exactly the one port they always did.
 declare -A XPUB=()
@@ -217,7 +217,7 @@ start_forwarder() { # node [port]
 stale_binaries() {
   local newest src_s src_f bin_s
   # `sovereign/apps/` is excluded: those pages are SERVED from the repo mount by
-  # `svrn ring dev`, never compiled in (no include_str! names that tree), so a
+  # `svrn ring show`, never compiled in (no include_str! names that tree), so a
   # page-only edit is already what the run reads, and no rebuild can move the
   # binary's mtime past it. Compiled-in JS (ring_cmd/templates, the door's
   # shim) stays covered.
@@ -452,13 +452,13 @@ members_from_mesh() {
 start_proxy() { # node — the page's door to its daemon, holding the grant
   local n=$1 deadline
   [ -f "$D/$n/dev.pid" ] && node_kill "$n" "$D/$n/dev.pid" && sleep 1
-  node_bg "$n" "$D/$n/dev.pid" "$D/$n/dev.out" "$D/$n/dev.out" "$CLI" ring dev $RING --dir "$APP" --port "${DPORT[$n]}"
+  node_bg "$n" "$D/$n/dev.pid" "$D/$n/dev.out" "$D/$n/dev.out" "$CLI" ring show $RING --dir "$APP" --port "${DPORT[$n]}"
   deadline=$(( $(date +%s) + 60 ))
   while [ "$(date +%s)" -lt "$deadline" ]; do
     node_curl "$n" -s --max-time 2 -o /dev/null -w '%{http_code}' -X POST "$(at "${DPORT[$n]}")/__ring/log" -d '{}' 2>/dev/null | grep -q 200 && return 0
     sleep 1
   done
-  echo "ring dev for $n never served /__ring/log" >&2
+  echo "ring show for $n never served /__ring/log" >&2
   return 1
 }
 

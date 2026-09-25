@@ -124,6 +124,28 @@ because there is no ordering decision left to make.
 and `ingest_all` are the whole sync protocol; both peers then `admit` to the
 same order. There is no leader in that exchange.
 
+## The shortest real exchange
+
+The mesh half is the same shape: two keys, one command each, and the caller's
+identity arrives at your service as a request header — no accounts, no login
+page. Run both from this repo:
+
+```sh
+# Terminal 1 — a node with a service on it. Prints a dial ticket.
+cargo run -p commonwealth-transport --features iroh --example hello_mesh -- serve
+
+# Terminal 2 — any other node reaches that service by dialing the ticket.
+cargo run -p commonwealth-transport --features iroh --example hello_mesh -- dial '<ticket>'
+```
+
+`serve` prints what its gate admitted (`--admit <dialer-pubkey>` closes it to
+every other key), and the service reads the verified `X-Mesh-Pubkey` from the
+request — a client that forges that header has it stripped at the gate. The
+service itself is ordinary HTTP on loopback; the transport is the part you do
+not write. Add `--no-n0` on both sides for a flat LAN or a mesh that runs its
+own infrastructure. The file is
+[`commonwealth-transport/examples/hello_mesh.rs`](crates/commonwealth-transport/examples/hello_mesh.rs).
+
 ## Where to go next
 
 - **[BOUNDARY.md](BOUNDARY.md)** — what may and may not cross into this package,

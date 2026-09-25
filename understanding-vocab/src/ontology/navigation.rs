@@ -406,11 +406,28 @@ impl WalkPolicy {
             walk: Vec::new(),
             hops: 0,
             budget: DEFAULT_BUDGET,
+            // The first four phrases here (2026-09-17) were abstract
+            // pronoun shapes, and a real list question never matched one:
+            // measured 2026-09-22 in the classifier's own space, the ANS
+            // bank's 32 "which mints are represented among the coins of
+            // the X hoard" questions lost to LOOKUP 32/32 (0.84-0.88 vs
+            // 0.80-0.86) — the speech-act embedder reads a concrete
+            // membership question as being-about-the-thing. The added
+            // phrasings are the membership family a reader actually types
+            // (validated both directions: 32/32 raw wins on the bank's K1,
+            // and thematic/trajectory/tension/lookup controls unflipped);
+            // subjects stay generic so the centroid carries the ACT, not a
+            // domain. Calibrated against the daemon embedder; artifact
+            // target/kind-calibration/ + session note 7837fdb6.
             exemplars: exemplars(&[
                 "which ones are there",
                 "list all of them",
-                "how many of these does it record",
-                "enumerate the items",
+                "which types of things are included",
+                "what items does the collection contain",
+                "which members belong to this group",
+                "what kinds are represented in it",
+                "name every category it covers",
+                "which ones does it record",
             ]),
             summary_sources: Vec::new(),
         }

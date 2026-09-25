@@ -55,6 +55,7 @@ mod model_files;
 mod newsworthy_status;
 mod peer_preference;
 mod pipeline_pause;
+mod ring_checkpoint;
 mod ring_live;
 mod ring_sync;
 mod rpc_warm;
@@ -72,6 +73,7 @@ pub use corpus_ingest::{
 };
 pub use guest_grant::{guest_grant_issue, guest_grant_list, guest_grant_revoke};
 pub use guest_route::{guest_route, GuestRouteResponse};
+pub use ring_checkpoint::ring_checkpoint;
 pub use ring_live::ring_live;
 pub use ring_sync::ring_sync;
 // The ring-sync wire body lives in the shared leaf both ends can name

@@ -18,6 +18,11 @@
 # and tests it with nothing of this monorepo on the path, and then RUNS the
 # binary against a real mesh.
 #
+# ONE named exception: cargo-hakari's `workspace-hack` — a hand-spelled path by
+# construction — is SHED from the copied manifests rather than scored. It is
+# this monorepo's build-unification shim (added 2026-09-17) and a lifted
+# closure has no use for it. The strip is printed (`STRIPPED …`), never silent.
+#
 # ── The four verdicts, and how the runner reads them (ARCH §18.2, §18.3) ────
 #
 # `scripts/co-lineage.py::measure_bar` maps an instrument's exit code and last
@@ -148,6 +153,16 @@ wsdeps = ws.get("dependencies", {})
 # fan-out route this daemon mirrors) and it carries corpus-engine.
 FORBIDDEN = re.compile(r"^(sovereign-|corpus-engine|commonwealth-(knowledge|inference|api)$)")
 
+# cargo-hakari's build shim. `workspace-hack` is added to every workspace
+# member (2026-09-17, bl-hakari) to pin third-party feature unions so a scoped
+# `-p` build resolves what `--workspace` resolves. That is a property of THIS
+# monorepo's build and a lifted closure has no scoped-build drift to solve —
+# and cannot resolve `../../../workspace-hack` at all. So it is SHED from the
+# copy (reported below), never scored as a hand-spelled path. Without this
+# exemption the instrument that had passed on 2026-09-11 scores every crate 0
+# from 2026-09-17 on, for a dep that is not part of any lift claim.
+SHIM = "workspace-hack"
+
 def manifest(path): return tomllib.loads(open(path).read())
 def tables(m):
     for t in ("dependencies", "dev-dependencies", "build-dependencies"):
@@ -159,6 +174,7 @@ def tables(m):
 # package carries its tests.
 seeds = {"commonwealth-rails": os.path.join(repo, "commonwealth/crates/commonwealth-rails")}
 found, hand_paths, referenced, queue = {}, [], set(), list(seeds.items())
+shim_holders = set()
 while queue:
     name, cdir = queue.pop()
     if name in found: continue
@@ -166,6 +182,9 @@ while queue:
     for table, dep, spec in tables(manifest(os.path.join(cdir, "Cargo.toml"))):
         if FORBIDDEN.match(dep):
             print(f"FORBIDDEN {name} -> {dep} ({table})"); sys.exit(4)
+        if dep == SHIM:
+            shim_holders.add(name)
+            continue
         if spec.get("workspace"):
             referenced.add(dep)
             entry = wsdeps.get(dep)
@@ -207,6 +226,24 @@ os.makedirs(os.path.join(sandbox, "crates"))
 ignore = shutil.ignore_patterns("target", ".git")
 for name, cdir in found.items():
     shutil.copytree(cdir, os.path.join(sandbox, "crates", name), ignore=ignore)
+
+# Shed the shim from every copied manifest. Line-wise, so the manifests'
+# comments survive the edit; a non-comment line still naming the shim after
+# the strip is a planner failure, never a silent carry.
+shim_line = re.compile(r"^" + re.escape(SHIM) + r"\s*=")
+for name in sorted(shim_holders):
+    p = os.path.join(sandbox, "crates", name, "Cargo.toml")
+    lines = open(p).read().splitlines(keepends=True)
+    kept = [ln for ln in lines if not shim_line.match(ln)]
+    if len(kept) == len(lines):
+        print(f"SHIM-STRIP-MISS {name}: declares {SHIM} in a shape this planner cannot strip")
+        sys.exit(4)
+    leftovers = [ln for ln in kept if SHIM in ln and not ln.lstrip().startswith("#")]
+    if leftovers:
+        print(f"SHIM-STRIP-MISS {name}: {leftovers[0].strip()[:90]}")
+        sys.exit(4)
+    open(p, "w").write("".join(kept))
+print(f"STRIPPED {SHIM} from {len(shim_holders)} manifest(s): {' '.join(sorted(shim_holders))}")
 
 def render(v):
     if isinstance(v, bool): return "true" if v else "false"

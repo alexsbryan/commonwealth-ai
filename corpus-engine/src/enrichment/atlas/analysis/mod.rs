@@ -66,6 +66,7 @@ pub use tension_classifier::{
 };
 pub use tension_policy::{
     drop_non_comparable_pairs, restrict_claims_to_types, BetweenOutcome, ComparabilityReport,
+    SAME_FIELD_CLOCK, SAME_FIELD_SUBJECT,
 };
 pub use tension_shape::{derive_declared_strategy, CorpusShape};
 pub use tensions::{

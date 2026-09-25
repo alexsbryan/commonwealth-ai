@@ -20,9 +20,14 @@ use crate::ids::{NodeId, NodePubkey};
 /// name, or a node_id prefix of at least 4 hex characters (the `node-`
 /// prefix is optional on either side).
 ///
+/// The prefix is matched against the FULL 32-hex id (`to_hex`), not the
+/// 16-hex `Display` form: status tables print 22 characters and the collision
+/// warning prints all 32, and until 2026-09-22 neither resolved — only a
+/// prefix of 16 or fewer did, so the id the repair hint told you to paste
+/// answered "No member matching" (5302a6ed3).
+///
 /// A prefix shorter than 4 is refused rather than matched loosely — a
-/// one-character prefix against a 16-character id is very nearly "any
-/// member", and the callers act on the answer (`forget-member` writes a
+/// one-character prefix is very nearly "any member", and the callers act on the answer (`forget-member` writes a
 /// tombstone; `mesh media <peer>` mints a bridge; `media_allow` admits a
 /// dial). One implementation so every `<peer>` argument on every surface
 /// resolves the same way (ARCH §10.6) — it lives at the shared seam rather
@@ -32,9 +37,8 @@ pub fn member_matches(node_id: NodeId, name: &str, query: &str) -> bool {
     if name == query {
         return true;
     }
-    let id = node_id.to_string();
     let q = query.trim_start_matches("node-");
-    q.len() >= 4 && id.trim_start_matches("node-").starts_with(q)
+    q.len() >= 4 && node_id.to_hex().starts_with(q)
 }
 
 /// The one implementation of the `X-Mesh-*` scheme: what the acceptor tells an
@@ -105,6 +109,23 @@ mod tests {
         assert!(m("BeefyMac"), "exact name matches");
         assert!(!m("Beefy"), "a partial NAME must not match");
         assert!(!m("b883"), "a wrong prefix must not match");
+    }
+
+    /// Every id form an operator is shown must resolve: the 16-hex `Display`
+    /// (`node-…`), the 22-char column `mesh status` prints, and the full 32 the
+    /// alias warning prints. Only the first did — `forget-member <id from the
+    /// warning>` answered "No member matching" on a live roster.
+    #[test]
+    fn every_printed_node_id_form_resolves_its_member() {
+        let id = NodeId::from_hex("188f04e2831741c77ccd5a142a314e07").unwrap();
+        let m = |q: &str| member_matches(id, "LittleMac", q);
+        assert!(m(&id.to_string()), "Display form: {id}");
+        assert!(m("188f04e2831741c77ccd5a"), "status column (22)");
+        assert!(m("188f04e2831741c77ccd5a142a314e07"), "full hex (32)");
+        assert!(
+            !m("188f04e2831741c77ccd5a142a314e08"),
+            "a wrong full id must not match"
+        );
     }
 
     /// An empty query must never match. It reaches here as `--force` with no

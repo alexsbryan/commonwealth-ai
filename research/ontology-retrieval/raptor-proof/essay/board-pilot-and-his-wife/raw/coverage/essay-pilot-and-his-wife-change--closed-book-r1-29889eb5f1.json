@@ -1,0 +1,28 @@
+{
+ "kind": "coverage",
+ "key": "essay-pilot-and-his-wife-change--closed-book-r1",
+ "prompt": "Below are numbered plot points of a novel and an answer written about the novel.\nLabel every point by what the answer says about it:\n\"correct\" = the answer states it\n\"contradicted\" = the answer says something that conflicts with it\n\"absent\" = the answer does not mention it\nReturn only JSON with one entry per point: {\"P1\": \"correct\", \"P2\": \"absent\"}\n\nPoints:\nP1. The novel portrays the life of a sailor named Salve Kristiansen.\nP2. Salve loves Elisabeth and she returns his affection.\nP3. Elisabeth is attracted to a young officer who wishes to marry her.\nP4. Elisabeth spurns the officer because her old love for Salve prevails.\nP5. Salve leaves his native land in desperation before he can reconcile with Elisabeth.\nP6. Salve sails toward foreign shores after leaving home.\nP7. Salve returns to his old home years later.\nP8. Salve finds that Elisabeth has remained true to him during his absence.\nP9. Salve marries Elisabeth upon his return.\nP10. The thought of Elisabeth's momentary hesitation makes life miserable for both spouses.\nP11. Ten years elapse while Salve and Elisabeth struggle with their marital issues.\nP12. Salve and Elisabeth finally come to a clear understanding of one another.\nP13. Salve and Elisabeth lay the foundation for a happy life together.\nP14. The novel emphasizes the need of implicit confidence and trust in marriage.\n\nAnswer:\nIn *The Pilot and His Wife* by James Fenimore Cooper, Elisabeth (often referred to as \"the wife\" or associated with the character of **Helen** in some interpretations, but specifically referring to the central female figure who marries the pilot) undergoes a significant transformation from a passive, sheltered observer into an active participant in her own fate and the survival of those around her. However, it is important to clarify that *The Pilot and His Wife* is actually a lesser-known novel by James Fenimore Cooper, published posthumously in 1823. The protagonist\u2019s name is often debated due to translation and textual variations, but the core narrative arc remains consistent.\n\n### Initial State: Passive and Sheltered\nAt the beginning of the novel, Elisabeth (or Helen, depending on the edition/character focus) is depicted as:\n- **Innocent and Dependent:** She lives under the protection of others, particularly her father or guardian figures. Her world is limited to domestic concerns and social propriety.\n- **Emotionally Reserved:** She experiences love cautiously, constrained by societal expectations and familial duties.\n- **Observer Rather Than Actor:** She watches events unfold around her\u2014particularly the romantic tension between the Pilot (Dillon) and herself\u2014but does not take decisive action to alter their course.\n\n### Final State: Active and Resolute\nBy the end of the novel, Elisabeth has transformed into:\n- **Courageous and Assertive:** She actively seeks out the Pilot during moments of crisis, demonstrating emotional strength and independence.\n- **Self-Aware:** She understands the depth of her feelings for Dillon and no longer suppresses them due to external pressures.\n- **Agent of Resolution:** Her choices directly influence the outcome of the narrative, particularly in reconciling personal desire with moral duty.\n\n### Causes of Change\n1. **The Crisis of War and Separation:**  \n   The backdrop of the American Revolutionary War forces characters out of their sheltered lives. Danger and uncertainty strip away social pretenses, revealing true character. Elisabeth is forced to confront mortality and loss, which accelerates her maturity.\n\n2. **The Pilot\u2019s (Dillon\u2019s) Character and Actions:**  \n   Dillon embodies honor, sacrifice, and quiet strength. His unwavering integrity challenges Elisabeth to rise above her initial passivity. Witnessing his devotion to duty\u2014and later, his vulnerability\u2014inspires her to act with similar courage in matters of the heart.\n\n3. **Tragic Events and Loss:**  \n   Deaths or near-deaths within the narrative serve as catalysts for change. When faced with potential loss of loved ones, Elisabeth realizes that hesitation can have fatal consequences. This urgency propels her toward decisive action.\n\n4. **Internal Moral Struggle:**  \n   Elisabeth grapples with conflicting loyalties\u2014to family, society, and personal happiness. Her resolution comes from prioritizing authentic emotional truth over rigid social convention, a shift encouraged by the novel\u2019s romantic ideals.\n\n### Conclusion\nElisabeth\u2019s transformation is driven by external pressures (war, danger) and internal growth (love, moral clarity). She moves from passive compliance to active agency, mirroring the broader Romantic theme of individual emotion triumphing over societal constraint. Her journey reflects Cooper\u2019s exploration of how crisis reveals true character and enables personal liberation.",
+ "attempts": [
+  {
+   "nudged": false,
+   "reply": "{\n\"P1\": \"absent\",\n\"P2\": \"correct\",\n\"P3\": \"contradicted\",\n\"P4\": \"contradicted\",\n\"P5\": \"absent\",\n\"P6\": \"absent\",\n\"P7\": \"absent\",\n\"P8\": \"absent\",\n\"P9\": \"absent\",\n\"P10\": \"absent\",\n\"P11\": \"absent\",\n\"P12\": \"absent\",\n\"P13\": \"absent\",\n\"P14\": \"absent\"\n}",
+   "model": "Qwen3.6-35B-A3B-MTP-UD-Q6_K"
+  }
+ ],
+ "parsed": {
+  "P1": "absent",
+  "P2": "correct",
+  "P3": "contradicted",
+  "P4": "contradicted",
+  "P5": "absent",
+  "P6": "absent",
+  "P7": "absent",
+  "P8": "absent",
+  "P9": "absent",
+  "P10": "absent",
+  "P11": "absent",
+  "P12": "absent",
+  "P13": "absent",
+  "P14": "absent"
+ }
+}

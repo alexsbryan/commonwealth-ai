@@ -81,12 +81,33 @@ fn literary_atlas_describes_itself_naming_theme() {
         .contains(&AtomType::Position));
 }
 
+/// Kinds the PRE-REGISTERED default table names that NO built-in atlas
+/// produces — not one, anywhere. A row naming one of these grounds on less
+/// than it declares for every undeclared corpus, and nothing at runtime says
+/// so: `RowInert` is existential, so a row with one live edge and one dead
+/// one reads as fit.
+///
+/// This list only shrinks. `causes` was on it until 2026-09-21, when Phase 3b
+/// began emitting it from the trigger it already names for a state change.
+/// Producing the kind is the way off; deleting the line banks it.
+const DEFAULT_TABLE_PRODUCED_BY_NOTHING: &[&str] = &[
+    // Phase 7 — positions and oppositions — ships in no built-in pipeline.
+    // The tension row seeds on `position` beside Claim and walks `opposes_in`
+    // beside Tension, and every built-in emits the Claim and the Tension.
+    "position",
+    "opposes_in",
+    // Written from an atom to a CHUNK, so it never seats in the atom CSR and
+    // a row walking it walks nothing. Taking it out of the thematic row is a
+    // map change, not a producer change.
+    "grounds",
+];
+
 /// map-conversion rung 2 (2026-09-08): every ON row of every built-in map
 /// names only kinds its pipeline can emit (`KindSet::covers`, the universal
-/// rule) — and the ratchet BITES: the pre-registered table fails it on every
-/// built-in, because `Position`, `Causes`, `OpposesIn` and `Grounds` seat in
-/// no built-in atlas. Failing input: put `Grounds` back in any walk list, or
-/// `Position` in any seed list.
+/// rule). The pre-registered table still fails it on every built-in, and the
+/// kinds it fails on are named above rather than counted — see the comment
+/// in the body. Failing input: put `Grounds` back in any built-in walk list,
+/// or `Position` in any built-in seed list.
 #[test]
 fn builtin_navigation_rows_name_only_kinds_the_pipeline_emits() {
     let registry = PipelineRegistry::builtin();
@@ -111,17 +132,55 @@ fn builtin_navigation_rows_name_only_kinds_the_pipeline_emits() {
                 kind.as_str()
             );
         }
-        let uncovered = NavigationPolicy::default()
-            .rows()
-            .filter(|(_, r)| emits.covers(r).is_some())
-            .count();
-        assert!(
-            uncovered > 0,
-            "{id}: the pre-registered table is fully covered, so this ratchet could not bite"
-        );
         checked += 1;
     }
     assert!(checked >= 5, "checked {checked} atlas pipelines");
+
+    // The pre-registered table is what an UNDECLARED corpus walks under. Per
+    // GENRE it is expected to fit badly — engineering is claims-only, so every
+    // entity-touching row misses there, and that is a map difference, not a
+    // defect. What is a defect is a kind NO built-in produces at all: the row
+    // names it, every corpus walks it, and nothing ever emits one.
+    //
+    // This used to be asserted as `uncovered > 0` — "the ratchet can still
+    // bite" — which made a dead kind the EXPECTED state, permanently. `causes`
+    // sat in the trajectory row with no producer anywhere in the workspace for
+    // the life of the product, and that assertion passed the whole time,
+    // because one more dead kind still satisfies `> 0`.
+    let mut produced_atoms = std::collections::BTreeSet::new();
+    let mut produced_edges = std::collections::BTreeSet::new();
+    for id in registry.pipeline_ids() {
+        if !id.ends_with("_atlas") {
+            continue;
+        }
+        let emits = registry.get(id).unwrap().emits();
+        produced_atoms.extend(emits.atoms.iter().map(|a| a.label()));
+        produced_edges.extend(emits.edges.iter().map(|e| e.label()));
+    }
+    for (kind, row) in NavigationPolicy::default().rows() {
+        for k in row.seed.kinds.iter() {
+            let label = k.label();
+            assert!(
+                produced_atoms.contains(label)
+                    || DEFAULT_TABLE_PRODUCED_BY_NOTHING.contains(&label),
+                "the default {} row seeds on {label}, which NO built-in atlas \
+                 emits. Either produce it, or add it to \
+                 DEFAULT_TABLE_PRODUCED_BY_NOTHING with the reason.",
+                kind.as_str()
+            );
+        }
+        for e in row.walk.iter() {
+            let label = e.label();
+            assert!(
+                produced_edges.contains(label)
+                    || DEFAULT_TABLE_PRODUCED_BY_NOTHING.contains(&label),
+                "the default {} row walks {label}, which NO built-in atlas \
+                 emits. Either produce it, or add it to \
+                 DEFAULT_TABLE_PRODUCED_BY_NOTHING with the reason.",
+                kind.as_str()
+            );
+        }
+    }
     // Four genres × five rows on, plus engineering's one.
     assert_eq!(rows_on, 21);
 }
@@ -191,6 +250,52 @@ fn every_kind_a_pipeline_emits_is_reachable_by_some_row() {
         checked += 1;
     }
     assert!(checked >= 5, "checked {checked} atlas pipelines");
+
+    // The pre-registered table is what an UNDECLARED corpus walks under. Per
+    // GENRE it is expected to fit badly — engineering is claims-only, so every
+    // entity-touching row misses there, and that is a map difference, not a
+    // defect. What is a defect is a kind NO built-in produces at all: the row
+    // names it, every corpus walks it, and nothing ever emits one.
+    //
+    // This used to be asserted as `uncovered > 0` — "the ratchet can still
+    // bite" — which made a dead kind the EXPECTED state, permanently. `causes`
+    // sat in the trajectory row with no producer anywhere in the workspace for
+    // the life of the product, and that assertion passed the whole time,
+    // because one more dead kind still satisfies `> 0`.
+    let mut produced_atoms = std::collections::BTreeSet::new();
+    let mut produced_edges = std::collections::BTreeSet::new();
+    for id in registry.pipeline_ids() {
+        if !id.ends_with("_atlas") {
+            continue;
+        }
+        let emits = registry.get(id).unwrap().emits();
+        produced_atoms.extend(emits.atoms.iter().map(|a| a.label()));
+        produced_edges.extend(emits.edges.iter().map(|e| e.label()));
+    }
+    for (kind, row) in NavigationPolicy::default().rows() {
+        for k in row.seed.kinds.iter() {
+            let label = k.label();
+            assert!(
+                produced_atoms.contains(label)
+                    || DEFAULT_TABLE_PRODUCED_BY_NOTHING.contains(&label),
+                "the default {} row seeds on {label}, which NO built-in atlas \
+                 emits. Either produce it, or add it to \
+                 DEFAULT_TABLE_PRODUCED_BY_NOTHING with the reason.",
+                kind.as_str()
+            );
+        }
+        for e in row.walk.iter() {
+            let label = e.label();
+            assert!(
+                produced_edges.contains(label)
+                    || DEFAULT_TABLE_PRODUCED_BY_NOTHING.contains(&label),
+                "the default {} row walks {label}, which NO built-in atlas \
+                 emits. Either produce it, or add it to \
+                 DEFAULT_TABLE_PRODUCED_BY_NOTHING with the reason.",
+                kind.as_str()
+            );
+        }
+    }
     assert!(
         orphans.is_empty(),
         "these kinds are built and then unreachable — every one is atoms written \
@@ -373,6 +478,52 @@ fn builtin_maps_use_the_pipelines_own_deciders() {
         checked += 1;
     }
     assert!(checked >= 5, "checked {checked} atlas pipelines");
+
+    // The pre-registered table is what an UNDECLARED corpus walks under. Per
+    // GENRE it is expected to fit badly — engineering is claims-only, so every
+    // entity-touching row misses there, and that is a map difference, not a
+    // defect. What is a defect is a kind NO built-in produces at all: the row
+    // names it, every corpus walks it, and nothing ever emits one.
+    //
+    // This used to be asserted as `uncovered > 0` — "the ratchet can still
+    // bite" — which made a dead kind the EXPECTED state, permanently. `causes`
+    // sat in the trajectory row with no producer anywhere in the workspace for
+    // the life of the product, and that assertion passed the whole time,
+    // because one more dead kind still satisfies `> 0`.
+    let mut produced_atoms = std::collections::BTreeSet::new();
+    let mut produced_edges = std::collections::BTreeSet::new();
+    for id in registry.pipeline_ids() {
+        if !id.ends_with("_atlas") {
+            continue;
+        }
+        let emits = registry.get(id).unwrap().emits();
+        produced_atoms.extend(emits.atoms.iter().map(|a| a.label()));
+        produced_edges.extend(emits.edges.iter().map(|e| e.label()));
+    }
+    for (kind, row) in NavigationPolicy::default().rows() {
+        for k in row.seed.kinds.iter() {
+            let label = k.label();
+            assert!(
+                produced_atoms.contains(label)
+                    || DEFAULT_TABLE_PRODUCED_BY_NOTHING.contains(&label),
+                "the default {} row seeds on {label}, which NO built-in atlas \
+                 emits. Either produce it, or add it to \
+                 DEFAULT_TABLE_PRODUCED_BY_NOTHING with the reason.",
+                kind.as_str()
+            );
+        }
+        for e in row.walk.iter() {
+            let label = e.label();
+            assert!(
+                produced_edges.contains(label)
+                    || DEFAULT_TABLE_PRODUCED_BY_NOTHING.contains(&label),
+                "the default {} row walks {label}, which NO built-in atlas \
+                 emits. Either produce it, or add it to \
+                 DEFAULT_TABLE_PRODUCED_BY_NOTHING with the reason.",
+                kind.as_str()
+            );
+        }
+    }
 }
 
 /// I5, kept structural: a built-in map names only entity types the taxonomy

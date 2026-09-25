@@ -36,6 +36,7 @@ use sovereign_contracts::launch::Launch;
 
 pub mod admin_join;
 mod boot;
+mod corpus_registry;
 mod help;
 mod lifecycle;
 // Twins of cli-daemon's modules, moved whole — see each file's header.

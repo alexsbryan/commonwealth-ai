@@ -1,0 +1,28 @@
+{
+ "kind": "coverage",
+ "key": "essay-pilot-and-his-wife-relationship--deep-r3",
+ "prompt": "Below are numbered plot points of a novel and an answer written about the novel.\nLabel every point by what the answer says about it:\n\"correct\" = the answer states it\n\"contradicted\" = the answer says something that conflicts with it\n\"absent\" = the answer does not mention it\nReturn only JSON with one entry per point: {\"P1\": \"correct\", \"P2\": \"absent\"}\n\nPoints:\nP1. The novel portrays the life of a sailor named Salve Kristiansen.\nP2. Salve loves Elisabeth and she returns his affection.\nP3. Elisabeth is attracted to a young officer who wishes to marry her.\nP4. Elisabeth spurns the officer because her old love for Salve prevails.\nP5. Salve leaves his native land in desperation before he can reconcile with Elisabeth.\nP6. Salve sails toward foreign shores after leaving home.\nP7. Salve returns to his old home years later.\nP8. Salve finds that Elisabeth has remained true to him during his absence.\nP9. Salve marries Elisabeth upon his return.\nP10. The thought of Elisabeth's momentary hesitation makes life miserable for both spouses.\nP11. Ten years elapse while Salve and Elisabeth struggle with their marital issues.\nP12. Salve and Elisabeth finally come to a clear understanding of one another.\nP13. Salve and Elisabeth lay the foundation for a happy life together.\nP14. The novel emphasizes the need of implicit confidence and trust in marriage.\n\nAnswer:\nBased on the provided passages from *The Pilot and His Wife*, the main relationship is that between **Salve** (the pilot) and his wife, **Elizabeth**.\n\nTheir marriage strains over the course of the story due to a combination of Salve\u2019s volatile temperament, his deep-seated insecurity regarding social status, and Elizabeth\u2019s growing independence. The specific factors straining their union include:\n\n*   **Salve\u2019s Jealousy and Insecurity:** As they move into higher social circles in Arendal, Salve becomes increasingly irritated by Elizabeth\u2019s social successes. He fears she contrasts him unfavorably with other men and resents her \"social talent,\" viewing it as taking her away from him. This is evident when he leaves the house immediately after receiving gifts for Elizabeth upon the birth of their son, Gjert, pacing outside in a bad mood despite being affectionate later.\n*   **The Pilot's Dangerous Profession:** The inherent danger of piloting creates emotional distance. Salve frequently goes to sea, sometimes leaving abruptly due to minor arguments or his own restlessness (\"like an anchovy; I don't bear taking out of the jar\"). Elizabeth endures long periods of loneliness and anxiety on Merdoe, weeping while waiting for him to return from dangerous voyages.\n*   **Communication Breakdowns and Misunderstandings:** There is a recurring failure in communication where both parties hide their true feelings until they explode. For instance, Elizabeth conceals her distress about Salve\u2019s behavior (specifically regarding his connection with \"Fru Beck\" and other women) until she reaches a breaking point. When she finally confronts him, accusing him of loving only himself ([unverified excerpt: It is yourself... you have loved all along]), the conversation turns cold and defensive rather than resolving the issue.\n*   **Salve\u2019s Volatile Temperament:** Salve oscillates between being affectionate and becoming \"dark,\" \"stern,\" or angry. He struggles to control his temper during arguments, which leaves Elizabeth feeling separated from him even when they are physically together.\n\nIn summary, the relationship strains because Salve cannot reconcile his pride in his profession with his insecurity about social standing, leading to jealousy toward Elizabeth's social life, while their communication style\u2014marked by silence followed by explosive confrontation\u2014prevents them from navigating these tensions effectively.\n\n---\n*Verification note: these statements could not be confirmed against your sources \u2014 treat them as unverified:*\n- Elizabeth's social successes irritate Salve, who fears she contrasts him unfavorably with other men.\n- Elizabeth endures long periods of loneliness on Merdoe while waiting for Salve to return from sea.",
+ "attempts": [
+  {
+   "nudged": false,
+   "reply": "{\n\"P1\": \"correct\",\n\"P2\": \"absent\",\n\"P3\": \"absent\",\n\"P4\": \"absent\",\n\"P5\": \"absent\",\n\"P6\": \"absent\",\n\"P7\": \"absent\",\n\"P8\": \"absent\",\n\"P9\": \"correct\",\n\"P10\": \"correct\",\n\"P11\": \"correct\",\n\"P12\": \"absent\",\n\"P13\": \"absent\",\n\"P14\": \"correct\"\n}",
+   "model": "Qwen3.6-35B-A3B-MTP-UD-Q6_K"
+  }
+ ],
+ "parsed": {
+  "P1": "correct",
+  "P2": "absent",
+  "P3": "absent",
+  "P4": "absent",
+  "P5": "absent",
+  "P6": "absent",
+  "P7": "absent",
+  "P8": "absent",
+  "P9": "correct",
+  "P10": "correct",
+  "P11": "correct",
+  "P12": "absent",
+  "P13": "absent",
+  "P14": "correct"
+ }
+}

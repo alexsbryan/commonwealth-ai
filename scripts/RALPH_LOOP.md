@@ -39,7 +39,8 @@ and `watch` and run the printed `launchctl bootstrap`.
   uncommitted work stays in the tree;
 - `--max-stall` consecutive no-commit iterations halt with a package;
 - a ready `HUMAN-` row stops before any session (operator-only);
-- `ralph/waiting` is bounded (`--marker-timeout`, default 7200s) — a detached
+- `ralph/waiting` is bounded (`--marker-timeout`; default `WAIT_LIMIT_S` from
+  `ralph/models.env`, else 86400s) — a detached
   run that never writes its marker halts with a package;
 - a lane ending on `ralph/waiting` (a detached run outliving its session) is
   WAITING, not a failure: the pool polls the named marker on its tick,
@@ -112,7 +113,17 @@ the tick resumes it when the marker appears and escalates past 48h.
 ## Models and tests
 
 `ralph/models.env` (per-host, gitignored) holds `MODEL`, `REVIEW_MODEL` and
-`VARIANT`; any unit id containing `REVIEW` routes to the review model.
+`VARIANT`; a `REVIEW-` prefix (or a `— review = true —` row field) routes to
+the review model.
+`MODEL`/`REVIEW_MODEL` accept a comma-separated roster. At each wave (or
+review) dispatch the pool probes the roster in order — one minimal chat call
+per model through the same client lanes use, 20s, provider-direct (never the
+mesh daemon on localhost) — and the first healthy model runs the wave,
+stamped in the log line (`pool: wave dm-a · model prov/x`). An all-dead
+roster parks the campaign naming every cause (`quota / provider error /
+timeout`), and a strikeout halt carries the lane's last error-shaped
+transcript line, so `launchd.log` alone is diagnostic. `WAIT_LIMIT_S` in the
+same file bounds the detached wait (default 86400s).
 `python3 scripts/ralph.py models --model M --review-model R [--variant high]
 --label L` writes it and restarts the loaded job. The FSMs are tested
 in-process, no model calls: `python3 scripts/tests/ralph.py`.

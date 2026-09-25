@@ -1,7 +1,13 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "cleanUrls": true,
-  "trailingSlash": false,
+  "redirects": [
+    {
+      "source": "/ring",
+      "destination": "/ring/",
+      "permanent": true
+    }
+  ],
   "rewrites": [
     {
       "source": "/api/desktop/updater/:target/:current_version",
@@ -54,6 +60,14 @@
       "headers": [
         { "key": "Cache-Control", "value": "public, max-age=0, s-maxage=300, stale-while-revalidate=86400" }
       ]
+    },
+    {
+      "source": "/ring/sw.js",
+      "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
+    },
+    {
+      "source": "/ring/wasm/(.*)",
+      "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }]
     }
   ]
 }

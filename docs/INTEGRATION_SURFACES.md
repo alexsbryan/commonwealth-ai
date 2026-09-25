@@ -76,7 +76,7 @@ that walks the rail's order and skips voided acts. Start from
 Three M0 limits, none of them permanent: the rail is mounted
 loopback-only (no `Peer` or `Guest` surface), rosters are per-node
 files rather than gossiped state, and there is no publish verb — `svrn
-ring dev` serves the bundle, so each member runs the app from their own
+ring show` serves the bundle, so each member runs the app from their own
 copy of the folder.
 
 **CLI scripting** — `svrn tools call <id> --format json` is the

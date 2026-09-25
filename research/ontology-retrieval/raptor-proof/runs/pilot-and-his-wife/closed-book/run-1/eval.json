@@ -2,7 +2,7 @@
   "bank_name": "raptor-proof-pilot-and-his-wife-v1",
   "corpus": "raptor-pilot-and-his-wife",
   "limit": 0,
-  "started_at_unix": 1789973633,
+  "started_at_unix": 1790005522,
   "results": [
     {
       "question_id": "nqa-pilot-and-his-wife-01",
@@ -28,9 +28,9 @@
       "corpora_hit": [],
       "vector_eligible": true,
       "synth": {
-        "answer": "You haven't provided the story yet. Please share the text or a summary of the story, and I will tell you what profession the main character has!",
+        "answer": "You haven't provided the story yet. Please share the text of the story, and I will identify the main character's profession for you.",
         "reasoning_chars": 0,
-        "stream_wall_ms": 568,
+        "stream_wall_ms": 519,
         "total_latency_ms": null,
         "intent": null,
         "source_origins": [],
@@ -85,9 +85,9 @@
       "corpora_hit": [],
       "vector_eligible": true,
       "synth": {
-        "answer": "To help you find the main character's name, I need a bit more context. Could you please specify which book, movie, TV show, or story you are referring to?\n\nFor example:\n*   **Harry Potter** series → Harry Potter\n*   **The Great Gatsby** → Jay Gatsby (though Nick Carraway is often considered the narrator/focal point)\n*   **Breaking Bad** → Walter White\n*   **Dune** → Paul Atreides\n\nPlease let me know the title of the work!",
+        "answer": "To answer this question, I need to know which story or work of fiction you are referring to. Could you please specify the title of a book, movie, TV show, game, or other narrative?\n\nFor example:\n*   In *Harry Potter*, the main character is **Harry Potter**.\n*   In *The Great Gatsby*, the narrator and central figure is often considered **Jay Gatsby** (though Nick Carraway tells the story).\n*   In *Star Wars: A New Hope*, the protagonists are **Luke Skywalker**, Princess Leia, and Han Solo.\n\nPlease provide more context!",
         "reasoning_chars": 0,
-        "stream_wall_ms": 755,
+        "stream_wall_ms": 933,
         "total_latency_ms": null,
         "intent": null,
         "source_origins": [],
@@ -148,9 +148,9 @@
       "corpora_hit": [],
       "vector_eligible": true,
       "synth": {
-        "answer": "To answer this question accurately, I need a bit more context. \"Salve\" is not a widely recognized public figure or character in mainstream media with a known romantic storyline.\n\nHere are a few possibilities:\n\n1. **Typo for \"Sally\"?** If you meant *Sally* (e.g., Sally from *Peanuts*, who loves Charlie Brown; or Sally Draper from *Mad Men*), please specify which Sally.\n2. **Character in a specific book, movie, game, or show?** For example, is there a character named Salve in a recent novel, anime, video game, or TV series?\n3. **Personal reference?** Is this someone you know personally?\n\nCould you clarify the source material or context where \"Salve\" appears?",
+        "answer": "\"Salve\" is not a widely recognized name associated with a specific, famous fictional character or public figure known for having a defined romantic interest in popular culture. It’s possible that:\n\n1. **You meant \"Sally\"** – For example, Sally from *Peanuts* (Charlie Brown) or another character named Sally.\n2. **\"Salve\" is a typo** – Perhaps you meant **Severus Snape**, **Salvatore**, **Selene**, **Shelby**, or another similarly spelled name?\n3. **It refers to an obscure or niche reference** – From a book, game, show, or meme I’m not immediately recalling.\n\nCould you clarify who \"Salve\" is? For instance:\n- Which movie, TV show, book, video game, or real-life context are they from?\n- Did you perhaps mean **Sally**? Or maybe **Severus Snape** (who had feelings for Lily Potter)?\n\nLet me know more details so I can give you the correct answer!",
         "reasoning_chars": 0,
-        "stream_wall_ms": 1134,
+        "stream_wall_ms": 1622,
         "total_latency_ms": null,
         "intent": null,
         "source_origins": [],
@@ -206,9 +206,9 @@
       "corpora_hit": [],
       "vector_eligible": true,
       "synth": {
-        "answer": "It appears there may be a slight confusion regarding the names or the specific story you are referring to, as **\"Elisabeth\"** and **\"Salve\"** do not correspond to a widely known canonical pair in major literature, film, or mythology where this specific plot point is central.\n\nHowever, here are a few possibilities of what you might mean:\n\n1. **If you meant *The Phantom Tollbooth* by Norton Juster:**\n   - There is no character named Salve. The main characters are Milo, Tock, and Humbug. Princesses like Rhyme and Reason appear later. This doesn’t fit.\n\n2. **If you meant *Wicked* (by Gregory Maguire) or the musical *Wicked*:**\n   - Elphaba (often misspelled as Elisabeth?) has complex relationships with Fiyero, Glinda, etc. No \"Salve.\"\n\n3. **If you meant *Pride and Prejudice*:***\n   - Elizabeth Bennet marries Mr. Darcy late in the story due to misunderstandings, pride, prejudice, and social constraints—not because of a character named Salve.\n\n4. **If you are referring to an indie game, lesser-known novel, or fanfiction:**\n   - Please provide more context (e.g., book title, movie name).\n\n5. **\"Salve\" might be a typo for:**\n   - **Sebastian**? (e.g., from *Black Butler*? Or another series?)\n   - **Sylvie**? \n   - **Valerius** or similar names in fantasy settings?\n\n6. **In some religious/historical contexts:**\n   - St. Elisabeth of Hungary did not marry early; she was married at age 14 to Louis IV, Landgrave of Thuringia, but her life took a pious turn after his death. No \"Salve.\"\n\n� **Could you please clarify the title of the book, movie, show, or game?** That will help me give you an accurate answer about why Elisabeth doesn’t marry Salve (or whoever it is) earlier in the story.",
+        "answer": "It appears there might be a confusion regarding the names or the specific story you are referring to, as **Elisabeth** and **Salve** do not correspond to well-known main characters in classic literature, film, or mythology who fit this exact description.\n\nHowever, here are a few possibilities based on similar-sounding names or common tropes:\n\n1.  **\"Sylvie\" instead of \"Salve\"?**  \n    If you meant **Elisabeth** (or Elizabeth) and **Sylvie**, there is no major canonical pairing with these first names that fits this question prominently. However, if you’re thinking of *Cyrano de Bergerac*, Christian and Roxane don’t match either.\n\n2.  **\"Selma\" or \"Silas\"?**  \n    Unlikely without more context.\n\n3.  **Misremembered Names from a Specific Book/Show?**  \n   - In ***Pride and Prejudice***, Elizabeth Bennet does not marry early on because she refuses Mr. Collins and waits for Darcy until mutual understanding and love are established.\n   - In ***Jane Eyre***, Jane does not marry Rochester immediately after their wedding is interrupted due to moral principles and the revelation about Bertha Mason.\n   - In ***The Great Gatsby***, Daisy does not marry Gatsby early; she marries Tom Buchanan instead.\n\n4.  **\"Salve\" as a Verb?**  \n    “Salve” means to soothe or heal. It’s unlikely to be a character name unless it’s from an obscure work, fan fiction, or a newly released book/show you’re referencing that isn’t widely known in mainstream canon yet.\n\n5.  **Possible Mix-up with *Elisabeth* (Musical)?**  \n    In the musical *Elisabeth*, Elisabeth of Bavaria never marries early because her marriage to Emperor Franz Joseph is arranged but complex, and the story focuses on her struggle for identity after marriage—not avoiding it entirely at the start.\n\n6.  **Could You Mean *Selma*?**  \n   If you meant **Selma Lagerlöf**’s works? Unlikely pairing.\n\n7.  ***The Witcher*** or Fantasy Series?  \n   Some fantasy novels use similar names, but again, no major “Elisabeth & Salve” pair stands out.\n\n---\n\n### To help me give you an accurate answer:\n- Could you clarify which **book, movie, TV show, game, or myth** this refers to?\n- Are the character names possibly misspelled? (e.g., *Salvatore*, *Silas*, *Sylvester*)\n- Is this from a specific genre (fantasy, romance, historical fiction)?\n\nOnce I have more context, I can provide a detailed explanation of why their marriage is delayed!",
         "reasoning_chars": 0,
-        "stream_wall_ms": 3073,
+        "stream_wall_ms": 4199,
         "total_latency_ms": null,
         "intent": null,
         "source_origins": [],
@@ -224,15 +224,14 @@
           "ratio": 0.0
         },
         "judge_fact_score": {
-          "matched": [
-            "young"
-          ],
+          "matched": [],
           "missing": [
             "attracted",
+            "young",
             "officer"
           ],
           "total_expected": 3,
-          "ratio": 0.33333334
+          "ratio": 0.0
         },
         "judge_evidence": [
           {
@@ -242,8 +241,8 @@
           },
           {
             "fact": "young",
-            "present": true,
-            "evidence": "\"St. Elisabeth of Hungary did not marry early; she was married at age 14\""
+            "present": false,
+            "evidence": "(absent)"
           },
           {
             "fact": "officer",
@@ -280,9 +279,9 @@
       "corpora_hit": [],
       "vector_eligible": true,
       "synth": {
-        "answer": "The answer depends on which \"Elisabeth\" you are referring to, as there are several famous historical and fictional figures with this name. Here are the most likely possibilities:\n\n### 1. **Empress Elisabeth of Austria (\"Sisi\")**\nHistorically, Empress Elisabeth did not choose her husband; she was married by arrangement to **Emperor Franz Joseph I of Austria**. However, historically, it is well-documented that before meeting Franz Joseph, she had a close emotional bond (and possibly unrequited love) for his brother, **Archduke Maximilian** (later Emperor of Mexico). After marrying Franz Joseph, their relationship became strained over time due to political pressures and differing personalities, but she remained devoted to him in public until his assassination.\n\nIf you are referring to popular culture or musicals:\n- In the **musical *Elisabeth*** (by Michael Kunze/Sylvester Levay), Elisabeth’s life is dominated by her complex relationship with Death (*Der Tod*), who becomes a dark lover/companion figure after Franz Joseph dies. Her romantic choice is portrayed as tragic and constrained by duty rather than free will.\n\n### 2. **Elizabeth Bennet from *Pride and Prejudice* (Jane Austen)**\nThough spelled \"Elizabeth,\" this character is often confused due to similar names. She chooses to love **Mr. Darcy** (Fitzwilliam Darcy), overcoming initial prejudices against him.\n\n### 3. **Queen Elizabeth I of England**\nShe never married or chose a husband, famously remaining the \"Virgin Queen.\" However, she had several romantic interests throughout her life, including:\n- **Robert Dudley**, Earl of Leicester (a close confidant and possible secret marriage).\n- **Francis, Duke of Anjou**.\n- **Sir Walter Raleigh**.\nUltimately, she chose not to marry any of them for political reasons.\n\n### 4. **Princess Elisabeth of Bavaria (1876–1965)**\nShe married **Grand Duke Paul Alexandrovich of Russia**.\n\n---\n\nIf you can specify which *Elisabeth* you mean (e.g., from a specific book, movie, or historical period), I can give a more precise answer!",
+        "answer": "Because \"Elisabeth\" is a common name, the answer depends on which specific character or historical figure you are referring to. Here are the most likely possibilities:\n\n### 1. **Empress Elisabeth of Austria (\"Sisi\")**\nHistorically, Empress Elisabeth did not have many romantic choices in the modern sense; she was married by arrangement to **Emperor Franz Joseph I of Austria**. While she loved her family deeply and had close relationships with friends (such as Princess Auguste of Hohenlohe-Schillingsfürst), her marriage to Franz Joseph was politically motivated, though it lasted until her death. She is often portrayed in literature and film as loving freedom more than anyone else.\n\n### 2. **Elisabeth Schumacher from *The Sound of Music***\nIn the musical/film *The Sound of Music*, there is no major character named Elisabeth who has a central love story. However, if you meant one of Maria’s husbands:\n- The first Captain von Trapp marries **Maria**.\n  \nIf you are thinking of a different adaptation or play, please clarify.\n\n### 3. **Elizabeth Bennet (often confused with Elisabeth) from *Pride and Prejudice***\nMany people confuse \"Elizabeth\" with \"Elisabeth.\" If this is the case:\n- **Elizabeth Bennet** chooses to love **Mr. Darcy** after overcoming her initial prejudice against him and recognizing his true character.\n\n### 4. **Elisabeth from *The Phantom of the Opera* (novel by Gaston Leroux)**\nIn Gaston Leroux’s original novel *The Phantom of the Opera*:\n- **Christine Daaé** is loved by both Erik (the Phantom) and Raoul, Vicomte de Chagny. Christine ultimately chooses to marry **Raoul**.\n- There is no major character named Elisabeth who has a central romantic choice in this story. However, if you are referring to **Carlotta**, she does not have a chosen lover; she is an opera singer admired by many but focused on her career.\n\n### 5. **Elisabeth from Shakespeare’s *Much Ado About Nothing***\nThere is no main character named Elisabeth in this play. The main female leads are Beatrice and Hero. If you meant:\n- **Beatrice** chooses to love **Benedick**.\n- **Hero** loves **Claudio**.\n\n---\n\n**Most Likely Answer:**\nIf you are referring to the most famous literary \"Elizabeth,\" it is **Elizabeth Bennet** from *Pride and Prejudice*, who chooses to love **Mr. Darcy**.\n\nIf you are referring to a specific book, movie, or game titled with an \"Elisabeth\" as the protagonist (e.g., *Elisabeth* by Franzobel, or a video game character), please provide more context for a precise answer.",
         "reasoning_chars": 0,
-        "stream_wall_ms": 3042,
+        "stream_wall_ms": 3950,
         "total_latency_ms": null,
         "intent": null,
         "source_origins": [],
@@ -312,7 +311,7 @@
           {
             "fact": "chooses",
             "present": true,
-            "evidence": "...she remained devoted to him in public until his assassination."
+            "evidence": "\"she was married by arrangement to Emperor Franz Joseph I of Austria\""
           },
           {
             "fact": "salve",
@@ -352,9 +351,9 @@
       "corpora_hit": [],
       "vector_eligible": true,
       "synth": {
-        "answer": "In the context of the classic fairy tale **\"Snow White\"** (specifically in versions like the Grimm Brothers' or Disney's adaptation), there is no character named \"Elisabeth\" who marries a slave. It appears there may be some confusion with characters, names, or sources.\n\nHowever, if you are referring to **Queen Elizabeth II** and her marriage to **Prince Philip**, he was not a slave. Prince Philip was born into European royalty (Greek and Danish royal families) but had renounced his titles and lived as an exiled prince before marrying Princess Elizabeth. They married on February 20, 1947, after:\n- Philip changed his name from Mountbatten-Windsor to Windsor upon becoming a British subject.\n- He received permission from King George VI to marry the heir presumptive.\n- They waited until Elisabeth turned 21 (the legal age of majority for royals at the time required special provisions if under that age).\n\nIf you are referring to **Elisabeth** from another story (e.g., *The Hunchback of Notre Dame*, where Esmeralda is sometimes confused with other names; or perhaps a different literary work), please clarify the source material.\n\nAlternatively, if this is referencing **\"The Slave Dancer\"** by Paula Fox or another novel involving a character named Elisabeth and slavery, more context would be needed. But in most well-known stories featuring \"Elisabeth\" or similar names (like Elizabeth Bennet in *Pride and Prejudice*), there is no plot point about marrying someone who is enslaved as an immediate barrier—though social class, wealth, or family opposition often serve as obstacles.\n\nCould you please specify which story or historical figure you are referring to? This will help provide a precise answer.",
+        "answer": "Based on the phrasing of your question, it appears there may be a misunderstanding regarding character names or sources. There is no widely known literary, historical, or fictional work featuring characters named **Elisabeth** and **Slave** where this specific plot point exists.\n\nHowever, here are a few possibilities you might be referring to:\n\n1. **\"The Little Mermaid\" (or similar fairy tales):** If \"Slave\" is a mishearing or typo for **\"Sailor\"** or another name? In some versions, restrictions come from external powers (e.g., sea witches, kings) rather than immediate consent.\n2. **\"Pride and Prejudice\":** If you meant **Elizabeth Bennet**? She cannot marry Mr. Darcy right away due to misunderstandings about his pride and Wickham’s lies, as well as social constraints and family pressures.\n3. **\"Wuthering Heights\":** If you meant **Catherine Earnshaw** and **Heathcliff**? Catherine cannot marry Heathcliff immediately because of class differences; she chooses Edgar Linton instead, believing it will help elevate Heathcliff’s status later.\n4. **\"The Handmaid's Tale\" or dystopian fiction:** \"Slave\" might refer to a character in a specific context, but no prominent Elisabeth-plot fits this exact description.\n\nIf you can provide more context—such as the title of the book, movie, game, or historical event—I’d be happy to give you a precise answer!",
         "reasoning_chars": 0,
-        "stream_wall_ms": 2822,
+        "stream_wall_ms": 3130,
         "total_latency_ms": null,
         "intent": null,
         "source_origins": [],
@@ -369,14 +368,13 @@
           "ratio": 0.0
         },
         "judge_fact_score": {
-          "matched": [
+          "matched": [],
+          "missing": [
+            "sailed",
             "without"
           ],
-          "missing": [
-            "sailed"
-          ],
           "total_expected": 2,
-          "ratio": 0.5
+          "ratio": 0.0
         },
         "judge_evidence": [
           {
@@ -386,8 +384,8 @@
           },
           {
             "fact": "without",
-            "present": true,
-            "evidence": "\"...though social class, wealth, or family opposition often serve as obstacles.\""
+            "present": false,
+            "evidence": "(absent)"
           }
         ]
       }
@@ -417,9 +415,9 @@
       "corpora_hit": [],
       "vector_eligible": true,
       "synth": {
-        "answer": "In the novel **\"Salve\" by C.J. Cherryh** (part of *The Morgaine Cycle*), when Salve returns 10 years later, several significant events unfold:\n\n### Context\n- **Salve** is a powerful and enigmatic figure in the world of *Morgaine*, often associated with magic, transformation, and political intrigue.\n- Her departure was tied to complex personal and political circumstances involving her partner **Hastur**, their daughter **Rennic**, and the broader conflicts on the planet **Kregen**.\n\n### What Happens Upon Her Return\n\n1. **Reunion with Hastur**:  \n   Salve’s return rekindles her relationship with Hastur, though it is fraught with tension due to past betrayals, misunderstandings, and the passage of time. Their dynamic remains intense and complicated by mutual love, resentment, and unresolved issues.\n\n2. **Impact on Rennic**:  \n   Rennic, now older, must navigate his feelings toward his mother, who has been absent for a decade. This reunion forces emotional reckoning for all three characters, especially as old wounds resurface.\n\n3. **Political Turmoil**:  \n   Salve’s reappearance stirs up political factions on Kregen. Her presence challenges existing power structures, particularly those aligned with or opposed to Hastur’s influence. Some see her return as an opportunity; others view it as a threat.\n\n4. **Uncovering Secrets**:  \n   During her absence, hidden truths about Morgaine’s society, magical practices, and personal histories come to light. Salve often plays a key role in revealing these secrets, which shift alliances and reshape the narrative landscape.\n\n5. **Thematic Resonance**:  \n   Her return underscores major themes of the novel: identity, transformation, forgiveness, and the cyclical nature of history and relationships. It also reinforces Cherryh’s exploration of how individuals are shaped by—and sometimes break free from—their pasts.\n\n### Overall Significance\nSalve’s return acts as a catalyst for both emotional resolution and plot advancement. It deepens character development, intensifies conflict, and moves the story toward its climax by forcing characters to confront long-avoided truths about themselves and each other.\n\nLet me know if you'd like more details on specific subplots or character arcs!",
+        "answer": "To provide an accurate answer, I need to know which specific story, movie, book, or game you are referring to. \"Salve\" is not a widely recognized main character in major global media without additional context (it could be a typo for **Sylvie**, **Severus Snape**, **Salva** from *A Long Walk to Water*, or a character from a specific indie game/series).\n\nHowever, here are two common possibilities based on similar names:\n\n1.  **If you meant Salva Dut from the novel/movie *A Long Walk to Water*:**\n    *   Salva returns to Sudan after more than two decades (not exactly 10 years) as an adult. He learns that his father has died and that many people he knew have also passed away. Despite this grief, he decides to return again with his wife to drill wells for clean water in South Sudan, fulfilling his promise to help others. His return is marked by emotional reconciliation and a commitment to service rather than revenge or conflict.\n\n2.  **If you meant Severus Snape from *Harry Potter*:**\n    *   Snape does not \"return\" after 10 years; he dies in the final book/movie (*Deathly Hallows*). If you’re thinking of Harry returning to Hogwarts 19 years later (in the epilogue), that’s different.\n\n3.  **If “Salve” refers to a character in a specific video game, anime, or lesser-known book:**\n    *   Please provide the title of the work so I can give you the correct plot details.\n\nCould you clarify which story you mean?",
         "reasoning_chars": 0,
-        "stream_wall_ms": 3379,
+        "stream_wall_ms": 3234,
         "total_latency_ms": null,
         "intent": null,
         "source_origins": [],
@@ -447,7 +445,7 @@
           {
             "fact": "marries",
             "present": true,
-            "evidence": "\"Her departure was tied to complex personal and political circumstances involving her partner Hastur...\""
+            "evidence": "\"He decides to return again with his wife...\""
           },
           {
             "fact": "elisabeth",
@@ -483,9 +481,9 @@
       "corpora_hit": [],
       "vector_eligible": true,
       "synth": {
-        "answer": "Salve and Elisabeth were miserable after they married because of the **social status difference** between them.\n\nHere’s the context from the story *\"The Story of Salve and Elisabeth\"* (often found in reading comprehension tests or literature anthologies):\n\n*   **Elisabeth** came from a wealthy, noble family.\n*   **Salve** was poor but talented and hardworking.\n\nDespite their love for each other, their marriage faced significant challenges due to:\n\n1.  **Family Disapproval:** Elisabeth’s family opposed the match because Salve lacked wealth and social standing.\n2.  **Financial Strain:** They struggled with poverty, which caused stress and tension in their daily lives.\n3.  **Social Pressure:** Society looked down on their union, making them feel isolated and inadequate.\n\nThese external pressures and internal struggles led to unhappiness and misery in their married life, at least initially, until they eventually found a way to overcome these obstacles through perseverance and mutual support (depending on the specific version or ending of the story you are referencing).",
+        "answer": "It appears there is a misunderstanding in the premise of your question. **Salve and Elisabeth were not miserable after they married; in fact, their marriage was famously happy and harmonious.**\n\nThis story comes from the medieval legend of **Saint Elizabeth of Hungary** (1207–1231) and her husband **Louis IV, Landgrave of Thuringia**.\n\nHere are the key facts:\n\n- **They had a loving marriage:** Historical accounts and hagiographies describe their early marriage as deeply affectionate. They shared a strong bond based on mutual piety and charity.\n- **Elisabeth’s devotion:** After Louis died suddenly in 1227 while on crusade, Elisabeth did not remain miserable or remarried. Instead, she chose to live a life of asceticism, poverty, and service to the poor, which was seen by many at the time (and later by the Church) as a holy vocation rather than one of misery.\n- **Possible confusion with another story?** You might be thinking of:\n  - A different literary or historical figure whose marriage was unhappy.\n  - The legend of **\"Salve\" and \"Elisabeth\"** is not a known tragic tale in mainstream history or literature. It’s possible you are conflating names from another source (e.g., *Salome* and someone else, or characters from Shakespeare or medieval romances).\n\nIf you meant a different pair of characters from a specific book, play, or movie, please provide more context! But based on the well-known historical figures Saint Elizabeth of Hungary and her husband Louis IV, their marriage was **not** miserable—it was considered modelly pious and loving during his lifetime.",
         "reasoning_chars": 0,
-        "stream_wall_ms": 1464,
+        "stream_wall_ms": 3316,
         "total_latency_ms": null,
         "intent": null,
         "source_origins": [],
@@ -525,7 +523,7 @@
           {
             "fact": "marry",
             "present": true,
-            "evidence": "\"Salve and Elisabeth were miserable after they married because of the social status difference between them.\""
+            "evidence": "\"Salve and Elisabeth were not miserable after they married; in fact, their marriage was famously happy and harmonious.\""
           }
         ]
       }
@@ -554,9 +552,9 @@
       "corpora_hit": [],
       "vector_eligible": true,
       "synth": {
-        "answer": "Based on historical records and common literary references, there is no widely known couple named \"Salve\" and **Elisabeth** who are famous for a specific timeline regarding how long it took them to form a happy life together.\n\nHowever, this question may be referring to one of the following possibilities due to potential name misspellings or confusion:\n\n1.  **King Charles III (then Prince Charles) and Diana, Princess of Wales**:  \n    - They married in 1981 but divorced in 1996. Their marriage was not considered \"happy,\" so this likely doesn't fit the description.\n   \n2.  **Queen Elizabeth II and Prince Philip**:  \n    - They met in 1934 when she was 8 and he was 13. They became engaged in 1947 and married in 1947. While their early years had challenges, they built a long-lasting partnership over decades. It would take several years for them to settle into their royal duties and build stability, but they remained together until Philip’s death in 2021 (over 70 years).\n\n3.  **Fictional Characters or Lesser-Known Historical Figures**:  \n   If \"Salve\" is a typo for **\"Steve\"** or another name, please clarify. For example:\n    - **Steve Jobs** and **Laurene Powell** (married in 1991) – no specific public timeline about \"forming a happy life.\"\n    - In literature, if you mean characters from a novel like *The Great Gatsby*, *Pride and Prejudice*, etc., the names don’t match exactly.\n\n4.  **Possible Confusion with \"Sylvia\" and \"Elisabeth\"?**  \n   Or perhaps **\"Salvador Dalí\"**? No known partner named Elisabeth fits this narrative prominently.\n\n5.  **Most Likely Scenario**: You may be referring to **King Gustaf VI Adolf of Sweden** or another European royal couple where names were misremembered. Alternatively, it could be a reference to a specific book, movie, or regional historical story not widely documented in global sources.\n\nIf you can provide more context (e.g., country, time period, whether they are fictional/historical), I can give a more accurate answer.",
+        "answer": "Based on the characters named **Salve** and **Elisabeth**, this question likely refers to the novel **\"The Snow Queen\"** (or potentially a specific contemporary romance or historical fiction book featuring these names, such as *Salve* by various authors, but most commonly in general literature queries, it might be a confusion with other famous couples).\n\nHowever, there is no widely known classic literary couple named \"Salve and Elisabeth\" in standard canonical works like Shakespeare, Austen, or Andersen. \n\nIf you are referring to **Sven and Gerda** from Hans Christian Andersen's *The Snow Queen*, they did not exactly form a life together in that story; Gerda rescued Kai, and he woke up, but their future wasn't detailed as a long-term timeline of forming a life over years.\n\nIf you are referring to the novel **\"Elisabeth\"** by various authors (e.g., *Empress Elisabeth* historical fiction), the name Salve does not fit.\n\nIt is highly probable that there is a typo in the names. Did you mean:\n1.  **Stanley and Elsie**? \n2.  **Sebastian and Elizabeth**?\n3.  Or perhaps from a specific book like ***The Time Traveler's Wife*** or similar?\n\n**Most Likely Scenario:**\nYou might be asking about **Salvatore (Sal) and Elizabeth** from a specific contemporary romance novel, such as those by **L.J. Shen**, **Penelope Douglas**, or similar popular romance authors where \"Sal\" is short for Salvatore. \n\nWithout more context on the specific book title, it is impossible to give an exact answer. However, if this refers to **\"Twisted Love\"** by Ana Huang (characters: Diego and Anastasia), or another in that series, please clarify.\n\nIf you can provide the **title of the book** or **author**, I can give you the precise answer.\n\n*(Note: If this is a trick question or from a very niche text, please specify.)*",
         "reasoning_chars": 0,
-        "stream_wall_ms": 3363,
+        "stream_wall_ms": 4213,
         "total_latency_ms": null,
         "intent": null,
         "source_origins": [],
@@ -570,18 +568,18 @@
           "ratio": 0.0
         },
         "judge_fact_score": {
-          "matched": [
+          "matched": [],
+          "missing": [
             "years"
           ],
-          "missing": [],
           "total_expected": 1,
-          "ratio": 1.0
+          "ratio": 0.0
         },
         "judge_evidence": [
           {
             "fact": "years",
-            "present": true,
-            "evidence": "They met in 1934 when she was 8 and he was 13. They became engaged in 1947 and married in 1947."
+            "present": false,
+            "evidence": "(absent)"
           }
         ]
       }
@@ -612,9 +610,9 @@
       "corpora_hit": [],
       "vector_eligible": true,
       "synth": {
-        "answer": "You haven't provided a story for me to analyze. Please share the text of the story, and I will be happy to identify its moral or central theme for you.",
+        "answer": "It seems like the story itself wasn't included in your message. Could you please share the text of the story or summarize it for me? Once I have that information, I’d be happy to help identify its moral!",
         "reasoning_chars": 0,
-        "stream_wall_ms": 301,
+        "stream_wall_ms": 696,
         "total_latency_ms": null,
         "intent": null,
         "source_origins": [],
@@ -683,9 +681,9 @@
       "corpora_hit": [],
       "vector_eligible": true,
       "synth": {
-        "answer": "You haven't provided a story for me to analyze yet! Please paste the text of the story here, and I’ll be happy to tell you what it’s about.",
+        "answer": "It seems like you might have pasted the prompt twice or left out the story itself. Could you please provide the text of the story you'd like me to summarize? Once you share it, I’ll be happy to tell you what it’s about!",
         "reasoning_chars": 0,
-        "stream_wall_ms": 306,
+        "stream_wall_ms": 523,
         "total_latency_ms": null,
         "intent": null,
         "source_origins": [],
@@ -747,9 +745,9 @@
       "corpora_hit": [],
       "vector_eligible": true,
       "synth": {
-        "answer": "It seems like you haven't provided the story yet. Could you please share the text or summary of the story so I can identify who it is about?",
+        "answer": "You haven't provided a story yet. Please share the text of the story, and I will tell you who it is about!",
         "reasoning_chars": 0,
-        "stream_wall_ms": 256,
+        "stream_wall_ms": 415,
         "total_latency_ms": null,
         "intent": null,
         "source_origins": [],
@@ -812,9 +810,9 @@
       "corpora_hit": [],
       "vector_eligible": true,
       "synth": {
-        "answer": "You haven't provided the story or text yet! Please paste the excerpt or describe the scene where the sailor is speaking, and I’ll help you identify what they are describing.\n\nFor example, sailors often describe:\n*   **Weather conditions** (storms, fog, wind direction)\n*   **Navigation hazards** (reefs, shallow waters, other ships)\n*   **The sea itself** (currents, waves, marine life)\n*   **A specific event** (a battle, a sighting of land, an encounter with mythical creatures)\n\nShare the passage, and I’ll give you a detailed analysis!",
+        "answer": "To help you identify what the sailor is describing, I need to see the specific story or text you are referring to. Could you please provide:\n\n1. **The excerpt** from the story (or a summary of it), and\n2. **Any context** about which work this comes from (e.g., *Moby-Dick*, *Rip Van Winkle*, an Edgar Allan Poe tale, etc.).\n\nOnce you share that information, I’ll be happy to analyze what the sailor is describing!",
         "reasoning_chars": 0,
-        "stream_wall_ms": 822,
+        "stream_wall_ms": 923,
         "total_latency_ms": null,
         "intent": null,
         "source_origins": [],
@@ -830,15 +828,14 @@
           "ratio": 0.0
         },
         "judge_fact_score": {
-          "matched": [
-            "stormy"
-          ],
+          "matched": [],
           "missing": [
             "experiences",
+            "stormy",
             "deep"
           ],
           "total_expected": 3,
-          "ratio": 0.33333334
+          "ratio": 0.0
         },
         "judge_evidence": [
           {
@@ -848,8 +845,8 @@
           },
           {
             "fact": "stormy",
-            "present": true,
-            "evidence": "\"Weather conditions (storms, fog, wind direction)\""
+            "present": false,
+            "evidence": "(absent)"
           },
           {
             "fact": "deep",
@@ -883,9 +880,9 @@
       "corpora_hit": [],
       "vector_eligible": true,
       "synth": {
-        "answer": "To answer this question accurately, I need more context. \"Who is loved in return\" depends entirely on the specific situation or story you are referring to.\n\nHere are a few possibilities:\n\n1. **In a general sense:** Someone who expresses love openly and receives it back from their partner, friend, family member, etc., is loved in return.\n2. **In literature/film:** For example, in *Romeo and Juliet*, they are deeply loved by each other (though tragically unable to stay together). In *Pride and Prejudice*, Mr. Darcy and Elizabeth Bennet eventually recognize that they are loved in return after overcoming misunderstandings.\n3. **In your personal life:** If this is about someone specific you know or care about, only you can determine whether your feelings are reciprocated through communication and observation of their actions.\n\nCould you clarify who or what scenario you’re asking about?",
+        "answer": "To answer that question, I would need a bit more context. Are you referring to:\n\n1. A specific character in a book, movie, or TV show?\n2. A historical figure?\n3. A personal situation (which I can offer general advice on)?\n4. Or perhaps it's part of a riddle?\n\nFeel free to share more details!",
         "reasoning_chars": 0,
-        "stream_wall_ms": 1266,
+        "stream_wall_ms": 717,
         "total_latency_ms": null,
         "intent": null,
         "source_origins": [],
@@ -910,7 +907,7 @@
           {
             "fact": "elisabeth",
             "present": true,
-            "evidence": "\"In *Pride and Prejudice*, Mr. Darcy and Elizabeth Bennet eventually recognize that they are loved in return\""
+            "evidence": "\"Are you referring to: ... A specific character in a book, movie, or TV show?\""
           }
         ]
       }
@@ -927,22 +924,23 @@
         "ratio": null
       },
       "fact_score": {
-        "matched": [],
+        "matched": [
+          "leaves"
+        ],
         "missing": [
-          "leaves",
           "desperation"
         ],
         "total_expected": 2,
-        "ratio": 0.0
+        "ratio": 0.5
       },
       "embed_ms": 0,
       "search_ms": 0,
       "corpora_hit": [],
       "vector_eligible": true,
       "synth": {
-        "answer": "To answer this question accurately, I need a bit more context. \"Salve\" is not the name of a widely recognized historical figure or character in mainstream global literature who left their land for a single famous reason.\n\nHowever, here are a few possibilities depending on what you might be referring to:\n\n1. **Typo for \"Saul\"?**  \n   If you meant **King Saul** from the Bible, he didn’t exactly “leave his land,” but he died in battle against the Philistines after being rejected by God and fleeing from King David’s jealousy.\n\n2. **Typo for \"Slavics/Slavs\"?**  \n   Unlikely phrasing, but Slavic peoples migrated extensively during early medieval times due to invasions (e.g., Huns, Avars) and territorial expansion.\n\n3. **Character named Salve?**  \n   There is no major literary or historical figure widely known as “Salve” who left their homeland for a famous reason. It’s possible you’re referring to:\n   - A character from a specific novel, movie, or game (e.g., *Assassin’s Creed*, *Final Fantasy*, etc.).\n   - A lesser-known historical person.\n   - A misspelling of **“Sulayman”** (Solomon), though he didn’t leave his land—he ruled it.\n   - Or perhaps **“Salvador Allende”**, the Chilean president who was overthrown and died in 1973; many exiles fled after that.\n\n4. **Typo for “Saleh”?**  \n   If you mean **Ali Abdullah Saleh**, former President of Yemen: He didn’t flee Yemen until late in life, going to Saudi Arabia for medical treatment, then briefly returning before being killed in 2017 during civil war turmoil.\n\n� Could you please clarify:\n- Is this from a book, movie, game, or real history?\n- Did you possibly mean a different name (e.g., Saul, Salih, Salvador)?\n\nThat way I can give you the precise answer!",
+        "answer": "It appears there is a misunderstanding or a typo in the name \"Salve.\" There is no widely recognized historical, literary, or mythological figure named **Salve** who is famous for leaving his land.\n\nHowever, based on phonetic similarity and common questions about figures who left their homeland, you might be referring to one of the following:\n\n1.  **Saul (Biblical Figure):**  \n    -   King Saul did not leave his land; he died fighting the Philistines on Mount Gilboa. His son Ish-bosheth later ruled in Mahanaim, but this was still within Israelite territory.\n   \n2.  **Solomon (Biblical Figure):**  \n    -   Solomon did not leave his land; he reigned over a united kingdom centered in Jerusalem. However, after his death, the kingdom split into Israel (north) and Judah (south).\n\n3.  **Salvador Allende (Chilean President):**  \n    -   Salvador Allende did not voluntarily \"leave\" Chile during most of his life, but as a result of the U.S.-backed coup d'état on September 11, 1973, he remained in the presidential palace until it was bombed by the military under Augusto Pinochet. He died inside La Moneda Palace rather than fleeing abroad. Many other Chileans were forced to leave their land due to exile following this event.\n\n4.  **A Character from Literature or Film:**  \n    -   If you are referring to a fictional character named Salve, please provide more context (e.g., book title, movie name).\n   \n5.  **\"Salve\" as a Verb/Word:**  \n    -   \"Salve\" is an English word meaning ointment or soothing remedy. It is not typically used as a proper noun for a person in historical contexts.\n\n6.  **Possible Confusion with \"Saul of Tarsus\" (St. Paul):**  \n    -   St. Paul was originally from Tarsus and later traveled extensively throughout the Roman Empire spreading Christianity. He left his homeland for missionary work but did not permanently abandon it due to exile; rather, he journeyed by choice.\n\n7.  **Possible Confusion with \"Aeneas\":**  \n    -   In Virgil’s *Aeneid*, Aeneas leaves Troy after its fall. The name doesn’t sound like Salve, but this is one of the most famous stories about leaving one's land.\n\n8.  **Possible Confusion with \"Salman Rushdie\" or another contemporary figure?**  \n    -   Unlikely given the phrasing.\n\n9.  **Most Likely: You may mean **\"Saul\"** in a different context, or perhaps **\"Cain\"** (who left his land after killing Abel)?**  \n    -   Cain was banished from the presence of God and settled in the Land of Nod, east of Eden. He did leave his original place due to punishment.\n\n10. **Or possibly **\"Solomon\"** again? No clear reason for him to leave.**\n\nGiven the ambiguity, could you clarify who **Salve** is? For example:\n- Is this from a specific book, movie, game, or historical period?\n- Did you mean **Saul**, **Salvador**, **Shalmaneser**, or another name?\n\nIf you meant **Cain**, he left because he was cursed by God after killing Abel and had to wander as a fugitive.  \nIf you meant **Aeneas**, he left Troy because it fell to the Greeks, guided by destiny to found Rome.  \nIf you meant **Abraham**, he left his land (Ur) at God’s command.\n\nPlease provide more details so I can give you an accurate answer!",
         "reasoning_chars": 0,
-        "stream_wall_ms": 2930,
+        "stream_wall_ms": 5287,
         "total_latency_ms": null,
         "intent": null,
         "source_origins": [],
@@ -970,7 +968,7 @@
           {
             "fact": "leaves",
             "present": true,
-            "evidence": "\"...who left their land for a single famous reason.\""
+            "evidence": "\"King Saul did not leave his land; he died fighting the Philistines on Mount Gilboa.\""
           },
           {
             "fact": "desperation",
@@ -1005,9 +1003,9 @@
       "corpora_hit": [],
       "vector_eligible": true,
       "synth": {
-        "answer": "Elisabeth of Bavaria, commonly known as **Sisi** or Empress Elisabeth of Austria, married **Franz Joseph I**, the Emperor of Austria.\n\nThey were married on April 24, 1854, in Vienna.",
+        "answer": "Elisabeth (also known as **Sisi** or Empress Elisabeth of Austria) married **Franz Joseph I**, the Emperor of Austria.\n\nThey were married on April 24, 1854, in Vienna. Franz Joseph was her first cousin; their mothers were sisters (Archduchess Sophie and Princess Ludovika).",
         "reasoning_chars": 0,
-        "stream_wall_ms": 390,
+        "stream_wall_ms": 715,
         "total_latency_ms": null,
         "intent": null,
         "source_origins": [],
@@ -1035,7 +1033,7 @@
           {
             "fact": "marries",
             "present": true,
-            "evidence": "\"Elisabeth of Bavaria, commonly known as Sisi or Empress Elisabeth of Austria, married Franz Joseph I\""
+            "evidence": "\"Elisabeth (also known as Sisi or Empress Elisabeth of Austria) married Franz Joseph I, the Emperor of Austria.\""
           },
           {
             "fact": "salve",
@@ -1069,9 +1067,9 @@
       "corpora_hit": [],
       "vector_eligible": true,
       "synth": {
-        "answer": "There is no fixed number of years that elapse before an understanding is made. The time it takes to reach an \"understanding\" depends entirely on the context, subject matter, and individuals involved.\n\nHere are a few perspectives:\n\n1. **Simple Facts**: You might understand something in seconds or minutes (e.g., learning what 2+2=4).\n2. **Complex Skills**: Mastering a language or instrument may take months or years.\n3. **Deep Relationships**: Understanding another person’s perspective can take years of shared experience and communication—or sometimes never fully happen.\n4. **Scientific/Philosophical Insights**: Some ideas took centuries for humanity as a whole to understand (e.g., heliocentrism, quantum mechanics).\n\nIn short: **It varies widely.** There is no universal timeline.",
+        "answer": "There is no fixed number of years that elapse before an understanding is made. The time it takes to reach a mutual understanding depends entirely on the context, complexity, and parties involved.\n\nHere are some factors that influence this timeline:\n\n1. **Complexity of the Subject**: Simple agreements (e.g., what to eat for dinner) can be reached in minutes or seconds. Complex international treaties or scientific consensus may take decades.\n2. **Communication Quality**: Clear, open, and empathetic communication often accelerates understanding. Miscommunication or conflict can delay it indefinitely.\n3. **Emotional Factors**: Personal relationships may require time for empathy, trust-building, or healing from past conflicts before true understanding is achieved.\n4. **Cultural Differences**: Cross-cultural misunderstandings may take longer due to differing values, norms, and perspectives.\n5. **Willingness to Listen**: Understanding requires active listening and openness from all parties. If one side is resistant, progress slows significantly.\n\nIn some cases, full understanding never occurs—especially in deeply polarized situations. In others, it happens instantly through shared experience or insight.\n\nSo rather than a set number of years, the key variables are: **clarity, patience, empathy, and willingness to engage.**",
         "reasoning_chars": 0,
-        "stream_wall_ms": 1114,
+        "stream_wall_ms": 1961,
         "total_latency_ms": null,
         "intent": null,
         "source_origins": [],
@@ -1096,7 +1094,7 @@
           {
             "fact": "years",
             "present": true,
-            "evidence": "\"Mastering a language or instrument may take months or years.\""
+            "evidence": "Complex international treaties or scientific consensus may take decades."
           }
         ]
       }
@@ -1113,21 +1111,21 @@
         "ratio": null
       },
       "fact_score": {
-        "matched": [],
-        "missing": [
+        "matched": [
           "true"
         ],
+        "missing": [],
         "total_expected": 1,
-        "ratio": 0.0
+        "ratio": 1.0
       },
       "embed_ms": 0,
       "search_ms": 0,
       "corpora_hit": [],
       "vector_eligible": true,
       "synth": {
-        "answer": "In the 2018 film *The Favourite*, Salve (Queen Anne) decides to marry Elisabeth (Abigail Masham, though her name is Abigail in history and the film; \"Salve\" seems to be a typo for **Anne** or perhaps you are referring to a different character? Let's assume you mean Queen **Anne** deciding to marry **Elisabeth/Sarah**? No, that doesn't happen.\n\nWait, let's re-read carefully: **\"What makes Salve decide to finally marry Elisabeth?\"**\n\nThere is no main character named \"Salve\" in *The Favourite*. It is highly likely you mean **Queen Anne**. And she does not marry Elisabeth/Abigail. She marries **Prince George of Denmark**.\n\nHowever, if this is from a different story, please clarify. But assuming this is about *The Favourite* (2018) and there are typos:\n- \"Salve\" -> Likely **Anne** (or perhaps **Sarah**?). Sarah Churchill never marries Abigail.\n- \"Elisabeth\" -> In the film, Abigail's full name is **Abigail Masham**, but her mother-in-law or others might refer to family members? No.\n- Actually, in the film, Queen Anne eventually turns against Sarah and favors Abigail. She does not marry Abigail.\n\nLet's look for another interpretation. Is there a character named **Salve**? Maybe you mean **Savage**? Or **Steve**?\n\nActually, looking at common queries about *The Favourite*, users often ask: **\"What makes Queen Anne decide to finally punish Sarah?\"** or **\"Why does Queen Anne turn away from Sarah?\"**\n\nBut if you strictly mean \"marry Elisabeth,\" this plot point doesn't exist in *The Favourite*.\n\nHowever, if this is about the 2013 film ***Saving Private Ryan***? No.\nIf it's about ***Pride and Prejudice***? Elizabeth Bennet marries Mr. Darcy.\n\nLet's consider that \"Salve\" might be a typo for **\"She\"** referring to **Elizabeth Bennet**? No, \"Salve decide\".\n\nLet's look at the movie ***The King's Speech***? No.\n\nIs it possible you are asking about the book/movie ***Bridgerton***? No character named Salve.\n\n**Hypothesis:** You are asking about the 2018 film *The Favourite*, but there is a significant confusion in names.\n- Queen Anne (Olivia Colman) does not marry Elisabeth/Abigail.\n- Sarah Churchill (Rachel Weisz) does not marry Abigail.\n- Abigail Masham (Emma Stone) marries Samuel Masham.\n\nPerhaps you mean: **What makes Queen Anne decide to finally turn against Sarah?**\nAnswer: The discovery that Sarah has been secretly corresponding with Tory politicians and plotting against her, combined with Abigail's manipulation of Anne's physical pain and emotional vulnerability.\n\n**Alternative Hypothesis:** You are asking about the movie ***Shakespeare in Love***? No.\n\nLet's assume you made typos for **\"Sarah\"** deciding something about **\"Elizabeth\"**? Unlikely.\n\nLet's try one more specific possibility: Is there a character named **Salve** in *The Favourite*? No.\n\nCould \"Salve\" be **Savage**? In *Game of Thrones*, no.\n\nOkay, let's look at the phrasing again. \"What makes Salve decide to finally marry Elisabeth?\"\nIf this is from a different story entirely, I need that context. But given the lack of other context, and the similarity of names in historical dramas...\n\nWait! Could it be ***Poldark***? No.\n\nLet's assume you are asking about **\"What makes Queen Anne decide to finally dismiss Sarah?\"** (since they don't marry). Or perhaps **\"What makes Abigail succeed?\"**\n\nHowever, if we must answer literally based on common misconceptions or specific plot points:\nIn *The Favourite*, **Queen Anne** does not marry anyone after Prince George dies (he died earlier). She lives with her companions.\n\nIf this is a trick question or from a different source, please provide more details. But if I have to guess the intent regarding *The Favourite*:\nThere is no marriage between Salve/Anne and Elisabeth/Abigail.\n\n**Correction:** Maybe you mean **\"What makes Sarah decide to finally leave London?\"**? No.\n\nLet's look at the names again. **Salve**. **Elisabeth**.\nCould it be ***Sense and Sensibility***? Elizabeth Marry... Edward Ferrars? Elinor marries...\n\nActually, there is a character named **Elizabeth** in many stories. And **Salve** sounds like **Sylvie** or **Steve**.\n\nIf this is about the 2017 film ***Beauty and the Beast***? No.\n\nI will assume you are asking about *The Favourite* but have confused the plot points significantly, OR you are asking about a different story entirely where a character named Salve (perhaps a typo for **Severus**? Snape marrying Elphias Doge? No.) marries Elisabeth.\n\nGiven the ambiguity, I cannot provide a correct answer without clarification on which movie/book/story \"Salve\" and \"Elisabeth\" belong to. However, if this is a reference to **\"What makes Queen Anne decide to finally punish Sarah?\"**, here is that answer:\n\nIn *The Favourite*, Queen Anne decides to turn against Sarah Churchill because Abigail Masham systematically manipulates her by exploiting her physical pain and insecurities, while simultaneously revealing Sarah's political disloyalty and contempt for Abigail. The final straw is often interpreted as Sarah's dismissive attitude towards Anne's children (who died young) and her alliance with the Tory opposition, which Abigail highlights.\n\nIf you meant a different story, please specify!",
+        "answer": "In the 1986 film *The Princess Bride*, Prince Humperdinck does not decide to marry Buttercup (who uses the alias \"Elisabeth\" in some contexts or is simply referred to as the bride) because he loves her. In fact, his motivation for the marriage is purely political and strategic.\n\nHumperdinck decides to proceed with the wedding primarily **to provoke a war with the Kingdom of Florin**. He plans to have Westley (the Man in Black/Buttercup’s true love) killed during the ceremony so that it looks like an act of aggression by Florin against Guilder. This would give him the pretext to declare war on Florin, unite the two kingdoms under his rule, and consolidate power.\n\nSo, the key reasons are:\n1.  **Political Ambition:** To gain control over both Guilder and Florin.\n2.  **Revenge/Premeditated War:** Using Buttercup as bait to frame Florin for murder and trigger a conflict he believes he can win.\n\nHe does not marry her out of affection or respect; she is merely a pawn in his scheme.",
         "reasoning_chars": 0,
-        "stream_wall_ms": 8518,
+        "stream_wall_ms": 1941,
         "total_latency_ms": null,
         "intent": null,
         "source_origins": [],
@@ -1141,18 +1139,18 @@
           "ratio": 0.0
         },
         "judge_fact_score": {
-          "matched": [],
-          "missing": [
+          "matched": [
             "true"
           ],
+          "missing": [],
           "total_expected": 1,
-          "ratio": 0.0
+          "ratio": 1.0
         },
         "judge_evidence": [
           {
             "fact": "true",
-            "present": false,
-            "evidence": "(absent)"
+            "present": true,
+            "evidence": "\"In fact, his motivation for the marriage is purely political and strategic.\""
           }
         ]
       }
@@ -1169,21 +1167,21 @@
         "ratio": null
       },
       "fact_score": {
-        "matched": [
+        "matched": [],
+        "missing": [
           "foundation"
         ],
-        "missing": [],
         "total_expected": 1,
-        "ratio": 1.0
+        "ratio": 0.0
       },
       "embed_ms": 0,
       "search_ms": 0,
       "corpora_hit": [],
       "vector_eligible": true,
       "synth": {
-        "answer": "There is no single secret that creates a happy life for every couple, as relationships are unique. However, psychologists and relationship experts generally agree on several core pillars that contribute to long-term happiness and stability:\n\n1. **Effective Communication**: It’s not just about talking; it’s about listening actively, expressing needs clearly without blame, and understanding each other’s perspectives.\n2. **Trust and Respect**: Feeling safe with your partner and respecting their individuality, boundaries, and opinions is foundational.\n3. **Shared Values and Goals**: While interests can differ, alignment on major life values (e.g., family, finances, lifestyle) helps couples navigate challenges together.\n4. **Emotional Support and Intimacy**: Being each other’s primary source of comfort, encouragement, and affection—both emotionally and physically.\n5. **Conflict Resolution Skills**: Disagreements are inevitable. Happy couples focus on solving the problem rather than winning the argument, often using “repair attempts” to de-escalate tension.\n6. **Quality Time and Shared Experiences**: Making time for each other, whether through daily rituals or shared adventures, keeps the connection fresh.\n7. **Individual Growth**: Supporting each other’s personal goals and maintaining a sense of self outside the relationship prevents codependency and fosters mutual admiration.\n\nUltimately, a happy life together is built day by day through small acts of kindness, consistency, and commitment to nurturing the bond over time.",
+        "answer": "The question of what creates a happy life together is profound and varies from couple to couple, but relationship experts, psychologists, and long-term studies consistently highlight several key pillars. It’s rarely just one thing; rather, it’s the interplay of many factors over time.\n\nHere are some of the most commonly cited elements:\n\n### 1. **Strong Communication**\n   - **Active Listening:** Truly hearing your partner without immediately planning your response or judging.\n   - **Honesty & Transparency:** Sharing thoughts, feelings, fears, and hopes openly.\n   - **Conflict Resolution:** Arguing fairly—focusing on solving the problem rather than “winning” or attacking each other. Learning how to repair after a fight is crucial.\n\n### 2. **Mutual Respect and Appreciation**\n   - Seeing your partner as an equal and valuing their opinions, boundaries, and individuality.\n   - Regularly expressing gratitude for small things (e.g., “Thanks for making coffee,” “I appreciate you listening to me today”). This builds emotional bank accounts that buffer against stress.\n\n### 3. **Shared Values and Goals**\n   - While interests can differ, core values around family, money, ethics, religion, or lifestyle often need alignment.\n   - Having shared dreams or projects (raising kids, building a home, traveling, volunteering) creates a sense of teamwork and purpose.\n\n### 4. **Emotional Intimacy and Trust**\n   - Feeling safe being vulnerable with your partner—sharing weaknesses without fear of ridicule.\n   - Consistency: Doing what you say you’ll do. Trust is built in small moments over time.\n\n### 5. **Quality Time and Connection**\n   - Prioritizing each other despite busy lives. This doesn’t always mean grand gestures; it can be daily check-ins, shared hobbies, or regular date nights.\n   - Being present: Putting away phones and distractions to truly connect.\n\n### 6. **Physical Affection and Sexuality**\n   - Non-sexual touch (holding hands, hugging, cuddling) releases oxytocin, the “bonding hormone.”\n   - A satisfying sexual relationship that evolves as life changes is important for many couples, but it’s not the sole definition of intimacy.\n\n### 7. **Individual Growth and Support**\n   - Paradoxically, happy couples often support each other’s individuality. Encouraging your partner’s personal goals, friendships, and hobbies prevents codependency and keeps the relationship fresh.\n   - Growing together rather than growing apart by adapting to life changes (career shifts, parenting, aging).\n\n### 8. **Shared Humor and Playfulness**\n   - Laughter reduces stress and strengthens bonds. Couples who can joke around, even during tough times, tend to weather storms better.\n\n### 9. **Teamwork in Daily Life**\n   - Sharing responsibilities (chores, finances, childcare) fairly feels respectful and prevents resentment from building up over time.\n\n### Important Note:\nThere is no “perfect” formula. Every couple negotiates these elements differently based on their personalities, backgrounds, and circumstances. What matters most is that both partners are committed to nurturing the relationship intentionally and consistently.\n\nWould you like advice tailored to a specific aspect of your relationship?",
         "reasoning_chars": 0,
-        "stream_wall_ms": 1898,
+        "stream_wall_ms": 4491,
         "total_latency_ms": null,
         "intent": null,
         "source_origins": [],
@@ -1197,18 +1195,18 @@
           "ratio": 0.0
         },
         "judge_fact_score": {
-          "matched": [
+          "matched": [],
+          "missing": [
             "foundation"
           ],
-          "missing": [],
           "total_expected": 1,
-          "ratio": 1.0
+          "ratio": 0.0
         },
         "judge_evidence": [
           {
             "fact": "foundation",
-            "present": true,
-            "evidence": "\"Feeling safe with your partner and respecting their individuality, boundaries, and opinions is foundational.\""
+            "present": false,
+            "evidence": "(absent)"
           }
         ]
       }
@@ -1238,9 +1236,9 @@
       "corpora_hit": [],
       "vector_eligible": true,
       "synth": {
-        "answer": "To provide an accurate answer, I need to know **which novel** you are referring to. Please specify the title and author of the book.\n\nOnce you provide that information, I can analyze its themes, plot, characters, and literary devices to explain what is emphasized in the story (e.g., social justice, love, identity, power, morality, etc.).",
+        "answer": "To provide an accurate answer, I need to know **which novel** you are referring to.\n\nPlease specify the title of the book and/or its author. For example:\n*   *1984* by George Orwell (emphasizes totalitarianism, surveillance, and truth)\n*   *The Great Gatsby* by F. Scott Fitzgerald (emphasizes the American Dream, class, and obsession)\n*   *Pride and Prejudice* by Jane Austen (emphasizes marriage, social status, and personal growth)\n\nOnce you name the novel, I can give you a detailed analysis of its central themes and emphases!",
         "reasoning_chars": 0,
-        "stream_wall_ms": 493,
+        "stream_wall_ms": 939,
         "total_latency_ms": null,
         "intent": null,
         "source_origins": [],
@@ -1304,9 +1302,9 @@
       "corpora_hit": [],
       "vector_eligible": true,
       "synth": {
-        "answer": "A healthy, lasting marriage is rarely built on just one thing. Instead, it requires a combination of emotional connection, practical teamwork, and intentional effort from both partners. While every relationship is unique, most experts agree that the following elements are essential:\n\n### 1. **Trust**\nTrust is the foundation. It means believing your partner has your best interests at heart, being honest with them, and feeling secure in their commitment to you. Without trust, insecurity and jealousy can erode the relationship over time.\n\n### 2. **Communication**\nThis goes beyond just talking. It involves:\n*   **Active Listening:** Truly hearing what your partner says without immediately planning your response.\n*   **Openness:** Sharing feelings, fears, hopes, and frustrations honestly but respectfully.\n*   **Conflict Resolution:** Learning how to argue fairly—focusing on resolving the issue rather than \"winning\" the argument or attacking each other’s character.\n\n### 3. **Respect**\nValuing each other as individuals is crucial. This means honoring boundaries, appreciating differences in opinion, supporting each other’s goals, and never speaking down to one another—even during disagreements.\n\n### 4. **Commitment**\nMarriage requires a conscious choice to stay dedicated through difficult times. It’s not just about romantic love; it’s about choosing your partner day after day, even when things are hard. This includes fidelity (emotional and physical) unless otherwise agreed upon by both partners.\n\n### 5. **Intimacy & Affection**\nThis isn’t limited to sex (though sexual compatibility can be important). Emotional intimacy—feeling close, understood, and connected—is vital. Physical affection like holding hands, hugging, or cuddling also helps maintain that bond.\n\n### 6. **Shared Values & Goals**\nWhile you don’t need to agree on everything, having aligned core values (e.g., views on family, money, religion, lifestyle) provides a common direction for your life together. It helps prevent fundamental conflicts down the road.\n\n### 7. **Friendship**\nMany couples find that the strongest marriages are built on genuine friendship. Enjoying each other’s company, laughing together, and sharing interests makes the relationship resilient during stressful times.\n\n### 8. **Flexibility & Compromise**\nNo two people are exactly alike. A successful marriage requires giving and taking—willingness to adapt when plans change, to meet in the middle during disagreements, and to support each other through life transitions (career changes, parenting, aging, etc.).\n\n---\n\n**Remember:** Marriage is a living entity—it needs constant care, attention, and nurturing. It’s not something you \"achieve\" once; it’s something you build every day through small acts of kindness, understanding, and partnership.",
+        "answer": "While every relationship is unique, psychologists and relationship experts generally agree that a healthy, lasting marriage requires several foundational elements. It’s less about perfection and more about consistent effort from both partners.\n\nHere are some of the most critical components:\n\n### 1. **Trust**\nThis is the bedrock of any strong partnership. Trust means believing in your partner’s integrity, honesty, and reliability. Without trust, insecurity and suspicion can erode the connection over time.\n\n### 2. **Communication**\nIt’s not just about talking; it’s about *listening*. Effective communication involves:\n- Expressing needs and feelings clearly without blame.\n- Active listening (hearing to understand, not just to respond).\n- Navigating difficult conversations with respect rather than avoidance or aggression.\n\n### 3. **Respect**\nEach partner should value the other as an individual, even when they disagree. This includes respecting boundaries, opinions, career aspirations, family dynamics, and personal space. Contempt is often cited by experts like Dr. John Gottman as one of the biggest predictors of divorce—so maintaining mutual respect is vital.\n\n### 4. **Compromise and Flexibility**\nNo two people are identical. A successful marriage requires both partners to be willing to meet each other halfway on issues ranging from finances and household chores to parenting styles and leisure time. Rigidity can lead to conflict; flexibility fosters harmony.\n\n### 5. **Emotional Intimacy and Connection**\nBeyond physical attraction, couples need a deep emotional bond. This means sharing vulnerabilities, supporting each other through hardships, celebrating joys together, and feeling safe being your authentic self around your partner.\n\n### 6. **Shared Values and Goals**\nWhile you don’t need to agree on everything, having aligned core values (e.g., views on money, family, religion, or lifestyle) helps create unity. Having shared goals—whether it’s building a home, raising children, traveling, or growing personally—gives the partnership direction and purpose.\n\n### 7. **Commitment**\nMarriage is often described as a choice made every day. Commitment means choosing your partner even during tough times, prioritizing the relationship, and working through challenges rather than giving up when things get difficult.\n\n### 8. **Friendship**\nMany long-married couples cite friendship as key to their success. Enjoying each other’s company, laughing together, and having fun creates a reservoir of positive feelings that can buffer against stress and conflict.\n\n---\n\n**Important Note:**  \nThere is no “one-size-fits-all” formula for marriage. Some couples thrive on shared hobbies; others prioritize individual growth within the partnership. What matters most is that both partners are willing to invest time, energy, and empathy into nurturing the relationship continuously.",
         "reasoning_chars": 0,
-        "stream_wall_ms": 3831,
+        "stream_wall_ms": 3843,
         "total_latency_ms": null,
         "intent": null,
         "source_origins": [],
@@ -1323,30 +1321,29 @@
         },
         "judge_fact_score": {
           "matched": [
+            "implicit",
+            "confidence",
             "trust"
           ],
-          "missing": [
-            "implicit",
-            "confidence"
-          ],
+          "missing": [],
           "total_expected": 3,
-          "ratio": 0.33333334
+          "ratio": 1.0
         },
         "judge_evidence": [
           {
             "fact": "implicit",
-            "present": false,
-            "evidence": "(absent)"
+            "present": true,
+            "evidence": "\"It's less about perfection and more about consistent effort from both partners.\""
           },
           {
             "fact": "confidence",
-            "present": false,
-            "evidence": "(absent)"
+            "present": true,
+            "evidence": "\"It's less about perfection and more about consistent effort from both partners.\""
           },
           {
             "fact": "trust",
             "present": true,
-            "evidence": "\"### 1. **Trust** Trust is the foundation.\" (6 words)"
+            "evidence": "\"1. **Trust** This is the bedrock of any strong partnership. Trust means believing in your partner's integrity, honesty, and reliability.\""
           }
         ]
       }
@@ -1375,9 +1372,9 @@
       "corpora_hit": [],
       "vector_eligible": true,
       "synth": {
-        "answer": "Based on publicly available information, Salve Kristiansen is a Norwegian politician associated with the Labour Party (Arbeiderpartiet). There are no widely known public records or credible sources detailing his personal romantic relationships or specifying who he \"loves.\"\n\nPoliticians' private lives are generally respected unless they choose to share details publicly. Therefore, this question cannot be answered from open-source data without infringing on privacy norms or speculating beyond verified facts.",
+        "answer": "Salve Kristiansen is a Norwegian comedian, actor, and television host who is married to **Kari Simonsen**.\n\nThey have been together for many years and are a well-known couple in Norway. Salve has often spoken affectionately about his wife in interviews and on social media.",
         "reasoning_chars": 0,
-        "stream_wall_ms": 741,
+        "stream_wall_ms": 571,
         "total_latency_ms": null,
         "intent": null,
         "source_origins": [],
@@ -1432,9 +1429,9 @@
       "corpora_hit": [],
       "vector_eligible": true,
       "synth": {
-        "answer": "To answer this question accurately, I need to know which specific story, book, movie, or TV show you are referring to. \"Elisabeth\" is a common name in many works of fiction and history.\n\nFor example:\n*   In **Shakespeare's *King John*** or related adaptations, Elisabeth (often Lady Faulconbridge) has complex relationships, but the context varies.\n*   In the musical ***Evita***, Eva Perón (born María Eva Duarte) is initially attracted to Juan Perón, but there isn't a primary character named Elisabeth with a clear initial attraction in the main plot unless referring to a minor character.\n*   In **Netflix’s *The Crown***, Queen Elizabeth II marries Prince Philip, so he is her romantic interest from the start of their relationship arc.\n*   In **Hannah Kent’s novel *Badgerland*** or other historical fiction featuring an Elisabeth, the answer depends on that specific narrative.\n\nCould you please specify the title of the work you are asking about?",
+        "answer": "To answer this question accurately, I need to know which story, movie, book, or TV show you are referring to, as \"Elisabeth\" is a common name in many narratives.\n\nHowever, the most famous fictional character named Elisabeth (or Elizabeth) who has a notable initial attraction that drives much of her plot is **Elizabeth Bennet** from Jane Austen's *Pride and Prejudice*.\n\nIf you mean **Elizabeth Bennet**:\n*   She is initially attracted to **Mr. George Wickham**. He charms her with his pleasant demeanor and false stories about Mr. Darcy.\n*   Conversely, she is initially strongly *disliked* by Mr. Fitzwilliam Darcy due to his pride and her prejudice against him.\n\nIf you are referring to another character (e.g., Elisabeth Schwarzhaupt, Elisabeth Moss in *The Handmaid's Tale*, or someone else), please specify the title!",
         "reasoning_chars": 0,
-        "stream_wall_ms": 1579,
+        "stream_wall_ms": 1383,
         "total_latency_ms": null,
         "intent": null,
         "source_origins": [],
@@ -1449,19 +1446,20 @@
           "ratio": 0.0
         },
         "judge_fact_score": {
-          "matched": [],
+          "matched": [
+            "young"
+          ],
           "missing": [
-            "young",
             "officer"
           ],
           "total_expected": 2,
-          "ratio": 0.0
+          "ratio": 0.5
         },
         "judge_evidence": [
           {
             "fact": "young",
-            "present": false,
-            "evidence": "(absent)"
+            "present": true,
+            "evidence": "\"She is initially attracted to Mr. George Wickham.\" (Note: 'attracted' implies the concept of youth/youngness in this context, but strictly looking for the word or direct paraphrase like 'young', let's re-evaluate based on strict instruction.)"
           },
           {
             "fact": "officer",
@@ -1495,9 +1493,9 @@
       "corpora_hit": [],
       "vector_eligible": true,
       "synth": {
-        "answer": "In the novel *Salve* by Inger Christensen, it takes **10 years** for Salve and Elisabeth to understand each other.\n\nThe story is structured around this decade-long period during which their relationship develops from misunderstanding and conflict toward a deeper, albeit complex, mutual comprehension.",
+        "answer": "In the novel *The Last Lecture* by Randy Pausch (and specifically referring to the characters in his life story or potentially a confusion with another work, as Salve and Elisabeth are not central named characters in that specific book), this question likely refers to the historical figures **Salve** (possibly a typo for **Søren Kierkegaard**'s engagement to **Regine Olsen**, or perhaps referring to **Elisabeth Schumann**? No, let's look closer).\n\nActually, this question most famously pertains to the relationship between **Salve** and **Elisabeth** in the context of the Norwegian author **Sigrid Undset’s** novel ***Kristin Lavransdatter***? No.\n\nLet's reconsider common literary pairs. A very famous story involving two people who struggle to understand each other is found in **\"The Last Lecture\"**? No.\n\nWait, there is a well-known short story or novella often used in reading comprehension tests titled **\"The Lesson\"** or similar?\n\nLet's look at the names: **Salve** and **Elisabeth**.\nThere is a famous Danish/Norwegian historical/literary reference regarding **Søren Kierkegaard** and **Regine Olsen**, but their names don't match.\n\nHowever, there is a specific short story by **Knut Hamsun** called ***Hunger***? No.\n\nLet's search for \"Salve and Elisabeth understand each other years\".\n\nThis question appears to be from a specific reading comprehension passage, likely from an English language exam (such as IELTS, TOEFL, or a national curriculum test). The text usually describes two people who have different backgrounds or languages.\n\nIn many such texts featuring characters named Salve and Elisabeth:\nThe story often involves them living together or interacting over a period of time before achieving mutual understanding. A common answer in these types of standardized test passages regarding their relationship development is that it took **10 years**.\n\nAnother possibility: This refers to the book **\"The Last Lecture\"**? No.\n\nLet's look at **\"Salve\"** as a name. It might be a typo for **Steve**? Steve Jobs? No.\n\nActually, this question matches content from the novel **\"The Kite Runner\"**? No.\n\nIt closely resembles questions about the play **\"A Doll's House\"** (Torvald and Nora)? No.\n\nLet's assume this is from a specific known text often used in exams:\nIn some contexts, specifically referring to the story of two immigrants or people from different cultures named Salve and Elisabeth in a passage titled something like *\"Crossing Cultures\"* or similar, the narrative arc states that it took them **10 years** to truly understand one another.\n\nHowever, without the specific source text, I must rely on common literary knowledge. There isn't a universally famous canonical work with central characters \"Salve\" and \"Elisabeth\". It is highly probable that \"Salve\" is a typo for **\"Steve\"** (as in Steve and his wife?) or perhaps **\"Sven\"**?\n\nIf we look at **\"The Last Lecture\"** by Randy Pausch, he talks about achieving childhood dreams. He mentions his daughter Alice. Not Salve/Elisabeth.\n\nLet's consider the possibility of a typo for **\"Sebastian and Elisabeth\"**? Or **\"Silas and Elizabeth\"** (*Adam Bede*)? In *Adam Bede*, it takes time but not specifically quantified as a single number like \"10 years\" in common trivia.\n\n**Correction:**\nThere is a famous short story by **Anton Chekhov**? No.\n\nLet's try one more angle: Is this from the book **\"Homo Faber\"**? Walter and Hanna? No.\n\nGiven the specificity, this is likely from a specific exam passage (e.g., from an Indonesian national exam or similar ESL test) where a text describes two characters, Salve and Elisabeth. In those specific reading comprehension contexts, the answer provided in the key is often **10**.\n\nAnother strong candidate: The question might refer to **Salman Rushdie**? No.\n\nIf I must provide the most likely intended answer based on common online resources for this exact phrasing found in educational databases:\nThe text usually states that they lived together but did not understand each other's language/culture until after a decade.\n\n**Answer:** 10 yearsIn the novel *The Reader* (*Der Vorleser*) by Bernhard Schlink, **Salve** (Michael Berg) and **Elisabeth** do not \"understand each other\" in a mutual, communicative sense during their initial relationship. Instead, the narrative focuses on Michael's internal journey of understanding Elisabeth's past crimes and his own moral complicity.\n\nHowever, if you are referring to how long it takes for Michael to understand the full truth about Elisabeth’s role in the Holocaust:\n\n- The story spans several decades.\n- Michael first meets Hanna (often confused with Elisabeth in some summaries or adaptations, but her name is Hanna Schmitz) when he is 15.\n- They have an affair until she disappears abruptly after six months.\n- Years later, as a law student, Michael attends trials where Hanna is a defendant. This is when he begins to piece together what happened.\n- He visits her in prison over many years while she serves her sentence.\n- It is only **after** Hanna commits suicide and he receives her tapes that he fully understands her shame regarding illiteracy and the weight of their shared history.\n\nIf you meant **\"How long did it take for Michael to understand the truth about Hanna?\"**, the answer involves **decades**—specifically, from his teenage years into adulthood (roughly 20+ years).\n\nBut if this question refers to a different book or context named *Salve* and *Elisabeth*, please clarify, as there is no widely known literary work with those two characters having such a central dynamic under those exact names. In Bernhard Schlink’s *The Reader*, the main character is **Michael Berg** and the woman is **Hanna Schmitz**.\n\nGiven common confusion in queries:\n- If you meant **Michael and Hanna**: It takes Michael roughly **25–30 years** of reflection and legal proceedings to fully understand her actions, motives (illiteracy/shame), and their moral implications.\n- There is no major canonical relationship between \"Salve\" and \"Elisabeth\" in standard literature that fits this specific question about mutual understanding over time.\n\nPlease verify the characters' names if possible.",
         "reasoning_chars": 0,
-        "stream_wall_ms": 515,
+        "stream_wall_ms": 13289,
         "total_latency_ms": null,
         "intent": null,
         "source_origins": [],
@@ -1522,7 +1520,7 @@
           {
             "fact": "ten",
             "present": true,
-            "evidence": "**10 years**"
+            "evidence": "\"In those specific reading comprehension contexts, the answer provided in the key is often **10**.\" \"The text usually states that they lived together but did not understand each other's language/culture until after a decade.\""
           }
         ]
       }
@@ -1551,9 +1549,9 @@
       "corpora_hit": [],
       "vector_eligible": true,
       "synth": {
-        "answer": "It appears there might be a typo or misunderstanding in your question, as **\"Salve\"** is not widely recognized as the name of a specific historical figure associated with a famous \"true\" lover or companion.\n\nHowever, here are a few possibilities you might mean:\n\n1. **Salvator Rosa?** – An Italian painter and poet, but no famous “true” partner is commonly cited in general trivia.\n2. **Salome?** – A biblical/historical figure; again, no single person is famously known for being “true to Salome.”\n3. **“True to Love”** – Perhaps you meant *Who was true to love?* or referenced a song/poem title?\n4. **Typo for “Sylvia”?** – In literature (e.g., Shakespeare’s *The Two Gentlemen of Verona*), Sylvia is loved by multiple characters, with Proteus betraying Valentine for her.\n5. **Typo for “Selene”?** – Greek goddess of the moon, associated with Endymion in myth.\n\nIf you meant **\"Salve\"** as in the Latin word meaning *\"hello\"* or *\"greeting,\"* then it doesn’t refer to a person at all.\n\nCould you please clarify who \"Salve\" refers to? For example:\n- Is this from a book, movie, game, or historical context?\n- Did you mean a different name (e.g., Salome, Selena, Sylvie)?\n\nI’d be happy to help once I have more details!",
+        "answer": "There is no widely recognized historical or literary figure known specifically as \"Salve\" in mainstream history, mythology, or popular culture. It is possible that:\n\n1. **\"Salve\"** is a misspelling or mishearing of another name (e.g., *Sulla*, *Selene*, *Salome*, *Valerius*, etc.).\n2. You are referring to a character from a specific book, movie, game, or lesser-known text not covered in general knowledge sources.\n3. \"Salve\" might be used here in its Latin sense meaning \"greeting,\" \"salutation,\" or \"remedy/salve,\" which wouldn't apply to identifying a person loyal to someone named Salve.\n\nCould you please provide more context? For example:\n- Is this from a novel, film, video game, or historical period?\n- Could the name be spelled differently (e.g., Sulla, Selene, Valens)?\n\nWith additional details, I can give you a much more accurate answer!",
         "reasoning_chars": 0,
-        "stream_wall_ms": 2130,
+        "stream_wall_ms": 2098,
         "total_latency_ms": null,
         "intent": null,
         "source_origins": [],
@@ -1608,9 +1606,9 @@
       "corpora_hit": [],
       "vector_eligible": true,
       "synth": {
-        "answer": "The question of \"who is living a happy life\" doesn't have a single, universal answer because happiness is subjective and varies from person to person. However, research in psychology (such as studies by the World Happiness Report) suggests that people who tend to report higher levels of well-being often share certain characteristics or habits:\n\n1. **Strong Social Connections**: People with close relationships with family, friends, and community members generally report greater happiness.\n2. **Purpose and Meaning**: Those engaged in meaningful work, hobbies, volunteerism, or personal goals often feel more fulfilled.\n3. **Gratitude and Mindfulness**: Individuals who practice gratitude, stay present, and focus on positive experiences tend to experience more joy.\n4. **Good Physical Health**: Regular exercise, adequate sleep, and proper nutrition significantly impact mental well-being.\n5. **Financial Stability (within limits)**: While money doesn’t guarantee happiness beyond a point where basic needs are met, financial security reduces stress and increases freedom.\n6. **Resilience and Optimism**: People who can cope with adversity and maintain a hopeful outlook often navigate life’s challenges with greater ease.\n\nUltimately, anyone—regardless of age, background, or circumstance—can live a happy life by cultivating these habits and focusing on what brings them personal fulfillment. Happiness is less about external achievements and more about internal contentment and connection.",
+        "answer": "The question of \"who is living a happy life\" is subjective and deeply personal, as happiness means different things to different people. There isn't one single person who holds the title of \"the happiest,\" but research in psychology and sociology suggests that certain types of individuals or lifestyles tend to correlate with higher levels of reported well-being.\n\nGenerally, people often describe themselves as happier when they experience:\n\n1. **Strong Social Connections:** People with close relationships with family, friends, and community members tend to report higher happiness levels.\n2. **A Sense of Purpose:** Engaging in meaningful work, hobbies, volunteering, or activities that align with their values.\n3. **Gratitude and Mindfulness:** Practicing appreciation for what they have rather than focusing on what they lack.\n4. **Good Physical Health:** While not the only factor, physical well-being significantly impacts mental and emotional state.\n5. **Financial Stability (to a point):** Enough resources to meet basic needs and reduce stress, though beyond a certain threshold, more money doesn’t necessarily equal more happiness.\n\nUltimately, anyone who feels content, fulfilled, and at peace with their life choices can be said to be living a happy life—whether they are a billionaire, an artist in a small studio, a parent raising children, or someone enjoying quiet solitude. Happiness is often found in everyday moments rather than grand achievements.",
         "reasoning_chars": 0,
-        "stream_wall_ms": 1850,
+        "stream_wall_ms": 2659,
         "total_latency_ms": null,
         "intent": null,
         "source_origins": [],
@@ -1671,9 +1669,9 @@
       "corpora_hit": [],
       "vector_eligible": true,
       "synth": {
-        "answer": "It is impossible to provide a single, exact number of people currently \"in wedlock\" (married) because this figure changes every second due to births, deaths, new marriages, and divorces. Additionally, data collection methods vary significantly by country.\n\nHowever, we can look at estimates based on recent global demographic data:\n\n1. **Global Estimate**: As of the early 2020s, it is estimated that approximately **46% to 50%** of adults worldwide are married. With a global adult population of roughly 5–6 billion, this suggests that between **2.3 billion and 3 billion** people are currently in some form of legal marriage or wedlock globally.\n   \n2. **Variation by Region**: Marriage rates differ widely:\n   - In many developed countries (e.g., parts of Europe, North America), marriage rates have been declining, with lower percentages of adults being married compared to previous decades.\n   - In other regions (e.g., parts of Asia, Africa, the Middle East), higher proportions of adults may be married at younger ages.\n\n3. **Data Limitations**: Many countries do not track real-time marital status accurately, and informal unions (common-law marriages) are often excluded from official statistics.\n\nFor precise current figures, organizations like the **United Nations Department of Economic and Social Affairs** or national census bureaus provide periodic estimates rather than live counts.",
+        "answer": "It is not possible to provide an exact number of people currently in wedlock (married) because this statistic changes constantly due to new marriages, divorces, and deaths. Additionally, accurate global data on current marital status is not compiled in real-time by a single central authority.\n\nHowever, here are some approximate figures for context:\n\n1. **Global Estimates**: According to the United Nations and other demographic sources, there were approximately **2 billion** married adults worldwide as of recent years (pre-2023). This includes both first marriages and remarriages.\n   \n2. **United States**: As of 2022–2023 estimates from the U.S. Census Bureau, about **54%–56%** of American adults aged 18 and older are currently married. With an adult population of roughly 250 million, this translates to around **130–140 million** married individuals in the U.S.\n\n3. **Regional Variations**: Marriage rates vary significantly by country due to cultural, religious, legal, and economic factors. For example:\n   - In many European countries, marriage rates have declined as cohabitation becomes more common.\n   - In some regions with large populations (like India or China), absolute numbers of married people remain very high, though trends toward later marriage are increasing.\n\nFor precise, up-to-date statistics, you would need to consult recent national census data from specific countries or reports from organizations like the UN Department of Economic and Social Affairs.",
         "reasoning_chars": 0,
-        "stream_wall_ms": 1911,
+        "stream_wall_ms": 2882,
         "total_latency_ms": null,
         "intent": null,
         "source_origins": [],
@@ -1698,7 +1696,7 @@
           {
             "fact": "two",
             "present": true,
-            "evidence": "\"between **2.3 billion and 3 billion** people are currently in some form of legal marriage or wedlock globally\""
+            "evidence": "\"there were approximately **2 billion** married adults worldwide\""
           }
         ]
       }
@@ -1727,9 +1725,9 @@
       "corpora_hit": [],
       "vector_eligible": true,
       "synth": {
-        "answer": "**\"The Pilot and His Wife\"** (German: *Der Hauptmann und sein Held*, though often referred to by the English title in international contexts, or specifically as part of a collection) is not a single universally famous standalone work like \"Romeo and Juliet,\" but it most commonly refers to one of two things depending on context. However, the most likely reference is to a **short story or fable**, particularly within German literature or folklore collections, such as those found in works by **Heinrich von Kleist** or similar authors from that era who wrote about military life and domestic tragedy.\n\nHowever, there is a very specific and well-known short story titled **\"The Pilot and His Wife\"** (or sometimes *\"Der Steuermann und seine Frau\"*) often attributed to or associated with **German Romanticism** or **folklore**. It typically involves themes of duty, separation, and tragic misunderstanding at sea.\n\nBut if you are referring to a more modern or popular cultural reference, it might be confused with:\n\n1.  **\"The Captain's Daughter\"** (*Kapitanskaya Dochka*) by Alexander Pushkin – which features a pilot/captain figure but focuses on his daughter.\n2.  A plot from the movie **\"The Perfect Storm\"** or similar maritime dramas where the relationship between a seafarer and their spouse is central.\n3.  A specific episode of a TV series like *Star Trek* (e.g., \"The Captain's Hand\" or episodes focusing on Captains' spouses).\n\n**Most Likely Answer:**\nIf this is from a literature class or classic reading list, it likely refers to a **short story by Heinrich von Kleist** titled *\"Der zerbrochne Krug\"*? No, that’s different. Let me double-check common titles.\n\nActually, there is a famous short story called **\"Die Verlobung in St. Domingo\"** (*The Engagement in Saint-Domingo*) by Kleist, but not exactly \"Pilot and His Wife.\"\n\nWait, there is a very famous fable/story often cited in moral education contexts: **\"The Pilot and the Captain's Wife\"** or similar variations where a pilot (navigator) saves a ship and is rewarded, sometimes involving his wife.\n\nHowever, the most prominent work with this exact title is likely **\"The Pilot\" (Der Steuermann)** by **Adalbert von Chamisso** or potentially a misremembered title of **\"The Mariner’s Wife\"** from *The Rime of the Ancient Mariner*.\n\nLet me provide the most accurate general answer based on common literary references:\n\nThere isn't one single global classic titled exactly *\"The Pilot and His Wife.\"* It is possible you are referring to:\n\n1.  **\"The Captain's Daughter\"** by Pushkin – often confused due to maritime themes.\n2.  A short story in German literature collections, such as those by **Wilhelm Hauff** or **Heinrich von Kleist**, which sometimes feature sailors/pilots and their spouses in moral tales.\n3.  The poem **\"The Rime of the Ancient Mariner\"** by Samuel Taylor Coleridge, where the mariner (a sailor) leaves his wife/girlfriend behind, though she isn't a central character named \"his wife\" in the same way.\n\nIf you can provide more context (e.g., author, country, plot summary), I can give a precise answer. For now, it is likely a reference to a **German Romantic short story** involving maritime duty and domestic life, possibly from a textbook or anthology.",
+        "answer": "\"The Pilot and His Wife\" is a classic **fairy tale** that appears in many cultures, most notably as part of the collection *The Arabian Nights* (also known as *One Thousand and One Nights*). It is often categorized under frame stories or tales within tales.\n\n### Summary of the Story:\nWhile versions vary slightly across translations and cultural adaptations, the core plot generally follows this pattern:\n\n1. **Introduction**: A pilot (sailor/captain) marries a beautiful but disobedient wife who frequently argues with him and disobeys his instructions while they are at sea.\n2. **Conflict**: During one voyage, she defies his orders again—sometimes involving interactions with other men, eating forbidden food, or interfering with navigation. In anger or frustration, the pilot kills her (often by throwing her overboard).\n3. **Regret and Consequence**: The pilot is overcome with remorse after committing the act. He experiences guilt, haunted by what he has done.\n4. **Divine Intervention/Miracle**: In many versions, God intervenes to show that justice belongs to Him alone. For example:\n   - Her body may be preserved in a jar or chest and returned to shore.\n   - She miraculously survives or returns as a spirit/ghost to forgive him or reveal divine will.\n   - Alternatively, another character reveals the moral that killing one’s wife without just cause leads to spiritual ruin unless repented.\n\n### Moral and Themes:\n- **Disobedience and Consequences**: The tale warns against ignoring wise counsel and respecting marital boundaries.\n- **Remorse and Repentance**: It emphasizes deep regret for violent actions taken in anger.\n- **Divine Justice**: Highlights that only God has the authority over life and death; humans must not take justice into their own hands rashly.\n- **Marital Discord**: Reflects societal views on marriage dynamics in historical contexts.\n\n### Cultural Context:\nThe story is similar in structure to other Middle Eastern, South Asian, and European tales involving jealous or disobedient spouses (e.g., elements resembling *Sinbad* stories or even Shakespeare’s *Othello*, though much simpler). In some versions found in Persian folklore or Indian storytelling traditions, it serves as a cautionary narrative about patience and control of temper.\n\nIf you’re referring to a specific modern adaptation, book title, or regional version titled *“The Pilot and His Wife,”* please provide more details for a tailored explanation!",
         "reasoning_chars": 0,
-        "stream_wall_ms": 5152,
+        "stream_wall_ms": 3938,
         "total_latency_ms": null,
         "intent": null,
         "source_origins": [],
@@ -1754,7 +1752,7 @@
           {
             "fact": "story",
             "present": true,
-            "evidence": "\"The Pilot and His Wife\" (German: Der Hauptmann und sein Held, though often referred to by the English title in international contexts, or specifically as part of a collection) is not a single universally famous standalone work like \"Romeo and Juliet,\" but it most commonly refers to one of two things depending on context. However, the most likely reference is to a short story or fable..."
+            "evidence": "\"The Pilot and His Wife\" is a classic fairy tale..."
           }
         ]
       }
@@ -1783,9 +1781,9 @@
       "corpora_hit": [],
       "vector_eligible": true,
       "synth": {
-        "answer": "Beauty is highly subjective and exists in many different forms. It isn't limited to physical appearance; it also encompasses kindness, intelligence, creativity, confidence, and the way people treat others.\n\nIn a poetic or philosophical sense, one might say that everyone has their own unique beauty if they look closely enough at their character, actions, and perspective on life. Ultimately, who is beautiful depends entirely on your personal values and what you find meaningful or inspiring.",
+        "answer": "Beauty is widely considered to be subjective, meaning it exists in the eye of the beholder. What one person finds beautiful—whether it’s a landscape, a piece of art, or another human being—is often influenced by personal taste, culture, and individual experiences.\n\nHowever, many people also believe that beauty goes beyond physical appearance. Inner qualities such as kindness, empathy, intelligence, humor, and confidence are frequently cited as making someone truly \"beautiful.\"",
         "reasoning_chars": 0,
-        "stream_wall_ms": 705,
+        "stream_wall_ms": 812,
         "total_latency_ms": null,
         "intent": null,
         "source_origins": [],
@@ -1840,9 +1838,9 @@
       "corpora_hit": [],
       "vector_eligible": true,
       "synth": {
-        "answer": "Salve is the main character in the video game **Stray**.\n\nIn the game, Salve (a cat) does not \"sail\" to a destination. Instead, Salve falls from an apartment window into a dystopian underground city inhabited by robots. The goal of the game is for Salve to navigate this neon-lit, cyberpunk world and find his way back home to the surface.\n\nIf you are referring to a different context or story where \"Salve\" sails somewhere, please provide more details!",
+        "answer": "The *Salve* is a ship in the video game **Sea of Thieves**.\n\nIn the context of the game's lore and quests, there isn't one single \"destination\" that the *Salve* permanently sails to. Instead:\n\n1.  **It is a player-owned vessel:** The *Salve* (specifically the **Sloop**, **Brigantine**, or **Galleon** named Salve) can sail anywhere in the Sea of Thieves world—visiting trading companies like the Merchant Alliance, Gold Hoarders, Order of Souls, Reaper’s Bones, etc., as well as islands, outposts, and hidden treasures.\n2.  **If you mean a specific quest or story arc:** There may be a specific voyage where your crew takes a ship named *Salve* on a particular mission (e.g., hunting a skeleton merchant, completing a Voyage for a company), but it doesn’t have one fixed endpoint.\n\nHowever, if you are referring to **\"Salve\"** from another source:\n\n-   In some literary or historical contexts, \"Salve\" might refer to a different vessel or be part of a title/name in fiction not widely recognized as having a single canonical destination.\n-   If this is from a **specific book, movie, or mod**, please provide more context!\n\nBut in the most common gaming reference (**Sea of Thieves**), the *Salve* sails wherever its crew commands it to go across the open ocean.",
         "reasoning_chars": 0,
-        "stream_wall_ms": 838,
+        "stream_wall_ms": 2448,
         "total_latency_ms": null,
         "intent": null,
         "source_origins": [],
@@ -1857,19 +1855,20 @@
           "ratio": 0.0
         },
         "judge_fact_score": {
-          "matched": [],
+          "matched": [
+            "distant"
+          ],
           "missing": [
-            "distant",
             "shores"
           ],
           "total_expected": 2,
-          "ratio": 0.0
+          "ratio": 0.5
         },
         "judge_evidence": [
           {
             "fact": "distant",
-            "present": false,
-            "evidence": "(absent)"
+            "present": true,
+            "evidence": "\"the *Salve* sails wherever its crew commands it to go across the open ocean.\""
           },
           {
             "fact": "shores",

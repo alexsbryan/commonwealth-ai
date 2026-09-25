@@ -1,0 +1,30 @@
+# The guest runtime — the page an iroh guest link opens.
+#
+# A Rust crate compiled to wasm: it IS an iroh endpoint (relay-only), so the
+# page dials the wall by public key and speaks the rail over that stream. No
+# HTTP door, no TLS termination, no proxy (docs/RING_APP_LIBRARY.md, "The page
+# is an iroh endpoint").
+#
+# Standalone on purpose: `[workspace]` below keeps it out of the repo's
+# workspace, which builds for the host. This crate only builds for
+# wasm32-unknown-unknown, via scripts/build-ring-runtime.sh.
+[package]
+name = "ring-runtime"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+# The LOCKED pin (Cargo.lock of the measuring build, browser-dial bd-1): the
+# browser dial was measured WORKED at exactly these versions.
+iroh = "=1.0.2"
+wasm-bindgen = "=0.2.128"
+wasm-bindgen-futures = "=0.4.78"
+js-sys = "=0.3.105"
+
+# Its own workspace root: without this, cargo walks up to the repo's
+# [workspace] and refuses the crate as a non-member.
+[workspace]

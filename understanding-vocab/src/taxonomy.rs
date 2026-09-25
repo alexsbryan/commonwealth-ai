@@ -210,6 +210,30 @@ string_enum_with_other! {
     }
 }
 
+/// The state type a resolver writes when nothing has classified the state:
+/// neither a declared ontology nor Phase 5 has named it.
+pub const STATE_TYPE_UNCLASSIFIED: &str = "unclassified";
+
+impl StateType {
+    /// The type a resolved `State` carries on disk, given the declared type
+    /// name the extractor put on its sketch.
+    ///
+    /// `Other` in both arms. A declared type name is an open set — the four
+    /// variants above are this schema's own closed vocabulary and a corpus's
+    /// `inner_state` is not one of them (ARCH §9). `None` yields
+    /// [`STATE_TYPE_UNCLASSIFIED`] rather than a guess, so "nobody typed this
+    /// state" stays distinguishable on disk from any type an author declared.
+    pub fn declared_or_unclassified(declared: Option<&str>) -> Self {
+        StateType::Other(
+            declared
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .unwrap_or(STATE_TYPE_UNCLASSIFIED)
+                .to_string(),
+        )
+    }
+}
+
 string_enum_with_other! {
     /// Kind of persistent interaction between entities (§2.6).
     pub enum RelationType {

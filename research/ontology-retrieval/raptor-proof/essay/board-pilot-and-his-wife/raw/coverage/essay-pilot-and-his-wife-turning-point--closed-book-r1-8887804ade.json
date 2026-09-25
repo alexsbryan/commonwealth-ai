@@ -1,0 +1,28 @@
+{
+ "kind": "coverage",
+ "key": "essay-pilot-and-his-wife-turning-point--closed-book-r1",
+ "prompt": "Below are numbered plot points of a novel and an answer written about the novel.\nLabel every point by what the answer says about it:\n\"correct\" = the answer states it\n\"contradicted\" = the answer says something that conflicts with it\n\"absent\" = the answer does not mention it\nReturn only JSON with one entry per point: {\"P1\": \"correct\", \"P2\": \"absent\"}\n\nPoints:\nP1. The novel portrays the life of a sailor named Salve Kristiansen.\nP2. Salve loves Elisabeth and she returns his affection.\nP3. Elisabeth is attracted to a young officer who wishes to marry her.\nP4. Elisabeth spurns the officer because her old love for Salve prevails.\nP5. Salve leaves his native land in desperation before he can reconcile with Elisabeth.\nP6. Salve sails toward foreign shores after leaving home.\nP7. Salve returns to his old home years later.\nP8. Salve finds that Elisabeth has remained true to him during his absence.\nP9. Salve marries Elisabeth upon his return.\nP10. The thought of Elisabeth's momentary hesitation makes life miserable for both spouses.\nP11. Ten years elapse while Salve and Elisabeth struggle with their marital issues.\nP12. Salve and Elisabeth finally come to a clear understanding of one another.\nP13. Salve and Elisabeth lay the foundation for a happy life together.\nP14. The novel emphasizes the need of implicit confidence and trust in marriage.\n\nAnswer:\nIt appears there is a misunderstanding regarding the title of the work. **There is no widely known novel titled *The Pilot and His Wife*.**\n\nHowever, this question likely refers to one of two famous literary works with similar themes or titles:\n\n### Possibility 1: *The Old Man and the Sea* by Ernest Hemingway\nIf you meant **\"The Old Man\" (Santiago) and his \"wife\"** (though he has no wife in the story; perhaps you are thinking of his memories of her, or confusing it with another character), this does not fit well. However, if you meant ***The Pilot*** as a metaphor for Santiago navigating the sea, the turning point is still clear.\n\nBut more likely, you may be referring to:\n\n### Possibility 2: *The Pilot\u2019s Wife* by Ann Patchett\nThis is a contemporary novel published in 1998. It tells the true story of Karen Berman, whose husband, John Berman, was an American Airlines pilot who died in flight AA-965 (a crash caused by navigation error). The other central figure is Annie Landau, whose husband, Tom Landau, also died in that same crash.\n\n**Turning Point:**\nIn *The Pilot\u2019s Wife*, the **turning point occurs when both women discover they are widows from the exact same plane crash**, and later, when they begin to interact despite their initial shock and grief.\n\nSpecifically:\n- **Initial State**: Both women live isolated lives defined by the absence of their husbands. They process grief differently\u2014Karen through religious faith and community support; Annie through intellectual isolation and anger.\n- **Inciting Incident/Crisis**: The news of the crashes separates them initially but binds them together.\n- **True Turning Point**: When Karen and Annie meet and begin a tentative friendship. This matters because it challenges their individual narratives of loss. Instead of remaining alone in their sorrow or blaming each other (as some might expect), they find solidarity. Their relationship forces both to confront complex truths about marriage, guilt, responsibility, and forgiveness\u2014not just toward others, but toward themselves.\n\n**Why It Matters for What Follows:**\n1. **Emotional Healing**: Their bond allows them to move from isolated grief to shared understanding, which is essential for healing.\n2. **Moral Complexity**: The novel explores whether the pilots were negligent and how that affects the widows\u2019 sense of justice. Their conversations help navigate these difficult questions without reducing either husband to a simple villain or hero.\n3. **Rebuilding Identity**: Each woman must redefine her life after loss. The turning point enables Karen to question her rigid faith and Annie to open herself to human connection again.\n\n---\n\n### Possibility 3: *The Pilot* by A.S. Byatt? Or Another Work?\nIf you are referring to a different book (e.g., a lesser-known work, a short story, or perhaps confusing it with *The Aviator\u2019s Wife* by Melanie Benjamin), please clarify the author or provide more context.\n\nHowever, given the phrasing \"The Pilot and His Wife,\" **\"The Pilot\u2019s Wife\" by Ann Patchett** is the most probable match in modern literature dealing directly with this dynamic.\n\nLet me know if you meant a different title!",
+ "attempts": [
+  {
+   "nudged": false,
+   "reply": "{\n\"P1\": \"absent\",\n\"P2\": \"contradicted\",\n\"P3\": \"absent\",\n\"P4\": \"absent\",\n\"P5\": \"absent\",\n\"P6\": \"absent\",\n\"P7\": \"absent\",\n\"P8\": \"absent\",\n\"P9\": \"absent\",\n\"P10\": \"absent\",\n\"P11\": \"absent\",\n\"P12\": \"absent\",\n\"P13\": \"absent\",\n\"P14\": \"absent\"\n}",
+   "model": "Qwen3.6-35B-A3B-MTP-UD-Q6_K"
+  }
+ ],
+ "parsed": {
+  "P1": "absent",
+  "P2": "contradicted",
+  "P3": "absent",
+  "P4": "absent",
+  "P5": "absent",
+  "P6": "absent",
+  "P7": "absent",
+  "P8": "absent",
+  "P9": "absent",
+  "P10": "absent",
+  "P11": "absent",
+  "P12": "absent",
+  "P13": "absent",
+  "P14": "absent"
+ }
+}

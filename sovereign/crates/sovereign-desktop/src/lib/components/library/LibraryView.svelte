@@ -14,7 +14,7 @@
 -->
 <script lang="ts">
   import { onMount } from "svelte";
-  import { notebookList, meshMediaOffers, type MeshMediaOffer } from "../../api";
+  import { notebookList, meshMediaOffers, meshMediaProbe, type MeshMediaOffer } from "../../api";
   import { invokePlugin } from "../../invoke";
   import type { NotebookSummary, StarterQuestion } from "../../types";
   import NotebookKindIcon from "./NotebookKindIcon.svelte";
@@ -63,6 +63,8 @@
   const offers_poll_s = 10;
   let offers = $state<MeshMediaOffer[]>([]);
   let offersError = $state<string | null>(null);
+  // A play attempt that the click-time probe refused, naming the member.
+  let playError = $state<string | null>(null);
 
   async function reloadOffers() {
     try {
@@ -74,7 +76,21 @@
   }
 
   async function play(o: MeshMediaOffer) {
-    if (o.player_url) await invokePlugin("plugin:shell|open", { path: o.player_url });
+    if (!o.player_url) return;
+    playError = null;
+    // One real GET through the bridge before the browser is pointed at it
+    // (the CLI's pattern; the desktop used to open blind). A member whose
+    // origin is down otherwise hands the user an empty-reply tab with
+    // nothing anywhere saying why.
+    try {
+      await meshMediaProbe(o.player_url);
+    } catch (e) {
+      playError = `${o.peer}'s library did not answer — ${
+        e instanceof Error ? e.message : String(e)
+      }`;
+      return;
+    }
+    await invokePlugin("plugin:shell|open", { path: o.player_url });
   }
 
   function offeredTo(o: MeshMediaOffer): string {
@@ -233,6 +249,9 @@
         {:else if offers.length === 0}
           <p class="muted" data-testid="mesh-libraries-empty">no member is offering a library</p>
         {:else}
+          {#if playError}
+            <p class="error" data-testid="mesh-library-play-error">{playError}</p>
+          {/if}
           <div class="shelf" role="list">
             {#each offers as o (o.node_id)}
               <div class="card" role="listitem" data-testid="mesh-library" data-peer={o.peer}>

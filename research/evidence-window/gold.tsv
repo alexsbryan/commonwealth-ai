@@ -1,0 +1,11 @@
+# question_id <TAB> class <TAB> fact||fact||fact
+# Gold is a STRING, not a chunk id — it survives re-chunking, re-embedding and
+# recipe changes. Pick distinctive strings: the answer plus its anchor.
+# class drives the per-class rollup; label it yourself, don't take the router's
+# word for it — whether the router assigns the class right is a separate question.
+#
+# Two rows that must pass before any arm number is read:
+#   ctl_pos  — a fact verbatim in exactly one chunk. Scorer misses it => scorer broken.
+#   ctl_neg  — a fact in no corpus. Scorer finds it => matcher too loose.
+ctl_pos	control	REPLACE with a string you know is in one chunk
+ctl_neg	control	zzq-not-in-any-corpus-zzq

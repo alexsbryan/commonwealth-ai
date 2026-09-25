@@ -225,7 +225,7 @@ dependencies = [
 
 [[package]]
 name = "arch-layers"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "serde",
  "toml 0.8.2",
@@ -1851,7 +1851,7 @@ dependencies = [
 
 [[package]]
 name = "code-facts"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "corpus-engine-scip",
  "corpus-engine-yield",
@@ -1870,7 +1870,7 @@ dependencies = [
 
 [[package]]
 name = "code-next-edit"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "corpus-engine-scip",
  "serde",
@@ -1928,7 +1928,7 @@ dependencies = [
 
 [[package]]
 name = "commonwealth-core"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "blake3",
  "ed25519-dalek 2.2.0",
@@ -1946,7 +1946,7 @@ dependencies = [
 
 [[package]]
 name = "commonwealth-discovery"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "blake3",
  "commonwealth-core",
@@ -1965,7 +1965,7 @@ dependencies = [
 
 [[package]]
 name = "commonwealth-media"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "axum",
  "commonwealth-core",
@@ -1984,7 +1984,7 @@ dependencies = [
 
 [[package]]
 name = "commonwealth-rail"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "commonwealth-rail-core",
  "oplog",
@@ -1996,7 +1996,7 @@ dependencies = [
 
 [[package]]
 name = "commonwealth-rail-core"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "ed25519-dalek 2.2.0",
  "hex",
@@ -2010,7 +2010,7 @@ dependencies = [
 
 [[package]]
 name = "commonwealth-rails"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "axum",
  "base64 0.22.1",
@@ -2039,7 +2039,7 @@ dependencies = [
 
 [[package]]
 name = "commonwealth-state"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "base64 0.22.1",
  "bytes",
@@ -2057,7 +2057,7 @@ dependencies = [
 
 [[package]]
 name = "commonwealth-transport"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "async-trait",
  "commonwealth-core",
@@ -2078,7 +2078,7 @@ dependencies = [
 
 [[package]]
 name = "commonwealth-work"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "commonwealth-core",
  "commonwealth-rail",
@@ -2370,7 +2370,7 @@ dependencies = [
 
 [[package]]
 name = "corpus-engine-archaeology"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "chrono",
  "regex",
@@ -2385,7 +2385,7 @@ dependencies = [
 
 [[package]]
 name = "corpus-engine-atlas-reader"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "arrow",
  "arrow-array",
@@ -2409,7 +2409,7 @@ dependencies = [
 
 [[package]]
 name = "corpus-engine-notes"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "async-trait",
  "axum",
@@ -2435,7 +2435,7 @@ dependencies = [
 
 [[package]]
 name = "corpus-engine-recipes"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "toml 0.8.2",
  "workspace-hack",
@@ -2443,7 +2443,7 @@ dependencies = [
 
 [[package]]
 name = "corpus-engine-scip"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "chrono",
  "fs4 0.12.0",
@@ -2464,7 +2464,7 @@ dependencies = [
 
 [[package]]
 name = "corpus-engine-sections"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "regex",
  "tracing",
@@ -2472,7 +2472,7 @@ dependencies = [
 
 [[package]]
 name = "corpus-engine-watchers"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "arc-swap",
  "async-trait",
@@ -2497,14 +2497,14 @@ dependencies = [
 
 [[package]]
 name = "corpus-engine-yield"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "workspace-hack",
 ]
 
 [[package]]
 name = "corpus-index"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "arrow",
  "arrow-array",
@@ -2530,7 +2530,7 @@ dependencies = [
 
 [[package]]
 name = "corpus-mcp"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -6728,7 +6728,7 @@ dependencies = [
 
 [[package]]
 name = "kernel-types"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "blake3",
  "getrandom 0.3.4",
@@ -7963,7 +7963,7 @@ dependencies = [
 
 [[package]]
 name = "mesh-join-vocab"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "blake3",
  "hex",
@@ -9199,7 +9199,7 @@ dependencies = [
 
 [[package]]
 name = "oplog"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "kernel-types",
  "serde",
@@ -11746,7 +11746,7 @@ dependencies = [
 
 [[package]]
 name = "serving-policy"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "serving-policy-core",
  "workspace-hack",
@@ -11754,7 +11754,7 @@ dependencies = [
 
 [[package]]
 name = "serving-policy-core"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "oicp-types",
  "serde",
@@ -12155,7 +12155,7 @@ dependencies = [
 
 [[package]]
 name = "sovereign-agent-bench"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -12181,7 +12181,7 @@ dependencies = [
 
 [[package]]
 name = "sovereign-agent-tools"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "async-trait",
  "proc-macro2",
@@ -12197,7 +12197,7 @@ dependencies = [
 
 [[package]]
 name = "sovereign-authoring-harness"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "corpus-engine",
  "serde",
@@ -12208,7 +12208,7 @@ dependencies = [
 
 [[package]]
 name = "sovereign-cli"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "chrono",
  "clap",
@@ -12245,7 +12245,7 @@ dependencies = [
 
 [[package]]
 name = "sovereign-cli-base"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "commonwealth-rail-core",
  "reqwest 0.12.28",
@@ -12257,7 +12257,7 @@ dependencies = [
 
 [[package]]
 name = "sovereign-cli-daemon"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "async-trait",
  "axum",
@@ -12289,7 +12289,7 @@ dependencies = [
 
 [[package]]
 name = "sovereign-cli-dev"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "arc-swap",
  "arch-layers",
@@ -12335,7 +12335,7 @@ dependencies = [
 
 [[package]]
 name = "sovereign-cli-llm"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "async-trait",
  "axum",
@@ -12391,7 +12391,7 @@ dependencies = [
 
 [[package]]
 name = "sovereign-cli-mesh"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "axum",
  "bytes",
@@ -12438,7 +12438,7 @@ dependencies = [
 
 [[package]]
 name = "sovereign-cli-shared"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "clap",
  "corpus-engine",
@@ -12466,7 +12466,7 @@ dependencies = [
 
 [[package]]
 name = "sovereign-code"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "arc-swap",
  "arch-layers",
@@ -12497,7 +12497,7 @@ dependencies = [
 
 [[package]]
 name = "sovereign-compute"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "async-trait",
  "axum",
@@ -12517,7 +12517,7 @@ dependencies = [
 
 [[package]]
 name = "sovereign-contracts"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "arc-swap",
  "async-trait",
@@ -12549,7 +12549,7 @@ dependencies = [
 
 [[package]]
 name = "sovereign-core"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "arc-swap",
  "async-trait",
@@ -12589,7 +12589,7 @@ dependencies = [
 
 [[package]]
 name = "sovereign-daemon"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "arc-swap",
  "arrow",
@@ -12672,7 +12672,7 @@ dependencies = [
 
 [[package]]
 name = "sovereign-desktop"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "async-trait",
  "axum",
@@ -12714,7 +12714,7 @@ dependencies = [
 
 [[package]]
 name = "sovereign-enrichment-build"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "chrono",
  "corpus-engine",
@@ -12737,7 +12737,7 @@ dependencies = [
 
 [[package]]
 name = "sovereign-enrichment-catalog"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "corpus-engine",
  "corpus-index",
@@ -12751,7 +12751,7 @@ dependencies = [
 
 [[package]]
 name = "sovereign-eval"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -12778,7 +12778,7 @@ dependencies = [
 
 [[package]]
 name = "sovereign-gliner"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -12802,7 +12802,7 @@ dependencies = [
 
 [[package]]
 name = "sovereign-grants"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "anyhow",
  "bytes",
@@ -12825,7 +12825,7 @@ dependencies = [
 
 [[package]]
 name = "sovereign-inference"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "async-trait",
  "dirs 5.0.1",
@@ -12858,7 +12858,7 @@ dependencies = [
 
 [[package]]
 name = "sovereign-mesh"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "arc-swap",
  "async-trait",
@@ -12916,7 +12916,7 @@ dependencies = [
 
 [[package]]
 name = "sovereign-mesh-test-harness"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "async-trait",
  "axum",
@@ -12933,7 +12933,7 @@ dependencies = [
 
 [[package]]
 name = "sovereign-meshapp"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "chrono",
  "corpus-engine-atlas-reader",
@@ -12952,7 +12952,7 @@ dependencies = [
 
 [[package]]
 name = "sovereign-meshapp-registry"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "bytes",
  "reqwest 0.12.28",
@@ -12989,7 +12989,7 @@ dependencies = [
 
 [[package]]
 name = "sovereign-peer-wire"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "commonwealth-rail-core",
  "serde",
@@ -12997,7 +12997,7 @@ dependencies = [
 
 [[package]]
 name = "sovereign-pipeline"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -13019,7 +13019,7 @@ dependencies = [
 
 [[package]]
 name = "sovereign-pods"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "axum",
  "axum-server",
@@ -13066,7 +13066,7 @@ dependencies = [
 
 [[package]]
 name = "sovereign-runtime-recipe"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "corpus-engine",
  "corpus-index",
@@ -13082,7 +13082,7 @@ dependencies = [
 
 [[package]]
 name = "sovereign-scheduler"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "async-trait",
  "kernel-types",
@@ -13095,7 +13095,7 @@ dependencies = [
 
 [[package]]
 name = "sovereign-service"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "dirs 5.0.1",
  "libc",
@@ -13105,7 +13105,7 @@ dependencies = [
 
 [[package]]
 name = "sovereign-serving-host"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "arc-swap",
  "async-trait",
@@ -13137,7 +13137,7 @@ dependencies = [
 
 [[package]]
 name = "sovereign-store"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "async-trait",
  "chrono",
@@ -13173,7 +13173,7 @@ dependencies = [
 
 [[package]]
 name = "sovereign-tdd"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "async-trait",
  "kernel-types",
@@ -13192,11 +13192,11 @@ dependencies = [
 
 [[package]]
 name = "sovereign-time"
-version = "0.7.0"
+version = "0.8.0"
 
 [[package]]
 name = "sovereign-tools"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "arrow",
  "async-trait",
@@ -13297,7 +13297,7 @@ dependencies = [
 
 [[package]]
 name = "sovereign-work-atlas"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "arc-swap",
  "async-trait",
@@ -15137,7 +15137,7 @@ checksum = "2896d95c02a80c6d6a5d6e953d479f5ddf2dfdb6a244441010e373ac0fb88971"
 
 [[package]]
 name = "understanding-atlas"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "chrono",
  "corpus-index",
@@ -15152,7 +15152,7 @@ dependencies = [
 
 [[package]]
 name = "understanding-host"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "arrow",
  "async-trait",
@@ -15170,7 +15170,7 @@ dependencies = [
 
 [[package]]
 name = "understanding-vocab"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "blake3",
  "kernel-types",

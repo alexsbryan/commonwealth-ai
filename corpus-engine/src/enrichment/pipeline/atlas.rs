@@ -112,6 +112,12 @@ pub struct EntityStateSketch {
     pub label: String,
     #[serde(default, skip_serializing_if = "is_empty_str")]
     pub anchor: String,
+    /// Declared state type name (ontology v1); `None` when the corpus
+    /// declares no state type whose `of` names an entity, and
+    /// classification stays deferred to Phase 5. Same contract as
+    /// [`EventSketch::event_type`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub state_type: Option<String>,
 }
 
 /// A persistent interaction between entities, introduced in this
@@ -147,6 +153,15 @@ pub struct RelationStateSketch {
     pub label: String,
     #[serde(default, skip_serializing_if = "is_empty_str")]
     pub anchor: String,
+    /// Declared state type name (ontology v1); `None` when the corpus
+    /// declares no state type whose `of` names a relation.
+    ///
+    /// This is how a state OF A PAIR is expressed: `of` names a declared
+    /// relation, and the relation is the pair. No second construct — the
+    /// resolver already writes the relation's id into `State::entity_id`
+    /// for these sketches.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub state_type: Option<String>,
 }
 
 /// Something that happens in this section and marks a transition,
@@ -879,6 +894,7 @@ mod tests {
                 entity_name: "Alyosha".into(),
                 label: "Unshaken faith meeting the elder's imminent death".into(),
                 anchor: "could not imagine the world without Zosima".into(),
+                state_type: None,
             }],
             relations_introduced: vec![RelationSketch {
                 attributes: Default::default(),
@@ -891,6 +907,7 @@ mod tests {
                 participants: vec!["Dmitri".into(), "Fyodor".into()],
                 label: "Adversarial rivalry over Grushenka".into(),
                 anchor: "glared past one another".into(),
+                state_type: None,
             }],
             events: vec![EventSketch {
                 attributes: Default::default(),

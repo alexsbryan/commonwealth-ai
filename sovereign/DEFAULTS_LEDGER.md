@@ -30,6 +30,35 @@ store (ids cited per row).
 
 ## DARK — proven or plausible, awaiting a named condition
 
+### `SOVEREIGN_COVERAGE_FIRST` — tell the model what it has, and card the gap on an answered turn (2026-09-22)
+
+**What it does.** `runtime::coverage_first` reads the demand set that
+`stamp_coverage` already computes before synthesis and that, until now, only
+the post-release ledger read. Flag on, it (1) renders the named facets into
+the KQ prompt as "Named in these passages" / "Not found by name in these
+passages", and (2) turns an answered turn with an absent Entity facet into a
+`GapTrigger::Uncovered`, which fires the Refinement card with that
+deterministic ask and skips the phrasing call. Flag off, both readers are
+inert and every path is byte-identical.
+
+**Shipped beside it, unflagged:** the synthesis prompt's whole-answer decline
+rule and "never complete a list" clause were replaced by LISTS / PARTIAL
+COVERAGE (give what the passages name, name the gap), and both EVIDENCE CHECK
+notes now say the same. Motivation: the ANS board (7baf4da8f) — 42
+decline-class rows in the full arm against bare's 9, including
+`list-igch0076-mints` declined with 3 of 6 gold mints in its chunks.
+
+**Flip condition.** Both, measured on the same synth + judge identity:
+(a) the ANS full arm, 3 runs, flag on vs off over the prompt change — K1 and
+K0 judge score up by more than the full arm's own run-to-run spread (bare's
+band is degenerate: its 3 runs are byte-identical), and bar 3's fabricated
+members not above bare's; (b) `svrn quality check` with no lane regressing.
+Owed first, before reading (a): the rate of answered turns that carry an
+absent Entity facet (a count over `epistemic_state` in persisted message
+metadata) — it sets whether "any absent Entity" is a tolerable card rate or
+the trigger needs narrowing. **Reject** if fabricated members rise above
+bare's or the card rate is noise. **Review by 2026-10-06.**
+
 ### `SOVEREIGN_KQ_POOL_SCALE` — the deep-pool arm's knob, shipped at 1 and **never a default** (ei7-stage0, 2026-09-19)
 
 **What changed.** One decider, `runtime::prompts::kq_pool_scale`, reads

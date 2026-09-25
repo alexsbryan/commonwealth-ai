@@ -1115,10 +1115,25 @@ impl TurnClient {
         corpus_id: &str,
         max_nodes: Option<usize>,
     ) -> Result<T> {
-        let query: Vec<(&str, String)> = max_nodes
+        self.atlas_subgraph_highlighted(corpus_id, max_nodes, None)
+            .await
+    }
+
+    /// [`Self::atlas_subgraph`] with the Map's highlight input — atom ids
+    /// that must survive the cap (the map shot's walk-ledger path).
+    pub async fn atlas_subgraph_highlighted<T: serde::de::DeserializeOwned>(
+        &self,
+        corpus_id: &str,
+        max_nodes: Option<usize>,
+        highlight: Option<&str>,
+    ) -> Result<T> {
+        let mut query: Vec<(&str, String)> = max_nodes
             .into_iter()
             .map(|n| ("max_nodes", n.to_string()))
             .collect();
+        if let Some(h) = highlight.filter(|h| !h.is_empty()) {
+            query.push(("highlight", h.to_string()));
+        }
         self.internal_get(format!("/internal/atlas/{corpus_id}/subgraph"), &query)
             .await
     }
