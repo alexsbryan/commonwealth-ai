@@ -4,7 +4,8 @@
 //! `GET /v1/mesh/status` · `GET /v1/mesh/media[?peer=]` ·
 //! `GET /v1/mesh/app[?peer=]` · `POST /v1/mesh/fanout` (and its media
 //! spelling) · the four `/v1/mesh/publish` routes · the two roster verbs ·
-//! the ring rail's doors, `/v1/rail/{append,log,live}`, in [`crate::rail`]. Every answer is
+//! the ring rail's doors, `/v1/rail/{append,log,live}`, in [`crate::rail`] ·
+//! the mesh store's `/v1/mesh/kv/*`, in [`crate::kv`]. Every answer is
 //! `commonwealth_media`'s — the same functions the inference daemon's
 //! `/v1/mesh/*` routes call, so a shim written against one daemon behaves the
 //! same against the other (ARCH §10.6), and `svrn run` publishes into either
@@ -95,7 +96,9 @@ pub fn router(daemon: Arc<RailsDaemon>) -> Router {
         .route("/v1/rail/compact", post(crate::rail::journal_compact))
         // The `work` queue, folded where its journal lives (fp-45).
         .route("/v1/work/projection", get(crate::work::projection))
-        .with_state(daemon)
+        .with_state(daemon.clone())
+        // The mesh store's doors (fp-77), over its own state.
+        .merge(crate::kv::router(daemon.kv.clone()))
 }
 
 /// The bind guard, as a function so it has a failing input that can be

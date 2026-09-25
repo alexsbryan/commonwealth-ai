@@ -2013,10 +2013,13 @@ name = "commonwealth-rails"
 version = "0.7.0"
 dependencies = [
  "axum",
+ "base64 0.22.1",
+ "bytes",
  "commonwealth-core",
  "commonwealth-discovery",
  "commonwealth-media",
  "commonwealth-rail",
+ "commonwealth-state",
  "commonwealth-transport",
  "commonwealth-work",
  "ed25519-dalek 2.2.0",

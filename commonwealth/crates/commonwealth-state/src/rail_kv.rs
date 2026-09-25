@@ -114,6 +114,18 @@ const F_DELETED: &str = "d";
 /// (see the module docs on `kind`).
 const F_SNAPSHOT: &str = "snap";
 
+/// How many of a node's own ops may stand above its last seal before its
+/// pump seals again.
+///
+/// ONE constant for every namespace a pump seals, KV and measurements alike,
+/// read by both pumps — the daemon's (`sovereign_mesh::rail_kv_pump`) and
+/// cw-rails' (ARCH §10.6). Two thousand ops is roughly 1.2 MB of journal at
+/// the measured ~594-byte line, held by every node in the mesh — small enough
+/// that a seal is rare (a household writes on the order of 3,500 ops a year)
+/// and large enough that the seal's own cost, one admission plus one
+/// snapshot, is amortised over a long stretch of ordinary writes.
+pub const SEAL_AFTER_OWN_OPS: usize = 2_000;
+
 /// One store write, read back off a journal line.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct KvOp {

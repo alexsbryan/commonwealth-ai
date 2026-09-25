@@ -29,6 +29,15 @@ commonwealth-rail = { workspace = true }
 # daemon owns. Default features only — `process` (tokio's process half, the
 # executor seam) stays off; the forbid row's except carries the cost (+1).
 commonwealth-work = { workspace = true }
+# The mesh store (fp-77): one `MeshStore::in_memory()` projected from this
+# daemon's journals, served at `/v1/mesh/kv/*`. Default features only —
+# `sqlite` stays off, so the closure gains this crate and nothing else (the
+# forbid row's except carries the census).
+commonwealth-state = { workspace = true }
+# The `/v1/mesh/kv` wire encodes a value as base64 — already in the closure
+# through commonwealth-state, at the one version the workspace holds.
+base64 = "0.22"
+bytes = { workspace = true }
 # The node key's type. Already in commonwealth-transport's closure, so
 # naming it here adds nothing a lift has to carry.
 ed25519-dalek = { workspace = true }

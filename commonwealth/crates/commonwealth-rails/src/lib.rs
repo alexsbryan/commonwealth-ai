@@ -73,6 +73,7 @@ pub mod gossip;
 pub mod identity;
 pub mod internal;
 pub mod join;
+pub mod kv;
 pub mod presence;
 pub mod rail;
 pub mod work;
@@ -96,6 +97,8 @@ pub enum Refusal {
     NoMesh(PathBuf),
     #[error("the iroh endpoint would not bind: {0}")]
     Endpoint(String),
+    #[error("the mesh store would not open: {0}")]
+    KvStore(#[from] commonwealth_state::Error),
     #[error("could not listen on {0}: {1}")]
     Listen(SocketAddr, std::io::Error),
     #[error(
@@ -202,6 +205,9 @@ pub struct RailsDaemon {
     /// nothing here reaches a store, a journal or a disk. See
     /// [`rail::LiveBuffer`].
     pub rail_live: rail::LiveBuffer,
+    /// The mesh store, projected from `rail`'s journals and pumped back onto
+    /// them; served at `/v1/mesh/kv/*`. See [`kv`].
+    pub kv: Arc<kv::KvHost>,
     /// The presence poll's last reading (`presence::run_forever` writes it,
     /// the gossip round stamps it into `NodeCapabilities::media_available`,
     /// `GET /v1/mesh/media/presence` serves it). `None` is "nobody answered",
@@ -236,6 +242,14 @@ impl RailsDaemon {
             Arc::new(node.key.clone()),
         ));
         rail::MembershipRosterSource::install(&rail, &mesh, node.self_id, Some(node.pubkey()));
+        // The mesh store over those journals (fp-77). Empty until `run`'s
+        // pump task projects the journals on disk into it.
+        let kv = Arc::new(kv::KvHost::new(
+            rail.clone(),
+            mesh.clone(),
+            node.self_id,
+            Some(node.pubkey()),
+        )?);
 
         let (internal_addr, internal) = internal::serve(
             mesh.clone(),
@@ -269,6 +283,7 @@ impl RailsDaemon {
             published_apps,
             rail,
             rail_live: rail::LiveBuffer::default(),
+            kv,
             media_presence: Arc::new(std::sync::RwLock::new(None)),
             internal_addr,
             _internal: internal,
@@ -296,6 +311,9 @@ impl RailsDaemon {
         // `media_presence`, which the gossip round and the presence route
         // read. A tick that cannot ask is a logged `None`, never an exit.
         let presence = tokio::spawn(presence::run_forever(daemon.clone()));
+        // The mesh store's pump (fp-77): rehydrate from the journals, then
+        // drain the outbox onto them every tick.
+        let kv_pump = tokio::spawn(kv::run_forever(daemon.kv.clone()));
         tracing::info!(
             target: "rails",
             api = %listen,
@@ -308,6 +326,7 @@ impl RailsDaemon {
         let _ = api.await;
         gossip.abort();
         presence.abort();
+        kv_pump.abort();
         Ok(())
     }
 

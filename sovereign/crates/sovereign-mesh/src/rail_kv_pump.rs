@@ -122,15 +122,9 @@ use crate::ring_roster::MeshRoster;
 pub const RAIL_KV_PUMP_INTERVAL: Duration = Duration::from_secs(2);
 
 /// How many of this node's own ops may stand above its last seal before the
-/// pump seals again.
-///
-/// ONE constant for every namespace the daemon owns, KV and measurements alike
-/// (ARCH §10.6). Two thousand ops is roughly 1.2 MB of journal at the measured
-/// ~594-byte line, held by every node in the mesh — small enough that a seal is
-/// rare (a household writes on the order of 3,500 ops a year) and large enough
-/// that the seal's own cost, one admission plus one snapshot, is amortised over
-/// a long stretch of ordinary writes.
-pub const SEAL_AFTER_OWN_OPS: usize = 2_000;
+/// pump seals again — `rail_kv`'s one constant, which cw-rails' pump reads
+/// too (fp-77), re-exported at its historical path.
+pub use commonwealth_state::rail_kv::SEAL_AFTER_OWN_OPS;
 
 /// How many outbox rows one tick takes.
 ///
