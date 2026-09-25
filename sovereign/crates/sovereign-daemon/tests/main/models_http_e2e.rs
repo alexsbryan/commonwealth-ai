@@ -110,7 +110,10 @@ async fn locally_owned_model_appears_in_v1_models_response() {
     // Insert a ModelInfo. `set_model_info` stamps `self_id` as the
     // origin (the constructor at `InferenceStateStore::new` captures
     // self_id from AppState).
-    state.register_model(empty_model_info(1, "test-local-model"));
+    state
+        .register_model(empty_model_info(1, "test-local-model"))
+        .await
+        .unwrap();
 
     let addr = spawn_router(client_router(state)).await;
     let resp = reqwest::Client::new()

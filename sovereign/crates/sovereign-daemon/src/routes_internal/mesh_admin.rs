@@ -199,7 +199,7 @@ pub async fn models_load(
         Ok(model_id) => {
             // Reflect the new slot in the inference store so
             // `/v1/models` advertises it immediately.
-            register_extras_in_store(&state, &req.slot_name, &req.path, model_id.as_str());
+            register_extras_in_store(&state, &req.slot_name, &req.path, model_id.as_str()).await;
             Ok(Json(LoadModelResponse {
                 model_id,
                 slot_name: req.slot_name,
@@ -231,7 +231,7 @@ fn compute_extras_model_id(
     commonwealth_core::ids::ModelId::from_u128((u128::from(hi) << 64) | u128::from(lo))
 }
 
-fn register_extras_in_store(
+async fn register_extras_in_store(
     state: &AppState,
     slot_name: &str,
     path: &std::path::Path,
@@ -262,7 +262,14 @@ fn register_extras_in_store(
         supports_parallel_instances: false,
         supports_pipeline_shard: false,
     };
-    state.register_model(info);
+    if let Err(e) = state.register_model(info).await {
+        tracing::warn!(
+            model = %id,
+            slot = slot_name,
+            error = %e,
+            "register_extras_in_store: the model did not reach inference_store"
+        );
+    }
 }
 
 async fn deregister_extras_from_store(

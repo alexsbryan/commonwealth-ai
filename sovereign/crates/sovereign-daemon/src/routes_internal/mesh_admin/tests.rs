@@ -462,7 +462,8 @@ async fn models_unload_drops_from_inference_store() {
         "bulk",
         std::path::Path::new("/m/qwen.gguf"),
         "Qwen3.5-9B.Q8_0",
-    );
+    )
+    .await;
     assert!(state
         .list_models()
         .await

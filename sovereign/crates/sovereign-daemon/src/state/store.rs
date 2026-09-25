@@ -5,9 +5,9 @@
 //! and seventeen went there at `REVIEW-build-daemon-parts`. These three cannot
 //! cross the crate line:
 //!
-//! * `inference_store` (`commonwealth_state::store_adapter::InferenceStateStore`)
-//!   and `peer_preferences` (`sovereign_mesh::ledger_port::PeerPreferencesPort`
-//!   since fp-90) are backed by `commonwealth-state`, which is not a shared leaf of the
+//! * `inference_store` (`sovereign_mesh::ledger_port::InferenceStatePort`
+//!   since fp-93) and `peer_preferences` (`PeerPreferencesPort` since fp-90)
+//!   are backed by `commonwealth-state`, which is not a shared leaf of the
 //!   `serving` package — a dep would be a third `[[exception]]`, and the
 //!   campaign's K4 kill clause splits the cluster rather than widening the
 //!   ledger (`quality/campaigns/domains.toml:288`);
@@ -20,17 +20,19 @@
 
 use std::sync::Arc;
 
-use commonwealth_state::store_adapter::InferenceStateStore;
 use sovereign_contracts::peer::ReplicatedKv;
-use sovereign_mesh::ledger_port::{ContributionLedgerPort, PeerPreferencesPort};
+use sovereign_mesh::ledger_port::{
+    ContributionLedgerPort, InferenceStatePort, PeerPreferencesPort,
+};
 
 use super::RpcShardWarmer;
 
 /// The three Serving fields held by the daemon, read as `AppStateInner::store`.
 pub struct StorePart {
-    /// Inference plan, model info, ledger, and llama addresses — all via
-    /// MeshStore.
-    pub inference_store: InferenceStateStore,
+    /// Inference plan, model info, ledger, and llama addresses, held as a
+    /// port over `LocalLedger` (five-programs fp-93); in-process until fp-88.
+    /// Every accessor reads and writes through it (§12 D4).
+    pub inference_store: Arc<dyn InferenceStatePort>,
     /// Per-peer preference store (Ostrom sanctions). Local-only,
     /// never gossiped — see
     /// `commonwealth_state::peer_preferences` for the structural

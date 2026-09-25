@@ -3392,7 +3392,7 @@ impl EmbeddedDaemon {
         // deterministic ModelId so reloads don't create duplicates.
         {
             let cfg = self.setup_config.read().await;
-            register_local_model_slots(&app_state, &cfg, node_id);
+            register_local_model_slots(&app_state, &cfg, node_id).await;
         }
 
         // `client_bind` and the auth posture were resolved above, before the
@@ -4736,7 +4736,7 @@ fn takeover_serve_at(pid_path: &Path) {
 /// model id. The `ModelId` is a deterministic hash of the absolute
 /// path so repeated calls (e.g. after an admin/reload) don't
 /// accumulate duplicate entries keyed on different random IDs.
-fn register_local_model_slots(app_state: &AppState, cfg: &SetupConfig, node_id: NodeId) {
+async fn register_local_model_slots(app_state: &AppState, cfg: &SetupConfig, node_id: NodeId) {
     use commonwealth_core::ids::ModelId;
     use commonwealth_core::model::{ModelArchitecture, ModelInfo};
     use oicp_types::CapabilityProfile;
@@ -4845,12 +4845,20 @@ fn register_local_model_slots(app_state: &AppState, cfg: &SetupConfig, node_id: 
             supports_parallel_instances: false,
             supports_pipeline_shard: false,
         };
-        app_state.register_model(info.clone());
-        info!(
-            role,
-            name = %info.name,
-            "registered local model in inference_store"
-        );
+        if let Err(e) = app_state.register_model(info.clone()).await {
+            tracing::warn!(
+                role,
+                model = %info.id,
+                error = %e,
+                "register_local_model_slots: the model did not reach inference_store"
+            );
+        } else {
+            info!(
+                role,
+                name = %info.name,
+                "registered local model in inference_store"
+            );
+        }
 
         // Add the slot alias entries. Skip extras: they're routed by
         // their slot key directly (the `[models.extra]` map already

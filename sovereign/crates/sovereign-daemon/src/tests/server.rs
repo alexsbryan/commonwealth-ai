@@ -572,7 +572,7 @@ async fn models_endpoint_with_registered_model() {
         supports_parallel_instances: false,
         supports_pipeline_shard: false,
     };
-    state.register_model(model);
+    state.register_model(model).await.unwrap();
 
     let app = mock_router(state);
     let response = app

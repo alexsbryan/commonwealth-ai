@@ -412,7 +412,7 @@ async fn register_local_model_slots_writes_info_for_all_three_slots() {
         mcp_servers: Vec::new(),
     };
 
-    register_local_model_slots(&app_state, &cfg, node_id);
+    register_local_model_slots(&app_state, &cfg, node_id).await;
 
     let models = app_state.list_models().await.unwrap();
     assert_eq!(
@@ -428,7 +428,7 @@ async fn register_local_model_slots_writes_info_for_all_three_slots() {
 
     // Second call with the same config must not duplicate entries
     // (deterministic ModelId per slot + path).
-    register_local_model_slots(&app_state, &cfg, node_id);
+    register_local_model_slots(&app_state, &cfg, node_id).await;
     let models2 = app_state.list_models().await.unwrap();
     assert_eq!(
         models2.len(),

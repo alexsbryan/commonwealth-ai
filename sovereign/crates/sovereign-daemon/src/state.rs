@@ -8,7 +8,6 @@ use tokio::sync::RwLock;
 use async_trait::async_trait;
 use commonwealth_core::ids::NodeId;
 use commonwealth_core::mesh::Mesh;
-use commonwealth_state::store_adapter::InferenceStateStore;
 use commonwealth_state::MeshStore;
 use corpus_engine::CorpusEngine;
 use oicp_types::model_aliases::ModelAliasTable;
@@ -1022,7 +1021,6 @@ impl AppState {
         serving_seed: serving::ServingSeed,
         node_seed: node::NodeSeed,
     ) -> Self {
-        let inference_store = InferenceStateStore::new(Arc::clone(&mesh_store), self_node_id);
         let kv_port: Arc<dyn sovereign_contracts::peer::ReplicatedKv> = Arc::new(
             sovereign_mesh::peer_adapter::MeshReplicatedKv::over(Arc::clone(&mesh_store)),
         );
@@ -1033,6 +1031,8 @@ impl AppState {
         let activity_emitter: Arc<dyn sovereign_mesh::ledger_port::ActivityLedgerPort> =
             local_ledger.clone();
         let peer_preferences: Arc<dyn sovereign_mesh::ledger_port::PeerPreferencesPort> =
+            local_ledger.clone();
+        let inference_store: Arc<dyn sovereign_mesh::ledger_port::InferenceStatePort> =
             local_ledger.clone();
         let contribution_port: Arc<dyn sovereign_mesh::ledger_port::ContributionLedgerPort> =
             local_ledger;
@@ -1228,20 +1228,28 @@ impl AppState {
     }
 
     /// Register a model as available on the mesh.
-    pub fn register_model(&self, model: commonwealth_core::model::ModelInfo) {
-        self.inner.store.inference_store.set_model_info(&model);
-    }
-
-    /// Set the address of a llama-server for a model (after orchestrator spawns it).
-    pub fn set_llama_server_address(
+    pub async fn register_model(
         &self,
-        model_id: commonwealth_core::ids::ModelId,
-        address: String,
-    ) {
+        model: commonwealth_core::model::ModelInfo,
+    ) -> Result<(), sovereign_mesh::ledger_port::LedgerAbsent> {
         self.inner
             .store
             .inference_store
-            .set_llama_address(model_id, &address);
+            .set_model_info(&model)
+            .await
+    }
+
+    /// Set the address of a llama-server for a model (after orchestrator spawns it).
+    pub async fn set_llama_server_address(
+        &self,
+        model_id: commonwealth_core::ids::ModelId,
+        address: String,
+    ) -> Result<(), sovereign_mesh::ledger_port::LedgerAbsent> {
+        self.inner
+            .store
+            .inference_store
+            .set_llama_address(model_id, &address)
+            .await
     }
 
     /// Get the llama-server address for a model.
@@ -1249,7 +1257,11 @@ impl AppState {
         &self,
         model_id: commonwealth_core::ids::ModelId,
     ) -> Result<Option<String>, sovereign_mesh::ledger_port::LedgerAbsent> {
-        Ok(self.inner.store.inference_store.get_llama_address(model_id))
+        self.inner
+            .store
+            .inference_store
+            .get_llama_address(model_id)
+            .await
     }
 
     /// Get the default model (first in the inference plan).
@@ -1264,7 +1276,7 @@ impl AppState {
     }
 
     // The inference-state readers, in the shape `InferenceStatePort` answers
-    // (five-programs fp-91): the store never fails today, the port can.
+    // (five-programs fp-91), reading through the port (fp-93, §12 D4).
 
     /// The inference plan.
     pub async fn inference_plan(
@@ -1273,7 +1285,7 @@ impl AppState {
         Option<commonwealth_state::inference_plan::InferencePlan>,
         sovereign_mesh::ledger_port::LedgerAbsent,
     > {
-        Ok(self.inner.store.inference_store.get_plan())
+        self.inner.store.inference_store.get_plan().await
     }
 
     /// Store a peer's inference plan.
@@ -1281,8 +1293,7 @@ impl AppState {
         &self,
         plan: &commonwealth_state::inference_plan::InferencePlan,
     ) -> Result<(), sovereign_mesh::ledger_port::LedgerAbsent> {
-        self.inner.store.inference_store.set_plan(plan);
-        Ok(())
+        self.inner.store.inference_store.set_plan(plan).await
     }
 
     /// Drop one registered model; `true` when it was present.
@@ -1290,7 +1301,11 @@ impl AppState {
         &self,
         model_id: commonwealth_core::ids::ModelId,
     ) -> Result<bool, sovereign_mesh::ledger_port::LedgerAbsent> {
-        Ok(self.inner.store.inference_store.remove_model_info(model_id))
+        self.inner
+            .store
+            .inference_store
+            .remove_model_info(model_id)
+            .await
     }
 
     /// One registered model's info.
@@ -1301,7 +1316,11 @@ impl AppState {
         Option<commonwealth_core::model::ModelInfo>,
         sovereign_mesh::ledger_port::LedgerAbsent,
     > {
-        Ok(self.inner.store.inference_store.get_model_info(model_id))
+        self.inner
+            .store
+            .inference_store
+            .get_model_info(model_id)
+            .await
     }
 
     /// Every registered model, keyed by id.
@@ -1311,7 +1330,12 @@ impl AppState {
         HashMap<commonwealth_core::ids::ModelId, commonwealth_core::model::ModelInfo>,
         sovereign_mesh::ledger_port::LedgerAbsent,
     > {
-        Ok(self.inner.store.inference_store.list_models())
+        Ok(self
+            .list_models_with_origins()
+            .await?
+            .into_iter()
+            .map(|(_, m)| (m.id, m))
+            .collect())
     }
 
     /// Every registered model with the node that wrote it.
@@ -1321,7 +1345,11 @@ impl AppState {
         Vec<(NodeId, commonwealth_core::model::ModelInfo)>,
         sovereign_mesh::ledger_port::LedgerAbsent,
     > {
-        Ok(self.inner.store.inference_store.list_models_with_origins())
+        self.inner
+            .store
+            .inference_store
+            .list_models_with_origins()
+            .await
     }
 
     /// This node's embed model, as published at bootstrap.
@@ -1331,7 +1359,11 @@ impl AppState {
         Option<commonwealth_core::oicp::EmbedModelInfo>,
         sovereign_mesh::ledger_port::LedgerAbsent,
     > {
-        Ok(self.inner.store.inference_store.get_local_embed_model())
+        self.inner
+            .store
+            .inference_store
+            .get_local_embed_model()
+            .await
     }
 
     /// Publish this node's embed model.
@@ -1339,8 +1371,11 @@ impl AppState {
         &self,
         info: &commonwealth_core::oicp::EmbedModelInfo,
     ) -> Result<(), sovereign_mesh::ledger_port::LedgerAbsent> {
-        self.inner.store.inference_store.set_local_embed_model(info);
-        Ok(())
+        self.inner
+            .store
+            .inference_store
+            .set_local_embed_model(info)
+            .await
     }
 
     /// Update the ACTIVITY input to this node's inference availability.
