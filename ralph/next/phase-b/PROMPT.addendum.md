@@ -68,6 +68,15 @@ has not been measured (principle 8).
   `--update-baseline` never runs on a dirty tree.
 - A moved module keeps every pub item reachable at its historical path. That
   means a re-export, never a twin.
+- Mechanical moves (a module, a file, a span) go through `cargo xtask
+  refactor-apply` with a recipe, and the recipe goes in the commit body. The
+  model writes the plan and the tool moves the lines (phase-b-2).
+- A program's "runs alone" proof is its RUN smoke, stored as data in
+  `scripts/program-lift.sh`. Never write a separate process harness for it
+  (principle 8, phase-b-2).
+- Moved items stay reachable at their historical paths through re-exports.
+  Repoint a consumer only in a file your row already edits ("repoint on
+  touch").
 - A `[[package_leaf]]` must NOT also be a package member.
 - The one mechanism leaf is the host kit (FIVE_PROGRAMS §2c, §12 3a rung 4).
   Any other new leaf is an operator decision.

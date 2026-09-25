@@ -204,9 +204,11 @@ never defaulted (ARCH principle 6).
    `oicp-types`, `kernel-types` and `sovereign-contracts` (§12 3a), and the one
    shared mechanism is the host kit (§2c). A module only one program uses
    belongs to that program, even when it sits in a shared crate today.
-7. Each program's config file holds its own sections only. The 13-section
-   `SetupConfig` splits per program, with the migration shipping in the same
-   commit as the switch (phase-b-1).
+7. Each program's config holds its own sections only. After Phase B, svrn
+   and `serve` each read only their own sections of the shared 13-section
+   `SetupConfig` file (phase-b-2). Splitting it into one file per program,
+   with the migration shipping in the same commit as the switch, belongs to
+   the follow-on queue (`ralph/next/phase-c/`).
 
 ## 5. What the design does not contain
 
@@ -1139,10 +1141,11 @@ first match wins:
      class table below). Never a leaf. The leaf test: no fs, no store, and a
      dep budget a third-party lifter would pay anyway.
 3. A leaf stays honest by the same test re-applied at every later touch.
-   Phase B re-applies it to `sovereign-contracts` itself, a 42k-line crate
-   that 51 manifests name. Its single-program modules move to their owners,
-   and traits whose implementer and consumer are the same program move into
-   that program.
+   The follow-on queue (`ralph/next/phase-c/`) re-applies it to
+   `sovereign-contracts` itself, a 42k-line crate that 51 manifests name. Its
+   single-program modules move to their owners, and traits whose implementer
+   and consumer are the same program move into that program. Phase B deletes
+   only what nothing reaches (phase-b-2).
 4. **The one mechanism rung (operator, 2026-09-25, phase-b-1).** A mechanism
    that every program's binary needs about ITSELF goes to the host kit (§2c).
    Examples: its lock, its data root, its server shell and MCP dispatch. It

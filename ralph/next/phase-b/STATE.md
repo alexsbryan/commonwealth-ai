@@ -17,6 +17,8 @@ rung). Finish: FIVE_PROGRAMS §12 "Done".
 - all six lift sandboxes pass;
 - each §2c drive has one implementation.
 
+Scope (phase-b-2, 2026-09-25): only the rows the finish needs. Six rows that close no red edge and make no lift pass moved to the staged follow-on queue ralph/next/phase-c/, with their design kept: the Url venue, the inference origin, bench's three dials, the contracts re-home, the provider split and the per-program config files. Mechanical moves use `cargo xtask refactor-apply`. Each program's "runs alone" proof is its RUN smoke in `scripts/program-lift.sh`. Dead code is deleted before anything ports it. The svrn daemon adopts the shared shell and MCP dispatcher LAST, after it has shrunk.
+
 Order: collapse before split (principle 8). The host kit, the one MCP dispatcher
 and the one serving assembly land before any host is stood up. Hosts come before
 their clients. Every row names the owner it extends; the appendix maps every red
@@ -34,52 +36,60 @@ A miss is NEEDS_HUMAN with the numbers, never a re-tuned bar.
 
 ## Rows
 
-- [ ] REVIEW-pb-census — depends [] — OUTCOME: every red edge on the merged tree has exactly ONE owner row below, and the known defects are reproduced or struck. No code, apart from the TSV repair.
+- [ ] REVIEW-pb-census — depends [] — OUTCOME: every red edge on the merged tree has exactly ONE owner row below, EVERY row's premises hold at HEAD, and the known defects are reproduced or struck. No code, apart from the TSV repair. This row front-loads the halts (phase-b-2): five-programs lost at least 25 halts to false premises, and these rows cite sites that read-only agents reported, not all of which the seat verified.
   (1) Run the gate on `cut` after the origin/main merge. Reconcile this file's appendix against it: an edge the merge added gets an owner row by the §12 3a ladder, and an edge that closed is struck with the count.
-  (2) Repair docs/FIVE_PROGRAMS_DECISIONS.tsv rows 31-44. They carry 11 fields, so `decision_needed` holds the delta text and the real question sits in column 10.
-  (3) Reproduce each defect in the appendix's "Defects" list by reading or running it, then confirm its owner row or strike it with the evidence.
-  (4) Measure the baseline each later row reports against:
+  (2) PREMISES. For EVERY row below, check each cited path, line, symbol and count with grep or ls. Where a site moved, rewrite the row text with the new site. Where a premise is false, rewrite the row under the charter: rescope, fold or strike, with the reasoning in the row. Only a fork the charter leaves to the operator becomes NEEDS_HUMAN.
+  (3) Repair docs/FIVE_PROGRAMS_DECISIONS.tsv rows 31-44. They carry 11 fields, so `decision_needed` holds the delta text and the real question sits in column 10.
+  (4) Reproduce each defect in the appendix's "Defects" list by reading or running it, then confirm its owner row or strike it with the evidence.
+  (5) Measure the baseline that later rows report against:
   - the copy counts of the §2c drives (locators, root locks, MCP loops, tool-set builders, engine assemblies, bring-up paths);
-  - `sovereign-contracts`' fan-in, meaning manifests that name it;
   - bench's closure crate count.
-  — read: this file whole, docs/FIVE_PROGRAMS.md §2c and §12 3a, ralph/decisions/phase-b-1.md, quality/ARCH_LAYERS.toml — check: BOUNDARY (paste the count and the owner histogram), DOCS
-- [ ] pb-lift-instrument — depends [REVIEW-pb-census] — OUTCOME: ONE instrument proves any program builds and runs outside the monorepo: `scripts/program-lift.sh [--sandbox] <program>`.
-  - Collapse the two twins `scripts/cw-rails-lift.sh` and `scripts/cw-work-lift.sh` onto it (principle 8). Keep both names as thin wrappers so existing callers still work.
-  - Each program's closure seed and forbidden set are read from quality/ARCH_LAYERS.toml's package map and `[[forbid]]` rows (one decider, principle 8). The regex copies go.
+  — read: this file whole, docs/FIVE_PROGRAMS.md §2c and §12 3a, ralph/decisions/phase-b-{1,2}.md, quality/ARCH_LAYERS.toml — check: BOUNDARY (paste the count and the owner histogram), DOCS; the body lists every row rewritten and why
+- [ ] pb-delete-dead — depends [REVIEW-pb-census] — OUTCOME: code that nothing reaches is gone BEFORE any later row ports it (phase-b-2: delete before move).
+  - Delete sovereign-contracts/src/mobile_host.rs, which writes config for and locates the deleted sovereign-server and shells out to tailscale. Its one caller, sovereign-cli-llm mobile_cmd.rs:108, answers a named pointer or goes with it; the census decides which and says so.
+  - Delete `Launch::Server` (sovereign-contracts/src/launch.rs ~:129), which describes a binary that no longer exists.
+  - Delete `server::serve` (sovereign-daemon/src/server.rs:667-712) if the census confirms it has no caller.
+  - Delete the ingest executor's legacy pull loop ("replaced, not yet deleted", sovereign-daemon/src/ingest_executor.rs:18-24), but only if the census shows that its replacement carries the traffic. Otherwise it stays for pb-ingest-dial.
+  - Fix the stale citations to the deleted sovereign-server: mcp_router.rs:39, corpus-mcp mcp.rs:3, mcp_demo_server.rs:15 and tool_bundle.rs:10. Also bin/sovereign-daemon.rs:2-4, which says "the cmnwlth binary's own main" (principle 3).
+  - PROOF: `git grep` for each deleted symbol returns nothing, and LINT and TESTALL are green. There is nothing to PLANT, because a deletion's proof is that the build and tests still pass without the code.
+  LIFT ~800 changed lines, mostly deletions. — read: the files above — check: CLEAN, LINT, TESTALL, LAYER, BOUNDARY
+- [ ] pb-lift-instrument — depends [REVIEW-pb-census] — OUTCOME: ONE instrument proves any program builds and RUNS outside the monorepo: `scripts/program-lift.sh [--sandbox] <program>`. Its RUN step is each program's "runs alone" proof, the one decider for that question (principle 8, phase-b-2). Later rows ADD their program's smoke here instead of writing their own process-level e2e harness.
+  - Collapse the twins `scripts/cw-rails-lift.sh` and `scripts/cw-work-lift.sh` onto it. Keep both names as thin wrappers so existing callers still work.
+  - Each program's closure seed and forbidden set are read from quality/ARCH_LAYERS.toml's package map and `[[forbid]]` rows (principle 8); the regex copies go.
   - `workspace-hack` is dropped from copied manifests, as fp-solo-lift did.
+  - Each program's RUN smoke is DATA, one TOML entry per program: the binary, its args, a temp root, the requests and the expected answers. Principle 9.
   - Four verdicts with distinct exits (principle 5). An absent precondition of the RUN step (an invite, a model file) is exit 3 naming it.
-  - Programs: svrn, ingest, cmnwlth, serve, code, bench. Until pb-serve-program lands, `serve` is the serving crates' closure.
-  - Record every program's verdict at this commit as the baseline. Most are 0, and that is the honest scoreboard, not a failure of this row.
-  - PROOF: cmnwlth passes (fp-solo-lift made it pass). A PLANT that adds a sovereign-* dep to commonwealth-rails turns cmnwlth red.
-  LIFT ~500 lines, scripts only. — read: scripts/cw-rails-lift.sh, scripts/cw-work-lift.sh, scripts/co-lineage.py `measure_bar` (the verdict contract), quality/ARCH_LAYERS.toml package map — check: LIFT(cmnwlth) passes; `scripts/cw-rails-lift.sh --sandbox` unchanged verdict; PLANT(add `sovereign-time` to commonwealth-rails [dependencies] → LIFT(cmnwlth) value 0); paste the six-program verdict table
+  - Programs: svrn, ingest, cmnwlth, serve, code, bench. Until pb-serve-program lands, `serve` is the serving crates' closure with no smoke.
+  - Record every program's verdict at this commit as the baseline. Most are 0, and that is the honest scoreboard.
+  - PROOF: cmnwlth passes with cw-rails' existing smoke. A PLANT that adds a sovereign-* dep to commonwealth-rails turns cmnwlth red.
+  LIFT ~800 lines, scripts and data only. — read: scripts/cw-rails-lift.sh, scripts/cw-work-lift.sh, scripts/co-lineage.py `measure_bar` (the verdict contract), quality/ARCH_LAYERS.toml package map — check: LIFT(cmnwlth) passes; `scripts/cw-rails-lift.sh --sandbox` has an unchanged verdict; PLANT(add `sovereign-time` to commonwealth-rails [dependencies] → LIFT(cmnwlth) value 0); paste the six-program verdict table
 - [ ] pb-hostkit — depends [pb-lift-instrument] — OUTCOME: every program claims its data root through ONE lock, from a neutrally named leaf that cw-rails can take (FIVE_PROGRAMS §2c, §12 3a rung 4).
-  - REUSE `sovereign-cli-base` (852 lines, principle 11). Its contracts uses are exactly host-kit and dialer items: dirs.rs:26,33, guest_link.rs:54, urls.rs:31.
-  - Name it with `svrn code converge noun <Name>` first, rename it neutrally, and keep a re-export crate or path so no consumer breaks.
-  - Move its program vocabulary to the owners: guest_link and the rail helpers go to sovereign-cli-mesh; `client_daemon_base` goes to sovereign-turn-client (the dialer).
-  - MOVE sovereign-contracts/src/run_lock.rs into it and keep the historical path as a re-export. Then, in its OWN commit because Windows gains enforcement, re-base the lock on std `File::try_lock`, which drops libc.
-  - Collapse these onto it: sovereign-core/src/deep_research/state.rs:208 (a second type named RunLock); cw-rails' fp-solo-lift lock; corpus-engine-scip's fs4 lock only if its semantics match (else name why not).
-  - ARCH_LAYERS: the leaf row with `allow = ["workspace-hack"]` and a size cap of 2,500 code lines. The cap is the operator's to change and is never ratcheted. The prose of the 3a rung is already in FIVE_PROGRAMS.
-  - PROOF: LIFT(cmnwlth) still passes with the kit in cw-rails' closure. Two processes on one root refuse, for the daemon and for cw-rails. Copy counts go down, with the numbers in the body.
-  LIFT ~1,200 lines, mostly renames. — read: sovereign-cli-base/src, sovereign-contracts/src/run_lock.rs, sovereign-core/src/deep_research/state.rs:190-240, commonwealth-rails/src/cli.rs, quality/ARCH_LAYERS.toml leaf rows — check: CLEAN, LINT, TEST(<the kit>), TEST(commonwealth-rails), TEST(sovereign-daemon), LAYER, LIFT(cmnwlth), PLANT(remove the try_lock claim → TEST(<the kit>) red), BOUNDARY
-- [ ] pb-mcp — depends [pb-hostkit] — OUTCOME: ONE MCP implementation. It is one dispatcher and one tool set built from bundles, and every host mounts it.
-  - The dispatcher: lift `McpService` from sovereign-daemon/src/mcp_router.rs:408-639, plus the version, alias and exposure logic in sovereign-tools/src/mcp_surface.rs, into the host kit.
+  - Name it with `svrn code converge noun <Name>` first.
+  - Build it by MOVING, not by renaming (phase-b-2). Its first content is the host-ish modules of `sovereign-cli-base` (852 lines, principle 11): the dirs, the dispatcher locator and help. Move them with `cargo xtask refactor-apply`, and put the recipe in the commit body.
+  - `sovereign-cli-base` re-exports them at their historical paths, so NO consumer changes in this row. Later rows repoint the files they already edit ("repoint on touch", the fp-14 precedent). pb-distribution deletes the alias once it has no consumers.
+  - Move cli-base's program vocabulary to its owners: guest_link and the rail helpers go to sovereign-cli-mesh, and `client_daemon_base` goes to sovereign-turn-client (the dialer). Each goes by recipe, re-exported until repointed.
+  - MOVE sovereign-contracts/src/run_lock.rs into the kit, re-exported at its historical path. Then, in its OWN commit because Windows gains enforcement, re-base it on std `File::try_lock`, which drops libc.
+  - Collapse these onto it: sovereign-core/src/deep_research/state.rs:208 (a second type named RunLock); cw-rails' fp-solo-lift lock; corpus-engine-scip's fs4 lock only if its semantics match (otherwise the body says why not).
+  - ARCH_LAYERS: add the kit's leaf row with `allow = ["workspace-hack"]` and a size cap of 2,500 code lines. The cap is the operator's to change and is never ratcheted.
+  - PROOF: LIFT(cmnwlth) still passes with the kit in cw-rails' closure. Two processes on one root refuse, for the daemon and for cw-rails. The copy counts go down, with the numbers in the body.
+  LIFT ~900 lines. — read: sovereign-cli-base/src, sovereign-contracts/src/run_lock.rs, sovereign-core/src/deep_research/state.rs:190-240, commonwealth-rails/src/cli.rs, corpus-engine/xtask/src/refactor_apply.rs (the recipe shape), quality/ARCH_LAYERS.toml leaf rows — check: CLEAN, LINT, TEST(<the kit>), TEST(commonwealth-rails), TEST(sovereign-daemon), LAYER, LIFT(cmnwlth), PLANT(remove the try_lock claim → TEST(<the kit>) red), BOUNDARY
+- [ ] pb-mcp — depends [pb-hostkit] — OUTCOME: ONE MCP dispatcher lives in the host kit, and corpus-mcp is its first adopter. The code server (pb-code-server) is the second. The svrn daemon adopts it LAST (pb-daemon-adopts), after its code tools have left, so nothing is ported that a later row deletes (phase-b-2).
+  - The dispatcher: lift `McpService` from sovereign-daemon/src/mcp_router.rs:408-639, plus the version, alias and exposure logic in sovereign-tools/src/mcp_surface.rs. Lift means move by recipe, with a re-export left behind, so the daemon keeps compiling on the same code.
   - Framings: stdio, in the corpus-mcp mcp.rs shape, and HTTP+SSE with axum behind a feature.
   - The MCP method set becomes ONE enum beside oicp-types' jsonrpc (principle 9). There are three string matches today.
-  - A call-log PORT replaces mcp_router's `Arc<NoteStore>` (mcp_router.rs:31,168,182). `ToolPatternMatcher` becomes the code mount's observer; five-programs-39 names this delta.
+  - A call-log PORT replaces mcp_router's `Arc<NoteStore>` (mcp_router.rs:31,168,182).
   - Tool exposure becomes a manifest field. `MCP_TOOLS_ALWAYS`, `SPEC_GATED`, `RETIRED` and `ALIASES` become data.
-  - The tool set is built from `ToolBundle`s (sovereign-contracts tool_bundle.rs:67). The three hand builders collapse onto it: daemon tool_registry.rs (38 register calls), cli-dev project_cmd/serve.rs:389-588 (30) and tools_cmd/registry.rs (35). The bundles `CodeIntelTools`/`NotesTools` (sovereign-code/src/bundle.rs) become the one assembly. Today they have zero production constructors.
-  - Adopters: the daemon, corpus-mcp and `project serve`.
-  - Deltas, each in its own commit: corpus-mcp moves to protocol-version negotiation and isError results (a behaviour change: name it). Registration drift between the three builders resolves to the union, and the body lists every tool that changes host.
-  - Closes sovereign-cli-dev → sovereign-daemon. cli-dev's only daemon imports are mcp_router's (serve.rs:666,675,696).
-  LIFT ~1,500 lines. — read: mcp_router.rs, mcp_surface.rs, corpus-mcp/src/{mcp.rs,tools.rs}, tool_bundle.rs, sovereign-code/src/bundle.rs, the three builders, ralph/decisions/five-programs-39.md — check: CLEAN, LINT, TEST(<the kit>), TEST(sovereign-daemon), TEST(corpus-mcp), TEST(sovereign-cli-dev), `sovereign-cli-dev/tests/mcp_surface_e2e.rs`, PLANT(register one tool in a host outside the bundle → the surface test red), LAYER, BOUNDARY (paste; expect −1)
-- [ ] pb-shell — depends [pb-hostkit] — OUTCOME: every program's HTTP server is ONE shell plus the routes it registers.
-  - One `serve(listeners, bundles, shutdown: impl Future)` in the host kit. It owns: peer addresses (the "bare axum::serve drops ConnectInfo" comment becomes code), the loopback guard, body limits (server.rs:30-46), bind retry and mount tracing.
-  - The loopback guard: lift the daemon's `pub(crate)` LoopbackRouter/LocalOnly (loopback_guard.rs:126) and retire mcp_router's hand-rolled `is_localhost`.
-  - Route bundles return `(name, Router)` as ONE value. The daemon's 18 `mounted.push`/`mount_names.push` pairs (daemon.rs:3500-3633) and the two parallel matches `host_routers`/`host_router_names` (daemon_services.rs:434-466) collapse onto it.
-  - Adopters: the daemon's six binds, cw-rails (api.rs:119-133, internal.rs:50-75), the compute child, and the meshapp dev and ring dev near-twins (sovereign-cli-mesh meshapp_cmd.rs:246-268, ring_cmd/dev.rs:88-110).
-  - Delete `server::serve` (server.rs:667-712) if the census confirms it has no caller.
+  - The tool set is built from `ToolBundle`s (sovereign-contracts tool_bundle.rs:67). The bundles `CodeIntelTools`/`NotesTools` (sovereign-code/src/bundle.rs) become the code server's assembly in pb-code-server.
+  - Delta, in its own commit: corpus-mcp moves to protocol-version negotiation and isError results, a behaviour change named in the body.
+  - PROOF: corpus-mcp's stdio loop is gone, and its tests plus `tests/no_inference_stack.rs` pass on the kit's dispatcher. PLANT: add a fourth method string match in corpus-mcp, and the enum-exhaustiveness test goes red.
+  LIFT ~1,000 lines. — read: mcp_router.rs, mcp_surface.rs, corpus-mcp/src/{mcp.rs,tools.rs}, tool_bundle.rs, sovereign-code/src/bundle.rs, ralph/decisions/five-programs-39.md — check: CLEAN, LINT, TEST(<the kit>), TEST(corpus-mcp), TEST(sovereign-daemon), PLANT, LAYER, BOUNDARY
+- [ ] pb-shell — depends [pb-hostkit] — OUTCOME: ONE HTTP server shell lives in the host kit, and the small hosts adopt it first. The svrn daemon adopts it LAST (pb-daemon-adopts), after pb-daemon-mesh-exit, pb-code-clean and pb-svrn-dials-serve have deleted its duplicate routes and serving bootstrap (phase-b-2).
+  - One `serve(listeners, bundles, shutdown: impl Future)` owns: peer addresses (the repeated "bare axum::serve drops ConnectInfo" comment becomes code), the loopback guard (lifted from the daemon's `pub(crate)` loopback_guard.rs:126 by recipe, re-exported), body limits (server.rs:30-46), bind retry and mount tracing.
+  - Route bundles return `(name, Router)` as ONE value.
+  - Adopters in this row: cw-rails (api.rs:119-133, internal.rs:50-75), the compute child (child_main.rs:223-330), and the meshapp dev and ring dev near-twins (sovereign-cli-mesh meshapp_cmd.rs:246-268, ring_cmd/dev.rs:88-110).
   - Health spellings stay as they are, because they are wires. Name them in the body.
-  LIFT ~1,200 lines. — read: sovereign-daemon/src/{daemon.rs:3478-3922,loopback_guard.rs,daemon_services.rs:434-466,server.rs}, commonwealth-rails/src/{api.rs,internal.rs}, sovereign-compute/src/child_main.rs:223-330 — check: CLEAN, LINT, TEST(<the kit>), TEST(sovereign-daemon), TEST(commonwealth-rails), LIFT(cmnwlth), PLANT(mount a route outside the bundle list → the mount-trace test red), LAYER, BOUNDARY
+  - PROOF: LIFT(cmnwlth) passes with the kit's shell in cw-rails. The adopters' tests pass, and each one's mount trace names its routes. PLANT: mount a route outside the bundle list in cw-rails, and the mount-trace test goes red.
+  LIFT ~800 lines. — read: sovereign-daemon/src/{loopback_guard.rs,server.rs:30-46}, commonwealth-rails/src/{api.rs,internal.rs}, sovereign-compute/src/child_main.rs:223-330, the two dev twins — check: CLEAN, LINT, TEST(<the kit>), TEST(commonwealth-rails), TEST(sovereign-compute), TEST(sovereign-cli-mesh), LIFT(cmnwlth), PLANT, LAYER, BOUNDARY
 - [ ] pb-serving-assembly — depends [REVIEW-pb-census] — OUTCOME: a hot reload builds exactly what cold start builds, from ONE engine assembly that the serving package owns.
   - Today three paths build the engine, and they have drifted:
     - daemon build/inference.rs `load_provider` (:67-490);
@@ -102,31 +112,27 @@ A miss is NEEDS_HUMAN with the numbers, never a re-tuned bar.
   - runtime-recipe takes both as PORTS: `rerank: Option<Arc<dyn InferenceProvider>>`, since `inference_to_rerank_fn` is provider-agnostic (reranker_standalone.rs:20-24), and the boot extractor. This closes sovereign-runtime-recipe → sovereign-inference (retires the fp-69 exception) and → sovereign-gliner.
   - Delta, in its own commit: daemon turns GAIN rerank (`RerankWiring::AlreadyInProvider` recorded none, lib.rs:250-256). Measure it with `svrn quality check --lane retrieval-prod`, which must stay in or above its band.
   LIFT ~1,200 lines. — read: engine_factory.rs, sovereign-inference/src/{engine.rs:1556-1760,reranker_standalone.rs}, sovereign-contracts/src/traits.rs:200-480, sovereign-runtime-recipe/src/lib.rs:240-260,820-1010, sovereign-daemon/src/daemon_cmd/boot.rs:580-600 — check: CLEAN, LINT, TEST(sovereign-inference), TEST(sovereign-runtime-recipe), TEST(sovereign-daemon), PLANT(register rerank without its route → the kind-registry test red), `cargo xtask env-gate`, LAYER, BOUNDARY (expect −2 and the fp-69 exception row deleted)
-- [ ] pb-venues — depends [pb-serving-assembly] — OUTCOME: any OpenAI-compatible endpoint is a venue, and where each kind runs is a setting.
-  - `Venue` becomes an enum { OwnSlot, ChildSlot, MeshMember(NodeId), PinnedPod, Url{ endpoint, key, declared claims } } over today's `InferenceVenue` (sovereign-contracts/src/venue.rs:19-46, mesh-only).
-  - Placement per kind becomes an enum { InProcess, Child, Dial }. All three arms exist today, as the engine, the compute child and the terminal dial.
-  - `[engine] kind="remote"` (engine_config.rs) absorbs the terminal node's `[node] entry` door, a second key for one question (principle 8). That door hard-codes model "primary" and sends no bearer (build/inference.rs:189,204).
-  - A remote engine no longer needs a placeholder `[models]` section (build/inference.rs:225).
-  - Delta: a `[node] entry` config is migrated to `[engine] remote` in the same commit (the config migration rule).
-  - PROOF: an e2e points svrn at a stub OpenAI server as a `Url` venue, with no `[models]`, and a chat turn and an embedding round-trip through it. PLANT: drop the Url arm from the router, and the e2e goes red.
-  LIFT ~900 lines. — read: sovereign-contracts/src/{venue.rs,engine_config.rs}, sovereign-serving-host/src/peer_inference.rs:1300-1340, sovereign-daemon/src/build/inference.rs:60-240, sovereign-turn-client/src/reach.rs:80-90 — check: CLEAN, LINT, TEST(sovereign-serving-host), TEST(sovereign-daemon), PLANT, LAYER, BOUNDARY
-- [ ] pb-serve-program — depends [pb-serving-kinds, pb-venues, pb-hostkit, pb-shell] — OUTCOME: `serve` runs ALONE. One binary answers `/v1/chat/completions`, `/v1/embeddings`, `/v1/rerank` and `/v1/models` with no mesh, no knowledge server and no cw-rails. This is the "local model server" developer (FIVE_PROGRAMS §2 row `serve`).
+- [ ] pb-serve-program — depends [pb-serving-kinds, pb-hostkit, pb-shell] — OUTCOME: `serve` runs ALONE. One binary answers `/v1/chat/completions`, `/v1/embeddings`, `/v1/rerank` and `/v1/models` with no mesh, no knowledge server and no cw-rails. This is the "local model server" developer (FIVE_PROGRAMS §2 row `serve`).
   - FIRST, rename the phrase collision: daemon code calls cw-rails "the mesh's serving process" (daemon.rs ~:5222, setup_config `rails_base` docs). Principle 8: one name.
   - ARCH_LAYERS: a `serve` package whose members are sovereign-inference, sovereign-compute, sovereign-serving-host and sovereign-serving-policy, moved from cmnwlth. Measure the gate before and after, and name every edge the re-map moves.
-  - Its own `[[bin]]` in its own crate. It promotes the compute child's server (sovereign-compute server.rs, which already has a supervisor, a wire and 5 routes) and puts serving-host's `inference_adapter` (the OpenAI translation) in front of it.
-  - It gets the host-kit lock and shell, plus its own config file with its sections (models, engine, compute, shared_model).
+  - Its own `[[bin]]` in its own crate. It promotes the compute child's server (sovereign-compute server.rs, which already has a supervisor, a wire and 5 routes) and puts serving-host's `inference_adapter` (the OpenAI translation) in front of it. It gets the host-kit lock and shell.
+  - It reads ITS sections (models, engine, compute, shared_model) from the existing config file through the existing SetupConfig. The per-program file split is phase-c (phase-b-2), so there is no config migration here.
   - `/v1/models` and the OICP manifest are built from its OWN provider (`oicp_synthesis::build_self_manifest` reads `resident_slots()`). Never from cw-rails' ledger: today the daemon's `/v1/models` is a per-request round trip to cw-rails (routes_inference.rs:29,330,359; principles 1 and 12).
-  - The rpc-worker and compute-child trampolines move with it (the serving crates spawn them via `current_exe()`: compute manager.rs:309/356/390, inference rpc_distribution.rs:2405).
-  - PROOF: LIFT(serve) passes. An e2e starts the `serve` binary on a temp root with the mock engine kind, and chat, embeddings, rerank and `/v1/models` each answer. PLANT: point `/v1/models` back at a rails dial, and the e2e goes red with cw-rails absent.
-  LIFT ~1,500 lines. — read: SERVING_BOUNDARY.md, sovereign-compute/src/{server.rs,wire.rs,child_main.rs,manager.rs}, sovereign-serving-host/src/{inference_adapter.rs,oicp_synthesis.rs}, sovereign-daemon/src/{routes_inference.rs,state.rs:1290-1320}, quality/ARCH_LAYERS.toml package map — check: CLEAN, LINT, TEST(sovereign-compute), TEST(sovereign-serving-host), LIFT(serve), PLANT, LAYER, `cargo xtask env-gate`, BOUNDARY (paste before/after)
+  - The rpc-worker and compute-child trampolines move with it (compute manager.rs:309/356/390, inference rpc_distribution.rs:2405).
+  - PROOF: add serve's RUN smoke to program-lift.sh's data. With the mock engine kind, chat, embeddings, rerank and `/v1/models` each answer on a temp root with cw-rails absent, and LIFT(serve) passes. PLANT: point `/v1/models` back at a rails dial, and LIFT(serve) goes red.
+  LIFT ~1,300 lines. — read: SERVING_BOUNDARY.md, sovereign-compute/src/{server.rs,wire.rs,child_main.rs,manager.rs}, sovereign-serving-host/src/{inference_adapter.rs,oicp_synthesis.rs}, sovereign-daemon/src/{routes_inference.rs,state.rs:1290-1320}, quality/ARCH_LAYERS.toml package map — check: CLEAN, LINT, TEST(sovereign-compute), TEST(sovereign-serving-host), LIFT(serve), PLANT, LAYER, `cargo xtask env-gate`, BOUNDARY (paste before and after)
 - [ ] pb-svrn-dials-serve — depends [pb-serve-program] — OUTCOME: svrn answers chat with serving in another process. The fp-10 and fp-68 exceptions are RETIRED by the owner, not by exception. The stock distribution dials `serve`, and a phone or single-binary distribution may still link serve's library face (FIVE_PROGRAMS §2c).
+  - REUSE the terminal-node arm, which already means "this node holds no weights and dials an entry node" (`SplitInferenceProvider`, sovereign-daemon build/inference.rs ~:84-230; principle 11). svrn reaches `serve` at `[node] entry` when it is set. Otherwise it uses a default loopback base constant, documented on both sides the way `DEFAULT_RAILS_BASE` is.
+  - svrn STOPS READING serve's sections (models, engine, compute, shared_model). So there is NO config migration: the shared file keeps them, and serve reads them (phase-b-2).
+  - The census checks that the terminal arm's hard-coded model "primary" and its missing bearer (build/inference.rs:189,204) are right for a loopback serve. It names any gap, which is fixed in its own commit.
   - The daemon's serving bootstrap is deleted.
-  - svrn reaches `serve` through `[engine] remote` (pb-venues) and brings it up with `ServingHost::ensure_reachable` at user-action moments only (daemon start, a verb). It never brings it up on a refused dial (ARCH_LAYERS ~:1495). An unreachable serve is a named absence (§4 rule 3).
+  - svrn brings `serve` up with `ServingHost::ensure_reachable` at user-action moments only (daemon start, a verb). It never brings it up on a refused dial (ARCH_LAYERS ~:1495). An unreachable serve is a named absence (§4 rule 3).
   - svrn's `/v1/models` answers from serve's.
   - The edges sovereign-daemon → sovereign-inference, → sovereign-compute and → sovereign-serving-host close. Delete their `[[exception]]` rows.
   - BEFORE the switch commit, run the header's pre-registered bars and paste them: first-token latency, embedding throughput, retrieval-prod and synth. A miss is NEEDS_HUMAN with the numbers.
   - Delta: a stock install runs two processes. Setup and `svrn daemon status` name both.
-  LIFT ~1,500 lines. — read: sovereign-daemon/src/{build/inference.rs,boot.rs,state.rs}, the fp-10/fp-68 exception rows, sovereign-turn-client/src/reach.rs — check: CLEAN, LINT, TEST(sovereign-daemon), TEST(sovereign-cli-daemon), the bars above, PLANT(stop serve mid-test → the chat turn reports absence, never an empty answer), LIFT(svrn) (paste the verdict; it may still be 0 for other edges), LAYER, BOUNDARY (expect −3)
+  - PROOF: add svrn's RUN smoke to program-lift.sh. The daemon and serve start on a temp root, and a chat turn answers. PLANT: stop serve mid-smoke, and the turn reports absence, never an empty answer.
+  LIFT ~1,300 lines. — read: sovereign-daemon/src/{build/inference.rs,daemon_cmd/boot.rs,state.rs}, the fp-10/fp-68 exception rows, sovereign-turn-client/src/reach.rs, sovereign-daemon/src/rails_client.rs (the DEFAULT_RAILS_BASE precedent) — check: CLEAN, LINT, TEST(sovereign-daemon), TEST(sovereign-cli-daemon), the bars above, PLANT, LIFT(svrn) (paste the verdict; it may still be 0 for edges later rows own), LAYER, BOUNDARY (expect −3)
 - [ ] pb-membership — depends [pb-hostkit] — OUTCOME: cw-rails is the node's ONE mesh endpoint and holds its ONE node key. Founding, joining, admission and mDNS move to cw-rails (reversing five-programs-21's disclaimer, operator 2026-09-25), and the fp-9 exception (sovereign-daemon → commonwealth-discovery) is RETIRED.
   - commonwealth-discovery is already on cw-rails' except list (ARCH_LAYERS ~:686).
   - Solo mode (fp-solo-lift) covers a lone node.
@@ -141,13 +147,6 @@ A miss is NEEDS_HUMAN with the numbers, never a re-tuned bar.
   - Edges: sovereign-daemon → commonwealth-transport, → commonwealth-core, → sovereign-mesh.
   - PROOF: the daemon e2e suite passes with cw-rails serving every mesh route, and each deleted route on the daemon answers a named pointer where a client might still call it. PLANT: re-mount one deleted route, and the duplicate-route test goes red.
   LIFT ~1,500 lines; split by edge if the census exceeds it. — read: five-programs STATE.md rows REVIEW-mint-fp-core-dial and REVIEW-mint-fp-mesh-dial, sovereign-daemon/src/{mesh_http.rs,routes_mesh_kv.rs,server.rs,daemon.rs}, commonwealth-rails/src/api.rs — check: CLEAN, LINT, TEST(sovereign-daemon), TEST(commonwealth-rails), PLANT, LAYER, BOUNDARY (expect −3)
-- [ ] pb-inference-origin — depends [pb-membership, pb-venues, pb-serve-program] — OUTCOME: the mesh fronts ANY OpenAI-compatible server (the "mesh in front of vLLM/ollama" developer).
-  - `OriginKind::Inference` in oicp-types (origin.rs:21-26: "a new kind is a new variant beside a new route").
-  - cw-rails adverts it and never ranks (its charter). cw-rails gossips `inference_capable: false` today (gossip.rs:79).
-  - The origin's manifest comes from the origin itself (oicp-conformance exists) or from an operator-declared claims file that cw-rails serves verbatim (data, principle 9).
-  - serve's router ranks venues. Its `VenueSource` reads cw-rails' HTTP roster in place of the in-process DeferredDaemon.
-  - PROOF: an e2e puts a stub OpenAI server behind cw-rails as an Inference origin with a claims file, and a second node's `serve` routes a chat turn to it. PLANT: drop the claims file, and the venue drops out with a named reason.
-  LIFT ~1,000 lines. — read: oicp-types/src/origin.rs, commonwealth-rails/src/gossip.rs, sovereign-serving-host/src/peer_inference.rs:1300-1340 — check: CLEAN, LINT, TEST(oicp-types), TEST(commonwealth-rails), TEST(sovereign-serving-host), LIFT(cmnwlth), PLANT, LAYER, BOUNDARY
 - [ ] pb-work-doors — depends [pb-membership] — OUTCOME: svrn submits and takes work through cw-rails' own doors. cw-rails has owned the journal and the fold since fp-45 (49578c1e2).
   - cw-rails gets two doors: submit, and take/complete. Acts are sealed with the one node key (pb-membership).
   - Act DTOs go into oicp-types beside JobKind, JobRequirements and JobUnit (§12 3a rung 2, federation wire).
@@ -156,29 +155,30 @@ A miss is NEEDS_HUMAN with the numbers, never a re-tuned bar.
   - Edges: sovereign-cli → commonwealth-work, sovereign-daemon → commonwealth-work.
   - PROOF: an e2e submits a job from `svrn`, a donor takes it through the door, and the fold shows it complete. PLANT: an unsealed act is refused.
   LIFT ~900 lines. — read: commonwealth-work/src/{executor.rs,process.rs}, commonwealth-rails/src/api.rs:98, sovereign-cli/src/distribute.rs, sovereign-daemon/src/{work_donor.rs,ingest_executor.rs} — check: CLEAN, LINT, TEST(commonwealth-rails), TEST(commonwealth-work), TEST(sovereign-daemon), PLANT, LAYER, BOUNDARY (expect −2)
-- [ ] pb-code-server — depends [pb-mcp, pb-shell] — OUTCOME: code intelligence runs ALONE as an MCP server, with no LLM, no knowledge server and no mesh (the "code intel for my agent" developer).
-  - `svrn code mcp` = the host kit + CodeIntelTools + NotesTools (decision notes) + the work-atlas bundle. The atlas is optional: it dials cw-rails' KV directly, never the daemon's `/v1/mesh/kv` proxy. When cw-rails is down it is absent by name (the null object `Withheld`, tool_bundle.rs:298).
+- [ ] pb-code-server — depends [pb-mcp, pb-shell] — OUTCOME: code intelligence runs ALONE as an MCP server with no LLM, no knowledge server and no mesh (the "code intel for my agent" developer). It REPLACES the legacy `project serve` (sovereign-cli-dev project_cmd/serve.rs, which today hand-builds 30 tools at :389-588 and mounts the daemon's `mcp_router` at :696) instead of porting it (phase-b-2). `svrn serve` and `project serve` become the new server's spellings.
+  - `svrn code mcp` = the host kit's dispatcher and shell + CodeIntelTools + NotesTools (decision notes) + the work-atlas bundle. The atlas is optional: it dials cw-rails' KV directly, never the daemon's `/v1/mesh/kv` proxy. When cw-rails is down it is absent by name (the null object `Withheld`, tool_bundle.rs:298).
   - Connect-or-spawn goes through `ServingHost`.
   - One SCIP loader (tool_registry.rs:384 and sovereign-cli-shared/src/scip.rs:31 collapse).
-  - One freshness path: the `Reindexer`. The 30 s mtime poll (serve.rs:731) goes.
+  - One freshness path: the `Reindexer`. The 30 s mtime poll goes.
   - The watcher runtime is owned here, which closes sovereign-daemon → corpus-engine-watchers.
-  - SpecWatcher (380 lines) and the spec-gated list move to sovereign-code, which closes sovereign-cli-dev → sovereign-tools.
+  - SpecWatcher (380 lines) and the spec-gated list move to sovereign-code by recipe, which closes sovereign-cli-dev → sovereign-tools.
+  - The legacy serve's import of `mcp_router` goes, which closes sovereign-cli-dev → sovereign-daemon (fp-11).
   - Defects, fixed in their own commits:
     - `code_search`'s `inf.embed(query).await.unwrap_or_default()` (code_search.rs:123) becomes a named fall-back, never a silent swap to FTS;
     - the in-memory notes fallback (serve.rs:251) becomes a refusal that names the path.
-  - Delta: legacy `project serve` stops refusing while the daemon runs (serve.rs:41-62), because it no longer shares the daemon's surface.
-  - PROOF: LIFT(code) passes. An e2e runs `svrn code mcp` on a fixture repo with NO daemon and no model, and `symbols`/`callers` answer. PLANT: make the atlas dial the daemon proxy, and with the daemon absent the atlas test goes red.
-  LIFT ~1,500 lines. — read: sovereign-code/src/bundle.rs, sovereign-cli-dev/src/project_cmd/serve.rs, sovereign-tools/src/code/code_search.rs, corpus-engine-watchers/src/reindexer.rs, sovereign-work-atlas — check: CLEAN, LINT, TEST(sovereign-code), TEST(sovereign-cli-dev), TEST(sovereign-work-atlas), LIFT(code), PLANT, LAYER, BOUNDARY (expect −2)
+  - Delta: the server no longer refuses to start while the daemon runs (serve.rs:41-62).
+  - PROOF: add code's RUN smoke to program-lift.sh. On a fixture repo with no daemon and no model, `symbols` and `callers` answer and LIFT(code) passes. PLANT: make the atlas dial the daemon proxy, and with the daemon absent the smoke goes red.
+  LIFT ~1,400 lines. — read: sovereign-code/src/bundle.rs, sovereign-cli-dev/src/project_cmd/serve.rs, sovereign-tools/src/code/code_search.rs, corpus-engine-watchers/src/reindexer.rs, sovereign-work-atlas — check: CLEAN, LINT, TEST(sovereign-code), TEST(sovereign-cli-dev), TEST(sovereign-work-atlas), LIFT(code), PLANT, LAYER, BOUNDARY (expect −3)
 - [ ] pb-ingest — depends [REVIEW-pb-census] — OUTCOME: an index builds in CI with only an embeddings endpoint (the "ingest in CI" developer). Ingest is a library plus ONE CLI (FIVE_PROGRAMS §2 row `svrn ingest`).
   - The working precedent is `corpus-mcp ingest` (corpus-mcp/src/ingest.rs:319-329; its `tests/no_inference_stack.rs` pins the closure).
   - Fold `svrn corpus ingest`'s workflow path into that one CLI. That path posts to the daemon and runs the notebook workflow (corpus_cmd/ingest.rs:108, workflow_cmd.rs:595), and it is a second ingest implementation (principle 8).
-  - ONE endpoint-resolution decider for embedder and chat: corpus-mcp's host.rs discovery ladder, reused. `code index` and bench use it later.
+  - ONE endpoint-resolution decider for embedder and chat: corpus-mcp's host.rs discovery ladder, reused. `code index` uses it later.
   - Fixed in their own commits:
     - the chat model is no longer resolved under `--no-enrich` (corpus-mcp/src/ingest.rs:225-242);
     - GLiNER absence is named, not silently skipped (corpus-engine/src/engine/ingest.rs:1927).
   - The work plane is one OPTIONAL caller, never a requirement.
-  - PROOF: LIFT(ingest) passes. An e2e ingests a fixture folder against a stub embeddings server with no chat model, and the index opens. PLANT: resolve chat under `--no-enrich`, and the e2e goes red.
-  LIFT ~1,000 lines. — read: corpus-mcp/src/{ingest.rs,host.rs}, sovereign-cli/src/corpus_cmd/ingest.rs, workflow_cmd.rs, corpus-engine/src/engine/ingest.rs:100-130,1400-1420,1920-1935 — check: CLEAN, LINT, TEST(corpus-mcp), TEST(corpus-engine), LIFT(ingest), PLANT, LAYER, BOUNDARY
+  - PROOF: add ingest's RUN smoke to program-lift.sh. It ingests a fixture folder against a stub embeddings server with no chat model, the index opens, and LIFT(ingest) passes. PLANT: resolve chat under `--no-enrich`, and the smoke goes red.
+  LIFT ~900 lines. — read: corpus-mcp/src/{ingest.rs,host.rs}, sovereign-cli/src/corpus_cmd/ingest.rs, workflow_cmd.rs, corpus-engine/src/engine/ingest.rs:100-130,1400-1420,1920-1935 — check: CLEAN, LINT, TEST(corpus-mcp), TEST(corpus-engine), LIFT(ingest), PLANT, LAYER, BOUNDARY
 - [ ] pb-code-index — depends [pb-code-server, pb-ingest] — OUTCOME: indexing a project needs only the code program, and `project init` works with no daemon.
   - `code_index` plus incremental (1,495 lines) and `code_refresh` (561) move from sovereign-cli-shared into the code program. D5 places them there. fp-5's refusal falls, because code now ships in the default distribution.
   - `code index` and `project refresh` stop refusing without the daemon (code_index.rs:260-271,451-455).
@@ -229,23 +229,18 @@ A miss is NEEDS_HUMAN with the numbers, never a re-tuned bar.
   - corpus-engine's bundled recipe source (recipe_source/bundled.rs, five-programs-52) lifts to svrn's composition roots.
   - PROOF: LIFT(ingest) and LIFT(svrn) are pasted (svrn may still be 0 for edges owned by later rows). A grants merge e2e completes as a work unit. PLANT: link corpus-engine from grants, and LAYER goes red.
   LIFT ~1,500 lines. — read: corpus-mcp/src, sovereign-tools watched/enrich.rs, sovereign-grants auto_recover.rs, shard_manager.rs, five-programs STATE.md row fp-43, corpus-engine/src/recipe_source/bundled.rs — check: CLEAN, LINT, TEST(corpus-mcp), TEST(sovereign-grants), TEST(sovereign-tools), LIFT(ingest), PLANT, LAYER, BOUNDARY (expect −6)
-- [ ] pb-bench-dials — depends [REVIEW-pb-census] — OUTCOME: bench judges ANY endpoint (the "bench my own server" developer).
-  - Three named dials: the model (plain OpenAI API), the subject (svrn, for the turn and verdict lanes) and a SEPARATE judge (principle 7). Today judges share the URL under test, and only `bench/external/*` takes `--base-url`.
-  - Every lane is tagged with the dials it needs. Against a foreign server, the model-only lanes run and the rest report could-not-judge with the reason.
-  - The quality-check precondition `port-listening:9741` (32 uses in quality/instruments.toml) honours the subject dial and `SOVEREIGN_DAEMON_URL` (quality_check_cmd/exec.rs:33-37).
-  - `eval run` lanes dial svrn in place of building an in-process Runtime (chat_cmd/bootstrap.rs:205-394).
-  - Defect, fixed in its own commit: the forced-choice judge's `.ok()?` fails OPEN on non-sovereign servers (grounding/judge.rs:157-173). It becomes could-not-judge.
-  - PROOF: LIFT(bench) passes. A lane run against a stub OpenAI server yields model-lane verdicts plus named could-not-judge rows. PLANT: restore fail-open, and the judge test goes red.
-  LIFT ~1,200 lines. — read: sovereign/bench/README.md, quality/instruments.toml, quality_check_cmd/exec.rs, grounding/judge.rs, chat_cmd/bootstrap.rs — check: CLEAN, LINT, TEST(sovereign-eval), TEST(sovereign-cli-llm), LIFT(bench), PLANT, LAYER, BOUNDARY
-- [ ] pb-cli-llm — depends [pb-serve-program, pb-bench-dials, pb-ingest] — OUTCOME: sovereign-cli-llm is a client. It links no serving, ingest or mesh internals.
+- [ ] pb-cli-llm — depends [pb-serve-program, pb-ingest] — OUTCOME: sovereign-cli-llm is a client. It links no serving, ingest or mesh internals, and bench's judges tell a foreign server's absence from a verdict.
   - RE-CENSUS FIRST, because five-programs-23's own falsifier is now true: `help` lives in sovereign-cli-base since fp-98; `sovereign_core::{types, setup_config, traits, tool_manifest, error, rebrand}` re-export contracts (sovereign-core/src/lib.rs:66-69); the 25 `::remote` refs re-export oicp-client. Repoint those (paths only).
-  - Bench's turn drive (chat_cmd, 32 refs in 15 files) dials the subject.
+  - Bench's turn drive (chat_cmd, 32 refs in 15 files) dials svrn.
   - The three local GGUF loads dial serve's embedder: router_fit_cmd.rs:403, router_cache_cmd.rs:231, inner_chaos/recall.rs:752. That leaves one embedder decider.
   - Node identity repoints to `sovereign_contracts::node_identity` (portfolio_cmd/mod.rs:59, partitions.rs:863/865). The hand re-implementation of `resolve_self_node_id`'s precedence (partitions.rs:863-879) goes.
   - The ingest half moves to the ingest CLI.
+  - Defects, fixed in their own commits (kept from the deferred bench-dials row, phase-b-2):
+    - the forced-choice judge's `.ok()?` fails OPEN on non-sovereign servers (grounding/judge.rs:157-173) and becomes could-not-judge;
+    - the quality-check precondition probe honours `SOVEREIGN_DAEMON_URL` (quality_check_cmd/exec.rs:33-37).
   - Edges: cli-llm → sovereign-enrichment-catalog, sovereign-enrichment-build (normal and dev), sovereign-gliner, sovereign-pipeline, sovereign-eval, corpus-engine, sovereign-inference, sovereign-mesh.
-  - PROOF: LAYER passes with those deps removed from cli-llm's Cargo.toml, and the cli-llm e2e journeys pass. PLANT: re-add one local GGUF load, and LAYER goes red.
-  LIFT ~1,500 lines; split by edge if the census exceeds it. — read: FIVE_PROGRAMS §11 "The cli-llm split", ralph/decisions/five-programs-{11,23}.md, sovereign-cli-llm/src — check: CLEAN, LINT, TEST(sovereign-cli-llm), PLANT, LAYER, BOUNDARY (expect −9)
+  - PROOF: LAYER passes with those deps removed from cli-llm's Cargo.toml, and the cli-llm e2e journeys pass. PLANT: re-add one local GGUF load, and LAYER goes red. Also PLANT the judge fail-open, and the judge test goes red.
+  LIFT ~1,600 lines; split by edge if the census exceeds it. — read: FIVE_PROGRAMS §11 "The cli-llm split", ralph/decisions/five-programs-{11,23}.md, sovereign-cli-llm/src — check: CLEAN, LINT, TEST(sovereign-cli-llm), TEST(sovereign-eval), PLANT, LAYER, BOUNDARY (expect −9)
 - [ ] pb-pods-verb — depends [pb-membership] — OUTCOME: provisioning pods is a cmnwlth verb.
   - `svrn pipeline pod {up,pool,list,down}` (pipeline_cmd.rs:674 onward) plus worker_pod_provider.rs (391 lines) move to sovereign-cli-mesh as `svrn mesh pod …`.
   - `sovereign_pipeline::pod` (340 lines, with no ingest consumer) moves to sovereign-pods. cli-mesh already declares sovereign-pods (Cargo.toml:50) and uses it nowhere.
@@ -262,40 +257,19 @@ A miss is NEEDS_HUMAN with the numbers, never a re-tuned bar.
   - The five-programs rows fp-12 and fp-47 carry the census and the HUMAN answers.
   - PROOF: each moved app's journey passes on its new host. PLANT: re-add one dependency, and LAYER goes red.
   LIFT ~1,500 lines; split by pair if the census exceeds it. — read: five-programs STATE.md rows fp-12, fp-47, HUMAN-fp12-daemon-embeds, HUMAN-fp47-app-registry — check: CLEAN, LINT, TEST(sovereign-daemon), TEST(sovereign-meshapp), TEST(sovereign-grants), PLANT, LAYER, BOUNDARY (expect −7)
-- [ ] pb-contracts — depends [pb-serve-program, pb-notes-split, pb-hostkit] — OUTCOME: a program that takes the shared layer takes only shared vocabulary. The §12 3a ladder is re-applied to sovereign-contracts itself (42,441 lines, 58 modules, named by 51 manifests).
-  - Single-program modules MOVE to their owners (re-exported at their historical paths until the last consumer repoints):
-    - svrn: skills, intent_policy, data_roots, tool_result_cache, guest_pages, observer, memory_config, mcp_config, lessons; types' grounding_journal, stage_attribution and grounding_verdict; daemon_wire's svrn-only half.
-    - serve/cmnwlth: fim, worker_pod, local_inference, build_stamp.
-  - Traits whose implementer and consumer are both svrn (~14: TaskStore, MemoryStore, DocumentStore, BudgetStore, InsightStore, the oracles…) move into svrn.
-  - DELETE mobile_host.rs (it targets the deleted sovereign-server) and `Launch::Server`. mobile_cmd.rs:108 loses its caller or gets a named pointer.
-  - `egress` (reqwest; 125 crates of closure) moves to its owner.
-  - Fix the stale "24,619 lines" leaf comment (ARCH_LAYERS ~:899-903).
-  - PROOF: bench's closure crate count, before and after (measured by REVIEW-pb-census). LIFT(bench) and LIFT(serve) pass. PLANT: re-add a moved module to contracts' lib.rs, and the single-owner census test fails. Add that census as a test: a contracts module named by one program only is red.
-  LIFT ~1,500 lines, mostly moves; split by owner if the census exceeds it. — read: sovereign-contracts/src/lib.rs, quality/ARCH_LAYERS.toml contracts leaf row, FIVE_PROGRAMS §12 3a — check: CLEAN, LINT, TEST(sovereign-contracts), TESTALL, LIFT(bench), PLANT, LAYER, BOUNDARY
-- [ ] pb-provider-split — depends [pb-svrn-dials-serve, pb-contracts] — OUTCOME: a client of a model server names only the dial surface.
-  - `InferenceProvider` (traits.rs:298, 29 methods, 114 impl lines in 75 files) splits by who needs what:
-    - the 10 dial methods (the `complete` family, embed, rerank) go to the wire side, beside oicp-client;
-    - the 10 metadata methods stay with them if a dialer reads them, otherwise they go to serve;
-    - the 7 slot-administration methods (warmup, load/unload_extra_slot, compute_children, …) go to serve;
-    - the 2 mesh methods (peer_manifests, lender_manifest) go to serve's router.
-  - One dimension per commit: introduce the narrow trait, repoint consumers, then shrink.
-  - PROOF: sovereign-cli-llm, sovereign-eval and sovereign-core name only the dial trait (grep in the body). PLANT: call a slot-admin method from sovereign-core, and it fails to compile.
-  LIFT ~1,500 lines. — read: sovereign-contracts/src/traits.rs:290-700, the 75 impl files' census — check: CLEAN, LINT, TESTALL, PLANT, LAYER, BOUNDARY
-- [ ] pb-config-split — depends [pb-serve-program, pb-membership, pb-contracts] — OUTCOME: each program reads ONLY its own config file (FIVE_PROGRAMS §1, §4 rule 7). Today `SetupConfig` (setup_config.rs:32) is one 13-section schema across programs, loaded in 13 crates.
-  - The split:
-    - serve: models, engine, compute, shared_model;
-    - cmnwlth: node, iroh, discovery;
-    - svrn: daemon, data, memory, search, mcp_servers, watched_folders.
-    cw-rails already has its own (commonwealth-rails/src/config.rs:129).
-  - Setup, the distribution, writes all of them.
-  - `client_daemon_base` moves to sovereign-turn-client, the dialer. Its parse-error-becomes-default-port substitution becomes a named error (principle 6).
-  - Delta: an existing `~/.svrnmesh/config.toml` MIGRATES in the same commit as the switch. The old file is kept as `.migrated` and the migration is idempotent.
-  - PROOF: a migration test takes a fixture full config and produces per-program files that each program loads, with no section lost. Each program also starts with only its own file. PLANT: drop one section in the migration, and the conservation test goes red.
-  LIFT ~1,500 lines. — read: sovereign-contracts/src/setup_config.rs, commonwealth-rails/src/config.rs, the 13 `SetupConfig::load` crates — check: CLEAN, LINT, TESTALL, `cargo xtask env-gate`, PLANT, LAYER, BOUNDARY
-- [ ] pb-distribution — depends [pb-svrn-dials-serve, pb-daemon-mesh-exit, pb-inference-origin, pb-code-clean, pb-notes-split, pb-ingest-rehome, pb-cli-llm, pb-pods-verb, pb-meshapp-rehome, pb-provider-split, pb-config-split] — OUTCOME: distributions are declared, every program runs alone, and Phase B is done.
+- [ ] pb-daemon-adopts — depends [pb-daemon-mesh-exit, pb-code-clean, pb-svrn-dials-serve, pb-notes-split, pb-ingest-dial, pb-meshapp-rehome] — OUTCOME: the svrn daemon is a composition of the host kit. What remains of its routes are bundles on the ONE shell, and what remains of its tools are bundles on the ONE MCP dispatcher, so each §2c drive has one implementation (phase-b-2: the daemon adopts last, once it has shrunk).
+  - Its remaining `mounted.push`/`mount_names.push` pairs (daemon.rs:3500-3633 at the census) and the two parallel matches `host_routers`/`host_router_names` (daemon_services.rs:434-466) collapse onto route bundles.
+  - Its binds move onto `serve(...)`.
+  - mcp_router's dispatch is replaced by the kit's `McpService`, and its hand-rolled `is_localhost` goes.
+  - Its tool registry (tool_registry.rs, the knowledge half that remains) is built from bundles.
+  - The `sovereign tools call` builder (sovereign-cli-dev tools_cmd/registry.rs, 35 tools, whose header predicts drift) is built from the same bundles.
+  - PROOF: the final copy-count table shows one bring-up, one root lock, one engine assembly, one MCP dispatch, one tool-set build, one route mounting and one job execution, against the census baseline. LIFT(svrn) passes. PLANT: mount one route outside a bundle, and the mount-trace test goes red.
+  LIFT ~1,000 lines. — read: sovereign-daemon/src/{daemon.rs,daemon_services.rs,mcp_router.rs,tool_registry.rs}, sovereign-cli-dev/src/tools_cmd/registry.rs, the census baseline — check: CLEAN, LINT, TEST(sovereign-daemon), TEST(sovereign-cli-dev), `sovereign-cli-dev/tests/mcp_surface_e2e.rs`, LIFT(svrn), PLANT, LAYER, BOUNDARY
+- [ ] pb-distribution — depends [pb-daemon-adopts, pb-code-index, pb-ingest-rehome, pb-cli-llm, pb-pods-verb] — OUTCOME: distributions are declared, every program runs alone, and Phase B is done.
   - `[[distribution]]` rows in quality/ARCH_LAYERS.toml, extending `[thin_surfaces]`, for: the `svrn` dispatcher (sovereign-cli), the setup wizard (sovereign-cli-daemon setup), sovereign-service and the desktop shell.
   - Each distribution may exec program binaries and link the wire leaves, the host kit, sovereign-turn-client and declared library faces. Its own code is capped as wiring (the operator sets the cap). layer-gate enforces it.
   - fp-25, setup's exec phase (sovereign-cli-daemon → sovereign-inference), closes: setup execs `serve` for model validation and download. That changes the Windows sidecar build contract (stage-daemon-sidecar.sh:91, `SOVEREIGN_SIDECAR_FEATURES`), which five-programs-38 names; update it in the same commit.
+  - Delete the `sovereign-cli-base` re-export alias if it has no consumers left. If some remain, name them.
   - FINISH:
     - boundary-gate exits 0;
     - no `package = "svrn"` exception remains;
@@ -377,10 +351,9 @@ excepted edges that are not red and that Phase B retires.
 
 Each red edge has exactly one owner row:
 
-- **pb-mcp:** cli-dev → daemon (fp-11).
 - **pb-code-clean:** daemon → sovereign-code (fp-11); daemon → work-atlas; mesh → work-atlas (dev); cli-dev → enrichment-build.
 - **pb-code-index:** cli-dev → corpus-engine (fp-34); cli-shared → corpus-engine; cli-dev → cli-shared; cli → corpus-engine (D6).
-- **pb-code-server:** daemon → corpus-engine-watchers; cli-dev → sovereign-tools.
+- **pb-code-server:** cli-dev → daemon (fp-11); daemon → corpus-engine-watchers; cli-dev → sovereign-tools.
 - **pb-ingest-rehome:** cli-llm → authoring-harness and daemon → authoring-harness (fp-43); corpus-mcp → corpus-engine; corpus-mcp → enrichment-build; tools → enrichment-catalog; grants → corpus-engine; the recipes default source (the non-edge item).
 - **pb-ingest-dial:** daemon, tools, mesh and runtime-recipe → corpus-engine; tools → recipe-author.
 - **pb-meshapp-rehome:** daemon → commonwealth-media (fp-47); the seven fp-12 pairs (gliner via pb-serving-kinds).
@@ -408,9 +381,9 @@ Excepted edges and their owner rows:
 - **`project init` stamps a model name on zero vectors** (project_init/mod.rs:505-513). Owner: pb-code-index.
 - **The chat model is resolved under `--no-enrich`,** and GLiNER absence is skipped silently. Owner: pb-ingest.
 - **`knowledge_lookup` collapses an error into an empty result,** and it treats every notes kind as evidence. Owner: pb-notes-split.
-- **The forced-choice judge fails open on non-sovereign servers,** and the quality probe ignores `SOVEREIGN_DAEMON_URL`. Owner: pb-bench-dials.
-- **A `client_daemon_base` parse error becomes the default port.** Owner: pb-config-split.
-- **`mobile_host.rs` targets the deleted sovereign-server,** and so does `Launch::Server`. Owner: pb-contracts.
+- **The forced-choice judge fails open on non-sovereign servers,** and the quality probe ignores `SOVEREIGN_DAEMON_URL`. Owner: pb-cli-llm.
+- **A `client_daemon_base` parse error becomes the default port.** Owner: phase-c's pc-config-split.
+- **`mobile_host.rs` targets the deleted sovereign-server,** and so does `Launch::Server`. Owner: pb-delete-dead.
 - **Stale citations:**
   - mcp_surface.rs:4-9;
   - mcp_router.rs:39;
@@ -419,4 +392,4 @@ Excepted edges and their owner rows:
   - tool_bundle.rs:10;
   - bin/sovereign-daemon.rs:2-4, which still calls itself "the cmnwlth binary's own main".
 
-  Owner: the row that touches each file.
+  Owner: pb-delete-dead.
