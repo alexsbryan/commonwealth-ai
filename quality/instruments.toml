@@ -1066,6 +1066,19 @@ load_bearing = [
   { flag = "CO_PRECOMMIT_STAGED / CO_PRECOMMIT_SELF", why = "the only way to exercise the warn path by hand without staging a peer's file — §18.1 says watch it fire" },
 ]
 
+[[instrument]]
+id = "commit-msg"
+kind = "gate"
+claim = "invariant"
+command = "./scripts/commit-msg.sh"
+cost_secs = 0.01
+enforcement = "hard"
+fidelity = "F0"
+baseline = { kind = "none" }
+negative_control = "none"
+runs_in = ["precommit"]
+doc = "scripts/commit-msg.sh (header)"
+
 # ── CI-only steps ────────────────────────────────────────────────────
 
 [[instrument]]
