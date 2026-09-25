@@ -215,9 +215,8 @@ impl ProcessedShardsPort for LocalLedger {
         let key = commonwealth_state::processed_shards_key(corpus_id, self.self_node_id);
         let payload = serde_json::to_vec(shards);
         Box::pin(async move {
-            let payload = payload.map_err(|e| {
-                LedgerAbsent(format!("processed shards are not serializable: {e}"))
-            })?;
+            let payload = payload
+                .map_err(|e| LedgerAbsent(format!("processed shards are not serializable: {e}")))?;
             self.store
                 .set(
                     commonwealth_state::PROCESSED_SHARDS_APP_ID,
