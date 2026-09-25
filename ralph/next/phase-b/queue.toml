@@ -1,0 +1,34 @@
+# phase-b as a queue manifest. Launch line (run it from the repo root once
+# five-programs has reached HUMAN-phase-b; control files live in
+# ralph/next/phase-b/ctl/ under --queue):
+#
+#   nohup python3 scripts/ralph.py supervise --workdir . --queue phase-b \
+#     -- python3 scripts/ralph.py run --workdir . --queue phase-b --max-stall 3 \
+#     >> ralph/log-phase-b.txt 2>&1 &
+#
+# The worker prompt is ralph/PROMPT.base.md + this campaign's addendum
+# (print it: python3 scripts/ralph.py prompt --queue phase-b).
+# Do not start it while another loop holds the cargo lock: check
+# `pgrep -f 'ralph.py supervise'` first.
+label = "phase-b"
+# Rows are outcomes (PROMPT.base §2, five-programs-65): a row runs longer than a
+# per-verb row did, and a [~] row resumes in the next session.
+session_timeout = 7200
+audit_every = 5
+worker_bin = "scripts/ralph-claude-shim.sh"
+settings = "ralph/claude-settings.json"
+
+[models]
+worker = "claude-opus-5-5"
+review = "claude-opus-5-5"
+resolve = "claude-opus-5-5"
+variant = "medium"
+
+# The campaign's checks ARE the gates: each commit body carries the
+# boundary-gate count. `lift` takes a program name once pb-lift-instrument has
+# landed (`scripts/ralph-check.sh lift serve`); before it, rows name
+# scripts/cw-rails-lift.sh directly.
+[checks]
+boundary = ["bash", "-c", "toolbox run -c sovereign-vulkan bash -lc 'cd corpus-engine && cargo xtask boundary-gate; true'"]
+compile = ["bash", "-c", "toolbox run -c sovereign-vulkan bash -lc './scripts/sovereign-lint.sh --human'"]
+lift = ["bash", "-c", "toolbox run -c sovereign-vulkan bash -lc \"./scripts/program-lift.sh --sandbox $0\""]
