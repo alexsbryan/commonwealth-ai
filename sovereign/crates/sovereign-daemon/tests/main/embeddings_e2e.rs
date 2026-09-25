@@ -28,13 +28,11 @@ use serde_json::json;
 
 use commonwealth_core::ids::NodeId;
 use commonwealth_core::mesh::Mesh;
-use commonwealth_state::MeshStore;
 use sovereign_contracts::traits::InferenceProvider;
 use sovereign_daemon::server::client_router;
 use sovereign_daemon::slot_manifest::CoreSlotManifest;
 use sovereign_daemon::state::{AppState, LocalInferenceService, ServingSeed};
 use sovereign_mesh::inference_adapter::SovereignInferenceAdapter;
-use sovereign_meshapp_registry::registry::AppRegistry;
 
 use crate::common;
 use crate::common::{member, spawn_router, TestProvider};
@@ -60,17 +58,8 @@ fn build_app_state(with_embed: bool) -> AppState {
         members,
         peers: vec![],
     };
-    let mesh_store = Arc::new(MeshStore::in_memory().unwrap());
-    let app_registry = Arc::new(AppRegistry::new());
     if !with_embed {
-        return AppState::new_with_platform_and_engine_and_serving(
-            self_id,
-            mesh,
-            mesh_store,
-            app_registry,
-            None,
-            ServingSeed::default(),
-        );
+        return AppState::new_with_serving(self_id, mesh, ServingSeed::default());
     }
     // Marker-encoded vector: `embed("foo") = [3.0; 8]`. Lets the
     // test verify per-input ordering survives the fan-out.
@@ -83,12 +72,9 @@ fn build_app_state(with_embed: bool) -> AppState {
         provider,
         Arc::new(CoreSlotManifest),
     ));
-    AppState::new_with_platform_and_engine_and_serving(
+    AppState::new_with_serving(
         self_id,
         mesh,
-        mesh_store,
-        app_registry,
-        None,
         ServingSeed {
             local_inference: Some(adapter),
             ..Default::default()

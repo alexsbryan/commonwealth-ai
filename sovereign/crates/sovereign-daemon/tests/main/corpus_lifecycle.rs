@@ -33,9 +33,11 @@ use commonwealth_core::mesh::Mesh;
 use corpus_engine::{CorpusEngine, IngestProgress};
 use corpus_index::corpus::Corpus;
 use sovereign_daemon::server::internal_router;
-use sovereign_daemon::state::AppState;
+use sovereign_daemon::state::{fabric, node, serving, AppState};
 use tempfile::TempDir;
 use tower::ServiceExt;
+
+use crate::common::ledger_double::RecordingLedger;
 
 /// Deterministic 8-dim vector derived from the input text. Non-zero
 /// and reasonably well-spread across inputs so LanceDB's IVF-PQ
@@ -211,12 +213,21 @@ fn test_state(tmp: &TempDir, embed_fn: corpus_index::types::EmbedFn) -> AppState
         peers: vec![],
     };
 
-    AppState::new_with_platform_and_engine(
-        NodeId::from_u128(1),
+    state_over_double(mesh, engine)
+}
+
+/// An AppState over the store-free recording double (five-programs fp-85).
+fn state_over_double(mesh: Mesh, engine: CorpusEngine) -> AppState {
+    let self_id = NodeId::from_u128(1);
+    AppState::new_with_seeds(
+        self_id,
         mesh,
-        Arc::new(commonwealth_state::MeshStore::in_memory().unwrap()),
-        Arc::new(sovereign_meshapp_registry::registry::AppRegistry::new()),
         Some(Arc::new(engine)),
+        None,
+        fabric::FabricSeed::default(),
+        serving::ServingSeed::default(),
+        node::NodeSeed::default(),
+        Arc::new(RecordingLedger::new(self_id)).seed(),
     )
 }
 
@@ -758,13 +769,7 @@ async fn status_sampler_publishes_estimated_fraction_on_resume() {
         members: HashMap::new(),
         peers: vec![],
     };
-    let state = AppState::new_with_platform_and_engine(
-        NodeId::from_u128(1),
-        mesh,
-        Arc::new(commonwealth_state::MeshStore::in_memory().unwrap()),
-        Arc::new(sovereign_meshapp_registry::registry::AppRegistry::new()),
-        Some(Arc::new(engine)),
-    );
+    let state = state_over_double(mesh, engine);
 
     // First poll: sampler hasn't run yet, so sidecar is absent and
     // we should see None for estimated_total_sections. The handler

@@ -24,16 +24,16 @@ use std::time::Duration;
 
 use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::mesh::Mesh;
-use commonwealth_state::MeshStore;
 use corpus_engine::CorpusEngine;
 use corpus_index::corpus::Corpus;
 use corpus_index::index::{CorpusIndex, EmbeddedChunk, InsertChunk};
 use corpus_index::types::EmbedFn;
 use sovereign_daemon::server::internal_router;
-use sovereign_daemon::state::AppState;
+use sovereign_daemon::state::{fabric, node, serving, AppState};
 use sovereign_mesh::canonical_pull::{pull_canonical_from_peer, PullError};
-use sovereign_meshapp_registry::AppRegistry;
 use tempfile::tempdir;
+
+use crate::common::ledger_double::RecordingLedger;
 
 /// Build a tiny canonical with three chunks carrying explicit
 /// content_hashes. Returns the index_dir (parent of canonical) and
@@ -120,13 +120,16 @@ async fn app_state_with_engine(index_dir: &Path) -> AppState {
         CorpusEngine::new(index_dir.to_path_buf(), index_dir.to_path_buf(), zero_embed)
             .with_embedding_model("test-embed"),
     );
-    let mesh_store = Arc::new(MeshStore::in_memory().unwrap());
-    AppState::new_with_platform_and_engine(
-        NodeId::from_u128(1),
+    let self_id = NodeId::from_u128(1);
+    AppState::new_with_seeds(
+        self_id,
         mesh,
-        mesh_store,
-        Arc::new(AppRegistry::new()),
         Some(engine),
+        None,
+        fabric::FabricSeed::default(),
+        serving::ServingSeed::default(),
+        node::NodeSeed::default(),
+        Arc::new(RecordingLedger::new(self_id)).seed(),
     )
 }
 

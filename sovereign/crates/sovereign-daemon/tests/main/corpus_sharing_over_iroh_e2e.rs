@@ -30,7 +30,6 @@ use std::sync::Arc;
 use commonwealth_core::capabilities::{AvailableResources, HardwareProfile, NodeCapabilities};
 use commonwealth_core::ids::{MeshId, NodeId, NodePubkey};
 use commonwealth_core::mesh::{MemberRecord, Mesh, NodeStatus};
-use commonwealth_state::MeshStore;
 use commonwealth_transport::iroh::{EndpointBuilder, IrohAcceptor, IrohTransport, SecretKey, ALPN};
 use commonwealth_transport::{
     IpTransport, PeerContact, PeerTransport, RoutedTransport, TrafficClass,
@@ -40,10 +39,10 @@ use corpus_index::index::{CorpusIndex, EmbeddedChunk, InsertChunk};
 use corpus_index::types::EmbedFn;
 use oicp_types::knowledge::CorpusShardInfo;
 use sovereign_daemon::server::{client_router, internal_router};
-use sovereign_daemon::state::AppState;
-use sovereign_meshapp_registry::registry::AppRegistry;
+use sovereign_daemon::state::{fabric, node, serving, AppState};
 
 use crate::common;
+use crate::common::ledger_double::RecordingLedger;
 use crate::common::spawn_router;
 
 const EMBED_DIM: usize = 8;
@@ -192,13 +191,15 @@ async fn spawn_iroh_founder(
     founder_id: NodeId,
     mesh: Mesh,
 ) -> (AppState, NodePubkey, Vec<SocketAddr>, IrohAcceptor) {
-    let store = Arc::new(MeshStore::in_memory().unwrap());
-    let state = AppState::new_with_platform_and_engine(
+    let state = AppState::new_with_seeds(
         founder_id,
         mesh,
-        store,
-        Arc::new(AppRegistry::new()),
         Some(engine),
+        None,
+        fabric::FabricSeed::default(),
+        serving::ServingSeed::default(),
+        node::NodeSeed::default(),
+        Arc::new(RecordingLedger::new(founder_id)).seed(),
     );
 
     // The founder's plain internal listener (loopback) — the iroh
@@ -292,14 +293,7 @@ async fn knowledge_fanout_over_iroh_reaches_peer_with_no_ip() {
         members: members_b,
         peers: vec![],
     };
-    let store_b = Arc::new(MeshStore::in_memory().unwrap());
-    let state_b = AppState::new_with_platform_and_engine(
-        id_b,
-        mesh_b,
-        store_b,
-        Arc::new(AppRegistry::new()),
-        None,
-    );
+    let state_b = AppState::new(id_b, mesh_b);
     install_iroh_route(&state_b, TrafficClass::KnowledgeSearch, 42).await;
 
     let addr_b = spawn_router(client_router(state_b.clone())).await;

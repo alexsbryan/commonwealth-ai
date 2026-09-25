@@ -10,15 +10,15 @@ use std::sync::Arc;
 use commonwealth_core::capabilities::{AvailableResources, HardwareProfile, NodeCapabilities};
 use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::mesh::{MemberRecord, Mesh, NodeStatus};
-use commonwealth_state::MeshStore;
 use corpus_engine::CorpusEngine;
 use corpus_index::index::{CorpusIndex, InsertChunk};
 use corpus_index::types::EmbedFn;
-use sovereign_daemon::state::AppState;
+use sovereign_daemon::state::{fabric, node, serving, AppState};
 use sovereign_mesh::gossip;
-use sovereign_meshapp_registry::registry::AppRegistry;
 use std::collections::HashMap;
 use std::time::Duration;
+
+use crate::common::ledger_double::RecordingLedger;
 
 fn mock_embed_fn() -> EmbedFn {
     Arc::new(|_text: &str| Box::pin(async { Ok(vec![0.0_f32; 8]) }))
@@ -133,14 +133,15 @@ async fn gossip_round_publishes_live_hosted_corpora() {
         peers: vec![],
     };
 
-    let mesh_store = Arc::new(MeshStore::in_memory().unwrap());
-    let app_registry = Arc::new(AppRegistry::new());
-    let state = AppState::new_with_platform_and_engine(
+    let state = AppState::new_with_seeds(
         self_id,
         mesh,
-        mesh_store,
-        app_registry,
         Some(Arc::clone(&engine)),
+        None,
+        fabric::FabricSeed::default(),
+        serving::ServingSeed::default(),
+        node::NodeSeed::default(),
+        Arc::new(RecordingLedger::new(self_id)).seed(),
     );
 
     // Sanity pre-condition: before the round, `hosted_corpora` is empty

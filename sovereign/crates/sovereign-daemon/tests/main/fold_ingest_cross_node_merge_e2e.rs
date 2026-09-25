@@ -103,7 +103,6 @@ use commonwealth_rail_core::{
     actor_of, admit, body_json, sign_ring_op, Ed25519Verifier, Op, Person, RailAct, Roster,
     SignedOp, SigningKey,
 };
-use commonwealth_state::MeshStore;
 use commonwealth_work::projection::{WorkProjection, WorkUnitStatus};
 use commonwealth_work::{ActorKey, Completion, Submission, UnitRef, WorkAct, WORK_NAMESPACE};
 use corpus_engine::CorpusEngine;
@@ -117,11 +116,11 @@ use sovereign_daemon::ingest_executor::{fold_coverage_for, IngestPayload, INGEST
 use sovereign_daemon::server::internal_router;
 use sovereign_daemon::state::AppState;
 use sovereign_grants::auto_recover::{merge_from_fold_coverage, RecoveryOutcome};
-use sovereign_meshapp_registry::AppRegistry;
 use tempfile::TempDir;
 
 use crate::common;
 use crate::common::corpus_at;
+use crate::common::ledger_double::RecordingLedger;
 
 /// The two donor nodes. **The HIGH bytes must differ** — see the module docs.
 pub(crate) fn leader_node() -> NodeId {
@@ -452,14 +451,15 @@ pub(crate) fn node_state_with_seed(
         members,
         peers: vec![],
     };
-    AppState::new_with_platform_and_engine_and_gauge_and_fabric(
+    AppState::new_with_seeds(
         self_id,
         mesh,
-        Arc::new(MeshStore::in_memory().expect("in-memory mesh store")),
-        Arc::new(AppRegistry::new()),
         Some(engine_at(index_dir, self_id)),
         None,
         seed,
+        sovereign_daemon::state::serving::ServingSeed::default(),
+        sovereign_daemon::state::NodeSeed::default(),
+        Arc::new(RecordingLedger::new(self_id)).seed(),
     )
 }
 

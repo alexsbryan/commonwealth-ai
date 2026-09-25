@@ -28,7 +28,6 @@
 //!    drift.
 use std::sync::Arc;
 
-use commonwealth_state::MeshStore;
 use corpus_engine::CorpusEngine;
 use corpus_index::index::{CorpusIndex, InsertChunk};
 use corpus_index::types::EmbedFn;
@@ -125,7 +124,6 @@ async fn build_reading_daemon() -> (Arc<EmbeddedDaemon>, tempfile::TempDir, u64)
     // need to fire up `create_mesh` because that path only matters
     // for routes that consult AppState (which reading_http does
     // not).
-    let _ = MeshStore::in_memory(); // silence the unused-import lint on macOS minimal-feature builds.
     (daemon, tmp, chunk_id)
 }
 
