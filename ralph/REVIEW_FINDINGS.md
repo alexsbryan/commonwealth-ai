@@ -2912,3 +2912,118 @@ The other 28 nouns each have one definition.
 - **Instruments could not judge** · dry-report has no chunk index and
   converge-noun reads a stale graph, the third audit running. The rebuild is
   still `svrn project refresh --name commonwealth-ai --local`.
+
+## REVIEW-audit-fp-auto-8 (2026-09-25, range 33a28606a..b34d98f68, starting from the previous audit's hash)
+
+The range holds 46 commits. Twelve units touch product code: fp-82, fp-84 to
+fp-86 and fp-97 (AppState's readers and the daemon tests move onto the port
+fields and the `StoreSeed` seam), fp-94 (grants leaves `MeshStore` for
+`ReplicatedKv` plus a fact port), fp-95, fp-98 and fp-99 (the `sovereign-cli-base`
+leaf), fp-100 and fp-101 (the `corpus-engine-recipes` data crate and the recipe
+port), and fp-106. All checks ran in the sovereign-vulkan toolbox.
+
+TESTALL at b34d98f68: exit=100, 13,382 passed and 2 failed. Both failures were
+drift from this range, the same two censuses auto-7 repaired, and both are
+repaired in 0a73a4018. `f26_egress_boundary_census` reported a STALE ROW for
+`sovereign-cli-shared/src/rail.rs` and an UNREGISTERED
+`sovereign-cli-base/src/rail.rs`. fp-98 moved that file with git mv, and the
+destination and class did not change. `conformance_tags_are_fresh` found
+`quality/conformance/sovereign-daemon.toml` stale at one line tag (709 → 705).
+After the repair, F26 is 1/0 and conformance_tags 4/0.
+
+PREPUSH was range-fed from 33a28606a. The first run exited 1 with rustfmt
+[hard] red on `sovereign-mesh/tests/main.rs`, because fp-84 (a688f7627)
+ordered `mod worker_e2e` before `mod work_atlas_store`; 8fcee389f fixes it.
+The re-run exited 1 with one blocking lane: boundary-gate at 54 violations,
+the declared burn-down and unchanged since auto-7. size-gate (53 keys grew)
+and deletion-manifest are advisory, concept-gate could not judge, and every
+other lane passed.
+
+### (1) Per-unit net-line ledger, product code (same rules as auto-6)
+
+| unit | src + | src − | src net | tests + | tests − | tests net |
+|---|---|---|---|---|---|---|
+| fp-82 | 86 | 87 | −1 | 0 | 0 | 0 |
+| fp-84 | 0 | 0 | 0 | 262 | 297 | −35 |
+| fp-85 | 0 | 0 | 0 | 59 | 83 | −24 |
+| fp-86 | 0 | 0 | 0 | 130 | 170 | −40 |
+| fp-94 | 102 | 37 | +65 | 10 | 13 | −3 |
+| fp-95 | 53 | 105 | −52 | 63 | 2 | +61 |
+| fp-97 | 95 | 28 | +67 | 127 | 0 | +127 |
+| fp-98 | 24 | 6 | +18 | 0 | 0 | 0 |
+| fp-99 | 135 | 137 | −2 | 0 | 0 | 0 |
+| fp-100 | 178 | 0 | +178 | 0 | 0 | 0 |
+| fp-101 | 200 | 496 | −296 | 7 | 5 | +2 |
+| fp-106 | 23 | 15 | +8 | 0 | 0 | 0 |
+| TOTAL | 896 | 911 | −15 | 658 | 570 | +88 |
+
+This is the first range in the queue with negative net product src. fp-101
+accounts for most of the deletion: its port retires `recipe_builtin.rs`
+(422 lines) and the `RecipeId` id-dispatch. fp-100's +178 is the data crate
+that replaces it. fp-97's +127 test lines are `store_seed_double.rs`, which is
+the seam's test double. fp-98 counts only +18 because its files moved by
+git mv.
+
+### (2) Clone check: dry-report could not judge, so I read the code
+
+`code dry-report --corpus-id commonwealth-ai --scope <dir>` fails with "no
+chunk index at ~/.svrnmesh/indexes/commonwealth-ai/chunks.lance". This is
+the fourth audit running with that result. I read the range's new code by
+hand and found two clones with an added side:
+
+- `corpus-engine/src/recipe_source/bundled.rs`: `bundled_asset` repeated
+  `lookup`'s find/map over the `&[u8]` table. Fixed below.
+- `sovereign-daemon/src/venue_host.rs:73` `record_shard_transferred` (fp-94)
+  copies `:38` `record_inference_received` (runtime check, spawn, record,
+  trace the loss). The two differ only in the event kind and in the trace
+  field names (`corpus` vs `model`). Recorded, not changed.
+
+### (3) Noun check
+
+The range adds five nouns: `Bundled`, `StoreSeed`, `AssetSource`, `RecipeSource`
+and `ShardTransferLedger`. It removes two: `RecipeId` and `MeshPeer`.
+`code converge noun <Name> --corpus-id commonwealth-ai` reports 0 definitions
+for all five, which means its graph predates them, so it could not judge.
+`git grep` finds exactly one definition for each noun. `ShardTransferLedger`
+(sovereign-contracts/src/venue_host.rs:29) sits beside `LedgerEmitter` (:20)
+as a separate fact port. That split follows decision five-programs-53 (c),
+and it is one port per fact, not two implementations of one.
+
+### Fixed
+
+- **ARCH 5 (gates the range turned red)** · 0a73a4018, F26 registry row and
+  one conformance line tag, as described above. 8fcee389f, the rustfmt order
+  in sovereign-mesh's test root.
+- **ARCH 8 (one lookup, two copies)** · 4c4d1230b,
+  `corpus-engine/src/recipe_source/bundled.rs:14`. `lookup` is now generic
+  over the value type, and `bundled_asset` calls it. LINT exit=0.
+
+### Recorded, not changed
+
+- **ARCH 8 (one write path, two bodies)** ·
+  `sovereign-daemon/src/venue_host.rs:38` and `:73`. The two
+  `DaemonLedger` fact writes repeat the same runtime-spawn-and-trace body. I
+  tried a shared `record_fact(kind, report)` and reverted it: it came out
+  +11 lines, because each caller still needs its own two `warn!` arms to keep
+  its trace fields (`model` / `corpus`). The only way to shrink it is to
+  rename those trace fields, and that is not behaviour-preserving
+  (principle 1). The factor is worth it at a third fact port.
+- **ARCH 5 (a path no test drives)** · the grants → `ShardTransferLedger` →
+  `ContributionLedgerPort` write for `ShardTransferred`
+  (`sovereign-grants/src/shard_manager.rs:96`,
+  `sovereign-daemon/src/venue_host.rs:109`). No test implements the port or
+  checks that the event reaches the ledger. fp-94's grants test diff names no
+  emitter, so the gap is older than this range. fp-94 made it cheap to
+  close, because a test double is now a single-method impl.
+- **Hard-rule slip, this audit** · two of this audit's edits were made through
+  a shell heredoc (a trial `venue_host.rs` refactor that I reverted, and
+  the `bundled.rs` edit) rather than the Edit tool (PROMPT §7). Both were
+  checked by LINT, and the reverted one never landed.
+- **size-gate (advisory)** · 53 keys grew, up from 52 at auto-7.
+  `corpus-engine-atlas-reader` (7755) is still unbaselined. Nothing was
+  re-pinned.
+- **deletion-manifest (advisory)** · `p0-root-junk` is 133537 against 113934,
+  unchanged since auto-4.
+- **Instruments could not judge** · dry-report (no chunk index) and
+  converge-noun (stale graph), the fourth audit running. The rebuild is still
+  `svrn project refresh --name commonwealth-ai --local`.
