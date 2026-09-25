@@ -829,10 +829,10 @@ mod tests {
         let queued = store.outbox_take(100).unwrap();
         let apps: Vec<&str> = queued.iter().map(|q| q.app_id.as_str()).collect();
         for app in LOCAL_ONLY_NAMESPACES {
-            assert!(apps.contains(app), "local-only {app} was not queued: {apps:?}");
+            assert!(apps.contains(app), "local-only {app} not queued");
         }
         for app in RAIL_CARRIED_APP_IDS {
-            assert!(!apps.contains(app), "rail-carried {app} was queued: {apps:?}");
+            assert!(!apps.contains(app), "rail-carried {app} queued");
         }
         assert_eq!(queued.len(), LOCAL_ONLY_NAMESPACES.len(), "{apps:?}");
         store

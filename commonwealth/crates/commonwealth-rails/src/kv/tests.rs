@@ -217,7 +217,10 @@ async fn a_local_only_write_is_journaled_and_never_offered() {
         .rail
         .journal(PRIVATE)
         .unwrap()
-        .ops_missing_from_within(&commonwealth_rail::Digest::new(), commonwealth_rail::NO_BUDGET)
+        .ops_missing_from_within(
+            &commonwealth_rail::Digest::new(),
+            commonwealth_rail::NO_BUDGET,
+        )
         .unwrap();
     assert!(for_peer.is_empty() && !more, "a peer is answered nothing");
 }
