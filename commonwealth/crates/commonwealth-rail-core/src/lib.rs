@@ -77,6 +77,7 @@
 //! than a path.
 
 mod admit;
+mod attest;
 mod introduce;
 mod payload;
 mod sig;
@@ -89,6 +90,7 @@ pub use ed25519_dalek::SigningKey;
 use serde::{Deserialize, Serialize};
 
 pub use admit::{admit, body_json, Admission, AdmittedOp, RailGap};
+pub use attest::{AttestRefusal, GuestAttestation};
 pub use introduce::{trace, trace_op, Introduce, Vouch, VouchStatus};
 pub use payload::{Payload, PayloadError, MAX_PAYLOAD_BYTES};
 pub use sig::{actor_of, ring_op_message, sign_ring_op};
