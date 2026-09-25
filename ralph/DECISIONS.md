@@ -620,6 +620,11 @@ merged; that merge is what minted this arrangement, and `ledger-1` records it.
 - Chose: the seat's four recommendations, plus a standing direction. (1) Local-only rows become durable in cw-rails before fp-87, through REVIEW-mint-fp-local-only-durable (cap 3): journaled, never offered, rehydrated from this node's own journals, with the two `:` ids renamed inside fp-87's migration. (2) Finish condition 2 is restated: `EmbeddedDaemon` is constructed nowhere outside the sovereign-daemon crate. (3) five-programs-39's restatement of condition 1 is confirmed, and the handoff row runs the full suite and `lint --full` regardless of the loop counter. (4) The fp-84 dev edge (sovereign-mesh → sovereign-work-atlas) goes to Phase B with the work-atlas question. Standing direction: "a pure outcome of five programs with the minimal amount of lift". That means gate 0 with no standing boundary `[[exception]]` (fp-9's and fp-10's retire in Phase B, none added), reached by deleting or moving before building, reusing before minting, and the smallest host that serves each verb. Every mint states its lift before it mints.
 - Because: operator's word. On (2), the literal check ("grep returns only the daemon's main") cannot be met: 373 of 377 non-comment hits are the daemon crate's own type and its uses, so the only zero is a rename, which would be a fake zero (ARCH 5). Measured 2026-09-25, construction outside the daemon crate is one site, the setup wizard (sovereign-cli-daemon/src/setup_cmd/terminal.rs:316). The desktop is already de-embedded: its remaining mentions are a stale log line (bootstrap.rs:195) and the census guard's needle string.
 
+**five-programs-55 · 2026-09-25 · fp-88 (mints fp-109, amends fp-83) · director** — this commit
+- Needed: fp-88 made itself conditional on one premise: peer ops that the daemon's ring sync admits must reach cw-rails' store. The premise fails. cw-rails' ingest door (commonwealth-rails/src/rail.rs:524) calls `journal.ingest_all` and never projects. `KvHost::project_namespace` (kv.rs:196) has one caller, the start-time `project_all_on_disk` (kv.rs:118, via `run_forever` kv.rs:487). Today the only fold of peer ops is the daemon's ring round (sovereign-mesh ring_sync.rs:408), and it folds into the daemon's own store. Flipping the reads without fixing this would leave every rail-carried namespace stale until cw-rails restarts.
+- Chose: option (A). cw-rails owns the re-projection. The ingest route marks the namespace dirty when `ingested > 0`, and `run_forever` folds each dirty namespace once per tick, before `pump_once`. This is minted as fp-109, with no dependencies, and fp-88 now depends on it. The daemon's ring-round projection stays through fp-88, still folding into Fabric's private store (dead work), and fp-83 deletes it along with the KV half of the pump.
+- Because: ARCH 12. The process that owns the store owns its fold. (B) would leave the decision about when the store is fresh with a daemon that no longer owns the store, and it adds a door and a port method. (C) re-folds every journal on every tick even when idle. (A) is the smallest change and is batched like the current round: one fold per namespace per 2 s PUMP_INTERVAL, never one per chunk.
+
 ## Flags for the operator
 
 - A26: REVIEW-DEMO-rr-1-run will very likely FAIL `ra-room-plug-in-live` again on this host. The bar's window is 60 s, and the CPU 2B took about 1–5 min per answer in this run (room-answer-0..4.json mtimes 19:33→19:49). Passing it takes a faster node or model for the room, or a different bar. Both are design changes for the operator, not tuning.
@@ -9367,5 +9372,19 @@ Options as weighed in front of the operator:
 Also corrected here: Phase B inherits eight rows, not six. The app-registry mint (9f5146824) sent fp-47 to Phase B, and REVIEW-mint-fp-mesh-dial follows it through its dependencies. The handoff row and `HUMAN-phase-b` now list both.
 
 Measurements behind the progress report given with this decision: boundary gate 103 (e8fee31a6, 2026-09-21), then 79 (09ff299b8, when this queue was minted), then 54 now. Per program: [bench] 0, [ingest] 1 (build.rs, which fp-105 closes), [cmnwlth] 3, [code] 5, [svrn] 45. The last full workspace run was at fp-68 (13,341/0, lint --full clean). The rows since then were checked by scoped lint and single-crate tests only, which is why the handoff now forces a full run.
+
+</details>
+
+## five-programs-55 · 2026-09-25: cw-rails re-projects on admit (fp-109) before fp-88 flips the reads
+
+<details><summary>reasoning, evidence, package</summary>
+
+Reproduced at a9acb7df2. `grep -rn project_namespace commonwealth/crates/commonwealth-rails/src` finds only the definition (kv.rs:196) and the call from `project_all_on_disk` (kv.rs:118). `ingest_answer` (rail.rs:524-533) returns `{namespace, ingested}` and nothing else. `ingest_all` is called from no other cw-rails site. The ingest route gets `State<Arc<RailsDaemon>>` (rail.rs:620-642), and `RailsDaemon.kv: Arc<KvHost>` (lib.rs:211), so the route can reach the dirty set without a new handle.
+
+On the package's second question: fp-88 does not delete ring_sync.rs:408. That would add a second dimension to a flip row. fp-83 already deletes the daemon pump's KV half, and `rail_kv_pump::project_namespace` is part of it. fp-83's text now names the ring-round step and moves `ring_sync_projection_tests.rs` beside fp-109's test with its assertions verbatim.
+
+Latency changes from "the next ring round" to "the ring round's ingest plus at most one PUMP_INTERVAL (2 s)". The two are the same order of magnitude, and the change is not observable at a reader.
+
+This is falsified if some peer-op path writes cw-rails' journals without going through `/v1/rail/ingest`. cw-rails' own gossip or a future append door would bypass the dirty mark. fp-109's premise greps for `ingest_all` callers. A second writer would need to mark the namespace dirty too, or the design would move to (C).
 
 </details>
