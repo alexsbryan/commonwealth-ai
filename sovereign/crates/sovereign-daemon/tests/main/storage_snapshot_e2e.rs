@@ -118,7 +118,7 @@ async fn first_tick_emits_only_mesh_shared_corpora_to_ledger() {
 
     // Run-time wait: the snapshot loop's first tick fires
     // immediately (per `run_storage_snapshot_loop`'s contract); the
-    // tokio::spawn'd record + serialize + MeshStore::set round-trip
+    // tokio::spawn'd record + serialize + store-port set round-trip
     // completes in single-digit ms on an in-memory store. 200 ms
     // is comfortable headroom for a loaded CI box.
     tokio::time::sleep(Duration::from_millis(200)).await;

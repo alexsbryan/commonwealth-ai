@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! A RECORDING double of the store ports AppState holds (five-programs fp-80,
 //! for fp-83..fp-86): every call is appended to [`RecordingLedger::calls`] and
-//! answered empty. It implements no key scheme — the writers in
-//! commonwealth-state are the one decider of those (ARCH 8).
+//! answered empty, save `list_models_with_origins`, which answers the rows a
+//! test seeds with [`RecordingLedger::with_models`] (fp-84). It implements no
+//! key scheme — the writers in commonwealth-state are the one decider of
+//! those (ARCH 8).
 
 use std::collections::{BTreeSet, HashMap};
 use std::sync::{Arc, Mutex};
@@ -15,6 +17,7 @@ use commonwealth_core::ids::{ModelId, NodeId};
 use commonwealth_core::model::ModelInfo;
 use commonwealth_core::oicp::EmbedModelInfo;
 use sovereign_contracts::peer::{ReplicatedKv, ReplicatedKvEntry, ReplicatedKvError};
+use sovereign_daemon::state::store::StoreSeed;
 use sovereign_mesh::ledger_port::{
     ActivityLedgerPort, ContributionLedgerPort, InferencePlan, InferenceStatePort, LedgerFut,
     PeerPreference, PeerPreferencesPort, ProcessedShardsPort,
@@ -31,6 +34,7 @@ pub struct LedgerCall {
 pub struct RecordingLedger {
     self_node_id: NodeId,
     calls: Arc<Mutex<Vec<LedgerCall>>>,
+    models: Vec<(NodeId, ModelInfo)>,
 }
 
 impl RecordingLedger {
@@ -38,6 +42,26 @@ impl RecordingLedger {
         Self {
             self_node_id,
             calls: Arc::default(),
+            models: Vec::new(),
+        }
+    }
+
+    /// The `(origin, model)` rows `list_models_with_origins` answers — handed
+    /// back verbatim, as a peer's gossiped rows would arrive.
+    pub fn with_models(mut self, rows: Vec<(NodeId, ModelInfo)>) -> Self {
+        self.models = rows;
+        self
+    }
+
+    /// A [`StoreSeed`] whose every port is this double (five-programs fp-84).
+    pub fn seed(self: &Arc<Self>) -> StoreSeed {
+        StoreSeed {
+            kv: self.clone(),
+            contributions: self.clone(),
+            activity: self.clone(),
+            peer_preferences: self.clone(),
+            inference: self.clone(),
+            processed_shards: self.clone(),
         }
     }
 
@@ -199,7 +223,7 @@ impl InferenceStatePort for RecordingLedger {
         self.answer(
             "inference.list_models_with_origins",
             String::new(),
-            Vec::new(),
+            self.models.clone(),
         )
     }
 

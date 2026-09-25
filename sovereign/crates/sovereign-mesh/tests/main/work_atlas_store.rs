@@ -15,8 +15,9 @@
 //! same invariant end to end); repeating it here would cost two tokio runtimes
 //! and a rail per test to re-assert somebody else's mechanism.
 //!
-//! This integration test lives in the daemon's test host: it is the program
-//! that already links both `commonwealth-state` and `sovereign-work-atlas`.
+//! This integration test lives beside `MeshReplicatedKv`, the port it drives,
+//! in `sovereign-mesh`'s test host (moved from the daemon's at five-programs
+//! fp-84; `sovereign-work-atlas` is a dev-dependency here only).
 //! Store-only tests stay beside MeshStore; port-level counterparts over
 //! `SoloReplicatedKv` stay in `sovereign-work-atlas/tests/port_fake.rs`.
 
@@ -25,7 +26,8 @@ use std::sync::Arc;
 
 use commonwealth_state::{is_gossip_excluded, MeshStore};
 use kernel_types::NodeId;
-use sovereign_contracts::peer::{ReplicatedKv, ReplicatedKvEntry, ReplicatedKvError};
+use sovereign_contracts::peer::ReplicatedKv;
+use sovereign_mesh::peer_adapter::MeshReplicatedKv;
 use uuid::Uuid;
 
 // Import fix for the new home: the clock lives in this crate's substrate
@@ -44,63 +46,12 @@ use sovereign_work_atlas::WorkAtlasStore;
 /// the projection it applies are the mesh's own, and the privacy invariant is
 /// only worth asserting against them.
 ///
-/// This is the same delegation `sovereign_mesh::peer_adapter::MeshReplicatedKv`
-/// performs. The fixture binds the store directly so no daemon or mesh
-/// transport needs to run for these outbox/projection assertions.
-struct MeshPeer(Arc<MeshStore>);
-
-impl MeshPeer {
-    fn new(store: &Arc<MeshStore>) -> Arc<dyn ReplicatedKv> {
-        Arc::new(Self(Arc::clone(store)))
-    }
-}
-
-fn port_err(e: commonwealth_state::error::Error) -> ReplicatedKvError {
-    ReplicatedKvError::Backend(e.to_string())
-}
-
-fn port_entry(e: commonwealth_state::StoreEntry) -> ReplicatedKvEntry {
-    ReplicatedKvEntry {
-        app_id: e.app_id,
-        key: e.key,
-        value: e.value,
-        timestamp: e.timestamp,
-        origin: e.origin,
-    }
-}
-
-impl ReplicatedKv for MeshPeer {
-    fn get(&self, app_id: &str, key: &str) -> Result<Option<ReplicatedKvEntry>, ReplicatedKvError> {
-        self.0
-            .get(app_id, key)
-            .map(|o| o.map(port_entry))
-            .map_err(port_err)
-    }
-
-    fn set(
-        &self,
-        app_id: &str,
-        key: &str,
-        value: bytes::Bytes,
-        origin: NodeId,
-    ) -> Result<bool, ReplicatedKvError> {
-        self.0.set(app_id, key, value, origin).map_err(port_err)
-    }
-
-    fn delete(&self, app_id: &str, key: &str) -> Result<bool, ReplicatedKvError> {
-        self.0.delete(app_id, key).map_err(port_err)
-    }
-
-    fn scan(
-        &self,
-        app_id: &str,
-        prefix: &str,
-    ) -> Result<Vec<ReplicatedKvEntry>, ReplicatedKvError> {
-        self.0
-            .scan(app_id, prefix)
-            .map(|v| v.into_iter().map(port_entry).collect())
-            .map_err(port_err)
-    }
+/// The port is this crate's own `MeshReplicatedKv` (five-programs fp-84
+/// replaced a test-local twin of it, ARCH 8), bound to the store directly so
+/// no daemon or mesh transport needs to run for these outbox/projection
+/// assertions.
+fn mesh_peer(store: &Arc<MeshStore>) -> Arc<dyn ReplicatedKv> {
+    Arc::new(MeshReplicatedKv::over(Arc::clone(store)))
 }
 
 /// One round of the real path: everything `src` queued for the rail, through
@@ -200,8 +151,8 @@ fn public_claim_propagates_via_the_ring() {
     let node_b = NodeId::from_u128(0xB);
     let store_a = Arc::new(MeshStore::in_memory().unwrap());
     let store_b = Arc::new(MeshStore::in_memory().unwrap());
-    let atlas_a = WorkAtlasStore::new(MeshPeer::new(&store_a), node_a);
-    let atlas_b = WorkAtlasStore::new(MeshPeer::new(&store_b), node_b);
+    let atlas_a = WorkAtlasStore::new(mesh_peer(&store_a), node_a);
+    let atlas_b = WorkAtlasStore::new(mesh_peer(&store_b), node_b);
 
     let session = sample_session(node_a, Privacy::Public, "conn:abc", &"r".repeat(64));
     atlas_a.put_session(&session).unwrap();
@@ -236,8 +187,8 @@ fn peer_claim_gets_received_at_on_first_observation() {
     let node_b = NodeId::from_u128(0xB);
     let store_a = Arc::new(MeshStore::in_memory().unwrap());
     let store_b = Arc::new(MeshStore::in_memory().unwrap());
-    let atlas_a = WorkAtlasStore::new(MeshPeer::new(&store_a), node_a);
-    let atlas_b = WorkAtlasStore::new(MeshPeer::new(&store_b), node_b);
+    let atlas_a = WorkAtlasStore::new(mesh_peer(&store_a), node_a);
+    let atlas_b = WorkAtlasStore::new(mesh_peer(&store_b), node_b);
 
     let session = sample_session(node_a, Privacy::Public, "conn:rec", &"r".repeat(64));
     atlas_a.put_session(&session).unwrap();
@@ -318,8 +269,8 @@ fn private_claim_never_propagates() {
     let node_b = NodeId::from_u128(0xB);
     let store_a = Arc::new(MeshStore::in_memory().unwrap());
     let store_b = Arc::new(MeshStore::in_memory().unwrap());
-    let atlas_a = WorkAtlasStore::new(MeshPeer::new(&store_a), node_a);
-    let atlas_b = WorkAtlasStore::new(MeshPeer::new(&store_b), node_b);
+    let atlas_a = WorkAtlasStore::new(mesh_peer(&store_a), node_a);
+    let atlas_b = WorkAtlasStore::new(mesh_peer(&store_b), node_b);
 
     let session = sample_session(node_a, Privacy::Private, "conn:secret", &"r".repeat(64));
     atlas_a.put_session(&session).unwrap();
@@ -350,8 +301,8 @@ fn public_observation_propagates_via_the_ring() {
     let node_b = NodeId::from_u128(0xB);
     let store_a = Arc::new(MeshStore::in_memory().unwrap());
     let store_b = Arc::new(MeshStore::in_memory().unwrap());
-    let atlas_a = WorkAtlasStore::new(MeshPeer::new(&store_a), node_a);
-    let atlas_b = WorkAtlasStore::new(MeshPeer::new(&store_b), node_b);
+    let atlas_a = WorkAtlasStore::new(mesh_peer(&store_a), node_a);
+    let atlas_b = WorkAtlasStore::new(mesh_peer(&store_b), node_b);
 
     let session = sample_session(node_a, Privacy::Public, "edits:a", &"r".repeat(64));
     atlas_a.put_session(&session).unwrap();
@@ -383,8 +334,8 @@ fn private_observation_never_propagates() {
     let node_b = NodeId::from_u128(0xB);
     let store_a = Arc::new(MeshStore::in_memory().unwrap());
     let store_b = Arc::new(MeshStore::in_memory().unwrap());
-    let atlas_a = WorkAtlasStore::new(MeshPeer::new(&store_a), node_a);
-    let atlas_b = WorkAtlasStore::new(MeshPeer::new(&store_b), node_b);
+    let atlas_a = WorkAtlasStore::new(mesh_peer(&store_a), node_a);
+    let atlas_b = WorkAtlasStore::new(mesh_peer(&store_b), node_b);
 
     let session = sample_session(node_a, Privacy::Private, "edits:secret", &"r".repeat(64));
     atlas_a.put_session(&session).unwrap();
@@ -429,8 +380,8 @@ fn release_propagates_as_a_tombstone() {
     let node_b = NodeId::from_u128(0xB);
     let store_a = Arc::new(MeshStore::in_memory().unwrap());
     let store_b = Arc::new(MeshStore::in_memory().unwrap());
-    let atlas_a = WorkAtlasStore::new(MeshPeer::new(&store_a), node_a);
-    let atlas_b = WorkAtlasStore::new(MeshPeer::new(&store_b), node_b);
+    let atlas_a = WorkAtlasStore::new(mesh_peer(&store_a), node_a);
+    let atlas_b = WorkAtlasStore::new(mesh_peer(&store_b), node_b);
 
     let session = sample_session(node_a, Privacy::Public, "conn:abc", &"r".repeat(64));
     atlas_a.put_session(&session).unwrap();
@@ -482,8 +433,8 @@ fn same_scope_on_two_nodes_is_distinguishable_by_node_is_self() {
     let node_b = NodeId::from_u128(0xB);
     let store_a = Arc::new(MeshStore::in_memory().unwrap());
     let store_b = Arc::new(MeshStore::in_memory().unwrap());
-    let atlas_a = WorkAtlasStore::new(MeshPeer::new(&store_a), node_a);
-    let atlas_b = WorkAtlasStore::new(MeshPeer::new(&store_b), node_b);
+    let atlas_a = WorkAtlasStore::new(mesh_peer(&store_a), node_a);
+    let atlas_b = WorkAtlasStore::new(mesh_peer(&store_b), node_b);
 
     // Peer machine claims ITS daemon's primary slot.
     let sess_a = sample_session(node_a, Privacy::Public, "conn:peer", &"r".repeat(64));
@@ -543,10 +494,10 @@ fn same_scope_on_two_nodes_is_distinguishable_by_node_is_self() {
 /// Relocated 2026-09-22 from `sovereign-work-atlas`'s `src/store.rs` test
 /// module together with the rest of this file: it is inherently about the
 /// atlas's `Privacy` vocabulary and the mesh's exclusion list TOGETHER, and
-/// this crate owns the list. The dev-dependency direction this implies
-/// (state -> work-atlas, test-only) is the mirror of the port edge the atlas
+/// the mesh owns the list. The dev-dependency direction this implies
+/// (mesh -> work-atlas, test-only) is the mirror of the port edge the atlas
 /// already has (`sovereign_contracts::peer::ReplicatedKv`); the atlas itself
-/// does not depend back on this crate.
+/// does not depend back on the mesh.
 #[test]
 fn private_app_id_matches_gossip_exclusion_list() {
     use commonwealth_state::peer_preferences::is_gossip_excluded;

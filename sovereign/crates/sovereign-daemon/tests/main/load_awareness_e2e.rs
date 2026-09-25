@@ -40,7 +40,6 @@ use std::sync::Arc;
 
 use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::mesh::Mesh;
-use commonwealth_state::MeshStore;
 use sovereign_contracts::in_flight::LocalInFlightGauge;
 use sovereign_contracts::traits::InferenceProvider;
 use sovereign_daemon::server::client_router;
@@ -48,9 +47,9 @@ use sovereign_daemon::slot_manifest::CoreSlotManifest;
 use sovereign_daemon::state::{AppState, LocalInferenceService, ServingSeed};
 use sovereign_mesh::capabilities::build_local_capabilities;
 use sovereign_mesh::inference_adapter::SovereignInferenceAdapter;
-use sovereign_meshapp_registry::registry::AppRegistry;
 
 use crate::common;
+use crate::common::ledger_double::RecordingLedger;
 use crate::common::{member_with_last_seen, spawn_router, TestProvider};
 
 fn empty_mesh() -> Mesh {
@@ -70,13 +69,15 @@ fn empty_mesh() -> Mesh {
 /// An `AppState` holding `gauge` — the production shape, where the node
 /// creates the gauge before the provider and gives the same handle to both.
 fn app_state_with_gauge(id: NodeId, mesh: Mesh, gauge: LocalInFlightGauge) -> AppState {
-    AppState::new_with_platform_and_engine_and_gauge(
+    AppState::new_with_seeds(
         id,
         mesh,
-        Arc::new(MeshStore::in_memory().unwrap()),
-        Arc::new(AppRegistry::new()),
         None,
         Some(gauge),
+        sovereign_daemon::state::FabricSeed::default(),
+        ServingSeed::default(),
+        sovereign_daemon::state::NodeSeed::default(),
+        Arc::new(RecordingLedger::new(id)).seed(),
     )
 }
 
@@ -284,17 +285,13 @@ async fn desktop_topology_serving_a_peer_request_does_not_publish_in_flight() {
         Arc::new(CoreSlotManifest),
     ));
 
-    let mesh_store = Arc::new(MeshStore::in_memory().unwrap());
-    let app_registry = Arc::new(AppRegistry::new());
     // The gauge and the inference provider are both construction arguments now,
     // so there is no `Arc::get_mut` installer whose ordering could silently
     // drop the provider (DC §4.2 "Construction is staged, and parts are
     // total").
-    let state = AppState::new_with_platform_and_engine_and_gauge_and_fabric_and_serving(
+    let state = AppState::new_with_seeds(
         self_id,
         mesh,
-        mesh_store,
-        app_registry,
         None,
         Some(gauge),
         sovereign_daemon::state::FabricSeed::default(),
@@ -302,6 +299,8 @@ async fn desktop_topology_serving_a_peer_request_does_not_publish_in_flight() {
             local_inference: Some(adapter),
             ..Default::default()
         },
+        sovereign_daemon::state::NodeSeed::default(),
+        Arc::new(RecordingLedger::new(self_id)).seed(),
     );
 
     let addr = spawn_router(client_router(state)).await;

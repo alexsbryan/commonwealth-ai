@@ -42,6 +42,8 @@ mod replication_sender_census;
 mod scheduler_replay_agreement;
 #[path = "main/worker_e2e.rs"]
 mod worker_e2e;
+#[path = "main/work_atlas_store.rs"]
+mod work_atlas_store;
 
 // ─── The wiring of this file is itself a gate ────────────────────────────────
 //

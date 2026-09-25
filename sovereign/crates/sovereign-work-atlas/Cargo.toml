@@ -49,7 +49,7 @@ tempfile = "3"
 # `tests/cross_node.rs` and the gossip-exclusion mirror pin in
 # `src/store.rs::private_app_id_matches_gossip_exclusion_list` — now live
 # beside the store they exercise:
-# `sovereign/crates/sovereign-daemon/tests/main/work_atlas_store.rs`.
+# `sovereign/crates/sovereign-mesh/tests/main/work_atlas_store.rs`.
 # This crate's own tests run over the port via
 # `sovereign_contracts::peer::SoloReplicatedKv`
 # (`tests/port_fake.rs`), so the mesh substrate is not needed to test a

@@ -12879,6 +12879,7 @@ dependencies = [
  "sovereign-scheduler",
  "sovereign-serving-host",
  "sovereign-time",
+ "sovereign-work-atlas",
  "tempfile",
  "thiserror 2.0.18",
  "tokio",

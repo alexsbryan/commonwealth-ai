@@ -31,7 +31,6 @@ use serde_json::{json, Value};
 
 use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::mesh::Mesh;
-use commonwealth_state::MeshStore;
 use sovereign_contracts::error::Result as SovResult;
 use sovereign_contracts::traits::InferenceProvider;
 use sovereign_contracts::types::{
@@ -41,7 +40,6 @@ use sovereign_daemon::server::client_router;
 use sovereign_daemon::slot_manifest::CoreSlotManifest;
 use sovereign_daemon::state::{AppState, LocalInferenceService, ServingSeed};
 use sovereign_mesh::inference_adapter::SovereignInferenceAdapter;
-use sovereign_meshapp_registry::registry::AppRegistry;
 
 use crate::common;
 use crate::common::{id_to_hex, member_with_last_seen, spawn_router, TestProvider};
@@ -122,9 +120,6 @@ fn build_state(peer_name: &str) -> (AppState, NodeId) {
         peers: vec![],
     };
 
-    let mesh_store = Arc::new(MeshStore::in_memory().unwrap());
-    let app_registry = Arc::new(AppRegistry::new());
-
     let fast: Arc<dyn InferenceProvider> = Arc::new(
         TestProvider::new()
             .with_model_id("stub-primary")
@@ -138,12 +133,9 @@ fn build_state(peer_name: &str) -> (AppState, NodeId) {
         slow,
         Arc::new(CoreSlotManifest),
     ));
-    let app_state = AppState::new_with_platform_and_engine_and_serving(
+    let app_state = AppState::new_with_serving(
         self_id,
         mesh,
-        mesh_store,
-        app_registry,
-        None,
         ServingSeed {
             local_inference: Some(adapter),
             ..Default::default()

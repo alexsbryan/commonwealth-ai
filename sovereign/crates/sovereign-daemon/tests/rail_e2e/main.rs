@@ -79,11 +79,9 @@ fn bare_state_with_seed(
         members: HashMap::new(),
         peers: vec![],
     };
-    AppState::new_with_platform_and_engine_and_gauge_and_fabric_and_serving_and_node(
+    AppState::new_with_seeds(
         node,
         mesh,
-        Arc::new(commonwealth_state::MeshStore::in_memory().unwrap()),
-        Arc::new(sovereign_meshapp_registry::registry::AppRegistry::new()),
         None,
         None,
         seed,
@@ -95,6 +93,7 @@ fn bare_state_with_seed(
             internal_auth: Default::default(),
             ..Default::default()
         },
+        Arc::new(ledger_double::RecordingLedger::new(node)).seed(),
     )
 }
 
@@ -573,6 +572,11 @@ async fn a_namespace_that_is_a_path_is_refused() {
     .await;
     assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
 }
+
+// The store ports ride tests/main's recording double.
+#[allow(dead_code)]
+#[path = "../main/common/ledger_double.rs"]
+mod ledger_double;
 
 // The replication + sealing half lives in a sibling file: together they put
 // this one into the 800-1200 approach band (ARCH §3.1).

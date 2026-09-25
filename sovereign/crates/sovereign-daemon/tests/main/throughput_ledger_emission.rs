@@ -28,7 +28,6 @@ use axum::routing::{get, post};
 use axum::{Json, Router};
 use commonwealth_core::contributions::LedgerEventKind;
 use commonwealth_core::ids::NodeId;
-use commonwealth_state::{ContributionEmitter, MeshStore};
 use futures::StreamExt;
 use oicp_types::{
     CapabilityClaim, CapabilityHint, InferenceRequirements, LatencyClass, ModelStatus,
@@ -38,35 +37,51 @@ use serde::Deserialize;
 use sovereign_contracts::traits::InferenceProvider;
 use sovereign_contracts::types::{CompletionRequest, Speed};
 use sovereign_daemon::daemon::InferenceVenue;
+use sovereign_mesh::ledger_port::ContributionLedgerPort;
 use sovereign_mesh::peer_inference::{InferenceRouter, VenueHost, VenueSource};
 use sovereign_serving_host::ledger::LedgerEmitter;
 
 use crate::common;
+use crate::common::ledger_double::RecordingLedger;
 use crate::common::TestProvider;
 
-// ── `VenueSource` stub with a real `ContributionEmitter` ──
+// ── `VenueSource` stub over the recording ledger double ──
 //
 // The daemon's side of the ledger port: the host mints the fact from
-// `RoutingOutcome` and hands it here, where it lands on a real
-// ContributionEmitter. After the stream drops, the emitter's MeshStore
-// retains the event for the assertion to read back.
+// `RoutingOutcome` and hands it here, where it lands on the
+// contribution port — the recording double, which keeps the call for
+// the assertion to read back (five-programs fp-84).
 struct StubVenueSource {
     peers: Vec<InferenceVenue>,
-    emitter: ContributionEmitter,
+    ledger: RecordingLedger,
 }
 
 struct TestLedger {
-    emitter: ContributionEmitter,
+    ledger: RecordingLedger,
 }
 
 impl LedgerEmitter for TestLedger {
     fn record_inference_received(&self, from_node: &NodeId, model_id: &str, tokens_generated: u64) {
-        self.emitter.record(LedgerEventKind::InferenceReceived {
-            from_node: *from_node,
-            model_id: model_id.to_string(),
-            tokens_generated,
-        });
+        // The double records on the call; the answer it returns carries nothing.
+        drop(ContributionLedgerPort::record(
+            &self.ledger,
+            LedgerEventKind::InferenceReceived {
+                from_node: *from_node,
+                model_id: model_id.to_string(),
+                tokens_generated,
+            },
+        ));
     }
+}
+
+/// The recorded `contributions.record` calls that are `InferenceReceived`.
+fn inference_received(ledger: &RecordingLedger) -> Vec<String> {
+    ledger
+        .calls()
+        .into_iter()
+        .filter(|c| c.method == "contributions.record" && c.args.starts_with("InferenceReceived"))
+        .map(|c| c.args)
+        .collect()
 }
 
 #[async_trait]
@@ -80,7 +95,7 @@ impl VenueSource for StubVenueSource {
 impl VenueHost for StubVenueSource {
     async fn ledger_emitter(&self) -> Option<Arc<dyn LedgerEmitter>> {
         Some(Arc::new(TestLedger {
-            emitter: self.emitter.clone(),
+            ledger: self.ledger.clone(),
         }))
     }
 }
@@ -180,14 +195,13 @@ async fn spawn_mock_peer() -> SocketAddr {
 
 #[tokio::test]
 async fn peer_routed_stream_emits_inference_received_on_drop() {
-    // 1. Set up the contribution ledger backed by an in-memory MeshStore.
+    // 1. Set up the contribution ledger — the recording double.
     let self_node = NodeId::from_u128(0xAAAA_AAAA_AAAA_AAAA);
-    let store = MeshStore::in_memory().unwrap();
-    let emitter = ContributionEmitter::new(store.clone(), self_node);
+    let ledger = RecordingLedger::new(self_node);
 
     // Sanity: ledger starts empty.
     assert!(
-        emitter.events().unwrap().is_empty(),
+        ledger.calls().is_empty(),
         "ledger must start empty so we can attribute the new event to the test"
     );
 
@@ -212,7 +226,7 @@ async fn peer_routed_stream_emits_inference_received_on_drop() {
     }];
     let peer_source = Arc::new(StubVenueSource {
         peers,
-        emitter: emitter.clone(),
+        ledger: ledger.clone(),
     });
 
     // 4. Local stub that loses OICP scoring → request routes to peer.
@@ -266,26 +280,13 @@ async fn peer_routed_stream_emits_inference_received_on_drop() {
     drop(stream);
     // The Drop impl `tokio::spawn`s the work; one yield is the
     // bare minimum, but on a loaded box the spawned task may need
-    // a moment to acquire the store write lock + serialise the
-    // event. 200 ms is comfortable headroom for an in-memory
-    // MeshStore without making the test sluggish on CI.
+    // a moment to run and record the event. 200 ms is comfortable
+    // headroom without making the test sluggish on CI.
     tokio::time::sleep(Duration::from_millis(200)).await;
 
-    // 9. Read the ledger back through the same emitter and assert.
-    let events = emitter
-        .events()
-        .expect("events() must succeed on an in-memory store");
-    let received: Vec<_> = events
-        .iter()
-        .filter_map(|e| match &e.kind {
-            LedgerEventKind::InferenceReceived {
-                from_node,
-                model_id,
-                tokens_generated,
-            } => Some((*from_node, model_id.clone(), *tokens_generated)),
-            _ => None,
-        })
-        .collect();
+    // 9. Read the recorded calls back from the double and assert.
+    let events = ledger.calls();
+    let received = inference_received(&ledger);
 
     assert_eq!(
         received.len(),
@@ -293,15 +294,20 @@ async fn peer_routed_stream_emits_inference_received_on_drop() {
         "exactly one InferenceReceived event must land on the ledger; \
          observed events: {events:?}"
     );
-    let (from_node, model_id_evt, tokens) = &received[0];
-    assert_eq!(
-        from_node, &peer_node_id,
-        "from_node must be the peer that served the stream"
+    let record = &received[0];
+    assert!(
+        record.contains(&format!("from_node: {peer_node_id:?},")),
+        "from_node must be the peer that served the stream; got {record}"
     );
     assert!(
-        !model_id_evt.is_empty(),
+        !record.contains("model_id: \"\""),
         "model_id must be populated; got empty string"
     );
+    let tokens: u64 = record
+        .split("tokens_generated: ")
+        .nth(1)
+        .and_then(|t| t.trim_end_matches(" }").parse().ok())
+        .unwrap_or_else(|| panic!("tokens_generated must be recorded; got {record}"));
     // chunk_count was 3 deltas + the [DONE] sentinel. The wrapper
     // counts every successful `Ok(chunk)` it forwards through
     // `poll_next`, so the exact count depends on how the SSE bridge
@@ -309,7 +315,7 @@ async fn peer_routed_stream_emits_inference_received_on_drop() {
     // is "at least one chunk → emit") rather than the exact count
     // to avoid coupling the test to bridge internals.
     assert!(
-        *tokens >= 1,
+        tokens >= 1,
         "tokens_generated must reflect ≥1 forwarded chunk; got {tokens}"
     );
 }
@@ -325,8 +331,7 @@ async fn peer_route_failure_without_chunks_does_not_emit_ledger_event() {
     // ThroughputObservedStream never wraps a successful upstream,
     // and the ledger stays empty.
     let self_node = NodeId::from_u128(0xBBBB_BBBB_BBBB_BBBB);
-    let store = MeshStore::in_memory().unwrap();
-    let emitter = ContributionEmitter::new(store, self_node);
+    let ledger = RecordingLedger::new(self_node);
 
     let dead_peer = vec![InferenceVenue {
         node_id: NodeId::from_u128(0xDEAD_BEEF_DEAD_BEEF),
@@ -344,7 +349,7 @@ async fn peer_route_failure_without_chunks_does_not_emit_ledger_event() {
     }];
     let peer_source = Arc::new(StubVenueSource {
         peers: dead_peer,
-        emitter: emitter.clone(),
+        ledger: ledger.clone(),
     });
     let local: Arc<dyn InferenceProvider> =
         Arc::new(TestProvider::new().with_model_id("qwen2.5-3b-instruct-q4_k_m"));
@@ -376,11 +381,7 @@ async fn peer_route_failure_without_chunks_does_not_emit_ledger_event() {
     }
     tokio::time::sleep(Duration::from_millis(200)).await;
 
-    let events = emitter.events().unwrap();
-    let received: Vec<_> = events
-        .iter()
-        .filter(|e| matches!(e.kind, LedgerEventKind::InferenceReceived { .. }))
-        .collect();
+    let received = inference_received(&ledger);
     assert!(
         received.is_empty(),
         "zero-chunk peer route must not emit InferenceReceived; \

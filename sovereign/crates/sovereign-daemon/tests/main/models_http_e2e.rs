@@ -51,12 +51,11 @@ use std::sync::Arc;
 use commonwealth_core::ids::{MeshId, ModelId, NodeId};
 use commonwealth_core::mesh::Mesh;
 use commonwealth_core::model::{ModelArchitecture, ModelInfo};
-use commonwealth_state::MeshStore;
 use sovereign_daemon::server::client_router;
-use sovereign_daemon::state::AppState;
-use sovereign_meshapp_registry::registry::AppRegistry;
+use sovereign_daemon::state::{AppState, FabricSeed, NodeSeed, ServingSeed};
 
 use crate::common;
+use crate::common::ledger_double::RecordingLedger;
 use crate::common::{member, spawn_router};
 
 fn empty_model_info(id: u128, name: &str) -> ModelInfo {
@@ -78,16 +77,14 @@ fn empty_model_info(id: u128, name: &str) -> ModelInfo {
     }
 }
 
-/// Build an AppState whose `inference_store` is keyed to `self_id` so
-/// any `set_model_info` calls land with self as the origin (= visible
-/// to the live-nodes filter in `list_models`).
-fn build_state(self_id: NodeId) -> AppState {
+/// The mesh these tests serve: `self_id` is its only member.
+fn build_mesh(self_id: NodeId) -> Mesh {
     let mut members = HashMap::new();
     members.insert(
         self_id,
         member(self_id, "self", "127.0.0.1:9742".parse().unwrap()),
     );
-    let mesh = Mesh {
+    Mesh {
         mesh_secret: [0u8; 32],
         invite_expires_at: None,
         id: MeshId::from_u128(1),
@@ -97,10 +94,29 @@ fn build_state(self_id: NodeId) -> AppState {
         require_encryption: false,
         members,
         peers: vec![],
-    };
-    let mesh_store = Arc::new(MeshStore::in_memory().unwrap());
-    let app_registry = Arc::new(AppRegistry::new());
-    AppState::new_with_platform_and_engine(self_id, mesh, mesh_store, app_registry, None)
+    }
+}
+
+/// Build an AppState whose `inference_store` is keyed to `self_id` so
+/// any `set_model_info` calls land with self as the origin (= visible
+/// to the live-nodes filter in `list_models`).
+fn build_state(self_id: NodeId) -> AppState {
+    AppState::new(self_id, build_mesh(self_id))
+}
+
+/// Build an AppState over the recording double, whose model scan answers
+/// `rows` — each `(origin, model)` as a peer's gossiped write would arrive.
+fn build_state_with_models(self_id: NodeId, rows: Vec<(NodeId, ModelInfo)>) -> AppState {
+    AppState::new_with_seeds(
+        self_id,
+        build_mesh(self_id),
+        None,
+        None,
+        FabricSeed::default(),
+        ServingSeed::default(),
+        NodeSeed::default(),
+        Arc::new(RecordingLedger::new(self_id).with_models(rows)).seed(),
+    )
 }
 
 #[tokio::test]
@@ -166,13 +182,19 @@ async fn offline_peer_only_model_is_filtered_out_of_v1_models() {
     //
     // We can't directly set the ModelInfo's *origin* (that comes
     // from the store's writer NodeId), but we CAN simulate the
-    // exact scenario the filter targets: write the ModelInfo from a
-    // store keyed to an offline peer, then build the test AppState
-    // around a different self_id that doesn't see the peer as online.
+    // exact scenario the filter targets: the store port answers a
+    // ModelInfo whose origin is an offline peer, and the test AppState
+    // is built around a different self_id that doesn't see the peer
+    // as online.
     let self_id = NodeId::from_u128(0xC0C0_C0C0);
     let offline_peer_id = NodeId::from_u128(0xDEAD_BEEF);
 
-    let state = build_state(self_id);
+    // The store port's scan answers the offline peer's write — origin
+    // `offline_peer_id` — as gossip would have replicated it.
+    let state = build_state_with_models(
+        self_id,
+        vec![(offline_peer_id, empty_model_info(2, "ghost-model"))],
+    );
     // Set up: the offline peer is NOT in the mesh's members, so
     // `live_nodes` will be `{self_id}` only.
     {
@@ -183,14 +205,6 @@ async fn offline_peer_only_model_is_filtered_out_of_v1_models() {
              mesh's online member set"
         );
     }
-
-    // Construct a second store handle keyed to the offline peer so
-    // any writes through it stamp `offline_peer_id` as the origin.
-    let peer_store = commonwealth_state::store_adapter::InferenceStateStore::new(
-        Arc::clone(&state.inner.fabric.mesh_store),
-        offline_peer_id,
-    );
-    peer_store.set_model_info(&empty_model_info(2, "ghost-model"));
 
     // Sanity: the store sees BOTH the self-owned + peer-owned
     // entries — the filter is the only thing standing between this

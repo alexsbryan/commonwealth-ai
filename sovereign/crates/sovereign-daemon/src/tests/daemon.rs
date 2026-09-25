@@ -380,10 +380,7 @@ async fn register_local_model_slots_writes_info_for_all_three_slots() {
         peers: vec![],
     };
     let node_id = commonwealth_core::ids::NodeId::generate();
-    let mesh_store = Arc::new(commonwealth_state::MeshStore::in_memory().unwrap());
-    let app_registry = Arc::new(sovereign_meshapp_registry::registry::AppRegistry::new());
-    let app_state =
-        AppState::new_with_platform_and_engine(node_id, mesh, mesh_store, app_registry, None);
+    let app_state = AppState::new(node_id, mesh);
 
     let cfg = SetupConfig {
         engine: Default::default(),

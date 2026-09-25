@@ -204,5 +204,3 @@ mod turn_reshape_fidelity;
 mod turn_surface;
 #[path = "main/wire_view_drift.rs"]
 mod wire_view_drift;
-#[path = "main/work_atlas_store.rs"]
-mod work_atlas_store;
