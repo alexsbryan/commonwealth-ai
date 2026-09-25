@@ -2225,34 +2225,33 @@ pub(crate) fn render_bench_human(
 // Help
 // ---------------------------------------------------------------------------
 
-pub(crate) const HELP_MESH_BENCH: sovereign_cli_base::help::Help =
-    sovereign_cli_base::help::Help {
-        command: "svrn mesh bench",
-        summary: "Measure how fast the model you are running actually decodes, and record it.",
-        sections: &[
-            sovereign_cli_base::help::HelpSection::Usage(
-                "svrn mesh bench [<model.gguf>] [--trials <n>] [--json] [--history]",
-            ),
-            sovereign_cli_base::help::HelpSection::Flags(&[
-                (
-                    "<model.gguf>",
-                    "An ASSERTION, not a selection: this file must be what the daemon has \
+pub(crate) const HELP_MESH_BENCH: sovereign_cli_base::help::Help = sovereign_cli_base::help::Help {
+    command: "svrn mesh bench",
+    summary: "Measure how fast the model you are running actually decodes, and record it.",
+    sections: &[
+        sovereign_cli_base::help::HelpSection::Usage(
+            "svrn mesh bench [<model.gguf>] [--trials <n>] [--json] [--history]",
+        ),
+        sovereign_cli_base::help::HelpSection::Flags(&[
+            (
+                "<model.gguf>",
+                "An ASSERTION, not a selection: this file must be what the daemon has \
                      resident, or the command exits 3 naming the config line. It never loads it.",
-                ),
-                (
-                    "--trials <n>",
-                    "Timed trials to run, 1–20 (default 3). More trials tighten the spread; \
+            ),
+            (
+                "--trials <n>",
+                "Timed trials to run, 1–20 (default 3). More trials tighten the spread; \
                      they do not change what is measured.",
-                ),
-                ("--json", "Emit the run as machine-readable JSON."),
-                (
-                    "--history",
-                    "List every run recorded for this model on this machine, invalid ones \
+            ),
+            ("--json", "Emit the run as machine-readable JSON."),
+            (
+                "--history",
+                "List every run recorded for this model on this machine, invalid ones \
                      included. Measures nothing.",
-                ),
-            ]),
-            sovereign_cli_base::help::HelpSection::Notes(
-                "Measures the configuration you are RUNNING; it never installs one. There is no \
+            ),
+        ]),
+        sovereign_cli_base::help::HelpSection::Notes(
+            "Measures the configuration you are RUNNING; it never installs one. There is no \
                  slot to select, so there is no slot to get wrong.\n\n\
                  Fires real streaming completions at the real HTTP surface and times the SSE \
                  frames, so the number includes the actual RPC split and network path. Decode \
@@ -2267,23 +2266,23 @@ pub(crate) const HELP_MESH_BENCH: sovereign_cli_base::help::Help =
                  Not instant. A cold load of a large model can take minutes before the first \
                  trial starts. Exit 0 valid · 1 guard tripped · 2 bad arguments · 3 assertion \
                  failed · 4 nothing measurable · 5 no daemon.",
+        ),
+        sovereign_cli_base::help::HelpSection::Examples(&[
+            (
+                "svrn mesh bench",
+                "Measure whatever is loaded right now, three trials",
             ),
-            sovereign_cli_base::help::HelpSection::Examples(&[
-                (
-                    "svrn mesh bench",
-                    "Measure whatever is loaded right now, three trials",
-                ),
-                (
-                    "svrn mesh bench ~/models/Qwen3.5-122B-Q5_K_XL.gguf",
-                    "The same, but fail loudly if that is not what is loaded",
-                ),
-                (
-                    "svrn mesh bench --history",
-                    "What has this machine already measured?",
-                ),
-            ]),
-        ],
-    };
+            (
+                "svrn mesh bench ~/models/Qwen3.5-122B-Q5_K_XL.gguf",
+                "The same, but fail loudly if that is not what is loaded",
+            ),
+            (
+                "svrn mesh bench --history",
+                "What has this machine already measured?",
+            ),
+        ]),
+    ],
+};
 
 #[cfg(test)]
 mod tests;

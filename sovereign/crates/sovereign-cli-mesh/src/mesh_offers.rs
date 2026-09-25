@@ -424,8 +424,7 @@ async fn warrants_for(neighbours: &[Neighbour]) -> Result<BTreeMap<String, Strin
         // A ring the daemon cannot answer for is SKIPPED and the others are
         // still read: one unreadable journal must not turn every seller's
         // warrant into an error.
-        if let Ok((roster, admission)) = sovereign_cli_base::rail::roster_and_admission(&ns).await
-        {
+        if let Ok((roster, admission)) = sovereign_cli_base::rail::roster_and_admission(&ns).await {
             rings.push((ns, roster, admission.ops));
         }
     }

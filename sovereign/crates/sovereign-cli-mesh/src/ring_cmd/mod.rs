@@ -452,14 +452,14 @@ async fn resolve_warrant(
 
 /// `svrn ring roster show|list <ns>` — who is in this ring, and why.
 async fn roster_list(namespace: &str) -> i32 {
-    let (roster, admission) =
-        match sovereign_cli_base::rail::roster_and_admission(namespace).await {
-            Ok(pair) => pair,
-            Err(e) => {
-                eprintln!("ring roster show: {e}");
-                return 1;
-            }
-        };
+    let (roster, admission) = match sovereign_cli_base::rail::roster_and_admission(namespace).await
+    {
+        Ok(pair) => pair,
+        Err(e) => {
+            eprintln!("ring roster show: {e}");
+            return 1;
+        }
+    };
     // The rail's precedence with its first rung already refused by the
     // caller: a `roster.json` narrows the ring, and without one the daemon's
     // default — the mesh — answers (`RingRail::default_roster`).
