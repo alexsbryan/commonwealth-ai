@@ -11,9 +11,9 @@
 
 use std::sync::Arc;
 
-use commonwealth_state::ActivityEmitter;
 use corpus_engine::CorpusEngine;
 use sovereign_grants::{GuestGrantStore, GuestSessionBinding, GuestSessionStore};
+use sovereign_mesh::ledger_port::ActivityLedgerPort;
 
 use crate::client_tokens::{ClientTokenStore, ClientTokens};
 use crate::internal_gate::InternalAuth;
@@ -266,7 +266,7 @@ pub struct NodePart {
     /// Sovereign's vocabulary, for the glassbox "Activity & Sharing"
     /// surface. Unlike `contribution_emitter`, its records are
     /// **local-only and never gossip** (written under the
-    /// `activity-private` namespace). Cheap to clone; shares the same
-    /// underlying `MeshStore`. See `commonwealth_core::activity`.
-    pub activity_emitter: ActivityEmitter,
+    /// `activity-private` namespace). Seen through `ActivityLedgerPort`;
+    /// in-process until fp-88. See `commonwealth_core::activity`.
+    pub activity_emitter: Arc<dyn ActivityLedgerPort>,
 }

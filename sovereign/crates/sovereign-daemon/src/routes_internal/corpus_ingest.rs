@@ -873,13 +873,22 @@ pub async fn spawn_corpus_install_outcome(
                 // thousands of chunks is heavy local resource use that
                 // never crosses a peer boundary, so the contribution
                 // ledger never sees it; this is where it becomes visible.
-                state_for_task.inner.node.activity_emitter.record(
-                    ActivityEventKind::ChunksIngested {
+                if let Err(e) = state_for_task
+                    .inner
+                    .node
+                    .activity_emitter
+                    .record(ActivityEventKind::ChunksIngested {
                         corpus_id: corpus_id_for_task.clone(),
                         chunks: info.chunks_created,
                         duration_secs: info.duration_secs,
-                    },
-                );
+                    })
+                    .await
+                {
+                    tracing::warn!(
+                        corpus = %corpus_id_for_task, error = %e,
+                        "spawn_corpus_install: the activity record did not reach the store"
+                    );
+                }
                 // Post-install hook: build the structural atlas the
                 // moment chunks are committed. Detached so the route
                 // handler that triggered the install isn't held up
@@ -970,11 +979,19 @@ pub async fn spawn_corpus_install_outcome(
                             // inference work — record it so the
                             // Activity surface shows "enriched <corpus>"
                             // distinct from the raw ingest embed pass.
-                            enrich_activity.record(ActivityEventKind::CorpusEnriched {
-                                corpus_id: cid.clone(),
-                                atoms: 0,
-                                duration_secs: elapsed_secs as u64,
-                            });
+                            if let Err(e) = enrich_activity
+                                .record(ActivityEventKind::CorpusEnriched {
+                                    corpus_id: cid.clone(),
+                                    atoms: 0,
+                                    duration_secs: elapsed_secs as u64,
+                                })
+                                .await
+                            {
+                                tracing::warn!(
+                                    corpus = %cid, error = %e,
+                                    "post-install: the activity record did not reach the store"
+                                );
+                            }
                             true
                         }
                         StructuralAtlasOutcome::AlreadyPresent { atoms_path } => {

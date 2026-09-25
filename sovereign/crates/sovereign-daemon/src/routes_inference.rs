@@ -667,7 +667,7 @@ pub async fn embeddings(
     // Record the embedding work on the local Activity ledger — split
     // peer (mesh-driven ingestion) vs local (own API client). This was
     // previously invisible: nothing recorded embeddings served.
-    state
+    if let Err(e) = state
         .inner
         .node
         .activity_emitter
@@ -678,7 +678,11 @@ pub async fn embeddings(
             },
             n_texts,
             tokens: approx_tokens as u64,
-        });
+        })
+        .await
+    {
+        warn!(error = %e, "embeddings: the activity record did not reach the store");
+    }
     (StatusCode::OK, Json(resp)).into_response()
 }
 
@@ -1183,7 +1187,7 @@ async fn serve_local_non_stream(
                     .map(|u| (u.prompt_tokens as u64, u.completion_tokens as u64))
                     .unwrap_or((0, 0));
                 let wall_seconds = started.elapsed().as_secs_f64();
-                state
+                if let Err(e) = state
                     .inner
                     .node
                     .activity_emitter
@@ -1192,7 +1196,11 @@ async fn serve_local_non_stream(
                         prompt_tokens,
                         completion_tokens,
                         wall_seconds,
-                    });
+                    })
+                    .await
+                {
+                    warn!(error = %e, "local inference: the activity record did not reach the store");
+                }
             }
             (StatusCode::OK, Json(resp)).into_response()
         }
@@ -1436,12 +1444,17 @@ async fn serve_local_stream(
             // Local API client — record on the Activity ledger, same
             // as the non-streaming path. Stream frames ≈ completion
             // tokens; prompt token count isn't available on this path.
-            activity_for_done.record(ActivityEventKind::LocalInferenceServed {
-                model_id: model_for_done,
-                prompt_tokens: 0,
-                completion_tokens: tokens,
-                wall_seconds,
-            });
+            if let Err(e) = activity_for_done
+                .record(ActivityEventKind::LocalInferenceServed {
+                    model_id: model_for_done,
+                    prompt_tokens: 0,
+                    completion_tokens: tokens,
+                    wall_seconds,
+                })
+                .await
+            {
+                warn!(error = %e, "local stream: the activity record did not reach the store");
+            }
         }
         Ok::<_, std::convert::Infallible>(Event::default().data("[DONE]"))
     });

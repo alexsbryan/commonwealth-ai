@@ -9,7 +9,7 @@ use async_trait::async_trait;
 use commonwealth_core::ids::NodeId;
 use commonwealth_core::mesh::Mesh;
 use commonwealth_state::store_adapter::InferenceStateStore;
-use commonwealth_state::{ActivityEmitter, MeshStore, PeerPreferenceStore};
+use commonwealth_state::{MeshStore, PeerPreferenceStore};
 use corpus_engine::CorpusEngine;
 use oicp_types::model_aliases::ModelAliasTable;
 use serving_policy_core::fair_sched::{reciprocity_weight, SchedCore, TryGrant};
@@ -1023,16 +1023,18 @@ impl AppState {
         node_seed: node::NodeSeed,
     ) -> Self {
         let inference_store = InferenceStateStore::new(Arc::clone(&mesh_store), self_node_id);
-        let activity_emitter = ActivityEmitter::new((*mesh_store).clone(), self_node_id);
         let peer_preferences = PeerPreferenceStore::new((*mesh_store).clone(), self_node_id);
         let kv_port: Arc<dyn sovereign_contracts::peer::ReplicatedKv> = Arc::new(
             sovereign_mesh::peer_adapter::MeshReplicatedKv::over(Arc::clone(&mesh_store)),
         );
+        let local_ledger = Arc::new(sovereign_mesh::ledger_port::LocalLedger::new(
+            Arc::clone(&mesh_store),
+            self_node_id,
+        ));
+        let activity_emitter: Arc<dyn sovereign_mesh::ledger_port::ActivityLedgerPort> =
+            local_ledger.clone();
         let contribution_port: Arc<dyn sovereign_mesh::ledger_port::ContributionLedgerPort> =
-            Arc::new(sovereign_mesh::ledger_port::LocalLedger::new(
-                Arc::clone(&mesh_store),
-                self_node_id,
-            ));
+            local_ledger;
         Self {
             inner: Arc::new(AppStateInner {
                 fabric,
