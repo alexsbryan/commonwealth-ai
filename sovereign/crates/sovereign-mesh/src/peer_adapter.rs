@@ -60,6 +60,12 @@ impl MeshReplicatedKv {
             .map_err(to_port_error)
     }
 
+    /// The port over a store the caller already holds, so the daemon's port
+    /// and Fabric read one store (five-programs fp-80).
+    pub fn over(store: Arc<MeshStore>) -> Self {
+        Self { inner: store }
+    }
+
     /// Open (or create) the store at `path`.
     ///
     /// The persisted counterpart of [`MeshReplicatedKv::in_memory`], for the CLI

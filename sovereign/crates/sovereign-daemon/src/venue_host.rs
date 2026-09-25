@@ -20,13 +20,17 @@ use crate::daemon::EmbeddedDaemon;
 
 /// The daemon's implementation of the host's ledger port.
 ///
-/// This is the only place the `commonwealth_state` emitter is named on the
+/// This is the only place the contribution ledger is named on the
 /// serving path (`quality/DAEMON_CORE.md` §4.2 "The facts rule" — no context
 /// outside Fabric names `ContributionEmitter`; Serving emits facts and Fabric
 /// prices them). The host mints the fact from `RoutingOutcome` and this
 /// records it.
+///
+/// `LedgerEmitter` is sync and the port is async, so the write rides the
+/// current runtime and its failure is traced — the shape of
+/// `InferenceCache::set_model_info` (rails_client/ledger.rs).
 struct DaemonLedger {
-    emitter: commonwealth_state::ContributionEmitter,
+    emitter: Arc<dyn sovereign_mesh::ledger_port::ContributionLedgerPort>,
 }
 
 impl LedgerEmitter for DaemonLedger {
@@ -36,13 +40,29 @@ impl LedgerEmitter for DaemonLedger {
         model_id: &str,
         tokens_generated: u64,
     ) {
-        self.emitter.record(
-            commonwealth_core::contributions::LedgerEventKind::InferenceReceived {
-                from_node: *from_node,
-                model_id: model_id.to_string(),
-                tokens_generated,
-            },
-        );
+        let Ok(runtime) = tokio::runtime::Handle::try_current() else {
+            tracing::warn!(
+                model = %model_id,
+                "venue ledger: no runtime to carry the InferenceReceived write; it did not reach the ledger"
+            );
+            return;
+        };
+        let emitter = Arc::clone(&self.emitter);
+        let kind = commonwealth_core::contributions::LedgerEventKind::InferenceReceived {
+            from_node: *from_node,
+            model_id: model_id.to_string(),
+            tokens_generated,
+        };
+        let model_id = model_id.to_string();
+        runtime.spawn(async move {
+            if let Err(e) = emitter.record(kind).await {
+                tracing::warn!(
+                    model = %model_id,
+                    error = %e,
+                    "venue ledger: the InferenceReceived write did not reach the ledger"
+                );
+            }
+        });
     }
 }
 
@@ -62,7 +82,7 @@ impl VenueHost for EmbeddedDaemon {
     async fn ledger_emitter(&self) -> Option<Arc<dyn LedgerEmitter>> {
         let app_state = self.app_state().await?;
         Some(Arc::new(DaemonLedger {
-            emitter: app_state.inner.fabric.contribution_emitter.clone(),
+            emitter: Arc::clone(&app_state.inner.store.contribution_emitter),
         }))
     }
 }

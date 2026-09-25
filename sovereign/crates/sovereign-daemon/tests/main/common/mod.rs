@@ -35,6 +35,9 @@ use sovereign_contracts::types::{
     CompletionRequest, CompletionResponse, ProviderCapabilities, Speed, StreamFrame,
 };
 
+#[path = "ledger_double.rs"]
+pub mod ledger_double;
+
 // ── Corpus layout ───────────────────────────────────────────────
 
 /// One corpus's layout on one node. `corpus_index::corpus::Corpus` is the ONE speller

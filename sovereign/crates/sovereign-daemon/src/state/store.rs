@@ -22,6 +22,8 @@ use std::sync::Arc;
 
 use commonwealth_state::store_adapter::InferenceStateStore;
 use commonwealth_state::PeerPreferenceStore;
+use sovereign_contracts::peer::ReplicatedKv;
+use sovereign_mesh::ledger_port::ContributionLedgerPort;
 
 use super::RpcShardWarmer;
 
@@ -41,4 +43,10 @@ pub struct StorePart {
     /// `POST /internal/rpc-warm`. `None` on a node that isn't an inference
     /// worker. See [`RpcShardWarmer`].
     pub rpc_shard_warmer: Option<Arc<dyn RpcShardWarmer>>,
+    /// The node's replicated KV as a port — Fabric's `mesh_store` seen through
+    /// `ReplicatedKv` (five-programs-36 (2)); in-process until fp-88.
+    pub mesh_store: Arc<dyn ReplicatedKv>,
+    /// The contribution ledger as a port — Fabric's `contribution_emitter`
+    /// seen through `ContributionLedgerPort`; in-process until fp-88.
+    pub contribution_emitter: Arc<dyn ContributionLedgerPort>,
 }

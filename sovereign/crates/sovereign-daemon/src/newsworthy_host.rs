@@ -27,7 +27,7 @@ use commonwealth_core::contributions::{LedgerEvent, LedgerEventKind};
 use commonwealth_core::ids::NodeId;
 use commonwealth_core::mesh::NodeStatus;
 use commonwealth_core::partition;
-use commonwealth_state::MeshStore;
+use sovereign_contracts::peer::ReplicatedKv;
 use corpus_engine::update::newsworthy_watcher::{CommittedDocs, NewsworthyHost};
 use corpus_index::error::{Error as CorpusError, Result as CorpusResult};
 use sovereign_contracts::identity::IdentityReader;
@@ -57,8 +57,8 @@ impl MeshNewsworthyHost {
         }
     }
 
-    fn mesh_store(&self) -> &Arc<MeshStore> {
-        &self.app_state.inner.fabric.mesh_store
+    fn mesh_store(&self) -> &Arc<dyn ReplicatedKv> {
+        &self.app_state.inner.store.mesh_store
     }
 
     fn self_node_id(&self) -> NodeId {
@@ -129,7 +129,7 @@ impl MeshNewsworthyHost {
         // freshly-installed peer may not show up for up to an hour —
         // acceptable for a daily watcher tick.
         let events: Vec<LedgerEvent> =
-            match self.app_state.inner.fabric.contribution_emitter.events() {
+            match self.app_state.inner.store.contribution_emitter.events().await {
                 Ok(ev) => ev,
                 Err(e) => {
                     tracing::warn!(

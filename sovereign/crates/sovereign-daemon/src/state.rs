@@ -1025,6 +1025,14 @@ impl AppState {
         let inference_store = InferenceStateStore::new(Arc::clone(&mesh_store), self_node_id);
         let activity_emitter = ActivityEmitter::new((*mesh_store).clone(), self_node_id);
         let peer_preferences = PeerPreferenceStore::new((*mesh_store).clone(), self_node_id);
+        let kv_port: Arc<dyn sovereign_contracts::peer::ReplicatedKv> = Arc::new(
+            sovereign_mesh::peer_adapter::MeshReplicatedKv::over(Arc::clone(&mesh_store)),
+        );
+        let contribution_port: Arc<dyn sovereign_mesh::ledger_port::ContributionLedgerPort> =
+            Arc::new(sovereign_mesh::ledger_port::LocalLedger::new(
+                Arc::clone(&mesh_store),
+                self_node_id,
+            ));
         Self {
             inner: Arc::new(AppStateInner {
                 fabric,
@@ -1083,6 +1091,8 @@ impl AppState {
                     inference_store,
                     peer_preferences,
                     rpc_shard_warmer: serving_seed.rpc_shard_warmer,
+                    mesh_store: kv_port,
+                    contribution_emitter: contribution_port,
                 },
                 node: node::NodePart {
                     client_token: node_seed.client_token,
@@ -1618,11 +1628,13 @@ impl AppState {
                 .map(|(id, m)| (*id, m.capabilities.clone()))
                 .collect()
         };
-        let contributions = match commonwealth_state::current_contributions(
-            &self.inner.fabric.mesh_store,
-            &caps,
-            commonwealth_core::contributions::DEFAULT_WINDOW_DAYS,
-        ) {
+        let contributions = match self
+            .inner
+            .store
+            .contribution_emitter
+            .current_contributions(&caps, commonwealth_core::contributions::DEFAULT_WINDOW_DAYS)
+            .await
+        {
             Ok(map) => map,
             Err(e) => {
                 tracing::warn!(error = %e, "reciprocity: aggregate failed; keeping last weights");
