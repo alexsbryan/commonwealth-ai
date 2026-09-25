@@ -12235,6 +12235,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "sovereign-cli-base"
+version = "0.7.0"
+dependencies = [
+ "commonwealth-rail-core",
+ "reqwest 0.12.28",
+ "serde_json",
+ "sovereign-contracts",
+ "tempfile",
+ "workspace-hack",
+]
+
+[[package]]
 name = "sovereign-cli-daemon"
 version = "0.7.0"
 dependencies = [
@@ -12418,7 +12430,6 @@ name = "sovereign-cli-shared"
 version = "0.7.0"
 dependencies = [
  "clap",
- "commonwealth-rail-core",
  "corpus-engine",
  "corpus-engine-scip",
  "corpus-index",
@@ -12429,6 +12440,7 @@ dependencies = [
  "reqwest 0.12.28",
  "serde",
  "serde_json",
+ "sovereign-cli-base",
  "sovereign-contracts",
  "sovereign-core",
  "sovereign-time",

@@ -46,11 +46,11 @@ pub mod cli_contract_report;
 pub mod code_index;
 pub mod code_index_incremental;
 pub mod deprecation;
-pub mod dirs;
-pub mod dispatcher;
+pub use sovereign_cli_base::dirs;
+pub use sovereign_cli_base::dispatcher;
 pub mod flag_surface;
-pub mod guest_link;
-pub mod help;
+pub use sovereign_cli_base::guest_link;
+pub use sovereign_cli_base::help;
 pub mod host_load;
 pub mod lane_verdict;
 #[cfg(feature = "mcp-client")]
@@ -62,9 +62,9 @@ pub mod observation;
 pub mod project_toml;
 pub mod prompts;
 #[cfg(feature = "rail-client")]
-pub mod rail;
+pub use sovereign_cli_base::rail;
 pub mod repo;
 #[cfg(feature = "scip")]
 pub mod scip;
 pub mod tracing_init;
-pub mod urls;
+pub use sovereign_cli_base::urls;

@@ -1084,6 +1084,23 @@ name = "mesh-join-vocab"
 # `Error::InvalidJoinKey` stays commonwealth-core's — accept_join constructs it.
 allow = ["workspace-hack"]
 
+[[package_leaf]]
+name = "sovereign-cli-base"
+# The thin half of `sovereign-cli-shared` — help, dirs, dispatcher, guest_link,
+# urls, and rail (feature `rail-client`). Admitted 2026-09-24 under operator
+# decision five-programs-38 (FIVE_PROGRAMS fp-98). Every program's CLI shares
+# it: [cmnwlth] sovereign-cli-mesh, [code] sovereign-cli-dev, [svrn]
+# sovereign-cli / -llm / -daemon — and a package member may not name another
+# package's crate. Each existing home refused first: sovereign-contracts is
+# wire vocabulary only, no CLI plumbing or HTTP client in its budget;
+# oicp-types is the federation wire and forbids sovereign-*; kernel-types
+# carries brand-free atoms; mesh-join-vocab is the join-key format only;
+# commonwealth-rail-core is the rail fold, no client. The leaf test holds: no
+# store, no engine; the fs it touches is the CLI's own config paths, resolved
+# through sovereign-contracts. sovereign-cli-shared re-exports all six at their
+# historical paths (re-exports, never twins). Leaf count 20 → 21.
+allow = ["sovereign-contracts", "commonwealth-rail-core", "workspace-hack"]
+
 # ── The packages ─────────────────────────────────────────────────────────────
 #
 # THE FIVE PROGRAMS, DECLARED AS THE ENDSTATE (2026-09-21, docs/FIVE_PROGRAMS.md

@@ -192,6 +192,7 @@ members = [
     # was already a workspace dependency via sovereign-desktop, so this adds no
     # new third-party tree.
     "sovereign/crates/sovereign-cli",
+    "sovereign/crates/sovereign-cli-base",
     "sovereign/crates/sovereign-cli-shared",
     "sovereign/crates/sovereign-cli-dev",
     "sovereign/crates/sovereign-cli-daemon",
@@ -370,6 +371,7 @@ sovereign-daemon = { path = "sovereign/crates/sovereign-daemon" }
 sovereign-peer-wire = { path = "sovereign/crates/sovereign-peer-wire" }
 sovereign-compute = { path = "sovereign/crates/sovereign-compute" }
 sovereign-service = { path = "sovereign/crates/sovereign-service" }
+sovereign-cli-base = { path = "sovereign/crates/sovereign-cli-base" }
 sovereign-cli-shared = { path = "sovereign/crates/sovereign-cli-shared" }
 sovereign-pipeline = { path = "sovereign/crates/sovereign-pipeline" }
 sovereign-work-atlas = { path = "sovereign/crates/sovereign-work-atlas" }

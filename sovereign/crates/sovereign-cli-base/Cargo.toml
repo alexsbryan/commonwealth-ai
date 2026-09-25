@@ -1,0 +1,33 @@
+[package]
+name = "sovereign-cli-base"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "The leaf half of the CLI shared set: help, dirs, dispatcher, guest_link, urls, rail."
+
+# The thin half of `sovereign-cli-shared`, admitted as a [[package_leaf]]
+# (FIVE_PROGRAMS five-programs-38, fp-98) so every program's CLI can reach it
+# without naming another package's crate. No fs store, no engine: the leaf
+# test is `quality/ARCH_LAYERS.toml`'s `allow` list for this crate.
+
+[dependencies]
+# The rebrand-aware path SSOT (`dirs`), the client daemon base (`urls`) and the
+# guest-link record (`guest_link`).
+sovereign-contracts = { workspace = true }
+# `rail` decodes the daemon's roster / ops / gaps replies.
+serde_json = { workspace = true }
+# `rail` only (feature `rail-client`) — the HTTP client and `RailAct`, the typed
+# wire form the daemon's append door parses.
+reqwest = { workspace = true, optional = true }
+commonwealth-rail-core = { workspace = true, optional = true }
+workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[features]
+# Enables `sovereign_cli_base::rail` — the ONE operator-side rail client.
+rail-client = ["dep:reqwest", "dep:commonwealth-rail-core"]
+
+[lints]
+workspace = true

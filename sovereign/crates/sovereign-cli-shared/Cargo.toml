@@ -38,10 +38,6 @@ which = { version = "7", optional = true }
 # Only for `mcp_client` (feature-gated) — the daemon-first path for
 # the work-atlas coordination tools.
 reqwest = { workspace = true, optional = true }
-# `rail` only (feature `rail-client`) — for `RailAct`, the typed wire form the
-# daemon's append door parses with `RailAct::from_json`. The client reads no
-# journal; its types live in the shared fold leaf.
-commonwealth-rail-core = { workspace = true, optional = true }
 dirs = "5"
 # The flag-surface derive. Every `sovereign-cli-*` binary that declares its
 # flags as a struct reaches `flag_surface::parse` through here, so the seam has
@@ -51,6 +47,9 @@ clap = { workspace = true }
 # The rebrand-aware path SSOT — `dirs.rs` delegates to it instead of
 # mirroring `resolve_branded_dir` by hand (the mirror drifted risk).
 sovereign-contracts = { workspace = true }
+# help, dirs, dispatcher, guest_link, urls, rail — the leaf half, re-exported
+# at their historical paths (FIVE_PROGRAMS fp-98).
+sovereign-cli-base = { workspace = true }
 # The neutral kernel — `NightlyPosture::judgement` maps the lane's word onto
 # the four verdicts and hands off age, formatting and the staleness band, so
 # `svrn contract nightly` and `svrn posture` cannot disagree about what a lane
@@ -103,7 +102,7 @@ code-index = ["dep:corpus-engine", "dep:corpus-index", "dep:oicp-client", "dep:s
 # `commonwealth-rail-core` is what defines `RailAct` — the act is typed on the way
 # out, so a caller cannot spell the wire form wrong and learn about it from a
 # 422 (ARCH §10.6).
-rail-client = ["dep:reqwest", "dep:commonwealth-rail-core"]
+rail-client = ["sovereign-cli-base/rail-client"]
 
 [lints]
 workspace = true

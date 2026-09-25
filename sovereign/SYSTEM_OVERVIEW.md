@@ -169,7 +169,8 @@ crates/
 ├── sovereign-server         # Axum REST + WebSocket, multi-tenant (the phone-facing host)
 ├── sovereign-desktop        # Tauri 2 + Svelte 5
 ├── sovereign-cli            # User-facing dispatcher — execs into sibling binaries
-├── sovereign-cli-shared     # Shared lib (dirs, repo, help, prompts, tracing init, cli-contract; rail client uses the rail-core wire leaf)
+├── sovereign-cli-base       # Leaf half of the CLI shared set (help, dirs, dispatcher, guest_link, urls; rail client uses the rail-core wire leaf)
+├── sovereign-cli-shared     # Shared lib (repo, prompts, tracing init, cli-contract; re-exports sovereign-cli-base at the historical paths)
 ├── sovereign-cli-daemon     # Long-running host + lifecycle; owns Windows GPU backend selection
 ├── sovereign-cli-dev        # Workbench: ATOS + project lifecycle + code intel + tools
 ├── sovereign-cli-llm        # Model interaction + heavy retrieval (chat/bench/eval/atlas/mesh/ring/job)
