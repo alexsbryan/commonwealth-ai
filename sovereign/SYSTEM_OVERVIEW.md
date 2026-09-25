@@ -2603,7 +2603,9 @@ serving the reading into gossip) and the
 `/v1/mesh/kv/*` over an in-memory `MeshStore` projected from those journals
 and pumped back onto them (`commonwealth-rails/src/kv.rs`; it seals only the
 KV namespaces its own outbox feeds, and the daemon keeps serving its own
-store until fp-82). Since fp-78 it also serves the typed ledger doors,
+store until fp-82; since fp-108 a start also rehydrates each local-only
+journal on disk through `MeshStore::apply_own_projection`, which merges
+only this node's own signed rows). Since fp-78 it also serves the typed ledger doors,
 `/v1/ledger/*` (`commonwealth-rails/src/ledger.rs`: contributions, activity,
 peer preferences, processed shards, inference state — each the
 commonwealth-state writer over that store, the writer's node id in the body)

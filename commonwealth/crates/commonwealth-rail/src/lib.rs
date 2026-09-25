@@ -193,6 +193,12 @@ impl RingRail {
         self.signer.as_ref()
     }
 
+    /// The root this rail journals under — for [`namespaces_in`], the
+    /// unfiltered disk list a local-only rehydrate reads (fp-108).
+    pub fn root(&self) -> &Path {
+        &self.root
+    }
+
     /// Declare that `namespace`'s roster is computed by `source`, not read
     /// from its `roster.json`.
     ///

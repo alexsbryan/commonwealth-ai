@@ -182,6 +182,81 @@ async fn a_restart_rehydrates_a_row_from_the_journal() {
     assert_eq!(row.origin, NodeId::from_u128(ME));
 }
 
+/// A local-only row journaled by this node survives a restart: the fresh
+/// store rehydrates it through the own-journal door (fp-108), though
+/// `RingRail::namespaces` never lists the namespace.
+#[tokio::test]
+async fn a_restart_rehydrates_a_local_only_row_from_its_own_journal() {
+    const PRIVATE: &str = "portfolio-private";
+    assert!(commonwealth_rail::is_local_only(PRIVATE));
+    let dir = tempfile::tempdir().unwrap();
+    let mesh = solo_mesh();
+    let first = host_at(dir.path(), &mesh);
+    let base = serve(first.clone()).await;
+    reqwest::Client::new()
+        .post(format!("{base}/v1/mesh/kv/entry"))
+        .json(&serde_json::json!({
+            "app_id": PRIVATE, "key": "holding", "value": b64("mine"), "origin": NodeId::from_u128(ME),
+        }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    assert_eq!(drain(&first).await.appended, 1);
+
+    let second = host_at(dir.path(), &mesh);
+    assert!(second.store.get(PRIVATE, "holding").unwrap().is_none());
+    assert_eq!(second.project_all_on_disk().await, 1);
+    let row = second
+        .store
+        .get(PRIVATE, "holding")
+        .unwrap()
+        .expect("rehydrated");
+    assert_eq!(&row.value[..], b"mine");
+    assert_eq!(row.origin, NodeId::from_u128(ME));
+}
+
+/// A peer-signed op in a local-only journal is NOT merged by the restart:
+/// the own-journal door takes this node's actor only. The peer is a keyed
+/// member, so the roster ADMITS its line — only the actor filter stops it.
+#[tokio::test]
+async fn a_peer_op_in_a_local_only_journal_is_not_rehydrated() {
+    const PRIVATE: &str = "portfolio-private";
+    let dir = tempfile::tempdir().unwrap();
+    let mesh = solo_mesh();
+    let peer_key = SigningKey::from_bytes(&[9; 32]);
+    let peer = NodeId::from_u128(0xBEEF);
+    {
+        let mut m = mesh.write().await;
+        let mut record = m.members[&NodeId::from_u128(ME)].clone();
+        record.node_id = peer;
+        record.name = "peer".into();
+        record.node_pubkey = Some(commonwealth_transport::identity::node_pubkey(&peer_key));
+        m.members.insert(peer, record);
+    }
+    let first = host_at(dir.path(), &mesh);
+    let journal = first.rail.journal(PRIVATE).unwrap();
+    let roster = first.rail.roster(&journal).await.unwrap();
+    let payload = rail_kv::to_payload("planted", Some(&b"theirs"[..]), 100).unwrap();
+    journal
+        .append(
+            commonwealth_rail::RailAct::Record { payload },
+            &peer_key,
+            &roster,
+            None,
+        )
+        .expect("the peer is in the roster, so its line is admitted");
+    drop(first);
+
+    let second = host_at(dir.path(), &mesh);
+    second.project_all_on_disk().await;
+    assert!(
+        second.store.get(PRIVATE, "planted").unwrap().is_none(),
+        "a peer's row in a local-only journal was rehydrated as ours"
+    );
+}
+
 /// A local-only write through the door is journaled on this node and never
 /// offered to a peer (fp-107: the outbox guard skips only rail-carried
 /// namespaces; privacy lives at the wire). Watched red by restoring

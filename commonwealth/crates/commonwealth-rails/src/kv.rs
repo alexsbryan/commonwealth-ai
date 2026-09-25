@@ -103,7 +103,8 @@ impl KvHost {
     }
 
     /// Rebuild the store from every journal on disk. Run once at start,
-    /// before the first drain; returns how many namespaces projected.
+    /// before the first drain; returns how many namespaces projected, the
+    /// local-only ones rehydrated from this node's own rows included.
     pub async fn project_all_on_disk(&self) -> usize {
         let namespaces = match self.rail.namespaces() {
             Ok(n) => n,
@@ -118,13 +119,77 @@ impl KvHost {
                 projected += 1;
             }
         }
+        // `RingRail::namespaces` omits local-only journals by design (never
+        // offered), so they are read from the unfiltered disk list and folded
+        // through the own-journal door (fp-108).
+        let local_only: Vec<String> = match commonwealth_rail::namespaces_in(self.rail.root()) {
+            Ok(all) => all
+                .into_iter()
+                .filter(|ns| commonwealth_rail::is_local_only(ns))
+                .collect(),
+            Err(e) => {
+                warn!(target: "rails", error = %e, "kv: cannot enumerate local-only journals, none rehydrated");
+                Vec::new()
+            }
+        };
+        let mut rehydrated = 0usize;
+        for namespace in &local_only {
+            if self.project_own_namespace(namespace).await.is_some() {
+                rehydrated += 1;
+            }
+        }
         info!(
             target: "rails",
             namespaces = namespaces.len(),
             projected,
+            local_only = local_only.len(),
+            rehydrated,
             "kv: rebuilt the store from the journals on disk"
         );
-        projected
+        projected + rehydrated
+    }
+
+    /// Fold one local-only namespace's journal back into the store, taking
+    /// only this node's own signed rows (`MeshStore::apply_own_projection`).
+    async fn project_own_namespace(&self, namespace: &str) -> Option<usize> {
+        let (journal, roster) = match self.journal_and_roster(namespace).await {
+            Ok(jr) => jr,
+            Err(e) => {
+                warn!(target: "rails", namespace, error = %e, "kv: a local-only journal or its roster is unreadable, nothing rehydrated");
+                return None;
+            }
+        };
+        let admission = match journal.admit(&roster, &Ed25519Verifier) {
+            Ok(a) => a,
+            Err(e) => {
+                warn!(target: "rails", namespace, error = %e, "kv: a local-only journal would not admit, nothing rehydrated");
+                return None;
+            }
+        };
+        let projection = rail_kv::project(&admission);
+        match self.store.apply_own_projection(
+            namespace,
+            &projection,
+            &self.rail.signer().actor(),
+            self.self_id,
+        ) {
+            Ok(applied) => {
+                debug!(
+                    target: "rails",
+                    namespace,
+                    rows = projection.rows.len(),
+                    merged = applied.merged,
+                    deleted = applied.deleted,
+                    skipped_foreign = applied.unattributed,
+                    "kv: rehydrated a local-only namespace from its own journal"
+                );
+                Some(applied.merged + applied.deleted)
+            }
+            Err(e) => {
+                warn!(target: "rails", namespace, error = %e, "kv: the store refused this local-only namespace");
+                None
+            }
+        }
     }
 
     /// Fold one namespace's admitted ops into the store.
