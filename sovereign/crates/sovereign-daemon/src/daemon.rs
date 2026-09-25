@@ -939,8 +939,6 @@ impl EmbeddedDaemon {
                 &fresh.iroh.media_allow,
             )?;
             self.media_route.set(origin, allow);
-            self.media_route
-                .set_viewer_user(fresh.iroh.media_viewer_user.clone());
             self.media_route.read_credentials_in(&self.data_dir);
             reloaded.extend(diff.media_changed.iter().map(|f| (*f).to_string()));
             info!(changed = ?diff.media_changed, "admin_reload: media route swapped live");
@@ -4300,8 +4298,6 @@ impl EmbeddedDaemon {
             )
             .map_err(MeshError::Config)?;
             self.media_route.set(origin, allow);
-            self.media_route
-                .set_viewer_user(cfg.iroh.media_viewer_user.clone());
         }
         // AN OFFER ORIGIN A MEMBER MAY REACH — what this operator has going
         // spare. Parsed here and REFUSED by name if it does not parse, for
