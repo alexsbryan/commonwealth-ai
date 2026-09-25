@@ -444,10 +444,10 @@ fn fmt_requester(id: &NodeId) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sovereign_mesh::ledger_port::PeerPreference;
     use oicp_types::{
         CapabilityClaim, CapabilityHint, LatencyClass, ModelStatus, ProviderManifest, ProviderModel,
     };
+    use sovereign_mesh::ledger_port::PeerPreference;
 
     fn nid(byte: u8) -> NodeId {
         NodeId::from_u128(byte as u128)
