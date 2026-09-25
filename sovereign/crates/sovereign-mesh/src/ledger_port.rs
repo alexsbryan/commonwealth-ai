@@ -60,6 +60,57 @@ pub trait ContributionLedgerPort: Send + Sync {
     ) -> LedgerFut<'_, HashMap<NodeId, NodeContributions>>;
 }
 
+/// Long-running background task that records one `StorageSnapshot`
+/// event per `interval` tick (the daemon passes
+/// `commonwealth_state::contributions::STORAGE_SNAPSHOT_INTERVAL`). Consumes
+/// a `walker` closure that produces the per-corpus `(id, size_gb)` pairs to
+/// record — the daemon supplies the walker, so this crate pulls in no
+/// knowledge dep. An empty walker result records nothing.
+///
+/// A [`LedgerAbsent`] from `record` is traced at warn and the loop keeps
+/// ticking: reported, never defaulted, never fatal (principle 6).
+///
+/// Shuts down cleanly when `shutdown` flips to true.
+pub async fn run_storage_snapshot_loop<F, Fut>(
+    emitter: std::sync::Arc<dyn ContributionLedgerPort>,
+    mut walker: F,
+    interval: std::time::Duration,
+    mut shutdown: tokio::sync::watch::Receiver<bool>,
+) where
+    F: FnMut() -> Fut + Send,
+    Fut: Future<Output = Vec<(String, f64)>> + Send,
+{
+    let mut ticker = tokio::time::interval(interval);
+    // The first tick fires immediately; we want a snapshot at boot
+    // AND every interval after, so this is the desired behavior.
+    loop {
+        tokio::select! {
+            _ = ticker.tick() => {
+                let corpora = walker().await;
+                if !corpora.is_empty() {
+                    if let Err(absent) = emitter
+                        .record(LedgerEventKind::StorageSnapshot { corpora })
+                        .await
+                    {
+                        tracing::warn!(
+                            error = %absent,
+                            "storage_snapshot: StorageSnapshot not recorded"
+                        );
+                    }
+                }
+            }
+            _ = shutdown.changed() => {
+                if *shutdown.borrow() {
+                    tracing::info!(
+                        "storage_snapshot: shutdown requested — exiting"
+                    );
+                    return;
+                }
+            }
+        }
+    }
+}
+
 /// `AppState.node.activity_emitter` as a port.
 pub trait ActivityLedgerPort: Send + Sync {
     /// `ActivityEmitter::record`.

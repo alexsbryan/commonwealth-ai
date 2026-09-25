@@ -84,6 +84,67 @@ async fn contributions_answer_what_the_emitter_answers() {
 }
 
 #[tokio::test]
+async fn storage_snapshot_loop_emits_on_first_tick() {
+    // Pinned cadence — first tick fires immediately when the
+    // tokio interval is created, so a snapshot lands at boot
+    // without waiting an hour. Pin this so a future tokio
+    // change doesn't silently shift the boot-time snapshot
+    // off the ledger.
+    let (_store, ledger) = ledger();
+    let port: Arc<dyn ContributionLedgerPort> = Arc::new(ledger.clone());
+    let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
+    let walker = || async { vec![("wikipedia".to_string(), 12.5_f64)] };
+    let handle = tokio::spawn(run_storage_snapshot_loop(
+        port,
+        walker,
+        std::time::Duration::from_secs(3_600),
+        shutdown_rx,
+    ));
+    // Real-time wait — first tick is immediate, so 50ms is
+    // generous. Pinned at 3600s interval so the second tick is
+    // an hour out (well after this test ends).
+    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    let _ = shutdown_tx.send(true);
+    let _ = handle.await;
+
+    let events = ContributionLedgerPort::events(&ledger).await.unwrap();
+    assert!(
+        events.iter().any(|e| matches!(
+            &e.kind,
+            LedgerEventKind::StorageSnapshot { corpora }
+                if corpora == &vec![("wikipedia".to_string(), 12.5)]
+        )),
+        "first tick must produce a StorageSnapshot, got {events:?}"
+    );
+}
+
+#[tokio::test]
+async fn storage_snapshot_loop_skips_emission_when_walker_returns_empty() {
+    // Empty walker → no event. Lets a daemon without a corpus
+    // engine wired up (or with no mesh-shared corpora) start
+    // the loop unconditionally without polluting the ledger.
+    let (_store, ledger) = ledger();
+    let port: Arc<dyn ContributionLedgerPort> = Arc::new(ledger.clone());
+    let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
+    let walker = || async { Vec::<(String, f64)>::new() };
+    let handle = tokio::spawn(run_storage_snapshot_loop(
+        port,
+        walker,
+        std::time::Duration::from_secs(3_600),
+        shutdown_rx,
+    ));
+    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    let _ = shutdown_tx.send(true);
+    let _ = handle.await;
+
+    let events = ContributionLedgerPort::events(&ledger).await.unwrap();
+    assert!(
+        events.is_empty(),
+        "no events expected when walker returns empty, got {events:?}"
+    );
+}
+
+#[tokio::test]
 async fn activity_answers_what_current_activity_answers() {
     let (store, ledger) = ledger();
     ActivityLedgerPort::record(

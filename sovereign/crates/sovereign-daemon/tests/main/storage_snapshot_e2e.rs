@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! `StorageSnapshot` integration test.
 //!
-//! `commonwealth-state::run_storage_snapshot_loop` is L1-pinned (the
-//! contribution module's own tests cover first-tick-immediate and
+//! `sovereign-mesh::ledger_port::run_storage_snapshot_loop` is L1-pinned
+//! (the ledger port's own tests cover first-tick-immediate and
 //! empty-walker-no-event). What's NOT pinned is the daemon-side
 //! integration: that the walker `EmbeddedDaemon::start_daemon`
 //! constructs (`daemon.rs::1546-1605`, paraphrased)

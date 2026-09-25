@@ -4048,12 +4048,12 @@ impl EmbeddedDaemon {
         // exit, the sender drops with it. Mirrors the gossip
         // loop's "live for the whole daemon" model without needing
         // to thread a new field into `DaemonState::Running`.
-        let snapshot_emitter = app_state.inner.fabric.contribution_emitter.clone();
+        let snapshot_emitter = Arc::clone(&app_state.inner.store.contribution_emitter);
         let snapshot_engine = corpus_engine.clone();
         let (snapshot_shutdown_tx, snapshot_shutdown_rx) = tokio::sync::watch::channel(false);
         tokio::spawn(async move {
             let _hold_shutdown_tx = snapshot_shutdown_tx;
-            commonwealth_state::contributions::run_storage_snapshot_loop(
+            sovereign_mesh::ledger_port::run_storage_snapshot_loop(
                 snapshot_emitter,
                 move || {
                     let engine = snapshot_engine.clone();
