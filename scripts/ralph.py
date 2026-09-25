@@ -1045,7 +1045,11 @@ class Session:
         except OSError:
             rejects = 0
         if rejects:
-            say(f"WARNING: {rejects} permission auto-rejections — extend opencode.json")
+            # Name the engine's own permission file: the claude shim reads the
+            # manifest's `settings`; opencode reads opencode.json.
+            manifest = self.paths.manifest
+            perms = manifest.settings if manifest and manifest.settings else "opencode.json"
+            say(f"WARNING: {rejects} permission auto-rejections — extend {perms}")
             self.notifier("auto — permission rejects", f"{rejects} auto-rejections", self.notify_enabled)
         _ACTIVE_SESSIONS.discard(proc)
         return rc
