@@ -27,10 +27,10 @@ use commonwealth_core::contributions::{LedgerEvent, LedgerEventKind};
 use commonwealth_core::ids::NodeId;
 use commonwealth_core::mesh::NodeStatus;
 use commonwealth_core::partition;
-use sovereign_contracts::peer::ReplicatedKv;
 use corpus_engine::update::newsworthy_watcher::{CommittedDocs, NewsworthyHost};
 use corpus_index::error::{Error as CorpusError, Result as CorpusResult};
 use sovereign_contracts::identity::IdentityReader;
+use sovereign_contracts::peer::ReplicatedKv;
 
 pub struct MeshNewsworthyHost {
     app_state: AppState,
@@ -128,18 +128,24 @@ impl MeshNewsworthyHost {
         // `target_corpus_id`. Snapshots are gossiped hourly, so a
         // freshly-installed peer may not show up for up to an hour —
         // acceptable for a daily watcher tick.
-        let events: Vec<LedgerEvent> =
-            match self.app_state.inner.store.contribution_emitter.events().await {
-                Ok(ev) => ev,
-                Err(e) => {
-                    tracing::warn!(
-                        error = %e,
-                        "newsworthy.host: contribution_emitter.events failed; \
-                         leader pool falls back to self-only"
-                    );
-                    return holders;
-                }
-            };
+        let events: Vec<LedgerEvent> = match self
+            .app_state
+            .inner
+            .store
+            .contribution_emitter
+            .events()
+            .await
+        {
+            Ok(ev) => ev,
+            Err(e) => {
+                tracing::warn!(
+                    error = %e,
+                    "newsworthy.host: contribution_emitter.events failed; \
+                     leader pool falls back to self-only"
+                );
+                return holders;
+            }
+        };
 
         let mut latest_per_node: HashMap<NodeId, (&LedgerEvent, &Vec<(String, f64)>)> =
             HashMap::new();
