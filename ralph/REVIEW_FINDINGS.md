@@ -3144,7 +3144,12 @@ as in its three siblings, and is not a noun.
   `git ls-files` into the list, which is certain to overflow, so "gating
   EVERYTHING" blocks without gating anything. The limit is in the variable's
   consumers (sovereign-lint.sh, quality instruments), so the fix is not
-  small.
+  small. FIXED 2026-09-25 in pre-push.sh alone, with no consumer change:
+  both consumers already read an unset variable as "gate everything", so
+  past 131072 bytes, or on the fail-closed branch, the hook exports
+  SOVEREIGN_LINT_FULL=1 and hands down no set. Watched red then green in
+  scripts/tests/pre-push-fail-closed.sh case 4
+  (`git log -S GATE_ALL -- scripts/pre-push.sh`).
 - **arch-gate [hard] (NEEDS_HUMAN)** · the instruction-surface ratchet has
   AGENTS.md at 48,756 against a baseline of 48,754
   (`quality/baselines/instruction_surface.txt:7`). The merge c65607b10 took

@@ -110,4 +110,25 @@ run_case "a valid empty range gates nothing" \
 run_case "a valid range gates exactly its diff" \
     "$C1" "$C2" gated "gating 1 changed file(s)"
 
+# 4. The change set must REACH the runner. It travels as one env string, and
+#    Linux refuses any single string past MAX_ARG_STRLEN (128 KiB): the runner
+#    then dies E2BIG before running a line (REVIEW-audit-fp-auto-10, 1,242
+#    paths). A stub runner, found first at target/debug/sovereign-cli, says
+#    what it inherited. ~1,400 paths of ~100 bytes crosses the limit.
+mkdir -p target/debug d
+printf '%s\n' '#!/usr/bin/env bash' \
+    'echo "stub: CHANGED=${SOVEREIGN_CHANGED_PATHS:+set} FULL=${SOVEREIGN_LINT_FULL:-}" >&2' \
+    > target/debug/sovereign-cli
+chmod +x target/debug/sovereign-cli
+echo target/ >> .git/info/exclude
+for i in $(seq 1 1400); do : > "d/$(printf 'f%04d_%090d' "$i" 0).txt"; done
+git add d && git commit -q -m "big"
+C3="$(git rev-parse HEAD)"
+run_case "a change set past 128 KiB reaches the runner as the whole workspace" \
+    "$C2" "$C3" gated "stub: CHANGED= FULL=1"
+run_case "an undiffable range reaches the runner as the whole workspace" \
+    "$UNKNOWN" "$C3" gated "stub: CHANGED= FULL=1"
+run_case "a small range still reaches the runner as its own paths" \
+    "$C1" "$C2" gated "stub: CHANGED=set FULL=$"
+
 exit "$rc"
