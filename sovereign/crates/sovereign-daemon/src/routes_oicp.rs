@@ -252,7 +252,7 @@ pub async fn capabilities(
             }
             drop(mesh);
             apply_v04_enrichment(&state, true, &mut manifest);
-            apply_peer_preference(&state, &requester, &mut manifest);
+            apply_peer_preference(&state, &requester, &mut manifest).await;
             return Json(manifest);
         }
     }
@@ -362,7 +362,7 @@ pub async fn capabilities(
     };
     drop(mesh);
     apply_v04_enrichment(&state, false, &mut manifest);
-    apply_peer_preference(&state, &requester, &mut manifest);
+    apply_peer_preference(&state, &requester, &mut manifest).await;
     Json(manifest)
 }
 
@@ -370,7 +370,7 @@ pub async fn capabilities(
 /// outbound manifest, multiplying every claim's `affinity` by the
 /// stored multiplier. No-op when the requester is unidentified or
 /// the operator hasn't set a preference for them.
-fn apply_peer_preference(
+async fn apply_peer_preference(
     state: &AppState,
     requester: &Option<NodeId>,
     manifest: &mut ProviderManifest,
@@ -378,7 +378,7 @@ fn apply_peer_preference(
     let Some(requester_id) = requester else {
         return;
     };
-    let pref = match state.inner.store.peer_preferences.get(requester_id) {
+    let pref = match state.inner.store.peer_preferences.get(requester_id).await {
         Ok(Some(p)) => p,
         Ok(None) => return,
         Err(e) => {
@@ -416,7 +416,7 @@ fn fmt_requester(id: &NodeId) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use commonwealth_state::{PeerPreference, PeerPreferenceStore};
+    use commonwealth_state::PeerPreference;
     use oicp_types::{
         CapabilityClaim, CapabilityHint, LatencyClass, ModelStatus, ProviderManifest, ProviderModel,
     };
@@ -504,10 +504,11 @@ mod tests {
             .store
             .peer_preferences
             .set(&target, PeerPreference::new(0.5, None).unwrap())
+            .await
             .unwrap();
         let mut manifest = manifest_with_affinity(0.8);
         // Apply for the matching requester.
-        apply_peer_preference(&state, &Some(target), &mut manifest);
+        apply_peer_preference(&state, &Some(target), &mut manifest).await;
         let scaled = manifest.models[0].claims[0].affinity;
         assert!((scaled - 0.4).abs() < 1e-6, "got {scaled}");
     }
@@ -520,10 +521,11 @@ mod tests {
             .store
             .peer_preferences
             .set(&nid(0x11), PeerPreference::new(0.5, None).unwrap())
+            .await
             .unwrap();
         let mut manifest = manifest_with_affinity(0.8);
         // Different requester — preference shouldn't apply.
-        apply_peer_preference(&state, &Some(nid(0x22)), &mut manifest);
+        apply_peer_preference(&state, &Some(nid(0x22)), &mut manifest).await;
         assert!((manifest.models[0].claims[0].affinity - 0.8).abs() < 1e-6);
     }
 
@@ -535,10 +537,11 @@ mod tests {
             .store
             .peer_preferences
             .set(&nid(0x11), PeerPreference::new(0.5, None).unwrap())
+            .await
             .unwrap();
         let mut manifest = manifest_with_affinity(0.8);
         // No `X-Node-Id` from the requester — manifest unchanged.
-        apply_peer_preference(&state, &None, &mut manifest);
+        apply_peer_preference(&state, &None, &mut manifest).await;
         assert!((manifest.models[0].claims[0].affinity - 0.8).abs() < 1e-6);
     }
 
@@ -546,7 +549,7 @@ mod tests {
     async fn manifest_endpoint_applies_preference_when_x_node_id_present() {
         // Full GET roundtrip through the router. test_app_state has
         // no models registered; we set a preference via the
-        // PeerPreferenceStore on AppState and verify the helper
+        // peer-preferences port on AppState and verify the helper
         // path runs cleanly with `X-Node-Id` set. Empty-model
         // manifests pass the multiplier loop without panicking,
         // proving the integration is wired even when there are no
@@ -560,8 +563,8 @@ mod tests {
             .store
             .peer_preferences
             .set(&nid(0x33), PeerPreference::new(0.25, None).unwrap())
+            .await
             .unwrap();
-        let _store = PeerPreferenceStore::new;
         let app = crate::server::mock_router(state);
         let resp = app
             .oneshot(

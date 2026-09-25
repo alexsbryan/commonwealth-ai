@@ -6,8 +6,8 @@
 //! cross the crate line:
 //!
 //! * `inference_store` (`commonwealth_state::store_adapter::InferenceStateStore`)
-//!   and `peer_preferences` (`commonwealth_state::PeerPreferenceStore`) are
-//!   backed by `commonwealth-state`, which is not a shared leaf of the
+//!   and `peer_preferences` (`sovereign_mesh::ledger_port::PeerPreferencesPort`
+//!   since fp-90) are backed by `commonwealth-state`, which is not a shared leaf of the
 //!   `serving` package — a dep would be a third `[[exception]]`, and the
 //!   campaign's K4 kill clause splits the cluster rather than widening the
 //!   ledger (`quality/campaigns/domains.toml:288`);
@@ -21,9 +21,8 @@
 use std::sync::Arc;
 
 use commonwealth_state::store_adapter::InferenceStateStore;
-use commonwealth_state::PeerPreferenceStore;
 use sovereign_contracts::peer::ReplicatedKv;
-use sovereign_mesh::ledger_port::ContributionLedgerPort;
+use sovereign_mesh::ledger_port::{ContributionLedgerPort, PeerPreferencesPort};
 
 use super::RpcShardWarmer;
 
@@ -36,8 +35,9 @@ pub struct StorePart {
     /// never gossiped — see
     /// `commonwealth_state::peer_preferences` for the structural
     /// invariants. The manifest endpoint reads this on every
-    /// fetch to apply per-requester affinity multipliers.
-    pub peer_preferences: PeerPreferenceStore,
+    /// fetch to apply per-requester affinity multipliers. Held as a port
+    /// over `LocalLedger` (five-programs fp-90); in-process until fp-88.
+    pub peer_preferences: Arc<dyn PeerPreferencesPort>,
     /// Worker-side auto-warm hook for distributed inference, passed at
     /// construction alongside `local_inference`; drives
     /// `POST /internal/rpc-warm`. `None` on a node that isn't an inference

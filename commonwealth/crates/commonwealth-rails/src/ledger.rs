@@ -36,7 +36,8 @@ use commonwealth_core::oicp::EmbedModelInfo;
 use commonwealth_state::inference_plan::InferencePlan;
 use commonwealth_state::store_adapter::InferenceStateStore;
 use commonwealth_state::{
-    ActivityEmitter, ContributionEmitter, MeshStore, PeerPreferenceStore, PROCESSED_SHARDS_APP_ID,
+    ActivityEmitter, ContributionEmitter, MeshStore, PeerPreference, PeerPreferenceStore,
+    PROCESSED_SHARDS_APP_ID,
 };
 use serde::Deserialize;
 use tracing::{debug, warn};
@@ -74,6 +75,11 @@ pub fn router(doors: LedgerDoors) -> Router {
         .route("/v1/ledger/activity/current", post(activity_current))
         .route("/v1/ledger/peer-preferences", get(peer_preferences_list))
         .route("/v1/ledger/peer-preferences/get", post(peer_preference_get))
+        .route("/v1/ledger/peer-preferences/set", post(peer_preference_set))
+        .route(
+            "/v1/ledger/peer-preferences/clear",
+            post(peer_preference_clear),
+        )
         .route(
             "/v1/ledger/processed-shards",
             post(processed_shards_publish),
@@ -140,6 +146,13 @@ pub struct WindowDays {
 #[derive(Debug, Deserialize)]
 pub struct Peer {
     pub peer: NodeId,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PeerPreferenceSet {
+    pub node_id: NodeId,
+    pub peer: NodeId,
+    pub pref: PeerPreference,
 }
 
 #[derive(Debug, Deserialize)]
@@ -229,7 +242,8 @@ async fn activity_current(State(d): State<LedgerDoors>, Json(body): Json<WindowD
 // ── Peer preferences ─────────────────────────────────────────
 
 fn preferences(d: &LedgerDoors) -> PeerPreferenceStore {
-    // Reads only: `list` and `get` never stamp the node id.
+    // `list`, `get` and `clear` never stamp the node id; `set` builds its
+    // own store with the writer's.
     PeerPreferenceStore::new(d.store.clone(), NodeId::from_u128(0))
 }
 
@@ -246,6 +260,28 @@ async fn peer_preference_get(State(d): State<LedgerDoors>, Json(body): Json<Peer
     match preferences(&d).get(&body.peer) {
         Ok(pref) => Json(pref).into_response(),
         Err(e) => store_error("peer-preferences/get", e),
+    }
+}
+
+/// POST /v1/ledger/peer-preferences/set — `PeerPreferenceStore::set`,
+/// stamped with the writer's node id.
+async fn peer_preference_set(
+    State(d): State<LedgerDoors>,
+    Json(body): Json<PeerPreferenceSet>,
+) -> Response {
+    debug!(target: "rails", node = %body.node_id, "ledger: peer preference set");
+    match PeerPreferenceStore::new(d.store.clone(), body.node_id).set(&body.peer, body.pref) {
+        Ok(()) => Json(()).into_response(),
+        Err(e) => store_error("peer-preferences/set", e),
+    }
+}
+
+/// POST /v1/ledger/peer-preferences/clear — `PeerPreferenceStore::clear`;
+/// answers whether a preference was there.
+async fn peer_preference_clear(State(d): State<LedgerDoors>, Json(body): Json<Peer>) -> Response {
+    match preferences(&d).clear(&body.peer) {
+        Ok(cleared) => Json(cleared).into_response(),
+        Err(e) => store_error("peer-preferences/clear", e),
     }
 }
 

@@ -135,6 +135,7 @@ async fn x_node_id_with_set_preference_halves_all_claim_affinities() {
             &target_peer,
             PeerPreference::new(0.5, Some("sanction reason".into())).unwrap(),
         )
+        .await
         .expect("set preference");
 
     let addr = spawn(state).await;
@@ -183,6 +184,7 @@ async fn x_node_id_for_unmatched_peer_does_not_modify_affinities() {
         .store
         .peer_preferences
         .set(&stored_peer, PeerPreference::new(0.25, None).unwrap())
+        .await
         .expect("set preference");
 
     let addr = spawn(state).await;
@@ -212,6 +214,7 @@ async fn no_header_does_not_pick_up_any_stored_preference() {
         .store
         .peer_preferences
         .set(&stored_peer, PeerPreference::new(0.1, None).unwrap())
+        .await
         .expect("set preference");
 
     let addr = spawn(state).await;

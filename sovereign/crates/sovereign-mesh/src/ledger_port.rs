@@ -68,12 +68,18 @@ pub trait ActivityLedgerPort: Send + Sync {
     fn current_activity(&self, window_days: u32) -> LedgerFut<'_, ActivitySummary>;
 }
 
-/// `AppState.store.peer_preferences` as a port — the daemon only reads it.
+/// `AppState.store.peer_preferences` as a port — the daemon reads it on
+/// every manifest fetch and writes it from the operator's `peer-preference`
+/// routes.
 pub trait PeerPreferencesPort: Send + Sync {
     /// `PeerPreferenceStore::list`.
     fn list(&self) -> LedgerFut<'_, Vec<(NodeId, PeerPreference)>>;
     /// `PeerPreferenceStore::get`.
     fn get(&self, peer: &NodeId) -> LedgerFut<'_, Option<PeerPreference>>;
+    /// `PeerPreferenceStore::set`.
+    fn set(&self, peer: &NodeId, pref: PeerPreference) -> LedgerFut<'_, ()>;
+    /// `PeerPreferenceStore::clear` — whether a preference was there.
+    fn clear(&self, peer: &NodeId) -> LedgerFut<'_, bool>;
 }
 
 /// The processed-shards announcements (`commonwealth_state::processed_shards`).
@@ -206,6 +212,24 @@ impl PeerPreferencesPort for LocalLedger {
             self.preferences()
                 .get(&peer)
                 .map_err(|e| store_absent("peer-preferences/get", e))
+        })
+    }
+
+    fn set(&self, peer: &NodeId, pref: PeerPreference) -> LedgerFut<'_, ()> {
+        let peer = *peer;
+        Box::pin(async move {
+            self.preferences()
+                .set(&peer, pref)
+                .map_err(|e| store_absent("peer-preferences/set", e))
+        })
+    }
+
+    fn clear(&self, peer: &NodeId) -> LedgerFut<'_, bool> {
+        let peer = *peer;
+        Box::pin(async move {
+            self.preferences()
+                .clear(&peer)
+                .map_err(|e| store_absent("peer-preferences/clear", e))
         })
     }
 }

@@ -136,6 +136,20 @@ impl PeerPreferencesPort for RailsLedger {
             async move { ledger_post(&self.base, "/v1/ledger/peer-preferences/get", body).await },
         )
     }
+
+    fn set(&self, peer: &NodeId, pref: PeerPreference) -> LedgerFut<'_, ()> {
+        let body = json!({ "node_id": self.self_node_id, "peer": peer, "pref": pref });
+        Box::pin(
+            async move { ledger_post(&self.base, "/v1/ledger/peer-preferences/set", body).await },
+        )
+    }
+
+    fn clear(&self, peer: &NodeId) -> LedgerFut<'_, bool> {
+        let body = json!({ "peer": peer });
+        Box::pin(
+            async move { ledger_post(&self.base, "/v1/ledger/peer-preferences/clear", body).await },
+        )
+    }
 }
 
 impl ProcessedShardsPort for RailsLedger {

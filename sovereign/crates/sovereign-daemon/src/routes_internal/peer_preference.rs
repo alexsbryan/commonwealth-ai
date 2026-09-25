@@ -105,7 +105,7 @@ fn parse_node_id_hex(s: &str) -> Result<NodeId, (StatusCode, String)> {
 pub async fn peer_preference_list(
     State(state): State<AppState>,
 ) -> Result<Json<Vec<VenuePreferenceDto>>, (StatusCode, String)> {
-    let entries = state.inner.store.peer_preferences.list().map_err(|e| {
+    let entries = state.inner.store.peer_preferences.list().await.map_err(|e| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             format!("peer_preference_list: {e}"),
@@ -148,6 +148,7 @@ pub async fn peer_preference_set(
         .store
         .peer_preferences
         .set(&target, pref)
+        .await
         .map_err(|e| {
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -173,6 +174,7 @@ pub async fn peer_preference_clear(
         .store
         .peer_preferences
         .clear(&target)
+        .await
         .map_err(|e| {
             (
                 StatusCode::INTERNAL_SERVER_ERROR,

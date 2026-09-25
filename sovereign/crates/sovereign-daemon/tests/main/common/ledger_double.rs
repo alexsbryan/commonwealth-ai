@@ -138,6 +138,14 @@ impl PeerPreferencesPort for RecordingLedger {
     fn get(&self, peer: &NodeId) -> LedgerFut<'_, Option<PeerPreference>> {
         self.answer("peer_preferences.get", peer.to_string(), None)
     }
+
+    fn set(&self, peer: &NodeId, pref: PeerPreference) -> LedgerFut<'_, ()> {
+        self.answer("peer_preferences.set", format!("{peer} {pref:?}"), ())
+    }
+
+    fn clear(&self, peer: &NodeId) -> LedgerFut<'_, bool> {
+        self.answer("peer_preferences.clear", peer.to_string(), false)
+    }
 }
 
 impl ProcessedShardsPort for RecordingLedger {
