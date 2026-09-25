@@ -8,7 +8,7 @@
 //! or follower, when the last tick fired, or whether anything is
 //! tracked. The route reads the snapshot the watcher publishes to
 //! the mesh store at the end of every tick (key
-//! `wikipedia-newsworthy:status/last_tick`) and overlays the live
+//! `wikipedia-newsworthy-status/last_tick`) and overlays the live
 //! mesh-membership view (current leader, online peer count) so the
 //! UI can answer the three questions the user actually asks:
 //!

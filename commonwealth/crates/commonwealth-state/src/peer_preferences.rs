@@ -224,14 +224,14 @@ impl PeerPreferenceStore {
 ///
 /// No cross-peer consumer (cw-lift 2b):
 ///
-/// - `wikipedia-newsworthy:status` — the per-node watcher tick
+/// - `wikipedia-newsworthy-status` — the per-node watcher tick
 ///   snapshot. Its key is the unsuffixed `last_tick` on EVERY node, so
 ///   under LWW the most recent peer's snapshot won and
 ///   `/internal/newsworthy/status` reported that peer's `node_id_str`
 ///   and `role_leader` as yours. Excluding it is the fix, not a
 ///   trade-off — the reader (`read_last_tick`) only ever wanted the
 ///   local tick.
-/// - `wikipedia-newsworthy:portal` — daily portal idempotency markers.
+/// - `wikipedia-newsworthy-portal` — daily portal idempotency markers.
 ///   Written and read inside the leader's own `run_leader_step`; the
 ///   only other reader is `svrn newsworthy status` against the
 ///   repo-local `.sovereign/mesh.db`.
@@ -444,9 +444,9 @@ mod tests {
     fn gossip_excludes_namespaces_with_no_cross_peer_consumer() {
         // Single unsuffixed `last_tick` key — replicating it made a
         // peer's tick render as yours.
-        assert!(is_gossip_excluded("wikipedia-newsworthy:status"));
+        assert!(is_gossip_excluded("wikipedia-newsworthy-status"));
         // Leader reads back its own marker inside `run_leader_step`.
-        assert!(is_gossip_excluded("wikipedia-newsworthy:portal"));
+        assert!(is_gossip_excluded("wikipedia-newsworthy-portal"));
         // The tracked set is the newsworthy namespace that DOES have a
         // cross-peer consumer: the leader writes it, every node reads
         // it to pick its partition. It must keep replicating — which

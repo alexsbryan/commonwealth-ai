@@ -8,8 +8,8 @@
 //! store via the [`NewsworthyHost`] adapter trait — `corpus-engine`
 //! deliberately does not link Commonwealth.
 //!
-//! Only the tracked set replicates. `wikipedia-newsworthy:portal` is
-//! the leader's own idempotency marker and `wikipedia-newsworthy:status`
+//! Only the tracked set replicates. `wikipedia-newsworthy-portal` is
+//! the leader's own idempotency marker and `wikipedia-newsworthy-status`
 //! is this node's own tick snapshot, so both are gossip-excluded
 //! (`commonwealth-state::peer_preferences::GOSSIP_EXCLUDED_APP_IDS`);
 //! `:status` had to be, since its single unsuffixed `last_tick` key
@@ -24,7 +24,7 @@
 //!    re-indexes it into `wikipedia-newsworthy` keyed by date, extracts
 //!    bullet wikilinks, and writes additions to the tracked set.
 //!    Idempotent under repeated leader ticks via the
-//!    `wikipedia-newsworthy:portal` KV namespace (date → last revid).
+//!    `wikipedia-newsworthy-portal` KV namespace (date → last revid).
 //!
 //! 2. **Every-node partition-owned reconciliation.** Each node walks
 //!    the tracked set, filters to titles it owns under rendezvous
@@ -80,7 +80,7 @@ pub const APP_ID_TRACKED: &str = "wikipedia-newsworthy-tracked";
 /// `portal:<YYYY-MM-DD>`. Written and read only inside
 /// [`WikipediaNewsworthyWatcher::run_leader_step`] — the leader reads
 /// back its own marker — so it is gossip-excluded and stays local.
-pub const APP_ID_PORTAL: &str = "wikipedia-newsworthy:portal";
+pub const APP_ID_PORTAL: &str = "wikipedia-newsworthy-portal";
 
 /// MeshStore namespace for the per-node tick-status snapshot. Single
 /// key `last_tick` carrying [`TickStatusSnapshot`] JSON, overwritten
@@ -95,7 +95,7 @@ pub const APP_ID_PORTAL: &str = "wikipedia-newsworthy:portal";
 /// last-write-wins made whichever peer ticked most recently the one
 /// whose `node_id_str` and `role_leader` your own status route
 /// reported (cw-lift 2b).
-pub const APP_ID_STATUS: &str = "wikipedia-newsworthy:status";
+pub const APP_ID_STATUS: &str = "wikipedia-newsworthy-status";
 pub const STATUS_KEY_LAST_TICK: &str = "last_tick";
 
 /// Persistent snapshot of the most recent watcher tick. Lives at

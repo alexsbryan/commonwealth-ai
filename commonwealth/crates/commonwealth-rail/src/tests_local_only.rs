@@ -9,6 +9,15 @@ use commonwealth_rail_core::tests_support::*;
 const LOCAL: &str = "notes-private";
 const CARRIED: &str = "mesh-measurements";
 
+/// Every local-only namespace is journalable: a directory name
+/// `valid_namespace` accepts (fp-106; ARCH 10).
+#[test]
+fn every_local_only_namespace_is_a_valid_journal_name() {
+    for ns in LOCAL_ONLY_NAMESPACES {
+        assert!(valid_namespace(ns), "`{ns}` cannot name a journal");
+    }
+}
+
 /// Watched red by deleting the local-only skip from `RingRail::namespaces`.
 #[test]
 fn a_local_only_journal_is_held_but_never_offered() {

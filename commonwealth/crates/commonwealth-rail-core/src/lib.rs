@@ -124,16 +124,15 @@ pub use serde_json::Value;
 /// `RingJournal::ops_missing_from_within`). The why per entry is
 /// `commonwealth_state::peer_preferences::GOSSIP_EXCLUDED_APP_IDS`, which is
 /// this list plus the namespaces that left the KV gossip FOR the ring
-/// (five-programs-37). The two `:` ids never name a journal — a namespace is
-/// a directory and refuses `:` — but "never leaves this node" holds of them.
+/// (five-programs-37).
 pub const LOCAL_ONLY_NAMESPACES: &[&str] = &[
     "peer_preferences",
     "work-atlas-private",
     "notes-private",
     "activity-private",
     "portfolio-private",
-    "wikipedia-newsworthy:status",
-    "wikipedia-newsworthy:portal",
+    "wikipedia-newsworthy-status",
+    "wikipedia-newsworthy-portal",
 ];
 
 /// The one predicate over [`LOCAL_ONLY_NAMESPACES`].
