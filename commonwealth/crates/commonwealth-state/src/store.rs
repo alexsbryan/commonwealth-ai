@@ -394,40 +394,7 @@ impl MeshStore {
                 );
                 continue;
             };
-            match &row.value {
-                Some(value) => {
-                    let accepted = self.merge_entry(StoreEntry {
-                        app_id: app_id.to_string(),
-                        key: row.key.clone(),
-                        value: value.clone(),
-                        timestamp: row.t,
-                        origin,
-                    })?;
-                    if accepted {
-                        applied.merged += 1;
-                    }
-                    tracing::debug!(
-                        app_id,
-                        key = %row.key,
-                        t = row.t,
-                        accepted,
-                        "mesh_store.projection_merge"
-                    );
-                }
-                None => {
-                    let removed = self.backend.delete_if_not_newer(app_id, &row.key, row.t)?;
-                    if removed {
-                        applied.deleted += 1;
-                    }
-                    tracing::debug!(
-                        app_id,
-                        key = %row.key,
-                        t = row.t,
-                        removed,
-                        "mesh_store.projection_tombstone"
-                    );
-                }
-            }
+            self.apply_projected_row(app_id, row, origin, &mut applied)?;
         }
         // ── What the seals say is no longer asserted.
         //
@@ -548,24 +515,7 @@ impl MeshStore {
                 tracing::debug!(app_id, key = %row.key, t = row.t, floor, "mesh_store.own_projection_withheld_expired");
                 continue;
             }
-            match &row.value {
-                Some(value) => {
-                    if self.merge_entry(StoreEntry {
-                        app_id: app_id.to_string(),
-                        key: row.key.clone(),
-                        value: value.clone(),
-                        timestamp: row.t,
-                        origin: self_id,
-                    })? {
-                        applied.merged += 1;
-                    }
-                }
-                None => {
-                    if self.backend.delete_if_not_newer(app_id, &row.key, row.t)? {
-                        applied.deleted += 1;
-                    }
-                }
-            }
+            self.apply_projected_row(app_id, row, self_id, &mut applied)?;
         }
         tracing::debug!(
             app_id,
@@ -577,6 +527,53 @@ impl MeshStore {
             "mesh_store.own_projection_applied"
         );
         Ok(applied)
+    }
+
+    /// One attributed row into the store: a value merges under LWW, a
+    /// tombstone deletes what is not newer. Both projection doors fold rows
+    /// through here; each decides the row's `origin` and its gates first.
+    fn apply_projected_row(
+        &self,
+        app_id: &str,
+        row: &crate::rail_kv::Projected,
+        origin: NodeId,
+        applied: &mut Applied,
+    ) -> Result<()> {
+        match &row.value {
+            Some(value) => {
+                let accepted = self.merge_entry(StoreEntry {
+                    app_id: app_id.to_string(),
+                    key: row.key.clone(),
+                    value: value.clone(),
+                    timestamp: row.t,
+                    origin,
+                })?;
+                if accepted {
+                    applied.merged += 1;
+                }
+                tracing::debug!(
+                    app_id,
+                    key = %row.key,
+                    t = row.t,
+                    accepted,
+                    "mesh_store.projection_merge"
+                );
+            }
+            None => {
+                let removed = self.backend.delete_if_not_newer(app_id, &row.key, row.t)?;
+                if removed {
+                    applied.deleted += 1;
+                }
+                tracing::debug!(
+                    app_id,
+                    key = %row.key,
+                    t = row.t,
+                    removed,
+                    "mesh_store.projection_tombstone"
+                );
+            }
+        }
+        Ok(())
     }
 
     /// Delete entries older than `ttl_seconds`. Returns count deleted.
