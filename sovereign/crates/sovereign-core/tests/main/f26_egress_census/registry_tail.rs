@@ -322,6 +322,16 @@ pub(super) const REGISTRY_TAIL: &[(&str, Class, usize)] = &[
     // the loopback `rails_base` (default 127.0.0.1:9747), the mesh's serving
     // process this daemon already trusts with its roster answers since fp-6.
     ("sovereign/crates/sovereign-daemon/src/rails_client.rs", Class::LocalDaemon, 1),
+    // NEW ROW (2026-09-25, fp-solo-hermetic, five-programs-66): a local-only
+    // node's `ensure_rails` reads an already-running cw-rails'
+    // `GET /v1/mesh/status` posture — the same loopback `rails_base`, which
+    // `ensure_rails` refuses unless it is loopback. Its own client because
+    // the read runs on ensure_rails' short-lived runtime, not the daemon's.
+    (
+        "sovereign/crates/sovereign-daemon/src/rails_client/bring_up.rs",
+        Class::LocalDaemon,
+        1,
+    ),
     // NEW ROW (2026-09-24, fw-1 wave: the journals moved to the serving
     // process, so the presence poll moved with the media origin it reads).
     // Four sites, one of them production — `run`'s poll client — dialing
