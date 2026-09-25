@@ -28,7 +28,8 @@ pub(crate) fn rails_kv() -> RailsKv {
         }
     };
     let base = sovereign_daemon::rails_client::resolve_rails_base(&daemon);
-    let _ = sovereign_daemon::rails_client::ensure_rails(&base);
+    let local_only = sovereign_daemon::LocalOnlyProfile::resolve(daemon.local_only).is_local_only();
+    let _ = sovereign_daemon::rails_client::ensure_rails(&base, local_only);
     RailsKv::new(base)
 }
 

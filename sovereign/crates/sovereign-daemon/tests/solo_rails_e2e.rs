@@ -220,7 +220,7 @@ fn a_meshless_node_brings_cw_rails_up_and_its_state_survives_a_restart() {
 
     // A portfolio row, written the way `svrn portfolio` writes it.
     let rails_kv = || {
-        ensure_rails(&base).expect("rails_kv() re-ensures cw-rails");
+        ensure_rails(&base, false).expect("rails_kv() re-ensures cw-rails");
         RailsKv::new(base.clone())
     };
     let (app, key, value) = ("portfolio-private", "solo-e2e", Bytes::from_static(b"kept"));
@@ -256,7 +256,7 @@ fn a_meshless_node_brings_cw_rails_up_and_its_state_survives_a_restart() {
     let (a, b) = std::thread::scope(|s| {
         let race = || {
             gate.wait();
-            ensure_rails(&base)
+            ensure_rails(&base, false)
         };
         let (a, b) = (s.spawn(race), s.spawn(race));
         (a.join().expect("racer a"), b.join().expect("racer b"))

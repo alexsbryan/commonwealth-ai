@@ -17,20 +17,30 @@ const RAILS_BRING_UP_WINDOW: std::time::Duration = std::time::Duration::from_sec
 /// racing callers are cw-rails' question — its `rails.lock` turns the loser
 /// away, and the refusal lands in `rails.log`.
 ///
+/// A cw-rails it brings up serves the port `base` names (`--listen`), and a
+/// `local_only` node's runs with n0 severed (`--local-only`). One already
+/// answering on a local-only node must report n0 services off on
+/// `/v1/mesh/status`, or this is a named Err — never a second cw-rails
+/// (five-programs-66).
+///
 /// Sync and safe from any thread: the probe runs on its own thread and
-/// runtime. A non-loopback base or an absent binary is a traced, named
-/// absence (principle 6).
+/// runtime. A non-loopback base, a base with no port, or an absent binary
+/// is a traced, named absence (principle 6).
 ///
 /// [`ServingHost::ensure_reachable`]: sovereign_turn_client::reach::ServingHost::ensure_reachable
-pub fn ensure_rails(base: &str) -> Result<sovereign_turn_client::reach::Reached, String> {
-    use sovereign_turn_client::reach::{locate_sibling, BundledBackend, ServingHost};
+pub fn ensure_rails(
+    base: &str,
+    local_only: bool,
+) -> Result<sovereign_turn_client::reach::Reached, String> {
+    use sovereign_turn_client::reach::{locate_sibling, BundledBackend, Reached, ServingHost};
 
     let absent = |why: String| {
         tracing::warn!(rails_base = base, reason = %why, "ensure_rails: cw-rails is not reachable");
         why
     };
-    let host = reqwest::Url::parse(base)
-        .map_err(|e| absent(format!("the rails base {base} is not a URL: {e}")))?
+    let url = reqwest::Url::parse(base)
+        .map_err(|e| absent(format!("the rails base {base} is not a URL: {e}")))?;
+    let host = url
         .host_str()
         .map(|h| h.trim_matches(['[', ']']).to_string())
         .unwrap_or_default();
@@ -43,6 +53,12 @@ pub fn ensure_rails(base: &str) -> Result<sovereign_turn_client::reach::Reached,
             "the rails base {base} is not loopback; only a local cw-rails is brought up"
         )));
     }
+    let Some(port) = url.port() else {
+        return Err(absent(format!(
+            "the rails base {base} names no port; a cw-rails is brought up on the port \
+             its client probes, so the base must name one"
+        )));
+    };
     let Some(bin) = locate_sibling("cw-rails", "CW_RAILS_BIN") else {
         return Err(absent(
             "no cw-rails binary: set CW_RAILS_BIN, or install it beside this program or on PATH"
@@ -58,13 +74,22 @@ pub fn ensure_rails(base: &str) -> Result<sovereign_turn_client::reach::Reached,
             data_dir.display()
         ))
     })?;
+    let mut backend = BundledBackend::at(bin)
+        .arg("run")
+        .arg("--listen")
+        .arg(port.to_string());
+    if local_only {
+        backend = backend.arg("--local-only");
+    }
+    tracing::debug!(
+        rails_base = base,
+        port,
+        local_only,
+        "ensure_rails: bring-up argv resolved"
+    );
     let serving = ServingHost::at(base)
         .ready_at("/v1/mesh/status")
-        .bringing_up(
-            BundledBackend::at(bin)
-                .arg("run")
-                .log_to(data_dir.join("rails.log")),
-        );
+        .bringing_up(backend.log_to(data_dir.join("rails.log")));
     let outcome = std::thread::scope(|s| {
         s.spawn(|| {
             tokio::runtime::Builder::new_current_thread()
@@ -72,8 +97,16 @@ pub fn ensure_rails(base: &str) -> Result<sovereign_turn_client::reach::Reached,
                 .build()
                 .map_err(|e| format!("no runtime to reach cw-rails with: {e}"))
                 .and_then(|rt| {
-                    rt.block_on(serving.ensure_reachable(RAILS_BRING_UP_WINDOW))
-                        .map_err(|e| e.to_string())
+                    rt.block_on(async {
+                        let reached = serving
+                            .ensure_reachable(RAILS_BRING_UP_WINDOW)
+                            .await
+                            .map_err(|e| e.to_string())?;
+                        if local_only && matches!(reached, Reached::AlreadyServing { .. }) {
+                            refuse_n0_posture(base).await?;
+                        }
+                        Ok::<_, String>(reached)
+                    })
                 })
         })
         .join()
@@ -85,5 +118,42 @@ pub fn ensure_rails(base: &str) -> Result<sovereign_turn_client::reach::Reached,
             Ok(reached)
         }
         Err(e) => Err(absent(e)),
+    }
+}
+
+/// A local-only node found a cw-rails it did not start: `Ok` only when that
+/// cw-rails' `/v1/mesh/status` says n0 services are off. On, unreported, or
+/// unreadable is a named Err — the node never rides an n0-homed cw-rails, and
+/// never starts a second one beside it.
+async fn refuse_n0_posture(base: &str) -> Result<(), String> {
+    let url = format!("{}/v1/mesh/status", base.trim_end_matches('/'));
+    let status: serde_json::Value = reqwest::Client::builder()
+        .timeout(super::DIAL_TIMEOUT)
+        .build()
+        .map_err(|e| format!("no HTTP client to read cw-rails' posture with: {e}"))?
+        .get(&url)
+        .send()
+        .await
+        .map_err(|e| format!("the cw-rails at {base} did not answer its status: {e}"))?
+        .json()
+        .await
+        .map_err(|e| format!("the cw-rails at {base} answered an unreadable status: {e}"))?;
+    match status["relay"]["n0_services"].as_bool() {
+        Some(false) => {
+            tracing::info!(
+                rails_base = base,
+                "ensure_rails: the running cw-rails is local-only"
+            );
+            Ok(())
+        }
+        Some(true) => Err(format!(
+            "this node is local-only, but the cw-rails already serving {base} uses n0 services \
+             (relay + DNS); stop it, or run it with `cw-rails run --local-only` — a second one \
+             is not started beside it"
+        )),
+        None => Err(format!(
+            "this node is local-only, and the cw-rails serving {base} does not report its relay \
+             posture on /v1/mesh/status; it cannot be judged local-only"
+        )),
     }
 }
