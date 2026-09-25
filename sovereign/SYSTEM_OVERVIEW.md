@@ -1676,7 +1676,7 @@ restart because the KV buffer was in memory.
 **`republish` is also the SNAPSHOT behind this namespace's seal** (cw-lift 4).
 `rail_kv_pump` checks every namespace it owns against `SEAL_AFTER_OWN_OPS`, and
 this one has to be reached from there rather than from a drain: it is
-gossip-excluded, so it never enters the outbox, and its acts go straight onto
+rail-carried (`is_rail_carried`), so it never enters the outbox, and its acts go straight onto
 the journal from `POST /v1/mesh/measurements` with nothing above them counting.
 A KV namespace's snapshot is its live store rows; this one's is
 `mesh_measurements::load()` through `republish`, which is idempotent by
@@ -3121,10 +3121,11 @@ directory per namespace — and this store is the fold of it:
   (ARCH §10.6). The `rail_outbox.deleted` column is still written and no
   longer read. `merge_entry` deliberately does NOT enqueue — it
   is the receive side, and a row that re-entered the outbox would echo
-  around the mesh forever. The SENDER-side privacy guard is inside
-  `enqueue_on`, not at the call site: `is_gossip_excluded` is the one
-  predicate, so an excluded namespace cannot enter the queue even by a
-  caller who forgot (ARCH §7.1). The ring's own guard is
+  around the mesh forever. The SENDER-side outbox guard is inside
+  `enqueue_on`, not at the call site: `is_rail_carried` is the one
+  predicate, so a rail-carried namespace cannot enter the queue even by a
+  caller who forgot (ARCH §7.1); since fp-107 a local-only write IS queued
+  and journaled, never offered. The ring's own guard is
   `commonwealth_rail_core::is_local_only` (the gossip list minus the
   rail-carried `mesh-measurements`): `RingRail::namespaces` and
   `RingJournal::ops_missing_from_within` never offer such a journal to a peer.

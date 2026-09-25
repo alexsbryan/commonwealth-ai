@@ -24,7 +24,8 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use commonwealth_state::{is_gossip_excluded, MeshStore};
+use commonwealth_state::peer_preferences::is_rail_carried;
+use commonwealth_state::MeshStore;
 use kernel_types::NodeId;
 use sovereign_contracts::peer::ReplicatedKv;
 use sovereign_mesh::peer_adapter::MeshReplicatedKv;
@@ -61,9 +62,10 @@ fn mesh_peer(store: &Arc<MeshStore>) -> Arc<dyn ReplicatedKv> {
 /// this twice replays A's whole queue, which is the anti-entropy behaviour the
 /// ring has and is what `release_propagates_as_a_tombstone` leans on.
 ///
-/// The excluded-namespace assertion is a canary, not the guard: the guard is
-/// inside `MeshStore::set`'s own transaction, so a leak would have to get past
-/// that first.
+/// A local-only row IS queued since fp-107 and is skipped here the way the
+/// ring skips it: journaled on `src`, never offered (`RingRail::namespaces`
+/// omits it). The rail-carried assertion is a canary, not the guard: the guard
+/// is inside `MeshStore::set`'s own transaction.
 fn replicate(src: &MeshStore, dst: &MeshStore, src_node: NodeId, dst_node: NodeId) {
     use commonwealth_state::rail_kv;
     use std::collections::BTreeMap;
@@ -72,10 +74,13 @@ fn replicate(src: &MeshStore, dst: &MeshStore, src_node: NodeId, dst_node: NodeI
     let mut by_namespace: BTreeMap<String, Vec<rail_kv::Projected>> = BTreeMap::new();
     for row in queued {
         assert!(
-            !is_gossip_excluded(&row.app_id),
-            "an excluded app_id '{}' was queued for the rail",
+            !is_rail_carried(&row.app_id),
+            "a rail-carried app_id '{}' was queued for the KV rail",
             row.app_id
         );
+        if commonwealth_rail_core::is_local_only(&row.app_id) {
+            continue;
+        }
         // Through the wire vocabulary rather than around it: a value that does
         // not survive `to_payload`/`from_payload` does not reach a peer either.
         let payload = rail_kv::to_payload(&row.op.key, row.op.value.as_deref(), row.op.t)

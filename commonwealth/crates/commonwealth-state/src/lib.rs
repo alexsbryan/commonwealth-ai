@@ -59,11 +59,11 @@
 //! leave the machine — your own token counts, and the private per-peer
 //! preferences that let you quietly serve a peer less. They are not filtered
 //! at the call site: [`GOSSIP_EXCLUDED_APP_IDS`] is a const list,
-//! [`is_gossip_excluded`] is the one predicate, and
-//! `backend::enqueue_on` applies it inside the write transaction, so a private
-//! namespace never enters the outbox and is off the wire by construction
-//! rather than by every caller remembering
-//! (ARCH §7). If you add a namespace that must stay local, the list is the
+//! [`is_gossip_excluded`] is the one predicate, and the ring rail never offers
+//! a local-only journal, so a private namespace is off the wire by
+//! construction rather than by every caller remembering (ARCH §7). Since
+//! fp-107 a private write DOES enter the outbox (`backend::enqueue_on` skips
+//! only rail-carried ones) — it is journaled, never offered. If you add a namespace that must stay local, the list is the
 //! only place to say so.
 //!
 //! The same list carries a second, non-privacy class since cw-lift 2b:

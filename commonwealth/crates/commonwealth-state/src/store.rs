@@ -806,48 +806,47 @@ mod tests {
 
     // ── The outbox: what this node wrote, for the rail ──────
 
-    /// **THE SENDER-SIDE PRIVACY GUARD.** The outbox is now the only thing
-    /// that leaves this machine, so it is the chokepoint
-    /// `all_entries_for_gossip` used to be. An excluded namespace must never
-    /// appear in it — not filtered later, not filtered by the pump: absent.
+    /// **THE SENDER-SIDE OUTBOX GUARD** (fp-107). A local-only write IS
+    /// queued — the pump journals it and the ring never offers it (fp-76's
+    /// class); a rail-carried write is not, since its namespace left the KV
+    /// rail for the ring rail and a second transport would double it.
     ///
-    /// The named failing input is any of the writes below reaching the queue.
-    /// Watched red by deleting the `is_gossip_excluded` guard in
-    /// `backend::enqueue_on`: eight rows queued instead of one.
+    /// The named failing input is a local-only write missing from the queue,
+    /// or a rail-carried one in it. Watched red by restoring
+    /// `is_gossip_excluded` in `backend::memory`'s `enqueue`.
     #[test]
-    fn an_excluded_namespace_never_enters_the_outbox() {
-        use crate::{ACTIVITY_APP_ID, CONTRIBUTIONS_APP_ID, GOSSIP_EXCLUDED_APP_IDS};
+    fn the_outbox_queues_local_only_writes_and_never_rail_carried_ones() {
+        use crate::peer_preferences::RAIL_CARRIED_APP_IDS;
+        use commonwealth_rail_core::LOCAL_ONLY_NAMESPACES;
 
         let store = MeshStore::in_memory().unwrap();
-        // Every excluded namespace there is, written through the ordinary
-        // door. Driving the LIST rather than a hand-picked few means a
-        // namespace added to it later is covered without editing this test.
-        for app in GOSSIP_EXCLUDED_APP_IDS {
-            store
-                .set(app, "k", Bytes::from("private"), node(1))
-                .unwrap();
+        // Driving the LISTS rather than a hand-picked few means a namespace
+        // added to either later is covered without editing this test.
+        for app in LOCAL_ONLY_NAMESPACES.iter().chain(RAIL_CARRIED_APP_IDS) {
+            store.set(app, "k", Bytes::from("mine"), node(1)).unwrap();
         }
-        store
-            .set(CONTRIBUTIONS_APP_ID, "ev1", Bytes::from("public"), node(1))
-            .unwrap();
 
         let queued = store.outbox_take(100).unwrap();
-        assert_eq!(
-            queued.len(),
-            1,
-            "only the public write is queued: {queued:?}"
-        );
-        assert_eq!(queued[0].app_id, CONTRIBUTIONS_APP_ID);
-
-        // Excluded is not the same as unwritten — the rows are all here.
-        for app in GOSSIP_EXCLUDED_APP_IDS {
-            assert!(store.get(app, "k").unwrap().is_some(), "{app} lost its row");
+        let apps: Vec<&str> = queued.iter().map(|q| q.app_id.as_str()).collect();
+        for app in LOCAL_ONLY_NAMESPACES {
+            assert!(apps.contains(app), "local-only {app} was not queued: {apps:?}");
         }
+        for app in RAIL_CARRIED_APP_IDS {
+            assert!(!apps.contains(app), "rail-carried {app} was queued: {apps:?}");
+        }
+        assert_eq!(queued.len(), LOCAL_ONLY_NAMESPACES.len(), "{apps:?}");
+        store
+            .outbox_ack(&queued.iter().map(|q| q.id).collect::<Vec<_>>())
+            .unwrap();
 
-        // A DELETE in an excluded namespace queues no tombstone either. A
-        // tombstone names a key, and the key is the private half.
-        assert!(store.delete(ACTIVITY_APP_ID, "k").unwrap());
-        assert_eq!(store.outbox_take(100).unwrap().len(), 1);
+        // A local-only DELETE queues its tombstone: the journal is the
+        // namespace's durable copy, and a missing tombstone resurrects the row.
+        let local = LOCAL_ONLY_NAMESPACES[0];
+        assert!(store.delete(local, "k").unwrap());
+        let tomb = store.outbox_take(100).unwrap();
+        assert_eq!(tomb.len(), 1, "{tomb:?}");
+        assert_eq!(tomb[0].app_id, local);
+        assert!(tomb[0].op.value.is_none(), "a delete queues a tombstone");
     }
 
     /// A LOCAL write queues an act; a write learned from a peer does not.

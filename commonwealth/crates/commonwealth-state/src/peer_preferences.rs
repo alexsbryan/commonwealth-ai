@@ -12,11 +12,10 @@
 //!
 //! 1. **Local only, never replicated.** The
 //!    `peer_preferences` `app_id` is excluded by the
-//!    [`is_gossip_excluded`] predicate, which `backend::enqueue_on`
-//!    applies inside the store's own write transaction — the
+//!    [`is_gossip_excluded`] predicate; it is local-only, so its writes
+//!    are journaled and the ring never offers them (fp-107) — the
 //!    structural invariant is pinned by
-//!    `gossip_excludes_peer_preferences_app_id` and, behaviourally, by
-//!    `store::tests::an_excluded_namespace_never_enters_the_outbox`.
+//!    `gossip_excludes_peer_preferences_app_id`.
 //!
 //! 2. **Multiplier clamped to `(0.0, 1.0]` at construction.** The
 //!    constructor returns `Err` for any other value — there is no
@@ -294,6 +293,14 @@ pub fn is_gossip_excluded(app_id: &str) -> bool {
     GOSSIP_EXCLUDED_APP_IDS.contains(&app_id)
 }
 
+/// Returns true when `app_id` left the KV rail for the ring rail
+/// ([`RAIL_CARRIED_APP_IDS`]) — the sender-side outbox guard's one decider.
+/// Local-only namespaces are NOT rail-carried: they are queued and journaled,
+/// and the ring never offers them (fp-107).
+pub fn is_rail_carried(app_id: &str) -> bool {
+    RAIL_CARRIED_APP_IDS.contains(&app_id)
+}
+
 fn node_key(peer: &NodeId) -> String {
     peer.as_bytes().iter().map(|b| format!("{b:02x}")).collect()
 }
@@ -407,9 +414,8 @@ mod tests {
     /// reader ever seeing two copies of one measurement from two transports.
     ///
     /// This pins the LIST, not the behaviour (ARCH §18.1). The outbound gate
-    /// is `store::tests::an_excluded_namespace_never_enters_the_outbox`,
-    /// which drives this whole list through the store's write door and fails
-    /// on the queued count; it carries this namespace.
+    /// is `store::tests::the_outbox_queues_local_only_writes_and_never_rail_carried_ones`,
+    /// which drives `RAIL_CARRIED_APP_IDS` through the store's write door.
     #[test]
     fn the_measurements_namespace_left_the_wire_for_the_rail() {
         assert!(is_gossip_excluded("mesh-measurements"));
@@ -434,12 +440,10 @@ mod tests {
     ///
     /// This pins the LIST, which is a register of decisions and their
     /// reasons; it is not the behavioural gate and should not be read
-    /// as one (ARCH §18.1). The gates are
-    /// `store::tests::an_excluded_namespace_never_enters_the_outbox`,
-    /// which drives the whole list through the store's write door and
-    /// fails on the queued count if any of these rejoins the wire, and
-    /// `store::tests::apply_projection_refuses_an_excluded_namespace`
-    /// for the inbound half. Both drive every namespace on this list.
+    /// as one (ARCH §18.1). The inbound gate is
+    /// `store::tests::apply_projection_refuses_an_excluded_namespace`,
+    /// which drives every namespace on this list; outbound, these are
+    /// local-only, journaled and never offered by the ring (fp-107).
     #[test]
     fn gossip_excludes_namespaces_with_no_cross_peer_consumer() {
         // Single unsuffixed `last_tick` key — replicating it made a

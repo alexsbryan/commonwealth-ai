@@ -39,11 +39,10 @@
 //!
 //! The old guard here refused an excluded `app_id` before reading the entry to
 //! POST it. Nothing is read and nothing is POSTed now, and the guard has
-//! moved to where it cannot be skipped: `backend::enqueue_on` refuses to queue
-//! an excluded namespace inside the store's own write transaction, so a
-//! private claim is not in the outbox for this call to drain, whatever it is
-//! passed (`commonwealth-state`'s
-//! `an_excluded_namespace_never_enters_the_outbox`). The receiving half is
+//! moved to where it cannot be skipped: since fp-107 a private claim is queued
+//! and journaled like any local-only write, and the ring rail never offers a
+//! local-only journal to a peer (`RingRail::namespaces` omits it; cw-rails'
+//! `a_local_only_write_is_journaled_and_never_offered`). The receiving half is
 //! the mesh store's `apply_projection`, which returns an `Err` naming the namespace
 //! (`apply_projection_refuses_an_excluded_namespace`). The work-atlas tools
 //! still gate on `Privacy::Public` before calling here at all.
@@ -78,8 +77,8 @@ impl std::fmt::Debug for MeshBroadcaster {
 impl ClaimBroadcaster for MeshBroadcaster {
     /// `app_id` and `key` name the write that is in a hurry; they do not
     /// select what travels. The outbox is drained whole — it is a queue, not
-    /// an index — and that is also why a private `app_id` arriving here cannot
-    /// leak: its row was never queued.
+    /// an index. A private `app_id` arriving here cannot leak: its row is
+    /// journaled, and the ring never offers a local-only journal (fp-107).
     async fn broadcast(&self, app_id: &str, key: &str) {
         let out = rail_kv_pump::pump_once(&self.app_state.inner.fabric).await;
         if out.appended > 0 {
@@ -194,11 +193,11 @@ mod tests {
     }
 
     /// The control, and the privacy pin: a PRIVATE claim written on the same
-    /// node is not in the outbox, so this call has nothing to drain and raises
-    /// no nudge — the namespace gets no journal at all. The refusal is the
-    /// store's, not this file's, which is the point (§7.1).
+    /// node is queued and journaled since fp-107 (fp-76's class), so this call
+    /// drains it and asks for a round — and the round offers it to no peer,
+    /// because the ring's `namespaces` omits a local-only journal (§7.1).
     #[tokio::test]
-    async fn a_private_claim_is_not_on_the_ring_and_raises_no_round() {
+    async fn a_private_claim_is_journaled_but_never_on_the_offered_ring() {
         assert!(
             commonwealth_state::GOSSIP_EXCLUDED_APP_IDS.contains(&PRIVATE),
             "this test is about an excluded namespace"
@@ -219,7 +218,7 @@ mod tests {
                 id
             )
             .unwrap());
-        assert_eq!(state.inner.fabric.mesh_store.outbox_len().unwrap(), 0);
+        assert_eq!(state.inner.fabric.mesh_store.outbox_len().unwrap(), 1);
 
         let nudge = state.ring_write_nudge();
         MeshBroadcaster::new(state.clone())
@@ -235,14 +234,12 @@ mod tests {
                 .unwrap()
                 .iter()
                 .any(|n| n == PRIVATE),
-            "a private namespace has no journal"
+            "a private journal is never offered"
         );
-        assert!(
-            tokio::time::timeout(Duration::from_millis(100), nudge.notified())
-                .await
-                .is_err(),
-            "nothing travelled, so no round was asked for"
-        );
+        assert_eq!(state.inner.fabric.mesh_store.outbox_len().unwrap(), 0);
+        tokio::time::timeout(Duration::from_millis(100), nudge.notified())
+            .await
+            .expect("the claim was journaled, so a round was asked for");
         assert!(
             state
                 .inner

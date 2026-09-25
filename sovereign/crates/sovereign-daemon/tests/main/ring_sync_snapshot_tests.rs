@@ -124,17 +124,11 @@ async fn a_snapshot_that_arrives_in_two_chunks_retires_nothing_until_the_mark() 
 
 /// **(d) A namespace that never leaves a machine never leaves it.**
 ///
-/// The sender-side guard is inside the store's own transaction, so this
-/// asserts on the two places a private write could surface if it slipped:
-/// this node's outbox and its journals, and the peer's store. The control
-/// in the same test is a public write on the same tick — without it, an
-/// entirely broken pump would pass.
-///
-/// Watched RED by deleting the `is_gossip_excluded` guard from
-/// `backend::enqueue_on`: the row queues, the pump appends it, a
-/// `notes-private` journal appears on disk, and the peer refuses it at
-/// `apply_projection` — the last layer, and the first three assertions all
-/// go red on the way there.
+/// Since fp-107 a local-only write IS queued and the pump journals it (fp-76's
+/// class: journaled, never offered), so this asserts on the two places a
+/// private write could surface on the wire: the namespaces the ring offers,
+/// and the peer's store. The control in the same test is a public write on
+/// the same tick — without it, an entirely broken pump would pass.
 #[tokio::test]
 async fn an_excluded_namespace_never_enters_the_outbox_nor_a_peers_store() {
     const PRIVATE: &str = "notes-private";
@@ -166,16 +160,16 @@ async fn an_excluded_namespace_never_enters_the_outbox_nor_a_peers_store() {
         .unwrap());
     assert_eq!(
         a_state.inner.fabric.mesh_store.outbox_len().unwrap(),
-        1,
-        "only the public write queued"
+        2,
+        "both writes queued: the private one to be journaled, never offered"
     );
 
     let pumped = sovereign_mesh::rail_kv_pump::pump_once(&*a_state.inner.fabric).await;
-    assert_eq!(pumped.appended, 1, "{pumped:?}");
+    assert_eq!(pumped.appended, 2, "{pumped:?}");
     let namespaces = a_rail.inner().namespaces().unwrap();
     assert!(
         !namespaces.iter().any(|n| n == PRIVATE),
-        "a private namespace has no journal at all: {namespaces:?}"
+        "a private journal is never offered: {namespaces:?}"
     );
 
     let url = serve(internal_router(b_state.clone())).await;

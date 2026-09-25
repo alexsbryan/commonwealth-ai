@@ -76,7 +76,7 @@ impl Tables {
 
     /// `enqueue_on`, with the same sender-side privacy guard.
     fn enqueue(&mut self, app_id: &str, key: &str, value: Option<&[u8]>, t: u64) {
-        if crate::peer_preferences::is_gossip_excluded(app_id) {
+        if crate::peer_preferences::is_rail_carried(app_id) {
             tracing::debug!(app_id, key, "mesh_store.outbox_excluded");
             return;
         }

@@ -182,6 +182,46 @@ async fn a_restart_rehydrates_a_row_from_the_journal() {
     assert_eq!(row.origin, NodeId::from_u128(ME));
 }
 
+/// A local-only write through the door is journaled on this node and never
+/// offered to a peer (fp-107: the outbox guard skips only rail-carried
+/// namespaces; privacy lives at the wire). Watched red by restoring
+/// `is_gossip_excluded` in `backend::memory`'s `enqueue`: `appended` was 0.
+#[tokio::test]
+async fn a_local_only_write_is_journaled_and_never_offered() {
+    const PRIVATE: &str = "notes-private";
+    assert!(commonwealth_rail::is_local_only(PRIVATE));
+    let dir = tempfile::tempdir().unwrap();
+    let mesh = solo_mesh();
+    let host = host_at(dir.path(), &mesh);
+    let base = serve(host.clone()).await;
+    let me = NodeId::from_u128(ME);
+
+    reqwest::Client::new()
+        .post(format!("{base}/v1/mesh/kv/entry"))
+        .json(&serde_json::json!({
+            "app_id": PRIVATE, "key": "secret", "value": b64("mine"), "origin": me,
+        }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    assert_eq!(drain(&host).await.appended, 1, "the write is journaled");
+
+    let namespaces = host.rail.namespaces().unwrap();
+    assert!(
+        !namespaces.iter().any(|n| n == PRIVATE),
+        "never offered: {namespaces:?}"
+    );
+    let (for_peer, more) = host
+        .rail
+        .journal(PRIVATE)
+        .unwrap()
+        .ops_missing_from_within(&commonwealth_rail::Digest::new(), commonwealth_rail::NO_BUDGET)
+        .unwrap();
+    assert!(for_peer.is_empty() && !more, "a peer is answered nothing");
+}
+
 #[tokio::test]
 async fn the_pump_appends_a_door_write_and_seals_past_the_threshold() {
     let dir = tempfile::tempdir().unwrap();
