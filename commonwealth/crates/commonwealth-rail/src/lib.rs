@@ -255,8 +255,19 @@ impl RingRail {
     ///
     /// A missing `rings/` directory is an empty list, not an error: a daemon
     /// that has never hosted a ring is a normal daemon.
+    ///
+    /// A local-only namespace ([`is_local_only`]) is journaled here but never
+    /// offered, so it is not on this list.
     pub fn namespaces(&self) -> Result<Vec<String>, RailError> {
-        namespaces_in(&self.root)
+        let mut out = namespaces_in(&self.root)?;
+        out.retain(|ns| {
+            let local = is_local_only(ns);
+            if local {
+                tracing::debug!(namespace = %ns, "ring rail: local-only journal, not offered");
+            }
+            !local
+        });
+        Ok(out)
     }
 }
 
@@ -333,3 +344,5 @@ pub use journal::RingJournal;
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tests_local_only;

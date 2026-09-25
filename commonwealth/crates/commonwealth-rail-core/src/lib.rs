@@ -116,6 +116,31 @@ pub use oplog::{Journaled, Op, OpId, SkippedLine};
 /// The JSON value [`Payload::new`] takes.
 pub use serde_json::Value;
 
+// ── Local-only namespaces ────────────────────────────────────
+
+/// Namespaces a node may journal but never OFFERS to a peer: the list a
+/// returning node advertises and every ring-sync answer skip them
+/// (`commonwealth-rail`'s `RingRail::namespaces` and
+/// `RingJournal::ops_missing_from_within`). The why per entry is
+/// `commonwealth_state::peer_preferences::GOSSIP_EXCLUDED_APP_IDS`, which is
+/// this list plus the namespaces that left the KV gossip FOR the ring
+/// (five-programs-37). The two `:` ids never name a journal — a namespace is
+/// a directory and refuses `:` — but "never leaves this node" holds of them.
+pub const LOCAL_ONLY_NAMESPACES: &[&str] = &[
+    "peer_preferences",
+    "work-atlas-private",
+    "notes-private",
+    "activity-private",
+    "portfolio-private",
+    "wikipedia-newsworthy:status",
+    "wikipedia-newsworthy:portal",
+];
+
+/// The one predicate over [`LOCAL_ONLY_NAMESPACES`].
+pub fn is_local_only(namespace: &str) -> bool {
+    LOCAL_ONLY_NAMESPACES.contains(&namespace)
+}
+
 // ── People ───────────────────────────────────────────────────
 
 /// A member of the ring, by the name the house calls them.

@@ -3114,7 +3114,10 @@ directory per namespace — and this store is the fold of it:
   around the mesh forever. The SENDER-side privacy guard is inside
   `enqueue_on`, not at the call site: `is_gossip_excluded` is the one
   predicate, so an excluded namespace cannot enter the queue even by a
-  caller who forgot (ARCH §7.1).
+  caller who forgot (ARCH §7.1). The ring's own guard is
+  `commonwealth_rail_core::is_local_only` (the gossip list minus the
+  rail-carried `mesh-measurements`): `RingRail::namespaces` and
+  `RingJournal::ops_missing_from_within` never offer such a journal to a peer.
 - **Vocabulary + fold.** `commonwealth-state::rail_kv` — one act,
   `{"k", "v" (base64, absent on a tombstone), "t", "d"}`, plus the snapshot
   MARK `{"snap": <the seal's seq>}` below, and

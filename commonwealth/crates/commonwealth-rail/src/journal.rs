@@ -222,6 +222,14 @@ impl RingJournal {
         theirs: &Digest,
         budget_bytes: usize,
     ) -> Result<(Vec<Op<SignedOp>>, bool), RailError> {
+        // A local-only journal answers no peer ([`is_local_only`]).
+        if is_local_only(&self.namespace) {
+            tracing::debug!(
+                namespace = %self.namespace,
+                "ring rail: local-only journal, nothing offered to the peer"
+            );
+            return Ok((Vec::new(), false));
+        }
         Ok(ops_missing_from_within(
             &self.read()?.0,
             theirs,

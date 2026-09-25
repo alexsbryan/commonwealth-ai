@@ -236,6 +236,18 @@ impl PeerPreferenceStore {
 ///   only other reader is `svrn newsworthy status` against the
 ///   repo-local `.sovereign/mesh.db`.
 ///
+/// The seven entries above are `commonwealth_rail_core::LOCAL_ONLY_NAMESPACES`
+/// (the ring never offers them either); the rest are
+/// [`RAIL_CARRIED_APP_IDS`]. This list is their union, built at compile time,
+/// so neither literal is spelled twice (five-programs-37).
+///
+/// Each entry is pinned by a test that asserts `is_gossip_excluded`
+/// returns `true` for it.
+pub const GOSSIP_EXCLUDED_APP_IDS: &[&str] = &GOSSIP_EXCLUDED;
+
+/// Namespaces that left the KV gossip for the ring rail — excluded from
+/// gossip, and still offered on the ring.
+///
 /// Moved to the ring rail (cw-lift 2d):
 ///
 /// - `mesh-measurements` — measured throughput per model per split. It is
@@ -249,19 +261,26 @@ impl PeerPreferenceStore {
 ///   There is no writer left on this side (`sovereign_mesh::
 ///   measurements_rail` is the only publisher and it appends to the journal),
 ///   which is exactly the shape `notes-private` already has.
-///
-/// Each entry is pinned by a test that asserts `is_gossip_excluded`
-/// returns `true` for it.
-pub const GOSSIP_EXCLUDED_APP_IDS: &[&str] = &[
-    PEER_PREFERENCES_APP_ID,
-    "work-atlas-private",
-    "notes-private",
-    "activity-private",
-    "portfolio-private",
-    "wikipedia-newsworthy:status",
-    "wikipedia-newsworthy:portal",
-    "mesh-measurements",
-];
+pub const RAIL_CARRIED_APP_IDS: &[&str] = &["mesh-measurements"];
+
+const GOSSIP_EXCLUDED_LEN: usize =
+    commonwealth_rail_core::LOCAL_ONLY_NAMESPACES.len() + RAIL_CARRIED_APP_IDS.len();
+
+const GOSSIP_EXCLUDED: [&str; GOSSIP_EXCLUDED_LEN] = {
+    let local = commonwealth_rail_core::LOCAL_ONLY_NAMESPACES;
+    let mut out = [""; GOSSIP_EXCLUDED_LEN];
+    let mut i = 0;
+    while i < local.len() {
+        out[i] = local[i];
+        i += 1;
+    }
+    let mut j = 0;
+    while j < RAIL_CARRIED_APP_IDS.len() {
+        out[i + j] = RAIL_CARRIED_APP_IDS[j];
+        j += 1;
+    }
+    out
+};
 
 /// `app_id` namespace for a user's Proxy Voting portfolios — the named
 /// sets of corpus_ids they hold. Reserved + gossip-excluded (FR-11):
@@ -393,6 +412,17 @@ mod tests {
     /// on the queued count; it carries this namespace.
     #[test]
     fn the_measurements_namespace_left_the_wire_for_the_rail() {
+        assert!(is_gossip_excluded("mesh-measurements"));
+    }
+
+    /// The gossip list is local-only plus rail-carried: private operator
+    /// state is never offered on the ring, measurements still are
+    /// (five-programs-37).
+    #[test]
+    fn local_only_is_the_gossip_list_minus_what_the_ring_carries() {
+        use commonwealth_rail_core::is_local_only;
+        assert!(is_local_only(PEER_PREFERENCES_APP_ID));
+        assert!(!is_local_only("mesh-measurements"));
         assert!(is_gossip_excluded("mesh-measurements"));
     }
 

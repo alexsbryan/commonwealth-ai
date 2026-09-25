@@ -258,13 +258,20 @@ async fn a_peers_private_namespace_is_taken_by_the_rail_and_refused_by_the_proje
         1
     );
 
-    // Both namespaces go to B through the real route.
+    // Both namespaces go to B through the real route. The private one is a
+    // raw push: an honest `exchange` offers a local-only journal nothing
+    // (five-programs-37), and a patched peer does not ask.
     let url = serve(internal_router(b_state.clone())).await;
     let client = reqwest::Client::new();
-    for (ns, _journal) in [(PRIVATE, &a_private), (KV, &a_public)] {
-        let out = exchange(&client, &url, &a_rail, ns, None).await;
-        assert!(out.stop.is_none(), "{:?}", out.stop);
-    }
+    let hostile = sovereign_peer_wire::RingSyncRequest {
+        namespace: PRIVATE.to_string(),
+        digest: a_private.digest().unwrap(),
+        ops: a_private.read().unwrap().0,
+    };
+    let pushed = client.post(&url).json(&hostile).send().await.unwrap();
+    assert!(pushed.status().is_success(), "{}", pushed.status());
+    let out = exchange(&client, &url, &a_rail, KV, None).await;
+    assert!(out.stop.is_none(), "{:?}", out.stop);
 
     // The rail took both — B holds the private line on disk. If this fails
     // the test below proves nothing, because nothing arrived.
