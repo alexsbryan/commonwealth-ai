@@ -40,10 +40,10 @@ mod mesh_sim_scoreboard;
 mod replication_sender_census;
 #[path = "main/scheduler_replay_agreement.rs"]
 mod scheduler_replay_agreement;
-#[path = "main/worker_e2e.rs"]
-mod worker_e2e;
 #[path = "main/work_atlas_store.rs"]
 mod work_atlas_store;
+#[path = "main/worker_e2e.rs"]
+mod worker_e2e;
 
 // ─── The wiring of this file is itself a gate ────────────────────────────────
 //
