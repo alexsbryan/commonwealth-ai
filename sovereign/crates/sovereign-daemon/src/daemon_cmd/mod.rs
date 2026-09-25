@@ -34,6 +34,7 @@ use std::sync::Arc;
 
 use sovereign_contracts::launch::Launch;
 
+pub mod admin_join;
 mod boot;
 mod help;
 mod lifecycle;

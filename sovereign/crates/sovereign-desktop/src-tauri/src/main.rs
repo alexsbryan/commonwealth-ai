@@ -129,6 +129,7 @@ fn main() -> ExitCode {
         | Launch::Daemon { .. }
         | Launch::ComputeChild { .. }
         | Launch::RpcWorker { .. }
+        | Launch::AdminJoin { .. }
         | Launch::Worker { .. } => {
             eprintln!("{NOT_A_DAEMON}");
             return ExitCode::FAILURE;

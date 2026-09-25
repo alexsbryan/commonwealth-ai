@@ -81,6 +81,22 @@ pub enum Launch {
         args: Vec<String>,
     },
 
+    /// The setup wizard's mesh join as a process:
+    /// `sovereign-daemon join --config <path> --node-name <n>`. It assembles
+    /// the mesh-admin shape (never the inference engine), joins the mesh whose
+    /// invite it reads as ONE line on stdin — never argv, because the link
+    /// carries the join key and `/proc/<pid>/cmdline` is world-readable —
+    /// prints [`JOINED_LINE_PREFIX`] on success, and serves until stopped.
+    /// The config is caller-named and required, so a first-run host with no
+    /// canonical config can take it. A flag left off parses as `None`; the
+    /// binary refuses it by name.
+    AdminJoin {
+        /// `--config <path>`.
+        config: Option<std::path::PathBuf>,
+        /// `--node-name <n>`.
+        node_name: Option<String>,
+    },
+
     /// A crash probe: load one model, decode one token, exit. Spawned by the
     /// desktop before it loads a model into the user-facing slot.
     Smoketest {
@@ -156,6 +172,16 @@ pub const WORKER_MODE_FLAG: &str = "--worker-mode";
 /// through to verb matching.
 pub const RPC_WORKER_FLAG: &str = "--rpc-worker";
 
+/// The `daemon` sub-verb that is [`Launch::AdminJoin`]. Public for the same
+/// reason as the flags above: the spawner names the string the parser reads.
+pub const ADMIN_JOIN_VERB: &str = "join";
+
+/// The one stdout line [`Launch::AdminJoin`] prints when its join succeeds,
+/// followed by the quoted mesh name. It is the join's result: the client port
+/// answers before the handshake (`join_mesh` binds on a placeholder mesh
+/// first), so a spawner that waits on `/v1/models` has not seen a join.
+pub const JOINED_LINE_PREFIX: &str = "joined ";
+
 // NOTE — the smoketest token is deliberately NOT declared here.
 // `sovereign_inference::smoketest::SMOKETEST_FLAG` already owns it, next to
 // the smoketest implementation, and the desktop re-exports it from there.
@@ -201,6 +227,16 @@ impl Launch {
         let rest = args[1..].to_vec();
 
         if first == "daemon" {
+            if rest.first().map(String::as_str) == Some(ADMIN_JOIN_VERB) {
+                let value = |flag: &str| {
+                    let i = rest.iter().position(|a| a == flag)?;
+                    rest.get(i + 1).cloned()
+                };
+                return Launch::AdminJoin {
+                    config: value("--config").map(std::path::PathBuf::from),
+                    node_name: value("--node-name"),
+                };
+            }
             return if rest.iter().any(|a| a == WORKER_MODE_FLAG) {
                 Launch::Worker { args: rest }
             } else {
@@ -242,6 +278,7 @@ impl Launch {
             Launch::Worker { .. } => "worker",
             Launch::ComputeChild { .. } => "compute-child",
             Launch::RpcWorker { .. } => "rpc-worker",
+            Launch::AdminJoin { .. } => "admin-join",
             Launch::Smoketest { .. } => "smoketest",
             Launch::Desktop => "desktop",
             Launch::Server => "server",
@@ -843,6 +880,41 @@ mod tests {
         assert_eq!(w.as_str(), "worker");
         assert!(w.is_resident());
         assert_ne!(w, parse(&["daemon", "run"]));
+    }
+
+    /// The wizard's join child: `daemon join` pins its two flags to the
+    /// variant, a missing flag stays `None` for the binary to refuse, and it
+    /// is neither the serving daemon nor resident.
+    #[test]
+    fn admin_join_pins_its_flags_to_its_own_launch() {
+        assert_eq!(
+            parse(&[
+                "daemon",
+                "join",
+                "--config",
+                "/t/c.toml",
+                "--node-name",
+                "box"
+            ]),
+            Launch::AdminJoin {
+                config: Some(std::path::PathBuf::from("/t/c.toml")),
+                node_name: Some("box".to_string()),
+            }
+        );
+        assert_eq!(
+            parse(&["daemon", "join", "--node-name"]),
+            Launch::AdminJoin {
+                config: None,
+                node_name: None,
+            }
+        );
+        let j = parse(&["daemon", "join"]);
+        assert_eq!(j.as_str(), "admin-join");
+        assert!(!j.is_resident());
+        assert_eq!(
+            parse(&["daemon", "run", "--config", "x"]).as_str(),
+            "daemon"
+        );
     }
 
     /// A child re-exec carries `current_exe`'s argv, so the flag can sit

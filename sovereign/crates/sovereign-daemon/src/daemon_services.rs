@@ -628,8 +628,9 @@ pub fn assemble(
 
         // `svrn mesh create` / `svrn mesh join` reaching this far means no
         // daemon was listening, so the verb builds a one-shot that mutates
-        // membership and exits.
-        Launch::Verb { .. } => match parts {
+        // membership and exits. `AdminJoin` is the setup wizard's join as a
+        // child process: the same admin shape, serving until stopped.
+        Launch::Verb { .. } | Launch::AdminJoin { .. } => match parts {
             LaunchParts::Admin => Ok(DaemonServices::mesh_admin()),
             LaunchParts::Serving { .. } => Err(AssemblyRefusal::Mismatch {
                 launch: name,

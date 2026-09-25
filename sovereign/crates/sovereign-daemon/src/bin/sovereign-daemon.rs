@@ -15,6 +15,8 @@
 //!
 //! - `sovereign-daemon run …` → `Launch::Daemon` → `daemon_cmd::run`
 //! - `sovereign-daemon run --worker-mode …` → `Launch::Worker`
+//! - `sovereign-daemon join --config <p> --node-name <n>` (invite on
+//!   stdin) → `Launch::AdminJoin` → `daemon_cmd::admin_join::run`
 //! - a `current_exe()` re-exec carrying `--compute-child` / `--rpc-worker`
 //!   (the daemon's own supervisors spawn those with THIS binary's path)
 //!   → the child mains, before any daemon bootstrap runs.
@@ -62,6 +64,24 @@ fn run(raw_args: &[String]) -> i32 {
     // RPC-worker re-exec: same rule — owns no data root, needs no tokio.
     if let Launch::RpcWorker { args } = &launch {
         return sovereign_inference::rpc_worker_main::run(args);
+    }
+
+    // The setup wizard's join child: the admin assembly, never the full
+    // serving one, and no canonical config required. No rebrand migration
+    // or panic hook — it owns only the caller-named config's data dir. Warn
+    // by default, as the wizard's in-process join logged; RUST_LOG overrides.
+    if let Launch::AdminJoin { config, node_name } = &launch {
+        init_tracing("warn");
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .thread_name("sovereign-admin-join-rt")
+            .build()
+            .expect("failed to build tokio runtime");
+        return runtime.block_on(daemon_cmd::admin_join::run(
+            &launch,
+            config.as_deref(),
+            node_name.as_deref(),
+        ));
     }
 
     // Not a launch this binary serves (a `--smoketest` argv, the

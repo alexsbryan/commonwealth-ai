@@ -262,6 +262,7 @@ async fn dispatch(launch: Launch, raw_args: &[String]) -> i32 {
         // Other binaries' launches, incl. the compute-child the sovereign-daemon [[bin]] owns.
         // Named explicitly so that adding a variant forces a decision here instead of a `_` arm.
         Launch::ComputeChild { .. }
+        | Launch::AdminJoin { .. }
         | Launch::Desktop
         | Launch::Server
         | Launch::Smoketest { .. } => {
