@@ -220,8 +220,7 @@ async fn a_peer_op_ingested_through_the_door_is_served_after_one_fold() {
 
     let host = host_at(dir.path(), &mesh);
     let journal = host.rail.journal(NS).unwrap();
-    let answer =
-        crate::rail::ingest_answer(&journal, &host, crate::rail::IngestBody { ops });
+    let answer = crate::rail::ingest_answer(&journal, &host, crate::rail::IngestBody { ops });
     assert!(answer.status().is_success(), "{:?}", answer.status());
     assert!(
         host.store.get(NS, "theirs").unwrap().is_none(),

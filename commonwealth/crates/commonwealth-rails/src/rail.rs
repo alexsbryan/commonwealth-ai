@@ -534,10 +534,10 @@ pub(crate) fn ingest_answer(
                 kv.mark_dirty(journal.namespace());
             }
             Json(serde_json::json!({
-            "namespace": journal.namespace(),
-            "ingested": n,
-        }))
-        .into_response()
+                "namespace": journal.namespace(),
+                "ingested": n,
+            }))
+            .into_response()
         }
         Err(e) => err(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
     }
@@ -631,7 +631,9 @@ fn compact_answer(journal: &Arc<RingJournal>, body: RosterBody) -> Response {
 /// answer fn — the same shape the append door is.
 macro_rules! journal_route {
     ($name:ident, $answer:ident, $body:ty) => {
-        journal_route!($name, $answer, $body, |_daemon, journal, body| $answer(&journal, body));
+        journal_route!($name, $answer, $body, |_daemon, journal, body| $answer(
+            &journal, body
+        ));
     };
     ($name:ident, $answer:ident, $body:ty, |$d:ident, $j:ident, $b:ident| $call:expr) => {
         pub async fn $name(
@@ -654,9 +656,12 @@ macro_rules! journal_route {
 }
 
 journal_route!(journal_missing, missing_answer, MissingBody);
-journal_route!(journal_ingest, ingest_answer, IngestBody, |daemon, journal, body| {
-    ingest_answer(&journal, &daemon.kv, body)
-});
+journal_route!(
+    journal_ingest,
+    ingest_answer,
+    IngestBody,
+    |daemon, journal, body| { ingest_answer(&journal, &daemon.kv, body) }
+);
 journal_route!(journal_admit, admit_answer, RosterBody);
 journal_route!(journal_compact, compact_answer, RosterBody);
 
