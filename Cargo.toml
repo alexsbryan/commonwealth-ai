@@ -84,6 +84,9 @@ members = [
     # ONE implementation by reaching DOWN instead of corpus-engine reaching up
     # into sovereign-contracts (noun-convergence rung 2).
     "corpus-engine-sections",
+    # The bundled recipe definitions as data (five-programs-52): the package is
+    # rooted at the sovereign-recipes/ directory, which keeps its name.
+    "sovereign-recipes",
     # The atlas vocabulary (AtomsFile/AtomEnvelope, Edge, the kind taxonomy,
     # lookup_key) — a serde + kernel-types leaf carved out 2026-09-03 so a thin
     # host can READ atlas/atoms.json without linking corpus-engine (Step 2 of
@@ -342,6 +345,7 @@ corpus-engine-archaeology = { path = "corpus-engine-archaeology" }
 corpus-engine-yield = { path = "corpus-engine-yield" }
 corpus-engine-watchers = { path = "corpus-engine-watchers" }
 corpus-engine-sections = { path = "corpus-engine-sections" }
+corpus-engine-recipes = { path = "sovereign-recipes" }
 understanding-vocab = { path = "understanding-vocab" }
 understanding-atlas = { path = "understanding-atlas" }
 corpus-index = { path = "corpus-index" }

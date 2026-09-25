@@ -2433,6 +2433,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "corpus-engine-recipes"
+version = "0.7.0"
+dependencies = [
+ "toml 0.8.2",
+ "workspace-hack",
+]
+
+[[package]]
 name = "corpus-engine-scip"
 version = "0.7.0"
 dependencies = [

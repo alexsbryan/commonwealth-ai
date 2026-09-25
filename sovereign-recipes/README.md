@@ -45,6 +45,8 @@ sovereign-recipes/
 │                              #   THE DIRECTORY IS THE CATALOG: build.rs discovers it,
 │                              #   `--ontology list` names them. Not listed here — a fourth
 │                              #   copy of the list is a fourth thing to forget.
+│                              #   A new directory (template or recipe) also takes a line in
+│                              #   src/lib.rs; its tree test names the one that is missing.
 ├── wikipedia/recipe.toml      # one directory per corpus
 ├── sep/recipe.toml
 └── …

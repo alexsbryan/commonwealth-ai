@@ -1273,6 +1273,8 @@ crates = [
     "sovereign-enrichment-catalog",
     "understanding-atlas",
     "understanding-host",
+    # The recipe definitions are ingest's config data (five-programs-52).
+    "corpus-engine-recipes",
 ]
 
 [[package]]
