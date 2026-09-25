@@ -977,7 +977,7 @@ impl AppState {
         Self::assemble_with_fabric(
             self_node_id,
             fabric,
-            mesh_store,
+            store::StoreSeed::local(mesh_store, self_node_id),
             corpus_engine,
             in_flight_gauge,
             serving_seed,
@@ -1001,7 +1001,7 @@ impl AppState {
         Self::assemble_with_fabric(
             self_node_id,
             fabric,
-            mesh_store,
+            store::StoreSeed::local(mesh_store, self_node_id),
             corpus_engine,
             in_flight_gauge,
             serving_seed,
@@ -1015,29 +1015,12 @@ impl AppState {
     fn assemble_with_fabric(
         self_node_id: NodeId,
         fabric: Arc<fabric::FabricPart>,
-        mesh_store: Arc<MeshStore>,
+        store_seed: store::StoreSeed,
         corpus_engine: Option<Arc<CorpusEngine>>,
         in_flight_gauge: Option<sovereign_core::in_flight::LocalInFlightGauge>,
         serving_seed: serving::ServingSeed,
         node_seed: node::NodeSeed,
     ) -> Self {
-        let kv_port: Arc<dyn sovereign_contracts::peer::ReplicatedKv> = Arc::new(
-            sovereign_mesh::peer_adapter::MeshReplicatedKv::over(Arc::clone(&mesh_store)),
-        );
-        let local_ledger = Arc::new(sovereign_mesh::ledger_port::LocalLedger::new(
-            Arc::clone(&mesh_store),
-            self_node_id,
-        ));
-        let activity_emitter: Arc<dyn sovereign_mesh::ledger_port::ActivityLedgerPort> =
-            local_ledger.clone();
-        let peer_preferences: Arc<dyn sovereign_mesh::ledger_port::PeerPreferencesPort> =
-            local_ledger.clone();
-        let inference_store: Arc<dyn sovereign_mesh::ledger_port::InferenceStatePort> =
-            local_ledger.clone();
-        let contribution_port: Arc<dyn sovereign_mesh::ledger_port::ContributionLedgerPort> =
-            local_ledger.clone();
-        let processed_shards: Arc<dyn sovereign_mesh::ledger_port::ProcessedShardsPort> =
-            local_ledger;
         Self {
             inner: Arc::new(AppStateInner {
                 fabric,
@@ -1093,12 +1076,12 @@ impl AppState {
                     local_in_flight_gauge: in_flight_gauge,
                 },
                 store: store::StorePart {
-                    inference_store,
-                    peer_preferences,
+                    inference_store: store_seed.inference,
+                    peer_preferences: store_seed.peer_preferences,
                     rpc_shard_warmer: serving_seed.rpc_shard_warmer,
-                    mesh_store: kv_port,
-                    contribution_emitter: contribution_port,
-                    processed_shards,
+                    mesh_store: store_seed.kv,
+                    contribution_emitter: store_seed.contributions,
+                    processed_shards: store_seed.processed_shards,
                 },
                 node: node::NodePart {
                     client_token: node_seed.client_token,
@@ -1132,7 +1115,7 @@ impl AppState {
                     // operators with a budget they didn't set.
                     storage_budget_bytes: std::sync::atomic::AtomicU64::new(0),
                     storage_used_bytes: std::sync::atomic::AtomicU64::new(0),
-                    activity_emitter,
+                    activity_emitter: store_seed.activity,
                 },
                 ingest: ingest::IngestPart {
                     active_ingests: RwLock::new(HashSet::new()),

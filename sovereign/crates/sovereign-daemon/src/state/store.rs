@@ -20,12 +20,96 @@
 
 use std::sync::Arc;
 
+use commonwealth_core::ids::NodeId;
+use commonwealth_core::mesh::Mesh;
+use commonwealth_state::MeshStore;
+use corpus_engine::CorpusEngine;
 use sovereign_contracts::peer::ReplicatedKv;
 use sovereign_mesh::ledger_port::{
-    ContributionLedgerPort, InferenceStatePort, PeerPreferencesPort, ProcessedShardsPort,
+    ActivityLedgerPort, ContributionLedgerPort, InferenceStatePort, PeerPreferencesPort,
+    ProcessedShardsPort,
 };
+use sovereign_meshapp_registry::registry::AppRegistry;
 
-use super::RpcShardWarmer;
+use super::{fabric, node, serving, AppState, RpcShardWarmer};
+
+/// The store ports `AppState` is assembled over — the one seam every backing
+/// enters through (five-programs fp-97): [`StoreSeed::local`] in-process today,
+/// a `rails_client` backing at fp-88, a recording double in tests.
+pub struct StoreSeed {
+    pub kv: Arc<dyn ReplicatedKv>,
+    pub contributions: Arc<dyn ContributionLedgerPort>,
+    pub activity: Arc<dyn ActivityLedgerPort>,
+    pub peer_preferences: Arc<dyn PeerPreferencesPort>,
+    pub inference: Arc<dyn InferenceStatePort>,
+    pub processed_shards: Arc<dyn ProcessedShardsPort>,
+}
+
+impl StoreSeed {
+    /// Every port over the node's own `MeshStore` through `LocalLedger`.
+    pub fn local(mesh_store: Arc<MeshStore>, self_node_id: NodeId) -> Self {
+        let kv_port: Arc<dyn sovereign_contracts::peer::ReplicatedKv> = Arc::new(
+            sovereign_mesh::peer_adapter::MeshReplicatedKv::over(Arc::clone(&mesh_store)),
+        );
+        let local_ledger = Arc::new(sovereign_mesh::ledger_port::LocalLedger::new(
+            Arc::clone(&mesh_store),
+            self_node_id,
+        ));
+        let activity_emitter: Arc<dyn sovereign_mesh::ledger_port::ActivityLedgerPort> =
+            local_ledger.clone();
+        let peer_preferences: Arc<dyn sovereign_mesh::ledger_port::PeerPreferencesPort> =
+            local_ledger.clone();
+        let inference_store: Arc<dyn sovereign_mesh::ledger_port::InferenceStatePort> =
+            local_ledger.clone();
+        let contribution_port: Arc<dyn sovereign_mesh::ledger_port::ContributionLedgerPort> =
+            local_ledger.clone();
+        let processed_shards: Arc<dyn sovereign_mesh::ledger_port::ProcessedShardsPort> =
+            local_ledger;
+        Self {
+            kv: kv_port,
+            contributions: contribution_port,
+            activity: activity_emitter,
+            peer_preferences,
+            inference: inference_store,
+            processed_shards,
+        }
+    }
+}
+
+impl AppState {
+    /// Test-support: every seed plus the [`StoreSeed`], with Fabric over its
+    /// own in-memory `MeshStore` as [`AppState::new`] builds it — so a test
+    /// hands in its store ports and names no store.
+    pub fn new_with_seeds(
+        self_node_id: NodeId,
+        mesh: Mesh,
+        corpus_engine: Option<Arc<CorpusEngine>>,
+        in_flight_gauge: Option<sovereign_core::in_flight::LocalInFlightGauge>,
+        fabric_seed: fabric::FabricSeed,
+        serving_seed: serving::ServingSeed,
+        node_seed: node::NodeSeed,
+        store_seed: StoreSeed,
+    ) -> Self {
+        #[allow(clippy::expect_used)]
+        let mesh_store = Arc::new(MeshStore::in_memory().expect("in-memory MeshStore failed"));
+        let fabric = Arc::new(fabric::FabricPart::new(
+            self_node_id,
+            mesh,
+            mesh_store,
+            Arc::new(AppRegistry::new()),
+            fabric_seed,
+        ));
+        Self::assemble_with_fabric(
+            self_node_id,
+            fabric,
+            store_seed,
+            corpus_engine,
+            in_flight_gauge,
+            serving_seed,
+            node_seed,
+        )
+    }
+}
 
 /// The three Serving fields held by the daemon, read as `AppStateInner::store`.
 pub struct StorePart {

@@ -192,6 +192,8 @@ mod spec_gate_e2e;
 mod storage_budget_route;
 #[path = "main/storage_snapshot_e2e.rs"]
 mod storage_snapshot_e2e;
+#[path = "main/store_seed_double.rs"]
+mod store_seed_double;
 #[path = "main/throughput_ledger_emission.rs"]
 mod throughput_ledger_emission;
 #[path = "main/try_resume_first_gossip.rs"]
