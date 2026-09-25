@@ -296,6 +296,50 @@ async fn post_json<T: serde::de::DeserializeOwned>(
     })
 }
 
+/// One append dial: the act's JSON, with `attestation` beside it when a
+/// guest's name rides along — the body cw-rails' append door reads.
+async fn post_append(
+    base: &str,
+    namespace: &str,
+    act: &commonwealth_rail_core::RailAct,
+    attestation: Option<&commonwealth_rail_core::GuestAttestation>,
+) -> Result<
+    commonwealth_rail_core::Op<commonwealth_rail_core::SignedOp>,
+    commonwealth_rail_core::RailError,
+> {
+    #[derive(serde::Deserialize)]
+    struct Answer {
+        op: commonwealth_rail_core::Op<commonwealth_rail_core::SignedOp>,
+    }
+    let mut body = serde_json::to_value(act).map_err(|e| {
+        commonwealth_rail_core::RailError::Io(format!("the act does not serialise: {e}"))
+    })?;
+    if let Some(attestation) = attestation {
+        let attestation = serde_json::to_value(attestation).map_err(|e| {
+            commonwealth_rail_core::RailError::Io(format!(
+                "the attestation does not serialise: {e}"
+            ))
+        })?;
+        match body.as_object_mut() {
+            Some(obj) => {
+                obj.insert("attestation".into(), attestation);
+            }
+            None => {
+                return Err(commonwealth_rail_core::RailError::Io(
+                    "the act did not serialise to an object".into(),
+                ))
+            }
+        }
+    }
+    let a: Answer = post_json(
+        base,
+        &format!("/v1/rail/append?namespace={namespace}"),
+        &body,
+    )
+    .await?;
+    Ok(a.op)
+}
+
 /// The ring rail, as the serving process holds it. Every method is one dial
 /// to the door that serves that verb; the answers are rail-core types, so
 /// the round and the pump run unchanged over either implementation.
@@ -418,22 +462,7 @@ impl RingRailPort for RailsRingRail {
         // not-in-roster check; the door signs against its own rail's roster
         // and answers a typed refusal when it does not name the signer.
         let _ = roster;
-        Box::pin(async move {
-            #[derive(serde::Deserialize)]
-            struct Answer {
-                op: commonwealth_rail_core::Op<commonwealth_rail_core::SignedOp>,
-            }
-            let act_json = serde_json::to_value(&act).map_err(|e| {
-                commonwealth_rail_core::RailError::Io(format!("the act does not serialise: {e}"))
-            })?;
-            let a: Answer = post_json(
-                &base,
-                &format!("/v1/rail/append?namespace={namespace}"),
-                &act_json,
-            )
-            .await?;
-            Ok(a.op)
-        })
+        Box::pin(async move { post_append(&base, &namespace, &act, None).await })
     }
 
     fn journal_append_attested(
@@ -448,37 +477,7 @@ impl RingRailPort for RailsRingRail {
         // Rails verifies against ITS roster; this one is the local impl's.
         let _ = roster;
         let attestation = attestation.clone();
-        Box::pin(async move {
-            #[derive(serde::Deserialize)]
-            struct Answer {
-                op: commonwealth_rail_core::Op<commonwealth_rail_core::SignedOp>,
-            }
-            let mut body = serde_json::to_value(&act).map_err(|e| {
-                commonwealth_rail_core::RailError::Io(format!("the act does not serialise: {e}"))
-            })?;
-            let attestation = serde_json::to_value(&attestation).map_err(|e| {
-                commonwealth_rail_core::RailError::Io(format!(
-                    "the attestation does not serialise: {e}"
-                ))
-            })?;
-            match body.as_object_mut() {
-                Some(obj) => {
-                    obj.insert("attestation".into(), attestation);
-                }
-                None => {
-                    return Err(commonwealth_rail_core::RailError::Io(
-                        "the act did not serialise to an object".into(),
-                    ))
-                }
-            }
-            let a: Answer = post_json(
-                &base,
-                &format!("/v1/rail/append?namespace={namespace}"),
-                &body,
-            )
-            .await?;
-            Ok(a.op)
-        })
+        Box::pin(async move { post_append(&base, &namespace, &act, Some(&attestation)).await })
     }
 
     fn journal_seal(

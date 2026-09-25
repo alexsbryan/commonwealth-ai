@@ -45,9 +45,8 @@ pub fn parse_atoms(data: &[u8]) -> serde_json::Result<AtomsFile> {
 pub fn read_atlas_atoms(atlas_dir: &Path) -> io::Result<AtomsFile> {
     let path = atlas_dir.join("atoms.json");
     let data = fs::read(&path)?;
-    parse_atoms(&data).map_err(|e| {
-        io::Error::new(io::ErrorKind::InvalidData, format!("parse atoms.json: {e}"))
-    })
+    parse_atoms(&data)
+        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, format!("parse atoms.json: {e}")))
 }
 
 /// Read the edges file back from disk. Companion to

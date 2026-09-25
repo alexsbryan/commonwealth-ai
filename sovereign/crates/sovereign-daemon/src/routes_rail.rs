@@ -417,12 +417,13 @@ pub async fn append(
     // so it honours `on_behalf_of` under an attestation it verifies against
     // its roster — and refuses, by name, when this node's key is not in it.
     // The attestation lives as long as the guest's session does.
-    let attestation = match on_behalf_of.as_deref() {
+    // `stamp_from` names the session's own name, so the name and its expiry
+    // come from one session — never a defaulted expiry (principle 6).
+    let session = guest.and_then(|g| g.session.as_ref());
+    let attestation = match on_behalf_of.as_deref().zip(session) {
         None => None,
-        Some(name) => {
-            let expires_at = guest
-                .and_then(|g| g.session.as_ref())
-                .map_or(0, |s| (s.expires_at_ms / 1000) as i64);
+        Some((name, session)) => {
+            let expires_at = (session.expires_at_ms / 1000) as i64;
             match state.attest_guest(name, &namespace, expires_at) {
                 Some(a) => {
                     tracing::debug!(
