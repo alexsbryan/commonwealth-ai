@@ -214,6 +214,9 @@ async fn a_local_only_daemon_spawns_no_network_service() {
     // The daemon's store ports dial cw-rails (five-programs fp-88), so the
     // model list is read from a stand-in door on `[daemon] rails_base`,
     // which records each read it serves. The door holds no models and no plan.
+    // It stays a stand-in because this daemon is in-process and never runs the
+    // binary boot that calls `ensure_rails`; the real cw-rails is proven by
+    // tests/solo_rails_e2e.rs (fp-solo-clients).
     let reads: std::sync::Arc<std::sync::Mutex<Vec<&'static str>>> = Default::default();
     let door = crate::common::spawn_router(
         axum::Router::new()
