@@ -333,20 +333,47 @@ pub async fn pump_once(fabric: &FabricPart) -> PumpOutcome {
         }
     }
 
+    seal_planes(fabric, rail.as_ref(), &mut out).await;
+    out
+}
+
+/// Spawn ONLY the two seal arms nothing drains — `mesh-measurements` and
+/// `work` — for a daemon whose KV store lives at cw-rails, which runs the KV
+/// drain and KV seal itself (five-programs fp-88; the two arms stay here,
+/// five-programs-40). No boot projection: that rebuilds the KV store.
+pub fn spawn_plane_seal(fabric: Arc<FabricPart>, interval: Duration) -> RailKvPumpHandle {
+    let task = tokio::spawn(async move {
+        info!(
+            interval_secs = interval.as_secs(),
+            "rail kv pump: started the measurements and work seal arms only"
+        );
+        loop {
+            if let Some(rail) = fabric.ring_rail() {
+                let mut out = PumpOutcome::default();
+                seal_planes(&fabric, rail.as_ref(), &mut out).await;
+                if out.sealed > 0 {
+                    debug!(
+                        sealed = out.sealed,
+                        snapshot_rows = out.snapshot_rows,
+                        "rail kv pump: sealed a plane"
+                    );
+                }
+            }
+            tokio::time::sleep(interval).await;
+        }
+    });
+    RailKvPumpHandle { _task: task }
+}
+
+/// The seal checks for the planes that never enter the outbox.
+async fn seal_planes(fabric: &FabricPart, rail: &dyn RingRailPort, out: &mut PumpOutcome) {
     // `mesh-measurements` never enters the outbox — it is gossip-excluded, and
     // its acts are published by `POST /v1/mesh/measurements` straight onto the
     // journal. So its journal grows with nothing above draining it, and the
     // seal check has to be reached some other way. Here is that way, and the
     // constant is the same one (ARCH §10.6).
     if let Ok(roster) = rail.roster(MEASUREMENTS_NAMESPACE).await {
-        seal_if_due(
-            fabric,
-            rail.as_ref(),
-            MEASUREMENTS_NAMESPACE,
-            &roster,
-            &mut out,
-        )
-        .await;
+        seal_if_due(fabric, rail, MEASUREMENTS_NAMESPACE, &roster, out).await;
     }
 
     // `work` never enters the outbox either, and for the same structural
@@ -362,10 +389,8 @@ pub async fn pump_once(fabric: &FabricPart) -> PumpOutcome {
     // and a namespace this node cannot append to is one it must not seal. The
     // failure direction is always "do not retire" (ARCH §18.3).
     if let Ok(roster) = rail.roster(WORK_NAMESPACE).await {
-        seal_if_due(fabric, rail.as_ref(), WORK_NAMESPACE, &roster, &mut out).await;
+        seal_if_due(fabric, rail, WORK_NAMESPACE, &roster, out).await;
     }
-
-    out
 }
 
 fn ack(store: &MeshStore, ids: &[i64]) {

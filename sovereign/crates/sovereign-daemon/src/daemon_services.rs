@@ -274,20 +274,20 @@ pub struct ServingProfile {
 ///   `models.*` change. The desktop has never had one; that is why this rail
 ///   is on the headless variant and the desktop's reload names its profile in
 ///   the refusal instead of reporting a missing installation.
-/// - `mesh_store` — the store the work atlas writes into, so its entries reach
-///   the rail outbox and travel. Without it the daemon builds a private
-///   in-memory store and atlas data is invisible across the mesh.
+/// - `mesh_store` — the ONE `RailsKv` (five-programs fp-88): the work atlas,
+///   the notes sink and poller, and `AppState`'s KV port all dial cw-rails
+///   through it, so their writes cross the mesh from the serving process.
 /// - `convergence_recorder` — the ONE convergence record the notes publish
 ///   sink, the ingest poller and `/status` all stamp and read. A second copy
 ///   would let the status section disagree with the sink.
 ///
-/// Both are the mesh ADAPTERS from [`sovereign_mesh::peer_adapter`], not the
-/// commonwealth types they wrap: the daemon builds them, hands them here, and
-/// talks to them through `sovereign-contracts::peer`'s ports, so its own
+/// Both are held as ports — the dial, and the mesh ADAPTER from
+/// [`sovereign_mesh::peer_adapter`] — never the commonwealth types: the daemon
+/// builds them, hands them here, and talks to them through `sovereign-contracts::peer`'s ports, so its own
 /// bootstrap names no `commonwealth-*` type at all (cw-lift 3b).
 pub struct HeadlessRails {
     pub provider_factory: Arc<dyn ProviderFactory>,
-    pub mesh_store: Arc<sovereign_mesh::peer_adapter::MeshReplicatedKv>,
+    pub mesh_store: Arc<dyn sovereign_contracts::peer::ReplicatedKv>,
     pub convergence_recorder: Arc<sovereign_mesh::peer_adapter::MeshConvergence>,
 }
 
@@ -828,10 +828,9 @@ pub(crate) mod fixtures {
             serving,
             rails: HeadlessRails {
                 provider_factory,
-                mesh_store: Arc::new(
-                    sovereign_mesh::peer_adapter::MeshReplicatedKv::in_memory()
-                        .expect("in-memory MeshStore"),
-                ),
+                mesh_store: Arc::new(crate::rails_client::kv::RailsKv::new(
+                    crate::rails_client::DEFAULT_RAILS_BASE,
+                )),
                 convergence_recorder: Arc::new(sovereign_mesh::peer_adapter::MeshConvergence::new()),
             },
             knowledge_view_http: axum::Router::new(),
@@ -856,10 +855,9 @@ mod tests {
         HeadlessExtras {
             rails: HeadlessRails {
                 provider_factory: std::sync::Arc::new(fixtures::NullFactory),
-                mesh_store: Arc::new(
-                    sovereign_mesh::peer_adapter::MeshReplicatedKv::in_memory()
-                        .expect("in-memory MeshStore"),
-                ),
+                mesh_store: Arc::new(crate::rails_client::kv::RailsKv::new(
+                    crate::rails_client::DEFAULT_RAILS_BASE,
+                )),
                 convergence_recorder: Arc::new(sovereign_mesh::peer_adapter::MeshConvergence::new()),
             },
             knowledge_view_http: axum::Router::new(),

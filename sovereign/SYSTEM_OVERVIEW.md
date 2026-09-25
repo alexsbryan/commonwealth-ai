@@ -3243,7 +3243,10 @@ directory per namespace — and this store is the fold of it:
   the sentence, never a silent drop and never an infinite retry.
   `MeshStore` is `in_memory()` in production, so the pump's FIRST act at boot
   is `project_all_on_disk` — the store is rebuilt from the journals or it
-  holds nothing at all.
+  holds nothing at all. Since five-programs fp-88 the daemon's KV is
+  cw-rails' (`StoreSeed::rails`, one `RailsKv`), cw-rails runs the drain and
+  the KV seal, and the daemon spawns only `spawn_plane_seal` — the
+  `mesh-measurements` and `work` seal arms.
 - **On receive, the fold runs once per namespace per ring-sync round**, after
   every peer, in `run_one_round` — NOT inside `exchange`. Half the ops a node
   receives never pass through its own exchange: a peer PUSHES on call 2 of

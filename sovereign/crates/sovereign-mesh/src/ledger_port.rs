@@ -29,6 +29,9 @@ use commonwealth_core::ids::{ModelId, NodeId};
 use commonwealth_core::model::ModelInfo;
 use commonwealth_core::oicp::EmbedModelInfo;
 
+/// The storage-snapshot cadence, read by the loop that records through the
+/// contribution port.
+pub use commonwealth_state::contributions::STORAGE_SNAPSHOT_INTERVAL;
 /// The record types these ports carry that live in commonwealth-state,
 /// re-exported so the dialing side names them without that crate.
 pub use commonwealth_state::inference_plan::{InferencePlan, ShardPlan};

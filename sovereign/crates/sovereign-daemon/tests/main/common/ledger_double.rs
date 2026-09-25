@@ -34,6 +34,7 @@ pub struct LedgerCall {
 pub struct RecordingLedger {
     self_node_id: NodeId,
     calls: Arc<Mutex<Vec<LedgerCall>>>,
+    recorded: Arc<Mutex<Vec<LedgerEventKind>>>,
     models: Vec<(NodeId, ModelInfo)>,
 }
 
@@ -42,6 +43,7 @@ impl RecordingLedger {
         Self {
             self_node_id,
             calls: Arc::default(),
+            recorded: Arc::default(),
             models: Vec::new(),
         }
     }
@@ -68,6 +70,12 @@ impl RecordingLedger {
     /// Every call so far, in order.
     pub fn calls(&self) -> Vec<LedgerCall> {
         self.calls.lock().unwrap().clone()
+    }
+
+    /// Every `contributions.record` kind so far, typed, in order — for a
+    /// test that asserts on the event's fields rather than its `Debug` text.
+    pub fn recorded_contributions(&self) -> Vec<LedgerEventKind> {
+        self.recorded.lock().unwrap().clone()
     }
 
     fn push(&self, method: &'static str, args: String) {
@@ -123,7 +131,9 @@ impl ContributionLedgerPort for RecordingLedger {
     }
 
     fn record(&self, kind: LedgerEventKind) -> LedgerFut<'_, ()> {
-        self.answer("contributions.record", format!("{kind:?}"), ())
+        let args = format!("{kind:?}");
+        self.recorded.lock().unwrap().push(kind);
+        self.answer("contributions.record", args, ())
     }
 
     fn events(&self) -> LedgerFut<'_, Vec<LedgerEvent>> {

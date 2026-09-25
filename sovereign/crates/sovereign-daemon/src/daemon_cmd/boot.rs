@@ -483,6 +483,7 @@ pub(super) async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
         &data_dir,
         Arc::clone(&lint_store),
         Arc::clone(&test_store),
+        crate::rails_client::resolve_rails_base(&config.daemon),
     );
 
     // ── CorpusEngine ──────────────────────────────────────────────

@@ -123,3 +123,65 @@ async fn served_knowledge_query_records_through_the_store_seed() {
         recorded[0].args
     );
 }
+
+/// The production seed (five-programs fp-88): `StoreSeed::rails` puts AppState's
+/// contribution port on the wire, and the write lands on a stand-in for
+/// cw-rails' `/v1/ledger/contributions` door, which hands it to the double.
+#[tokio::test]
+async fn a_contribution_write_lands_on_the_rails_door() {
+    use sovereign_mesh::ledger_port::ContributionLedgerPort;
+
+    let self_id = NodeId::from_u128(0x5EED_0088);
+    let peer = NodeId::from_u128(0xBBBB_0088);
+    let double = Arc::new(RecordingLedger::new(self_id));
+    let seen = Arc::clone(&double);
+    let door = axum::Router::new().route(
+        "/v1/ledger/contributions",
+        axum::routing::post(move |axum::Json(body): axum::Json<serde_json::Value>| {
+            let seen = Arc::clone(&seen);
+            async move {
+                assert_eq!(body["node_id"], serde_json::json!(self_id), "{body}");
+                let kind = serde_json::from_value(body["record"].clone()).unwrap();
+                seen.record(kind).await.unwrap();
+                axum::Json(())
+            }
+        }),
+    );
+    let base = format!("http://{}", spawn_router(door).await);
+
+    let kv = Arc::new(sovereign_daemon::rails_client::kv::RailsKv::new(base.clone()));
+    let state = AppState::new_with_seeds(
+        self_id,
+        solo_mesh(self_id, "store-seed-rails"),
+        None,
+        None,
+        fabric::FabricSeed::default(),
+        serving::ServingSeed::default(),
+        node::NodeSeed::default(),
+        StoreSeed::rails(kv, &base, self_id),
+    );
+    state
+        .inner
+        .store
+        .contribution_emitter
+        .record(commonwealth_core::contributions::LedgerEventKind::InferenceReceived {
+            from_node: peer,
+            model_id: "m".into(),
+            tokens_generated: 7,
+        })
+        .await
+        .unwrap();
+
+    let recorded: Vec<_> = double
+        .calls()
+        .into_iter()
+        .filter(|c| c.method == "contributions.record")
+        .collect();
+    assert_eq!(recorded.len(), 1, "{recorded:?}");
+    assert!(
+        recorded[0].args.contains("InferenceReceived")
+            && recorded[0].args.contains(&format!("{peer:?}")),
+        "{:?}",
+        recorded[0].args
+    );
+}

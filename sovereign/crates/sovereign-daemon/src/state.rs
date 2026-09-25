@@ -988,20 +988,22 @@ impl AppState {
     /// [`Self::new_with_platform_and_engine_and_gauge_and_fabric_and_serving_and_node`]
     /// with Fabric already constructed — the daemon holds the part across a
     /// stop and passes the same `Arc` here (DC §4.2 "Construction is staged,
-    /// and parts are total").
+    /// and parts are total"). Every store port dials cw-rails at the node's
+    /// `rails_base`, `kv` being the daemon's one `RailsKv` (five-programs fp-88).
     pub fn new_with_fabric_and_serving_and_node(
         self_node_id: NodeId,
         fabric: Arc<fabric::FabricPart>,
-        mesh_store: Arc<MeshStore>,
+        kv: Arc<dyn sovereign_contracts::peer::ReplicatedKv>,
         corpus_engine: Option<Arc<CorpusEngine>>,
         in_flight_gauge: Option<sovereign_core::in_flight::LocalInFlightGauge>,
         serving_seed: serving::ServingSeed,
         node_seed: node::NodeSeed,
     ) -> Self {
+        let store_seed = store::StoreSeed::rails(kv, &node_seed.rails_base, self_node_id);
         Self::assemble_with_fabric(
             self_node_id,
             fabric,
-            store::StoreSeed::local(mesh_store, self_node_id),
+            store_seed,
             corpus_engine,
             in_flight_gauge,
             serving_seed,
@@ -1268,7 +1270,7 @@ impl AppState {
     pub async fn inference_plan(
         &self,
     ) -> Result<
-        Option<commonwealth_state::inference_plan::InferencePlan>,
+        Option<sovereign_mesh::ledger_port::InferencePlan>,
         sovereign_mesh::ledger_port::LedgerAbsent,
     > {
         self.inner.store.inference_store.get_plan().await
@@ -1277,7 +1279,7 @@ impl AppState {
     /// Store a peer's inference plan.
     pub async fn set_inference_plan(
         &self,
-        plan: &commonwealth_state::inference_plan::InferencePlan,
+        plan: &sovereign_mesh::ledger_port::InferencePlan,
     ) -> Result<(), sovereign_mesh::ledger_port::LedgerAbsent> {
         self.inner.store.inference_store.set_plan(plan).await
     }

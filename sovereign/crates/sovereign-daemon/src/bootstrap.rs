@@ -1446,7 +1446,7 @@ pub fn wire_note_propagation_sink(
     } else {
         tracing::info!(
             target = "notes",
-            "notes: propagation_sink wired to MeshStore (app_id=notes)"
+            "notes: propagation_sink wired to the replicated KV (app_id=notes)"
         );
     }
 }
@@ -1543,8 +1543,8 @@ pub fn spawn_notes_ingest_poller(
     self_node_id: NodeId,
     convergence: Arc<dyn Convergence>,
 ) {
-    // Ingest poller: bridge inbound MeshStore entries (merged from
-    // gossip) into `NoteStore::ingest_remote_notes`. MeshStore
+    // Ingest poller: bridge inbound replicated-KV entries (merged from
+    // the ring) into `NoteStore::ingest_remote_notes`. The KV
     // doesn't expose a merge-callback today — periodic scan is
     // the path of least resistance. `ingest_remote_notes` is
     // idempotent (content_hash dedup) so re-reads cost nothing.
@@ -2478,7 +2478,7 @@ pub struct WatcherAtlasSetup {
     pub watched_lint_scope: Option<String>,
     pub watched_test_scope: Option<String>,
     pub watcher_monitor: Option<tokio::task::JoinHandle<()>>,
-    pub work_atlas_mesh_store: Arc<sovereign_mesh::peer_adapter::MeshReplicatedKv>,
+    pub work_atlas_mesh_store: Arc<dyn ReplicatedKv>,
     pub work_atlas_store: Arc<sovereign_work_atlas::WorkAtlasStore>,
     pub work_atlas_broadcaster: Arc<sovereign_work_atlas::tools::DeferredBroadcaster>,
     pub work_atlas_cfg: sovereign_work_atlas::WorkAtlasConfig,
@@ -2495,6 +2495,7 @@ pub fn setup_watchers_and_work_atlas(
     data_dir: &Path,
     lint_store: Arc<corpus_engine_watchers::LintResultStore>,
     test_store: Arc<corpus_engine_watchers::TestResultStore>,
+    rails_base: String,
 ) -> WatcherAtlasSetup {
     // Shared liveness beacon: the coordinator loop stamps it, the
     // status tools read it. Replaces the old one-shot `watcher_active`
@@ -2516,23 +2517,20 @@ pub fn setup_watchers_and_work_atlas(
     let mut _watcher_monitor: Option<tokio::task::JoinHandle<()>> = None;
 
     // ── Work atlas wiring (Phase 2) ────────────────────────────────────
-    // Single shared `Arc<MeshStore>`: handed into the EmbeddedDaemon
-    // via `set_mesh_store` so `AppState.inner.fabric.mesh_store` IS this
-    // instance, and also handed into the `WorkAtlasStore` so claims
-    // and observations land in the same store gossip publishes from.
-    // In-memory is intentional — matches the daemon's existing
-    // long-term-persistence-via-mesh.json design. The atlas-relevant
-    // records have TTLs measured in hours; restart cost is acceptable.
-    let work_atlas_mesh_store: Arc<sovereign_mesh::peer_adapter::MeshReplicatedKv> = Arc::new(
-        sovereign_mesh::peer_adapter::MeshReplicatedKv::in_memory()
-            .expect("in-memory MeshStore for work atlas"),
+    // The daemon's ONE `RailsKv` (five-programs fp-88): handed to the
+    // `WorkAtlasStore` here, to the notes sink and poller, and on
+    // `HeadlessRails` to `AppState`'s KV port, so every one of them writes
+    // the store cw-rails holds and pumps onto the ring. Construction checks
+    // no presence; a cw-rails that is down surfaces on the first call.
+    let work_atlas_mesh_store: Arc<dyn ReplicatedKv> = Arc::new(
+        crate::rails_client::kv::RailsKv::new(rails_base),
     );
     // Node identity — same resolution order EmbeddedDaemon uses when
     // it starts (file-on-disk → mesh.json → generate). Resolved early
     // so `WorkAtlasStore::node_id` matches the daemon's `self_id`.
     let work_atlas_node_id = resolve_self_node_id(data_dir);
     let work_atlas_store = Arc::new(sovereign_work_atlas::WorkAtlasStore::new(
-        Arc::clone(&work_atlas_mesh_store) as Arc<dyn ReplicatedKv>,
+        Arc::clone(&work_atlas_mesh_store),
         work_atlas_node_id,
     ));
     // Deferred broadcaster — `MeshBroadcaster` needs `AppState`, which

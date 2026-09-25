@@ -29,13 +29,16 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use crate::common;
+use crate::common::ledger_double::RecordingLedger;
 use crate::common::mesh_admin_services;
 use commonwealth_core::contributions::LedgerEventKind;
+use commonwealth_core::ids::NodeId;
 use corpus_engine::CorpusEngine;
 use corpus_index::index::{CorpusIndex, InsertChunk};
 use corpus_index::types::EmbedFn;
 use sovereign_contracts::setup_config::SetupConfig;
 use sovereign_daemon::daemon::EmbeddedDaemon;
+use sovereign_mesh::ledger_port::ContributionLedgerPort;
 
 const EMBED_DIM: usize = 8;
 
@@ -106,9 +109,27 @@ async fn first_tick_emits_only_mesh_shared_corpora_to_ledger() {
     // Daemon: data_dir holds mesh.json + node_id; corpus engine
     // injected so `start_daemon` spawns the snapshot loop with the
     // mesh_sharing filter in place.
+    // The daemon's contribution port dials cw-rails (five-programs fp-88):
+    // a stand-in `/v1/ledger/contributions` door on `[daemon] rails_base`
+    // hands each write to fp-80's recording double, which this test reads.
+    let double = Arc::new(RecordingLedger::new(NodeId::from_u128(0)));
+    let door = common::spawn_router(axum::Router::new().route(
+        "/v1/ledger/contributions",
+        axum::routing::post({
+            let double = Arc::clone(&double);
+            move |axum::Json(body): axum::Json<serde_json::Value>| async move {
+                let kind = serde_json::from_value(body["record"].clone()).unwrap();
+                double.record(kind).await.unwrap();
+                axum::Json(())
+            }
+        }),
+    ))
+    .await;
+    let mut config = SetupConfig::unconfigured();
+    config.daemon.rails_base = Some(format!("http://{door}"));
     let daemon = EmbeddedDaemon::new(
         tmp.path().to_path_buf(),
-        SetupConfig::unconfigured(),
+        config,
         common::desktop_services_with_engine(Arc::clone(&engine)),
     );
     daemon
@@ -123,21 +144,12 @@ async fn first_tick_emits_only_mesh_shared_corpora_to_ledger() {
     // is comfortable headroom for a loaded CI box.
     tokio::time::sleep(Duration::from_millis(200)).await;
 
-    let app_state = daemon
-        .app_state()
-        .await
-        .expect("app_state present after create_mesh");
-    let events = app_state
-        .inner
-        .fabric
-        .contribution_emitter
-        .events()
-        .expect("contribution_emitter.events() reads from in-memory store");
+    let events = double.recorded_contributions();
 
     // Filter to StorageSnapshot rows.
     let snapshots: Vec<&Vec<(String, f64)>> = events
         .iter()
-        .filter_map(|e| match &e.kind {
+        .filter_map(|e| match e {
             LedgerEventKind::StorageSnapshot { corpora } => Some(corpora),
             _ => None,
         })

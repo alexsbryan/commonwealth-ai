@@ -3021,20 +3021,12 @@ impl EmbeddedDaemon {
         // (if one was installed via `set_corpus_engine`). Without
         // this, Commonwealth's knowledge handlers can only return
         // stubs — the whole reason Peer A couldn't see Peer B's SEP
-        // corpus. The MeshStore defaults to in-memory; bootstraps
-        // that want shared access (e.g. the work atlas reading from
-        // the same store gossip publishes from) inject one via
-        // `set_mesh_store` before this point. Long-term persistence
-        // for the legacy mesh state still flows through `mesh.json`.
-        let mesh_store = match self.services.rails().map(|r| &r.mesh_store) {
-            Some(provided) => provided.inner(),
-            // Only the headless daemon carries a shared store; the desktop and
-            // the mesh-admin one-shot get a private in-memory one, which is
-            // what their variants declare by not having the field.
-            None => Arc::new(
-                commonwealth_state::MeshStore::in_memory().expect("in-memory MeshStore failed"),
-            ),
-        };
+        // corpus. Fabric's own store is private to it for every variant: the
+        // node's replicated KV is cw-rails', reached through `RailsKv` below
+        // (five-programs fp-88).
+        let mesh_store = Arc::new(
+            commonwealth_state::MeshStore::in_memory().expect("in-memory MeshStore failed"),
+        );
         let app_registry = Arc::new(sovereign_meshapp_registry::registry::AppRegistry::new());
 
         // ── Fabric's values exist before its part is built ────────
@@ -3257,15 +3249,25 @@ impl EmbeddedDaemon {
         let fabric = Arc::new(sovereign_mesh::fabric::FabricPart::new(
             node_id,
             mesh,
-            Arc::clone(&mesh_store),
+            mesh_store,
             Arc::clone(&app_registry),
             fabric_seed,
         ));
         *self.fabric.write().unwrap_or_else(|e| e.into_inner()) = Some(Arc::clone(&fabric));
+        // The headless daemon hands in the ONE `RailsKv` its work atlas and
+        // notes write through; the desktop and the mesh-admin one-shot dial
+        // their own. Neither checks presence: a missing cw-rails is a named
+        // absence on the first call (five-programs fp-88, D4).
+        let kv: Arc<dyn sovereign_contracts::peer::ReplicatedKv> = match self.services.rails() {
+            Some(r) => Arc::clone(&r.mesh_store),
+            None => Arc::new(crate::rails_client::kv::RailsKv::new(
+                node_seed.rails_base.clone(),
+            )),
+        };
         let app_state = AppState::new_with_fabric_and_serving_and_node(
             node_id,
             fabric,
-            mesh_store,
+            kv,
             corpus_engine.clone(),
             self.services
                 .serving()
@@ -3979,24 +3981,21 @@ impl EmbeddedDaemon {
                 running_services.record(crate::local_only::MeshService::AutoIngestCollaborate);
 
                 // Ring-ledger replication: one round immediately, then every
-                // minute — or as soon as the KV pump signs a local write,
-                // whichever comes first. ONE `Notify`, held by both halves:
-                // the pump raises it, the sync loop selects on it beside its
-                // interval. The pump also rebuilds the mesh store from the
-                // journals on disk before its first drain, which is the boot
-                // half of "the journal is truth" — production `MeshStore` is
-                // `in_memory()`.
+                // minute — or as soon as a local write is signed, whichever
+                // comes first (the nudge `ring_write_nudge` names).
                 let ring_sync_handle = sovereign_mesh::ring_sync::spawn_ring_sync_loop(
                     app_state.inner.fabric.clone(),
                     sovereign_mesh::ring_sync::DEFAULT_RING_SYNC_INTERVAL,
-                    Arc::clone(&ring_write_nudge),
+                    ring_write_nudge,
                 );
                 running_services.record(crate::local_only::MeshService::RingSync);
 
-                let rail_kv_pump_handle = sovereign_mesh::rail_kv_pump::spawn_rail_kv_pump(
+                // The KV drain and KV seal are cw-rails' since fp-77/fp-78 —
+                // the node's KV lives there (fp-88). The `mesh-measurements`
+                // and `work` seal arms stay here (five-programs-40).
+                let rail_kv_pump_handle = sovereign_mesh::rail_kv_pump::spawn_plane_seal(
                     app_state.inner.fabric.clone(),
                     sovereign_mesh::rail_kv_pump::RAIL_KV_PUMP_INTERVAL,
-                    ring_write_nudge,
                 );
                 running_services.record(crate::local_only::MeshService::RailKvPump);
 
@@ -4078,70 +4077,15 @@ impl EmbeddedDaemon {
                         }
                     }
                 },
-                commonwealth_state::contributions::STORAGE_SNAPSHOT_INTERVAL,
+                sovereign_mesh::ledger_port::STORAGE_SNAPSHOT_INTERVAL,
                 snapshot_shutdown_rx,
             )
             .await;
         });
         info!("StorageSnapshot loop started");
 
-        // ── Contributions-ledger retention GC ─────────────────────
-        //
-        // The ledger is append-only: `ContributionEmitter::record`
-        // writes one ~220 B `MeshStore` row per served request, under a
-        // key carrying an origin+time+seq suffix so LWW never collapses
-        // two events. Nothing ever deleted them on this daemon —
-        // `RetentionGc` was constructed only by `commonwealth-daemon`.
-        // At 10k requests/day that is ~2 MB/day of rows that gossip
-        // then replicates as a full snapshot on every round, walking
-        // toward `MAX_REQUEST_BODY_BYTES` (8 MiB) and, before that, the
-        // 3s POST timeout (MESH_SCALE_100_USERS_1000_CORPORA.md §7.2).
-        //
-        // TTL is the AGGREGATION WINDOW, and this call site does not get
-        // to spell it: `commonwealth_state::retention` declares it once,
-        // and `MeshStore::apply_projection` reads the SAME table on every
-        // fold. That coupling is not decoration — the store is a
-        // projection of the ring journal, so a sweep at a cutoff of its
-        // own is re-inserted by the next round (ARCH §10.6).
-        //
-        // SCOPED to the contributions app on purpose. This daemon's
-        // `MeshStore` also carries processed-shards dedup markers and
-        // `corpus-engine/handoff:*` records that are written once and
-        // never rewritten; a whole-store age sweep would delete those
-        // and re-open completed ingest work. See `RetentionGc::app_scope`.
-        let gc_store = app_state.inner.fabric.mesh_store.clone();
-        match commonwealth_state::RetentionGc::for_namespace(
-            gc_store,
-            commonwealth_state::CONTRIBUTIONS_APP_ID,
-            commonwealth_state::contributions::STORAGE_SNAPSHOT_INTERVAL,
-        ) {
-            Some(gc) => {
-                let (gc_shutdown_tx, gc_shutdown_rx) = tokio::sync::watch::channel(false);
-                tokio::spawn(async move {
-                    let _hold_shutdown_tx = gc_shutdown_tx;
-                    gc.run(gc_shutdown_rx).await;
-                });
-                info!(
-                    app_scope = commonwealth_state::CONTRIBUTIONS_APP_ID,
-                    ttl_days = commonwealth_state::retention::window_days(
-                        commonwealth_state::CONTRIBUTIONS_APP_ID
-                    ),
-                    interval_secs =
-                        commonwealth_state::contributions::STORAGE_SNAPSHOT_INTERVAL.as_secs(),
-                    "RetentionGc started (contributions ledger)"
-                );
-            }
-            // Reported, never defaulted to a cutoff this site invented
-            // (§18.3). The only way here is the ledger losing its row in
-            // `retention::RETENTION_WINDOW_DAYS`, and an unbounded ledger
-            // is a thing the operator should read in the log rather than
-            // discover as memory growth.
-            None => warn!(
-                app_scope = commonwealth_state::CONTRIBUTIONS_APP_ID,
-                "RetentionGc not started: this namespace declares no retention \
-                 window, so nothing bounds it"
-            ),
-        }
+        // The contributions ledger's RetentionGc runs in cw-rails beside the
+        // store it sweeps (fp-78); this daemon holds no ledger rows (fp-88).
 
         // Stall sweep — any non-terminal `_enrichment_state.json`
         // older than STALL_THRESHOLD_SECS is rewritten as `Stalled`

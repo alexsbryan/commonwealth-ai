@@ -211,12 +211,38 @@ async fn a_local_only_daemon_does_not_donate() {
 /// and has started nothing that talks to another machine.
 #[tokio::test]
 async fn a_local_only_daemon_spawns_no_network_service() {
+    // The daemon's store ports dial cw-rails (five-programs fp-88), so the
+    // model list is read from a stand-in door on `[daemon] rails_base`,
+    // which records each read it serves. The door holds no models and no plan.
+    let reads: std::sync::Arc<std::sync::Mutex<Vec<&'static str>>> = Default::default();
+    let door = crate::common::spawn_router(
+        axum::Router::new()
+            .route(
+                "/v1/ledger/inference/models",
+                axum::routing::get({
+                    let reads = reads.clone();
+                    move || async move {
+                        reads.lock().unwrap().push("models");
+                        axum::Json(Vec::<()>::new())
+                    }
+                }),
+            )
+            .route(
+                "/v1/ledger/inference/plan",
+                axum::routing::get({
+                    let reads = reads.clone();
+                    move || async move {
+                        reads.lock().unwrap().push("plan");
+                        axum::Json(None::<()>)
+                    }
+                }),
+            ),
+    )
+    .await;
+    let mut config = cfg(39751, 39752, true);
+    config.daemon.rails_base = Some(format!("http://{door}"));
     let dir = tempfile::tempdir().unwrap();
-    let daemon = EmbeddedDaemon::new(
-        dir.path().to_path_buf(),
-        cfg(39751, 39752, true),
-        mesh_admin_services(),
-    );
+    let daemon = EmbeddedDaemon::new(dir.path().to_path_buf(), config, mesh_admin_services());
 
     // The mint that `daemon_cmd` performs at boot. Under the profile it must
     // SUCCEED without mDNS register/browse — the campaign's CLASS 3 blocker.
@@ -279,6 +305,11 @@ async fn a_local_only_daemon_spawns_no_network_service() {
         status,
         reqwest::StatusCode::OK,
         "GET /v1/models on a local-only daemon"
+    );
+    assert!(
+        reads.lock().unwrap().contains(&"models"),
+        "the model list was read from the declared door, got {:?}",
+        reads.lock().unwrap()
     );
 
     let state = daemon.app_state().await.expect("running daemon has state");
