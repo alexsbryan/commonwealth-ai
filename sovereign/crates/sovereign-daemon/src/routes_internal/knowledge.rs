@@ -247,13 +247,24 @@ pub async fn knowledge_search(
     // chunks. Local-origin requests (requester==None) skip emission.
     if let Some(for_node) = requester {
         for (corpus_id, chunks) in per_corpus_chunks {
-            state.inner.fabric.contribution_emitter.record(
-                commonwealth_core::contributions::LedgerEventKind::KnowledgeQueryServed {
-                    for_node,
-                    corpus_id,
-                    chunks_returned: chunks,
-                },
-            );
+            if let Err(e) = state
+                .inner
+                .store
+                .contribution_emitter
+                .record(
+                    commonwealth_core::contributions::LedgerEventKind::KnowledgeQueryServed {
+                        for_node,
+                        corpus_id,
+                        chunks_returned: chunks,
+                    },
+                )
+                .await
+            {
+                tracing::warn!(
+                    error = %e,
+                    "internal knowledge_search: contribution ledger absent — KnowledgeQueryServed not recorded"
+                );
+            }
         }
     }
 

@@ -91,7 +91,7 @@
 //! The one thing a signature cannot answer is "may this namespace exist on my
 //! machine at all", and that is not asked here either: a peer may put a
 //! `notes-private` journal on our disk and this route will take it. It reaches
-//! no reader, because `MeshStore::apply_projection` refuses an excluded
+//! no reader, because the store's `apply_projection` refuses an excluded
 //! namespace and the store is the only thing anything reads
 //! (`sovereign-mesh::ring_sync`'s
 //! `a_peers_private_namespace_is_taken_by_the_rail_and_refused_by_the_projection`).

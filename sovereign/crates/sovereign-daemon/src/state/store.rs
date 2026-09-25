@@ -22,7 +22,7 @@ use std::sync::Arc;
 
 use sovereign_contracts::peer::ReplicatedKv;
 use sovereign_mesh::ledger_port::{
-    ContributionLedgerPort, InferenceStatePort, PeerPreferencesPort,
+    ContributionLedgerPort, InferenceStatePort, PeerPreferencesPort, ProcessedShardsPort,
 };
 
 use super::RpcShardWarmer;
@@ -51,4 +51,7 @@ pub struct StorePart {
     /// The contribution ledger as a port — Fabric's `contribution_emitter`
     /// seen through `ContributionLedgerPort`; in-process until fp-88.
     pub contribution_emitter: Arc<dyn ContributionLedgerPort>,
+    /// The processed-shards announcements as a port (five-programs-46);
+    /// in-process until fp-88.
+    pub processed_shards: Arc<dyn ProcessedShardsPort>,
 }

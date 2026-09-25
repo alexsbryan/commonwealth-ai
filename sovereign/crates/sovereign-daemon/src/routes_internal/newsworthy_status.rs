@@ -7,7 +7,7 @@
 //! to verify whether the daemon is running, whether they're leader
 //! or follower, when the last tick fired, or whether anything is
 //! tracked. The route reads the snapshot the watcher publishes to
-//! `MeshStore` at the end of every tick (key
+//! the mesh store at the end of every tick (key
 //! `wikipedia-newsworthy:status/last_tick`) and overlays the live
 //! mesh-membership view (current leader, online peer count) so the
 //! UI can answer the three questions the user actually asks:
@@ -68,17 +68,19 @@ pub struct NewsworthyStatusResponse {
     pub self_in_pool: bool,
 }
 
-pub async fn newsworthy_status(State(state): State<AppState>) -> Json<NewsworthyStatusResponse> {
+pub async fn newsworthy_status(
+    State(state): State<AppState>,
+) -> Result<Json<NewsworthyStatusResponse>, (StatusCode, String)> {
     let last_tick = read_last_tick(&state);
     let local_corpus_installed = local_corpus_installed(&state).await;
-    let (leader_node_id, installed_peer_count) = compute_leader(&state).await;
-    Json(NewsworthyStatusResponse {
+    let (leader_node_id, installed_peer_count) = compute_leader(&state).await?;
+    Ok(Json(NewsworthyStatusResponse {
         last_tick,
         local_corpus_installed,
         leader_node_id,
         installed_peer_count,
         self_in_pool: local_corpus_installed,
-    })
+    }))
 }
 
 /// `POST /internal/newsworthy/tick` — fire one watcher tick on
@@ -157,7 +159,7 @@ async fn local_corpus_installed(state: &AppState) -> bool {
 fn read_last_tick(state: &AppState) -> Option<TickStatusSnapshot> {
     let entry = state
         .inner
-        .fabric
+        .store
         .mesh_store
         .get(APP_ID_STATUS, STATUS_KEY_LAST_TICK)
         .ok()
@@ -170,7 +172,10 @@ fn read_last_tick(state: &AppState) -> Option<TickStatusSnapshot> {
 /// without taking a dependency on `sovereign-mesh`. The two
 /// implementations must stay aligned; the watcher writes leadership
 /// decisions, this route reports them.
-async fn compute_leader(state: &AppState) -> (Option<String>, usize) {
+///
+/// A contribution ledger that does not answer is a named 503, never an
+/// empty holder pool (five-programs-46).
+async fn compute_leader(state: &AppState) -> Result<(Option<String>, usize), (StatusCode, String)> {
     let mesh = state.inner.fabric.mesh.read().await;
     let online: Vec<NodeId> = mesh
         .members
@@ -181,7 +186,7 @@ async fn compute_leader(state: &AppState) -> (Option<String>, usize) {
     drop(mesh);
 
     if online.is_empty() {
-        return (None, 0);
+        return Ok((None, 0));
     }
 
     let self_id = state.self_node_id();
@@ -200,10 +205,17 @@ async fn compute_leader(state: &AppState) -> (Option<String>, usize) {
 
     let events: Vec<LedgerEvent> = state
         .inner
-        .fabric
+        .store
         .contribution_emitter
         .events()
-        .unwrap_or_default();
+        .await
+        .map_err(|e| {
+            tracing::warn!(error = %e, "newsworthy_status: contribution ledger absent");
+            (
+                StatusCode::SERVICE_UNAVAILABLE,
+                format!("contribution ledger absent: {e}"),
+            )
+        })?;
     let mut latest_per_node: std::collections::HashMap<NodeId, (u64, &Vec<(String, f64)>)> =
         std::collections::HashMap::new();
     for ev in &events {
@@ -234,5 +246,5 @@ async fn compute_leader(state: &AppState) -> (Option<String>, usize) {
     }
 
     let leader = partition::elect_leader(&holders).map(|id| id.to_string());
-    (leader, holders.len())
+    Ok((leader, holders.len()))
 }

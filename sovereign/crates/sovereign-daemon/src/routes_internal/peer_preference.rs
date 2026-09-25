@@ -4,7 +4,7 @@
 //!
 //! The multiplier scales every claim affinity this node advertises to one
 //! peer (`routes_oicp.rs:383 apply_peer_preference`), so it is a policy the
-//! DAEMON owns: it lives in the daemon's `MeshStore`, the daemon's OICP
+//! DAEMON owns: it lives in the daemon's mesh store, the daemon's OICP
 //! manifest path is its only reader, and the daemon's `PeerPreference::new`
 //! is the only constructor that can produce a valid one.
 //!
@@ -32,7 +32,7 @@ use axum::extract::State;
 use axum::http::StatusCode;
 use axum::Json;
 use commonwealth_core::ids::NodeId;
-use commonwealth_state::PeerPreference;
+use sovereign_mesh::ledger_port::PeerPreference;
 use serde::{Deserialize, Serialize};
 
 use crate::state::AppState;
@@ -98,7 +98,7 @@ fn parse_node_id_hex(s: &str) -> Result<NodeId, (StatusCode, String)> {
 
 /// `GET /internal/peer-preference/list` — every preference this node holds.
 ///
-/// Order is the `MeshStore` scan order the store itself yields
+/// Order is the mesh-store scan order the store itself yields
 /// (`commonwealth-state/src/peer_preferences.rs:164`), unchanged: the CLI's
 /// `peer-preference list` reads the same call, and re-ordering here would
 /// make one of the two surfaces disagree with the store.

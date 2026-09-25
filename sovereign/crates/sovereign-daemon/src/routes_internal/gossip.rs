@@ -12,7 +12,7 @@ use axum::Json;
 use serde::{Deserialize, Serialize};
 
 use commonwealth_core::mesh::GossipAuthArm;
-use commonwealth_state::inference_plan::InferencePlan;
+use sovereign_mesh::ledger_port::InferencePlan;
 
 use crate::state::AppState;
 
@@ -174,7 +174,7 @@ pub async fn scheduling_intent(
 /// POST /internal/scheduling/plan — shard plan broadcast.
 ///
 /// Peer nodes call this when they compute a new inference plan.
-/// The plan is stored in MeshStore and propagated via gossip.
+/// The plan is stored in the mesh store and propagated via gossip.
 pub async fn scheduling_plan(
     State(state): State<AppState>,
     Json(plan): Json<InferencePlan>,

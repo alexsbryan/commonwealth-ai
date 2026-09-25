@@ -549,7 +549,7 @@ pub fn find_local_handoff_for_corpus(
 ) -> Option<IngestionHandoff> {
     let entries = state
         .inner
-        .fabric
+        .store
         .mesh_store
         .scan("corpus-engine", "handoff:")
         .ok()?;

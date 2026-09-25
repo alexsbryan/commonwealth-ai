@@ -159,27 +159,24 @@ pub struct RecentContributionsResponse {
 /// `GET /internal/contribution/recent` — recent ledger events, newest
 /// first. Powers the W3 contribution-panel "served feed" without
 /// forcing the UI to aggregate across the full per-node window. Cheap:
-/// reads the MeshStore once and sorts in-memory.
+/// reads the contribution ledger once and sorts in-memory.
 pub async fn contribution_recent(
     State(state): State<AppState>,
     axum::extract::Query(params): axum::extract::Query<RecentContributionsParams>,
 ) -> Result<Json<RecentContributionsResponse>, (StatusCode, String)> {
     let limit = params.limit.unwrap_or(20).min(200);
-    let entries = state
+    let mut events: Vec<commonwealth_core::contributions::LedgerEvent> = state
         .inner
-        .fabric
-        .mesh_store
-        .scan(commonwealth_state::CONTRIBUTIONS_APP_ID, "")
+        .store
+        .contribution_emitter
+        .events()
+        .await
         .map_err(|e| {
             (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("contribution_recent: scan failed: {e}"),
+                StatusCode::SERVICE_UNAVAILABLE,
+                format!("contribution_recent: contribution ledger absent: {e}"),
             )
         })?;
-    let mut events: Vec<commonwealth_core::contributions::LedgerEvent> = entries
-        .into_iter()
-        .filter_map(|e| serde_json::from_slice(e.value.as_ref()).ok())
-        .collect();
     // Newest first. `LedgerEvent.timestamp` is unix-seconds; ties
     // are broken by stable_sort order, which is fine for UI display.
     events.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
@@ -220,7 +217,7 @@ pub struct NodeContributionsView {
 
 /// `GET /internal/contribution/view` — aggregated per-node contributions
 /// over the default 30-day window, one entry per peer the local
-/// MeshStore has ledger events about. Powers the Mesh → Members
+/// ledger has events about. Powers the Mesh → Members
 /// section of the desktop Settings panel in Attach mode, where the
 /// Tauri shell can't reach the daemon's in-process `AppState`
 /// directly.
@@ -238,17 +235,21 @@ pub async fn contribution_view(
             .map(|(id, member)| (*id, member.capabilities.clone()))
             .collect()
     };
-    let map = commonwealth_state::current_contributions(
-        &state.inner.fabric.mesh_store,
-        &caps_map,
-        commonwealth_core::contributions::DEFAULT_WINDOW_DAYS,
-    )
-    .map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("contribution_view: aggregate failed: {e}"),
+    let map = state
+        .inner
+        .store
+        .contribution_emitter
+        .current_contributions(
+            &caps_map,
+            commonwealth_core::contributions::DEFAULT_WINDOW_DAYS,
         )
-    })?;
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::SERVICE_UNAVAILABLE,
+                format!("contribution_view: contribution ledger absent: {e}"),
+            )
+        })?;
     let mut out: Vec<NodeContributionsView> = map
         .into_iter()
         .map(|(node_id, c)| NodeContributionsView {
@@ -321,21 +322,24 @@ pub async fn activity_summary(
         .window_days
         .unwrap_or(commonwealth_core::activity::DEFAULT_ACTIVITY_WINDOW_DAYS)
         .min(365);
-    let activity =
-        commonwealth_state::current_activity(&state.inner.fabric.mesh_store, window_days).map_err(
-            |e| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("activity_summary: aggregate failed: {e}"),
-                )
-            },
-        )?;
+    let activity = state
+        .inner
+        .node
+        .activity_emitter
+        .current_activity(window_days)
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::SERVICE_UNAVAILABLE,
+                format!("activity_summary: activity ledger absent: {e}"),
+            )
+        })?;
 
     // Fold in this node's own contribution totals. Self-origin
     // contribution events land on the self node's `NodeContributions`,
     // so the self entry is exactly "what I served to / received from
     // the mesh."
-    let self_id = state.inner.fabric.contribution_emitter.self_node_id();
+    let self_id = state.inner.store.contribution_emitter.self_node_id();
     let caps_map: std::collections::HashMap<
         NodeId,
         commonwealth_core::capabilities::NodeCapabilities,
@@ -347,17 +351,21 @@ pub async fn activity_summary(
             .map(|(id, member)| (*id, member.capabilities.clone()))
             .collect()
     };
-    let contrib = commonwealth_state::current_contributions(
-        &state.inner.fabric.mesh_store,
-        &caps_map,
-        commonwealth_core::contributions::DEFAULT_WINDOW_DAYS,
-    )
-    .map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("activity_summary: contribution aggregate failed: {e}"),
+    let contrib = state
+        .inner
+        .store
+        .contribution_emitter
+        .current_contributions(
+            &caps_map,
+            commonwealth_core::contributions::DEFAULT_WINDOW_DAYS,
         )
-    })?;
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::SERVICE_UNAVAILABLE,
+                format!("activity_summary: contribution ledger absent: {e}"),
+            )
+        })?;
     let self_c = contrib.get(&self_id);
 
     Ok(Json(ActivitySummaryResponse {
@@ -394,21 +402,18 @@ pub async fn activity_recent(
     axum::extract::Query(params): axum::extract::Query<RecentContributionsParams>,
 ) -> Result<Json<ActivityRecentResponse>, (StatusCode, String)> {
     let limit = params.limit.unwrap_or(20).min(200);
-    let entries = state
+    let mut events: Vec<commonwealth_core::activity::ActivityEvent> = state
         .inner
-        .fabric
-        .mesh_store
-        .scan(commonwealth_state::ACTIVITY_APP_ID, "")
+        .node
+        .activity_emitter
+        .events()
+        .await
         .map_err(|e| {
             (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("activity_recent: scan failed: {e}"),
+                StatusCode::SERVICE_UNAVAILABLE,
+                format!("activity_recent: activity ledger absent: {e}"),
             )
         })?;
-    let mut events: Vec<commonwealth_core::activity::ActivityEvent> = entries
-        .into_iter()
-        .filter_map(|e| serde_json::from_slice(e.value.as_ref()).ok())
-        .collect();
     events.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
     events.truncate(limit);
     Ok(Json(ActivityRecentResponse { events }))

@@ -173,7 +173,7 @@ pub async fn corpus_grant_revoke(
         let gossip_key = format!("handoff:{handoff_id}");
         let _ = state
             .inner
-            .fabric
+            .store
             .mesh_store
             .delete("corpus-engine", &gossip_key);
         tracing::info!(

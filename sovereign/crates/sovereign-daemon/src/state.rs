@@ -1035,6 +1035,8 @@ impl AppState {
         let inference_store: Arc<dyn sovereign_mesh::ledger_port::InferenceStatePort> =
             local_ledger.clone();
         let contribution_port: Arc<dyn sovereign_mesh::ledger_port::ContributionLedgerPort> =
+            local_ledger.clone();
+        let processed_shards: Arc<dyn sovereign_mesh::ledger_port::ProcessedShardsPort> =
             local_ledger;
         Self {
             inner: Arc::new(AppStateInner {
@@ -1096,6 +1098,7 @@ impl AppState {
                     rpc_shard_warmer: serving_seed.rpc_shard_warmer,
                     mesh_store: kv_port,
                     contribution_emitter: contribution_port,
+                    processed_shards,
                 },
                 node: node::NodePart {
                     client_token: node_seed.client_token,

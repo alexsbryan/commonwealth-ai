@@ -282,8 +282,8 @@ pub async fn corpus_collaborate(
             if shard_count > 1 {
                 // Union LOCAL processed_shards (this peer's partition
                 // dirs on disk) with PEER processed_shards (every
-                // other peer's last-published view, gossiped via
-                // MeshStore by `auto_ingest::publish_local_processed_shards`).
+                // other peer's last-published view, gossiped via the
+                // mesh store by `auto_ingest::publish_local_processed_shards`).
                 // Without the peer-side union, dispatch queues units
                 // for shards that another peer has already finished —
                 // observed in the wild: 8 of 33 distinct shards
@@ -292,10 +292,25 @@ pub async fn corpus_collaborate(
                     .corpus_processed_shards(req.corpus_id.as_str())
                     .into_iter()
                     .collect();
-                let peer_processed = commonwealth_state::union_processed_shards(
-                    &state.inner.fabric.mesh_store,
-                    req.corpus_id.as_str(),
-                );
+                let peer_processed = state
+                    .inner
+                    .store
+                    .processed_shards
+                    .union(req.corpus_id.as_str())
+                    .await
+                    .map_err(|e| {
+                        tracing::warn!(
+                            corpus = %req.corpus_id,
+                            error = %e,
+                            "corpus_collaborate: processed-shards ledger absent"
+                        );
+                        (
+                            StatusCode::SERVICE_UNAVAILABLE,
+                            Json(ErrorBody {
+                                error: format!("processed-shards ledger absent: {e}"),
+                            }),
+                        )
+                    })?;
                 processed.extend(peer_processed);
                 let remaining: Vec<usize> = (0..shard_count)
                     .filter(|i| !processed.contains(i))
@@ -388,7 +403,7 @@ pub async fn corpus_collaborate(
                     spawn_queue_merge(state.clone(), existing.handoff_id);
                     return Ok(Json(existing));
                 }
-                // No live handoff blob to re-fire from. The MeshStore
+                // No live handoff blob to re-fire from. The mesh store
                 // is in-memory on the daemon (see `daemon::start_daemon`)
                 // so any stranded handoff was wiped on restart, and
                 // gossip can't help if no peer still holds it. Try
@@ -621,7 +636,7 @@ pub async fn corpus_collaborate(
                 ));
             }
         };
-        let _ = state.inner.fabric.mesh_store.set(
+        let _ = state.inner.store.mesh_store.set(
             "corpus-engine",
             &gossip_key,
             bytes::Bytes::from(handoff_bytes),
@@ -648,7 +663,7 @@ pub async fn corpus_collaborate(
             handoff = %handoff.handoff_id,
             units = unit_count,
             // Eligible, not notified: this handler no longer sends
-            // anything — the handoff row is a `MeshStore` write, so the
+            // anything — the handoff row is a mesh-store write, so the
             // outbox and the ring carry it like any other.
             peers_eligible = candidates.len(),
             "corpus_collaborate: pull-based queue registered"
