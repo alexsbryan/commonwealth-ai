@@ -600,6 +600,11 @@ merged; that merge is what minted this arrangement, and `ledger-1` records it.
 - Chose: the package's option (a). The site moves into fp-94's file list, next to grants' three test files that build a MeshStore for the same constructor. fp-86 is rescoped to the ten files and marked `[x] 2a9fb23c3`. fp-87's dependencies stay as they are, because fp-87 → fp-88 → fp-94 already orders its crate-wide daemon bar after the seam. Boundary gate 55 (EXIT=1). No code changes.
 - Because: the hit goes away with the signature change, and nothing on the daemon side can remove it. Option (b), making fp-86 depend on fp-94, would park a finished row behind an open operator question (HUMAN-fp94-grants-seam) for no benefit. The only in-row workaround is laundering the type (a grants re-export, or an inferred constructor), which the rule forbids.
 
+**five-programs-51 · 2026-09-24 · fp-98 · director** — this commit
+- Needed: fp-98's code landed (9e6c557c0) but LAYER exited 1: fan-in of `sovereign-contracts` grew 41 → 42, and the worker may not raise a ratchet the row does not name.
+- Chose: accept the growth explicitly, `quality/baselines/fan_in.tsv` `sovereign-contracts` 41 → 42, one line; mark fp-98 `[x]`.
+- Because: the new dependent is sovereign-cli-base, and the edge is the row's own (its `allow` list names sovereign-contracts, five-programs-38). The three reads it carries (rebrand, setup_config::client_daemon_base, guest_link) live in no other leaf, and cli-shared keeps its own edge for repo/models/mcp_client. Precedent: five-programs-41, fe309bfb5.
+
 ## Flags for the operator
 
 - A26: REVIEW-DEMO-rr-1-run will very likely FAIL `ra-room-plug-in-live` again on this host. The bar's window is 60 s, and the CPU 2B took about 1–5 min per answer in this run (room-answer-0..4.json mtimes 19:33→19:49). Passing it takes a faster node or model for the room, or a different bar. Both are design changes for the operator, not tuning.
@@ -9284,5 +9289,21 @@ Package: ctl/NEEDS_HUMAN.resolved-fp86-20260924.md (git-excluded), written by fp
 - `cargo xtask boundary-gate` (corpus-engine/, toolbox): 55 violations, EXIT=1, unchanged by this rescope.
 
 Falsified if the store argument in internal_gate_e2e.rs can be removed without changing `ShardManager::new`'s signature and without laundering the type, for example by a test-support constructor grants already exposes that takes no store. In that case the site belonged in fp-86.
+
+</details>
+
+## five-programs-51 · 2026-09-24 — sovereign-contracts fan-in 41 → 42, accepted for fp-98's named edge
+
+<details><summary>reasoning, evidence, package</summary>
+
+Package: ctl/NEEDS_HUMAN.resolved-fp98-20260924.md. Reproduced at 9e6c557c0.
+
+- `scripts/ralph-check.sh layer` (toolbox) before the edit: exit=1, "layer-gate FAILED (0 layer violations, 1 fan-in)". After: "fan-in within caps", exit 0.
+- `grep -rn sovereign_contracts sovereign/crates/sovereign-cli-base/src`: dirs.rs:26,33 (rebrand), urls.rs:31 (setup_config::client_daemon_base), guest_link.rs:54 (re-export). The same grep over sovereign-cli-shared/src still lists repo.rs, models.rs, mcp_client.rs, so no dependent drops in exchange.
+- `scripts/ralph-check.sh boundary`: 55, unchanged, as the row expects.
+
+REVIEW-AFTER: the fan-in cap is a ratchet the charter does not list; the edge itself was decided by the operator in five-programs-38, and the cap follows it mechanically, as in five-programs-41.
+
+Falsified if the three contracts items could be reached through an existing leaf cli-base is already allowed (then the edge, not the cap, was wrong), or if cli-shared's fat-half move removes its last contracts reference without the cap being tightened back.
 
 </details>
