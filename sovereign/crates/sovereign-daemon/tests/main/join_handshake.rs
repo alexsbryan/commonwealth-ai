@@ -30,6 +30,8 @@ use commonwealth_discovery::membership;
 use sovereign_daemon::server::internal_router;
 use sovereign_daemon::state::AppState;
 
+use crate::common::ledger_double::RecordingLedger;
+
 async fn spawn_internal_router(state: AppState) -> SocketAddr {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
@@ -59,17 +61,18 @@ fn build_founder() -> (AppState, NodeId, String, Arc<AtomicUsize>) {
         });
     // The mutation hook is a construction argument now (DC §4.2 "Construction
     // is staged"), not a post-construction install.
-    let state = AppState::new_with_platform_and_engine_and_gauge_and_fabric(
+    let state = AppState::new_with_seeds(
         founder_id,
         mesh,
-        Arc::new(commonwealth_state::MeshStore::in_memory().unwrap()),
-        Arc::new(sovereign_meshapp_registry::registry::AppRegistry::new()),
         None,
         None,
         sovereign_daemon::state::FabricSeed {
             mesh_mutation_hook: Some(hook),
             ..Default::default()
         },
+        Default::default(),
+        Default::default(),
+        Arc::new(RecordingLedger::new(founder_id)).seed(),
     );
 
     (state, founder_id, join_key, counter)

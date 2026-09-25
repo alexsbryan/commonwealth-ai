@@ -19,13 +19,12 @@ use std::sync::Arc;
 
 use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::mesh::Mesh;
-use commonwealth_state::MeshStore;
 use sovereign_contracts::traits::InferenceProvider;
 use sovereign_daemon::slot_manifest::CoreSlotManifest;
 use sovereign_daemon::state::{AppState, LocalInferenceService, ServingSeed};
 use sovereign_mesh::inference_adapter::SovereignInferenceAdapter;
-use sovereign_meshapp_registry::registry::AppRegistry;
 
+use crate::common::ledger_double::RecordingLedger;
 use crate::common::TestProvider;
 
 fn empty_mesh() -> Mesh {
@@ -52,12 +51,9 @@ fn local_inference_is_present_at_construction() {
         provider,
         Arc::new(CoreSlotManifest),
     ));
-    let app_state = AppState::new_with_platform_and_engine_and_serving(
+    let app_state = AppState::new_with_serving(
         NodeId::from_u128(0xDEAD_BEEF_CAFE_F00D),
         empty_mesh(),
-        Arc::new(MeshStore::in_memory().unwrap()),
-        Arc::new(AppRegistry::new()),
-        None,
         ServingSeed {
             local_inference: Some(adapter),
             ..Default::default()
@@ -81,17 +77,19 @@ fn mesh_mutation_hook_is_present_at_construction() {
             // Body intentionally empty — the test isn't about firing the
             // hook, only about it surviving construction.
         });
-    let app_state = AppState::new_with_platform_and_engine_and_gauge_and_fabric(
-        NodeId::from_u128(0xDEAD_BEEF_CAFE_F00D),
+    let self_id = NodeId::from_u128(0xDEAD_BEEF_CAFE_F00D);
+    let app_state = AppState::new_with_seeds(
+        self_id,
         empty_mesh(),
-        Arc::new(MeshStore::in_memory().unwrap()),
-        Arc::new(AppRegistry::new()),
         None,
         None,
         sovereign_daemon::state::FabricSeed {
             mesh_mutation_hook: Some(hook),
             ..Default::default()
         },
+        Default::default(),
+        Default::default(),
+        Arc::new(RecordingLedger::new(self_id)).seed(),
     );
 
     assert!(

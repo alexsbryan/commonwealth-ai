@@ -23,7 +23,6 @@ use axum::http::{Request, StatusCode};
 use commonwealth_core::capabilities::{AvailableResources, HardwareProfile, NodeCapabilities};
 use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::mesh::{MemberRecord, Mesh, NodeStatus};
-use commonwealth_state::MeshStore;
 use corpus_engine::CorpusEngine;
 use corpus_index::{
     index::{CorpusIndex, InsertChunk},
@@ -32,8 +31,9 @@ use corpus_index::{
 use oicp_types::knowledge::CorpusShardInfo;
 use sovereign_daemon::server::{client_router, internal_router};
 use sovereign_daemon::state::AppState;
-use sovereign_meshapp_registry::registry::AppRegistry;
 use tower::ServiceExt;
+
+use crate::common::ledger_double::RecordingLedger;
 
 /// 8-dim zero vector — matches what mock-embed-backed indexes ship
 /// with throughout the corpus-engine test suite.
@@ -201,9 +201,16 @@ fn make_state(node_id: NodeId, peer: MemberRecord, engine: Option<Arc<CorpusEngi
         peers: vec![],
     };
 
-    let mesh_store = Arc::new(MeshStore::in_memory().unwrap());
-    let app_registry = Arc::new(AppRegistry::new());
-    AppState::new_with_platform_and_engine(node_id, mesh, mesh_store, app_registry, engine)
+    AppState::new_with_seeds(
+        node_id,
+        mesh,
+        engine,
+        None,
+        Default::default(),
+        Default::default(),
+        Default::default(),
+        Arc::new(RecordingLedger::new(node_id)).seed(),
+    )
 }
 
 /// Issue a `/v1/knowledge/search` POST against `state` via

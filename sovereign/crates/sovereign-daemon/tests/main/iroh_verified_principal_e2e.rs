@@ -320,10 +320,11 @@ async fn a_direct_caller_presenting_a_forged_identity_is_refused_by_name() {
 /// used to take the requester from.
 #[tokio::test]
 async fn the_knowledge_ledger_names_the_dialer_and_not_the_node_it_claimed_to_be() {
-    use crate::knowledge_served_e2e::{build_state_with_corpora, EMBED_DIM};
-    use commonwealth_core::contributions::LedgerEventKind;
+    use crate::knowledge_served_e2e::{
+        build_state_with_corpora, served_record, served_records, EMBED_DIM,
+    };
 
-    let (state, _tmp) = build_state_with_corpora(
+    let (state, double, _tmp) = build_state_with_corpora(
         NodeId::from_u128(0xA11CE),
         &[("sep", "Stanford Encyclopedia", "Free will and determinism.")],
     )
@@ -378,22 +379,9 @@ async fn the_knowledge_ledger_names_the_dialer_and_not_the_node_it_claimed_to_be
     assert_eq!(resp.status(), reqwest::StatusCode::OK, "A answers B");
     drop(bridge);
 
-    let events = state
-        .inner
-        .fabric
-        .contribution_emitter
-        .events()
-        .expect("emitter.events() reads");
-    let served: Vec<NodeId> = events
-        .iter()
-        .filter_map(|e| match &e.kind {
-            LedgerEventKind::KnowledgeQueryServed { for_node, .. } => Some(*for_node),
-            _ => None,
-        })
-        .collect();
     assert_eq!(
-        served,
-        vec![member_identity().node_id],
+        served_records(&double),
+        vec![served_record(member_identity().node_id, "sep", 1)],
         "A must credit the key it verified. Crediting {} — the id B typed — \
          is how B spends C's reciprocity",
         claimed_other()

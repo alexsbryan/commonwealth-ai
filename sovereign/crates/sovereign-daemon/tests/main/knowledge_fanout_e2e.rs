@@ -50,16 +50,15 @@ use commonwealth_core::capabilities::{AvailableResources, HardwareProfile, NodeC
 use commonwealth_core::contributions::LedgerEventKind;
 use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::mesh::{MemberRecord, Mesh, NodeStatus};
-use commonwealth_state::MeshStore;
 use corpus_engine::CorpusEngine;
 use corpus_index::index::{CorpusIndex, InsertChunk};
 use corpus_index::types::EmbedFn;
 use oicp_types::knowledge::CorpusShardInfo;
 use sovereign_daemon::server::{client_router, internal_router};
 use sovereign_daemon::state::AppState;
-use sovereign_meshapp_registry::registry::AppRegistry;
 
 use crate::common;
+use crate::common::ledger_double::RecordingLedger;
 use crate::common::spawn_router;
 
 pub(super) const EMBED_DIM: usize = 8;
@@ -173,8 +172,6 @@ async fn joiner_fans_out_to_peer_when_corpus_not_local() {
     );
 
     let id_a = NodeId::from_u128(0xAAAA_AAAA_AAAA_AAAA);
-    let store_a = Arc::new(MeshStore::in_memory().unwrap());
-    let app_registry_a = Arc::new(AppRegistry::new());
     // A's mesh contains only A — that's fine, only B needs to know
     // about A for fan-out to work.
     let mut members_a = HashMap::new();
@@ -208,12 +205,15 @@ async fn joiner_fans_out_to_peer_when_corpus_not_local() {
         members: members_a,
         peers: vec![],
     };
-    let state_a = AppState::new_with_platform_and_engine(
+    let state_a = AppState::new_with_seeds(
         id_a,
         mesh_a,
-        store_a,
-        app_registry_a,
         Some(Arc::clone(&engine_a)),
+        None,
+        Default::default(),
+        Default::default(),
+        Default::default(),
+        Arc::new(RecordingLedger::new(id_a)).seed(),
     );
     // Spawn A's internal router. The ephemeral port is what B's
     // fan-out will dial — we'll plug it into B's MemberRecord
@@ -225,8 +225,6 @@ async fn joiner_fans_out_to_peer_when_corpus_not_local() {
     // a member with `hosted_corpora=["sep"]` so the fan-out
     // discovery loop picks A up.
     let id_b = NodeId::from_u128(0xBBBB_BBBB_BBBB_BBBB);
-    let store_b = Arc::new(MeshStore::in_memory().unwrap());
-    let app_registry_b = Arc::new(AppRegistry::new());
     let mut members_b = HashMap::new();
     // Self record.
     members_b.insert(
@@ -280,8 +278,7 @@ async fn joiner_fans_out_to_peer_when_corpus_not_local() {
         members: members_b,
         peers: vec![],
     };
-    let state_b =
-        AppState::new_with_platform_and_engine(id_b, mesh_b, store_b, app_registry_b, None);
+    let state_b = AppState::new(id_b, mesh_b);
     let addr_b = spawn_router(client_router(state_b.clone())).await;
 
     // === Client request ===
@@ -369,7 +366,7 @@ async fn offline_peer_is_excluded_from_fan_out_plan() {
             .with_embedding_model("qwen3-embedding-0.6b"),
     );
     let id_a = NodeId::from_u128(0xA0A0_A0A0_A0A0_A0A0);
-    let state_a = AppState::new_with_platform_and_engine(
+    let state_a = AppState::new_with_seeds(
         id_a,
         Mesh {
             mesh_secret: [0u8; 32],
@@ -382,9 +379,12 @@ async fn offline_peer_is_excluded_from_fan_out_plan() {
             members: HashMap::new(),
             peers: vec![],
         },
-        Arc::new(MeshStore::in_memory().unwrap()),
-        Arc::new(AppRegistry::new()),
         Some(engine_a),
+        None,
+        Default::default(),
+        Default::default(),
+        Default::default(),
+        Arc::new(RecordingLedger::new(id_a)).seed(),
     );
     let addr_a = spawn_router(internal_router(state_a)).await;
 
@@ -429,7 +429,7 @@ async fn offline_peer_is_excluded_from_fan_out_plan() {
             addresses: vec![addr_a],
         },
     );
-    let state_b = AppState::new_with_platform_and_engine(
+    let state_b = AppState::new(
         id_b,
         Mesh {
             mesh_secret: [0u8; 32],
@@ -442,9 +442,6 @@ async fn offline_peer_is_excluded_from_fan_out_plan() {
             members: members_b,
             peers: vec![],
         },
-        Arc::new(MeshStore::in_memory().unwrap()),
-        Arc::new(AppRegistry::new()),
-        None,
     );
     let addr_b = spawn_router(client_router(state_b)).await;
 

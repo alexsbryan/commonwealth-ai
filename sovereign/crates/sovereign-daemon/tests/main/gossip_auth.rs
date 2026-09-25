@@ -34,6 +34,7 @@ use sovereign_daemon::server::internal_router;
 use sovereign_daemon::state::AppState;
 
 use crate::common;
+use crate::common::ledger_double::RecordingLedger;
 use crate::common::{member_with_last_seen as member, spawn_router};
 
 /// Build a founder AppState pinned to (mesh_id, invite_key_hash) +
@@ -73,17 +74,18 @@ fn build_founder(
         });
     // The mutation hook is a construction argument now (DC §4.2 "Construction
     // is staged"), not a post-construction install.
-    let state = AppState::new_with_platform_and_engine_and_gauge_and_fabric(
+    let state = AppState::new_with_seeds(
         founder_id,
         mesh,
-        Arc::new(commonwealth_state::MeshStore::in_memory().unwrap()),
-        Arc::new(sovereign_meshapp_registry::registry::AppRegistry::new()),
         None,
         None,
         sovereign_daemon::state::FabricSeed {
             mesh_mutation_hook: Some(hook),
             ..Default::default()
         },
+        Default::default(),
+        Default::default(),
+        Arc::new(RecordingLedger::new(founder_id)).seed(),
     );
 
     (state, founder_id, counter)

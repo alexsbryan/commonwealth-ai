@@ -41,15 +41,14 @@ use std::sync::Arc;
 
 use commonwealth_core::contributions::LedgerEventKind;
 use commonwealth_core::ids::NodeId;
-use commonwealth_state::MeshStore;
 use corpus_engine::CorpusEngine;
 use corpus_index::index::{CorpusIndex, InsertChunk};
 use corpus_index::types::EmbedFn;
 use sovereign_daemon::server::internal_router;
 use sovereign_daemon::state::AppState;
-use sovereign_meshapp_registry::registry::AppRegistry;
 
 use crate::common;
+use crate::common::ledger_double::RecordingLedger;
 use crate::common::{id_to_hex, solo_mesh, spawn_router};
 
 pub(crate) const EMBED_DIM: usize = 8;
@@ -102,11 +101,12 @@ async fn install_corpus_with_chunk(
 
 /// Build an `AppState` with a `CorpusEngine` rooted at `tmp/indexes/`
 /// and pre-installed corpora. Returns the state and the on-disk
-/// directory (keep alive for the test's duration).
+/// directory (keep alive for the test's duration), with the recording
+/// double every store port writes to.
 pub(crate) async fn build_state_with_corpora(
     self_id: NodeId,
     corpora: &[(&str, &str, &str)], // (id, name, chunk_content)
-) -> (AppState, tempfile::TempDir) {
+) -> (AppState, Arc<RecordingLedger>, tempfile::TempDir) {
     let tmp = tempfile::tempdir().unwrap();
     let indexes = tmp.path().join("indexes");
     std::fs::create_dir_all(&indexes).unwrap();
@@ -119,16 +119,41 @@ pub(crate) async fn build_state_with_corpora(
         CorpusEngine::new(recipes, indexes, mock_embed_fn())
             .with_embedding_model("qwen3-embedding-0.6b"),
     );
-    let mesh_store = Arc::new(MeshStore::in_memory().unwrap());
-    let app_registry = Arc::new(AppRegistry::new());
-    let state = AppState::new_with_platform_and_engine(
+    let double = Arc::new(RecordingLedger::new(self_id));
+    let state = AppState::new_with_seeds(
         self_id,
         solo_mesh(self_id, "knowledge-served-test"),
-        mesh_store,
-        app_registry,
         Some(engine),
+        None,
+        Default::default(),
+        Default::default(),
+        Default::default(),
+        double.seed(),
     );
-    (state, tmp)
+    (state, double, tmp)
+}
+
+/// The recorded `KnowledgeQueryServed` records, `Debug`-rendered, in call order.
+pub(crate) fn served_records(double: &RecordingLedger) -> Vec<String> {
+    double
+        .calls()
+        .into_iter()
+        .filter(|c| c.method == "contributions.record")
+        .map(|c| c.args)
+        .filter(|args| args.starts_with("KnowledgeQueryServed"))
+        .collect()
+}
+
+/// The record one served query of `chunks_returned` chunks on `corpus_id` makes.
+pub(crate) fn served_record(for_node: NodeId, corpus_id: &str, chunks_returned: u32) -> String {
+    format!(
+        "{:?}",
+        LedgerEventKind::KnowledgeQueryServed {
+            for_node,
+            corpus_id: corpus_id.into(),
+            chunks_returned,
+        }
+    )
 }
 
 /// The requester's verified key, as this node's roster would carry it.
@@ -138,7 +163,7 @@ const REQUESTER_KEY: [u8; 32] = [0x5a; 32];
 async fn peer_request_emits_one_knowledge_query_served_per_contributing_corpus() {
     let self_id = NodeId::from_u128(0xAAAA_AAAA);
     let requester = NodeId::from_u128(0xBBBB_BBBB);
-    let (state, _tmp) = build_state_with_corpora(
+    let (state, double, _tmp) = build_state_with_corpora(
         self_id,
         &[
             ("sep", "Stanford Encyclopedia", "Free will and determinism."),
@@ -178,44 +203,22 @@ async fn peer_request_emits_one_knowledge_query_served_per_contributing_corpus()
         "both corpora should each contribute one chunk; got: {body}"
     );
 
-    // The ledger should now have exactly two `KnowledgeQueryServed`
-    // events, one per contributing corpus, both stamped with
-    // `for_node = requester`.
-    let events = state
-        .inner
-        .fabric
-        .contribution_emitter
-        .events()
-        .expect("emitter.events() reads");
-    let served: Vec<(NodeId, String, u32)> = events
-        .iter()
-        .filter_map(|e| match &e.kind {
-            LedgerEventKind::KnowledgeQueryServed {
-                for_node,
-                corpus_id,
-                chunks_returned,
-            } => Some((*for_node, corpus_id.clone(), *chunks_returned)),
-            _ => None,
-        })
-        .collect();
-
+    // The ledger port should now have recorded exactly two
+    // `KnowledgeQueryServed`, one per contributing corpus, each of one
+    // chunk, both stamped with `for_node = requester` — the key the
+    // acceptor verified, not the local node (a §10 lookup-pollution
+    // regression).
+    let mut served = served_records(&double);
+    served.sort();
+    let mut expected = vec![
+        served_record(requester, "sep", 1),
+        served_record(requester, "wikipedia", 1),
+    ];
+    expected.sort();
     assert_eq!(
-        served.len(),
-        2,
-        "one event per contributing corpus expected; got: {served:?}"
+        served, expected,
+        "one record per contributing corpus, for_node = requester"
     );
-    for (for_node, corpus_id, chunks) in &served {
-        assert_eq!(
-            for_node, &requester,
-            "for_node must be the requester (the key the acceptor verified), \
-             not the local node — a §10 lookup-pollution regression"
-        );
-        assert!(
-            corpus_id == "sep" || corpus_id == "wikipedia",
-            "unexpected corpus_id in event: {corpus_id}"
-        );
-        assert_eq!(*chunks, 1, "each corpus contributed exactly one chunk");
-    }
 }
 
 #[tokio::test]
@@ -225,7 +228,7 @@ async fn local_origin_request_with_no_x_node_id_emits_nothing() {
     // promises intra-mesh-only accounting, and a missing header
     // means "I can't tell who you are" → safe-default skip.
     let self_id = NodeId::from_u128(0xCCCC_CCCC);
-    let (state, _tmp) = build_state_with_corpora(
+    let (state, double, _tmp) = build_state_with_corpora(
         self_id,
         &[("sep", "Stanford Encyclopedia", "Compatibilism essay.")],
     )
@@ -252,15 +255,12 @@ async fn local_origin_request_with_no_x_node_id_emits_nothing() {
         "the search still serves results; only the ledger emission is gated"
     );
 
-    let events = state.inner.fabric.contribution_emitter.events().unwrap();
-    let served_count = events
-        .iter()
-        .filter(|e| matches!(e.kind, LedgerEventKind::KnowledgeQueryServed { .. }))
-        .count();
+    let served = served_records(&double);
     assert_eq!(
-        served_count, 0,
+        served.len(),
+        0,
         "no `X-Node-Id` header → no KnowledgeQueryServed events. \
-         Got events: {events:?}"
+         Got events: {served:?}"
     );
 }
 
@@ -271,7 +271,7 @@ async fn unavailable_corpus_filter_emits_no_event_and_lists_unavailable() {
     // event emitted (zero chunks → no entry in per_corpus_chunks).
     let self_id = NodeId::from_u128(0xDDDD_DDDD);
     let requester = NodeId::from_u128(0xEEEE_EEEE);
-    let (state, _tmp) = build_state_with_corpora(
+    let (state, double, _tmp) = build_state_with_corpora(
         self_id,
         &[("sep", "Stanford Encyclopedia", "Some content.")],
     )
@@ -304,11 +304,7 @@ async fn unavailable_corpus_filter_emits_no_event_and_lists_unavailable() {
         "the route must report the unhosted corpus in `corpora_unavailable`; got {body}"
     );
 
-    let events = state.inner.fabric.contribution_emitter.events().unwrap();
-    let served_count = events
-        .iter()
-        .filter(|e| matches!(e.kind, LedgerEventKind::KnowledgeQueryServed { .. }))
-        .count();
+    let served_count = served_records(&double).len();
     assert_eq!(
         served_count, 0,
         "zero chunks served → zero KnowledgeQueryServed events. \

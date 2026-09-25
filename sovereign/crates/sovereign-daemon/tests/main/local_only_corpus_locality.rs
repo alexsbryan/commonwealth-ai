@@ -41,16 +41,15 @@ use std::time::Duration;
 
 use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::mesh::{MemberRecord, Mesh, NodeStatus};
-use commonwealth_state::MeshStore;
 use corpus_engine::CorpusEngine;
 use corpus_index::index::{CorpusIndex, InsertChunk};
 use corpus_index::types::EmbedFn;
 use sovereign_daemon::state::AppState;
 use sovereign_mesh::gossip;
-use sovereign_meshapp_registry::registry::AppRegistry;
 
 use crate::common;
 use crate::common::empty_capabilities;
+use crate::common::ledger_double::RecordingLedger;
 
 const EMBED_DIM: usize = 8;
 
@@ -175,14 +174,15 @@ async fn query_sharing_false_corpus_does_not_publish_to_hosted_corpora() {
         members,
         peers: vec![],
     };
-    let mesh_store = Arc::new(MeshStore::in_memory().unwrap());
-    let app_registry = Arc::new(AppRegistry::new());
-    let state = AppState::new_with_platform_and_engine(
+    let state = AppState::new_with_seeds(
         self_id,
         mesh,
-        mesh_store,
-        app_registry,
         Some(engine),
+        None,
+        Default::default(),
+        Default::default(),
+        Default::default(),
+        Arc::new(RecordingLedger::new(self_id)).seed(),
     );
 
     // Pre-condition: self's hosted_corpora is empty (the initial

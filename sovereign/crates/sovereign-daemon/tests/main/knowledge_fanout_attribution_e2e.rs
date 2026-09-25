@@ -7,22 +7,21 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use commonwealth_core::capabilities::{AvailableResources, HardwareProfile, NodeCapabilities};
-use commonwealth_core::contributions::LedgerEventKind;
 use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::mesh::{MemberRecord, Mesh, NodeStatus};
-use commonwealth_state::MeshStore;
 use corpus_engine::CorpusEngine;
 use corpus_index::index::{CorpusIndex, InsertChunk};
 use corpus_index::types::EmbedFn;
 use oicp_types::knowledge::CorpusShardInfo;
 use sovereign_daemon::server::{client_router, internal_router};
 use sovereign_daemon::state::AppState;
-use sovereign_meshapp_registry::registry::AppRegistry;
 
 use crate::common;
+use crate::common::ledger_double::RecordingLedger;
 use crate::common::spawn_router;
 
 use crate::knowledge_fanout_e2e::{caps_with_hosted, install_corpus, mock_embed_fn, EMBED_DIM};
+use crate::knowledge_served_e2e::served_records;
 
 #[tokio::test]
 async fn a_fan_out_hop_the_server_cannot_verify_is_served_and_not_attributed() {
@@ -67,9 +66,10 @@ async fn a_fan_out_hop_the_server_cannot_verify_is_served_and_not_attributed() {
     let id_a = NodeId::from_u128(0xA1_A1_A1_A1_A1_A1_A1_A1);
     let id_b = NodeId::from_u128(0xB2_B2_B2_B2_B2_B2_B2_B2);
 
-    // A's mesh: solo. The ledger emitter is on A's AppState; we
+    // A's mesh: solo. A's store ports are the recording double; we
     // keep a handle to it for the assertion.
-    let state_a = AppState::new_with_platform_and_engine(
+    let double_a = Arc::new(RecordingLedger::new(id_a));
+    let state_a = AppState::new_with_seeds(
         id_a,
         Mesh {
             mesh_secret: [0u8; 32],
@@ -82,9 +82,12 @@ async fn a_fan_out_hop_the_server_cannot_verify_is_served_and_not_attributed() {
             members: HashMap::new(),
             peers: vec![],
         },
-        Arc::new(MeshStore::in_memory().unwrap()),
-        Arc::new(AppRegistry::new()),
         Some(Arc::clone(&engine_a)),
+        None,
+        Default::default(),
+        Default::default(),
+        Default::default(),
+        double_a.seed(),
     );
     let addr_a = spawn_router(internal_router(state_a.clone())).await;
 
@@ -128,7 +131,7 @@ async fn a_fan_out_hop_the_server_cannot_verify_is_served_and_not_attributed() {
             addresses: vec![addr_a],
         },
     );
-    let state_b = AppState::new_with_platform_and_engine(
+    let state_b = AppState::new(
         id_b,
         Mesh {
             mesh_secret: [0u8; 32],
@@ -141,23 +144,12 @@ async fn a_fan_out_hop_the_server_cannot_verify_is_served_and_not_attributed() {
             members: members_b,
             peers: vec![],
         },
-        Arc::new(MeshStore::in_memory().unwrap()),
-        Arc::new(AppRegistry::new()),
-        None,
     );
     let addr_b = spawn_router(client_router(state_b)).await;
 
     // Pre-condition: A's ledger has no KnowledgeQueryServed.
-    let pre_events = state_a
-        .inner
-        .fabric
-        .contribution_emitter
-        .events()
-        .expect("emitter.events() ok");
     assert!(
-        pre_events
-            .iter()
-            .all(|e| !matches!(e.kind, LedgerEventKind::KnowledgeQueryServed { .. })),
+        served_records(&double_a).is_empty(),
         "ledger should be clean before the fan-out fires"
     );
 
@@ -177,23 +169,7 @@ async fn a_fan_out_hop_the_server_cannot_verify_is_served_and_not_attributed() {
 
     // A's emitter must show NO KnowledgeQueryServed: the hop carried a claim
     // and no proof.
-    let post_events = state_a
-        .inner
-        .fabric
-        .contribution_emitter
-        .events()
-        .expect("emitter.events() ok");
-    let served: Vec<(NodeId, String, u32)> = post_events
-        .iter()
-        .filter_map(|e| match &e.kind {
-            LedgerEventKind::KnowledgeQueryServed {
-                for_node,
-                corpus_id,
-                chunks_returned,
-            } => Some((*for_node, corpus_id.clone(), *chunks_returned)),
-            _ => None,
-        })
-        .collect();
+    let served = served_records(&double_a);
 
     assert!(
         served.is_empty(),
