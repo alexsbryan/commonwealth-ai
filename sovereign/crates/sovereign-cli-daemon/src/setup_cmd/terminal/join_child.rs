@@ -13,7 +13,7 @@ use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 
-use sovereign_contracts::launch::JOINED_LINE_PREFIX;
+use sovereign_contracts::launch::{ADMIN_JOIN_VERB, JOINED_LINE_PREFIX};
 use sovereign_core::setup_config::{DataSection, SetupConfig};
 
 /// A joined child. Dropping it stops the child (kill, then reap) and removes
@@ -92,7 +92,7 @@ pub(super) async fn join(
         .save_to(&provisional)
         .map_err(JoinFailure::Launch)?;
     let mut child = match daemon
-        .args(["join", "--config"])
+        .args([ADMIN_JOIN_VERB, "--config"])
         .arg(&provisional)
         .args(["--node-name", node_name])
         .stdin(Stdio::piped())
