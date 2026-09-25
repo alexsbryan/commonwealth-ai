@@ -2522,9 +2522,8 @@ pub fn setup_watchers_and_work_atlas(
     // `HeadlessRails` to `AppState`'s KV port, so every one of them writes
     // the store cw-rails holds and pumps onto the ring. Construction checks
     // no presence; a cw-rails that is down surfaces on the first call.
-    let work_atlas_mesh_store: Arc<dyn ReplicatedKv> = Arc::new(
-        crate::rails_client::kv::RailsKv::new(rails_base),
-    );
+    let work_atlas_mesh_store: Arc<dyn ReplicatedKv> =
+        Arc::new(crate::rails_client::kv::RailsKv::new(rails_base));
     // Node identity — same resolution order EmbeddedDaemon uses when
     // it starts (file-on-disk → mesh.json → generate). Resolved early
     // so `WorkAtlasStore::node_id` matches the daemon's `self_id`.

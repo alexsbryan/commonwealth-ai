@@ -149,7 +149,9 @@ async fn a_contribution_write_lands_on_the_rails_door() {
     );
     let base = format!("http://{}", spawn_router(door).await);
 
-    let kv = Arc::new(sovereign_daemon::rails_client::kv::RailsKv::new(base.clone()));
+    let kv = Arc::new(sovereign_daemon::rails_client::kv::RailsKv::new(
+        base.clone(),
+    ));
     let state = AppState::new_with_seeds(
         self_id,
         solo_mesh(self_id, "store-seed-rails"),
@@ -164,11 +166,13 @@ async fn a_contribution_write_lands_on_the_rails_door() {
         .inner
         .store
         .contribution_emitter
-        .record(commonwealth_core::contributions::LedgerEventKind::InferenceReceived {
-            from_node: peer,
-            model_id: "m".into(),
-            tokens_generated: 7,
-        })
+        .record(
+            commonwealth_core::contributions::LedgerEventKind::InferenceReceived {
+                from_node: peer,
+                model_id: "m".into(),
+                tokens_generated: 7,
+            },
+        )
         .await
         .unwrap();
 
