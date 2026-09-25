@@ -378,7 +378,12 @@ impl KvHost {
                 .map_err(|e| e.to_string())
                 .and_then(|payload| {
                     journal
-                        .append(RailAct::Record { payload }, self.rail.signer(), roster, None)
+                        .append(
+                            RailAct::Record { payload },
+                            self.rail.signer(),
+                            roster,
+                            None,
+                        )
                         .map_err(|e| e.to_string())
                 });
             match written {
@@ -391,12 +396,19 @@ impl KvHost {
             .map_err(|e| e.to_string())
             .and_then(|payload| {
                 journal
-                    .append(RailAct::Record { payload }, self.rail.signer(), roster, None)
+                    .append(
+                        RailAct::Record { payload },
+                        self.rail.signer(),
+                        roster,
+                        None,
+                    )
                     .map_err(|e| e.to_string())
             });
         match mark {
-            Ok(_) => info!(target: "rails", namespace, appended, peers_rows_skipped = skipped, floor,
-                           "kv pump: snapshotted this node's live rows above the new floor, and closed it"),
+            Ok(_) => {
+                info!(target: "rails", namespace, appended, peers_rows_skipped = skipped, floor,
+                           "kv pump: snapshotted this node's live rows above the new floor, and closed it")
+            }
             Err(e) => warn!(target: "rails", namespace, appended, floor, error = %e,
                             "kv pump: the snapshot could not be closed, so peers will keep \
                              whatever of ours they already hold"),
@@ -473,7 +485,10 @@ fn to_entry(e: StoreEntry) -> serde_json::Value {
 
 fn store_error(op: &str, e: commonwealth_state::Error) -> Response {
     warn!(target: "rails", op, error = %e, "kv: store refused");
-    err(StatusCode::INTERNAL_SERVER_ERROR, format!("mesh kv {op}: {e}"))
+    err(
+        StatusCode::INTERNAL_SERVER_ERROR,
+        format!("mesh kv {op}: {e}"),
+    )
 }
 
 /// GET /v1/mesh/kv/entry — one record, or `null`.
