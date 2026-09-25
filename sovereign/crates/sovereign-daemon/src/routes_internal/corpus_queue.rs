@@ -111,7 +111,22 @@ pub async fn corpus_ingest_partition(
     // this node hasn't completed bootstrap (or has no embed model configured)
     // and cannot safely accept a partition — return 503 so the coordinator
     // skips us rather than assigning work we can't do.
-    let Some(local_embed_model) = state.inner.store.inference_store.get_local_embed_model() else {
+    let local_embed_model = match state.local_embed_model().await {
+        Ok(m) => m,
+        Err(e) => {
+            tracing::warn!(error = %e, "ingest_partition: embed model unread; refusing");
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(IngestPartitionResponse {
+                    accepted: false,
+                    reason: Some(format!(
+                        "inference state absent — cannot check embed model: {e}"
+                    )),
+                }),
+            );
+        }
+    };
+    let Some(local_embed_model) = local_embed_model else {
         return (
             StatusCode::SERVICE_UNAVAILABLE,
             Json(IngestPartitionResponse {

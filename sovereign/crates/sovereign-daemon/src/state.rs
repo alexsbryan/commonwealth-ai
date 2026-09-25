@@ -1276,6 +1276,23 @@ impl AppState {
         Ok(self.inner.store.inference_store.get_plan())
     }
 
+    /// Store a peer's inference plan.
+    pub async fn set_inference_plan(
+        &self,
+        plan: &commonwealth_state::inference_plan::InferencePlan,
+    ) -> Result<(), sovereign_mesh::ledger_port::LedgerAbsent> {
+        self.inner.store.inference_store.set_plan(plan);
+        Ok(())
+    }
+
+    /// Drop one registered model; `true` when it was present.
+    pub async fn remove_model_info(
+        &self,
+        model_id: commonwealth_core::ids::ModelId,
+    ) -> Result<bool, sovereign_mesh::ledger_port::LedgerAbsent> {
+        Ok(self.inner.store.inference_store.remove_model_info(model_id))
+    }
+
     /// One registered model's info.
     pub async fn model_info(
         &self,

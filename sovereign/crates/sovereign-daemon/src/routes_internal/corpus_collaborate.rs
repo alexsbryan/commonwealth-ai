@@ -131,10 +131,19 @@ pub async fn corpus_collaborate(
     })?;
 
     let local_embed_model = state
-        .inner
-        .store
-        .inference_store
-        .get_local_embed_model()
+        .local_embed_model()
+        .await
+        .map_err(|e| {
+            tracing::warn!(error = %e, "corpus_collaborate: embed model unread; cannot plan");
+            (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(ErrorBody {
+                    error: format!(
+                        "inference state absent — cannot read this node's embed model: {e}"
+                    ),
+                }),
+            )
+        })?
         .ok_or_else(|| {
             (
                 StatusCode::SERVICE_UNAVAILABLE,
@@ -1008,7 +1017,15 @@ pub async fn corpus_eligible_peers(
         .map(|r| r.corpus.grantable)
         .unwrap_or(false);
 
-    let local_embed_model = state.inner.store.inference_store.get_local_embed_model();
+    let local_embed_model = state.local_embed_model().await.map_err(|e| {
+        tracing::warn!(error = %e, "corpus_eligible_peers: embed model unread");
+        (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(ErrorBody {
+                error: format!("inference state absent — cannot read this node's embed model: {e}"),
+            }),
+        )
+    })?;
 
     let mesh = state.inner.fabric.mesh.read().await;
     let self_id = state.inner.fabric.identity.current();

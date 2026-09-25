@@ -179,7 +179,10 @@ pub async fn scheduling_plan(
     State(state): State<AppState>,
     Json(plan): Json<InferencePlan>,
 ) -> StatusCode {
-    state.inner.store.inference_store.set_plan(&plan);
+    if let Err(e) = state.set_inference_plan(&plan).await {
+        tracing::warn!(error = %e, "scheduling_plan: inference state absent; plan not stored");
+        return StatusCode::SERVICE_UNAVAILABLE;
+    }
     StatusCode::OK
 }
 

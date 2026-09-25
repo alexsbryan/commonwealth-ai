@@ -262,24 +262,27 @@ fn register_extras_in_store(
         supports_parallel_instances: false,
         supports_pipeline_shard: false,
     };
-    state.inner.store.inference_store.set_model_info(&info);
+    state.register_model(info);
 }
 
-fn deregister_extras_from_store(state: &AppState, model_id_str: &str) -> bool {
+async fn deregister_extras_from_store(
+    state: &AppState,
+    model_id_str: &str,
+) -> Result<bool, sovereign_mesh::ledger_port::LedgerAbsent> {
     // Look up the existing entry by advertised name, then remove
     // by ModelId. We don't have the original path here (the
     // `unload` request only carries the slot name), so we can't
     // recompute the deterministic id directly — name lookup is the
     // right path, and matches how `/v1/models` exposes the entries.
-    let models = state.inner.store.inference_store.list_models();
+    let models = state.list_models().await?;
     let target = models
         .into_iter()
         .find(|(_, info)| info.name == model_id_str);
     if let Some((id, _)) = target {
-        state.inner.store.inference_store.remove_model_info(id);
-        true
+        state.remove_model_info(id).await?;
+        Ok(true)
     } else {
-        false
+        Ok(false)
     }
 }
 
@@ -304,7 +307,17 @@ pub async fn models_unload(
         .map_err(|e| format!("{e}"))
     {
         Ok(Some(model_id)) => {
-            deregister_extras_from_store(&state, &model_id);
+            if let Err(e) = deregister_extras_from_store(&state, &model_id).await {
+                tracing::warn!(error = %e, %model_id, "models_unload: slot unloaded; store entry not dropped");
+                return Err((
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    format!(
+                        "slot '{}' unloaded, but inference state is absent so '{model_id}' \
+                         may still appear on /v1/models: {e}",
+                        req.slot_name
+                    ),
+                ));
+            }
             Ok(Json(UnloadModelResponse {
                 model_id: Some(model_id),
                 slot_name: req.slot_name,
