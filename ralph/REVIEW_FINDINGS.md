@@ -2680,3 +2680,99 @@ None needed a fix in this audit's commit.
   `corpus-engine-atlas-reader` 7023 → 7503 with this range's moves. Not re-pinned.
 - **deletion-manifest (advisory)** · `p0-root-junk` 133537 > 113934, unchanged
   since auto-4, foreign to the campaign.
+
+## REVIEW-audit-fp-auto-6 (2026-09-24, range 2ed2b85d9..510793800, starting from the previous audit's hash)
+
+The range holds 43 commits, 20 of them product code: fp-66 and fp-67
+(sovereign-core and sovereign-meshapp drop corpus-engine), fp-15
+(re-measure), fp-58 (eval parses atoms.json), fp-9, fp-10, fp-68 and fp-69
+(package exceptions), fp-25 (rpc-worker handover), fp-70 and fp-71 (media
+presence poll inputs move to cw-rails), and fp-72 to fp-74 (the guest
+attestation, decision five-programs-34). All checks ran in the
+sovereign-vulkan toolbox. TESTALL exit=0, 13,357 passed and 0 failed.
+PREPUSH was range-fed with remote sha 2ed2b85d9 and blocked on two lanes:
+boundary-gate at 54 violations, which is the declared burn-down state, and
+rustfmt on `understanding-vocab/src/read.rs`, which is fixed below.
+size-gate and deletion-manifest are advisory, concept-gate could not judge,
+and every other lane passed. After the fixes, LINT exit=0 (arch-gate clean)
+and TEST(sovereign-daemon) passed 1280 of 1280.
+
+### (1) Per-unit net-line ledger, product code (`.rs/.py/.sh/.ts/.mjs/.js/.svelte`; paths under `/tests/` or named `tests.rs` count as tests, and in-file `mod tests` counts as src)
+
+| unit | src + | src − | src net | tests + | tests − | tests net |
+|---|---|---|---|---|---|---|
+| fp-25 | 9 | 11 | −2 | 0 | 0 | 0 |
+| fp-58 | 33 | 20 | +13 | 0 | 0 | 0 |
+| fp-66 | 72 | 59 | +13 | 0 | 0 | 0 |
+| fp-67 | 620 | 591 | +29 | 0 | 0 | 0 |
+| fp-70 | 331 | 93 | +238 | 49 | 23 | +26 |
+| fp-71 | 4 | 106 | −102 | 11 | 6 | +5 |
+| fp-72 | 192 | 4 | +188 | 0 | 0 | 0 |
+| fp-73 | 79 | 17 | +62 | 76 | 1 | +75 |
+| fp-74 | 237 | 24 | +213 | 264 | 88 | +176 |
+| fp-9 | 4 | 4 | 0 | 0 | 0 | 0 |
+| TOTAL | 1581 | 929 | +652 | 400 | 118 | +282 |
+
+Most of fp-72's +188 is attest.rs, with its five in-file tests counted as src.
+Of fp-70's +238, 166 lines are the rail_migration.rs one-time move, which
+has a trace on every branch. fp-67 is a verbatim move behind `pub use`
+shims at the historical paths.
+
+### (2) Clone check: the instrument could not judge
+
+`code dry-report --corpus-id commonwealth-ai --scope <dir>` refuses for all
+15 touched crate dirs: `no chunk index at
+~/.svrnmesh/indexes/commonwealth-ai/chunks.lance`. As a substitute I read
+every added body in fp-70 through fp-74 and checked the fp-67 moves with
+`git diff`. That read found one clone, fixed below: fp-74's
+`journal_append_attested` duplicated `journal_append`'s dial body.
+
+### (3) Noun check
+
+`code converge noun` answers from a stale graph. It reports 0 definitions
+for GuestAttestation and AttestRefusal, and places fp-67's moved nouns at
+their pre-move sites, so a word-bounded `git grep` of `pub struct|enum|trait
+<Name>` is the data here. GuestAttestation, AttestRefusal, InvestigationEntity,
+ExtractionExcerpt, PatternFinding, PatternKind, ParcelAggregates, ParcelDelta,
+ParcelFlag, FlagKind, TurnAuthor and ParsedTurn each have one definition.
+The fp-67 donors are `pub use` re-exports, not twins. One noun has two
+definitions:
+
+- `Relationship` · `corpus-engine-atlas-reader/src/investigation_graph.rs:66`
+  (the investigation graph edge, moved by fp-67) and
+  `corpus-engine-scip/src/scip_proto.rs:223` (the SCIP protobuf message).
+  These are distinct concepts that happen to share a name. Both predate the
+  range, so this is not a convergence candidate.
+
+### Findings, fixed in e2312003f
+
+- **ARCH 8 (two implementations of one dial)** ·
+  `sovereign/crates/sovereign-daemon/src/rails_client.rs:301`. Before the
+  fix, `journal_append` and `journal_append_attested` each carried their own
+  Answer struct, act serialisation and POST. Both now call one
+  `post_append`.
+- **ARCH 6 (absence defaulted)** ·
+  `sovereign/crates/sovereign-daemon/src/routes_rail.rs:423`. Before the
+  fix, a missing session's expiry was `map_or(0, ..)`, which would sign an
+  attestation that rails refuses as `expired`. The name and its expiry now
+  come from the same session through `zip`.
+- **rustfmt** · `understanding-vocab/src/read.rs:45` (fp-58). This was
+  PREPUSH's only blocking lane besides the burn-down.
+
+### Recorded, not changed
+
+- **ARCH 6 (minor)** · `commonwealth/crates/commonwealth-rails/src/rail.rs`
+  `append_act`. When a body carries a valid `attestation`, any
+  `on_behalf_of` beside it is ignored without a warning, so the attested name
+  wins. The daemon never sends both, and the attested name is the
+  authenticated one, so this is left for the attestation's owner.
+- **Instruments could not judge** · dry-report has no chunk index, and
+  converge-noun reads a stale graph. The rebuild is
+  `svrn project refresh --name commonwealth-ai --local`, the same finding as
+  auto-5.
+- **size-gate (advisory)** · 48 keys grew (43 at auto-5). New in this range:
+  commonwealth-rail-core 2067 → 2183 and its tests 330 → 376 (fp-72, fp-74),
+  commonwealth-rails tests 879 → 999 (fp-73), and commonwealth-media tests
+  989 → 1006 (fp-70). Nothing was re-pinned.
+- **deletion-manifest (advisory)** · `p0-root-junk` is at 133537 against a
+  baseline of 113934, unchanged since auto-4 and outside this campaign.
