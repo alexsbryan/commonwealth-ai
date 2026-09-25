@@ -150,7 +150,10 @@ fn withdraw_clears_every_key_offer_wrote() {
     let iroh: IrohSection = toml::from_str(&doc["iroh"].to_string()).unwrap();
     assert_eq!(iroh.media_origin, None);
     assert!(iroh.media_allow.is_empty());
-    assert!(!doc["iroh"].as_table().unwrap().contains_key("media_viewer_user"));
+    assert!(!doc["iroh"]
+        .as_table()
+        .unwrap()
+        .contains_key("media_viewer_user"));
     assert_eq!(
         iroh.enabled,
         Some(true),
@@ -212,7 +215,10 @@ fn offer_writes_no_credential_into_the_config_the_mesh_reads() {
         );
     }
     assert!(
-        !doc["iroh"].as_table().unwrap().contains_key("media_viewer_user"),
+        !doc["iroh"]
+            .as_table()
+            .unwrap()
+            .contains_key("media_viewer_user"),
         "the viewer id lives in rails' house store"
     );
 }
