@@ -11,7 +11,7 @@ use std::path::PathBuf;
 /// Names the monorepo source tree. Set for in-repo builds by `.cargo/config.toml`.
 pub const WORKSPACE_ROOT_ENV: &str = "SOVEREIGN_WORKSPACE_ROOT";
 
-/// Names the canonical recipes tree — the SAME knob `build.rs` vendors from.
+/// Names the canonical recipes tree.
 pub const RECIPES_DIR_ENV: &str = "CORPUS_ENGINE_RECIPES_DIR";
 
 /// The monorepo source tree. Panics naming the knob when it is absent.

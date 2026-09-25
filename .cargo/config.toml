@@ -109,7 +109,6 @@ SOVEREIGN_BENCH_ROOT = { value = "sovereign/bench", relative = true }
 # The monorepo source tree, absolute, so corpus-engine's workspace-wide gates
 # can name sibling-crate sources without climbing out of the crate root.
 SOVEREIGN_WORKSPACE_ROOT = { value = ".", relative = true }
-# The canonical recipes tree. build.rs already reads this name as its
-# standalone-clone escape hatch; setting it by default makes build and gates
-# resolve ONE tree.
+# The canonical recipes tree, read at runtime by the recipe gates
+# (corpus-engine tests/main/source_tree.rs, sovereign-pipeline shipped_recipes).
 CORPUS_ENGINE_RECIPES_DIR = { value = "sovereign-recipes", relative = true }

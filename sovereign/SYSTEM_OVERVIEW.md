@@ -50,7 +50,7 @@ commonwealth-ai/
 ├── understanding-atlas/       # Understanding's pure tier — arithmetic over the published language
 ├── understanding-host/        # Understanding's host tier — the ports and the knot
 ├── corpus-mcp/                # Thin knowledge host — recipe new · ingest · serve, any OpenAI-compatible endpoint
-├── sovereign-recipes/         # Canonical recipe TOMLs + catalog (vendored into corpus-engine at build)
+├── sovereign-recipes/         # Canonical recipe TOMLs + catalog (the corpus-engine-recipes data crate)
 ├── sovereign/                 # Local AI assistant (CLI / desktop / server / daemon)
 ├── commonwealth/              # Mesh coordination daemon
 ├── studio/                    # Liftable authoring package
@@ -80,7 +80,7 @@ in-process via `sovereign-mesh` — the only place the two upper projects meet.
 
 ```
        oicp-types          sovereign-recipes
-            │                       │ build.rs include_bytes!
+            │                       │ include_str!/include_bytes!
             │                ┌──────▼──────┐
             │                │ corpus-engine│  (LanceDB + Tantivy)
             │                └──────┬──────┘
@@ -506,8 +506,8 @@ operator action via `POST /internal/corpus/enrich-reset`.
 ### Registry, authoring, back-compat
 
 Resolution order is local override on disk → remote → bundled, SHA-256
-verified when the entry declares one. `build.rs` vendors `registry.toml` into
-`OUT_DIR`, so the engine works offline with no checked-in snapshot to drift.
+verified when the entry declares one. The corpus-engine-recipes crate compiles
+`registry.toml` in, so the engine works offline with no checked-in snapshot to drift.
 
 The schema is open — a domain expert authors a TOML and the engine runs it.
 Generic primitives: the `http_api` acquirer (URL templating, four pagination
@@ -4183,7 +4183,7 @@ root `Cargo.toml`. `sovereign/`, `commonwealth/` and the corpus-engine
 carve-outs are directories of member crates, not separate workspaces.
 
 ```sh
-cargo build --workspace                    # bundled assets copied via build.rs
+cargo build --workspace                    # recipes + assets compiled in by corpus-engine-recipes
 cargo check --workspace --all-targets      # what CI's `check` job runs
 
 # The CLI spans 4 binaries — rebuild all of them, since editing one and

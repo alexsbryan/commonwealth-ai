@@ -404,7 +404,7 @@ impl RecipeRegistry {
                 Ok(text) => {
                     // Decide remote-vs-bundled by INTEGRITY, not mere reachability.
                     // The bundled recipe is vendored from the canonical
-                    // `sovereign-recipes/` tree at compile time (build.rs), so it
+                    // `sovereign-recipes/` tree at compile time (corpus-engine-recipes), so it
                     // is the reviewed, committed source of truth shipped with this
                     // binary. A remote may only OVERRIDE it when the registry
                     // vouches for the exact bytes (sha256 present and verified) —

@@ -17,9 +17,11 @@ use corpus_engine::recipe::{EntityTypeDecl, RelationshipTypeDecl};
 use corpus_engine::testing::validate_recipe_offline;
 use corpus_engine::{recipe_templates, Recipe};
 
-/// The maple-house recipe as vendored by `build.rs` (no repo-relative path).
-const MAPLE_HOUSE: &str =
-    include_str!(concat!(env!("OUT_DIR"), "/recipes/maple-house/recipe.toml"));
+/// The maple-house recipe from the recipes data crate (no repo-relative path).
+fn maple_house() -> &'static str {
+    let found = corpus_engine_recipes::UNCATALOGED.iter().find(|(id, _)| *id == "maple-house");
+    found.map(|(_, toml)| *toml).expect("maple-house bundled")
+}
 
 /// A minimal loadable recipe wrapped around an `[enrichment.ontology]` body.
 fn recipe_with_ontology(body: &str) -> String {
@@ -147,16 +149,16 @@ fn v1_empty_equals_v0_equals_default() {
 /// yields exactly the version-0 policies.
 #[test]
 fn v1_with_guidance_equals_v0() {
-    let v0 = Recipe::from_toml(MAPLE_HOUSE)
+    let v0 = Recipe::from_toml(maple_house())
         .unwrap()
         .custom_ontology()
         .unwrap();
-    let migrated = Recipe::migrate_ontology_version(MAPLE_HOUSE, 1)
+    let migrated = Recipe::migrate_ontology_version(maple_house(), 1)
         .expect("migrates")
         .expect("was version 0");
     assert_eq!(
         migrated.lines().count(),
-        MAPLE_HOUSE.lines().count() + 1,
+        maple_house().lines().count() + 1,
         "the migration adds one line and nothing else"
     );
     let v1 = Recipe::from_toml(&migrated)
@@ -681,7 +683,7 @@ identity_fallback = ["name", "employer"]"#,
     );
 
     // A version-0 block derives nothing.
-    let v0 = Recipe::from_toml(MAPLE_HOUSE).unwrap();
+    let v0 = Recipe::from_toml(maple_house()).unwrap();
     assert!(validate_block(v0.ontology_block().unwrap())
         .notes
         .is_empty());

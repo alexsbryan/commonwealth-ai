@@ -22,8 +22,8 @@ point them at your data.
 
 ## This repo is the single source of truth
 
-These recipes are the **only** authored copy. corpus-engine vendors this tree at
-build time (`build.rs` → `OUT_DIR` → `include_str!`) to bundle an offline copy
+These recipes are the **only** authored copy. This directory is also the
+`corpus-engine-recipes` crate, which `include_str!`s the tree to bundle an offline copy
 into the binary and the desktop app — that bundle is a build artifact regenerated
 from this tree on every build, so there is no second copy to keep in sync.
 

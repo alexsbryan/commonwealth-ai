@@ -52,6 +52,12 @@ const ASSETS: &[(&str, &[u8])] = {
     ]
 };
 
+/// An `UNCATALOGED` recipe's text, for in-crate test fixtures only.
+#[cfg(test)]
+pub(crate) fn uncataloged_toml(id: &str) -> Option<&'static str> {
+    lookup(corpus_engine_recipes::UNCATALOGED, id)
+}
+
 impl AssetSource for Bundled {
     fn bundled_asset(&self, key: &str) -> Option<&'static [u8]> {
         lookup(ASSETS, key)
