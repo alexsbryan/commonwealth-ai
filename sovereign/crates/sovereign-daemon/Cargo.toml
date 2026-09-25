@@ -93,7 +93,10 @@ sovereign-workflow-host = { workspace = true }
 # loopback knowledge source through the turn client. Neither depends on
 # this crate (leaf/tier below `mesh-api`), so the edges stay acyclic.
 sovereign-runtime-recipe = { workspace = true }
-sovereign-turn-client = { workspace = true }
+# `bundled-backend`: `rails_client::ensure_rails` brings cw-rails up through
+# `ServingHost::bringing_up` when nothing answers (fp-solo-clients). The
+# feature gates code only, so it moves no dependency edge.
+sovereign-turn-client = { workspace = true, features = ["bundled-backend"] }
 
 async-trait = { workspace = true }
 bytes = { workspace = true }

@@ -464,6 +464,9 @@ pub(super) async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
     // sovereign + commonwealth + corpus-engine in parallel. So one
     // env var lights up coverage for all three.
     let workspace_dir = resolve_workspace_dir();
+    // fp-solo-clients: every store port below dials cw-rails; boot reaches it.
+    let rails_base = crate::rails_client::resolve_rails_base(&config.daemon);
+    let _ = crate::rails_client::ensure_rails(&rails_base);
     let bootstrap::WatcherAtlasSetup {
         watcher_heartbeat,
         lint_watcher,
@@ -483,7 +486,7 @@ pub(super) async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
         &data_dir,
         Arc::clone(&lint_store),
         Arc::clone(&test_store),
-        crate::rails_client::resolve_rails_base(&config.daemon),
+        rails_base,
     );
 
     // ── CorpusEngine ──────────────────────────────────────────────

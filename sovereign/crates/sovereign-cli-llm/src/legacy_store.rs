@@ -16,7 +16,9 @@ use sovereign_contracts::peer::{ReplicatedKv, ReplicatedKvEntry};
 use sovereign_daemon::rails_client::kv::RailsKv;
 
 /// The `RailsKv` at the base `[daemon] rails_base` names, through THE one
-/// reader of that key.
+/// reader of that key. A `svrn portfolio` / `newsworthy` run is a user
+/// action, so cw-rails is brought up here if nothing answers; an absence is
+/// traced there and reported by the first call on the store.
 pub(crate) fn rails_kv() -> RailsKv {
     let daemon = match sovereign_core::setup_config::SetupConfig::load() {
         Ok(c) => c.daemon,
@@ -25,7 +27,9 @@ pub(crate) fn rails_kv() -> RailsKv {
             Default::default()
         }
     };
-    RailsKv::new(sovereign_daemon::rails_client::resolve_rails_base(&daemon))
+    let base = sovereign_daemon::rails_client::resolve_rails_base(&daemon);
+    let _ = sovereign_daemon::rails_client::ensure_rails(&base);
+    RailsKv::new(base)
 }
 
 fn marker(path: &Path) -> PathBuf {

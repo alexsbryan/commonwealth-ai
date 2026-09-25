@@ -1186,6 +1186,13 @@ status = "shipped"
 purpose = "Path override for the sovereign-cli-mesh sibling, lifted out of sovereign-cli-llm 2026-09-21."
 
 [[flag]]
+name = "CW_RAILS_BIN"
+cluster = "cli-binaries"
+default = "sibling of the running program, then PATH"
+status = "shipped"
+purpose = "Path override for the cw-rails binary that `rails_client::ensure_rails` brings up when nothing answers on the rails base (fp-solo-clients, five-programs-63/-65). Read through `sovereign_turn_client::reach::locate_sibling`."
+
+[[flag]]
 name = "SOVEREIGN_AGENT_BENCH_BIN"
 cluster = "cli-binaries"
 default = "sibling of dispatcher"
