@@ -8,7 +8,7 @@ use std::collections::{BTreeSet, HashMap};
 use std::sync::{Arc, Mutex};
 
 use bytes::Bytes;
-use commonwealth_core::activity::{ActivityEventKind, ActivitySummary};
+use commonwealth_core::activity::{ActivityEvent, ActivityEventKind, ActivitySummary};
 use commonwealth_core::capabilities::NodeCapabilities;
 use commonwealth_core::contributions::{LedgerEvent, LedgerEventKind, NodeContributions};
 use commonwealth_core::ids::{ModelId, NodeId};
@@ -119,6 +119,10 @@ impl ContributionLedgerPort for RecordingLedger {
 impl ActivityLedgerPort for RecordingLedger {
     fn record(&self, kind: ActivityEventKind) -> LedgerFut<'_, ()> {
         self.answer("activity.record", format!("{kind:?}"), ())
+    }
+
+    fn events(&self) -> LedgerFut<'_, Vec<ActivityEvent>> {
+        self.answer("activity.events", String::new(), Vec::new())
     }
 
     fn current_activity(&self, window_days: u32) -> LedgerFut<'_, ActivitySummary> {

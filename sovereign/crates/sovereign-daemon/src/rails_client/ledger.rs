@@ -11,7 +11,7 @@
 use std::collections::{BTreeSet, HashMap};
 use std::sync::{Arc, RwLock};
 
-use commonwealth_core::activity::{ActivityEventKind, ActivitySummary};
+use commonwealth_core::activity::{ActivityEvent, ActivityEventKind, ActivitySummary};
 use commonwealth_core::capabilities::NodeCapabilities;
 use commonwealth_core::contributions::{LedgerEvent, LedgerEventKind, NodeContributions};
 use commonwealth_core::ids::{ModelId, NodeId};
@@ -117,6 +117,10 @@ impl ActivityLedgerPort for RailsLedger {
     fn record(&self, kind: ActivityEventKind) -> LedgerFut<'_, ()> {
         let body = self.written(kind);
         Box::pin(async move { ledger_post(&self.base, "/v1/ledger/activity", body).await })
+    }
+
+    fn events(&self) -> LedgerFut<'_, Vec<ActivityEvent>> {
+        Box::pin(async move { ledger_get(&self.base, "/v1/ledger/activity").await })
     }
 
     fn current_activity(&self, window_days: u32) -> LedgerFut<'_, ActivitySummary> {

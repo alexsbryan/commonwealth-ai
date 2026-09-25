@@ -5,7 +5,7 @@
 
 use std::collections::{BTreeSet, HashMap};
 
-use commonwealth_core::activity::ActivityEventKind;
+use commonwealth_core::activity::{ActivityEvent, ActivityEventKind};
 use commonwealth_core::contributions::{LedgerEvent, LedgerEventKind, NodeContributions};
 use commonwealth_core::ids::{ModelId, NodeId};
 use commonwealth_core::model::{ModelArchitecture, ModelInfo};
@@ -107,20 +107,24 @@ async fn a_contribution_written_through_the_door_reads_back_under_the_daemons_id
 async fn an_activity_written_through_the_door_is_in_the_current_summary() {
     let store = MeshStore::in_memory().unwrap();
     let base = serve(store.clone()).await;
+    let kind = ActivityEventKind::LocalInferenceServed {
+        model_id: "m".into(),
+        prompt_tokens: 3,
+        completion_tokens: 4,
+        wall_seconds: 0.1,
+    };
     post(
         &base,
         "/v1/ledger/activity",
-        json!({
-            "node_id": NodeId::from_u128(DAEMON),
-            "record": ActivityEventKind::LocalInferenceServed {
-                model_id: "m".into(),
-                prompt_tokens: 3,
-                completion_tokens: 4,
-                wall_seconds: 0.1,
-            },
-        }),
+        json!({ "node_id": NodeId::from_u128(DAEMON), "record": kind }),
     )
     .await;
+
+    let events: Vec<ActivityEvent> =
+        serde_json::from_value(get(&base, "/v1/ledger/activity").await).unwrap();
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0].node_id, NodeId::from_u128(DAEMON));
+    assert_eq!(events[0].kind, kind);
     let summary = post(
         &base,
         "/v1/ledger/activity/current",

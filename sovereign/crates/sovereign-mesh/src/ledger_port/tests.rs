@@ -12,7 +12,7 @@ use commonwealth_core::model::{ModelArchitecture, ModelInfo};
 use commonwealth_core::oicp::{EmbedModelInfo, NormalizationStrategy, PoolingStrategy};
 use commonwealth_state::peer_preferences::PeerPreferenceStore;
 use commonwealth_state::store_adapter::InferenceStateStore;
-use commonwealth_state::{ContributionEmitter, MeshStore};
+use commonwealth_state::{ActivityEmitter, ContributionEmitter, MeshStore};
 
 use super::*;
 
@@ -64,7 +64,7 @@ async fn contributions_answer_what_the_emitter_answers() {
         .await
         .unwrap();
 
-    let events = ledger.events().await.unwrap();
+    let events = ContributionLedgerPort::events(&ledger).await.unwrap();
     let expected = ContributionEmitter::new(store.clone(), NodeId::from_u128(0))
         .events()
         .unwrap();
@@ -101,6 +101,14 @@ async fn activity_answers_what_current_activity_answers() {
     let expected = commonwealth_state::current_activity(&store, 7).unwrap();
     assert_eq!(summary, expected);
     assert_ne!(expected, Default::default(), "the write reached the store");
+
+    let events = ActivityLedgerPort::events(&ledger).await.unwrap();
+    let expected = ActivityEmitter::new(store, NodeId::from_u128(0))
+        .events()
+        .unwrap();
+    assert_eq!(events, expected);
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0].node_id, NodeId::from_u128(DAEMON));
 }
 
 #[tokio::test]

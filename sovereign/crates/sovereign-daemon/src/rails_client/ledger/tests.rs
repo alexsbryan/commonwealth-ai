@@ -74,7 +74,7 @@ async fn every_port_reports_a_named_absence_on_a_dead_dial() {
         )
         .await,
     );
-    assert_absent(l.events().await);
+    assert_absent(ContributionLedgerPort::events(&l).await);
     assert_absent(l.current_contributions(&HashMap::new(), 30).await);
     assert_absent(
         ActivityLedgerPort::record(
@@ -88,6 +88,7 @@ async fn every_port_reports_a_named_absence_on_a_dead_dial() {
         )
         .await,
     );
+    assert_absent(ActivityLedgerPort::events(&l).await);
     assert_absent(l.current_activity(7).await);
     assert_absent(l.list().await);
     assert_absent(PeerPreferencesPort::get(&l, &NodeId::from_u128(2)).await);
@@ -182,4 +183,36 @@ async fn a_failed_refill_keeps_the_last_value() {
     assert!(origins
         .iter()
         .any(|(n, m)| *n == NodeId::from_u128(ME) && m.id == ModelId::from_u128(2)));
+}
+
+/// An activity event the one decider recorded reads back through the dialed
+/// port unchanged — the stand-in door serves `ActivityEmitter::events`, as
+/// cw-rails' `GET /v1/ledger/activity` does.
+#[tokio::test]
+async fn a_recorded_activity_event_reads_back_through_the_dial() {
+    let store = commonwealth_state::MeshStore::in_memory().unwrap();
+    let emitter = commonwealth_state::ActivityEmitter::new(store, NodeId::from_u128(ME));
+    emitter.record(ActivityEventKind::LocalInferenceServed {
+        model_id: "m".into(),
+        prompt_tokens: 3,
+        completion_tokens: 4,
+        wall_seconds: 0.1,
+    });
+    let recorded = emitter.events().unwrap();
+    assert_eq!(recorded.len(), 1);
+
+    let served = recorded.clone();
+    let app = axum::Router::new().route(
+        "/v1/ledger/activity",
+        axum::routing::get(move || {
+            let served = served.clone();
+            async move { Json(served) }
+        }),
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+
+    let l = RailsLedger::new(format!("http://{addr}"), NodeId::from_u128(ME));
+    assert_eq!(ActivityLedgerPort::events(&l).await.unwrap(), recorded);
 }

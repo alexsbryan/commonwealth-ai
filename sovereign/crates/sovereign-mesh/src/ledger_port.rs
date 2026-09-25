@@ -22,7 +22,7 @@ use std::collections::{BTreeSet, HashMap};
 use std::future::Future;
 use std::pin::Pin;
 
-use commonwealth_core::activity::{ActivityEventKind, ActivitySummary};
+use commonwealth_core::activity::{ActivityEvent, ActivityEventKind, ActivitySummary};
 use commonwealth_core::capabilities::NodeCapabilities;
 use commonwealth_core::contributions::{LedgerEvent, LedgerEventKind, NodeContributions};
 use commonwealth_core::ids::{ModelId, NodeId};
@@ -64,6 +64,8 @@ pub trait ContributionLedgerPort: Send + Sync {
 pub trait ActivityLedgerPort: Send + Sync {
     /// `ActivityEmitter::record`.
     fn record(&self, kind: ActivityEventKind) -> LedgerFut<'_, ()>;
+    /// `ActivityEmitter::events`.
+    fn events(&self) -> LedgerFut<'_, Vec<ActivityEvent>>;
     /// `commonwealth_state::current_activity`.
     fn current_activity(&self, window_days: u32) -> LedgerFut<'_, ActivitySummary>;
 }
@@ -186,6 +188,14 @@ impl ActivityLedgerPort for LocalLedger {
             commonwealth_state::ActivityEmitter::new((*self.store).clone(), self.self_node_id)
                 .record(kind);
             Ok(())
+        })
+    }
+
+    fn events(&self) -> LedgerFut<'_, Vec<ActivityEvent>> {
+        Box::pin(async move {
+            commonwealth_state::ActivityEmitter::new((*self.store).clone(), self.self_node_id)
+                .events()
+                .map_err(|e| store_absent("activity", e))
         })
     }
 

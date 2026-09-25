@@ -71,7 +71,10 @@ pub fn router(doors: LedgerDoors) -> Router {
             "/v1/ledger/contributions/current",
             post(contributions_current),
         )
-        .route("/v1/ledger/activity", post(activity_record))
+        .route(
+            "/v1/ledger/activity",
+            get(activity_events).post(activity_record),
+        )
         .route("/v1/ledger/activity/current", post(activity_current))
         .route("/v1/ledger/peer-preferences", get(peer_preferences_list))
         .route("/v1/ledger/peer-preferences/get", post(peer_preference_get))
@@ -229,6 +232,15 @@ async fn activity_record(
     debug!(target: "rails", node = %body.node_id, "ledger: activity recorded");
     ActivityEmitter::new(d.store.clone(), body.node_id).record(body.record);
     Json(())
+}
+
+/// GET /v1/ledger/activity — `ActivityEmitter::events`.
+async fn activity_events(State(d): State<LedgerDoors>) -> Response {
+    // The node id is not read by `events`; any id reads the same scan.
+    match ActivityEmitter::new(d.store.clone(), NodeId::from_u128(0)).events() {
+        Ok(events) => Json(events).into_response(),
+        Err(e) => store_error("activity", e),
+    }
 }
 
 /// POST /v1/ledger/activity/current — `current_activity`.
