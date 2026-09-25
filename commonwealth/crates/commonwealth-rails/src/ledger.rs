@@ -219,10 +219,7 @@ async fn activity_record(
 }
 
 /// POST /v1/ledger/activity/current — `current_activity`.
-async fn activity_current(
-    State(d): State<LedgerDoors>,
-    Json(body): Json<WindowDays>,
-) -> Response {
+async fn activity_current(State(d): State<LedgerDoors>, Json(body): Json<WindowDays>) -> Response {
     match commonwealth_state::current_activity(&d.store, body.window_days) {
         Ok(summary) => Json(summary).into_response(),
         Err(e) => store_error("activity/current", e),
@@ -323,7 +320,10 @@ async fn inference_model_get(
     State(d): State<LedgerDoors>,
     Json(body): Json<Model>,
 ) -> Json<Option<ModelInfo>> {
-    Json(d.inference(NodeId::from_u128(0)).get_model_info(body.model_id))
+    Json(
+        d.inference(NodeId::from_u128(0))
+            .get_model_info(body.model_id),
+    )
 }
 
 /// POST /v1/ledger/inference/model — `set_model_info`.
@@ -348,7 +348,10 @@ async fn inference_llama_address_get(
     State(d): State<LedgerDoors>,
     Json(body): Json<Model>,
 ) -> Json<Option<String>> {
-    Json(d.inference(NodeId::from_u128(0)).get_llama_address(body.model_id))
+    Json(
+        d.inference(NodeId::from_u128(0))
+            .get_llama_address(body.model_id),
+    )
 }
 
 /// POST /v1/ledger/inference/llama-address — `set_llama_address`.

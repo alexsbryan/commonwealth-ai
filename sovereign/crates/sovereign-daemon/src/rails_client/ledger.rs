@@ -40,17 +40,12 @@ async fn ledger_post<T: DeserializeOwned>(
     body: Value,
 ) -> Result<T, LedgerAbsent> {
     let url = format!("{}{}", base.trim_end_matches('/'), path);
-    let resp = client()
-        .post(&url)
-        .json(&body)
-        .send()
-        .await
-        .map_err(|e| {
-            absent(RailsDial::Absent {
-                base: base.to_string(),
-                detail: e.to_string(),
-            })
-        })?;
+    let resp = client().post(&url).json(&body).send().await.map_err(|e| {
+        absent(RailsDial::Absent {
+            base: base.to_string(),
+            detail: e.to_string(),
+        })
+    })?;
     let status = resp.status();
     if !status.is_success() {
         let message = resp.text().await.unwrap_or_default();
@@ -152,9 +147,9 @@ impl ProcessedShardsPort for RailsLedger {
 
     fn union(&self, corpus_id: &str) -> LedgerFut<'_, BTreeSet<usize>> {
         let body = json!({ "corpus_id": corpus_id });
-        Box::pin(async move {
-            ledger_post(&self.base, "/v1/ledger/processed-shards/union", body).await
-        })
+        Box::pin(
+            async move { ledger_post(&self.base, "/v1/ledger/processed-shards/union", body).await },
+        )
     }
 }
 
@@ -182,9 +177,9 @@ impl InferenceStatePort for RailsLedger {
 
     fn remove_model_info(&self, model_id: ModelId) -> LedgerFut<'_, bool> {
         let body = json!({ "node_id": self.self_node_id, "model_id": model_id });
-        Box::pin(async move {
-            ledger_post(&self.base, "/v1/ledger/inference/model/remove", body).await
-        })
+        Box::pin(
+            async move { ledger_post(&self.base, "/v1/ledger/inference/model/remove", body).await },
+        )
     }
 
     fn list_models_with_origins(&self) -> LedgerFut<'_, Vec<(NodeId, ModelInfo)>> {
