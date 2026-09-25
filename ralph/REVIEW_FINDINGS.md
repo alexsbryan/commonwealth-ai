@@ -2776,3 +2776,139 @@ definitions:
   989 → 1006 (fp-70). Nothing was re-pinned.
 - **deletion-manifest (advisory)** · `p0-root-junk` is at 133537 against a
   baseline of 113934, unchanged since auto-4 and outside this campaign.
+
+## REVIEW-audit-fp-auto-7 (2026-09-24, range 7366dae31..8c86eedac, starting from the previous audit's hash)
+
+The range holds 53 commits, 21 of them product code: fp-75 (commonwealth-state's
+memory backend, SQLite behind a feature), fp-76 (local-only ring namespaces),
+fp-77 (cw-rails hosts a mesh store and serves `/v1/mesh/kv/*`), fp-78 (cw-rails'
+typed ledger doors plus the daemon's ports and dialing impl, unwired), fp-79
+(`LocalLedger`), fp-80, fp-81 and fp-89 to fp-96 (AppState's fields flip onto
+the ports), and REVIEW-fp54-signer-identity. All checks ran in the
+sovereign-vulkan toolbox.
+
+TESTALL at 8c86eedac: exit=100, 13,376 passed and 2 failed. Both failures were
+drift from this range, and both are repaired in 69c6985c7.
+`f26_egress_boundary_census` had not registered the reqwest clients in fp-77's
+`commonwealth-rails/src/kv/tests.rs` (2) and fp-78's `ledger/tests.rs` (1).
+Each one targets a router the test serves on 127.0.0.1:0, and they are now
+registered TestOnly. `conformance_tags_are_fresh` found stale `line =` values
+in `quality/conformance/{commonwealth-state,sovereign-daemon}.toml`, and the
+regeneration changed line numbers only. PREPUSH was range-fed with remote sha
+7366dae31 and exited 1. Its one blocking lane was boundary-gate at 54
+violations, the declared burn-down. size-gate and deletion-manifest are
+advisory, concept-gate could not judge, and every other lane passed, rustfmt
+included.
+
+### (1) Per-unit net-line ledger, product code (same rules as auto-6)
+
+| unit | src + | src − | src net | tests + | tests − | tests net |
+|---|---|---|---|---|---|---|
+| fp-75 | 394 | 13 | +381 | 0 | 0 | 0 |
+| fp-76 | 132 | 14 | +118 | 12 | 5 | +7 |
+| fp-77 | 581 | 16 | +565 | 245 | 0 | +245 |
+| fp-78 | 893 | 23 | +870 | 470 | 0 | +470 |
+| fp-79 | 203 | 3 | +200 | 214 | 0 | +214 |
+| fp-80 | 84 | 32 | +52 | 216 | 0 | +216 |
+| fp-81 | 138 | 89 | +49 | 0 | 0 | 0 |
+| fp-89 | 61 | 29 | +32 | 0 | 0 | 0 |
+| fp-90 | 114 | 28 | +86 | 11 | 0 | +11 |
+| fp-91 | 295 | 139 | +156 | 7 | 11 | −4 |
+| fp-92 | 79 | 14 | +65 | 4 | 5 | −1 |
+| fp-93 | 90 | 38 | +52 | 47 | 37 | +10 |
+| fp-96 | 29 | 3 | +26 | 63 | 14 | +49 |
+| REVIEW-fp54-signer-identity | 16 | 14 | +2 | 54 | 1 | +53 |
+| TOTAL | 3109 | 455 | +2654 | 1343 | 73 | +1270 |
+
+fp-77 and fp-78 account for +1435 of the +2654 src lines. Most of that is the
+serving half of D4: cw-rails' kv host and pump (kv.rs, 537 lines) and the
+ledger doors (ledger.rs, 453 lines). The daemon's dialing impl
+(`rails_client/ledger.rs`) and fp-79's `LocalLedger` land unwired, and fp-80
+through fp-96 are what wire them. The daemon-side pump, store and routes that
+these replace are removed in queued rows fp-83 and fp-87, so this range is
+the build-up half of a move. The deletion half has not landed yet.
+
+### (2) Clone check: dry-report could not judge, so I read the code
+
+`code dry-report --corpus-id commonwealth-ai --scope <dir>` refuses in every
+touched crate dir (commonwealth-rail, -rail-core, -rails, -state,
+sovereign-daemon, sovereign-mesh) with the same missing
+`~/.svrnmesh/indexes/commonwealth-ai/chunks.lance` as auto-5 and auto-6. The
+substitute was a read of every door, dial and adapter added in fp-75 through
+fp-79. That read turned up four clones:
+
+- `ledger_post` · `sovereign-daemon/src/rails_client/ledger.rs:37` (fp-78)
+  duplicated the response reader of `get_answer` in
+  `sovereign-daemon/src/rails_client.rs:90`. **Fixed in 91c01bbb7**, see below.
+- `store_error` · `commonwealth-rails/src/kv.rs:486` (fp-77) and
+  `commonwealth-rails/src/ledger.rs:120` (fp-78). Both are five-line
+  warn-then-500 helpers, and they differ only in their message prefix and log
+  text. Recorded, not merged, because a shared helper would change one side's
+  wording or take a prefix parameter to save four lines.
+- The kv pump · `commonwealth-rails/src/kv.rs` `KvHost::pump_once` and
+  `sovereign-mesh/src/rail_kv_pump.rs` `pump_once`. fp-77's body says the rails
+  pump was "lifted from" the daemon's. `SEAL_AFTER_OWN_OPS` is already one
+  constant. Closed by fp-83 ("DELETE the daemon-side pump"), so it is recorded
+  here only to keep that deletion owed.
+- The kv wire bodies. See the noun check below.
+
+### (3) Noun check
+
+`code converge noun --corpus-id commonwealth-ai` reads a stale graph, so it
+could not judge: it reports 0 definitions for `LocalLedger`, which is defined
+in `sovereign-mesh/src/ledger_port.rs`. The data here is a word-bounded
+`git grep` of `struct|enum|trait|type <Name>` over production `.rs`, run for
+the 33 nouns the range adds. Five of them have more than one definition:
+
+- **`KvLookup`, `KvScanQuery`, `KvSetBody` (ARCH 8, one wire with two
+  schemas)** · `commonwealth-rails/src/kv.rs:441,449,457` (fp-77) and
+  `sovereign-contracts/src/peer.rs:137,144,156`. Both describe the body of the
+  same `/v1/mesh/kv/*` doors, and the rails copy names the contracts type in
+  its doc comment. fp-77 mirrors them on purpose, following the
+  `api::ClaimRequest` precedent, because `commonwealth-rails → sovereign-*` is
+  forbidden (ARCH_LAYERS.toml:676-679). The drift risk is that the two
+  `KvSetBody`s already differ in type: rails reads `value: String` and
+  base64-decodes it by hand, while contracts uses `Bytes` with `b64_bytes`.
+  Both use the STANDARD alphabet, so the two agree on the wire today, but no
+  test sends one side's serialisation to the other side's door.
+  **Recorded.** It closes when the shapes move to a commonwealth-* crate that
+  both sides may name. That is a re-home decision, and it belongs with the
+  fp-87 close or Phase B, not with an audit.
+- `PumpOutcome` · `commonwealth-rails/src/kv.rs:70` and
+  `sovereign-mesh/src/rail_kv_pump.rs:140`. This is the pump twin above, and
+  fp-83 closes it.
+- `Corpus` · `commonwealth-rails/src/ledger.rs:169` (a `{corpus_id}` request
+  body) and `corpus-index/src/corpus.rs:66`. Same name, different concepts, so
+  it is not a convergence candidate.
+- `RecordingLedger` and `Row` · private or `#[cfg(test)]`-local structs with
+  the same name and different concepts. `RecordingLedger` in
+  `sovereign-daemon/tests/main/common/ledger_double.rs` is a test double
+  staged for queued rows fp-83 to fp-86. It has no user yet, and it is not
+  dead inventory.
+
+The other 28 nouns each have one definition.
+
+### Fixed
+
+- **ARCH 8 (two readers of one door answer)** · 91c01bbb7,
+  `sovereign-daemon/src/rails_client.rs:90`. `get_answer` and fp-78's
+  `ledger_post` each mapped non-2xx to `Refused("<verb> refused: <status>
+  <body>")` and a bad body to `Unreadable`. Both now go through `read_answer`,
+  and `post_answer` is `get_answer`'s POST twin. The error text is unchanged.
+  LINT exit=0, TEST(sovereign-daemon) 1284/0.
+- **ARCH 5 (a gate the range turned red)** · 69c6985c7, F26 registry and
+  conformance tags, as described above.
+
+### Recorded, not changed
+
+- **size-gate (advisory)** · 52 keys grew, up from 48 at auto-6. The growth
+  in this range is in commonwealth-rail-core (2067 → 2195), commonwealth-rails
+  tests (879 → 1005), commonwealth-state tests (1602 → 1619) and
+  sovereign-contracts tests (7672 → 7838). The sovereign-daemon::tests key
+  reads 22610 → 50510, but this range adds only about +461 net daemon test
+  lines, so almost all of that growth is older. Nothing was re-pinned.
+- **deletion-manifest (advisory)** · `p0-root-junk` is 133537 against 113934,
+  unchanged since auto-4.
+- **Instruments could not judge** · dry-report has no chunk index and
+  converge-noun reads a stale graph, the third audit running. The rebuild is
+  still `svrn project refresh --name commonwealth-ai --local`.
