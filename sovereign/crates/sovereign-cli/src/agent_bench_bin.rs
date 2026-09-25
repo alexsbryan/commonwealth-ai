@@ -13,23 +13,7 @@ use std::path::PathBuf;
 const BIN_NAME: &str = "sovereign-agent-bench";
 
 fn locate() -> Option<PathBuf> {
-    if let Some(p) = std::env::var_os("SOVEREIGN_AGENT_BENCH_BIN") {
-        let path = PathBuf::from(p);
-        if path.is_file() {
-            return Some(path);
-        }
-    }
-    if let Ok(exe) = std::env::current_exe() {
-        if let Ok(real) = std::fs::canonicalize(&exe) {
-            if let Some(dir) = real.parent() {
-                let cand = dir.join(BIN_NAME);
-                if cand.is_file() {
-                    return Some(cand);
-                }
-            }
-        }
-    }
-    which::which(BIN_NAME).ok()
+    sovereign_turn_client::reach::locate_sibling(BIN_NAME, "SOVEREIGN_AGENT_BENCH_BIN")
 }
 
 /// `args` is everything AFTER the `agent-bench` verb — the sibling's `main`

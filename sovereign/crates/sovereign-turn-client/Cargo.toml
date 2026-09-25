@@ -29,6 +29,9 @@ tokio = { workspace = true }
 tokio-tungstenite = "0.29"
 tracing = { workspace = true }
 reqwest = { workspace = true }
+# `reach::locate_sibling`'s PATH step — the same crate the seven copies it
+# replaced called.
+which = "7"
 workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 
 [dev-dependencies]

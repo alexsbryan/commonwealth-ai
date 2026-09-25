@@ -15,23 +15,7 @@ use std::time::SystemTime;
 const BIN_NAME: &str = "sovereign-daemon";
 
 pub(crate) fn locate() -> Option<PathBuf> {
-    if let Some(p) = std::env::var_os("SOVEREIGN_DAEMON_BIN") {
-        let path = PathBuf::from(p);
-        if path.is_file() {
-            return Some(path);
-        }
-    }
-    if let Ok(exe) = std::env::current_exe() {
-        if let Ok(real) = std::fs::canonicalize(&exe) {
-            if let Some(dir) = real.parent() {
-                let cand = dir.join(BIN_NAME);
-                if cand.is_file() {
-                    return Some(cand);
-                }
-            }
-        }
-    }
-    which::which(BIN_NAME).ok()
+    sovereign_turn_client::reach::locate_sibling(BIN_NAME, "SOVEREIGN_DAEMON_BIN")
 }
 
 /// Sibling staleness warning — a local twin of `sovereign-cli`'s

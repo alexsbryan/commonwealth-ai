@@ -300,23 +300,7 @@ fn process_alive(_pid: i32) -> bool {
 /// Same lookup shape as `crate::dev_bin::exec` but returns the
 /// `PathBuf` rather than execing.
 fn locate_dev_bin_for_spawn() -> Option<PathBuf> {
-    if let Some(p) = std::env::var_os("SOVEREIGN_CLI_DEV_BIN") {
-        let path = PathBuf::from(p);
-        if path.is_file() {
-            return Some(path);
-        }
-    }
-    if let Ok(exe) = std::env::current_exe() {
-        if let Ok(real) = std::fs::canonicalize(&exe) {
-            if let Some(dir) = real.parent() {
-                let cand = dir.join("sovereign-cli-dev");
-                if cand.is_file() {
-                    return Some(cand);
-                }
-            }
-        }
-    }
-    which::which("sovereign-cli-dev").ok()
+    sovereign_turn_client::reach::locate_sibling("sovereign-cli-dev", "SOVEREIGN_CLI_DEV_BIN")
 }
 
 /// Bool wrapper over `crate::dev_bin::exec("project-daemon-is-running",

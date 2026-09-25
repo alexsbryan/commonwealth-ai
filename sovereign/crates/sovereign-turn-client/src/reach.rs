@@ -389,6 +389,52 @@ impl ServingHost {
     }
 }
 
+/// Find the program named `bin` that a client brings up or execs.
+///
+/// A client locates the program it reaches (ARCH principle 12), so the one
+/// order lives here: `env_var` if it names a file, then `bin` beside the
+/// canonical `current_exe()`, then `PATH`. Seven copies of this body lived in
+/// `sovereign-cli`, `sovereign-cli-daemon` and `serve_cmd` before it.
+/// Not feature-gated: exec'ing a sibling is not bringing up a backend.
+pub fn locate_sibling(bin: &str, env_var: &str) -> Option<std::path::PathBuf> {
+    locate_from(
+        bin,
+        std::env::var_os(env_var),
+        std::env::current_exe().ok(),
+        std::env::var_os("PATH"),
+    )
+}
+
+/// [`locate_sibling`] with its three inputs supplied, so a test can pin the
+/// order without mutating the process environment.
+fn locate_from(
+    bin: &str,
+    env_override: Option<std::ffi::OsString>,
+    exe: Option<std::path::PathBuf>,
+    path: Option<std::ffi::OsString>,
+) -> Option<std::path::PathBuf> {
+    if let Some(p) = env_override.map(std::path::PathBuf::from) {
+        if p.is_file() {
+            tracing::debug!(bin, found = %p.display(), "locate_sibling: env override");
+            return Some(p);
+        }
+    }
+    if let Some(cand) = exe
+        .and_then(|e| std::fs::canonicalize(e).ok())
+        .and_then(|real| real.parent().map(|d| d.join(bin)))
+    {
+        if cand.is_file() {
+            tracing::debug!(bin, found = %cand.display(), "locate_sibling: beside current_exe");
+            return Some(cand);
+        }
+    }
+    let found = which::which_in_global(bin, path)
+        .ok()
+        .and_then(|mut hits| hits.next());
+    tracing::debug!(bin, found = ?found, "locate_sibling: PATH");
+    found
+}
+
 /// A backend binary this build ships and may bring up.
 ///
 /// The client does not decide the path — a surface knows where its sidecar

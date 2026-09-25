@@ -12233,6 +12233,7 @@ dependencies = [
  "sovereign-contracts",
  "sovereign-core",
  "sovereign-store",
+ "sovereign-turn-client",
  "tempfile",
  "tokio",
  "toml 0.8.2",
@@ -12282,7 +12283,6 @@ dependencies = [
  "toml 0.8.2",
  "tracing",
  "tracing-subscriber",
- "which",
  "workspace-hack",
 ]
 
@@ -13291,6 +13291,7 @@ dependencies = [
  "tokio",
  "tokio-tungstenite",
  "tracing",
+ "which",
  "workspace-hack",
 ]
 

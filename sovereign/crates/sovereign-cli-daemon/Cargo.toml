@@ -78,7 +78,6 @@ tracing-subscriber = { workspace = true }
 reqwest = { workspace = true }
 dirs = "5"
 hostname = { workspace = true }
-which = "7"
 tempfile = "3"
 sovereign-contracts = { workspace = true }
 # The client half of the wire: the wizard reads its join child's

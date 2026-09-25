@@ -324,3 +324,43 @@ mod bring_up {
         }
     }
 }
+
+/// `locate_sibling`'s three steps, in order: a named env file wins over a
+/// sibling of the exe, which wins over `PATH`; an env var naming a missing
+/// file falls through rather than failing.
+#[test]
+fn locate_sibling_prefers_env_then_exe_dir_then_path() {
+    let root = std::env::temp_dir().join(format!("locate-sibling-{}", std::process::id()));
+    let (env_dir, exe_dir, path_dir) = (root.join("env"), root.join("exe"), root.join("path"));
+    for d in [&env_dir, &exe_dir, &path_dir] {
+        std::fs::create_dir_all(d).unwrap();
+    }
+    let bin = "svrn-probe-bin";
+    let place = |dir: &std::path::Path| {
+        let p = dir.join(bin);
+        std::fs::write(&p, "#!/bin/sh\n").unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        p
+    };
+    let (in_env, in_exe, in_path) = (place(&env_dir), place(&exe_dir), place(&path_dir));
+    let exe = Some(exe_dir.join("the-client"));
+    let path = Some(path_dir.clone().into_os_string());
+    let canon = |p: &std::path::Path| std::fs::canonicalize(p).unwrap();
+
+    let got = locate_from(bin, Some(in_env.clone().into()), exe.clone(), path.clone());
+    assert_eq!(got.as_deref(), Some(in_env.as_path()), "env override first");
+
+    let missing = Some(env_dir.join("absent").into_os_string());
+    let got = locate_from(bin, missing.clone(), exe.clone(), path.clone()).unwrap();
+    assert_eq!(canon(&got), canon(&in_exe), "then beside current_exe");
+
+    let got = locate_from(bin, missing.clone(), Some(root.join("no-exe")), path.clone()).unwrap();
+    assert_eq!(canon(&got), canon(&in_path), "then PATH");
+
+    assert_eq!(locate_from(bin, missing, None, None), None, "absent is None");
+    std::fs::remove_dir_all(&root).unwrap();
+}

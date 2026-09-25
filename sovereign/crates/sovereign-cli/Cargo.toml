@@ -104,6 +104,9 @@ uuid = { workspace = true }
 dirs = "5"
 hex = "0.4"
 which = "7"
+# `reach::locate_sibling` — the one sibling locator the `*_bin` exec
+# dispatchers call. A [[package_leaf]], so the edge is free.
+sovereign-turn-client = { workspace = true }
 sha2 = { workspace = true }
 chrono = { workspace = true }
 regex = { workspace = true }
