@@ -13,7 +13,10 @@ decide. The campaign's method binds you (FIVE_PROGRAMS §11): the endstate is
 declared, everything red returns to green, one dimension per move,
 behaviour-preserving. **Strictly necessary** is the size rule: a resolution
 that adds scope — a new abstraction, a cleanup, a second row where one would
-do — is the wrong resolution.
+do — is the wrong resolution. Rows are OUTCOMES, bounded by a stated lift
+(`ralph/PROMPT.base.md` §2, decision five-programs-65): when a census
+demands more work, extend the row that owns the outcome or fold rows that
+touch the same files. Split only when two outcomes need different proofs.
 
 ## Decide these
 

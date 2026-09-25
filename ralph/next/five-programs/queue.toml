@@ -11,7 +11,7 @@
 # `pgrep -f 'ralph.py supervise'` first.
 label = "five-programs"
 session_timeout = 7200
-audit_every = 15
+audit_every = 5
 # worker on the Claude plan via the shim, Opus 5.5 at medium effort (`variant`
 # is --effort there; operator, 2026-09-24): the zai plan
 # answered "Weekly/Monthly Limit Exhausted" until 2026-09-29 and killed three
