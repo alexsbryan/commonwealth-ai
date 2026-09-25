@@ -660,6 +660,11 @@ merged; that merge is what minted this arrangement, and `ledger-1` records it.
 - Chose: the package's option (i), as a new row fp-cond2-b2 ahead of fp-cond2-c: a venues-only router in mesh_http.rs that `mesh_router` merges (one route declaration), mounted in `start_daemon`'s `else` arm for `MeshAdmin`. fp-cond2-c's proof locates `<target>/debug/sovereign-daemon` through daemon_bin.rs's existing resolution and fails naming the build command when absent; its checks run TEST(sovereign-daemon) first so the bin is fresh. The founder fixture is the package's measured one (terminal-class `run`, join link plus `&relay=127.0.0.1:<internal_port>`).
 - Because: it is the one read the wizard needs and exposes no mutating route on the child (option ii would expose create/join/leave/rotate/forget for the child's lifetime); option iii is a second wire for a fact the daemon already serves (principle 8). It is the falsifier five-programs-61 named ("the child cannot keep serving `/v1/mesh/venues`"), met by the smallest code change.
 
+**five-programs-63 · 2026-09-25 · standalone state: cw-rails solo mode · operator** — this commit
+- Needed: `Rails::start_from_disk` refuses on a meshless node (commonwealth-rails/src/lib.rs:297-299, `Refusal::NoMesh`). Since fp-88 (d18f4514b) and fp-87 (3f57442a9), a local-only daemon therefore answers 503 on `/v1/models` and every store port is absent, and `svrn portfolio` and `svrn newsworthy` have nothing to dial. five-programs-58 ruled the 503 "§12 decision 2's named absence". The seat had asked the director to package it for the operator (seat note on fp-88's third package) and asked the operator directly, but the answer arrived after the rows had landed. The objective forbids changing standalone behaviour silently.
+- Chose: cw-rails solo mode, the seat's recommendation. cw-rails runs with no mesh as well: it serves its store and doors, journals locally, and runs no ring sync. It owns its lifecycle by connect-or-spawn through its own `ensure` entry, the MCP rule from five-programs-39, and its clients call that entry, never holding cw-rails' lifecycle. This overrides five-programs-58 on standalone nodes. REVIEW-mint-fp-rails-solo (cap 5) mints the rows before `HUMAN-phase-b`. five-programs is not done until they land.
+- Because: operator's word. The rejected arms were a backing chosen by mode (two backings in production, and portfolio needs its own meshless fallback) and accepting the change. Solo mode is the pure outcome under five-programs-54: one owner of the store in every mode, one backing in every client.
+
 ## Flags for the operator
 
 - A26: REVIEW-DEMO-rr-1-run will very likely FAIL `ra-room-plug-in-live` again on this host. The bar's window is 60 s, and the CPU 2B took about 1–5 min per answer in this run (room-answer-0..4.json mtimes 19:33→19:49). Passing it takes a faster node or model for the room, or a different bar. Both are design changes for the operator, not tuning.
@@ -9538,5 +9543,17 @@ The `Launch::Verb` one-shots (`svrn mesh create|join` with no daemon) also assem
 Decision 2 of the package: a `--package sovereign-cli-daemon` run cannot build another package's `[[bin]]`, so the test resolves the bin the way `daemon_bin::locate` (sovereign-cli-daemon/src/daemon_bin.rs:17, honours `SOVEREIGN_DAEMON_BIN`) does, and the row orders TEST(sovereign-daemon) before TEST(sovereign-cli-daemon), which builds the bin into target/debug. An absent bin is a named failure, never a skip (principle 5, 6).
 
 What would falsify this: the venues-only mount makes the child answer a route other than `/v1/mesh/venues` beyond the base routers (check `mount_names` at `tracing=debug`); the joiner's venues list stays empty with the founder online, so `find_holders` still cannot see holders (then the gap is `peer_inference_endpoints` on an admin assembly, and a new package is owed); or TEST(sovereign-daemon) does not refresh target/debug/sovereign-daemon under the test script's engine.
+
+</details>
+
+## five-programs-63 · 2026-09-25 — cw-rails solo mode restores standalone state
+
+<details><summary>reasoning, evidence, package</summary>
+
+The regression, measured by the fp-88 worker (ctl/NEEDS_HUMAN.resolved-fp88c-*): with no cw-rails listening, `local_only_boot.rs:278` got 503 on `/v1/models` where it had 200. five-programs-58 then pointed that test at a stand-in door through fp-112's `[daemon] rails_base`, so the suite is green while a production local-only install has no cw-rails at all. The minted rows must prove standalone behaviour against the real cw-rails binary. A process-level e2e test spawns the built binary, located the way fp-cond2-c locates sovereign-daemon, so no crate edge is added.
+
+State at this decision: boundary gate 51, all owned (REVIEW-handoff-phase-b, d963105eb). The full suite was 13,404/0 at 64c3dd7d7 (REVIEW-audit-fp-auto-9), before the condition-2 rows. Condition 2 holds: outside sovereign-daemon, only the two census guards name `EmbeddedDaemon`.
+
+This decision is falsified if cw-rails needs a mesh identity that no single-node form can supply without a charter change. It is also falsified if connect-or-spawn cannot be done without the daemon supervising cw-rails. Either finding is a NEEDS_HUMAN line with the site.
 
 </details>
