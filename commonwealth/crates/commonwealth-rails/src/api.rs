@@ -99,6 +99,10 @@ pub fn router(daemon: Arc<RailsDaemon>) -> Router {
         .with_state(daemon.clone())
         // The mesh store's doors (fp-77), over its own state.
         .merge(crate::kv::router(daemon.kv.clone()))
+        // The typed ledger doors (fp-78), over the same store.
+        .merge(crate::ledger::router(crate::ledger::LedgerDoors::new(
+            daemon.kv.store.clone(),
+        )))
 }
 
 /// The bind guard, as a function so it has a failing input that can be

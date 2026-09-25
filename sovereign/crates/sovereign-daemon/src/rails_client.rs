@@ -24,6 +24,9 @@ use commonwealth_core::ids::NodePubkey;
 use sovereign_mesh::fabric::ForgottenMember;
 use sovereign_mesh::rail_port::{RailFut, RingRailPort};
 
+/// The typed ledger ports' dialing implementation (fp-78).
+pub mod ledger;
+
 /// Where the mesh's serving process listens. Mirrors cw-rails'
 /// `commonwealth_rails::config::DEFAULT_LISTEN` — 9747, outside the
 /// 9741..9745 family this daemon binds (the two programs are built and

@@ -2602,7 +2602,12 @@ serving the reading into gossip) and the
 `/v1/mesh/kv/*` over an in-memory `MeshStore` projected from those journals
 and pumped back onto them (`commonwealth-rails/src/kv.rs`; it seals only the
 KV namespaces its own outbox feeds, and the daemon keeps serving its own
-store until fp-82). It deliberately does NOT admit
+store until fp-82). Since fp-78 it also serves the typed ledger doors,
+`/v1/ledger/*` (`commonwealth-rails/src/ledger.rs`: contributions, activity,
+peer preferences, processed shards, inference state — each the
+commonwealth-state writer over that store, the writer's node id in the body)
+and runs the contributions `RetentionGc`; the daemon's dialing side is
+`sovereign_mesh::ledger_port` + `rails_client/ledger.rs`, not yet wired. It deliberately does NOT admit
 joiners — a mesh is founded by a full daemon, and that absence is most of why
 it lifts (319 crates in its closure vs 743 at the 2026-09-11 measure; the rail
 doors cost three more).

@@ -65,6 +65,7 @@ pub use sovereign_serving_host::inference_adapter; // shim: moved by domains REV
 pub mod iroh_access;
 pub mod iroh_watchdog;
 pub mod join;
+pub mod ledger_port;
 pub mod measurements_rail;
 pub mod media_route;
 pub mod mesh_discovery;

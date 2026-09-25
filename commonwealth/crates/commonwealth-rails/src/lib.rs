@@ -74,6 +74,7 @@ pub mod identity;
 pub mod internal;
 pub mod join;
 pub mod kv;
+pub mod ledger;
 pub mod presence;
 pub mod rail;
 pub mod work;
@@ -314,6 +315,8 @@ impl RailsDaemon {
         // The mesh store's pump (fp-77): rehydrate from the journals, then
         // drain the outbox onto them every tick.
         let kv_pump = tokio::spawn(kv::run_forever(daemon.kv.clone()));
+        // The contributions ledger's retention sweep (fp-78), over that store.
+        let ledger_gc = tokio::spawn(ledger::run_retention_gc(daemon.kv.store.clone()));
         tracing::info!(
             target: "rails",
             api = %listen,
@@ -327,6 +330,7 @@ impl RailsDaemon {
         gossip.abort();
         presence.abort();
         kv_pump.abort();
+        ledger_gc.abort();
         Ok(())
     }
 
