@@ -4286,7 +4286,7 @@ the shared report.
 | Add a tool | `sovereign-contracts/src/traits.rs`, a file under `sovereign-tools/src/`, a `[[tool]]` block in `sovereign-contracts/tool-manifests/` |
 | Run a workflow | CLI `svrn workflow run` → `workflow-host::run_workflow_in_process`; desktop `workflow_commands.rs` → `run_workflow_with_provider` |
 | Add a corpus extractor / filter | `corpus-engine/src/extractors/` then register in `engine/ingest.rs`; `src/filters/` + `recipe.rs::FilterConfig` + `filters/loader.rs` |
-| Bundle a generated data file | `sovereign-recipes/<corpus>/data/`, append to `corpus-engine/build.rs::BUNDLED_ASSETS`, `include_bytes!` in `filters/assets.rs` |
+| Bundle a generated data file | `sovereign-recipes/<corpus>/data/`, a `pub const` `include_bytes!` line in `sovereign-recipes/src/lib.rs`, a key row in `corpus-engine/src/recipe_source/bundled.rs::ASSETS` |
 | Write a recipe | `sovereign-recipes/<id>/recipe.toml`, then `registry.toml` |
 | Add an investigation recipe | `enrichment.type = "investigation"` + `[[entity_types]]` + `[[relationship_types]]` + `[[patterns]]` |
 | Write a skill / tune models per hardware | `sovereign/modes/<id>/skill.toml`; `sovereign/crates/sovereign-contracts/data/models.toml` |

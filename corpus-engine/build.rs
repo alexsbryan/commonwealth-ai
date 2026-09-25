@@ -3,11 +3,10 @@
 //! `OUT_DIR`.
 //!
 //! `sovereign-recipes/` (the sibling workspace dir) is the SINGLE SOURCE
-//! OF TRUTH for corpus recipes, the registry catalog, and the generated
-//! Vital-Articles data lists. corpus-engine bundles them at compile time
+//! OF TRUTH for corpus recipes and the registry catalog. corpus-engine
+//! bundles them at compile time
 //! by copying into the per-build `OUT_DIR` Cargo provides, then
-//! `include_str!`/`include_bytes!`-ing from there (see
-//! `src/recipe_builtin.rs`, `src/registry.rs`, `src/filters/assets.rs`).
+//! `include_str!`-ing from there.
 //!
 //! There is NO second checked-in copy of recipes in this crate: the
 //! bundle is a pure function of `sovereign-recipes/`, regenerated every
@@ -19,28 +18,13 @@
 //!   - `sovereign-recipes/registry.toml`          → `OUT_DIR/registry_snapshot.toml`
 //!   - `sovereign-recipes/schema/recipe_schema_descriptor.json`
 //!                                                → `OUT_DIR/recipe_schema_descriptor.json`
-//!   - the Vital-Articles data lists              → `OUT_DIR/<asset>`
 //!
 //! Standalone clones (corpus-engine built without the sibling repo
 //! present, e.g. air-gapped CI): set
 //! `CORPUS_ENGINE_RECIPES_DIR=<path-to-sovereign-recipes>` to point the
-//! vendoring at an alternate copy of the tree. `CORPUS_ENGINE_DATA_DIR`
-//! remains a narrower escape hatch for the data lists alone (a flat dir
-//! holding the `BUNDLED_ASSETS` filenames).
+//! vendoring at an alternate copy of the tree.
 
 use std::path::{Path, PathBuf};
-
-/// Data-list filenames consumed via `include_bytes!` in
-/// `src/filters/assets.rs`. Any new bundled asset added there must also
-/// appear here, otherwise the `include_bytes!` macro fails at the next
-/// build with a missing-file error.
-const BUNDLED_ASSETS: &[&str] = &[
-    "vital_articles_l1.txt",
-    "vital_articles_l2.txt",
-    "vital_articles_l3.txt",
-    "vital_articles_l4.txt",
-    "vital_articles_l5.txt",
-];
 
 fn main() {
     let manifest_dir = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
@@ -86,7 +70,6 @@ fn main() {
     println!("cargo:rerun-if-changed={}", templates_root.display());
     vendor_registry(&recipes_root, &out_dir);
     vendor_descriptor(&recipes_root, &out_dir);
-    vendor_data_assets(&recipes_root, &out_dir);
 
     println!("cargo:rerun-if-changed=build.rs");
     // The recipes ROOT too, not only each recipe.toml found under it: a
@@ -97,7 +80,6 @@ fn main() {
     // (2026-09-11, federalist-starter).
     println!("cargo:rerun-if-changed={}", recipes_root.display());
     println!("cargo:rerun-if-env-changed=CORPUS_ENGINE_RECIPES_DIR");
-    println!("cargo:rerun-if-env-changed=CORPUS_ENGINE_DATA_DIR");
 }
 
 /// Copy every `<id>/recipe.toml` directly under `recipes_root` into
@@ -161,43 +143,4 @@ fn vendor_descriptor(recipes_root: &Path, out_dir: &Path) {
     std::fs::copy(&src, &dest)
         .unwrap_or_else(|e| panic!("copy {} -> {}: {e}", src.display(), dest.display()));
     println!("cargo:rerun-if-changed={}", src.display());
-}
-
-/// Copy the Vital-Articles data lists into `OUT_DIR`. Resolution order:
-///   1. `CORPUS_ENGINE_DATA_DIR` — flat dir of the asset files (air-gapped
-///      escape hatch).
-///   2. `<recipes_root>/wikipedia/data/` — the common workspace case.
-fn vendor_data_assets(recipes_root: &Path, out_dir: &Path) {
-    let mut candidates: Vec<PathBuf> = Vec::new();
-    if let Ok(env_dir) = std::env::var("CORPUS_ENGINE_DATA_DIR") {
-        candidates.push(PathBuf::from(env_dir));
-    }
-    candidates.push(recipes_root.join("wikipedia").join("data"));
-
-    for asset in BUNDLED_ASSETS {
-        let src = match find_asset(asset, &candidates) {
-            Some(p) => p,
-            None => {
-                eprintln!("cargo:warning=corpus-engine build.rs: '{asset}' not found in any of:");
-                for c in &candidates {
-                    eprintln!("cargo:warning=  - {}", c.join(asset).display());
-                }
-                eprintln!(
-                    "cargo:warning=  Regenerate via sovereign-recipes/wikipedia/scripts/build_vital_articles.py"
-                );
-                panic!("required bundled asset '{asset}' missing");
-            }
-        };
-        let dest = out_dir.join(asset);
-        std::fs::copy(&src, &dest)
-            .unwrap_or_else(|e| panic!("copy {} -> {}: {e}", src.display(), dest.display()));
-        println!("cargo:rerun-if-changed={}", src.display());
-    }
-}
-
-fn find_asset(name: &str, candidates: &[PathBuf]) -> Option<PathBuf> {
-    candidates
-        .iter()
-        .map(|d| d.join(name))
-        .find(|p| p.is_file())
 }

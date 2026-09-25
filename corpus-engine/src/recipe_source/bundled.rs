@@ -5,7 +5,10 @@
 
 use corpus_engine_recipes::{RECIPES, TEMPLATES};
 
-pub use corpus_engine_recipes::REGISTRY_TOML;
+pub use corpus_engine_recipes::{
+    REGISTRY_TOML, VITAL_ARTICLES_L1, VITAL_ARTICLES_L2, VITAL_ARTICLES_L3, VITAL_ARTICLES_L4,
+    VITAL_ARTICLES_L5,
+};
 
 use super::{AssetSource, RecipeSource};
 
