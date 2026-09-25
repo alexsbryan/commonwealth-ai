@@ -18,12 +18,13 @@
 //! **The journals live under THIS process's data root**, never the daemon's
 //! (§4 rule 1 — one data directory, one owner; a second process never opens
 //! the daemon's dir, and the daemon's journals migrate in fp-54's commit, so
-//! there is no dual-writer window). The signer is the node key both
-//! processes load through the ONE loader
-//! (`commonwealth_transport::identity::load_or_generate_node_key`), so a
-//! line this daemon writes verifies under the roster every peer already
-//! holds — the wire contract five-programs-6 pinned: the signer identity
-//! does not change.
+//! there is no dual-writer window). The signer is THIS process's node key —
+//! one loader, but two dirs, so on a default install it is NOT the
+//! daemon's key. A line still verifies at every peer because rails is a
+//! member in its own right (`run` refuses without a mesh; `join` stamps its
+//! key), and it renders as the same person because both processes name a
+//! member by hostname and the roster groups keys by name — pinned by
+//! `rails_and_the_daemon_sign_with_two_keys_under_one_person`.
 //!
 //! **The live lane is the drain half only.** The daemon's `live_push` fans
 //! each payload out to every online peer over sovereign-mesh's fabric,

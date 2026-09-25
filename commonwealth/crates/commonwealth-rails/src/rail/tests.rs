@@ -18,7 +18,7 @@ use tokio::sync::RwLock;
 use super::{
     admit_answer, append_act, compact_answer, derive_roster, digest_answer, drain_answer,
     ingest_answer, journal_of, missing_answer, push_answer, read_answer, roster_answer, LiveBuffer,
-    MembershipRosterSource, MissingBody,
+    MembershipRosterSource, MissingBody, RosterBody,
 };
 
 fn key(seed: u8) -> SigningKey {
@@ -235,6 +235,59 @@ async fn an_unstamped_append_carries_no_name() {
     assert_eq!(resp.status(), StatusCode::OK);
     let (ops, _) = journal.read().unwrap();
     assert_eq!(ops[0].kind.on_behalf_of, None);
+}
+
+/// The signer-identity census (REVIEW-fp54-signer-identity). On a default
+/// install rails and the daemon hold TWO node keys (`~/.commonwealth-rails`,
+/// `~/.svrnmesh`), and rails is a member in its own right: `run` refuses
+/// without a mesh, and `join` stamps rails' key into its record. Both name a
+/// member by hostname by default and both derivations group keys by name, so
+/// rails' lines admit — at home and at a peer — under the person the
+/// daemon's lines already render as, and the daemon's key attests as a
+/// roster member. The person holds only while the two names agree.
+#[tokio::test]
+async fn rails_and_the_daemon_sign_with_two_keys_under_one_person() {
+    let daemon = key(1);
+    let records = |rails_name: &str| {
+        vec![
+            member(ME, rails_name, Some(pubkey_of(&key(7))), false),
+            member(0xD, "host-a", Some(pubkey_of(&daemon)), false),
+            member(0xB, "host-b", Some(pubkey_of(&key(2))), false),
+        ]
+    };
+    let (_dir, rail, mesh) = rail_with(mesh_with(records("host-a")));
+    let journal = journal_of(&rail, "ledger").unwrap();
+    let body = serde_json::json!({ "op": "record", "payload": { "amount": 4 } });
+    assert_eq!(
+        append_act(&rail, &journal, body).await.status(),
+        StatusCode::OK
+    );
+    let resp = append_act(&rail, &journal, attested(1, "ledger", LATER)).await;
+    assert_eq!(resp.status(), StatusCode::OK, "the daemon's key attests");
+
+    let persons = |m: &Mesh, at: u128, k: &SigningKey| {
+        let roster = derive_roster(m, NodeId::from_u128(at), Some(pubkey_of(k)));
+        let journal = journal.clone();
+        async move {
+            let out = body_of(admit_answer(&journal, RosterBody { roster })).await;
+            assert_eq!(out["complete"], true, "{out}");
+            out["ops"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|o| o["person"].as_str().unwrap().to_string())
+                .collect::<Vec<_>>()
+        }
+    };
+    let m = mesh.read().await;
+    assert_eq!(persons(&m, ME, &key(7)).await, ["host-a", "host-a"]);
+    assert_eq!(persons(&m, 0xB, &key(2)).await, ["host-a", "host-a"]);
+    let renamed = mesh_with(records("living-room"));
+    assert_eq!(
+        persons(&*renamed.read().await, 0xB, &key(2)).await,
+        ["living-room", "living-room"],
+        "a rails named apart renders apart"
+    );
 }
 
 /// Nobody in the mesh → every op this node writes would be unreadable to

@@ -224,11 +224,11 @@ impl RailsDaemon {
 
         // The ring rail's storage (five-programs fp-44): one journal
         // directory per ring namespace under THIS process's data dir,
-        // signed with the same identity key the endpoint proves. Rails and
-        // the inference daemon load `node_key` through the ONE loader
-        // (`commonwealth_transport::identity::load_or_generate_node_key`),
-        // so a line either writes verifies under the roster every peer
-        // already holds — the signer identity does not change. Membership
+        // signed with the same identity key the endpoint proves — rails'
+        // own, not the daemon's (one loader, two data dirs). Its lines verify
+        // because rails joined as a member with that key, and render as the
+        // daemon's person while both keep the hostname default name (see
+        // `rail::tests::rails_and_the_daemon_sign_with_two_keys_under_one_person`). Membership
         // is every ring's default roster, derived at read time; the mesh
         // Arc below is what the source reads, held weakly beside the rail.
         let rail = Arc::new(commonwealth_rail::RingRail::new(

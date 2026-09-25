@@ -3106,9 +3106,10 @@ impl EmbeddedDaemon {
         // daemon holds no journal and every rail read or write dials
         // `cw-rails` through the port (`rails_client::RailsRingRail`), which
         // reports ABSENCE when the serving process is down — never an empty
-        // ledger (ARCH §18.3). The signer does not change: the serving
-        // process loads the SAME node key through the ONE loader, so a line
-        // written there verifies under the roster every peer already holds.
+        // ledger (ARCH §18.3). The signer DOES change: the serving process
+        // signs with its own node key (its own data dir), and a line verifies
+        // because rails joined the mesh as a member with that key — see
+        // commonwealth-rails' `rails_and_the_daemon_sign_with_two_keys_under_one_person`.
         crate::rail_migration::migrate_journals_to_rails(&self.data_dir);
         // fp-70: the media presence poll is rails' too, so its inputs (the
         // house credential and viewer id `offer` kept here) move beside it.
