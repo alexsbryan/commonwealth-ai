@@ -67,7 +67,8 @@ fn node_env(dir: &Path, bin: &Path) -> Command {
     std::fs::create_dir_all(&home).expect("home");
     let mut cmd = Command::new(bin);
     cmd.env("HOME", &home)
-        .env("SVRNMESH_DATA_DIR", dir.join("svrnmesh"));
+        .env("SVRNMESH_DATA_DIR", dir.join("svrnmesh"))
+        .env("CW_RAILS_DIR", dir.join("rails"));
     cmd
 }
 
@@ -96,9 +97,10 @@ async fn the_wizard_joins_through_a_spawned_daemon_and_stops_it() {
         &fcfg,
         format!(
             "[node]\nentry_node = \"00000000000000000000000000000001\"\n\n\
-             [daemon]\nclient_port = {f_client}\ninternal_port = {}\n\n\
-             [data]\ndir = \"{}\"\n",
+             [daemon]\nclient_port = {f_client}\ninternal_port = {}\n\
+             rails_base = \"http://127.0.0.1:{}\"\n\n[data]\ndir = \"{}\"\n",
             f_client + 1,
+            free_pair(),
             fdata.display()
         ),
     )

@@ -66,8 +66,9 @@ fn write_config(dir: &Path, client: u16, internal: u16, entry: bool) -> PathBuf 
     std::fs::write(
         &path,
         format!(
-            "{node}[daemon]\nclient_port = {client}\ninternal_port = {internal}\n\n\
-             [data]\ndir = \"{}\"\n",
+            "{node}[daemon]\nclient_port = {client}\ninternal_port = {internal}\n\
+             rails_base = \"http://127.0.0.1:{}\"\n\n[data]\ndir = \"{}\"\n",
+            free_port(),
             data.display()
         ),
     )
@@ -81,6 +82,7 @@ fn daemon(dir: &Path) -> Command {
     let mut cmd = Command::new(BIN);
     cmd.env("HOME", &home)
         .env("SVRNMESH_DATA_DIR", dir.join("svrnmesh"))
+        .env("CW_RAILS_DIR", dir.join("rails"))
         .stderr(Stdio::from(
             std::fs::File::create(dir.join("stderr.log")).expect("stderr log"),
         ));
