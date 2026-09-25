@@ -3089,6 +3089,80 @@ each.
   `~/.svrnmesh/indexes/commonwealth-ai/chunks.lance`. converge-noun still
   refuses to pick a corpus. This is the fifth audit in a row. Clones were
   read by hand.
+
+## REVIEW-audit-fp-auto-10 (2026-09-25, range f4611fc62..69203cd11)
+
+The range holds 191 commits. Most of them arrive through the origin/main
+merge (c65607b10), which is not this queue's work. The first-parent chain
+holds 18 commits, and five units touch Rust: fp-cond2-a, fp-cond2-b,
+fp-cond2-b2, fp-cond2-c (the setup wizard joins through a spawned
+`sovereign-daemon join`, and its venues come over `GET /v1/mesh/venues`) and
+fp-solo-a (cw-rails starts solo without a mesh.json). All checks ran in the
+sovereign-vulkan toolbox.
+
+TESTALL at 69203cd11: exit=0, 13,497 passed, 0 failed. PREPUSH fed with
+f4611fc62..69203cd11 cannot start. Its 1,242 changed paths (148,629 bytes)
+go into one env string, `SOVEREIGN_CHANGED_PATHS`, and that string is over
+the kernel's 128 KiB per-string limit: `sovereign-cli: Argument list too
+long`. PREPUSH fed with the queue's own units, f4611fc62..55546ac07 (33
+paths), exited 1 with two blocking lanes. boundary-gate is at 51, the
+handoff list. arch-gate is new, below. LINT is red on the same arch-gate
+line. Its compile half is clean.
+
+Ledger (Rust lines, first-parent, src apart from tests): fp-cond2-a +57/0,
+fp-cond2-b +184/0, fp-cond2-b2 +20/+206, fp-cond2-c +165/+227, fp-solo-a
++29/+133. Total src +455, tests +566. That is the size of the moves:
+EmbeddedDaemon leaves the wizard (condition 2), and cw-rails gains solo mode.
+
+New nouns: `JoinChild`, `JoinFailure`, `PeerVenue` and `Killed`. The first
+three have one definition each by git grep. `Killed` has two, listed below.
+`Body<T>` in turn-client `mesh_venues` is the file's per-method local shape,
+as in its three siblings, and is not a noun.
+
+- **ARCH 8, fixed in 03d14d9e7** · `join_child::join`
+  (`sovereign-cli-daemon/src/setup_cmd/terminal/join_child.rs:95`) typed
+  `"join"`. `sovereign_contracts::launch::ADMIN_JOIN_VERB`
+  (`sovereign-contracts/src/launch.rs:177`) exists so the spawner names the
+  string the parser reads (`:230`). It now names it.
+- **ARCH 8 (recorded)** · the joined line's quoting is spelled twice.
+  `admin_join::run` prints `{JOINED_LINE_PREFIX}"{mesh_name}"`
+  (`sovereign-daemon/src/daemon_cmd/admin_join.rs:76`), and `join_child`
+  strips the quotes by hand (`join_child.rs:143`). The prefix is shared, but
+  the quoting is not. A format/parse pair in `sovereign-contracts::launch`
+  would be a new pub item, so it is not a small fix. The e2e
+  `admin_join_serves_venues_e2e` only checks the prefix.
+- **ARCH 8 (recorded, tests)** · two copies of the same 7-line kill-and-reap
+  guard `struct Killed(Child)`:
+  `sovereign-cli-daemon/src/setup_cmd/terminal/join_child/tests.rs:43` and
+  `sovereign-daemon/tests/main/admin_join_serves_venues_e2e.rs:25`. The two
+  crates share no test-support crate, so one home would mean minting one.
+- **ARCH 5 (recorded)** · `scripts/pre-push.sh:207` exports the whole
+  changed-path list as one env string. Past 128 KiB (about 1,200 paths here)
+  the exec fails with E2BIG, and the push is blocked by a message that names
+  no gate. The real push of `cut` is 1,389 paths and 76,158 bytes, so it
+  fits. The fail-closed branch does not. On a failed diff, `:159` puts
+  `git ls-files` into the list, which is certain to overflow, so "gating
+  EVERYTHING" blocks without gating anything. The limit is in the variable's
+  consumers (sovereign-lint.sh, quality instruments), so the fix is not
+  small.
+- **arch-gate [hard] (NEEDS_HUMAN)** · the instruction-surface ratchet has
+  AGENTS.md at 48,756 against a baseline of 48,754
+  (`quality/baselines/instruction_surface.txt:7`). The merge c65607b10 took
+  origin/main's `branch_relation` paragraph (origin/main's AGENTS.md is
+  48,852, with baseline 48,852) but kept cut's baseline line. The queue's
+  units did not touch AGENTS.md. The fix is either a 2-byte cut to AGENTS.md
+  or a baseline set to the merged size. The worker may do neither (PROMPT
+  §7).
+- **deletion-manifest (advisory)** · `p0-root-junk` jumped from 133,537 to
+  323,069. The growth is origin/main's `dbe871ef4` "save work" (research/
+  ontology-retrieval run logs, four of about 46.9k lines each), which the
+  merge brought in. This queue added none of it.
+- **concept-gate (advisory)** · could-not-judge (the graph cannot speak for
+  this commit).
+- **Instruments could not judge** · dry-report (no chunk index for
+  commonwealth-ai) and converge-noun, for the sixth audit in a row. Clones
+  were read by hand.
+
 ## the-link — REVIEW-audit-the-link (2026-09-22, range `71bfde459..7d009553b`)
 
 33 commits. The campaign's product commits (86adab41b inventory · be5baf177 ·
