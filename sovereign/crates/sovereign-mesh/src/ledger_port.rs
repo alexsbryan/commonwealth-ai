@@ -101,3 +101,204 @@ pub trait InferenceStatePort: Send + Sync {
     fn set_local_embed_model(&self, info: &EmbedModelInfo) -> LedgerFut<'_, ()>;
     fn get_local_embed_model(&self) -> LedgerFut<'_, Option<EmbedModelInfo>>;
 }
+
+/// Every ledger port, in process, over the store the daemon holds today —
+/// the [`crate::rail_port::LocalRingRail`] precedent. Each method calls the
+/// commonwealth-state writer or reader the port names; no key scheme lives
+/// here (ARCH 8). The daemon's types flip onto this first (fp-80..fp-82) and
+/// its backing onto the dial last (fp-88).
+#[derive(Clone)]
+pub struct LocalLedger {
+    store: std::sync::Arc<commonwealth_state::MeshStore>,
+    self_node_id: NodeId,
+}
+
+impl LocalLedger {
+    pub fn new(store: std::sync::Arc<commonwealth_state::MeshStore>, self_node_id: NodeId) -> Self {
+        Self {
+            store,
+            self_node_id,
+        }
+    }
+
+    fn contributions(&self) -> commonwealth_state::ContributionEmitter {
+        commonwealth_state::ContributionEmitter::new((*self.store).clone(), self.self_node_id)
+    }
+
+    fn preferences(&self) -> commonwealth_state::PeerPreferenceStore {
+        commonwealth_state::PeerPreferenceStore::new((*self.store).clone(), self.self_node_id)
+    }
+
+    fn inference(&self) -> commonwealth_state::store_adapter::InferenceStateStore {
+        commonwealth_state::store_adapter::InferenceStateStore::new(
+            std::sync::Arc::clone(&self.store),
+            self.self_node_id,
+        )
+    }
+}
+
+fn store_absent(what: &str, e: commonwealth_state::Error) -> LedgerAbsent {
+    LedgerAbsent(format!("in-process mesh store: {what} failed: {e}"))
+}
+
+impl ContributionLedgerPort for LocalLedger {
+    fn self_node_id(&self) -> NodeId {
+        self.self_node_id
+    }
+
+    fn record(&self, kind: LedgerEventKind) -> LedgerFut<'_, ()> {
+        Box::pin(async move {
+            self.contributions().record(kind);
+            Ok(())
+        })
+    }
+
+    fn events(&self) -> LedgerFut<'_, Vec<LedgerEvent>> {
+        Box::pin(async move {
+            self.contributions()
+                .events()
+                .map_err(|e| store_absent("contributions", e))
+        })
+    }
+
+    fn current_contributions(
+        &self,
+        peer_capabilities: &HashMap<NodeId, NodeCapabilities>,
+        window_days: u32,
+    ) -> LedgerFut<'_, HashMap<NodeId, NodeContributions>> {
+        let peer_capabilities = peer_capabilities.clone();
+        Box::pin(async move {
+            commonwealth_state::current_contributions(&self.store, &peer_capabilities, window_days)
+                .map_err(|e| store_absent("contributions/current", e))
+        })
+    }
+}
+
+impl ActivityLedgerPort for LocalLedger {
+    fn record(&self, kind: ActivityEventKind) -> LedgerFut<'_, ()> {
+        Box::pin(async move {
+            commonwealth_state::ActivityEmitter::new((*self.store).clone(), self.self_node_id)
+                .record(kind);
+            Ok(())
+        })
+    }
+
+    fn current_activity(&self, window_days: u32) -> LedgerFut<'_, ActivitySummary> {
+        Box::pin(async move {
+            commonwealth_state::current_activity(&self.store, window_days)
+                .map_err(|e| store_absent("activity/current", e))
+        })
+    }
+}
+
+impl PeerPreferencesPort for LocalLedger {
+    fn list(&self) -> LedgerFut<'_, Vec<(NodeId, PeerPreference)>> {
+        Box::pin(async move {
+            self.preferences()
+                .list()
+                .map_err(|e| store_absent("peer-preferences", e))
+        })
+    }
+
+    fn get(&self, peer: &NodeId) -> LedgerFut<'_, Option<PeerPreference>> {
+        let peer = *peer;
+        Box::pin(async move {
+            self.preferences()
+                .get(&peer)
+                .map_err(|e| store_absent("peer-preferences/get", e))
+        })
+    }
+}
+
+impl ProcessedShardsPort for LocalLedger {
+    fn publish(&self, corpus_id: &str, shards: &[usize]) -> LedgerFut<'_, bool> {
+        let key = commonwealth_state::processed_shards_key(corpus_id, self.self_node_id);
+        let payload = serde_json::to_vec(shards);
+        Box::pin(async move {
+            let payload = payload.map_err(|e| {
+                LedgerAbsent(format!("processed shards are not serializable: {e}"))
+            })?;
+            self.store
+                .set(
+                    commonwealth_state::PROCESSED_SHARDS_APP_ID,
+                    &key,
+                    payload.into(),
+                    self.self_node_id,
+                )
+                .map_err(|e| store_absent("processed-shards", e))
+        })
+    }
+
+    fn union(&self, corpus_id: &str) -> LedgerFut<'_, BTreeSet<usize>> {
+        let corpus_id = corpus_id.to_string();
+        Box::pin(async move {
+            Ok(commonwealth_state::union_processed_shards(
+                &self.store,
+                &corpus_id,
+            ))
+        })
+    }
+}
+
+// `InferenceStateStore` swallows its store errors (its methods answer
+// `Option`/`()`/`bool`); so does this, exactly as the cw-rails doors do.
+impl InferenceStatePort for LocalLedger {
+    fn get_plan(&self) -> LedgerFut<'_, Option<InferencePlan>> {
+        Box::pin(async move { Ok(self.inference().get_plan()) })
+    }
+
+    fn set_plan(&self, plan: &InferencePlan) -> LedgerFut<'_, ()> {
+        let plan = plan.clone();
+        Box::pin(async move {
+            self.inference().set_plan(&plan);
+            Ok(())
+        })
+    }
+
+    fn get_model_info(&self, model_id: ModelId) -> LedgerFut<'_, Option<ModelInfo>> {
+        Box::pin(async move { Ok(self.inference().get_model_info(model_id)) })
+    }
+
+    fn set_model_info(&self, info: &ModelInfo) -> LedgerFut<'_, ()> {
+        let info = info.clone();
+        Box::pin(async move {
+            self.inference().set_model_info(&info);
+            Ok(())
+        })
+    }
+
+    fn remove_model_info(&self, model_id: ModelId) -> LedgerFut<'_, bool> {
+        Box::pin(async move { Ok(self.inference().remove_model_info(model_id)) })
+    }
+
+    fn list_models_with_origins(&self) -> LedgerFut<'_, Vec<(NodeId, ModelInfo)>> {
+        Box::pin(async move { Ok(self.inference().list_models_with_origins()) })
+    }
+
+    fn get_llama_address(&self, model_id: ModelId) -> LedgerFut<'_, Option<String>> {
+        Box::pin(async move { Ok(self.inference().get_llama_address(model_id)) })
+    }
+
+    fn set_llama_address(&self, model_id: ModelId, addr: &str) -> LedgerFut<'_, ()> {
+        let addr = addr.to_string();
+        Box::pin(async move {
+            self.inference().set_llama_address(model_id, &addr);
+            Ok(())
+        })
+    }
+
+    fn set_local_embed_model(&self, info: &EmbedModelInfo) -> LedgerFut<'_, ()> {
+        let info = info.clone();
+        Box::pin(async move {
+            self.inference().set_local_embed_model(&info);
+            Ok(())
+        })
+    }
+
+    fn get_local_embed_model(&self) -> LedgerFut<'_, Option<EmbedModelInfo>> {
+        Box::pin(async move { Ok(self.inference().get_local_embed_model()) })
+    }
+}
+
+#[cfg(test)]
+mod tests;
