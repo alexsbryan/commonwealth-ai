@@ -305,7 +305,7 @@ by performing one: its gate was green while `sovereign-contracts` embedded a fil
 outside its crate root and the sandbox had to preserve the monorepo's directory shape to
 compile. The way to know Serving carries no such embed is to lift it. **Serving carried
 one, measured 2026-09-15 and removed 2026-09-16:** `sovereign-contracts` `include_str!`d
-`sovereign-recipes/registry.toml` and `sovereign-recipes/schema/recipe_schema_descriptor.json`
+`sovereign-recipes/registry.toml` and `corpus-engine/schema/recipe_schema_descriptor.json`
 from outside its crate root (`recipe/registry.rs:31`, `recipe/schema.rs:25`), so the
 flat-copy sandbox could not compile the shared leaf — the embedder was a leaf, not a
 package member. The two artifacts are now vendored by `corpus-engine`'s `build.rs` into

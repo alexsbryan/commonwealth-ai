@@ -402,7 +402,7 @@ pub(crate) fn first_diff(a: &str, b: &str) -> String {
 // *across the crate boundary* to parse `corpus-engine/src/recipe.rs` — a
 // source-tree path no package split survives. It now lives here, next to the
 // SCHEMA.md generator that already parses the same source, and is emitted as a
-// checked-in artifact `sovereign-recipes/schema/recipe_schema_descriptor.json`
+// checked-in artifact `corpus-engine/schema/recipe_schema_descriptor.json`
 // that the authoring tool `include_str!`s. corpus-engine owns the catalog (it
 // owns the types); the authoring tool owns the schema shape + overlays.
 
@@ -473,7 +473,7 @@ fn recipe_schema_descriptor_is_fresh() {
         crate::ontology_prompt_snapshots::canonical_json(&serde_json::to_string(&desc).unwrap())
             .expect("the descriptor is JSON");
 
-    let out_dir = crate::source_tree::recipes_root().join("schema");
+    let out_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("schema");
     let out_path = out_dir.join("recipe_schema_descriptor.json");
     if std::env::var("UPDATE_RECIPE_SCHEMA").is_ok() {
         std::fs::create_dir_all(&out_dir).expect("create schema dir");
@@ -491,7 +491,7 @@ fn recipe_schema_descriptor_is_fresh() {
     if committed != generated {
         let (cl, gl) = (committed.lines().count(), generated.lines().count());
         panic!(
-            "sovereign-recipes/schema/recipe_schema_descriptor.json is stale \
+            "corpus-engine/schema/recipe_schema_descriptor.json is stale \
              ({cl} committed lines vs {gl} generated).\n\
              The recipe config enums changed — regenerate with:\n  \
              UPDATE_RECIPE_SCHEMA=1 cargo test -p corpus-engine --test main recipe_schema\n\
