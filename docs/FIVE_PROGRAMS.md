@@ -20,21 +20,31 @@ or a decision; the decisions are marked.
 Sovereign answers a question from what you already have, says where the
 answer came from, and declines when it cannot.
 
-That sentence is served by five programs joined by two wires everyone already
+That sentence is served by six programs joined by two wires everyone already
 speaks: OpenAI-compatible HTTP for turns and completions, MCP for tools.
-Composition is by process. One program dials another; none embeds another;
-each owns its own config file, data directory and log. The crate graph is a
-build detail, not architecture.
+Programs compose by process. One program dials another; none embeds another;
+each owns its own config file, data directory and log. A *distribution* (§2c)
+may also bundle programs, but it holds wiring only. Every program builds and
+runs alone, and its lift sandbox proves it. The crate graph is a build detail,
+not architecture.
 
-## 2. The five
+The test for every boundary is the next developer who wants THIS program but
+not THAT one (operator, 2026-09-25, `ralph/decisions/phase-b-1.md`).
+
+## 2. The programs
+
+There were five until 2026-09-25. That day `serve` was split out of `cmnwlth`,
+because a local model server must not need a mesh and a mesh must be able to
+front someone else's model server (phase-b-1).
 
 | Program | Shape | Wire it serves | Owns on disk | Exists today as |
 |---|---|---|---|---|
-| `svrn` | knowledge server | MCP `ask`, `search`, `atoms_lookup`; HTTP `/v1/chat/completions` | corpus indexes, conversations | `corpus-mcp/` (three verbs, lifted) + the turn path in `sovereign-core` |
-| `svrn ingest` | recipe pipeline | CLI only | the index directory it writes | `sovereign-recipes/` + `corpus-engine` extractors, chunkers, index |
-| `cmnwlth` | endpoint router with a roster | HTTP `/v1/*` proxied, OICP manifest | roster, adverts, decision log | `commonwealth/` package (lifted, `scripts/cw-rails-lift.sh`) + the serving cluster |
-| `svrn code` | LSP for agents | MCP `symbols`, `callers`, `blast`, …; HTTP `/v1/completions` (FIM) | SCIP index, notes | `sovereign/crates/sovereign-tools/src/code/`, `corpus-engine-scip`, `corpus-engine-notes`, `packages/vscode-sovereign/` |
-| `svrn bench` | evaluator | none; dials a URL | banks, baselines, verdict tables | `sovereign/bench/` lanes, `sovereign-eval` minus its product links |
+| `svrn` | knowledge server | MCP `ask`, `search`, `atoms_lookup`; HTTP `/v1/chat/completions` | corpus indexes, conversations, its own memory (lessons, commitments, dossier) | `corpus-mcp/` (three verbs, lifted) + the turn path in `sovereign-core` |
+| `svrn ingest` | recipe pipeline | CLI over a library; the work plane is one optional caller, never a requirement | the index directory it writes | `sovereign-recipes/` + `corpus-engine` extractors, chunkers, index |
+| `cmnwlth` | endpoint router with a roster | HTTP `/v1/*` proxied, OICP manifest; adverts any origin, inference included, and never ranks | roster, adverts, decision log, the node key | `commonwealth/` package (lifted, `scripts/cw-rails-lift.sh`) |
+| `serve` | model server | HTTP `/v1/chat/completions`, `/v1/embeddings`, `/v1/rerank`, `/v1/models` and its own OICP manifest | weights, its placement config | `sovereign-inference`, `sovereign-compute`, `sovereign-serving-host` (one engine assembly; model kinds by registration; placement per kind: in-process, child or dial) |
+| `svrn code` | LSP for agents | MCP `symbols`, `callers`, `blast`, …; HTTP `/v1/completions` (FIM) | SCIP index, decision notes, the work atlas (optional bundle) | `sovereign/crates/sovereign-tools/src/code/`, `corpus-engine-scip`, `corpus-engine-notes`, `packages/vscode-sovereign/` |
+| `svrn bench` | evaluator | none; dials three URLs: the model, the subject (svrn) and a separate judge | banks, baselines, verdict tables | `sovereign/bench/` lanes, `sovereign-eval` minus its product links |
 
 Clients are not programs. A browser, a coding harness, Open WebUI and `curl`
 are all clients of the two wires and are built and prioritised as clients. The
@@ -125,6 +135,45 @@ organisation's boundary as the journey that proves it; (5) delete
 `sovereign-server`, attach mode, and the Tauri command layer. Each step is
 usable on its own.
 
+## 2c. Distributions, the host kit, and the compose rule (phase-b-1)
+
+**A distribution is a composition root that holds wiring only.** Examples: the
+`svrn` dispatcher, the setup wizard, service install, the container image and
+a native shell. A distribution may:
+
+- exec or install program binaries;
+- link the wire leaves, the host kit and `sovereign-turn-client`;
+- link a program's declared library face, never its internals.
+
+It owns only the bundle's concerns: the composed setup flow, the verb map, and
+the default placement of each model kind (a stock install dials `serve`; a
+phone build links it). Distributions are declared as `[[distribution]]` rows in
+`quality/ARCH_LAYERS.toml`, extending `[thin_surfaces]`. A distribution never
+excuses a program from building and running alone.
+
+**The host kit holds what each program's binary owns about itself:**
+
+- its data-root lock;
+- its data root (the path is always supplied by the caller);
+- its server shell: bind, loopback guard, peer address, body limits, shutdown
+  as a value, mount tracing;
+- MCP dispatch and its framings, the call-log port, and tool exposure as
+  manifest data.
+
+It is a neutrally named leaf, so `cw-rails` can take it. It owns no store and
+names no program's vocabulary. Reaching a program is the client's half and
+stays in `sovereign-turn-client`: probing it, bringing it up through the one
+`bring_up_decider`, and locating its binary. Principle 12 splits the two.
+
+**Compose, never re-own.** Before building, a change names the existing owner
+it extends and the registry it plugs into (principle 11). A change that adds a
+second implementation of a drive or a second owner of a capability stops. The
+drives are: bring-up, root lock, engine assembly, MCP dispatch, tool-set build,
+route mounting and job execution. A new model kind, tool or route is a
+registration, never a new binary (principles 8, 9). The duplicates are
+collapsed before a process is split, the way principle 8 collapses the drive
+before the file is split.
+
 ## 3. The verdict is a schema
 
 The differentiator is that an answer carries its own checking. It is a type,
@@ -151,15 +200,21 @@ never defaulted (ARCH principle 6).
 3. An unreachable peer program is `CouldNotJudge` or absent, never empty.
 4. Every decision visible at `tracing=debug`.
 5. Config that can change without a code change is a file, not a constant.
-6. A program never links another program's crates. Shared types live in
-   `oicp-types` and `sovereign-contracts` only.
+6. A program never links another program's crates. Shared vocabulary lives in
+   `oicp-types`, `kernel-types` and `sovereign-contracts` (§12 3a), and the one
+   shared mechanism is the host kit (§2c). A module only one program uses
+   belongs to that program, even when it sits in a shared crate today.
+7. Each program's config file holds its own sections only. The 13-section
+   `SetupConfig` splits per program, with the migration shipping in the same
+   commit as the switch (phase-b-1).
 
 ## 5. What the design does not contain
 
 Deleted, not migrated: the in-process daemon; the two-name state database;
 `sovereign/SYSTEM_OVERVIEW.md` and the drift machinery that keeps it honest;
-the work atlas, claims, orders, campaigns, cursors, journals and demos under
-`.sovereign/features/`; the canon store; notes injection; the ten-context
+orders, campaigns, cursors, journals and demos under `.sovereign/features/`
+(the work atlas and its claims STAY: operator, 2026-09-25, as an optional
+code-program bundle); the canon store; notes injection; the ten-context
 registry `quality/DOMAINS.toml` and its census script; `sovereign-server` as a
 second host (§2b; the phone and the browser dial `svrn`); the Tauri command
 layer and attach mode (§2a); `studio` and `atos` unless a journey in
@@ -1084,6 +1139,16 @@ first match wins:
      class table below). Never a leaf. The leaf test: no fs, no store, and a
      dep budget a third-party lifter would pay anyway.
 3. A leaf stays honest by the same test re-applied at every later touch.
+   Phase B re-applies it to `sovereign-contracts` itself, a 42k-line crate
+   that 51 manifests name. Its single-program modules move to their owners,
+   and traits whose implementer and consumer are the same program move into
+   that program.
+4. **The one mechanism rung (operator, 2026-09-25, phase-b-1).** A mechanism
+   that every program's binary needs about ITSELF goes to the host kit (§2c).
+   Examples: its lock, its data root, its server shell and MCP dispatch. It
+   qualifies only if every path is supplied by the caller, it owns no store,
+   and it names no program's vocabulary. The kit is the only leaf allowed to
+   do fs and process work. It has a size cap, and the cap is not ratcheted.
 
 **4. The replicated store: cmnwlth owns the disk; the daemon keeps a read-through
 cache and dials.** Principle 12, second clause verbatim: a gap in one thing is
@@ -1168,8 +1233,11 @@ authority).**
       + Claims over a `sovereign_contracts::peer::ReplicatedKv`, a TTL GC task
       the daemon spawns, and the three MCP tools `declare_scope` /
       `release_scope` / `work_in_flight` that `AGENTS.md` makes a pre-flight
-      ("is anyone else on the mesh touching this?"). Phase 1 of a v0.1 spec —
-      Observations are not implemented. Consumers: `sovereign-cli-dev` 4 files,
+      ("is anyone else on the mesh touching this?"). CORRECTED 2026-09-25:
+      `work_in_flight` returns live file-level Observations, and the session
+      boot brief renders them (`sovereign-code/src/brief.rs:298`). DECIDED
+      2026-09-25 by the operator: KEPT, as an optional code-program bundle that
+      dials cw-rails' KV directly (phase-b-1). Consumers: `sovereign-cli-dev` 4 files,
       `sovereign-daemon` 3, `sovereign-code` 1.
       **It is agent-facing, which makes it `code`'s** by the same argument that
       puts `symbols`/`callers` there. Blocked on its own deps: `sovereign-core`
@@ -1256,3 +1324,14 @@ promoted even though one row would have closed eight edges.
       `svrn` daemon binary's own main (step 10; §11 correction).
 - [ ] `bench`'s per-package leaf budget exists and the row is expressed
       (phase 7), so the evaluator cannot link the thing it measures.
+
+Phase B adds the conditions that make "take THIS without THAT" true
+(phase-b-1):
+
+- [ ] No `[[exception]]` row with `package = "svrn"` remains (fp-9, fp-10,
+      fp-68, fp-69 retired by building the owner, never by exception).
+- [ ] Every program passes its own lift sandbox, meaning it builds and runs
+      with only its shared leaves: `svrn`, `ingest`, `cmnwlth`, `serve`,
+      `code` and `bench`.
+- [ ] Each drive in §2c has one implementation, and each commit body that
+      collapsed one names the copy count it took down.
