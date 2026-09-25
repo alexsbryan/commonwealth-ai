@@ -163,6 +163,9 @@ pub async fn status(State(daemon): State<Arc<RailsDaemon>>) -> impl IntoResponse
             .collect()
     };
     let addr = daemon.node.endpoint.addr();
+    // The posture the endpoint was bound with (`RailsNode::bind` reads the
+    // same `relay_config`), so a client can refuse an n0-homed cw-rails.
+    let relay = daemon.node.config.relay_config();
     Json(serde_json::json!({
         "self": {
             "node_id": daemon.node.self_id.to_string(),
@@ -175,6 +178,10 @@ pub async fn status(State(daemon): State<Arc<RailsDaemon>>) -> impl IntoResponse
         "members": members,
         "fanout_inflight": daemon.gauge.load(Ordering::Relaxed),
         "internal_listener": daemon.internal_addr.to_string(),
+        "relay": {
+            "n0_services": relay.n0_services,
+            "relay_urls": relay.relay_urls,
+        },
     }))
 }
 
