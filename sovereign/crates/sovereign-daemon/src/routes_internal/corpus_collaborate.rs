@@ -880,7 +880,7 @@ pub async fn corpus_collaborate(
             let endpoints = transport
                 .endpoints(
                     &commonwealth_transport::peer_contact(peer),
-                    sovereign_contracts::transport::TrafficClass::ControlPlane,
+                    commonwealth_transport::TrafficClass::ControlPlane,
                 )
                 .await;
             if endpoints.is_empty() {

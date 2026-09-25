@@ -123,7 +123,7 @@ async fn orchestrate_warm(
         let mut candidates: Vec<(
             String,
             String,
-            Option<sovereign_contracts::transport::PeerEndpoint>,
+            Option<commonwealth_transport::PeerEndpoint>,
         )> = Vec::new();
         if let Some(node) = worker_node {
             for ep in daemon.model_transfer_endpoints(node).await {

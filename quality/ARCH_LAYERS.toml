@@ -711,8 +711,7 @@ reason = "mesh foundation must stay consumable without the agent runtime; it mee
 [[forbid]]
 from = "commonwealth-transport"
 to = "sovereign-*"
-except = ["sovereign-contracts"]
-reason = "mesh foundation must stay consumable without the agent runtime; it meets sovereign at the contracts seam only (FIVE_PROGRAMS fp-21, 2026-09-22 — the vocabulary half moves there; the iroh endpoints stay cmnwlth's)"
+reason = "mesh foundation must stay consumable without the agent runtime, and it is in commonwealth-rails' lifted closure (scripts/cw-rails-lift.sh). The dial vocabulary fp-40 moved to sovereign-contracts came back here (fp-solo-lift, 2026-09-25, §12 3a rung 1): only cmnwlth speaks it, and a contracts edge put 42k lines in the small daemon's closure for 65"
 
 [[forbid]]
 from = "commonwealth-discovery"

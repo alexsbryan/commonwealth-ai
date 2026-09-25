@@ -151,11 +151,6 @@ pub mod tool_bundle;
 pub mod tool_manifest;
 pub mod tool_result_cache;
 pub mod traits;
-/// How this node reaches a peer — `TrafficClass`, `PeerContact`,
-/// `PeerEndpoint`, the `PeerTransport` port and the three origin ALPNs.
-/// Dial vocabulary only (§12 decision 3, fp-40); the machinery stays in
-/// `commonwealth-transport`, which re-exports these at its historical paths.
-pub mod transport;
 pub mod types;
 /// The ranked candidate record (`InferenceVenue`), the `VenueSource` port,
 /// and the slot-alias policy table both advertisement and resolution derive

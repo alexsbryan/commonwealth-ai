@@ -2068,7 +2068,6 @@ dependencies = [
  "rustls",
  "serde",
  "serde_json",
- "sovereign-contracts",
  "tempfile",
  "tokio",
  "tracing",

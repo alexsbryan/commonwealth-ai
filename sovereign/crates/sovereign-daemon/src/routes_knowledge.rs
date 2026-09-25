@@ -266,7 +266,7 @@ pub async fn knowledge_search(
         NodeId,
         (
             String,
-            sovereign_contracts::transport::PeerContact,
+            commonwealth_transport::PeerContact,
             Vec<String>,
         ),
     > = HashMap::new();
@@ -419,7 +419,7 @@ pub async fn knowledge_search(
 struct PeerOffering {
     node_id: NodeId,
     node_name: String,
-    contact: sovereign_contracts::transport::PeerContact,
+    contact: commonwealth_transport::PeerContact,
     corpora: Vec<String>,
 }
 
@@ -451,7 +451,7 @@ struct PeerServed {
 #[allow(clippy::too_many_arguments)]
 async fn fanout_one_peer(
     http: reqwest::Client,
-    transport: std::sync::Arc<dyn sovereign_contracts::transport::PeerTransport>,
+    transport: std::sync::Arc<dyn commonwealth_transport::PeerTransport>,
     requester_id: NodeId,
     target: crate::fanout::FanoutTarget,
     corpora: Vec<String>,
@@ -486,7 +486,7 @@ async fn fanout_one_peer(
         &transport,
         node_id,
         &target.contact,
-        sovereign_contracts::transport::TrafficClass::KnowledgeSearch,
+        commonwealth_transport::TrafficClass::KnowledgeSearch,
         |ep| {
             let http = http.clone();
             let body = &body;

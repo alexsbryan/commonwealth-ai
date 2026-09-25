@@ -897,7 +897,7 @@ async fn discover_and_spawn_pull_loops(state: AppState, self_id: NodeId, daemon_
                 .peer_transport()
                 .endpoints(
                     contact,
-                    sovereign_contracts::transport::TrafficClass::ControlPlane,
+                    commonwealth_transport::TrafficClass::ControlPlane,
                 )
                 .await
                 .into_iter()
@@ -1450,7 +1450,7 @@ async fn find_best_peer_canonical(
                 .peer_transport()
                 .endpoints(
                     &commonwealth_transport::peer_contact(member),
-                    sovereign_contracts::transport::TrafficClass::ControlPlane,
+                    commonwealth_transport::TrafficClass::ControlPlane,
                 )
                 .await
                 .into_iter()

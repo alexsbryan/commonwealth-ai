@@ -533,7 +533,7 @@ async fn host_transport_bases(state: &AppState, host_node_id: Option<&str>) -> V
         .peer_transport()
         .endpoints(
             &commonwealth_transport::peer_contact(&member),
-            sovereign_contracts::transport::TrafficClass::ModelTransfer,
+            commonwealth_transport::TrafficClass::ModelTransfer,
         )
         .await
         .into_iter()
