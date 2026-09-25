@@ -722,7 +722,8 @@ reason = "mesh foundation must stay consumable without the agent runtime"
 [[forbid]]
 from = "sovereign-grants"
 to = "sovereign-*"
-reason = "must stay consumable without the agent runtime — it names NO sovereign-* crate today (measured at the domains-1 move, 2026-09-11) and this rule keeps it that way. The reason read \"mesh foundation must stay…\" until that move, when the crate left commonwealth/crates/ for sovereign/crates/; the PROPERTY is unchanged, only the family it sits in changed"
+except = ["sovereign-contracts"]
+reason = "must stay consumable without the agent runtime — it names NO sovereign-* crate bar the contracts seam (measured at the domains-1 move, 2026-09-11) and this rule keeps it that way. sovereign-contracts joins the exception for `ReplicatedKv` + the `ShardTransferLedger` fact port ONLY (FIVE_PROGRAMS fp-94, operator decision five-programs-53). The reason read \"mesh foundation must stay…\" until that move, when the crate left commonwealth/crates/ for sovereign/crates/; the PROPERTY is unchanged, only the family it sits in changed"
 
 [[forbid]]
 from = "sovereign-meshapp-registry"

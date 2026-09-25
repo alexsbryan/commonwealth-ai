@@ -71,6 +71,7 @@ use commonwealth_core::ids::HandoffId;
 use commonwealth_core::knowledge::{CompleteOutcome, HandoffPhase, IngestionHandoff, WorkUnit};
 use commonwealth_core::oicp::{EmbedModelInfo, NormalizationStrategy, PoolingStrategy};
 use corpus_index::{corpus::Corpus, index::CorpusIndex};
+use sovereign_contracts::peer::ReplicatedKv;
 use sovereign_grants::{ShardManager, WorkQueueManager};
 
 use super::merge_participants_coverage::{embedding, fixture, Fixture, CORPUS};
@@ -173,7 +174,7 @@ async fn queue_mode_handoff(f: &Fixture) -> (HandoffId, ShardManager) {
     let manager = ShardManager::new(
         Arc::clone(&f.engine),
         f.index_dir.clone(),
-        Arc::clone(&f.mesh_store),
+        f.mesh_store.clone(),
     )
     .with_work_queue(queue);
 

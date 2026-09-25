@@ -3,28 +3,28 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
-use commonwealth_core::contributions::LedgerEventKind;
 use commonwealth_core::ids::{HandoffId, NodeId};
 use commonwealth_core::knowledge::{IngestionHandoff, KnowledgeShardAssignment, PartitionStatus};
-use commonwealth_state::{ContributionEmitter, MeshStore};
 use corpus_engine::{CorpusEngine, ShardInfo};
 use corpus_index::{
     corpus::Corpus,
     index::CorpusIndex,
     types::{ChunkRange, IndexInfo},
 };
+use sovereign_contracts::peer::ReplicatedKv;
+use sovereign_contracts::venue_host::ShardTransferLedger;
 
 pub struct ShardManager {
     engine: Arc<CorpusEngine>,
     shard_dir: PathBuf,
-    mesh_store: Arc<MeshStore>,
+    mesh_store: Arc<dyn ReplicatedKv>,
     /// Optional emitter for `ShardTransferred` events on the merge
     /// leader's pull path. Optional so existing call sites that
     /// don't have a daemon-scoped emitter (legacy tests, ad-hoc
     /// tooling) keep working unchanged. Missing emitter ⇒ no
     /// ledger event ⇒ ledger silently underreports the transfer,
     /// which is honest about the gap.
-    emitter: Option<ContributionEmitter>,
+    emitter: Option<Arc<dyn ShardTransferLedger>>,
     /// Optional handle on the daemon's `WorkQueueManager`. Required
     /// for queue-mode `coordinate_merge` (legacy static-partition
     /// handoffs carry the participating peer list inline; queue-mode
@@ -70,7 +70,11 @@ pub struct MergePlan<'a> {
 }
 
 impl ShardManager {
-    pub fn new(engine: Arc<CorpusEngine>, shard_dir: PathBuf, mesh_store: Arc<MeshStore>) -> Self {
+    pub fn new(
+        engine: Arc<CorpusEngine>,
+        shard_dir: PathBuf,
+        mesh_store: Arc<dyn ReplicatedKv>,
+    ) -> Self {
         Self {
             engine,
             shard_dir,
@@ -80,7 +84,7 @@ impl ShardManager {
         }
     }
 
-    /// Attach a `ContributionEmitter` so successful peer-shard
+    /// Attach a [`ShardTransferLedger`] so successful peer-shard
     /// pulls during `merge_participants` (the merge half of
     /// `coordinate_merge`) write `ShardTransferred`
     /// events into the dimensional ledger. The emit is on behalf
@@ -89,7 +93,7 @@ impl ShardManager {
     /// puller's. See
     /// `commonwealth_core::contributions::aggregate` for the
     /// pull-emission special case.
-    pub fn with_emitter(mut self, emitter: ContributionEmitter) -> Self {
+    pub fn with_emitter(mut self, emitter: Arc<dyn ShardTransferLedger>) -> Self {
         self.emitter = Some(emitter);
         self
     }
@@ -256,7 +260,7 @@ impl ShardManager {
             // lease/complete units. Fallback when the snapshot is
             // missing (queue-mode handoff that outlived a coordinator
             // restart): the gossiped `processed_shards:<corpus>:<peer>`
-            // entries in `MeshStore`. Each peer that has actually done
+            // entries in the replicated KV. Each peer that has actually done
             // work for this corpus publishes a non-empty list under
             // its own slot, so the union of `entry.origin`s across
             // every non-empty entry is the participating-peers set.
@@ -277,13 +281,16 @@ impl ShardManager {
                         "work queue",
                     ),
                     None => (
-                        participating_peers_from_gossip(&self.mesh_store, &handoff.corpus_id),
+                        participating_peers_from_gossip(
+                            self.mesh_store.as_ref(),
+                            &handoff.corpus_id,
+                        ),
                         now_ms,
                         "gossip fallback (live queue missing — coordinator restart?)",
                     ),
                 },
                 None => (
-                    participating_peers_from_gossip(&self.mesh_store, &handoff.corpus_id),
+                    participating_peers_from_gossip(self.mesh_store.as_ref(), &handoff.corpus_id),
                     now_ms,
                     "gossip fallback (no work queue attached)",
                 ),
@@ -572,12 +579,12 @@ impl ShardManager {
                     // merge leader can emit. See `aggregate` for
                     // the pull-emission special case.
                     if let Some(em) = &self.emitter {
-                        em.record(LedgerEventKind::ShardTransferred {
-                            from_node: node_id,
-                            to_node: local_node_id,
-                            corpus_id: corpus_id.to_string(),
-                            bytes: bytes_received,
-                        });
+                        em.record_shard_transferred(
+                            &node_id,
+                            &local_node_id,
+                            corpus_id,
+                            bytes_received,
+                        );
                     }
                     shard_dirs.push(dest_dir);
 
@@ -825,7 +832,7 @@ impl ShardManager {
         corpus_id: &str,
         target_base_url: &str,
         to_node: Option<NodeId>,
-        emitter: Option<&ContributionEmitter>,
+        emitter: Option<(&dyn ShardTransferLedger, NodeId)>,
     ) -> anyhow::Result<TransferReceipt> {
         let index_path = self.engine.index_dir().join(corpus_id);
         if !index_path.exists() {
@@ -888,13 +895,8 @@ impl ShardManager {
         // also lands `bytes_received` on `to_node` from the same
         // event, so a single emission produces both halves of the
         // byte ledger (per `aggregate` in commonwealth-core).
-        if let (Some(to), Some(em)) = (to_node, emitter) {
-            em.record(LedgerEventKind::ShardTransferred {
-                from_node: em.self_node_id(),
-                to_node: to,
-                corpus_id: corpus_id.to_string(),
-                bytes: bytes_transferred,
-            });
+        if let (Some(to), Some((em, self_node_id))) = (to_node, emitter) {
+            em.record_shard_transferred(&self_node_id, &to, corpus_id, bytes_transferred);
         }
 
         Ok(TransferReceipt {
@@ -917,7 +919,7 @@ impl ShardManager {
 /// hasn't actually been ingested anywhere visible to gossip and the
 /// caller should bail rather than try to merge nothing.
 fn participating_peers_from_gossip(
-    mesh_store: &MeshStore,
+    mesh_store: &dyn ReplicatedKv,
     corpus_id: &str,
 ) -> std::collections::HashSet<NodeId> {
     let prefix = format!("processed_shards:{corpus_id}:");

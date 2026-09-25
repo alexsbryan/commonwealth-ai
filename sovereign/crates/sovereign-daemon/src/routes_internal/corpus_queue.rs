@@ -27,6 +27,7 @@ use sovereign_grants::auto_recover::FoldRecovery;
 use sovereign_grants::shard_manager::ShardManager;
 
 use crate::state::AppState;
+use crate::venue_host::shard_transfer_ledger;
 
 use super::{IngestPartitionRequest, IngestPartitionResponse};
 
@@ -82,8 +83,8 @@ pub async fn fold_recovery(state: &AppState) -> FoldRecovery {
     let peer_shard_base_urls = peer_control_urls(state, local_node_id).await;
     FoldRecovery {
         corpus_engine: state.inner.node.corpus_engine.clone(),
-        mesh_store: Arc::clone(&state.inner.fabric.mesh_store),
-        contribution_emitter: state.inner.fabric.contribution_emitter.clone(),
+        mesh_store: Arc::clone(&state.inner.store.mesh_store),
+        contribution_emitter: shard_transfer_ledger(state),
         local_node_id,
         peer_shard_base_urls,
         mesh_proof: owned_mesh_proof(state).await,
@@ -163,7 +164,7 @@ pub async fn corpus_ingest_partition(
     let handoff_id = req.handoff_id;
     let local_node_id = state.inner.fabric.identity.current();
     let engine = _engine.clone();
-    let mesh_store = Arc::clone(&state.inner.fabric.mesh_store);
+    let mesh_store = Arc::clone(&state.inner.store.mesh_store);
     let state_clone = state.clone();
     // Snapshot peer base URLs now — we can't hold the mesh lock across an async task.
     let peer_urls: Vec<(NodeId, String)> = peer_control_urls(&state, local_node_id).await;
@@ -257,7 +258,7 @@ pub async fn corpus_ingest_partition(
                     engine.index_dir().to_path_buf(),
                     mesh_store,
                 )
-                .with_emitter(state_clone.inner.fabric.contribution_emitter.clone());
+                .with_emitter(shard_transfer_ledger(&state_clone));
                 match shard_mgr
                     .coordinate_merge(
                         handoff_id,
@@ -596,7 +597,7 @@ pub fn spawn_queue_merge(state: AppState, handoff_id: commonwealth_core::ids::Ha
                 return;
             }
         };
-        let mesh_store = Arc::clone(&state.inner.fabric.mesh_store);
+        let mesh_store = Arc::clone(&state.inner.store.mesh_store);
         let local_node_id = state.inner.fabric.identity.current();
         let peer_urls: Vec<(NodeId, String)> = peer_control_urls(&state, local_node_id).await;
         let merge_proof = owned_mesh_proof(&state).await;
@@ -606,7 +607,7 @@ pub fn spawn_queue_merge(state: AppState, handoff_id: commonwealth_core::ids::Ha
             engine.index_dir().to_path_buf(),
             mesh_store,
         )
-        .with_emitter(state.inner.fabric.contribution_emitter.clone())
+        .with_emitter(shard_transfer_ledger(&state))
         .with_work_queue(Arc::clone(&state.inner.ingest.work_queue));
 
         match shard_mgr

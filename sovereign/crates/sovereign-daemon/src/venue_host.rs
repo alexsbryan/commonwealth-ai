@@ -14,9 +14,10 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use sovereign_contracts::venue::{InferenceVenue, VenueSource};
-use sovereign_contracts::venue_host::{LedgerEmitter, VenueHost};
+use sovereign_contracts::venue_host::{LedgerEmitter, ShardTransferLedger, VenueHost};
 
 use crate::daemon::EmbeddedDaemon;
+use crate::state::AppState;
 
 /// The daemon's implementation of the host's ledger port.
 ///
@@ -64,6 +65,51 @@ impl LedgerEmitter for DaemonLedger {
             }
         });
     }
+}
+
+/// The same daemon ledger as `sovereign-grants`' shard-transfer fact port
+/// (fp-94, five-programs-53): grants reports the fact, this records it.
+impl ShardTransferLedger for DaemonLedger {
+    fn record_shard_transferred(
+        &self,
+        from_node: &kernel_types::NodeId,
+        to_node: &kernel_types::NodeId,
+        corpus_id: &str,
+        bytes: u64,
+    ) {
+        let Ok(runtime) = tokio::runtime::Handle::try_current() else {
+            tracing::warn!(
+                corpus = %corpus_id,
+                "shard ledger: no runtime to carry the ShardTransferred write; it did not reach the ledger"
+            );
+            return;
+        };
+        let emitter = Arc::clone(&self.emitter);
+        let kind = commonwealth_core::contributions::LedgerEventKind::ShardTransferred {
+            from_node: *from_node,
+            to_node: *to_node,
+            corpus_id: corpus_id.to_string(),
+            bytes,
+        };
+        let corpus_id = corpus_id.to_string();
+        runtime.spawn(async move {
+            if let Err(e) = emitter.record(kind).await {
+                tracing::warn!(
+                    corpus = %corpus_id,
+                    error = %e,
+                    "shard ledger: the ShardTransferred write did not reach the ledger"
+                );
+            }
+        });
+    }
+}
+
+/// The shard-transfer fact port over this node's contribution ledger, for the
+/// `ShardManager`s and `FoldRecovery` the daemon hands `sovereign-grants`.
+pub(crate) fn shard_transfer_ledger(state: &AppState) -> Arc<dyn ShardTransferLedger> {
+    Arc::new(DaemonLedger {
+        emitter: Arc::clone(&state.inner.store.contribution_emitter),
+    })
 }
 
 #[async_trait]

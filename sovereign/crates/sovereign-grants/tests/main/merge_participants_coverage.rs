@@ -29,10 +29,10 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use commonwealth_core::ids::{HandoffId, NodeId};
-use commonwealth_state::MeshStore;
 use corpus_engine::CorpusEngine;
 use corpus_index::index::{InsertChunk, InsertCodeMeta};
 use corpus_index::{corpus::Corpus, index::CorpusIndex, types::EmbedFn};
+use sovereign_contracts::peer::SoloReplicatedKv;
 use sovereign_grants::shard_manager::MergePlan;
 use sovereign_grants::ShardManager;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -153,7 +153,7 @@ pub(crate) struct Fixture {
     pub(crate) engine: Arc<CorpusEngine>,
     /// The gossip store the manager loads handoffs from. Exposed so a caller
     /// can seed a handoff blob and drive `coordinate_merge`.
-    pub(crate) mesh_store: Arc<MeshStore>,
+    pub(crate) mesh_store: Arc<SoloReplicatedKv>,
     pub(crate) manager: ShardManager,
     pub(crate) local: NodeId,
     pub(crate) reachable_peer: NodeId,
@@ -196,12 +196,8 @@ pub(crate) async fn fixture() -> Fixture {
         index_dir.clone(),
         unused_embed_fn(),
     ));
-    let mesh_store = Arc::new(MeshStore::in_memory().expect("in-memory mesh store"));
-    let manager = ShardManager::new(
-        Arc::clone(&engine),
-        index_dir.clone(),
-        Arc::clone(&mesh_store),
-    );
+    let mesh_store = Arc::new(SoloReplicatedKv::new());
+    let manager = ShardManager::new(Arc::clone(&engine), index_dir.clone(), mesh_store.clone());
 
     Fixture {
         _tmp: tmp,

@@ -19,9 +19,9 @@
 use std::sync::{Arc, Mutex};
 
 use commonwealth_core::ids::{HandoffId, NodeId};
-use commonwealth_state::MeshStore;
 use corpus_engine::CorpusEngine;
 use corpus_index::types::EmbedFn;
+use sovereign_contracts::peer::SoloReplicatedKv;
 use sovereign_grants::shard_manager::MergePlan;
 use sovereign_grants::ShardManager;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -84,7 +84,7 @@ async fn pull_once(mesh_proof: Option<(&str, &str)>) -> String {
     let manager = ShardManager::new(
         Arc::clone(&engine),
         index_dir,
-        Arc::new(MeshStore::in_memory().unwrap()),
+        Arc::new(SoloReplicatedKv::new()),
     );
 
     let local = NodeId::from_u128(1);

@@ -413,9 +413,9 @@ async fn serve_as_lan(state: AppState) -> (String, std::sync::Arc<std::sync::Mut
 /// Drive one real shard pull against the real router and give back the statuses
 /// the router answered with.
 async fn shard_pull_statuses(stamped: bool) -> Vec<u16> {
-    use commonwealth_state::MeshStore;
     use corpus_engine::CorpusEngine;
     use corpus_index::types::EmbedFn;
+    use sovereign_contracts::peer::SoloReplicatedKv;
     use sovereign_grants::shard_manager::MergePlan;
     use sovereign_grants::ShardManager;
     use std::sync::Arc;
@@ -433,7 +433,7 @@ async fn shard_pull_statuses(stamped: bool) -> Vec<u16> {
     let manager = ShardManager::new(
         Arc::clone(&engine),
         index_dir,
-        Arc::new(MeshStore::in_memory().unwrap()),
+        Arc::new(SoloReplicatedKv::new()),
     );
 
     let (name, value) = member_stamp();

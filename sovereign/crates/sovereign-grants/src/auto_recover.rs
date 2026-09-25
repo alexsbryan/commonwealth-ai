@@ -10,7 +10,7 @@
 //! handoff blob in `mesh_store` to point at, and the blob carries
 //! the merge_leader assignment.
 //!
-//! The MeshStore is **in-memory** on the daemon (see
+//! The mesh store is **in-memory** on the daemon (see
 //! `sovereign-mesh::daemon::start_daemon`), so every restart wipes
 //! it. Handoff blobs only re-appear via gossip from a peer that
 //! still holds them. If no peer in the mesh has the blob anymore —
@@ -57,9 +57,10 @@ use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use commonwealth_core::ids::{HandoffId, NodeId};
-use commonwealth_state::{ContributionEmitter, MeshStore};
 use corpus_engine::CorpusEngine;
 use corpus_index::corpus::Corpus;
+use sovereign_contracts::peer::ReplicatedKv;
+use sovereign_contracts::venue_host::ShardTransferLedger;
 
 use crate::shard_manager::{MergePlan, ShardManager};
 
@@ -202,9 +203,9 @@ pub struct FoldRecovery {
     /// This node's corpus engine; `None` before one is booted.
     pub corpus_engine: Option<Arc<CorpusEngine>>,
     /// The mesh store the shard manager pulls partitions through.
-    pub mesh_store: Arc<MeshStore>,
-    /// Ledger emitter for `ShardTransferred` events on the pull path.
-    pub contribution_emitter: ContributionEmitter,
+    pub mesh_store: Arc<dyn ReplicatedKv>,
+    /// Ledger fact port for `ShardTransferred` events on the pull path.
+    pub contribution_emitter: Arc<dyn ShardTransferLedger>,
     /// This node's id, as the identity watch reports it at call time.
     pub local_node_id: NodeId,
     /// One ControlPlane base URL per peer, from `peer_control_urls`.

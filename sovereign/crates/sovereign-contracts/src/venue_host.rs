@@ -23,6 +23,21 @@ pub trait LedgerEmitter: Send + Sync {
     fn record_inference_received(&self, from_node: &NodeId, model_id: &str, tokens_generated: u64);
 }
 
+/// The shard-transfer fact port `sovereign-grants` records its one ledger
+/// write through; the daemon implements it over its contribution ledger, as
+/// it does [`LedgerEmitter`] (five-programs fp-94, decision five-programs-53).
+pub trait ShardTransferLedger: Send + Sync {
+    /// Record that `bytes` of `corpus_id`'s shard moved from `from_node` to
+    /// `to_node`.
+    fn record_shard_transferred(
+        &self,
+        from_node: &NodeId,
+        to_node: &NodeId,
+        corpus_id: &str,
+        bytes: u64,
+    );
+}
+
 /// The host-side companion to the scheduler's `VenueSource`
 /// (`sovereign_scheduler::venue::VenueSource`, the candidate list alone).
 ///
