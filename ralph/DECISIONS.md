@@ -535,6 +535,11 @@ merged; that merge is what minted this arrangement, and `ledger-1` records it.
 - Chose: option (A). commonwealth-rail-core owns `LOCAL_ONLY_NAMESPACES` (the other seven) and `is_local_only`. commonwealth-state keeps `RAIL_CARRIED_APP_IDS = ["mesh-measurements"]` and builds `GOSSIP_EXCLUDED_APP_IDS` at compile time as the union of the two. `is_gossip_excluded` keeps its path and its answers. The ring skip goes in `RingJournal::ops_missing_from_within`, which both wire answer sites call. `ops_missing_from`, the in-process honest total, is left as it is. Boundary gate 54, unchanged, since no code moved.
 - Because: "never on the KV gossip wire" and "never offered on the ring" are two questions, so each gets its own list and the KV list is composed from them, not copied (ARCH 8). Option (B) would put a second decider at a call site. Option (C) would drop the inbound refusal that peer_preferences.rs:245-249 documents, which changes behaviour.
 
+**five-programs-38 · 2026-09-24 · the three HUMAN rows + three NEEDS-OPERATOR classes · operator** — this commit
+- Needed: at boundary 54 (53f9d8434) about five red edges had a live code owner: commonwealth-state ×2 through fp-75..87, commonwealth-media through fp-47, and the core and mesh residues. The rest waited on HUMAN-fp25, HUMAN-fp11, HUMAN-fp12 or a NEEDS-OPERATOR appendix line. The operator asked for the decisions to be cleared now rather than after the queue drained, and the seat asked once, with its recommendation first.
+- Chose: (1) Phase B starts now. Every edge whose only closing arm was an `[[exception]]` or a new serving host closes by building the host, not by exception: HUMAN-fp25 (a), HUMAN-fp11 (a), all seven HUMAN-fp12 pairs, and the fp-9/fp-10 exceptions granted "until Phase B". REVIEW-plan-fp-phase-b maps the edges to hosts and mints one campaign per host. (2) One node identity, owned by cw-rails, landing with finish condition 2. (3) sovereign-cli-shared's thin half is admitted as a shared leaf (§12 3a), minted by REVIEW-mint-fp-cli-shared-leaf. (4) corpus-engine's build.rs: "Can we decouple corpus engine from the declarative recipe definitions and just agree on abstractions and interfaces?" corpus-engine keeps the recipe contract and stops vendoring the definitions, minted by REVIEW-mint-fp-recipes-decouple.
+- Because: operator's word. On (1) the seat recommended a uniform exception and named what it would cost: a gate at 0 that records the boundary without making the programs liftable. The operator chose the liftable version. Boundary gate 54, unchanged; no code in this commit.
+
 ## Flags for the operator
 
 - A26: REVIEW-DEMO-rr-1-run will very likely FAIL `ra-room-plug-in-live` again on this host. The bar's window is 60 s, and the CPU 2B took about 1–5 min per answer in this run (room-answer-0..4.json mtimes 19:33→19:49). Passing it takes a faster node or model for the room, or a different bar. Both are design changes for the operator, not tuning.
@@ -8975,5 +8980,22 @@ Package: ctl/NEEDS_HUMAN.resolved-fp76-20260924.md. The director reproduced it a
 This fork is covered by the charter: which of two options follows from principle 8 and the row's own "one decider" text. Nothing a user can observe changes. The KV predicate returns the same answer for every id, and the ring stops offering only namespaces that were already private.
 
 Falsified if some entry in `LOCAL_ONLY_NAMESPACES` turns out to have a ring publisher that peers rely on. That would be the same mistake as `mesh-measurements`, and its daemon ring-sync test would go red at fp-76. It is also falsified if a third wire answer site exists that does not go through `ops_missing_from_within`, because the skip would then not be structural.
+
+</details>
+
+## five-programs-38 · 2026-09-24 — Phase B starts now; one node key; the cli-shared leaf; recipes decouple
+
+<details><summary>reasoning, evidence, package</summary>
+
+Asked as four questions. First, the three HUMAN rows as one policy ("edges where a program embeds a capability no other process serves yet"), with three arms: a uniform `[[exception]]` until Phase B (the seat's recommendation), exceptions for the three HUMAN rows only, or start Phase B. Second, the node-identity question REVIEW-fp54-signer-identity (7ea05c6fc) left open. Third, the cli-shared leaf admission (the appendix lines for cli-mesh→cli-shared and cli-dev→cli-shared). Fourth, the `[ingest] corpus-engine: has a build.rs` line.
+
+Costs stated when asked, which the minted rows must carry with a reader rather than discover:
+
+- **Phase B.** It is several campaigns, each a REVIEW-mint under a cap. Under HUMAN-fp11 (a), the code tools leave the daemon's MCP surface whenever the code program is down; the daemon proxies them and reports the absence. §2 places notes with the code program, so notes and session_state follow unless the plan finds a reason in §2 that they should not. HUMAN-fp25 (a) changes the documented Windows sidecar build contract (stage-daemon-sidecar.sh:91, ENV_FLAGS `SOVEREIGN_SIDECAR_FEATURES`). The pods exec split touches a pod contract that only a Vast pod can check.
+- **One node key owned by rails.** The daemon's `~/.svrnmesh/node_key` retires, and fp-74's attestation is signed by rails at the daemon's request. Existing installs have the daemon key in their peers' rosters, so the migration ships in the same commit as the flip. It is sequenced with condition 2 because the daemon's second mesh endpoint (sovereign-mesh `iroh_access`) goes away there.
+- **cli-shared thin half.** §12 decision 5 already says cli-shared keeps only the thin dispatcher helpers; the admission is the rung that 3a reserves for the operator. fp-5's refusal stands unless the census shows otherwise: sovereign-cli's light verbs use code_index and scip in-process.
+- **Recipes.** Six sites read OUT_DIR today: recipe_builtin.rs, registry.rs:38, recipe_schema.rs:22, recipe_templates.rs:31, filters/assets.rs:55-73, and the configurable_atlas.rs:251 test. `RecipeId` is a closed enum over an open set (ARCH 9), used in 3 files across 12 arms, mostly tests. An offline first install must keep working (principle 6).
+
+This decision is falsified if the Phase B plan finds an edge whose owning program §2 does not name, or a host that cannot be built without a sovereign-* dependency in a commonwealth-* crate where ARCH_LAYERS forbids it with no except. Either finding is a NEEDS_HUMAN line with the count, never a quiet exception.
 
 </details>
