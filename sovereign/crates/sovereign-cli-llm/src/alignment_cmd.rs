@@ -44,8 +44,8 @@ const CORPUS_ID: &str = "alignment";
 /// external file, no fragile relative path.
 ///
 /// `alignment` is also kept OUT of the public recipe catalog
-/// (`sovereign-recipes/registry.toml`) and the bundled-enum
-/// (`corpus_engine::recipe_builtin`): it syncs the author's own
+/// (`sovereign-recipes/registry.toml`) and the bundled set
+/// (`corpus_engine::recipe_source`): it syncs the author's own
 /// `~/.claude`, so it must not surface in `sovereign corpus list` or be
 /// installable by strangers who happen to run the binary. The trade-off
 /// is that the daemon's `fetch_recipe("alignment")` has no catalog entry

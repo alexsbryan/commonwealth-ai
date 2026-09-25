@@ -38,6 +38,10 @@ corpus-engine-atlas-reader = { workspace = true }
 # in the monorepo changed when it was carved out (domains
 # REVIEW-build-index-read-port, DE "The read-port leaf, measured again").
 corpus-index = { workspace = true }
+# The bundled recipe definitions as static data (five-programs-52). Named in
+# one file only, `src/recipe_source/bundled.rs`, behind the RecipeSource and
+# AssetSource ports.
+corpus-engine-recipes = { workspace = true }
 # Understanding's pure tier — a temporary shim edge: the pure files that leave
 # `corpus-engine` for `understanding-atlas` are re-exported at their historical
 # paths here (domains REVIEW-build-understanding-crate-tree, §3a step 5) until

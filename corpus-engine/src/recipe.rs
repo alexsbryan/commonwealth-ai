@@ -52,13 +52,13 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::{Error, Result};
 use crate::filters::{ComposeMode, FilterConfig};
-#[cfg(test)]
-use crate::recipe_builtin::{bundled_recipe_toml, RecipeId};
 use crate::recipe_parsing::{
     check_schema_version, empty_value, parameter_value_from_toml, translate_parse_error,
 };
 #[cfg(test)]
 use crate::recipe_parsing::{extract_missing_field, extract_unknown_variant};
+#[cfg(test)]
+use crate::recipe_source::default_source;
 use crate::types::CorpusKind;
 
 // ---------------------------------------------------------------------------
@@ -1868,7 +1868,7 @@ impl Recipe {
     ///    See [`check_enrichment_type`](crate::recipe_parsing::check_enrichment_type).
     ///
     /// This is the ONE recipe load boundary: [`Self::from_file`],
-    /// `recipe_builtin`, and the desktop recipe author's validate
+    /// the bundled recipe source, and the desktop recipe author's validate
     /// preview all route through it. Anything that parses a `Recipe`
     /// with a bare `toml::from_str` skips all three guards.
     pub fn from_toml(toml_str: &str) -> Result<Self> {
@@ -2069,7 +2069,7 @@ impl Recipe {
 /// **For tests only.** Production code uses
 /// `RecipeRegistry::fetch_recipe()` which checks local overrides,
 /// fetches from the registry URL, and falls back to
-/// [`bundled_recipe_toml`].
+/// [`default_source`].
 #[cfg(test)]
 pub(crate) fn builtin_recipes() -> Vec<Recipe> {
     const IDS: &[&str] = &[
@@ -2084,7 +2084,9 @@ pub(crate) fn builtin_recipes() -> Vec<Recipe> {
     ];
     IDS.iter()
         .map(|id| {
-            let toml = bundled_recipe_toml(id).expect("bundled recipe present");
+            let toml = default_source()
+                .recipe_toml(id)
+                .expect("bundled recipe present");
             Recipe::from_toml(toml).expect("built-in recipe.toml failed to parse")
         })
         .collect()
@@ -2307,58 +2309,14 @@ max_chars = 2048
     }
 
     #[test]
-    fn recipe_id_from_id_round_trips_for_every_variant() {
-        // Every RecipeId variant's id() must round-trip through
-        // from_id() — pin the wire-form contract per
-        // ARCH_PRINCIPLES.md §2.2 (legacy_view_id_constants_match_view_kind
-        // is the reference pattern).
-        for &recipe_id in RecipeId::ALL {
-            let wire = recipe_id.id();
-            assert_eq!(
-                RecipeId::from_id(wire),
-                Some(recipe_id),
-                "RecipeId::{recipe_id:?} ↔ {wire:?} round-trip broke"
-            );
-            // bundled_toml() must also resolve. include_str! enforces
-            // the file exists at compile time; this just checks
-            // non-empty content reached us.
-            assert!(
-                !recipe_id.bundled_toml().is_empty(),
-                "RecipeId::{recipe_id:?}.bundled_toml() returned empty",
-            );
-        }
-    }
-
-    #[test]
-    fn recipe_id_dispatch_matches_string_adapter() {
-        // bundled_recipe_toml(&str) must agree with
-        // RecipeId::<v>.bundled_toml() byte-for-byte. Catches a
-        // case where the adapter falls behind the enum.
-        for &recipe_id in RecipeId::ALL {
-            let via_adapter = bundled_recipe_toml(recipe_id.id())
-                .expect("adapter returned None for known recipe id");
-            let via_enum = recipe_id.bundled_toml();
-            assert_eq!(
-                via_adapter, via_enum,
-                "RecipeId::{recipe_id:?} dispatch mismatch between adapter and enum"
-            );
-        }
-    }
-
-    #[test]
-    fn bundled_recipe_toml_unknown_id_returns_none() {
-        assert!(bundled_recipe_toml("does-not-exist").is_none());
-        assert!(RecipeId::from_id("does-not-exist").is_none());
-    }
-
-    #[test]
     fn bundled_gutenberg_recipes_parse() {
         // Both the catalog (`gutenberg`) and on-demand work
         // (`gutenberg-work`) recipes must always be loadable from the
         // bundled snapshot — the on-demand ingest path resolves them
         // by id at runtime.
         for id in &["gutenberg", "gutenberg-work"] {
-            let toml = bundled_recipe_toml(id)
+            let toml = default_source()
+                .recipe_toml(id)
                 .unwrap_or_else(|| panic!("bundled recipe `{id}` is missing"));
             let r = Recipe::from_toml(toml)
                 .unwrap_or_else(|e| panic!("bundled recipe `{id}` parse error: {e}"));
@@ -3002,8 +2960,9 @@ type = "paragraph"
         // the desktop picker can group them under the Core row instead
         // of rendering them as separate top-level entries.
         for id in ["wikipedia-simple", "wikipedia-newsworthy"] {
-            let toml =
-                bundled_recipe_toml(id).unwrap_or_else(|| panic!("{id} must be a bundled recipe"));
+            let toml = default_source()
+                .recipe_toml(id)
+                .unwrap_or_else(|| panic!("{id} must be a bundled recipe"));
             let r = Recipe::from_toml(toml)
                 .unwrap_or_else(|e| panic!("{id} recipe.toml must parse: {e}"));
             assert_eq!(
@@ -3016,7 +2975,9 @@ type = "paragraph"
 
         // Counter-example: the Core wikipedia recipe itself must NOT
         // declare a parent, otherwise it'd disappear from the picker.
-        let core = bundled_recipe_toml("wikipedia").expect("wikipedia bundled");
+        let core = default_source()
+            .recipe_toml("wikipedia")
+            .expect("wikipedia bundled");
         let parsed = Recipe::from_toml(core).expect("wikipedia parses");
         assert!(
             parsed.corpus.parent_corpus_id.is_none(),
@@ -3029,7 +2990,8 @@ type = "paragraph"
         // `builtin_recipes()`'s IDS list deliberately excludes the
         // newsworthy recipe (it has no acquire-pipeline use), so we
         // parse the bundled TOML directly.
-        let toml = bundled_recipe_toml("wikipedia-newsworthy")
+        let toml = default_source()
+            .recipe_toml("wikipedia-newsworthy")
             .expect("wikipedia-newsworthy must be a bundled recipe");
         let r = Recipe::from_toml(toml).expect("wikipedia-newsworthy recipe.toml must parse");
         let update = r
@@ -3235,7 +3197,8 @@ type = "paragraph"
     /// or renames a parameter would all fail here.
     #[test]
     fn federal_register_presidential_recipe_shape() {
-        let toml = bundled_recipe_toml("federal-register-presidential")
+        let toml = default_source()
+            .recipe_toml("federal-register-presidential")
             .expect("federal-register-presidential must be a bundled recipe");
         let r =
             Recipe::from_toml(toml).expect("federal-register-presidential recipe.toml must parse");
@@ -3386,7 +3349,9 @@ type = "paragraph"
     /// flips enrichment on by default would all fail here.
     #[test]
     fn us_code_recipe_shape() {
-        let toml = bundled_recipe_toml("us-code").expect("us-code must be a bundled recipe");
+        let toml = default_source()
+            .recipe_toml("us-code")
+            .expect("us-code must be a bundled recipe");
         let r = Recipe::from_toml(toml).expect("us-code recipe.toml must parse");
 
         assert_eq!(r.corpus.id, "us-code");
@@ -3470,7 +3435,9 @@ type = "paragraph"
             ("olc-opinions", "cluster__docket__court=olc"),
             ("scotus-opinions", "cluster__docket__court=scotus"),
         ] {
-            let toml = bundled_recipe_toml(id).unwrap_or_else(|| panic!("{id} is bundled"));
+            let toml = default_source()
+                .recipe_toml(id)
+                .unwrap_or_else(|| panic!("{id} is bundled"));
             let r = Recipe::from_toml(toml).unwrap_or_else(|e| panic!("{id} recipe parses: {e}"));
 
             assert_eq!(r.corpus.id, id);

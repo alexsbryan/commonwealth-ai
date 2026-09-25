@@ -2254,11 +2254,11 @@ for status table, landing-by-landing scope, and validation targets.
 Twenty-six catalog recipes ship in `sovereign-recipes` (§2), consumed
 via `RecipeRegistry`:
 
-- **Bundled snapshot** — `build.rs` vendors `sovereign-recipes/registry.toml`
-  into `OUT_DIR` and `registry.rs` `include_str!`s it from there, so the engine
+- **Bundled snapshot** — `registry.rs` reads `sovereign-recipes/registry.toml`
+  from the `corpus-engine-recipes` data crate via `recipe_source`, so the engine
   works fully offline with no checked-in snapshot copy to drift.
-- **Bundled fallback** — `recipe_builtin.rs::bundled_recipe_toml(id)` returns the
-  full recipe TOML (also vendored from `sovereign-recipes/` into `OUT_DIR`) for
+- **Bundled fallback** — `recipe_source::default_source().recipe_toml(id)` returns the
+  full recipe TOML (from the `corpus-engine-recipes` data crate) for
   snapshot entries when the live URL is unreachable.
 - **Live refresh** — `RecipeRegistry::refresh()` pulls the latest
   from GitHub.
@@ -8173,7 +8173,7 @@ Default ports:
 | Understand the v2 atlas pipeline                 | [`corpus-engine/ENRICHMENT_V2.md`](../corpus-engine/ENRICHMENT_V2.md) + `corpus-engine/src/enrichment/pipeline/mod.rs` |
 | Drive v2 enrichment from the CLI                 | `sovereign-cli-llm/src/enrich_cmd/`                                 |
 | Run an atlas build INSIDE the daemon (a shipped desktop has no CLI on PATH) | `enrich_now` (`sovereign-tools/src/local_corpus/atlas_dispatch.rs`) resolves the recipe's `[enrichment] type` through `EnrichmentPassRegistry` and routes the `atlas` pass to `EnrichmentDriver::start_atlas_build` → the host-installed `watched::enrich::AtlasBuildRunner` (`sovereign-daemon/src/atlas_builder.rs::in_process_atlas_builder`, which links `sovereign-cli-llm` as a library); progress lands in `_enrichment_state.json`. `tiered` and recipe-less folders keep `start_tiered_build`. The subprocess runner (`sovereign-tools/src/enrich.rs`) is the fallback where no builder is installed. (ontology-v1 P0.4) |
-| Understand the recipe registry                   | `corpus-engine/src/registry.rs` (+ `recipe.rs::bundled_recipe_toml`) |
+| Understand the recipe registry                   | `corpus-engine/src/registry.rs` (+ `recipe_source.rs::default_source`) |
 | Understand delta updates                         | `corpus-engine/src/update/delta.rs`                                 |
 | Understand scope expansion (filter delta)        | `corpus-engine/src/engine/expand.rs`                                |
 | Understand KnowledgeView digest assembly         | `sovereign-tools/src/knowledge_view/` and [`docs/knowledge-view.md`](./docs/knowledge-view.md) |

@@ -221,7 +221,7 @@ fn valid_set_in_the_message_is_the_registry_itself() {
 /// shrink deliberately and can never quietly grow.
 #[test]
 fn every_bundled_recipe_loads_except_the_ones_we_name() {
-    use corpus_engine::recipe_builtin::{bundled_recipe_toml, RecipeId};
+    use corpus_engine::recipe_source::default_source;
 
     /// **Empty, and that is the state to defend.** The list held exactly one
     /// row — `wikipedia-article`, which declared `type = "field_model"` with
@@ -255,11 +255,13 @@ fn every_bundled_recipe_loads_except_the_ones_we_name() {
     // reason.
 
     let mut rejected = Vec::new();
-    for id in RecipeId::ALL {
-        let toml = bundled_recipe_toml(id.id())
-            .unwrap_or_else(|| panic!("bundled recipe `{}` is missing", id.id()));
+    let source = default_source();
+    for id in source.recipe_ids() {
+        let toml = source
+            .recipe_toml(id)
+            .unwrap_or_else(|| panic!("bundled recipe `{id}` is missing"));
         if let Err(e) = Recipe::from_toml(toml) {
-            rejected.push((id.id(), e.to_string()));
+            rejected.push((id, e.to_string()));
         }
     }
 

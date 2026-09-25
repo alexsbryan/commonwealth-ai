@@ -61,7 +61,8 @@ pub fn authoritative_store(
         .and_then(|s| crate::Recipe::from_toml(&s).ok());
     let bundled = from_disk.is_none();
     let recipe = from_disk.or_else(|| {
-        crate::recipe_builtin::bundled_recipe_toml(corpus_id)
+        crate::recipe_source::default_source()
+            .recipe_toml(corpus_id)
             .and_then(|toml| crate::Recipe::from_toml(toml).ok())
     });
     let declared = recipe
