@@ -124,7 +124,9 @@ pub(super) const REGISTRY_TAIL: &[(&str, Class, usize)] = &[
     //     sovereign-cli-llm could construct this; now every binary linking
     //     sovereign-cli-shared can. That widening IS the refactor, and the
     //     class is unchanged by it because the destination did not move.
-    ("sovereign/crates/sovereign-cli-shared/src/rail.rs", Class::LocalDaemon, 1),
+    //   - fp-98 (9e6c557c0) moved the file by git mv into the sovereign-cli-base
+    //     leaf behind its `rail-client` feature; same client, same destination.
+    ("sovereign/crates/sovereign-cli-base/src/rail.rs", Class::LocalDaemon, 1),
 
     // ---- sovereign-tools ----
     // knowledge_lookup: the tool-registry web-search evidence path —
