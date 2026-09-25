@@ -34,7 +34,8 @@ cw-rails — the minimal rails daemon: your address on the mesh, with media on i
       Writes node_id and mesh.json, then exits.
 
   cw-rails run [--data-dir D] [--config F]
-      Serve the loopback API and gossip. Refuses to start with no mesh.
+      Serve the loopback API and gossip. With no mesh it runs solo: the
+      store and ledger serve, nothing gossips, no peer is admitted.
 
   cw-rails media [<peer>] [--fanout <path>] [--peers a,b] [--listen P]
       Ask the running daemon: who offers a library, the URL for one, or the

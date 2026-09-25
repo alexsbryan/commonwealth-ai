@@ -91,11 +91,6 @@ pub enum Refusal {
     Store(#[from] identity::StoreRefusal),
     #[error("{0}")]
     Join(#[from] join::JoinRefusal),
-    #[error(
-        "no mesh at {0} — join first: `cw-rails join <invite>`. \
-         An invite comes from a member of the mesh you want to be on."
-    )]
-    NoMesh(PathBuf),
     #[error("the iroh endpoint would not bind: {0}")]
     Endpoint(String),
     #[error("the mesh store would not open: {0}")]
@@ -217,6 +212,9 @@ pub struct RailsDaemon {
     /// Where `POST /internal/gossip` is served. Ephemeral loopback, reachable
     /// only through the acceptor.
     pub internal_addr: SocketAddr,
+    /// No `mesh.json` at start: the roster is this node alone, in memory only,
+    /// and `run` spawns no gossip and no presence poll (five-programs-63).
+    pub solo: bool,
     _internal: tokio::task::JoinHandle<()>,
     _acceptor: IrohAcceptor,
 }
@@ -287,18 +285,38 @@ impl RailsDaemon {
             kv,
             media_presence: Arc::new(std::sync::RwLock::new(None)),
             internal_addr,
+            solo: false,
             _internal: internal,
             _acceptor: acceptor,
         })
     }
 
-    /// Load the persisted mesh and start. The refusal when there is none is
-    /// the one a first-time operator will see, so it names the next command.
+    /// Load the persisted mesh and start — or, with none on disk, start SOLO
+    /// (five-programs-63): a self-only roster held in memory and never
+    /// written to `mesh.json`, so a later `cw-rails join` still finds no mesh
+    /// in its way and the next start is meshed. The stores keep their rows
+    /// across that move: the local-only rehydrate keys on the node key, which
+    /// a join does not change.
     pub async fn start_from_disk(node: RailsNode) -> Result<Self, Refusal> {
-        let Some(mesh) = identity::load_mesh(&node.data_dir)? else {
-            return Err(Refusal::NoMesh(identity::mesh_file(&node.data_dir)));
-        };
-        Self::start(node, mesh).await
+        if let Some(mesh) = identity::load_mesh(&node.data_dir)? {
+            tracing::info!(target: "rails", mode = "meshed", mesh = %mesh.name,
+                           members = mesh.members.len(), "rails: starting meshed");
+            return Self::start(node, mesh).await;
+        }
+        tracing::info!(target: "rails", mode = "solo",
+                       absent = %identity::mesh_file(&node.data_dir).display(),
+                       "rails: no mesh, starting solo — self-only roster, no gossip, no peers");
+        let (mesh, _join_key) = commonwealth_discovery::membership::init_mesh_with_identity(
+            "solo",
+            &node.config.name,
+            Vec::new(),
+            node.self_id,
+            Some(node.pubkey()),
+            false,
+        );
+        let mut daemon = Self::start(node, mesh).await?;
+        daemon.solo = true;
+        Ok(daemon)
     }
 
     /// Serve the loopback API and gossip forever. Returns only on a listener
@@ -307,11 +325,19 @@ impl RailsDaemon {
         let listen = api::bind_addr(self.node.config.listen);
         let daemon = Arc::new(self);
         let api = api::serve(daemon.clone(), listen).await?;
-        let gossip = tokio::spawn(gossip::run_forever(daemon.clone()));
-        // The presence poll (five-programs fp-46): the reading lands in
-        // `media_presence`, which the gossip round and the presence route
-        // read. A tick that cannot ask is a logged `None`, never an exit.
-        let presence = tokio::spawn(presence::run_forever(daemon.clone()));
+        // Solo has no one to gossip with and no roster to stamp a presence
+        // reading into, so neither task runs.
+        let (gossip, presence) = if daemon.solo {
+            (None, None)
+        } else {
+            // The presence poll (five-programs fp-46): the reading lands in
+            // `media_presence`, which the gossip round and the presence route
+            // read. A tick that cannot ask is a logged `None`, never an exit.
+            (
+                Some(tokio::spawn(gossip::run_forever(daemon.clone()))),
+                Some(tokio::spawn(presence::run_forever(daemon.clone()))),
+            )
+        };
         // The mesh store's pump (fp-77): rehydrate from the journals, then
         // drain the outbox onto them every tick.
         let kv_pump = tokio::spawn(kv::run_forever(daemon.kv.clone()));
@@ -322,13 +348,15 @@ impl RailsDaemon {
             api = %listen,
             internal = %daemon.internal_addr,
             members = daemon.mesh.read().await.members.len(),
+            solo = daemon.solo,
             "rails: serving"
         );
         // The API task owns the process's lifetime; a gossip round that fails
         // is a logged round, never an exit.
         let _ = api.await;
-        gossip.abort();
-        presence.abort();
+        for task in [gossip, presence].into_iter().flatten() {
+            task.abort();
+        }
         kv_pump.abort();
         ledger_gc.abort();
         Ok(())
