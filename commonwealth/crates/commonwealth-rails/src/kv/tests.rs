@@ -182,6 +182,59 @@ async fn a_restart_rehydrates_a_row_from_the_journal() {
     assert_eq!(row.origin, NodeId::from_u128(ME));
 }
 
+/// A peer's op admitted through the ingest door reaches the running store
+/// on the next tick's fold, not only after a restart (fp-109) — and not
+/// before that fold: the door itself only journals and marks.
+#[tokio::test]
+async fn a_peer_op_ingested_through_the_door_is_served_after_one_fold() {
+    let dir = tempfile::tempdir().unwrap();
+    let peer_dir = tempfile::tempdir().unwrap();
+    let mesh = solo_mesh();
+    let peer_key = SigningKey::from_bytes(&[9; 32]);
+    let peer_pubkey = commonwealth_transport::identity::node_pubkey(&peer_key);
+    let peer = NodeId::from_u128(0xBEEF);
+    {
+        let mut m = mesh.write().await;
+        let mut record = m.members[&NodeId::from_u128(ME)].clone();
+        record.node_id = peer;
+        record.name = "peer".into();
+        record.node_pubkey = Some(peer_pubkey);
+        m.members.insert(peer, record);
+    }
+    // The peer's own rail, where its op is signed and journaled.
+    let peer_rail = Arc::new(RingRail::new(peer_dir.path(), Arc::new(peer_key.clone())));
+    MembershipRosterSource::install(&peer_rail, &mesh, peer, Some(peer_pubkey));
+    let peer_journal = peer_rail.journal(NS).unwrap();
+    let peer_roster = peer_rail.roster(&peer_journal).await.unwrap();
+    let payload = rail_kv::to_payload("theirs", Some(&b"peer-value"[..]), 100).unwrap();
+    peer_journal
+        .append(
+            commonwealth_rail::RailAct::Record { payload },
+            &peer_key,
+            &peer_roster,
+            None,
+        )
+        .unwrap();
+    let (ops, _) = peer_journal.read().unwrap();
+    assert_eq!(ops.len(), 1);
+
+    let host = host_at(dir.path(), &mesh);
+    let journal = host.rail.journal(NS).unwrap();
+    let answer =
+        crate::rail::ingest_answer(&journal, &host, crate::rail::IngestBody { ops });
+    assert!(answer.status().is_success(), "{:?}", answer.status());
+    assert!(
+        host.store.get(NS, "theirs").unwrap().is_none(),
+        "the door folded on its own; the fold belongs to the tick"
+    );
+
+    assert_eq!(host.project_dirty().await, 1);
+    let row = host.store.get(NS, "theirs").unwrap().expect("folded");
+    assert_eq!(&row.value[..], b"peer-value");
+    assert_eq!(row.origin, peer);
+    assert_eq!(host.project_dirty().await, 0, "the dirty set drained");
+}
+
 /// A local-only row journaled by this node survives a restart: the fresh
 /// store rehydrates it through the own-journal door (fp-108), though
 /// `RingRail::namespaces` never lists the namespace.

@@ -2605,7 +2605,9 @@ and pumped back onto them (`commonwealth-rails/src/kv.rs`; it seals only the
 KV namespaces its own outbox feeds, and the daemon keeps serving its own
 store until fp-82; since fp-108 a start also rehydrates each local-only
 journal on disk through `MeshStore::apply_own_projection`, which merges
-only this node's own signed rows). Since fp-78 it also serves the typed ledger doors,
+only this node's own signed rows; since fp-109 a namespace the
+`/v1/rail/ingest` door took new ops for is re-projected on the pump's next
+tick, once per namespace, so a peer's write reaches the running store). Since fp-78 it also serves the typed ledger doors,
 `/v1/ledger/*` (`commonwealth-rails/src/ledger.rs`: contributions, activity,
 peer preferences, processed shards, inference state — each the
 commonwealth-state writer over that store, the writer's node id in the body)

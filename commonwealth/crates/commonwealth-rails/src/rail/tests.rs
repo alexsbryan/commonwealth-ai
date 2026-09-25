@@ -383,7 +383,8 @@ async fn a_seal_renders_its_prune() {
 #[tokio::test]
 async fn the_sync_doors_digest_missing_and_ingest_one_journal() {
     let mesh = mesh_with(vec![member(ME, "alex", None, false)]);
-    let (_dir, rail, _mesh) = rail_with(mesh);
+    let (_dir, rail, mesh) = rail_with(mesh);
+    let kv = crate::kv::KvHost::new(rail.clone(), mesh, NodeId::from_u128(ME), None).unwrap();
     let journal = journal_of(&rail, "ledger").unwrap();
     for amount in 1..=2 {
         let body = serde_json::json!({ "op": "record", "payload": { "amount" : amount } });
@@ -433,6 +434,7 @@ async fn the_sync_doors_digest_missing_and_ingest_one_journal() {
     // ingest of what is already held: zero new — the steady state.
     let out = body_of(ingest_answer(
         &journal,
+        &kv,
         serde_json::from_value(serde_json::json!({ "ops": offered })).unwrap(),
     ))
     .await;

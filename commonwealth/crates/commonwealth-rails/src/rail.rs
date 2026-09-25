@@ -521,13 +521,24 @@ pub struct IngestBody {
     pub ops: Vec<Op<SignedOp>>,
 }
 
-fn ingest_answer(journal: &Arc<RingJournal>, body: IngestBody) -> Response {
+/// A namespace that took new ops is marked dirty on `kv`, so the pump's next
+/// tick folds them into the store (fp-109); the fold itself is never done here.
+pub(crate) fn ingest_answer(
+    journal: &Arc<RingJournal>,
+    kv: &crate::kv::KvHost,
+    body: IngestBody,
+) -> Response {
     match journal.ingest_all(&body.ops) {
-        Ok(n) => Json(serde_json::json!({
+        Ok(n) => {
+            if n > 0 {
+                kv.mark_dirty(journal.namespace());
+            }
+            Json(serde_json::json!({
             "namespace": journal.namespace(),
             "ingested": n,
         }))
-        .into_response(),
+        .into_response()
+        }
         Err(e) => err(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
     }
 }
@@ -620,6 +631,9 @@ fn compact_answer(journal: &Arc<RingJournal>, body: RosterBody) -> Response {
 /// answer fn — the same shape the append door is.
 macro_rules! journal_route {
     ($name:ident, $answer:ident, $body:ty) => {
+        journal_route!($name, $answer, $body, |_daemon, journal, body| $answer(&journal, body));
+    };
+    ($name:ident, $answer:ident, $body:ty, |$d:ident, $j:ident, $b:ident| $call:expr) => {
         pub async fn $name(
             State(daemon): State<Arc<RailsDaemon>>,
             Query(q): Query<RailQuery>,
@@ -633,13 +647,16 @@ macro_rules! journal_route {
                 Ok(j) => j,
                 Err(refusal) => return refusal,
             };
-            $answer(&journal, body)
+            let ($d, $j, $b) = (&daemon, journal, body);
+            $call
         }
     };
 }
 
 journal_route!(journal_missing, missing_answer, MissingBody);
-journal_route!(journal_ingest, ingest_answer, IngestBody);
+journal_route!(journal_ingest, ingest_answer, IngestBody, |daemon, journal, body| {
+    ingest_answer(&journal, &daemon.kv, body)
+});
 journal_route!(journal_admit, admit_answer, RosterBody);
 journal_route!(journal_compact, compact_answer, RosterBody);
 

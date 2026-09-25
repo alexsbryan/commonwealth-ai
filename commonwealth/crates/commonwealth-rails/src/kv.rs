@@ -25,8 +25,8 @@
 //! name (the lift boundary), so the request shapes are mirrored here the way
 //! [`crate::api::ClaimRequest`] mirrors the publish body.
 
-use std::collections::{BTreeMap, HashMap};
-use std::sync::Arc;
+use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use axum::extract::{Query, State};
@@ -62,6 +62,9 @@ pub struct KvHost {
     mesh: Arc<RwLock<Mesh>>,
     self_id: NodeId,
     self_pubkey: Option<NodePubkey>,
+    /// Namespaces the ingest door took new peer ops for since the last tick;
+    /// [`KvHost::project_dirty`] folds each once (fp-109).
+    dirty: Mutex<BTreeSet<String>>,
 }
 
 /// What one [`KvHost::pump_once`] did — returned so a test asserts on the
@@ -99,7 +102,38 @@ impl KvHost {
             mesh,
             self_id,
             self_pubkey,
+            dirty: Mutex::new(BTreeSet::new()),
         })
+    }
+
+    /// Queue `namespace` for the next tick's fold — called by the ingest door
+    /// when it admitted new ops, so a peer's write reaches the store without
+    /// a restart.
+    pub fn mark_dirty(&self, namespace: &str) {
+        self.dirty
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .insert(namespace.to_string());
+    }
+
+    /// Fold every namespace marked since the last call, once each — batched
+    /// per tick, never per ingested chunk. A non-store name is skipped by
+    /// [`KvHost::project_namespace`]'s own debug line. Returns how many
+    /// projected.
+    pub async fn project_dirty(&self) -> usize {
+        let dirty = std::mem::take(&mut *self.dirty.lock().unwrap_or_else(|p| p.into_inner()));
+        if dirty.is_empty() {
+            return 0;
+        }
+        let mut projected = 0usize;
+        for namespace in &dirty {
+            if self.project_namespace(namespace).await.is_some() {
+                projected += 1;
+            }
+        }
+        debug!(target: "rails", dirty = dirty.len(), projected,
+               "kv: folded the namespaces the ingest door fed since the last tick");
+        projected
     }
 
     /// Rebuild the store from every journal on disk. Run once at start,
@@ -489,6 +523,7 @@ pub async fn run_forever(host: Arc<KvHost>) {
           seal_after_own_ops = SEAL_AFTER_OWN_OPS, "kv pump: started");
     host.project_all_on_disk().await;
     loop {
+        host.project_dirty().await;
         let out = host.pump_once().await;
         if out != PumpOutcome::default() {
             debug!(target: "rails", appended = out.appended, deferred = out.deferred,
