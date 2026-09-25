@@ -11,7 +11,7 @@ use super::{AssetSource, RecipeSource};
 
 pub(super) struct Bundled;
 
-fn lookup(table: &[(&str, &'static str)], key: &str) -> Option<&'static str> {
+fn lookup<T: Copy>(table: &[(&str, T)], key: &str) -> Option<T> {
     table.iter().find(|(k, _)| *k == key).map(|(_, v)| *v)
 }
 
@@ -51,6 +51,6 @@ const ASSETS: &[(&str, &[u8])] = {
 
 impl AssetSource for Bundled {
     fn bundled_asset(&self, key: &str) -> Option<&'static [u8]> {
-        ASSETS.iter().find(|(k, _)| *k == key).map(|(_, v)| *v)
+        lookup(ASSETS, key)
     }
 }
