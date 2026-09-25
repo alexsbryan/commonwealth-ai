@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 use axum::extract::State;
-use axum::http::HeaderMap;
+use axum::http::{HeaderMap, StatusCode};
+use axum::response::{IntoResponse, Response};
 use axum::Json;
 
 use commonwealth_core::ids::NodeId;
@@ -149,7 +150,11 @@ pub(crate) fn synthesize_fingerprint(
 /// embed model (with its query-instruction prefix), and — when a corpus
 /// engine is wired — advertise the ingest endpoints (§5) that
 /// `routes_oicp_ingest` serves.
-fn apply_v04_enrichment(state: &AppState, embedded: bool, manifest: &mut ProviderManifest) {
+async fn apply_v04_enrichment(
+    state: &AppState,
+    embedded: bool,
+    manifest: &mut ProviderManifest,
+) -> Result<(), sovereign_mesh::ledger_port::LedgerAbsent> {
     // §2 features.
     let mut feats: Vec<String> = if embedded {
         EMBEDDED_FEATURES
@@ -192,7 +197,7 @@ fn apply_v04_enrichment(state: &AppState, embedded: bool, manifest: &mut Provide
     // instruction prefix) already lives in the inference store, set by the
     // daemon at bootstrap; a client reconstructs bit-compatible query
     // embeddings from it for federated search.
-    let embed_model = state.inner.store.inference_store.get_local_embed_model();
+    let embed_model = state.local_embed_model().await?;
     if embed_model.is_some() || ingest.is_some() {
         match &mut manifest.knowledge {
             Some(k) => {
@@ -213,6 +218,21 @@ fn apply_v04_enrichment(state: &AppState, embedded: bool, manifest: &mut Provide
             }
         }
     }
+    Ok(())
+}
+
+/// The inference state did not answer: a named 503 in place of a manifest
+/// that would advertise nothing (principle 6).
+fn inference_state_absent(e: &sovereign_mesh::ledger_port::LedgerAbsent) -> Response {
+    tracing::warn!(error = %e, "capabilities: inference state unread");
+    (
+        StatusCode::SERVICE_UNAVAILABLE,
+        Json(crate::openai_types::ErrorResponse::new(
+            format!("the inference state did not answer: {e}"),
+            "inference_state_absent",
+        )),
+    )
+        .into_response()
 }
 
 /// GET /oicp/v1/capabilities — OICP provider manifest per spec §4.
@@ -229,7 +249,7 @@ fn apply_v04_enrichment(state: &AppState, embedded: bool, manifest: &mut Provide
 pub async fn capabilities(
     State(state): State<AppState>,
     attached: Option<axum::Extension<sovereign_serving_host::admission::AttachedPrincipal>>,
-) -> Json<ProviderManifest> {
+) -> Response {
     let requester = crate::admission::requester(attached);
 
     // If we have a local inference service (Sovereign's
@@ -251,31 +271,37 @@ pub async fn capabilities(
                 });
             }
             drop(mesh);
-            apply_v04_enrichment(&state, true, &mut manifest);
+            if let Err(e) = apply_v04_enrichment(&state, true, &mut manifest).await {
+                return inference_state_absent(&e);
+            }
             apply_peer_preference(&state, &requester, &mut manifest).await;
-            return Json(manifest);
+            return Json(manifest).into_response();
         }
     }
 
+    // Read before taking the mesh lock: these reads may cross a process.
+    let read = async {
+        let models = state.list_models().await?;
+        let plan = state.inference_plan().await?.unwrap_or_default();
+        let mut addressed = std::collections::HashSet::new();
+        for id in models.keys() {
+            if state.get_llama_server_address(*id).await?.is_some() {
+                addressed.insert(*id);
+            }
+        }
+        Ok::<_, sovereign_mesh::ledger_port::LedgerAbsent>((models, plan, addressed))
+    };
+    let (models, plan, addressed) = match read.await {
+        Ok(r) => r,
+        Err(e) => return inference_state_absent(&e),
+    };
     let mesh = state.inner.fabric.mesh.read().await;
-    let models = state.inner.store.inference_store.list_models();
-    let plan = state
-        .inner
-        .store
-        .inference_store
-        .get_plan()
-        .unwrap_or_default();
 
     let model_entries: Vec<ProviderModel> = models
         .values()
         .map(|model| {
             let shard_plan = plan.model_plans.iter().find(|p| p.model == model.id);
-            let loaded = state
-                .inner
-                .store
-                .inference_store
-                .get_llama_address(model.id)
-                .is_some();
+            let loaded = addressed.contains(&model.id);
 
             let claims = synthesize_default_claims(
                 &model.name,
@@ -361,9 +387,11 @@ pub async fn capabilities(
         features: Vec::new(),
     };
     drop(mesh);
-    apply_v04_enrichment(&state, false, &mut manifest);
+    if let Err(e) = apply_v04_enrichment(&state, false, &mut manifest).await {
+        return inference_state_absent(&e);
+    }
     apply_peer_preference(&state, &requester, &mut manifest).await;
-    Json(manifest)
+    Json(manifest).into_response()
 }
 
 /// Apply any local-only peer preference for `requester` to the

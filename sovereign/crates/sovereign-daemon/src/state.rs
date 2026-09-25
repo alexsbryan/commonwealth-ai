@@ -1245,20 +1245,85 @@ impl AppState {
     }
 
     /// Get the llama-server address for a model.
-    pub fn get_llama_server_address(
+    pub async fn get_llama_server_address(
         &self,
         model_id: commonwealth_core::ids::ModelId,
-    ) -> Option<String> {
-        self.inner.store.inference_store.get_llama_address(model_id)
+    ) -> Result<Option<String>, sovereign_mesh::ledger_port::LedgerAbsent> {
+        Ok(self.inner.store.inference_store.get_llama_address(model_id))
     }
 
     /// Get the default model (first in the inference plan).
-    pub fn default_model_id(&self) -> Option<commonwealth_core::ids::ModelId> {
-        self.inner
-            .store
-            .inference_store
-            .get_plan()
-            .and_then(|p| p.model_plans.first().map(|mp| mp.model))
+    pub async fn default_model_id(
+        &self,
+    ) -> Result<Option<commonwealth_core::ids::ModelId>, sovereign_mesh::ledger_port::LedgerAbsent>
+    {
+        Ok(self
+            .inference_plan()
+            .await?
+            .and_then(|p| p.model_plans.first().map(|mp| mp.model)))
+    }
+
+    // The inference-state readers, in the shape `InferenceStatePort` answers
+    // (five-programs fp-91): the store never fails today, the port can.
+
+    /// The inference plan.
+    pub async fn inference_plan(
+        &self,
+    ) -> Result<
+        Option<commonwealth_state::inference_plan::InferencePlan>,
+        sovereign_mesh::ledger_port::LedgerAbsent,
+    > {
+        Ok(self.inner.store.inference_store.get_plan())
+    }
+
+    /// One registered model's info.
+    pub async fn model_info(
+        &self,
+        model_id: commonwealth_core::ids::ModelId,
+    ) -> Result<
+        Option<commonwealth_core::model::ModelInfo>,
+        sovereign_mesh::ledger_port::LedgerAbsent,
+    > {
+        Ok(self.inner.store.inference_store.get_model_info(model_id))
+    }
+
+    /// Every registered model, keyed by id.
+    pub async fn list_models(
+        &self,
+    ) -> Result<
+        HashMap<commonwealth_core::ids::ModelId, commonwealth_core::model::ModelInfo>,
+        sovereign_mesh::ledger_port::LedgerAbsent,
+    > {
+        Ok(self.inner.store.inference_store.list_models())
+    }
+
+    /// Every registered model with the node that wrote it.
+    pub async fn list_models_with_origins(
+        &self,
+    ) -> Result<
+        Vec<(NodeId, commonwealth_core::model::ModelInfo)>,
+        sovereign_mesh::ledger_port::LedgerAbsent,
+    > {
+        Ok(self.inner.store.inference_store.list_models_with_origins())
+    }
+
+    /// This node's embed model, as published at bootstrap.
+    pub async fn local_embed_model(
+        &self,
+    ) -> Result<
+        Option<commonwealth_core::oicp::EmbedModelInfo>,
+        sovereign_mesh::ledger_port::LedgerAbsent,
+    > {
+        Ok(self.inner.store.inference_store.get_local_embed_model())
+    }
+
+    /// Publish this node's embed model.
+    pub async fn set_local_embed_model(
+        &self,
+        info: &commonwealth_core::oicp::EmbedModelInfo,
+    ) -> Result<(), sovereign_mesh::ledger_port::LedgerAbsent> {
+        self.inner.store.inference_store.set_local_embed_model(info);
+        Ok(())
     }
 
     /// Update the ACTIVITY input to this node's inference availability.
@@ -1966,11 +2031,20 @@ impl sovereign_core::self_claims::SelfClaims for AppState {
         // built the capabilities; it now rides the port so Fabric stops
         // reaching into Serving for its own advertisement.
         let availability = self.recompute_local_availability().await;
+        // `LocalClaims` carries no absence slot, so an unanswered read is
+        // advertised as no embed model for this round — and traced as such.
+        let embed_model = match self.local_embed_model().await {
+            Ok(m) => m,
+            Err(e) => {
+                tracing::warn!(error = %e, "self claims: embed model unread; advertising none this round");
+                None
+            }
+        };
         sovereign_core::self_claims::LocalClaims {
             availability,
             in_flight: self.current_local_in_flight(),
             storage_remaining: self.storage_remaining_bytes(),
-            embed_model: self.inner.store.inference_store.get_local_embed_model(),
+            embed_model,
             media_available: self.local_media_available().await,
         }
     }

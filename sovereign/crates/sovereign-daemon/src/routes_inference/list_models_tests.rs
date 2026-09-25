@@ -509,7 +509,7 @@ async fn dispatchable_ids_matches_what_an_ungated_listing_reports() {
     )
     .unwrap();
     let mut from_listing: Vec<String> = listed.data.iter().map(|m| m.id.clone()).collect();
-    let mut from_mint_gate = dispatchable_ids(&state).await;
+    let mut from_mint_gate = dispatchable_ids(&state).await.unwrap();
     from_listing.sort();
     from_mint_gate.sort();
     assert_eq!(from_mint_gate, from_listing);

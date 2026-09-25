@@ -24,6 +24,23 @@ use crate::state::AppState;
 /// stays true when the operator renames the node.
 const LOCAL_HOLDER: &str = "local";
 
+/// The inference state did not answer: a named 503, never a routing miss
+/// or an empty list (principle 6).
+fn inference_state_absent(e: &sovereign_mesh::ledger_port::LedgerAbsent) -> Response {
+    warn!(error = %e, "inference state unread");
+    (
+        StatusCode::SERVICE_UNAVAILABLE,
+        Json(
+            serde_json::to_value(ErrorResponse::new(
+                format!("the inference state did not answer: {e}"),
+                "inference_state_absent",
+            ))
+            .unwrap_or_default(),
+        ),
+    )
+        .into_response()
+}
+
 /// POST /v1/chat/completions — OpenAI-compatible chat completions.
 pub async fn chat_completions(
     State(state): State<AppState>,
@@ -287,9 +304,10 @@ pub async fn chat_completions(
             || oicp_req.context_tokens.is_some()
             || oicp_req.max_output_tokens.is_some();
         if has_v03_routing {
-            let model_id = match route_with_oicp(&state, oicp_req) {
-                Some(id) => id,
-                None => {
+            let model_id = match route_with_oicp(&state, oicp_req).await {
+                Ok(Some(id)) => id,
+                Err(e) => return inference_state_absent(&e),
+                Ok(None) => {
                     return (
                         StatusCode::SERVICE_UNAVAILABLE,
                         Json(
@@ -309,7 +327,11 @@ pub async fn chat_completions(
 
     // --- Priority 2: Model name matches a loaded model by name ---
     if let Some(ref requested_model) = request.model {
-        if let Some(model_id) = find_model_by_name(&state, requested_model) {
+        let by_name = match find_model_by_name(&state, requested_model).await {
+            Ok(id) => id,
+            Err(e) => return inference_state_absent(&e),
+        };
+        if let Some(model_id) = by_name {
             debug!(
                 model_name = requested_model,
                 "routing to model by exact name match"
@@ -328,16 +350,19 @@ pub async fn chat_completions(
             let synthesized = InferenceRequirements::new()
                 .with_hint(resolution.hint.clone())
                 .with_latency_class(resolution.latency_class);
-            if let Some(model_id) = route_with_oicp(&state, &synthesized) {
-                return forward_to_model(&state, model_id, &request).await;
+            match route_with_oicp(&state, &synthesized).await {
+                Ok(Some(model_id)) => return forward_to_model(&state, model_id, &request).await,
+                Ok(None) => {}
+                Err(e) => return inference_state_absent(&e),
             }
         }
     }
 
     // --- Priority 4: Default model ---
-    match state.default_model_id() {
-        Some(model_id) => forward_to_model(&state, model_id, &request).await,
-        None => (
+    match state.default_model_id().await {
+        Err(e) => inference_state_absent(&e),
+        Ok(Some(model_id)) => forward_to_model(&state, model_id, &request).await,
+        Ok(None) => (
             StatusCode::SERVICE_UNAVAILABLE,
             Json(
                 serde_json::to_value(ErrorResponse::new(
@@ -359,14 +384,12 @@ pub async fn chat_completions(
 /// picks among LOCAL models on one node for an already-admitted
 /// request — load/locality/cold-start/availability are peer-shaped
 /// signals that don't differentiate candidates sharing one host.
-fn route_with_oicp(state: &AppState, req: &InferenceRequirements) -> Option<ModelId> {
-    let models = state.inner.store.inference_store.list_models();
-    let plan = state
-        .inner
-        .store
-        .inference_store
-        .get_plan()
-        .unwrap_or_default();
+async fn route_with_oicp(
+    state: &AppState,
+    req: &InferenceRequirements,
+) -> Result<Option<ModelId>, sovereign_mesh::ledger_port::LedgerAbsent> {
+    let models = state.list_models().await?;
+    let plan = state.inference_plan().await?.unwrap_or_default();
 
     let mut best_model = None;
     let mut best_name = String::new();
@@ -405,14 +428,14 @@ fn route_with_oicp(state: &AppState, req: &InferenceRequirements) -> Option<Mode
             req_latency = ?req.effective_latency_class(),
             "route_with_oicp: selected"
         );
-        Some(model)
+        Ok(Some(model))
     } else {
         tracing::info!(
             req_hint = %req.effective_hint(),
             req_latency = ?req.effective_latency_class(),
             "route_with_oicp: no claim passed the hard gate"
         );
-        None
+        Ok(None)
     }
 }
 
@@ -433,13 +456,16 @@ fn synthesize_claims_for_model_info(
     )
 }
 
-fn find_model_by_name(state: &AppState, name: &str) -> Option<ModelId> {
-    let models = state.inner.store.inference_store.list_models();
+async fn find_model_by_name(
+    state: &AppState,
+    name: &str,
+) -> Result<Option<ModelId>, sovereign_mesh::ledger_port::LedgerAbsent> {
+    let models = state.list_models().await?;
     let name_lower = name.to_lowercase();
-    models
+    Ok(models
         .values()
         .find(|m| m.name.to_lowercase() == name_lower)
-        .map(|m| m.id)
+        .map(|m| m.id))
 }
 
 async fn forward_to_model(
@@ -447,9 +473,10 @@ async fn forward_to_model(
     model_id: ModelId,
     request: &ChatCompletionRequest,
 ) -> Response {
-    let llama_addr = match state.get_llama_server_address(model_id) {
-        Some(addr) => addr,
-        None => {
+    let llama_addr = match state.get_llama_server_address(model_id).await {
+        Err(e) => return inference_state_absent(&e),
+        Ok(Some(addr)) => addr,
+        Ok(None) => {
             return (
                 StatusCode::SERVICE_UNAVAILABLE,
                 Json(
@@ -722,10 +749,13 @@ pub async fn embeddings(
 pub async fn list_models(
     State(state): State<AppState>,
     guest: Option<axum::Extension<crate::client_auth::Guest>>,
-) -> impl IntoResponse {
+) -> Response {
     let mut data = match manifest_rows(&state).await {
         Some(rows) => rows,
-        None => store_rows(&state).await,
+        None => match store_rows(&state).await {
+            Ok(rows) => rows,
+            Err(e) => return inference_state_absent(&e),
+        },
     };
     // A guest sees only what their grant covers. This is the SAME contract the
     // rest of this handler keeps — every id returned is dispatchable — held for
@@ -744,6 +774,7 @@ pub async fn list_models(
         object: "list".into(),
         data,
     })
+    .into_response()
 }
 
 /// Build the list from the manifests name resolution reads. `None` when
@@ -764,14 +795,16 @@ pub async fn list_models(
 /// that set at the mint site would be a second answer to "what can this node
 /// serve" (§10.6) — and the failure would be quiet: a grant minted for a name
 /// nothing advertises produces a link that looks fine and 403s on first use.
-pub(crate) async fn dispatchable_ids(state: &AppState) -> Vec<String> {
-    match manifest_rows(state).await {
+pub(crate) async fn dispatchable_ids(
+    state: &AppState,
+) -> Result<Vec<String>, sovereign_mesh::ledger_port::LedgerAbsent> {
+    Ok(match manifest_rows(state).await {
         Some(rows) => rows,
-        None => store_rows(state).await,
+        None => store_rows(state).await?,
     }
     .into_iter()
     .map(|m| m.id)
-    .collect()
+    .collect())
 }
 
 /// `None` means "this node has no manifest surface at all", which is the
@@ -924,7 +957,9 @@ async fn manifest_rows(state: &AppState) -> Option<Vec<ModelObject>> {
 /// no manifest to consult and a narrower list would be empty; it is not the
 /// path any mesh node with local inference takes. Deduped by name like the
 /// manifest path, so the duplicate-row bug is fixed on both.
-async fn store_rows(state: &AppState) -> Vec<ModelObject> {
+async fn store_rows(
+    state: &AppState,
+) -> Result<Vec<ModelObject>, sovereign_mesh::ledger_port::LedgerAbsent> {
     let local_id = state.self_node_id();
     let live_nodes: HashSet<NodeId> = {
         let mesh = state.inner.fabric.mesh.read().await;
@@ -938,12 +973,7 @@ async fn store_rows(state: &AppState) -> Vec<ModelObject> {
             .collect()
     };
 
-    let plan = state
-        .inner
-        .store
-        .inference_store
-        .get_plan()
-        .unwrap_or_default();
+    let plan = state.inference_plan().await?.unwrap_or_default();
 
     // Ground-truth residency from the embedded engine (empty on the
     // orchestrator daemon). Used only to OR-correct the `loaded` flag,
@@ -954,29 +984,19 @@ async fn store_rows(state: &AppState) -> Vec<ModelObject> {
         None => Vec::new(),
     };
 
-    let mut data: Vec<ModelObject> = state
-        .inner
-        .store
-        .inference_store
-        .list_models_with_origins()
+    let registered = state.list_models_with_origins().await?;
+    let mut addressed: HashSet<ModelId> = HashSet::new();
+    for (_, model) in &registered {
+        if state.get_llama_server_address(model.id).await?.is_some() {
+            addressed.insert(model.id);
+        }
+    }
+    let mut data: Vec<ModelObject> = registered
         .into_iter()
-        .filter(|(origin, model)| {
-            live_nodes.contains(origin)
-                || state
-                    .inner
-                    .store
-                    .inference_store
-                    .get_llama_address(model.id)
-                    .is_some()
-        })
+        .filter(|(origin, model)| live_nodes.contains(origin) || addressed.contains(&model.id))
         .map(|(_, model)| {
             let shard_plan = plan.model_plans.iter().find(|p| p.model == model.id);
-            let loaded = state
-                .inner
-                .store
-                .inference_store
-                .get_llama_address(model.id)
-                .is_some()
+            let loaded = addressed.contains(&model.id)
                 || resident
                     .iter()
                     .any(|r| r.resident && r.model_id == model.name);
@@ -1072,7 +1092,7 @@ async fn store_rows(state: &AppState) -> Vec<ModelObject> {
         });
     }
 
-    data
+    Ok(data)
 }
 
 // ── Local-inference serving helpers ────────────────────────────

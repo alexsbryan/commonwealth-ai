@@ -363,8 +363,8 @@ fn the_client_api_binds_loopback_by_default_and_never_exposes_an_unauthenticated
 /// returned `{"data":[]}`. Root cause was that the daemon never
 /// registered its loaded model slots into `inference_store`, so
 /// Commonwealth's handler had nothing to list.
-#[test]
-fn register_local_model_slots_writes_info_for_all_three_slots() {
+#[tokio::test]
+async fn register_local_model_slots_writes_info_for_all_three_slots() {
     use crate::state::AppState;
     use commonwealth_core::mesh::Mesh;
 
@@ -414,7 +414,7 @@ fn register_local_model_slots_writes_info_for_all_three_slots() {
 
     register_local_model_slots(&app_state, &cfg, node_id);
 
-    let models = app_state.inner.store.inference_store.list_models();
+    let models = app_state.list_models().await.unwrap();
     assert_eq!(
         models.len(),
         3,
@@ -429,7 +429,7 @@ fn register_local_model_slots_writes_info_for_all_three_slots() {
     // Second call with the same config must not duplicate entries
     // (deterministic ModelId per slot + path).
     register_local_model_slots(&app_state, &cfg, node_id);
-    let models2 = app_state.inner.store.inference_store.list_models();
+    let models2 = app_state.list_models().await.unwrap();
     assert_eq!(
         models2.len(),
         3,

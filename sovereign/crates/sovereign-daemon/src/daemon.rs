@@ -3354,16 +3354,18 @@ impl EmbeddedDaemon {
             .serving()
             .and_then(|s| s.advertise_embed.info())
         {
-            app_state
-                .inner
-                .store
-                .inference_store
-                .set_local_embed_model(embed_info);
-            info!(
-                model_id = %embed_info.model_id,
-                dims = embed_info.dimensions,
-                "embed model info: published to inference store"
-            );
+            match app_state.set_local_embed_model(embed_info).await {
+                Ok(()) => info!(
+                    model_id = %embed_info.model_id,
+                    dims = embed_info.dimensions,
+                    "embed model info: published to inference store"
+                ),
+                Err(e) => warn!(
+                    model_id = %embed_info.model_id,
+                    error = %e,
+                    "embed model info: NOT published to inference store"
+                ),
+            }
         }
 
         // Start the pull-based work-queue reaper. Dormant until a handoff
@@ -4843,7 +4845,7 @@ fn register_local_model_slots(app_state: &AppState, cfg: &SetupConfig, node_id: 
             supports_parallel_instances: false,
             supports_pipeline_shard: false,
         };
-        app_state.inner.store.inference_store.set_model_info(&info);
+        app_state.register_model(info.clone());
         info!(
             role,
             name = %info.name,

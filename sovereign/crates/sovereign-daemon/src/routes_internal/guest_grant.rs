@@ -155,7 +155,16 @@ pub async fn guest_grant_issue(
     // nothing advertises is born broken: it looks fine to the operator, and
     // 403s on the guest's first request with a message about scope that sends
     // them hunting in the wrong place.
-    let dispatchable = crate::routes_inference::dispatchable_ids(&state).await;
+    let dispatchable = crate::routes_inference::dispatchable_ids(&state)
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(ErrorBody {
+                    error: format!("the inference state did not answer: {e}"),
+                }),
+            )
+        })?;
     for scope in &scopes {
         let ids = match scope {
             Scope::Models(ids) => ids,

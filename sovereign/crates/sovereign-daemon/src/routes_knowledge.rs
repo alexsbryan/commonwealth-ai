@@ -75,13 +75,16 @@ pub async fn knowledge_search(
                 Json(empty_knowledge_response()),
             );
         };
-        let prefix = state
-            .inner
-            .store
-            .inference_store
-            .get_local_embed_model()
-            .map(|e| e.query_instruction_prefix)
-            .unwrap_or_default();
+        let prefix = match state.local_embed_model().await {
+            Ok(m) => m.map(|e| e.query_instruction_prefix).unwrap_or_default(),
+            Err(e) => {
+                tracing::warn!(error = %e, "knowledge search: embed model unread; cannot embed the query in its space");
+                return (
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    Json(empty_knowledge_response()),
+                );
+            }
+        };
         match local
             .embed(&format!("{prefix}{}", request.query_text))
             .await

@@ -9,15 +9,35 @@ use sovereign_contracts::run_identity::BuildStamp;
 
 use crate::state::AppState;
 
+/// Each inference-plan entry with its registered model NAME and whether the
+/// orchestrator recorded a llama-server address for it. The name is the join
+/// key for engine residency: the engine reports GGUF stems, not ModelIds, so
+/// comparing against the ModelId's `model-<hex>` Display can never match.
+async fn loaded_model_rows(
+    state: &AppState,
+) -> Result<
+    Vec<(
+        commonwealth_state::inference_plan::ShardPlan,
+        Option<String>,
+        bool,
+    )>,
+    sovereign_mesh::ledger_port::LedgerAbsent,
+> {
+    let plan = state.inference_plan().await?.unwrap_or_default();
+    let mut rows = Vec::with_capacity(plan.model_plans.len());
+    for p in plan.model_plans {
+        let name = state.model_info(p.model).await?.map(|m| m.name);
+        let addressed = state.get_llama_server_address(p.model).await?.is_some();
+        rows.push((p, name, addressed));
+    }
+    Ok(rows)
+}
+
 /// GET /status — mesh and node status summary.
 pub async fn status(State(state): State<AppState>) -> Json<StatusResponse> {
+    // Read before taking the mesh lock: these reads may cross a process.
+    let plan_rows = loaded_model_rows(&state).await;
     let mesh = state.inner.fabric.mesh.read().await;
-    let plan = state
-        .inner
-        .store
-        .inference_store
-        .get_plan()
-        .unwrap_or_default();
 
     let members_online = mesh
         .members
@@ -69,29 +89,19 @@ pub async fn status(State(state): State<AppState>) -> Json<StatusResponse> {
             None => None,
         };
 
-    let loaded_models: Vec<LoadedModelStatus> = plan
-        .model_plans
-        .iter()
-        .map(|p| {
+    let (plan_rows, loaded_models_absent) = match plan_rows {
+        Ok(rows) => (rows, None),
+        Err(e) => {
+            tracing::warn!(error = %e, "status: inference state unread; loaded_models absent");
+            (Vec::new(), Some(e.to_string()))
+        }
+    };
+    let loaded_models: Vec<LoadedModelStatus> = plan_rows
+        .into_iter()
+        .map(|(p, name, addressed)| {
             let model = format!("{}", p.model);
-            // OR-fix: the orchestrator `llama_addr:` key is never written
-            // on the embedded path, so fall back to real engine residency.
-            // The engine reports GGUF stems, not ModelIds, so the join key
-            // is the registered model NAME (`ModelInfo.name`) — comparing
-            // against the ModelId's `model-<hex>` Display can never match.
-            let name = state
-                .inner
-                .store
-                .inference_store
-                .get_model_info(p.model)
-                .map(|m| m.name);
             LoadedModelStatus {
-                loaded: state
-                    .inner
-                    .store
-                    .inference_store
-                    .get_llama_address(p.model)
-                    .is_some()
+                loaded: addressed
                     || resident
                         .iter()
                         .any(|r| r.resident && Some(&r.model_id) == name.as_ref()),
@@ -143,6 +153,7 @@ pub async fn status(State(state): State<AppState>) -> Json<StatusResponse> {
             // Deprecated mirror — see the field doc. Same value, so
             // the two keys can never disagree.
             fim: edit_slot_status,
+            loaded_models_absent,
             peer_requests: {
                 // Join the tally's opaque NodeIds against the mesh
                 // roster so the answer is "BeefyMac is being served",
@@ -446,6 +457,10 @@ pub struct InferenceStatus {
     /// attribution witness, `last_request_at` for staleness.
     #[serde(default)]
     pub peer_requests: Vec<PrincipalRequestStatus>,
+    /// Why `loaded_models` could not be read, when the inference state did
+    /// not answer — an empty list there is then not "nothing loaded".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub loaded_models_absent: Option<String>,
 }
 
 /// One principal's tally row on `/status` (UC-R1) — the `Member` arm of the

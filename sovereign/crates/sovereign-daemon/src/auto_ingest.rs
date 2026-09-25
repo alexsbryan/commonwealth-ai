@@ -812,8 +812,13 @@ const MAX_NEXT_UNIT_FAILURES: u32 = 5;
 async fn discover_and_spawn_pull_loops(state: AppState, self_id: NodeId, daemon_port: u16) {
     // Read the local embed model. If missing, we can't match any
     // handoff — skip silently (peer is still bootstrapping).
-    let Some(local_embed) = state.inner.store.inference_store.get_local_embed_model() else {
-        return;
+    let local_embed = match state.local_embed_model().await {
+        Ok(Some(m)) => m,
+        Ok(None) => return,
+        Err(e) => {
+            tracing::warn!(error = %e, "pull_loops: embed model unread; skipping this tick");
+            return;
+        }
     };
 
     let entries = match state

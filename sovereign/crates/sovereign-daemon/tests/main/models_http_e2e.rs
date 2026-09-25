@@ -110,11 +110,7 @@ async fn locally_owned_model_appears_in_v1_models_response() {
     // Insert a ModelInfo. `set_model_info` stamps `self_id` as the
     // origin (the constructor at `InferenceStateStore::new` captures
     // self_id from AppState).
-    state
-        .inner
-        .store
-        .inference_store
-        .set_model_info(&empty_model_info(1, "test-local-model"));
+    state.register_model(empty_model_info(1, "test-local-model"));
 
     let addr = spawn_router(client_router(state)).await;
     let resp = reqwest::Client::new()
@@ -196,7 +192,7 @@ async fn offline_peer_only_model_is_filtered_out_of_v1_models() {
     // Sanity: the store sees BOTH the self-owned + peer-owned
     // entries — the filter is the only thing standing between this
     // and the wire.
-    let raw_count = state.inner.store.inference_store.list_models().len();
+    let raw_count = state.list_models().await.unwrap().len();
     assert_eq!(
         raw_count, 1,
         "test precondition: with no local-self model registered, \
