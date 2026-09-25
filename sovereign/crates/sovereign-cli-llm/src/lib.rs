@@ -69,11 +69,11 @@ mod inner_chaos;
 // It reaches `ring_cmd::rail_append`, which is the ONE append client
 // (ARCH §10.6).
 mod knowledge_gym_cmd;
+mod legacy_store;
 mod mcp_cmd;
 mod mcp_demo_server;
 mod meta_atlas_cmd;
 mod mobile_cmd;
-mod legacy_store;
 mod newsworthy_cmd;
 mod pipeline_cmd;
 mod portfolio_cmd;
