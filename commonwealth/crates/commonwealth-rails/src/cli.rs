@@ -222,7 +222,7 @@ pub async fn main(args: Args) -> ExitCode {
                 "run: posture resolved"
             );
             // Held until `main` returns: the process lifetime.
-            let _root = match crate::claim_root(&data_dir) {
+            let root = match crate::claim_root(&data_dir) {
                 Ok(f) => f,
                 Err(e) => return refuse(e),
             };
@@ -235,9 +235,13 @@ pub async fn main(args: Args) -> ExitCode {
                 Err(e) => return refuse(e),
             };
             eprintln!("cw-rails: http://127.0.0.1:{listen}/v1/mesh/status");
-            match daemon.run().await {
-                Ok(()) => ExitCode::SUCCESS,
-                Err(e) => refuse(e),
+            // The root's loss ends the process (five-programs-66).
+            tokio::select! {
+                ran = daemon.run() => match ran {
+                    Ok(()) => ExitCode::SUCCESS,
+                    Err(e) => refuse(e),
+                },
+                lost = crate::root_lost(&data_dir, &root, crate::ROOT_WATCH_INTERVAL) => refuse(lost),
             }
         }
     }

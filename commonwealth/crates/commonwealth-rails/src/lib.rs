@@ -109,6 +109,11 @@ pub enum Refusal {
     RootHeld(PathBuf),
     #[error("could not open the data-root lock {0}: {1}")]
     RootLock(PathBuf, std::io::Error),
+    #[error(
+        "{0} is no longer the lock this cw-rails claimed ({1}) — its data root is gone \
+         or replaced, so it exits rather than acknowledge writes it cannot keep"
+    )]
+    RootLost(PathBuf, String),
 }
 
 impl Refusal {
@@ -160,6 +165,50 @@ pub fn claim_root(data_dir: &Path) -> Result<std::fs::File, Refusal> {
             Err(Refusal::RootLock(path, e))
         }
     }
+}
+
+/// How often `run` checks that `rails.lock` is still the file it claimed.
+pub const ROOT_WATCH_INTERVAL: std::time::Duration = std::time::Duration::from_secs(2);
+
+/// Resolve when `<data_dir>/rails.lock` is no longer `held` — unlinked (the
+/// root was deleted) or replaced — compared by (dev, ino) every `every`.
+/// cw-rails owns its root and its lifetime (principle 12): nothing else
+/// reaps a cw-rails whose root is gone, so it reaps itself (five-programs-66).
+#[cfg(unix)]
+pub async fn root_lost(
+    data_dir: &Path,
+    held: &std::fs::File,
+    every: std::time::Duration,
+) -> Refusal {
+    use std::os::unix::fs::MetadataExt;
+    let path = data_dir.join(ROOT_LOCK);
+    let ours = match held.metadata() {
+        Ok(m) => (m.dev(), m.ino()),
+        Err(e) => return Refusal::RootLost(path, format!("the held lock cannot be read: {e}")),
+    };
+    tracing::info!(lock = %path.display(), every = ?every, "cw-rails: watching the data root's lock");
+    let mut tick = tokio::time::interval(every);
+    loop {
+        tick.tick().await;
+        let why = match std::fs::metadata(&path) {
+            Ok(m) if (m.dev(), m.ino()) == ours => continue,
+            Ok(_) => "another file now sits at that path".to_string(),
+            Err(e) => format!("the path is gone: {e}"),
+        };
+        tracing::error!(lock = %path.display(), why = %why, "cw-rails: the data root's lock is no longer ours — exiting");
+        return Refusal::RootLost(path, why);
+    }
+}
+
+/// No (dev, ino) to compare off unix: the watch never fires, and says so.
+#[cfg(not(unix))]
+pub async fn root_lost(
+    data_dir: &Path,
+    _held: &std::fs::File,
+    _every: std::time::Duration,
+) -> Refusal {
+    tracing::warn!(lock = %data_dir.join(ROOT_LOCK).display(), "cw-rails: no root-loss watch on this platform");
+    std::future::pending().await
 }
 
 /// Identity plus the ONE long-lived iroh endpoint. Both verbs need this much;
