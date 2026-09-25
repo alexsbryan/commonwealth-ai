@@ -32,8 +32,8 @@ use axum::extract::State;
 use axum::http::StatusCode;
 use axum::Json;
 use commonwealth_core::ids::NodeId;
-use sovereign_mesh::ledger_port::PeerPreference;
 use serde::{Deserialize, Serialize};
+use sovereign_mesh::ledger_port::PeerPreference;
 
 use crate::state::AppState;
 
