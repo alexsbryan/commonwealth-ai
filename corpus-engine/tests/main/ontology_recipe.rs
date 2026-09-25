@@ -19,7 +19,9 @@ use corpus_engine::{recipe_templates, Recipe};
 
 /// The maple-house recipe from the recipes data crate (no repo-relative path).
 fn maple_house() -> &'static str {
-    let found = corpus_engine_recipes::UNCATALOGED.iter().find(|(id, _)| *id == "maple-house");
+    let found = corpus_engine_recipes::UNCATALOGED
+        .iter()
+        .find(|(id, _)| *id == "maple-house");
     found.map(|(_, toml)| *toml).expect("maple-house bundled")
 }
 

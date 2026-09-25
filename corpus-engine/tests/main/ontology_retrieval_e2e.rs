@@ -37,8 +37,12 @@ fn numismatics_policies() -> OntologyPolicies {
 /// manifest the eval bank and the chain proof both read left this test
 /// asserting the old hoard.
 fn truth_json() -> &'static str {
-    let found = corpus_engine_recipes::TRUTH.iter().find(|(id, _)| *id == "wessex-hoard");
-    found.map(|(_, json)| *json).expect("wessex-hoard truth.json bundled")
+    let found = corpus_engine_recipes::TRUTH
+        .iter()
+        .find(|(id, _)| *id == "wessex-hoard");
+    found
+        .map(|(_, json)| *json)
+        .expect("wessex-hoard truth.json bundled")
 }
 
 /// One catalogue coin, typed under the author's noun.
