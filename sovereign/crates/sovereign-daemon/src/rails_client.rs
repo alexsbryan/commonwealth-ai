@@ -27,6 +27,9 @@ use sovereign_mesh::rail_port::{RailFut, RingRailPort};
 /// The typed ledger ports' dialing implementation (fp-78).
 pub mod ledger;
 
+/// The daemon's sync `ReplicatedKv`, dialed (fp-110).
+pub mod kv;
+
 /// Where the mesh's serving process listens. Mirrors cw-rails'
 /// `commonwealth_rails::config::DEFAULT_LISTEN` — 9747, outside the
 /// 9741..9745 family this daemon binds (the two programs are built and
