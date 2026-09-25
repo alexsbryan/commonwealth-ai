@@ -23,9 +23,11 @@
 //! Every method has a named caller in this crate (`ring_sync`, `rail_kv_pump`,
 //! `measurements_rail`) or in the daemon's rail routes. The sync leaves the
 //! local surface carries that the mesh never calls — `ops_missing_from`'s
-//! unbudgeted form, the `SkippedLine` half of a read, `on_behalf_of` (the
-//! mesh passes `None` everywhere and the door refuses it) — stay off the
-//! port: a smaller trait is a smaller wire contract to keep honest.
+//! unbudgeted form, the `SkippedLine` half of a read, a bare `on_behalf_of`
+//! (the mesh passes `None` everywhere and the door drops it) — stay off the
+//! port: a smaller trait is a smaller wire contract to keep honest. A guest's
+//! name crosses only as a signed [`GuestAttestation`]
+//! ([`RingRailPort::journal_append_attested`], decision five-programs-34).
 //!
 //! **The signer is the PORT'S identity, never a per-call argument.** The mesh
 //! always passed `rail.signer()`; post-flip the signature happens where the
@@ -45,7 +47,8 @@ use std::pin::Pin;
 use std::sync::Arc;
 
 use commonwealth_rail_core::{
-    Admission, Compaction, Digest, Op, RailAct, RailError, Roster, RosterOrigin, SignedOp,
+    Admission, Compaction, Digest, GuestAttestation, Op, RailAct, RailError, Roster, RosterOrigin,
+    SignedOp,
 };
 
 /// The local journal types, re-exported so a consumer that names ONLY the
@@ -86,6 +89,17 @@ pub trait RingRailPort: Send + Sync {
         namespace: &str,
         act: RailAct,
         roster: &Roster,
+    ) -> RailFut<'_, Op<SignedOp>>;
+    /// [`Self::journal_append`] on a guest's behalf: the journal's side
+    /// verifies `attestation` against the namespace's roster and the clock,
+    /// and only then signs the act with `on_behalf_of` = its name. A refusal
+    /// is [`RailError::AttestRefused`] and nothing is written.
+    fn journal_append_attested(
+        &self,
+        namespace: &str,
+        act: RailAct,
+        roster: &Roster,
+        attestation: &GuestAttestation,
     ) -> RailFut<'_, Op<SignedOp>>;
     /// The seal act plus the prune it authorises, in one result: a refused
     /// prune is not a failed seal, and the pair stays one fact over the wire.
@@ -207,6 +221,30 @@ impl RingRailPort for LocalRingRail {
         Box::pin(async move {
             self.journal(&namespace)?
                 .append(act, self.0.signer(), &roster, None)
+        })
+    }
+
+    fn journal_append_attested(
+        &self,
+        namespace: &str,
+        act: RailAct,
+        roster: &Roster,
+        attestation: &GuestAttestation,
+    ) -> RailFut<'_, Op<SignedOp>> {
+        let namespace = namespace.to_string();
+        let roster = roster.clone();
+        let attestation = attestation.clone();
+        Box::pin(async move {
+            let now = commonwealth_core::clock::unix_now_secs() as i64;
+            attestation
+                .verify(&roster, &namespace, now)
+                .map_err(RailError::AttestRefused)?;
+            self.journal(&namespace)?.append(
+                act,
+                self.0.signer(),
+                &roster,
+                Some(attestation.name.as_str()),
+            )
         })
     }
 

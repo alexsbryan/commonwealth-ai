@@ -433,6 +433,11 @@ pub enum RailError {
         actor_prefix(.actor)
     )]
     NotInRoster { actor: String, namespace: String },
+    /// A guest attestation the journal's writer would not honour. Typed so
+    /// the refusal's name crosses a dial intact (`AttestRefusal::name`) and
+    /// the door can hand it to the caller verbatim.
+    #[error("the guest attestation was refused: {0}")]
+    AttestRefused(AttestRefusal),
 }
 
 /// Enough of an actor key to recognise, short enough to read in a sentence.

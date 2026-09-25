@@ -62,6 +62,19 @@ impl AttestRefusal {
             Self::SignerNotInRoster => "signer_not_in_roster",
         }
     }
+
+    /// The refusal a door named, read back from its [`Self::name`] — so a
+    /// dialing client re-types the refusal instead of matching prose.
+    pub fn from_name(name: &str) -> Option<Self> {
+        [
+            Self::Forged,
+            Self::Expired,
+            Self::WrongNamespace,
+            Self::SignerNotInRoster,
+        ]
+        .into_iter()
+        .find(|r| r.name() == name)
+    }
 }
 
 impl GuestAttestation {

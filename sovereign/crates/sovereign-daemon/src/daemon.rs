@@ -3086,6 +3086,20 @@ impl EmbeddedDaemon {
                 )
             },
         ));
+        // The guest door's attester (decision five-programs-34): cw-rails
+        // honours a guest's name only under a roster member's signed word,
+        // and this node's key is the member the door speaks as.
+        let attest_key = identity_key.clone();
+        let guest_attester: Option<Arc<sovereign_mesh::fabric::GuestAttester>> = Some(Arc::new(
+            move |name: &str, namespace: &str, expires_at: i64| {
+                commonwealth_rail_core::GuestAttestation::sign(
+                    &attest_key,
+                    name,
+                    namespace,
+                    expires_at,
+                )
+            },
+        ));
         // The ring rail's journals moved to the serving process's data root
         // (fp-54, §4 rule 1 — one data directory, one owner). The one-time
         // handover runs before any rail surface answers; from here on this
@@ -3132,6 +3146,7 @@ impl EmbeddedDaemon {
             convergence: convergence_recorder,
             self_node_pubkey,
             self_dial_signer,
+            guest_attester,
             ring_rail,
             mesh_mutation_hook,
             // The reader the iroh install publishes through later; seeded with

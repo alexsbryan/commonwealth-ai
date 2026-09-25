@@ -229,6 +229,15 @@ fn refused_error(
                 .to_string(),
         };
     }
+    // A refused guest attestation keeps its name across the dial, so the
+    // door hands the caller the serving process's own verdict (principle 6).
+    if let Some(refusal) = body
+        .get("kind")
+        .and_then(|k| k.as_str())
+        .and_then(commonwealth_rail_core::AttestRefusal::from_name)
+    {
+        return RailError::AttestRefused(refusal);
+    }
     RailError::Rejected(match body.get("error").and_then(|e| e.as_str()) {
         Some(msg) => msg.to_string(),
         None => format!("the mesh's serving process at {base} refused: {status}"),
@@ -427,6 +436,51 @@ impl RingRailPort for RailsRingRail {
         })
     }
 
+    fn journal_append_attested(
+        &self,
+        namespace: &str,
+        act: commonwealth_rail_core::RailAct,
+        roster: &commonwealth_rail_core::Roster,
+        attestation: &commonwealth_rail_core::GuestAttestation,
+    ) -> RailFut<'_, commonwealth_rail_core::Op<commonwealth_rail_core::SignedOp>> {
+        let base = self.base.clone();
+        let namespace = namespace.to_string();
+        // Rails verifies against ITS roster; this one is the local impl's.
+        let _ = roster;
+        let attestation = attestation.clone();
+        Box::pin(async move {
+            #[derive(serde::Deserialize)]
+            struct Answer {
+                op: commonwealth_rail_core::Op<commonwealth_rail_core::SignedOp>,
+            }
+            let mut body = serde_json::to_value(&act).map_err(|e| {
+                commonwealth_rail_core::RailError::Io(format!("the act does not serialise: {e}"))
+            })?;
+            let attestation = serde_json::to_value(&attestation).map_err(|e| {
+                commonwealth_rail_core::RailError::Io(format!(
+                    "the attestation does not serialise: {e}"
+                ))
+            })?;
+            match body.as_object_mut() {
+                Some(obj) => {
+                    obj.insert("attestation".into(), attestation);
+                }
+                None => {
+                    return Err(commonwealth_rail_core::RailError::Io(
+                        "the act did not serialise to an object".into(),
+                    ))
+                }
+            }
+            let a: Answer = post_json(
+                &base,
+                &format!("/v1/rail/append?namespace={namespace}"),
+                &body,
+            )
+            .await?;
+            Ok(a.op)
+        })
+    }
+
     fn journal_seal(
         &self,
         namespace: &str,
@@ -574,3 +628,7 @@ impl RingRailPort for RailsRingRail {
         Box::pin(async move { dial_json(&base, "/v1/work/projection").await })
     }
 }
+
+#[cfg(test)]
+#[path = "rails_client/tests.rs"]
+mod tests;

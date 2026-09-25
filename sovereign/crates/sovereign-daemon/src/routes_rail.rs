@@ -412,23 +412,44 @@ pub async fn append(
     // Read before the body becomes an act, because `RailAct` does not carry
     // this field and serde drops it on the way in.
     let on_behalf_of = stamp_from(guest, &body);
-    // A guest's stamp cannot cross the dial. The serving process's door has
-    // no sessions — its recorded rule is to drop any claimed name and sign as
-    // the node — so the act would land with NO attribution, and the wall
-    // would read the member's name over the guest's words: the exact
-    // misattribution [`stamp_from`] exists to prevent. This door refuses
-    // rather than ships it, and names the gap (principle 6). Reads are
-    // untouched; re-mounting guest writes wants the stamp's wire shape
-    // decided by the operator (row HUMAN-fp54-guest-write-remount).
-    if on_behalf_of.is_some() {
-        return err(
-            StatusCode::SERVICE_UNAVAILABLE,
-            "guest writes are not served while the journals live at the mesh's \
-             serving process: it carries no sessions, so a guest's name could \
-             not be authenticated there, and this door will not file a \
-             guest's words under the member's name",
-        );
-    }
+    // A guest's name crosses the dial only as this node's signed word
+    // (decision five-programs-34): the serving process holds no sessions,
+    // so it honours `on_behalf_of` under an attestation it verifies against
+    // its roster — and refuses, by name, when this node's key is not in it.
+    // The attestation lives as long as the guest's session does.
+    let attestation = match on_behalf_of.as_deref() {
+        None => None,
+        Some(name) => {
+            let expires_at = guest
+                .and_then(|g| g.session.as_ref())
+                .map_or(0, |s| (s.expires_at_ms / 1000) as i64);
+            match state.attest_guest(name, &namespace, expires_at) {
+                Some(a) => {
+                    tracing::debug!(
+                        namespace,
+                        guest = name,
+                        expires_at,
+                        signer = %a.signer,
+                        "rail: attested a guest's append for the serving process"
+                    );
+                    Some(a)
+                }
+                None => {
+                    tracing::warn!(
+                        namespace,
+                        guest = name,
+                        "rail: refused a guest append — this node has no key to attest with"
+                    );
+                    return err(
+                        StatusCode::SERVICE_UNAVAILABLE,
+                        "guest writes need this node's identity key to vouch for \
+                         the guest's name, and this daemon has none — the write \
+                         would land under the member's name, so it is refused",
+                    );
+                }
+            }
+        }
+    };
     // Taken as a `Value` and converted here rather than as `Json<RailAct>`,
     // so a refusal is the rail's own sentence instead of axum's rejection
     // prose wrapped around serde's prose wrapped around it (ARCH §10.6).
@@ -458,9 +479,15 @@ pub async fn append(
             .await
             .map(|(op, retired)| (op, Some(retired)))
     } else {
-        rail.journal_append(&namespace, act, &roster)
-            .await
-            .map(|op| (op, None))
+        // A seal takes no stamp: it is delivery, not words.
+        match &attestation {
+            Some(a) => {
+                rail.journal_append_attested(&namespace, act, &roster, a)
+                    .await
+            }
+            None => rail.journal_append(&namespace, act, &roster).await,
+        }
+        .map(|op| (op, None))
     };
     match appended {
         Ok((op, retired)) => {
@@ -498,6 +525,25 @@ pub async fn append(
         // the local journal open used to answer 400 with this same sentence.
         Err(e @ RailError::BadNamespace(_)) => err(StatusCode::BAD_REQUEST, e.to_string()),
         Err(RailError::Rejected(why)) => err(StatusCode::UNPROCESSABLE_ENTITY, why),
+        // The serving process's own verdict on the attestation, verbatim —
+        // a daemon not in rails' roster reads as `signer_not_in_roster`,
+        // never as success (principle 6).
+        Err(RailError::AttestRefused(refusal)) => {
+            tracing::warn!(
+                namespace,
+                refusal = refusal.name(),
+                "rail: the serving process refused a guest's attestation"
+            );
+            (
+                StatusCode::FORBIDDEN,
+                Json(serde_json::json!({
+                    "error": refusal.to_string(),
+                    "kind": refusal.name(),
+                    "namespace": namespace,
+                })),
+            )
+                .into_response()
+        }
         Err(e) => err(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
     }
 }

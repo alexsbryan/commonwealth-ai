@@ -140,6 +140,27 @@ fn state_with_rail_sessions(
     sessions: sovereign_grants::GuestSessionBinding,
     pages: sovereign_daemon::guest_door::GuestPages,
 ) -> AppState {
+    state_with_rail_attested_by(root, key, key, sessions, pages)
+}
+
+/// The guest door's attester, as the daemon builds it: a closure over a node
+/// key (daemon.rs, beside the dial signer).
+fn attester(key: &SigningKey) -> Arc<sovereign_daemon::state::fabric::GuestAttester> {
+    let key = key.clone();
+    Arc::new(move |name: &str, namespace: &str, expires_at: i64| {
+        commonwealth_rail_core::GuestAttestation::sign(&key, name, namespace, expires_at)
+    })
+}
+
+/// [`state_with_rail_sessions`] whose guest door attests with `attest_key`
+/// rather than the rail's own key — a door the roster may not admit.
+fn state_with_rail_attested_by(
+    root: &std::path::Path,
+    key: &SigningKey,
+    attest_key: &SigningKey,
+    sessions: sovereign_grants::GuestSessionBinding,
+    pages: sovereign_daemon::guest_door::GuestPages,
+) -> AppState {
     let rail = LocalRingRail::new(root, Arc::new(key.clone()));
     let mut members = std::collections::BTreeMap::new();
     members.insert(Person::from("alex"), vec![key.actor()]);
@@ -155,6 +176,7 @@ fn state_with_rail_sessions(
     bare_state_with_seed(
         sovereign_daemon::state::FabricSeed {
             ring_rail: Some(Arc::new(rail)),
+            guest_attester: Some(attester(attest_key)),
             ..Default::default()
         },
         sessions,

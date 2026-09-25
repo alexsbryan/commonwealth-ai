@@ -544,6 +544,17 @@ impl AppState {
         ))
     }
 
+    /// Sign a guest session's attestation with the node key, or `None` if
+    /// the node has no identity key (decision five-programs-34).
+    pub fn attest_guest(
+        &self,
+        name: &str,
+        namespace: &str,
+        expires_at: i64,
+    ) -> Option<commonwealth_rail_core::GuestAttestation> {
+        self.inner.fabric.attest_guest(name, namespace, expires_at)
+    }
+
     /// The ring rail's storage, or `None` if the daemon has none.
     pub fn ring_rail(&self) -> Option<Arc<dyn sovereign_mesh::rail_port::RingRailPort>> {
         self.inner.fabric.ring_rail.clone()

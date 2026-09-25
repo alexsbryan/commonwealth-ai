@@ -46,6 +46,13 @@ pub type MeshMutationHook = std::sync::Arc<dyn Fn(&Mesh, NodeId) + Send + Sync>;
 pub type DialSigner =
     dyn Fn(u64, Option<String>, Vec<std::net::SocketAddr>) -> String + Send + Sync;
 
+/// Signs a guest attestation with the node key — `(name, namespace,
+/// expires_at unix secs) -> attestation`. Same seam as [`DialSigner`]: the
+/// daemon builds it from the node `SigningKey` and `AppState` never holds raw
+/// key material (decision five-programs-34).
+pub type GuestAttester =
+    dyn Fn(&str, &str, i64) -> commonwealth_rail_core::GuestAttestation + Send + Sync;
+
 /// The provider that yields this node's CURRENT iroh dial info (relay URL +
 /// direct addrs), pulled fresh each gossip round. Type-erased so this crate
 /// needs no iroh dependency; the daemon owns the endpoint.
@@ -185,6 +192,8 @@ pub struct FabricSeed {
     pub self_node_pubkey: Option<commonwealth_core::ids::NodePubkey>,
     /// The dial-info signing closure, built from the node `SigningKey`.
     pub self_dial_signer: Option<Arc<DialSigner>>,
+    /// The guest-attestation signing closure, built from the node `SigningKey`.
+    pub guest_attester: Option<Arc<GuestAttester>>,
     /// The ring rail's storage, built from the data dir and identity key.
     pub ring_rail: Option<Arc<dyn crate::rail_port::RingRailPort>>,
     /// The mutation persistence hook, installed at construction rather than
@@ -238,6 +247,11 @@ pub struct FabricPart {
     /// dependency. `None` when the daemon has no identity key. See
     /// [`crate::state::AppState::sign_dial_info`].
     pub self_dial_signer: Option<Arc<DialSigner>>,
+    /// Closure that signs a guest session's attestation for the rail's
+    /// writer (decision five-programs-34). `None` when the daemon has no
+    /// identity key — a guest write is then refused by name. See
+    /// [`Self::attest_guest`].
+    pub guest_attester: Option<Arc<GuestAttester>>,
     /// The ring rail's storage: where each ring namespace's journal lives,
     /// and how this node signs the ops it writes — the port the round, the
     /// pump and the rail routes read through, local journals or the serving
@@ -402,6 +416,7 @@ impl FabricPart {
             self_node_pubkey: seed.self_node_pubkey,
             dial_info: seed.dial_info,
             self_dial_signer: seed.self_dial_signer,
+            guest_attester: seed.guest_attester,
             ring_rail: seed.ring_rail,
             ring_write_nudge: Arc::new(tokio::sync::Notify::new()),
             peer_transport: seed.peer_transport,
@@ -451,6 +466,18 @@ impl FabricPart {
             relay_url.map(|s| s.to_string()),
             direct_addrs.to_vec(),
         ))
+    }
+
+    /// Sign `name`'s guest session in `namespace` until `expires_at` (unix
+    /// secs), or `None` if the node has no identity key.
+    pub fn attest_guest(
+        &self,
+        name: &str,
+        namespace: &str,
+        expires_at: i64,
+    ) -> Option<commonwealth_rail_core::GuestAttestation> {
+        let attester = self.guest_attester.clone()?;
+        Some(attester(name, namespace, expires_at))
     }
 
     /// The ring rail's storage, or `None` if the daemon has none.

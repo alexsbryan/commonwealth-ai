@@ -230,7 +230,10 @@ takes the room-facing `host:port`, and the apps on the wall go in
 `[daemon.guest_pages]` — one line per rail namespace,
 `ring-doc = "/path/to/bundle"`, or
 `house-expenses = { dir = "/path/to/bundle", guests = "read" }` for an app the
-room may only look at. Registering an app there is how you say it admits
+room may only look at. A guest's write reaches the journal at `cw-rails` with
+the daemon's signed word for the guest's name, and rails honours it only when
+the daemon's node key is in that namespace's roster; otherwise the write is
+refused as `signer_not_in_roster`, never filed under the member. Registering an app there is how you say it admits
 guests; a namespace the daemon writes itself (`mesh-measurements`, the work
 plane) is refused at config load. Each app is served at `/ring/<namespace>/`,
 and the bare `/ring/` is an index of the ones the scanned grant reaches.

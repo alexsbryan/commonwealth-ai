@@ -380,9 +380,8 @@ async fn the_door_claims_a_name_once_and_refuses_the_three_collisions() {
     assert!(body.contains("already someone else in this room"), "{body}");
 
     // The handle is accepted on the routes behind the door — observed on a
-    // READ, because guest WRITES are refused while the journals live at the
-    // serving process (fp-54; the refusal is pinned in
-    // `a_guest_write_is_refused_while_the_journals_live_at_the_serving_process`).
+    // READ; the write it stamps is pinned in
+    // `the_door_stamps_the_guest_and_the_page_cannot`.
     let mut req = request("GET", "/v1/rail/log", LAN_PEER, Some(GUEST_TOKEN), None);
     req.headers_mut().insert(
         axum::http::HeaderName::from_static("x-ring-session"),
@@ -404,16 +403,15 @@ async fn the_door_claims_a_name_once_and_refuses_the_three_collisions() {
 }
 
 /// **The door writes whose words an act was, and a lying page gets nowhere.**
-/// The journals live at the mesh's serving process since fp-54, and its door
-/// carries no sessions — a guest's name could not be authenticated there, so
-/// this door REFUSES the write rather than file a guest's words under the
-/// member's name (principle 6: named absence, never a silent substitution).
-/// The name the door holds still decides: the page's `on_behalf_of` and its
-/// payload `guest` field are equally unread, and the log carries no act at
-/// all — which is the point. Re-mounting guest writes wants the stamp's wire
-/// shape decided (recorded on fp-54).
+/// The page here sends a `guest` of its own in the payload and an
+/// `on_behalf_of` beside it, and the act is still attributed to the name the
+/// session holds. The journal lives where the door signs a
+/// `GuestAttestation` for it (decision five-programs-34), and the name that
+/// lands is the one the attestation carries. The log hands the finished name
+/// back, so an app renders `person` and is right without knowing guests
+/// exist.
 #[tokio::test]
-async fn a_guest_write_is_refused_while_the_journals_live_at_the_serving_process() {
+async fn the_door_stamps_the_guest_and_the_page_cannot() {
     let dir = tempfile::tempdir().unwrap();
     let key = SigningKey::from_bytes(&[1u8; 32]);
     let a = with_guest(
@@ -421,43 +419,74 @@ async fn a_guest_write_is_refused_while_the_journals_live_at_the_serving_process
         vec![Scope::Rails(NS.into())],
     );
     let (_root, page) = page_dir();
-
-    let (status, body) = door(
-        a.clone(),
-        &page,
-        request(
-            "POST",
-            "/v1/guest/session",
-            LAN_PEER,
-            Some(GUEST_TOKEN),
-            Some(serde_json::json!({ "name": "ana" })),
-        ),
-    )
-    .await;
+    let handle = claimed(a.clone(), &page, GUEST_TOKEN, "ana").await;
+    let (status, body) = stamped_append(a.clone(), &page, &handle).await;
     assert_eq!(status, StatusCode::OK, "{body}");
-    let handle = serde_json::from_str::<serde_json::Value>(&body).unwrap()["session"]
-        .as_str()
-        .expect("a handle")
-        .to_string();
 
-    let with_handle = |method: &str, path: &str, body: Option<serde_json::Value>| {
-        let mut req = request(method, path, LAN_PEER, Some(GUEST_TOKEN), body);
-        req.headers_mut().insert(
-            axum::http::HeaderName::from_static("x-ring-session"),
-            axum::http::HeaderValue::from_str(&handle).unwrap(),
-        );
-        req
-    };
+    let log = guest_log(a, &page, &handle).await;
+    let op = &log["ops"][0];
+    let person = op["person"].as_str().expect("a person");
+    assert!(
+        person.starts_with("ana, guest of "),
+        "the door's name did not reach the log: {person}"
+    );
+    assert_eq!(op["guest"]["name"], "ana");
+    assert_eq!(
+        op["on_behalf_of"], "ana",
+        "the name must be what was SIGNED"
+    );
+    assert!(!person.contains("zoe"), "the page's claim won: {person}");
+}
 
-    // The page names somebody else, in the payload and beside it. Neither is
-    // read, and nothing is written: the door refuses before the body is even
-    // parsed as an act.
-    let (status, body) = door(
-        a.clone(),
-        &page,
-        with_handle(
+/// A door whose key the namespace's roster does not name cannot vouch for a
+/// guest: the journal's writer refuses the attestation, the door hands the
+/// refusal's name through verbatim, and nothing lands under anyone's name
+/// (principle 6 — never read as success).
+#[tokio::test]
+async fn a_door_the_roster_does_not_name_is_refused_by_name() {
+    let dir = tempfile::tempdir().unwrap();
+    let key = SigningKey::from_bytes(&[1u8; 32]);
+    let stranger = SigningKey::from_bytes(&[42u8; 32]);
+    let a = with_guest(
+        state_with_rail_attested_by(
+            dir.path(),
+            &key,
+            &stranger,
+            sovereign_grants::GuestSessionBinding::Door,
+            Default::default(),
+        ),
+        vec![Scope::Rails(NS.into())],
+    );
+    let (_root, page) = page_dir();
+    let handle = claimed(a.clone(), &page, GUEST_TOKEN, "ana").await;
+    let (status, body) = stamped_append(a.clone(), &page, &handle).await;
+    assert_eq!(status, StatusCode::FORBIDDEN, "{body}");
+    let body: serde_json::Value = serde_json::from_str(&body).unwrap();
+    assert_eq!(body["kind"], "signer_not_in_roster", "{body}");
+
+    let log = guest_log(a, &page, &handle).await;
+    assert_eq!(
+        log["ops"].as_array().map(Vec::len),
+        Some(0),
+        "no act may appear, attributed to anyone: {log}"
+    );
+}
+
+/// Append one act, under the session `handle`, whose page names "zoe" in the
+/// payload and beside it.
+async fn stamped_append(
+    state: AppState,
+    page: &std::path::Path,
+    handle: &str,
+) -> (StatusCode, String) {
+    door(
+        state,
+        page,
+        as_guest(
             "POST",
             "/v1/rail/append",
+            GUEST_TOKEN,
+            handle,
             Some(serde_json::json!({
                 "op": "record",
                 "on_behalf_of": "zoe",
@@ -467,26 +496,19 @@ async fn a_guest_write_is_refused_while_the_journals_live_at_the_serving_process
             })),
         ),
     )
-    .await;
-    assert_eq!(
-        status,
-        StatusCode::SERVICE_UNAVAILABLE,
-        "a guest write must be refused, not attributed to the member: {body}"
-    );
-    assert!(
-        body.contains("serving process") && body.contains("sessions"),
-        "the refusal must name the gap: {body}"
-    );
+    .await
+}
 
-    // And the log carries nothing — no act under the member's name, and no
-    // page-supplied name either.
-    let (_, log) = door(a, &page, with_handle("GET", "/v1/rail/log", None)).await;
-    let log: serde_json::Value = serde_json::from_str(&log).unwrap();
-    assert_eq!(
-        log["ops"].as_array().map(Vec::len),
-        Some(0),
-        "no act may appear, attributed to anyone: {log}"
-    );
+/// The log as the guest holding `handle` sees it.
+async fn guest_log(state: AppState, page: &std::path::Path, handle: &str) -> serde_json::Value {
+    let (status, log) = door(
+        state,
+        page,
+        as_guest("GET", "/v1/rail/log", GUEST_TOKEN, handle, None),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{log}");
+    serde_json::from_str(&log).unwrap()
 }
 
 /// The second app on this wall: its own grant, its own bearer, its own QR —
@@ -580,11 +602,8 @@ async fn a_name_claimed_on_one_app_is_the_same_person_on_the_next() {
 
     let handle = claimed(a.clone(), &page, GUEST_TOKEN, "ana").await;
 
-    // The doc, on the same wall, under its own bearer: no second prompt. The
-    // append is REFUSED — guest writes live at the serving process now and it
-    // carries no sessions — but the refusal is the journal gap (503), not an
-    // auth failure, which is the proof that the handle walked: under the doc's
-    // bearer the door still knows who is holding this phone.
+    // The doc, on the same wall, under its own bearer: no second prompt, and
+    // the door names the writer from the handle it already knows.
     let (status, body) = door(
         a.clone(),
         &page,
@@ -600,13 +619,7 @@ async fn a_name_claimed_on_one_app_is_the_same_person_on_the_next() {
         ),
     )
     .await;
-    assert_eq!(
-        status,
-        StatusCode::SERVICE_UNAVAILABLE,
-        "a walked handle must reach the write door (and be refused as a guest \
-         write), not be treated as unknown: {body}"
-    );
-    assert!(body.contains("serving process"), "{body}");
+    assert_eq!(status, StatusCode::OK, "{body}");
 
     let (_, log) = door(
         a.clone(),
@@ -618,6 +631,11 @@ async fn a_name_claimed_on_one_app_is_the_same_person_on_the_next() {
     assert_eq!(
         log["namespace"], DOC_NS,
         "reach followed the handle instead of the bearer presented"
+    );
+    let person = log["ops"][0]["person"].as_str().expect("a person");
+    assert!(
+        person.starts_with("ana, guest of "),
+        "the name did not walk to the second app: {person}"
     );
 
     // And nothing of it reached the app the name was claimed on.
@@ -739,23 +757,12 @@ async fn one_wall_bearer_reaches_every_declared_app_and_is_refused_the_rest() {
         )
     };
 
-    // The declared, writable app: one bearer. The write is refused with the
-    // serving-process gap (guest writes are not served since fp-54) — the
-    // bearer reached the door, which is what this wall tests.
+    // The declared, writable app: one bearer, and the guest's name on the act.
     let (status, body) = door(a.clone(), &page, append(NS)).await;
-    assert_eq!(
-        status,
-        StatusCode::SERVICE_UNAVAILABLE,
-        "the declared app's write is the named guest-write refusal: {body}"
-    );
+    assert_eq!(status, StatusCode::OK, "{body}");
     let (status, body) = door(a.clone(), &page, log(NS)).await;
     assert_eq!(status, StatusCode::OK);
-    let ns_log: serde_json::Value = serde_json::from_str(&body).unwrap();
-    assert_eq!(
-        ns_log["ops"].as_array().map(Vec::len),
-        Some(0),
-        "and nothing was filed: {ns_log}"
-    );
+    assert!(body.contains("ana, guest of alex"), "{body}");
 
     // The second app on the same wall, registered read-only. The SAME bearer
     // reads it — narrowing what a guest may DO is not narrowing what they see.
