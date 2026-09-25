@@ -472,9 +472,12 @@ Seams the sweep learned, by name:
 
 ### The recipes tree — mechanical, one cutter, one pass
 
-- [ ] `sovereign-recipes/` → `corpus-engine/recipes/`: **106 files, 1.7 MB,
-      54 recipes, 145 files outside the tree citing the path.**
-- [ ] Delete `corpus-engine/build.rs`; `include_str!` directly instead of via `OUT_DIR`.
+- [ ] `sovereign-recipes/` becomes an `[ingest]` data crate that `include_str!`s
+      its own files from a static list, with a list-matches-tree test; corpus-engine
+      reads definitions only through its own recipe-source and asset-source ports,
+      with one default-source module (five-programs-52, which replaces the earlier
+      move into `corpus-engine/recipes/`; Phase B lifts the default source out).
+- [ ] Delete `corpus-engine/build.rs`.
 - [ ] Closes the last rule-3a violation in the workspace.
 
 ### The atlas read surface — the long pole
