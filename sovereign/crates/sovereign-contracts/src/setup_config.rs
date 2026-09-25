@@ -1453,6 +1453,13 @@ pub struct DaemonSection {
     #[serde(default)]
     pub client_tokens: Option<String>,
 
+    /// Where the mesh's serving process (`cw-rails`) listens, as a base URL
+    /// (`"http://127.0.0.1:9747"`). `None` (default) is
+    /// `sovereign_daemon::rails_client::DEFAULT_RAILS_BASE`;
+    /// `sovereign_daemon::rails_client::resolve_rails_base` is its one reader.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rails_base: Option<String>,
+
     /// `[daemon.guest_pages]` — one wall, more than one app: rail namespace
     /// → bundle directory, served at `/ring/<namespace>/`. Registering an app
     /// here is how its owner DECLARES that it admits guests; a wall grant
@@ -1497,6 +1504,7 @@ impl Default for DaemonSection {
             internal_bind: default_internal_bind(),
             internal_auth: None,
             client_tokens: None,
+            rails_base: None,
             local_only: default_local_only(),
         }
     }

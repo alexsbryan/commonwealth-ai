@@ -160,6 +160,8 @@ mod plaintext_join_over_iroh_e2e;
 mod port_config;
 #[path = "main/rail_kv_pump_loop_tests.rs"]
 mod rail_kv_pump_loop_tests;
+#[path = "main/rails_base_config.rs"]
+mod rails_base_config;
 #[path = "main/reading_http_e2e.rs"]
 mod reading_http_e2e;
 #[path = "main/recipe_surface_e2e.rs"]

@@ -3118,9 +3118,10 @@ impl EmbeddedDaemon {
             &SetupConfig::default_path(),
             &commonwealth_media::rails_data_dir(),
         );
-        let ring_rail: Option<Arc<dyn sovereign_mesh::rail_port::RingRailPort>> = Some(Arc::new(
-            crate::rails_client::RailsRingRail::new(crate::rails_client::DEFAULT_RAILS_BASE),
-        ));
+        let ring_rail: Option<Arc<dyn sovereign_mesh::rail_port::RingRailPort>> =
+            Some(Arc::new(crate::rails_client::RailsRingRail::new(
+                crate::rails_client::resolve_rails_base(&self.setup_config.read().await.daemon),
+            )));
         // The persistence hook fires on every `Mesh` mutation from a route
         // handler (`/internal/join`, `/internal/gossip`). It closes the race
         // window where the founder accepts a new member but crashes before

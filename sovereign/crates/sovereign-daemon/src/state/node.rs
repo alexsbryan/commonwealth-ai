@@ -57,8 +57,8 @@ pub struct NodeSeed {
     pub named_client_tokens: Arc<ClientTokenStore>,
     /// Where the mesh's serving process (`cw-rails`) listens. The roster
     /// verbs dial it (FIVE_PROGRAMS fp-6 / §12 decision 2) instead of
-    /// answering from this daemon's own mesh copy. Defaults to
-    /// [`crate::rails_client::DEFAULT_RAILS_BASE`]; the ring-sync tests point
+    /// answering from this daemon's own mesh copy. Resolved from
+    /// `[daemon] rails_base` by [`crate::rails_client::resolve_rails_base`]; the ring-sync tests point
     /// it at a fixture the same way production would point it at a rails
     /// daemon on another port.
     pub rails_base: String,
@@ -145,7 +145,7 @@ impl NodeSeed {
             internal_auth,
             client_tokens,
             named_client_tokens,
-            rails_base: crate::rails_client::DEFAULT_RAILS_BASE.to_string(),
+            rails_base: crate::rails_client::resolve_rails_base(&daemon),
         })
     }
 }

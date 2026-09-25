@@ -37,6 +37,25 @@ pub mod kv;
 /// both sides rather than imported across the lift boundary).
 pub const DEFAULT_RAILS_BASE: &str = "http://127.0.0.1:9747";
 
+/// The base this daemon dials cw-rails at: `[daemon] rails_base` when set,
+/// else [`DEFAULT_RAILS_BASE`]. THE one reader of the key (fp-112).
+pub fn resolve_rails_base(daemon: &sovereign_core::setup_config::DaemonSection) -> String {
+    match daemon.rails_base.as_deref() {
+        Some(url) => {
+            tracing::debug!(rails_base = url, source = "config", "rails base resolved");
+            url.to_string()
+        }
+        None => {
+            tracing::debug!(
+                rails_base = DEFAULT_RAILS_BASE,
+                source = "default",
+                "rails base resolved"
+            );
+            DEFAULT_RAILS_BASE.to_string()
+        }
+    }
+}
+
 /// How long a dial may take before it is reported absent. Loopback answers
 /// or refuses in milliseconds; the bound exists so a HUNG serving process
 /// turns into a named refusal rather than a wedged route.
