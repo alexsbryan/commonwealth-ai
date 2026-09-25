@@ -24,7 +24,7 @@ use sovereign_mesh::ledger_port::{
     LedgerFut, PeerPreference, PeerPreferencesPort, ProcessedShardsPort,
 };
 
-use super::{client, get_answer, RailsDial};
+use super::{get_answer, post_answer, RailsDial};
 
 fn absent(e: RailsDial) -> LedgerAbsent {
     LedgerAbsent(e.to_string())
@@ -39,28 +39,7 @@ async fn ledger_post<T: DeserializeOwned>(
     path: &str,
     body: Value,
 ) -> Result<T, LedgerAbsent> {
-    let url = format!("{}{}", base.trim_end_matches('/'), path);
-    let resp = client().post(&url).json(&body).send().await.map_err(|e| {
-        absent(RailsDial::Absent {
-            base: base.to_string(),
-            detail: e.to_string(),
-        })
-    })?;
-    let status = resp.status();
-    if !status.is_success() {
-        let message = resp.text().await.unwrap_or_default();
-        return Err(absent(RailsDial::Refused {
-            status,
-            kind: None,
-            message: format!("{path} refused: {status} {message}"),
-        }));
-    }
-    resp.json().await.map_err(|e| {
-        absent(RailsDial::Unreadable {
-            base: base.to_string(),
-            detail: e.to_string(),
-        })
-    })
+    post_answer(base, path, &body).await.map_err(absent)
 }
 
 /// Every ledger port, dialed. `self_node_id` is the daemon's: every row a

@@ -92,7 +92,33 @@ async fn get_answer<T: serde::de::DeserializeOwned>(
     path: &str,
     verb: &str,
 ) -> Result<T, RailsDial> {
-    let resp = dial(base, path).await?;
+    read_answer(base, verb, dial(base, path).await?).await
+}
+
+/// One POST door's answer, read exactly as [`get_answer`] reads a GET's.
+async fn post_answer<T: serde::de::DeserializeOwned>(
+    base: &str,
+    path: &str,
+    body: &serde_json::Value,
+) -> Result<T, RailsDial> {
+    let url = format!("{}{}", base.trim_end_matches('/'), path);
+    let resp = client()
+        .post(&url)
+        .json(body)
+        .send()
+        .await
+        .map_err(|e| RailsDial::Absent {
+            base: base.to_string(),
+            detail: e.to_string(),
+        })?;
+    read_answer(base, path, resp).await
+}
+
+async fn read_answer<T: serde::de::DeserializeOwned>(
+    base: &str,
+    verb: &str,
+    resp: reqwest::Response,
+) -> Result<T, RailsDial> {
     let status = resp.status();
     if !status.is_success() {
         let message = resp.text().await.unwrap_or_default();
