@@ -1,20 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! The mesh store's send half — local writes onto the ring journal, and the
-//! seal that keeps the journal from growing forever.
+//! The seal that keeps the daemon's own non-store journals — `mesh-measurements`
+//! and `work` — from growing forever.
 //!
-//! # Where this sits
-//!
-//! `commonwealth_state::rail_kv` is the vocabulary and the fold, and it has no
-//! I/O, no clock and no journal. This is the half that has all three: a task
-//! beside [`crate::ring_sync`]'s that drains
-//! [`MeshStore::outbox_take`](commonwealth_state::MeshStore::outbox_take) every
-//! [`RAIL_KV_PUMP_INTERVAL`] and signs each queued write onto its namespace's
-//! journal. Nothing else is done with the row — the local store already holds
-//! it, because `set` wrote it in the same transaction that queued it.
-//!
-//! The store is not replicated any more; it is PROJECTED. The journal is
-//! truth, and [`project_namespace`] is what turns a namespace's admitted ops
-//! back into store rows on the receiving side.
+//! The store's half moved out: cw-rails drains the mesh store's outbox onto
+//! the journals, seals and snapshots the store namespaces, and folds admitted
+//! ops back into its store (`commonwealth_rails::kv`, five-programs fp-77,
+//! fp-109, fp-83). What stays here is the two planes whose writers are this
+//! daemon's (five-programs-40).
 //!
 //! # Sealing: for the daemon's own rings, the daemon decides
 //!
@@ -49,76 +41,24 @@
 //! sealed here, and it stays off that list: two different questions, and the
 //! list answers the other one.
 //!
-//! The three vocabularies are named by [`projector_for`], which is what the
-//! receive half and [`snapshot`] both read. What a `work` seal re-appends is
+//! The three vocabularies are named by [`projector_for`], which is what
+//! [`seal_if_due`] and [`snapshot`] both read. What a `work` seal re-appends is
 //! [`live_work_acts`], and its bound is stated there.
-//!
-//! # What a seal costs, and how the cost was absorbed
-//!
-//! A seal + snapshot re-appends the LIVE rows this node owns, from the store.
-//! A TOMBSTONE is not a live row and is not in the store, so a delete this node
-//! published would stop travelling once the seal that retired it lands, and a
-//! peer that never received the tombstone would keep its stale value forever.
-//! ea4da7b68 recorded that as the KV shape of K7's "no history past the next
-//! seal" and priced it with the threshold; it is now CLOSED instead.
-//!
-//! **The seal itself carries the answer.** A seal followed by its whole
-//! snapshot IS the actor's live set, so a peer holding both may retire every
-//! other row of that actor's. [`snapshot`] therefore ends with
-//! `rail_kv::snapshot_mark(floor)` — one act naming the seal it closes,
-//! appended after the last row — and holding that mark with no sequence hole
-//! for its actor is holding the whole snapshot. `rail_kv::project` reports the
-//! live set per closed actor and `MeshStore::apply_projection` reconciles the
-//! store's rows to it in the same call. What a peer misses is now bounded by
-//! what it has HELD, not by what it happened to be online for.
-//!
-//! The threshold stays where it is: `SEAL_AFTER_OWN_OPS` is priced on journal
-//! bytes (~594 a line) and the cost it was raised for is gone, not smaller.
-//!
-//! # Retention rides the fold, and through the fold it reaches the journal
-//!
-//! A namespace may declare a retention window
-//! (`commonwealth_state::retention`). It is enforced in
-//! [`MeshStore::apply_projection`](commonwealth_state::MeshStore::apply_projection),
-//! because that is the only place it CAN be: the store is a projection, so a
-//! row a sweep deletes has no incumbent and `merge_entry` puts it back on the
-//! next round. `RetentionGc`'s thirty days on the contributions ledger were
-//! undone every minute until 2026-09-08, on every node with an online peer
-//! ([`crate::ring_sync`]'s `a_retention_sweep_is_not_undone_by_the_next_projection`).
-//!
-//! An expiry publishes NOTHING. The floor is `now` minus a constant and `t` is
-//! on every op, so every node derives the same answer without being told — and
-//! a tombstone per retired row would add a journal line to every node in the
-//! mesh for each row retention exists to remove.
-//!
-//! [`snapshot`] is how the store's bound becomes the journal's: it re-appends
-//! this node's live set FROM THE STORE, so a row the floor keeps out is a row
-//! the snapshot does not carry above the new floor, and the compaction behind
-//! the seal deletes its line. Same decision, reached twice, with no second
-//! number (ARCH §10.6).
 
-use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::time::Duration;
 
 use crate::fabric::FabricPart;
-use commonwealth_rail::{RailAct, RailError, Roster};
-use commonwealth_state::{rail_kv, MeshStore, Outboxed};
+use commonwealth_rail::{RailAct, Roster};
 use commonwealth_work::projection::{WorkProjection, WorkUnitStatus};
 use commonwealth_work::{ActorKey, UnitRef, WorkAct, WorkActKind};
-use tokio::sync::Notify;
 use tracing::{debug, info, warn};
 
 use crate::rail_port::RingRailPort;
-use crate::ring_roster::MeshRoster;
 
-/// How often the outbox is drained.
-///
-/// Two seconds because the outbox is the LATENCY of a local write reaching the
-/// ring, and the ring's own exchange is a minute — a shorter pump would spend
-/// wakeups for nothing, a longer one would show up as a write that "did not
-/// take". The pump nudges the sync loop after any append, so the round that
-/// carries the write starts here rather than at the next sixty-second tick.
+/// How often the seal arms check their journals — cw-rails' own pump
+/// interval (`commonwealth_rails::kv::PUMP_INTERVAL`), kept equal so the two
+/// sealers run on one cadence.
 pub const RAIL_KV_PUMP_INTERVAL: Duration = Duration::from_secs(2);
 
 /// How many of this node's own ops may stand above its last seal before the
@@ -126,27 +66,10 @@ pub const RAIL_KV_PUMP_INTERVAL: Duration = Duration::from_secs(2);
 /// too (fp-77), re-exported at its historical path.
 pub use commonwealth_state::rail_kv::SEAL_AFTER_OWN_OPS;
 
-/// How many outbox rows one tick takes.
-///
-/// A bound, not a throughput knob: rows left behind are taken on the next tick
-/// two seconds later, and `outbox_take` is non-destructive so nothing is lost
-/// by stopping early. It exists so a burst of writes cannot make one tick hold
-/// the journal's writer lock for an unbounded stretch.
-const OUTBOX_DRAIN_LIMIT: usize = 256;
-
-/// What one [`pump_once`] did. Returned rather than only logged so a test can
+/// What one [`seal_once`] did. Returned rather than only logged so a test can
 /// assert on the mechanism instead of on log lines.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct PumpOutcome {
-    /// Queued writes signed onto a journal.
-    pub appended: usize,
-    /// Queued writes LEFT IN THE OUTBOX because this node is not in a roster
-    /// yet. Not a failure — see [`pump_once`].
-    pub deferred: usize,
-    /// Queued writes dropped because the rail will never accept them. Acked so
-    /// they cannot block the namespace behind them, and every one of them
-    /// carries a `warn` naming the refusal.
-    pub refused: usize,
     /// Namespaces sealed this tick.
     pub sealed: usize,
     /// Rows re-appended as the snapshot behind those seals.
@@ -166,41 +89,22 @@ impl Drop for RailKvPumpHandle {
     }
 }
 
-/// Spawn the outbox pump. Call once per daemon start.
-///
-/// The FIRST thing it does is rebuild the projection from every journal on
-/// disk, before any write is drained. In production `MeshStore` is
-/// `in_memory()`, so what this node holds after a restart is nothing at all
-/// until the fold is run — the journal is the durable half and the store is
-/// derived from it, which is only true if something derives it.
-///
-/// `nudge` is [`crate::ring_sync`]'s wake-up. It is notified after any
-/// successful append, so a local write reaches peers on a round that starts now
-/// rather than up to sixty seconds later. Same wire, same sender: the pump does
-/// not talk to a peer, it asks the one replication path to run.
-pub fn spawn_rail_kv_pump(
-    fabric: Arc<FabricPart>,
-    interval: Duration,
-    nudge: Arc<Notify>,
-) -> RailKvPumpHandle {
+/// Spawn the two seal arms nothing drains — `mesh-measurements` and `work`.
+/// The KV drain and KV seal are cw-rails' (five-programs fp-77/fp-83; the two
+/// arms stay here, five-programs-40).
+pub fn spawn_plane_seal(fabric: Arc<FabricPart>, interval: Duration) -> RailKvPumpHandle {
     let task = tokio::spawn(async move {
         info!(
             interval_secs = interval.as_secs(),
-            seal_after_own_ops = SEAL_AFTER_OWN_OPS,
-            "rail kv pump: started"
+            "rail kv pump: started the measurements and work seal arms only"
         );
-        project_all_on_disk(&fabric).await;
         loop {
-            let out = pump_once(&fabric).await;
-            if out.appended > 0 {
-                nudge.notify_one();
+            let out = seal_once(&fabric).await;
+            if out.sealed > 0 {
                 debug!(
-                    appended = out.appended,
-                    deferred = out.deferred,
-                    refused = out.refused,
                     sealed = out.sealed,
                     snapshot_rows = out.snapshot_rows,
-                    "rail kv pump: tick, ring sync nudged"
+                    "rail kv pump: sealed a plane"
                 );
             }
             tokio::time::sleep(interval).await;
@@ -209,171 +113,25 @@ pub fn spawn_rail_kv_pump(
     RailKvPumpHandle { _task: task }
 }
 
-/// One drain of the outbox onto the ring, plus the seal check for every
-/// namespace this node writes.
-///
-/// Three verdicts per row, and they are kept apart (ARCH §18.2, §18.3):
-///
-/// - **Appended.** The row is acked.
-/// - **Deferred.** [`RailError::NotInRoster`] — this node is not in a mesh yet,
-///   so nothing it signed would be readable to anyone. The row STAYS in the
-///   outbox and travels the moment membership exists, which is the same
-///   reasoning `mesh_http`'s measurement publish already applies to the same
-///   condition. Logged once per namespace per tick at `debug`, because a solo
-///   daemon is a normal daemon and this would otherwise be a warning every two
-///   seconds forever.
-/// - **Refused.** Anything else — a payload the rail cannot carry, a journal
-///   that will not open. The row is acked WITH a `warn` naming the sentence:
-///   never a silent drop, and never a retry loop against a rail that has
-///   already said no.
-pub async fn pump_once(fabric: &FabricPart) -> PumpOutcome {
+/// One tick of the seal arms: the seal check for `mesh-measurements` and
+/// `work`. A node with no ring rail seals nothing.
+pub async fn seal_once(fabric: &FabricPart) -> PumpOutcome {
     let mut out = PumpOutcome::default();
-    let Some(rail) = fabric.ring_rail() else {
-        return out;
-    };
-    let store = Arc::clone(&fabric.mesh_store);
-    let queued = match store.outbox_take(OUTBOX_DRAIN_LIMIT) {
-        Ok(rows) => rows,
-        Err(e) => {
-            warn!(error = %e, "rail kv pump: the outbox could not be read");
-            return out;
-        }
-    };
-
-    // Grouped so the roster is read once per namespace and the seal check runs
-    // once per namespace, not once per row. `BTreeMap` keeps the order a
-    // function of the namespace set rather than of hash iteration.
-    let mut by_namespace: BTreeMap<String, Vec<Outboxed>> = BTreeMap::new();
-    for row in queued {
-        by_namespace
-            .entry(row.app_id.clone())
-            .or_default()
-            .push(row);
+    if let Some(rail) = fabric.ring_rail() {
+        seal_planes(rail.as_ref(), &mut out).await;
     }
-
-    for (namespace, rows) in by_namespace {
-        // THE door (ARCH §10.6). For these namespaces it answers from
-        // membership, because `MeshRosterSource::install` declared them —
-        // locally — or, since the flip, the serving process derives it the
-        // same way from the membership it holds.
-        let roster = match rail.roster(&namespace).await {
-            Ok(r) => r,
-            Err(e) => {
-                // Left queued: an unreadable roster is a condition that heals,
-                // and dropping the writes would make it permanent.
-                warn!(namespace, error = %e, queued = rows.len(),
-                      "rail kv pump: the roster is unreadable, so these writes stayed queued");
-                out.deferred += rows.len();
-                continue;
-            }
-        };
-
-        let mut acked: Vec<i64> = Vec::new();
-        let mut appended_here = 0usize;
-        let mut not_in_roster = false;
-        for row in &rows {
-            if not_in_roster {
-                out.deferred += 1;
-                continue;
-            }
-            let op = &row.op;
-            let payload = match rail_kv::to_payload(&op.key, op.value.as_deref(), op.t) {
-                Ok(p) => p,
-                Err(e) => {
-                    warn!(namespace, key = %op.key, error = %e,
-                          "rail kv pump: this write cannot travel on the rail and was dropped");
-                    out.refused += 1;
-                    acked.push(row.id);
-                    continue;
-                }
-            };
-            match rail
-                .journal_append(&namespace, RailAct::Record { payload }, &roster)
-                .await
-            {
-                Ok(appended) => {
-                    debug!(
-                        namespace,
-                        key = %op.key,
-                        t = op.t,
-                        // The one spelling of "this is a tombstone" — the
-                        // outbox row carries no second one (ARCH §10.6).
-                        deleted = op.value.is_none(),
-                        id = %appended.id,
-                        seq = appended.kind.seq,
-                        "rail kv pump: appended a local write"
-                    );
-                    acked.push(row.id);
-                    appended_here += 1;
-                }
-                Err(RailError::NotInRoster { actor, .. }) => {
-                    not_in_roster = true;
-                    out.deferred += 1;
-                    debug!(
-                        namespace,
-                        actor = %actor,
-                        queued = rows.len(),
-                        "rail kv pump: this node is in no roster for this namespace yet, so its \
-                         writes stay queued and travel once membership exists"
-                    );
-                }
-                Err(e) => {
-                    warn!(namespace, key = %op.key, error = %e,
-                          "rail kv pump: the rail refused this write, which was dropped");
-                    out.refused += 1;
-                    acked.push(row.id);
-                }
-            }
-        }
-        ack(&store, &acked);
-        out.appended += appended_here;
-
-        if appended_here > 0 {
-            seal_if_due(fabric, rail.as_ref(), &namespace, &roster, &mut out).await;
-        }
-    }
-
-    seal_planes(fabric, rail.as_ref(), &mut out).await;
     out
 }
 
-/// Spawn ONLY the two seal arms nothing drains — `mesh-measurements` and
-/// `work` — for a daemon whose KV store lives at cw-rails, which runs the KV
-/// drain and KV seal itself (five-programs fp-88; the two arms stay here,
-/// five-programs-40). No boot projection: that rebuilds the KV store.
-pub fn spawn_plane_seal(fabric: Arc<FabricPart>, interval: Duration) -> RailKvPumpHandle {
-    let task = tokio::spawn(async move {
-        info!(
-            interval_secs = interval.as_secs(),
-            "rail kv pump: started the measurements and work seal arms only"
-        );
-        loop {
-            if let Some(rail) = fabric.ring_rail() {
-                let mut out = PumpOutcome::default();
-                seal_planes(&fabric, rail.as_ref(), &mut out).await;
-                if out.sealed > 0 {
-                    debug!(
-                        sealed = out.sealed,
-                        snapshot_rows = out.snapshot_rows,
-                        "rail kv pump: sealed a plane"
-                    );
-                }
-            }
-            tokio::time::sleep(interval).await;
-        }
-    });
-    RailKvPumpHandle { _task: task }
-}
-
 /// The seal checks for the planes that never enter the outbox.
-async fn seal_planes(fabric: &FabricPart, rail: &dyn RingRailPort, out: &mut PumpOutcome) {
+async fn seal_planes(rail: &dyn RingRailPort, out: &mut PumpOutcome) {
     // `mesh-measurements` never enters the outbox — it is gossip-excluded, and
     // its acts are published by `POST /v1/mesh/measurements` straight onto the
     // journal. So its journal grows with nothing above draining it, and the
     // seal check has to be reached some other way. Here is that way, and the
     // constant is the same one (ARCH §10.6).
     if let Ok(roster) = rail.roster(MEASUREMENTS_NAMESPACE).await {
-        seal_if_due(fabric, rail, MEASUREMENTS_NAMESPACE, &roster, out).await;
+        seal_if_due(rail, MEASUREMENTS_NAMESPACE, &roster, out).await;
     }
 
     // `work` never enters the outbox either, and for the same structural
@@ -389,16 +147,7 @@ async fn seal_planes(fabric: &FabricPart, rail: &dyn RingRailPort, out: &mut Pum
     // and a namespace this node cannot append to is one it must not seal. The
     // failure direction is always "do not retire" (ARCH §18.3).
     if let Ok(roster) = rail.roster(WORK_NAMESPACE).await {
-        seal_if_due(fabric, rail, WORK_NAMESPACE, &roster, out).await;
-    }
-}
-
-fn ack(store: &MeshStore, ids: &[i64]) {
-    if ids.is_empty() {
-        return;
-    }
-    if let Err(e) = store.outbox_ack(ids) {
-        warn!(error = %e, rows = ids.len(), "rail kv pump: the outbox ack failed");
+        seal_if_due(rail, WORK_NAMESPACE, &roster, out).await;
     }
 }
 
@@ -425,12 +174,20 @@ pub const WORK_NAMESPACE: &str = commonwealth_work::WORK_NAMESPACE;
 /// one-sided, so the gate can only ever cost an extra admission — never miss a
 /// seal.
 async fn seal_if_due(
-    fabric: &FabricPart,
     rail: &dyn RingRailPort,
     namespace: &str,
     roster: &Roster,
     out: &mut PumpOutcome,
 ) {
+    // A store namespace's live set is cw-rails' store, so cw-rails seals it
+    // (fp-83); a seal here would retire rows with nothing to put them back.
+    if projector_for(namespace) == Some(Projector::Kv) {
+        warn!(
+            namespace,
+            "rail kv pump: a store namespace is sealed by cw-rails, not here; nothing sealed"
+        );
+        return;
+    }
     let mine = match rail.actor().await {
         Ok(a) => a,
         Err(e) => {
@@ -529,7 +286,6 @@ async fn seal_if_due(
     // re-read from a fresh admission, which would be a second answer to "what
     // did we just seal at" (ARCH §10.6).
     out.snapshot_rows += snapshot(
-        fabric,
         rail,
         namespace,
         roster,
@@ -539,35 +295,13 @@ async fn seal_if_due(
     .await;
 }
 
-/// Re-append this node's live rows above the floor its seal just set.
+/// Re-append this node's live set above the floor its seal just set.
 ///
 /// **Without this a seal is a delete.** The floor retires every line below it,
-/// so a key whose only write is down there stops existing on every node that
-/// admits the seal. The snapshot puts the LIVE set back above the floor,
-/// carrying each row's ORIGINAL write time so the fold keeps it exactly where
-/// its author left it — `a_snapshot_re_append_keeps_its_lww_position`
-/// (commonwealth-state) is the pin, and it is why `t` is on the payload rather
-/// than read off the journal line.
-///
-/// Only rows this node ORIGINATED. A peer's row is above that peer's floor, not
-/// ours; re-appending it would put a second author's name on it and make every
-/// node that snapshots last the author of the whole ring.
-///
-/// # It ends with a mark, and that is what makes the seal say "all of it"
-///
-/// The last act appended is `rail_kv::snapshot_mark(floor)`. A reader holding
-/// it, with no hole in this actor's run above the floor, holds every row of the
-/// snapshot — and may then retire every row of ours it holds that the snapshot
-/// does not name, which is how a tombstone we published keeps travelling past
-/// the seal that retired it (module docs). The mark is written LAST for exactly
-/// that reason, and a snapshot whose mark could not be appended claims nothing
-/// rather than claiming a truncated set: the failure direction is always "do
-/// not retire" (ARCH §18.3).
-///
-/// It is one act on the journal per seal — 2,000 ops apart — and it is NOT
-/// counted in `snapshot_rows`, which stays what it says: live rows re-appended.
+/// so anything whose only line is down there stops existing on every node that
+/// admits the seal. Each plane puts its LIVE set back from wherever that set
+/// lives: measurements from the local file, work from the pre-seal fold.
 async fn snapshot(
-    fabric: &FabricPart,
     rail: &dyn RingRailPort,
     namespace: &str,
     roster: &Roster,
@@ -575,7 +309,7 @@ async fn snapshot(
     live_work: Option<&WorkProjection>,
 ) -> usize {
     // ONE decider for which vocabulary this namespace speaks (ARCH §10.6) —
-    // the same selector the receive half reads, rather than a second set of
+    // the same selector the seal check reads, rather than a second set of
     // name comparisons that could drift from it.
     match projector_for(namespace) {
         None => {
@@ -597,79 +331,11 @@ async fn snapshot(
             );
             return done.appended;
         }
-        Some(Projector::Work) => {
-            return snapshot_work(rail, namespace, roster, floor, live_work).await;
-        }
-        Some(Projector::Kv) => {}
+        Some(Projector::Work) => snapshot_work(rail, namespace, roster, floor, live_work).await,
+        // Refused before the seal, in `seal_if_due`: a store namespace's live
+        // set is cw-rails' store, and cw-rails seals it.
+        Some(Projector::Kv) => 0,
     }
-
-    let self_id = fabric.self_node_id();
-    let rows = match fabric.mesh_store.scan(namespace, "") {
-        Ok(r) => r,
-        Err(e) => {
-            warn!(namespace, error = %e,
-                  "rail kv pump: the live set could not be read, so the seal retired rows nothing replaced");
-            return 0;
-        }
-    };
-    let mut appended = 0usize;
-    let mut skipped = 0usize;
-    for row in rows {
-        if row.origin != self_id {
-            skipped += 1;
-            continue;
-        }
-        let payload = match rail_kv::to_payload(&row.key, Some(&row.value), row.timestamp) {
-            Ok(p) => p,
-            Err(e) => {
-                warn!(namespace, key = %row.key, error = %e,
-                      "rail kv pump: a live row could not be snapshotted and is now below the floor");
-                continue;
-            }
-        };
-        match rail
-            .journal_append(namespace, RailAct::Record { payload }, roster)
-            .await
-        {
-            Ok(_) => appended += 1,
-            Err(e) => warn!(namespace, key = %row.key, error = %e,
-                            "rail kv pump: a live row could not be snapshotted and is now below the floor"),
-        }
-    }
-    match rail_kv::snapshot_mark(floor)
-        .map_err(|e| e.to_string())
-        .and_then(|payload| Ok(RailAct::Record { payload }))
-    {
-        Ok(act) => match rail.journal_append(namespace, act, roster).await {
-            Ok(_) => info!(
-                namespace,
-                appended,
-                peers_rows_skipped = skipped,
-                floor,
-                "rail kv pump: snapshotted this node's live rows above the new floor, and closed it"
-            ),
-            // The rows are on the journal and every one of them still projects.
-            // What is lost is the CLAIM that they are all of them, so no peer
-            // retires anything of ours until the next seal marks one.
-            Err(e) => warn!(
-                namespace,
-                appended,
-                floor,
-                error = %e,
-                "rail kv pump: the snapshot could not be closed, so peers will keep \
-                 whatever of ours they already hold"
-            ),
-        },
-        Err(e) => warn!(
-            namespace,
-            appended,
-            floor,
-            error = %e,
-            "rail kv pump: the snapshot could not be closed, so peers will keep \
-             whatever of ours they already hold"
-        ),
-    }
-    appended
 }
 
 /// Re-append this node's live work acts above the floor its seal just set.
@@ -845,8 +511,6 @@ fn live_work_acts(projection: &WorkProjection, mine: &ActorKey, now_ms: u64) -> 
     acts
 }
 
-// ── The receive half: journal → store ────────────────────────
-
 /// Which vocabulary a namespace's acts are written in.
 ///
 /// Two variants and an absence, because there are three answers and not two:
@@ -857,7 +521,7 @@ fn live_work_acts(projection: &WorkProjection, mine: &ActorKey, now_ms: u64) -> 
 /// reads straight off its journal.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Projector {
-    /// `rail_kv`'s vocabulary: every act is a row in [`MeshStore`].
+    /// `rail_kv`'s vocabulary: every act is a row in `commonwealth_state::MeshStore`.
     Kv,
     /// `commonwealth_work`'s vocabulary: every act is a move in the work
     /// plane's queue, folded by `WorkProjection::fold` and never stored.
@@ -921,137 +585,4 @@ pub fn projector_for(namespace: &str) -> Option<Projector> {
             Some(Projector::Kv)
         }
     }
-}
-
-/// Fold one namespace's journal and apply it to the store.
-///
-/// The receive side of the whole mechanism. `MeshStore` holds what the fold of
-/// the admitted ops says it should hold — not what a peer sent it — so a row
-/// arrives with the origin the ROSTER places its signature at, never one the
-/// sender supplied (ARCH §18.1).
-///
-/// Returns the number of store rows this fold moved — merged, tombstoned,
-/// retired by a sealed actor's live set, or expired past the namespace's
-/// retention window — or `None` when the namespace was not projected at all —
-/// a measurements ring, a journal that would not admit, or a namespace
-/// `apply_projection` refuses on privacy grounds. The two are different facts
-/// and a `0` for both would hide the second (ARCH §18.2).
-pub async fn project_namespace(
-    fabric: &FabricPart,
-    rail: &dyn RingRailPort,
-    namespace: &str,
-) -> Option<usize> {
-    // `projector_for` says which branch this is and traces it; the skip needs
-    // no second sentence here (ARCH §10.6).
-    if projector_for(namespace) != Some(Projector::Kv) {
-        return None;
-    }
-    let roster = match rail.roster(namespace).await {
-        Ok(r) => r,
-        Err(e) => {
-            warn!(namespace = %namespace, error = %e, "rail kv pump: the roster is unreadable, nothing projected");
-            return None;
-        }
-    };
-    let admission = match rail.journal_admit(namespace, &roster).await {
-        Ok(a) => a,
-        Err(e) => {
-            warn!(namespace = %namespace, error = %e, "rail kv pump: the journal would not admit, nothing projected");
-            return None;
-        }
-    };
-    let projection = rail_kv::project(&admission);
-    if projection.unreadable > 0 {
-        warn!(
-            namespace = %namespace,
-            unreadable = projection.unreadable,
-            "rail kv pump: acts on a store namespace that this build cannot read as store writes"
-        );
-    }
-    // The actor → node mapping comes from the SAME membership derivation the
-    // roster above came from, so a key that admitted an op is a key that can
-    // name its node (ARCH §10.6). An actor it cannot place is counted
-    // `unattributed` by `apply_projection`, never given an invented origin.
-    //
-    // The whole `projection` goes in, not its rows: the sealed actors' live
-    // sets are the same fold's second answer, and the store's own node id is
-    // what keeps the reconciliation off rows this node has not put on the rail
-    // yet. This module does no second pass — one call, one decision.
-    let mesh_roster = MeshRoster::from_membership(
-        &*fabric.mesh.read().await,
-        fabric.self_node_id(),
-        fabric.self_node_pubkey(),
-    );
-    match fabric.mesh_store.apply_projection(
-        &namespace,
-        &projection,
-        |actor| mesh_roster.node_id_of(actor),
-        fabric.self_node_id(),
-    ) {
-        Ok(applied) => {
-            debug!(
-                namespace = %namespace,
-                rows = projection.rows.len(),
-                sealed_actors = projection.sealed_actors.len(),
-                merged = applied.merged,
-                deleted = applied.deleted,
-                reconciled = applied.reconciled,
-                expired = applied.expired,
-                withheld = applied.withheld,
-                unattributed = applied.unattributed,
-                gaps = admission.gaps.len(),
-                "rail kv pump: projected a namespace into the store"
-            );
-            if applied.unattributed > 0 {
-                warn!(
-                    namespace = %namespace,
-                    unattributed = applied.unattributed,
-                    "rail kv pump: the roster and the journal disagree about who is in this ring"
-                );
-            }
-            Some(applied.merged + applied.deleted + applied.reconciled + applied.expired)
-        }
-        Err(e) => {
-            // The receiver-side privacy guard firing is not a bug in this
-            // module — it is a peer having put a namespace on the ring that
-            // never leaves a machine. Loud, and nothing is written.
-            warn!(namespace = %namespace, error = %e, "rail kv pump: the store refused this namespace");
-            None
-        }
-    }
-}
-
-/// Rebuild the projection for every namespace this node holds a journal for.
-///
-/// Run once at pump start. In production `MeshStore` is `in_memory()`, so
-/// without this a restart loses every row the mesh ever agreed on and the node
-/// re-learns them only as peers happen to re-send — which, on a digest
-/// exchange that ships only what a peer LACKS, is never.
-pub async fn project_all_on_disk(fabric: &FabricPart) -> usize {
-    let Some(rail) = fabric.ring_rail() else {
-        return 0;
-    };
-    let namespaces = match rail.namespaces().await {
-        Ok(n) => n,
-        Err(e) => {
-            warn!(error = %e, "rail kv pump: cannot enumerate namespaces, nothing projected at boot");
-            return 0;
-        }
-    };
-    let mut projected = 0usize;
-    for namespace in &namespaces {
-        if project_namespace(fabric, rail.as_ref(), namespace)
-            .await
-            .is_some()
-        {
-            projected += 1;
-        }
-    }
-    if projected > 0 {
-        info!(
-            namespaces = namespaces.len(),
-            projected, "rail kv pump: rebuilt the store from the journals on disk"
-        );
-    }
-    projected
 }

@@ -287,7 +287,7 @@ impl RingJournal {
     /// reports the deleted range as missing, forever, on every node. Neither
     /// half is worth anything alone. The two callers that seal — the rail
     /// route an app reaches (`sovereign_daemon::routes_rail::append`) and the
-    /// daemon's own KV pump (`sovereign_mesh::rail_kv_pump`) — reach this
+    /// daemon's plane seal (`sovereign_mesh::rail_kv_pump`) — reach this
     /// rather than each writing the sequence themselves, because a second
     /// spelling of "seal, then compact, and a refused compaction is not a
     /// failed seal" is a decider with two answers.

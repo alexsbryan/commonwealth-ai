@@ -2336,47 +2336,17 @@ pub async fn build_mesh_provider(
     (daemon, mesh_provider, in_flight_gauge)
 }
 
-/// Swap the real `MeshBroadcaster` into the deferred handle (peer fan-out) and
-/// spawn the work-atlas TTL GC; returns the GC task handle to hold.
+/// Spawn the work-atlas TTL GC, so expired claims and idle sessions are
+/// reaped on a 60s cadence; returns the GC task handle to hold.
+///
+/// No broadcaster is swapped in: the `DeferredBroadcaster` stays unset, a
+/// no-op. A claim written through the one `RailsKv` reaches its journal on
+/// cw-rails' 2 s pump tick and a peer on the next ring round (five-programs
+/// fp-83, decision five-programs-59).
 pub fn finalize_work_atlas(
-    daemon: Arc<EmbeddedDaemon>,
-    work_atlas_broadcaster: Arc<sovereign_work_atlas::tools::DeferredBroadcaster>,
     work_atlas_store: Arc<sovereign_work_atlas::WorkAtlasStore>,
     work_atlas_cfg: sovereign_work_atlas::WorkAtlasConfig,
 ) -> tokio::task::JoinHandle<()> {
-    // ── Work atlas (Phase 2) finalisation ─────────────────────────────
-    //
-    // 1. Swap the real `MeshBroadcaster` into the `DeferredBroadcaster`
-    //    now that `daemon.app_state()` returns `Some`. After this,
-    //    work-atlas writes broadcast to peers within the round-trip
-    //    rather than waiting up to one full 10s gossip interval.
-    // 2. Spawn the TTL eviction loop so expired claims and idle
-    //    sessions are reaped on a 60s cadence.
-    {
-        let daemon_for_atlas = Arc::clone(&daemon);
-        let broadcaster_for_atlas = Arc::clone(&work_atlas_broadcaster);
-        tokio::spawn(async move {
-            let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(30);
-            loop {
-                if let Some(state) = daemon_for_atlas.app_state().await {
-                    let real: Box<dyn sovereign_work_atlas::tools::ClaimBroadcaster> =
-                        Box::new(crate::work_atlas_broadcaster::MeshBroadcaster::new(state));
-                    broadcaster_for_atlas.set(real);
-                    tracing::info!("work_atlas: real broadcaster wired (peer fan-out active)");
-                    return;
-                }
-                if tokio::time::Instant::now() >= deadline {
-                    tracing::warn!(
-                        "work_atlas: broadcaster wire-up timed out — \
-                         claims/observations will only reach peers via the \
-                         10s gossip round (still functional, just slower)"
-                    );
-                    return;
-                }
-                tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-            }
-        });
-    }
     sovereign_work_atlas::gc::WorkAtlasGc::new(Arc::clone(&work_atlas_store), work_atlas_cfg)
         .spawn()
 }
@@ -2532,10 +2502,9 @@ pub fn setup_watchers_and_work_atlas(
         Arc::clone(&work_atlas_mesh_store),
         work_atlas_node_id,
     ));
-    // Deferred broadcaster — `MeshBroadcaster` needs `AppState`, which
-    // isn't reachable until `daemon.try_resume()`. The MCP tools and
-    // the AtlasObserver hold this handle now; we swap the real
-    // broadcaster in once `app_state` is available.
+    // Deferred broadcaster — the MCP tools and the AtlasObserver hold
+    // this handle. Nothing swaps a real one in (fp-83): it stays unset, a
+    // no-op, and a claim travels on cw-rails' pump tick plus the ring round.
     let work_atlas_broadcaster = Arc::new(sovereign_work_atlas::tools::DeferredBroadcaster::new());
     let work_atlas_cfg = {
         let path = sovereign_core::rebrand::work_atlas_toml();

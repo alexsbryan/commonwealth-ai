@@ -36,6 +36,8 @@ mod local_pod_smoke;
 mod mesh_sim_ring_room;
 #[path = "main/mesh_sim_scoreboard.rs"]
 mod mesh_sim_scoreboard;
+#[path = "main/rail_kv_pump_namespaces.rs"]
+mod rail_kv_pump_namespaces;
 #[path = "main/replication_sender_census.rs"]
 mod replication_sender_census;
 #[path = "main/scheduler_replay_agreement.rs"]

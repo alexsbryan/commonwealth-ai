@@ -180,10 +180,6 @@ mod ring_return_syncs;
 mod ring_sync_by_roster;
 #[path = "main/ring_sync_loop_tests.rs"]
 mod ring_sync_loop_tests;
-#[path = "main/ring_sync_projection_tests.rs"]
-mod ring_sync_projection_tests;
-#[path = "main/ring_sync_snapshot_tests.rs"]
-mod ring_sync_snapshot_tests;
 #[path = "main/rotate_pre_split_guard.rs"]
 mod rotate_pre_split_guard;
 #[path = "main/scheduler_decision_records.rs"]

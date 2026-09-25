@@ -29,8 +29,8 @@
 //! (`MeshStore::all_entries_for_gossip`).
 //!
 //! Store state replicates on the ring now: a write is queued in the store's
-//! own transaction, [`crate::rail_kv_pump`] signs it onto its namespace's
-//! journal, and [`crate::ring_sync`] carries it by digest. That leaves ONE
+//! own transaction, cw-rails' pump (`commonwealth_rails::kv`) signs it onto
+//! its namespace's journal, and [`crate::ring_sync`] carries it by digest. That leaves ONE
 //! sender of replicated state in the workspace — `/internal/ring/sync` — which
 //! is `cw-twin-visibility`'s instrument and is pinned by
 //! `tests/main/replication_sender_census.rs::every_sender_of_replicated_state_is_declared`.

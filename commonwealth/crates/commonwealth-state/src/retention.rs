@@ -29,7 +29,7 @@
 //! for each row retention exists to remove, which is the wrong direction for
 //! the only mechanism bounding the journal.
 //!
-//! What actually shortens the journal is the seal: `rail_kv_pump::snapshot`
+//! What actually shortens the journal is the seal: cw-rails' `KvHost::snapshot`
 //! re-appends this node's live set FROM THE STORE, so a row this module keeps
 //! out of the store is a row the next snapshot does not carry above the floor,
 //! and the compaction that follows deletes its line. The store bound and the

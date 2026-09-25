@@ -148,9 +148,6 @@ pub mod venue_host;
 pub mod watched_folder_runtime;
 pub mod watched_folder_setup;
 pub mod watcher_supervisor;
-/// `sovereign-work-atlas`'s `ClaimBroadcaster` over the rail — the adapter
-/// that hurries a claim onto the ring (DAEMON_CORE.md §4.3, `adapters`).
-pub mod work_atlas_broadcaster;
 /// The `work` donor loop — the node's own lease-and-run half of the work
 /// plane (DAEMON_CORE.md §3.2, `jobs`).
 pub mod work_donor;

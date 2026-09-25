@@ -148,7 +148,7 @@ fn scan_senders() -> Vec<(String, String, usize)> {
 /// **A one-row table is the weaker instrument, and the sabotage has to change
 /// with it.** The scan looks only for the routes NAMED here, so deleting a
 /// sender AND its row can never turn this red: the second half of 2e's
-/// deletion is proved by the compiler and by `MeshBroadcaster`'s own tests,
+/// deletion is proved by the compiler (and was by `MeshBroadcaster`'s tests),
 /// not by this. What this still catches, and the only thing it claims to, is a
 /// SECOND site on the surviving route. Watched red at 2e by adding
 /// `let _ = format!("{}/internal/ring/sync", "x");` to

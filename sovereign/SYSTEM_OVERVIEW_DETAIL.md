@@ -6887,27 +6887,25 @@ directory per namespace — and this store is the fold of it:
   POSIX and APFS and is not on NTFS, and the desktop ships on Windows
   linking `sovereign-mesh` and through it `commonwealth-rail`.
 
-- **The pump, the seal and the fold on the receive side are the daemon's**
-  (`sovereign-mesh/src/rail_kv_pump.rs`). `spawn_rail_kv_pump` runs beside
-  `spawn_ring_sync_loop` and drains the outbox every
-  `RAIL_KV_PUMP_INTERVAL` (2 s): per row, `rail.journal(app_id)` →
-  `rail.roster(&journal)` (THE door) → `journal.append(Record)`, then ack.
+- **The pump, the seal and the fold of the mesh store are cw-rails'**
+  (`commonwealth-rails/src/kv.rs`, five-programs fp-77/fp-109/fp-83). Every
+  `PUMP_INTERVAL` (2 s) it drains the outbox: per row, `rail.journal(app_id)`
+  → `rail.roster(&journal)` (THE door) → `journal.append(Record)`, then ack.
   Three verdicts, kept apart (§18.2): appended and acked; **deferred** on
   `RailError::NotInRoster` — a solo daemon is a normal daemon, the row STAYS
-  queued and travels the moment membership exists, logged once per namespace
-  per tick at debug; **refused** on anything else — acked WITH a warn naming
-  the sentence, never a silent drop and never an infinite retry.
-  `MeshStore` is `in_memory()` in production, so the pump's FIRST act at boot
-  is `project_all_on_disk` — the store is rebuilt from the journals or it
-  holds nothing at all.
-- **On receive, the fold runs once per namespace per ring-sync round**, after
-  every peer, in `run_one_round` — NOT inside `exchange`. Half the ops a node
-  receives never pass through its own exchange: a peer PUSHES on call 2 of
-  ITS exchange and those land through `/internal/ring/sync`, a route in
-  another crate. A projection hung off our own pull count would be blind to
-  exactly the direction a local write creates.
-  `RoundOutcome::namespaces_projected` reports it, and
-  `a_round_projects_the_namespace_even_when_it_pulled_nothing` is the pin.
+  queued and travels the moment membership exists; **refused** on anything
+  else — acked WITH a warn naming the sentence, never a silent drop and never
+  an infinite retry. Its `MeshStore` is `in_memory()`, so the pump's FIRST act
+  at start is `project_all_on_disk`, local-only journals rehydrated through
+  the own-actor door (fp-108). It seals every store namespace its outbox fed,
+  local-only ones included. The daemon's `sovereign-mesh/src/rail_kv_pump.rs`
+  keeps only `spawn_plane_seal` — the `mesh-measurements` and `work` seal arms.
+- **On receive, the fold is keyed to the ingest door**, not to a ring round.
+  Every op a peer sends reaches cw-rails through `POST /v1/rail/ingest`, pulled
+  by this node's round or pushed by the peer's, and the door marks the
+  namespace dirty; the next pump tick folds each dirty namespace once
+  (`KvHost::project_dirty`). The daemon's ring round projects nothing since
+  fp-83; `a_peer_op_ingested_through_the_door_is_served_after_one_fold` is the pin.
 - **A namespace's vocabulary is chosen by NAME, not by parse failure.**
   `rail_kv_pump::projector_for` is one selector returning `Some(Kv)`,
   `Some(Work)` or `None`, against `MEASUREMENTS_APP_ID` and

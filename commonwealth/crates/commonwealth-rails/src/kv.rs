@@ -12,12 +12,12 @@
 //! and seals + snapshots a KV namespace its outbox fed once this node's own
 //! ops above its last seal pass `rail_kv::SEAL_AFTER_OWN_OPS`.
 //!
-//! **One sealer per journal.** The daemon still pumps and serves its own store
-//! (its `/v1/mesh/kv/*` routes flip in fp-82). A snapshot's mark retires every
-//! row of its actor it does not name, so two stores sealing one journal would
-//! retire each other's rows. This pump therefore seals only the namespaces its
-//! OWN outbox fed on the same tick, and never the `mesh-measurements` or
-//! `work` journals — their writers are the daemon's.
+//! **One sealer per journal.** A snapshot's mark retires every row of its
+//! actor it does not name, so two stores sealing one journal would retire
+//! each other's rows. Since the daemon pump's KV half was deleted (fp-83) this
+//! is the only store that seals a store namespace, local-only ones included.
+//! It seals only the namespaces its OWN outbox fed on the same tick, and never
+//! the `mesh-measurements` or `work` journals — their writers are the daemon's.
 //!
 //! The doors' bodies are the daemon's (`routes_mesh_kv.rs`), field for field,
 //! so the workbench's `mesh_kv_client` reads either daemon. The wire structs
@@ -404,7 +404,10 @@ impl KvHost {
     /// cost is paid only when a seal may be due.
     async fn seal_if_due(&self, journal: &RingJournal, roster: &Roster, out: &mut PumpOutcome) {
         let namespace = journal.namespace();
-        if !is_kv_namespace(namespace) {
+        // Local-only journals are sealed too: since the daemon pump's KV half
+        // went (fp-83) this store is their one writer, so no twin sealer can
+        // retire its rows. `is_kv_namespace` still gates projection.
+        if !is_kv_namespace(namespace) && !commonwealth_rail::is_local_only(namespace) {
             return;
         }
         let mine = self.rail.signer().actor();
@@ -635,3 +638,11 @@ async fn kv_scan(State(host): State<Arc<KvHost>>, Query(q): Query<KvScanQuery>) 
 #[cfg(test)]
 #[path = "kv/tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "kv/projection_tests.rs"]
+mod projection_tests;
+
+#[cfg(test)]
+#[path = "kv/snapshot_tests.rs"]
+mod snapshot_tests;

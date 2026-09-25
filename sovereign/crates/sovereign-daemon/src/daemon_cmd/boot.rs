@@ -1157,12 +1157,8 @@ pub(super) async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
         })
     };
 
-    let _work_atlas_gc_handle = bootstrap::finalize_work_atlas(
-        Arc::clone(&daemon),
-        Arc::clone(&work_atlas_broadcaster),
-        Arc::clone(&work_atlas_store),
-        work_atlas_cfg.clone(),
-    );
+    let _work_atlas_gc_handle =
+        bootstrap::finalize_work_atlas(Arc::clone(&work_atlas_store), work_atlas_cfg.clone());
 
     // Measurement history onto the ring journal: a migration for records filed
     // before the namespace moved to the rail, and the closure loop for a run

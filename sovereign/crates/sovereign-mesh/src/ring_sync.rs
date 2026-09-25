@@ -137,11 +137,6 @@ pub struct RoundOutcome {
     pub peers_refused: usize,
     pub ops_pulled: usize,
     pub ops_pushed: usize,
-    /// Namespaces whose journal was folded back into the mesh store this round.
-    /// Counted apart from `namespaces` because a measurements ring, a journal
-    /// that would not admit and a namespace the store refuses are all "not
-    /// projected" and none of them is "nothing to project" (ARCH §18.2).
-    pub namespaces_projected: usize,
 }
 
 /// Spawn the periodic ring-sync task. Call once per daemon start.
@@ -152,8 +147,10 @@ pub struct RoundOutcome {
 /// restarted peer confidently reporting a total over a subset for that whole
 /// minute.
 ///
-/// `nudge` is the wake-up [`crate::rail_kv_pump`] fires after it signs a local
-/// write onto a journal. Sixty seconds is the right cadence for anti-entropy
+/// `nudge` is the wake-up a local writer fires after it signs onto a journal
+/// (`POST /v1/rail/append`, the donor loop, a peer coming back). A mesh-store
+/// write reaches its journal on cw-rails' pump tick and waits for the next
+/// round; nothing nudges for it (fp-83). Sixty seconds is the right cadence for anti-entropy
 /// and the wrong one for "I just wrote something", and the two do not have to
 /// be the same number: the nudge starts a round now, and the round is the same
 /// round. **Nothing about the sender census changes** — the pump does not talk
@@ -179,7 +176,6 @@ pub fn spawn_ring_sync_loop(
                     peers_refused = outcome.peers_refused,
                     ops_pulled = outcome.ops_pulled,
                     ops_pushed = outcome.ops_pushed,
-                    projected = outcome.namespaces_projected,
                     round_ms = started.elapsed().as_millis() as u64,
                     "ring sync: round"
                 );
@@ -388,28 +384,6 @@ pub async fn run_one_round(fabric: &FabricPart) -> RoundOutcome {
             } else {
                 outcome.peers_unreachable += 1;
             }
-        }
-
-        // ── The journal is truth; the store is its projection.
-        //
-        // ONCE per namespace per round, after every peer, and NOT inside
-        // `exchange`. Two reasons, and the second is the one that matters:
-        //
-        // - Folding is one Ed25519 verify per op, so doing it per chunk would
-        //   pay a bootstrap's whole read cost sixteen times over for one
-        //   answer that does not change until the last chunk lands.
-        // - **Half the ops this node receives never pass through `exchange`
-        //   at all.** A peer PUSHES on call 2 of its own exchange, and those
-        //   ops arrive through `/internal/ring/sync` — a route, in another
-        //   crate, that this loop never runs. A projection hung off our own
-        //   pull would be blind to exactly the direction the pump's nudge
-        //   creates, and a write would reach a peer's disk immediately and its
-        //   store never.
-        if crate::rail_kv_pump::project_namespace(fabric, rail.as_ref(), namespace)
-            .await
-            .is_some()
-        {
-            outcome.namespaces_projected += 1;
         }
     }
     outcome

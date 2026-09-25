@@ -555,10 +555,3 @@ async fn a_peer_whose_digest_never_moves_stops_the_loop_instead_of_spinning() {
         hits.load(std::sync::atomic::Ordering::SeqCst)
     );
 }
-
-// ── The mesh store as a projection of the rail (cw-lift 4) ──
-//
-// Two nodes, the REAL internal router, the REAL pump and the REAL fold.
-// Every helper below is deliberately built from the production pieces:
-// a fixture that appended its own ops or projected with its own roster
-// would pass whatever the two halves happened to agree on.

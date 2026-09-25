@@ -14,7 +14,7 @@ use tokio::sync::RwLock;
 use super::{KvHost, PumpOutcome};
 use crate::rail::MembershipRosterSource;
 
-const ME: u128 = 0xA11CE;
+pub(super) const ME: u128 = 0xA11CE;
 const NS: &str = "kv-test";
 
 fn key() -> SigningKey {
@@ -27,7 +27,7 @@ fn pubkey() -> NodePubkey {
 
 /// A mesh holding only this node, keyed — so membership, the default roster,
 /// admits its own lines.
-fn solo_mesh() -> Arc<RwLock<Mesh>> {
+pub(super) fn solo_mesh() -> Arc<RwLock<Mesh>> {
     let (mut mesh, _key) =
         commonwealth_discovery::membership::init_mesh("Lab", "founder", Vec::new());
     mesh.members.clear();
@@ -56,7 +56,7 @@ fn solo_mesh() -> Arc<RwLock<Mesh>> {
 
 /// A host over a rail rooted at `dir` — built the way `RailsDaemon::start`
 /// builds it. Calling it twice on one dir is a restart.
-fn host_at(dir: &std::path::Path, mesh: &Arc<RwLock<Mesh>>) -> Arc<KvHost> {
+pub(super) fn host_at(dir: &std::path::Path, mesh: &Arc<RwLock<Mesh>>) -> Arc<KvHost> {
     let rail = Arc::new(RingRail::new(dir, Arc::new(key())));
     let me = NodeId::from_u128(ME);
     MembershipRosterSource::install(&rail, mesh, me, Some(pubkey()));
@@ -79,7 +79,7 @@ fn b64(s: &str) -> String {
 }
 
 /// Drain until the outbox is empty, summing what each tick did.
-async fn drain(host: &KvHost) -> PumpOutcome {
+pub(super) async fn drain(host: &KvHost) -> PumpOutcome {
     let mut total = PumpOutcome::default();
     loop {
         let out = host.pump_once().await;

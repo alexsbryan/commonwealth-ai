@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `rail_kv_pump`'s tests. A sibling file only so `rail_kv_pump.rs` stays
-//! under ARCH §3.1's 1200-line ceiling — moved verbatim, nothing renamed.
-//! The pump's own decisions. The two-node path — a write reaching a peer's
-//! store, a delete, a seal, an excluded namespace — is driven end to end
-//! against the real router in `crate::ring_sync::tests`.
+//! `rail_kv_pump`'s seal arms, driven over the daemon's assembled node.
+//! The KV drain and KV seal moved to cw-rails in five-programs fp-83; their
+//! tests are `commonwealth_rails::kv`'s, and the namespace-agreement check
+//! is sovereign-mesh's `rail_kv_pump_namespaces`.
 
 use commonwealth_core::ids::NodeId;
 use commonwealth_rail_core::{Ed25519Verifier, RailAct, SigningKey};
@@ -12,154 +11,6 @@ use sovereign_mesh::rail_kv_pump::*;
 use sovereign_mesh::rail_port::LocalRingRail;
 use sovereign_mesh::ring_roster::tests::{member, mesh_of, pubkey_of};
 use std::sync::Arc;
-
-/// The rings the daemon writes on its own behalf. No longer a declaration the
-/// roster reads — every ring nobody narrowed derives from membership now
-/// (`ring_roster::MeshRosterSource::install`) — but still the set whose
-/// charset and store routing must agree, which is what the test below checks.
-const DAEMON_OWN_NAMESPACES: &[&str] = &[
-    sovereign_mesh::mesh_measurements::MEASUREMENTS_APP_ID,
-    commonwealth_state::store_adapter::INFERENCE_APP_ID,
-    commonwealth_state::CONTRIBUTIONS_APP_ID,
-    commonwealth_state::PROCESSED_SHARDS_APP_ID,
-    sovereign_contracts::peer::NOTES_APP_ID,
-    sovereign_contracts::peer::WORK_ATLAS_APP_ID_PUBLIC,
-    corpus_engine::update::newsworthy_watcher::APP_ID_TRACKED,
-];
-
-/// **The declaration is checkable, and this is the check.**
-///
-/// Two properties, both of which have already failed once in this
-/// workspace. The charset one is `wikipedia-newsworthy:tracked`: a colon is
-/// legal in an `app_id` and not in a ring namespace, and the mismatch was
-/// silent until something tried to open the directory. The exclusion one is
-/// the split between the six namespaces that reach the ring through the
-/// OUTBOX and the one that does not — `mesh-measurements` is
-/// gossip-excluded, publishes straight onto its journal from
-/// `POST /v1/mesh/measurements`, and would be refused by both the outbox
-/// and `apply_projection` if anything tried to route it through the store.
-#[tokio::test]
-async fn every_declared_namespace_is_one_the_rail_and_the_store_agree_about() {
-    let key = SigningKey::from_bytes(&[1u8; 32]);
-    let me = NodeId::from_u128(1);
-    let dir = tempfile::tempdir().unwrap();
-    let state = AppState::new(me, mesh_of(vec![member(me, "me", Some(pubkey_of(&key)))]));
-    let rail = LocalRingRail::new(dir.path(), Arc::new(key));
-
-    // The charset check lives in `derive_roster`, so a namespace the rail
-    // would refuse to open cannot be installed either.
-    sovereign_mesh::ring_roster::MeshRosterSource::install(
-        rail.inner(),
-        &state.inner.fabric.mesh,
-        &state.inner.fabric.identity,
-        state.self_node_pubkey(),
-    )
-    .unwrap();
-
-    let mut seen = std::collections::BTreeSet::new();
-    for ns in DAEMON_OWN_NAMESPACES {
-        assert!(seen.insert(*ns), "{ns} is declared twice");
-        // The charset check: a namespace the rail would refuse to open.
-        rail.inner()
-            .journal(ns)
-            .unwrap_or_else(|e| panic!("{ns}: {e}"));
-        assert_eq!(
-            rail.inner().roster_origin(ns),
-            commonwealth_rail_core::RosterOrigin::Derived,
-            "{ns} still reads a roster file"
-        );
-        assert_eq!(
-            commonwealth_state::is_gossip_excluded(ns),
-            ns == &MEASUREMENTS_NAMESPACE,
-            "{ns}: a namespace on this list either rides the outbox or is \
-             the one that publishes straight onto its journal, and which \
-             one it is decides whether the store will carry it at all"
-        );
-        assert_eq!(
-            projector_for(ns),
-            if ns == &MEASUREMENTS_NAMESPACE {
-                None
-            } else {
-                Some(Projector::Kv)
-            },
-            "{ns}: a daemon-owned namespace is either the measurement \
-             vocabulary or the KV one — the work plane is deliberately not \
-             on this list, so `Work` must never appear here"
-        );
-    }
-}
-
-/// **A node in no mesh queues its writes; it does not lose them.**
-///
-/// `NotInRoster` is the one refusal that is not a refusal — a solo daemon
-/// is a normal daemon, and its writes travel the moment it joins. Dropping
-/// them would make a legitimate condition permanent, and retrying an
-/// append the rail will never accept would be the other failure. The
-/// second half is the control: the same row, the same pump, one member
-/// added.
-#[tokio::test]
-async fn a_node_in_no_mesh_keeps_its_writes_queued_until_membership_exists() {
-    const KV: &str = commonwealth_state::store_adapter::INFERENCE_APP_ID;
-    let key = SigningKey::from_bytes(&[2u8; 32]);
-    let me = NodeId::from_u128(7);
-    let dir = tempfile::tempdir().unwrap();
-    // A mesh with nobody in it: this node cannot place its own key.
-    let local = LocalRingRail::new(dir.path(), Arc::new(key.clone()));
-    let state = AppState::new_with_platform_and_engine_and_gauge_and_fabric(
-        me,
-        mesh_of(vec![]),
-        Arc::new(sovereign_meshapp_registry::registry::AppRegistry::new()),
-        None,
-        None,
-        sovereign_daemon::state::FabricSeed {
-            ring_rail: Some(Arc::new(local.clone())),
-            ..Default::default()
-        },
-    );
-    sovereign_mesh::ring_roster::MeshRosterSource::install(
-        local.inner(),
-        &state.inner.fabric.mesh,
-        &state.inner.fabric.identity,
-        state.self_node_pubkey(),
-    )
-    .unwrap();
-
-    assert!(state
-        .inner
-        .fabric
-        .mesh_store
-        .set(KV, "plan", bytes::Bytes::from_static(b"v1"), me)
-        .unwrap());
-
-    let out = pump_once(&*state.inner.fabric).await;
-    assert_eq!(
-        (out.appended, out.deferred, out.refused),
-        (0, 1, 0),
-        "{out:?}"
-    );
-    assert_eq!(
-        state.inner.fabric.mesh_store.outbox_len().unwrap(),
-        1,
-        "a deferred write stays queued"
-    );
-
-    // Membership arrives, and the same row goes out.
-    state
-        .inner
-        .fabric
-        .mesh
-        .write()
-        .await
-        .members
-        .insert(me, member(me, "me", Some(pubkey_of(&key))));
-    let out = pump_once(&*state.inner.fabric).await;
-    assert_eq!(
-        (out.appended, out.deferred, out.refused),
-        (1, 0, 0),
-        "{out:?}"
-    );
-    assert_eq!(state.inner.fabric.mesh_store.outbox_len().unwrap(), 0);
-}
 
 /// **A seal on `work` must not delete the queue it is sealing.**
 ///
@@ -305,7 +156,7 @@ async fn work_namespace_seals_and_keeps_live_leases() {
     assert_eq!(journal.ingest_all(&ops).unwrap(), ops.len());
 
     // ── the pump's own seal check reaches this namespace ──
-    let out = pump_once(&*state.inner.fabric).await;
+    let out = seal_once(&*state.inner.fabric).await;
     assert_eq!(
         out.sealed, 1,
         "the work namespace was never sealed: {out:?}"
