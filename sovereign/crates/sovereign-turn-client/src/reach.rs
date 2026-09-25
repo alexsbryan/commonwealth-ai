@@ -149,6 +149,11 @@ pub enum NotReachable {
         pid: u32,
         base: String,
         waited: Duration,
+        /// The last lines of the file handed to [`BundledBackend::log_to`],
+        /// headed by its path — why it is silent is usually written there.
+        /// `None` only when no log file was handed. Reading a path it was
+        /// given retains and reaps nothing (five-programs-65).
+        log_tail: Option<String>,
     },
 }
 
@@ -168,11 +173,22 @@ impl std::fmt::Display for NotReachable {
             Self::LaunchFailed { program, reason } => {
                 write!(f, "could not bring up {program}: {reason}")
             }
-            Self::SilentAfterLaunch { pid, base, waited } => write!(
-                f,
-                "brought up pid {pid} but {base} did not answer within {:.1}s (a cold model load can take 30-60s)",
-                waited.as_secs_f32()
-            ),
+            Self::SilentAfterLaunch {
+                pid,
+                base,
+                waited,
+                log_tail,
+            } => {
+                write!(
+                    f,
+                    "brought up pid {pid} but {base} did not answer within {:.1}s (a cold model load can take 30-60s)",
+                    waited.as_secs_f32()
+                )?;
+                match log_tail {
+                    Some(tail) => write!(f, "; {tail}"),
+                    None => Ok(()),
+                }
+            }
         }
     }
 }
@@ -344,16 +360,19 @@ impl ServingHost {
                 Ok(Reached::BroughtUp { pid, ready_after })
             } else {
                 let waited = started.elapsed();
+                let log_tail = backend.log_tail();
                 tracing::warn!(
                     base = %self.base,
                     pid,
                     waited_ms = waited.as_millis() as u64,
+                    log_tail = ?log_tail,
                     "reach: brought up a backend that has not answered",
                 );
                 Err(NotReachable::SilentAfterLaunch {
                     pid,
                     base: self.base.clone(),
                     waited,
+                    log_tail,
                 })
             };
         }
@@ -435,6 +454,13 @@ fn locate_from(
     found
 }
 
+/// How many lines of a silent backend's log [`NotReachable::SilentAfterLaunch`]
+/// carries, and the most bytes read to find them.
+#[cfg(feature = "bundled-backend")]
+const LOG_TAIL_LINES: usize = 20;
+#[cfg(feature = "bundled-backend")]
+const LOG_TAIL_BYTES: u64 = 8 * 1024;
+
 /// A backend binary this build ships and may bring up.
 ///
 /// The client does not decide the path — a surface knows where its sidecar
@@ -481,6 +507,30 @@ impl BundledBackend {
     /// The binary this would bring up.
     pub fn program(&self) -> &std::path::Path {
         &self.program
+    }
+
+    /// The last [`LOG_TAIL_LINES`] lines of the [`BundledBackend::log_to`]
+    /// file, headed by its path; `None` when none was handed. An unreadable
+    /// file is reported as such, never as an empty tail (ARCH principle 6).
+    /// Reads at most the final [`LOG_TAIL_BYTES`].
+    fn log_tail(&self) -> Option<String> {
+        use std::io::{Read, Seek, SeekFrom};
+
+        let path = self.log_to.as_ref()?;
+        let read = || -> std::io::Result<String> {
+            let mut file = std::fs::File::open(path)?;
+            let len = file.metadata()?.len();
+            file.seek(SeekFrom::Start(len.saturating_sub(LOG_TAIL_BYTES)))?;
+            let mut buf = Vec::new();
+            file.read_to_end(&mut buf)?;
+            let text = String::from_utf8_lossy(&buf);
+            let lines: Vec<&str> = text.lines().collect();
+            Ok(lines[lines.len().saturating_sub(LOG_TAIL_LINES)..].join("\n"))
+        };
+        Some(match read() {
+            Ok(tail) => format!("last lines of {}:\n{tail}", path.display()),
+            Err(e) => format!("its log {} could not be read: {e}", path.display()),
+        })
     }
 
     /// Start it, detached, and drop the handle. Returns the pid as a fact.

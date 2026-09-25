@@ -289,9 +289,46 @@ mod bring_up {
             .await
             .expect_err("it never serves");
         match err {
-            NotReachable::SilentAfterLaunch { pid, .. } => kill(pid),
+            NotReachable::SilentAfterLaunch { pid, log_tail, .. } => {
+                kill(pid);
+                assert_eq!(log_tail, None, "no log was handed, so none is read");
+            }
             other => panic!("expected SilentAfterLaunch, got {other:?}"),
         }
+    }
+
+    /// A silent backend's own words reach the caller: the tail of the
+    /// `log_to` file it was handed is in the error and its Display.
+    #[tokio::test]
+    async fn a_silent_backend_reports_the_tail_of_its_log() {
+        let port = dead_port().await;
+        let log = std::env::temp_dir().join(format!("silent-backend-{port}.log"));
+        let _ = std::fs::remove_file(&log);
+        let host = host_at(port).bringing_up(
+            BundledBackend::at("/bin/sh")
+                .arg("-c")
+                .arg("echo line-one; echo refused-marker-xyz; sleep 30")
+                .log_to(&log),
+        );
+        let err = host
+            .ensure_reachable(Duration::from_millis(800))
+            .await
+            .expect_err("it never serves");
+        let shown = err.to_string();
+        match err {
+            NotReachable::SilentAfterLaunch { pid, log_tail, .. } => {
+                kill(pid);
+                let tail = log_tail.expect("a log was handed, so its tail is reported");
+                assert!(tail.contains("refused-marker-xyz"), "tail: {tail}");
+                assert!(
+                    tail.contains(&log.display().to_string()),
+                    "tail names its file: {tail}"
+                );
+                assert!(shown.contains("refused-marker-xyz"), "display: {shown}");
+            }
+            other => panic!("expected SilentAfterLaunch, got {other:?}"),
+        }
+        let _ = std::fs::remove_file(&log);
     }
 
     #[tokio::test]
