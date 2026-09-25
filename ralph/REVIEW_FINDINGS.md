@@ -3027,3 +3027,65 @@ and it is one port per fact, not two implementations of one.
 - **Instruments could not judge** · dry-report (no chunk index) and
   converge-noun (stale graph), the fourth audit running. The rebuild is still
   `svrn project refresh --name commonwealth-ai --local`.
+
+## REVIEW-audit-fp-auto-9 (2026-09-25, range bae0e2154..64c3dd7d7, starting from the previous audit's hash)
+
+The range holds 47 commits. Thirteen units touch Rust: fp-107 to fp-112,
+fp-83, fp-87, fp-88 (the node's KV moves to cw-rails and the daemon dials it),
+fp-102 to fp-105 (corpus-engine/build.rs is deleted and its outputs are read
+from the data crate), plus REVIEW-handoff-phase-b. All checks ran in the
+sovereign-vulkan toolbox.
+
+TESTALL at 64c3dd7d7: exit=0, 13,404 passed and 0 failed. PREPUSH was
+range-fed from bae0e2154 and exited 1. The only blocking lane was
+boundary-gate at 51 violations, which is the handoff list. rustfmt, lint,
+arch, docs, layout, env and layer all passed.
+
+Ledger (Rust lines; "src" counts inline `mod tests` bodies as src). fp-102
+-67, fp-103 -83, fp-104 -17, fp-105 -120/+12 tests, fp-107 +2/+42, fp-108
+-796/+1040 (store.rs's inline tests moved to store/tests.rs, so the real
+change is about +80 src), fp-109 +57/+54, fp-110 +209/+261, fp-111 -36/-9,
+fp-112 +28/+142, fp-83 -786/-128, fp-87 +256/+204, fp-88 -13/+119. Total
+src -1366, tests +1737.
+
+Two new nouns, `RailsKv` and `Exchanged`. git grep finds one definition of
+each.
+
+- **ARCH 8, fixed in 7486243b5** · `MeshStore::apply_own_projection`
+  (`commonwealth-state/src/store.rs:486`, fp-108) had an inline copy of
+  `apply_projection`'s merge/tombstone arm. Both now call
+  `apply_projected_row`.
+- **ARCH 8 (recorded)** · there are two `ReplicatedKv` clients for the same
+  four `/v1/mesh/kv/*` doors: `RailsKv`
+  (`sovereign-daemon/src/rails_client/kv.rs:138`, fp-110) and
+  `DaemonReplicatedKv` (`sovereign-cli-dev/src/mesh_kv_client.rs:36`,
+  fp-33). They share the error family and the method bodies line for line.
+  They differ in transport: a dial thread versus `reqwest::blocking`. They
+  also differ in target: cw-rails' base versus the daemon's `/v1`. They live
+  in two packages ([svrn] and [code]), so one home for both is a leaf
+  admission, and that is the operator's decision (§12 decision 3a). Once
+  fp-88's flip lands, `DaemonReplicatedKv` dials a daemon whose KV is
+  cw-rails', which may make it a one-hop proxy of `RailsKv`. Whether it
+  should dial cw-rails directly belongs to Phase B.
+- **ARCH 8 (recorded)** · `legacy_store::export_via_cli_mesh`
+  (`sovereign-cli-llm/src/legacy_store.rs:79`, fp-87) locates the
+  `sovereign-cli-mesh` sibling with a copy of the dispatcher's
+  `mesh_bin::locate` (`sovereign-cli/src/mesh_bin.rs:15`). It checks the
+  same env var and then the canonicalized exe dir, but it drops the
+  `which` fallback. sovereign-cli-llm cannot depend on the dispatcher, so
+  the shared home would be `sovereign-cli-base`. That adds a pub item to a
+  leaf, which is not a small fix.
+- **ARCH 6 (noted, not changed)** · `legacy_store::rails_kv`
+  (`legacy_store.rs:20`) falls back to the default rails base when
+  `SetupConfig::load` errors. The fallback is traced at warn and names the
+  substitution, so it is not silent. It does mean a broken config migrates
+  into the default port's cw-rails.
+- **size-gate (advisory)** · 55 keys grew, up from 53 at auto-8. Nothing was
+  re-pinned.
+- **deletion-manifest (advisory)** · `p0-root-junk` is 133537 against
+  113934, unchanged.
+- **Instruments could not judge** · dry-report now resolves the corpus with
+  `--corpus-id commonwealth-ai` but finds no chunk index at
+  `~/.svrnmesh/indexes/commonwealth-ai/chunks.lance`. converge-noun still
+  refuses to pick a corpus. This is the fifth audit in a row. Clones were
+  read by hand.
