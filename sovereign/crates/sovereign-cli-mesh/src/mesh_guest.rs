@@ -33,13 +33,13 @@
 //! rather than reading config, and the link never carries a preference order
 //! for the guest to resolve.
 
-use sovereign_cli_shared::help::{Help, HelpSection};
+use sovereign_cli_base::help::{Help, HelpSection};
 use sovereign_mesh::deep_link::{
     build_guest_link, build_https_guest_link, parse_deep_link, DeepLink,
 };
 
 use crate::mesh_guest_link::{wall_page_base, wall_qr_svg};
-use sovereign_cli_shared::guest_link::{self, GuestLink};
+use sovereign_cli_base::guest_link::{self, GuestLink};
 
 /// Read the daemon's client port from `SetupConfig` rather than hardcoding
 /// 9741 — a sandbox pointed at its own daemon must not mint against the
@@ -347,8 +347,8 @@ pub(crate) const HELP_MESH_GRANT: Help = Help {
 };
 
 pub(crate) async fn cmd_grant(args: &[String]) -> i32 {
-    if sovereign_cli_shared::help::wants_help(args) {
-        sovereign_cli_shared::help::print(&HELP_MESH_GRANT);
+    if sovereign_cli_base::help::wants_help(args) {
+        sovereign_cli_base::help::print(&HELP_MESH_GRANT);
         return 0;
     }
 
@@ -789,8 +789,8 @@ pub(crate) const HELP_MESH_USE: Help = Help {
 };
 
 pub(crate) async fn cmd_use(args: &[String]) -> i32 {
-    if sovereign_cli_shared::help::wants_help(args) {
-        sovereign_cli_shared::help::print(&HELP_MESH_USE);
+    if sovereign_cli_base::help::wants_help(args) {
+        sovereign_cli_base::help::print(&HELP_MESH_USE);
         return 0;
     }
 

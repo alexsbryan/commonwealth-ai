@@ -132,7 +132,7 @@ pub(super) fn stored_origin(
 /// a restart left peers dialing the holder's endpoint for 120 s (ring-room
 /// 99ca7e4cb leg 3).
 pub(super) async fn cmd_media_offer(args: &[String]) -> i32 {
-    if sovereign_cli_shared::help::wants_help(args) {
+    if sovereign_cli_base::help::wants_help(args) {
         eprintln!("Usage: svrn mesh media offer [<origin>] [--admit <member>...]");
         eprintln!();
         eprintln!("Offer a media server on this machine to the members of this mesh.");
@@ -238,7 +238,7 @@ pub(super) async fn cmd_media_offer(args: &[String]) -> i32 {
 /// from every member's rail within one gossip round rather than at the next
 /// restart.
 pub(super) fn cmd_media_withdraw(args: &[String]) -> i32 {
-    if sovereign_cli_shared::help::wants_help(args) {
+    if sovereign_cli_base::help::wants_help(args) {
         eprintln!("Usage: svrn mesh media withdraw");
         eprintln!();
         eprintln!("Stop offering this machine's media server to the mesh. Removes the");
@@ -282,7 +282,7 @@ pub(super) fn cmd_media_withdraw(args: &[String]) -> i32 {
 /// `svrn mesh media admit <member>...` — narrow a standing offer to the named
 /// members, reading the origin `offer` stored rather than asking for it again.
 pub(super) fn cmd_media_admit(args: &[String]) -> i32 {
-    if sovereign_cli_shared::help::wants_help(args) || args.is_empty() {
+    if sovereign_cli_base::help::wants_help(args) || args.is_empty() {
         eprintln!("Usage: svrn mesh media admit <member>...");
         eprintln!();
         eprintln!("Narrow this machine's media offer to the named members (member name or");
@@ -345,7 +345,7 @@ fn write_offer(
 fn reload_daemon() -> i32 {
     let dispatcher = match std::env::current_exe()
         .map_err(|e| e.to_string())
-        .and_then(|exe| sovereign_cli_shared::dispatcher::dispatcher_exe(&exe))
+        .and_then(|exe| sovereign_cli_base::dispatcher::dispatcher_exe(&exe))
     {
         Ok(d) => d,
         Err(e) => {

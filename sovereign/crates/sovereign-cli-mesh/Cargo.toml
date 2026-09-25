@@ -18,7 +18,7 @@ sovereign-mesh = { workspace = true, features = ["treesitter"] }
 # when the last in-process daemon constructions left this crate.
 sovereign-turn-client = { workspace = true }
 sovereign-meshapp = { workspace = true }
-sovereign-cli-shared = { workspace = true, features = ["scip", "mcp-client", "rail-client"] }
+sovereign-cli-base = { workspace = true, features = ["rail-client"] }
 commonwealth-core = { path = "../../../commonwealth/crates/commonwealth-core" }
 commonwealth-rail = { workspace = true }
 commonwealth-work = { workspace = true, features = ["process"] }

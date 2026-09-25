@@ -32,7 +32,7 @@ pub(crate) async fn cmd_media(args: &[String]) -> i32 {
     if args.first().map(String::as_str) == Some("admit") {
         return cmd_media_admit(&args[1..]);
     }
-    if sovereign_cli_shared::help::wants_help(args) {
+    if sovereign_cli_base::help::wants_help(args) {
         eprintln!("Usage: svrn mesh media [<peer>] [--json] [--no-probe]");
         eprintln!("       svrn mesh media offer [<origin>] [--admit <member>...]");
         eprintln!("       svrn mesh media withdraw");
@@ -288,7 +288,7 @@ pub(crate) async fn cmd_fanout(app: Option<&str>, args: &[String]) -> i32 {
         Some(_) => "mesh app fanout",
         None => "mesh media fanout",
     };
-    if sovereign_cli_shared::help::wants_help(args) || args.is_empty() {
+    if sovereign_cli_base::help::wants_help(args) || args.is_empty() {
         match app {
             Some(_) => eprintln!("Usage: svrn mesh app fanout <app> <path> [--peers a,b] [--method M] [--timeout-ms N] [--json]"),
             None => eprintln!("Usage: svrn mesh media fanout <path> [--peers a,b] [--method M] [--timeout-ms N] [--json]"),

@@ -1300,7 +1300,7 @@ pub(crate) async fn cmd_bench(args: &[String]) -> i32 {
             "--json" => parsed.json = true,
             "--history" => parsed.history = true,
             "--help" | "-h" => {
-                sovereign_cli_shared::help::print(&HELP_MESH_BENCH);
+                sovereign_cli_base::help::print(&HELP_MESH_BENCH);
                 return 0;
             }
             s if parsed.assert_model.is_none() && !s.starts_with('-') => {
@@ -2225,15 +2225,15 @@ pub(crate) fn render_bench_human(
 // Help
 // ---------------------------------------------------------------------------
 
-pub(crate) const HELP_MESH_BENCH: sovereign_cli_shared::help::Help =
-    sovereign_cli_shared::help::Help {
+pub(crate) const HELP_MESH_BENCH: sovereign_cli_base::help::Help =
+    sovereign_cli_base::help::Help {
         command: "svrn mesh bench",
         summary: "Measure how fast the model you are running actually decodes, and record it.",
         sections: &[
-            sovereign_cli_shared::help::HelpSection::Usage(
+            sovereign_cli_base::help::HelpSection::Usage(
                 "svrn mesh bench [<model.gguf>] [--trials <n>] [--json] [--history]",
             ),
-            sovereign_cli_shared::help::HelpSection::Flags(&[
+            sovereign_cli_base::help::HelpSection::Flags(&[
                 (
                     "<model.gguf>",
                     "An ASSERTION, not a selection: this file must be what the daemon has \
@@ -2251,7 +2251,7 @@ pub(crate) const HELP_MESH_BENCH: sovereign_cli_shared::help::Help =
                      included. Measures nothing.",
                 ),
             ]),
-            sovereign_cli_shared::help::HelpSection::Notes(
+            sovereign_cli_base::help::HelpSection::Notes(
                 "Measures the configuration you are RUNNING; it never installs one. There is no \
                  slot to select, so there is no slot to get wrong.\n\n\
                  Fires real streaming completions at the real HTTP surface and times the SSE \
@@ -2268,7 +2268,7 @@ pub(crate) const HELP_MESH_BENCH: sovereign_cli_shared::help::Help =
                  trial starts. Exit 0 valid · 1 guard tripped · 2 bad arguments · 3 assertion \
                  failed · 4 nothing measurable · 5 no daemon.",
             ),
-            sovereign_cli_shared::help::HelpSection::Examples(&[
+            sovereign_cli_base::help::HelpSection::Examples(&[
                 (
                     "svrn mesh bench",
                     "Measure whatever is loaded right now, three trials",

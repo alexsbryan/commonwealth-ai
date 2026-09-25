@@ -12405,7 +12405,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.9",
- "sovereign-cli-shared",
+ "sovereign-cli-base",
  "sovereign-contracts",
  "sovereign-inference",
  "sovereign-mesh",

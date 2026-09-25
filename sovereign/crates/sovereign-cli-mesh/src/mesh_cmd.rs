@@ -11,7 +11,7 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
-use sovereign_cli_shared::dirs::sovereign_root;
+use sovereign_cli_base::dirs::sovereign_root;
 use sovereign_contracts::setup_config::{client_daemon_base, client_daemon_base_for};
 use sovereign_mesh::deep_link::{build_https_join_link, parse_join_argument};
 use sovereign_turn_client::reach::ServingHost;
@@ -27,11 +27,11 @@ const REACH_WINDOW: Duration = Duration::from_secs(5);
 /// Run a mesh subcommand. Returns the exit code.
 pub async fn run_mesh(args: &[String]) -> i32 {
     if args.is_empty() {
-        sovereign_cli_shared::help::print(&HELP_MESH);
+        sovereign_cli_base::help::print(&HELP_MESH);
         return 1;
     }
     if matches!(args[0].as_str(), "--help" | "-h" | "help") {
-        sovereign_cli_shared::help::print(&HELP_MESH);
+        sovereign_cli_base::help::print(&HELP_MESH);
         return 0;
     }
 
@@ -62,7 +62,7 @@ pub async fn run_mesh(args: &[String]) -> i32 {
         "soak-gate" => cmd_soak_gate(&args[1..]).await,
         other => {
             eprintln!("Unknown mesh subcommand: {other}");
-            sovereign_cli_shared::help::print(&HELP_MESH);
+            sovereign_cli_base::help::print(&HELP_MESH);
             1
         }
     }
@@ -400,12 +400,12 @@ async fn cmd_soak_gate(args: &[String]) -> i32 {
 }
 
 /// Run a corpus subcommand. Returns the exit code.
-const HELP_MESH: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help {
+const HELP_MESH: sovereign_cli_base::help::Help = sovereign_cli_base::help::Help {
     command: "svrn mesh",
     summary: "Manage the local Commonwealth mesh (create / join / rotate / status).",
     sections: &[
-        sovereign_cli_shared::help::HelpSection::Usage("svrn mesh <subcommand> [args]"),
-        sovereign_cli_shared::help::HelpSection::Subcommands(&[
+        sovereign_cli_base::help::HelpSection::Usage("svrn mesh <subcommand> [args]"),
+        sovereign_cli_base::help::HelpSection::Subcommands(&[
             (
                 "create",
                 "Promote the solo mesh to a joinable mesh; print invite",
@@ -477,7 +477,7 @@ const HELP_MESH: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::
                 "Gate mesh-soak SLIs (violation rate, load latency) against a committed baseline",
             ),
         ]),
-        sovereign_cli_shared::help::HelpSection::Notes(
+        sovereign_cli_base::help::HelpSection::Notes(
             "Run `svrn mesh <subcommand> --help` for subcommand-specific flags.",
         ),
     ],
@@ -821,7 +821,7 @@ async fn cmd_plan(args: &[String]) -> i32 {
             "--json" => json = true,
             "--from-mesh" => from_mesh = true,
             "--help" | "-h" => {
-                sovereign_cli_shared::help::print(&HELP_MESH_PLAN);
+                sovereign_cli_base::help::print(&HELP_MESH_PLAN);
                 return 0;
             }
             s if model_spec.is_none() && !s.starts_with('-') => model_spec = Some(s.to_string()),
@@ -833,7 +833,7 @@ async fn cmd_plan(args: &[String]) -> i32 {
         i += 1;
     }
     let Some(model_spec) = model_spec else {
-        sovereign_cli_shared::help::print(&HELP_MESH_PLAN);
+        sovereign_cli_base::help::print(&HELP_MESH_PLAN);
         return 2;
     };
     if from_mesh {
@@ -2463,14 +2463,14 @@ fn render_speed_human(o: &mut String, r: &PlanReport) {
     }
 }
 
-const HELP_MESH_PLAN: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help {
+const HELP_MESH_PLAN: sovereign_cli_base::help::Help = sovereign_cli_base::help::Help {
     command: "svrn mesh plan",
     summary: "Dry-run a model's tensor split across a mesh — per-device fit, offline, no load.",
     sections: &[
-        sovereign_cli_shared::help::HelpSection::Usage(
+        sovereign_cli_base::help::HelpSection::Usage(
             "svrn mesh plan <model.gguf | hf:owner/repo[/variant]> (--from-mesh | --devices <gb,..>) [--host <idx>] [--headroom <f>] [--json]",
         ),
-        sovereign_cli_shared::help::HelpSection::Flags(&[
+        sovereign_cli_base::help::HelpSection::Flags(&[
             (
                 "--from-mesh",
                 "Read the live mesh from the running daemon (online anchor workers + this host). Exclusive with --devices.",
@@ -2489,7 +2489,7 @@ const HELP_MESH_PLAN: sovereign_cli_shared::help::Help = sovereign_cli_shared::h
             ),
             ("--json", "Emit the plan as a machine-readable JSON split manifest."),
         ]),
-        sovereign_cli_shared::help::HelpSection::Notes(
+        sovereign_cli_base::help::HelpSection::Notes(
             "Reuses the daemon's own plan_shards + quantize_vram, then overlays the real per-block\n\
              byte mass to show the BYTES each node holds and whether they fit — via the SAME\n\
              shard_fits decider the live load's per-device gate runs, so a plan that says OVERFLOW\n\
@@ -2514,7 +2514,7 @@ const HELP_MESH_PLAN: sovereign_cli_shared::help::Help = sovereign_cli_shared::h
              is honest about tensor mass but has fetched no weights, so it cannot tell you the\n\
              download will succeed — only whether it would fit if it did.",
         ),
-        sovereign_cli_shared::help::HelpSection::Examples(&[
+        sovereign_cli_base::help::HelpSection::Examples(&[
             (
                 "svrn mesh plan GLM-5.2.gguf --from-mesh",
                 "Plan across your actual running mesh (reads each node's advertised VRAM)",
@@ -2539,14 +2539,14 @@ const HELP_MESH_PLAN: sovereign_cli_shared::help::Help = sovereign_cli_shared::h
     ],
 };
 
-const HELP_MESH_CREATE: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help {
+const HELP_MESH_CREATE: sovereign_cli_base::help::Help = sovereign_cli_base::help::Help {
     command: "svrn mesh create",
     summary: "Promote the solo mesh to a joinable mesh and print the shareable invite.",
     sections: &[
-        sovereign_cli_shared::help::HelpSection::Usage(
+        sovereign_cli_base::help::HelpSection::Usage(
             "svrn mesh create [--name <name>] [--encrypt]",
         ),
-        sovereign_cli_shared::help::HelpSection::Flags(&[
+        sovereign_cli_base::help::HelpSection::Flags(&[
             (
                 "--name <name>",
                 "Human-readable mesh name (default: \"<host>'s Mesh\")",
@@ -2557,7 +2557,7 @@ const HELP_MESH_CREATE: sovereign_cli_shared::help::Help = sovereign_cli_shared:
                  plaintext fallback, and the plaintext client API is closed to the network",
             ),
         ]),
-        sovereign_cli_shared::help::HelpSection::Notes(
+        sovereign_cli_base::help::HelpSection::Notes(
             "Needs a RUNNING daemon (`svrn daemon start`): the create happens in the\n\
              daemon that keeps serving after this command exits, not in this process.\n\
              \n\
@@ -2572,12 +2572,12 @@ const HELP_MESH_CREATE: sovereign_cli_shared::help::Help = sovereign_cli_shared:
     ],
 };
 
-const HELP_MESH_JOIN: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help {
+const HELP_MESH_JOIN: sovereign_cli_base::help::Help = sovereign_cli_base::help::Help {
     command: "svrn mesh join",
     summary: "Join an existing mesh using any of the three invite forms.",
     sections: &[
-        sovereign_cli_shared::help::HelpSection::Usage("svrn mesh join <arg>"),
-        sovereign_cli_shared::help::HelpSection::Examples(&[
+        sovereign_cli_base::help::HelpSection::Usage("svrn mesh join <arg>"),
+        sovereign_cli_base::help::HelpSection::Examples(&[
             (
                 "svrn mesh join cwth-a1b2-c3d4-e5f6",
                 "Bare key typed from another user's terminal",
@@ -2591,19 +2591,19 @@ const HELP_MESH_JOIN: sovereign_cli_shared::help::Help = sovereign_cli_shared::h
                 "Native app deep link",
             ),
         ]),
-        sovereign_cli_shared::help::HelpSection::Notes(
+        sovereign_cli_base::help::HelpSection::Notes(
             "Needs a RUNNING daemon (`svrn daemon start`). The daemon performs the join;\n\
              a join run in this CLI process would evaporate with it.",
         ),
     ],
 };
 
-const HELP_MESH_ROTATE: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help {
+const HELP_MESH_ROTATE: sovereign_cli_base::help::Help = sovereign_cli_base::help::Help {
     command: "svrn mesh rotate",
     summary: "Generate a new shareable join key (the previous key stops working for future joins).",
     sections: &[
-        sovereign_cli_shared::help::HelpSection::Usage("svrn mesh rotate"),
-        sovereign_cli_shared::help::HelpSection::Notes(
+        sovereign_cli_base::help::HelpSection::Usage("svrn mesh rotate"),
+        sovereign_cli_base::help::HelpSection::Notes(
             "Existing members keep their connections — rotation changes only who may JOIN.\n\
              Needs a RUNNING daemon: the rotation happens in-process, so no restart is\n\
              required and stopping the daemon first makes this refuse. (This note used to\n\
@@ -2615,8 +2615,8 @@ const HELP_MESH_ROTATE: sovereign_cli_shared::help::Help = sovereign_cli_shared:
 };
 
 async fn cmd_create(args: &[String]) -> i32 {
-    if sovereign_cli_shared::help::wants_help(args) {
-        sovereign_cli_shared::help::print(&HELP_MESH_CREATE);
+    if sovereign_cli_base::help::wants_help(args) {
+        sovereign_cli_base::help::print(&HELP_MESH_CREATE);
         return 0;
     }
     let mut name = None;
@@ -2794,8 +2794,8 @@ fn print_mesh_share(
 }
 
 async fn cmd_join(args: &[String]) -> i32 {
-    if sovereign_cli_shared::help::wants_help(args) {
-        sovereign_cli_shared::help::print(&HELP_MESH_JOIN);
+    if sovereign_cli_base::help::wants_help(args) {
+        sovereign_cli_base::help::print(&HELP_MESH_JOIN);
         return 0;
     }
     let Some(arg) = args.first() else {
@@ -2916,8 +2916,8 @@ async fn join_via_running_daemon(client: &TurnClient, arg: &str, node_name: &str
 /// key + hash, writes the new hash back to `mesh.json`, and prints the
 /// new shareable invite in the same format as `mesh create`.
 async fn cmd_rotate(args: &[String]) -> i32 {
-    if sovereign_cli_shared::help::wants_help(args) {
-        sovereign_cli_shared::help::print(&HELP_MESH_ROTATE);
+    if sovereign_cli_base::help::wants_help(args) {
+        sovereign_cli_base::help::print(&HELP_MESH_ROTATE);
         return 0;
     }
     let force = args.iter().any(|a| a == "--force");
@@ -3024,7 +3024,7 @@ async fn rotate_via_running_daemon(force: bool) -> i32 {
 ///   svrn mesh status --json
 ///   export SOVEREIGN_FOUNDER_ADDR=$(svrn mesh status --self --addr-only)
 async fn cmd_status(args: &[String]) -> i32 {
-    if sovereign_cli_shared::help::wants_help(args) {
+    if sovereign_cli_base::help::wants_help(args) {
         eprintln!("Usage: svrn mesh status [--json] [--self] [--addr-only]");
         eprintln!();
         eprintln!("Show mesh members, online status, and advertised addresses.");
@@ -3228,7 +3228,7 @@ async fn cmd_status(args: &[String]) -> i32 {
 /// iroh, and via a direct path or the relay?" surface (H2). Reads the
 /// `iroh_transport` block of `/v1/mesh/status`.
 async fn cmd_transport(args: &[String]) -> i32 {
-    if sovereign_cli_shared::help::wants_help(args) {
+    if sovereign_cli_base::help::wants_help(args) {
         eprintln!("Usage: svrn mesh transport [--json]");
         eprintln!();
         eprintln!("Show each peer's live iroh connection path (direct / relayed / mixed / idle).");
@@ -3360,7 +3360,7 @@ async fn cmd_balance() -> i32 {
 /// *never-ran* into *passed* — the caller's script sees success and moves on.
 /// No daemon is now a non-zero exit that says so.
 async fn cmd_leave(args: &[String]) -> i32 {
-    if sovereign_cli_shared::help::wants_help(args) {
+    if sovereign_cli_base::help::wants_help(args) {
         eprintln!("Usage: svrn mesh leave");
         eprintln!();
         eprintln!("Give up membership in the active mesh and return to a solo mesh.");
@@ -3410,7 +3410,7 @@ async fn cmd_leave(args: &[String]) -> i32 {
 /// way, and an operator debugging a daemon that will not start still needs to
 /// see what it is a member of.
 async fn cmd_list(args: &[String]) -> i32 {
-    if sovereign_cli_shared::help::wants_help(args) {
+    if sovereign_cli_base::help::wants_help(args) {
         eprintln!("Usage: svrn mesh list [--json]");
         eprintln!();
         eprintln!("Show every mesh this node has joined. The active one is marked '*'.");
@@ -3469,7 +3469,7 @@ async fn cmd_list(args: &[String]) -> i32 {
 
 /// `svrn mesh switch <mesh>` — park the active mesh, bring another up.
 async fn cmd_switch(args: &[String]) -> i32 {
-    if sovereign_cli_shared::help::wants_help(args) || args.is_empty() {
+    if sovereign_cli_base::help::wants_help(args) || args.is_empty() {
         eprintln!("Usage: svrn mesh switch <mesh-name-or-id>");
         eprintln!();
         eprintln!("Park the active mesh and bring another joined mesh up in its place.");
@@ -3523,7 +3523,7 @@ async fn cmd_switch(args: &[String]) -> i32 {
 
 /// `svrn mesh forget <mesh>` — drop a PARKED mesh from this node.
 async fn cmd_forget(args: &[String]) -> i32 {
-    if sovereign_cli_shared::help::wants_help(args) || args.is_empty() {
+    if sovereign_cli_base::help::wants_help(args) || args.is_empty() {
         eprintln!("Usage: svrn mesh forget <mesh-name-or-id>");
         eprintln!();
         eprintln!("Delete a parked mesh's roster and invite key from this node.");
@@ -3577,7 +3577,7 @@ async fn cmd_logs() -> i32 {
 /// stream is hashed on the fly and the file is rejected on
 /// mismatch. See `sovereign_serving_host::model_fetch::fetch_model_to_dir`.
 async fn cmd_fetch_model(args: &[String]) -> i32 {
-    if sovereign_cli_shared::help::wants_help(args) {
+    if sovereign_cli_base::help::wants_help(args) {
         eprintln!("Usage: svrn mesh fetch-model <name> [--peer <host:port>] [--out <dir>]");
         eprintln!();
         eprintln!("Pulls a GGUF from a mesh peer over the tailnet. No R2 credentials required.");

@@ -15,7 +15,7 @@
 //! listener, so this drives `127.0.0.1` and no other address — minting a
 //! credential is not something a peer may ask for.
 
-use sovereign_cli_shared::help::{Help, HelpSection};
+use sovereign_cli_base::help::{Help, HelpSection};
 
 use crate::mesh_guest::{daemon_client_port, error_text, http_client};
 
@@ -51,8 +51,8 @@ pub(crate) const HELP_MESH_TOKEN: Help = Help {
 };
 
 pub(crate) async fn cmd_token(args: &[String]) -> i32 {
-    if sovereign_cli_shared::help::wants_help(args) {
-        sovereign_cli_shared::help::print(&HELP_MESH_TOKEN);
+    if sovereign_cli_base::help::wants_help(args) {
+        sovereign_cli_base::help::print(&HELP_MESH_TOKEN);
         return 0;
     }
 

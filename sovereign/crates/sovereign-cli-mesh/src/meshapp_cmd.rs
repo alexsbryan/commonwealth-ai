@@ -201,7 +201,7 @@ async fn run_dev(args: &[String]) -> i32 {
             if in_repo.join("index.html").is_file() {
                 in_repo
             } else {
-                sovereign_cli_shared::dirs::sovereign_meshapps().join(&app_id)
+                sovereign_cli_base::dirs::sovereign_meshapps().join(&app_id)
             }
         }
     };
@@ -228,7 +228,7 @@ async fn run_dev(args: &[String]) -> i32 {
 
     // Index dir: --index, else ~/.svrnmesh/indexes/<corpus>.
     let index_path =
-        index.unwrap_or_else(|| sovereign_cli_shared::dirs::sovereign_indexes().join(&corpus));
+        index.unwrap_or_else(|| sovereign_cli_base::dirs::sovereign_indexes().join(&corpus));
     if !index_path.is_dir() {
         eprintln!(
             "meshapp dev: corpus `{corpus}` not found at {} — install it first (`svrn corpus install {corpus}`) or pass --index",
@@ -355,7 +355,7 @@ async fn op_handler(
         // Same load-or-build-and-cache path the desktop host runs, so the
         // dev loop exercises staleness + the verbatim audit identically.
         "wrapped_artifact" => {
-            let state_db = sovereign_cli_shared::dirs::sovereign_root().join("sovereign.db");
+            let state_db = sovereign_cli_base::dirs::sovereign_root().join("sovereign.db");
             sovereign_meshapp::wrapped::wrapped_artifact(idx, Some(state_db.as_path()))
                 .await
                 .map(to_val)

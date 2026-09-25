@@ -61,7 +61,7 @@ fn heartbeat(ttl_secs: u64) -> Duration {
 const DEFAULT_TTL_SECS: u64 = 3600;
 
 pub async fn run(args: &[String]) -> i32 {
-    if sovereign_cli_shared::help::wants_help(args) {
+    if sovereign_cli_base::help::wants_help(args) {
         help();
         return 0;
     }

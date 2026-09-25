@@ -30,7 +30,7 @@ pub(crate) async fn cmd_app(args: &[String]) -> i32 {
         // help. `cli_contract_flags::flags_missing_from_their_own_help_do_not_grow`
         // reads that help and counted all four as undocumented; they were
         // written, just behind a branch nothing could enter.
-        if sovereign_cli_shared::help::wants_help(&args[1..]) {
+        if sovereign_cli_base::help::wants_help(&args[1..]) {
             let named = args
                 .get(1)
                 .filter(|a| !a.starts_with("--"))
@@ -43,7 +43,7 @@ pub(crate) async fn cmd_app(args: &[String]) -> i32 {
         };
         return crate::mesh_media::cmd_fanout(Some(app), &args[2..]).await;
     }
-    if sovereign_cli_shared::help::wants_help(args) {
+    if sovereign_cli_base::help::wants_help(args) {
         eprintln!("Usage: svrn mesh app [<peer>] [<app>] [--json] [--no-probe]");
         eprintln!("       svrn mesh app fanout <app> <path> [--peers a,b] [--method M] [--timeout-ms N] [--json]");
         eprintln!();

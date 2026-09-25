@@ -67,7 +67,7 @@ pub(crate) fn print_alias_warnings(members: &[&MemberDto]) {
 /// (the gossip admission guard) but not fixed, so a roster that already held a
 /// collision stayed broken and every read through it stayed wrong.
 pub(crate) async fn cmd_forget_member(args: &[String]) -> i32 {
-    if sovereign_cli_shared::help::wants_help(args) || args.is_empty() {
+    if sovereign_cli_base::help::wants_help(args) || args.is_empty() {
         eprintln!("Usage: svrn mesh forget-member <node-id-or-name> [--force]");
         eprintln!();
         eprintln!("Tombstone one member row in the ACTIVE mesh and let gossip carry");

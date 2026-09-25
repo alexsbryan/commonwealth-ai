@@ -39,7 +39,7 @@ use toml_edit::{DocumentMut, Item, Table};
 
 pub async fn run(args: &[String]) -> i32 {
     match args.first().map(String::as_str) {
-        Some(a) if sovereign_cli_shared::help::wants_help(args) => {
+        Some(a) if sovereign_cli_base::help::wants_help(args) => {
             let _ = a;
             help();
             0
@@ -52,7 +52,7 @@ pub async fn run(args: &[String]) -> i32 {
 /// `svrn unpublish <name>` — the other half, dispatched separately so the
 /// verb reads as its own action rather than as a flag on this one.
 pub async fn run_unpublish(args: &[String]) -> i32 {
-    if args.is_empty() || sovereign_cli_shared::help::wants_help(args) {
+    if args.is_empty() || sovereign_cli_base::help::wants_help(args) {
         eprintln!("Usage: svrn unpublish <name>");
         eprintln!();
         eprintln!("Stop publishing an app to the house. `svrn publish` lists what is published.");

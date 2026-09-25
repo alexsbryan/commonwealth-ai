@@ -55,7 +55,7 @@ const DEFAULT_OFFER_PATH: &str = "/";
 const BODY_PREVIEW_BYTES: usize = 600;
 
 pub(crate) async fn cmd_offers(args: &[String]) -> i32 {
-    if sovereign_cli_shared::help::wants_help(args) {
+    if sovereign_cli_base::help::wants_help(args) {
         print_help();
         return 0;
     }
@@ -410,10 +410,10 @@ const NO_KEY: &str = "warrant unknown — this member gossips no key, so there i
 ///
 /// Asks the daemon for each ring's roster and admission — the same read
 /// `svrn ring roster show` makes, through
-/// [`sovereign_cli_shared::rail::roster_and_admission`], so the catalogue and
+/// [`sovereign_cli_base::rail::roster_and_admission`], so the catalogue and
 /// the roster page cannot say different things about the same row.
 async fn warrants_for(neighbours: &[Neighbour]) -> Result<BTreeMap<String, String>, String> {
-    let root = sovereign_cli_shared::dirs::sovereign_root();
+    let root = sovereign_cli_base::dirs::sovereign_root();
     let namespaces = commonwealth_rail::namespaces_in(&root).map_err(|e| e.to_string())?;
     let mut rings: Vec<(
         String,
@@ -424,7 +424,7 @@ async fn warrants_for(neighbours: &[Neighbour]) -> Result<BTreeMap<String, Strin
         // A ring the daemon cannot answer for is SKIPPED and the others are
         // still read: one unreadable journal must not turn every seller's
         // warrant into an error.
-        if let Ok((roster, admission)) = sovereign_cli_shared::rail::roster_and_admission(&ns).await
+        if let Ok((roster, admission)) = sovereign_cli_base::rail::roster_and_admission(&ns).await
         {
             rings.push((ns, roster, admission.ops));
         }

@@ -125,7 +125,7 @@ use scaffold::run_new;
 /// namespace that is not a plain directory name, so a roster written under
 /// one was a file nothing would ever read.
 fn ring_journal(namespace: &str) -> Result<commonwealth_rail::RingJournal, String> {
-    commonwealth_rail::RingJournal::open(&sovereign_cli_shared::dirs::sovereign_root(), namespace)
+    commonwealth_rail::RingJournal::open(&sovereign_cli_base::dirs::sovereign_root(), namespace)
         .map_err(|e| e.to_string())
 }
 
@@ -184,13 +184,13 @@ fn http_client() -> Result<reqwest::Client, String> {
 ///
 /// They were this module's while `ring` and `job` were the only callers. `svrn
 /// quality check --distribute` is a third and it lives in `sovereign-cli`, so
-/// the pair moved to `sovereign_cli_shared::rail`, the crate both already
+/// the pair moved to `sovereign_cli_base::rail`, the crate both already
 /// link. Re-exported rather than re-imported at each call site because
 /// [`dev`](super::ring_cmd::dev) needs the CONSTANTS (it proxies opaque bytes
 /// under a grant token and cannot use the functions) and every other caller
 /// here needs the functions, so one `use` line serves both and a route renamed
 /// on the daemon still breaks the build at every caller.
-pub(crate) use sovereign_cli_shared::rail::{
+pub(crate) use sovereign_cli_base::rail::{
     error_text, rail_append, rail_log, RAIL_APPEND_PATH, RAIL_LIVE_PATH, RAIL_LOG_PATH,
 };
 
@@ -285,7 +285,7 @@ async fn run_roster(args: &[String]) -> i32 {
 /// This node's own signing key, as the rail names it: hex of the Ed25519
 /// public key. The same value `Op.actor` carries.
 fn self_actor() -> Result<String, String> {
-    let data_dir = sovereign_cli_shared::dirs::sovereign_root();
+    let data_dir = sovereign_cli_base::dirs::sovereign_root();
     let key = commonwealth_transport::identity::load_or_generate_node_key(&data_dir);
     Ok(commonwealth_rail::actor_of(&key))
 }
@@ -423,7 +423,7 @@ async fn resolve_warrant(
     key: &str,
     op_id: &str,
 ) -> Result<commonwealth_rail::Vouch, String> {
-    let (roster, admission) = sovereign_cli_shared::rail::roster_and_admission(namespace)
+    let (roster, admission) = sovereign_cli_base::rail::roster_and_admission(namespace)
         .await
         .map_err(|e| {
             format!(
@@ -453,7 +453,7 @@ async fn resolve_warrant(
 /// `svrn ring roster show|list <ns>` — who is in this ring, and why.
 async fn roster_list(namespace: &str) -> i32 {
     let (roster, admission) =
-        match sovereign_cli_shared::rail::roster_and_admission(namespace).await {
+        match sovereign_cli_base::rail::roster_and_admission(namespace).await {
             Ok(pair) => pair,
             Err(e) => {
                 eprintln!("ring roster show: {e}");

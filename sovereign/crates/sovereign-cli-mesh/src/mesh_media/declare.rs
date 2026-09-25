@@ -19,7 +19,7 @@ pub(crate) fn cmd_media_declare(args: &[String]) -> i32 {
 
     let dir = commonwealth_media::dir_under(&sovereign_contracts::rebrand::svrnmesh_root());
 
-    if sovereign_cli_shared::help::wants_help(args) {
+    if sovereign_cli_base::help::wants_help(args) {
         eprintln!("Usage: svrn mesh media declare <header-name>     # value on stdin");
         eprintln!("       svrn mesh media declare <header-name> --clear");
         eprintln!("       svrn mesh media declare --list");

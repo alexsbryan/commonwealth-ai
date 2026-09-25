@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Opening the route a guest link names. Split from the link FORMAT, which
-//! is mesh-free and lives in `sovereign_cli_shared::guest_link`.
+//! is mesh-free and lives in `sovereign_cli_base::guest_link`.
 
-use sovereign_cli_shared::guest_link::GuestLink;
+use sovereign_cli_base::guest_link::GuestLink;
 
 /// The base URL every request under `link` must be sent to — opening a mesh
 /// tunnel first when the link names an iroh endpoint.
@@ -49,7 +49,7 @@ static TUNNEL: std::sync::OnceLock<sovereign_mesh::guest_tunnel::GuestTunnel> =
 
 #[cfg(test)]
 mod tests {
-    use sovereign_cli_shared::guest_link::GuestLink;
+    use sovereign_cli_base::guest_link::GuestLink;
 
     fn link(expires_at: u64) -> GuestLink {
         GuestLink {

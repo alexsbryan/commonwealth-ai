@@ -53,7 +53,7 @@ use commonwealth_work::projection::{WorkProjection, WorkUnitStatus};
 use commonwealth_work::{seal, ActorKey, WORK_NAMESPACE};
 use oicp_types::{JobKind, JobRequirements, JobUnit};
 
-use sovereign_cli_shared::rail::admission_from_wire;
+use sovereign_cli_base::rail::admission_from_wire;
 
 use crate::ring_cmd::{rail_append, rail_log, short_stamp};
 
