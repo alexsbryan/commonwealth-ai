@@ -720,6 +720,44 @@ merged; that merge is what minted this arrangement, and `ledger-1` records it.
 - Chose: option (A). cw-rails holds its own lock on its own data root for the lifetime of `run`, with std `File::try_lock` and no new dependency, mirrored and documented on both sides like `DEFAULT_RAILS_BASE`. The six locators collapse into one `locate_sibling(bin, env_var)` in sovereign-contracts. Five rows minted, fp-solo-a..e, which is the cap. Solo idle-exit is not minted.
 - Because: principle 12. Each program owns the singleton of its own data root; the daemon's run_lock and cw-rails' lock guard different roots, so no one thing has two deciders. (B) widens the lift closure, which is the operator's call. (C) leaves two cw-rails on one root unguarded. Lifting the locator is the reuse the row asked for under principles 8 and 11, and it deletes five copies (five-programs-54).
 
+**five-programs-65 · 2026-09-25 · fp-solo-a halt + row sizing · operator** — this commit
+- Needed: fp-solo-a halted on a red `cw-rails-lift.sh --sandbox`. The operator also judged the rows too granular and asked for them to merge down. The seat measured both before recommending.
+- Chose:
+  - (1) fp-solo-a is accepted on its other checks.
+  - (2) fp-solo-b..e fold into two outcome rows. fp-solo-lift covers cw-rails' own root lock plus the lift repair. fp-solo-clients covers one sibling locator, `ensure_rails` as a `ServingHost` call, and the real-binary e2e. The `cw-rails ensure` verb is struck.
+  - (3) The shared worker prompt now sizes a row by OUTCOME. A row carries its own proof, may take several commits, and runs its heavy checks once at the end. Its bound is a stated lift, not a verb count. `audit_every` goes from 15 to 5.
+  - (4) When a launched backend stays silent, `ServingHost` reports the tail of its log. It never retains or reaps the child.
+- Because:
+  - The lift break predates the row (see the appendix).
+  - Principle 12: cw-rails owns its root, and a client owns reaching it.
+  - Principle 8: bring-up already has one decider, the `bring_up_decider` in ARCH_LAYERS.toml. fp-solo-c's `ensure` would have been a new copy of it inside the one crate that is forbidden to reach it.
+  - The sizing is measured, not asserted (principle 7).
+  - Boundary gate: 51, unchanged. There is no code in this commit.
+
+**phase-b-1 · 2026-09-25 · Phase B design · operator** — this commit
+- Needed:
+  - Phase B's staged plan built new hosts, one per red-edge class: a serving binary, an ingest server and a code server. It minted them through REVIEW-mint rows.
+  - The operator named the smell: "a second owner of core capability". They set a test: "the next developer who wants THIS but not THAT".
+  - Seven read-only inventories and persona walks followed. They found one owner already exists for each capability, and that the current hosts bypass it. Phase B as staged would have added the next copy of each drive.
+- Chose:
+  - (1) `serve` becomes a sixth program, split out of `cmnwlth`. It has one engine assembly, kinds by registration, and placement per kind (in-process, child or dial). Any OpenAI URL is a venue. cw-rails adverts inference origins and never ranks.
+  - (2) A **host kit**, one neutrally named mechanism leaf (§12 3a rung 4), reusing sovereign-cli-base. It holds each program's lock, data root, server shell and MCP dispatch.
+  - (3) **Distributions** are wiring-only composition roots, declared in `[[distribution]]` rows. They may link declared library faces, and every program still runs alone, proven by its own lift sandbox.
+  - (4) The 3a ladder is re-applied to sovereign-contracts itself. `SetupConfig` splits into per-program files, with the migration in the same commit.
+  - (5) Notes split by owner. svrn's memory is svrn's; decision notes go to code; the call log goes to the MCP host.
+  - (6) Ingest is a library plus one CLI, and the work plane is an optional caller. There is no ingest server.
+  - (7) Bench dials three URLs: model, subject and judge.
+  - (8) The work atlas is KEPT, as an optional code bundle that dials cw-rails directly.
+  - (9) cw-rails founds, joins and admits, and owns the one node key. svrn dials cw-rails' work doors.
+  - (10) `pipeline pod` becomes `svrn mesh pod`.
+  - (11) Grants hands merges to ingest as work units.
+  - (12) The compose rule: extend, never re-own, and collapse the duplicates before splitting a process.
+  - The Phase B queue is rewritten as 29 outcome rows with no mint step.
+- Because:
+  - Principles 12, 8, 11, 9, 6 and 10.
+  - FIVE_PROGRAMS §1 "composition is by process" is kept for programs. Distributions give heterogeneous deployments (a one-process stock install, a phone, a pod) a place that is not a program.
+  - Boundary gate: 51 at 55546ac07, unchanged. There is no code in this commit.
+
 ## Flags for the operator
 
 - A26: REVIEW-DEMO-rr-1-run will very likely FAIL `ra-room-plug-in-live` again on this host. The bar's window is 60 s, and the CPU 2B took about 1–5 min per answer in this run (room-answer-0..4.json mtimes 19:33→19:49). Passing it takes a faster node or model for the room, or a different bar. Both are design changes for the operator, not tuning.
@@ -10327,5 +10365,80 @@ Package: `ctl/NEEDS_HUMAN.resolved-fprailssolo-20260925.md`. Reproduced at dc654
 Idle-exit is left out because the source row says solo mode "may" idle-exit, and the charter's size rule is strictly necessary. A detached cw-rails that stays up is what the meshed mode already does.
 
 Falsified if cw-rails' lock and the daemon's run_lock turn out to need to agree on one path (for example, if both are ever pointed at one data root), because that would make them one decider in two copies. Also falsified if `locate_sibling` cannot preserve any of the six call sites' current behaviour without a per-site branch.
+
+</details>
+
+## five-programs-65 · 2026-09-25 — accept fp-solo-a, repair the lift, fold the solo rows, size rows by outcome
+
+<details><summary>reasoning, evidence, package</summary>
+
+**The lift.** It last held at b25c04b3e (2026-09-11) and has two independent breaks. The first: fp-40 (cba47e483, 2026-09-22) moved transport's vocabulary into sovereign-contracts and gave commonwealth-transport a sovereign-contracts dep. The lift walk exits FORBIDDEN on that edge (scripts/cw-rails-lift.sh:149,167). The second: hakari (44f9a1bdc, 2026-09-17) gave commonwealth-rails, -transport and -core, among others, `workspace-hack = { version = "0.1", path = "../../../workspace-hack" }`. The walk rejects that as HAND-SPELLED-PATH, but FORBIDDEN exits first and hides it. cw-work-lift.sh walks a closure that also carries it (commonwealth-work/Cargo.toml:52).
+
+The seat walked the manifests. cw-rails' closure is 15 crates and includes sovereign-contracts and sovereign-time. cw-work's closure is 7 crates and reaches only kernel-types and oicp-types.
+
+fp-40's move set, sovereign-contracts/src/transport.rs (234 lines, 65 of them code), depends only on kernel_types::{NodeId, NodePubkey}, std SocketAddr and async_trait. §12 3a rung 1 puts it back with cmnwlth, because Phase B retires the daemon's mesh endpoint. The mesh-join-vocab admission (2026-09-23) states the rule fp-40 broke: vocabulary that a commonwealth crate must name cannot live in sovereign-contracts. Letting sovereign-contracts into the rails closure was rejected: it would pull 42k lines into the small daemon for 65.
+
+**Bring-up.** `ServingHost::ensure_reachable` (sovereign-turn-client/src/reach.rs:276) is declared the workspace's one `bring_up_decider` (quality/ARCH_LAYERS.toml:1501). The daemon (Cargo.toml:96) and cli-llm (Cargo.toml:59) already depend on turn-client. The settled bar forbids bring-up "on a timer or a health signal" (ARCH_LAYERS.toml ~:1495), so fp-solo-d's re-ensure on a refused dial is struck. There are seven identical locator copies; the six `fn locate()` plus serve_cmd.rs:302 `locate_dev_bin_for_spawn`, which fp-solo-b's premise grep missed.
+
+**Sizing, measured on this queue's 150 worker transcripts and git history.**
+- 154 row ids. 16 were written up front; 69 were minted by director or operator commits, and about 22 exist only because a halted row was split.
+- The median session was 5.4 min (7.3 when the row got marked). 39% of worker time went to checks, 46% in row-marking sessions. The first code edit came at about 77 s.
+- 60 NEEDS_HUMAN halts across 51 of 120 units (43%). At least 25 were a false premise and 6 were mint-cap overruns. Halted sessions plus resolution sessions cost 6.3 h, against 13.4 h for sessions that finished a row.
+- The median work row changed 182 lines, and 36 of 98 consecutive pairs share a code file.
+- The runner already supports multi-commit rows (scripts/ralph.py:1144-1151, and `[~]` resumes); the prompt text was the limit.
+- The counter-example: the fw waves grouped rows by SHAPE with no per-outcome proof. fw-1 took 11 sessions for −1 against a −8 target. Grouping by outcome is the fix.
+
+Falsified if, after 10 outcome rows, halts per row or fixed-check share do not fall, or if a row regularly exceeds a 7200 s session.
+
+</details>
+
+## phase-b-1 · 2026-09-25 — six programs, the host kit, distributions, and compose-never-re-own
+
+<details><summary>reasoning, evidence, package</summary>
+
+**What already exists and is bypassed.** Every claim below was re-checked by the seat against source unless marked.
+
+- **Bring-up.** `ServingHost::ensure_reachable` (sovereign-turn-client/src/reach.rs:276) is the declared `bring_up_decider` (quality/ARCH_LAYERS.toml:1501), and it replaced thirteen private copies. Copies remaining: 7 identical sibling locators, cli-daemon `start_daemon`'s private ready-poll, and `serve_cmd` `spawn_background`, which is today's code-server connect-or-spawn. There are three root-lock mechanisms: run_lock (libc flock), deep_research's second `RunLock` (std try_lock) and scip's fs4.
+- **Serving.** It has one owner: the serving crates behind `InferenceProvider` (sovereign-contracts/src/traits.rs:298), with a registry of engine kinds (`register_engine`, sovereign-inference/src/engine_factory.rs:141). The engine is assembled three times, and the reload path has drifted. `LlamaCppFactory` (sovereign-daemon/src/provider.rs:36) calls `load_full_with_families` directly and makes zero `install_*` or compute-layer calls. The compute child is off by default (setup_config.rs:750).
+- **MCP.** `ToolRegistry` (sovereign-contracts/src/registry.rs:13) and `ToolBundle` (tool_bundle.rs:67) exist. The code bundles have zero production constructors. Three hand builders register 38, 30 and 35 tools and have already drifted, and three MCP loops make different protocol decisions.
+- **Jobs.** Job execution is owned by commonwealth-work's `JobExecutorRegistry` (executor.rs:374), and `IngestExecutor` already implements `JobExecutor` (sovereign-daemon/src/ingest_executor.rs:430). FIVE_PROGRAMS §2 gives ingest the wire "CLI only".
+
+**The persona walks.**
+
+- **P1, a local model server with no mesh.** Today it needs the whole daemon, which pulls in 37 in-repo crates, and `/v1/models` reads cw-rails' ledger.
+- **P2, a mesh in front of vLLM.** Impossible today: cw-rails gossips `inference_capable: false` (gossip.rs:79), and `InferenceVenue` is mesh-only and lives in sovereign-contracts (venue.rs:20).
+- **P3, svrn on a hosted API.** Mostly works through `[engine] kind="remote"` (engine_config.rs:42).
+- **P4, in-process serving.** Shut out by a dial-only default. A phone can't build llama-cpp-4 today (per the manifest; not built).
+- **P5, code with no LLM.** Code search falls back to full text, but cli-dev links the daemon. The atlas is broken standalone.
+- **P6, ingest in CI.** Works only through `corpus-mcp ingest`.
+- **P7, svrn without code.** Broken by the earlier "notes owned by code" recommendation. notes.db holds four populations, and there are three `notes_db_path` deciders (backlog item.rs:30, awareness store_open.rs:60, contracts middleware.rs:165). One query returns 68 notes from one directory and 6,811 from another (item.rs:27). svrn already owns `save_memory` (traits.rs:1277).
+- **P8, bench against my own endpoint.** 32 `port-listening:9741` preconditions, and judges share the URL under test.
+
+**The shared layer is the ball.** sovereign-contracts is 42,441 lines and 58 modules, and 51 manifests name it. A bench-only developer pays for a ~342-crate closure (an upper bound from Cargo.lock) to use 4 items. 14 modules have one consumer program. cw-rails, the one program forbidden to link it, has had to copy four things.
+
+**Alternatives rejected.**
+
+- A new serving binary: a second owner.
+- Serving under cmnwlth: fails P1, and cw-rails may not link it.
+- Serving as a module of svrn: a model server would carry corpus-engine.
+- An ingest server: a second owner of job execution.
+- MCP dispatch in sovereign-contracts: no axum there today, it sits inside bench's budget, and cw-rails can't reach it.
+- A shared notes program: no reader needs more than one population, so it would make the accident permanent.
+- Exec-only distributions: rules out on-device serving (principle 12's last paragraph).
+- One crate per mechanism: three more leaves.
+
+**Pre-registered bars** (pb-svrn-dials-serve), set before any data:
+- first-token latency p50 over loopback at most 10% slower than in-process;
+- embedding throughput at batch 32 at least 90% of in-process;
+- n ≥ 5 runs each;
+- retrieval-prod and the synth lane inside their noise bands.
+
+The host-kit size cap is 2,500 code lines; both numbers are the operator's to change.
+
+**Falsified if:**
+- a program's lift sandbox cannot pass without linking another program's crates, so the six-way line is drawn wrong;
+- the host kit needs program vocabulary to serve any program;
+- the one serving assembly cannot express the reload path without daemon state that no port carries;
+- the loopback bars fail, which makes the dial-default wrong for the stock distribution and needs an operator decision on in-process placement.
 
 </details>
