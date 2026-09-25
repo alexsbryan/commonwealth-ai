@@ -51,7 +51,7 @@
 
 use std::collections::HashMap;
 use std::net::SocketAddr;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
 
@@ -102,6 +102,13 @@ pub enum Refusal {
          because loopback IS the auth, so binding it anywhere else would publish it"
     )]
     NotLoopback(SocketAddr),
+    #[error(
+        "{0} is held by another cw-rails on this data root — stop that cw-rails, \
+         or give this one its own --data-dir"
+    )]
+    RootHeld(PathBuf),
+    #[error("could not open the data-root lock {0}: {1}")]
+    RootLock(PathBuf, std::io::Error),
 }
 
 impl Refusal {
@@ -113,6 +120,44 @@ impl Refusal {
             // A data dir that cannot be created is the host, not the mesh.
             Refusal::Store(identity::StoreRefusal::DataDir(_, _)) => 3,
             _ => 1,
+        }
+    }
+}
+
+/// The file `run` holds for its whole life, so ONE cw-rails serves a data
+/// root (fp-solo-lift; Phase B's host-kit row absorbs it).
+pub const ROOT_LOCK: &str = "rails.lock";
+
+/// Claim `<data_dir>/rails.lock`. The returned file IS the claim: drop it and
+/// the root is free, which the OS also does when the process dies.
+pub fn claim_root(data_dir: &Path) -> Result<std::fs::File, Refusal> {
+    std::fs::create_dir_all(data_dir)
+        .map_err(|e| identity::StoreRefusal::DataDir(data_dir.to_path_buf(), e))?;
+    let path = data_dir.join(ROOT_LOCK);
+    let file = match std::fs::OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .open(&path)
+    {
+        Ok(f) => f,
+        Err(e) => {
+            tracing::warn!(lock = %path.display(), error = %e, "cw-rails: root lock would not open");
+            return Err(Refusal::RootLock(path, e));
+        }
+    };
+    match file.try_lock() {
+        Ok(()) => {
+            tracing::info!(lock = %path.display(), "cw-rails: data root claimed");
+            Ok(file)
+        }
+        Err(std::fs::TryLockError::WouldBlock) => {
+            tracing::warn!(lock = %path.display(), "cw-rails: data root held by another cw-rails");
+            Err(Refusal::RootHeld(path))
+        }
+        Err(std::fs::TryLockError::Error(e)) => {
+            tracing::warn!(lock = %path.display(), error = %e, "cw-rails: root lock would not take");
+            Err(Refusal::RootLock(path, e))
         }
     }
 }

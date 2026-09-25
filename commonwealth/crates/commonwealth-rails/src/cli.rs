@@ -188,6 +188,11 @@ pub async fn main(args: Args) -> ExitCode {
         }
         Command::Run => {
             let listen = config.listen;
+            // Held until `main` returns: the process lifetime.
+            let _root = match crate::claim_root(&data_dir) {
+                Ok(f) => f,
+                Err(e) => return refuse(e),
+            };
             let node = match RailsNode::bind(data_dir.clone(), config).await {
                 Ok(n) => n,
                 Err(e) => return refuse(e),
