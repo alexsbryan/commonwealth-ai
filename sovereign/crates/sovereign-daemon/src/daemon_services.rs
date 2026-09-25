@@ -395,7 +395,7 @@ impl DaemonServices {
 
     /// True for the two variants that serve a host HTTP surface. The
     /// mesh-admin one-shot mounts nothing beyond the base client/internal
-    /// routers.
+    /// routers and `GET /v1/mesh/venues`.
     pub fn serves_host_surface(&self) -> bool {
         !matches!(self, Self::MeshAdmin(_))
     }

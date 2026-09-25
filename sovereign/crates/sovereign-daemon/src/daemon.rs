@@ -3640,6 +3640,16 @@ impl EmbeddedDaemon {
                 mounted.push(router);
                 mount_names.push(name);
             }
+        } else {
+            // Mesh-admin: the venues read alone, so the setup wizard's join
+            // child answers what the wizard polls (five-programs-62). The
+            // `Verb` one-shots carry it too while they run.
+            let self_arc = self
+                .self_weak
+                .upgrade()
+                .expect("EmbeddedDaemon::start_daemon runs behind the Arc that owns it");
+            mounted.push(crate::mesh_http::mesh_venues_router(self_arc));
+            mount_names.push("mesh_venues");
         }
         info!(
             profile = self.services.label(),

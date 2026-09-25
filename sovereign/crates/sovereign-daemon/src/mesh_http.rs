@@ -46,7 +46,7 @@ pub fn mesh_router(daemon: Arc<EmbeddedDaemon>) -> Router {
             post(crate::roster_repair::mesh_forget_member),
         )
         .route("/v1/mesh/relay-candidates", get(mesh_relay_candidates))
-        .route("/v1/mesh/venues", get(mesh_venues))
+        .merge(mesh_venues_router(Arc::clone(&daemon)))
         // Federated media, viewer half: the loopback URL that reaches a
         // member's `[iroh] media_origin`. The holder half is the acceptor's
         // MEDIA_ALPN slot in `iroh_access`.
@@ -85,6 +85,16 @@ pub fn mesh_router(daemon: Arc<EmbeddedDaemon>) -> Router {
         // the per-handler `enforce_localhost` checks. Adding a new
         // route to this module inherits the guard for free; the
         // per-handler check stays as a secondary barrier.
+        .localhost_only_with(daemon)
+}
+
+/// `GET /v1/mesh/venues` alone. `mesh_router` merges it, and a mesh-admin
+/// daemon (which mounts no host surface) serves it by itself, so the setup
+/// wizard's join child answers the one read the wizard polls
+/// (five-programs-62).
+pub fn mesh_venues_router(daemon: Arc<EmbeddedDaemon>) -> Router {
+    Router::new()
+        .route("/v1/mesh/venues", get(mesh_venues))
         .localhost_only_with(daemon)
 }
 
