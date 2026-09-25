@@ -358,9 +358,19 @@ fn locate_sibling_prefers_env_then_exe_dir_then_path() {
     let got = locate_from(bin, missing.clone(), exe.clone(), path.clone()).unwrap();
     assert_eq!(canon(&got), canon(&in_exe), "then beside current_exe");
 
-    let got = locate_from(bin, missing.clone(), Some(root.join("no-exe")), path.clone()).unwrap();
+    let got = locate_from(
+        bin,
+        missing.clone(),
+        Some(root.join("no-exe")),
+        path.clone(),
+    )
+    .unwrap();
     assert_eq!(canon(&got), canon(&in_path), "then PATH");
 
-    assert_eq!(locate_from(bin, missing, None, None), None, "absent is None");
+    assert_eq!(
+        locate_from(bin, missing, None, None),
+        None,
+        "absent is None"
+    );
     std::fs::remove_dir_all(&root).unwrap();
 }
