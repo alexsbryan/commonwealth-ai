@@ -595,6 +595,11 @@ merged; that merge is what minted this arrangement, and `ledger-1` records it.
 - Chose: keep `work_atlas_store.rs` in sovereign-mesh and record the edge as a NEEDS-OPERATOR appendix line under [cmnwlth], which is an owner REVIEW-handoff-phase-b accepts. Only the operator can close it: either an `[[exception]] package = "cmnwlth"` or a crate outside every package. The Cargo.toml comment now says the gate counts the edge. Boundary gate 55 (EXIT=1). No code changes.
 - Because: every host inside a package adds at least one edge. Moving the test back to the daemon (i) adds nothing today, but fp-87 then fails its crate-wide `MeshStore|MeshReplicatedKv|commonwealth_state` bar and its daemon dev-dep removal. Hosting it in sovereign-work-atlas (ii) needs sovereign-mesh, commonwealth-state and commonwealth-core as dev-deps, so +3 [code] edges. The four crates outside every package are oicp-conformance, whose minimal dependency budget is its whole purpose, and the desktop, mobile and studio apps. None of them fits.
 
+**five-programs-50 · 2026-09-24 · fp-86 · director** — this commit
+- Needed: fp-86 flipped ten of its eleven files (2a9fb23c3, TEST(sovereign-daemon) 1277 pass / 0 fail). The eleventh, `internal_gate_e2e.rs`, still has two hits at :416 and :436. Both are the `Arc<MeshStore>` argument to `sovereign_grants::ShardManager::new` (shard_manager.rs:73), which the test drives as a real shard-pull client. No daemon seed reaches those lines, so the row's bar of 0 over eleven files could not be met before fp-94.
+- Chose: the package's option (a). The site moves into fp-94's file list, next to grants' three test files that build a MeshStore for the same constructor. fp-86 is rescoped to the ten files and marked `[x] 2a9fb23c3`. fp-87's dependencies stay as they are, because fp-87 → fp-88 → fp-94 already orders its crate-wide daemon bar after the seam. Boundary gate 55 (EXIT=1). No code changes.
+- Because: the hit goes away with the signature change, and nothing on the daemon side can remove it. Option (b), making fp-86 depend on fp-94, would park a finished row behind an open operator question (HUMAN-fp94-grants-seam) for no benefit. The only in-row workaround is laundering the type (a grants re-export, or an inferred constructor), which the rule forbids.
+
 ## Flags for the operator
 
 - A26: REVIEW-DEMO-rr-1-run will very likely FAIL `ra-room-plug-in-live` again on this host. The bar's window is 60 s, and the CPU 2B took about 1–5 min per answer in this run (room-answer-0..4.json mtimes 19:33→19:49). Passing it takes a faster node or model for the room, or a different bar. Both are design changes for the operator, not tuning.
@@ -9264,5 +9269,20 @@ Package: ctl/NEEDS_HUMAN.resolved-fp84b-20260924.md (git-excluded), written by f
 Operator options, in the appendix line: (a) `[[exception]] package = "cmnwlth"` for the dev edge, citing the cross-package contract `private_app_id_matches_gossip_exclusion_list`. It costs one row and changes nothing else. DIRECTOR'S RECOMMENDATION. (b) A new test-only crate outside every package that hosts compositions across packages. It costs a crate, and it sets the precedent for a place where cross-package tests go. (c) Move the private app-id literal into sovereign-contracts so the pin becomes structural, and move the replication tests to the ring_sync tests. It weakens the atlas-over-real-store coverage and is not prescribed by any row.
 
 REVIEW-AFTER: the operator's answer on the appendix line. This is falsified if some host inside a package can run the test with its assertions verbatim and add no counted edge.
+
+</details>
+
+## five-programs-50 · 2026-09-24 — internal_gate_e2e.rs's ShardManager store argument moves to fp-94; fp-86 closes on its ten files
+
+<details><summary>reasoning, evidence, package</summary>
+
+Package: ctl/NEEDS_HUMAN.resolved-fp86-20260924.md (git-excluded), written by fp-86's worker.
+
+- `git grep -nw 'commonwealth_state\|MeshStore\|MeshReplicatedKv' -- <the 11 files>` at 2a9fb23c3 returns only internal_gate_e2e.rs:416 (`use commonwealth_state::MeshStore;`) and :436 (`Arc::new(MeshStore::in_memory().unwrap())` passed to `ShardManager::new`). The other ten files return 0.
+- shard_manager.rs:73: `pub fn new(engine: Arc<CorpusEngine>, shard_dir: PathBuf, mesh_store: Arc<MeshStore>)`. fp-94 (STATE.md) owns that signature and already lists grants' three test files that construct it. It is blocked on HUMAN-fp94-grants-seam.
+- fp-87 depends on fp-88, and fp-88 depends on fp-94. The crate-wide bar therefore runs after the site is gone, with no edit needed.
+- `cargo xtask boundary-gate` (corpus-engine/, toolbox): 55 violations, EXIT=1, unchanged by this rescope.
+
+Falsified if the store argument in internal_gate_e2e.rs can be removed without changing `ShardManager::new`'s signature and without laundering the type, for example by a test-support constructor grants already exposes that takes no store. In that case the site belonged in fp-86.
 
 </details>
