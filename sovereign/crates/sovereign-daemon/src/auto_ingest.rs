@@ -187,7 +187,7 @@ async fn auto_collaborate_loop(state: AppState, daemon_port: u16) {
         // Detect corpora with `<corpus>-partition-*/` dirs on disk
         // but no canonical, and try to merge them into a canonical
         // ourselves. The deadlock this catches: the queue-mode
-        // ingest's handoff blob lives in the in-memory MeshStore,
+        // ingest's handoff blob lives in the in-memory mesh store,
         // which is wiped on every daemon restart; if no peer in
         // the mesh still gossips the blob when we come back up,
         // the dispatcher's existing recovery path
@@ -457,7 +457,7 @@ async fn auto_collaborate_loop(state: AppState, daemon_port: u16) {
         last_known_in_progress = in_progress.clone();
 
         // Publish this node's per-corpus `processed_shards` into the
-        // gossip-replicated MeshStore so the coordinator can union
+        // gossip-replicated mesh store so the coordinator can union
         // every peer's progress when computing `remaining` in
         // `corpus_collaborate`. Without this, each peer dispatches
         // from its own local view (`engine.corpus_processed_shards`
@@ -474,9 +474,9 @@ async fn auto_collaborate_loop(state: AppState, daemon_port: u16) {
         // only the last-writer's entry. With it, each peer has its
         // own gossip slot and the dispatch-side scan unions across
         // them naturally. Publish runs every CHECK_INTERVAL; cheap
-        // (a small JSON read of the partition meta + a MeshStore
+        // (a small JSON read of the partition meta + a mesh store
         // write).
-        publish_local_processed_shards(&state, engine, self_id, &in_progress_vec).await;
+        publish_local_processed_shards(&state, engine, &in_progress_vec).await;
 
         let should_check = first_iteration || new_peer_appeared || new_ingest_appeared;
         first_iteration = false;
@@ -688,7 +688,7 @@ async fn auto_collaborate_loop(state: AppState, daemon_port: u16) {
 async fn has_active_queue_handoff(state: &AppState, corpus_id: &str) -> bool {
     let entries = match state
         .inner
-        .fabric
+        .store
         .mesh_store
         .scan("corpus-engine", "handoff:")
     {
@@ -713,7 +713,6 @@ async fn has_active_queue_handoff(state: &AppState, corpus_id: &str) -> bool {
 async fn publish_local_processed_shards(
     state: &AppState,
     engine: &std::sync::Arc<corpus_engine::CorpusEngine>,
-    self_id: NodeId,
     in_progress: &[String],
 ) {
     for corpus_id in in_progress {
@@ -724,27 +723,15 @@ async fn publish_local_processed_shards(
             // hazard if the publisher loses its meta file mid-run.
             continue;
         }
-        let key = commonwealth_state::processed_shards_key(corpus_id, self_id);
-        let payload = match serde_json::to_vec(&local) {
-            Ok(b) => b,
-            Err(e) => {
-                tracing::warn!(
-                    corpus = %corpus_id,
-                    error = %e,
-                    "auto_ingest: serialize processed_shards failed"
-                );
-                continue;
-            }
-        };
-        if let Err(e) = state.inner.fabric.mesh_store.set(
-            commonwealth_state::PROCESSED_SHARDS_APP_ID,
-            &key,
-            payload.into(),
-            self_id,
-        ) {
+        if let Err(e) = state
+            .inner
+            .store
+            .processed_shards
+            .publish(corpus_id, &local)
+            .await
+        {
             tracing::warn!(
                 corpus = %corpus_id,
-                key = %key,
                 error = %e,
                 "auto_ingest: publish processed_shards failed"
             );
@@ -753,7 +740,6 @@ async fn publish_local_processed_shards(
         tracing::debug!(
             corpus = %corpus_id,
             shard_count = local.len(),
-            key = %key,
             "auto_ingest: published processed_shards"
         );
     }
@@ -777,7 +763,7 @@ async fn spawn_local_ingest(state: AppState, corpus_id: String) {
 
 // ── Pull-based work queue peer side ─────────────────────────────────
 //
-// The coordinator gossips a pull-based handoff via its MeshStore under
+// The coordinator gossips a pull-based handoff via its mesh store under
 // `corpus-engine / handoff:{handoff_id}` with `phase: Open` and empty
 // `partitions`. Every auto-ingest tick, each peer scans that namespace,
 // filters to handoffs it's compatible with (embed model match, not yet
@@ -823,7 +809,7 @@ async fn discover_and_spawn_pull_loops(state: AppState, self_id: NodeId, daemon_
 
     let entries = match state
         .inner
-        .fabric
+        .store
         .mesh_store
         .scan("corpus-engine", "handoff:")
     {
@@ -1048,7 +1034,7 @@ async fn pull_loop(
             // automatic — `merge_entry` accepts new versions — so the
             // delete is safe.
             let key = format!("handoff:{}", handoff_id);
-            if let Err(e) = state.inner.fabric.mesh_store.delete("corpus-engine", &key) {
+            if let Err(e) = state.inner.store.mesh_store.delete("corpus-engine", &key) {
                 tracing::warn!(
                     handoff = %handoff_id,
                     error = %e,

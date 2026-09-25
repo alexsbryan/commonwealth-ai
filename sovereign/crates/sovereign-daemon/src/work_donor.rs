@@ -790,7 +790,21 @@ async fn run_unit(
                         wall_seconds,
                         "work donor: crediting this node's contribution ledger"
                     );
-                    app_state.inner.fabric.contribution_emitter.record(credit);
+                    if let Err(e) = app_state
+                        .inner
+                        .store
+                        .contribution_emitter
+                        .record(credit)
+                        .await
+                    {
+                        warn!(
+                            target: TRACE_TARGET,
+                            handoff = %unit_ref.handoff,
+                            unit = %unit_ref.unit_hash,
+                            error = %e,
+                            "work donor: the contribution credit did not reach the store"
+                        );
+                    }
                 }
                 None => debug!(
                     target: TRACE_TARGET,
@@ -829,9 +843,9 @@ async fn run_unit(
 /// reasons that are mechanism rather than taste.
 ///
 /// **The contributions ledger is ALREADY a replicated log, and it converges
-/// by "one write site, one event".** `LedgerEvent`s are stored in `MeshStore`
+/// by "one write site, one event".** `LedgerEvent`s are stored in the mesh store
 /// under the `contributions` app id, gossip to peers, and merge LWW on a key
-/// of `origin:secs:nanos:seq` (`commonwealth_state::contributions`). N nodes
+/// of `origin:secs:nanos:seq` (`commonwealth-state`'s `contributions`). N nodes
 /// folding one `Complete` would therefore write N rows under N DISTINCT keys,
 /// and `aggregate` sums rows: one donated shard would be credited once per
 /// ring member, and the error would grow with the ring. Making that safe

@@ -9,12 +9,12 @@
 //!   `Arc<RwLock<Mesh>>` carried on `AppStateInner` and run the
 //!   answer through `commonwealth_core::partition::{is_leader,
 //!   is_owner}`.
-//! - KV operations forward to `MeshStore` directly. SQLite is
+//! - KV operations forward to the mesh store port directly. SQLite is
 //!   blocking-friendly under tokio's full runtime; the existing
 //!   `peer_preferences` store does the same and ships in production
 //!   today.
 //!
-//! The watcher itself never sees `MeshStore`, `Mesh`, or `NodeId` —
+//! The watcher itself never sees the mesh store, `Mesh`, or `NodeId` —
 //! the trait keeps `corpus-engine` free of any Commonwealth dependency
 //! per the architectural seam in §6 of `SYSTEM_OVERVIEW.md`.
 
@@ -201,7 +201,7 @@ impl NewsworthyHost for MeshNewsworthyHost {
         match self
             .mesh_store()
             .get(app_id, key)
-            .map_err(|e| CorpusError::Database(format!("MeshStore.get: {e}")))?
+            .map_err(|e| CorpusError::Database(format!("mesh store get: {e}")))?
         {
             Some(entry) => Ok(Some(entry.value.to_vec())),
             None => Ok(None),
@@ -212,14 +212,14 @@ impl NewsworthyHost for MeshNewsworthyHost {
         self.mesh_store()
             .set(app_id, key, Bytes::from(value), self.self_node_id())
             .map(|_| ())
-            .map_err(|e| CorpusError::Database(format!("MeshStore.set: {e}")))
+            .map_err(|e| CorpusError::Database(format!("mesh store set: {e}")))
     }
 
     fn store_scan(&self, app_id: &str, prefix: &str) -> CorpusResult<Vec<(String, Vec<u8>)>> {
         let entries = self
             .mesh_store()
             .scan(app_id, prefix)
-            .map_err(|e| CorpusError::Database(format!("MeshStore.scan: {e}")))?;
+            .map_err(|e| CorpusError::Database(format!("mesh store scan: {e}")))?;
         Ok(entries
             .into_iter()
             .map(|e| (e.key, e.value.to_vec()))
@@ -229,7 +229,7 @@ impl NewsworthyHost for MeshNewsworthyHost {
     fn store_delete(&self, app_id: &str, key: &str) -> CorpusResult<bool> {
         self.mesh_store()
             .delete(app_id, key)
-            .map_err(|e| CorpusError::Database(format!("MeshStore.delete: {e}")))
+            .map_err(|e| CorpusError::Database(format!("mesh store delete: {e}")))
     }
 
     /// Schedule a structural atlas rebuild for each affected corpus.

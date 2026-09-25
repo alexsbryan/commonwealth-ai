@@ -444,7 +444,7 @@ fn fmt_requester(id: &NodeId) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use commonwealth_state::PeerPreference;
+    use sovereign_mesh::ledger_port::PeerPreference;
     use oicp_types::{
         CapabilityClaim, CapabilityHint, LatencyClass, ModelStatus, ProviderManifest, ProviderModel,
     };

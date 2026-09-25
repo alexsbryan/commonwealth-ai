@@ -17,7 +17,7 @@ async fn loaded_model_rows(
     state: &AppState,
 ) -> Result<
     Vec<(
-        commonwealth_state::inference_plan::ShardPlan,
+        sovereign_mesh::ledger_port::ShardPlan,
         Option<String>,
         bool,
     )>,

@@ -31,7 +31,7 @@ use commonwealth_core::oicp::EmbedModelInfo;
 
 /// The record types these ports carry that live in commonwealth-state,
 /// re-exported so the dialing side names them without that crate.
-pub use commonwealth_state::inference_plan::InferencePlan;
+pub use commonwealth_state::inference_plan::{InferencePlan, ShardPlan};
 pub use commonwealth_state::peer_preferences::PeerPreference;
 
 /// Why a ledger call produced no answer. The message names the process that

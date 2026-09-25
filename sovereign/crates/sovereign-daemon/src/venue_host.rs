@@ -7,7 +7,7 @@
 //! The ports themselves now live in `sovereign_contracts::venue_host`
 //! (fp-16; `InferenceRouter` holds them, and they moved host-side by domains
 //! `REVIEW-build-serving-move-peer`). What stays here is the half that names
-//! `commonwealth_core` / `commonwealth_state` / `EmbeddedDaemon`, which the
+//! `commonwealth_core` / `EmbeddedDaemon`, which the
 //! serving package may not (`sovereign/SERVING_BOUNDARY.md` rule 5): the
 //! `EmbeddedDaemon` impls and the deferred handle.
 use std::sync::Arc;

@@ -3,12 +3,12 @@
 //! fp-33).
 //!
 //! Before this module, the `svrn` workbench opened the mesh's replicated KV
-//! directly — `MeshReplicatedKv::open` on a repo-local `mesh.db` — which is
+//! directly — a replicated-KV open on a repo-local `mesh.db` — which is
 //! the ownership line §4 rule 1 and §12 decision 2 draw wrong: a second
 //! process never opens the mesh's store, it DIALS the process that owns it.
 //! A record written into a repo-local island was invisible to the daemon,
 //! to gossip, and to every peer; the store this module serves is the ONE
-//! instance (`AppState.inner.fabric.mesh_store`) the daemon's own work-atlas
+//! instance (`AppState.inner.store.mesh_store`) the daemon's own work-atlas
 //! writes and gossip publishes from, so a claim the workbench dials in now
 //! lands where every reader already looks.
 //!
@@ -31,11 +31,11 @@ use axum::{Json, Router};
 
 use sovereign_contracts::peer::{KvLookup, KvScanQuery, KvSetBody, ReplicatedKvEntry};
 
-use crate::http_response::internal_error;
+use crate::http_response::service_unavailable;
 use crate::state::AppState;
 
-/// The mesh-KV routes, over the one shared store. A store failure is a 500
-/// naming the operation; every success is 200 with the operation's own
+/// The mesh-KV routes, over the one shared store. A failed store dial is a
+/// traced 503 naming the operation (five-programs fp-82); every success is 200 with the operation's own
 /// answer (`null` for an absent key IS the answer — "absent" is a fact about
 /// the store, not an error).
 pub fn router() -> Router<AppState> {
@@ -52,9 +52,9 @@ async fn kv_get(
     State(state): State<AppState>,
     Query(q): Query<KvLookup>,
 ) -> Result<Json<Option<ReplicatedKvEntry>>, Response> {
-    match state.inner.fabric.mesh_store.get(&q.app_id, &q.key) {
-        Ok(entry) => Ok(Json(entry.map(to_entry))),
-        Err(e) => Err(internal_error(format!("mesh kv get: {e}"))),
+    match state.inner.store.mesh_store.get(&q.app_id, &q.key) {
+        Ok(entry) => Ok(Json(entry)),
+        Err(e) => Err(store_absent("get", e)),
     }
 }
 
@@ -73,12 +73,12 @@ async fn kv_set(
     } = body;
     match state
         .inner
-        .fabric
+        .store
         .mesh_store
         .set(&app_id, &key, value, origin)
     {
         Ok(changed) => Ok(Json(changed)),
-        Err(e) => Err(internal_error(format!("mesh kv set: {e}"))),
+        Err(e) => Err(store_absent("set", e)),
     }
 }
 
@@ -88,9 +88,9 @@ async fn kv_delete(
     State(state): State<AppState>,
     Query(q): Query<KvLookup>,
 ) -> Result<Json<bool>, Response> {
-    match state.inner.fabric.mesh_store.delete(&q.app_id, &q.key) {
+    match state.inner.store.mesh_store.delete(&q.app_id, &q.key) {
         Ok(deleted) => Ok(Json(deleted)),
-        Err(e) => Err(internal_error(format!("mesh kv delete: {e}"))),
+        Err(e) => Err(store_absent("delete", e)),
     }
 }
 
@@ -100,21 +100,15 @@ async fn kv_scan(
     State(state): State<AppState>,
     Query(q): Query<KvScanQuery>,
 ) -> Result<Json<Vec<ReplicatedKvEntry>>, Response> {
-    match state.inner.fabric.mesh_store.scan(&q.app_id, &q.prefix) {
-        Ok(rows) => Ok(Json(rows.into_iter().map(to_entry).collect())),
-        Err(e) => Err(internal_error(format!("mesh kv scan: {e}"))),
+    match state.inner.store.mesh_store.scan(&q.app_id, &q.prefix) {
+        Ok(rows) => Ok(Json(rows)),
+        Err(e) => Err(store_absent("scan", e)),
     }
 }
 
-/// The store's row, as the wire type. Field-for-field the same mapping
-/// `sovereign_mesh::peer_adapter` applies between `MeshStore` and the port —
-/// the types agree by construction.
-fn to_entry(e: commonwealth_state::StoreEntry) -> ReplicatedKvEntry {
-    ReplicatedKvEntry {
-        app_id: e.app_id,
-        key: e.key,
-        value: e.value,
-        timestamp: e.timestamp,
-        origin: e.origin,
-    }
+/// A failed store dial, as the named 503 the route answers — never an empty
+/// scan or a `null` read (principle 6).
+fn store_absent(op: &str, e: sovereign_contracts::peer::ReplicatedKvError) -> Response {
+    tracing::warn!(op, error = %e, "mesh kv: store dial failed");
+    service_unavailable(format!("mesh kv {op}: {e}"))
 }

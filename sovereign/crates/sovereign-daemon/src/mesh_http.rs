@@ -547,7 +547,7 @@ async fn mesh_status(
 // ---------------------------------------------------------------------------
 //
 // Why these two routes exist at all: `svrn mesh bench` measures, and it runs in
-// the CLI process. Gossip publishes from the daemon's `MeshStore`, which is
+// the CLI process. Gossip publishes from the daemon's mesh store, which is
 // `in_memory()` (`bootstrap.rs`) and therefore unreachable from any other
 // process — there is no file to open and no lock to share. So a measurement
 // taken by the CLI cannot travel without the daemon handing it a door. This is

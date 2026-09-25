@@ -1184,16 +1184,20 @@ async fn serve_local_non_stream(
                     .map(|u| u.completion_tokens as u64)
                     .unwrap_or(0);
                 let wall_seconds = started.elapsed().as_secs_f64();
-                state
+                if let Err(e) = state
                     .inner
-                    .fabric
+                    .store
                     .contribution_emitter
                     .record(LedgerEventKind::InferenceServed {
                         for_node,
                         model_id,
                         tokens_generated: tokens,
                         wall_seconds,
-                    });
+                    })
+                    .await
+                {
+                    warn!(error = %e, "peer inference: the contribution record did not reach the store");
+                }
             } else {
                 // Local API client (no `X-Node-Id`). The contribution
                 // ledger deliberately skips this — it's not work *for
@@ -1446,7 +1450,7 @@ async fn serve_local_stream(
     // dispatch. Local-origin streams (no `X-Node-Id`) skip the
     // emission, matching the non-streaming policy.
     let chunks_for_done = chunks_count;
-    let state_for_done = state.inner.fabric.contribution_emitter.clone();
+    let state_for_done = std::sync::Arc::clone(&state.inner.store.contribution_emitter);
     let activity_for_done = state.inner.node.activity_emitter.clone();
     let requester_for_done = requester;
     let model_for_done = model_id_for_ledger;
@@ -1454,12 +1458,17 @@ async fn serve_local_stream(
         let tokens = chunks_for_done.load(std::sync::atomic::Ordering::Relaxed);
         let wall_seconds = started.elapsed().as_secs_f64();
         if let Some(for_node) = requester_for_done {
-            state_for_done.record(LedgerEventKind::InferenceServed {
-                for_node,
-                model_id: model_for_done,
-                tokens_generated: tokens,
-                wall_seconds,
-            });
+            if let Err(e) = state_for_done
+                .record(LedgerEventKind::InferenceServed {
+                    for_node,
+                    model_id: model_for_done,
+                    tokens_generated: tokens,
+                    wall_seconds,
+                })
+                .await
+            {
+                warn!(error = %e, "peer stream: the contribution record did not reach the store");
+            }
         } else {
             // Local API client — record on the Activity ledger, same
             // as the non-streaming path. Stream frames ≈ completion

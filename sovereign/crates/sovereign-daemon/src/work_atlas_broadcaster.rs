@@ -19,7 +19,7 @@
 //! `/internal/ring/sync`.
 //!
 //! The write itself already left: `WorkAtlasStore` wrote it through
-//! `MeshStore::set`, which queued it in `rail_outbox` **in the same
+//! the mesh store's `set`, which queued it in `rail_outbox` **in the same
 //! transaction as the row**. So there is nothing here to send and nothing to
 //! lose. What a latency-sensitive writer still needs is for the two hops that
 //! carry it — the pump's drain, then the ring round — to happen NOW rather
@@ -44,7 +44,7 @@
 //! private claim is not in the outbox for this call to drain, whatever it is
 //! passed (`commonwealth-state`'s
 //! `an_excluded_namespace_never_enters_the_outbox`). The receiving half is
-//! `MeshStore::apply_projection`, which returns an `Err` naming the namespace
+//! the mesh store's `apply_projection`, which returns an `Err` naming the namespace
 //! (`apply_projection_refuses_an_excluded_namespace`). The work-atlas tools
 //! still gate on `Privacy::Public` before calling here at all.
 
