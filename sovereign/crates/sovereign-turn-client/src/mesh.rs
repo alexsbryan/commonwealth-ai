@@ -198,6 +198,23 @@ impl TurnClient {
         .await
     }
 
+    /// `GET /v1/mesh/venues` — the online dialable peers and the client base
+    /// URLs the HOST's transport resolved for them.
+    ///
+    /// `T` is `sovereign_contracts::daemon_wire::PeerVenue`. An empty list
+    /// is a solo or stopped daemon, which is a fact; an unreachable host is
+    /// an `Err` (ARCH principle 6).
+    pub async fn mesh_venues<T: serde::de::DeserializeOwned>(&self) -> Result<Vec<T>> {
+        #[derive(serde::Deserialize)]
+        struct Body<T> {
+            venues: Vec<T>,
+        }
+        let body: Body<T> = self
+            .internal_get("/v1/mesh/venues".to_string(), &[])
+            .await?;
+        Ok(body.venues)
+    }
+
     /// `POST /v1/mesh/join/preview` — what `mesh_join` WOULD join, as a
     /// confirmation-dialog payload, without joining.
     ///

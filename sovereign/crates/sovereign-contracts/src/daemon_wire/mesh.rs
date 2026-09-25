@@ -517,6 +517,20 @@ pub struct DaemonIdentity {
     pub node_id: String,
 }
 
+/// One row of `GET /v1/mesh/venues`: a dialable online peer and the client
+/// base URLs the daemon's `PeerTransport` resolved for it. Carries only what
+/// the setup wizard reads of `InferenceVenue`; the URLs are resolved by the
+/// daemon, never re-derived from `MeshMember::addresses` (ARCH principle 8).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct PeerVenue {
+    /// `NodeId::to_hex()`.
+    pub node_id: String,
+    /// The member's display name.
+    pub name: String,
+    /// `http://<host>:<client_port>/v1` prefixes in try-order.
+    pub base_urls: Vec<String>,
+}
+
 // ─── `sovereign_mesh::mesh_discovery` — invite relay picker ─────
 
 /// One reachable address the founder can paste into the `?relay=…`

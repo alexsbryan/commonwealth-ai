@@ -46,6 +46,7 @@ pub fn mesh_router(daemon: Arc<EmbeddedDaemon>) -> Router {
             post(crate::roster_repair::mesh_forget_member),
         )
         .route("/v1/mesh/relay-candidates", get(mesh_relay_candidates))
+        .route("/v1/mesh/venues", get(mesh_venues))
         // Federated media, viewer half: the loopback URL that reaches a
         // member's `[iroh] media_origin`. The holder half is the acceptor's
         // MEDIA_ALPN slot in `iroh_access`.
@@ -1106,6 +1107,31 @@ async fn mesh_relay_candidates(_: LocalOnly) -> impl IntoResponse {
     (
         StatusCode::OK,
         Json(serde_json::json!({ "candidates": candidates })),
+    )
+        .into_response()
+}
+
+/// `GET /v1/mesh/venues` — `EmbeddedDaemon::peer_inference_endpoints` on
+/// the wire: online dialable peers with their transport-resolved client base
+/// URLs. A stopped or solo daemon answers an empty list.
+async fn mesh_venues(
+    _: LocalOnly,
+    Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
+) -> impl IntoResponse {
+    let venues: Vec<sovereign_contracts::daemon_wire::PeerVenue> = daemon
+        .peer_inference_endpoints()
+        .await
+        .into_iter()
+        .map(|v| sovereign_contracts::daemon_wire::PeerVenue {
+            node_id: v.node_id.to_hex(),
+            name: v.name,
+            base_urls: v.base_urls,
+        })
+        .collect();
+    tracing::debug!(count = venues.len(), "mesh_http: venues");
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({ "venues": venues })),
     )
         .into_response()
 }
