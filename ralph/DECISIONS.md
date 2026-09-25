@@ -650,6 +650,11 @@ merged; that merge is what minted this arrangement, and `ledger-1` records it.
 - Chose: (a) the package's option A. `FabricPart` gains one method that returns its private store's two backings as ports, and `StoreSeed::local(&fabric, id)` builds from them. (b) The ledger test builds its `ActivityEvent` as a literal. (c) The client is the daemon's existing `RailsKv`, with its base from `resolve_rails_base`. The row is rewritten in place and stays one commit.
 - Because: all three use owners that already exist (principles 8, 11). Fabric already owns the store (fp-111), cli-llm already depends on sovereign-daemon, and `RailsKv` is the one cw-rails KV client. So both edges close without a new type, edge, or client. Option C would split §12 D4's "same commit" for a fix that is one method.
 
+**five-programs-61 · 2026-09-25 · fp-cond2-b, fp-cond2-c · director** — this commit
+- Needed: fp-cond2-b's admin launch, as written, spawns a process with no listener. `EmbeddedDaemon` binds its client API only inside `start_daemon` (daemon.rs:2896), which only try_resume, create_mesh_with and join_mesh reach; `expose_client_api` (daemon.rs:1205) only persists a marker. So fp-cond2-c's "spawn, wait for `/v1/models`, join over HTTP" cannot work on a fresh host.
+- Chose: the package's option 1. The admin launch performs the join itself (`expose_client_api` then `join_mesh`, as terminal.rs:334-335 do today). Two corrections to the package: the join signal is a `joined "<mesh>"` stdout line from the child, not `/v1/models`, and the invite link goes over the child's stdin, never argv. Both rows are rewritten in place.
+- Because: it is the only option that preserves behaviour (one membership, the same refusal text) with the smallest lift. Option 2 leaves a parked solo mesh on every terminal node, which is end-user-visible and no §12 decision names it (charter: operator's call). Option 3 adds a daemon lifecycle capability, against five-programs-54's minimal lift.
+
 ## Flags for the operator
 
 - A26: REVIEW-DEMO-rr-1-run will very likely FAIL `ra-room-plug-in-live` again on this host. The bar's window is 60 s, and the CPU 2B took about 1–5 min per answer in this run (room-answer-0..4.json mtimes 19:33→19:49). Passing it takes a faster node or model for the room, or a different bar. Both are design changes for the operator, not tuning.
@@ -9500,5 +9505,19 @@ Package: ctl/NEEDS_HUMAN.resolved-fp87-20260925.md. Reproduced at 154df6d8e:
 Rejected: (B) re-seeding the `AppState::new` family over the recording double. That touches 17 files and is its own row, and a src unit test cannot reach tests/main/common (-59). (C) keeping the daemon edge. That splits D4 and leaves a named edge open for a one-method fix. Moving `mesh_kv_client` to a shared crate would add a second client host.
 
 What would falsify this: the FabricPart method needs a type in its signature that sovereign-daemon cannot name without commonwealth-state; `RailsKv`'s sync-over-dedicated-thread shape panics or deadlocks inside cli-llm's runtime; or the boundary gate counts a dev or transitive path that keeps sovereign-daemon → commonwealth-state after the Cargo line goes.
+
+</details>
+
+## five-programs-61 · 2026-09-25 — fp-cond2-b's admin launch carries the join; the child reports the join on stdout and takes the link on stdin
+
+<details><summary>reasoning, evidence, package</summary>
+
+Package: ctl/NEEDS_HUMAN.resolved-fpcond2b-20260925.md. Reproduced at 236b74224: server.rs:687 is the only `TcpListener::bind(client_addr)`; `start_daemon` call sites are daemon.rs:1031, :1324, :1596; `expose_client_api` at :1205 calls only `persist::set_client_exposed`; the wizard joins in-process at terminal.rs:335.
+
+The package's option 1 said `/v1/models` answering would signal a successful join. It would not: `join_mesh` calls `start_daemon(placeholder_mesh, …)` at daemon.rs:1596 and only then runs the handshake, so the listener answers while the join can still fail, and the placeholder carries the real mesh name, so `/v1/mesh/status` cannot tell them apart either. The child's own result is the only decider, so it prints the line the wizard prints today, with the prefix held in one const beside `Launch::parse`. The invite link embeds the join key, and argv is readable by every local user through `/proc/<pid>/cmdline`, so it travels on stdin.
+
+Rejected: (2) solo-bootstrap then HTTP join, which parks a second "<host>'s Mesh" membership visible in `svrn mesh list` and the desktop MeshList; (3) a no-mesh listener in `EmbeddedDaemon`, which is new lifecycle capability.
+
+What would falsify this: a failed `join_mesh` in the child persists state (a mesh file or a client-exposed marker) that the in-process wizard's failure path does not; the child cannot keep serving `/v1/mesh/venues` after printing its line; or fp-cond2-c's test cannot observe the stdout line before the child's first venues poll.
 
 </details>
