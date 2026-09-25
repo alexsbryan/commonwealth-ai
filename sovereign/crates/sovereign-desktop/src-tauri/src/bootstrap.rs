@@ -183,16 +183,17 @@ pub async fn detect() -> BootstrapMode {
             "Fresh",
         )
     };
-    // Glassbox: Local mode means this desktop runs its OWN embedded
-    // daemon. If a separate daemon is in fact serving the mesh on this
-    // port, that's the "empty Members list" failure mode — this log
-    // line plus the `is_daemon_live` warning below name it directly.
+    // Glassbox: Local mode means no daemon answered, and this desktop runs
+    // none itself (`serving_host` is the only thing that brings one up). If
+    // a separate daemon is in fact serving the mesh on this port, that's the
+    // "empty Members list" failure mode — this log line plus the
+    // `is_daemon_live` warning below name it directly.
     tracing::info!(
         target: "bootstrap",
         port,
         source = label,
         "bootstrap: no live daemon on client port — Local mode \
-         (this desktop will run its own in-process EmbeddedDaemon)"
+         (this desktop runs no daemon of its own)"
     );
     mode
 }

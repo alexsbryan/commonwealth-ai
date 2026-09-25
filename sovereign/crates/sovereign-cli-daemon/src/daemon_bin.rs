@@ -14,7 +14,7 @@ use std::time::SystemTime;
 
 const BIN_NAME: &str = "sovereign-daemon";
 
-fn locate() -> Option<PathBuf> {
+pub(crate) fn locate() -> Option<PathBuf> {
     if let Some(p) = std::env::var_os("SOVEREIGN_DAEMON_BIN") {
         let path = PathBuf::from(p);
         if path.is_file() {

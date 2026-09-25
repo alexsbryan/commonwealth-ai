@@ -12277,6 +12277,7 @@ dependencies = [
  "sovereign-daemon",
  "sovereign-inference",
  "sovereign-service",
+ "sovereign-turn-client",
  "tempfile",
  "tokio",
  "toml 0.8.2",

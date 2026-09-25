@@ -75,8 +75,10 @@ const LIVE_CONSTRUCTION_SITES: &[(&str, &str, &str)] = &[
         "Headless",
         "headless: Some(",
     ),
+    // The setup wizard's join (moved out of cli-daemon's terminal.rs by
+    // fp-cond2-c: the wizard spawns this launch instead of building one).
     (
-        "sovereign/crates/sovereign-cli-daemon/src/setup_cmd/terminal.rs",
+        "sovereign/crates/sovereign-daemon/src/daemon_cmd/admin_join.rs",
         "MeshAdmin",
         "LaunchParts::Admin",
     ),

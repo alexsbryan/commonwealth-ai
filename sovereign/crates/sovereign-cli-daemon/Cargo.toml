@@ -38,11 +38,10 @@ sovereign-service = { workspace = true }
 mesh-join-vocab = { workspace = true }
 # The daemon crate, post-de-embed (docs/FIVE_PROGRAMS.md §11 step 10): no
 # longer the in-process run body (that forked to its own `[[bin]]`, which
-# `daemon_bin.rs` execs). The residue this crate still links: the wizard's
-# in-process EmbeddedDaemon (a NAMED SEAM — terminal.rs:575 needs
-# `peer_inference_endpoints`, which no HTTP route exposes), the pidfile
+# `daemon_bin.rs` execs). The residue this crate still links: the pidfile
 # path + rpc-worker flag parser (`startup`, `bootstrap`), and doctor's
-# containment guard (`build::containment`).
+# containment guard (`build::containment`). The wizard's join spawns the
+# sibling's `join` launch (setup_cmd/terminal/join_child.rs, fp-cond2-c).
 sovereign-daemon = { workspace = true, features = ["treesitter"] }
 # The rented-pod modules lifted out of sovereign-mesh (domains REVIEW-audit-3);
 # reached directly rather than through sovereign-mesh's shim.
@@ -82,6 +81,9 @@ hostname = { workspace = true }
 which = "7"
 tempfile = "3"
 sovereign-contracts = { workspace = true }
+# The client half of the wire: the wizard reads its join child's
+# `GET /v1/mesh/venues` through `TurnClient::mesh_venues`.
+sovereign-turn-client = { workspace = true }
 workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 
 [target.'cfg(unix)'.dependencies]
