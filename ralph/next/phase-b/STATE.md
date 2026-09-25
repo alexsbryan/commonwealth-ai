@@ -1,0 +1,25 @@
+# phase-b — the ralph queue (STAGED, not started)
+
+Staged by the operator's direction 2026-09-24 (ralph/decisions/five-programs-39.md):
+Phase B is the NEXT campaign, started when five-programs completes. Nothing
+runs this queue until the operator launches it. five-programs ends at its
+`HUMAN-phase-b` row, after its `REVIEW-handoff-phase-b` has written the edge
+list this campaign inherits into the appendix below.
+
+At launch, write this queue's `CHARTER.md`, `PROMPT.addendum.md` (render
+`PROMPT.md` with `python3 scripts/ralph.py prompt --queue phase-b`) and
+`queue.toml`, using five-programs' as the base, then start it the way
+five-programs' queue.toml header shows, with `--queue phase-b`.
+
+What Phase B is: §11's front-loading step 3 in docs/FIVE_PROGRAMS.md, "the
+serving-cluster dial". It widens to every red edge whose only closing arm was an
+`[[exception]]` or a new serving host (operator, five-programs-38: build the
+host, not the exception). Its finish condition is five-programs' original
+condition 1: `cd corpus-engine && cargo xtask boundary-gate` exits 0 with no
+exception added by Phase B, and with the fp-9/fp-10 exceptions retired.
+
+- [ ] REVIEW-plan-fp-phase-b — depends [] — PLAN Phase B (operator, 2026-09-24, five-programs-38 "Start Phase B now", staged as the next campaign by five-programs-39). Every edge whose only closing arm was an [[exception]] or a new serving host closes by building the host, not by exception. No code. (1) CENSUS the red edges: the handoff list in this file's appendix (five-programs' REVIEW-handoff-phase-b wrote it), reproduced against the gate at this row's commit. It covers the edges of five-programs' inherited rows (fp-11, fp-12's seven pairs, fp-25, fp-34, fp-43, REVIEW-mint-fp-core-dial), its NEEDS-OPERATOR lines, and the edges the fp-9/fp-10 [[exception]] rows grant (granted "until Phase B", so Phase B retires them). (2) For each edge name the program §2 says OWNS the verb the edge carries and the process that will serve it; group edges by serving host, ONE campaign per host. Expected, for the census to falsify: the code program's MCP server with the reindexer and ScipGraphHandle; an ingest serving surface; the serving-cluster dial proper (fp-10's exception retires); a cmnwlth host for the sovereign-* crates cw-rails may not name (grants, meshapp, meshapp-registry — re-home or serve, decided against quality/ARCH_LAYERS.toml's [[forbid]] rows); the pods worker exec split (TSV:23); setup's exec phase (HUMAN-fp25 (a)). (3) MCP SURFACES follow one rule (operator, five-programs-39): the CLIENT composes the surface — each program serves its own MCP wire (§2) and the harness config lists every server; each program OWNS its own lifecycle by connect-or-spawn (for code: `svrn code mcp` over stdio dials the one code server, or starts it detached under sovereign-contracts' run_lock and idles out with no clients); there is NO daemon proxy — for a moved tool the daemon answers a named pointer ("moved to svrn code; `svrn project init` updates your config"), never unknown-tool (rules 3, 6). The first split is mcp_router (sovereign-daemon/src/mcp_router.rs:166-183): a generic transport over ToolRegistry to a leaf both programs mount, and the code program's call observer (ToolPatternMatcher) on the code mount only — delta: tool-call patterns that span a knowledge tool and a code tool stop being observed. The scaffold (sovereign-cli/src/project_init/scaffold.rs:509-536) writes both servers; this repo's .mcp.json and .opencode/opencode.json change with it. (4) NODE IDENTITY (operator, five-programs-38, timing corrected by -39): ONE node key owned by cw-rails; the daemon's ~/.svrnmesh/node_key retires in the campaign that retires the daemon's own mesh endpoint (fp-9/fp-10's exceptions), fp-74's attestation is then signed by rails at the daemon's request, and the existing-install key migration ships in the same commit. (5) MINT ONE REVIEW-mint row per campaign, ordered host before client, each carrying its edge list, the existing surface it reuses (principle 11 — cw-rails' doors, /v1/admin/hardware, rails_client, run_lock), and every behaviour delta it causes with its reader. A delta that five-programs-38/-39 and §12 do not already name is a NEEDS_HUMAN line, never a silent change (principle 6); first-run and standalone behaviour are preserved or the campaign halts. Re-mint the inherited rows into their campaigns and rewrite each appendix owner cell. — read: docs/FIVE_PROGRAMS.md §2, §4, §11 front-loading, §12; this file's appendix; ralph/next/five-programs/STATE.md (the inherited rows and their director notes); ralph/decisions/five-programs-{28,30,31,32,38,39}.md; quality/ARCH_LAYERS.toml — check: every red edge on the gate at this row's commit has exactly one owner cell (the gate count and the owner histogram in the commit body); campaigns ≤ 8, past it NEEDS_HUMAN with the count; no code
+
+## Appendix — the handoff list
+
+Written by five-programs' `REVIEW-handoff-phase-b` when that queue drains. Empty until then.
