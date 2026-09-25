@@ -125,4 +125,3 @@ fn vendor_registry(recipes_root: &Path, out_dir: &Path) {
         .unwrap_or_else(|e| panic!("copy {} -> {}: {e}", src.display(), dest.display()));
     println!("cargo:rerun-if-changed={}", src.display());
 }
-

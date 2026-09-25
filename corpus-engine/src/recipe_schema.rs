@@ -18,8 +18,7 @@
 //! *across* the crate boundary to parse `corpus-engine/src/recipe.rs` with
 //! `syn` at build time — a source-tree path no package split survived.)
 
-pub const RECIPE_SCHEMA_DESCRIPTOR_JSON: &str =
-    include_str!(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/schema/recipe_schema_descriptor.json"
-    ));
+pub const RECIPE_SCHEMA_DESCRIPTOR_JSON: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/schema/recipe_schema_descriptor.json"
+));
