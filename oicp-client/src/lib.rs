@@ -1951,6 +1951,10 @@ impl InferenceProvider for SplitInferenceProvider {
         serve_loopback::code_model_id(&self.served)
     }
 
+    fn compute_children(&self) -> Vec<sovereign_contracts::oicp::ComputeChildStatus> {
+        serve_loopback::compute_children(&self.served)
+    }
+
     fn embed_model_id(&self) -> String {
         self.embed_model_id.clone()
     }

@@ -55,6 +55,7 @@ use tracing::{debug, error, info, warn};
 
 mod fetch_model;
 mod reload;
+mod self_report;
 mod warm_cache;
 
 /// The run lock's name inside the data root (`host_kit::RunLock`): one
@@ -280,8 +281,12 @@ async fn serve(args: ServeArgs) -> i32 {
         info!(target: "serve", "shutdown signal received");
     };
     // Every route answers from one cell, so a reload swaps them all at once.
-    let cell = Arc::new(reload::ReloadableProvider::new(parts.provider));
+    let cell = Arc::new(reload::ReloadableProvider::new(
+        parts.provider,
+        parts.embed_family,
+    ));
     let mut routes = bundles(Arc::clone(&cell) as Arc<dyn InferenceProvider>);
+    routes.push(self_report::bundle(Arc::clone(&cell)));
     routes.push(reload::bundle(cell, parts.reload_factory, config_path));
     match host_kit::shell::serve([listener], routes, shutdown).await {
         Ok(()) => 0,
@@ -315,32 +320,7 @@ pub fn bundles(provider: Arc<dyn InferenceProvider>) -> Vec<RouteBundle> {
             sovereign_contracts::engine_state::ENGINE_STATE_PATH,
             get(engine_state),
         ),
-        RouteBundle::new("serve_self")
-            .route(
-                sovereign_contracts::engine_state::SERVED_SELF_PATH,
-                get(served_self),
-            )
-            .with_state(provider),
     ]
-}
-
-/// What this process's provider says about itself, read at the moment of
-/// the request. The svrn daemon's loopback terminal arm answers its own
-/// `model_id_for`, `resident_slots` and `edit_slot_info` from this.
-async fn served_self(
-    State(provider): State<Arc<dyn InferenceProvider>>,
-) -> Json<sovereign_contracts::engine_state::ServedSelf> {
-    let this = sovereign_contracts::engine_state::ServedSelf {
-        primary_model: provider.model_id_for(Speed::Slow),
-        medium_model: provider.model_id_for(Speed::Medium),
-        fast_model: provider.model_id_for(Speed::Fast),
-        embed_model: provider.embed_model_id(),
-        code_model: provider.code_model_id(),
-        resident_slots: provider.resident_slots(),
-        edit_slot: provider.edit_slot_info(),
-    };
-    debug!(target: "serve", primary = %this.primary_model, slots = this.resident_slots.len(), edit = this.edit_slot.is_some(), "served self: this process's provider");
-    Json(this)
 }
 
 /// The loader's CACHED view: the device memory it read the last time it
@@ -580,36 +560,6 @@ mod tests {
     fn with_no_listener_named_it_listens_where_svrn_dials() {
         let parsed = ServeArgs::parse(&[]).expect("valid");
         assert_eq!(parsed.listen, "127.0.0.1:9748".parse().unwrap());
-    }
-
-    #[tokio::test]
-    async fn serve_describes_its_own_provider_on_the_self_route() {
-        let provider: Arc<dyn InferenceProvider> =
-            Arc::new(sovereign_compute::mock::MockProvider {
-                tokens: 1,
-                delay: std::time::Duration::ZERO,
-            });
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
-            .await
-            .expect("bind");
-        let base = format!("http://{}", listener.local_addr().expect("addr"));
-        tokio::spawn(host_kit::shell::serve(
-            [listener],
-            bundles(provider),
-            std::future::pending(),
-        ));
-        let this: sovereign_contracts::engine_state::ServedSelf = reqwest::get(format!(
-            "{base}{}",
-            sovereign_contracts::engine_state::SERVED_SELF_PATH
-        ))
-        .await
-        .expect("answered")
-        .json()
-        .await
-        .expect("a ServedSelf");
-        assert_eq!(this.primary_model, sovereign_compute::mock::MOCK_MODEL);
-        assert_eq!(this.resident_slots.len(), 1);
-        assert_eq!(this.resident_slots[0].role, "primary");
     }
 
     /// A provider with a FIM-capable edit slot that records the request it

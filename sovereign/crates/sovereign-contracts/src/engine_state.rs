@@ -76,10 +76,20 @@ pub struct ServedSelf {
     pub fast_model: String,
     /// `embed_model_id()`; `"unknown"` is the trait's own sentinel.
     pub embed_model: String,
+    /// The embed slot's family as serve's assembly resolved it. Its
+    /// `default_quirks().embed` is the query-instruction prefix, the same
+    /// decider the engine applies in process, so a client embedding a query
+    /// over the wire prepares it the same way.
+    pub embed_family: crate::model_family::ModelFamily,
     /// `code_model_id()`.
     pub code_model: Option<String>,
     /// `resident_slots()`: every configured slot, `resident` as a flag.
     pub resident_slots: Vec<crate::oicp::ResidentSlot>,
     /// `edit_slot_info()`; `None` means no editing model at all.
     pub edit_slot: Option<crate::types::EditSlotInfo>,
+    /// `effective_context_size()`: the chat slot's window as serve loaded it.
+    pub context_size: Option<u32>,
+    /// `compute_children()`: the supervised children serve runs, whose roles
+    /// say which kinds (rerank among them) it serves out of process.
+    pub compute_children: Vec<crate::oicp::ComputeChildStatus>,
 }

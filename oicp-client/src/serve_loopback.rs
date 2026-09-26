@@ -63,6 +63,15 @@ pub(crate) fn edit_slot_info(served: &Option<ServedSelf>) -> Option<EditSlotInfo
     served.as_ref().and_then(|s| s.edit_slot.clone())
 }
 
+pub(crate) fn compute_children(
+    served: &Option<ServedSelf>,
+) -> Vec<sovereign_contracts::oicp::ComputeChildStatus> {
+    served
+        .as_ref()
+        .map(|s| s.compute_children.clone())
+        .unwrap_or_default()
+}
+
 pub(crate) fn code_model_id(served: &Option<ServedSelf>) -> Option<String> {
     served.as_ref().and_then(|s| s.code_model.clone())
 }
@@ -221,6 +230,7 @@ mod tests {
             medium_model: "big-27b".into(),
             fast_model: "small-4b".into(),
             embed_model: "embed-0.6b".into(),
+            embed_family: Default::default(),
             code_model: Some("coder".into()),
             resident_slots: vec![ResidentSlot {
                 role: "primary".into(),
@@ -231,6 +241,8 @@ mod tests {
                 placement: None,
             }],
             edit_slot: None,
+            context_size: Some(8192),
+            compute_children: Vec::new(),
         }
     }
 

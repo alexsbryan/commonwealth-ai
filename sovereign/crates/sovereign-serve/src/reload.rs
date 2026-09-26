@@ -23,6 +23,7 @@ use sovereign_compute::assembly::ReloadFactory;
 use sovereign_compute::server::openai_refusal;
 use sovereign_contracts::engine_state::{EngineReloaded, RELOAD_PATH};
 use sovereign_contracts::error::Result;
+use sovereign_contracts::model_family::ModelFamily;
 use sovereign_contracts::setup_config::SetupConfig;
 use sovereign_contracts::*;
 use tracing::{info, warn};
@@ -30,14 +31,26 @@ use tracing::{info, warn};
 /// The provider serve's routes answer from, swappable by a reload.
 pub struct ReloadableProvider {
     current: RwLock<Arc<dyn InferenceProvider>>,
+    /// The embed slot's family as the assembly resolved it, swapped with the
+    /// provider: it decides the query-instruction prefix a client applies.
+    embed_family: RwLock<ModelFamily>,
 }
 
 impl ReloadableProvider {
     /// A cell holding the provider cold start built.
-    pub fn new(provider: Arc<dyn InferenceProvider>) -> Self {
+    pub fn new(provider: Arc<dyn InferenceProvider>, embed_family: ModelFamily) -> Self {
         Self {
             current: RwLock::new(provider),
+            embed_family: RwLock::new(embed_family),
         }
+    }
+
+    /// The embed family of the provider this cell holds now.
+    pub fn embed_family(&self) -> ModelFamily {
+        self.embed_family
+            .read()
+            .unwrap_or_else(|p| p.into_inner())
+            .clone()
     }
 
     /// The provider this request runs on. The guard is only ever held for a
@@ -46,8 +59,9 @@ impl ReloadableProvider {
         Arc::clone(&self.current.read().unwrap_or_else(|p| p.into_inner()))
     }
 
-    fn swap(&self, provider: Arc<dyn InferenceProvider>) {
+    fn swap(&self, provider: Arc<dyn InferenceProvider>, embed_family: ModelFamily) {
         *self.current.write().unwrap_or_else(|p| p.into_inner()) = provider;
+        *self.embed_family.write().unwrap_or_else(|p| p.into_inner()) = embed_family;
     }
 }
 
@@ -235,7 +249,7 @@ async fn reload(_: LocalOnly, State(r): State<Reload>) -> Response {
         Ok(Err(e)) => return refused(format!("the serving assembly refused: {e}")),
         Err(e) => return refused(format!("the serving assembly panicked: {e}")),
     };
-    r.cell.swap(parts.provider);
+    r.cell.swap(parts.provider, parts.embed_family.clone());
     let resident_models: Vec<String> = r
         .cell
         .resident_slots()
@@ -283,7 +297,10 @@ mod tests {
             tokens: 1,
             delay: std::time::Duration::ZERO,
         });
-        let cell = Arc::new(ReloadableProvider::new(Arc::clone(&before)));
+        let cell = Arc::new(ReloadableProvider::new(
+            Arc::clone(&before),
+            ModelFamily::Unknown,
+        ));
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
             .await
             .expect("bind");
