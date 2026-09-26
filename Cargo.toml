@@ -188,6 +188,9 @@ members = [
     # sovereign-serving-host.
     "sovereign/crates/sovereign-scheduler",
     "sovereign/crates/sovereign-serving-host",
+    # `serve`, the model server (docs/FIVE_PROGRAMS.md §2; phase-b
+    # pb-serve-program): the one binary that answers the OpenAI wire alone.
+    "sovereign/crates/sovereign-serve",
     "sovereign/crates/sovereign-service",
     "sovereign/crates/sovereign-desktop/src-tauri",
     "sovereign-mobile/src-tauri",
@@ -379,6 +382,7 @@ sovereign-mesh = { path = "sovereign/crates/sovereign-mesh" }
 sovereign-daemon = { path = "sovereign/crates/sovereign-daemon" }
 sovereign-peer-wire = { path = "sovereign/crates/sovereign-peer-wire" }
 sovereign-compute = { path = "sovereign/crates/sovereign-compute" }
+sovereign-serving-host = { path = "sovereign/crates/sovereign-serving-host" }
 sovereign-service = { path = "sovereign/crates/sovereign-service" }
 sovereign-cli-base = { path = "sovereign/crates/sovereign-cli-base" }
 sovereign-cli-shared = { path = "sovereign/crates/sovereign-cli-shared" }

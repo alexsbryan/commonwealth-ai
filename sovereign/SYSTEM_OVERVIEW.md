@@ -168,6 +168,7 @@ crates/
 ├── sovereign-pods           # Compute's remote isolation — leasing a rented machine
 ├── sovereign-scheduler      # Serving's pure tier — ranker, decision records, replay ("The two tiers", SERVING_BOUNDARY.md)
 ├── sovereign-serving-host   # Serving's host tier — peer_inference, admission, entry_endpoint
+├── sovereign-serve          # `serve`, the model server binary — the OpenAI wire alone (no mesh, no cw-rails) over the one serving assembly
 ├── sovereign-grants         # GuestGrant, EphemeralGrantStore, `Scope` — per-turn authorization
 ├── sovereign-desktop        # Tauri 2 + Svelte 5
 ├── sovereign-cli            # User-facing dispatcher — execs into sibling binaries

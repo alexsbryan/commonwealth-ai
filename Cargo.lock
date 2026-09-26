@@ -13100,6 +13100,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "sovereign-serve"
+version = "0.8.0"
+dependencies = [
+ "axum",
+ "futures",
+ "host-kit",
+ "sovereign-compute",
+ "sovereign-contracts",
+ "sovereign-inference",
+ "sovereign-serving-host",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "workspace-hack",
+]
+
+[[package]]
 name = "sovereign-service"
 version = "0.8.0"
 dependencies = [

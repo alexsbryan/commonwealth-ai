@@ -1,0 +1,33 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+[package]
+name = "sovereign-serve"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# `serve` — the model server (docs/FIVE_PROGRAMS.md §2): one binary that
+# answers /v1/chat/completions, /v1/embeddings, /v1/rerank and /v1/models with
+# no mesh, no knowledge server and no cw-rails (phase-b pb-serve-program).
+# Wiring only: the one serving assembly and the compute child's server
+# (sovereign-compute), the OpenAI translation (sovereign-serving-host's
+# inference_adapter and openai_http), and the host kit's lock and shell.
+
+[[bin]]
+name = "sovereign-serve"
+path = "src/main.rs"
+
+[dependencies]
+sovereign-contracts = { workspace = true }
+sovereign-inference = { workspace = true }
+sovereign-compute = { workspace = true }
+sovereign-serving-host = { workspace = true }
+host-kit = { workspace = true, features = ["shell"] }
+axum = { workspace = true }
+futures = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
+
+[lints]
+workspace = true
