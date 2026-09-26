@@ -1019,6 +1019,7 @@ grants, because no `Scope` variant names `/internal/*`.
 | `POST /v1/responses` | OpenAI Responses-API adapter |
 | `GET /v1/models` | Names this daemon can dispatch by name, built from the local OICP manifest + every reachable peer's — the same source `locate_named_model` resolves against, so a listed id resolves and an omitted one does not |
 | `POST /v1/embeddings` | What peers call via `embed_http::http_embed_fn` |
+| `POST /v1/rerank` (and each served kind's route) | Mounted from the served-kind registry (`sovereign_inference::served_kind`); answers with the rerank kind's slot or compute child |
 | `POST /v1/knowledge/search` | Determines target corpora, fans out, merges, reranks |
 | `/v1/apps*`, `/app/{app_id}/{*path}` | Mesh-app install/status + reverse proxy |
 | `GET /status` | Node / mesh / inference / knowledge summary, incl. `process.pid` + `run_id` |
