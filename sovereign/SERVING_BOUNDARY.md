@@ -139,8 +139,10 @@ cleared when the remote provider is reached through `oicp-client` — RETIRED 20
 `REVIEW-build-serving-drop-inference`: the provider now names `oicp-client` directly, the
 tool-call parser moved DOWN to `oicp-types::tool_calls` and the FIM prompt/stop text to
 `sovereign-contracts::fim`, and the host's `sovereign-inference` dep is gone (one row left).
-`sovereign-serving-host → commonwealth-core` (`PeerHealthTracker`, `ids::NodeId`) clears
-when quarantine state is the host's own and identity is `kernel_types::NodeId`.
+`sovereign-serving-host → commonwealth-core` (`PeerHealthTracker`, `ids::NodeId`) — RETIRED
+2026-09-26 by phase-b `pb-serve-sheds-core`: quarantine state moved to
+`sovereign_scheduler::peer_health`, identity is `kernel_types::NodeId`, and the model-transfer
+wire is `oicp_types::model_transfer`; `tests/main/sheds_commonwealth.rs` pins it.
 `sovereign-scheduler → sovereign-core` is **zero once `pick_slot_for_oicp` leaves** (corrected
 above): the ranker's other non-`oicp` uses are `traits::InferenceProvider` and `types::Speed`,
 and the former is already a leaf at `sovereign-contracts/src/traits.rs:281`.
