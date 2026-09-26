@@ -166,13 +166,14 @@ binary = "debug/sovereign-serve"
 # is ABSENT by construction: `[daemon] rails_base` names a port nothing listens
 # on, so a /v1/* answer that dialled cw-rails (this host runs one on :9747)
 # would fail here rather than pass by borrowing the operator's.
-pass = "served '${MODEL}' on /v1/models from its own manifest, answered a chat turn ('${CHAT}'), an embedding and a rerank (score ${SCORE}) on a temp root, with cw-rails pointed at a closed port"
+pass = "served '${MODEL}' on /v1/models from its own manifest, advertised '${ADVERTISED}' on /oicp/v1/capabilities, answered a chat turn ('${CHAT}'), an embedding and a rerank (score ${SCORE}) on a temp root, with cw-rails pointed at a closed port"
 steps = [
   { do = "ports", vars = ["PORT", "DEAD_RAILS_PORT"] },
   { do = "write", path = "${SANDBOX}/root/config.toml", text = "[engine]\nkind = \"mock\"\n\n[models]\nprimary = \"${SANDBOX}/root/mock.gguf\"\nembed = \"${SANDBOX}/root/mock-embed.gguf\"\n\n[daemon]\nrails_base = \"http://127.0.0.1:${DEAD_RAILS_PORT}\"\n" },
   { do = "spawn", id = "serve", argv = ["${BIN}", "--data-dir", "${SANDBOX}/root", "--listen", "127.0.0.1:${PORT}"], log = "serve.log", env = { RUST_LOG = "info" } },
   { do = "poll", url = "http://127.0.0.1:${PORT}/health", path = "state", var = "HEALTH", timeout = 60, alive = "serve", fail = "serve never answered /health within 60s (see ${SANDBOX}/serve.log)" },
   { do = "get", url = "http://127.0.0.1:${PORT}/v1/models", path = "data[owned_by=local].id", var = "MODEL", fail = "GET /v1/models listed no model this process holds: ${BODY}" },
+  { do = "get", url = "http://127.0.0.1:${PORT}/oicp/v1/capabilities", path = "models.id", var = "ADVERTISED", fail = "GET /oicp/v1/capabilities advertised no model: ${BODY}" },
   { do = "call", url = "http://127.0.0.1:${PORT}/v1/chat/completions", json = { model = "${MODEL}", messages = [{ role = "user", content = "hello" }] }, path = "choices.message.content", var = "CHAT", fail = "POST /v1/chat/completions gave no answer: ${BODY}" },
   { do = "call", url = "http://127.0.0.1:${PORT}/v1/embeddings", json = { model = "${MODEL}", input = ["hello"] }, path = "data.index", var = "EMBEDDED", fail = "POST /v1/embeddings gave no vector: ${BODY}" },
   { do = "call", url = "http://127.0.0.1:${PORT}/v1/rerank", json = { model = "${MODEL}", query = "hello", documents = ["hello world", "other"] }, path = "results[index=0].relevance_score", var = "SCORE", fail = "POST /v1/rerank gave no score: ${BODY}" },

@@ -314,6 +314,7 @@ fn openai_bundle(adapter: Arc<SovereignInferenceAdapter>) -> RouteBundle {
         .route("/v1/chat/completions", post(chat_completions))
         .route("/v1/embeddings", post(embeddings))
         .route("/v1/models", get(list_models))
+        .route("/oicp/v1/capabilities", get(capabilities))
         .with_state(adapter)
 }
 
@@ -416,6 +417,27 @@ async fn list_models(State(adapter): AdapterState) -> Response {
         data,
     })
     .into_response()
+}
+
+/// `/oicp/v1/capabilities`: this process's own provider manifest, the source
+/// its `/v1/models` reads. The svrn daemon's loopback terminal arm reads it as
+/// its own manifest and resident slots, so its peers still see this node's
+/// models after the daemon stops holding them (phase-b-23, option (a)).
+async fn capabilities(State(adapter): AdapterState) -> Response {
+    match adapter.provider_manifest() {
+        Some(manifest) => {
+            info!(target: "serve", models = manifest.models.len(), "capabilities: this process's own manifest");
+            Json(manifest).into_response()
+        }
+        None => {
+            warn!(target: "serve", "capabilities: the provider builds no manifest");
+            openai_refusal(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "this serve's provider builds no manifest".to_string(),
+                "no_manifest",
+            )
+        }
+    }
 }
 
 #[cfg(test)]
