@@ -55,6 +55,7 @@ Nothing runs this queue until the operator launches it, after phase-b's `pb-dist
     cw-rails already has its own (commonwealth-rails/src/config.rs:129).
   - Setup, the distribution, writes all of them.
   - `client_daemon_base` moves to sovereign-turn-client, the dialer. Its parse-error-becomes-default-port substitution becomes a named error (principle 6).
+  - (phase-b-10 handoff) sovereign-cli-base's urls.rs moves with it: `daemon_base_url`, `daemon_v1_base`, `v1_url` and `v1_models_url` wrap `client_daemon_base` (urls.rs:31). It goes by recipe, re-exported at its historical path. cli-base's own rail.rs:80 reads `crate::urls`, so the re-export needs sovereign-cli-base's `allow` to gain sovereign-turn-client (a leaf). Name that widening in this row (PROMPT §7). pb-hostkit struck this move because the lock did not need it.
   - Delta: an existing `~/.svrnmesh/config.toml` MIGRATES in the same commit as the switch. The old file is kept as `.migrated` and the migration is idempotent.
   - PROOF: a migration test takes a fixture full config and produces per-program files that each program loads, with no section lost. Each program also starts with only its own file. PLANT: drop one section in the migration, and the conservation test goes red.
   LIFT ~1,500 lines. — read: sovereign-contracts/src/setup_config.rs, commonwealth-rails/src/config.rs, the 13 `SetupConfig::load` crates — check: CLEAN, LINT, TESTALL, `cargo xtask env-gate`, PLANT, LAYER, BOUNDARY
