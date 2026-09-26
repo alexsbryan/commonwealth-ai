@@ -190,6 +190,8 @@ mod ring_sync_loop_tests;
 mod rotate_pre_split_guard;
 #[path = "main/scheduler_decision_records.rs"]
 mod scheduler_decision_records;
+#[path = "main/serve_latency_bars.rs"]
+mod serve_latency_bars;
 #[path = "main/spec_gate_e2e.rs"]
 mod spec_gate_e2e;
 #[path = "main/storage_budget_route.rs"]
