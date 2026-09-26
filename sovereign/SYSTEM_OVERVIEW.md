@@ -155,7 +155,7 @@ crates/
 ├── sovereign-store          # SQLite + Postgres + in-memory StateStore
 ├── sovereign-tools          # Built-in tools (search, knowledge, docs, web, MCP)
 ├── sovereign-code           # Code intelligence served over MCP — the `svrn code` program, lifted out of sovereign-tools
-├── sovereign-gliner         # GLiNER (ONNX) NER — its own crate to keep ONNX off sovereign-tools; store reached via the `ChunkEntityStore` port, not sovereign-store
+├── sovereign-gliner         # GLiNER (ONNX) NER — the NER served kind's loader (sovereign-compute `ner`, once per process); port in sovereign-contracts `ner`, chunk adapter in corpus-engine
 ├── sovereign-work-atlas     # Coordination atlas for agents on the mesh
 ├── sovereign-enrichment-catalog # The enrichment store below every host that reads it
 ├── sovereign-enrichment-build   # The enrichment orchestrator, outside the inference stack

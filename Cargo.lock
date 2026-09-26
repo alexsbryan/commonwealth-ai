@@ -12792,8 +12792,6 @@ version = "0.8.0"
 dependencies = [
  "anyhow",
  "async-trait",
- "corpus-engine",
- "corpus-index",
  "dirs 5.0.1",
  "gline-rs",
  "ndarray",

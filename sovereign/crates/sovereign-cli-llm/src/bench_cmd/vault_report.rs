@@ -1095,7 +1095,8 @@ fn build_entity_extractor(
             // number is read against, and it must be answerable from
             // the report alone.
             let routed = format!("gliner {:?} ({model_id})", g.generation());
-            let base = sovereign_gliner::GlinerChunkExtractor::new(store, g).into_handle();
+            let base = corpus_engine::enrichment::chunk_ner::GlinerChunkExtractor::new(store, g)
+                .into_handle();
             let metered: ChunkEntityExtractorHandle =
                 Arc::new(MeteredEntityExtractor { inner: base, obs });
             (Some(metered), routed)

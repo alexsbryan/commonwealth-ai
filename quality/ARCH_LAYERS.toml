@@ -283,10 +283,10 @@ crates = [
     # pinned_worker_source, entry_endpoint, admission. A stub until the host
     # half moves in.
     "sovereign-serving-host",
-    # GLiNER NER inference (ort/gline-rs carve-out). Takes the state store as an
-    # injected `ChunkEntityStore` port (sovereign-contracts) rather than naming
-    # sovereign-store; deps sovereign-core + corpus-engine (lower). Consumed from
-    # capabilities (sovereign-tools) and hosts.
+    # GLiNER NER inference (ort/gline-rs carve-out): the NER served kind's
+    # loader. Deps are leaves only (sovereign-contracts, sovereign-time) since
+    # pb-serving-ner; consumed by sovereign-compute and, until pb-cli-llm,
+    # sovereign-cli-llm.
     "sovereign-gliner",
 ]
 
@@ -1278,9 +1278,11 @@ doc = "docs/FIVE_PROGRAMS.md"
 # build` orchestrates, `-catalog` is the store layout) is the same argument:
 # these are atlas WRITERS.
 #
-# `sovereign-gliner` (entity extraction) is here for what it does, and is
-# clean today: leaves (`sovereign-contracts`, `sovereign-time`,
-# `corpus-index`) plus `corpus-engine`, a member.
+# `sovereign-gliner` LEFT for [cmnwlth] (phase-b pb-serving-ner, §12 3a rung
+# 1): its only in-tree loader is the NER served kind's registration in the
+# serving assembly (`sovereign-compute`), so one program uses it. The per-chunk
+# adapter it carried (`GlinerChunkExtractor`, pure over the NER port) moved into
+# `corpus-engine`, which is what lets the crate leave without a red edge back.
 #
 # `sovereign-runtime-recipe` LEFT for [svrn] (fp-4, 2026-09-23, §12 decision 5):
 # the crate was claimed here for its enrichment lane, but that lane is the
@@ -1297,7 +1299,6 @@ crates = [
     "sovereign-authoring-harness",
     "sovereign-pipeline",
     "sovereign-recipe-author",
-    "sovereign-gliner",
     "sovereign-enrichment-build",
     "sovereign-enrichment-catalog",
     "understanding-atlas",
@@ -1349,6 +1350,9 @@ crates = [
     "serving-policy",
     "sovereign-inference",
     "sovereign-compute",
+    # The NER served kind's loader (phase-b pb-serving-ner); it follows the
+    # serving crates into `serve` at pb-serve-program.
+    "sovereign-gliner",
     "sovereign-pods",
     "sovereign-meshapp",
     "sovereign-meshapp-registry",
