@@ -218,16 +218,15 @@ pub(super) async fn open_tools_registry() -> Result<ToolsEnv, String> {
             .declared(),
     ));
     // Work atlas — coordination layer for agents sharing the repo.
-    // The store is the daemon's, dialed (fp-33): claims declared
-    // through these tools land in the store the daemon serves and
-    // gossips from, not in a repo-local mesh.db nobody else read.
-    // With the daemon down, every claim operation reports the
-    // absence by name — the tools stay registered so `svrn tools
-    // list` still shows the surface.
-    let mesh_store: Arc<dyn sovereign_work_atlas::ReplicatedKv> = Arc::new(
-        crate::mesh_kv_client::DaemonReplicatedKv::new()
-            .map_err(|e| format!("work atlas mesh store client: {e}"))?,
-    );
+    // The store is cw-rails', dialed (pb-atlas-kv): claims declared
+    // through these tools land in the store the mesh's serving process
+    // holds, not in a repo-local mesh.db nobody else read. With
+    // cw-rails down, every claim operation reports the absence by
+    // name — the tools stay registered so `svrn tools list` still
+    // shows the surface. The client builds no blocking runtime, so
+    // this async path cannot panic on it (the fp-33 twin did).
+    let mesh_store: Arc<dyn sovereign_work_atlas::ReplicatedKv> =
+        Arc::new(crate::mesh_kv_client::atlas_kv());
     // Identity MUST come from the ROOT data dir with the daemon's full
     // precedence (node_id file → mesh.json → generate). Resolving
     // against `data_dir` (= <root>/indexes) minted a SECOND node id for

@@ -56,8 +56,8 @@ pub fn resolve_rails_base(daemon: &sovereign_contracts::setup_config::DaemonSect
     }
 }
 
-/// The ceiling `DaemonReplicatedKv` (sovereign-cli-dev) uses for the same
-/// four doors: these are coordination reads, and slower IS unreachable.
+/// The ceiling for all four doors: these are coordination reads, and slower
+/// IS unreachable.
 const KV_TIMEOUT: Duration = Duration::from_secs(2);
 
 type Job = BoxFuture<'static, ()>;

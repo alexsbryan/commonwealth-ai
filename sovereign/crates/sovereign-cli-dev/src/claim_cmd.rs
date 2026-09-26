@@ -4,7 +4,7 @@
 //! DAEMON-ONLY for state: the daemon's work-atlas store is the one peers,
 //! gossip, and CodeWatcher observations share, so every subcommand
 //! calls the daemon's MCP tools when it answers. When the daemon is
-//! unreachable the subcommand proceeds against the daemon-DIALED store
+//! unreachable the subcommand proceeds against the cw-rails-DIALED store
 //! (`mesh_kv_client`), whose every operation reports the absence by
 //! name — since fp-33 there is no repo-local `mesh.db` to fall back
 //! to: a claim that cannot reach the daemon says so, it does not land
@@ -20,7 +20,6 @@ use std::sync::Arc;
 
 use uuid::Uuid;
 
-use crate::mesh_kv_client::DaemonReplicatedKv;
 use sovereign_cli_shared::mcp_client::{daemon_tool_call, DaemonCallError};
 use sovereign_work_atlas::{
     model::{AgentKind, Privacy},
@@ -806,14 +805,10 @@ fn open_atlas() -> Result<CliCtx, i32> {
             return Err(1);
         }
     };
-    // The store is the daemon's, dialed (fp-33): there is no repo-local
-    // mesh.db to open, and every operation a daemon-down session attempts
-    // reports the absence by name. Construction itself cannot fail on
-    // daemon presence.
-    let mesh = DaemonReplicatedKv::new().map_err(|e| {
-        eprintln!("claim: work-atlas store client: {e}");
-        1
-    })?;
+    // The store is cw-rails', dialed (pb-atlas-kv): there is no repo-local
+    // mesh.db to open, and every operation a cw-rails-down session attempts
+    // reports the absence by name. Construction cannot fail.
+    let mesh = crate::mesh_kv_client::atlas_kv();
     // Identity from the ROOT data dir with the daemon's full precedence
     // (node_id file → mesh.json → generate), now from the contracts home.
     // The previous hardcoded `~/.svrnmesh/indexes` minted a SECOND node id

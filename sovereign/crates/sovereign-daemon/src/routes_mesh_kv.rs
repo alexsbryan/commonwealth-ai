@@ -15,8 +15,9 @@
 //! The wire vocabulary is `sovereign_contracts::peer`'s own:
 //! [`sovereign_contracts::peer::ReplicatedKvEntry`] carries its serde form,
 //! and the request shapes are the `Kv*` structs beside it — one schema, both
-//! ends link contracts. The dialing client is
-//! `sovereign-cli-dev/src/mesh_kv_client.rs`.
+//! ends link contracts. The workbench no longer dials this proxy: since
+//! pb-atlas-kv its work atlas dials cw-rails' doors directly through
+//! `sovereign-turn-client/src/rails_kv.rs`, the client this proxy forwards with.
 //!
 //! Mounted on the Operator surface only (the same bind the workbench's other
 //! daemon calls use); a peer or guest listener 404s these paths rather than

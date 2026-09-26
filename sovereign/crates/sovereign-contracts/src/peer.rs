@@ -128,7 +128,7 @@ mod b64_bytes {
 
 // ── The /v1/mesh/kv request wire (five-programs fp-33) ──────────────────────
 // The daemon's mesh-KV serving surface (`sovereign-daemon/src/routes_mesh_kv.rs`)
-// and the workbench's dialing client (`sovereign-cli-dev/src/mesh_kv_client.rs`)
+// and the one dialing client (`sovereign-turn-client/src/rails_kv.rs`)
 // must agree on every field name; one definition here — the svrn
 // serving-contract home (§12 decision 3a) — is what makes that structural.
 

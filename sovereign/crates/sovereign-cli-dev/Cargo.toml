@@ -66,8 +66,8 @@ sovereign-cli-shared = { workspace = true }
 # re-exports it while linking llama.cpp unconditionally) saved 3.5 KB of a
 # 395 MB debug binary. `sovereign-mesh` — which pulls `sovereign-inference`
 # unconditionally across 8 files of inference-serving guts — left this
-# crate's dependency list with fp-33: the work-atlas surfaces dial the
-# daemon's `/v1/mesh/kv` routes (`mesh_kv_client`), and node identity comes
+# crate's dependency list with fp-33: the work-atlas surfaces dial cw-rails'
+# `/v1/mesh/kv` doors (`mesh_kv_client`, pb-atlas-kv), and node identity comes
 # from `sovereign_contracts::node_identity`. The workbench no longer links
 # llama.cpp at all.
 # `dev-tools` (git archaeology in BriefTool) travels with
@@ -87,6 +87,9 @@ sovereign-daemon = { workspace = true, optional = true }
 # the daemon comes up; pulled in directly here rather than via
 # sovereign-tools so the dep is visible in this crate's tree.
 sovereign-work-atlas = { workspace = true, optional = true }
+# The work atlas's store: `mesh_kv_client` dials cw-rails' KV doors through
+# the one sync client, `rails_kv::RailsKv` (pb-atlas-kv).
+sovereign-turn-client = { workspace = true, optional = true }
 corpus-engine = { workspace = true, features = ["treesitter"], optional = true }
 # Read-port leaf (`EmbedFn`, `Error`, `DEFAULT_EMBED_DIM`, `CorpusIndex`) —
 # same workbench gate as corpus-engine.
@@ -114,9 +117,6 @@ kernel-types = { workspace = true, features = ["wire-fixture"], optional = true 
 # `sovereign-cli`, so an always-on entry costs the dispatcher nothing new.
 # axum + tower-http serve the workbench's MCP HTTP surface and are gated.
 async-trait = { workspace = true }
-# `ReplicatedKv::set`'s value type, which `mesh_kv_client` implements the
-# trait in terms of (fp-33).
-bytes = { workspace = true }
 axum = { workspace = true, optional = true }
 tower-http = { workspace = true, optional = true }
 futures = { workspace = true }
@@ -126,10 +126,7 @@ tokio = { workspace = true }
 toml = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
-# `mesh_kv_client` — the sync `ReplicatedKv` port dials the daemon's
-# `/v1/mesh/kv` routes on reqwest's blocking client (fp-33; the
-# `sovereign-eval` feature-add precedent).
-reqwest = { workspace = true, features = ["blocking"] }
+reqwest = { workspace = true }
 uuid = { workspace = true }
 arc-swap = { workspace = true }
 dirs = "5"
@@ -161,6 +158,7 @@ workbench = [
     "dep:sovereign-tools",
     "dep:sovereign-daemon",
     "dep:sovereign-work-atlas",
+    "dep:sovereign-turn-client",
     "dep:corpus-engine",
     "dep:corpus-index",
     "dep:code-facts",

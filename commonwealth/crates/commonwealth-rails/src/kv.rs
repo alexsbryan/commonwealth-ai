@@ -20,7 +20,7 @@
 //! the `mesh-measurements` or `work` journals — their writers are the daemon's.
 //!
 //! The doors' bodies are the daemon's (`routes_mesh_kv.rs`), field for field,
-//! so the workbench's `mesh_kv_client` reads either daemon. The wire structs
+//! so the one client (sovereign-turn-client's `rails_kv`) reads either. The wire structs
 //! themselves are `sovereign_contracts::peer`'s, which this binary may not
 //! name (the lift boundary), so the request shapes are mirrored here the way
 //! [`crate::api::ClaimRequest`] mirrors the publish body.

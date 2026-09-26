@@ -44,7 +44,8 @@ pub(super) const REGISTRY_TAIL: &[(&str, Class, usize)] = &[
     // `audit --recover` and the work-atlas surfaces read them over the
     // daemon's own /v1 routes, one client construction each. Estate content
     // never leaves the machine: LocalDaemon, like every row above.
-    ("sovereign/crates/sovereign-cli-dev/src/mesh_kv_client.rs", Class::LocalDaemon, 1),
+    // -1 (pb-atlas-kv): the mesh-KV twin is gone; the work atlas dials
+    // through turn-client's `rails_kv.rs`, counted there.
     ("sovereign/crates/sovereign-cli-dev/src/state_store_client.rs", Class::LocalDaemon, 1),
 
     // ---- sovereign-cli-daemon (LocalDaemon — daemon self-control) ----

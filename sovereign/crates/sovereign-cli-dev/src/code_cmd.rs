@@ -1745,8 +1745,8 @@ async fn cmd_search(args: &[String]) -> i32 {
 /// `work_in_flight` tool. One prefix query on the absolute repo root
 /// catches all observations (stored absolute) and absolute-scoped
 /// claims; observations are then filtered to working-set membership
-/// client-side. Falls back to the daemon-DIALED store (`mesh_kv_client`,
-/// fp-33 — there is no repo-local mesh.db) and finally to an
+/// client-side. Falls back to the cw-rails-DIALED store (`mesh_kv_client`,
+/// pb-atlas-kv — there is no repo-local mesh.db) and finally to an
 /// empty section — the brief must never fail on coordination
 /// signals being unavailable.
 async fn collect_brief_overlaps(
@@ -1837,17 +1837,15 @@ async fn daemon_brief_overlaps(
 }
 
 /// Fallback when the daemon is down. Since fp-33 there is no repo-local
-/// `mesh.db` to read — the store is the daemon's, dialed — so an
-/// unreachable daemon simply yields no overlaps; the daemon-first
+/// `mesh.db` to read — the store is cw-rails', dialed — so an
+/// unreachable cw-rails simply yields no overlaps; the daemon-first
 /// attempt upstream has already said so by name. Stale-claim
 /// visibility beats nothing only when the store is reachable.
 fn local_brief_overlaps(
     repo_root: &Path,
     working_set: &[PathBuf],
 ) -> Vec<sovereign_code::brief::WorkInFlightEntry> {
-    let Ok(mesh_store) = crate::mesh_kv_client::DaemonReplicatedKv::new() else {
-        return Vec::new();
-    };
+    let mesh_store = crate::mesh_kv_client::atlas_kv();
     let node_id = crate::atlas_identity::atlas_node_id();
     let store = sovereign_work_atlas::WorkAtlasStore::new(Arc::new(mesh_store), node_id);
     sovereign_code::overlaps_for_working_set(&store, repo_root, working_set, None)

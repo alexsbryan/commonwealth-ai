@@ -309,10 +309,10 @@ async fn cmd_call(args: &[String]) -> i32 {
     // Coordination tools are only CORRECT against the daemon's
     // work-atlas store — the one peers, gossip, and CodeWatcher
     // observations share. The in-process registry below holds the
-    // daemon-DIALED store (fp-33 — no repo-local mesh.db exists to
-    // write; a local island would be invisible to every other
+    // cw-rails-DIALED store (pb-atlas-kv — no repo-local mesh.db exists
+    // to write; a local island would be invisible to every other
     // process, root-caused 2026-07-31), so these four go daemon-first
-    // and every operation a daemon-down session attempts reports the
+    // and every operation a cw-rails-down session attempts reports the
     // absence by name.
     const DAEMON_AUTHORITATIVE: &[&str] = &[
         "declare_scope",
@@ -354,9 +354,9 @@ async fn cmd_call(args: &[String]) -> i32 {
             }
             Err(DaemonCallError::Unreachable(e)) => {
                 eprintln!(
-                    "warning: daemon unreachable ({e}) — {id} falling back to the repo-local \
-                     store. Records written here are NOT visible to the daemon, MCP peers, or \
-                     the mesh; re-declare once the daemon is back if coordination matters."
+                    "warning: daemon unreachable ({e}) — {id} dialing the mesh's serving \
+                     process (cw-rails) directly. With cw-rails down too, the call reports \
+                     that absence by name."
                 );
             }
         }
