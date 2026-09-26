@@ -47,6 +47,8 @@
 1652	corpus-index::tests
 2085	corpus-mcp
 864	corpus-mcp::tests
+640	host-kit
+296	host-kit::tests
 2447	kernel-types
 1761	kernel-types::tests
 338	mesh-join-vocab
