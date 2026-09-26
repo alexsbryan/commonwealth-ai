@@ -25,11 +25,14 @@
 //!   HTTP client for a child.
 //! - [`child_main`] — the child process entrypoint (`--compute-child`),
 //!   reached by re-executing the daemon binary.
+//! - [`assembly`] — the one serving assembly: config in, the provider a
+//!   serving process installs out; [`containment`] is its admission guard.
 
+pub mod assembly;
 pub mod child;
 pub mod child_main;
-pub mod containment;
 pub mod client;
+pub mod containment;
 pub mod distribution;
 pub mod manager;
 pub mod server;
