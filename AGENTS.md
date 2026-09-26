@@ -492,7 +492,10 @@ across several machines; these keep them consistent.)
   either way.
 - **Rebuild the WHOLE workspace, not one binary.** After editing a shared
   crate (esp. `sovereign-core`), run a plain full `cargo build --workspace
-  --features corpus-engine/treesitter` so every binary is fresh. A scoped
+  --features corpus-engine/treesitter,sovereign-cli/dev-tools` so every
+  binary is fresh. Leaving out `sovereign-cli/dev-tools` relinks the
+  dispatcher without its developer verbs (`quality`, `notes`, `code`,
+  `tools`), as happened 2026-09-26. A scoped
   `-p sovereign-cli-daemon` leaves `target/debug/sovereign-desktop` stale —
   and the chat e2e repro (`repro-defects.mjs` / `chaos.mjs`) exercises the
   DESKTOP binary, which runs the KnowledgeQuery / grounding pipeline
