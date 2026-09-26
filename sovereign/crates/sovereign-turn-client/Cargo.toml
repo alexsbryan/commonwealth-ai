@@ -25,6 +25,8 @@ async-trait = { workspace = true }
 # Deserialize-only parse shapes over the wire bytes serde_json already reads.
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
+# `ReplicatedKv::set`'s value type, which `rails_kv` implements the port in.
+bytes = { workspace = true }
 tokio = { workspace = true }
 tokio-tungstenite = "0.29"
 tracing = { workspace = true }

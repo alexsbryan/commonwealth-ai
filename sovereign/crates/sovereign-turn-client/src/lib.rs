@@ -84,6 +84,10 @@ mod mesh;
 pub mod knowledge_client;
 pub mod landscape_digest_client;
 
+/// The sync `ReplicatedKv` over cw-rails' KV doors: the one client the daemon
+/// and the code program's work atlas dial (pb-atlas-kv).
+pub mod rails_kv;
+
 #[cfg(feature = "bundled-backend")]
 pub use reach::BundledBackend;
 pub use reach::{NotReachable, Reached, ServingHost, CAN_BRING_UP_A_BACKEND};

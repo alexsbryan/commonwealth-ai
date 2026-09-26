@@ -28,7 +28,7 @@ fn every_verb_is_absent() {
             "a",
             "k",
             bytes::Bytes::from_static(b"v"),
-            kernel_types::NodeId::from_u128(1),
+            sovereign_contracts::principal::NodeId::from_u128(1),
         ),
         "/v1/mesh/kv/entry",
     );
@@ -71,10 +71,10 @@ mod door {
     use axum::routing::get;
     use axum::{Json, Router};
     use bytes::Bytes;
-    use kernel_types::NodeId;
     use sovereign_contracts::peer::{
         KvLookup, KvScanQuery, KvSetBody, ReplicatedKv, ReplicatedKvEntry,
     };
+    use sovereign_contracts::principal::NodeId;
 
     use super::super::RailsKv;
 

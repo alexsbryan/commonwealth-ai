@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! The daemon's synchronous [`ReplicatedKv`], over `cw-rails`' `/v1/mesh/kv/*`
-//! doors (five-programs fp-110, decision five-programs-56; the doors are
-//! `commonwealth-rails/src/kv.rs`). With [`super::ledger::RailsLedger`] it
-//! covers all six of `StoreSeed`'s ports.
+//! The synchronous [`ReplicatedKv`] over `cw-rails`' `/v1/mesh/kv/*` doors
+//! (five-programs fp-110, decision five-programs-56; the doors are
+//! `commonwealth-rails/src/kv.rs`), and the base it dials. It moved here from
+//! the daemon's `rails_client::kv` (pb-atlas-kv) so the daemon and the code
+//! program dial one client; with the daemon's `rails_client::ledger::RailsLedger`
+//! it covers all six of `StoreSeed`'s ports.
 //!
 //! Nothing here is wired into `AppState` yet — fp-88 flips the backing.
 //!
@@ -23,16 +25,53 @@ use std::time::Duration;
 
 use bytes::Bytes;
 use futures::future::BoxFuture;
-use kernel_types::NodeId;
 use sovereign_contracts::peer::{
     KvLookup, KvScanQuery, KvSetBody, ReplicatedKv, ReplicatedKvEntry, ReplicatedKvError,
 };
+use sovereign_contracts::principal::NodeId;
+
+/// Where the mesh's serving process listens. Mirrors cw-rails'
+/// `commonwealth_rails::config::DEFAULT_LISTEN` — 9747, outside the
+/// 9741..9745 family this daemon binds (the two programs are built and
+/// versioned separately, so the convention is mirrored and documented on
+/// both sides rather than imported across the lift boundary).
+pub const DEFAULT_RAILS_BASE: &str = "http://127.0.0.1:9747";
+
+/// The base this daemon dials cw-rails at: `[daemon] rails_base` when set,
+/// else [`DEFAULT_RAILS_BASE`]. THE one reader of the key (fp-112).
+pub fn resolve_rails_base(daemon: &sovereign_contracts::setup_config::DaemonSection) -> String {
+    match daemon.rails_base.as_deref() {
+        Some(url) => {
+            tracing::debug!(rails_base = url, source = "config", "rails base resolved");
+            url.to_string()
+        }
+        None => {
+            tracing::debug!(
+                rails_base = DEFAULT_RAILS_BASE,
+                source = "default",
+                "rails base resolved"
+            );
+            DEFAULT_RAILS_BASE.to_string()
+        }
+    }
+}
 
 /// The ceiling `DaemonReplicatedKv` (sovereign-cli-dev) uses for the same
 /// four doors: these are coordination reads, and slower IS unreachable.
 const KV_TIMEOUT: Duration = Duration::from_secs(2);
 
 type Job = BoxFuture<'static, ()>;
+
+/// The client every door is dialed with. Only the dial thread sends on it, so
+/// its connection pool lives on that thread's runtime.
+fn client() -> &'static reqwest::Client {
+    static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
+    CLIENT.get_or_init(|| {
+        reqwest::Client::builder()
+            .build()
+            .expect("a plain reqwest client")
+    })
+}
 
 /// The one dial thread: a current-thread runtime that spawns each job, so
 /// concurrent callers do not queue behind one another's round trip.
@@ -154,7 +193,7 @@ impl RailsKv {
 impl ReplicatedKv for RailsKv {
     fn get(&self, app_id: &str, key: &str) -> Result<Option<ReplicatedKvEntry>, ReplicatedKvError> {
         let url = self.url("/v1/mesh/kv/entry");
-        let req = super::client().get(&url).query(&KvLookup {
+        let req = client().get(&url).query(&KvLookup {
             app_id: app_id.to_string(),
             key: key.to_string(),
         });
@@ -169,7 +208,7 @@ impl ReplicatedKv for RailsKv {
         origin: NodeId,
     ) -> Result<bool, ReplicatedKvError> {
         let url = self.url("/v1/mesh/kv/entry");
-        let req = super::client().post(&url).json(&KvSetBody {
+        let req = client().post(&url).json(&KvSetBody {
             app_id: app_id.to_string(),
             key: key.to_string(),
             value,
@@ -180,7 +219,7 @@ impl ReplicatedKv for RailsKv {
 
     fn delete(&self, app_id: &str, key: &str) -> Result<bool, ReplicatedKvError> {
         let url = self.url("/v1/mesh/kv/entry");
-        let req = super::client().delete(&url).query(&KvLookup {
+        let req = client().delete(&url).query(&KvLookup {
             app_id: app_id.to_string(),
             key: key.to_string(),
         });
@@ -193,7 +232,7 @@ impl ReplicatedKv for RailsKv {
         prefix: &str,
     ) -> Result<Vec<ReplicatedKvEntry>, ReplicatedKvError> {
         let url = self.url("/v1/mesh/kv/entries");
-        let req = super::client().get(&url).query(&KvScanQuery {
+        let req = client().get(&url).query(&KvScanQuery {
             app_id: app_id.to_string(),
             prefix: prefix.to_string(),
         });
@@ -202,5 +241,4 @@ impl ReplicatedKv for RailsKv {
 }
 
 #[cfg(test)]
-#[path = "kv/tests.rs"]
 mod tests;

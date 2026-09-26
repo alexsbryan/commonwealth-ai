@@ -27,37 +27,13 @@ use sovereign_mesh::rail_port::{RailFut, RingRailPort};
 /// The typed ledger ports' dialing implementation (fp-78).
 pub mod ledger;
 
-/// The daemon's sync `ReplicatedKv`, dialed (fp-110).
-pub mod kv;
+/// The daemon's sync `ReplicatedKv`, dialed (fp-110). One client for every
+/// program that dials cw-rails' KV doors, so it lives in the client family.
+pub use sovereign_turn_client::rails_kv as kv;
+pub use sovereign_turn_client::rails_kv::{resolve_rails_base, DEFAULT_RAILS_BASE};
 
 mod bring_up;
 pub use bring_up::ensure_rails;
-
-/// Where the mesh's serving process listens. Mirrors cw-rails'
-/// `commonwealth_rails::config::DEFAULT_LISTEN` — 9747, outside the
-/// 9741..9745 family this daemon binds (the two programs are built and
-/// versioned separately, so the convention is mirrored and documented on
-/// both sides rather than imported across the lift boundary).
-pub const DEFAULT_RAILS_BASE: &str = "http://127.0.0.1:9747";
-
-/// The base this daemon dials cw-rails at: `[daemon] rails_base` when set,
-/// else [`DEFAULT_RAILS_BASE`]. THE one reader of the key (fp-112).
-pub fn resolve_rails_base(daemon: &sovereign_core::setup_config::DaemonSection) -> String {
-    match daemon.rails_base.as_deref() {
-        Some(url) => {
-            tracing::debug!(rails_base = url, source = "config", "rails base resolved");
-            url.to_string()
-        }
-        None => {
-            tracing::debug!(
-                rails_base = DEFAULT_RAILS_BASE,
-                source = "default",
-                "rails base resolved"
-            );
-            DEFAULT_RAILS_BASE.to_string()
-        }
-    }
-}
 
 /// How long a dial may take before it is reported absent. Loopback answers
 /// or refuses in milliseconds; the bound exists so a HUNG serving process
