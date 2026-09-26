@@ -38,6 +38,7 @@ pub mod job;
 pub mod jsonrpc;
 pub mod knowledge;
 pub mod manifest;
+pub mod mcp;
 pub mod model_aliases;
 pub mod openai_types;
 pub mod origin;
