@@ -4,6 +4,7 @@ use std::net::SocketAddr;
 
 use axum::routing::{any, delete, get, post};
 use axum::Router;
+use host_kit::shell::BodyLimits;
 
 use crate::routes_apps;
 use crate::routes_completions;
@@ -326,10 +327,7 @@ pub fn client_router_for(state: AppState, surface: ClientSurface) -> Router {
         ))
         // Outermost frontdoor: bound request-body size + slow-dribble time
         // before any handler or auth work runs.
-        .layer(tower_http::timeout::RequestBodyTimeoutLayer::new(
-            REQUEST_BODY_READ_TIMEOUT,
-        ))
-        .layer(axum::extract::DefaultBodyLimit::max(MAX_REQUEST_BODY_BYTES))
+        .body_limits(MAX_REQUEST_BODY_BYTES, REQUEST_BODY_READ_TIMEOUT)
         .with_state(state)
 }
 
@@ -651,10 +649,7 @@ pub fn internal_router(state: AppState) -> Router {
         // Frontdoor bound on the perimeter-trusted internal port too — its
         // routes (gossip, app-state, knowledge) carry no auth gate, so this is
         // their resource ceiling.
-        .layer(tower_http::timeout::RequestBodyTimeoutLayer::new(
-            REQUEST_BODY_READ_TIMEOUT,
-        ))
-        .layer(axum::extract::DefaultBodyLimit::max(MAX_REQUEST_BODY_BYTES))
+        .body_limits(MAX_REQUEST_BODY_BYTES, REQUEST_BODY_READ_TIMEOUT)
         // INSIDE the resolver, so it reads what the resolver attached: whether
         // this caller may reach the port at all (`internal_gate`).
         .layer(axum::middleware::from_fn_with_state(

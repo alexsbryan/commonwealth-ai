@@ -4631,7 +4631,8 @@ impl EmbeddedDaemon {
 /// from the previous mesh. `stop_inner` already awaits the old serve task,
 /// so this is belt-and-suspenders — but `SO_REUSEADDR` (which mio sets)
 /// only lets a new bind past a socket in `TIME_WAIT`, NOT one still in
-/// `LISTEN`, so if the old task is slow to drop we give it a few tries.
+/// `LISTEN`, so if the old task is slow to drop we give it a few tries —
+/// the host kit's `shell::bind_with_retry` (phase-b pb-shell).
 ///
 /// On any non-`EADDRINUSE` error, or after exhausting retries, this returns
 /// `MeshError::Network`; the caller (the serve task) logs it and returns
@@ -4641,35 +4642,9 @@ async fn bind_listener_with_retry(
     addr: SocketAddr,
     label: &str,
 ) -> Result<tokio::net::TcpListener, MeshError> {
-    const ATTEMPTS: usize = 5;
-    const BACKOFF: std::time::Duration = std::time::Duration::from_millis(100);
-    let mut last_err: Option<std::io::Error> = None;
-    for attempt in 1..=ATTEMPTS {
-        match tokio::net::TcpListener::bind(addr).await {
-            Ok(listener) => return Ok(listener),
-            Err(e) if e.kind() == std::io::ErrorKind::AddrInUse => {
-                warn!(
-                    %addr, attempt, attempts = ATTEMPTS,
-                    "bind {label}: address in use — retrying in {}ms (old listener \
-                     may still be releasing)",
-                    BACKOFF.as_millis()
-                );
-                last_err = Some(e);
-                tokio::time::sleep(BACKOFF).await;
-            }
-            Err(e) => {
-                return Err(MeshError::Network(format!(
-                    "bind {label} on {addr} failed: {e}"
-                )));
-            }
-        }
-    }
-    Err(MeshError::Network(format!(
-        "bind {label} on {addr} failed after {ATTEMPTS} attempts: {}",
-        last_err
-            .map(|e| e.to_string())
-            .unwrap_or_else(|| "address in use".to_string())
-    )))
+    host_kit::shell::bind_with_retry(addr, label)
+        .await
+        .map_err(|e| MeshError::Network(e.to_string()))
 }
 
 /// Write minimal `ModelInfo` entries into the inference store for

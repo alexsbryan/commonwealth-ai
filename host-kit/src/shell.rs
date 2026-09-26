@@ -153,15 +153,24 @@ pub async fn serve(
     first_err.map_or(Ok(()), Err)
 }
 
-/// Bound the request BODY: at most `max_bytes`, delivered within
-/// `read_timeout` (a slow-loris guard). Responses, streamed or not, are
-/// not touched. The caller names both numbers.
-pub fn body_limits(router: Router, max_bytes: usize, read_timeout: Duration) -> Router {
-    router
-        .layer(tower_http::timeout::RequestBodyTimeoutLayer::new(
+/// The request-body bound, as a router tail like [`guard::LoopbackRouter`].
+pub trait BodyLimits {
+    /// Bound the request BODY: at most `max_bytes`, delivered within
+    /// `read_timeout` (a slow-loris guard). Responses, streamed or not, are
+    /// not touched. The caller names both numbers.
+    fn body_limits(self, max_bytes: usize, read_timeout: Duration) -> Self;
+}
+
+impl<S> BodyLimits for Router<S>
+where
+    S: Clone + Send + Sync + 'static,
+{
+    fn body_limits(self, max_bytes: usize, read_timeout: Duration) -> Self {
+        self.layer(tower_http::timeout::RequestBodyTimeoutLayer::new(
             read_timeout,
         ))
         .layer(axum::extract::DefaultBodyLimit::max(max_bytes))
+    }
 }
 
 /// Bind `addr`, retrying while the address is still held by a listener

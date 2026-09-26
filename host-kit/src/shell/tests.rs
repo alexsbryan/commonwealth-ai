@@ -102,14 +102,12 @@ async fn serve_hands_the_peer_address_through_and_stops_on_shutdown() {
 
 #[tokio::test]
 async fn body_limits_refuse_a_body_over_the_cap() {
-    let app = body_limits(
-        Router::new().route(
+    let app = Router::new()
+        .route(
             "/in",
             post(|body: String| async move { body.len().to_string() }),
-        ),
-        16,
-        Duration::from_secs(30),
-    );
+        )
+        .body_limits(16, Duration::from_secs(30));
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     tokio::spawn(async move { axum::serve(listener, app).await.ok() });
