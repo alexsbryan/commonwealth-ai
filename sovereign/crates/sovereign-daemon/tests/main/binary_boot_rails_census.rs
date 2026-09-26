@@ -13,7 +13,14 @@
 //! The failing input: delete `rails_base` from any file below. The scan also
 //! fails if it finds none of the files it is known to cover, so an empty
 //! walk is never green.
+//!
+//! The same scan, widened to in-process boots, is the ONE rule for the
+//! nextest `daemon-boot` test group (.config/nextest.toml, phase-b-4): a file
+//! that boots a daemon has exactly one clause in the group's filter, and the
+//! filter has no clause for a file that does not. The failing input: add a
+//! boot to a file outside the group, or drop a clause from the filter.
 
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 fn repo_root() -> PathBuf {
@@ -24,7 +31,8 @@ fn repo_root() -> PathBuf {
         .to_path_buf()
 }
 
-/// Test source: a file under a `tests/` dir, or a `tests.rs` module.
+/// Test source: a file under a `tests/` dir, a `tests.rs` module, or a
+/// `*_tests.rs` file a `#[path]` attribute mounts.
 fn test_sources(dir: &Path, out: &mut Vec<PathBuf>) {
     let Ok(entries) = std::fs::read_dir(dir) else {
         return;
@@ -37,7 +45,9 @@ fn test_sources(dir: &Path, out: &mut Vec<PathBuf>) {
                 test_sources(&path, out);
             }
         } else if path.extension().is_some_and(|x| x == "rs")
-            && (name == "tests.rs" || path.components().any(|c| c.as_os_str() == "tests"))
+            && (name == "tests.rs"
+                || name.to_string_lossy().ends_with("_tests.rs")
+                || path.components().any(|c| c.as_os_str() == "tests"))
         {
             out.push(path);
         }
@@ -90,5 +100,131 @@ fn every_test_that_boots_a_daemon_pins_its_cw_rails() {
         "these tests boot a daemon's `run` without pinning `[daemon] rails_base` to an \
          ephemeral port and `CW_RAILS_DIR` under their temp root, so the cw-rails it brings \
          up lands on 9747 / ~/.commonwealth-rails: {unpinned:?}"
+    );
+}
+
+/// Boots a daemon in process: names `EmbeddedDaemon` and makes a call that
+/// reaches `start_daemon`. Needles built with `concat!`, as above.
+fn boots_in_process(text: &str) -> bool {
+    const CALLS: [&str; 4] = [
+        concat!(".create_", "mesh("),
+        concat!(".create_", "mesh_with("),
+        concat!(".join_", "mesh("),
+        concat!(".try_", "resume("),
+    ];
+    text.contains(concat!("Embedded", "Daemon")) && CALLS.iter().any(|c| text.contains(c))
+}
+
+/// The filter clause that places one test file's tests: its test binary for
+/// a `tests/<name>.rs` target, else the module prefix nextest names its tests
+/// by. A shape this cannot place is a panic, so no booting file is ever
+/// silently outside the group.
+fn group_clause(root: &Path, file: &Path) -> String {
+    let rel: Vec<String> = file
+        .strip_prefix(root)
+        .unwrap_or(file)
+        .iter()
+        .map(|c| c.to_string_lossy().into_owned())
+        .collect();
+    let module = |parts: &[String]| {
+        parts
+            .iter()
+            .map(|p| p.trim_end_matches(".rs"))
+            .filter(|p| *p != "mod")
+            .collect::<Vec<_>>()
+            .join("::")
+    };
+    let (krate, rest) = (&rel[2], &rel[3..]);
+    match rest {
+        [t, name] if t == "tests" => format!("binary_id({krate}::{})", name.trim_end_matches(".rs")),
+        [t, m, path @ ..] if t == "tests" && m == "main" => format!("test(/^{}::/)", module(path)),
+        [s, path @ .., name] if s == "src" => {
+            // A `#[path = "<name>"] mod x;` in a sibling places it at `<sibling>::x`.
+            let dir = file.parent().expect("a file has a parent");
+            let needle = format!("#[path = \"{name}\"]");
+            let host = std::fs::read_dir(dir)
+                .into_iter()
+                .flatten()
+                .filter_map(Result::ok)
+                .find_map(|e| {
+                    let text = std::fs::read_to_string(e.path()).ok()?;
+                    let after = text.split_once(&needle)?.1;
+                    let m = after.split_once("mod ")?.1.split(|c: char| !c.is_alphanumeric() && c != '_').next()?;
+                    Some((e.file_name().to_string_lossy().into_owned(), m.to_string()))
+                });
+            let mut parts = path.to_vec();
+            match host {
+                Some((sibling, m)) => {
+                    parts.push(sibling);
+                    parts.push(m);
+                }
+                None => parts.push(name.clone()),
+            }
+            format!("test(/^{}::/)", module(&parts))
+        }
+        _ => panic!(
+            "the census cannot name the nextest filter clause for {} — teach group_clause its shape",
+            file.display()
+        ),
+    }
+}
+
+#[test]
+fn every_test_that_boots_a_daemon_runs_in_the_daemon_boot_group() {
+    let root = repo_root();
+    let mut files = Vec::new();
+    for dir in ["sovereign/crates", "commonwealth/crates"] {
+        test_sources(&root.join(dir), &mut files);
+    }
+    let booting: BTreeSet<String> = files
+        .iter()
+        .filter(|p| {
+            let text = std::fs::read_to_string(p)
+                .unwrap_or_else(|e| panic!("the census cannot read {}: {e}", p.display()));
+            boots_a_daemon(&text) || boots_in_process(&text)
+        })
+        .map(|p| group_clause(&root, p))
+        .collect();
+    assert!(
+        booting.contains("test(/^local_only_boot::/)")
+            && booting.contains("binary_id(sovereign-daemon::solo_rails_e2e)"),
+        "the scan no longer sees the known in-process and binary boots — it is broken: {booting:?}"
+    );
+
+    let config_path = root.join(".config/nextest.toml");
+    let config: toml::Value = toml::from_str(
+        &std::fs::read_to_string(&config_path)
+            .unwrap_or_else(|e| panic!("read {}: {e}", config_path.display())),
+    )
+    .expect("nextest.toml parses");
+    let max_threads = config["test-groups"]["daemon-boot"]["max-threads"].as_integer();
+    assert!(
+        max_threads.is_some_and(|n| n >= 1),
+        "the daemon-boot group must bound its threads, got {max_threads:?}"
+    );
+    let filters: Vec<&str> = config["profile"]["default"]["overrides"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|o| o.get("test-group").and_then(|g| g.as_str()) == Some("daemon-boot"))
+        .filter_map(|o| o.get("filter").and_then(|f| f.as_str()))
+        .collect();
+    let [filter] = filters.as_slice() else {
+        panic!(
+            "exactly one default-profile override places the daemon-boot group, found {filters:?}"
+        );
+    };
+    let grouped: BTreeSet<String> = filter
+        .split('|')
+        .map(|c| c.trim().to_string())
+        .filter(|c| !c.is_empty())
+        .collect();
+    let outside: Vec<_> = booting.difference(&grouped).collect();
+    let stale: Vec<_> = grouped.difference(&booting).collect();
+    assert!(
+        outside.is_empty() && stale.is_empty(),
+        "the daemon-boot group's filter in .config/nextest.toml and the test files that boot \
+         a daemon disagree. Booting but not grouped (add the clause): {outside:?}. Grouped but \
+         not booting (remove it): {stale:?}"
     );
 }

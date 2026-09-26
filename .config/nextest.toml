@@ -127,3 +127,35 @@ slow-timeout = { period = "300s", terminate-after = 4 }
 [[profile.default.overrides]]
 filter = "test(/dst_scenarios::/)"
 slow-timeout = { period = "120s", terminate-after = 3 }
+
+# THE DAEMON BOOTS — every test file that boots a daemon, in process
+# (`EmbeddedDaemon` reaching `start_daemon`) or as the binary's `run`. Each
+# boot is a Vulkan init; with enough of them concurrent, in-process boots
+# crossed their 10 s serve bound at 10.33 s while taking ~1.9 s alone
+# (612cdd77b, phase-b-4). The group bounds how many run at once instead of
+# lengthening any bound. Membership is not edited by hand: one clause per
+# booting file, and `binary_boot_rails_census.rs` derives the set from test
+# source and fails when this list and the source disagree. The default
+# profile's overrides apply under every profile, so this one entry serves ci.
+[test-groups]
+daemon-boot = { max-threads = 3 }
+
+[[profile.default.overrides]]
+test-group = "daemon-boot"
+filter = """
+binary_id(sovereign-daemon::solo_rails_e2e)
+| test(/^admin_join_serves_venues_e2e::/)
+| test(/^client_exposure::/)
+| test(/^join_key_persistence::/)
+| test(/^join_parks_not_leaves::/)
+| test(/^local_only_boot::/)
+| test(/^mesh_http::tests::/)
+| test(/^mesh_switch::/)
+| test(/^node_id_persistence::/)
+| test(/^port_config::/)
+| test(/^rails_base_config::/)
+| test(/^rotate_pre_split_guard::/)
+| test(/^setup_cmd::terminal::join_child::tests::/)
+| test(/^storage_snapshot_e2e::/)
+| test(/^try_resume_first_gossip::/)
+"""
