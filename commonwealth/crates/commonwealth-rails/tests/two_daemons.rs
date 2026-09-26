@@ -3,13 +3,11 @@
 //!
 //! # Why the mesh is built rather than joined
 //!
-//! This daemon does not admit joiners — there is no `/internal/join` in it —
-//! so a two-process test cannot found a mesh the way `sovereign-mesh`'s
-//! `gossip_integration` does. What it CAN do, and what matters, is start both
-//! from the same `Mesh` snapshot (which is exactly what a founder's
-//! `JoinResponse` hands each of them) and prove that a round over the real
-//! transport converges. Everything under test after that line is the same
-//! code path a live join produces.
+//! Founding and joining have their own test (`tests/found_and_join.rs`). This
+//! one isolates gossip: it starts both from the same `Mesh` snapshot (which is
+//! exactly what a founder's `JoinResponse` hands each of them) and proves that
+//! a round over the real transport converges. Everything under test after
+//! that line is the same code path a live join produces.
 //!
 //! # Hermetic on purpose
 //!

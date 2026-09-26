@@ -23,9 +23,11 @@
 //!
 //! # What it deliberately does NOT do
 //!
-//! **It does not admit joiners.** There is no `/internal/join` here and no
-//! invite minting: a mesh is founded and grown by a full daemon, and this
-//! process joins one. That is what keeps it small enough to lift.
+//! **It founds and admits without a full daemon** (phase-b pb-membership,
+//! reversing five-programs-21). `cw-rails found` starts a mesh ([`found`]),
+//! `/v1/mesh/status` carries its invite as `join_link`, and `/internal/join`
+//! admits through the membership decider the inference daemon uses
+//! ([`internal`]). Its mesh is keyed by this process's own node key.
 //!
 //! **It does not join over LAN/mDNS.** An invite without an iroh dial string
 //! is refused by name (see [`join`]).
@@ -69,6 +71,7 @@ pub mod acceptor;
 pub mod api;
 pub mod cli;
 pub mod config;
+pub mod found;
 pub mod gossip;
 pub mod identity;
 pub mod internal;
@@ -91,6 +94,8 @@ pub enum Refusal {
     Store(#[from] identity::StoreRefusal),
     #[error("{0}")]
     Join(#[from] join::JoinRefusal),
+    #[error("{0}")]
+    Found(#[from] found::FoundRefusal),
     #[error("the iroh endpoint would not bind: {0}")]
     Endpoint(String),
     #[error("the mesh store would not open: {0}")]
@@ -301,6 +306,9 @@ pub struct RailsDaemon {
     /// No `mesh.json` at start: the roster is this node alone, in memory only,
     /// and `run` spawns no gossip and no presence poll (five-programs-63).
     pub solo: bool,
+    /// The raw invite key, read once at start: present only on the member
+    /// that founded its mesh with `cw-rails found` (see [`found`]).
+    pub join_key: Option<String>,
     _internal: tokio::task::JoinHandle<()>,
     _acceptor: IrohAcceptor,
 }
@@ -344,6 +352,7 @@ impl RailsDaemon {
         )
         .await?;
 
+        let join_key = identity::load_join_key(&node.data_dir)?;
         let published_apps = commonwealth_media::PublishedApps::default();
         let acceptor = acceptor::spawn(
             node.endpoint.clone(),
@@ -372,6 +381,7 @@ impl RailsDaemon {
             media_presence: Arc::new(std::sync::RwLock::new(None)),
             internal_addr,
             solo: false,
+            join_key,
             _internal: internal,
             _acceptor: acceptor,
         })

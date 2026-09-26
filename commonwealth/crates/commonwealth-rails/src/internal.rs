@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `POST /internal/gossip` — the one route other daemons dial, and the only
-//! inbound HTTP this process serves to the mesh.
+//! `POST /internal/gossip` — the route other daemons dial every round — and
+//! `POST /internal/join`, the one a joiner dials once. Together they are the
+//! only inbound HTTP this process serves to the mesh.
 //!
 //! **Without it this member vanishes.** A full daemon dials every member each
 //! round; one that never answers stops refreshing that daemon's local contact
@@ -19,6 +20,17 @@
 //! handshake with a verified key. It still refuses a payload that is not this
 //! mesh's, because the acceptor deliberately admits any dialer on the gossip
 //! ALPN (a joiner is not yet a member).
+//!
+//! # Admission
+//!
+//! `/internal/join` admits through
+//! `commonwealth_discovery::membership::accept_join_with_identity`, the same
+//! decider the inference daemon's join route calls
+//! (`routes_internal/mesh_admin.rs`). The two checks that route makes before
+//! it — the pubkey's proof of possession and the mesh's invite expiry — are
+//! repeated here from their owners (`verify_join_proof`,
+//! `Mesh::invite_expired_at`) until pb-mesh-exit-mesh retires the daemon's
+//! route and this is the only one.
 
 use std::collections::HashMap;
 use std::net::SocketAddr;
@@ -31,7 +43,9 @@ use axum::routing::post;
 use axum::{Json, Router};
 use commonwealth_core::clock::unix_now_secs;
 use commonwealth_core::ids::NodeId;
-use commonwealth_core::mesh::wire::{GossipRejection, GossipRequest, GossipResponse};
+use commonwealth_core::mesh::wire::{
+    GossipRejection, GossipRequest, GossipResponse, JoinRejection, JoinRequest, JoinResponse,
+};
 use commonwealth_core::mesh::{GossipAuth, GossipAuthArm, Mesh, MeshWire, SecretDisclosure};
 use tokio::sync::{Mutex, RwLock};
 
@@ -71,13 +85,14 @@ pub async fn serve(
             tracing::error!(target: "rails", error = %e, "internal: listener stopped");
         }
     });
-    tracing::info!(target: "rails", addr = %addr, "internal: /internal/gossip listening");
+    tracing::info!(target: "rails", addr = %addr, "internal: /internal/gossip and /internal/join listening");
     Ok((addr, task))
 }
 
 pub fn router(state: Inbound) -> Router {
     Router::new()
         .route("/internal/gossip", post(gossip))
+        .route("/internal/join", post(join))
         .with_state(state)
 }
 
@@ -170,6 +185,76 @@ pub async fn gossip(
         mesh: wire,
         from: Some(state.self_id),
         mesh_proof: proof,
+    }))
+}
+
+fn rejected(reason: &str) -> (StatusCode, Json<JoinRejection>) {
+    (
+        StatusCode::UNAUTHORIZED,
+        Json(JoinRejection {
+            reason: reason.to_string(),
+        }),
+    )
+}
+
+/// Verify a join key and, on a match, admit the caller and hand it the mesh.
+pub async fn join(
+    State(state): State<Inbound>,
+    Json(req): Json<JoinRequest>,
+) -> Result<Json<JoinResponse>, (StatusCode, Json<JoinRejection>)> {
+    // A presented pubkey must be proven before it is recorded: admitting an
+    // unproven key would bind a transport identity the joiner may not hold.
+    if let Some(pubkey) = req.node_pubkey.as_ref() {
+        let proven = match (req.proposed_node_id.as_ref(), req.pubkey_proof.as_deref()) {
+            (Some(id), Some(proof)) => commonwealth_transport::identity::verify_join_proof(
+                pubkey,
+                id,
+                &req.joining_node_name,
+                proof,
+            ),
+            _ => false,
+        };
+        if !proven {
+            tracing::warn!(target: "rails", joining = %req.joining_node_name,
+                           "join: REFUSED — node_pubkey without a valid proof of possession");
+            return Err(rejected("node_pubkey proof of possession missing or invalid"));
+        }
+    }
+    let now = unix_now_secs();
+    let mut mesh = state.mesh.write().await;
+    if mesh.invite_expired_at(now) {
+        tracing::warn!(target: "rails", joining = %req.joining_node_name,
+                       expires_at = ?mesh.invite_expires_at, "join: REFUSED — the invite has expired");
+        return Err(rejected("invite link has expired"));
+    }
+    let new_id = match commonwealth_discovery::membership::accept_join_with_identity(
+        &mut mesh,
+        &req.join_key,
+        &req.joining_node_name,
+        req.joining_node_addresses,
+        state.self_id,
+        req.proposed_node_id,
+        req.node_pubkey,
+    ) {
+        Ok(id) => id,
+        Err(e) => {
+            tracing::warn!(target: "rails", joining = %req.joining_node_name, error = %e,
+                           "join: REFUSED by the membership decider");
+            return Err(rejected(&e.to_string()));
+        }
+    };
+    note_contact(&state.contacts, new_id, now).await;
+    // Persist before answering: a founder that restarts inside a gossip
+    // interval must not forget the member it just admitted.
+    if let Err(e) = identity::save_mesh(&state.data_dir, &mesh) {
+        tracing::warn!(target: "rails", error = %e, "join: could not persist the mesh");
+    }
+    tracing::info!(target: "rails", new_node = %new_id, joining = %req.joining_node_name,
+                   members = mesh.members.len(), "join: admitted a member");
+    // Disclose: a joiner has no other channel to learn the gossip credential.
+    Ok(Json(JoinResponse {
+        assigned_node_id: new_id,
+        mesh: MeshWire::for_peer(&mesh, SecretDisclosure::Disclose),
     }))
 }
 
@@ -288,5 +373,76 @@ mod tests {
             out.0.mesh_proof.is_some(),
             "both directions prove, or neither"
         );
+    }
+    fn join_req(key: &str, name: &str) -> JoinRequest {
+        let signer = ed25519_dalek::SigningKey::from_bytes(&[5u8; 32]);
+        let id = NodeId::generate();
+        JoinRequest {
+            join_key: key.to_string(),
+            joining_node_name: name.to_string(),
+            joining_node_addresses: Vec::new(),
+            proposed_node_id: Some(id),
+            node_pubkey: Some(commonwealth_transport::identity::node_pubkey(&signer)),
+            pubkey_proof: Some(commonwealth_transport::identity::sign_join_proof(
+                &signer, &id, name,
+            )),
+        }
+    }
+
+    /// The happy path: the founder's key admits the joiner under the id it
+    /// proposed, and the reply carries the gossip credential.
+    #[tokio::test]
+    async fn the_founders_key_admits_a_joiner() {
+        let (mesh, key) =
+            commonwealth_discovery::membership::init_mesh("Lab", "founder", Vec::new());
+        let st = state(mesh);
+        let req = join_req(&key, "joiner");
+        let proposed = req.proposed_node_id.unwrap();
+        let out = join(State(st.clone()), Json(req)).await.expect("admitted");
+        assert_eq!(out.0.assigned_node_id, proposed);
+        assert_ne!(out.0.mesh.mesh_secret, [0u8; 32], "a joiner learns the credential here");
+        assert!(st.mesh.read().await.members.contains_key(&proposed));
+    }
+
+    /// **The failing input.** A wrong key is a 401 that adds nobody.
+    #[tokio::test]
+    async fn a_wrong_key_is_401_and_admits_nobody() {
+        let (mesh, _key) =
+            commonwealth_discovery::membership::init_mesh("Lab", "founder", Vec::new());
+        let st = state(mesh);
+        let wrong = commonwealth_discovery::membership::generate_join_key();
+        let err = join(State(st.clone()), Json(join_req(&wrong, "joiner")))
+            .await
+            .expect_err("a wrong key must be refused");
+        assert_eq!(err.0, StatusCode::UNAUTHORIZED);
+        assert_eq!(st.mesh.read().await.members.len(), 1);
+    }
+
+    /// A pubkey whose proof does not verify is refused before the key is read.
+    #[tokio::test]
+    async fn an_unproven_pubkey_is_401() {
+        let (mesh, key) =
+            commonwealth_discovery::membership::init_mesh("Lab", "founder", Vec::new());
+        let st = state(mesh);
+        let mut req = join_req(&key, "joiner");
+        req.joining_node_name = "someone-else".into();
+        let err = join(State(st.clone()), Json(req))
+            .await
+            .expect_err("the proof binds the name");
+        assert_eq!(err.0, StatusCode::UNAUTHORIZED);
+        assert!(err.1.reason.contains("proof of possession"), "{}", err.1.reason);
+    }
+
+    /// An expired invite admits nobody, whoever minted it.
+    #[tokio::test]
+    async fn an_expired_invite_is_401() {
+        let (mut mesh, key) =
+            commonwealth_discovery::membership::init_mesh("Lab", "founder", Vec::new());
+        mesh.invite_expires_at = Some(1);
+        let st = state(mesh);
+        let err = join(State(st), Json(join_req(&key, "joiner")))
+            .await
+            .expect_err("expired");
+        assert!(err.1.reason.contains("expired"), "{}", err.1.reason);
     }
 }

@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! The command surface: three verbs, hand-parsed, no framework.
+//! The command surface: four verbs, hand-parsed, no framework.
 //!
 //! ```text
+//! cw-rails found <mesh-name> [--name N] [--data-dir D] [--config F]
 //! cw-rails join <invite> [--name N] [--data-dir D] [--config F]
 //! cw-rails run [--listen P] [--local-only] [--data-dir D] [--config F]
 //! cw-rails media [<peer>] [--fanout <path>] [--peers a,b] [--listen P]
@@ -29,6 +30,11 @@ use crate::{join, RailsDaemon, RailsNode, Refusal};
 pub const USAGE: &str = "\
 cw-rails — the minimal rails daemon: your address on the mesh, with media on it.
 
+  cw-rails found <mesh-name> [--name N] [--data-dir D] [--config F]
+      Found a mesh with this node as its first member. Writes node_id,
+      mesh.json and join_key.secret, then exits. `run` serves the invite as
+      `join_link` on /v1/mesh/status.
+
   cw-rails join <invite> [--name N] [--data-dir D] [--config F]
       Join a mesh by invite (a sovereign://join/… link with an iroh dial).
       Writes node_id and mesh.json, then exits.
@@ -49,6 +55,10 @@ Logging:  RUST_LOG, default `info`.";
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Command {
+    Found {
+        mesh_name: String,
+        name: Option<String>,
+    },
     Join {
         invite: String,
         name: Option<String>,
@@ -124,7 +134,7 @@ impl Args {
                     return Err(format!("unknown argument `{other}`"))
                 }
                 positional => match verb.as_str() {
-                    "join" if invite.is_none() => invite = Some(positional.to_string()),
+                    "join" | "found" if invite.is_none() => invite = Some(positional.to_string()),
                     "media" if peer.is_none() => peer = Some(positional.to_string()),
                     _ => return Err(format!("unexpected argument `{positional}`")),
                 },
@@ -134,6 +144,10 @@ impl Args {
             return Err("--local-only is a `run` flag".into());
         }
         let command = match verb.as_str() {
+            "found" => Command::Found {
+                mesh_name: invite.ok_or("found wants a mesh name: `cw-rails found <mesh-name>`")?,
+                name,
+            },
             "join" => Command::Join {
                 invite: invite.ok_or("join wants an invite: `cw-rails join <invite>`")?,
                 name,
@@ -179,6 +193,25 @@ pub async fn main(args: Args) -> ExitCode {
             peers,
             listen,
         } => media(listen.unwrap_or(config.listen), peer, fanout, peers).await,
+        Command::Found { mesh_name, name } => {
+            let node_name = name.unwrap_or(config.name);
+            // Held while the files are written, so a running cw-rails on
+            // this root is refused by name rather than left serving solo.
+            let _root = match crate::claim_root(&data_dir) {
+                Ok(f) => f,
+                Err(e) => return refuse(e),
+            };
+            match crate::found::found(&data_dir, &mesh_name, &node_name) {
+                Ok(f) => {
+                    println!("Founded {} as {node_name} ({}).", f.mesh.name, f.mesh.id);
+                    println!(
+                        "Now: cw-rails run — its /v1/mesh/status carries the invite as join_link."
+                    );
+                    ExitCode::SUCCESS
+                }
+                Err(e) => refuse(e),
+            }
+        }
         Command::Join { invite, name } => {
             let mut config = config;
             if let Some(n) = name {
@@ -474,6 +507,16 @@ mod tests {
                 config: None,
             }
         );
+        assert_eq!(
+            Args::parse(argv("found Lab --name founder"))
+                .unwrap()
+                .command,
+            Command::Found {
+                mesh_name: "Lab".into(),
+                name: Some("founder".into())
+            }
+        );
+        assert!(Args::parse(argv("found")).is_err(), "a mesh wants a name");
         let run = Args::parse(argv("run --data-dir /var/rails")).unwrap();
         assert_eq!(
             run.command,

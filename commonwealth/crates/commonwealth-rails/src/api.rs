@@ -166,15 +166,20 @@ pub async fn status(State(daemon): State<Arc<RailsDaemon>>) -> impl IntoResponse
     // The posture the endpoint was bound with (`RailsNode::bind` reads the
     // same `relay_config`), so a client can refuse an n0-homed cw-rails.
     let relay = daemon.node.config.relay_config();
+    let dial = commonwealth_transport::iroh::format_dial_string(&addr);
+    // The invite, with the daemon's field name, or why there is none.
+    let invite = crate::found::invite_link(daemon.join_key.as_deref(), &mesh, dial.as_deref());
     Json(serde_json::json!({
         "self": {
             "node_id": daemon.node.self_id.to_string(),
             "name": daemon.node.config.name,
             "pubkey": hex::encode(daemon.node.pubkey().0),
-            "dial": commonwealth_transport::iroh::format_dial_string(&addr),
+            "dial": dial,
             "media_origin": daemon.node.config.media.origin,
         },
         "mesh": { "id": mesh.id.to_string(), "name": mesh.name },
+        "join_link": invite.as_ref().ok(),
+        "join_link_absent": invite.as_ref().err().map(|a| a.reason()),
         "members": members,
         "fanout_inflight": daemon.gauge.load(Ordering::Relaxed),
         "internal_listener": daemon.internal_addr.to_string(),
