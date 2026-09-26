@@ -3471,3 +3471,74 @@ ledger + queue). What the twelve were read against, and what held:
   `ring_cmd/mod.rs`; the campaign's share is zero. A fix is either a product edit (forbidden
   here) or a working-tree `--update-baseline` (forbidden by PROMPT §7) — the operator's call.
   Advisory size-gate / deletion-manifest / concept-gate ride as above.
+
+## REVIEW-audit-pb-auto-2 (2026-09-26, range 0fb81c949..0a1203a5c, since REVIEW-audit-pb-auto-1)
+
+The range holds 49 commits across five units: pb-lift-instrument (no Rust),
+pb-atlas-kv, pb-hostkit, pb-membership and pb-mcp, plus the seat's
+phase-b-7 to phase-b-14 commits. All checks ran in the sovereign-vulkan
+toolbox.
+
+TESTALL at 0a1203a5c: exit=100, 13,518 passed and 1 failed. The failure was
+pb-membership's own proof, `a_joiner_with_a_bare_key_finds_the_founder_on_mdns`
+(NoAnswer 15 s, 38.08 s). It was a defect, not a load flake: it reproduced
+alone, and it is fixed below. After the fix it passed 6 of 6 alone, at 8.08 s
+each. PREPUSH exited 1. Its one blocking lane was boundary-gate at 51
+violations, the declared burn-down, unchanged. The advisories: size-gate had
+19 keys grow against a baseline that predates the range (rails src
+5248→5697 and rails tests 1120→1727, mostly pb-membership; turn-client src
+3063→3616; host-kit::tests new at 176 and unbaselined, for which
+`size-gate --accept host-kit::tests` is the operator's call); the
+deletion-manifest `p0-root-junk` growth already triaged in fp-auto-10; and
+concept-gate plus domains-census-self-test as could-not-judge.
+
+Ledger (Rust lines, net; a path under `tests/` or a `tests.rs` counts as
+tests, and inline `#[cfg(test)]` counts as src): pb-atlas-kv -133 src / +168
+tests, pb-hostkit +66 / 0, pb-mcp +410 / +80, pb-membership +691 / +197.
+Total src +1034, tests +445.
+
+dry-report could not judge, as in auto-1: there is no chunk index at
+`~/.svrnmesh/indexes/commonwealth-ai/chunks.lance` (only `scip_graph.db`).
+converge-noun reads an index that predates the range. It reported 0
+definitions for `McpDispatcher`, `McpMethod` and eight more nouns that exist,
+so each noun was checked with `git grep` instead. Twelve nouns are new; two
+names have more than one definition:
+- `ToolOutcome`: `host-kit/src/mcp.rs:24` (an MCP CallToolResult) and
+  `sovereign/crates/sovereign-turn-client/src/lib.rs:396` (the
+  approval-audit payload, which predates the range). These are distinct
+  concepts sharing a name, so nothing changes.
+- `Sandbox`: `sovereign/crates/sovereign-cli-dev/tests/tools_verbs_e2e.rs:26`
+  (a test-local temp root) against `commonwealth-work/src/sandbox.rs:65` and
+  `sovereign-agent-bench/src/sandbox.rs:29`. The first is test-only and
+  distinct, so nothing changes.
+The range's added code was read by hand in place of dry-report.
+
+- **ARCH 5/2, fixed in af54bb2dd** · `commonwealth-discovery/src/mdns.rs:206`
+  (browse) and `:352` (apps) took the "first" of mdns-sd's
+  `get_addresses()`, which is a HashSet. Since 5a7af2e6e turned on
+  `enable_addr_auto`, that set holds scope-less `fe80::` addresses, which dial
+  nothing. mdns-sd's " (2)" conflict rename of the founder's own instance
+  resolves to link-local only, and each such dial cost 15 s. One decider,
+  `dialable_address`, replaces both copies (2 → 1): IPv4, then routable IPv6,
+  never link-local. The planted fallback went red at `mdns.rs:465`.
+- **ARCH 1, fixed in 29374b565** · `host-kit/src/mcp.rs:125`: the tool-call
+  branch of `McpDispatcher::dispatch` had no trace event, and corpus-mcp's
+  call log is `()`. It now emits `mcp: tool ran` with tool and is_error at
+  debug.
+- **ARCH 8, open, owned by pb-mesh-exit-mesh (STATE.md:209)** ·
+  `commonwealth-rails/src/internal.rs:201` `join` repeats the proof-of-possession
+  and invite-expiry pre-checks from
+  `sovereign-daemon/src/routes_internal/mesh_admin.rs:686,728`. Both call the
+  one decider, `accept_join_with_identity`. The repeat is named in the
+  module doc, and it closes when pb-mesh-exit-mesh retires the daemon's
+  route.
+- **ARCH 6, open, owned by pb-mesh-exit-mesh** · `internal.rs` `join` admits
+  and answers 200 when `identity::save_mesh` fails, and only warns. The
+  daemon's route does the same through `on_mesh_mutation`
+  (`mesh_admin.rs:763`). This is not a regression, but a founder that
+  restarts would forget the member. It closes when the one surviving route
+  refuses or retries on a failed persist.
+- Reuse confirmed: founding calls `init_mesh_with_identity` (one founder);
+  admission calls `accept_join_with_identity` (one decider); `RunLock` is the
+  only file lock left (`host-kit/src/lib.rs:187`; the fs4/fs2 dependencies
+  are gone); MCP dispatch loops are 3 → 3, as the pb-mcp row states.
