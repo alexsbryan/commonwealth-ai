@@ -991,7 +991,7 @@ pub(super) fn check_distributed_primary_contained() -> CheckResult {
     };
 
     let verdict = classify_containment(
-        config.compute.enabled && config.compute.distributed_primary,
+        sovereign_inference::engine_factory::child_owns_primary(&config),
         config.shared_model.role,
         false, // self node id is not resolved here; the role term carries it
         sovereign_daemon::startup::rpc_discovery_armed(),
