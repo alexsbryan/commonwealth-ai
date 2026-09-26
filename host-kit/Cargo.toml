@@ -16,15 +16,24 @@ description = "The host kit — what each program's binary owns about itself, st
 # every MCP host shares, over a tool-host port. Optional, so a program that
 # serves no MCP (cw-rails) takes the kit without the wire vocabulary.
 mcp = ["dep:oicp-types", "dep:serde_json", "dep:tokio", "dep:tracing"]
+# The server shell (phase-b pb-shell): bind, loopback guard, peer address,
+# body limits, shutdown as a value, mount tracing. Optional, so a program
+# that serves no HTTP takes the kit without axum.
+shell = ["dep:axum", "dep:serde_json", "dep:tokio", "dep:tower-http", "dep:tracing"]
 
 [dependencies]
+axum = { workspace = true, optional = true }
 oicp-types = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
 tokio = { workspace = true, optional = true }
+tower-http = { workspace = true, optional = true, features = ["timeout"] }
 tracing = { workspace = true, optional = true }
 
 [dev-dependencies]
+if-addrs = "0.13"
+reqwest = { workspace = true }
 tempfile = { workspace = true }
+tracing-subscriber = { workspace = true }
 
 [lints]
 workspace = true

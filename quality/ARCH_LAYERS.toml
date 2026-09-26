@@ -1106,6 +1106,8 @@ name = "host-kit"
 # vocabulary (JSON-RPC envelope, method set) rather than re-declaring it. It is
 # a wire leaf already shared by every package's closure; cw-rails does not
 # enable the feature.
+# The server shell joined 2026-09-26 (pb-shell) behind the `shell` feature:
+# crates.io deps only (axum, tower-http), so this allow list is unchanged.
 allow = ["oicp-types", "workspace-hack"]
 # Fixed, never ratcheted; the operator's to change (FIVE_PROGRAMS §12 3a
 # rung 4). boundary-gate counts it with size-gate's counter.

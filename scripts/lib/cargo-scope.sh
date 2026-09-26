@@ -117,7 +117,7 @@ keep_members() {
 # this replaced.
 resolve_features() {
     if [[ $# -eq 0 ]]; then
-        echo "corpus-engine/treesitter,sovereign-cli/dev-tools,sovereign-cli/code-intel,sovereign-cli/awareness,sovereign-daemon/treesitter,sovereign-mesh/dst,sovereign-turn-client/bundled-backend,host-kit/mcp"
+        echo "corpus-engine/treesitter,sovereign-cli/dev-tools,sovereign-cli/code-intel,sovereign-cli/awareness,sovereign-daemon/treesitter,sovereign-mesh/dst,sovereign-turn-client/bundled-backend,host-kit/mcp,host-kit/shell"
         return 0
     fi
 
@@ -222,6 +222,9 @@ if "host-kit" in seen:
     # nothing. The feature adds only wire-leaf and async deps, so unifying it
     # into a scoped cw-rails run moves no package closure.
     want.append("host-kit/mcp")
+    # `shell` gates the server shell (phase-b pb-shell), for the same reason:
+    # the daemon and cw-rails turn it on, a solo run would compile it to nothing.
+    want.append("host-kit/shell")
 legal = [f for f in want if f.split("/", 1)[0] in nameable]
 dropped = [f for f in want if f not in legal]
 if dropped:

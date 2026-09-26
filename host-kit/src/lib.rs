@@ -63,6 +63,8 @@
 
 #[cfg(feature = "mcp")]
 pub mod mcp;
+#[cfg(feature = "shell")]
+pub mod shell;
 
 use std::path::{Path, PathBuf};
 

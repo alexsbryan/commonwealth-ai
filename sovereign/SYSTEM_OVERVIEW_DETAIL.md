@@ -8180,7 +8180,7 @@ Default ports:
 | See the ATOS CLI surface                         | `sovereign-cli-dev/src/atos_cmd/` + `project_cmd/` (`cmd_found` in `mod.rs`, `cmd_amend` in `charter_amend.rs`, `cmd_phase` in `phase.rs`, `cmd_audit` in `audit/`) |
 | Run the long-running Sovereign daemon            | `sovereign-cli-daemon/src/daemon_cmd/` + `sovereign-service/data/` |
 | Rotate daemon logs                               | `sovereign-cli-daemon/src/log_rotation.rs`                          |
-| Understand the loopback guard                    | `sovereign-daemon/src/loopback_guard.rs` + `admin_http::tests::loopback_guard_works_under_production_listener_shape` |
+| Understand the loopback guard                    | `host-kit/src/shell/guard.rs` (re-exported at `sovereign-daemon/src/loopback_guard.rs`) + `admin_http::tests::loopback_guard_works_under_production_listener_shape` |
 | Serve something a desktop command used to compute in-process | the client-router families in `sovereign-daemon/src/{reading,atlas,meshapp,lc,governance,insight,notes,features,recipe_project,mcp_config,turn_extras}_http.rs` — table in §5, "What the host mounts on that router"; parity audited by `sovereign-mesh/tests/loopback_parity.rs` |
 | Know what an attached desktop still constructs   | `sovereign-desktop/src-tauri/tests/attach_construction_census.rs` (floor 12) + §6 "Desktop attach mode" |
 | Prove a deleted twin cannot come back            | `scripts/twin-census.py` over `quality/twin-plants.toml` (19 families) — plant, watch the family census name its own rule, restore byte-for-byte |
