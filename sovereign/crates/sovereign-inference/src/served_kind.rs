@@ -22,11 +22,21 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, OnceLock, RwLock};
 
 use futures::future::BoxFuture;
+use sovereign_contracts::ner::LabeledEntityExtractor;
 use sovereign_contracts::setup_config::ModelsSection;
 use sovereign_contracts::traits::InferenceProvider;
 
-/// Loads one kind's model from a GGUF path into a provider that serves it.
-pub type KindLoader = fn(&Path) -> sovereign_contracts::error::Result<Arc<dyn InferenceProvider>>;
+/// How a kind loads its model. A closed set, one arm per handle shape a
+/// serving process holds (ARCH §9).
+#[derive(Clone, Copy)]
+pub enum KindLoader {
+    /// A GGUF path, loaded into a provider that serves it.
+    Provider(fn(&Path) -> sovereign_contracts::error::Result<Arc<dyn InferenceProvider>>),
+    /// A named-entity extractor. It resolves its own model (an id, not a GGUF
+    /// path); `None` is a model this node has not installed, which the loader
+    /// reports itself.
+    Ner(fn() -> Option<Arc<dyn LabeledEntityExtractor>>),
+}
 
 /// Serves one request on a kind's route: the JSON body in, the JSON answer
 /// out, against the serving process's provider. Transport-free, so the route
@@ -162,13 +172,28 @@ impl ServedKind {
             KindChild::Absent { .. } => None,
         }
     }
+
+    /// Load this kind's GGUF at `path` into a provider. A kind whose loader
+    /// is not a provider refuses by name rather than loading nothing.
+    pub fn load_provider(
+        &self,
+        path: &Path,
+    ) -> sovereign_contracts::error::Result<Arc<dyn InferenceProvider>> {
+        match self.loader {
+            KindLoader::Provider(load) => load(path),
+            KindLoader::Ner(_) => Err(sovereign_contracts::error::Error::Inference(format!(
+                "served kind `{}` loads an entity extractor, not a provider",
+                self.role
+            ))),
+        }
+    }
 }
 
 /// The cross-encoder reranker.
 pub const RERANK: ServedKind = ServedKind {
     role: "rerank",
     env_path: Some("SOVEREIGN_RERANK_MODEL_PATH"),
-    loader: load_rerank,
+    loader: KindLoader::Provider(load_rerank),
     route: KindRoute::Served {
         path: "/v1/rerank",
         serve: serve_rerank,
@@ -402,7 +427,7 @@ mod tests {
         std::fs::File::create(&path)
             .and_then(|f| f.set_len(4 << 40))
             .expect("sparse file");
-        let err = match (RERANK.loader)(&path) {
+        let err = match RERANK.load_provider(&path) {
             Ok(_) => panic!("a 4 TiB reranker cannot load"),
             Err(e) => e.to_string(),
         };

@@ -5,32 +5,23 @@
 
 use std::sync::Arc;
 
-use corpus_engine::enrichment::tiered::ChunkEntityExtractor;
-use sovereign_contracts::daemon_wire::conv_tiered::ChunkEntityStore;
-
 use crate::labeled::{configured_model_id, load_labeled_extractor, LabeledEntityExtractor};
-use corpus_engine::enrichment::chunk_ner::GlinerChunkExtractor;
 
-/// Load the shared GLiNER per-chunk entity extractor once (the ONNX model
-/// is ~150 MB for v1, ~795 MB for GLiNER2; one load only). Returns the raw
-/// handle (for a NoteStore T2 `GlinerFn` adapter, when the caller wires
-/// notes) alongside the trait-object wrapper (for the engine's tiered
-/// runner and the folder driver). Both `None` when the model isn't
+/// Load the shared GLiNER entity extractor once (the ONNX model is ~150 MB
+/// for v1, ~795 MB for GLiNER2; one load only). `None` when the model isn't
 /// installed — tiered ingest then falls back to RAPTOR-derived entities.
-/// The chunk-entity store is INJECTED as a port, so this crate never opens
-/// `sovereign.db` (the host owns that open).
+///
+/// This is the NER served kind's loader (`sovereign_compute::ner::NER`,
+/// pb-serving-ner). It no longer builds the per-chunk adapter: that is
+/// corpus-engine's `GlinerChunkExtractor`, and the host that owns the
+/// chunk-entity store builds it over this handle.
 ///
 /// **Which generation runs is [`configured_model_id`]'s call, not this
-/// function's** (P2.1). The raw handle is the generation-agnostic
+/// function's** (P2.1). The handle is the generation-agnostic
 /// [`LabeledEntityExtractor`] for the same reason: typing it as v1's
 /// concrete `GlinerExtractor` would have silently dropped note-side NER
 /// the moment the ingest path moved to GLiNER2.
-pub fn load_gliner_extractor(
-    store: Arc<dyn ChunkEntityStore>,
-) -> (
-    Option<Arc<dyn LabeledEntityExtractor>>,
-    Option<Arc<dyn ChunkEntityExtractor>>,
-) {
+pub fn load_gliner_extractor() -> Option<Arc<dyn LabeledEntityExtractor>> {
     let model_id = configured_model_id();
     if !crate::gliner_ner::probe_model_available(&model_id) {
         let root = crate::gliner_ner::models_root().join(&model_id);
@@ -39,7 +30,7 @@ pub fn load_gliner_extractor(
             expected_path = %root.display(),
             "enrichment_bootstrap: GLiNER model not installed — per-chunk entity extraction disabled. Tiered ingest will use RAPTOR-derived entities only."
         );
-        return (None, None);
+        return None;
     }
 
     match load_labeled_extractor(&model_id, None) {
@@ -49,10 +40,7 @@ pub fn load_gliner_extractor(
                 generation = ?extractor.generation(),
                 "enrichment_bootstrap: GLiNER extractor loaded (shared across engine + folder driver + NoteStore T2)"
             );
-            let chunk_entity_extractor =
-                Arc::new(GlinerChunkExtractor::new(store, Arc::clone(&extractor)))
-                    as Arc<dyn ChunkEntityExtractor>;
-            (Some(extractor), Some(chunk_entity_extractor))
+            Some(extractor)
         }
         Err(e) => {
             tracing::warn!(
@@ -60,7 +48,7 @@ pub fn load_gliner_extractor(
                 error = %e,
                 "enrichment_bootstrap: GLiNER load failed — tiered ingest will fall back to RAPTOR-only entities"
             );
-            (None, None)
+            None
         }
     }
 }

@@ -179,9 +179,9 @@ async fn setup_slot(_: LocalOnly, Query(q): Query<SlotQuery>) -> Response {
 /// different export, and a client hardcoding the default would report
 /// "installed" about a file the daemon never opens.
 async fn ner_model(_: LocalOnly) -> Response {
-    let model_id = sovereign_gliner::labeled::configured_model_id();
-    let installed = sovereign_gliner::gliner_ner::probe_model_available(&model_id);
-    let expected_path = sovereign_gliner::gliner_ner::models_root()
+    let model_id = sovereign_compute::ner::configured_model_id();
+    let installed = sovereign_compute::ner::probe_model_available(&model_id);
+    let expected_path = sovereign_compute::ner::models_root()
         .join(&model_id)
         .display()
         .to_string();
@@ -310,7 +310,7 @@ fn plan(req: &AssetDownloadRequest) -> Result<Plan, String> {
                 model_id: req
                     .model_id
                     .clone()
-                    .unwrap_or_else(sovereign_gliner::labeled::configured_model_id),
+                    .unwrap_or_else(sovereign_compute::ner::configured_model_id),
             })
         }
     }
@@ -337,7 +337,7 @@ async fn asset_download(
     let models_dir = daemon.data_dir().join("models");
     let dest = match &plan {
         Plan::Gguf { file, .. } => models_dir.join(file),
-        Plan::Gliner { model_id } => sovereign_gliner::gliner_ner::models_root().join(model_id),
+        Plan::Gliner { model_id } => sovereign_compute::ner::models_root().join(model_id),
     };
     let job_id = format!("asset-{}-{}", req.kind.as_str(), uuid::Uuid::new_v4());
     let job = Arc::new(AssetDownload {
@@ -416,7 +416,7 @@ async fn run_download(
         }
         Plan::Gliner { model_id } => {
             let j = Arc::clone(job);
-            sovereign_gliner::gliner_ner::download_model(&model_id, move |file, done, total| {
+            sovereign_compute::ner::download_model(&model_id, move |file, done, total| {
                 j.observe(file, done, (total > 0).then_some(total));
             })
             .await
@@ -583,7 +583,7 @@ mod route_tests {
             .json()
             .await
             .expect("parses as NerModelStatus");
-        assert_eq!(s.model_id, sovereign_gliner::labeled::configured_model_id());
+        assert_eq!(s.model_id, sovereign_compute::ner::configured_model_id());
         assert!(
             s.expected_path.ends_with(&s.model_id),
             "{}",

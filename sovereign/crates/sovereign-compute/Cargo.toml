@@ -25,6 +25,9 @@ host-kit = { workspace = true, features = ["shell"] }
 # EmbedOnlyProvider (embed), plus fast_exit_skip_destructors on the abort path.
 # Runtime-layer, same layer as this crate, so the direction is legal.
 sovereign-inference = { workspace = true }
+# The NER served kind's loader (`ner.rs`, phase-b pb-serving-ner). This crate's
+# only dependent is sovereign-daemon, so the ONNX stack links nowhere new.
+sovereign-gliner = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }

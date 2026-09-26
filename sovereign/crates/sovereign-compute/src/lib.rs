@@ -35,6 +35,7 @@ pub mod client;
 pub mod containment;
 pub mod distribution;
 pub mod manager;
+pub mod ner;
 pub mod server;
 pub mod supervisor;
 pub mod wire;

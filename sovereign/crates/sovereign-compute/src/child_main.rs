@@ -363,7 +363,7 @@ fn load_provider(
                 Error::InvalidInput(format!("--model required for role={}", kind.role))
             })?;
             info!(target: "compute_child", kind = kind.role, path = %path.display(), "loading served kind");
-            (kind.loader)(&path)
+            kind.load_provider(&path)
         }
         Role::Mock => Ok(Arc::new(MockProvider {
             tokens: mock_tokens.max(1),

@@ -440,7 +440,8 @@ fn build_in_process(
                 .and_then(|s| s.to_str())
                 .unwrap_or("reranker")
                 .to_string();
-            let installed = (served_kind::RERANK.loader)(&path)
+            let installed = served_kind::RERANK
+                .load_provider(&path)
                 .and_then(|provider| arc.install_rerank(model_id, provider));
             if let Err(e) = installed {
                 tracing::warn!(

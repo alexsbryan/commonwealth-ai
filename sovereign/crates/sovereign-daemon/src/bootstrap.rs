@@ -78,26 +78,33 @@ pub fn build_node_roster(data_dir: &Path, self_node_id: NodeId) -> Option<NodeRo
     Some(NodeRoster::new(self_node, peers))
 }
 
-/// Load the shared GLiNER per-chunk entity extractor once (the ONNX model is
-/// ~150 MB for v1, ~795 MB for GLiNER2; one load only). Returns the raw
-/// handle (for the NoteStore T2 `GlinerFn` adapter) alongside the
-/// trait-object wrapper (for the engine's tiered runner and the folder
-/// driver). Both `None` when the model isn't installed — tiered ingest then
-/// falls back to RAPTOR-derived entities.
+/// The process's NER handle and the per-chunk adapter over it. The handle is
+/// the NER served kind's (`sovereign_compute::ner::served_ner`, loaded once per
+/// process); it feeds the NoteStore T2 `GlinerFn` adapter. The adapter
+/// (corpus-engine's `GlinerChunkExtractor`) feeds the engine's tiered runner
+/// and the folder driver. Both `None` when the model isn't installed — tiered
+/// ingest then falls back to RAPTOR-derived entities.
 ///
-/// Generation is chosen inside the shared builder
+/// Generation is chosen inside the kind's loader
 /// (`sovereign_gliner::configured_model_id`); nothing on this side of the
 /// call knows or needs to know which backend it got.
 pub fn load_gliner_extractor(
     store: Arc<dyn sovereign_core::daemon_wire::conv_tiered::ChunkEntityStore>,
 ) -> (
-    Option<Arc<dyn sovereign_gliner::LabeledEntityExtractor>>,
+    Option<Arc<dyn sovereign_contracts::ner::LabeledEntityExtractor>>,
     Option<Arc<dyn corpus_engine::enrichment::tiered::ChunkEntityExtractor>>,
 ) {
-    // Delegated to the shared builder so the desktop's embedded daemon wires
-    // an identical stack. The store is opened once by `run_daemon` and passed
-    // in, so neither this crate nor gliner opens a second handle.
-    sovereign_gliner::load_gliner_extractor(store)
+    // The store is opened once by `run_daemon` and passed in, so the adapter
+    // opens no second handle.
+    let ner = sovereign_compute::ner::served_ner();
+    let chunk = ner.as_ref().map(|extractor| {
+        corpus_engine::enrichment::chunk_ner::GlinerChunkExtractor::new(
+            store,
+            Arc::clone(extractor),
+        )
+        .into_handle()
+    });
+    (ner, chunk)
 }
 
 /// Build the single shared `CorpusEngine` (powers `/mcp` tools AND
@@ -109,7 +116,7 @@ pub fn build_corpus_engine(
     data_dir: &Path,
     provider: Arc<dyn InferenceProvider>,
     notes_store: Arc<NoteStore>,
-    gliner_raw: &Option<Arc<dyn sovereign_gliner::LabeledEntityExtractor>>,
+    gliner_raw: &Option<Arc<dyn sovereign_contracts::ner::LabeledEntityExtractor>>,
     config: &SetupConfig,
     self_node_id: NodeId,
     chunk_entity_extractor: &Option<
