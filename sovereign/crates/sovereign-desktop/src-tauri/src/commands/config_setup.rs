@@ -16,31 +16,16 @@ pub async fn get_config(state: State<'_, Arc<AppState>>) -> Result<DesktopConfig
     Ok(state.config.read().await.clone())
 }
 
-/// Pairing card for the Settings → Mobile access panel (address + tenant +
-/// token the phone enters, plus the no-VPN iroh pairing code once the
-/// running server reports one). Reads/creates `~/.svrnmesh/mobile-host.toml`.
+/// Pairing card for the Settings → Mobile access panel. Answers the named
+/// absence of a mobile host (see [`crate::mobile_host_setup`]).
 #[tauri::command]
 pub async fn get_mobile_pairing() -> Result<crate::mobile_host_setup::MobilePairing, String> {
     crate::mobile_host_setup::pairing().await
 }
 
-/// Start or stop the mobile host at runtime (the toggle's runtime half —
-/// persistence rides the normal `save_config`).
-///
-/// Two HTTP calls, and no handle either way (sv-surface svt-2). This took
-/// `State<AppState>` until 2026-09-11 so it could store, and later abort, a
-/// `JoinHandle` whose drop SIGKILLed a `sovereign-server` child — a client
-/// deciding a resident server's lifetime, which is the line ARCH principle
-/// 12 draws. `ensure_running` reaches the host through the sanctioned
-/// bring-up and `stop` asks the host's own `POST /v1/admin/shutdown`, so
-/// the desktop holds nothing between the two and the toggle still works
-/// both ways.
-///
-/// A consequence worth knowing at the call site: toggle-off now stops
-/// whatever is serving that port, including a host this app did not start
-/// (`svrn mobile serve`, or a previous run of the app). That is the honest
-/// reading of the toggle — it says whether mobile access is on for this
-/// node, not whether this window's child is alive.
+/// The toggle's runtime half (persistence rides the normal `save_config`).
+/// On is refused with the named absence of a mobile host; off succeeds,
+/// because nothing can be serving.
 #[tauri::command]
 pub async fn set_mobile_access(enabled: bool) -> Result<(), String> {
     if enabled {

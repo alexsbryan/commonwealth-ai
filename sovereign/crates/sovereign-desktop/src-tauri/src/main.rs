@@ -354,15 +354,9 @@ fn main() -> ExitCode {
             let app_state = Arc::new(app_state);
             app.manage(app_state.clone());
 
-            // Opt-in Mobile access: if enabled in the desktop config, make sure
-            // the `sovereign-server` phone-facing host is reachable. It
-            // delegates all inference to the daemon, so it loads no models.
-            //
-            // `ensure_running`, not `start` + a `JoinHandle` stashed on
-            // `AppState`. The handle was the bring-up TASK, not the child, so
-            // aborting it stopped nothing — the app held a lifecycle it could
-            // not actually exercise. Toggle-off is an authenticated
-            // `POST /v1/admin/shutdown` on the host itself.
+            // Opt-in Mobile access: a toggle persisted ON is asked at launch,
+            // and `ensure_running` names the absence of a mobile host (the
+            // `sovereign-server` binary was deleted) on the trace below.
             {
                 let st = Arc::clone(&app_state);
                 tauri::async_runtime::block_on(async move {

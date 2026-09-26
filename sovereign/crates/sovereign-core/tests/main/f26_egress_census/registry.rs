@@ -338,10 +338,6 @@ pub(super) const REGISTRY: &[(&str, Class, usize)] = &[
     ("sovereign/crates/sovereign-desktop/src-tauri/src/commands/hardware.rs", Class::LocalDaemon, 2),
     ("sovereign/crates/sovereign-desktop/src-tauri/src/watched_folder_commands.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-desktop/src-tauri/src/recipe_commands.rs", Class::LocalDaemon, 1),
-    // 1 -> 2 at svt-2 (1a35260e2): `stop()` posts `/v1/admin/shutdown` to the
-    // mobile host on loopback instead of killing a child it no longer holds;
-    // `fetch_iroh_dial` is the other. Both talk to 127.0.0.1.
-    ("sovereign/crates/sovereign-desktop/src-tauri/src/mobile_host_setup.rs", Class::LocalDaemon, 2),
     // 1 -> 2 (2026-09-22, merged from local `mesh media` work 11b01ec84):
     // `probe_media_url` — the click-path probe that reports an HTTP status
     // instead of opening a dead tab. Loopback-http ONLY by construction
@@ -518,7 +514,6 @@ pub(super) const REGISTRY: &[(&str, Class, usize)] = &[
     ("sovereign/crates/sovereign-cli-llm/src/workflow_cmd.rs", Class::LocalDaemon, 2),
     ("sovereign/crates/sovereign-cli-dev/src/solve_cmd.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-cli-llm/src/pipeline_cmd.rs", Class::LocalDaemon, 1),
-    ("sovereign/crates/sovereign-cli-llm/src/mobile_cmd.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-cli-mesh/src/mesh_travel.rs", Class::Mesh, 1),
     ("sovereign/crates/sovereign-cli-llm/src/knowledge_gym_cmd/mod.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-cli-llm/src/corpus_snapshot_cmd.rs", Class::InboundOnly, 1),

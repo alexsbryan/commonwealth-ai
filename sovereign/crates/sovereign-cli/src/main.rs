@@ -197,7 +197,7 @@ const HELP: Help = Help {
             ),
             (
                 "mobile",
-                "Serve the phone-facing API, riding on the daemon's models (serve / status / pair)",
+                "Absent: the mobile host (sovereign-server) was deleted; no mobile host ships",
             ),
             (
                 "alignment",

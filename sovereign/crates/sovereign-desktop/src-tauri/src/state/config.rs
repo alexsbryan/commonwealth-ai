@@ -67,12 +67,10 @@ pub struct DesktopConfig {
     /// later without restarting through the wizard.
     #[serde(default)]
     pub enable_recipe_authoring: bool,
-    /// Opt-in for **Mobile access** — serving the phone-facing
-    /// `sovereign-server` API so the svrnmesh mobile app can pair with this
-    /// node over the tailnet. When `true`, the desktop starts a
-    /// `sovereign-server` child (see [`crate::mobile_host_setup::start`]) that
-    /// delegates all inference to the local daemon — it loads no models of
-    /// its own. Off by default; flipped from Settings → Mobile access.
+    /// Opt-in for **Mobile access**. Kept so existing config files still
+    /// parse; when `true`, launch asks [`crate::mobile_host_setup`], which
+    /// names the absence of a mobile host (the `sovereign-server` binary was
+    /// deleted). Off by default; flipped from Settings → Mobile access.
     #[serde(default)]
     pub mobile_access_enabled: bool,
     /// When `true`, the `knowledge_lookup` tool auto-escalates to

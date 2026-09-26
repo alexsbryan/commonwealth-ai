@@ -340,13 +340,7 @@ sovereign alignment status               # check progress
 
 ### `svrn mobile`
 
-Serve the phone-facing API, riding on the daemon's already-loaded models. The phone talks HTTP + WebSocket to this bridge; no separate model load.
-
-| Subcommand | Description |
-|---|---|
-| `serve` | Start the phone-facing API server (HTTP + WS) backed by the daemon's models |
-| `status` | Show the mobile bridge status |
-| `pair` | Print the pairing string a phone uses to connect |
+Absent. This verb ran `sovereign-server`, the phone-facing API; that binary was deleted and no mobile host ships. Every subcommand (`serve`, `status`, `pair`) prints that absence and exits 1.
 
 ### `svrn code`
 
