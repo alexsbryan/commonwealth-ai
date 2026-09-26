@@ -1238,6 +1238,7 @@ impl InferenceProvider for ComputeRoutedProvider {
             if child.is_serving() {
                 return child.rerank_batch(query, docs).await;
             }
+            tracing::warn!(target: "compute_child", "rerank child not serving; falling back to the in-process slot");
         }
         self.inner.rerank_batch(query, docs).await
     }
@@ -1690,3 +1691,6 @@ mod distributed_slot_tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
+#[cfg(test)]
+#[path = "manager/rerank_fallback_tests.rs"]
+mod rerank_fallback_tests;
