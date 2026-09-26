@@ -17,6 +17,7 @@ use std::pin::Pin;
 use std::time::Instant;
 
 mod rerank;
+mod serve_loopback;
 
 use async_trait::async_trait;
 use futures::{Stream, StreamExt};
@@ -1489,6 +1490,8 @@ pub struct SplitInferenceProvider {
     ///
     /// [`ServingLocus`]: sovereign_contracts::traits::ServingLocus
     locus: sovereign_contracts::traits::ServingLocus,
+    /// serve's self-report, in the loopback mode only (`serve_loopback`).
+    served: Option<sovereign_contracts::engine_state::ServedSelf>,
 }
 
 /// Does this `/v1` endpoint point at something on this machine?
@@ -1654,6 +1657,7 @@ impl SplitInferenceProvider {
             } else {
                 sovereign_contracts::traits::ServingLocus::ForwardsOffBox
             },
+            served: None,
         }
     }
 
@@ -1730,6 +1734,7 @@ impl SplitInferenceProvider {
             embed_model_id,
             context_size,
             locus,
+            served: None,
         }
     }
 
@@ -1795,6 +1800,7 @@ impl SplitInferenceProvider {
             } else {
                 sovereign_contracts::traits::ServingLocus::ForwardsOffBox
             },
+            served: None,
         }
     }
 
@@ -1887,6 +1893,9 @@ impl InferenceProvider for SplitInferenceProvider {
         &self,
         request: &CompletionRequest,
     ) -> Result<Pin<Box<dyn Stream<Item = sovereign_contracts::types::StreamFrame> + Send>>> {
+        if serve_loopback::wants_raw_completion(&self.served, request) {
+            return self.chat.raw_completion_stream(request).await;
+        }
         self.chat.complete_stream_with_finish(request).await
     }
 
@@ -1920,11 +1929,26 @@ impl InferenceProvider for SplitInferenceProvider {
         self.chat.rerank_batch(query, docs).await
     }
 
-    fn model_id_for(&self, _speed: Speed) -> String {
+    fn model_id_for(&self, speed: Speed) -> String {
+        if let Some(served) = &self.served {
+            return serve_loopback::model_id_for(served, speed);
+        }
         // Only one chat slot over HTTP; the daemon's own engine maps the
         // request (Speed / max_tokens) to its loaded fast/primary slots.
         // Reporting the request model is the most honest client-side signal.
         self.chat_model_id.clone()
+    }
+
+    fn resident_slots(&self) -> Vec<ResidentSlot> {
+        serve_loopback::resident_slots(&self.served)
+    }
+
+    fn edit_slot_info(&self) -> Option<EditSlotInfo> {
+        serve_loopback::edit_slot_info(&self.served)
+    }
+
+    fn code_model_id(&self) -> Option<String> {
+        serve_loopback::code_model_id(&self.served)
     }
 
     fn embed_model_id(&self) -> String {
@@ -1970,6 +1994,9 @@ impl InferenceProvider for SplitInferenceProvider {
     /// immediately before synthesis, and a narration frame is never
     /// worth delaying the answer it narrates.
     async fn primary_slot_status(&self) -> Option<ResidentSlot> {
+        if let Some(served) = &self.served {
+            return serve_loopback::primary_slot(served);
+        }
         #[derive(Deserialize)]
         struct StatusBody {
             inference: StatusInference,

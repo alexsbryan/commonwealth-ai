@@ -70,6 +70,8 @@ pub const SERVED_SELF_PATH: &str = "/v1/engine/self";
 pub struct ServedSelf {
     /// `model_id_for(Speed::Slow)`.
     pub primary_model: String,
+    /// `model_id_for(Speed::Medium)`.
+    pub medium_model: String,
     /// `model_id_for(Speed::Fast)`.
     pub fast_model: String,
     /// `embed_model_id()`; `"unknown"` is the trait's own sentinel.

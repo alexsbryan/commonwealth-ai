@@ -332,6 +332,7 @@ async fn served_self(
 ) -> Json<sovereign_contracts::engine_state::ServedSelf> {
     let this = sovereign_contracts::engine_state::ServedSelf {
         primary_model: provider.model_id_for(Speed::Slow),
+        medium_model: provider.model_id_for(Speed::Medium),
         fast_model: provider.model_id_for(Speed::Fast),
         embed_model: provider.embed_model_id(),
         code_model: provider.code_model_id(),
