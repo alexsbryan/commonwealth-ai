@@ -268,6 +268,13 @@ impl ReloadFactory {
         let mut live = self.live.lock().unwrap_or_else(PoisonError::into_inner);
         if let Some(running) = live.as_ref() {
             if running.children != plan.children {
+                tracing::warn!(
+                    target: "compute_child",
+                    running = ?running.children,
+                    asked = ?plan.children,
+                    "reload refused: the config asks for different compute children; \
+                     a reload never respawns them, a daemon restart does"
+                );
                 return Err(fail(format!(
                     "the compute children running are {:?}, and this config asks for {:?}. A \
                      reload re-wraps the running children and never respawns them — restart \
@@ -674,6 +681,9 @@ mod distributed_primary_routing_tests {
     }
 }
 // A sibling file: inline, it put this file past the 800-line band (ARCH §3.1).
+#[cfg(test)]
+#[path = "assembly/reload_tests.rs"]
+mod reload_tests;
 #[cfg(test)]
 #[path = "assembly/serves_rerank_tests.rs"]
 mod serves_rerank_tests;

@@ -191,6 +191,12 @@ pub fn check_containment(config: &SetupConfig, self_node_id: Option<&str>) -> bo
             );
         }
         ContainmentVerdict::Refuse => {
+            tracing::error!(
+                target: "compute_child",
+                "containment refused boot: a shared-model HOST would run the DISTRIBUTED \
+                 primary IN-PROCESS, where a worker leaving aborts the daemon; set \
+                 `[compute] enabled = true` + `distributed_primary = true`"
+            );
             eprintln!(
                 "error: this node is a shared-model HOST but the DISTRIBUTED primary would run"
             );
@@ -233,6 +239,25 @@ mod tests {
     /// declared host, a distributable primary, and no compute-child boundary.
     /// The abort was `ggml-rpc.cpp:386` during `reload_primary`'s teardown of a
     /// worker that had already left — uncatchable, hence admission-time refusal.
+    /// The refusal reaches the daemon's log, not only stderr: a detached
+    /// daemon discards eprintln, so an eprintln-only refusal is dark.
+    #[test]
+    fn a_refused_boot_is_logged_where_the_daemon_filter_admits_it() {
+        assert!(
+            std::env::var_os(OVERRIDE_ENV).is_none(),
+            "the override turns the refusal into a warning"
+        );
+        let mut config = SetupConfig::unconfigured();
+        config.shared_model.role = SharedModelRole::Host;
+        let (proceeds, log) =
+            crate::logged_under("compute_child=info", || check_containment(&config, None));
+        assert!(!proceeds, "a declared host with no containment is refused");
+        assert!(
+            log.contains("containment refused boot"),
+            "no refusal event at compute_child: {log:?}"
+        );
+    }
+
     #[test]
     fn classify_containment_replays_the_2026_07_27_abort() {
         assert_eq!(
