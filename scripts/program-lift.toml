@@ -150,12 +150,33 @@ finally = [
   { do = "remove", paths = ["${RAIL}", "${RAIL}.probe"] },
 ]
 
-# ── serve — the model server. pb-serve-program adds its binary and smoke. Until
-# pb-serve-package declares its own package (phase-b-20), it is judged under
-# cmnwlth's rule, where the serving crates sit today.
+# ── serve — the model server (sovereign-serve). Until pb-serve-package declares
+# its own package (phase-b-20), it is judged under cmnwlth's rule, where the
+# serving crates sit today.
 [lift.serve]
 package = "cmnwlth"
-seeds = ["sovereign-inference", "sovereign-compute", "sovereign-serving-host"]
+seeds = ["sovereign-serve"]
+build = ["-p", "sovereign-serve", "--bin", "sovereign-serve"]
+test = ["-p", "sovereign-serve", "-p", "sovereign-compute", "-p", "sovereign-serving-host"]
+binary = "debug/sovereign-serve"
+
+[lift.serve.run]
+# The mock engine (`[engine] kind = "mock"`, sovereign_compute::mock) loads no
+# weights, so the smoke proves the routes and the wiring, not a model. cw-rails
+# is ABSENT by construction: `[daemon] rails_base` names a port nothing listens
+# on, so a /v1/* answer that dialled cw-rails (this host runs one on :9747)
+# would fail here rather than pass by borrowing the operator's.
+pass = "served '${MODEL}' on /v1/models from its own manifest, answered a chat turn ('${CHAT}'), an embedding and a rerank (score ${SCORE}) on a temp root, with cw-rails pointed at a closed port"
+steps = [
+  { do = "ports", vars = ["PORT", "DEAD_RAILS_PORT"] },
+  { do = "write", path = "${SANDBOX}/root/config.toml", text = "[engine]\nkind = \"mock\"\n\n[models]\nprimary = \"${SANDBOX}/root/mock.gguf\"\nembed = \"${SANDBOX}/root/mock-embed.gguf\"\n\n[daemon]\nrails_base = \"http://127.0.0.1:${DEAD_RAILS_PORT}\"\n" },
+  { do = "spawn", id = "serve", argv = ["${BIN}", "--data-dir", "${SANDBOX}/root", "--listen", "127.0.0.1:${PORT}"], log = "serve.log", env = { RUST_LOG = "info" } },
+  { do = "poll", url = "http://127.0.0.1:${PORT}/health", path = "state", var = "HEALTH", timeout = 60, alive = "serve", fail = "serve never answered /health within 60s (see ${SANDBOX}/serve.log)" },
+  { do = "get", url = "http://127.0.0.1:${PORT}/v1/models", path = "data[owned_by=local].id", var = "MODEL", fail = "GET /v1/models listed no model this process holds: ${BODY}" },
+  { do = "call", url = "http://127.0.0.1:${PORT}/v1/chat/completions", json = { model = "${MODEL}", messages = [{ role = "user", content = "hello" }] }, path = "choices.message.content", var = "CHAT", fail = "POST /v1/chat/completions gave no answer: ${BODY}" },
+  { do = "call", url = "http://127.0.0.1:${PORT}/v1/embeddings", json = { model = "${MODEL}", input = ["hello"] }, path = "data.index", var = "EMBEDDED", fail = "POST /v1/embeddings gave no vector: ${BODY}" },
+  { do = "call", url = "http://127.0.0.1:${PORT}/v1/rerank", json = { model = "${MODEL}", query = "hello", documents = ["hello world", "other"] }, path = "results[index=0].relevance_score", var = "SCORE", fail = "POST /v1/rerank gave no score: ${BODY}" },
+]
 
 # ── code — the LSP for agents ───────────────────────────────────────────────
 [lift.code]
