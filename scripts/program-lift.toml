@@ -70,47 +70,43 @@ test = ["-p", "commonwealth-rails"]
 binary = "debug/cw-rails"
 
 [lift.cmnwlth.run]
-# A rails daemon cannot found a mesh (no /internal/join), so the RUN needs a
-# member's word: an invite. It is never minted here; a mesh of one would pass
-# gossip, offers and reach by having nobody to disagree with.
-pass = "joined the mesh, converged a roster with '${PEER}', reached '${OFFERER}' as an online library, and a GET through ${URL} answered HTTP ${THROUGH}"
+# The run grows its OWN two-node mesh inside the sandbox (phase-b
+# pb-membership): a founder cw-rails that declares a fixture media origin,
+# and the lifted joiner. Nothing touches the operator's mesh, so nothing has
+# to be retired from its roster afterwards. Both run --local-only: no n0
+# relay, no n0 DNS, the two reach each other on direct addresses. It is two
+# processes, so it is not the mesh of one that could pass by having nobody to
+# disagree with.
+pass = "founded '${MESH}', joined it by the founder's invite, converged a roster with '${PEER}', reached '${OFFERER}' as an online library, and a GET through ${URL} answered HTTP ${THROUGH}"
 steps = [
-  { do = "input", var = "MESH_STATUS", env = "CW_RAILS_MESH_STATUS", default = "http://127.0.0.1:9741/v1/mesh/status" },
-  { do = "input", var = "MESH_BASE", value = "${MESH_STATUS}", strip = "/v1/mesh/status" },
-  { do = "input", var = "INVITE", env = "CW_RAILS_INVITE", get = "${MESH_STATUS}", path = "join_link", abstain = "no invite, and ${MESH_STATUS} offered no join_link. A rails daemon cannot found a mesh, so only the run abstains. Pass --invite <link>, set CW_RAILS_INVITE, or start a mesh daemon on this host." },
-  { do = "require", value = "${INVITE}", match = "iroh=|dial=", abstain = "the invite carries no iroh dial string, and cw-rails joins over iroh only. Ask for an invite from a daemon with iroh on." },
-  { do = "unexpired", value = "${INVITE}", param = "exp", abstain = "the invite expired and the founder is the authority on that. `sovereign mesh rotate` mints a fresh one, which then appears as join_link on ${MESH_STATUS}." },
-  { do = "ports", vars = ["ORIGIN_PORT", "LISTEN_PORT"] },
+  { do = "input", var = "MESH", value = "cw-rails-lift-mesh" },
+  { do = "ports", vars = ["ORIGIN_PORT", "FOUNDER_PORT", "LISTEN_PORT"] },
   # A tiny file, so a GET through the bridge has something real to fetch.
   { do = "write", path = "${SANDBOX}/library/index.html", text = "program-lift origin\n" },
-  # The stand-in media origin authenticates NOTHING, which is why the holder's
+  # The fixture origin authenticates NOTHING, which is why the holder's
   # admission decision has to be right.
   { do = "spawn", id = "origin", argv = ["python3", "-m", "http.server", "${ORIGIN_PORT}", "--bind", "127.0.0.1", "--directory", "${SANDBOX}/library"], log = "origin.log" },
-  { do = "write", path = "${SANDBOX}/data/rails.toml", text = "name = \"cw-rails-lift\"\nlisten = ${LISTEN_PORT}\n\n[media]\norigin = \"127.0.0.1:${ORIGIN_PORT}\"\n" },
-  { do = "exec", argv = ["${BIN}", "join", "${INVITE}", "--data-dir", "${SANDBOX}/data", "--name", "cw-rails-lift"], log = "join.log", fail = "the lifted daemon did not join the mesh (see ${SANDBOX}/join.log)" },
+  { do = "write", path = "${SANDBOX}/founder/rails.toml", text = "name = \"cw-rails-founder\"\nlisten = ${FOUNDER_PORT}\n\n[media]\norigin = \"127.0.0.1:${ORIGIN_PORT}\"\n" },
+  { do = "exec", argv = ["${BIN}", "found", "${MESH}", "--data-dir", "${SANDBOX}/founder"], log = "found.log", fail = "the lifted binary could not found a mesh (see ${SANDBOX}/found.log)" },
+  { do = "spawn", id = "founder", argv = ["${BIN}", "run", "--local-only", "--data-dir", "${SANDBOX}/founder"], log = "founder.log", env = { RUST_LOG = "info" } },
+  # The invite is served once the founder's endpoint has an address to name.
+  { do = "poll", url = "http://127.0.0.1:${FOUNDER_PORT}/v1/mesh/status", path = "join_link", var = "INVITE", doc = "founder", timeout = 60, alive = "founder", fail = "the founder served no join_link within 60s (see ${SANDBOX}/founder.log)" },
+  { do = "require", value = "${INVITE}", match = "iroh=", fail = "the founder's invite carries no iroh dial string: ${INVITE}" },
+  { do = "write", path = "${SANDBOX}/data/rails.toml", text = "name = \"cw-rails-lift\"\nlisten = ${LISTEN_PORT}\n" },
+  { do = "exec", argv = ["${BIN}", "join", "${INVITE}", "--data-dir", "${SANDBOX}/data", "--name", "cw-rails-lift"], log = "join.log", fail = "the lifted daemon was not admitted by the founder (see ${SANDBOX}/join.log and founder.log)" },
   { do = "exists", path = "${SANDBOX}/data/mesh.json", fail = "join reported success and wrote no mesh.json" },
-  { do = "spawn", id = "daemon", argv = ["${BIN}", "run", "--data-dir", "${SANDBOX}/data"], log = "daemon.log", env = { RUST_LOG = "info" } },
+  { do = "spawn", id = "daemon", argv = ["${BIN}", "run", "--local-only", "--data-dir", "${SANDBOX}/data"], log = "daemon.log", env = { RUST_LOG = "info" } },
   # The roster comes from the join snapshot, so it appears at once.
   { do = "poll", url = "http://127.0.0.1:${LISTEN_PORT}/v1/mesh/status", path = "members[is_self!=true].name", var = "PEER", doc = "status", timeout = 60, alive = "daemon", fail = "no member other than this one appeared on /v1/mesh/status within 60s (see ${SANDBOX}/daemon.log)" },
-  { do = "select", doc = "status", path = "members[is_self=true].node_id", var = "SELF_ID", abstain = "the lifted daemon's own row carries no node_id, so the member it joined as cannot be named" },
   # The catalogue rides a GOSSIP round, seconds after the roster (measured
-  # 2026-09-11: a one-shot read here lost that race). An empty list cannot tell
-  # "nobody offers a library" from "nothing converged", so the issuer's own
-  # route is the second reading.
-  { do = "poll", url = "http://127.0.0.1:${LISTEN_PORT}/v1/mesh/media", path = "offering.peer", var = "ANY_OFFER", doc = "media", timeout = 60, alive = "daemon", second = { url = "${MESH_BASE}/v1/mesh/media", path = "offering[peer!=cw-rails-lift].peer", abstain = "no member of this mesh other than this one advertises a media origin, and ${MESH_BASE} says the same, so there was no library to reach. A holder declares one with `[iroh] media_origin` and restarts.", fail = "GET /v1/mesh/media listed no offering member within 60s while ${MESH_BASE} lists '${SECOND}': the catalogue rides gossiped capabilities.origins and nothing arrived (see ${SANDBOX}/daemon.log)" } },
-  # phase-b-4: reach an ONLINE offerer. A bridge to an offline one is refused
-  # (409) and says nothing about this daemon.
-  { do = "select", doc = "media", path = "offering[status!=offline].peer", var = "OFFERER", all = "offering.peer", all_var = "OFFERERS", abstain = "every member offering a library is offline (${OFFERERS}), so there was no library to reach and the bridge was not measured" },
+  # 2026-09-11: a one-shot read here lost that race). The founder's own route
+  # is the second reading.
+  { do = "poll", url = "http://127.0.0.1:${LISTEN_PORT}/v1/mesh/media", path = "offering.peer", var = "ANY_OFFER", doc = "media", timeout = 60, alive = "daemon", second = { url = "http://127.0.0.1:${FOUNDER_PORT}/v1/mesh/media", path = "offering.peer", abstain = "the founder offers no media origin on its own route either, so the fixture never registered and there was no library to reach (see ${SANDBOX}/founder.log)", fail = "GET /v1/mesh/media listed no offering member within 60s while the founder lists '${SECOND}': the catalogue rides gossiped capabilities.origins and nothing arrived (see ${SANDBOX}/daemon.log)" } },
+  { do = "select", doc = "media", path = "offering[status!=offline].peer", var = "OFFERER", all = "offering.peer", all_var = "OFFERERS", fail = "every member offering a library is offline (${OFFERERS}), yet the founder is running in this sandbox" },
   { do = "get", url = "http://127.0.0.1:${LISTEN_PORT}/v1/mesh/media?peer=${OFFERER}", path = "url", var = "URL", fail = "GET /v1/mesh/media?peer=${OFFERER} returned no URL: ${BODY}" },
   { do = "require", value = "${URL}", match = "^http://127\\.0\\.0\\.1:", fail = "the reach URL is not loopback (${URL}): the media class was routed off iroh, which is a hole rather than a fallback" },
-  # Any status is the pass: a 401 from a Jellyfin that wants a token is the
-  # plane working. What fails is no answer at all.
+  # Any status is the pass. What fails is no answer at all.
   { do = "get", url = "${URL}/", status_var = "THROUGH", timeout = 30, fail = "a GET through ${URL} got no HTTP answer: the bridge accepted and the far end never sent a byte" },
-]
-# phase-b-4: the run retires the member it joined as, so the operator's roster
-# does not grow. A member cannot forget itself, so the issuer is asked.
-finally = [
-  { do = "post", label = "retire", url = "${MESH_BASE}/v1/mesh/forget-member", json = { member = "${SELF_ID}", force = true }, needs = "SELF_ID" },
 ]
 
 # ── cw-work — cmnwlth's work peer, a package-only donor ─────────────────────

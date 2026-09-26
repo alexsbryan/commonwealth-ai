@@ -1192,10 +1192,11 @@ handover (`rail_migration::hand_over`) first, before any bring-up; with a cw-rai
 moves nothing and warns with the namespaces that wait. Since fp-solo-hermetic the bring-up is `run --listen <rails_base port>`,
 plus `--local-only` (`[relay] discovery = "none"`) on a local-only node, which also refuses an already
 running cw-rails whose `/v1/mesh/status` `relay.n0_services` is true; and `run` exits when its `rails.lock`
-is unlinked or replaced. It deliberately does NOT admit
-joiners — a mesh is founded by a full daemon, and that absence is most of why
-it lifts (319 crates in its closure vs 743 at the 2026-09-11 measure; the rail
-doors cost three more).
+is unlinked or replaced. Since phase-b pb-membership it founds (`cw-rails found`), serves its invite as
+`join_link` on `/v1/mesh/status`, admits at `/internal/join` through commonwealth-discovery's
+`accept_join_with_identity`, and speaks mDNS by key (`run --mdns`; a dial-less join browses for a keyed
+founder), all keyed by its own node key; its closure did not grow (319 crates vs 743 at the 2026-09-11
+measure; the rail doors cost three more).
 
 ---
 

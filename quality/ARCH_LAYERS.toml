@@ -1576,8 +1576,9 @@ reason = "`kickstart_daemon` — `id -u`, then `launchctl kickstart -k gui/<uid>
 # test-only (dev) edge, which layer-gate never enforces.
 #
 # Package rows since 2026-09-24. fp-9 (operator answer (b) to
-# HUMAN-fp9-membership-owner): commonwealth-rails disclaims both roles below
-# (its lib.rs "does not admit joiners" / "does not join over LAN/mDNS").
+# HUMAN-fp9-membership-owner): commonwealth-rails disclaimed both roles below
+# until phase-b pb-membership gave it founding, admission and mDNS; this row
+# retires with pb-mesh-exit-mesh, when the daemon stops founding (phase-b-11).
 # fp-10 (operator answer (b) to HUMAN-fp10-serving-host): serving stays in
 # the daemon; deleting the four rows (fp-10 + fp-68 + fp-69) is Phase B's closing act.
 
