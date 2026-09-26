@@ -1715,7 +1715,9 @@ pub(crate) fn local_fit_verdict(
     reserve_bytes: u64,
 ) -> Option<LocalFitShortfall> {
     const MIB: u64 = 1024 * 1024;
-    let need = model_bytes + overhead_bytes.unwrap_or(model_bytes / 8 + 1024 * MIB);
+    // Saturating: `total_model_bytes` answers u64::MAX for a file it cannot
+    // stat, which must refuse as unfit, not overflow.
+    let need = model_bytes.saturating_add(overhead_bytes.unwrap_or(model_bytes / 8 + 1024 * MIB));
     let usable = available_bytes.saturating_sub(reserve_bytes);
     (need > usable).then_some(LocalFitShortfall {
         need_mb: need / MIB,
@@ -2982,6 +2984,11 @@ mod rpc_prune_tests {
         // box: need ≈ 23.5 GiB vs 40−8 = 32 GiB usable → fits. Existing
         // working configs must not regress.
         assert_eq!(local_fit_verdict(20 * GIB, None, 40 * GIB, 8 * GIB), None);
+
+        // A GGUF `total_model_bytes` cannot stat is sized u64::MAX: refused,
+        // with or without a projected overhead, never an overflow panic.
+        assert!(local_fit_verdict(u64::MAX, None, 110 * GIB, 16 * GIB).is_some());
+        assert!(local_fit_verdict(u64::MAX, Some(GIB), 110 * GIB, 16 * GIB).is_some());
 
         // Reserve is honoured: same numbers with the reserve eating the
         // margin flips the verdict.
