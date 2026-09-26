@@ -52,7 +52,9 @@ import json
 import os
 import re
 import subprocess
+import socket
 import time
+import urllib.error
 import urllib.request
 
 PORT = os.environ.get("SOVEREIGN_PORT", "9741")
@@ -151,26 +153,45 @@ def emit(text):
 emit("## Sovereign session boot (injected by session-boot.sh)\n")
 
 # ── Tier 0: brain health ────────────────────────────────────────────────
+# The probe asks /mcp directly, because "are code-intel tools live" is the
+# question this line answers. It used to gate on GET /status first (2 s), and
+# /status builds its model rows from per-request cw-rails ledger round trips
+# (sovereign-daemon routes_status.rs loaded_model_rows): measured 2026-09-26
+# at ~5 s on 2 of 6 calls, so a third of boots told an agent "not reachable,
+# code intel is dark" while MCP was connected. Slow is not absent (ARCH
+# principle 6); tests/brain-probe.sh drives all three answers.
+BRAIN_TIMEOUT_S = 4
+body = json.dumps({
+    "jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {},
+}).encode()
+req = urllib.request.Request(
+    f"{BASE}/mcp", data=body, headers={"content-type": "application/json"},
+)
+slow = (f"_brain: daemon on :{PORT} did not answer /mcp within {BRAIN_TIMEOUT_S}s — "
+        f"slow, not absent; the MCP tools may still work. `sovereign doctor` diagnoses_\n")
 try:
-    urllib.request.urlopen(f"{BASE}/status", timeout=2).read(1)
-    body = json.dumps({
-        "jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {},
-    }).encode()
-    req = urllib.request.Request(
-        f"{BASE}/mcp", data=body, headers={"content-type": "application/json"},
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=4) as r:
-            tools = json.loads(r.read().decode()).get("result", {}).get("tools", [])
-        emit(f"_brain: daemon up · {len(tools)} MCP tools live "
-             f"(symbols/callers/facts/code_search/notes are cheaper and exact — "
-             f"prefer them over raw Read/grep)_\n")
-    except Exception as e:
-        emit(f"_brain: daemon up but MCP tools/list failed ({type(e).__name__}) — "
-             f"CLI fallback: `sovereign tools call <id>`_\n")
-except Exception:
-    emit(f"_brain: daemon not reachable on :{PORT} — code intel is dark; "
-         f"start it: `sovereign daemon start`; `sovereign doctor` diagnoses_\n")
+    with urllib.request.urlopen(req, timeout=BRAIN_TIMEOUT_S) as r:
+        tools = json.loads(r.read().decode()).get("result", {}).get("tools", [])
+    emit(f"_brain: daemon up · {len(tools)} MCP tools live "
+         f"(symbols/callers/facts/code_search/notes are cheaper and exact — "
+         f"prefer them over raw Read/grep)_\n")
+except urllib.error.HTTPError as e:
+    emit(f"_brain: daemon up but /mcp answered HTTP {e.code} — "
+         f"CLI fallback: `sovereign tools call <id>`_\n")
+except urllib.error.URLError as e:
+    if isinstance(e.reason, ConnectionRefusedError):
+        emit(f"_brain: daemon not reachable on :{PORT} — code intel is dark; "
+             f"start it: `sovereign daemon start`; `sovereign doctor` diagnoses_\n")
+    elif isinstance(e.reason, (TimeoutError, socket.timeout)):
+        emit(slow)
+    else:
+        emit(f"_brain: could not reach :{PORT} ({type(e.reason).__name__}) — "
+             f"`sovereign doctor` diagnoses_\n")
+except (TimeoutError, socket.timeout):
+    emit(slow)
+except Exception as e:
+    emit(f"_brain: daemon up but MCP tools/list failed ({type(e).__name__}) — "
+         f"CLI fallback: `sovereign tools call <id>`_\n")
 
 # ── Tier 0b: build posture — which side of the toolbox am I on? ─────────
 #
