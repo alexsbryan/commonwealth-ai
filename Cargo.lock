@@ -5613,7 +5613,6 @@ dependencies = [
 name = "host-kit"
 version = "0.8.0"
 dependencies = [
- "libc",
  "tempfile",
 ]
 

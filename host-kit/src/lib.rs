@@ -12,6 +12,9 @@
 //! pidfile that names the wrong process, and double model RAM. `flock(2)` is
 //! the primitive built for exactly this: the kernel releases it on ANY exit
 //! path including `SIGKILL`, so there is no stale-lock cleanup to get wrong.
+//! The claim is std's `File::try_lock` — `flock(LOCK_EX | LOCK_NB)` on unix,
+//! `LockFileEx` on Windows — so it is enforced on every platform std locks
+//! files on, and a platform that cannot lock refuses rather than admits.
 //!
 //! # Why the key is the data root and not `$HOME`
 //!
@@ -72,7 +75,6 @@ pub struct RunLock {
     path: PathBuf,
     /// Held open because the lock lives on the open file description. Never
     /// read; closing it is what releases the claim.
-    #[cfg(unix)]
     _file: std::fs::File,
 }
 
@@ -95,13 +97,24 @@ pub enum RunLockError {
         /// The underlying `open(2)` failure.
         source: std::io::Error,
     },
+    /// The lock file opened but the lock call itself failed for a reason
+    /// other than another holder — a filesystem without locks, a platform std
+    /// cannot lock on. Never folded into `Held`: nobody holds it.
+    Unlockable {
+        /// The lock file that could not be locked.
+        path: PathBuf,
+        /// The underlying lock failure.
+        source: std::io::Error,
+    },
 }
 
 impl RunLockError {
     /// The lock path this refusal is about.
     pub fn path(&self) -> &Path {
         match self {
-            Self::Held { path } | Self::Unopenable { path, .. } => path,
+            Self::Held { path } | Self::Unopenable { path, .. } | Self::Unlockable { path, .. } => {
+                path
+            }
         }
     }
 }
@@ -118,6 +131,9 @@ impl std::fmt::Display for RunLockError {
             Self::Unopenable { path, source } => {
                 write!(f, "cannot open run lock {}: {source}", path.display())
             }
+            Self::Unlockable { path, source } => {
+                write!(f, "cannot lock run lock {}: {source}", path.display())
+            }
         }
     }
 }
@@ -126,7 +142,7 @@ impl std::error::Error for RunLockError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::Held { .. } => None,
-            Self::Unopenable { source, .. } => Some(source),
+            Self::Unopenable { source, .. } | Self::Unlockable { source, .. } => Some(source),
         }
     }
 }
@@ -154,9 +170,7 @@ impl RunLock {
         Self::acquire_at(path)
     }
 
-    #[cfg(unix)]
     fn acquire_at(path: PathBuf) -> Result<Self, RunLockError> {
-        use std::os::unix::io::AsRawFd;
         let file = match std::fs::OpenOptions::new()
             .create(true)
             .truncate(false)
@@ -166,28 +180,25 @@ impl RunLock {
             Ok(f) => f,
             Err(source) => return Err(RunLockError::Unopenable { path, source }),
         };
-        // SAFETY: flock on an fd we own; LOCK_NB means it never blocks.
-        if unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } != 0 {
-            return Err(RunLockError::Held { path });
+        // Non-blocking: a live holder is `WouldBlock`, never a wait.
+        match file.try_lock() {
+            Ok(()) => Ok(Self { path, _file: file }),
+            Err(std::fs::TryLockError::WouldBlock) => Err(RunLockError::Held { path }),
+            Err(std::fs::TryLockError::Error(source)) => {
+                Err(RunLockError::Unlockable { path, source })
+            }
         }
-        Ok(Self { path, _file: file })
     }
 
-    #[cfg(not(unix))]
-    fn acquire_at(path: PathBuf) -> Result<Self, RunLockError> {
-        Ok(Self { path })
-    }
-
-    /// Whether this platform actually enforces the claim.
-    ///
-    /// `false` everywhere that is not unix: there is no advisory whole-file
-    /// lock wired up there, so `acquire` succeeds and guarantees nothing. The
-    /// call site is identical on every platform on purpose — but a caller
-    /// that logs "run lock held" without consulting this is reporting a guard
-    /// it does not have (ARCH_PRINCIPLES §18.3), so a caller says which it
-    /// got at startup.
+    /// Whether this claim is enforced. Always `true`: since the re-base on
+    /// std `File::try_lock` a claim exists only as a held lock, and a
+    /// platform that cannot lock refuses with `Unlockable` instead of
+    /// granting an empty claim. Until then this was `cfg!(unix)` and Windows
+    /// got a claim that guaranteed nothing. Kept because callers log it at
+    /// startup, and a guard they report must be one they have
+    /// (ARCH_PRINCIPLES §18.3).
     pub const fn is_enforced(&self) -> bool {
-        cfg!(unix)
+        true
     }
 
     /// The lock file this claim is on.
@@ -207,13 +218,13 @@ mod tests {
     /// point of the type, and the re-acquire proves the kernel released it on
     /// drop — which is what makes `SIGKILL` safe and stale-lock cleanup
     /// unnecessary.
-    #[cfg(unix)]
     #[test]
     fn a_second_claim_on_one_root_is_refused_until_the_first_drops() {
         let root = tempfile::tempdir().expect("tempdir");
         let first = RunLock::acquire(root.path(), LOCK).expect("first claim succeeds");
 
-        let refusal = RunLock::acquire(root.path(), LOCK).expect_err("second claim must be refused");
+        let refusal =
+            RunLock::acquire(root.path(), LOCK).expect_err("second claim must be refused");
         assert!(matches!(refusal, RunLockError::Held { .. }));
         assert_eq!(refusal.path(), first.path());
 
@@ -224,7 +235,6 @@ mod tests {
     /// The false refusal that made a 3-node soak a 1-node soak: two data
     /// roots under one `$HOME` are two locks, and both must be grantable.
     /// This is the assertion the old `$HOME`-derived key failed.
-    #[cfg(unix)]
     #[test]
     fn two_data_roots_under_one_home_do_not_collide() {
         let home = tempfile::tempdir().expect("tempdir");
@@ -248,7 +258,10 @@ mod tests {
 
         let _held = RunLock::acquire(&real, LOCK).expect("claim the real root");
         assert!(
-            matches!(RunLock::acquire(&alias, LOCK), Err(RunLockError::Held { .. })),
+            matches!(
+                RunLock::acquire(&alias, LOCK),
+                Err(RunLockError::Held { .. })
+            ),
             "the alias resolves to the same inode and must be refused"
         );
     }

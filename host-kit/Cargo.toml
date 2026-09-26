@@ -11,12 +11,6 @@ description = "The host kit — what each program's binary owns about itself, st
 # from sovereign, corpus-engine, commonwealth or studio, so commonwealth-rails
 # can take it past its `→ sovereign-*` [[forbid]].
 
-# `RunLock`: flock(2) for the single-writer claim on a data root, unix-gated
-# because the lock has no enforcement to offer anywhere else
-# (`RunLock::is_enforced`).
-[target.'cfg(unix)'.dependencies]
-libc = "0.2"
-
 [dev-dependencies]
 tempfile = { workspace = true }
 
