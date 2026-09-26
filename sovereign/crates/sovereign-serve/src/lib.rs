@@ -53,8 +53,8 @@ use sovereign_serving_host::slot_manifest::CoreSlotManifest;
 use tracing::{debug, error, info, warn};
 
 mod fetch_model;
-mod warm_cache;
 mod reload;
+mod warm_cache;
 
 /// The run lock's name inside the data root (`host_kit::RunLock`): one
 /// `serve` per root. The daemon's and cw-rails' locks are their own.

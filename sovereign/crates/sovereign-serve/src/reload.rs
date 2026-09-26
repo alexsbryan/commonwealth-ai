@@ -262,7 +262,14 @@ mod tests {
 
     /// A cell over a mock, the reload route on a free loopback port, and the
     /// config file it re-reads.
-    async fn serving(config_text: Option<&str>) -> (Arc<ReloadableProvider>, Arc<dyn InferenceProvider>, String, tempfile::TempDir) {
+    async fn serving(
+        config_text: Option<&str>,
+    ) -> (
+        Arc<ReloadableProvider>,
+        Arc<dyn InferenceProvider>,
+        String,
+        tempfile::TempDir,
+    ) {
         let _ = sovereign_inference::engine_factory::register_engine(
             MOCK_ENGINE,
             Arc::new(sovereign_compute::mock::MockEngine),
@@ -277,10 +284,16 @@ mod tests {
             delay: std::time::Duration::ZERO,
         });
         let cell = Arc::new(ReloadableProvider::new(Arc::clone(&before)));
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.expect("bind");
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind");
         let base = format!("http://{}", listener.local_addr().expect("addr"));
         let routes = vec![bundle(Arc::clone(&cell), Arc::default(), config_path)];
-        tokio::spawn(host_kit::shell::serve([listener], routes, std::future::pending()));
+        tokio::spawn(host_kit::shell::serve(
+            [listener],
+            routes,
+            std::future::pending(),
+        ));
         (cell, before, base, dir)
     }
 
@@ -296,7 +309,10 @@ mod tests {
         assert_eq!(resp.status(), 200, "{:?}", resp.text().await);
         let body: EngineReloaded = resp.json().await.expect("body");
         assert_eq!(body.resident_models, vec![MOCK_MODEL.to_string()]);
-        assert!(!Arc::ptr_eq(&cell.current(), &before), "the cell still holds the pre-reload provider");
+        assert!(
+            !Arc::ptr_eq(&cell.current(), &before),
+            "the cell still holds the pre-reload provider"
+        );
     }
 
     #[tokio::test]
@@ -308,7 +324,14 @@ mod tests {
             .await
             .expect("reload answered");
         assert_eq!(resp.status(), 503);
-        assert!(resp.text().await.unwrap_or_default().contains("cannot read"));
-        assert!(Arc::ptr_eq(&cell.current(), &before), "a refused reload swapped the provider");
+        assert!(resp
+            .text()
+            .await
+            .unwrap_or_default()
+            .contains("cannot read"));
+        assert!(
+            Arc::ptr_eq(&cell.current(), &before),
+            "a refused reload swapped the provider"
+        );
     }
 }
