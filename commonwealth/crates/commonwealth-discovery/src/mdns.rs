@@ -203,8 +203,7 @@ impl MdnsDiscovery {
                                     .get_property_val_str("node_pubkey")
                                     .map(str::to_string);
 
-                                // Pick the first address.
-                                let addr = info.get_addresses().iter().next().copied();
+                                let addr = dialable_address(info.get_addresses());
                                 let port = info.get_port();
 
                                 if let Some(ip) = addr {
@@ -350,7 +349,7 @@ impl MdnsDiscovery {
                     let _ = node_id_str; // node_id comes from gossip handshake
 
                     let port = info.get_port();
-                    if let Some(ip) = info.get_addresses().iter().next().copied() {
+                    if let Some(ip) = dialable_address(info.get_addresses()) {
                         let app = DiscoveredApp {
                             app_id: app_id_owned.clone(),
                             node_id: commonwealth_core::ids::NodeId::generate(),
@@ -422,9 +421,50 @@ fn app_service_type(app_id: &str) -> String {
     format!("_cwapp-{}._tcp.local.", sanitize_app_id(app_id))
 }
 
+/// The one address of a resolved service to dial. mdns-sd hands back an
+/// unordered set, and with addr-auto it holds IPv6 link-local addresses that
+/// carry no scope id and so dial nothing: IPv4 first, then routable IPv6, and
+/// never a link-local one. A resolution holding only link-local addresses is
+/// no peer yet — mdns-sd's own " (2)" conflict rename of an advertiser that
+/// hears itself on a second interface resolves exactly that way.
+fn dialable_address(
+    addrs: &std::collections::HashSet<std::net::IpAddr>,
+) -> Option<std::net::IpAddr> {
+    let rank = |ip: &std::net::IpAddr| match ip {
+        std::net::IpAddr::V4(_) => Some(0),
+        std::net::IpAddr::V6(v6) if !v6.is_unicast_link_local() => Some(1),
+        std::net::IpAddr::V6(_) => None,
+    };
+    let chosen = addrs
+        .iter()
+        .filter_map(|ip| rank(ip).map(|r| (r, *ip)))
+        .min()
+        .map(|(_, ip)| ip);
+    debug!(candidates = addrs.len(), chosen = ?chosen, "mDNS: chose the address to dial");
+    chosen
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Measured 2026-09-26: a keyed founder's " (2)" record resolved to
+    /// `fe80::` addresses only and the join timed out on it for 15 s.
+    #[test]
+    fn a_link_local_address_is_never_chosen() {
+        let set = |a: &[&str]| a.iter().map(|s| s.parse().unwrap()).collect();
+        let v4: std::net::IpAddr = "192.168.1.12".parse().unwrap();
+        assert_eq!(
+            dialable_address(&set(&["fe80::1", "192.168.1.12", "fe80::2"])),
+            Some(v4)
+        );
+        assert_eq!(
+            dialable_address(&set(&["fe80::1", "fd7a::1"])),
+            Some("fd7a::1".parse().unwrap())
+        );
+        assert_eq!(dialable_address(&set(&["fe80::1", "fe80::2"])), None);
+        assert_eq!(dialable_address(&set(&[])), None);
+    }
 
     #[test]
     fn service_type_format() {
