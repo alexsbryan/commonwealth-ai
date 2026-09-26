@@ -238,7 +238,8 @@ fn build_llama(config: &SetupConfig) -> Result<BuiltEngine, String> {
     // `primary_path`, so `None` means no code path in this process can pull
     // the distributed model in behind our back. The *guards* around this
     // mode (containment armed? is `fast` distinct from `primary`?) are
-    // admission and stay with the daemon; this is only the derivation.
+    // admission and live in the serving assembly (sovereign-compute
+    // `assembly.rs`, `containment.rs`); this is only the derivation.
     let child_owns_primary = child_owns_primary(config);
 
     let engine = EmbeddedLlamaCpp::load_full_with_families(

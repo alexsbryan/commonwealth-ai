@@ -17,8 +17,9 @@
 //! The daemon can't rebuild a provider on its own (that would couple
 //! `sovereign-mesh` to `sovereign-inference` model-loading details
 //! that live in the CLI/desktop bootstrap). It delegates via a
-//! `ProviderFactory` trait: the CLI/desktop installs one at startup
-//! that knows how to call `EmbeddedLlamaCpp::load_full_with_families`.
+//! `ProviderFactory` trait: the daemon installs one at startup
+//! (`provider::LlamaCppFactory`) that rebuilds through the one serving
+//! assembly (`sovereign_compute::assembly::ReloadFactory::build`).
 //!
 //! Fields that need a full rebind (ports, data_dir) can't be hot-
 //! reloaded because `TcpListener` is already bound and SQLite handles
