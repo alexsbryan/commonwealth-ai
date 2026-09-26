@@ -27,10 +27,10 @@ use axum::response::IntoResponse;
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use commonwealth_core::capabilities::OriginKind;
-use host_kit::shell::RouteBundle;
 use commonwealth_media::apps::PublishRefusal;
 use commonwealth_media::fanout::FanoutRequest;
 use commonwealth_media::MediaReachRefusal;
+use host_kit::shell::RouteBundle;
 use serde::Deserialize;
 
 use crate::{RailsDaemon, Refusal};
@@ -49,9 +49,7 @@ pub fn bundles(daemon: Arc<RailsDaemon>) -> Vec<RouteBundle> {
         // The mesh store's doors (fp-77), over its own state.
         crate::kv::router(daemon.kv.clone()),
         // The typed ledger doors (fp-78), over the same store.
-        crate::ledger::router(crate::ledger::LedgerDoors::new(
-            daemon.kv.store.clone(),
-        )),
+        crate::ledger::router(crate::ledger::LedgerDoors::new(daemon.kv.store.clone())),
     ]
 }
 

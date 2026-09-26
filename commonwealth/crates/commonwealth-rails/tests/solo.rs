@@ -205,7 +205,10 @@ async fn the_mount_trace_names_every_route_the_api_serves() {
     daemon.node.endpoint.close().await;
 
     let mut sources = Vec::new();
-    product_sources(&Path::new(env!("CARGO_MANIFEST_DIR")).join("src"), &mut sources);
+    product_sources(
+        &Path::new(env!("CARGO_MANIFEST_DIR")).join("src"),
+        &mut sources,
+    );
     let outside: Vec<String> = sources
         .iter()
         .flat_map(|(path, text)| {

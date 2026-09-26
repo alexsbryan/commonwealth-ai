@@ -27,7 +27,6 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::Json;
-use host_kit::shell::RouteBundle;
 use commonwealth_core::activity::ActivityEventKind;
 use commonwealth_core::capabilities::NodeCapabilities;
 use commonwealth_core::contributions::LedgerEventKind;
@@ -40,6 +39,7 @@ use commonwealth_state::{
     ActivityEmitter, ContributionEmitter, MeshStore, PeerPreference, PeerPreferenceStore,
     PROCESSED_SHARDS_APP_ID,
 };
+use host_kit::shell::RouteBundle;
 use serde::Deserialize;
 use tracing::{debug, warn};
 
