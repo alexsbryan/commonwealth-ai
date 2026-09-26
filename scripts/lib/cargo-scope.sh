@@ -117,7 +117,7 @@ keep_members() {
 # this replaced.
 resolve_features() {
     if [[ $# -eq 0 ]]; then
-        echo "corpus-engine/treesitter,sovereign-cli/dev-tools,sovereign-cli/code-intel,sovereign-cli/awareness,sovereign-daemon/treesitter,sovereign-mesh/dst,sovereign-turn-client/bundled-backend"
+        echo "corpus-engine/treesitter,sovereign-cli/dev-tools,sovereign-cli/code-intel,sovereign-cli/awareness,sovereign-daemon/treesitter,sovereign-mesh/dst,sovereign-turn-client/bundled-backend,host-kit/mcp"
         return 0
     fi
 
@@ -215,6 +215,13 @@ if "sovereign-turn-client" in seen:
     # `sv-no-daemon-management` gate (cargo tree over the desktop) reads the
     # same either way.
     want.append("sovereign-turn-client/bundled-backend")
+if "host-kit" in seen:
+    # `mcp` gates the MCP dispatcher in the host kit (phase-b pb-mcp).
+    # corpus-mcp turns it on, so a workspace run gets it by unification; a solo
+    # `--package host-kit` run compiled the module and its protocol tests to
+    # nothing. The feature adds only wire-leaf and async deps, so unifying it
+    # into a scoped cw-rails run moves no package closure.
+    want.append("host-kit/mcp")
 legal = [f for f in want if f.split("/", 1)[0] in nameable]
 dropped = [f for f in want if f not in legal]
 if dropped:

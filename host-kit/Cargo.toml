@@ -11,6 +11,18 @@ description = "The host kit — what each program's binary owns about itself, st
 # from sovereign, corpus-engine, commonwealth or studio, so commonwealth-rails
 # can take it past its `→ sovereign-*` [[forbid]].
 
+[features]
+# The MCP dispatcher (phase-b pb-mcp, decision phase-b-13): the protocol half
+# every MCP host shares, over a tool-host port. Optional, so a program that
+# serves no MCP (cw-rails) takes the kit without the wire vocabulary.
+mcp = ["dep:oicp-types", "dep:serde_json", "dep:tokio", "dep:tracing"]
+
+[dependencies]
+oicp-types = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true }
+tokio = { workspace = true, optional = true }
+tracing = { workspace = true, optional = true }
+
 [dev-dependencies]
 tempfile = { workspace = true }
 

@@ -61,6 +61,9 @@
 //! the operator hint a refusal prints is the caller's to add for the same
 //! reason.
 
+#[cfg(feature = "mcp")]
+pub mod mcp;
+
 use std::path::{Path, PathBuf};
 
 /// An exclusive claim on one data root, held for as long as the value lives.

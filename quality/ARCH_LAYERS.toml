@@ -1101,7 +1101,12 @@ name = "host-kit"
 # every path and file name is supplied by the caller, it owns no store, and it
 # names no program's vocabulary. Neutrally named so neither `[[forbid]]
 # commonwealth-rails → sovereign-*` nor `→ commonwealth-*` matches it.
-allow = ["workspace-hack"]
+# `oicp-types` joined 2026-09-26 (pb-mcp, decision phase-b-13) as an OPTIONAL
+# dep behind the kit's `mcp` feature: the MCP dispatcher speaks the wire
+# vocabulary (JSON-RPC envelope, method set) rather than re-declaring it. It is
+# a wire leaf already shared by every package's closure; cw-rails does not
+# enable the feature.
+allow = ["oicp-types", "workspace-hack"]
 # Fixed, never ratcheted; the operator's to change (FIVE_PROGRAMS §12 3a
 # rung 4). boundary-gate counts it with size-gate's counter.
 max_code_lines = 2500
