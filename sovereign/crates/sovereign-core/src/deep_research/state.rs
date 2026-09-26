@@ -8,9 +8,8 @@
 //! conditions recorded distinctly. The run-scoped lock (F19) refuses a
 //! second run against the same run directory.
 
-use std::fs::{File, OpenOptions};
 use std::io::Write as _;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 /// The enumerated loop states (icd-schemas.md §13).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -188,15 +187,14 @@ pub enum Event {
     AbortRendered,
 }
 
-/// The run-scoped lock (F19): flock on `<run_dir>/lock`. A second run
-/// against the same run directory refuses at acquisition. The lifecycle
-/// is recorded in the manifest's `lock` record.
+/// The run-scoped lock (F19): the host kit's flock on `<run_dir>/lock`. A
+/// second run against the same run directory refuses at acquisition. The
+/// lifecycle is recorded in the manifest's `lock` record.
 #[derive(Debug)]
 pub struct RunLock {
-    file: File,
-    /// The lock file path — `File` does not expose one; keeping it lets
-    /// release/Drop remove the file (the visible released state).
-    path: PathBuf,
+    /// The held claim; dropping it releases the flock. Its path is what
+    /// release/Drop remove (the visible released state).
+    claim: host_kit::RunLock,
     pub id: String,
     pub acquired_at_unix: i64,
 }
@@ -205,46 +203,40 @@ impl RunLock {
     /// Acquire the run-scoped lock, refusing a second opener. Fail-closed:
     /// an unreadable/lockable lock file is a refused run, not a warning.
     pub fn acquire(run_dir: &Path, run_id: &str) -> Result<RunLock, String> {
-        let lock_path = run_dir.join("lock");
-        // flock semantics (order deep-research-t3a): create(true), then
-        // File::try_lock. A LIVE second run holds the flock and refuses
-        // (F19) — the refusal names "already exists". A STALE lock file
-        // left by a SIGKILL'd process holds no flock and is acquirable —
-        // the operator's `--resume` is the visible act that acquires it.
-        // (Pre-t3a this was create_new/O_EXCL, which also refused the
-        // stale file and would have blocked resume forever.)
-        let file = OpenOptions::new()
-            .write(true)
-            .create(true)
-            .open(&lock_path)
-            .map_err(|e| {
-                format!(
-                    "run lock refused: {lock_path:?} already exists or is unwritable ({e}); \
-                     a second run against the same run dir must not proceed (F19)"
-                )
-            })?;
-        match file.try_lock() {
-            Ok(()) => {}
-            Err(std::fs::TryLockError::WouldBlock) => {
+        // flock semantics (order deep-research-t3a), through the host kit's
+        // one RunLock. A LIVE second run holds the flock and refuses (F19) —
+        // the refusal names "already exists". A STALE lock file left by a
+        // SIGKILL'd process holds no flock and is acquirable — the
+        // operator's `--resume` is the visible act that acquires it.
+        // (Pre-t3a this was create_new/O_EXCL, which also refused the stale
+        // file and would have blocked resume forever.)
+        let claim = match host_kit::RunLock::acquire(run_dir, "lock") {
+            Ok(claim) => claim,
+            Err(host_kit::RunLockError::Unopenable { path, source: e }) => {
                 return Err(format!(
-                    "run lock refused: {lock_path:?} already exists and is held by a live run; \
+                    "run lock refused: {path:?} already exists or is unwritable ({e}); \
+                     a second run against the same run dir must not proceed (F19)"
+                ));
+            }
+            Err(host_kit::RunLockError::Held { path }) => {
+                return Err(format!(
+                    "run lock refused: {path:?} already exists and is held by a live run; \
                      a second run against the same run dir must not proceed (F19). A stale lock \
                      file from a dead process is acquirable — `--resume` is the visible act."
                 ));
             }
-            Err(std::fs::TryLockError::Error(e)) => {
+            Err(host_kit::RunLockError::Unlockable { path, source: e }) => {
                 return Err(format!(
-                    "run lock refused: {lock_path:?} could not be flocked ({e}) — fail-closed (F19)"
+                    "run lock refused: {path:?} could not be flocked ({e}) — fail-closed (F19)"
                 ));
             }
-        }
+        };
         let acquired_at_unix = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_secs() as i64)
             .unwrap_or(0);
         Ok(RunLock {
-            file,
-            path: lock_path,
+            claim,
             id: run_id.to_string(),
             acquired_at_unix,
         })
@@ -258,13 +250,13 @@ impl RunLock {
             .map(|d| d.as_secs() as i64)
             .unwrap_or(0);
         // Best-effort removal; the file's absence is the visible released state.
-        let _ = std::fs::remove_file(&self.path);
+        let _ = std::fs::remove_file(self.claim.path());
         released_at_unix
     }
 
     /// The lock file path (for the manifest record).
     pub fn path(&self) -> &Path {
-        &self.path
+        self.claim.path()
     }
 }
 
@@ -273,7 +265,7 @@ impl Drop for RunLock {
         // A dropped lock without an explicit release still unblocks the
         // dir — the lock is per-process; the file removal is best-effort
         // so a panic mid-run does not permanently wedge the run dir.
-        let _ = std::fs::remove_file(&self.path);
+        let _ = std::fs::remove_file(self.claim.path());
     }
 }
 

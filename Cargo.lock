@@ -12568,6 +12568,7 @@ dependencies = [
  "dashmap",
  "dirs 5.0.1",
  "futures",
+ "host-kit",
  "kernel-types",
  "oicp-client",
  "oicp-types",
