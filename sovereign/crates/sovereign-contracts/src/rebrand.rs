@@ -233,6 +233,11 @@ pub fn data_dir() -> PathBuf {
     svrnmesh_root()
 }
 
+/// The daemon's run-lock file inside its data root (`host_kit::RunLock`).
+/// The daemon takes it and a harness waiting for the daemon to exit watches
+/// it, so the two read one name.
+pub const DAEMON_LOCK_FILE: &str = "daemon.lock";
+
 /// The session-frame store, honoring the `SVRNMESH_SESSIONS_DIR` /
 /// `SOVEREIGN_SESSIONS_DIR` override and falling back to
 /// [`svrnmesh_root`]. THE derivation for "where do session frames live":

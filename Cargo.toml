@@ -40,6 +40,10 @@ members = [
     # fs, no store — the one `SOVEREIGN_JOIN_HOST` env read rides with the
     # format that consumes it.
     "mesh-join-vocab",
+    # The host kit (FIVE_PROGRAMS §2c): what each program's binary owns about
+    # itself, starting with its data-root lock. Neutrally named so
+    # commonwealth-rails can take it; every path comes from the caller.
+    "host-kit",
 
     # Knowledge layer (LanceDB + Tantivy + extractors + chunkers).
     "corpus-engine",
@@ -337,6 +341,7 @@ serving-policy = { path = "serving-policy" }
 serving-policy-core = { path = "serving-policy-core" }
 oplog = { path = "oplog" }
 mesh-join-vocab = { path = "mesh-join-vocab" }
+host-kit = { path = "host-kit" }
 corpus-engine = { path = "corpus-engine" }
 corpus-engine-scip = { path = "corpus-engine-scip" }
 corpus-engine-atlas-reader = { path = "corpus-engine-atlas-reader" }

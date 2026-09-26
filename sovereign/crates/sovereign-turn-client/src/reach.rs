@@ -316,7 +316,7 @@ impl ServingHost {
     ///
     /// Two callers racing to bring one up is the daemon's question, not
     /// this client's: a svrn daemon takes
-    /// [`sovereign_contracts::run_lock::RunLock`] on its data root, so the
+    /// `host_kit::RunLock` on its data root, so the
     /// loser exits and the winner serves both. Adding a lock here would be
     /// this client deciding something the daemon already owns (ARCH
     /// principle 12).

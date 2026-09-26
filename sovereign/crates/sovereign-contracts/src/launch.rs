@@ -243,7 +243,7 @@ impl Launch {
     /// [`Launch::Worker`] is resident and owns no persistent state (an
     /// ephemeral pod boots from a bootstrap blob and exits), while
     /// [`Launch::Desktop`] is not resident yet owns a data root whenever it
-    /// runs its own in-process daemon. See [`crate::run_lock`].
+    /// runs its own in-process daemon. See `host_kit::RunLock`.
     pub fn is_resident(&self) -> bool {
         matches!(self, Launch::Daemon { .. } | Launch::Worker { .. })
     }

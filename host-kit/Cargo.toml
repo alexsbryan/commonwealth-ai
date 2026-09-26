@@ -1,0 +1,24 @@
+[package]
+name = "host-kit"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "The host kit — what each program's binary owns about itself, starting with the single-writer lock on its data root. Every path and file name comes from the caller; it names no program's vocabulary."
+
+# Minted 2026-09-26 (phase-b pb-hostkit; FIVE_PROGRAMS §2c, §12 3a rung 4).
+# The one mechanism leaf: it may do fs work, owns no store, and names nothing
+# from sovereign, corpus-engine, commonwealth or studio, so commonwealth-rails
+# can take it past its `→ sovereign-*` [[forbid]].
+
+# `RunLock`: flock(2) for the single-writer claim on a data root, unix-gated
+# because the lock has no enforcement to offer anywhere else
+# (`RunLock::is_enforced`).
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[lints]
+workspace = true

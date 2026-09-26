@@ -332,7 +332,7 @@ fn daemon_lock_path() -> PathBuf {
     let root = sovereign_contracts::setup_config::SetupConfig::load()
         .map(|c| c.data.dir)
         .unwrap_or_else(|_| sovereign_contracts::rebrand::data_dir());
-    sovereign_contracts::run_lock::RunLock::path_for(&root)
+    host_kit::RunLock::path_for(&root, sovereign_contracts::rebrand::DAEMON_LOCK_FILE)
 }
 
 /// The DISPATCHER binary, which is not the one we are running.

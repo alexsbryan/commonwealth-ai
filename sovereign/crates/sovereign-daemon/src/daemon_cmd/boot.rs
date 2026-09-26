@@ -221,7 +221,10 @@ pub(super) async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
     //
     // Held for the process lifetime: the kernel releases it on any exit,
     // including SIGKILL, so there is no stale-lock cleanup path.
-    let _run_lock = match sovereign_contracts::run_lock::RunLock::acquire(&config.data.dir) {
+    let _run_lock = match host_kit::RunLock::acquire(
+        &config.data.dir,
+        sovereign_contracts::rebrand::DAEMON_LOCK_FILE,
+    ) {
         Ok(lock) => {
             tracing::debug!(
                 target: "daemon",
@@ -233,6 +236,14 @@ pub(super) async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
         }
         Err(e) => {
             eprintln!("error: {e}");
+            if matches!(e, host_kit::RunLockError::Held { .. }) {
+                eprintln!(
+                    "  Check `svrn daemon status`; stop it with `svrn daemon stop`.\n  \
+                     A harness that wants a second daemon gives it its OWN data \
+                     dir (`--config` with a distinct `[data] dir`, or \
+                     SVRNMESH_DATA_DIR) — the lock is per data root, not per HOME."
+                );
+            }
             return 1;
         }
     };

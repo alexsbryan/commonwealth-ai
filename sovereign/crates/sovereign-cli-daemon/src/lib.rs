@@ -179,7 +179,7 @@ pub fn run_with_args(raw_args: Vec<String>) -> i32 {
     // comment said it was. Residency and data-root ownership are different
     // questions: `Launch::Worker` is resident and owns no persistent state at
     // all, so it has nothing to lock. The lock is keyed on the data root by
-    // whoever is about to write it (`sovereign_contracts::run_lock`).
+    // whoever is about to write it (`host_kit::RunLock`).
     if launch.is_resident() {
         let data_dir = sovereign_contracts::rebrand::svrnmesh_root();
         panic_hook::install(data_dir);

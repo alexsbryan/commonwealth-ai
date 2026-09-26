@@ -11587,7 +11587,7 @@ lines = 437
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/run_lock.rs"
+path = "host-kit/src/lib.rs"
 context = "kernel"
 lines = 275
 note = ""

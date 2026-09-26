@@ -51,6 +51,8 @@ sovereign-enrichment-catalog = { workspace = true }
 # `enrich_cmd/mod.rs`.
 sovereign-enrichment-build = { workspace = true }
 sovereign-contracts = { workspace = true }
+# `bench_cmd/ablate.rs` watches the daemon's data-root lock.
+host-kit = { workspace = true }
 # `declare`: write this node's own origin credential to the 0600 secret
 # store. One implementation of where a declaration lives, shared with the
 # acceptor that reads it.

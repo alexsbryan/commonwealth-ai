@@ -135,7 +135,6 @@ pub mod rebrand;
 pub mod recipe;
 pub mod registry;
 pub mod run_identity;
-pub mod run_lock;
 /// What this node claims about itself — the port Fabric publishes from. A
 /// consumer in `sovereign-mesh` (Fabric) and an implementation in
 /// `sovereign-api` (the daemon) may not name each other, so the port lives

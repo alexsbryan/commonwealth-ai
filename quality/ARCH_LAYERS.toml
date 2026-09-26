@@ -158,6 +158,12 @@ crates = [
     # `sovereign-*` prefix, so the shared home cannot carry a sovereign name.
     # No fs, no store; blake3 + hex are the whole budget.
     "mesh-join-vocab",
+    # The host kit (FIVE_PROGRAMS §2c, §12 3a rung 4; phase-b pb-hostkit):
+    # what each program's binary owns about itself, starting with its
+    # data-root lock. Neutrally named for the mesh-join-vocab reason, so
+    # commonwealth-rails can take it. The one leaf that does fs work; every
+    # path comes from the caller.
+    "host-kit",
 ]
 
 # The knowledge layer: corpus-engine + its carve-outs. "Self-contained by
@@ -1082,6 +1088,17 @@ name = "mesh-join-vocab"
 # var is declared in quality/env-flags.toml). commonwealth-discovery re-exports
 # both modules at their historical paths (re-exports, never twins);
 # `Error::InvalidJoinKey` stays commonwealth-core's — accept_join constructs it.
+allow = ["workspace-hack"]
+
+[[package_leaf]]
+name = "host-kit"
+# The host kit — the one mechanism leaf (FIVE_PROGRAMS §2c, §12 3a rung 4;
+# phase-b pb-hostkit, decisions phase-b-9/-10). It holds what each program's
+# binary owns about ITSELF; its first content is the data-root lock
+# (`RunLock`), moved whole from sovereign-contracts. It qualifies only while
+# every path and file name is supplied by the caller, it owns no store, and it
+# names no program's vocabulary. Neutrally named so neither `[[forbid]]
+# commonwealth-rails → sovereign-*` nor `→ commonwealth-*` matches it.
 allow = ["workspace-hack"]
 
 [[package_leaf]]

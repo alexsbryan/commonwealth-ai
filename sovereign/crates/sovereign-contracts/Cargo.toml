@@ -68,13 +68,6 @@ hex = "0.4"
 # `HeaderMap` is vocabulary, not a server.
 http = "1"
 
-# `run_lock`: flock(2) for the single-writer claim on a data root. A leaf
-# third-party crate, so it adds no workspace layer edge — and unix-gated,
-# because the lock has no enforcement to offer anywhere else
-# (`RunLock::is_enforced`).
-[target.'cfg(unix)'.dependencies]
-libc = "0.2"
-
 [features]
 # The canonical middleware test fixtures (`middleware::fixtures`). Off by
 # default so the lifted contract leaf ships no test support; the crates that
