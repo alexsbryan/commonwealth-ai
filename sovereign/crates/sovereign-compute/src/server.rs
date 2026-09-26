@@ -338,7 +338,10 @@ mod tests {
                     .await
                     .expect("the child answers");
                 let status = resp.status().as_u16();
-                (status, resp.json::<WireError>().await.expect("a WireError body"))
+                (
+                    status,
+                    resp.json::<WireError>().await.expect("a WireError body"),
+                )
             })
         });
         assert_eq!(status, 503, "a backend failure is 503 on every host");
