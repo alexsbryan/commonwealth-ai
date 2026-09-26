@@ -428,7 +428,7 @@ pub struct InferenceRouter {
     /// linearly-backed-off cooldown. Filtered out of routing
     /// candidates while quarantined; one successful response clears
     /// the state. See [`peer_health`] for the policy.
-    peer_health: Arc<commonwealth_core::peer_health::PeerHealthTracker>,
+    peer_health: Arc<sovereign_scheduler::peer_health::PeerHealthTracker>,
     /// "Do I hold a live guest grant for this model id?"
     ///
     /// Defaults to [`NoGuestLenders`] — almost every node has no link, and a
@@ -695,7 +695,7 @@ impl InferenceRouter {
             peer_observations: Arc::new(RwLock::new(std::collections::HashMap::new())),
             local_observations: Arc::new(RwLock::new(local_obs)),
             extension_registry: Arc::new(RwLock::new(ExtensionRegistry::new())),
-            peer_health: Arc::new(commonwealth_core::peer_health::PeerHealthTracker::new()),
+            peer_health: Arc::new(sovereign_scheduler::peer_health::PeerHealthTracker::new()),
             guest: std::sync::RwLock::new(Arc::new(crate::guest_lender::NoGuestLenders)
                 as Arc<dyn crate::guest_lender::GuestLenderSource>),
             yield_backoff: Arc::new(sovereign_scheduler::yield_backoff::YieldBackoff::new()),

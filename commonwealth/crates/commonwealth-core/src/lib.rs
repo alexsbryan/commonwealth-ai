@@ -82,7 +82,6 @@
 //!     contributions   what this node gave the mesh — gossiped, never scored
 //!     activity        what this node did locally — never leaves the machine
 //!     latency         the pairwise latency matrix
-//!     peer_health     quarantine a peer that keeps failing, then retry it
 //!
 //!   How do I reach a peer, and is it really that peer?
 //!     peer_addr       which of a peer's addresses to try first
@@ -125,7 +124,6 @@ pub mod mesh_identity;
 pub mod mesh_merge;
 pub mod model;
 pub mod peer_addr;
-pub mod peer_health;
 pub use oicp_types as oicp;
 pub mod partition;
 

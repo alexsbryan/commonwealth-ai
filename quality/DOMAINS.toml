@@ -1677,8 +1677,8 @@ why = "Fabric-internal, inside the package; doc at :397 says 'trust between peer
 
 [[noun]]
 name = "PeerHealthTracker"
-crate = "commonwealth-core"
-file = "commonwealth/crates/commonwealth-core/src/peer_health.rs:142"
+crate = "sovereign-scheduler"
+file = "sovereign/crates/sovereign-scheduler/src/peer_health.rs:142"
 visibility = "pub"
 concept = "C3"
 context = "serving"
@@ -1688,8 +1688,8 @@ why = "32 refs / 7 files. Zero Fabric consumers; only is_quarantined/health_weig
 
 [[noun]]
 name = "PeerHealth"
-crate = "commonwealth-core"
-file = "commonwealth/crates/commonwealth-core/src/peer_health.rs:83"
+crate = "sovereign-scheduler"
+file = "sovereign/crates/sovereign-scheduler/src/peer_health.rs:83"
 visibility = "private"
 concept = "C3"
 context = "serving"
@@ -6559,8 +6559,8 @@ lines = 129
 note = ""
 
 [[module]]
-path = "commonwealth/crates/commonwealth-core/src/peer_health.rs"
-context = "fabric"
+path = "sovereign/crates/sovereign-scheduler/src/peer_health.rs"
+context = "serving"
 lines = 510
 note = ""
 
