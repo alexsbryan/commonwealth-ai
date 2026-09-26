@@ -12414,6 +12414,7 @@ dependencies = [
  "fast_qr",
  "futures",
  "hex",
+ "host-kit",
  "hostname",
  "libc",
  "oicp-types",

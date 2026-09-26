@@ -13,8 +13,8 @@ use axum::{
     http::{header, StatusCode, Uri},
     response::{IntoResponse, Response},
     routing::{get, post},
-    Router,
 };
+use host_kit::shell::RouteBundle;
 
 use super::{
     daemon_client_port, flag, http_client, mint_rail_grant, rail_log, RAIL_APPEND_PATH,
@@ -86,11 +86,7 @@ pub(super) async fn run_show(args: &[String]) -> i32 {
         http,
     });
 
-    let app = Router::new()
-        .route("/__ring/{op}", post(op_handler))
-        .route("/__ring_dev.js", get(shim_handler))
-        .fallback(static_handler)
-        .with_state(ctx.clone());
+    let routes = show_routes(ctx.clone());
 
     let addr = std::net::SocketAddr::from(([127, 0, 0, 1], port));
     let listener = match tokio::net::TcpListener::bind(addr).await {
@@ -107,11 +103,22 @@ pub(super) async fn run_show(args: &[String]) -> i32 {
     println!();
     println!("  The grant this server holds reaches `{namespace}` and nothing else on");
     println!("  the daemon, and it dies with this process. The browser never sees it.");
-    if let Err(e) = axum::serve(listener, app.into_make_service()).await {
+    let forever = std::future::pending::<()>();
+    if let Err(e) = host_kit::shell::serve([listener], vec![routes], forever).await {
         eprintln!("ring show: server error: {e}");
         return 1;
     }
     0
+}
+
+/// `ring show`'s routes, as the host kit's named bundle: the rail ops, the
+/// dev shim, and the bundle's static files behind the fallback.
+fn show_routes(ctx: Arc<RingCtx>) -> RouteBundle {
+    RouteBundle::new("ring_show")
+        .route("/__ring/{op}", post(op_handler))
+        .route("/__ring_dev.js", get(shim_handler))
+        .fallback(static_handler)
+        .with_state(ctx)
 }
 
 /// **The whole op table: four ops, because the rail is three routes and the
@@ -252,5 +259,21 @@ mod tests {
             ))
         );
         assert!(upstream("nope").is_none());
+    }
+
+    /// The mount trace names every route `ring show` serves (phase-b
+    /// pb-shell): the trace prints the bundle's `routes()`.
+    #[test]
+    fn the_show_bundle_names_its_routes_and_its_fallback() {
+        let ctx = Arc::new(RingCtx {
+            bundle_dir: PathBuf::new(),
+            base: String::new(),
+            token: String::new(),
+            namespace: String::new(),
+            http: reqwest::Client::new(),
+        });
+        let routes = show_routes(ctx);
+        assert_eq!(routes.name(), "ring_show");
+        assert_eq!(routes.routes(), ["/__ring/{op}", "/__ring_dev.js", "*"]);
     }
 }

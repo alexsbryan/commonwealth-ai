@@ -8,6 +8,8 @@ description = "cmnwlth's CLI verbs: mesh, ring, job, media, meshapp, run, publis
 [dependencies]
 clap = { workspace = true }
 sovereign-contracts = { workspace = true }
+# The server shell `meshapp dev` and `ring show` serve through (phase-b pb-shell).
+host-kit = { workspace = true, features = ["shell"] }
 sovereign-time = { workspace = true }
 commonwealth-media = { workspace = true }
 sovereign-inference = { workspace = true }

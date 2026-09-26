@@ -16,8 +16,8 @@ use axum::{
     http::{header, StatusCode, Uri},
     response::{IntoResponse, Response},
     routing::{get, post},
-    Router,
 };
+use host_kit::shell::RouteBundle;
 use serde::Deserialize;
 
 // The clamps live with the DTOs they clamp, in
@@ -243,11 +243,7 @@ async fn run_dev(args: &[String]) -> i32 {
         sdk_dir,
     });
 
-    let app = Router::new()
-        .route("/__meshapp/{op}", post(op_handler))
-        .route("/__meshapp_dev.js", get(shim_handler))
-        .fallback(static_handler)
-        .with_state(ctx.clone());
+    let routes = dev_routes(ctx.clone());
 
     let addr = std::net::SocketAddr::from(([127, 0, 0, 1], port));
     let listener = match tokio::net::TcpListener::bind(addr).await {
@@ -261,11 +257,22 @@ async fn run_dev(args: &[String]) -> i32 {
     println!("  bundle : {}", ctx.bundle_dir.display());
     println!("  index  : {}", ctx.index_path.display());
     println!("  open   : http://{addr}/   (Ctrl-C to stop)");
-    if let Err(e) = axum::serve(listener, app.into_make_service()).await {
+    let forever = std::future::pending::<()>();
+    if let Err(e) = host_kit::shell::serve([listener], vec![routes], forever).await {
         eprintln!("meshapp dev: server error: {e}");
         return 1;
     }
     0
+}
+
+/// `meshapp dev`'s routes, as the host kit's named bundle: the bridge ops,
+/// the dev shim, and the bundle's static files behind the fallback.
+fn dev_routes(ctx: Arc<DevCtx>) -> RouteBundle {
+    RouteBundle::new("meshapp_dev")
+        .route("/__meshapp/{op}", post(op_handler))
+        .route("/__meshapp_dev.js", get(shim_handler))
+        .fallback(static_handler)
+        .with_state(ctx)
 }
 
 fn read_manifest_corpus(bundle_dir: &Path) -> Result<String, String> {
@@ -567,3 +574,25 @@ const STARTER_MANIFEST: &str = r#"{
   "trust": "unsigned"
 }
 "#;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The mount trace names every route `meshapp dev` serves (phase-b
+    /// pb-shell): the trace prints the bundle's `routes()`.
+    #[test]
+    fn the_dev_bundle_names_its_routes_and_its_fallback() {
+        let ctx = Arc::new(DevCtx {
+            index_path: PathBuf::new(),
+            bundle_dir: PathBuf::new(),
+            sdk_dir: PathBuf::new(),
+        });
+        let routes = dev_routes(ctx);
+        assert_eq!(routes.name(), "meshapp_dev");
+        assert_eq!(
+            routes.routes(),
+            ["/__meshapp/{op}", "/__meshapp_dev.js", "*"]
+        );
+    }
+}
