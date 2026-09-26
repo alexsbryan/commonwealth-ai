@@ -120,7 +120,15 @@ pub fn load_from_env() -> RerankLoad {
     let Some(path) = crate::served_kind::RERANK.model_path(None) else {
         return RerankLoad::NotConfigured;
     };
+    load_fitted(&path)
+}
 
+/// Load the reranker at `path`, refused up front when it does not fit. The
+/// one in-process rerank load: [`load_from_env`] and the rerank kind's loader
+/// (`served_kind::RERANK`, which the serving assembly and the compute child
+/// call) both land here, so each carries the fit check.
+pub fn load_fitted(path: &Path) -> RerankLoad {
+    let path = path.to_path_buf();
     // NATIVE_GROUNDING.md §8 residency plan — the fit check BEFORE the slot
     // loads. The rerank slot is process-local additional weight alongside
     // whatever primary is already resident.
@@ -161,14 +169,15 @@ pub fn load_from_env() -> RerankLoad {
         Ok(reranker) => {
             tracing::info!(
                 path = %path.display(),
-                "reranker loaded from SOVEREIGN_RERANK_MODEL_PATH"
+                "reranker loaded"
             );
             RerankLoad::Loaded(Arc::new(reranker) as Arc<dyn InferenceProvider>)
         }
         Err(e) => {
             let message = format!(
-                "SOVEREIGN_RERANK_MODEL_PATH is set but the reranker failed to \
-                 load ({e}) — running baseline retrieval without rerank"
+                "the reranker at {} failed to load ({e}) — running baseline \
+                 retrieval without rerank",
+                path.display()
             );
             tracing::warn!(path = %path.display(), "{message}");
             RerankLoad::Failed { message }

@@ -22,7 +22,6 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, OnceLock, RwLock};
 
 use futures::future::BoxFuture;
-use sovereign_contracts::model_family::ModelFamily;
 use sovereign_contracts::setup_config::ModelsSection;
 use sovereign_contracts::traits::InferenceProvider;
 
@@ -180,10 +179,21 @@ pub const RERANK: ServedKind = ServedKind {
     child: KindChild::Hosted { role: "rerank" },
 };
 
+/// The one in-process rerank load, fit check first
+/// (`reranker_standalone::load_fitted`). A refusal and a failed load are both
+/// an `Err` naming which one it was.
 fn load_rerank(path: &Path) -> sovereign_contracts::error::Result<Arc<dyn InferenceProvider>> {
-    let reranker =
-        crate::reranker_standalone::StandaloneReranker::load(path, ModelFamily::Reranker, None)?;
-    Ok(Arc::new(reranker))
+    use crate::reranker_standalone::RerankLoad;
+    match crate::reranker_standalone::load_fitted(path) {
+        RerankLoad::Loaded(provider) => Ok(provider),
+        RerankLoad::Refused { message } | RerankLoad::Failed { message } => {
+            Err(sovereign_contracts::error::Error::Inference(message))
+        }
+        RerankLoad::NotConfigured => Err(sovereign_contracts::error::Error::Inference(format!(
+            "no reranker configured at {}",
+            path.display()
+        ))),
+    }
 }
 
 fn serve_rerank(
@@ -228,9 +238,21 @@ fn serve_rerank(
 
 type Registry = RwLock<Vec<ServedKind>>;
 
+/// The kinds every serving binary registers, admitted through the same clash
+/// check as an out-of-tree [`register_kind`].
+const BUILT_IN: [ServedKind; 1] = [RERANK];
+
 fn registry() -> &'static Registry {
     static REGISTRY: OnceLock<Registry> = OnceLock::new();
-    REGISTRY.get_or_init(|| RwLock::new(vec![RERANK]))
+    REGISTRY.get_or_init(|| {
+        let mut kinds = Vec::new();
+        for kind in BUILT_IN {
+            if let Err(e) = admit(&mut kinds, kind) {
+                panic!("the built-in served kinds clash: {e}");
+            }
+        }
+        RwLock::new(kinds)
+    })
 }
 
 /// Register an out-of-tree kind. Call before the host mounts its routes.
@@ -242,7 +264,12 @@ pub fn register_kind(kind: ServedKind) -> Result<(), String> {
     let mut guard = registry()
         .write()
         .map_err(|_| "served kind registry poisoned".to_string())?;
-    for existing in guard.iter() {
+    admit(&mut guard, kind)
+}
+
+/// Add `kind` to `kinds` unless its role, route or child role is taken.
+fn admit(kinds: &mut Vec<ServedKind>, kind: ServedKind) -> Result<(), String> {
+    for existing in kinds.iter() {
         if existing.role == kind.role {
             return Err(format!("served kind `{}` is already registered", kind.role));
         }
@@ -264,7 +291,7 @@ pub fn register_kind(kind: ServedKind) -> Result<(), String> {
         }
     }
     tracing::info!(target: "served_kind", kind = kind.role, "served kind registered");
-    guard.push(kind);
+    kinds.push(kind);
     Ok(())
 }
 
@@ -347,6 +374,40 @@ mod tests {
         };
         let err = register_kind(route_clash).expect_err("a taken route must be refused");
         assert!(err.contains("/v1/rerank"), "got: {err}");
+    }
+
+    /// No two registered kinds share a role, route or child role: the built-in
+    /// seed is admitted through the same check an out-of-tree kind is.
+    #[test]
+    fn no_two_registered_kinds_clash() {
+        let mut admitted = Vec::new();
+        for kind in served_kinds() {
+            admit(&mut admitted, kind).expect("every registered kind passes the clash check");
+        }
+    }
+
+    /// The kind's loader carries the residency fit check, so a slot that
+    /// cannot fit is refused before anything allocates — in the daemon and
+    /// the compute child, not only in the CLI's `load_from_env`.
+    #[test]
+    fn the_rerank_loader_refuses_a_slot_that_does_not_fit() {
+        assert!(
+            !crate::capacity::check_skipped_by_env(),
+            "SOVEREIGN_SKIP_VRAM_CHECK disables the check this test watches"
+        );
+        let dir = std::env::temp_dir().join(format!("pb-rerank-fit-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        let path = dir.join("huge-reranker.gguf");
+        // Sparse: 4 TiB on paper, no blocks on disk.
+        std::fs::File::create(&path)
+            .and_then(|f| f.set_len(4 << 40))
+            .expect("sparse file");
+        let err = match (RERANK.loader)(&path) {
+            Ok(_) => panic!("a 4 TiB reranker cannot load"),
+            Err(e) => e.to_string(),
+        };
+        let _ = std::fs::remove_dir_all(&dir);
+        assert!(err.contains("does not fit"), "got: {err}");
     }
 
     /// The config key is the kind's role; the env var, when set, wins.
