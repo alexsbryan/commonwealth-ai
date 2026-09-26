@@ -32,6 +32,48 @@ pub fn negotiate_mcp_protocol_version(params: Option<&serde_json::Value>) -> &'s
         .unwrap_or(MCP_SUPPORTED_PROTOCOL_VERSIONS[0])
 }
 
+/// The request methods an MCP server mount answers. The one place a method
+/// name is matched as a string: every mount parses into this and matches on
+/// the variant, so a method cannot be spelled two ways (principle 9).
+/// Notifications are not here; a request without an id is one, whatever its
+/// method.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum McpMethod {
+    /// `initialize`: version negotiation, capabilities, server info.
+    Initialize,
+    /// `ping`: liveness, answered with an empty result.
+    Ping,
+    /// `tools/list`: the tools the mount exposes.
+    ToolsList,
+    /// `tools/call`: run one tool.
+    ToolsCall,
+}
+
+impl McpMethod {
+    /// Every variant, in declaration order.
+    pub const ALL: [McpMethod; 4] = [
+        McpMethod::Initialize,
+        McpMethod::Ping,
+        McpMethod::ToolsList,
+        McpMethod::ToolsCall,
+    ];
+
+    /// The method's wire spelling.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            McpMethod::Initialize => "initialize",
+            McpMethod::Ping => "ping",
+            McpMethod::ToolsList => "tools/list",
+            McpMethod::ToolsCall => "tools/call",
+        }
+    }
+
+    /// Parse a wire method name; `None` is "method not found" (-32601).
+    pub fn parse(method: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|m| m.as_str() == method)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -64,6 +106,90 @@ mod tests {
         assert_eq!(
             negotiate_mcp_protocol_version(Some(&serde_json::json!({}))),
             "2025-06-18"
+        );
+    }
+
+    /// `ALL` holds every variant once (the match has no wildcard, so a new
+    /// variant fails to compile here until it is placed), and each wire
+    /// spelling parses back to its variant.
+    #[test]
+    fn mcp_method_all_is_exhaustive_and_round_trips() {
+        let position = |m: McpMethod| match m {
+            McpMethod::Initialize => 0,
+            McpMethod::Ping => 1,
+            McpMethod::ToolsList => 2,
+            McpMethod::ToolsCall => 3,
+        };
+        for (i, m) in McpMethod::ALL.into_iter().enumerate() {
+            assert_eq!(position(m), i, "{m:?} is out of place in ALL");
+            assert_eq!(McpMethod::parse(m.as_str()), Some(m));
+        }
+        assert_eq!(McpMethod::parse("notifications/initialized"), None);
+    }
+
+    /// No `.rs` file in the workspace matches an MCP method name as a string
+    /// pattern (`"tools/call" =>`); every mount matches on [`McpMethod`]
+    /// instead. The workspace root is this crate's parent; build output,
+    /// vendored code and dot-directories are skipped.
+    #[test]
+    fn every_mcp_method_match_goes_through_the_enum() {
+        fn walk(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
+            let Ok(entries) = std::fs::read_dir(dir) else {
+                return;
+            };
+            for entry in entries.flatten() {
+                let path = entry.path();
+                let name = entry.file_name().to_string_lossy().into_owned();
+                if path.is_dir() {
+                    if !(name.starts_with('.')
+                        || name.starts_with("target")
+                        || name == "node_modules"
+                        || name == "vendor")
+                    {
+                        walk(&path, out);
+                    }
+                } else if name.ends_with(".rs") {
+                    out.push(path);
+                }
+            }
+        }
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .expect("oicp-types has a parent directory");
+        let mut files = Vec::new();
+        walk(root, &mut files);
+        assert!(
+            files.len() > 1,
+            "scanned {} .rs files under {} — the walk found nothing to judge",
+            files.len(),
+            root.display()
+        );
+        let needles: Vec<String> = McpMethod::ALL
+            .iter()
+            .flat_map(|m| {
+                [
+                    format!("\"{}\" =>", m.as_str()),
+                    format!("\"{}\" |", m.as_str()),
+                ]
+            })
+            .collect();
+        let mut hits = Vec::new();
+        for file in &files {
+            let Ok(text) = std::fs::read_to_string(file) else {
+                continue;
+            };
+            for (n, line) in text.lines().enumerate() {
+                if !line.trim_start().starts_with("//")
+                    && needles.iter().any(|needle| line.contains(needle.as_str()))
+                {
+                    hits.push(format!("{}:{}: {}", file.display(), n + 1, line.trim()));
+                }
+            }
+        }
+        assert!(
+            hits.is_empty(),
+            "MCP method matched as a string; match on oicp_types::mcp::McpMethod:\n{}",
+            hits.join("\n")
         );
     }
 }

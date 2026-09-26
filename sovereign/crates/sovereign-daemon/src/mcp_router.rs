@@ -42,6 +42,7 @@ use sovereign_core::types::{Effect, StepOutput, ToolContext};
 // visible change here is that the error object now carries the spec's optional
 // `data` member, which serializes to nothing while it is `None`.
 use sovereign_core::oicp::jsonrpc::{JsonRpcRequest, JsonRpcResponse};
+use sovereign_core::oicp::mcp::McpMethod;
 
 fn call_tool_text(text: impl Into<String>, is_error: bool) -> Value {
     serde_json::json!({
@@ -423,8 +424,8 @@ async fn dispatch(
         return None;
     };
 
-    let response = match req.method.as_str() {
-        "initialize" => {
+    let response = match McpMethod::parse(&req.method) {
+        Some(McpMethod::Initialize) => {
             // Phase 5b: advertise `tools.listChanged: true` so MCP
             // clients (Claude Code, Cursor, opencode) subscribe to
             // the SSE channel and refetch `tools/list` on the
@@ -442,7 +443,7 @@ async fn dispatch(
             });
             JsonRpcResponse::result(id, result)
         }
-        "tools/list" => {
+        Some(McpMethod::ToolsList) => {
             let descriptors = tools.descriptors();
             // Phase 5: feature_root.0 is `Some(Arc<PathBuf>)` for
             // spec-gated callers (standalone serve), `None` for the
@@ -453,7 +454,7 @@ async fn dispatch(
             );
             JsonRpcResponse::result(id, serde_json::json!({ "tools": tool_list }))
         }
-        "tools/call" => {
+        Some(McpMethod::ToolsCall) => {
             handle_tool_call(
                 id,
                 req.params,
@@ -466,8 +467,8 @@ async fn dispatch(
             )
             .await
         }
-        "ping" => JsonRpcResponse::result(id, serde_json::json!({})),
-        other => JsonRpcResponse::error(id, -32601, format!("method not found: {other}")),
+        Some(McpMethod::Ping) => JsonRpcResponse::result(id, serde_json::json!({})),
+        None => JsonRpcResponse::error(id, -32601, format!("method not found: {}", req.method)),
     };
 
     Some(response)

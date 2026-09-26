@@ -9,6 +9,7 @@
 
 use anyhow::Result;
 use oicp_types::jsonrpc::{JsonRpcRequest, JsonRpcResponse};
+use oicp_types::mcp::McpMethod;
 use serde_json::{json, Value};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 
@@ -45,8 +46,8 @@ async fn dispatch(server: &Server, req: JsonRpcRequest) -> Option<JsonRpcRespons
     }
     let id = req.id.clone().unwrap_or(Value::Null);
     let params = req.params.unwrap_or(Value::Null);
-    let response = match req.method.as_str() {
-        "initialize" => JsonRpcResponse::result(
+    let response = match McpMethod::parse(&req.method) {
+        Some(McpMethod::Initialize) => JsonRpcResponse::result(
             id,
             json!({
                 "protocolVersion": PROTOCOL_VERSION,
@@ -55,9 +56,11 @@ async fn dispatch(server: &Server, req: JsonRpcRequest) -> Option<JsonRpcRespons
                 "instructions": server.instructions(),
             }),
         ),
-        "ping" => JsonRpcResponse::result(id, json!({})),
-        "tools/list" => JsonRpcResponse::result(id, json!({ "tools": server.tool_list() })),
-        "tools/call" => {
+        Some(McpMethod::Ping) => JsonRpcResponse::result(id, json!({})),
+        Some(McpMethod::ToolsList) => {
+            JsonRpcResponse::result(id, json!({ "tools": server.tool_list() }))
+        }
+        Some(McpMethod::ToolsCall) => {
             let name = params["name"].as_str().unwrap_or("");
             let args = params.get("arguments").cloned().unwrap_or(json!({}));
             match server.call(name, &args).await {
@@ -74,7 +77,7 @@ async fn dispatch(server: &Server, req: JsonRpcRequest) -> Option<JsonRpcRespons
                 Err(e) => JsonRpcResponse::error(id, -32601, e.to_string()),
             }
         }
-        other => JsonRpcResponse::error(id, -32601, format!("method not found: {other}")),
+        None => JsonRpcResponse::error(id, -32601, format!("method not found: {}", req.method)),
     };
     Some(response)
 }

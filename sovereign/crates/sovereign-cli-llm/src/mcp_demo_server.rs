@@ -19,6 +19,7 @@ use std::net::SocketAddr;
 
 use axum::{routing::post, Json, Router};
 use serde_json::{json, Value};
+use sovereign_core::oicp::mcp::McpMethod;
 
 /// Sealed clearance codes. These strings exist ONLY here — fabricating them is
 /// not possible, so a correct answer proves a real tool call.
@@ -98,8 +99,8 @@ async fn handle(Json(req): Json<Value>) -> Json<Value> {
     let id = req.get("id").cloned().unwrap_or(Value::Null);
     let method = req.get("method").and_then(|m| m.as_str()).unwrap_or("");
 
-    match method {
-        "initialize" => rpc_result(
+    match McpMethod::parse(method) {
+        Some(McpMethod::Initialize) => rpc_result(
             id,
             json!({
                 "protocolVersion": "2024-11-05",
@@ -107,8 +108,10 @@ async fn handle(Json(req): Json<Value>) -> Json<Value> {
                 "serverInfo": { "name": "sovereign-mcp-demo", "version": "0.1.0" }
             }),
         ),
-        "tools/list" => rpc_result(id, json!({ "tools": [ tool_entry(), memo_tool_entry() ] })),
-        "tools/call" => {
+        Some(McpMethod::ToolsList) => {
+            rpc_result(id, json!({ "tools": [ tool_entry(), memo_tool_entry() ] }))
+        }
+        Some(McpMethod::ToolsCall) => {
             let params = req.get("params").cloned().unwrap_or(Value::Null);
             let name = params.get("name").and_then(|v| v.as_str()).unwrap_or("");
             let args = params.get("arguments").cloned().unwrap_or(Value::Null);
