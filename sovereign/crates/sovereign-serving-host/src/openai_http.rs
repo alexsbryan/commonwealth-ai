@@ -36,20 +36,9 @@ impl ChunkHeader {
     /// OpenAI convention of `chatcmpl-*` + unix timestamp; clients that care
     /// about stable ids set them on their side.
     pub fn new(model: Option<String>) -> Self {
-        let id = format!(
-            "chatcmpl-{}",
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map(|d| d.as_millis())
-                .unwrap_or(0)
-        );
-        let created = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_secs())
-            .unwrap_or(0);
         Self {
-            id,
-            created,
+            id: format!("chatcmpl-{}", sovereign_time::unix_millis()),
+            created: sovereign_time::unix_now_u64(),
             model: model.unwrap_or_else(|| "local".into()),
         }
     }
