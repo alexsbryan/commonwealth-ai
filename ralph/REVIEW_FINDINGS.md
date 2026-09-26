@@ -3607,3 +3607,31 @@ in place of dry-report, which found the first finding below.
   `sovereign-runtime-recipe/src/lib.rs:906`; rerank registers once
   (`served_kind::BUILT_IN`), and the route mount, the compute child and the
   model-path decider read it.
+
+## Seat — serve/mesh census (2026-09-26)
+
+Small findings from ralph/next/phase-b/serve-mesh-census.md (§6, §8.4) that
+no row's outcome covers. Each one is owned by the row or audit that next
+touches it.
+
+- **ARCH 8, open, owned by the next REVIEW-audit** ·
+  `sovereign-serving-host/src/worker_state.rs` (87 lines) declares a
+  `WorkerState` port that has no implementor and no user. `lib.rs:35` is its
+  only reference.
+- **ARCH 12, open, owned by pb-serve-placement (which moves the module)** ·
+  `sovereign-mesh/src/measurements_rail.rs:312-317` compiles `pub mod tests`
+  into production as fixtures.
+- **ARCH 8, open, owned by pb-mesh-dissolve** · three `sovereign-mesh` lib.rs
+  shims have no user: `decision_replay`, `predicted_time`, `worker_pod`.
+- **ARCH 5, open, owned by pb-mesh-dissolve** · the mesh_sim scoreboard tests
+  need `sovereign-mesh/dst`, and no manifest enables it. ci.yml:599 relies on
+  them running.
+- **ARCH 12, record only** · `fim_adapter` and `inference_adapter` import each
+  other (fim_adapter.rs:43; inference_adapter.rs:1411,1415).
+- **Correction to phase-b-22's premise; the conclusion stands** · the
+  measurement validation, per-key cap and dedupe run in the svrn daemon
+  (mesh_http.rs:649-800, bootstrap.rs:1315-1346, sovereign-mesh
+  rail_kv_pump.rs:323) and in the CLI (mesh_bench.rs mints the Verdict). They
+  do not run in "cw-rails' rail". cw-rails carries `mesh-measurements` as
+  opaque signed lines (commonwealth-state peer_preferences.rs:263). serve takes
+  the store from the daemon, not from cw-rails.
