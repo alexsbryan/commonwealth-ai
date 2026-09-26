@@ -92,6 +92,7 @@ steps = [
   { do = "spawn", id = "daemon", argv = ["${BIN}", "run", "--data-dir", "${SANDBOX}/data"], log = "daemon.log", env = { RUST_LOG = "info" } },
   # The roster comes from the join snapshot, so it appears at once.
   { do = "poll", url = "http://127.0.0.1:${LISTEN_PORT}/v1/mesh/status", path = "members[is_self!=true].name", var = "PEER", doc = "status", timeout = 60, alive = "daemon", fail = "no member other than this one appeared on /v1/mesh/status within 60s (see ${SANDBOX}/daemon.log)" },
+  { do = "select", doc = "status", path = "members[is_self=true].node_id", var = "SELF_ID", abstain = "the lifted daemon's own row carries no node_id, so the member it joined as cannot be named" },
   # The catalogue rides a GOSSIP round, seconds after the roster (measured
   # 2026-09-11: a one-shot read here lost that race). An empty list cannot tell
   # "nobody offers a library" from "nothing converged", so the issuer's own
@@ -105,6 +106,11 @@ steps = [
   # Any status is the pass: a 401 from a Jellyfin that wants a token is the
   # plane working. What fails is no answer at all.
   { do = "get", url = "${URL}/", status_var = "THROUGH", timeout = 30, fail = "a GET through ${URL} got no HTTP answer: the bridge accepted and the far end never sent a byte" },
+]
+# phase-b-4: the run retires the member it joined as, so the operator's roster
+# does not grow. A member cannot forget itself, so the issuer is asked.
+finally = [
+  { do = "post", label = "retire", url = "${MESH_BASE}/v1/mesh/forget-member", json = { member = "${SELF_ID}", force = true }, needs = "SELF_ID" },
 ]
 
 # ── cw-work — cmnwlth's work peer, a package-only donor ─────────────────────
