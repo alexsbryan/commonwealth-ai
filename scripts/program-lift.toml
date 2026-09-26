@@ -97,7 +97,9 @@ steps = [
   # "nobody offers a library" from "nothing converged", so the issuer's own
   # route is the second reading.
   { do = "poll", url = "http://127.0.0.1:${LISTEN_PORT}/v1/mesh/media", path = "offering.peer", var = "ANY_OFFER", doc = "media", timeout = 60, alive = "daemon", second = { url = "${MESH_BASE}/v1/mesh/media", path = "offering[peer!=cw-rails-lift].peer", abstain = "no member of this mesh other than this one advertises a media origin, and ${MESH_BASE} says the same, so there was no library to reach. A holder declares one with `[iroh] media_origin` and restarts.", fail = "GET /v1/mesh/media listed no offering member within 60s while ${MESH_BASE} lists '${SECOND}': the catalogue rides gossiped capabilities.origins and nothing arrived (see ${SANDBOX}/daemon.log)" } },
-  { do = "select", doc = "media", path = "offering.peer", var = "OFFERER", abstain = "the catalogue emptied between two reads" },
+  # phase-b-4: reach an ONLINE offerer. A bridge to an offline one is refused
+  # (409) and says nothing about this daemon.
+  { do = "select", doc = "media", path = "offering[status!=offline].peer", var = "OFFERER", all = "offering.peer", all_var = "OFFERERS", abstain = "every member offering a library is offline (${OFFERERS}), so there was no library to reach and the bridge was not measured" },
   { do = "get", url = "http://127.0.0.1:${LISTEN_PORT}/v1/mesh/media?peer=${OFFERER}", path = "url", var = "URL", fail = "GET /v1/mesh/media?peer=${OFFERER} returned no URL: ${BODY}" },
   { do = "require", value = "${URL}", match = "^http://127\\.0\\.0\\.1:", fail = "the reach URL is not loopback (${URL}): the media class was routed off iroh, which is a hole rather than a fallback" },
   # Any status is the pass: a 401 from a Jellyfin that wants a token is the
