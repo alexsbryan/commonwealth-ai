@@ -9,7 +9,6 @@ use corpus_engine_watchers::{LintResultStore, TestResultStore};
 use sovereign_contracts::launch::Launch;
 use sovereign_core::setup_config::SetupConfig;
 use sovereign_core::traits::InferenceProvider;
-use sovereign_inference::embedded::EmbeddedLlamaCpp;
 
 use super::log_rotation;
 use super::memory_watch;
@@ -248,105 +247,17 @@ pub(super) async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
         }
     };
 
-    // Shared-model cluster role → RPC env contract. The desktop fleet
-    // sets `[shared_model] role` instead of SOVEREIGN_RPC_* by hand;
-    // translate it here, once, before any RPC consumer reads the env
-    // (the inference serve call_once, the discovery loop below, and
-    // commonwealth-api's /status advertise). An explicit env var wins.
-    // `--rpc-worker` first: it is the operator saying it out loud on this
-    // invocation, and the role translation below only fills in what is unset.
-    bootstrap::apply_rpc_worker_flag(args);
-    bootstrap::apply_shared_model_role_to_env(&config.shared_model);
-
-    // Route llama.cpp's internal log into our tracing layer. Without
-    // this, gguf load failures and ggml backend diagnostics print to a
-    // dropped stderr (the daemon's child-style stdio capture swallows
-    // them) — the operator gets a bare "null result from llama cpp"
-    // with no actionable detail. Installed exactly once per process.
-    sovereign_inference::llama::install_log_tracing();
-
-    // VRAM capacity preflight — ADVISORY by default: warns and starts
-    // anyway on overcommit (so CPU-only / low-VRAM machines aren't
-    // hard-blocked). Only refuses under SOVEREIGN_STRICT_VRAM_CHECK=1 or
-    // when a model file is unreadable. Full rationale on
-    // `build::preflight::check_vram`.
-    // Name the config the operator actually passed, not the default one —
-    // a `--config` start used to be told to edit a file it never read.
-    let config_path_in_use = config_override
-        .clone()
-        .unwrap_or_else(sovereign_core::setup_config::SetupConfig::default_path);
-    if !crate::build::preflight::check_vram_reporting(&config, &config_path_in_use) {
-        return 1;
-    }
-
-    // ── Force-tool-calls config → process env ─────────────────────
-    //
-    // The inference adapter reads `SOVEREIGN_FORCE_TOOL_CALLS` per
-    // request to decide whether to upgrade `tool_choice="auto"` to
-    // `"required"` (which engages the JSON-Schema tool-envelope
-    // grammar). When the operator sets `[daemon] force_tool_calls =
-    // true` in setup_config.toml, we propagate that into the process
-    // env at boot so the existing per-request lookup picks it up.
-    // Caller-supplied env wins — `std::env::set_var` only overrides
-    // when nothing was set on the CLI invocation. Operators who want
-    // a one-shot test (`SOVEREIGN_FORCE_TOOL_CALLS=0 svrn daemon
-    // run`) can still do so without editing the config file.
-    if config.daemon.force_tool_calls && std::env::var("SOVEREIGN_FORCE_TOOL_CALLS").is_err() {
-        std::env::set_var("SOVEREIGN_FORCE_TOOL_CALLS", "1");
-        tracing::info!(
-            "daemon: force_tool_calls=true — grammar engaged on every \
-             tools-using request (set via setup_config.toml)"
-        );
-    }
-
-    // ── Alternation-grammar config → process env ──────────────────
-    //
-    // Same propagation pattern as force_tool_calls. The inference
-    // adapter reads `SOVEREIGN_ALTERNATION_GRAMMAR` per request to
-    // route tool-envelope requests through llguidance's canonical
-    // `TopLevelGrammar::from_json_schema` path instead of the
-    // in-house `JsonConstraint` mask. Caller-supplied env wins so
-    // operators can A/B test (`SOVEREIGN_ALTERNATION_GRAMMAR=0
-    // svrn daemon run` ignores the config).
-    //
-    // launchd-spawned daemons don't inherit caller env, so flipping
-    // this in setup_config.toml is the load-bearing path on macOS
-    // hosts running the daemon via `svrn daemon start`.
-    if config.daemon.alternation_grammar && std::env::var("SOVEREIGN_ALTERNATION_GRAMMAR").is_err()
-    {
-        std::env::set_var("SOVEREIGN_ALTERNATION_GRAMMAR", "1");
-        tracing::info!(
-            "daemon: alternation_grammar=true — llguidance schema path \
-             engaged on tools-using requests (set via setup_config.toml)"
-        );
-    }
-
-    // Inference provider — load the embedded llama.cpp provider (3 GGUF
-    // slots + extras/idle/rerank wiring); full rationale on
-    // `crate::build::inference::load_provider`. `engine_handle` (concrete) feeds
-    // the RPC-worker auto-reload path; `resolved_embed_family` feeds the
-    // mesh embed-model advertisement.
-    //
-    // Minted HERE, before the provider, because a terminal's provider binds to
-    // its entry node THROUGH this handle: the bind is a mesh identity, resolved
-    // per turn, and the mesh view does not exist yet. `DeferredDaemon` answers
-    // exactly as a commissioned-but-stopped daemon until `bind` — no peers — so
-    // a terminal booting ahead of gossip reports its entry node unreachable
-    // rather than inventing an address for it.
-    let deferred_daemon = Arc::new(crate::DeferredDaemon::new());
-    let (provider, raw_engine, resolved_embed_family, distributed_primary_slot, reload_factory) =
-        match crate::build::inference::load_provider(&config, Arc::clone(&deferred_daemon)) {
-            Ok(t) => t,
-            Err(()) => return 1,
-        };
-    // `None` whenever nothing in this process owns llama slots — TWO ways in
-    // now, and the engine-only paths (RPC-worker auto-reload, slot hot-swap)
-    // must see the absence rather than a stub either way:
-    //   - a `terminal`, which holds no weights at all and forwards instead;
-    //   - an engine configured with no local llama slots, where the
-    //     RPC-worker reload below is llama's own and simply does not arm.
-    // Already an `Option` before either existed; both make the `None` reachable.
-    let engine_handle: Option<Arc<EmbeddedLlamaCpp>> = raw_engine;
+    let super::serving_boot::ServingBoot {
+        provider,
+        engine_handle,
+        resolved_embed_family,
+        distributed_primary_slot,
+        reload_factory,
+        deferred_daemon,
+    } = match super::serving_boot::boot_serving(&config, args, &config_override) {
+        Ok(s) => s,
+        Err(code) => return code,
+    };
 
     // ── Note store (for MCP notes tools + ring-buffer logging) ────
     let data_dir = config.data.dir.clone();

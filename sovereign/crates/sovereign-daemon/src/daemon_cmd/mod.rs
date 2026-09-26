@@ -45,6 +45,7 @@ mod memory_watch;
 mod mesh_resume;
 mod panic_hook;
 mod rlimit;
+mod serving_boot;
 mod vram_plan;
 
 use boot::run_daemon;
