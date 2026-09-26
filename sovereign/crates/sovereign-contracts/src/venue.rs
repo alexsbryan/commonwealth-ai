@@ -127,3 +127,19 @@ pub fn resolution_alias_keys(role: &str) -> Vec<String> {
     }
     keys
 }
+
+/// Alias ids `build_self_manifest` must ADVERTISE for a role —
+/// namespaced form first (canonical), bare form second (the
+/// OpenAI-client shortcut). Empty when the role isn't mesh-advertised.
+pub fn advertised_alias_ids(role: &str) -> Vec<String> {
+    let Some(policy) = SLOT_ALIAS_POLICY.iter().find(|p| p.role == role) else {
+        return Vec::new();
+    };
+    if !policy.mesh_advertised {
+        return Vec::new();
+    }
+    vec![
+        format!("commonwealth/{}", policy.role),
+        policy.role.to_string(),
+    ]
+}

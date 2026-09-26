@@ -28,23 +28,9 @@
 //! failure is the point; it's the reminder the 2026-05-19 bug never
 //! got.
 
-pub use sovereign_contracts::venue::{resolution_alias_keys, SlotAliasPolicy, SLOT_ALIAS_POLICY};
-
-/// Alias ids `build_self_manifest` must ADVERTISE for a role —
-/// namespaced form first (canonical), bare form second (the
-/// OpenAI-client shortcut). Empty when the role isn't mesh-advertised.
-pub fn advertised_alias_ids(role: &str) -> Vec<String> {
-    let Some(policy) = SLOT_ALIAS_POLICY.iter().find(|p| p.role == role) else {
-        return Vec::new();
-    };
-    if !policy.mesh_advertised {
-        return Vec::new();
-    }
-    vec![
-        format!("commonwealth/{}", policy.role),
-        policy.role.to_string(),
-    ]
-}
+pub use sovereign_contracts::venue::{
+    advertised_alias_ids, resolution_alias_keys, SlotAliasPolicy, SLOT_ALIAS_POLICY,
+};
 
 #[cfg(test)]
 mod parity_tests {

@@ -246,7 +246,7 @@ pub fn build_self_manifest(
                 (caps, None)
             }
         };
-        for alias_id in sovereign_scheduler::slot_aliases::advertised_alias_ids("primary") {
+        for alias_id in sovereign_contracts::venue::advertised_alias_ids("primary") {
             if !seen_ids.insert(alias_id.clone()) {
                 continue;
             }
@@ -304,7 +304,7 @@ pub fn build_self_manifest(
                 (caps, None)
             }
         };
-        for alias_id in sovereign_scheduler::slot_aliases::advertised_alias_ids("fast") {
+        for alias_id in sovereign_contracts::venue::advertised_alias_ids("fast") {
             if !seen_ids.insert(alias_id.clone()) {
                 continue;
             }
@@ -1191,7 +1191,7 @@ mod self_manifest_tests {
     /// resolution map (also table-derived) may not honour.
     #[test]
     fn manifest_advertises_exactly_the_policy_alias_set() {
-        use sovereign_scheduler::slot_aliases::{
+        use sovereign_contracts::venue::{
             advertised_alias_ids, resolution_alias_keys, SLOT_ALIAS_POLICY,
         };
 
