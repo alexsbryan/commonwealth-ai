@@ -131,12 +131,13 @@ If you change a subsystem, update its `SYSTEM_OVERVIEW.md` entry in the same com
 
 | Verb(s) | Owning binary (rebuild this) |
 |---|---|
-| `tools`, `code`, `project` | `sovereign-cli-dev` |
+| `tools`, `code`, `project`, `claim` | `sovereign-cli-dev` |
 | `daemon`, `doctor`, `setup`, `install-service` | `sovereign-cli-daemon` |
-| `mesh`, `corpus`, `mcp`, `recipe`, `pipeline`, `bench`, `chat`, `eval`, `enrich`, `atlas`, `claim` | `sovereign-cli-llm` |
+| `corpus`, `mcp`, `recipe`, `pipeline`, `bench`, `chat`, `eval`, `enrich`, `atlas` | `sovereign-cli-llm` |
+| `mesh`, `ring`, `job` (`mesh warm-cache`/`fetch-model`: `sovereign-serve`) | `sovereign-cli-mesh` |
 | `init`, `status`, `notes`, `drift`, `design`, `plan`, `serve`, `reflect`, `memory`, … | `sovereign-cli` (in-process) |
 
-So `lint_status`/`test_status`/`build` (under `tools`) live in **`sovereign-cli-dev`**; the watcher daemon + `doctor`'s `watcher_live` probe live in **`sovereign-cli-daemon`**. To build everything correctly the first time, build all the binaries the change spans, e.g. `cargo build -p sovereign-cli --features dev-tools -p sovereign-cli-dev -p sovereign-cli-daemon -p sovereign-cli-llm` (or `cargo build --bins --features sovereign-cli/dev-tools`).
+To build everything correctly the first time, build all the binaries the change spans, e.g. `cargo build -p sovereign-cli --features dev-tools -p sovereign-cli-dev -p sovereign-cli-daemon -p sovereign-cli-llm` (or `cargo build --bins --features sovereign-cli/dev-tools`).
 
 **`sovereign-cli` MUST be built with `--features dev-tools`.** Without it the build succeeds and silently replaces your `target/debug/sovereign-cli` with an end-user binary that has NO `notes`, `code`, `project`, `atos`, or `tools` verbs — and the loss surfaces minutes later on an unrelated command as "not in the default build", which reads like a missing feature rather than "your last build downgraded your install". Since 2026-07-26 the dispatcher warns on every invocation when it detects this (a `sovereign-cli-dev` sibling next to a dispatcher lacking the feature); the repair is the command above. Debug — see the build-profile note above. The daemon must be restarted (`sovereign daemon stop && sovereign daemon start`, in the `sovereign-vulkan` toolbox — there is no `dev-toolbox` on this host) to load a new `sovereign-cli-daemon` binary; CLI verbs pick up the new sibling on next invocation.
 
