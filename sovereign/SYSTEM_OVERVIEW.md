@@ -1172,6 +1172,10 @@ journal on disk through `MeshStore::apply_own_projection`, which merges
 only this node's own signed rows; since fp-109 a namespace the
 `/v1/rail/ingest` door took new ops for is re-projected on the pump's next
 tick, once per namespace, so a peer's write reaches the running store;
+since phase-b-5 `RailsDaemon::run` finishes that projection BEFORE the
+listener binds, so `/v1/mesh/status` answering means the store is loaded
+(`tests/ready.rs`), and the ed25519 stack builds optimized even in dev so
+a 12.9k-line store projects in under 2 s, not 118 s;
 since fp-87 `svrn portfolio` and `svrn newsworthy` read and write it through
 the daemon's `RailsKv`, after migrating their legacy SQLite files once —
 `sovereign-cli-mesh kv-export` reads, `sovereign-cli-llm/src/legacy_store.rs`

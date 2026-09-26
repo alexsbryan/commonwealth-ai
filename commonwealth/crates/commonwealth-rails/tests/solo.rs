@@ -3,8 +3,8 @@
 //! store serves, a local-only row survives a restart, and survives the join
 //! that moves the node onto the meshed path.
 //!
-//! The pump is driven by hand (`pump_once` / `project_all_on_disk`, the two
-//! halves of `kv::run_forever`) so a restart is a drop and a fresh start, not
+//! The pump is driven by hand (`project_all_on_disk` / `pump_once`, what
+//! `RailsDaemon::run` does at start and every tick) so a restart is a drop and a fresh start, not
 //! a timing race against the tick.
 
 use std::path::Path;

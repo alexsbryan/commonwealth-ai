@@ -140,6 +140,7 @@ impl KvHost {
     /// before the first drain; returns how many namespaces projected, the
     /// local-only ones rehydrated from this node's own rows included.
     pub async fn project_all_on_disk(&self) -> usize {
+        let started = std::time::Instant::now();
         let namespaces = match self.rail.namespaces() {
             Ok(n) => n,
             Err(e) => {
@@ -178,6 +179,7 @@ impl KvHost {
             projected,
             local_only = local_only.len(),
             rehydrated,
+            elapsed_ms = started.elapsed().as_millis() as u64,
             "kv: rebuilt the store from the journals on disk"
         );
         projected + rehydrated
@@ -519,12 +521,11 @@ impl KvHost {
     }
 }
 
-/// Rehydrate the store, then drain it forever. Spawned by
-/// [`crate::RailsDaemon::run`]; aborted with it.
+/// Drain the store forever. Spawned by [`crate::RailsDaemon::run`] after it
+/// has projected the store; aborted with it.
 pub async fn run_forever(host: Arc<KvHost>) {
     info!(target: "rails", interval_secs = PUMP_INTERVAL.as_secs(),
           seal_after_own_ops = SEAL_AFTER_OWN_OPS, "kv pump: started");
-    host.project_all_on_disk().await;
     loop {
         host.project_dirty().await;
         let out = host.pump_once().await;

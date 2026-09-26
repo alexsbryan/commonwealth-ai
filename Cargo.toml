@@ -527,6 +527,19 @@ llguidance = "1.7"
 [profile.dev]
 debug = 0
 
+# The ring signature stack runs optimized even in dev, because the deployed
+# daemons ARE dev builds (target/debug) and cw-rails verifies every journal
+# line's ed25519 signature before it serves (phase-b-5, `journal.admit`).
+# Unoptimized, that was ~9.6 ms a line: 118 s to project the operator's
+# 12.9k-line store. Optimized: 1.74-1.88 s over three runs. Only these three
+# crates change; nothing else loses debuggability.
+[profile.dev.package.curve25519-dalek]
+opt-level = 3
+[profile.dev.package.ed25519-dalek]
+opt-level = 3
+[profile.dev.package.sha2]
+opt-level = 3
+
 # Release builds ship in the desktop bundle. The desktop binary is ~397 MB
 # unstripped (835k symbols) because cargo's default release profile keeps the
 # full symbol table and Tauri's bundler does NOT strip Rust binaries for you.

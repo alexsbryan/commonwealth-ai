@@ -522,19 +522,6 @@ fn an_upgraded_hosts_first_boot_serves_the_rings_it_already_had() {
                 .all(|ns| !data.join("rings").join(ns).exists())
         },
     );
-    // cw-rails serves its doors before its pump task has projected the store
-    // (commonwealth-rails kv.rs `run_forever`), so a read waits on the rebuild
-    // — the line the handover's order decides the count of.
-    let rails_log = rails_dir.join("rails.log");
-    wait_until(
-        "cw-rails rebuilt its store",
-        Duration::from_secs(30),
-        &rails_log,
-        || {
-            std::fs::read_to_string(&rails_log)
-                .is_ok_and(|l| l.contains("kv: rebuilt the store from the journals on disk"))
-        },
-    );
     let kv = RailsKv::new(format!("http://127.0.0.1:{rails_port}"));
     for (app, key, value) in SEEDED {
         let row = kv.get(app, key).expect("cw-rails answers the read");

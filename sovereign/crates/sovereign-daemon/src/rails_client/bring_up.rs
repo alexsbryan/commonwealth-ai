@@ -3,7 +3,10 @@
 //! (fp-solo-clients), split out of `rails_client.rs` at its arch-gate band.
 
 /// How long [`ensure_rails`] waits for cw-rails to answer, bring-up included.
-/// cw-rails loads no model: a start is a lock, a bind and a store open.
+/// cw-rails loads no model: a start is a lock, a bind, and projecting its
+/// store from the journals before it serves (phase-b-5) — 1.74-1.88 s on a
+/// copy of the operator's 12.9k-line store with the signature stack
+/// optimized (root Cargo.toml `[profile.dev.package]`).
 const RAILS_BRING_UP_WINDOW: std::time::Duration = std::time::Duration::from_secs(10);
 
 /// Make cw-rails reachable at `base`, bringing it up if nothing answers there

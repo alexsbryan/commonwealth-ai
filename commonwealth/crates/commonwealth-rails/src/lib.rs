@@ -418,6 +418,9 @@ impl RailsDaemon {
     pub async fn run(self) -> Result<(), Refusal> {
         let listen = api::bind_addr(self.node.config.listen);
         let daemon = Arc::new(self);
+        // Ready means projected (phase-b-5): a door that answered before the
+        // journals were folded would read absent for rows they hold.
+        daemon.kv.project_all_on_disk().await;
         let api = api::serve(daemon.clone(), listen).await?;
         // Solo has no one to gossip with and no roster to stamp a presence
         // reading into, so neither task runs.
@@ -432,8 +435,8 @@ impl RailsDaemon {
                 Some(tokio::spawn(presence::run_forever(daemon.clone()))),
             )
         };
-        // The mesh store's pump (fp-77): rehydrate from the journals, then
-        // drain the outbox onto them every tick.
+        // The mesh store's pump (fp-77): drain the outbox onto the journals
+        // every tick.
         let kv_pump = tokio::spawn(kv::run_forever(daemon.kv.clone()));
         // The contributions ledger's retention sweep (fp-78), over that store.
         let ledger_gc = tokio::spawn(ledger::run_retention_gc(daemon.kv.store.clone()));
