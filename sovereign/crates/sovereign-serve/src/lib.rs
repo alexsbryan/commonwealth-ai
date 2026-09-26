@@ -59,13 +59,13 @@ mod warm_cache;
 /// `serve` per root. The daemon's and cw-rails' locks are their own.
 pub const RUN_LOCK: &str = "serve";
 
-/// Where `serve` listens unless `--listen` says otherwise: loopback, 9748.
-/// Mirrored by the svrn daemon's `serve_client::DEFAULT_SERVE_BASE`, the base
-/// it dials when `[node] entry` is unset — beside cw-rails' 9747 and outside
-/// the daemon's 9741..9745. The two programs are built and versioned
-/// separately, so the convention is documented on both sides rather than
-/// imported across the lift boundary (pb-svrn-dials-serve).
-pub const DEFAULT_LISTEN: ([u8; 4], u16) = ([127, 0, 0, 1], 9748);
+/// Where `serve` listens unless `--listen` says otherwise: loopback, on the
+/// one port the svrn daemon dials by default
+/// (`sovereign_contracts::venue::DEFAULT_SERVE_PORT`).
+pub const DEFAULT_LISTEN: ([u8; 4], u16) = (
+    [127, 0, 0, 1],
+    sovereign_contracts::venue::DEFAULT_SERVE_PORT,
+);
 
 /// How this process names itself in `/v1/models` `advertised_by`.
 const LOCAL_HOLDER: &str = "local";

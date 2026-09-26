@@ -11,6 +11,14 @@ use async_trait::async_trait;
 use kernel_types::NodeId;
 use oicp_types::BenchmarkResult;
 
+/// Where `serve`, the model server, listens on loopback when nobody names a
+/// port — and so where the svrn daemon dials it (pb-svrn-dials-serve). ONE
+/// number both programs derive from (`sovereign_serve::DEFAULT_LISTEN`,
+/// `sovereign_daemon::serve_client::default_serve_base`), as the guest door's
+/// is `guest_pages::DEFAULT_GUEST_PORT`: the slot after cw-rails' 9747, outside
+/// the daemon's 9741 client, 9742 internal, 9743 rail and 9744 guest door.
+pub const DEFAULT_SERVE_PORT: u16 = 9748;
+
 /// A candidate the scheduler may rank.
 ///
 /// Renamed from `PeerInferenceEndpoint` (registry `[[noun]]`, decided
