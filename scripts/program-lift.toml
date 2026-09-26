@@ -1,0 +1,164 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# The lifts `scripts/program-lift.sh` can run, one [lift.<id>] per program
+# (phase-b-2: each program's "runs alone" proof is its RUN smoke, and it is
+# DATA here, never a per-row process harness). A later row adds its program's
+# smoke as a `[lift.<id>.run]` table; it does not write a script.
+#
+# Per lift:
+#   package  the [[package]] in quality/ARCH_LAYERS.toml whose rule judges the
+#            closure. The forbidden set is that map's package rule plus its
+#            [[forbid]] rows, read at run time; nothing here restates it.
+#   seeds    the member crates the closure is walked from. Absent = every crate
+#            the package declares. Each must be a member of `package`.
+#   build    `cargo build` args; absent = `-p <seed>` for each seed.
+#   test     `cargo test` args; absent = `-p <seed>` for each seed.
+#   binary   the built artifact the RUN step starts, relative to the target dir.
+#   run      the RUN smoke: `inputs`, `steps`, `finally` and `pass`. With no
+#            `run`, a closure that builds and tests is never-ran, not passed.
+#
+# Step vocabulary (scripts/lib/program_lift.py `STEPS` is the interpreter).
+# Every string takes ${VAR}; SANDBOX, TARGET and BIN are always set.
+#   input    var from `env`, else `path` read from GET `get`, else `value`, else
+#            `default`; `strip` drops a suffix; `abstain` if empty (omit
+#            `abstain` and an empty value is allowed)
+#   require  `value` must match regex `match`, else `abstain` or `fail`
+#   unexpired  the `param`=<unix secs> query parameter of `value` is in the future
+#   ports    a free loopback port for each name in `vars`
+#   write    `text` to `path`
+#   spawn    start `argv` in the background as `id`; `log` under the sandbox
+#   exec     run `argv`; rc 0 continues, rc 3 abstains, any other rc is `fail`
+#            (or `abstain` when `on_error = "abstain"`); `expect = "fail"`
+#            inverts it, for a control that must fail on the bare host
+#   exists   `path` exists, else `fail`
+#   poll     GET `url` each second up to `timeout` until `path` yields a value;
+#            stores it in `var` and the document as `doc`; `alive` names a spawn
+#            that must stay up. On timeout, `second` reads another route: empty
+#            abstains, a hit fails. Without `second` a timeout is `fail`.
+#   select   `path` over a stored `doc` into `var`; `all` + `all_var` keep the
+#            unfiltered list for the message; empty abstains
+#   get      one GET; `var` = `path` of the body, `status_var` = the HTTP status.
+#            The body is kept on a refusal (never `curl -f`); `fail` on no answer
+#            or, with `path`, on a non-2xx or an empty value
+#   count    lines of `file` matching `pattern` into `var`; below `min` fails
+#   post     (finally only) POST `json` to `url` when every var in `needs` is
+#            set; its outcome is reported beside the verdict and never changes it
+#   remove   (finally only) delete `paths`, unless --keep
+#
+# Path syntax for `path`: dotted keys, each optionally filtered as
+# `key[field=value]` or `key[field!=value]`; lists fan out; the first value wins.
+
+# ── svrn — the knowledge server ─────────────────────────────────────────────
+[lift.svrn]
+package = "svrn"
+build = ["-p", "sovereign-daemon", "--bin", "sovereign-daemon"]
+binary = "debug/sovereign-daemon"
+
+# ── ingest — the recipe pipeline (a library plus one CLI; no binary yet) ────
+[lift.ingest]
+package = "ingest"
+
+# ── cmnwlth — the endpoint router with a roster: the cw-rails daemon ────────
+# The closure is cw-rails', not the whole package's: sovereign-mesh and
+# sovereign-grants still reach corpus-engine (boundary-gate, 2026-09-25), and
+# the binary a developer takes is this one (FIVE_PROGRAMS §2, "lifted").
+[lift.cmnwlth]
+package = "cmnwlth"
+seeds = ["commonwealth-rails"]
+build = ["-p", "commonwealth-rails", "--bin", "cw-rails"]
+test = ["-p", "commonwealth-rails"]
+binary = "debug/cw-rails"
+
+[lift.cmnwlth.run]
+# A rails daemon cannot found a mesh (no /internal/join), so the RUN needs a
+# member's word: an invite. It is never minted here; a mesh of one would pass
+# gossip, offers and reach by having nobody to disagree with.
+pass = "joined the mesh, converged a roster with '${PEER}', reached '${OFFERER}' as an online library, and a GET through ${URL} answered HTTP ${THROUGH}"
+steps = [
+  { do = "input", var = "MESH_STATUS", env = "CW_RAILS_MESH_STATUS", default = "http://127.0.0.1:9741/v1/mesh/status" },
+  { do = "input", var = "MESH_BASE", value = "${MESH_STATUS}", strip = "/v1/mesh/status" },
+  { do = "input", var = "INVITE", env = "CW_RAILS_INVITE", get = "${MESH_STATUS}", path = "join_link", abstain = "no invite, and ${MESH_STATUS} offered no join_link. A rails daemon cannot found a mesh, so only the run abstains. Pass --invite <link>, set CW_RAILS_INVITE, or start a mesh daemon on this host." },
+  { do = "require", value = "${INVITE}", match = "iroh=|dial=", abstain = "the invite carries no iroh dial string, and cw-rails joins over iroh only. Ask for an invite from a daemon with iroh on." },
+  { do = "unexpired", value = "${INVITE}", param = "exp", abstain = "the invite expired and the founder is the authority on that. `sovereign mesh rotate` mints a fresh one, which then appears as join_link on ${MESH_STATUS}." },
+  { do = "ports", vars = ["ORIGIN_PORT", "LISTEN_PORT"] },
+  # A tiny file, so a GET through the bridge has something real to fetch.
+  { do = "write", path = "${SANDBOX}/library/index.html", text = "program-lift origin\n" },
+  # The stand-in media origin authenticates NOTHING, which is why the holder's
+  # admission decision has to be right.
+  { do = "spawn", id = "origin", argv = ["python3", "-m", "http.server", "${ORIGIN_PORT}", "--bind", "127.0.0.1", "--directory", "${SANDBOX}/library"], log = "origin.log" },
+  { do = "write", path = "${SANDBOX}/data/rails.toml", text = "name = \"cw-rails-lift\"\nlisten = ${LISTEN_PORT}\n\n[media]\norigin = \"127.0.0.1:${ORIGIN_PORT}\"\n" },
+  { do = "exec", argv = ["${BIN}", "join", "${INVITE}", "--data-dir", "${SANDBOX}/data", "--name", "cw-rails-lift"], log = "join.log", fail = "the lifted daemon did not join the mesh (see ${SANDBOX}/join.log)" },
+  { do = "exists", path = "${SANDBOX}/data/mesh.json", fail = "join reported success and wrote no mesh.json" },
+  { do = "spawn", id = "daemon", argv = ["${BIN}", "run", "--data-dir", "${SANDBOX}/data"], log = "daemon.log", env = { RUST_LOG = "info" } },
+  # The roster comes from the join snapshot, so it appears at once.
+  { do = "poll", url = "http://127.0.0.1:${LISTEN_PORT}/v1/mesh/status", path = "members[is_self!=true].name", var = "PEER", doc = "status", timeout = 60, alive = "daemon", fail = "no member other than this one appeared on /v1/mesh/status within 60s (see ${SANDBOX}/daemon.log)" },
+  # The catalogue rides a GOSSIP round, seconds after the roster (measured
+  # 2026-09-11: a one-shot read here lost that race). An empty list cannot tell
+  # "nobody offers a library" from "nothing converged", so the issuer's own
+  # route is the second reading.
+  { do = "poll", url = "http://127.0.0.1:${LISTEN_PORT}/v1/mesh/media", path = "offering.peer", var = "ANY_OFFER", doc = "media", timeout = 60, alive = "daemon", second = { url = "${MESH_BASE}/v1/mesh/media", path = "offering[peer!=cw-rails-lift].peer", abstain = "no member of this mesh other than this one advertises a media origin, and ${MESH_BASE} says the same, so there was no library to reach. A holder declares one with `[iroh] media_origin` and restarts.", fail = "GET /v1/mesh/media listed no offering member within 60s while ${MESH_BASE} lists '${SECOND}': the catalogue rides gossiped capabilities.origins and nothing arrived (see ${SANDBOX}/daemon.log)" } },
+  { do = "select", doc = "media", path = "offering.peer", var = "OFFERER", abstain = "the catalogue emptied between two reads" },
+  { do = "get", url = "http://127.0.0.1:${LISTEN_PORT}/v1/mesh/media?peer=${OFFERER}", path = "url", var = "URL", fail = "GET /v1/mesh/media?peer=${OFFERER} returned no URL: ${BODY}" },
+  { do = "require", value = "${URL}", match = "^http://127\\.0\\.0\\.1:", fail = "the reach URL is not loopback (${URL}): the media class was routed off iroh, which is a hole rather than a fallback" },
+  # Any status is the pass: a 401 from a Jellyfin that wants a token is the
+  # plane working. What fails is no answer at all.
+  { do = "get", url = "${URL}/", status_var = "THROUGH", timeout = 30, fail = "a GET through ${URL} got no HTTP answer: the bridge accepted and the far end never sent a byte" },
+]
+
+# ── cw-work — cmnwlth's work peer, a package-only donor ─────────────────────
+[lift.cw-work]
+package = "cmnwlth"
+seeds = ["commonwealth-work"]
+build = ["-p", "commonwealth-work", "--features", "process", "--example", "work_peer"]
+test = ["--workspace", "--features", "commonwealth-work/process"]
+binary = "debug/examples/work_peer"
+
+[lift.cw-work.run]
+pass = "ran three heterogeneous units on a ${ACTS}-act rail and refused both escapes, outside the monorepo, inside `${IMAGE}`"
+steps = [
+  # The image is the DONOR OPERATOR's declaration. With none the peer publishes
+  # no process:v1 offer and exits 3, which is the honest "no boundary here".
+  { do = "input", var = "IMAGE", env = "CW_WORK_IMAGE" },
+  # The rail is a SIBLING of the workdir, never a child: the workdir is the one
+  # thing the boundary mounts, and a rail holds the donor's identity.
+  { do = "input", var = "RAIL", value = "${SANDBOX}.rail" },
+  # The boundary is --network=none with one mount, so the submitter ships the
+  # package cache in the workdir (measured 2026-09-10: `no matching package
+  # named blake3` without it).
+  { do = "exec", argv = ["cargo", "vendor", "--offline", "--versioned-dirs", "vendor"], cwd = "${SANDBOX}", log = "vendor.log", on_error = "abstain", fail = "the closure's dependencies could not be vendored into the workdir (see ${SANDBOX}/vendor.log)" },
+  { do = "write", path = "${SANDBOX}/.cargo/config.toml", text = "[source.crates-io]\nreplace-with = \"vendored-sources\"\n\n[source.vendored-sources]\ndirectory = \"vendor\"\n" },
+  { do = "exec", argv = ["${BIN}", "--root", "${RAIL}", "--workdir", "${SANDBOX}", "--label", "cw-work-lift peer", "--image", "${IMAGE}", "--", "env", "CARGO_HOME=.cargo-home", "cargo", "test", "--offline", "-q", "-p", "commonwealth-rail-core"], cwd = "${SANDBOX}", log = "peer.log", fail = "the peer did not complete its three units (see ${SANDBOX}/peer.log)" },
+  # The ledger's own watched red (DEFAULTS_LEDGER process:v1): a unit that
+  # tries to open a socket or see the rail, and is refused.
+  { do = "write", path = "${SANDBOX}/probe.sh", text = "if ! command -v python3 >/dev/null 2>&1; then echo 'PROBE BROKEN: no python3'; exit 1; fi\nif python3 -c 'import socket; socket.setdefaulttimeout(4); socket.create_connection((\"1.1.1.1\", 53))' 2>/dev/null; then echo 'ESCAPE: network'; exit 1; fi\nif [ -e \"${RAIL}\" ]; then echo 'ESCAPE: the donor rail is visible'; exit 1; fi\necho ok\n" },
+  # The control comes first: with no boundary the probe MUST fail, or its
+  # green means nothing.
+  { do = "exec", argv = ["sh", "probe.sh"], cwd = "${SANDBOX}", log = "probe-control.log", expect = "fail", abstain = "the escape probe PASSED on the bare host, so it cannot detect an escape" },
+  # A second rail: a peer handed the first finds every unit complete.
+  { do = "exec", argv = ["${BIN}", "--root", "${RAIL}.probe", "--workdir", "${SANDBOX}", "--label", "cw-work-lift probe", "--image", "${IMAGE}", "--", "sh", "probe.sh"], cwd = "${SANDBOX}", log = "probe.log", fail = "a donated unit ESCAPED the boundary; reproduce with: cd ${SANDBOX} && sh probe.sh, then the same argv through the peer" },
+  # A submit, an offer and three lease/report pairs is 8: the guard on the
+  # peer's own decider.
+  { do = "count", file = "${RAIL}/rings/work/ring_oplog.jsonl", pattern = "\"op\"", var = "ACTS", min = 8, fail = "the peer reported green with only ${ACTS} act(s) on the work rail" },
+]
+finally = [
+  { do = "remove", paths = ["${RAIL}", "${RAIL}.probe"] },
+]
+
+# ── serve — the model server. Until pb-serve-program declares its package and
+# smoke, it is the serving crates' closure, judged under cmnwlth's rule where
+# the three crates sit today, and never-ran at best.
+[lift.serve]
+package = "cmnwlth"
+seeds = ["sovereign-inference", "sovereign-compute", "sovereign-serving-host"]
+
+# ── code — the LSP for agents ───────────────────────────────────────────────
+[lift.code]
+package = "code"
+build = ["-p", "sovereign-cli-dev", "--bin", "sovereign-cli-dev"]
+binary = "debug/sovereign-cli-dev"
+
+# ── bench — the evaluator ───────────────────────────────────────────────────
+[lift.bench]
+package = "bench"
+build = ["-p", "sovereign-eval", "--bin", "sovereign-eval"]
+binary = "debug/sovereign-eval"
