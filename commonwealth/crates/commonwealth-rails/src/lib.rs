@@ -130,39 +130,31 @@ impl Refusal {
 }
 
 /// The file `run` holds for its whole life, so ONE cw-rails serves a data
-/// root (fp-solo-lift; Phase B's host-kit row absorbs it).
+/// root (fp-solo-lift). The lock itself is `host_kit::RunLock` (pb-hostkit).
 pub const ROOT_LOCK: &str = "rails.lock";
 
-/// Claim `<data_dir>/rails.lock`. The returned file IS the claim: drop it and
-/// the root is free, which the OS also does when the process dies.
-pub fn claim_root(data_dir: &Path) -> Result<std::fs::File, Refusal> {
+/// Claim `<data_dir>/rails.lock` through the host kit's one lock. The returned
+/// claim IS the lock: drop it and the root is free, which the OS also does
+/// when the process dies.
+pub fn claim_root(data_dir: &Path) -> Result<host_kit::RunLock, Refusal> {
     std::fs::create_dir_all(data_dir)
         .map_err(|e| identity::StoreRefusal::DataDir(data_dir.to_path_buf(), e))?;
-    let path = data_dir.join(ROOT_LOCK);
-    let file = match std::fs::OpenOptions::new()
-        .create(true)
-        .truncate(false)
-        .write(true)
-        .open(&path)
-    {
-        Ok(f) => f,
-        Err(e) => {
-            tracing::warn!(lock = %path.display(), error = %e, "cw-rails: root lock would not open");
-            return Err(Refusal::RootLock(path, e));
+    match host_kit::RunLock::acquire(data_dir, ROOT_LOCK) {
+        Ok(lock) => {
+            tracing::info!(lock = %lock.path().display(), "cw-rails: data root claimed");
+            Ok(lock)
         }
-    };
-    match file.try_lock() {
-        Ok(()) => {
-            tracing::info!(lock = %path.display(), "cw-rails: data root claimed");
-            Ok(file)
-        }
-        Err(std::fs::TryLockError::WouldBlock) => {
+        Err(host_kit::RunLockError::Held { path }) => {
             tracing::warn!(lock = %path.display(), "cw-rails: data root held by another cw-rails");
             Err(Refusal::RootHeld(path))
         }
-        Err(std::fs::TryLockError::Error(e)) => {
-            tracing::warn!(lock = %path.display(), error = %e, "cw-rails: root lock would not take");
-            Err(Refusal::RootLock(path, e))
+        Err(host_kit::RunLockError::Unopenable { path, source }) => {
+            tracing::warn!(lock = %path.display(), error = %source, "cw-rails: root lock would not open");
+            Err(Refusal::RootLock(path, source))
+        }
+        Err(host_kit::RunLockError::Unlockable { path, source }) => {
+            tracing::warn!(lock = %path.display(), error = %source, "cw-rails: root lock would not take");
+            Err(Refusal::RootLock(path, source))
         }
     }
 }
@@ -177,7 +169,7 @@ pub const ROOT_WATCH_INTERVAL: std::time::Duration = std::time::Duration::from_s
 #[cfg(unix)]
 pub async fn root_lost(
     data_dir: &Path,
-    held: &std::fs::File,
+    held: &host_kit::RunLock,
     every: std::time::Duration,
 ) -> Refusal {
     use std::os::unix::fs::MetadataExt;
@@ -204,7 +196,7 @@ pub async fn root_lost(
 #[cfg(not(unix))]
 pub async fn root_lost(
     data_dir: &Path,
-    _held: &std::fs::File,
+    _held: &host_kit::RunLock,
     _every: std::time::Duration,
 ) -> Refusal {
     tracing::warn!(lock = %data_dir.join(ROOT_LOCK).display(), "cw-rails: no root-loss watch on this platform");

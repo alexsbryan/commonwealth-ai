@@ -10,6 +10,9 @@ name = "cw-rails"
 path = "src/main.rs"
 
 [dependencies]
+# The data-root lock (`claim_root`): the host kit's one RunLock (phase-b
+# pb-hostkit). A neutral leaf, so neither [[forbid]] row above it matches.
+host-kit = { workspace = true }
 commonwealth-core = { workspace = true }
 # `iroh` for the endpoint, the acceptor and the dial-by-key transport;
 # `fanout` because the media catalogue half runs on it.

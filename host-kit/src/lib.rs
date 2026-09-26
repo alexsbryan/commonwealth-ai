@@ -73,9 +73,9 @@ use std::path::{Path, PathBuf};
 pub struct RunLock {
     /// The lock file this claim is on, inside the data root it names.
     path: PathBuf,
-    /// Held open because the lock lives on the open file description. Never
-    /// read; closing it is what releases the claim.
-    _file: std::fs::File,
+    /// Held open because the lock lives on the open file description;
+    /// closing it is what releases the claim. Read only for its metadata.
+    file: std::fs::File,
 }
 
 /// Why a data root could not be claimed. Both arms name the path, because an
@@ -182,7 +182,7 @@ impl RunLock {
         };
         // Non-blocking: a live holder is `WouldBlock`, never a wait.
         match file.try_lock() {
-            Ok(()) => Ok(Self { path, _file: file }),
+            Ok(()) => Ok(Self { path, file }),
             Err(std::fs::TryLockError::WouldBlock) => Err(RunLockError::Held { path }),
             Err(std::fs::TryLockError::Error(source)) => {
                 Err(RunLockError::Unlockable { path, source })
@@ -204,6 +204,13 @@ impl RunLock {
     /// The lock file this claim is on.
     pub fn path(&self) -> &Path {
         &self.path
+    }
+
+    /// Metadata of the file this claim holds open — not of whatever sits at
+    /// [`Self::path`] now. A holder that must notice its root being deleted
+    /// or replaced compares the two (cw-rails' `root_lost`).
+    pub fn metadata(&self) -> std::io::Result<std::fs::Metadata> {
+        self.file.metadata()
     }
 }
 

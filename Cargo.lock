@@ -2024,6 +2024,7 @@ dependencies = [
  "commonwealth-work",
  "ed25519-dalek 2.2.0",
  "hex",
+ "host-kit",
  "hostname",
  "reqwest 0.12.28",
  "serde",
