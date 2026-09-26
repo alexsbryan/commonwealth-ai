@@ -36,6 +36,12 @@ Split only when two outcomes need different proofs.
   - ids and atoms → kernel-types;
   - svrn serving contract → sovereign-contracts;
   - a mechanism a program's binary needs about itself → the host kit.
+- Where anything mesh-facing lives, by FIVE_PROGRAMS §4 rule 8 (phase-b-18).
+  The program that owns the capability (§2) serves it on loopback. cw-rails
+  forwards peers to that registered origin and reaches peers' origins for
+  local callers. "Which process should host X for the mesh" has no other
+  answer, so it is never the operator's. Only a capability that no §2
+  program owns goes to the operator.
 - Collapsing N copies of a drive onto the existing decider, with the copy
   count in the body.
 - Re-running a red gate to understand it, and fixing the code it names.

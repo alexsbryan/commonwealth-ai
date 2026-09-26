@@ -209,6 +209,31 @@ never defaulted (ARCH principle 6).
    `SetupConfig` file (phase-b-2). Splitting it into one file per program,
    with the migration shipping in the same commit as the switch, belongs to
    the follow-on queue (`ralph/next/phase-c/`).
+8. The mesh is a layer, never a host (operator, 2026-09-26, phase-b-18:
+   "daemons serve, mesh added by cw-rails — it should all gracefully LAYER
+   rather than enmesh and embed").
+   - Each program serves its own surface on loopback and passes its
+     journeys with cw-rails absent. The mesh's absence costs reach, never an
+     answer the program can give alone. That is TOPOLOGY §3.5's ring rule,
+     which places a capability by what its absence costs.
+   - cw-rails holds what makes a node a member: the node key, the one
+     endpoint, the roster, peer admission and advertisement. It adds these
+     to programs from outside:
+     - it forwards each traffic class to the loopback origin that class's
+       owner registered;
+     - it carries the peer's identity in `X-Mesh-*` headers;
+     - it advertises what the origins declare;
+     - it hands a local caller a loopback bridge to a peer's origin.
+   - Who a peer is, is cw-rails' question. What that principal may see is
+     the owning program's (DAEMON_CORE §1's `principal → Scope` table stays
+     svrn's).
+   - A program never holds a key, an endpoint, a roster or a peer dial of
+     its own, and cw-rails never links a program's crates to host its
+     feature. For anything mesh-facing, the placement test has one answer:
+     the program that owns the capability (§2) serves it on loopback, and
+     cw-rails forwards to it. Node compositions nest the way TOPOLOGY's
+     construction variants do: `serve` ⊂ `serve` + `svrn` ⊂ … + `cw-rails`.
+     Each layer adds reach and changes nothing below it.
 
 ## 5. What the design does not contain
 
