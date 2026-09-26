@@ -31,7 +31,7 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use anyhow::{anyhow, bail, Result};
+use anyhow::{bail, Result};
 use corpus_engine::enrichment::atlas::ground;
 use corpus_engine::enrichment::atlas::summary::read_current_summary;
 use corpus_engine::enrichment::atlas::writer::{read_atlas_ontology, AtlasOntologyFile};
@@ -254,15 +254,26 @@ impl Server {
         ])
     }
 
-    pub async fn call(&self, name: &str, args: &Value) -> Result<ToolOutcome> {
-        match name {
+    /// `None` is an unknown tool (the protocol's -32601). A tool that ran and
+    /// failed comes back as an `is_error` outcome the agent can read, never
+    /// as a transport error.
+    pub async fn call(&self, name: &str, args: &Value) -> Option<ToolOutcome> {
+        let ran = match name {
             "ask" => self.ask(args).await,
             "corpus_list" => Ok(self.corpus_list()),
             "corpus_search" => self.corpus_search(args).await,
             "atoms_lookup" => Ok(self.atoms_lookup(args)),
             "corpus_ontology" => Ok(self.corpus_ontology(args)),
-            other => Err(anyhow!("unknown tool: {other}")),
-        }
+            _ => return None,
+        };
+        Some(ran.unwrap_or_else(|e| {
+            tracing::warn!(tool = name, error = %e, "corpus-mcp: tool failed");
+            ToolOutcome {
+                text: format!("Tool `{name}` failed: {e}"),
+                is_error: true,
+                structured: None,
+            }
+        }))
     }
 
     fn corpus_list(&self) -> ToolOutcome {
