@@ -443,6 +443,10 @@ impl crate::labeled::LabeledEntityExtractor for Gliner2Extractor {
                 .collect(),
         ))
     }
+
+    fn generation(&self) -> GlinerGeneration {
+        crate::gliner_ner::model_spec(&self.model_id).generation
+    }
 }
 
 impl sovereign_contracts::traits::EntityExtractor for Gliner2Extractor {

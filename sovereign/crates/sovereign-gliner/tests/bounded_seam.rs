@@ -52,6 +52,9 @@ impl LabeledEntityExtractor for RecordingSeam {
     fn threshold(&self) -> f32 {
         0.6
     }
+    fn generation(&self) -> sovereign_gliner::gliner_ner::GlinerGeneration {
+        sovereign_gliner::gliner_ner::GlinerGeneration::V1
+    }
     fn extract_mentions(&self, _text: &str) -> Result<Vec<EntityMention>> {
         Ok(Vec::new())
     }

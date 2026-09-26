@@ -41,8 +41,10 @@ use gliner::model::params::Parameters;
 use gliner::model::pipeline::span::SpanMode;
 use gliner::model::GLiNER;
 use regex::Regex;
-use sovereign_contracts::daemon_wire::conv_tiered::ChunkEntityRow;
 use sovereign_contracts::error::{Error, Result};
+// The NER port moved to sovereign-contracts (pb-serving-ner); reachable here
+// at its historical path.
+pub use sovereign_contracts::ner::{EntityMention, GlinerGeneration};
 
 /// Default extraction threshold. Below this, GliNER's softmax score
 /// is too low to trust — most below-threshold "mentions" in
@@ -82,19 +84,6 @@ pub const DEFAULT_MODEL_ID: &str = "gliner_small-v2.1";
 /// The GLiNER2 base export evaluated in SP1 — a monolithic
 /// encoder+span-head graph, driven bare on `ort` (no gline-rs).
 pub const GLINER2_MODEL_ID: &str = "gliner2-base-v1-onnx";
-
-/// Which GLiNER generation a model id belongs to.
-///
-/// This is a closed set on purpose (ARCH_PRINCIPLES §2): each variant
-/// implies a different input contract and a different loader, so a
-/// generation the code cannot drive must not be nameable in config.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum GlinerGeneration {
-    /// gline-rs stack, entities only.
-    V1,
-    /// Bare-`ort` schema-driven export: entities, types, typed slots.
-    V2,
-}
 
 /// Where a GLiNER model lives on HuggingFace and how its files are laid
 /// out on disk.
@@ -205,44 +194,6 @@ pub fn resolve_model_paths(model_id: &str) -> Result<(PathBuf, PathBuf)> {
         )));
     }
     Ok((tokenizer, model))
-}
-
-/// One extracted entity mention with character offsets into the
-/// preprocessed (role-marker-stripped) chunk text. Use the
-/// `original_offsets_from_processed` helper to map back to offsets
-/// in the raw chunk content for highlight rendering.
-#[derive(Debug, Clone, PartialEq)]
-pub struct EntityMention {
-    pub text: String,
-    pub label: String,
-    pub char_start: usize,
-    pub char_end: usize,
-    pub score: f32,
-}
-
-impl EntityMention {
-    /// Promote a stack of mentions into persisted `ChunkEntityRow`s
-    /// for one chunk. Callers stamp `extracted_at` from a single
-    /// timestamp so all rows in a batch share the same provenance.
-    pub fn into_row(
-        self,
-        corpus_id: &str,
-        chunk_id: u64,
-        conv_uuid: Option<&str>,
-        extracted_at: i64,
-    ) -> ChunkEntityRow {
-        ChunkEntityRow {
-            corpus_id: corpus_id.to_string(),
-            chunk_id,
-            text: self.text,
-            label: self.label,
-            char_start: self.char_start as i64,
-            char_end: self.char_end as i64,
-            score: self.score as f64,
-            conv_uuid: conv_uuid.map(|s| s.to_string()),
-            extracted_at,
-        }
-    }
 }
 
 /// gline-rs's `GLiNER<SpanMode>` model wrapped behind a `Mutex` so
@@ -475,6 +426,10 @@ impl crate::labeled::LabeledEntityExtractor for GlinerExtractor {
 
     fn extract_mentions_batch(&self, texts: &[&str]) -> Result<Vec<Vec<EntityMention>>> {
         self.extract_batch(texts)
+    }
+
+    fn generation(&self) -> GlinerGeneration {
+        model_spec(&self.model_id).generation
     }
 }
 

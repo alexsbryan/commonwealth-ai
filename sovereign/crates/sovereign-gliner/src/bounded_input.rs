@@ -196,6 +196,9 @@ mod tests {
         fn threshold(&self) -> f32 {
             0.6
         }
+        fn generation(&self) -> crate::gliner_ner::GlinerGeneration {
+            crate::gliner_ner::GlinerGeneration::V1
+        }
         fn extract_mentions(&self, _text: &str) -> Result<Vec<EntityMention>> {
             Ok(Vec::new())
         }
@@ -313,6 +316,9 @@ mod tests {
             }
             fn threshold(&self) -> f32 {
                 0.6
+            }
+            fn generation(&self) -> crate::gliner_ner::GlinerGeneration {
+                crate::gliner_ner::GlinerGeneration::V1
             }
             fn extract_mentions(&self, text: &str) -> Result<Vec<EntityMention>> {
                 Ok(vec![mention(text)])

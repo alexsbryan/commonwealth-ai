@@ -100,6 +100,9 @@ pub const MOBILE_HOST_ABSENT: &str =
     "the mobile host was the sovereign-server binary, which was deleted; no mobile host ships";
 pub mod model_family;
 pub mod models_manifest;
+/// The NER port — `LabeledEntityExtractor` and its `EntityMention` — so a host
+/// holds an extractor without linking the ONNX stack that serves it.
+pub mod ner;
 /// The node-identity FILES — the `node_id` file and the identity fields of
 /// `mesh.json`, with the ONE precedence decider every stamping surface shares.
 /// The files are cross-program contracts (the daemon writes them, every CLI

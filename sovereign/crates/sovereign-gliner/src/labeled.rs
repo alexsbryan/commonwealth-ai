@@ -32,6 +32,9 @@ use crate::gliner_ner::{
     model_spec, EntityMention, GlinerExtractor, GlinerGeneration, DEFAULT_LABELS, DEFAULT_MODEL_ID,
     DEFAULT_THRESHOLD,
 };
+// The port moved to sovereign-contracts (pb-serving-ner); reachable here at
+// its historical path.
+pub use sovereign_contracts::ner::LabeledEntityExtractor;
 
 /// Env knob naming the GLiNER model the INGEST path loads. Open set (a
 /// model id, resolved through the `KNOWN_MODELS` registry) rather than a
@@ -42,52 +45,6 @@ use crate::gliner_ner::{
 /// WHERE models live; this one says WHICH.
 pub const MODEL_ID_ENV: &str = "SOVEREIGN_GLINER_MODEL_ID";
 
-/// A per-chunk extractor that reports the label and the span, not just
-/// the string.
-///
-/// One method is required. `extract_mentions_batch` has a looping
-/// default so a backend without true batched inference (GLiNER2 drives
-/// one graph call per text) is a two-line impl, while v1 — whose
-/// gline-rs stack batches natively and gains real throughput from it —
-/// overrides it.
-pub trait LabeledEntityExtractor: Send + Sync {
-    /// The model id this extractor loaded. Logged at every wiring site
-    /// so a run's routing is readable from the trace, not inferred.
-    fn model_id(&self) -> &str;
-
-    /// The label set handed to the model, in canonical output casing.
-    ///
-    /// Required, not defaulted: this and [`threshold`](Self::threshold)
-    /// are persisted verbatim onto `chunk_entity_progress`, and that row
-    /// is the only durable record of WHICH extractor built a corpus. A
-    /// default would put a plausible lie in the audit trail.
-    fn labels(&self) -> Vec<String>;
-
-    /// The score cutoff this extractor applied. The two generations do
-    /// not share one (v1 0.6, GLiNER2 0.5) — see `GLINER2_DEFAULT_THRESHOLD`.
-    fn threshold(&self) -> f32;
-
-    /// Mentions in one chunk: threshold-filtered, whitespace-normalized,
-    /// and deduped within the chunk by case-insensitive `(text, label)`
-    /// with the highest score winning.
-    ///
-    /// Offsets point into the ROLE-MARKER-STRIPPED text, not the raw
-    /// chunk (both backends strip before inference). Callers rendering
-    /// highlights over raw content must map back.
-    fn extract_mentions(&self, text: &str) -> Result<Vec<EntityMention>>;
-
-    /// Mentions for many chunks, one `Vec` per input, in input order.
-    fn extract_mentions_batch(&self, texts: &[&str]) -> Result<Vec<Vec<EntityMention>>> {
-        texts.iter().map(|t| self.extract_mentions(t)).collect()
-    }
-
-    /// Which generation this is. Derived from the model id through the
-    /// one registry that owns that mapping, so no impl can disagree
-    /// with `model_spec` about what it loaded.
-    fn generation(&self) -> GlinerGeneration {
-        model_spec(self.model_id()).generation
-    }
-}
 
 /// Collapse a chunk's mentions to one per case-insensitive
 /// `(text, label)`, keeping the highest-scoring span and preserving
