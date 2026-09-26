@@ -963,6 +963,16 @@ merged; that merge is what minted this arrangement, and `ledger-1` records it.
   - Boundary gate: 51, unchanged. No code is in this commit.
 - FLAG: the reload refusal (compute assembly.rs:270) is a user-observable change the pb-serving-assembly row never listed. The row keeps it until the operator rules.
 
+**phase-b-17 · 2026-09-26 · operator rulings on phase-b-13 and phase-b-16 · operator** — this commit
+- Needed: two items waited on the operator. phase-b-13's REVIEW-AFTER put `oicp-types` on the host kit's allow list, behind the kit's `mcp` feature. phase-b-16's FLAG covers the reload refusal (sovereign-compute assembly.rs:270), a user-observable change that the pb-serving-assembly row never listed.
+- Chose: the operator ratified both on 2026-09-26.
+  - The allow-list edge stands. The ARCH_LAYERS comment that credits "cw-rails does not enable the feature" gets corrected where pb-code-server already carries it.
+  - The reload refusal stands. pb-serving-proofs gives it a tracing event.
+- Because:
+  - The kit edge. oicp-types is a shared leaf in every package's closure, so the edge moves no closure. The allow list, which the operator owns, is what guards the next dep behind `mcp`. A kit-local envelope would be a twin (principle 8).
+  - The refusal. The old reload returned 200 and never touched the compute children (sovereign-daemon provider.rs:37-110 at 6233a6b82^), a success-shaped answer for a change it did not apply (principle 6).
+  - Boundary gate: 51, unchanged. No code is in this commit.
+
 ## Flags for the operator
 
 - A26: REVIEW-DEMO-rr-1-run will very likely FAIL `ra-room-plug-in-live` again on this host. The bar's window is 60 s, and the CPU 2B took about 1–5 min per answer in this run (room-answer-0..4.json mtimes 19:33→19:49). Passing it takes a faster node or model for the room, or a different bar. Both are design changes for the operator, not tuning.
@@ -10960,5 +10970,18 @@ Two commit-body claims are corrected here, because published history is not rewr
 - da819e9e2's "16 importers inside sovereign-daemon": 30 src files name `crate::loopback_guard` at da819e9e2^ (`git grep -l`).
 
 Falsifier for pb-serving-proofs: if driving `build_provider` against a running generation needs a live compute child, and a test cannot provide one, the reload-branch proof becomes a process-level test in sovereign-daemon/tests, as pb-handover-first's was.
+
+</details>
+
+## phase-b-17 · 2026-09-26 — the operator ratifies the kit's oicp-types edge and the reload refusal
+
+<details><summary>reasoning, evidence, package</summary>
+
+The seat asked in session and the operator answered: "I'm aligned with all the recs, except [HUMAN-pb-mesh-traffic]." That answer covered five recommendations:
+- HUMAN-pb-lanes-rerank (b): measure rerank on against rerank off now. It gets its own commit with the numbers.
+- phase-b-13: ratify.
+- phase-b-16 FLAG: ratify.
+- The atlas_grounding ledger violation: it needs an owner outside Phase B.
+- HUMAN-pb-mesh-traffic: not accepted. The operator asked for more due diligence to find a more principled option.
 
 </details>
