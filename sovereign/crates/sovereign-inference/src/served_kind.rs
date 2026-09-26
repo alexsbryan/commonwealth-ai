@@ -322,7 +322,24 @@ fn admit(kinds: &mut Vec<ServedKind>, kind: ServedKind) -> Result<(), String> {
 
 /// Every kind this binary serves, in registration order.
 pub fn served_kinds() -> Vec<ServedKind> {
-    registry().read().map(|g| g.clone()).unwrap_or_default()
+    kinds_in(registry())
+}
+
+/// The kinds `registry` holds. A poisoned lock still holds a whole list (the
+/// one writer, [`admit`], pushes last), so the list is recovered and the
+/// poisoning reported: an empty answer would mount no kind routes and say
+/// nothing (ARCH §6).
+fn kinds_in(registry: &Registry) -> Vec<ServedKind> {
+    match registry.read() {
+        Ok(guard) => guard.clone(),
+        Err(poisoned) => {
+            tracing::error!(
+                target: "served_kind",
+                "served kind registry lock is poisoned; serving the kinds it holds"
+            );
+            poisoned.into_inner().clone()
+        }
+    }
 }
 
 /// The kind a compute child hosts under `role`, if one is registered.
@@ -383,6 +400,52 @@ mod tests {
                     kind.role
                 );
             }
+        }
+    }
+
+    /// A registry whose lock a writer poisoned still answers its kinds, and
+    /// says the lock is poisoned where the daemon's log can see it.
+    #[test]
+    fn a_poisoned_registry_still_answers_its_kinds_and_says_so() {
+        let registry: Registry = RwLock::new(vec![RERANK]);
+        let _ = std::thread::scope(|s| {
+            s.spawn(|| {
+                let _guard = registry.write().unwrap();
+                panic!("poison the registry lock");
+            })
+            .join()
+        });
+        assert!(registry.is_poisoned());
+
+        let logs = std::sync::Arc::new(std::sync::Mutex::new(Vec::<u8>::new()));
+        let sink = std::sync::Arc::clone(&logs);
+        let subscriber = tracing_subscriber::fmt()
+            .with_env_filter("served_kind=error")
+            .with_writer(move || Sink(std::sync::Arc::clone(&sink)))
+            .with_ansi(false)
+            .finish();
+        let kinds = tracing::subscriber::with_default(subscriber, || kinds_in(&registry));
+
+        assert_eq!(
+            kinds.iter().map(|k| k.role).collect::<Vec<_>>(),
+            vec!["rerank"],
+            "a poisoned lock must not read as no kinds"
+        );
+        let logged = String::from_utf8_lossy(&logs.lock().unwrap()).into_owned();
+        assert!(
+            logged.contains("served kind registry lock is poisoned"),
+            "the recovery must be reported: {logged:?}"
+        );
+    }
+
+    struct Sink(std::sync::Arc<std::sync::Mutex<Vec<u8>>>);
+    impl std::io::Write for Sink {
+        fn write(&mut self, b: &[u8]) -> std::io::Result<usize> {
+            self.0.lock().unwrap().extend_from_slice(b);
+            Ok(b.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
         }
     }
 
