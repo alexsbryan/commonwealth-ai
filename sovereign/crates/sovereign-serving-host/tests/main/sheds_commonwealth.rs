@@ -28,7 +28,10 @@ fn rust_sources(dir: &Path, out: &mut Vec<PathBuf>) {
 
 #[test]
 fn serving_host_names_no_commonwealth_crate() {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    // Read at run time, never `env!`: program-lift shares one target across
+    // sandboxes, and a binary compiled in a deleted sandbox keeps that path.
+    let root = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").expect("cargo sets it"));
+    let root = root.as_path();
     let mut sites = Vec::new();
 
     let manifest = std::fs::read_to_string(root.join("Cargo.toml")).expect("read Cargo.toml");
