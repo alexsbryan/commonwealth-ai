@@ -170,6 +170,30 @@ pub fn plan_serving(config: &SetupConfig) -> Result<ServingPlan, String> {
     })
 }
 
+/// Does a process built from `config` serve the rerank kind — a slot in its
+/// own engine, or a warm compute child in the kind's child role? A config
+/// that cannot be planned (a terminal, an unconfigured node) holds no weights,
+/// so it serves none.
+pub fn serves_rerank(config: &SetupConfig) -> bool {
+    let in_process = match plan_serving(config) {
+        Ok(plan) => plan.in_process.contains(&PlannedSlot::Rerank),
+        Err(_) => false,
+    };
+    let child = config.compute.enabled
+        && config
+            .compute
+            .slot
+            .iter()
+            .any(|s| s.warm && Some(s.role.as_str()) == served_kind::RERANK.child_role());
+    tracing::debug!(
+        target: "served_kind",
+        in_process,
+        child,
+        "does this process serve the rerank kind"
+    );
+    in_process || child
+}
+
 /// The compute generation a factory started: what the children were planned
 /// as, and the manager running them (`None` when the layer came up empty).
 struct LiveCompute {
@@ -649,6 +673,11 @@ mod distributed_primary_routing_tests {
         assert_eq!(count, 1, "got: {ids:?}");
     }
 }
+// A sibling file: inline, it put this file past the 800-line band (ARCH §3.1).
+#[cfg(test)]
+#[path = "assembly/serves_rerank_tests.rs"]
+mod serves_rerank_tests;
+
 /// The assembly must arm every idle monitor the slot lineup has.
 ///
 /// **The bug this is a gate for.** There were two provider-build paths:

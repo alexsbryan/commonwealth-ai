@@ -933,10 +933,11 @@ pub(super) async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
             // reachable. Byte-identical to the behaviour this host had
             // before `LaneScope` existed.
             scope: sovereign_runtime_recipe::LaneScope::All,
-            // No cross-encoder for turns yet: the serving assembly may hold a
-            // rerank slot in this process's engine, and handing it to the
-            // lane is its own change.
-            rerank: None,
+            // This daemon's own rerank kind — the engine's slot or a rerank
+            // compute child, reached through the routed provider — when the
+            // serving assembly holds one. Never a second load of the GGUF.
+            rerank: sovereign_compute::assembly::serves_rerank(&config)
+                .then(|| Arc::clone(&routed_provider)),
         },
         &sovereign_runtime_recipe::TracingProgress,
     )
