@@ -162,3 +162,46 @@ async fn non_serving_child_fails_fast() {
     );
     drop(tx);
 }
+
+/// A child hosting the rerank kind answers on the kind's own route, and the
+/// daemon-side `ChildProvider` reaches it through `rerank_batch`.
+#[tokio::test]
+async fn a_rerank_child_scores_over_the_kind_route() {
+    struct Reranker;
+    #[async_trait]
+    impl InferenceProvider for Reranker {
+        async fn complete(&self, _: &CompletionRequest) -> Result<CompletionResponse> {
+            Err(Error::NotImplemented("rerank only".into()))
+        }
+        async fn complete_stream(
+            &self,
+            _: &CompletionRequest,
+        ) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>> {
+            Err(Error::NotImplemented("rerank only".into()))
+        }
+        async fn embed(&self, _: &str) -> Result<Vec<f32>> {
+            Err(Error::NotImplemented("rerank only".into()))
+        }
+        async fn rerank_batch(&self, _: &str, docs: &[String]) -> Result<Vec<f32>> {
+            Ok(docs.iter().map(|d| d.len() as f32).collect())
+        }
+        fn capabilities(&self) -> ProviderCapabilities {
+            ProviderCapabilities {
+                max_context_tokens: 0,
+                supports_structured_output: false,
+                relative_speed: Speed::Fast,
+                relative_reasoning: Depth::Shallow,
+            }
+        }
+    }
+    let port = spawn_server(Arc::new(Reranker), "rerank").await;
+    let (child, _tx) = serving_child("rerank", port);
+    let scores = child
+        .rerank_batch(
+            "q",
+            &["aa".to_string(), "b".to_string(), "cccc".to_string()],
+        )
+        .await
+        .expect("the child serves the rerank kind");
+    assert_eq!(scores, vec![2.0, 1.0, 4.0]);
+}

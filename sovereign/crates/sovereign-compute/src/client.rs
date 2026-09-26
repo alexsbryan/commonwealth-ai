@@ -14,7 +14,9 @@ use std::pin::Pin;
 use std::time::Duration;
 
 use futures::{Stream, StreamExt};
+use sovereign_contracts::oicp::openai_types::{RerankRequest, RerankResponse};
 use sovereign_contracts::{CompletionRequest, CompletionResponse, Error, Result, StreamFrame};
+use sovereign_inference::served_kind;
 use tokio::sync::mpsc;
 
 use crate::wire::{
@@ -194,6 +196,35 @@ impl ComputeChildClient {
             Error::Inference(format!("compute child embed_batch decode failed: {e}"))
         })?;
         Ok(body.embeddings)
+    }
+
+    /// Score `docs` against `query` on the child's rerank kind route, which
+    /// speaks the public `/v1/rerank` wire (`served_kind::RERANK`).
+    pub async fn rerank(&self, query: &str, docs: &[String]) -> Result<Vec<f32>> {
+        let path = served_kind::RERANK
+            .route_path()
+            .ok_or_else(|| Error::NotImplemented("rerank has no route".to_string()))?;
+        let resp = self
+            .client
+            .post(format!("{}{path}", self.base_url))
+            .json(&RerankRequest {
+                model: String::new(),
+                query: query.to_string(),
+                documents: docs.to_vec(),
+            })
+            .send()
+            .await
+            .map_err(|e| Error::Inference(format!("compute child rerank request failed: {e}")))?;
+        if !resp.status().is_success() {
+            return Err(error_from_response(resp).await);
+        }
+        let body: RerankResponse = resp
+            .json()
+            .await
+            .map_err(|e| Error::Inference(format!("compute child rerank decode failed: {e}")))?;
+        let mut results = body.results;
+        results.sort_by_key(|r| r.index);
+        Ok(results.into_iter().map(|r| r.relevance_score).collect())
     }
 
     /// Probe readiness + identity. Both 200 (ready) and 503 (loading)

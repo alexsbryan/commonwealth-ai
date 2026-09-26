@@ -241,7 +241,9 @@ fn the_child_bundle_names_every_wire_route() {
             ROUTE_COMPLETE_STREAM,
             ROUTE_EMBED,
             ROUTE_EMBED_BATCH,
-            ROUTE_HEALTH
+            ROUTE_HEALTH,
+            // The rerank kind's route, mounted from the served-kind registry.
+            "/v1/rerank",
         ]
     );
 }

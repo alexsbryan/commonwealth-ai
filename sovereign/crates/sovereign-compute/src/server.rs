@@ -18,6 +18,7 @@ use axum::{Json, Router};
 use futures::StreamExt;
 use host_kit::shell::RouteBundle;
 use sovereign_contracts::{CompletionRequest, Error, InferenceProvider, StreamFrame};
+use sovereign_inference::served_kind::{self, KindRoute, KindServeError};
 
 use crate::wire::{
     self, EmbedBatchRequest, EmbedBatchResponse, EmbedMode, EmbedRequest, EmbedResponse,
@@ -65,12 +66,34 @@ pub fn bundle(
         ready,
         meta,
     };
-    RouteBundle::new("compute_child")
+    let bundle = RouteBundle::new("compute_child")
         .route(ROUTE_COMPLETE, post(handle_complete))
         .route(ROUTE_COMPLETE_STREAM, post(handle_complete_stream))
         .route(ROUTE_EMBED, post(handle_embed))
         .route(ROUTE_EMBED_BATCH, post(handle_embed_batch))
-        .route(ROUTE_HEALTH, get(handle_health))
+        .route(ROUTE_HEALTH, get(handle_health));
+    // Each served kind answers on its own route path, from its registration,
+    // so a child hosting a kind speaks the same wire as the public route.
+    served_kind::served_kinds()
+        .into_iter()
+        .fold(bundle, |bundle, kind| match kind.route {
+            KindRoute::Served { path, serve } => bundle.route(
+                path,
+                post(
+                    move |State(st): State<ChildServerState>,
+                          Json(body): Json<serde_json::Value>| async move {
+                        match serve(Arc::clone(&st.provider), body).await {
+                            Ok(value) => Json(value).into_response(),
+                            Err(KindServeError::BadRequest(m)) => {
+                                err_response(&Error::InvalidInput(m))
+                            }
+                            Err(KindServeError::Backend(m)) => err_response(&Error::Inference(m)),
+                        }
+                    },
+                ),
+            ),
+            KindRoute::Absent { .. } => bundle,
+        })
         .with_state(state)
 }
 

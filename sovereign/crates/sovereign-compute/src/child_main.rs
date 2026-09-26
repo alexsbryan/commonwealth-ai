@@ -25,13 +25,14 @@ use sovereign_contracts::{
     ProviderCapabilities, Result, Speed, StreamFrame,
 };
 use sovereign_inference::fast_exit_skip_destructors;
+use sovereign_inference::served_kind::{self, ServedKind};
 use tracing::{error, info};
 
 use crate::server::{bundle, ChildMeta};
 use crate::supervisor::HANDSHAKE_PREFIX;
 
 /// The kind of provider a child hosts.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy)]
 enum Role {
     /// Full generative engine (`EmbeddedLlamaCpp`), serves `/internal/complete*`.
     Generate,
@@ -39,6 +40,9 @@ enum Role {
     Embed,
     /// Model-free canned provider for the crash-isolation e2e.
     Mock,
+    /// A served model kind hosted under its registered child role
+    /// (`sovereign_inference::served_kind`), serving its kind route.
+    Kind(ServedKind),
 }
 
 impl Role {
@@ -47,6 +51,7 @@ impl Role {
             Role::Generate => "generate",
             Role::Embed => "embed",
             Role::Mock => "mock",
+            Role::Kind(kind) => kind.child_role().unwrap_or(kind.role),
         }
     }
 }
@@ -104,7 +109,10 @@ impl ChildArgs {
                         "generate" => Role::Generate,
                         "embed" => Role::Embed,
                         "mock" => Role::Mock,
-                        other => return Err(format!("unknown --role: {other}")),
+                        other => match served_kind::kind_for_child_role(other) {
+                            Some(kind) => Role::Kind(kind),
+                            None => return Err(format!("unknown --role: {other}")),
+                        },
                     })
                 }
                 "--name" => name = Some(take_value(&mut it, "--name")?),
@@ -350,6 +358,13 @@ fn load_provider(
                 .ok_or_else(|| Error::InvalidInput("--model required for role=embed".into()))?;
             crate::assembly::assemble_child_embed(&path)
         }
+        Role::Kind(kind) => {
+            let path = model.ok_or_else(|| {
+                Error::InvalidInput(format!("--model required for role={}", kind.role))
+            })?;
+            info!(target: "compute_child", kind = kind.role, path = %path.display(), "loading served kind");
+            (kind.loader)(&path)
+        }
         Role::Mock => Ok(Arc::new(MockProvider {
             tokens: mock_tokens.max(1),
             delay: Duration::from_millis(mock_token_delay_ms),
@@ -426,6 +441,13 @@ impl InferenceProvider for LazyProvider {
     async fn embed_query(&self, query: &str) -> Result<Vec<f32>> {
         match self.current() {
             Some(p) => p.embed_query(query).await,
+            None => Err(self.unavailable()),
+        }
+    }
+
+    async fn rerank_batch(&self, query: &str, docs: &[String]) -> Result<Vec<f32>> {
+        match self.current() {
+            Some(p) => p.rerank_batch(query, docs).await,
             None => Err(self.unavailable()),
         }
     }

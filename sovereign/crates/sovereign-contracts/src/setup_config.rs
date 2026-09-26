@@ -1017,7 +1017,8 @@ pub struct ComputeSlotConfig {
     /// Addressable id: a request `model_id` equal to this routes to the
     /// child. Also used as the child `--name`.
     pub name: String,
-    /// `"generate"` (EmbeddedLlamaCpp) or `"embed"` (EmbedOnlyProvider).
+    /// `"generate"` (EmbeddedLlamaCpp), `"embed"` (EmbedOnlyProvider), or a
+    /// served kind's child role (`"rerank"`; `sovereign_inference::served_kind`).
     pub role: String,
     /// GGUF path the child loads.
     pub model: PathBuf,
