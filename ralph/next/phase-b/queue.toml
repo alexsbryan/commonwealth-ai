@@ -31,7 +31,12 @@ variant = "medium"
 # target reached 47G there and hit the quota (1d611fcab). The target persists
 # across runs, so the closures' crates.io deps stay warm; the sandbox, and with
 # it every workspace crate, is fresh each run (phase-b-8).
+# The sandbox PATH is stable per lift (seat, 2026-09-26): program_lift.py wipes
+# and re-creates `--dir`, so the contents stay fresh, but cargo reuses a
+# relocated artifact across sandbox paths, and a pid-keyed path left every
+# `env!("CARGO_MANIFEST_DIR")` a reused test binary carries pointing at a deleted
+# sandbox (1db9a6e12). A stable path keeps what was baked in valid.
 [checks]
 boundary = ["bash", "-c", "toolbox run -c sovereign-vulkan bash -lc 'cd corpus-engine && cargo xtask boundary-gate; true'"]
 compile = ["bash", "-c", "toolbox run -c sovereign-vulkan bash -lc './scripts/sovereign-lint.sh --human'"]
-lift = ['bash', '-c', 'mkdir -p "$HOME/.cache/program-lift" && toolbox run -c sovereign-vulkan bash -lc "TMPDIR=$HOME/.cache/program-lift ./scripts/program-lift.sh --sandbox $0 --target-dir $HOME/.cache/program-lift/target"']
+lift = ['bash', '-c', 'mkdir -p "$HOME/.cache/program-lift" && toolbox run -c sovereign-vulkan bash -lc "TMPDIR=$HOME/.cache/program-lift ./scripts/program-lift.sh --sandbox $0 --dir $HOME/.cache/program-lift/sandbox-$0 --target-dir $HOME/.cache/program-lift/target"']
