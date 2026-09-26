@@ -133,6 +133,14 @@ async fn create_and_status_round_trip() {
 /// relied on a service manager that wasn't there to relaunch it).
 #[tokio::test]
 async fn http_leave_returns_to_solo_mesh() {
+    // The re-solo runs detached and reports failure only as a tracing event;
+    // capture it so a red run names its cause (pb-test-load).
+    let _trace = tracing::subscriber::set_default(
+        tracing_subscriber::fmt()
+            .with_env_filter("sovereign_daemon=info,sovereign_mesh=info")
+            .with_test_writer()
+            .finish(),
+    );
     let (_daemon, base, _tmp) = spawn_test_router().await;
     let client = reqwest::Client::new();
 
@@ -159,6 +167,8 @@ async fn http_leave_returns_to_solo_mesh() {
     // one as running. A missing re-solo would never satisfy this and
     // fail the assertion after the loop.
     let mut running_solo = false;
+    let left_at = std::time::Instant::now();
+    let mut last = serde_json::Value::Null;
     for _ in 0..40 {
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
         let body: serde_json::Value = client
@@ -176,10 +186,13 @@ async fn http_leave_returns_to_solo_mesh() {
             running_solo = true;
             break;
         }
+        last = body;
     }
     assert!(
         running_solo,
-        "POST /v1/mesh/leave should re-create a live solo mesh in-process"
+        "POST /v1/mesh/leave should re-create a live solo mesh in-process; {:?} after \
+         the leave, last status: {last}",
+        left_at.elapsed()
     );
 }
 
