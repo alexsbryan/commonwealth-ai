@@ -23,6 +23,7 @@ pub mod pinned_worker_source;
 pub mod prompt_compactor;
 pub mod recorder;
 pub mod router_builder;
+pub mod slot_manifest;
 pub mod slot_select;
 pub mod source_content_validator;
 pub mod state;

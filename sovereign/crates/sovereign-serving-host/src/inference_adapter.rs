@@ -194,10 +194,9 @@ fn synthesize_tool_stream(resp: ChatCompletionResponse) -> Vec<wire::StreamFrame
 pub struct SovereignInferenceAdapter {
     provider: Arc<dyn InferenceProvider>,
     /// The manifest reader the local slot pick and the self-manifest
-    /// advertisement read through. Supplied by the daemon, because the port's
-    /// implementation names `sovereign-core` and the host may not
-    /// (`sovereign/SERVING_BOUNDARY.md` "The two tiers"; a third
-    /// `[[exception]]` is the kill clause).
+    /// advertisement read through. Supplied by the host binary
+    /// ([`crate::slot_manifest::CoreSlotManifest`] in the daemon and `serve`),
+    /// so a test can hand it a stub.
     manifest: Arc<dyn SlotManifest>,
 }
 
