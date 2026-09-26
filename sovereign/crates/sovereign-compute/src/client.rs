@@ -219,9 +219,8 @@ impl ComputeChildClient {
             .json()
             .await
             .map_err(|e| Error::Inference(format!("compute child rerank decode failed: {e}")))?;
-        let mut results = body.results;
-        results.sort_by_key(|r| r.index);
-        Ok(results.into_iter().map(|r| r.relevance_score).collect())
+        body.scores_in_input_order(docs.len())
+            .map_err(|e| Error::Inference(format!("compute child rerank: {e}")))
     }
 
     /// The rerank POST, bounded by [`RERANK_TIMEOUT`]: every search on a

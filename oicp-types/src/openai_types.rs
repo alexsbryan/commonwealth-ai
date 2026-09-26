@@ -581,6 +581,31 @@ pub struct RerankResponse {
     pub results: Vec<RerankResult>,
 }
 
+impl RerankResponse {
+    /// The scores for a request of `documents` documents, in input order,
+    /// whatever order the server listed them in. Refuses a result that names
+    /// a document past the end and a document left without a score, so a
+    /// short answer never shifts scores onto the wrong documents. The one
+    /// decoder every `/v1/rerank` client reads.
+    pub fn scores_in_input_order(self, documents: usize) -> Result<Vec<f32>, String> {
+        let mut scores = vec![None; documents];
+        for result in self.results {
+            let slot = scores.get_mut(result.index).ok_or_else(|| {
+                format!(
+                    "rerank response names document {} of {documents}",
+                    result.index
+                )
+            })?;
+            *slot = Some(result.relevance_score);
+        }
+        scores
+            .into_iter()
+            .enumerate()
+            .map(|(i, s)| s.ok_or_else(|| format!("rerank response has no score for document {i}")))
+            .collect()
+    }
+}
+
 /// One document's score. Scores are model-specific logits; never compare
 /// them across models.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -680,6 +705,34 @@ impl ErrorResponse {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Scores land in input order, and a short answer is refused rather than
+    /// shifting the scores it does carry onto the wrong documents.
+    #[test]
+    fn rerank_scores_land_in_input_order_and_a_short_answer_is_refused() {
+        let response = |indices: &[usize]| RerankResponse {
+            model: String::new(),
+            results: indices
+                .iter()
+                .map(|&index| RerankResult {
+                    index,
+                    relevance_score: index as f32,
+                })
+                .collect(),
+        };
+        assert_eq!(
+            response(&[2, 0, 1]).scores_in_input_order(3),
+            Ok(vec![0.0, 1.0, 2.0])
+        );
+        assert_eq!(
+            response(&[2, 0]).scores_in_input_order(3),
+            Err("rerank response has no score for document 1".to_string())
+        );
+        assert_eq!(
+            response(&[0, 3]).scores_in_input_order(3),
+            Err("rerank response names document 3 of 3".to_string())
+        );
+    }
 
     #[test]
     fn chat_completion_request_deserialize_minimal() {

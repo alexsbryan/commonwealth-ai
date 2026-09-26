@@ -27,27 +27,11 @@ impl RemoteApiProvider {
             .json()
             .await
             .map_err(|e| Error::Inference(format!("Failed to parse rerank response: {e}")))?;
-        let mut scores = vec![None; docs.len()];
-        for result in parsed.results {
-            let slot = scores.get_mut(result.index).ok_or_else(|| {
-                Error::Inference(format!(
-                    "rerank response names document {} of {}",
-                    result.index,
-                    docs.len()
-                ))
-            })?;
-            *slot = Some(result.relevance_score);
-        }
+        let scores = parsed
+            .scores_in_input_order(docs.len())
+            .map_err(Error::Inference)?;
         tracing::debug!(target: "oicp_client", docs = docs.len(), "rerank answered over the route");
-        scores
-            .into_iter()
-            .enumerate()
-            .map(|(i, s)| {
-                s.ok_or_else(|| {
-                    Error::Inference(format!("rerank response has no score for document {i}"))
-                })
-            })
-            .collect()
+        Ok(scores)
     }
 }
 
