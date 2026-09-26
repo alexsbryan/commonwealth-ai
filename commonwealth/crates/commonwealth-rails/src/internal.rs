@@ -40,13 +40,14 @@ use std::sync::Arc;
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::routing::post;
-use axum::{Json, Router};
+use axum::Json;
 use commonwealth_core::clock::unix_now_secs;
 use commonwealth_core::ids::NodeId;
 use commonwealth_core::mesh::wire::{
     GossipRejection, GossipRequest, GossipResponse, JoinRejection, JoinRequest, JoinResponse,
 };
 use commonwealth_core::mesh::{GossipAuth, GossipAuthArm, Mesh, MeshWire, SecretDisclosure};
+use host_kit::shell::RouteBundle;
 use tokio::sync::{Mutex, RwLock};
 
 use crate::{identity, note_contact, Refusal};
@@ -74,14 +75,15 @@ pub async fn serve(
     let addr = listener
         .local_addr()
         .map_err(|e| Refusal::Listen(bind, e))?;
-    let app = router(Inbound {
+    let bundle = router(Inbound {
         mesh,
         contacts,
         self_id,
         data_dir,
     });
     let task = tokio::spawn(async move {
-        if let Err(e) = axum::serve(listener, app).await {
+        let forever = std::future::pending::<()>();
+        if let Err(e) = host_kit::shell::serve([listener], vec![bundle], forever).await {
             tracing::error!(target: "rails", error = %e, "internal: listener stopped");
         }
     });
@@ -89,8 +91,8 @@ pub async fn serve(
     Ok((addr, task))
 }
 
-pub fn router(state: Inbound) -> Router {
-    Router::new()
+pub fn router(state: Inbound) -> RouteBundle {
+    RouteBundle::new("internal")
         .route("/internal/gossip", post(gossip))
         .route("/internal/join", post(join))
         .with_state(state)

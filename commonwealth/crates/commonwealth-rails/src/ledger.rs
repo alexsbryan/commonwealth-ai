@@ -26,7 +26,8 @@ use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
-use axum::{Json, Router};
+use axum::Json;
+use host_kit::shell::RouteBundle;
 use commonwealth_core::activity::ActivityEventKind;
 use commonwealth_core::capabilities::NodeCapabilities;
 use commonwealth_core::contributions::LedgerEventKind;
@@ -60,9 +61,9 @@ impl LedgerDoors {
     }
 }
 
-/// Every ledger door. Merged into [`crate::api::router`].
-pub fn router(doors: LedgerDoors) -> Router {
-    Router::new()
+/// Every ledger door, one of [`crate::api::bundles`].
+pub fn router(doors: LedgerDoors) -> RouteBundle {
+    RouteBundle::new("ledger")
         .route(
             "/v1/ledger/contributions",
             get(contribution_events).post(contribution_record),

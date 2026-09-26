@@ -27,6 +27,7 @@ use axum::response::IntoResponse;
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use commonwealth_core::capabilities::OriginKind;
+use host_kit::shell::RouteBundle;
 use commonwealth_media::apps::PublishRefusal;
 use commonwealth_media::fanout::FanoutRequest;
 use commonwealth_media::MediaReachRefusal;
@@ -40,8 +41,27 @@ pub fn bind_addr(port: u16) -> SocketAddr {
     ([127, 0, 0, 1], port).into()
 }
 
+/// The routes this API serves, as the shell's named bundles: the mesh and
+/// rail doors, the mesh store's, and the ledger's.
+pub fn bundles(daemon: Arc<RailsDaemon>) -> Vec<RouteBundle> {
+    vec![
+        mesh_bundle(daemon.clone()),
+        // The mesh store's doors (fp-77), over its own state.
+        crate::kv::router(daemon.kv.clone()),
+        // The typed ledger doors (fp-78), over the same store.
+        crate::ledger::router(crate::ledger::LedgerDoors::new(
+            daemon.kv.store.clone(),
+        )),
+    ]
+}
+
+/// Every bundle, mounted as one router.
 pub fn router(daemon: Arc<RailsDaemon>) -> Router {
-    Router::new()
+    host_kit::shell::mount(bundles(daemon))
+}
+
+fn mesh_bundle(daemon: Arc<RailsDaemon>) -> RouteBundle {
+    RouteBundle::new("mesh")
         .route("/v1/mesh/status", get(status))
         .route("/v1/mesh/media", get(media))
         .route("/v1/mesh/app", get(app))
@@ -96,13 +116,7 @@ pub fn router(daemon: Arc<RailsDaemon>) -> Router {
         .route("/v1/rail/compact", post(crate::rail::journal_compact))
         // The `work` queue, folded where its journal lives (fp-45).
         .route("/v1/work/projection", get(crate::work::projection))
-        .with_state(daemon.clone())
-        // The mesh store's doors (fp-77), over its own state.
-        .merge(crate::kv::router(daemon.kv.clone()))
-        // The typed ledger doors (fp-78), over the same store.
-        .merge(crate::ledger::router(crate::ledger::LedgerDoors::new(
-            daemon.kv.store.clone(),
-        )))
+        .with_state(daemon)
 }
 
 /// The bind guard, as a function so it has a failing input that can be
@@ -125,9 +139,10 @@ pub async fn serve(
     let listener = tokio::net::TcpListener::bind(listen)
         .await
         .map_err(|e| Refusal::Listen(listen, e))?;
-    let app = router(daemon);
+    let bundles = bundles(daemon);
     Ok(tokio::spawn(async move {
-        if let Err(e) = axum::serve(listener, app).await {
+        let forever = std::future::pending::<()>();
+        if let Err(e) = host_kit::shell::serve([listener], bundles, forever).await {
             tracing::error!(target: "rails", error = %e, "api: listener stopped");
         }
     }))

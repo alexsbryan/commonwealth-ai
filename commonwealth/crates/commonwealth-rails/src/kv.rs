@@ -33,7 +33,8 @@ use axum::extract::{Query, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
-use axum::{Json, Router};
+use axum::Json;
+use host_kit::shell::RouteBundle;
 use base64::engine::general_purpose::STANDARD as B64;
 use base64::Engine;
 use commonwealth_core::ids::{NodeId, NodePubkey};
@@ -565,9 +566,9 @@ pub struct KvSetBody {
     pub origin: NodeId,
 }
 
-/// The four doors over `host`'s store. Merged into [`crate::api::router`].
-pub fn router(host: Arc<KvHost>) -> Router {
-    Router::new()
+/// The four doors over `host`'s store, one of [`crate::api::bundles`].
+pub fn router(host: Arc<KvHost>) -> RouteBundle {
+    RouteBundle::new("kv")
         .route(
             "/v1/mesh/kv/entry",
             get(kv_get).post(kv_set).delete(kv_delete),

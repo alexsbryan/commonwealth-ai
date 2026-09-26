@@ -23,7 +23,8 @@ async fn serve(store: MeshStore) -> String {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     tokio::spawn(async move {
-        axum::serve(listener, router(LedgerDoors::new(store)))
+        let forever = std::future::pending::<()>();
+        host_kit::shell::serve([listener], vec![router(LedgerDoors::new(store))], forever)
             .await
             .unwrap();
     });

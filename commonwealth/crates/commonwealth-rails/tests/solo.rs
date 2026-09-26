@@ -131,3 +131,94 @@ async fn a_meshless_node_serves_its_store_across_a_restart_and_a_join() {
     assert_eq!(read_back(third.clone()).await.as_deref(), Some("mine"));
     third.node.endpoint.close().await;
 }
+
+/// Every `.rs` under `src/`, test code cut away: files named `tests.rs`,
+/// anything under a `tests/` dir, and a file's text from its first
+/// `#[cfg(test)]` on.
+fn product_sources(dir: &Path, out: &mut Vec<(String, String)>) {
+    for entry in std::fs::read_dir(dir).unwrap() {
+        let path = entry.unwrap().path();
+        if path.is_dir() {
+            if path.file_name().is_some_and(|n| n != "tests") {
+                product_sources(&path, out);
+            }
+        } else if path.extension().is_some_and(|e| e == "rs")
+            && path.file_name().is_some_and(|n| n != "tests.rs")
+        {
+            let text = std::fs::read_to_string(&path).unwrap();
+            let product = text.split("#[cfg(test)]").next().unwrap_or("").to_string();
+            out.push((path.display().to_string(), product));
+        }
+    }
+}
+
+/// The mount trace names every route the API serves (phase-b pb-shell).
+///
+/// The kit's trace prints each bundle's `routes()`. Here every route a
+/// bundle names answers through the kit's `serve` (a router 404 has an
+/// empty body; a handler's own 404 does not), and nothing in this crate can
+/// serve a route the trace does not name: a route enters a bundle only
+/// through `RouteBundle::route`, so the doors around it are a hand-built
+/// `Router` and a bare `axum::serve`, and neither may appear in `src/`.
+#[tokio::test]
+async fn the_mount_trace_names_every_route_the_api_serves() {
+    let dir = tempfile::tempdir().unwrap();
+    let daemon = start(dir.path()).await;
+    let bundles = api::bundles(daemon.clone());
+    let named: Vec<(&str, Vec<String>)> = bundles
+        .iter()
+        .map(|b| (b.name(), b.routes().to_vec()))
+        .collect();
+    assert_eq!(
+        named.iter().map(|(n, _)| *n).collect::<Vec<_>>(),
+        ["mesh", "kv", "ledger"]
+    );
+
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let forever = std::future::pending::<()>();
+    tokio::spawn(host_kit::shell::serve([listener], bundles, forever));
+    let client = reqwest::Client::new();
+    for (bundle, routes) in &named {
+        assert!(!routes.is_empty(), "{bundle} names no route");
+        for route in routes {
+            let path: String = route
+                .split('/')
+                .map(|seg| if seg.starts_with('{') { "x" } else { seg })
+                .collect::<Vec<_>>()
+                .join("/");
+            let sent = client.get(format!("http://{addr}{path}")).send();
+            // A long poll that holds the request open is a mounted route.
+            let Ok(resp) = tokio::time::timeout(std::time::Duration::from_secs(2), sent).await
+            else {
+                continue;
+            };
+            let resp = resp.unwrap();
+            let status = resp.status();
+            let body = resp.bytes().await.unwrap();
+            assert!(
+                !(status == 404 && body.is_empty()),
+                "{bundle} names {route}, and the router does not serve it"
+            );
+        }
+    }
+    daemon.node.endpoint.close().await;
+
+    let mut sources = Vec::new();
+    product_sources(&Path::new(env!("CARGO_MANIFEST_DIR")).join("src"), &mut sources);
+    let outside: Vec<String> = sources
+        .iter()
+        .flat_map(|(path, text)| {
+            text.lines()
+                .enumerate()
+                .filter(|(_, l)| l.contains("Router::new(") || l.contains("axum::serve("))
+                .map(move |(i, l)| format!("{path}:{}: {}", i + 1, l.trim()))
+        })
+        .collect();
+    assert!(
+        outside.is_empty(),
+        "a route mounted outside the bundle list — build it with \
+         host_kit::shell::RouteBundle and serve it with host_kit::shell::serve:\n{}",
+        outside.join("\n")
+    );
+}

@@ -68,7 +68,10 @@ async fn serve(host: Arc<KvHost>) -> String {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     tokio::spawn(async move {
-        axum::serve(listener, super::router(host)).await.unwrap();
+        let forever = std::future::pending::<()>();
+        host_kit::shell::serve([listener], vec![super::router(host)], forever)
+            .await
+            .unwrap();
     });
     format!("http://{addr}")
 }
