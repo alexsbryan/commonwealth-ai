@@ -215,7 +215,9 @@ pub(super) const REGISTRY: &[(&str, Class, usize)] = &[
     ("sovereign/crates/sovereign-daemon/src/assets_http.rs", Class::Mesh, 4),
     ("sovereign/crates/sovereign-daemon/src/project_http.rs", Class::Mesh, 4),
     ("sovereign/crates/sovereign-serving-host/src/model_fetch.rs", Class::Mesh, 5),
-    ("sovereign/crates/sovereign-daemon/src/loopback_guard.rs", Class::Mesh, 3),
+    // Moved from sovereign-daemon/src/loopback_guard.rs with the guard itself
+    // (pb-shell, da819e9e2): the same three test-module clients, a relocation.
+    ("host-kit/src/shell/guard.rs", Class::Mesh, 3),
     ("sovereign/crates/sovereign-serving-host/src/peer_inference.rs", Class::Mesh, 2),
     // setup_cmd/terminal.rs (2026-08-30, the `terminal` node class; 1 -> 3 on
     // 2026-08-31 when `--terminal` learned to take a join link). THREE clients,

@@ -24,6 +24,10 @@ pub(super) const REGISTRY_TAIL: &[(&str, Class, usize)] = &[
     // leaves the machine through this client — replication is the daemon's
     // own peer traffic (`ring_sync`), on the mesh class.
     ("sovereign/crates/sovereign-cli-mesh/src/ring_cmd/mod.rs", Class::LocalDaemon, 1),
+    // pb-shell (42a657102, da819e9e2): a `#[test]` that builds a RingCtx it
+    // never sends through, and the shell's own test module.
+    ("sovereign/crates/sovereign-cli-mesh/src/ring_cmd/show.rs", Class::TestOnly, 1),
+    ("host-kit/src/shell/tests.rs", Class::TestOnly, 1),
     // 2 -> 3 on 2026-08-21 (nc-27): `daemon_get` MOVED here from
     // `project_cmd/registry_watch.rs` when that file was deleted as an
     // unreachable fork. Same loopback client, same class — a relocation,
