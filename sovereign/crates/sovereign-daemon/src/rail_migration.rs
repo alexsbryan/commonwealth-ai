@@ -30,6 +30,11 @@
 
 use std::path::{Path, PathBuf};
 
+/// The house credential's file in a house dir, and `[iroh]`'s viewer-id key:
+/// one spelling for the handover's check ([`hand_over`]) and its move.
+const HOUSE_CREDENTIAL: &str = "authorization";
+const VIEWER_KEY: &str = "media_viewer_user";
+
 /// Where the daemon's journals live today — the same layout
 /// `commonwealth_rail` spells for both processes.
 fn source_root(data_dir: &Path) -> PathBuf {
@@ -82,14 +87,14 @@ pub fn hand_over(data_dir: &Path, config_path: &Path, rails_answering: bool) {
         }
     };
     let house_credential = commonwealth_media::house_dir_under(data_dir)
-        .join("authorization")
+        .join(HOUSE_CREDENTIAL)
         .exists();
     let viewer_id = std::fs::read_to_string(config_path)
         .ok()
         .and_then(|t| t.parse::<toml_edit::DocumentMut>().ok())
         .is_some_and(|d| {
             d.get("iroh")
-                .and_then(|i| i.get("media_viewer_user"))
+                .and_then(|i| i.get(VIEWER_KEY))
                 .is_some()
         });
     if namespaces.is_empty() && !house_credential && !viewer_id {
@@ -194,8 +199,8 @@ pub fn migrate_media_to_rails(data_dir: &Path, config_path: &Path, rails_dir: &P
 }
 
 fn migrate_house_credential(data_dir: &Path, target: &Path) {
-    let from = commonwealth_media::house_dir_under(data_dir).join("authorization");
-    let to = target.join("authorization");
+    let from = commonwealth_media::house_dir_under(data_dir).join(HOUSE_CREDENTIAL);
+    let to = target.join(HOUSE_CREDENTIAL);
     let value = match std::fs::read_to_string(&from) {
         Ok(v) => v,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
@@ -215,7 +220,7 @@ fn migrate_house_credential(data_dir: &Path, target: &Path) {
         );
         return;
     }
-    if let Err(e) = commonwealth_media::write_declared_in(target, "authorization", &value) {
+    if let Err(e) = commonwealth_media::write_declared_in(target, HOUSE_CREDENTIAL, &value) {
         tracing::error!(error = %e, from = %from.display(), to = %to.display(), "media migration: the house credential could not be written to rails' store; it stays where it is");
         return;
     }
@@ -245,7 +250,7 @@ fn migrate_viewer_key(config_path: &Path, target: &Path) {
         return;
     };
     let Some(id) = iroh
-        .get("media_viewer_user")
+        .get(VIEWER_KEY)
         .and_then(|v| v.as_str())
         .map(str::to_string)
     else {
@@ -259,7 +264,7 @@ fn migrate_viewer_key(config_path: &Path, target: &Path) {
         tracing::error!(error = %e, to = %to.display(), "media migration: the viewer id could not be written to rails' store; the config key stays");
         return;
     }
-    iroh.remove("media_viewer_user");
+    iroh.remove(VIEWER_KEY);
     if let Err(e) = std::fs::write(config_path, doc.to_string()) {
         tracing::warn!(error = %e, config = %config_path.display(), "media migration: the viewer id is in rails' store, but the config key could not be removed");
         return;
