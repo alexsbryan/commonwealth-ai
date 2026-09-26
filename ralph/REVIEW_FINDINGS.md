@@ -3542,3 +3542,68 @@ The range's added code was read by hand in place of dry-report.
   admission calls `accept_join_with_identity` (one decider); `RunLock` is the
   only file lock left (`host-kit/src/lib.rs:187`; the fs4/fs2 dependencies
   are gone); MCP dispatch loops are 3 → 3, as the pb-mcp row states.
+
+## REVIEW-audit-pb-auto-3 (2026-09-26, range ef1c16fbf..bfd451965, since REVIEW-audit-pb-auto-2)
+
+The range holds 58 commits across five units (pb-shell, pb-serving-assembly,
+pb-serving-kinds, pb-serving-proofs, pb-retrieval-ledger-units) plus the
+seat's phase-b-15 to phase-b-19 commits. All checks ran in the
+sovereign-vulkan toolbox.
+
+TESTALL at 4bac806ac: exit=100, 13,552 passed and 1 failed,
+`conformance_tags_are_fresh` (drift, fixed below). At b8401db7e: exit=0,
+13,553 passed. PREPUSH exited 1; its one blocking lane was boundary-gate at
+51 violations, the declared burn-down, unchanged. Advisories: size-gate had
+28 keys grow against a baseline that predates the range (sovereign-daemon::tests
+49118→50054, commonwealth-rails 5248→5713, sovereign-compute::tests 728→1042,
+among them), the deletion-manifest `p0-root-junk` growth already triaged in
+fp-auto-10, hakari-verify (below), and concept-gate plus
+domains-census-self-test as could-not-judge.
+
+Ledger (lines, net, `.rs`/`.sh`/`.py`/`Cargo.toml`; a path under `tests/` or
+a file named `*test*` counts as tests, inline `#[cfg(test)]` as src):
+pb-shell +298 src / +270 tests, pb-serving-assembly +431 / 0,
+pb-serving-kinds +788 / +134, pb-serving-proofs +231 / +186,
+pb-retrieval-ledger-units +73 / +92. Total src +1821, tests +682.
+
+dry-report could not judge, as in auto-1 and auto-2: there is no chunk index
+at `~/.svrnmesh/indexes/commonwealth-ai/chunks.lance`, and without
+`--corpus-id` it finds no corpus built from this repo. converge-noun reads the
+same stale index, so the 25 new nouns were checked with `git grep`. One name
+has two definitions: `Scores`, at `sovereign-inference/src/served_kind.rs:434`
+(a test-local stub inside a fn) and `sovereign-eval/src/mechanism_fidelity/score.rs:59`.
+They are distinct, so nothing changes. The range's added code was read by hand
+in place of dry-report, which found the first finding below.
+
+- **ARCH 8/6, fixed in 4bac806ac** · `oicp-client/src/rerank.rs:31` and
+  `sovereign-compute/src/client.rs:222` each decoded a `/v1/rerank` answer
+  into input-order scores. The first refused a missing or out-of-range
+  index; the second sorted by index and trusted it, so a short answer shifted
+  scores onto the wrong documents. Both now call
+  `RerankResponse::scores_in_input_order` (`oicp-types/src/openai_types.rs:590`).
+  Decoders: 2 → 1. The planted lossy decoder went red with `left: Ok([0.0, 2.0])`.
+- **Drift, fixed in b8401db7e** · 062d38caf (pb-serving-proofs) added seven
+  lines to `rpc_distribution.rs` above FE-77's test and left
+  `quality/conformance/sovereign-inference.toml:52` at `line = 3028`. The
+  row's TEST(sovereign-inference) cannot see this; only xtask's
+  `conformance_tags_are_fresh` in the workspace run does.
+- **ARCH 6, open, owned by the next row that edits served_kind.rs** ·
+  `sovereign-inference/src/served_kind.rs:300` `served_kinds()` answers an
+  empty list on a poisoned registry lock, so the route mount would mount no
+  kind routes and say nothing. It is unreachable today (the only writer holds
+  the lock for a `push`). It closes with `unwrap_or_else(|p| p.into_inner().clone())`
+  or a traced refusal, as a behaviour change in its own commit.
+- **Build hygiene, open, owned by the build-latency campaign (bl-hakari)** ·
+  `cargo hakari verify` fails: `host-kit/Cargo.toml:33` (pb-shell, da819e9e2)
+  takes `if-addrs` without `link-local`, and host-kit never took the
+  `workspace-hack` dep its leaf budget allows (`quality/ARCH_LAYERS.toml:1111`).
+  `manage-deps --dry-run` would add the hack to 11 packages, only one of them
+  (host-kit) from this campaign, and `generate --diff` also re-pins bytemuck,
+  rustix and i_overlay. Regenerating the hack reshapes every scoped build that
+  campaign measures, so it is theirs to run.
+- Reuse confirmed: the loopback guard moved to `host-kit/src/shell/guard.rs`
+  with a re-export at `sovereign-daemon/src/loopback_guard.rs` (no twin);
+  `SOVEREIGN_RERANK_DEDUP_ONLY` has one reader,
+  `sovereign-runtime-recipe/src/lib.rs:906`; rerank registers once
+  (`served_kind::BUILT_IN`), and the route mount, the compute child and the
+  model-path decider read it.
