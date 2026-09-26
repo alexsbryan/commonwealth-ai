@@ -2079,3 +2079,72 @@ type = ["string", "null"]
 
 [tool.output_schema.properties.dismissed]
 type = "boolean"
+
+[[tool]]
+id = "write_redteam_finding"
+name = "Write Red-Team Finding"
+description = "Record a red-team review finding, structured as {invariant, status, evidence, confidence}. The call must be made from a `mode=redteam` driver session against a feature_id; otherwise normal-mode `write_note` is the right tool."
+effect = "write"
+idempotency = "nonidempotent"
+latency = "instant"
+scope = "persistent"
+permissions = []
+
+[tool.parameters]
+type = "object"
+required = ["feature_id", "invariant", "status", "confidence"]
+
+[tool.parameters.properties]
+
+[tool.parameters.properties.feature_id]
+type = "string"
+description = "Feature this finding applies to. Usually $SOVEREIGN_FEATURE_ID from the driver env."
+
+[tool.parameters.properties.invariant]
+type = "string"
+description = "The spec invariant being checked. Quote it from the charter verbatim."
+
+[tool.parameters.properties.status]
+type = "string"
+enum = ["violated", "potentially_violated", "not_found"]
+description = "Whether the invariant is violated, possibly violated, or no evidence either way was found."
+
+[tool.parameters.properties.evidence]
+type = "string"
+description = "The specific symbol, file, or line that led to the finding. Empty string for `status=not_found`."
+
+[tool.parameters.properties.confidence]
+type = "string"
+enum = ["high", "medium", "low"]
+description = "Reviewer confidence in the status verdict."
+
+[tool.parameters.properties.files]
+type = "array"
+description = "Optional: file paths the evidence points at. Drives report grouping."
+
+[tool.parameters.properties.files.items]
+type = "string"
+
+[tool.output_schema]
+type = "object"
+
+[tool.output_schema.properties]
+
+[tool.output_schema.properties.id]
+type = "string"
+
+[tool.output_schema.properties.feature_id]
+type = "string"
+
+[tool.output_schema.properties.invariant]
+type = "string"
+
+[tool.output_schema.properties.status]
+type = "string"
+
+[tool.output_schema.properties.confidence]
+type = "string"
+
+[[tool.examples]]
+situation = "You found that ZoteroLibrary's factory method relies on a default for `scope=Local` when the charter said the field must be set explicitly. Medium confidence — the default currently happens to be correct but a refactor could silently flip it."
+call = { feature_id = "zotero-acquirer", invariant = "LocalCorpusConfig::zotero_library MUST set scope=Local explicitly, not via default.", status = "violated", evidence = "corpus-engine/src/acquirers/zotero.rs::factory() line 42 omits the field.", confidence = "medium", files = ["corpus-engine/src/acquirers/zotero.rs"] }
