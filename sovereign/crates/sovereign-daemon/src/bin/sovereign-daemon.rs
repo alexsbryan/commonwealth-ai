@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign-daemon` — the assembled-host process (docs/FIVE_PROGRAMS.md
-//! §11 step 10): the cmnwlth binary's own main, holding what used to be
+//! §11 step 10): the svrn daemon binary's own main, holding what used to be
 //! the `daemon` verb's half of `sovereign-cli-daemon`'s dispatcher.
 //!
 //! # argv contract

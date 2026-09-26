@@ -12,8 +12,8 @@
 //! The protocol is the minimal JSON-RPC-over-POST that
 //! `sovereign_tools::mcp::http::HttpSseTransport` speaks: `initialize`,
 //! `tools/list`, `tools/call`, and an ack for the `notifications/initialized`
-//! notification. Modeled on `sovereign-server/src/routes_mcp.rs`; kept
-//! self-contained so the demo needs no daemon, corpus, or model.
+//! notification. Kept self-contained so the demo needs no daemon, corpus,
+//! or model.
 
 use std::net::SocketAddr;
 

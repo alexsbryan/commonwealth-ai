@@ -1,15 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Shared MCP-server surface contract.
 //!
-//! Sovereign exposes its tool registry via two HTTP entry points:
+//! Sovereign exposes its tool registry over HTTP through one router,
+//! `sovereign-daemon::mcp_router`, mounted in two places:
 //!
-//! - `sovereign-mesh::mcp_router` — the embedded daemon's mount,
-//!   active when `sovereign daemon` owns `:9741`.
-//! - `sovereign-server::routes_mcp` — the standalone MCP server,
-//!   active when `sovereign serve` (or the legacy `sovereign
-//!   project serve`) is running.
+//! - the daemon's own mount, active when `sovereign daemon` owns `:9741`;
+//! - `svrn project serve` (sovereign-cli-dev `project_cmd/serve.rs`),
+//!   the standalone MCP server.
 //!
-//! Both surfaces must agree on:
+//! Both mounts must agree on:
 //!
 //! - which canonical tool ids are exposed,
 //! - which legacy ids alias to which new ones,
@@ -18,8 +17,8 @@
 //!
 //! Letting each module define its own allowlist drifted previously
 //! and is the hazard `.claude/plans/...` (the CLI refactor) wants
-//! to eliminate. This module is the single source of truth — both
-//! HTTP modules import from here.
+//! to eliminate. This module is the single source of truth — the
+//! router imports from here.
 //!
 //! ## Phase 2 vs Phase 5 layering
 //!

@@ -36,7 +36,7 @@ use sovereign_core::types::{Effect, StepOutput, ToolContext};
 //
 // Imported, not re-declared. The envelope is a wire contract, so it lives at
 // layer 0 in `oicp-types` (reached here through `sovereign_core`'s re-export,
-// per ARCH §8.3) and `sovereign_server::routes_mcp` imports the same one.
+// per ARCH §8.3) and corpus-mcp's stdio server imports the same one.
 //
 // This router's `Option<Value>` id is the shape that won the adjudication; the
 // visible change here is that the error object now carries the spec's optional

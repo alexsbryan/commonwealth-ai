@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! MCP over stdio — newline-delimited JSON-RPC 2.0, the framing every MCP
-//! client speaks to a local server. Modeled on `sovereign-server`'s
-//! `routes_mcp.rs` and the reference demo server in `sovereign-cli-llm`
-//! (`mcp_demo_server.rs`); the envelope types are `oicp_types::jsonrpc`.
+//! client speaks to a local server. Modeled on the reference demo server in
+//! `sovereign-cli-llm` (`mcp_demo_server.rs`); the envelope types are
+//! `oicp_types::jsonrpc`.
 //!
 //! stdout carries ONLY responses. Everything else — degradations, tracing —
 //! goes to stderr, or a client's parser breaks on the first log line.
