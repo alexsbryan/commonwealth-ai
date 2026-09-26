@@ -56,3 +56,28 @@ pub struct DeviceBytes {
     /// What the owning node keeps for itself and will not lend.
     pub reserve_bytes: u64,
 }
+
+/// Where serve answers what its provider says about itself.
+pub const SERVED_SELF_PATH: &str = "/v1/engine/self";
+
+/// serve's provider, describing itself: what the svrn daemon's loopback
+/// terminal arm answers `model_id_for`, `resident_slots` and
+/// `edit_slot_info` from once the daemon holds no weights
+/// (pb-svrn-dials-serve). Typed, because the OICP manifest carries neither
+/// the slot roles nor the edit slot, and deriving them from it would be a
+/// guess (principle 6).
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ServedSelf {
+    /// `model_id_for(Speed::Slow)`.
+    pub primary_model: String,
+    /// `model_id_for(Speed::Fast)`.
+    pub fast_model: String,
+    /// `embed_model_id()`; `"unknown"` is the trait's own sentinel.
+    pub embed_model: String,
+    /// `code_model_id()`.
+    pub code_model: Option<String>,
+    /// `resident_slots()`: every configured slot, `resident` as a flag.
+    pub resident_slots: Vec<crate::oicp::ResidentSlot>,
+    /// `edit_slot_info()`; `None` means no editing model at all.
+    pub edit_slot: Option<crate::types::EditSlotInfo>,
+}
