@@ -10,7 +10,7 @@
 //!     configured GGUF is missing from disk and at least one mesh
 //!     peer advertises it on `/internal/v1/models/list`
 //!
-//! The wire types come from `commonwealth_core::model`. They were declared
+//! The wire types come from `oicp_types::model_transfer`. They were declared
 //! here as well until 2026-09-04, under a header claiming the commonwealth-api
 //! dependency was only transitive and that the tests below locked the wire
 //! format. Both claims were false: the dependency is direct and declared in
@@ -22,7 +22,7 @@
 use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
 
-pub use commonwealth_core::model::{ModelFileInfo, ModelFileListing};
+pub use oicp_types::model_transfer::{ModelFileInfo, ModelFileListing};
 
 #[derive(Debug, thiserror::Error)]
 pub enum FetchError {
@@ -59,7 +59,7 @@ pub async fn list_peer_files(
     peer_base: &str,
     mesh_proof: Option<(&str, &str)>,
 ) -> Result<ModelFileListing, FetchError> {
-    let url = commonwealth_core::model::models_list_url(peer_base);
+    let url = oicp_types::model_transfer::models_list_url(peer_base);
     let resp = stamped(http.get(&url), mesh_proof).send().await?;
     if !resp.status().is_success() {
         return Err(FetchError::HttpStatus(resp.status()));
@@ -94,7 +94,7 @@ pub async fn fetch_model_to_dir(
     let final_path = dest_dir.join(&info.name);
     let partial_path = dest_dir.join(format!(".{}.{}.partial", info.name, std::process::id()));
 
-    let url = commonwealth_core::model::model_file_url(peer_base, &urlencoding::encode(&info.name));
+    let url = oicp_types::model_transfer::model_file_url(peer_base, &urlencoding::encode(&info.name));
     let resp = stamped(http.get(&url), mesh_proof).send().await?;
     if !resp.status().is_success() {
         return Err(FetchError::HttpStatus(resp.status()));

@@ -40,6 +40,8 @@ pub mod knowledge;
 pub mod manifest;
 pub mod mcp;
 pub mod model_aliases;
+/// The node-to-node model-transfer wire (`/internal/v1/models/*`).
+pub mod model_transfer;
 pub mod openai_types;
 pub mod origin;
 /// Per-pipeline context-injection flags carried by a resolved pipeline alias —
