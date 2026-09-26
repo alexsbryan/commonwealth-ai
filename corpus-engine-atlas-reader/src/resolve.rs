@@ -89,6 +89,10 @@ pub struct ResolveLedger {
     pub section_searched: usize,
     /// Already emitted this turn.
     pub duplicate: usize,
+    /// Requests never fetched because the budget was already spoken for. A
+    /// REQUEST count, exact, where [`Self::budget_exhausted`] mixes units: a
+    /// chunk-unit caller (`sovereign-core`'s atlas step) needs this one.
+    pub unattempted: usize,
 }
 
 impl ResolveLedger {
@@ -136,6 +140,7 @@ pub async fn resolve_evidence<F: EvidenceFetcher>(
     let mut out: Vec<ResolvedChunk> = Vec::new();
     let mut ledger = ResolveLedger {
         considered: requests.len(),
+        unattempted: requests.len(),
         ..Default::default()
     };
     if budget == 0 {
@@ -155,6 +160,7 @@ pub async fn resolve_evidence<F: EvidenceFetcher>(
             // fetching more would be work no chunk can come from.
             break;
         }
+        ledger.unattempted -= 1;
         let corpus = req.site.chunk_corpus();
         if let Some(allow) = allowed {
             if !allow.iter().any(|c| c.as_str() == corpus.as_str()) {
@@ -320,6 +326,7 @@ pub async fn resolve_evidence<F: EvidenceFetcher>(
         title_mismatch = ledger.title_mismatch,
         duplicate = ledger.duplicate,
         budget_exhausted = ledger.budget_exhausted(),
+        unattempted = ledger.unattempted,
         // How many DISTINCT ideas the emitted chunks are evidence for. The
         // number the starvation above drove to 1 while `added` read 12.
         ideas_cited = out
@@ -636,6 +643,34 @@ mod tests {
         assert!(out.is_empty());
         assert_eq!(fetcher.next.get(), 0, "no search was issued");
         assert_eq!(ledger.added, 0);
+        assert_eq!(ledger.unattempted, 1);
+    }
+
+    /// `unattempted` counts REQUESTS, whatever the fetched ones yielded. A
+    /// budget of four attempts eight requests: one in scope that yields four
+    /// passages and seven out of scope, so the ninth is never fetched.
+    /// Failing input: derive it from `budget_exhausted`, which reads 0 here
+    /// because `added` is in chunks (9 - (4 + 7) saturates).
+    #[tokio::test]
+    async fn unattempted_counts_requests_never_fetched() {
+        let mut requests = vec![section_request("in")];
+        for i in 0..8 {
+            let mut r = section_request(&format!("away-{i}"));
+            r.site = EvidenceSite::SelfHosted {
+                corpus: CorpusId::new("elsewhere").unwrap(),
+            };
+            requests.push(r);
+        }
+        let fetcher = Generous {
+            per_request: 30,
+            next: std::cell::Cell::new(0),
+        };
+        let allow = vec!["c".to_string()];
+        let (out, ledger) = resolve_evidence(&requests, 4, Some(&allow), &fetcher).await;
+        assert_eq!(out.len(), 4);
+        assert_eq!(ledger.out_of_scope, 7);
+        assert_eq!(ledger.budget_exhausted(), 0);
+        assert_eq!(ledger.unattempted, 1);
     }
 
     /// The allow-list is checked against the corpus the fetch will SEARCH,
