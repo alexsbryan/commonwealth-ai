@@ -305,7 +305,40 @@ pub fn bundles(provider: Arc<dyn InferenceProvider>) -> Vec<RouteBundle> {
             meta,
         ),
         openai_bundle(adapter),
+        RouteBundle::new("serve_engine_state").route(
+            sovereign_contracts::engine_state::ENGINE_STATE_PATH,
+            get(engine_state),
+        ),
     ]
+}
+
+/// The loader's CACHED view: the device memory it read the last time it
+/// planned a distributed load, and the pinned block split. Never sampled
+/// here — sampling an RPC device can stall on a busy worker (the 2026-07-30
+/// hang) — so this answers as fast as the daemon's own `/v1/mesh/status`
+/// did when the loader lived there (pb-svrn-dials-serve).
+async fn engine_state() -> Json<sovereign_contracts::engine_state::EngineState> {
+    use sovereign_contracts::engine_state::{DeviceBytes, DeviceMemoryReading, EngineState};
+    let device_memory =
+        sovereign_inference::embedded::last_device_memory().map(|s| DeviceMemoryReading {
+            observed_unix: s.observed_unix,
+            devices: s
+                .devices
+                .into_iter()
+                .map(|d| DeviceBytes {
+                    endpoint: d.endpoint,
+                    free_bytes: d.free_bytes,
+                    total_bytes: d.total_bytes,
+                    reserve_bytes: d.reserve_bytes,
+                })
+                .collect(),
+        });
+    let state = EngineState {
+        device_memory,
+        rpc_block_split_pin: sovereign_inference::embedded::pinned_block_split_raw(),
+    };
+    info!(target: "serve", observed = state.device_memory.is_some(), pinned = state.rpc_block_split_pin.is_some(), "engine state: the loader's cached view");
+    Json(state)
 }
 
 /// The OpenAI routes, over the adapter.

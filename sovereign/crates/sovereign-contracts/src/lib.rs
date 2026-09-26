@@ -38,6 +38,8 @@ pub mod data_roots;
 /// the code-intelligence crate.
 pub mod drift_fingerprint;
 pub mod engine_config;
+/// serve's engine-state wire (pb-svrn-dials-serve).
+pub mod engine_state;
 // The egress boundary — the ONE choke point for remote-model calls and
 // search-query egress (order deep-research-t2a, R10; moved down from
 // `sovereign-core` by ei-5a-build-cut so a crate can gate its egress without

@@ -67,7 +67,7 @@ use std::time::{Duration, Instant};
 /// (`attach_watch.rs:29`, `setup_cmd/finish.rs:525`); the 500 ms end of the
 /// range belongs to callers that only wanted a liveness answer and can get
 /// one from a short [`ServingHost::ensure_reachable`] window instead.
-const PROBE_TIMEOUT: Duration = Duration::from_secs(2);
+pub const PROBE_TIMEOUT: Duration = Duration::from_secs(2);
 
 /// Gap between probes while waiting for a host to answer. The same 250 ms
 /// `sovereign-cli-daemon/src/daemon_cmd/lifecycle.rs:1165` has polled at
