@@ -117,6 +117,28 @@ pub fn run() -> i32 {
         runtime_root_escapes(&dir, name, scope, &mut fails);
     }
 
+    // Rule 4 — a leaf's fixed size cap (`max_code_lines`), counted by
+    // size-gate's own counter. A cap nothing reads would be no cap.
+    for leaf in &map.package_leaves {
+        let (Some(cap), Some(rel)) = (leaf.max_code_lines, dir_of.get(leaf.name.as_str())) else {
+            continue;
+        };
+        match crate::size_gate::crate_code_lines(&root, &root.join(rel), &leaf.name) {
+            Ok(n) if n > cap => fails.push(format!(
+                "[{}] {}: {n} code lines over its fixed cap of {cap} — split the \
+                 mechanism out or take the cap to the operator; it is never re-pinned",
+                arch_layers::SHARED_LEAVES_SCOPE,
+                leaf.name
+            )),
+            Ok(_) => {}
+            Err(e) => fails.push(format!(
+                "[{}] {}: size cap could not be measured: {e}",
+                arch_layers::SHARED_LEAVES_SCOPE,
+                leaf.name
+            )),
+        }
+    }
+
     // Declared-but-absent crates. Reported rather than skipped in silence:
     // the same shape covers a typo, and a typo'd crate name is a rule that
     // quietly governs nothing (ARCH §18.3 — absence is reported, never
@@ -663,6 +685,15 @@ mod tests {
             ["oicp-types", "kernel-types", "sovereign-time"]
         );
         assert_eq!(budget("oicp-client"), ["sovereign-contracts", "oicp-types"]);
+        // The host kit's cap is fixed, not ratcheted (pb-hostkit): changing
+        // it is typed here and in ARCH_LAYERS.toml, and it is the operator's.
+        let cap = |name: &str| {
+            map.package_leaves
+                .iter()
+                .find(|l| l.name == name)
+                .and_then(|l| l.max_code_lines)
+        };
+        assert_eq!(cap("host-kit"), Some(2500));
     }
 
     /// A breach is caught, and a build- or dev-edge breach counts. The layer

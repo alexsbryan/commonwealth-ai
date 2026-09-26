@@ -410,6 +410,24 @@ fn is_noise(t: &str, in_block: &mut bool) -> bool {
     false
 }
 
+/// Code lines of crate `krate` rooted at `dir`, counted exactly as this gate
+/// counts them (comments, blanks and test code excluded). boundary-gate reads
+/// it for a `[[package_leaf]]` that declares `max_code_lines`, so the cap and
+/// this ratchet cannot disagree on what a line is.
+pub(crate) fn crate_code_lines(root: &Path, dir: &Path, krate: &str) -> Result<usize, String> {
+    let scope = common::SourceTree::discover(root)?;
+    let mut files: Vec<PathBuf> = Vec::new();
+    collect_rs(dir, root, &scope, &mut files);
+    Ok(files
+        .iter()
+        .filter_map(|path| {
+            let text = std::fs::read_to_string(path).ok()?;
+            let rel = common::rel_path(path, root);
+            Some(count(&text, in_test_tree(&rel, krate)).0)
+        })
+        .sum())
+}
+
 fn collect_rs(dir: &Path, root: &Path, scope: &common::SourceTree, out: &mut Vec<PathBuf>) {
     let Ok(entries) = std::fs::read_dir(dir) else {
         return;

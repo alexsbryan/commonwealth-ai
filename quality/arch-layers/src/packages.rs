@@ -57,6 +57,11 @@ pub struct PackageLeaf {
     /// Internal crates this leaf may itself depend on.
     #[serde(default)]
     pub allow: Vec<String>,
+    /// A fixed ceiling on the leaf's code lines, counted as size-gate counts
+    /// them. Absent = no cap. Unlike a ratchet it is never re-pinned: the
+    /// host kit's is the operator's to change (FIVE_PROGRAMS §12 3a rung 4).
+    #[serde(default)]
+    pub max_code_lines: Option<usize>,
 }
 
 /// The pseudo-package an `[[exception]]` names to grandfather a SHARED LEAF's
