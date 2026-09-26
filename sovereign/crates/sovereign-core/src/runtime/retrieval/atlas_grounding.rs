@@ -7,6 +7,10 @@ use std::sync::Arc;
 
 use super::super::*;
 
+#[path = "atlas_grounding/pool.rs"]
+mod pool;
+use pool::pool_resolved;
+
 /// The atlas ids that could hold atoms citing a chunk — the chunk → atlas id
 /// derivation, in ONE place.
 ///
@@ -393,17 +397,7 @@ impl Runtime {
             &fetcher,
         )
         .await;
-        let mut seen_in_pool: std::collections::HashSet<String> = std::collections::HashSet::new();
-        for r in fetched {
-            let key = format!(
-                "{}|{}",
-                r.chunk.title.clone().unwrap_or_default(),
-                truncate_chars(&r.chunk.content, 80)
-            );
-            if seen_in_pool.insert(key) {
-                chunks.push(r.chunk);
-            }
-        }
+        let ledger = pool_resolved(chunks, fetched, &resolve);
         let graph_added = chunks.len() - before;
 
         // The line whose absence hid the defect: candidates in, chunks out,
@@ -450,16 +444,6 @@ impl Runtime {
             added: graph_added,
             considered: resolve.considered,
         });
-        let ledger = StepLedger::injected(resolve.considered)
-            .drop(DropReason::OutOfScope, resolve.out_of_scope)
-            .drop(DropReason::EvidenceUnresolvable, resolve.unresolvable)
-            .drop(DropReason::TitleMismatch, resolve.title_mismatch)
-            .drop(DropReason::Duplicate, resolve.duplicate)
-            // Candidates past the fetch budget were never attempted. They
-            // are a DECISION, not a failure, and the accounting identity
-            // requires them named.
-            .drop(DropReason::BudgetExhausted, resolve.budget_exhausted());
-
         // Adaptive triage: bump article slug per atlas to climb
         // the Tier-2 enrichment queue.
         for ctx in &ctxs {
@@ -787,3 +771,7 @@ mod atlas_summary_append_tests {
         );
     }
 }
+
+#[cfg(test)]
+#[path = "atlas_grounding/pool_tests.rs"]
+mod pool_tests;
