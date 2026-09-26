@@ -64,10 +64,11 @@ has not been measured (principle 8).
   podman is (the toolbox has none). A commonwealth closure never reaches
   llama-cpp-sys-4. `scripts/cw-work-lift.sh --sandbox --image
   localhost/sovereign-work:latest` on the host gave value 1 on 2026-09-25,
-  after the toolbox run abstained at step 5. cw-rails' RUN step needs a live
-  invite (`CW_RAILS_INVITE`); minting one is the operator's. A lift that
-  abstains for a reason this host can supply is owed, not passed
-  (principle 5).
+  after the toolbox run abstained at step 5. Since pb-membership (44db3ffa3)
+  cmnwlth's RUN founds its own two-node mesh with a fixture media origin, so
+  it needs no invite and never touches the operator's mesh or roster;
+  `CW_RAILS_INVITE` is no longer read. A lift that abstains for a reason
+  this host can supply is owed, not passed (principle 5).
 - ALL TESTS GREEN IS STANDING. A red test is repaired, never queued. Classify
   drift vs regression first, then fix in the correct direction. Faking a
   test, weakening a census, or fixing the test instead of the tree is a fake

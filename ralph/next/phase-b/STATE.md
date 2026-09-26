@@ -524,7 +524,7 @@ Verdicts from REVIEW-pb-census, 2026-09-25. Every one was reproduced by reading 
 
 - **svrn** failed at the planner: 49 edges, the gate's 44 plus 5 excepted. The edge rows own it, and pb-daemon-adopts proves LIFT(svrn).
 - **ingest** failed: `tests/evidence_reds.rs` fails outside the monorepo. Owner: pb-ingest.
-- **cmnwlth** failed as found (the operator's advertised media origin 127.0.0.1:8096 does not answer), and passed with a stand-in origin. Owner: pb-membership's sandbox founder with a fixture origin.
+- **cmnwlth** PASSED at 44db3ffa3 (pb-membership): the lift founds its own two-node mesh with a fixture origin. At bc984cc46 it failed as found, because the operator's advertised media origin 127.0.0.1:8096 does not answer.
 - **serve** failed: the root `[patch.crates-io]` llama-cpp-4 fork is not carried. Owner: pb-serve-program.
 - **code** failed at the planner: 5 edges. The code rows own them, and pb-code-server adds the smoke.
 - **bench** failed: HAND-SPELLED-PATH sovereign-eval → understanding-vocab, and there is no RUN smoke. Owner: pb-cli-llm.
