@@ -45,7 +45,6 @@ pub use sovereign_contracts::ner::LabeledEntityExtractor;
 /// WHERE models live; this one says WHICH.
 pub const MODEL_ID_ENV: &str = "SOVEREIGN_GLINER_MODEL_ID";
 
-
 /// Collapse a chunk's mentions to one per case-insensitive
 /// `(text, label)`, keeping the highest-scoring span and preserving
 /// first-seen order.

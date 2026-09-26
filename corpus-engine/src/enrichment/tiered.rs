@@ -57,7 +57,7 @@ pub type ChunkEntityExtractorHandle = Arc<dyn ChunkEntityExtractor>;
 /// The refusal count travels in the return type rather than in a log
 /// line because a caller cannot drop a field it has to destructure
 /// (ARCH 6, ARCH 10). An implementor that bounds its input (the GLiNER
-/// one does — `sovereign-gliner/src/bounded_input.rs`) reports the
+/// one does — `corpus-engine/src/enrichment/chunk_ner_bound.rs`) reports the
 /// chunks it declined to send here; the runners accumulate it and stamp
 /// it on `_enrichment_state.json` via
 /// [`EnrichmentStateFile::record_refused_over_cap`], so "this corpus's
@@ -436,7 +436,7 @@ pub async fn run_tiered_enrichment(
     let mut completed = 0usize;
     let mut failed = 0usize;
     // Chunks the NER seam REFUSED for exceeding its per-chunk input bound
-    // (`sovereign-gliner/src/bounded_input.rs`). Accumulated across the
+    // (`corpus-engine/src/enrichment/chunk_ner_bound.rs`). Accumulated across the
     // whole run and stamped on the state file below — a refusal is a fact
     // about this corpus's entities, not a per-conversation log line.
     let mut refused_over_cap = 0u64;
@@ -827,7 +827,7 @@ pub fn report_refused_over_cap(index_path: &Path, corpus_id: &str, refused: u64)
          and produced no entities — refused whole, never truncated. Recorded on \
          _enrichment_state.json as refused_over_cap_chunks. If this is most of the \
          corpus, the chunker is emitting units the model cannot read; see \
-         sovereign-gliner/src/bounded_input.rs::MAX_CHUNK_CHARS for the bound and \
+         corpus-engine/src/enrichment/chunk_ner_bound.rs::MAX_CHUNK_CHARS for the bound and \
          where it comes from."
     );
     if let Err(e) = EnrichmentStateFile::record_refused_over_cap(index_path, refused) {

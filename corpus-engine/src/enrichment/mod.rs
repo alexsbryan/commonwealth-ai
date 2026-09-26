@@ -8,6 +8,8 @@
 pub mod alignment;
 pub mod atlas;
 pub mod checkpoint;
+pub mod chunk_ner;
+pub mod chunk_ner_bound;
 pub mod clustering;
 pub mod code_intel;
 pub mod domain;

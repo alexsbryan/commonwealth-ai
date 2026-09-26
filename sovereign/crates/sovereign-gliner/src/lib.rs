@@ -33,15 +33,16 @@
 //! constructor refuses the other's model ids by generation rather than
 //! failing deep inside `ort` with a shape error.
 
-pub mod bounded_input;
+// The chunk adapter and its input bound moved to corpus-engine (pb-serving-ner),
+// which owns `ChunkEntityExtractor`; reachable here at their historical paths.
+pub use corpus_engine::enrichment::chunk_ner_bound as bounded_input;
 pub mod gliner2;
 pub mod gliner_ner;
 pub mod labeled;
 pub mod session_bound;
 
 mod bootstrap;
-mod chunk_extractor;
 
 pub use bootstrap::load_gliner_extractor;
-pub use chunk_extractor::GlinerChunkExtractor;
+pub use corpus_engine::enrichment::chunk_ner::GlinerChunkExtractor;
 pub use labeled::{configured_model_id, load_labeled_extractor, LabeledEntityExtractor};

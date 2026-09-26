@@ -13501,13 +13501,13 @@ lines = 78
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-gliner/src/bounded_input.rs"
+path = "corpus-engine/src/enrichment/chunk_ner_bound.rs"
 context = "unknown"
 lines = 368
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-gliner/src/chunk_extractor.rs"
+path = "corpus-engine/src/enrichment/chunk_ner.rs"
 context = "unknown"
 lines = 336
 note = ""

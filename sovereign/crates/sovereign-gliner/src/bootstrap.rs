@@ -8,8 +8,8 @@ use std::sync::Arc;
 use corpus_engine::enrichment::tiered::ChunkEntityExtractor;
 use sovereign_contracts::daemon_wire::conv_tiered::ChunkEntityStore;
 
-use crate::chunk_extractor::GlinerChunkExtractor;
 use crate::labeled::{configured_model_id, load_labeled_extractor, LabeledEntityExtractor};
+use corpus_engine::enrichment::chunk_ner::GlinerChunkExtractor;
 
 /// Load the shared GLiNER per-chunk entity extractor once (the ONNX model
 /// is ~150 MB for v1, ~795 MB for GLiNER2; one load only). Returns the raw

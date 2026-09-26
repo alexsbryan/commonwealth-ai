@@ -1,30 +1,32 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Per-chunk GLiNER entity extractor — the daemon ingest path's
 //! [`ChunkEntityExtractor`]. Extracted from sovereign-tools'
-//! `conv_tiered_provider` (2026-07-17) so the ONNX stack stays in this crate.
+//! `conv_tiered_provider` (2026-07-17); moved here from sovereign-gliner
+//! (phase-b pb-serving-ner) because it is pure over the NER port, so the
+//! crate that owns `ChunkEntityExtractor` owns it and no ONNX link comes along.
 
 use std::path::Path;
 use std::sync::Arc;
 
+use crate::enrichment::tiered::{ChunkEntityExtractor, ChunkNerOutcome};
 use async_trait::async_trait;
-use corpus_engine::enrichment::tiered::{ChunkEntityExtractor, ChunkNerOutcome};
 use corpus_index::error::{Error, Result};
 use corpus_index::index::{CorpusIndex, EnrichmentChunkRow};
 use sovereign_contracts::daemon_wire::conv_tiered::ChunkEntityStore;
 
-use crate::bounded_input::BoundedInputs;
-use crate::labeled::LabeledEntityExtractor;
+use crate::enrichment::chunk_ner_bound::BoundedInputs;
+use sovereign_contracts::ner::LabeledEntityExtractor;
 
 /// Concrete `ChunkEntityExtractor` impl for the daemon ingest path.
 /// Wraps a [`LabeledEntityExtractor`] + `Arc<dyn ChunkEntityStore>` and
 /// persists rows into `chunk_entities` per-conversation. Fires
-/// from `corpus_engine::enrichment::tiered::run_tiered_enrichment`
+/// from `crate::enrichment::tiered::run_tiered_enrichment`
 /// ahead of the LLM-heavy `TieredEnrichmentProvider` call.
 ///
 /// **Generation-agnostic since P2.1.** It holds the trait, not
 /// `GlinerExtractor`, so v1 and GLiNER2 reach a corpus over the same
 /// persistence, dedup, and progress-provenance code. Which one runs is
-/// decided once, in [`crate::load_labeled_extractor`] — never here.
+/// decided once, in `sovereign_gliner::load_labeled_extractor` — never here.
 pub struct GlinerChunkExtractor {
     store: Arc<dyn ChunkEntityStore>,
     extractor: Arc<dyn LabeledEntityExtractor>,
@@ -85,7 +87,7 @@ impl GlinerChunkExtractor {
                 Error::Database(format!("list_ner_processed_chunk_ids({corpus_id}): {e}"))
             })?;
 
-        let now = crate::gliner_ner::now_unix();
+        let now = corpus_engine_yield::time::unix_now();
         let mut new_chunks_processed = 0usize;
         let mut new_mentions = 0usize;
         let mut refused_over_cap = 0usize;
@@ -134,7 +136,7 @@ impl GlinerChunkExtractor {
                     conv = %conv_uuid,
                     chunk = delta[over.index].id,
                     chars = over.chars,
-                    cap = crate::bounded_input::MAX_CHUNK_CHARS,
+                    cap = crate::enrichment::chunk_ner_bound::MAX_CHUNK_CHARS,
                     "extract_delta_for_corpus: chunk over the NER input bound — REFUSED \
                      whole, not truncated, so it contributes no entities"
                 );
@@ -280,7 +282,7 @@ impl ChunkEntityExtractor for GlinerChunkExtractor {
         if chunks.is_empty() {
             return Ok(ChunkNerOutcome::default());
         }
-        let extracted_at = crate::gliner_ner::now_unix();
+        let extracted_at = corpus_engine_yield::time::unix_now();
         let texts: Vec<&str> = chunks.iter().map(|c| c.content.as_str()).collect();
         // THE bound. Before 2026-09-12 this handed every chunk of the
         // conversation to gline-rs in ONE `inference()` call, and a Claude
@@ -294,7 +296,7 @@ impl ChunkEntityExtractor for GlinerChunkExtractor {
                 conv = conv_uuid,
                 chunk = chunks[over.index].id,
                 chars = over.chars,
-                cap = crate::bounded_input::MAX_CHUNK_CHARS,
+                cap = crate::enrichment::chunk_ner_bound::MAX_CHUNK_CHARS,
                 "extract_for_conversation: chunk over the NER input bound — REFUSED \
                  whole, not truncated, so it contributes no entities"
             );

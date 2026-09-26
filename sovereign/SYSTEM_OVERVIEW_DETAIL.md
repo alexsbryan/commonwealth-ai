@@ -1482,13 +1482,13 @@ sidecar; the corpus then enriches again on the normal path. Every skip says
 so at `info` and names that path.
 
 **The NER inference seam is input-bounded (2026-09-12).**
-`sovereign/crates/sovereign-gliner/src/bounded_input.rs` is the ONE
+`corpus-engine/src/enrichment/chunk_ner_bound.rs` is the ONE
 implementation: `BoundedInputs::plan` splits a caller's texts into batches
 of at most `MAX_BATCH_CHUNKS` (16) and holds back anything over
 `MAX_CHUNK_CHARS` (2,048); `BoundedInputs::extract` drives the batches and
 reassembles results in input order. Both `GlinerChunkExtractor` entry
 points — `extract_for_conversation` and `extract_delta_for_corpus`
-(`sovereign/crates/sovereign-gliner/src/chunk_extractor.rs`) — go through
+(`corpus-engine/src/enrichment/chunk_ner.rs`) — go through
 it, and neither hands `LabeledEntityExtractor::extract_mentions_batch` a
 raw slice any more.
 

@@ -133,7 +133,7 @@ arena's high-water mark is set by the largest batch it ever served).
 
 ### GLiNER input bound — `MAX_CHUNK_CHARS` 2,048 / `MAX_BATCH_CHUNKS` 16, shipped ON (enrich-bounded-1, 2026-09-12)
 
-**What ships.** `sovereign-gliner/src/bounded_input.rs` bounds every input
+**What ships.** `corpus-engine/src/enrichment/chunk_ner_bound.rs` bounds every input
 reaching the per-chunk NER seam: a text over `MAX_CHUNK_CHARS` is REFUSED
 (never truncated) and counted, and no single `extract_mentions_batch` call
 carries more than `MAX_BATCH_CHUNKS` texts. Both `GlinerChunkExtractor`

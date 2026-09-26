@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! The input bound at the GLiNER inference seam.
 //!
-//! **What went wrong.** [`crate::GlinerChunkExtractor::extract_for_conversation`]
+//! **What went wrong.** [`crate::enrichment::chunk_ner::GlinerChunkExtractor::extract_for_conversation`]
 //! collected EVERY chunk of a conversation into one `Vec<&str>` and handed
 //! it to [`LabeledEntityExtractor::extract_mentions_batch`] in a single
 //! call. gline-rs batches natively — one `inference()` over N texts — so
@@ -36,8 +36,8 @@
 
 use sovereign_contracts::error::Result;
 
-use crate::gliner_ner::EntityMention;
-use crate::labeled::LabeledEntityExtractor;
+use sovereign_contracts::ner::EntityMention;
+use sovereign_contracts::ner::LabeledEntityExtractor;
 
 /// Per-text character ceiling. **Derived from the model, not chosen.**
 ///
@@ -196,8 +196,8 @@ mod tests {
         fn threshold(&self) -> f32 {
             0.6
         }
-        fn generation(&self) -> crate::gliner_ner::GlinerGeneration {
-            crate::gliner_ner::GlinerGeneration::V1
+        fn generation(&self) -> sovereign_contracts::ner::GlinerGeneration {
+            sovereign_contracts::ner::GlinerGeneration::V1
         }
         fn extract_mentions(&self, _text: &str) -> Result<Vec<EntityMention>> {
             Ok(Vec::new())
@@ -317,8 +317,8 @@ mod tests {
             fn threshold(&self) -> f32 {
                 0.6
             }
-            fn generation(&self) -> crate::gliner_ner::GlinerGeneration {
-                crate::gliner_ner::GlinerGeneration::V1
+            fn generation(&self) -> sovereign_contracts::ner::GlinerGeneration {
+                sovereign_contracts::ner::GlinerGeneration::V1
             }
             fn extract_mentions(&self, text: &str) -> Result<Vec<EntityMention>> {
                 Ok(vec![mention(text)])

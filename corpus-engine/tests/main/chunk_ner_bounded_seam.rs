@@ -22,15 +22,16 @@
 
 use std::sync::{Arc, Mutex};
 
+use corpus_engine::enrichment::chunk_ner::GlinerChunkExtractor;
+use corpus_engine::enrichment::chunk_ner_bound::{MAX_BATCH_CHUNKS, MAX_CHUNK_CHARS};
 use corpus_engine::enrichment::tiered::ChunkEntityExtractor;
 use corpus_index::index::EnrichmentChunkRow;
 use sovereign_contracts::daemon_wire::conv_tiered::{
     ChunkEntityProgressRow, ChunkEntityRow, ChunkEntityStore,
 };
 use sovereign_contracts::error::Result;
-use sovereign_gliner::bounded_input::{MAX_BATCH_CHUNKS, MAX_CHUNK_CHARS};
-use sovereign_gliner::gliner_ner::EntityMention;
-use sovereign_gliner::{GlinerChunkExtractor, LabeledEntityExtractor};
+use sovereign_contracts::ner::EntityMention;
+use sovereign_contracts::ner::LabeledEntityExtractor;
 
 /// Stands in for GLiNER and records the SHAPE of every call — which is
 /// the whole assertion: what the model is handed, not what the caller
@@ -52,8 +53,8 @@ impl LabeledEntityExtractor for RecordingSeam {
     fn threshold(&self) -> f32 {
         0.6
     }
-    fn generation(&self) -> sovereign_gliner::gliner_ner::GlinerGeneration {
-        sovereign_gliner::gliner_ner::GlinerGeneration::V1
+    fn generation(&self) -> sovereign_contracts::ner::GlinerGeneration {
+        sovereign_contracts::ner::GlinerGeneration::V1
     }
     fn extract_mentions(&self, _text: &str) -> Result<Vec<EntityMention>> {
         Ok(Vec::new())
