@@ -16,6 +16,8 @@
 use std::pin::Pin;
 use std::time::Instant;
 
+mod rerank;
+
 use async_trait::async_trait;
 use futures::{Stream, StreamExt};
 use serde::Deserialize;
@@ -1307,6 +1309,11 @@ impl InferenceProvider for RemoteApiProvider {
             ))
     }
 
+    /// The rerank kind's client method (`rerank.rs`).
+    async fn rerank_batch(&self, query: &str, docs: &[String]) -> Result<Vec<f32>> {
+        self.rerank_over_route(query, docs).await
+    }
+
     /// Embed many texts with ONE request per chunk of
     /// [`Self::EMBED_BATCH_INPUTS`], using the `/embeddings` endpoint's
     /// array `input` form.
@@ -1906,6 +1913,11 @@ impl InferenceProvider for SplitInferenceProvider {
     /// `Self::embed`, the document path, silently dropping the prefix).
     async fn embed_query(&self, query: &str) -> Result<Vec<f32>> {
         self.embed.embed_query(query).await
+    }
+
+    /// Rerank on the serving node, which is the chat endpoint's host.
+    async fn rerank_batch(&self, query: &str, docs: &[String]) -> Result<Vec<f32>> {
+        self.chat.rerank_batch(query, docs).await
     }
 
     fn model_id_for(&self, _speed: Speed) -> String {

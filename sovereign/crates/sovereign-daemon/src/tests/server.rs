@@ -588,3 +588,33 @@ async fn models_endpoint_with_registered_model() {
     assert_eq!(json["data"].as_array().unwrap().len(), 1);
     assert_eq!(json["data"][0]["id"], "test-coder");
 }
+
+/// The kind registry is the route mount: every registered kind with a route
+/// answers on it, and rerank is one of them. A kind registered without its
+/// route would 404 here.
+#[tokio::test]
+async fn every_served_kind_route_is_mounted_and_rerank_is_served() {
+    let kinds = sovereign_inference::served_kind::served_kinds();
+    let mut paths: Vec<&str> = kinds.iter().filter_map(|k| k.route_path()).collect();
+    assert!(
+        paths.contains(&"/v1/rerank"),
+        "rerank must register its route; registered: {kinds:?}"
+    );
+    paths.sort();
+    for path in paths {
+        let resp = mock_router(test_app_state())
+            .oneshot(
+                Request::post(path)
+                    .header("content-type", "application/json")
+                    .body(Body::from(r#"{"query":"q","documents":["d"]}"#))
+                    .unwrap(),
+            )
+            .await
+            .expect("the route must answer");
+        assert_ne!(
+            resp.status(),
+            StatusCode::NOT_FOUND,
+            "{path}: a registered kind's route must be mounted"
+        );
+    }
+}

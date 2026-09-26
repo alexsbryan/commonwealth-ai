@@ -11,6 +11,7 @@ use crate::routes_completions;
 use crate::routes_edit_predictions;
 use crate::routes_inference;
 use crate::routes_internal;
+use crate::routes_kinds;
 use crate::routes_knowledge;
 use crate::routes_mesh_kv;
 use crate::routes_oicp;
@@ -138,7 +139,7 @@ pub fn client_router_for(state: AppState, surface: ClientSurface) -> Router {
     // probing federation health, and an exempt path that answered would be
     // the one route it could reach without a credential.
     let general: Router<AppState> = if surface.serves_general_client_routes() {
-        Router::new()
+        let general = Router::new()
             // OpenAI-compatible inference endpoints.
             .route(
                 "/v1/chat/completions",
@@ -262,7 +263,14 @@ pub fn client_router_for(state: AppState, surface: ClientSurface) -> Router {
             .route("/v1/apps/{app_id}/status", get(routes_apps::app_status))
             .route("/v1/apps/{app_id}", delete(routes_apps::uninstall_app))
             // Reverse proxy to locally running apps.
-            .route("/app/{app_id}/{*path}", any(routes_apps::proxy_app))
+            .route("/app/{app_id}/{*path}", any(routes_apps::proxy_app));
+        // Served model kinds (`/v1/rerank`, …), mounted from the kind
+        // registry, behind the admission gate every inference route carries.
+        routes_kinds::served_kind_routes()
+            .into_iter()
+            .fold(general, |router, (path, handler)| {
+                router.route(path, handler.layer(admission()))
+            })
     } else {
         Router::new()
     };
