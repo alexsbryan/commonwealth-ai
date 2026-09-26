@@ -239,7 +239,7 @@ fn build_llama(config: &SetupConfig) -> Result<BuiltEngine, String> {
     // the distributed model in behind our back. The *guards* around this
     // mode (containment armed? is `fast` distinct from `primary`?) are
     // admission and stay with the daemon; this is only the derivation.
-    let child_owns_primary = config.compute.enabled && config.compute.distributed_primary;
+    let child_owns_primary = child_owns_primary(config);
 
     let engine = EmbeddedLlamaCpp::load_full_with_families(
         models.fast_path(),
@@ -268,6 +268,13 @@ fn build_llama(config: &SetupConfig) -> Result<BuiltEngine, String> {
         llama: Some(arc),
         embed_family,
     })
+}
+
+/// Does a supervised compute child own this node's primary
+/// (`[compute] enabled` + `distributed_primary`)? When it does, no path in
+/// this process may load the primary GGUF.
+pub fn child_owns_primary(config: &SetupConfig) -> bool {
+    config.compute.enabled && config.compute.distributed_primary
 }
 
 /// The family an embed GGUF gets, from the models manifest by file name —

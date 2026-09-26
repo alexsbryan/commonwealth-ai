@@ -47,9 +47,21 @@ impl ProviderFactory for LlamaCppFactory {
         // forwarder built once against its entry node; there is nothing here to
         // hot-reload, and refusing by name beats loading empty paths.
         let models = cfg.models()?;
+        // Under `[compute] distributed_primary` the primary lives in a
+        // compute child; withhold it here exactly as cold start does.
+        let child_owns_primary = sovereign_inference::engine_factory::child_owns_primary(cfg);
+        tracing::info!(
+            target: "compute_child",
+            child_owns_primary,
+            "reload: rebuilding the in-process engine"
+        );
         let provider = EmbeddedLlamaCpp::load_full_with_families(
             models.fast_path(),
-            Some(&models.primary),
+            if child_owns_primary {
+                None
+            } else {
+                Some(&models.primary)
+            },
             Some(&models.embed),
             models.code.as_deref(),
             // Per-slot windows (2026-08-25). `from_models` honours
