@@ -18,9 +18,11 @@ FLAT to a directory OUTSIDE the repository (cargo inherits `.cargo/config.toml`
 from any ancestor, so a sandbox under the repo would carry this workspace's
 linker and rustflags), a root workspace is synthesised there, and it is built,
 tested and run with nothing of this monorepo on the path. `.cargo/config.toml`,
-`clippy.toml`, `rust-toolchain.toml` and the root `[patch]` are not copied: a
-third party has none of them. cargo-hakari's `workspace-hack` is shed from
-every copied manifest and the strip is printed (fp-solo-lift).
+`clippy.toml` and `rust-toolchain.toml` are not copied: a third party has none
+of them. A root `[patch.crates-io]` entry the closure resolves IS carried, with
+its vendored directory, because the fork is part of what the third party takes
+(pb-serve-program). cargo-hakari's `workspace-hack` is shed from every copied
+manifest and the strip is printed (fp-solo-lift).
 
 THE FOUR VERDICTS, each with its own exit, said on the last stdout line
 through `scripts/lib/judgement.py` (ARCH principle 5):
@@ -171,12 +173,27 @@ def plan(lift_id: str, lift: dict, sandbox: Path) -> tuple[list[str], list[str]]
             for i, line in enumerate(open(fp, errors="replace"), 1):
                 if hazard.search(line) and not line.lstrip().startswith(("//", "*")):
                     print(f"HAZARD {fp.relative_to(REPO)}:{i}: {line.strip()[:110]}")
-    for dep in load(REPO / "Cargo.toml").get("patch", {}).get("crates-io", {}):
-        print(f"HAZARD the root [patch.crates-io] `{dep}` is not carried; a lift resolves it from crates.io")
-
     (sandbox / "crates").mkdir(parents=True)
     for name, cdir in found.items():
         shutil.copytree(cdir, sandbox / "crates" / name, ignore=shutil.ignore_patterns("target", ".git"))
+
+    # A root [patch.crates-io] entry the closure resolves is part of what a
+    # developer takes: the llama fork is not a monorepo convenience, and
+    # crates.io's llama-cpp-4 does not build sovereign-inference
+    # (pb-serve-program). It travels with its vendored directory; an entry
+    # the closure never reaches stays behind.
+    resolved = lock_closure(set(found))
+    patches = {}
+    for dep, spec in load(REPO / "Cargo.toml").get("patch", {}).get("crates-io", {}).items():
+        if dep not in resolved:
+            print(f"LEFT the root [patch.crates-io] `{dep}`: the closure does not resolve it")
+            continue
+        if not isinstance(spec, dict) or "path" not in spec:
+            print(f"HAZARD the root [patch.crates-io] `{dep}` is not a path patch; a lift resolves it from crates.io")
+            continue
+        shutil.copytree(REPO / spec["path"], sandbox / "vendor" / dep, ignore=shutil.ignore_patterns("target", ".git"))
+        patches[dep] = {"path": f"vendor/{dep}"}
+        print(f"CARRIED the root [patch.crates-io] `{dep}` from {spec['path']}")
     shim_line = re.compile(r"^" + re.escape(SHIM) + r"\s*=")
     for name in sorted(holders):
         p = sandbox / "crates" / name / "Cargo.toml"
@@ -208,6 +225,8 @@ def plan(lift_id: str, lift: dict, sandbox: Path) -> tuple[list[str], list[str]]
         if isinstance(entry, dict) and "path" in entry:
             entry = dict(entry, path=f"crates/{dep}")
         out.append(f"{dep} = {render_toml(entry)}")
+    if patches:
+        out += ["", "[patch.crates-io]"] + [f"{dep} = {render_toml(p)}" for dep, p in sorted(patches.items())]
     (sandbox / "Cargo.toml").write_text("\n".join(out) + "\n")
     # The lock travels, as `cargo package` would give a third party one.
     shutil.copyfile(REPO / "Cargo.lock", sandbox / "Cargo.lock")
@@ -230,6 +249,23 @@ def cargo(args: list[str], sandbox: Path, target: Path, log: str, show: str) -> 
                 say(line.rstrip())
         rc = p.wait()
     return rc, time.monotonic() - t0
+
+
+def lock_closure(roots: set[str]) -> set[str]:
+    """Every package name the root Cargo.lock resolves from `roots`, which is
+    what the copied lock gives the sandbox. Names only: two versions of one
+    crate both count, which can only carry a patch too many. The hakari shim
+    is shed from every manifest, so its edges are not walked."""
+    deps: dict[str, set[str]] = {}
+    for pkg in load(REPO / "Cargo.lock").get("package", []):
+        deps.setdefault(pkg["name"], set()).update(d.split()[0] for d in pkg.get("dependencies", []))
+    seen, queue = set(), list(roots)
+    while queue:
+        name = queue.pop()
+        if name not in seen and name != SHIM:
+            seen.add(name)
+            queue.extend(deps.get(name, ()))
+    return seen
 
 
 def seeds_args(crates: list[str]) -> list[str]:
