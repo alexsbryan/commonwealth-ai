@@ -31,7 +31,7 @@ use sovereign_core::runtime::Runtime;
 use sovereign_core::traits::{ApprovalChannel, InferenceProvider, StateStore};
 use sovereign_core::types::*;
 use sovereign_core::SkillRegistry;
-use sovereign_runtime_recipe::{LaneScope, LaneWarmth, RecipeInputs, RecipeProgress, RerankWiring};
+use sovereign_runtime_recipe::{LaneScope, LaneWarmth, RecipeInputs, RecipeProgress};
 // Re-exported (not just `use`d) so the other CLI modules that referenced the
 // formerly-local `chat_cmd::bootstrap::SplitInferenceProvider` (raptor,
 // recipe_cmd) keep resolving after it was promoted to sovereign-inference.
@@ -361,10 +361,10 @@ async fn build_session_scoped(
             // `Sealed` for a bench lane that already knows its one
             // corpus. See `build_session_sealed` for the measurement.
             scope,
-            // The provider here is a `SplitInferenceProvider` over HTTP and
-            // does not support rerank, so a standalone slot is the only way
-            // this surface gets a cross-encoder at all.
-            rerank: RerankWiring::Standalone,
+            // This surface's reranker is its own standalone load: its
+            // provider speaks HTTP to the daemon, and one process holds the
+            // cross-encoder once.
+            rerank: standalone_reranker(&Banner),
         },
         &Banner,
     )
@@ -408,6 +408,30 @@ async fn build_session_scoped(
 /// stderr, one per line, exactly as it did when the recipe was inline here —
 /// a daemon commissioning the same `Runtime` traces them instead.
 struct Banner;
+
+/// The standalone cross-encoder from `SOVEREIGN_RERANK_MODEL_PATH`, with the
+/// capacity pre-flight (`reranker_standalone::load_from_env`). A refusal or a
+/// failed load is printed and the turn runs without one; the dedup-only
+/// ablation takes precedence, so under it nothing loads.
+fn standalone_reranker(progress: &dyn RecipeProgress) -> Option<Arc<dyn InferenceProvider>> {
+    use sovereign_inference::reranker_standalone::{load_from_env, RerankLoad};
+    if sovereign_runtime_recipe::rerank_dedup_only() {
+        return None;
+    }
+    match load_from_env() {
+        RerankLoad::Loaded(reranker) => Some(reranker),
+        RerankLoad::Refused { message } => {
+            progress.note(&format!("Reranker:    REFUSED — {message}"));
+            None
+        }
+        RerankLoad::Failed { message } => {
+            progress.note(&format!("Reranker:    {message}"));
+            None
+        }
+        // Opt-in, and nobody opted in. Nothing to say.
+        RerankLoad::NotConfigured => None,
+    }
+}
 
 impl RecipeProgress for Banner {
     fn note(&self, line: &str) {

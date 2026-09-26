@@ -226,38 +226,6 @@ impl LaneScope {
     }
 }
 
-/// Where this host's cross-encoder rerank comes from — or why it has none.
-///
-/// `SOVEREIGN_RERANK_MODEL_PATH` names ONE GGUF and TWO different things load
-/// it, in two different ways, and which is correct depends on the host:
-///
-/// - `sovereign daemon run` installs it as a slot **inside its embedded
-///   llama.cpp engine** (`install_rerank_slot`, `sovereign-daemon/src/build/inference.rs`).
-/// - `svrn chat` loads a **standalone** `StandaloneReranker`, because its
-///   provider is remote — a `SplitInferenceProvider` speaks HTTP to the daemon
-///   and does not support rerank at all.
-///
-/// A host that does both puts the same weights in one process twice. That is
-/// not hypothetical: it is exactly what the daemon would have done the moment
-/// it started using this recipe, and the VRAM pre-flight would not have caught
-/// it, because the pre-flight plans one rerank slot and there would have been
-/// two.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum RerankWiring {
-    /// Load a standalone cross-encoder from `SOVEREIGN_RERANK_MODEL_PATH`, if
-    /// set and if it fits. Correct when the host's provider cannot rerank.
-    Standalone,
-    /// Do not load one: this host's provider already owns a rerank slot from
-    /// the same variable.
-    ///
-    /// The turn therefore gets NO cross-encoder rerank today — reaching the
-    /// host's own slot means handing the lane a `rerank_fn` over the host
-    /// provider, which is a separate change. This arm exists so that gap is a
-    /// sentence a reader can find rather than a doubled resident model an
-    /// operator discovers from RSS (ARCH §18.3).
-    AlreadyInProvider,
-}
-
 /// What a host must resolve before the recipe can run.
 ///
 /// Total by construction, like [`RuntimeParts`] itself: every field is one the
@@ -337,9 +305,13 @@ pub struct RecipeInputs {
     /// nobody sees in a wall-clock lane total; an under-broad scope on a
     /// service silently drops the cross-corpus boost.
     pub scope: LaneScope,
-    /// Rerank wiring — see [`RerankWiring`]. Getting it wrong loads the same
-    /// GGUF twice in one process.
-    pub rerank: RerankWiring,
+    /// The cross-encoder this host's turns rerank with, as a port: any
+    /// provider whose `rerank_batch` answers (`sovereign_tools::corpus::
+    /// inference_to_rerank_fn` is provider-agnostic). The host decides where
+    /// it lives — its own engine's slot, a standalone load, a compute child
+    /// or `/v1/rerank` on a serving node — so no GGUF loads twice in one
+    /// process. `None`: this host's turns run without one.
+    pub rerank: Option<Arc<dyn InferenceProvider>>,
 }
 
 /// Whether a person's tool switches govern this host's turn registry.
@@ -657,7 +629,7 @@ async fn build_lane(
     embed_model: &str,
     warmth: LaneWarmth,
     scope: LaneScope,
-    rerank: RerankWiring,
+    rerank: Option<Arc<dyn InferenceProvider>>,
     progress: &dyn RecipeProgress,
 ) -> (LaneSources, Arc<AtlasContextManager>) {
     progress.phase(RecipePhase::BuildingLane);
@@ -928,28 +900,28 @@ async fn log_installed_corpora(
     }
 }
 
-/// The optional cross-encoder reranker, and the dedup-only ablation that
-/// takes precedence over it.
-fn load_reranker(lane: &mut LaneSources, wiring: RerankWiring, progress: &dyn RecipeProgress) {
-    if wiring == RerankWiring::AlreadyInProvider {
-        // See `RerankWiring::AlreadyInProvider`. The dedup-only ablation below
-        // is skipped too: it is a rerank CONFIG, and configuring a rerank this
-        // host will not run is the kind of half-set state this document exists
-        // to remove.
-        tracing::debug!(
-            "runtime_recipe: no standalone reranker — this host's provider \
-             already owns the slot"
-        );
-        return;
-    }
+/// Is the dedup-only rerank ablation on (`SOVEREIGN_RERANK_DEDUP_ONLY=1`)?
+/// It takes precedence over a cross-encoder, so a host that loads its own
+/// reads this first and skips a load the turn would not use.
+pub fn rerank_dedup_only() -> bool {
+    std::env::var("SOVEREIGN_RERANK_DEDUP_ONLY")
+        .map(|s| s == "1" || s.eq_ignore_ascii_case("true"))
+        .unwrap_or(false)
+}
+
+/// The host's cross-encoder, and the dedup-only ablation that takes
+/// precedence over it.
+fn load_reranker(
+    lane: &mut LaneSources,
+    rerank: Option<Arc<dyn InferenceProvider>>,
+    progress: &dyn RecipeProgress,
+) {
     // Dedup-only ablation: `SOVEREIGN_RERANK_DEDUP_ONLY=1` enables overfetch +
     // per-article dedup using ONLY the fusion ordering — the experiment that
     // asks whether the SEP source-recall lift is the dedup mechanism or the
     // cross-encoder logits (`sovereign/docs/RERANK_EXPERIMENT.md`). It takes
     // precedence so an operator can A/B without touching two env vars.
-    let dedup_only = std::env::var("SOVEREIGN_RERANK_DEDUP_ONLY")
-        .map(|s| s == "1" || s.eq_ignore_ascii_case("true"))
-        .unwrap_or(false);
+    let dedup_only = rerank_dedup_only();
     let dedup_filter = sovereign_tools::corpus::rerank_dedup_filter_from_env();
     let dedup_picker = sovereign_tools::corpus::rerank_dedup_picker_from_env();
 
@@ -977,37 +949,24 @@ fn load_reranker(lane: &mut LaneSources, wiring: RerankWiring, progress: &dyn Re
         return;
     }
 
-    // ONE loader, and it now carries the capacity pre-flight this recipe used
-    // to carry alone (`sovereign_inference::reranker_standalone::load_from_env`
-    // — see its docs for the mirror that was not one). The refusal MESSAGE
-    // comes back rather than being logged and swallowed, because the caller
-    // with a banner is the one that can show it to a person.
-    match sovereign_inference::reranker_standalone::load_from_env() {
-        sovereign_inference::reranker_standalone::RerankLoad::Loaded(reranker) => {
-            let rerank_fn = sovereign_tools::corpus::inference_to_rerank_fn(reranker);
-            let cfg = sovereign_tools::corpus::rerank_config_from_env();
-            progress.note(&format!(
-                "Reranker:    candidates_k={}, alpha={:.2}, per_article={}, \
-                 atlas_weight={:.2}, dedup_corpora={:?}, min_score={:?}",
-                cfg.candidates_k,
-                cfg.alpha,
-                cfg.per_article,
-                cfg.atlas_weight,
-                sorted_corpora(cfg.dedup_corpus_filter.as_ref()),
-                cfg.min_score
-            ));
-            lane.rerank.f = Some(rerank_fn);
-            lane.rerank.config = cfg;
-        }
-        sovereign_inference::reranker_standalone::RerankLoad::Refused { message } => {
-            progress.note(&format!("Reranker:    REFUSED — {message}"));
-        }
-        sovereign_inference::reranker_standalone::RerankLoad::Failed { message } => {
-            progress.note(&format!("Reranker:    {message}"));
-        }
-        // Opt-in, and nobody opted in. Nothing to say.
-        sovereign_inference::reranker_standalone::RerankLoad::NotConfigured => {}
-    }
+    let Some(reranker) = rerank else {
+        tracing::debug!("runtime_recipe: this host supplied no cross-encoder");
+        return;
+    };
+    let rerank_fn = sovereign_tools::corpus::inference_to_rerank_fn(reranker);
+    let cfg = sovereign_tools::corpus::rerank_config_from_env();
+    progress.note(&format!(
+        "Reranker:    candidates_k={}, alpha={:.2}, per_article={}, \
+         atlas_weight={:.2}, dedup_corpora={:?}, min_score={:?}",
+        cfg.candidates_k,
+        cfg.alpha,
+        cfg.per_article,
+        cfg.atlas_weight,
+        sorted_corpora(cfg.dedup_corpus_filter.as_ref()),
+        cfg.min_score
+    ));
+    lane.rerank.f = Some(rerank_fn);
+    lane.rerank.config = cfg;
 }
 
 /// Deterministic rendering of the dedup allowlist. A `HashSet`'s iteration

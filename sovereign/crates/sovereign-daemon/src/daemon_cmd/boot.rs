@@ -933,12 +933,10 @@ pub(super) async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
             // reachable. Byte-identical to the behaviour this host had
             // before `LaneScope` existed.
             scope: sovereign_runtime_recipe::LaneScope::All,
-            // `crate::build::inference::load_provider` above already installed a
-            // rerank slot INSIDE the embedded engine from the same
-            // `SOVEREIGN_RERANK_MODEL_PATH`. A standalone one here would put
-            // the same GGUF in this process twice, and the VRAM pre-flight
-            // would not catch it — it plans one rerank slot.
-            rerank: sovereign_runtime_recipe::RerankWiring::AlreadyInProvider,
+            // No cross-encoder for turns yet: the serving assembly may hold a
+            // rerank slot in this process's engine, and handing it to the
+            // lane is its own change.
+            rerank: None,
         },
         &sovereign_runtime_recipe::TracingProgress,
     )

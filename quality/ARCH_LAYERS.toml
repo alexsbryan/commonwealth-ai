@@ -1617,13 +1617,6 @@ to = "sovereign-serving-host"
 reason = "the svrn daemon is the serving process until Phase B is minted as its own reviewed program (HUMAN-fp10-serving-host, operator answer (b), 2026-09-24): it hosts admission, venue routing and the InferenceRouter behind its /v1 routes in-process; the port traits already moved to sovereign-contracts (fp-16), and no cmnwlth serving surface exists to dial."
 tracking = "five-programs fp-68"
 
-[[exception]]
-package = "svrn"
-from = "sovereign-runtime-recipe"
-to = "sovereign-inference"
-reason = "the svrn daemon is the serving process until Phase B is minted as its own reviewed program (HUMAN-fp10-serving-host, operator answer (b), 2026-09-24): the recipe's enrichment lane loads the standalone reranker in-process (lib.rs sovereign_inference::reranker_standalone::load_from_env), a model load of the serving-host class, and no cmnwlth serving surface exists to dial."
-tracking = "five-programs fp-69"
-
 
 # Populated by the first layer-gate census, 2026-07-11. Removing an entry —
 # with its edge — is the win condition; see the remediation roadmap (R6).

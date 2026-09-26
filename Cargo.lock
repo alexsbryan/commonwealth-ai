@@ -13083,7 +13083,6 @@ dependencies = [
  "sovereign-contracts",
  "sovereign-core",
  "sovereign-gliner",
- "sovereign-inference",
  "sovereign-tools",
  "tokio",
  "tracing",

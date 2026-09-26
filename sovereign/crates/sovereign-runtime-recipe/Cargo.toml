@@ -43,9 +43,6 @@ sovereign-contracts = { workspace = true }
 # rerank config/dedup readers. Same layer (capabilities), like
 # sovereign-gliner -> sovereign-core one layer down.
 sovereign-tools = { workspace = true }
-# `StandaloneReranker` + the capacity pre-flight that refuses a rerank slot
-# which does not fit. Runtime layer — down.
-sovereign-inference = { workspace = true }
 # The optional GLiNER entity extractor behind entity-aware
 # retrieval-over-history. Probed, never required. Runtime layer — down.
 sovereign-gliner = { workspace = true }
