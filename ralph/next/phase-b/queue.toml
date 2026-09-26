@@ -25,10 +25,13 @@ resolve = "claude-opus-5-5"
 variant = "medium"
 
 # The campaign's checks ARE the gates: each commit body carries the
-# boundary-gate count. `lift` takes a program name once pb-lift-instrument has
-# landed (`scripts/ralph-check.sh lift serve`); before it, rows name
-# scripts/cw-rails-lift.sh directly.
+# boundary-gate count. `lift` takes a program name (`scripts/ralph-check.sh
+# lift serve`). Its sandbox and target live on disk under ~/.cache/program-lift,
+# never on /tmp, which is a 63G RAM-backed tmpfs on this host: ingest's cold
+# target reached 47G there and hit the quota (1d611fcab). The target persists
+# across runs, so the closures' crates.io deps stay warm; the sandbox, and with
+# it every workspace crate, is fresh each run (phase-b-8).
 [checks]
 boundary = ["bash", "-c", "toolbox run -c sovereign-vulkan bash -lc 'cd corpus-engine && cargo xtask boundary-gate; true'"]
 compile = ["bash", "-c", "toolbox run -c sovereign-vulkan bash -lc './scripts/sovereign-lint.sh --human'"]
-lift = ["bash", "-c", "toolbox run -c sovereign-vulkan bash -lc \"./scripts/program-lift.sh --sandbox $0\""]
+lift = ['bash', '-c', 'mkdir -p "$HOME/.cache/program-lift" && toolbox run -c sovereign-vulkan bash -lc "TMPDIR=$HOME/.cache/program-lift ./scripts/program-lift.sh --sandbox $0 --target-dir $HOME/.cache/program-lift/target"']
