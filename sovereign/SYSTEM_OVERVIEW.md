@@ -1058,6 +1058,10 @@ removed; never describe `:9742` as mTLS.**
 a pinned listener-shape test. The listener MUST use
 `.into_make_service_with_connect_info::<SocketAddr>()` — bare `axum::serve`
 leaves `ConnectInfo` absent and the guards fail closed for *every* caller.
+The guard lives in the host kit (`host_kit::shell::guard`, re-exported at
+`loopback_guard`), whose `shell::serve` always attaches `ConnectInfo`;
+cw-rails, the compute child, `meshapp dev` and `ring show` serve through it,
+and the daemon's listeners adopt it in pb-daemon-adopts.
 
 ### Admission and fairness
 
