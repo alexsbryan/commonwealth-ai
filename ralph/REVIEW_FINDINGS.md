@@ -3168,6 +3168,62 @@ as in its three siblings, and is not a noun.
   commonwealth-ai) and converge-noun, for the sixth audit in a row. Clones
   were read by hand.
 
+## REVIEW-audit-pb-auto-1 (2026-09-25, range f6abd245f..bd20525ce, from the Phase B launch; no earlier phase-b audit)
+
+The range holds 23 commits. Four units touch Rust: pb-handover-first,
+pb-rails-ready, pb-test-load and pb-delete-dead. REVIEW-pb-census and the
+seat's phase-b-3 to phase-b-6 commits carry no Rust. All checks ran in the
+sovereign-vulkan toolbox.
+
+TESTALL at af57170c8: exit=0, 13,501 passed and 0 failed. PREPUSH exited 1.
+Its one blocking lane was boundary-gate at 51 violations, the declared
+burn-down, unchanged by this audit. The advisories were size-gate (8 keys
+grew against a baseline older than this range: rails src +126 of which this
+range added 5, daemon tests +1067 of which pb-test-load added 165), the
+deletion-manifest `p0-root-junk` growth already triaged in fp-auto-10, and
+concept-gate and domains-census-self-test as could-not-judge.
+
+Ledger (Rust lines, src apart from tests): pb-delete-dead -1241 src / -4
+tests, pb-test-load 0 / +165, pb-rails-ready +7 / +132, pb-handover-first
++81 / +235. Total src -1153, tests +528.
+
+No `struct`, `enum` or `trait` was added in the range (a git grep of the
+range's added lines finds none), so there was nothing for converge-noun to
+check. dry-report could not judge: `--corpus-id commonwealth-ai` has no
+chunk index at `~/.svrnmesh/indexes/commonwealth-ai/chunks.lance`. The
+range's added symbols were read by hand in its place.
+
+- **ARCH 8, fixed in 1950a5662** · `rail_migration::hand_over`
+  (`sovereign-daemon/src/rail_migration.rs:90,95`, pb-handover-first)
+  re-spelled the house credential file and `[iroh] media_viewer_user`, which
+  `migrate_house_credential` and `migrate_viewer_key` (`:198-199,219,249,263`)
+  already spelled. Both now read `HOUSE_CREDENTIAL` and `VIEWER_KEY` (`:35-36`).
+- **ARCH 8, fixed in 470766056** · `hand_over_first`
+  (`sovereign-daemon/src/rails_client/bring_up.rs:144`) copied
+  `ensure_rails`' scoped-thread and current-thread-runtime block (`:102`).
+  Both now call `on_own_runtime` (`:124`).
+- **ARCH 8, fixed in af57170c8** · `MOBILE_HOST_ABSENT` was defined twice,
+  in `sovereign-cli-llm/src/mobile_cmd.rs:11` (at bd20525ce) and
+  `sovereign-desktop/src-tauri/src/mobile_host_setup.rs:13` (pb-delete-dead).
+  It is now defined once, at `sovereign-contracts/src/lib.rs:99`.
+- **ARCH 8 (recorded, before this range)** · there is a third
+  thread-and-runtime runner at `sovereign-daemon/src/rails_client/kv.rs:46`,
+  beside `bring_up.rs:124`. Its error handling is different, so folding it
+  in is a separate change.
+- **ARCH 8 (recorded, before this range)** · two keys are still spelled in
+  two crates. `media_viewer_user` appears at
+  `sovereign-cli-mesh/src/mesh_media/offer.rs:48` and
+  `sovereign-daemon/src/rail_migration.rs:36`. `authorization` appears at
+  `commonwealth-media/src/declared.rs:268` and `rail_migration.rs:35`. The
+  owner is commonwealth-media, which already exports `VIEWER_FILE`.
+- **ARCH 6 (recorded, a behaviour question)** · `ensure_rails` runs the
+  handover (`bring_up.rs:45`) before it refuses a non-loopback base
+  (`:60`). If a remote base does not answer, the journals move to the local
+  cw-rails root, but no local cw-rails is brought up to read them. This
+  matches the old unconditional boot-time migration, so it is not a
+  regression. Gating it on loopback would change behaviour, and that needs
+  its own row.
+
 ## the-link — REVIEW-audit-the-link (2026-09-22, range `71bfde459..7d009553b`)
 
 33 commits. The campaign's product commits (86adab41b inventory · be5baf177 ·
