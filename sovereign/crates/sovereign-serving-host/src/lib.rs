@@ -16,6 +16,7 @@ pub mod ledger;
 pub mod local_inflight;
 pub mod model_fetch;
 pub mod oicp_synthesis;
+pub mod openai_http;
 pub mod peer_inference;
 pub mod pinned_pod_snapshot;
 pub mod pinned_transport;

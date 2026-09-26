@@ -604,93 +604,30 @@ pub async fn embeddings(
             .into_response();
     };
 
-    let inputs: Vec<String> = match request.input {
-        EmbeddingInput::Single(s) => vec![s],
-        EmbeddingInput::Batch(v) => v,
-    };
-    if inputs.is_empty() {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(
-                serde_json::to_value(ErrorResponse::new(
-                    "embeddings request: `input` must be a non-empty string or array",
-                    "invalid_request_error",
-                ))
-                .unwrap_or_default(),
-            ),
-        )
-            .into_response();
-    }
-
-    let n_texts = inputs.len() as u64;
-    let total_chars: usize = inputs.iter().map(|t| t.len()).sum();
-
-    // One batch call: a single multi-sequence decode on the embedded engine,
-    // or sharded across compute-child replicas by the routing facade. Both
-    // beat the former per-input sequential loop for bulk ingest.
-    let embeddings = match service.embed_batch(&inputs).await {
-        Ok(v) => v,
-        Err(e) => {
-            warn!(error = %e, "embeddings: local embed_batch failed");
-            return (
-                StatusCode::SERVICE_UNAVAILABLE,
-                Json(
-                    serde_json::to_value(ErrorResponse::new(
-                        format!("embedding batch failed: {e}"),
-                        "backend_error",
-                    ))
-                    .unwrap_or_default(),
-                ),
-            )
-                .into_response();
-        }
-    };
-    if embeddings.len() != inputs.len() {
-        warn!(
-            got = embeddings.len(),
-            want = inputs.len(),
-            "embeddings: backend returned the wrong number of vectors"
-        );
-        return (
-            StatusCode::SERVICE_UNAVAILABLE,
-            Json(
-                serde_json::to_value(ErrorResponse::new(
-                    format!(
-                        "embedding backend returned {} vectors for {} inputs",
-                        embeddings.len(),
-                        inputs.len()
+    // The request is answered by the one OpenAI embeddings rendering
+    // (`sovereign_serving_host::openai_http`), which `serve` answers through
+    // too; what this daemon records about the work stays here.
+    let resp =
+        match sovereign_serving_host::openai_http::embeddings_response(service.as_ref(), request)
+            .await
+        {
+            Ok(resp) => resp,
+            Err(refusal) => {
+                return (
+                    refusal.status,
+                    Json(
+                        serde_json::to_value(ErrorResponse::new(
+                            refusal.message,
+                            refusal.error_type,
+                        ))
+                        .unwrap_or_default(),
                     ),
-                    "backend_error",
-                ))
-                .unwrap_or_default(),
-            ),
-        )
-            .into_response();
-    }
-    let data: Vec<EmbeddingData> = embeddings
-        .into_iter()
-        .enumerate()
-        .map(|(i, embedding)| EmbeddingData {
-            object: "embedding".into(),
-            embedding,
-            index: i,
-        })
-        .collect();
-
-    // The OpenAI spec counts token usage; we only have char count, so
-    // we produce a conservative ~4 chars/token estimate rather than
-    // leaving the field out (some clients require it to be present).
-    let approx_tokens = total_chars.div_ceil(4) as u32;
-    let resp = EmbeddingResponse {
-        object: "list".into(),
-        data,
-        model: request.model,
-        usage: Usage {
-            prompt_tokens: approx_tokens,
-            completion_tokens: 0,
-            total_tokens: approx_tokens,
-        },
-    };
+                )
+                    .into_response();
+            }
+        };
+    let n_texts = resp.data.len() as u64;
+    let approx_tokens = resp.usage.prompt_tokens;
     // Record the embedding work on the local Activity ledger — split
     // peer (mesh-driven ingestion) vs local (own API client). This was
     // previously invisible: nothing recorded embeddings served.
@@ -876,76 +813,12 @@ async fn manifest_rows(state: &AppState) -> Option<Vec<ModelObject>> {
     }
 
     let slot_aliases = state.inner.serving.slot_aliases.current();
-    let mut rows: Vec<ModelObject> = Vec::new();
-    let mut index: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
-
-    for (holder, model) in holders {
-        let resident = model.status.loaded;
-        if let Some(&row) = index.get(&model.id) {
-            let existing: &mut ModelObject = &mut rows[row];
-            if !existing.advertised_by.contains(&holder) {
-                existing.advertised_by.push(holder);
-            }
-            // ANY holder with the weights in memory makes the name warm:
-            // the resolver load-balances across holders and will pick one.
-            // A cold row upgrading to Resident is the honest direction; the
-            // reverse would let one cold peer mask a warm local slot.
-            if resident {
-                existing.residency = Some(Residency::Resident);
-                if let Some(perf) = existing.performance.as_mut() {
-                    perf.loaded = true;
-                }
-            }
-            continue;
-        }
-
-        let residency = if resident {
-            Residency::Resident
-        } else {
-            Residency::Cold
-        };
-        index.insert(model.id.clone(), rows.len());
-        rows.push(ModelObject {
-            // An alias (`primary`, `commonwealth/fast`) is a first-class
-            // dispatchable name, not a synthetic decoration: it appears here
-            // because a manifest advertised it, so it is resolvable by
-            // definition. The pre-2026-08-27 handler appended aliases from
-            // `slot_aliases` unconditionally, which is how `embed` came to be
-            // listed on a node whose manifest never advertised it.
-            //
-            // The target named here is THIS node's binding. That is the right
-            // one to show even on a row a peer also advertises: an alias is
-            // dereferenced by whichever node ends up serving, so "what does
-            // `primary` resolve to" is node-relative by design, and this is
-            // the answer that applies if the request stays here.
-            owned_by: match slot_aliases.get(&model.id) {
-                Some(target) => format!("alias→{target}"),
-                None => "mesh".into(),
-            },
-            id: model.id,
-            object: "model".into(),
-            created: 0,
-            // The manifest's capability CLAIMS, which is what the scheduler
-            // actually scores. The store path published a `CapabilityProfile`
-            // here instead — a different shape for the same field, and the
-            // one further from the routing decision.
-            capabilities: serde_json::to_value(&model.claims).ok(),
-            performance: Some(ModelPerformance {
-                // The manifest carries per-claim throughput, not a per-model
-                // estimate; the orchestrator's shard plan was the only source
-                // of these and it does not exist on the embedded path. Zeroed
-                // rather than omitted so `loaded` stays readable — absence
-                // here is what made availability invisible before.
-                estimated_tokens_per_sec: 0.0,
-                estimated_ttft_ms: 0,
-                loaded: resident,
-            }),
-            residency: Some(residency),
-            advertised_by: vec![holder],
-        });
-    }
-
-    Some(rows)
+    // Rows from the one `/v1/models` row builder, which `serve` reads too.
+    Some(sovereign_serving_host::openai_http::model_rows(
+        holders,
+        &slot_aliases,
+        "mesh",
+    ))
 }
 
 /// The pre-2026-08-27 store scan, kept for the orchestrator daemon — the
@@ -1270,22 +1143,7 @@ async fn serve_local_stream(
     requester: Option<NodeId>,
     model_id_for_ledger: String,
 ) -> Response {
-    // `id` / `created` are placeholders that would match the
-    // non-streaming response — clients that care about stable ids
-    // can set them on their side; we follow the OpenAI convention
-    // of `chatcmpl-*` + unix timestamp.
-    let id = format!(
-        "chatcmpl-{}",
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_millis())
-            .unwrap_or(0)
-    );
-    let created = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
-    let model = request.model.clone().unwrap_or_else(|| "local".into());
+    let header = sovereign_serving_host::openai_http::ChunkHeader::new(request.model.clone());
 
     let token_stream = match service.chat_completion_stream(request).await {
         Ok(s) => s,
@@ -1332,111 +1190,15 @@ async fn serve_local_stream(
     // ledger event in a tokio task.
     let chunks_count = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
     let started = Instant::now();
-
-    let id_for_stream = id.clone();
-    let model_for_stream = model.clone();
     let chunks_count_for_stream = chunks_count.clone();
     let sse_events = token_stream.map(move |frame| {
         use crate::openai_types::StreamFrame;
-        match frame {
-            StreamFrame::Token(delta) => {
-                chunks_count_for_stream.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                let chunk = serde_json::json!({
-                    "id": id_for_stream,
-                    "object": "chat.completion.chunk",
-                    "created": created,
-                    "model": model_for_stream,
-                    "choices": [{
-                        "index": 0,
-                        "delta": { "content": delta },
-                        "finish_reason": null
-                    }]
-                });
-                Ok::<_, std::convert::Infallible>(Event::default().data(chunk.to_string()))
-            }
-            StreamFrame::ToolCalls(calls) => {
-                // Synthetic tools-streaming chunk. Local backends
-                // parse `<tool_call>` markup post-generation, so we
-                // emit one chunk carrying every parsed call rather
-                // than the per-fragment `arguments` deltas the
-                // OpenAI spec also permits. Both shapes are
-                // wire-legal — clients accumulate by `tool_calls[i].
-                // index` regardless of chunk count.
-                chunks_count_for_stream.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                let tool_calls_json: Vec<serde_json::Value> = calls
-                    .iter()
-                    .enumerate()
-                    .map(|(i, c)| {
-                        serde_json::json!({
-                            "index": i,
-                            "id": c.id,
-                            "type": c.kind,
-                            "function": {
-                                "name": c.function.name,
-                                "arguments": c.function.arguments,
-                            }
-                        })
-                    })
-                    .collect();
-                let chunk = serde_json::json!({
-                    "id": id_for_stream,
-                    "object": "chat.completion.chunk",
-                    "created": created,
-                    "model": model_for_stream,
-                    "choices": [{
-                        "index": 0,
-                        "delta": {
-                            "role": "assistant",
-                            "tool_calls": tool_calls_json,
-                        },
-                        "finish_reason": null
-                    }]
-                });
-                Ok::<_, std::convert::Infallible>(Event::default().data(chunk.to_string()))
-            }
-            StreamFrame::Finish { reason, usage } => {
-                // Terminal frame: emit an OpenAI-shaped chunk with
-                // an empty delta and the real `finish_reason`. This
-                // is the bug fix that motivated the typed surface —
-                // the legacy `Result<String>` couldn't carry the
-                // signal so every truncation looked like a clean
-                // stop on the wire.
-                let mut payload = serde_json::json!({
-                    "id": id_for_stream,
-                    "object": "chat.completion.chunk",
-                    "created": created,
-                    "model": model_for_stream,
-                    "choices": [{
-                        "index": 0,
-                        "delta": {},
-                        "finish_reason": reason.as_openai_str()
-                    }]
-                });
-                if let Some(u) = usage {
-                    payload["usage"] = serde_json::json!({
-                        "prompt_tokens": u.prompt_tokens,
-                        "completion_tokens": u.completion_tokens,
-                        "total_tokens": u.total_tokens,
-                    });
-                }
-                Ok(Event::default().data(payload.to_string()))
-            }
-            StreamFrame::Error(e) => {
-                // Surface the error as a final event then let the
-                // stream close — clients handle the abrupt end.
-                warn!(error = %e, "chat_completions: local stream error frame");
-                Ok(Event::default().data(format!(
-                    "{{\"error\":{{\"message\":\"{}\"}}}}",
-                    e.replace('"', "\\\"")
-                )))
-            }
-            StreamFrame::Debug(_) => {
-                // FIM-only glassbox frame; the chat path never
-                // produces it. Drop defensively so a future producer
-                // can't leak internals onto an unrelated surface.
-                Ok(Event::default().comment("debug frame dropped"))
-            }
+        if matches!(frame, StreamFrame::Token(_) | StreamFrame::ToolCalls(_)) {
+            chunks_count_for_stream.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         }
+        Ok::<_, std::convert::Infallible>(sovereign_serving_host::openai_http::sse_event(
+            &header, frame,
+        ))
     });
 
     // Append the OpenAI `[DONE]` sentinel so the consumer knows
@@ -1485,7 +1247,9 @@ async fn serve_local_stream(
                 warn!(error = %e, "local stream: the activity record did not reach the store");
             }
         }
-        Ok::<_, std::convert::Infallible>(Event::default().data("[DONE]"))
+        Ok::<_, std::convert::Infallible>(
+            Event::default().data(sovereign_serving_host::openai_http::DONE),
+        )
     });
     let combined = sse_events.chain(done);
 
