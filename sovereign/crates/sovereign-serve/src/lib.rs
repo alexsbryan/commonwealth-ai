@@ -52,6 +52,9 @@ use sovereign_serving_host::openai_http::{self, ChunkHeader};
 use sovereign_serving_host::slot_manifest::CoreSlotManifest;
 use tracing::{error, info, warn};
 
+mod fetch_model;
+mod warm_cache;
+
 /// The run lock's name inside the data root (`host_kit::RunLock`): one
 /// `serve` per root. The daemon's and cw-rails' locks are their own.
 pub const RUN_LOCK: &str = "serve";
@@ -113,6 +116,13 @@ pub fn run(args: &[String]) -> i32 {
         Launch::RpcWorker { args } => return sovereign_inference::rpc_worker_main::run(&args),
         _ => {}
     }
+    // The weight verbs, spelled `svrn mesh <verb>` through the dispatcher
+    // (phase-b-22). No tracing subscriber, as under sovereign-cli-mesh.
+    if let Some((verb, rest)) = args.split_first() {
+        if WEIGHT_VERBS.contains(&verb.as_str()) {
+            return run_weight_verb(verb, rest);
+        }
+    }
     let parsed = match ServeArgs::parse(args) {
         Ok(p) => p,
         Err(e) => {
@@ -138,6 +148,29 @@ pub fn run(args: &[String]) -> i32 {
     // Skip the ggml static destructors on the way out (the teardown SIGABRT
     // the compute child dodges the same way).
     sovereign_inference::fast_exit_skip_destructors(code)
+}
+
+/// The subcommands `run` routes before the server's arguments. The dispatcher
+/// sends `svrn mesh <verb>` here for exactly these.
+pub const WEIGHT_VERBS: &[&str] = &["warm-cache", "fetch-model"];
+
+fn run_weight_verb(verb: &str, rest: &[String]) -> i32 {
+    let runtime = match tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+    {
+        Ok(rt) => rt,
+        Err(e) => {
+            eprintln!("sovereign-serve: cannot build runtime: {e}");
+            return 1;
+        }
+    };
+    runtime.block_on(async {
+        match verb {
+            "warm-cache" => warm_cache::cmd_warm_cache(rest).await,
+            _ => fetch_model::cmd_fetch_model(rest).await,
+        }
+    })
 }
 
 fn init_tracing() {

@@ -22,8 +22,13 @@ sovereign-inference = { workspace = true }
 sovereign-compute = { workspace = true }
 sovereign-serving-host = { workspace = true }
 host-kit = { workspace = true, features = ["shell"] }
+# The weight verbs' help and root path (a package leaf every program's CLI shares).
+sovereign-cli-base = { workspace = true }
 axum = { workspace = true }
 futures = { workspace = true }
+# `fetch-model`'s peer client and its mesh.json read.
+reqwest = { workspace = true }
+serde_json = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }

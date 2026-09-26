@@ -1186,6 +1186,13 @@ status = "shipped"
 purpose = "Path override for the sovereign-cli-mesh sibling, lifted out of sovereign-cli-llm 2026-09-21."
 
 [[flag]]
+name = "SOVEREIGN_SERVE_BIN"
+cluster = "cli-binaries"
+default = "sibling of dispatcher"
+status = "shipped"
+purpose = "Path override for sovereign-serve, which the dispatcher execs for `svrn mesh warm-cache` and `svrn mesh fetch-model` (phase-b-22)."
+
+[[flag]]
 name = "CW_RAILS_BIN"
 cluster = "cli-binaries"
 default = "sibling of the running program, then PATH"

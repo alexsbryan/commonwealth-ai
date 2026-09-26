@@ -8,7 +8,6 @@
 //! step 10: a mesh verb that embedded a daemon left its state in a
 //! process that exits when the command does).
 
-use std::path::PathBuf;
 use std::time::Duration;
 
 use sovereign_cli_base::dirs::sovereign_root;
@@ -54,8 +53,15 @@ pub async fn run_mesh(args: &[String]) -> i32 {
         "balance" => cmd_balance().await,
         "leave" => cmd_leave(&args[1..]).await,
         "logs" => cmd_logs().await,
-        "fetch-model" => cmd_fetch_model(&args[1..]).await,
-        "warm-cache" => cmd_warm_cache(&args[1..]).await,
+        // serve's weight verbs (phase-b-22): the dispatcher execs
+        // sovereign-serve for these spellings, so only a direct call lands here.
+        verb @ ("fetch-model" | "warm-cache") => {
+            eprintln!(
+                "mesh {verb}: owned by serve. Run `svrn mesh {verb}` (the dispatcher \
+                 routes it to sovereign-serve) or `sovereign-serve {verb}`."
+            );
+            2
+        }
         "plan" => cmd_plan(&args[1..]).await,
         "bench" => crate::mesh_bench::cmd_bench(&args[1..]).await,
         "check-invariants" => cmd_check_invariants(&args[1..]).await,
@@ -63,83 +69,6 @@ pub async fn run_mesh(args: &[String]) -> i32 {
         other => {
             eprintln!("Unknown mesh subcommand: {other}");
             sovereign_cli_base::help::print(&HELP_MESH);
-            1
-        }
-    }
-}
-
-/// `svrn mesh warm-cache <gguf> [--cache-dir <dir>]`
-///
-/// Pre-seed the RPC worker's tensor cache from a local GGUF — fully offline (no
-/// network, no GPU). When the cluster later serves this model, the host's
-/// tensor-hash requests are all cache hits and zero weight bytes cross the wire.
-/// The companion to a thumbdrive'd GGUF: distribute the model offline, run this
-/// on each worker, and a metered/throttled link never carries the weights.
-async fn cmd_warm_cache(args: &[String]) -> i32 {
-    let mut model: Option<std::path::PathBuf> = None;
-    let mut cache_dir: Option<std::path::PathBuf> = None;
-    let mut i = 0;
-    while i < args.len() {
-        match args[i].as_str() {
-            "--cache-dir" => {
-                i += 1;
-                cache_dir = args.get(i).map(std::path::PathBuf::from);
-            }
-            "--help" | "-h" => {
-                eprintln!("Usage: svrn mesh warm-cache <model.gguf> [--cache-dir <dir>]");
-                eprintln!();
-                eprintln!("  Pre-seeds the RPC tensor cache from a local GGUF so a mesh worker");
-                eprintln!("  serves this model with ZERO weight transfer over the network.");
-                eprintln!("  Fully offline — no network, no GPU. Default cache dir:");
-                eprintln!("  ~/.svrnmesh/rpc-cache (matches the in-process worker).");
-                return 0;
-            }
-            s if model.is_none() && !s.starts_with('-') => {
-                model = Some(std::path::PathBuf::from(s));
-            }
-            other => {
-                eprintln!("Unknown arg: {other}");
-                return 2;
-            }
-        }
-        i += 1;
-    }
-    let Some(model) = model else {
-        eprintln!("Usage: svrn mesh warm-cache <model.gguf> [--cache-dir <dir>]");
-        return 2;
-    };
-    let cache_dir = match cache_dir.or_else(sovereign_inference::embedded::default_cache_dir) {
-        Some(d) => d,
-        None => {
-            eprintln!(
-                "no cache dir: SOVEREIGN_RPC_CACHE_DIR is off/0/empty (caching \
-                 disabled), or HOME is unset. Pass --cache-dir to warm one anyway."
-            );
-            return 1;
-        }
-    };
-    eprintln!(
-        "warming RPC cache for {} → {}",
-        model.display(),
-        cache_dir.display()
-    );
-    let t0 = std::time::Instant::now();
-    match sovereign_inference::embedded::warm_cache_from_gguf(&model, &cache_dir) {
-        Ok(s) => {
-            println!(
-                "✓ {}/{} tensors cacheable (>10MB): {} written ({:.2} GB), {} already present — {:.1}s",
-                s.tensors_cacheable,
-                s.tensors_total,
-                s.written,
-                s.bytes_written as f64 / 1e9,
-                s.already_present,
-                t0.elapsed().as_secs_f64(),
-            );
-            println!("  cache dir: {}", s.cache_dir.display());
-            0
-        }
-        Err(e) => {
-            eprintln!("warm-cache failed: {e}");
             1
         }
     }
@@ -3499,244 +3428,6 @@ async fn cmd_forget(args: &[String]) -> i32 {
 async fn cmd_logs() -> i32 {
     println!("(mesh logs are written to stderr when the daemon runs)");
     0
-}
-
-/// `svrn mesh fetch-model <name> [--peer <peer-tailnet-addr>] [--out <dir>]`
-///
-/// Pulls a GGUF from a mesh peer over the tailnet. Used by the
-/// friend-onboarding flow (WS5) so a new node doesn't need R2 /
-/// S3 credentials of its own — it joins the mesh first, then
-/// pulls model files from whoever already has them.
-///
-/// Discovery order:
-///   1. If `--peer host:port` is given, use that directly.
-///   2. Otherwise, read the local daemon's mesh.json to find peer
-///      `addresses`, try each peer's `/internal/v1/models/list`
-///      in turn, return the first peer that advertises `<name>`.
-///
-/// Destination: defaults to the parent dir of the local `[models]
-/// .primary` path (the conventional models dir). `--out <dir>`
-/// overrides.
-///
-/// Integrity: the peer's listing carries a SHA-256; the response
-/// stream is hashed on the fly and the file is rejected on
-/// mismatch. See `sovereign_serving_host::model_fetch::fetch_model_to_dir`.
-async fn cmd_fetch_model(args: &[String]) -> i32 {
-    if sovereign_cli_base::help::wants_help(args) {
-        eprintln!("Usage: svrn mesh fetch-model <name> [--peer <host:port>] [--out <dir>]");
-        eprintln!();
-        eprintln!("Pulls a GGUF from a mesh peer over the tailnet. No R2 credentials required.");
-        eprintln!();
-        eprintln!("Examples:");
-        eprintln!("  svrn mesh fetch-model Darwin-9B-Opus.Q4_K_M.gguf");
-        eprintln!("  svrn mesh fetch-model Qwen3-Embedding-0.6B-Q8_0.gguf --out ~/models");
-        return 0;
-    }
-
-    let Some(name) = args.first().cloned() else {
-        eprintln!("Missing model file name.");
-        eprintln!("Usage: svrn mesh fetch-model <name> [--peer <host:port>] [--out <dir>]");
-        return 1;
-    };
-
-    // Tiny manual flag parser — sticks with the existing CLI
-    // convention here (no clap on this subcommand).
-    let mut peer_override: Option<String> = None;
-    let mut out_override: Option<PathBuf> = None;
-    let mut i = 1;
-    while i < args.len() {
-        match args[i].as_str() {
-            "--peer" => {
-                i += 1;
-                peer_override = args.get(i).cloned();
-            }
-            "--out" => {
-                i += 1;
-                out_override = args.get(i).map(PathBuf::from);
-            }
-            other => {
-                eprintln!("Unknown flag: {other}");
-                return 1;
-            }
-        }
-        i += 1;
-    }
-
-    // Default dest is the dir holding `cfg.models.primary`. We
-    // read SetupConfig from disk rather than the running daemon
-    // so this command works even when the daemon's down — handy
-    // during friend-onboarding where the daemon might be in its
-    // first-boot loop.
-    let dest_dir = match out_override {
-        Some(p) => p,
-        None => match sovereign_contracts::setup_config::SetupConfig::load() {
-            Ok(cfg) => cfg
-                .models
-                .as_ref()
-                .and_then(|m| m.primary.parent())
-                .map(PathBuf::from)
-                .unwrap_or_else(|| PathBuf::from(".")),
-            Err(e) => {
-                eprintln!("error: could not load setup config to choose default --out dir: {e}");
-                eprintln!(
-                    "hint: pass --out <dir> explicitly, or run `svrn daemon --setup-only` first."
-                );
-                return 1;
-            }
-        },
-    };
-
-    let client = match reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(60 * 60)) // 1h cap for very slow links
-        .build()
-    {
-        Ok(c) => c,
-        Err(e) => {
-            eprintln!("error: build http client: {e}");
-            return 1;
-        }
-    };
-
-    // Decide which peers to try. Explicit override wins.
-    let peer_candidates: Vec<String> = if let Some(p) = peer_override {
-        // Accept `host:port` or `http://host:port` — normalise to URL.
-        let url = if p.starts_with("http://") || p.starts_with("https://") {
-            p
-        } else {
-            format!("http://{p}")
-        };
-        vec![url]
-    } else {
-        match collect_peer_internal_urls().await {
-            Ok(urls) if urls.is_empty() => {
-                eprintln!("No mesh peers known. Run `svrn mesh join <link>` first,");
-                eprintln!("or pass --peer <host:port> to target a specific node.");
-                return 1;
-            }
-            Ok(urls) => urls,
-            Err(e) => {
-                eprintln!("error: discovering peers: {e}");
-                return 1;
-            }
-        }
-    };
-
-    println!();
-    println!(
-        "Searching {} peer(s) for '{}'…",
-        peer_candidates.len(),
-        name
-    );
-
-    for peer_url in &peer_candidates {
-        // Probe the peer's listing first so we can pick the one
-        // that actually advertises `name` before committing to
-        // the download.
-        let listing =
-            match sovereign_mesh::model_fetch::list_peer_files(&client, peer_url, None).await {
-                Ok(l) => l,
-                Err(e) => {
-                    eprintln!("  ✗ {peer_url}: list failed ({e})");
-                    continue;
-                }
-            };
-        let Some(info) = listing.files.into_iter().find(|f| f.name == name) else {
-            println!("  · {peer_url}: doesn't have it");
-            continue;
-        };
-        println!(
-            "  → {peer_url}: streaming {} ({} MiB, sha256={}…)",
-            info.name,
-            info.size_bytes / (1024 * 1024),
-            &info.sha256[..16],
-        );
-        let started = std::time::Instant::now();
-        let progress = |downloaded: u64, total: u64| {
-            let pct = if total > 0 {
-                100 * downloaded / total
-            } else {
-                0
-            };
-            eprint!(
-                "\r  {} / {} MiB ({}%)…   ",
-                downloaded / (1024 * 1024),
-                total / (1024 * 1024),
-                pct,
-            );
-        };
-        match sovereign_mesh::model_fetch::fetch_model_to_dir(
-            // Unstamped: the CLI holds no `Mesh`, so it has nothing to mint
-            // a proof from. Against a peer on the default `internal_auth` this
-            // reaches only a loopback daemon; the fix is for the CLI to ask its
-            // own daemon to fetch, not to forge a credential it does not hold.
-            &client, peer_url, &info, &dest_dir, None, progress,
-        )
-        .await
-        {
-            Ok(path) => {
-                let secs = started.elapsed().as_secs_f64();
-                let mb_per_s = if secs > 0.0 {
-                    (info.size_bytes as f64 / 1_048_576.0) / secs
-                } else {
-                    0.0
-                };
-                eprintln!();
-                println!();
-                println!("✓ saved to {}", path.display());
-                println!(
-                    "  {} MiB in {:.1}s ({:.1} MiB/s)",
-                    info.size_bytes / (1024 * 1024),
-                    secs,
-                    mb_per_s,
-                );
-                return 0;
-            }
-            Err(e) => {
-                eprintln!();
-                eprintln!("  ✗ {peer_url}: fetch failed ({e})");
-                // fall through to next peer
-            }
-        }
-    }
-
-    eprintln!();
-    eprintln!("No peer could serve '{name}'.");
-    1
-}
-
-/// Discover peer internal-port URLs by reading the local daemon's
-/// persisted mesh.json. `MemberRecord.addresses` for each peer are
-/// the gossip-port endpoints (`:9742`), which is exactly what we
-/// want — the model-files routes live on the internal port.
-async fn collect_peer_internal_urls() -> std::io::Result<Vec<String>> {
-    let mesh_path = sovereign_root().join("mesh.json");
-    let bytes = std::fs::read(&mesh_path)?;
-    // Parse loosely — we only need the addresses array of each
-    // non-self member. Using serde_json::Value avoids dragging in
-    // the full Mesh deserialiser, which would force a tight
-    // coupling on the on-disk schema this command only inspects.
-    let v: serde_json::Value = serde_json::from_slice(&bytes)?;
-    let self_id = v.get("self_node_id").and_then(|x| x.as_str()).unwrap_or("");
-    let mut urls = Vec::new();
-    if let Some(members) = v
-        .get("mesh")
-        .and_then(|m| m.get("members"))
-        .and_then(|m| m.as_object())
-    {
-        for (nid, member) in members {
-            if nid == self_id {
-                continue;
-            }
-            if let Some(addrs) = member.get("addresses").and_then(|a| a.as_array()) {
-                for a in addrs {
-                    if let Some(s) = a.as_str() {
-                        urls.push(format!("http://{}", s));
-                    }
-                }
-            }
-        }
-    }
-    Ok(urls)
 }
 
 // ── Corpus subcommand implementations ────────────────────
