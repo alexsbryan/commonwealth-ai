@@ -40,8 +40,9 @@ corpus-index = { workspace = true }
 # was FOR: without it a person needs our daemon to build a corpus, and the
 # binary's whole claim is that they do not.
 sovereign-enrichment-build = { workspace = true }
-# The JSON-RPC envelope every MCP message rides on — a leaf.
-oicp-types = { workspace = true }
+# The one MCP dispatcher (phase-b pb-mcp): the stdio loop and the JSON-RPC
+# envelope are the kit's, and `Server` is its tool-host port.
+host-kit = { workspace = true, features = ["mcp"] }
 # `sovereign_contracts::rebrand::data_dir()` is the ONE derivation of the data
 # root (quality/env-flags.toml: SOVEREIGN_DATA_DIR); already in corpus-engine's
 # closure, and a declared package leaf.

@@ -2538,7 +2538,7 @@ dependencies = [
  "corpus-engine",
  "corpus-engine-atlas-reader",
  "corpus-index",
- "oicp-types",
+ "host-kit",
  "reqwest 0.12.28",
  "serde",
  "serde_json",
@@ -5604,7 +5604,11 @@ dependencies = [
 name = "host-kit"
 version = "0.8.0"
 dependencies = [
+ "oicp-types",
+ "serde_json",
  "tempfile",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]
@@ -17020,6 +17024,7 @@ version = "0.1.0"
 dependencies = [
  "arch-layers",
  "kernel-types",
+ "oicp-types",
  "quote",
  "regex",
  "serde_json",

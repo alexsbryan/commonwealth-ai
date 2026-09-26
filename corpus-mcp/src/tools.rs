@@ -45,11 +45,8 @@ use understanding_vocab::read::read_atlas_atoms;
 
 use crate::host::HostProfile;
 
-pub struct ToolOutcome {
-    pub text: String,
-    pub is_error: bool,
-    pub structured: Option<Value>,
-}
+/// The kit's, since corpus-mcp serves through its dispatcher (phase-b pb-mcp).
+pub use host_kit::mcp::ToolOutcome;
 
 struct Served {
     id: String,
