@@ -1017,7 +1017,9 @@ name = "corpus-engine-scip"
 # and corpus-index is a leaf. It is a format/port library, not a program's
 # lifecycle or unique machinery. Reverse this row if the exporter dispatch
 # (tool_path::resolve, which::which) is read as policy rather than format.
-allow = ["sovereign-contracts", "workspace-hack"]
+# host-kit joined 2026-09-26 (pb-hostkit, phase-b-10): the rebuild guard is the
+# host kit's one RunLock, and scip dropped fs4 for it.
+allow = ["host-kit", "sovereign-contracts", "workspace-hack"]
 
 [[package_leaf]]
 name = "corpus-engine-yield"
