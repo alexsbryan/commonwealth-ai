@@ -458,7 +458,7 @@ pub enum StreamFrame {
 /// and curl working; the rich fields (`prefix`/`path`/`language`/
 /// `debug`) are what the first-party VSCode extension sends.
 /// `prefix` wins over `prompt` when both are present.
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct CompletionsRequestWire {
     /// Legacy: model id. Echoed in the response envelope, but the
     /// configured FIM slot always serves regardless.
@@ -494,6 +494,13 @@ pub struct CompletionsRequestWire {
     /// Opt-in glassbox payload on the terminal chunk / response.
     #[serde(default)]
     pub debug: Option<bool>,
+    /// The next-edit lane's whole prompt, decoded verbatim (the adapter's
+    /// `FimCompletionRequest::raw_prompt`). Honoured by serve's route, which
+    /// the svrn daemon dials for that lane's model call
+    /// (pb-svrn-dials-serve); the daemon's own editor door builds its
+    /// request field by field and never reads it.
+    #[serde(default)]
+    pub raw_prompt: Option<String>,
 }
 
 impl CompletionsRequestWire {

@@ -40,13 +40,14 @@ use host_kit::shell::RouteBundle;
 use sovereign_compute::server::{openai_refusal, ChildMeta};
 use sovereign_contracts::launch::Launch;
 use sovereign_contracts::oicp::openai_types::{
-    ChatCompletionRequest, EmbeddingRequest, ModelListResponse,
+    ChatCompletionRequest, CompletionsRequestWire, EmbeddingRequest, ModelListResponse, StopParam,
 };
-use sovereign_contracts::oicp::LocalInferenceError;
+use sovereign_contracts::oicp::{FimCompletionRequest, LocalInferenceError};
 use sovereign_contracts::setup_config::SetupConfig;
 use sovereign_contracts::traits::LocalInferenceService;
 use sovereign_contracts::venue::resolution_alias_keys;
 use sovereign_contracts::{InferenceProvider, Speed};
+use sovereign_serving_host::fim_http;
 use sovereign_serving_host::inference_adapter::SovereignInferenceAdapter;
 use sovereign_serving_host::openai_http::{self, ChunkHeader};
 use sovereign_serving_host::slot_manifest::CoreSlotManifest;
@@ -388,6 +389,7 @@ fn openai_bundle(adapter: Arc<SovereignInferenceAdapter>) -> RouteBundle {
     RouteBundle::new("serve_openai")
         .route("/v1/chat/completions", post(chat_completions))
         .route("/v1/embeddings", post(embeddings))
+        .route("/v1/completions", post(completions))
         .route("/v1/models", get(list_models))
         .route("/oicp/v1/capabilities", get(capabilities))
         .with_state(adapter)
@@ -443,6 +445,49 @@ fn chat_refusal(err: LocalInferenceError, what: &'static str) -> Response {
                 format!("{what} failed: {e}"),
                 "backend_error",
             )
+        }
+    }
+}
+
+/// `/v1/completions`, the FIM model call over this process's adapter. The
+/// svrn daemon's editor door keeps its context assembly and dials here for
+/// the model (phase-b-23); a `raw_prompt` is the next-edit lane's verbatim
+/// prompt. Rendered by the one FIM renderer both doors share.
+async fn completions(
+    State(adapter): AdapterState,
+    Json(wire): Json<CompletionsRequestWire>,
+) -> Response {
+    let Some(prefix) = wire
+        .effective_prefix()
+        .map(str::to_string)
+        .or_else(|| wire.raw_prompt.as_ref().map(|_| String::new()))
+    else {
+        return openai_refusal(
+            StatusCode::BAD_REQUEST,
+            "missing `prefix` (or legacy `prompt`, or `raw_prompt`)".to_string(),
+            "invalid_request",
+        );
+    };
+    let debug = wire.debug.unwrap_or(false);
+    let stream = wire.stream.unwrap_or(false);
+    let request = FimCompletionRequest {
+        prefix,
+        suffix: wire.suffix.unwrap_or_default(),
+        path: wire.path,
+        language: wire.language,
+        max_tokens: wire.max_tokens,
+        temperature: wire.temperature,
+        stop: wire.stop.map(StopParam::into_vec).unwrap_or_default(),
+        debug,
+        raw_prompt: wire.raw_prompt,
+    };
+    debug!(target: "serve", raw = request.raw_prompt.is_some(), stream, "completions: FIM model call");
+    match adapter.fim_completion_stream(request).await {
+        Ok(start) if stream => fim_http::serve_fim_sse(start, debug, wire.model),
+        Ok(start) => fim_http::serve_fim_aggregated(start, debug, wire.model).await,
+        Err(e) => {
+            warn!(target: "serve", error = %e, "completions: FIM unavailable");
+            openai_refusal(StatusCode::SERVICE_UNAVAILABLE, e, "fim_unavailable")
         }
     }
 }
@@ -564,6 +609,130 @@ mod tests {
         assert_eq!(this.primary_model, sovereign_compute::mock::MOCK_MODEL);
         assert_eq!(this.resident_slots.len(), 1);
         assert_eq!(this.resident_slots[0].role, "primary");
+    }
+
+    /// A provider with a FIM-capable edit slot that records the request it
+    /// was asked to decode.
+    struct EditSlotStub {
+        seen: std::sync::Mutex<Option<sovereign_contracts::CompletionRequest>>,
+    }
+
+    #[async_trait::async_trait]
+    impl InferenceProvider for EditSlotStub {
+        async fn complete(
+            &self,
+            _r: &sovereign_contracts::CompletionRequest,
+        ) -> sovereign_contracts::Result<sovereign_contracts::CompletionResponse> {
+            unimplemented!("stream-only stub")
+        }
+        async fn complete_stream(
+            &self,
+            _r: &sovereign_contracts::CompletionRequest,
+        ) -> sovereign_contracts::Result<
+            std::pin::Pin<
+                Box<dyn futures::Stream<Item = sovereign_contracts::Result<String>> + Send>,
+            >,
+        > {
+            unimplemented!("with_finish-only stub")
+        }
+        async fn complete_stream_with_finish(
+            &self,
+            request: &sovereign_contracts::CompletionRequest,
+        ) -> sovereign_contracts::Result<
+            std::pin::Pin<Box<dyn futures::Stream<Item = sovereign_contracts::StreamFrame> + Send>>,
+        > {
+            *self.seen.lock().unwrap() = Some(request.clone());
+            Ok(Box::pin(futures::stream::iter(vec![
+                sovereign_contracts::StreamFrame::Token("return a + b;".to_string()),
+                sovereign_contracts::StreamFrame::Finish {
+                    reason: sovereign_contracts::FinishReason::Stop,
+                    usage: None,
+                },
+            ])))
+        }
+        async fn embed(&self, _t: &str) -> sovereign_contracts::Result<Vec<f32>> {
+            unimplemented!()
+        }
+        fn capabilities(&self) -> sovereign_contracts::ProviderCapabilities {
+            sovereign_contracts::ProviderCapabilities {
+                max_context_tokens: 4096,
+                supports_structured_output: false,
+                relative_speed: Speed::Fast,
+                relative_reasoning: sovereign_contracts::Depth::Shallow,
+            }
+        }
+        fn edit_slot_info(&self) -> Option<sovereign_contracts::EditSlotInfo> {
+            Some(sovereign_contracts::EditSlotInfo {
+                slot: "edit".into(),
+                model_id: "coder".into(),
+                aliased_to_fast: false,
+                degraded: false,
+                next_edit: None,
+                fim: Some(sovereign_contracts::FimLane {
+                    style: sovereign_contracts::FimStyle::QwenCoder,
+                    max_tokens: 48,
+                    temperature: 0.2,
+                    max_prefix_chars: 4096,
+                    max_suffix_chars: 4096,
+                }),
+            })
+        }
+    }
+
+    async fn serving(provider: Arc<dyn InferenceProvider>) -> String {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind");
+        let base = format!("http://{}", listener.local_addr().expect("addr"));
+        tokio::spawn(host_kit::shell::serve(
+            [listener],
+            bundles(provider),
+            std::future::pending(),
+        ));
+        base
+    }
+
+    #[tokio::test]
+    async fn serve_decodes_the_next_edit_lanes_raw_prompt_verbatim() {
+        let stub = Arc::new(EditSlotStub {
+            seen: std::sync::Mutex::new(None),
+        });
+        let base = serving(Arc::clone(&stub) as Arc<dyn InferenceProvider>).await;
+        let raw = "<|editable_region_start|>fn add(a, b) {}<|editable_region_end|>";
+        let body: serde_json::Value = reqwest::Client::new()
+            .post(format!("{base}/v1/completions"))
+            .json(&serde_json::json!({ "raw_prompt": raw, "max_tokens": 16 }))
+            .send()
+            .await
+            .expect("answered")
+            .json()
+            .await
+            .expect("a text_completion");
+        assert_eq!(body["choices"][0]["text"], "return a + b;", "{body}");
+        let seen = stub.seen.lock().unwrap().clone().expect("decoded");
+        assert_eq!(seen.prompt, raw, "the raw prompt was not decoded verbatim");
+        assert_eq!(seen.model_id.as_deref(), Some("coder"));
+    }
+
+    #[tokio::test]
+    async fn serve_without_an_edit_slot_refuses_fim_by_name() {
+        let base = serving(Arc::new(sovereign_compute::mock::MockProvider {
+            tokens: 1,
+            delay: std::time::Duration::ZERO,
+        }))
+        .await;
+        let resp = reqwest::Client::new()
+            .post(format!("{base}/v1/completions"))
+            .json(&serde_json::json!({ "prefix": "fn main() {" }))
+            .send()
+            .await
+            .expect("answered");
+        assert_eq!(resp.status(), 503);
+        assert!(resp
+            .text()
+            .await
+            .unwrap_or_default()
+            .contains("fim_unavailable"));
     }
 
     #[test]
