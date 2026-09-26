@@ -122,6 +122,7 @@ impl<H: McpToolHost, L: McpCallLog> McpDispatcher<H, L> {
                 let args = params.get("arguments").cloned().unwrap_or(json!({}));
                 match self.host.call(name, &args).await {
                     Some(outcome) => {
+                        tracing::debug!(tool = name, is_error = outcome.is_error, "mcp: tool ran");
                         self.log.record(name, &outcome);
                         JsonRpcResponse::result(id, outcome.into_call_result())
                     }
