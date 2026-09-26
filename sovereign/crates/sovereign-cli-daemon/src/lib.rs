@@ -71,6 +71,7 @@ const DAEMON_TRACING_FILTER: &str = "sovereign_cli_daemon=info,\
      fim=info,\
      next_edit=info,\
      admission=info,\
+     served_kind=info,\
      corpus_maintenance=info,\
      sec_edgar=info,\
      sec_facts=info,\
@@ -403,6 +404,10 @@ mod tests {
             // logs, from the node being broken — and the per-request decision
             // at `debug` would be unreachable even with the directive raised.
             "admission",
+            // Served model kinds (phase-b pb-serving-kinds, pb-serving-ner):
+            // registration, the rerank lane's installed-or-not answer, a
+            // kind route's backend failure, and the NER kind's one load.
+            "served_kind",
             // SEC filings install + figure answering (FINANCIAL_CORPORA.md
             // §7). This was the NEXT instance of the trap, and it cost a
             // 20.5-minute e2e run to find: `sec_edgar` names every install

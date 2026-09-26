@@ -184,6 +184,7 @@ const DAEMON_TRACING_FILTER: &str = "sovereign_cli_daemon=info,\
      fim=info,\
      next_edit=info,\
      admission=info,\
+     served_kind=info,\
      corpus_maintenance=info,\
      sec_edgar=info,\
      sec_facts=info,\
@@ -246,6 +247,7 @@ mod tests {
             "synth.budget",
             "corpus_maintenance",
             "admission",
+            "served_kind",
             "sec_edgar",
             "sec_facts",
             "sec_facts_render",
