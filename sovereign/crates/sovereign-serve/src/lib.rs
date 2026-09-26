@@ -59,6 +59,14 @@ mod warm_cache;
 /// `serve` per root. The daemon's and cw-rails' locks are their own.
 pub const RUN_LOCK: &str = "serve";
 
+/// Where `serve` listens unless `--listen` says otherwise: loopback, 9748.
+/// Mirrored by the svrn daemon's `serve_client::DEFAULT_SERVE_BASE`, the base
+/// it dials when `[node] entry` is unset — beside cw-rails' 9747 and outside
+/// the daemon's 9741..9745. The two programs are built and versioned
+/// separately, so the convention is documented on both sides rather than
+/// imported across the lift boundary (pb-svrn-dials-serve).
+pub const DEFAULT_LISTEN: ([u8; 4], u16) = ([127, 0, 0, 1], 9748);
+
 /// How this process names itself in `/v1/models` `advertised_by`.
 const LOCAL_HOLDER: &str = "local";
 
@@ -74,10 +82,10 @@ pub struct ServeArgs {
 impl ServeArgs {
     /// `[--data-dir <dir>] [--listen <addr:port>]`. The data root defaults to
     /// the branded root the daemon reads (`rebrand::svrnmesh_root`); the
-    /// listener to an ephemeral loopback port, printed once bound.
+    /// listener to [`DEFAULT_LISTEN`], printed once bound.
     pub fn parse(args: &[String]) -> Result<Self, String> {
         let mut data_dir = None;
-        let mut listen: SocketAddr = ([127, 0, 0, 1], 0).into();
+        let mut listen: SocketAddr = DEFAULT_LISTEN.into();
         let mut it = args.iter();
         while let Some(arg) = it.next() {
             let mut value = |flag: &str| {
@@ -423,6 +431,12 @@ mod tests {
         let parsed = ServeArgs::parse(&args).expect("valid");
         assert_eq!(parsed.data_dir, PathBuf::from("/srv/serve"));
         assert_eq!(parsed.listen, "127.0.0.1:8080".parse().unwrap());
+    }
+
+    #[test]
+    fn with_no_listener_named_it_listens_where_svrn_dials() {
+        let parsed = ServeArgs::parse(&[]).expect("valid");
+        assert_eq!(parsed.listen, "127.0.0.1:9748".parse().unwrap());
     }
 
     #[test]

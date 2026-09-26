@@ -124,6 +124,7 @@ pub mod recipe_project_http;
 pub mod research_http;
 pub mod roster_repair;
 pub mod rpc_warm_http;
+pub mod serve_client;
 /// The daemon's `SlotManifest` port implementation over `sovereign-core`'s
 /// bundled manifest; supplied to the serving host's inference adapter and
 /// self-manifest advertisement (domains REVIEW-build-serving-move-adapter).
