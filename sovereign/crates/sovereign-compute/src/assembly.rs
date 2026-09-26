@@ -696,8 +696,16 @@ mod serves_rerank_tests;
 /// `embedded::ffi_trace` already uses for the KV-clear rule.
 #[cfg(test)]
 mod idle_monitor_coverage {
-    /// The provider build, by source.
-    const COLD_START_SRC: &str = include_str!("assembly.rs");
+    /// The provider build, by source: the text before the first test module.
+    /// This module spells every monitor it looks for, so scanning the whole
+    /// file would pass with all four production calls deleted.
+    fn production_src() -> &'static str {
+        let src = include_str!("assembly.rs");
+        let end = src
+            .find("#[cfg(test)]")
+            .expect("assembly.rs has a test module");
+        &src[..end]
+    }
 
     /// Every idle monitor the embedded engine exposes. Adding a slot with
     /// an idle monitor means adding it here, which is the point: the list
@@ -726,7 +734,7 @@ mod idle_monitor_coverage {
         let missing: Vec<&str> = MONITORS
             .iter()
             .copied()
-            .filter(|m| !calls(COLD_START_SRC, m))
+            .filter(|m| !calls(production_src(), m))
             .collect();
         assert!(
             missing.is_empty(),
@@ -746,7 +754,7 @@ mod idle_monitor_coverage {
             ("start_fast_idle_monitor(", "fast_idle_secs"),
             ("start_embed_idle_monitor(", "embed_idle_secs"),
         ] {
-            let wired = COLD_START_SRC
+            let wired = production_src()
                 .lines()
                 .filter(|l| {
                     let t = l.trim_start();
