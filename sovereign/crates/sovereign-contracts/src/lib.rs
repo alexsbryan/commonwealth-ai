@@ -94,7 +94,6 @@ pub mod memory_config;
 /// decision extractor can name it without the host; the composition
 /// (`Pipeline`, the registry) stays host code.
 pub mod middleware;
-pub mod mobile_host;
 pub mod model_family;
 pub mod models_manifest;
 /// The node-identity FILES — the `node_id` file and the identity fields of

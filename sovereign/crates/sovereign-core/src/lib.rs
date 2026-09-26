@@ -20,7 +20,6 @@ pub mod health_monitor;
 pub mod insight;
 pub mod memory;
 pub mod memory_compaction;
-pub use sovereign_contracts::mobile_host;
 pub use sovereign_contracts::model_family;
 pub use sovereign_contracts::models_manifest;
 pub mod quote_verification;
