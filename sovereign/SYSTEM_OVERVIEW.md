@@ -1283,6 +1283,11 @@ gate appends a `cargo test --doc` pass because nextest cannot run doctests,
 and the JUnit report is deleted before a run so "no report" cannot replay a
 stale green.
 
+Tests that boot a daemon, in process or as the binary's `run`, share
+nextest's bounded `daemon-boot` group (`.config/nextest.toml`). Its filter
+is derived from test source by `binary_boot_rails_census.rs`, which fails
+when a booting file is outside it or a clause names none.
+
 No tests require GPU, models or network. Sovereign uses
 `DeterministicInference` + in-memory SQLite + real FTS5; cmnwlth's harness
 runs simulated meshes deterministically.
