@@ -214,10 +214,12 @@ fn serve_rerank(
             results: scores
                 .into_iter()
                 .enumerate()
-                .map(|(index, relevance_score)| oicp_types::openai_types::RerankResult {
-                    index,
-                    relevance_score,
-                })
+                .map(
+                    |(index, relevance_score)| oicp_types::openai_types::RerankResult {
+                        index,
+                        relevance_score,
+                    },
+                )
                 .collect(),
         };
         serde_json::to_value(response).map_err(|e| KindServeError::Backend(e.to_string()))
