@@ -99,27 +99,15 @@ pub fn ensure_rails(
     let serving = ServingHost::at(base)
         .ready_at("/v1/mesh/status")
         .bringing_up(backend.log_to(data_dir.join("rails.log")));
-    let outcome = std::thread::scope(|s| {
-        s.spawn(|| {
-            tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .build()
-                .map_err(|e| format!("no runtime to reach cw-rails with: {e}"))
-                .and_then(|rt| {
-                    rt.block_on(async {
-                        let reached = serving
-                            .ensure_reachable(RAILS_BRING_UP_WINDOW)
-                            .await
-                            .map_err(|e| e.to_string())?;
-                        if local_only && matches!(reached, Reached::AlreadyServing { .. }) {
-                            refuse_n0_posture(base).await?;
-                        }
-                        Ok::<_, String>(reached)
-                    })
-                })
-        })
-        .join()
-        .unwrap_or_else(|_| Err("the ensure_rails probe thread panicked".into()))
+    let outcome = on_own_runtime("ensure_rails probe", || async {
+        let reached = serving
+            .ensure_reachable(RAILS_BRING_UP_WINDOW)
+            .await
+            .map_err(|e| e.to_string())?;
+        if local_only && matches!(reached, Reached::AlreadyServing { .. }) {
+            refuse_n0_posture(base).await?;
+        }
+        Ok(reached)
     });
     match outcome {
         Ok(reached) => {
@@ -130,22 +118,32 @@ pub fn ensure_rails(
     }
 }
 
+/// Run `probe` on its own thread and current-thread runtime, so the caller
+/// is safe from any thread, a runtime's included. `what` names the probe
+/// when the thread panics.
+fn on_own_runtime<T: Send, F: std::future::Future<Output = Result<T, String>>>(
+    what: &str,
+    probe: impl FnOnce() -> F + Send,
+) -> Result<T, String> {
+    std::thread::scope(|s| {
+        s.spawn(|| {
+            tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .map_err(|e| format!("no runtime to reach cw-rails with: {e}"))
+                .and_then(|rt| rt.block_on(probe()))
+        })
+        .join()
+        .unwrap_or_else(|_| Err(format!("the {what} thread panicked")))
+    })
+}
+
 /// One probe of `base`, then the handover: moved when nothing answers, left
 /// in place and named when a cw-rails already does. A probe that cannot run
 /// moves nothing — a journal under a live store is the loss this prevents.
 fn hand_over_first(base: &str, data_dir: &std::path::Path) {
     let host = sovereign_turn_client::reach::ServingHost::at(base).ready_at("/v1/mesh/status");
-    let answering = std::thread::scope(|s| {
-        s.spawn(|| {
-            tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .build()
-                .map(|rt| rt.block_on(host.is_serving()))
-                .map_err(|e| e.to_string())
-        })
-        .join()
-        .unwrap_or_else(|_| Err("the handover probe thread panicked".into()))
-    });
+    let answering = on_own_runtime("handover probe", || async { Ok(host.is_serving().await) });
     let answering = answering.unwrap_or_else(|e| {
         tracing::warn!(rails_base = base, error = %e, "ensure_rails: could not probe cw-rails before the handover; treated as answering, so nothing moves");
         true
