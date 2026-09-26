@@ -85,7 +85,7 @@ fn file_roster(named: &[(&str, &SigningKey)]) -> Roster {
     Roster::new(members)
 }
 
-/// A stand-in for the mesh's serving process (fp-6): a DERIVED roster's
+/// A stand-in for the mesh's rails daemon (fp-6): a DERIVED roster's
 /// membership question is dialed, so the test answers it the way `cw-rails`
 /// does — from this node's own membership, tombstones included, which is
 /// exactly the answer set the local derivation used to produce. The seam the

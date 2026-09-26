@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! The one-time handover of the ring journals to the serving process.
+//! The one-time handover of the ring journals to the rails daemon.
 //!
 //! Until fp-54's flip the inference daemon's in-process rail was the ONLY
 //! writer, so moving the journals to `cw-rails`' data root is atomic: this
 //! runs in `rails_client::ensure_rails`, before any bring-up and so before any
 //! rail surface answers ([`hand_over`], phase-b-3), and after it
 //! the daemon never opens a journal again (§4 rule 1 — one data directory,
-//! one owner; the daemon cannot write into the serving process's store as a
+//! one owner; the daemon cannot write into the rails daemon's store as a
 //! standing arrangement, and a one-time rename during a boot it owns is not
 //! an arrangement).
 //!
@@ -41,7 +41,7 @@ fn source_root(data_dir: &Path) -> PathBuf {
     data_dir.join("rings")
 }
 
-/// Where the serving process keeps journals: its default data dir.
+/// Where the rails daemon keeps journals: its default data dir.
 fn rails_data_dir() -> PathBuf {
     commonwealth_media::rails_data_dir()
 }
@@ -109,7 +109,7 @@ pub fn hand_over(data_dir: &Path, config_path: &Path, rails_answering: bool) {
 }
 
 /// Move every ring namespace's journal from the daemon's data dir to the
-/// serving process's. Idempotent; logs what moved and what could not.
+/// rails daemon's. Idempotent; logs what moved and what could not.
 pub fn migrate_journals_to_rails(data_dir: &Path) {
     let source = source_root(data_dir);
     let entries = match std::fs::read_dir(&source) {
@@ -120,7 +120,7 @@ pub fn migrate_journals_to_rails(data_dir: &Path) {
                 error = %e,
                 dir = %source.display(),
                 "rail migration: the daemon's ring directory could not be read; journals stay \
-                 where they are and the serving process will not see them"
+                 where they are and the rails daemon will not see them"
             );
             return;
         }
@@ -155,13 +155,13 @@ pub fn migrate_journals_to_rails(data_dir: &Path) {
                     from = %from.display(),
                     to = %to.display(),
                     "rail migration: this journal could not be moved — it stays under the \
-                     daemon's data dir and is invisible to the serving process until the \
+                     daemon's data dir and is invisible to the rails daemon until the \
                      operator moves it"
                 );
                 continue;
             }
             if let Err(e) = std::fs::remove_dir_all(&from) {
-                // The copy landed: the serving process sees the journal. Only
+                // The copy landed: the rails daemon sees the journal. Only
                 // the daemon-side original is left behind, and the next boot
                 // leaves it alone (the target exists).
                 tracing::warn!(
@@ -169,7 +169,7 @@ pub fn migrate_journals_to_rails(data_dir: &Path) {
                     namespace = %name.to_string_lossy(),
                     from = %from.display(),
                     to = %to.display(),
-                    "rail migration: the journal was copied to the serving process's root, \
+                    "rail migration: the journal was copied to the rails daemon's root, \
                      but the daemon-side original could not be removed — it is now a stale copy"
                 );
                 continue;
@@ -178,7 +178,7 @@ pub fn migrate_journals_to_rails(data_dir: &Path) {
         tracing::info!(
             namespace = %name.to_string_lossy(),
             to = %to.display(),
-            "rail migration: the journal moved to the serving process's data root"
+            "rail migration: the journal moved to the rails daemon's data root"
         );
     }
 }
@@ -286,7 +286,7 @@ mod tests {
         fs::write(ns.join("oplog.jsonl"), "{\"seq\":0}").unwrap();
         fs::write(ns.join("roster.json"), "{\"members\":{}}").unwrap();
         // A second namespace already at the target: the daemon holds a stale
-        // copy of a ring the serving process has since written.
+        // copy of a ring the rails daemon has since written.
         fs::create_dir_all(rails_dir.path().join("rings").join("work")).unwrap();
         fs::write(
             rails_dir.path().join("rings/work/oplog.jsonl"),

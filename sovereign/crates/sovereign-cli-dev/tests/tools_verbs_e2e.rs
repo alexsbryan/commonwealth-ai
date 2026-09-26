@@ -154,7 +154,7 @@ fn a_work_atlas_call_with_no_door_names_the_absence() {
     let stderr = String::from_utf8_lossy(&call.stderr);
     assert!(
         stderr.contains(&format!(
-            "cannot reach the mesh's serving process at {DEAD_RAILS}/v1/mesh/kv/entries"
+            "cannot reach the mesh's rails daemon at {DEAD_RAILS}/v1/mesh/kv/entries"
         )),
         "the absence names the door it dialed: {}",
         text(&call)

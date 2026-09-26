@@ -282,7 +282,7 @@ pub(super) const REGISTRY: &[(&str, Class, usize)] = &[
     // pb-atlas-kv: the one `ReplicatedKv` client over cw-rails' KV doors,
     // moved from the daemon's rails_client (whose shared client it used) —
     // its own client now, dialed only from its one dial thread. The work
-    // atlas's claim records ride it to the mesh's serving process.
+    // atlas's claim records ride it to the mesh's rails daemon.
     ("sovereign/crates/sovereign-turn-client/src/rails_kv.rs", Class::Mesh, 1),
     ("sovereign/crates/sovereign-mesh/src/gossip.rs", Class::Mesh, 1),
     ("sovereign/crates/sovereign-mesh/src/canonical_pull.rs", Class::Mesh, 1),

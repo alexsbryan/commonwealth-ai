@@ -276,7 +276,7 @@ pub struct ServingProfile {
 ///   the refusal instead of reporting a missing installation.
 /// - `mesh_store` — the ONE `RailsKv` (five-programs fp-88): the work atlas,
 ///   the notes sink and poller, and `AppState`'s KV port all dial cw-rails
-///   through it, so their writes cross the mesh from the serving process.
+///   through it, so their writes cross the mesh from the rails daemon.
 /// - `convergence_recorder` — the ONE convergence record the notes publish
 ///   sink, the ingest poller and `/status` all stamp and read. A second copy
 ///   would let the status section disagree with the sink.

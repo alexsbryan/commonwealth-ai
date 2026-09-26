@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! A dead serving process is a named `Backend` absence within the timeout,
+//! A dead rails daemon is a named `Backend` absence within the timeout,
 //! from a multi-thread worker and from a current-thread runtime alike.
 
 use std::time::{Duration, Instant};

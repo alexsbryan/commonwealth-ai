@@ -28,7 +28,7 @@ pub struct AliasedEndpointKey {
 }
 
 /// What retiring one member row reports. Lived in `sovereign-mesh::fabric`
-/// until the roster verbs moved to the mesh's serving process
+/// until the roster verbs moved to the mesh's rails daemon
 /// (FIVE_PROGRAMS fp-6 / §12 decision 2): the verb operates on the mesh, so
 /// its types live beside it, and both the daemon's fabric delegate and the
 /// `cw-rails` route serialize this same definition.

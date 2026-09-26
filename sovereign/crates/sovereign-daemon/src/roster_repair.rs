@@ -33,7 +33,7 @@ use crate::rails_client::{self, RailsDial};
 pub use sovereign_mesh::fabric::ForgottenMember;
 
 impl EmbeddedDaemon {
-    /// Retire one member row — by DIALING the mesh's serving process
+    /// Retire one member row — by DIALING the mesh's rails daemon
     /// (FIVE_PROGRAMS fp-6 / §12 decision 2: the mesh owns the roster, and a
     /// daemon mutating its own copy is a component holding another's
     /// lifecycle). The tombstone is written where the roster's readers
@@ -45,7 +45,7 @@ impl EmbeddedDaemon {
     /// delete) moved with the implementation to
     /// `commonwealth_core::mesh_identity::Mesh::forget_member`, which the
     /// serving route calls. What stays here is the boundary: absence is
-    /// REPORTED (`ServingUnreachable` — the serving process is a required
+    /// REPORTED (`ServingUnreachable` — the rails daemon is a required
     /// service per the TSV's behaviour delta), and the named refusal arms
     /// map back onto [`MeshError`] so the CLI's answers do not change.
     pub async fn forget_member(
@@ -79,7 +79,7 @@ impl EmbeddedDaemon {
             was_aliased = outcome.was_aliased,
             already_retired = outcome.already_retired,
             base = %base,
-            "forget-member: retired on the mesh's serving process; gossip carries the tombstone"
+            "forget-member: retired on the mesh's rails daemon; gossip carries the tombstone"
         );
         Ok(outcome)
     }
@@ -113,7 +113,7 @@ pub async fn mesh_forget_member(
             Json(serde_json::json!({ "error": e.to_string() })),
         )
             .into_response(),
-        // The mesh's serving process did not answer. 503, and the sentence
+        // The mesh's rails daemon did not answer. 503, and the sentence
         // names it: the roster is served by cw-rails, and this route holds no
         // answer of its own (principle 6 — absence reported, never defaulted).
         Err(e @ MeshError::ServingUnreachable(_)) => (

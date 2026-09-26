@@ -89,7 +89,7 @@ pub struct ChatActivityQuery {
 /// rolled up from the store THIS daemon serves turns against.
 ///
 /// Beside `context-window` for the same reason that route is here: both are
-/// a read of the serving process's own state that a Settings-style panel
+/// a read of this daemon's own state that a Settings-style panel
 /// renders, and both were computed inside the desktop from a handle on
 /// something that no longer answers a turn. The desktop called
 /// `SqliteStateStore::summarize_chat_activity` on the `sovereign.db` IT

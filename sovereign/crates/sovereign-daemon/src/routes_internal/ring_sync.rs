@@ -58,7 +58,7 @@
 //! hand-written `roster.json` is read from the rail (the rail's one reader),
 //! and a DERIVED roster — every app ring by default, and the seven
 //! `REGISTERED_NAMESPACES` — is the mesh's membership, asked of the mesh's
-//! serving process since fp-6 (§12 decision 2). Either way a ring with no
+//! rails daemon since fp-6 (§12 decision 2). Either way a ring with no
 //! file still admits every member, and the file-rostered work plane narrows.
 //! The sender applies the SAME test before it offers
 //! (`sovereign_mesh::ring_roster::roster_names`); this half is what makes the
@@ -130,14 +130,14 @@ fn err(status: StatusCode, msg: impl Into<String>) -> Response {
 ///   without a roster check, which is the half still open; see the module
 ///   header.
 ///
-/// An unreadable roster — or a serving process that does not answer the
+/// An unreadable roster — or a rails daemon that does not answer the
 /// derived-roster question — refuses. Under-share, never over-share: the
 /// same posture `ring_sync`'s prune takes when it cannot read one.
 ///
 /// WHERE the answer comes from, for a verified member: a hand-written
 /// `roster.json` is this daemon's ring storage and is read here; a DERIVED
 /// roster is the mesh's membership, and since fp-6 (§12 decision 2) that
-/// question dials the mesh's serving process (`cw-rails`) instead of being
+/// question dials the mesh's rails daemon (`cw-rails`) instead of being
 /// answered from this daemon's own converging copy. The rail's
 /// `roster_origin` is the one decider of which half a namespace is.
 async fn roster_refusal(
@@ -225,12 +225,12 @@ async fn roster_refusal(
         return Some(format!("{asker} is not on {namespace}'s roster"));
     };
     // WHERE the roster answer comes from, decided by the rail's ONE origin
-    // decider, asked through the port (the journals live at the serving
-    // process since fp-54). A hand-written `roster.json` is read from the
-    // serving process's ring storage — one data directory, one owner — and
+    // decider, asked through the port (the journals live at the rails
+    // daemon since fp-54). A hand-written `roster.json` is read from the
+    // rails daemon's ring storage — one data directory, one owner — and
     // its members are checked here. Every DERIVED roster is the mesh's
     // membership, and since fp-6 (§12 decision 2) that question is asked of
-    // the mesh's serving process's roster answer instead of being answered
+    // the mesh's rails daemon's roster answer instead of being answered
     // from this daemon's own converging copy: one decider for "who is in the
     // mesh", not a second derivation here.
     if matches!(
@@ -267,7 +267,7 @@ async fn roster_refusal(
             tracing::debug!(
                 namespace,
                 asker = %asker,
-                "ring sync: the mesh's serving process names the asker"
+                "ring sync: the mesh's rails daemon names the asker"
             );
             None
         }
@@ -280,7 +280,7 @@ async fn roster_refusal(
             Some(format!("{asker} is not on {namespace}'s roster"))
         }
         Err(e) => {
-            // The serving process did not answer. Refuse: under-share, never
+            // The rails daemon did not answer. Refuse: under-share, never
             // over-share — the same posture the unreadable-file arm above
             // takes, and the absence is named (principle 6) rather than
             // defaulted to a local answer.
@@ -288,7 +288,7 @@ async fn roster_refusal(
                 namespace,
                 asker = %asker,
                 error = %e,
-                "ring sync: refused — the mesh's serving process did not answer \
+                "ring sync: refused — the mesh's rails daemon did not answer \
                  the roster question"
             );
             Some(format!("{namespace}'s roster cannot be checked: {e}"))

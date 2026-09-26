@@ -245,12 +245,12 @@ fn refuse_read_only(
 /// Resolve the namespace AND the rail behind it, or the refusal to return.
 ///
 /// The three failures are different and are kept different. A namespace the
-/// caller may not touch is a 403 about them; a serving process that does not
+/// caller may not touch is a 403 about them; a rails daemon that does not
 /// answer is a 503 about the mesh; a namespace with no journal there is a 400
 /// about the name. Collapsing either into an empty success would hand the app
 /// a plausible `[]` and let it carry on (ARCH §18.3).
 ///
-/// Since fp-54 the rail is the serving process's — the door dials, the
+/// Since fp-54 the rail is the rails daemon's — the door dials, the
 /// journals moved (`crate::rails_client::RailsRingRail`). The guest-door
 /// decision above is unchanged and stays HERE: what a caller may touch is
 /// this daemon's grant answer, not the caller's.
@@ -268,7 +268,7 @@ pub(crate) async fn door_for(
         )
     })?;
     // The namespace-existence check the local journal open used to make now
-    // rides the first read: a namespace the serving process holds no journal
+    // rides the first read: a namespace the rails daemon holds no journal
     // for answers an empty roster/ops set, which is the same fact the local
     // rail answered with on first touch (nothing is created until the first
     // append).
@@ -413,7 +413,7 @@ pub async fn append(
     // this field and serde drops it on the way in.
     let on_behalf_of = stamp_from(guest, &body);
     // A guest's name crosses the dial only as this node's signed word
-    // (decision five-programs-34): the serving process holds no sessions,
+    // (decision five-programs-34): the rails daemon holds no sessions,
     // so it honours `on_behalf_of` under an attestation it verifies against
     // its roster — and refuses, by name, when this node's key is not in it.
     // The attestation lives as long as the guest's session does.
@@ -431,7 +431,7 @@ pub async fn append(
                         guest = name,
                         expires_at,
                         signer = %a.signer,
-                        "rail: attested a guest's append for the serving process"
+                        "rail: attested a guest's append for the rails daemon"
                     );
                     Some(a)
                 }
@@ -492,7 +492,7 @@ pub async fn append(
     };
     match appended {
         Ok((op, retired)) => {
-            // The write is on disk (at the serving process); ask the ring
+            // The write is on disk (at the rails daemon); ask the ring
             // round to run NOW rather than at its sixty-second tick. Same
             // door the KV pump and the work donor use — this route does not
             // talk to a peer, it asks `ring_sync` to.
@@ -526,14 +526,14 @@ pub async fn append(
         // the local journal open used to answer 400 with this same sentence.
         Err(e @ RailError::BadNamespace(_)) => err(StatusCode::BAD_REQUEST, e.to_string()),
         Err(RailError::Rejected(why)) => err(StatusCode::UNPROCESSABLE_ENTITY, why),
-        // The serving process's own verdict on the attestation, verbatim —
+        // The rails daemon's own verdict on the attestation, verbatim —
         // a daemon not in rails' roster reads as `signer_not_in_roster`,
         // never as success (principle 6).
         Err(RailError::AttestRefused(refusal)) => {
             tracing::warn!(
                 namespace,
                 refusal = refusal.name(),
-                "rail: the serving process refused a guest's attestation"
+                "rail: the rails daemon refused a guest's attestation"
             );
             (
                 StatusCode::FORBIDDEN,

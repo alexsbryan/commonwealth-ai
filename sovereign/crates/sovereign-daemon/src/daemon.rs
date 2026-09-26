@@ -752,7 +752,7 @@ impl EmbeddedDaemon {
     /// From the config the daemon was commissioned with (and that
     /// `reload_from_setup_config` updates), NOT from
     /// `SetupConfig::load()`. A route that re-loaded the file would be
-    /// reporting the config of whatever `~/.svrnmesh` the SERVING process
+    /// reporting the config of whatever `~/.svrnmesh` the SERVING daemon
     /// can see, which is the same wrong-source mistake as a client
     /// reading its own data dir for the daemon's.
     pub async fn configured_context_size(&self) -> u32 {
@@ -3143,14 +3143,14 @@ impl EmbeddedDaemon {
                 )
             },
         ));
-        // The ring rail's journals moved to the serving process's data root
+        // The ring rail's journals moved to the rails daemon's data root
         // (fp-54, §4 rule 1 — one data directory, one owner). The one-time
         // handover runs in `rails_client::ensure_rails`, before any bring-up
         // (phase-b-3), so it has already run by here; from here on this
         // daemon holds no journal and every rail read or write dials
         // `cw-rails` through the port (`rails_client::RailsRingRail`), which
-        // reports ABSENCE when the serving process is down — never an empty
-        // ledger (ARCH §18.3). The signer DOES change: the serving process
+        // reports ABSENCE when the rails daemon is down — never an empty
+        // ledger (ARCH §18.3). The signer DOES change: the rails daemon
         // signs with its own node key (its own data dir), and a line verifies
         // because rails joined the mesh as a member with that key — see
         // commonwealth-rails' `rails_and_the_daemon_sign_with_two_keys_under_one_person`.
@@ -3326,7 +3326,7 @@ impl EmbeddedDaemon {
         // total".)
 
         // The daemon's own rings' roster installation died with the local
-        // rail (fp-54): the journals live at the serving process now, and ITS
+        // rail (fp-54): the journals live at the rails daemon now, and ITS
         // `MembershipRosterSource` derives every ring nobody narrowed from
         // the membership it holds. The registered-namespace list
         // (`sovereign_mesh::ring_roster::REGISTERED_NAMESPACES`) guards the
@@ -3462,7 +3462,7 @@ impl EmbeddedDaemon {
         );
 
         // The holder's media-presence poll (`crate::media_presence`): the
-        // reading is the mesh's serving process's, the report is this
+        // reading is the mesh's rails daemon's, the report is this
         // process's own, so both halves stay loopback regardless of
         // internal_bind.
         tokio::spawn(crate::media_presence::run(
@@ -3551,7 +3551,7 @@ impl EmbeddedDaemon {
             // The daemon's weights: what this machine can run, what the
             // catalog offers, what is installed, and the one job that fetches
             // any of it. Beside `admin_http` because it is the same audience
-            // — a local Settings-style surface reading the serving process's
+            // — a local Settings-style surface reading this daemon's
             // own state — and loopback-guarded for the same reason.
             mounted.push(crate::assets_http::assets_router(Arc::clone(&self_arc)));
             mount_names.push("assets_http");
@@ -5249,18 +5249,18 @@ pub enum MeshError {
     #[error("Already active in '{0}'")]
     MeshAlreadyActive(String),
 
-    /// The mesh's serving process (cw-rails) did not answer a roster verb.
+    /// The mesh's rails daemon (cw-rails) did not answer a roster verb.
     /// Since fp-6 (§12 decision 2) the roster is the serving cluster's to
     /// hold and mutate; this daemon dials it and — principle 6 — reports the
     /// absence by name instead of answering from its own converging copy.
     #[error(
-        "the mesh's serving process is not reachable at {0} — the roster is \
+        "the mesh's rails daemon is not reachable at {0} — the roster is \
          served by cw-rails, and this daemon alone holds no answer; start it \
          and retry"
     )]
     ServingUnreachable(String),
 
-    /// The serving process refused a roster verb. The sentence is the mesh's
+    /// The rails daemon refused a roster verb. The sentence is the mesh's
     /// own (`Mesh::forget_member` owns the refusals — one implementation),
     /// forwarded verbatim.
     #[error("{0}")]

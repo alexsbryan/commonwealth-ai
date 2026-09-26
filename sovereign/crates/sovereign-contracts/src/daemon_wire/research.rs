@@ -26,7 +26,7 @@ use serde::{Deserialize, Serialize};
 /// DAEMON — no client re-decides a runtime default.
 ///
 /// No `runs_base`: the run dir is the daemon's to mint (a client-named
-/// directory on the serving process is a path the caller supplies, which
+/// directory on the daemon is a path the caller supplies, which
 /// is ARCH principle 5's smell). The CLI's `--run-dir` is the one flag
 /// this union does not carry, by that rule.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]

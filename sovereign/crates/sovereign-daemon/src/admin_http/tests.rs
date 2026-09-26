@@ -385,7 +385,7 @@ async fn context_window_reports_absence_rather_than_echoing_configured() {
         "absence must not be reported as agreement with the config"
     );
     // And `configured` is the DAEMON's own, from the config it was
-    // commissioned with — not a re-read of the serving process's
+    // commissioned with — not a re-read of the serving daemon's
     // `~/.svrnmesh/config.toml`.
     assert_eq!(body.configured, initial_ctx);
 }

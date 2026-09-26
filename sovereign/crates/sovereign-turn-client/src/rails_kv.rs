@@ -8,7 +8,7 @@
 //!
 //! Nothing here is wired into `AppState` yet — fp-88 flips the backing.
 //!
-//! Nothing is retained: every call reads through to the serving process. A
+//! Nothing is retained: every call reads through to the rails daemon. A
 //! cached row would turn a read-modify-write (the grants handoff) into a lost
 //! peer update (-56). Every failure is `ReplicatedKvError::Backend` naming the
 //! URL, never `Ok(None)` or an empty scan (principle 6).
@@ -30,7 +30,7 @@ use sovereign_contracts::peer::{
 };
 use sovereign_contracts::principal::NodeId;
 
-/// Where the mesh's serving process listens. Mirrors cw-rails'
+/// Where the mesh's rails daemon listens. Mirrors cw-rails'
 /// `commonwealth_rails::config::DEFAULT_LISTEN` — 9747, outside the
 /// 9741..9745 family this daemon binds (the two programs are built and
 /// versioned separately, so the convention is mirrored and documented on
@@ -117,7 +117,7 @@ fn on_dial_thread<T: Send + 'static>(
     if dial_thread().send(job).is_err() {
         tracing::warn!(url, "rails kv: the dial thread is gone");
         return Err(ReplicatedKvError::Backend(format!(
-            "cannot dial the mesh's serving process at {url}: the dial thread is gone"
+            "cannot dial the mesh's rails daemon at {url}: the dial thread is gone"
         )));
     }
     let on_worker = tokio::runtime::Handle::try_current()
@@ -131,7 +131,7 @@ fn on_dial_thread<T: Send + 'static>(
     received.unwrap_or_else(|_| {
         tracing::warn!(url, "rails kv: the dial thread dropped the call");
         Err(ReplicatedKvError::Backend(format!(
-            "cannot dial the mesh's serving process at {url}: the dial thread dropped the call"
+            "cannot dial the mesh's rails daemon at {url}: the dial thread dropped the call"
         )))
     })
 }
@@ -148,23 +148,23 @@ async fn answer<T: serde::de::DeserializeOwned>(
     };
     let resp = req.timeout(KV_TIMEOUT).send().await.map_err(|e| {
         fail(format!(
-            "cannot reach the mesh's serving process at {url}: {e}"
+            "cannot reach the mesh's rails daemon at {url}: {e}"
         ))
     })?;
     let status = resp.status();
     let body = resp.text().await.map_err(|e| {
         fail(format!(
-            "the mesh's serving process's answer at {url} is unreadable: {e}"
+            "the mesh's rails daemon's answer at {url} is unreadable: {e}"
         ))
     })?;
     if !status.is_success() {
         return Err(fail(format!(
-            "the mesh's serving process refused {url}: {status}: {body}"
+            "the mesh's rails daemon refused {url}: {status}: {body}"
         )));
     }
     let read = serde_json::from_str(&body).map_err(|e| {
         fail(format!(
-            "the mesh's serving process's answer at {url} is a shape this build cannot read: {e}"
+            "the mesh's rails daemon's answer at {url} is a shape this build cannot read: {e}"
         ))
     })?;
     tracing::debug!(url = %url, "rails kv: answered");
@@ -172,7 +172,7 @@ async fn answer<T: serde::de::DeserializeOwned>(
 }
 
 /// [`ReplicatedKv`] dialed to `cw-rails`. Construction checks no presence: a
-/// serving process that is down surfaces on the first call, by URL.
+/// rails daemon that is down surfaces on the first call, by URL.
 #[derive(Clone)]
 pub struct RailsKv {
     base: String,

@@ -38,7 +38,7 @@
 //! **Roster installation stays LOCAL-ONLY and off the trait.**
 //! [`crate::ring_roster::MeshRosterSource::install`] works on the concrete
 //! journal rail (who derives which roster is the OWNER's setup, not a
-//! per-call fact); post-flip the serving process derives rosters itself and
+//! per-call fact); post-flip the rails daemon derives rosters itself and
 //! the daemon's bootstrap install dies with its local rail. Tests reach the
 //! local impl through this module's re-export.
 

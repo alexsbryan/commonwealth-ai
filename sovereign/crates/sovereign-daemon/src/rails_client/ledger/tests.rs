@@ -51,7 +51,7 @@ fn assert_absent<T: std::fmt::Debug>(r: Result<T, sovereign_mesh::ledger_port::L
     let e = r.expect_err("a dead dial has no answer");
     assert!(
         e.0.contains("not reachable at http://127.0.0.1:1"),
-        "the absence names the serving process: {e}"
+        "the absence names the rails daemon: {e}"
     );
 }
 

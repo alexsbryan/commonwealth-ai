@@ -589,7 +589,7 @@ async fn take_round(
 /// behind the port since fp-45 — so this reads the folded queue and never
 /// admits the journal itself.
 ///
-/// `None` when this node has no rail, or the serving process could not fold
+/// `None` when this node has no rail, or the rails daemon could not fold
 /// (unreadable roster, a journal that will not admit, the process absent) —
 /// each traced, and each a condition that heals, so the round is skipped
 /// rather than the loop exiting.
@@ -612,7 +612,7 @@ pub(crate) async fn fold_now(
     let self_actor = match rail.actor().await {
         Ok(a) => a,
         Err(e) => {
-            warn!(target: TRACE_TARGET, error = %e, "work donor: the serving process did not name this node's signing identity");
+            warn!(target: TRACE_TARGET, error = %e, "work donor: the rails daemon did not name this node's signing identity");
             return None;
         }
     };

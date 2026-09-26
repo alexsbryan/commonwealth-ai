@@ -173,7 +173,7 @@ impl DialInfoReader {
 /// `commonwealth_core::mesh_identity` with the tombstone core at domains
 /// `REVIEW-build-daemon-membership-lifecycle`, and again to serve the
 /// `cw-rails` route (FIVE_PROGRAMS fp-6 / §12 decision 2: the roster verbs
-/// are the mesh serving process's). Re-exported here so every historical
+/// are the mesh rails daemon's). Re-exported here so every historical
 /// path keeps resolving.
 pub use commonwealth_core::mesh_identity::{ForgetMemberError, ForgottenMember};
 

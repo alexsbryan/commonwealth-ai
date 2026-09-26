@@ -686,7 +686,7 @@ async fn publish_measurement(
     // right instruction for a ring whose roster is written by hand, and one
     // that does not apply to a namespace whose roster IS the membership.
     let Ok(self_actor) = rail.actor().await else {
-        return refuse("the serving process did not name this node's signing identity".into());
+        return refuse("the rails daemon did not name this node's signing identity".into());
     };
     if !roster.claims(&self_actor) {
         return refuse(
@@ -785,13 +785,13 @@ async fn peer_measurements(
     };
 
     // `None` drops the own-author filter entirely; see `include_self`. A
-    // serving process that will not even name this node's identity cannot be
+    // rails daemon that will not even name this node's identity cannot be
     // asked for its journal either, so the failure is loud and rare.
     let own_actor = rail.actor().await;
     let exclude = match &own_actor {
         Ok(mine) => (!q.include_self).then_some(mine.as_str()),
         Err(e) => {
-            tracing::warn!(error = %e, "mesh-measurements: the serving process did not name this node's signing identity; the own-author filter is OFF");
+            tracing::warn!(error = %e, "mesh-measurements: the rails daemon did not name this node's signing identity; the own-author filter is OFF");
             None
         }
     };

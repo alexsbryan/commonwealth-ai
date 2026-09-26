@@ -83,7 +83,7 @@ pub trait RosterSource: Send + Sync {
     fn roster(&self) -> Pin<Box<dyn Future<Output = Result<Roster, RailError>> + Send + '_>>;
 }
 
-// `RosterOrigin` moved to the fold (fp-54: the serving process reports the
+// `RosterOrigin` moved to the fold (fp-54: the rails daemon reports the
 // origin beside the roster, and a fold-only consumer still reads it); the
 // glob re-export below keeps every historical path spelling it through this
 // crate.

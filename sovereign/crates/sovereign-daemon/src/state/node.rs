@@ -55,7 +55,7 @@ pub struct NodeSeed {
     /// read off disk once here so no request path touches the filesystem.
     /// Empty on a daemon with no data directory.
     pub named_client_tokens: Arc<ClientTokenStore>,
-    /// Where the mesh's serving process (`cw-rails`) listens. The roster
+    /// Where the mesh's rails daemon (`cw-rails`) listens. The roster
     /// verbs dial it (FIVE_PROGRAMS fp-6 / §12 decision 2) instead of
     /// answering from this daemon's own mesh copy. Resolved from
     /// `[daemon] rails_base` by [`crate::rails_client::resolve_rails_base`]; the ring-sync tests point
@@ -191,7 +191,7 @@ pub struct NodePart {
     /// at exactly one point, `client_auth_layer`, beside the shared compare.
     /// See [`crate::client_tokens`].
     pub named_client_tokens: Arc<ClientTokenStore>,
-    /// Where the mesh's serving process (`cw-rails`) listens — the roster
+    /// Where the mesh's rails daemon (`cw-rails`) listens — the roster
     /// verbs dial it ([`crate::rails_client`]). A construction argument
     /// ([`NodeSeed::rails_base`]), like the port postures: decided before
     /// the state exists, never read from config mid-request.

@@ -9,7 +9,7 @@ use sovereign_grants::Scope;
 use super::*;
 
 /// The refusal `append` would render for `ns` at `origin`. Post-flip the
-/// origin is read over the port from the serving process's rail, so the
+/// origin is read over the port from the rails daemon's rail, so the
 /// sentence's two arms are pinned against the ENUM directly — the origin's
 /// own derivation is the serving side's, and its tests live there
 /// (commonwealth-rails).

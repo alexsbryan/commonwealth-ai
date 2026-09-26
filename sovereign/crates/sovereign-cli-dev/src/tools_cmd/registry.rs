@@ -219,7 +219,7 @@ pub(super) async fn open_tools_registry() -> Result<ToolsEnv, String> {
     ));
     // Work atlas — coordination layer for agents sharing the repo.
     // The store is cw-rails', dialed (pb-atlas-kv): claims declared
-    // through these tools land in the store the mesh's serving process
+    // through these tools land in the store the mesh's rails daemon
     // holds, not in a repo-local mesh.db nobody else read. With
     // cw-rails down, every claim operation reports the absence by
     // name — the tools stay registered so `svrn tools list` still

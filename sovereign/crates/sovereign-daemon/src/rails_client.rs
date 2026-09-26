@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! The client half of the serving-cluster dials: the daemon DIALS the mesh's
-//! serving process (`cw-rails`) instead of mutating or reading its own copy
+//! rails daemon (`cw-rails`) instead of mutating or reading its own copy
 //! (FIVE_PROGRAMS fp-6 / §12 decision 2 — the mesh owns the roster; a daemon
 //! holding another's lifecycle is the line drawn wrong).
 //!
@@ -11,8 +11,8 @@
 //! defaulted to a local read.
 //!
 //! Since fp-54's flip this file also carries the ring rail's dialing
-//! implementation ([`RailsRingRail`]): the journals moved to the serving
-//! process, so every rail read and write the round, the pump, the donor and
+//! implementation ([`RailsRingRail`]): the journals moved to the rails
+//! daemon, so every rail read and write the round, the pump, the donor and
 //! the rail routes make goes over `cw-rails`' `/v1/rail/*` doors through
 //! [`sovereign_mesh::rail_port::RingRailPort`]. A rail that is not reachable
 //! is an ABSENCE every caller already handles (the port returns `RailError`),
@@ -36,7 +36,7 @@ mod bring_up;
 pub use bring_up::ensure_rails;
 
 /// How long a dial may take before it is reported absent. Loopback answers
-/// or refuses in milliseconds; the bound exists so a HUNG serving process
+/// or refuses in milliseconds; the bound exists so a HUNG rails daemon
 /// turns into a named refusal rather than a wedged route.
 const DIAL_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
 
@@ -51,15 +51,15 @@ fn client() -> &'static reqwest::Client {
 }
 
 /// Why a dial did not produce the verb's answer. Every variant names the
-/// serving process; none of them is a fall-back.
+/// rails daemon; none of them is a fall-back.
 #[derive(Debug, thiserror::Error)]
 pub enum RailsDial {
-    /// The serving process is not reachable. This is the ABSENCE the route
+    /// The rails daemon is not reachable. This is the ABSENCE the route
     /// reports — the mesh's roster is its to serve, and this daemon holds no
     /// answer of its own.
-    #[error("the mesh's serving process is not reachable at {base}: {detail}")]
+    #[error("the mesh's rails daemon is not reachable at {base}: {detail}")]
     Absent { base: String, detail: String },
-    /// The serving process answered with a refusal. `kind` names the arm
+    /// The rails daemon answered with a refusal. `kind` names the arm
     /// when the body carried one, so the caller maps refusals without
     /// parsing prose.
     #[error("{message}")]
@@ -68,9 +68,9 @@ pub enum RailsDial {
         kind: Option<String>,
         message: String,
     },
-    /// The serving process answered with a body this client could not read.
+    /// The rails daemon answered with a body this client could not read.
     /// A wire both ends own breaking shape is not silently survivable.
-    #[error("the mesh's serving process at {base} answered with an unreadable body: {detail}")]
+    #[error("the mesh's rails daemon at {base} answered with an unreadable body: {detail}")]
     Unreadable { base: String, detail: String },
 }
 
@@ -135,7 +135,7 @@ async fn read_answer<T: serde::de::DeserializeOwned>(
     })
 }
 
-/// Does the mesh's membership name this key? The serving process answers
+/// Does the mesh's membership name this key? The rails daemon answers
 /// from every member row, tombstones included — the ring-roster rule — so
 /// this is the exact question the derived rosters used to answer locally.
 pub async fn roster_names(base: &str, key: NodePubkey) -> Result<bool, RailsDial> {
@@ -152,7 +152,7 @@ pub async fn roster_names(base: &str, key: NodePubkey) -> Result<bool, RailsDial
     Ok(answer.named)
 }
 
-/// The media-presence poll's last reading, as the serving process holds it.
+/// The media-presence poll's last reading, as the rails daemon holds it.
 ///
 /// `Ok(None)` is the route's served VALUE `{"media_available": null}` — the
 /// poll over there could not ask, and "nobody answered" is the reading — not
@@ -220,17 +220,17 @@ pub async fn forget_member(
 // ── The ring rail's dialing implementation ───────────────────
 
 /// Map a dial outcome onto the port's error type. Every variant keeps the
-/// sentence the serving process (or the failed dial) produced: the absence is
+/// sentence the rails daemon (or the failed dial) produced: the absence is
 /// named, never defaulted (principle 6).
 fn rail_error(base: &str, e: RailsDial) -> commonwealth_rail_core::RailError {
     use commonwealth_rail_core::RailError;
     match e {
         RailsDial::Absent { base, detail } => RailError::Io(format!(
-            "the mesh's serving process is not reachable at {base}: {detail}"
+            "the mesh's rails daemon is not reachable at {base}: {detail}"
         )),
         RailsDial::Refused { message, .. } => RailError::Rejected(message),
         RailsDial::Unreadable { base, detail } => RailError::Io(format!(
-            "the mesh's serving process at {base} answered with an unreadable body: {detail}"
+            "the mesh's rails daemon at {base} answered with an unreadable body: {detail}"
         )),
     }
 }
@@ -260,7 +260,7 @@ fn refused_error(
         };
     }
     // A refused guest attestation keeps its name across the dial, so the
-    // door hands the caller the serving process's own verdict (principle 6).
+    // door hands the caller the rails daemon's own verdict (principle 6).
     if let Some(refusal) = body
         .get("kind")
         .and_then(|k| k.as_str())
@@ -270,7 +270,7 @@ fn refused_error(
     }
     RailError::Rejected(match body.get("error").and_then(|e| e.as_str()) {
         Some(msg) => msg.to_string(),
-        None => format!("the mesh's serving process at {base} refused: {status}"),
+        None => format!("the mesh's rails daemon at {base} refused: {status}"),
     })
 }
 
@@ -370,7 +370,7 @@ async fn post_append(
     Ok(a.op)
 }
 
-/// The ring rail, as the serving process holds it. Every method is one dial
+/// The ring rail, as the rails daemon holds it. Every method is one dial
 /// to the door that serves that verb; the answers are rail-core types, so
 /// the round and the pump run unchanged over either implementation.
 pub struct RailsRingRail {
@@ -424,7 +424,7 @@ impl RingRailPort for RailsRingRail {
                 "file" => Ok(commonwealth_rail_core::RosterOrigin::File),
                 "derived" => Ok(commonwealth_rail_core::RosterOrigin::Derived),
                 other => Err(commonwealth_rail_core::RailError::Io(format!(
-                    "the mesh's serving process at {base} named an unknown roster origin: {other}"
+                    "the mesh's rails daemon at {base} named an unknown roster origin: {other}"
                 ))),
             }
         })
@@ -551,12 +551,12 @@ impl RingRailPort for RailsRingRail {
                     Some(why) => Err(commonwealth_rail_core::RailError::Rejected(why.to_string())),
                     None => serde_json::from_value(v).map_err(|e| {
                         commonwealth_rail_core::RailError::Io(format!(
-                            "the mesh's serving process at {base} answered with an unreadable prune report: {e}"
+                            "the mesh's rails daemon at {base} answered with an unreadable prune report: {e}"
                         ))
                     }),
                 },
                 None => Err(commonwealth_rail_core::RailError::Io(format!(
-                    "the mesh's serving process at {base} answered a seal with no prune report"
+                    "the mesh's rails daemon at {base} answered a seal with no prune report"
                 ))),
             };
             Ok((a.op, retired))

@@ -6,7 +6,7 @@
 //!
 //! Nothing here is wired into `AppState` yet — the daemon's callers flip in
 //! fp-80..fp-82. Every failed dial is a [`LedgerAbsent`] carrying the dial's
-//! own sentence (it names the serving process's URL), never an empty answer.
+//! own sentence (it names the rails daemon's URL), never an empty answer.
 
 use std::collections::{BTreeSet, HashMap};
 use std::sync::{Arc, RwLock};
@@ -215,7 +215,7 @@ impl InferenceStatePort for RailsLedger {
 /// in place of an empty model map, which would claim "this mesh has no
 /// models" (principle 6).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
-#[error("the inference state has never been read from the mesh's serving process")]
+#[error("the inference state has never been read from the mesh's rails daemon")]
 pub struct NeverFilled;
 
 #[derive(Clone)]

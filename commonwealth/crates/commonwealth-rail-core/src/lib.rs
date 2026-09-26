@@ -266,7 +266,7 @@ impl Roster {
 /// `tracing=debug` and a caller that needs to know (the CLI refusing to write
 /// a file nothing reads) can ask without re-deriving it.
 ///
-/// Lived in the journal crate until fp-54: the serving process reports the
+/// Lived in the journal crate until fp-54: the rails daemon reports the
 /// origin beside the roster it answers with, and a consumer that names only
 /// the fold (the daemon after its Cargo swap) still has to say `File` from
 /// `Derived` without naming the journal half. `RosterSource` — the thing a

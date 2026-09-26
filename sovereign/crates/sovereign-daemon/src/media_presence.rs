@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! The holder's media-presence poll — "is somebody in this house watching the
-//! library right now?", read from the mesh's serving process and reported to
+//! library right now?", read from the mesh's rails daemon and reported to
 //! this node's own capabilities.
 //!
 //! The decision lives in cw-rails (fp-46): it holds the origin and the house
@@ -9,7 +9,7 @@
 //! report — a second CALLER, never a second decider (ARCH 8): the house
 //! credential does not live here, and no origin is asked from this process.
 //!
-//! The served `null` and a serving process that does not answer both publish
+//! The served `null` and a rails daemon that does not answer both publish
 //! "no presence" — a viewer must not start a stream on a missing answer —
 //! but they are not the same event: a failed dial is a named absence in the
 //! log (principle 6), while the served `null` is the poll's own honest
@@ -17,7 +17,7 @@
 
 use std::time::Duration;
 
-/// How often the serving process is asked. Matched to the gossip round (10 s):
+/// How often the rails daemon is asked. Matched to the gossip round (10 s):
 /// a faster poll cannot reach a peer sooner, and a slower one would let the
 /// wall show "free" after the holder pressed play.
 pub const POLL_INTERVAL: Duration = Duration::from_secs(10);
@@ -26,7 +26,7 @@ pub const POLL_INTERVAL: Duration = Duration::from_secs(10);
 /// the report is loopback, and a hung receiver must not stall the poll.
 const REPORT_TIMEOUT: Duration = Duration::from_secs(3);
 
-/// Read the serving process's last presence reading.
+/// Read the rails daemon's last presence reading.
 ///
 /// `Some(v)` is a real reading; `None` is "no presence to publish" — either
 /// the served `null` (the poll over there could not ask) or a dial that did
@@ -41,7 +41,7 @@ async fn read_presence(base: &str) -> Option<f32> {
             tracing::warn!(
                 %base,
                 error = %e,
-                "media presence: the mesh's serving process did not answer — publishing no presence"
+                "media presence: the mesh's rails daemon did not answer — publishing no presence"
             );
             None
         }
@@ -81,8 +81,8 @@ async fn report(client: &reqwest::Client, internal_url: &str, media_available: O
 ///
 /// Reports only on a CHANGE, so the transition is one line in the log rather
 /// than one every ten seconds — the same discipline
-/// `recompute_local_availability` keeps for the inference half. A serving
-/// process with no reading publishes `None` on the first tick, reports it
+/// `recompute_local_availability` keeps for the inference half. A rails
+/// daemon with no reading publishes `None` on the first tick, reports it
 /// once, and then costs one dial per interval.
 pub async fn run(rails_base: String, internal_url: String) {
     let client = match reqwest::Client::builder().build() {
@@ -99,7 +99,7 @@ pub async fn run(rails_base: String, internal_url: String) {
         "media presence: poll started"
     );
     // `None` is the published default, so the first tick reports only when it
-    // finds a real reading — a node whose serving process has no reading yet
+    // finds a real reading — a node whose rails daemon has no reading yet
     // stays silent.
     let mut last: Option<Option<f32>> = Some(None);
     loop {
@@ -116,7 +116,7 @@ pub async fn run(rails_base: String, internal_url: String) {
 mod tests {
     use super::*;
 
-    /// A stand-in for the mesh's serving process: the presence route serving
+    /// A stand-in for the mesh's rails daemon: the presence route serving
     /// a reading this daemon had no part in deciding.
     async fn rails_serving(media_available: Option<f32>) -> std::net::SocketAddr {
         let app = axum::Router::new().route(
@@ -138,7 +138,7 @@ mod tests {
     }
 
     /// Positive: the served reading is what this poll reads — the decision
-    /// is the serving process's; this loop only mirrors it.
+    /// is the rails daemon's; this loop only mirrors it.
     #[tokio::test]
     async fn the_served_reading_is_what_the_poll_reads() {
         let addr = rails_serving(Some(0.0)).await;
@@ -161,7 +161,7 @@ mod tests {
         );
     }
 
-    /// Negative: no serving process is a named absence (principle 6) that
+    /// Negative: no rails daemon is a named absence (principle 6) that
     /// publishes no presence — a viewer must not start a stream on a missing
     /// answer.
     #[tokio::test]

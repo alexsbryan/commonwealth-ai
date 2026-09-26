@@ -1465,7 +1465,7 @@ pub struct DaemonSection {
     #[serde(default)]
     pub client_tokens: Option<String>,
 
-    /// Where the mesh's serving process (`cw-rails`) listens, as a base URL
+    /// Where the mesh's rails daemon (`cw-rails`) listens, as a base URL
     /// (`"http://127.0.0.1:9747"`). `None` (default) is
     /// `sovereign_daemon::rails_client::DEFAULT_RAILS_BASE`;
     /// `sovereign_daemon::rails_client::resolve_rails_base` is its one reader.

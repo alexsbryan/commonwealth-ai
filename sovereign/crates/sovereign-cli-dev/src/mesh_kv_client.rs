@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! The work atlas's store — dialed at the mesh's serving process (`cw-rails`)
+//! The work atlas's store — dialed at the mesh's rails daemon (`cw-rails`)
 //! through the ONE sync `ReplicatedKv` client the daemon dials with,
 //! [`sovereign_turn_client::rails_kv::RailsKv`] (pb-atlas-kv, phase-b-7).
 //!
