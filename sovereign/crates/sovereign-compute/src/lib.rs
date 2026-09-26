@@ -23,6 +23,7 @@
 //!   InferenceProvider>`.
 //! - [`client`] — [`client::ComputeChildClient`], the daemon-side typed
 //!   HTTP client for a child.
+//! - [`mock`] — the model-free provider (`--role mock`, `serve`'s `mock` engine).
 //! - [`child_main`] — the child process entrypoint (`--compute-child`),
 //!   reached by re-executing the daemon binary.
 //! - [`assembly`] — the one serving assembly: config in, the provider a
@@ -35,6 +36,7 @@ pub mod client;
 pub mod containment;
 pub mod distribution;
 pub mod manager;
+pub mod mock;
 pub mod ner;
 pub mod server;
 pub mod supervisor;
