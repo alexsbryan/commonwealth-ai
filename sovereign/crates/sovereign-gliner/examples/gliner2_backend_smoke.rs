@@ -101,8 +101,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         eprintln!("{s}");
     }
 
-    // The trait surface the retrieval call sites actually use.
-    let entities = extractor.extract_entities(&chunks[2]);
+    // The trait surface the retrieval call sites actually use: the one
+    // narrow adapter over the labeled port.
+    let view = sovereign_contracts::ner::NerEntities(std::sync::Arc::new(extractor));
+    let entities = view.extract_entities(&chunks[2]);
     println!("trait_entities_chunk2  {}", entities.len());
     eprintln!("  [trait] chunk 2: {:?}", &entities);
 

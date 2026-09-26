@@ -428,131 +428,14 @@ impl crate::labeled::LabeledEntityExtractor for GlinerExtractor {
         self.extract_batch(texts)
     }
 
+    /// The dedicated `Concept` pass ([`CONCEPT_LABELS`] at
+    /// [`CONCEPT_THRESHOLD`]), kept out of the 5-label pass on purpose.
+    fn extract_concept_mentions(&self, text: &str) -> Result<Vec<EntityMention>> {
+        self.extract_labeled(text, CONCEPT_LABELS, CONCEPT_THRESHOLD)
+    }
+
     fn generation(&self) -> GlinerGeneration {
         model_spec(&self.model_id).generation
-    }
-}
-
-/// Implementation of the `sovereign-contracts::traits::EntityExtractor`
-/// trait. Wraps `GlinerExtractor::extract` and dedupes by entity
-/// text (lower-cased). The trait elides the label because
-/// retrieval-side scoring only needs the entity STRING for
-/// jaccard overlap, not its NER type.
-///
-/// Errors from `extract` (rare, typically ORT runtime issues) are
-/// downgraded to an empty Vec — entity-aware retrieval falls back
-/// to pure cosine on that turn instead of crashing the synthesis
-/// path. The retrieval call sites already log soft-failures via
-/// `tracing::debug!`.
-impl sovereign_contracts::traits::EntityExtractor for GlinerExtractor {
-    fn extract_entities(&self, text: &str) -> Vec<String> {
-        dedup_mention_texts(self.extract(text).ok())
-    }
-
-    /// Run the dedicated `Concept` pass (see [`CONCEPT_LABELS`]). Errors
-    /// (rare ORT runtime issues) degrade to no concepts — retrieval's
-    /// obligation lane just doesn't gain the concept articles this turn,
-    /// exactly as when the model isn't installed.
-    fn extract_concepts(&self, text: &str) -> Vec<String> {
-        dedup_mention_texts(
-            self.extract_labeled(text, CONCEPT_LABELS, CONCEPT_THRESHOLD)
-                .ok(),
-        )
-    }
-}
-
-/// Lower-case, dedupe (preserving first-seen order) the text of a set of
-/// mentions. Shared by `extract_entities` and `extract_concepts` so the
-/// two produce identically-shaped output. `None` (an extraction error)
-/// yields an empty Vec.
-fn dedup_mention_texts(mentions: Option<Vec<EntityMention>>) -> Vec<String> {
-    let Some(mentions) = mentions else {
-        return Vec::new();
-    };
-    let mut seen = std::collections::HashSet::new();
-    let mut out = Vec::with_capacity(mentions.len());
-    for m in mentions {
-        let key = m.text.to_lowercase();
-        if seen.insert(key.clone()) {
-            out.push(key);
-        }
-    }
-    out
-}
-
-/// Boot-critical-path-free wrapper around [`GlinerExtractor`].
-///
-/// Loading the GLiNER model (`GlinerExtractor::new_default`) costs ~950ms —
-/// on the desktop that was roughly half of the whole warm boot, all spent
-/// synchronously before `backend-ready` fires. This decorator moves that
-/// load onto a background thread at construction and installs immediately,
-/// so bootstrap pays only the (cheap) `probe_model_available` check.
-///
-/// Until the background load completes, `extract_entities` returns an empty
-/// `Vec` — the exact same soft-fallback the retrieval path already takes
-/// when GLiNER isn't installed at all (it degrades to cosine + MMR history
-/// retrieval, see `Runtime::maybe_retrieve_relevant_history`). In practice
-/// the model is warm within ~1s of boot — long before a user reads the
-/// freshly-loaded UI and types a first query — so entity-aware retrieval is
-/// effectively always available by the time it's exercised. A load failure
-/// is logged once and leaves the extractor permanently in fallback mode,
-/// identical to today's `new_default` error branch.
-pub struct LazyGlinerExtractor {
-    inner: std::sync::Arc<std::sync::OnceLock<GlinerExtractor>>,
-}
-
-impl LazyGlinerExtractor {
-    /// Install immediately and warm the default model on a background
-    /// thread. Callers should still gate construction on
-    /// [`probe_model_available`] so a machine without the model doesn't
-    /// spawn a thread only to fail.
-    pub fn new_default_deferred() -> Self {
-        let inner = std::sync::Arc::new(std::sync::OnceLock::new());
-        let slot = std::sync::Arc::clone(&inner);
-        let spawned = std::thread::Builder::new()
-            .name("gliner-warm".into())
-            .spawn(move || {
-                let t = std::time::Instant::now();
-                match GlinerExtractor::new_default() {
-                    Ok(g) => {
-                        let _ = slot.set(g);
-                        tracing::info!(
-                            elapsed_ms = t.elapsed().as_millis() as u64,
-                            "GLiNER entity extractor warmed (background)"
-                        );
-                    }
-                    Err(e) => {
-                        tracing::warn!(
-                            error = %e,
-                            "GLiNER background load failed; entity-aware retrieval disabled (cosine+MMR fallback)"
-                        );
-                    }
-                }
-            });
-        if let Err(e) = spawned {
-            tracing::warn!(error = %e, "GLiNER background warm thread failed to spawn; entity-aware retrieval disabled");
-        }
-        Self { inner }
-    }
-}
-
-impl sovereign_contracts::traits::EntityExtractor for LazyGlinerExtractor {
-    fn extract_entities(&self, text: &str) -> Vec<String> {
-        match self.inner.get() {
-            Some(g) => g.extract_entities(text),
-            // Not warm yet (or load failed): same soft-fallback as an
-            // uninstalled model — the retrieval path degrades to cosine+MMR.
-            None => Vec::new(),
-        }
-    }
-
-    fn extract_concepts(&self, text: &str) -> Vec<String> {
-        match self.inner.get() {
-            Some(g) => g.extract_concepts(text),
-            // Not warm yet (or load failed): no concept obligations this
-            // turn, same soft-fallback as an uninstalled model.
-            None => Vec::new(),
-        }
     }
 }
 

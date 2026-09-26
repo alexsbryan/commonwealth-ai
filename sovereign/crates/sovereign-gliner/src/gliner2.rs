@@ -449,34 +449,6 @@ impl crate::labeled::LabeledEntityExtractor for Gliner2Extractor {
     }
 }
 
-impl sovereign_contracts::traits::EntityExtractor for Gliner2Extractor {
-    fn extract_entities(&self, text: &str) -> Vec<String> {
-        match self.extract(text) {
-            Ok(hits) => {
-                let mut out: Vec<String> = hits
-                    .into_iter()
-                    .map(|h| h.text.to_lowercase())
-                    .collect::<std::collections::BTreeSet<_>>()
-                    .into_iter()
-                    .collect();
-                out.retain(|s| !s.trim().is_empty());
-                out
-            }
-            Err(e) => {
-                // Same degradation contract as the v1 extractor: entity-aware
-                // retrieval falls back to cosine+MMR rather than failing the
-                // query. Logged, never silent.
-                tracing::warn!(
-                    error = %e,
-                    model_id = %self.model_id,
-                    "GLiNER2 extract_entities failed; returning no entities"
-                );
-                Vec::new()
-            }
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -6,7 +6,8 @@
 //!
 //! - `sovereign_contracts::traits::EntityExtractor` — the RETRIEVAL side.
 //!   Label-less, lower-cased, deduped strings; enough for jaccard
-//!   overlap on a query turn. Both backends already implement it.
+//!   overlap on a query turn. Served over this port by the one adapter,
+//!   `sovereign_contracts::ner::NerEntities`.
 //! - [`LabeledEntityExtractor`] (this module) — the INGEST side. Needs
 //!   the label and the character span, because every mention becomes a
 //!   `chunk_entities` row (`EntityMention::into_row`) that retrieval,

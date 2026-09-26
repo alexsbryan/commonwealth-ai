@@ -7,8 +7,11 @@
 //! pb-serving-ner) so a host holds the port without linking the ONNX stack
 //! that serves it; the historical `sovereign_gliner` paths re-export these.
 
+use std::sync::Arc;
+
 use crate::daemon_wire::conv_tiered::ChunkEntityRow;
 use crate::error::Result;
+use crate::traits::EntityExtractor;
 
 /// One extracted entity mention with character offsets into the
 /// preprocessed (role-marker-stripped) chunk text. Use the
@@ -105,9 +108,65 @@ pub trait LabeledEntityExtractor: Send + Sync {
         texts.iter().map(|t| self.extract_mentions(t)).collect()
     }
 
+    /// Mentions from the dedicated `Concept` pass (abstract nouns, -isms),
+    /// which retrieval's entity-obligation lane reads through
+    /// [`EntityExtractor::extract_concepts`]. Default: no concepts, the same
+    /// answer as a backend with no such pass (GLiNER2 today).
+    fn extract_concept_mentions(&self, _text: &str) -> Result<Vec<EntityMention>> {
+        Ok(Vec::new())
+    }
+
     /// Which generation this is. A backend derives it from the model id
     /// through the one registry that owns that mapping (sovereign-gliner's
     /// `model_spec`), so no impl can disagree about what it loaded. Required
     /// because that registry is the backend's, not this crate's.
     fn generation(&self) -> GlinerGeneration;
+}
+
+/// The narrow view: [`EntityExtractor`] served over the labeled port. The ONE
+/// adapter — no backend implements the narrow port itself, so the retrieval
+/// side and the ingest side read the same extractor the same way (ARCH §8).
+pub struct NerEntities(pub Arc<dyn LabeledEntityExtractor>);
+
+impl NerEntities {
+    /// The labeled handle this view reads.
+    pub fn labeled(&self) -> &Arc<dyn LabeledEntityExtractor> {
+        &self.0
+    }
+}
+
+impl EntityExtractor for NerEntities {
+    fn extract_entities(&self, text: &str) -> Vec<String> {
+        lowered_unique(self.0.extract_mentions(text), self.0.model_id(), "entities")
+    }
+
+    fn extract_concepts(&self, text: &str) -> Vec<String> {
+        lowered_unique(
+            self.0.extract_concept_mentions(text),
+            self.0.model_id(),
+            "concepts",
+        )
+    }
+}
+
+/// Lower-case and dedupe mention texts, first seen first. An extraction error
+/// yields no entities — retrieval falls back to cosine + MMR for the turn —
+/// and says so at `warn`.
+fn lowered_unique(mentions: Result<Vec<EntityMention>>, model_id: &str, pass: &str) -> Vec<String> {
+    let mentions = match mentions {
+        Ok(m) => m,
+        Err(e) => {
+            tracing::warn!(model_id, pass, error = %e, "NER extraction failed; returning no entities");
+            return Vec::new();
+        }
+    };
+    let mut seen = std::collections::HashSet::new();
+    let mut out = Vec::with_capacity(mentions.len());
+    for m in mentions {
+        let key = m.text.to_lowercase();
+        if seen.insert(key.clone()) {
+            out.push(key);
+        }
+    }
+    out
 }

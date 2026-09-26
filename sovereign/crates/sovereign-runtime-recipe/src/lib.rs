@@ -312,6 +312,12 @@ pub struct RecipeInputs {
     /// or `/v1/rerank` on a serving node — so no GGUF loads twice in one
     /// process. `None`: this host's turns run without one.
     pub rerank: Option<Arc<dyn InferenceProvider>>,
+    /// The NER port this host's turns extract entities through, for
+    /// entity-aware retrieval-over-history. The host decides where it comes
+    /// from — the daemon hands in its served NER kind's handle
+    /// (`sovereign_compute::ner::served_ner`), so the model loads once per
+    /// process and this crate loads none. `None`: retrieval runs cosine + MMR.
+    pub ner: Option<Arc<dyn sovereign_contracts::ner::LabeledEntityExtractor>>,
 }
 
 /// Whether a person's tool switches govern this host's turn registry.
@@ -384,6 +390,7 @@ pub async fn common_parts(inputs: RecipeInputs, progress: &dyn RecipeProgress) -
         warmth,
         scope,
         rerank,
+        ner,
     } = inputs;
 
     log_installed_corpora(&corpus_engine, progress).await;
@@ -400,6 +407,7 @@ pub async fn common_parts(inputs: RecipeInputs, progress: &dyn RecipeProgress) -
         warmth,
         scope,
         rerank,
+        ner,
         progress,
     )
     .await;
@@ -630,13 +638,22 @@ async fn build_lane(
     warmth: LaneWarmth,
     scope: LaneScope,
     rerank: Option<Arc<dyn InferenceProvider>>,
+    ner: Option<Arc<dyn sovereign_contracts::ner::LabeledEntityExtractor>>,
     progress: &dyn RecipeProgress,
 ) -> (LaneSources, Arc<AtlasContextManager>) {
     progress.phase(RecipePhase::BuildingLane);
     progress.note(&format!("Lane scope:  {}", scope.label()));
     let mut lane = LaneSources::none();
     lane.conv_tiered = conv_tiered;
-    lane.gliner = load_gliner(warmth);
+    // The host's NER port, read through the one narrow adapter.
+    tracing::debug!(
+        installed = ner.is_some(),
+        "runtime_recipe: entity extractor from the host's NER port"
+    );
+    lane.gliner = ner.map(|n| {
+        Arc::new(sovereign_contracts::ner::NerEntities(n))
+            as Arc<dyn sovereign_contracts::traits::EntityExtractor>
+    });
 
     // Atlas Layer 0: the installed Wikipedia link graph, if one is built.
     //
@@ -776,71 +793,6 @@ fn load_meta_atlas(lane: &LaneSources, warmth: LaneWarmth, progress: &dyn Recipe
                 }
             });
         }
-    }
-}
-
-/// GLiNER entity extractor for entity-aware retrieval-over-history, at the
-/// warmth this host asked for. Probe first; a missing model soft-falls-through
-/// to pure cosine + MMR.
-///
-/// # Why this takes `warmth`
-///
-/// `lane.gliner` is a lane member, so [`LaneWarmth`] governs it like every
-/// other one. It did not until 2026-08-26, and the gap was a §10.6 split-brain
-/// rather than a policy choice: `sovereign daemon run` declares
-/// [`LaneWarmth::Deferred`] and this one member read it as `Eager`, so a host
-/// that had explicitly asked to reach `listening` promptly still blocked ~950 ms
-/// on a model load. One declaration, two readings.
-///
-/// The deferred arm's degradation is not new and is already accepted in
-/// `LaneWarmth`'s own words: until the model is warm the extractor returns no
-/// entities, which is EXACTLY what a host with no GLiNER installed does —
-/// retrieval falls back to cosine + MMR, "a degradation in ranking and never a
-/// wrong answer". `LaneWarmth` says that about a ~1 GB JSON parse; this is a
-/// ~950 ms load that is warm within ~1 s, well before a first query.
-///
-/// This is also what lets the desktop stop hand-rolling its own bootstrap: its
-/// wiring WAS the deferred arm, written out by hand.
-fn load_gliner(
-    warmth: LaneWarmth,
-) -> Option<Arc<dyn sovereign_contracts::traits::EntityExtractor>> {
-    let model_id = sovereign_gliner::gliner_ner::DEFAULT_MODEL_ID;
-    if !sovereign_gliner::gliner_ner::probe_model_available(model_id) {
-        tracing::debug!(
-            model = model_id,
-            "runtime_recipe: GLiNER model not installed; entity-aware \
-             retrieval disabled (falls back to cosine+MMR)"
-        );
-        return None;
-    }
-    match warmth {
-        // Install now, warm behind. `new_default_deferred` cannot fail
-        // synchronously — the thread logs a load error and leaves the
-        // extractor permanently in the same fallback the `Eager` arm's `Err`
-        // branch produces, so absence is reported identically on both paths.
-        LaneWarmth::Deferred => {
-            tracing::info!(
-                model = model_id,
-                "runtime_recipe: GLiNER entity extractor installed (background warm)"
-            );
-            Some(
-                Arc::new(sovereign_gliner::gliner_ner::LazyGlinerExtractor::new_default_deferred())
-                    as Arc<dyn sovereign_contracts::traits::EntityExtractor>,
-            )
-        }
-        LaneWarmth::Eager => match sovereign_gliner::gliner_ner::GlinerExtractor::new_default() {
-            Ok(g) => {
-                tracing::info!(
-                    model = model_id,
-                    "runtime_recipe: GLiNER entity extractor loaded"
-                );
-                Some(Arc::new(g) as Arc<dyn sovereign_contracts::traits::EntityExtractor>)
-            }
-            Err(e) => {
-                tracing::warn!(error = %e, "runtime_recipe: GLiNER probe ok but load failed; entity-aware retrieval disabled");
-                None
-            }
-        },
     }
 }
 
@@ -996,6 +948,10 @@ mod warmth_census {
     /// The compiler does NOT hold this: dropping the parameter and its argument
     /// together compiles clean and silently restores eager-always. Watched to
     /// fail by reverting `load_gliner(warmth)` to `load_gliner()`.
+    ///
+    /// `load_gliner` left the list at pb-serving-ner: NER is a host port now
+    /// (`RecipeInputs::ner`), so the host's own load carries its warmth and
+    /// this crate loads no model to defer.
     #[test]
     fn every_deferrable_lane_member_honours_the_declared_warmth() {
         let src = include_str!("lib.rs");
@@ -1008,7 +964,7 @@ mod warmth_census {
             })
             .collect();
 
-        for member in ["load_meta_atlas", "load_gliner"] {
+        for member in ["load_meta_atlas"] {
             let start = code
                 .iter()
                 .position(|l| l.contains(&format!("fn {member}(")))

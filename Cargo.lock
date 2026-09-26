@@ -13082,7 +13082,6 @@ dependencies = [
  "corpus-index",
  "sovereign-contracts",
  "sovereign-core",
- "sovereign-gliner",
  "sovereign-tools",
  "tokio",
  "tracing",

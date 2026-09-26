@@ -365,6 +365,9 @@ async fn build_session_scoped(
             // provider speaks HTTP to the daemon, and one process holds the
             // cross-encoder once.
             rerank: standalone_reranker(&Banner),
+            // The NER kind's loader, loaded here because this process serves
+            // no kinds (the cli-llm → gliner edge is pb-cli-llm's).
+            ner: sovereign_gliner::load_gliner_extractor(),
         },
         &Banner,
     )

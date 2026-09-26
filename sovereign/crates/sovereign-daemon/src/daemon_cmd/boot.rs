@@ -595,15 +595,10 @@ pub(super) async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
         }
     }
 
-    // GliNER per-chunk entity extractor — hoisted out of the engine
-    // block so both the engine's tiered runner (conv corpora) AND the
-    // folder_tiered_deps below can share the same Arc<dyn> handle
-    // (the underlying GlinerExtractor is ~150MB ONNX; one load only).
-    //
-    // The raw `Arc<GlinerExtractor>` is hoisted alongside the
-    // trait-object wrapper so the NoteStore T2 path can install
-    // it as a `GlinerFn` adapter without re-loading the model.
-    // The store opened above is handed to gliner as a port (no second handle).
+    // The served NER kind's handle (loaded once per process) and the per-chunk
+    // adapter over it, hoisted so the engine's tiered runner, the folder
+    // driver, the NoteStore T2 hook and the turn's recipe (below) share one
+    // model. The store opened above is the adapter's port (no second handle).
     let chunk_entity_store: Arc<dyn sovereign_core::daemon_wire::conv_tiered::ChunkEntityStore> =
         state_store_concrete.clone();
     let (gliner_raw, chunk_entity_extractor) = bootstrap::load_gliner_extractor(chunk_entity_store);
@@ -938,6 +933,8 @@ pub(super) async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
             // serving assembly installed one. Never a second load of the GGUF.
             rerank: sovereign_compute::assembly::serves_rerank(routed_provider.as_ref())
                 .then(|| Arc::clone(&routed_provider)),
+            // The served NER kind's handle, the one the ingest paths hold.
+            ner: gliner_raw.clone(),
         },
         &sovereign_runtime_recipe::TracingProgress,
     )

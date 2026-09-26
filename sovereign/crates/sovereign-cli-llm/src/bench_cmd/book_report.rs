@@ -601,7 +601,8 @@ async fn run(opts: Opts) -> Result<BookReportRun, String> {
                 match sovereign_gliner::gliner_ner::GlinerExtractor::new_default() {
                     Ok(g) => {
                         eprintln!("      T2 entity pass: GLiNER ({model_id})");
-                        Some(Arc::new(g) as Arc<dyn sovereign_core::traits::EntityExtractor>)
+                        Some(Arc::new(sovereign_contracts::ner::NerEntities(Arc::new(g)))
+                            as Arc<dyn sovereign_core::traits::EntityExtractor>)
                     }
                     Err(e) => {
                         eprintln!("      T2 entity pass: LLM (GLiNER load failed: {e})");

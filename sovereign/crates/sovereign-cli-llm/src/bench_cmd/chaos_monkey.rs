@@ -534,7 +534,9 @@ async fn run(rest: &[String]) -> i32 {
                     match sovereign_gliner::gliner_ner::GlinerExtractor::new_default() {
                         Ok(g) => {
                             eprintln!("[chaos] T2 entity pass: GLiNER ({model_id})");
-                            Some(std::sync::Arc::new(g)
+                            Some(std::sync::Arc::new(sovereign_contracts::ner::NerEntities(
+                                std::sync::Arc::new(g),
+                            ))
                                 as std::sync::Arc<
                                     dyn sovereign_core::traits::EntityExtractor,
                                 >)
