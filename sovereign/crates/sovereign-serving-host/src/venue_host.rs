@@ -45,7 +45,7 @@ pub(crate) async fn ledger_emitter_for_venue(
 pub trait PinnedTransportResolver: Send + Sync {
     async fn resolve(
         &self,
-        node_id: &commonwealth_core::ids::NodeId,
+        node_id: &kernel_types::NodeId,
     ) -> Option<crate::pinned_transport::PinnedTransport>;
 }
 
@@ -56,7 +56,7 @@ pub struct NoPinnedTransports;
 impl PinnedTransportResolver for NoPinnedTransports {
     async fn resolve(
         &self,
-        _node_id: &commonwealth_core::ids::NodeId,
+        _node_id: &kernel_types::NodeId,
     ) -> Option<crate::pinned_transport::PinnedTransport> {
         None
     }

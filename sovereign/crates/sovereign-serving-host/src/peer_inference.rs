@@ -4002,7 +4002,7 @@ mod tests {
     /// simply the failure that made this path reachable in practice.)
     fn dead_peer() -> InferenceVenue {
         InferenceVenue {
-            node_id: commonwealth_core::ids::NodeId::from_u128(7),
+            node_id: kernel_types::NodeId::from_u128(7),
             name: "DeadPeer".into(),
             base_urls: vec!["http://127.0.0.1:1/v1".into()],
             system_ram_gb: 64,

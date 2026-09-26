@@ -41,7 +41,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-use commonwealth_core::ids::NodeId;
+use kernel_types::NodeId;
 
 /// One RPC worker as seen by a single discovery tick: a stable mesh identity
 /// (`node_id`) plus the address the host should dial it at THIS tick.

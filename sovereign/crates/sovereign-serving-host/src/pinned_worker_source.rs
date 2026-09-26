@@ -43,7 +43,7 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use commonwealth_core::ids::NodeId;
+use kernel_types::NodeId;
 use tokio::sync::RwLock;
 
 use sovereign_scheduler::venue::{InferenceVenue, VenueSource};
