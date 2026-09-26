@@ -42,8 +42,8 @@ fn cfg(rails_base: Option<String>) -> SetupConfig {
         }),
         node: Default::default(),
         daemon: DaemonSection {
-            client_port: 39771,
-            internal_port: 39772,
+            client_port: 29771,
+            internal_port: 29772,
             local_only: true,
             rails_base,
             ..Default::default()

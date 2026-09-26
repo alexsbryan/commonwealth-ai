@@ -91,7 +91,7 @@ async fn custom_client_port_from_setup_config_flows_to_api_address() {
     // After `set_setup_config` + `create_mesh`, the daemon's
     // bind decision must reflect it. Pre-fix this was a silent
     // no-op (operator changed the TOML, daemon still bound 9741).
-    let daemon = EmbeddedDaemon::in_memory(cfg_with_ports(39741, 39742), mesh_admin_services());
+    let daemon = EmbeddedDaemon::in_memory(cfg_with_ports(29741, 29742), mesh_admin_services());
     daemon
         .create_mesh("custom-port test", "node")
         .await
@@ -103,7 +103,7 @@ async fn custom_client_port_from_setup_config_flows_to_api_address() {
         .expect("daemon must report an api_address after create_mesh");
     assert_eq!(
         addr.port(),
-        39741,
+        29741,
         "setup_config.daemon.client_port must drive the client bind decision; \
          api_address still reports 9741 means the wiring is broken"
     );

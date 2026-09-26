@@ -69,7 +69,9 @@ use sovereign_daemon::local_only::MeshService;
 /// runtime off-switches and now read the same decider.
 const EVERY_NETWORK_SERVICE: &[MeshService] = MeshService::ALL;
 
-/// A config on ports nothing else in the suite uses.
+/// A config on ports nothing else in the suite uses, below Linux's ephemeral
+/// range (32768-60999): at 39751 another test's `bind(0)` held the port and
+/// answered `/v1/models` with a 404 (pb-test-load).
 ///
 /// `mdns` and `[iroh] enabled` are deliberately set to the values that would
 /// turn each on, so the local-only run proves the PROFILE is what keeps them
@@ -146,7 +148,7 @@ async fn a_local_only_daemon_does_not_donate() {
     let quiet = tempfile::tempdir().unwrap();
     let daemon = EmbeddedDaemon::new(
         quiet.path().to_path_buf(),
-        cfg_donating(39651, 39652, true),
+        cfg_donating(29651, 29652, true),
         mesh_admin_services(),
     );
     daemon
@@ -189,7 +191,7 @@ async fn a_local_only_daemon_does_not_donate() {
     // graduating and this control staying in its negative form is the thing
     // to catch.
     let resolved = sovereign_daemon::work_donor::resolve_offer(
-        &cfg_donating(39661, 39662, false).compute.work_offer,
+        &cfg_donating(29661, 29662, false).compute.work_offer,
         &sovereign_daemon::work_donor::donor_registry(
             None,
             commonwealth_work::sandbox::Sandbox::Direct,
@@ -242,7 +244,7 @@ async fn a_local_only_daemon_spawns_no_network_service() {
             ),
     )
     .await;
-    let mut config = cfg(39751, 39752, true);
+    let mut config = cfg(29751, 29752, true);
     config.daemon.rails_base = Some(format!("http://{door}"));
     let dir = tempfile::tempdir().unwrap();
     let daemon = EmbeddedDaemon::new(dir.path().to_path_buf(), config, mesh_admin_services());
@@ -337,7 +339,7 @@ async fn the_control_a_networked_daemon_spawns_every_gated_loop() {
     let dir = tempfile::tempdir().unwrap();
     let daemon = EmbeddedDaemon::new(
         dir.path().to_path_buf(),
-        cfg(39851, 39852, false),
+        cfg(29851, 29852, false),
         mesh_admin_services(),
     );
     daemon.create_mesh("solo", "node").await.expect("create");
@@ -378,7 +380,7 @@ async fn local_only_plus_require_encryption_is_refused_by_name() {
     let dir = tempfile::tempdir().unwrap();
     let daemon = EmbeddedDaemon::new(
         dir.path().to_path_buf(),
-        cfg(39951, 39952, true),
+        cfg(29951, 29952, true),
         mesh_admin_services(),
     );
     let msg = match daemon.create_mesh_with("encrypted", "node", true).await {

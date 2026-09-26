@@ -67,7 +67,7 @@ async fn unexposed_solo_mesh_binds_loopback_with_no_token() {
     let dir = tempfile::tempdir().unwrap();
     let daemon = EmbeddedDaemon::new(
         dir.path().to_path_buf(),
-        cfg_with_ports(38751, 38752),
+        cfg_with_ports(28751, 28752),
         mesh_admin_services(),
     );
     // NO expose_client_api() — the silent solo-mesh path.
@@ -100,7 +100,7 @@ async fn exposed_mesh_binds_wide_with_token_and_persists_marker() {
     let dir = tempfile::tempdir().unwrap();
     let daemon = EmbeddedDaemon::new(
         dir.path().to_path_buf(),
-        cfg_with_ports(38851, 38852),
+        cfg_with_ports(28851, 28852),
         mesh_admin_services(),
     );
     // Explicit share: expose BEFORE create so start_daemon binds wide

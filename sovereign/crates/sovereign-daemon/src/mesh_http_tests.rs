@@ -233,8 +233,8 @@ async fn direct_leave_leaves_daemon_stopped() {
 async fn leave_to_solo_rebinds_same_port_repeatedly() {
     let tmp = tempfile::tempdir().unwrap();
     let mut cfg = hermetic_cfg();
-    cfg.daemon.client_port = 39411;
-    cfg.daemon.internal_port = 39412;
+    cfg.daemon.client_port = 29411;
+    cfg.daemon.internal_port = 29412;
     let daemon = EmbeddedDaemon::new(
         tmp.path().to_path_buf(),
         cfg,
