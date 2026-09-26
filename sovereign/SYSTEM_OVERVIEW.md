@@ -1183,7 +1183,9 @@ and runs the contributions `RetentionGc`; the daemon's dialing side is
 `sovereign_mesh::ledger_port` + `rails_client/ledger.rs`, not yet wired. Since fp-solo-clients its
 clients bring it up: daemon boot and cli-llm's `rails_kv()` call `rails_client::ensure_rails`, a
 `ServingHost` bring-up of the binary `CW_RAILS_BIN`/sibling/PATH names, logging to `<data dir>/rails.log`;
-a refused dial never re-ensures. Since fp-solo-hermetic the bring-up is `run --listen <rails_base port>`,
+a refused dial never re-ensures. Since phase-b-3 `ensure_rails` runs the daemon's one-time journal
+handover (`rail_migration::hand_over`) first, before any bring-up; with a cw-rails already answering it
+moves nothing and warns with the namespaces that wait. Since fp-solo-hermetic the bring-up is `run --listen <rails_base port>`,
 plus `--local-only` (`[relay] discovery = "none"`) on a local-only node, which also refuses an already
 running cw-rails whose `/v1/mesh/status` `relay.n0_services` is true; and `run` exits when its `rails.lock`
 is unlinked or replaced. It deliberately does NOT admit

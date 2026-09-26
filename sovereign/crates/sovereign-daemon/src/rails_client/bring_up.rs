@@ -23,6 +23,10 @@ const RAILS_BRING_UP_WINDOW: std::time::Duration = std::time::Duration::from_sec
 /// `/v1/mesh/status`, or this is a named Err — never a second cw-rails
 /// (five-programs-66).
 ///
+/// `data_dir` is the daemon's (`[data] dir`): its one-time journal handover
+/// runs FIRST, before any bring-up, because cw-rails reads its journals once
+/// at start (phase-b-3, [`crate::rail_migration::hand_over`]).
+///
 /// Sync and safe from any thread: the probe runs on its own thread and
 /// runtime. A non-loopback base, a base with no port, or an absent binary
 /// is a traced, named absence (principle 6).
@@ -31,9 +35,11 @@ const RAILS_BRING_UP_WINDOW: std::time::Duration = std::time::Duration::from_sec
 pub fn ensure_rails(
     base: &str,
     local_only: bool,
+    data_dir: &std::path::Path,
 ) -> Result<sovereign_turn_client::reach::Reached, String> {
     use sovereign_turn_client::reach::{locate_sibling, BundledBackend, Reached, ServingHost};
 
+    hand_over_first(base, data_dir);
     let absent = |why: String| {
         tracing::warn!(rails_base = base, reason = %why, "ensure_rails: cw-rails is not reachable");
         why
@@ -119,6 +125,34 @@ pub fn ensure_rails(
         }
         Err(e) => Err(absent(e)),
     }
+}
+
+/// One probe of `base`, then the handover: moved when nothing answers, left
+/// in place and named when a cw-rails already does. A probe that cannot run
+/// moves nothing — a journal under a live store is the loss this prevents.
+fn hand_over_first(base: &str, data_dir: &std::path::Path) {
+    let host = sovereign_turn_client::reach::ServingHost::at(base).ready_at("/v1/mesh/status");
+    let answering = std::thread::scope(|s| {
+        s.spawn(|| {
+            tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .map(|rt| rt.block_on(host.is_serving()))
+                .map_err(|e| e.to_string())
+        })
+        .join()
+        .unwrap_or_else(|_| Err("the handover probe thread panicked".into()))
+    });
+    let answering = answering.unwrap_or_else(|e| {
+        tracing::warn!(rails_base = base, error = %e, "ensure_rails: could not probe cw-rails before the handover; treated as answering, so nothing moves");
+        true
+    });
+    tracing::debug!(rails_base = base, answering, "ensure_rails: handover probe");
+    crate::rail_migration::hand_over(
+        data_dir,
+        &sovereign_core::setup_config::SetupConfig::default_path(),
+        answering,
+    );
 }
 
 /// A local-only node found a cw-rails it did not start: `Ok` only when that

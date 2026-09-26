@@ -466,7 +466,7 @@ pub(super) async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
     let workspace_dir = resolve_workspace_dir();
     let rails_base = crate::rails_client::resolve_rails_base(&config.daemon); // stores dial this
     let local = crate::LocalOnlyProfile::resolve(config.daemon.local_only).is_local_only();
-    let _ = crate::rails_client::ensure_rails(&rails_base, local); // fp-solo-clients: boot reaches it
+    let _ = crate::rails_client::ensure_rails(&rails_base, local, &data_dir); // fp-solo-clients: boot reaches it
     let bootstrap::WatcherAtlasSetup {
         watcher_heartbeat,
         lint_watcher,

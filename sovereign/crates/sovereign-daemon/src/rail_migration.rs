@@ -3,7 +3,8 @@
 //!
 //! Until fp-54's flip the inference daemon's in-process rail was the ONLY
 //! writer, so moving the journals to `cw-rails`' data root is atomic: this
-//! runs once at daemon start, before any rail surface answers, and after it
+//! runs in `rails_client::ensure_rails`, before any bring-up and so before any
+//! rail surface answers ([`hand_over`], phase-b-3), and after it
 //! the daemon never opens a journal again (§4 rule 1 — one data directory,
 //! one owner; the daemon cannot write into the serving process's store as a
 //! standing arrangement, and a one-time rename during a boot it owns is not
@@ -55,6 +56,55 @@ fn copy_dir(from: &Path, to: &Path) -> std::io::Result<()> {
         }
     }
     Ok(())
+}
+
+/// The handover as `ensure_rails` runs it, before it brings cw-rails up
+/// (phase-b-3). cw-rails folds the journals on disk into its store once, at
+/// start, so a namespace moved under a live one reads empty for that
+/// cw-rails' lifetime. With one already answering nothing moves, journals or
+/// media, and what waits is named (principle 6).
+pub fn hand_over(data_dir: &Path, config_path: &Path, rails_answering: bool) {
+    if !rails_answering {
+        migrate_journals_to_rails(data_dir);
+        migrate_media_to_rails(data_dir, config_path, &rails_data_dir());
+        return;
+    }
+    let namespaces: Vec<String> = match std::fs::read_dir(source_root(data_dir)) {
+        Ok(entries) => entries
+            .flatten()
+            .filter(|e| e.path().is_dir())
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .collect(),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Vec::new(),
+        Err(e) => {
+            tracing::warn!(error = %e, dir = %source_root(data_dir).display(), "rail migration: cw-rails already answers, and the daemon's ring directory could not be read to name what waits");
+            Vec::new()
+        }
+    };
+    let house_credential = commonwealth_media::house_dir_under(data_dir)
+        .join("authorization")
+        .exists();
+    let viewer_id = std::fs::read_to_string(config_path)
+        .ok()
+        .and_then(|t| t.parse::<toml_edit::DocumentMut>().ok())
+        .is_some_and(|d| {
+            d.get("iroh")
+                .and_then(|i| i.get("media_viewer_user"))
+                .is_some()
+        });
+    if namespaces.is_empty() && !house_credential && !viewer_id {
+        tracing::debug!(dir = %data_dir.display(), "rail migration: cw-rails already answers and nothing waits to be handed over");
+        return;
+    }
+    tracing::warn!(
+        namespaces = ?namespaces,
+        house_credential,
+        viewer_id,
+        dir = %data_dir.display(),
+        "rail migration: cw-rails already answers, so nothing moved under it — these wait \
+         under the daemon's data dir; cw-rails must restart to take them (stop it, and the \
+         next daemon boot or `svrn portfolio` hands them over before bringing it up)"
+    );
 }
 
 /// Move every ring namespace's journal from the daemon's data dir to the

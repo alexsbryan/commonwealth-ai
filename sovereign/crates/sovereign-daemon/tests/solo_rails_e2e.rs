@@ -179,6 +179,8 @@ fn a_meshless_node_brings_cw_rails_up_and_its_state_survives_a_restart() {
     // This process's ensure_rails resolves the same root and binary.
     std::env::set_var("CW_RAILS_DIR", &rails_dir);
     std::env::set_var("CW_RAILS_BIN", &rails_bin);
+    // Its handover reads the config under this root, never the developer's.
+    std::env::set_var("SVRNMESH_DATA_DIR", root.path().join("svrnmesh"));
     // The pump's append is the durability point the test waits on below.
     std::env::set_var("RUST_LOG", "info,rails=debug");
 
@@ -223,7 +225,7 @@ fn a_meshless_node_brings_cw_rails_up_and_its_state_survives_a_restart() {
 
     // A portfolio row, written the way `svrn portfolio` writes it.
     let rails_kv = || {
-        ensure_rails(&base, false).expect("rails_kv() re-ensures cw-rails");
+        ensure_rails(&base, false, &data).expect("rails_kv() re-ensures cw-rails");
         RailsKv::new(base.clone())
     };
     let (app, key, value) = ("portfolio-private", "solo-e2e", Bytes::from_static(b"kept"));
@@ -259,7 +261,7 @@ fn a_meshless_node_brings_cw_rails_up_and_its_state_survives_a_restart() {
     let (a, b) = std::thread::scope(|s| {
         let race = || {
             gate.wait();
-            ensure_rails(&base, false)
+            ensure_rails(&base, false, &data)
         };
         let (a, b) = (s.spawn(race), s.spawn(race));
         (a.join().expect("racer a"), b.join().expect("racer b"))
@@ -375,4 +377,237 @@ fn a_local_only_boot_brings_cw_rails_up_on_the_pinned_port_with_n0_services_off(
         "a local-only cw-rails names no n0 relay, but {} does:\n{written}",
         log.display()
     );
+}
+
+/// A cw-rails on `rails_dir` at `port`, started by hand (no daemon), logging
+/// to `log`. Reaped by the caller's [`Reaper`].
+fn spawn_rails(rails_bin: &Path, rails_dir: &Path, home: &Path, port: u16, log: &Path) {
+    Command::new(rails_bin)
+        .args(["run", "--listen"])
+        .arg(port.to_string())
+        .env("HOME", home)
+        .env("CW_RAILS_DIR", rails_dir)
+        .env("RUST_LOG", "info,rails=debug")
+        .stdout(Stdio::null())
+        .stderr(Stdio::from(std::fs::File::create(log).expect("rails log")))
+        .spawn()
+        .expect("spawn cw-rails");
+    wait_until("cw-rails answered", Duration::from_secs(30), log, || {
+        status(port, "/v1/mesh/status") == Some(200)
+    });
+}
+
+/// The rows the fixture seeds, one per namespace.
+const SEEDED: [(&str, &str, &[u8]); 2] = [
+    ("portfolio-private", "handover-e2e", b"kept"),
+    ("notes", "handover-e2e", b"also kept"),
+];
+
+/// An upgraded host's layout (phase-b-3): two namespaces a real cw-rails
+/// wrote on `rails_dir` (so they carry its key), then moved under the
+/// daemon's `data/rings/`, where they sat before fp-54. `rails_dir` is left
+/// with its key and no journals. Returns the namespaces.
+fn seed_daemon_rings(rails_bin: &Path, rails_dir: &Path, home: &Path, data: &Path) -> Vec<String> {
+    let port = free_port();
+    let log = rails_dir.join("seed.log");
+    let lock = rails_dir.join("rails.lock");
+    spawn_rails(rails_bin, rails_dir, home, port, &log);
+    let kv = RailsKv::new(format!("http://127.0.0.1:{port}"));
+    for (app, key, value) in SEEDED {
+        kv.set(app, key, Bytes::from_static(value), NodeId::from_u128(7))
+            .expect("a seed row is written");
+    }
+    wait_until(
+        "the pump appended both rows",
+        Duration::from_secs(10),
+        &log,
+        || {
+            std::fs::read_to_string(&log)
+                .is_ok_and(|l| l.matches("kv pump: appended a local write").count() >= SEEDED.len())
+        },
+    );
+    kill_rails(&lock, port, &log);
+    let (from, to) = (rails_dir.join("rings"), data.join("rings"));
+    std::fs::create_dir_all(&to).expect("data/rings");
+    let mut namespaces = Vec::new();
+    for e in std::fs::read_dir(&from)
+        .expect("the seed wrote rings/")
+        .flatten()
+    {
+        let name = e.file_name().to_string_lossy().into_owned();
+        std::fs::rename(e.path(), to.join(&name)).expect("move a namespace");
+        namespaces.push(name);
+    }
+    assert_eq!(
+        namespaces.len(),
+        2,
+        "the fixture is two namespaces: {namespaces:?}"
+    );
+    namespaces
+}
+
+/// Boot a terminal-class daemon on `data` with `rails_base` pinned to
+/// `rails_port` and `CW_RAILS_DIR` at `rails_dir`; stderr to `stderr`.
+fn boot_daemon(
+    root: &Path,
+    data: &Path,
+    rails_dir: &Path,
+    rails_port: u16,
+    stderr: &Path,
+) -> Killed {
+    let (client, internal) = (free_port(), free_port());
+    let config = root.join("config.toml");
+    std::fs::write(
+        &config,
+        format!(
+            "[node]\nentry_node = \"00000000000000000000000000000001\"\n\n\
+             [daemon]\nclient_port = {client}\ninternal_port = {internal}\n\
+             rails_base = \"http://127.0.0.1:{rails_port}\"\n\n[data]\ndir = \"{}\"\n",
+            data.display()
+        ),
+    )
+    .expect("config");
+    Killed(
+        Command::new(BIN)
+            .args(["run", "--config"])
+            .arg(&config)
+            .env("HOME", root.join("home"))
+            .env("SVRNMESH_DATA_DIR", root.join("svrnmesh"))
+            .env("CW_RAILS_DIR", rails_dir)
+            .env("CW_RAILS_BIN", cw_rails_bin())
+            .env("RUST_LOG", "info")
+            .stdout(Stdio::null())
+            .stderr(Stdio::from(std::fs::File::create(stderr).expect("stderr")))
+            .spawn()
+            .expect("spawn sovereign-daemon"),
+    )
+}
+
+/// PROOF (phase-b-3): an upgraded host's FIRST boot at HEAD serves the ring
+/// history it already had. The handover runs before the bring-up, so the
+/// cw-rails the boot starts rebuilds its store from the moved journals.
+/// PLANT: hand over after the bring-up (today's order before phase-b-3) and
+/// every seeded row reads empty.
+#[test]
+fn an_upgraded_hosts_first_boot_serves_the_rings_it_already_had() {
+    let rails_bin = cw_rails_bin();
+    let root = tempfile::tempdir().expect("tempdir");
+    let (home, data, rails_dir) = (
+        root.path().join("home"),
+        root.path().join("data"),
+        root.path().join("rails"),
+    );
+    for d in [&home, &data, &rails_dir] {
+        std::fs::create_dir_all(d).expect("dir");
+    }
+    let _reaper = Reaper(rails_dir.join("rails.lock"));
+    let namespaces = seed_daemon_rings(&rails_bin, &rails_dir, &home, &data);
+
+    let rails_port = free_port();
+    let stderr = root.path().join("daemon.stderr.log");
+    let _daemon = boot_daemon(root.path(), &data, &rails_dir, rails_port, &stderr);
+    wait_until(
+        "the boot's cw-rails answered",
+        Duration::from_secs(60),
+        &stderr,
+        || status(rails_port, "/v1/mesh/status") == Some(200),
+    );
+    wait_until(
+        "every namespace was handed over",
+        Duration::from_secs(30),
+        &stderr,
+        || {
+            namespaces
+                .iter()
+                .all(|ns| !data.join("rings").join(ns).exists())
+        },
+    );
+    // cw-rails serves its doors before its pump task has projected the store
+    // (commonwealth-rails kv.rs `run_forever`), so a read waits on the rebuild
+    // — the line the handover's order decides the count of.
+    let rails_log = rails_dir.join("rails.log");
+    wait_until(
+        "cw-rails rebuilt its store",
+        Duration::from_secs(30),
+        &rails_log,
+        || {
+            std::fs::read_to_string(&rails_log)
+                .is_ok_and(|l| l.contains("kv: rebuilt the store from the journals on disk"))
+        },
+    );
+    let kv = RailsKv::new(format!("http://127.0.0.1:{rails_port}"));
+    for (app, key, value) in SEEDED {
+        let row = kv.get(app, key).expect("cw-rails answers the read");
+        let seen = |p: &Path, needles: &[&str]| {
+            std::fs::read_to_string(p)
+                .unwrap_or_default()
+                .lines()
+                .filter(|l| needles.iter().any(|n| l.contains(n)))
+                .collect::<Vec<_>>()
+                .join("\n")
+        };
+        assert_eq!(
+            row.map(|r| r.value),
+            Some(Bytes::from_static(value)),
+            "{app}/{key} reads back on the first boot; the handover and bring-up:\n{}\n\
+             cw-rails:\n{}",
+            seen(&stderr, &["rail migration", "ensure_rails"]),
+            seen(&rails_dir.join("rails.log"), &["kv:", "WARN", "ERROR"]),
+        );
+    }
+}
+
+/// A cw-rails already answering when the daemon boots: nothing moves under
+/// its live store. The namespaces stay under the daemon's data dir and the
+/// warn event names them (phase-b-3, principle 6).
+#[test]
+fn a_live_cw_rails_takes_nothing_and_the_waiting_namespaces_are_named() {
+    let rails_bin = cw_rails_bin();
+    let root = tempfile::tempdir().expect("tempdir");
+    let (home, data, rails_dir) = (
+        root.path().join("home"),
+        root.path().join("data"),
+        root.path().join("rails"),
+    );
+    for d in [&home, &data, &rails_dir] {
+        std::fs::create_dir_all(d).expect("dir");
+    }
+    let _reaper = Reaper(rails_dir.join("rails.lock"));
+    let namespaces = seed_daemon_rings(&rails_bin, &rails_dir, &home, &data);
+
+    let rails_port = free_port();
+    spawn_rails(
+        &rails_bin,
+        &rails_dir,
+        &home,
+        rails_port,
+        &rails_dir.join("live.log"),
+    );
+    let stderr = root.path().join("daemon.stderr.log");
+    let _daemon = boot_daemon(root.path(), &data, &rails_dir, rails_port, &stderr);
+    wait_until(
+        "the handover named what waits",
+        Duration::from_secs(60),
+        &stderr,
+        || {
+            std::fs::read_to_string(&stderr)
+                .is_ok_and(|l| l.contains("cw-rails already answers, so nothing moved under it"))
+        },
+    );
+    let written = std::fs::read_to_string(&stderr).expect("stderr");
+    let line = written
+        .lines()
+        .find(|l| l.contains("cw-rails already answers, so nothing moved under it"))
+        .expect("the warn line");
+    for ns in &namespaces {
+        assert!(line.contains(ns.as_str()), "the warn names {ns}: {line}");
+        assert!(
+            data.join("rings").join(ns).is_dir(),
+            "{ns} stays at the source"
+        );
+        assert!(
+            !rails_dir.join("rings").join(ns).exists(),
+            "{ns} did not move under the live store"
+        );
+    }
 }

@@ -3145,7 +3145,8 @@ impl EmbeddedDaemon {
         ));
         // The ring rail's journals moved to the serving process's data root
         // (fp-54, §4 rule 1 — one data directory, one owner). The one-time
-        // handover runs before any rail surface answers; from here on this
+        // handover runs in `rails_client::ensure_rails`, before any bring-up
+        // (phase-b-3), so it has already run by here; from here on this
         // daemon holds no journal and every rail read or write dials
         // `cw-rails` through the port (`rails_client::RailsRingRail`), which
         // reports ABSENCE when the serving process is down — never an empty
@@ -3153,14 +3154,6 @@ impl EmbeddedDaemon {
         // signs with its own node key (its own data dir), and a line verifies
         // because rails joined the mesh as a member with that key — see
         // commonwealth-rails' `rails_and_the_daemon_sign_with_two_keys_under_one_person`.
-        crate::rail_migration::migrate_journals_to_rails(&self.data_dir);
-        // fp-70: the media presence poll is rails' too, so its inputs (the
-        // house credential and viewer id `offer` kept here) move beside it.
-        crate::rail_migration::migrate_media_to_rails(
-            &self.data_dir,
-            &SetupConfig::default_path(),
-            &commonwealth_media::rails_data_dir(),
-        );
         let ring_rail: Option<Arc<dyn sovereign_mesh::rail_port::RingRailPort>> =
             Some(Arc::new(crate::rails_client::RailsRingRail::new(
                 crate::rails_client::resolve_rails_base(&self.setup_config.read().await.daemon),
