@@ -170,21 +170,19 @@ pub fn plan_serving(config: &SetupConfig) -> Result<ServingPlan, String> {
     })
 }
 
-/// Does a process built from `config` serve the rerank kind — a slot in its
-/// own engine, or a warm compute child in the kind's child role? A config
-/// that cannot be planned (a terminal, an unconfigured node) holds no weights,
-/// so it serves none.
-pub fn serves_rerank(config: &SetupConfig) -> bool {
-    let in_process = match plan_serving(config) {
-        Ok(plan) => plan.in_process.contains(&PlannedSlot::Rerank),
-        Err(_) => false,
-    };
-    let child = config.compute.enabled
-        && config
-            .compute
-            .slot
-            .iter()
-            .any(|s| s.warm && Some(s.role.as_str()) == served_kind::RERANK.child_role());
+/// Does `provider` — what the serving assembly installed — serve the rerank
+/// kind: a rerank slot its engine holds, or a compute child in the kind's
+/// child role? Answered from what loaded, never from the config: a rerank
+/// install that failed leaves the lane unarmed, so no search pays the
+/// cross-encoder's overfetch for a reranker that is not there (ARCH §6).
+pub fn serves_rerank(provider: &dyn InferenceProvider) -> bool {
+    let in_process = provider
+        .resident_slots()
+        .iter()
+        .any(|s| s.role == served_kind::RERANK.role);
+    let child = served_kind::RERANK
+        .child_role()
+        .is_some_and(|role| provider.compute_children().iter().any(|c| c.role == role));
     tracing::debug!(
         target: "served_kind",
         in_process,

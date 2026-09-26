@@ -935,8 +935,8 @@ pub(super) async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
             scope: sovereign_runtime_recipe::LaneScope::All,
             // This daemon's own rerank kind — the engine's slot or a rerank
             // compute child, reached through the routed provider — when the
-            // serving assembly holds one. Never a second load of the GGUF.
-            rerank: sovereign_compute::assembly::serves_rerank(&config)
+            // serving assembly installed one. Never a second load of the GGUF.
+            rerank: sovereign_compute::assembly::serves_rerank(routed_provider.as_ref())
                 .then(|| Arc::clone(&routed_provider)),
         },
         &sovereign_runtime_recipe::TracingProgress,
