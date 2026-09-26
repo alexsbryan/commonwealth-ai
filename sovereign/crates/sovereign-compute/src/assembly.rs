@@ -353,8 +353,8 @@ pub(crate) fn assemble_child_generate(
 pub(crate) fn assemble_child_embed(
     path: &Path,
 ) -> sovereign_contracts::Result<Arc<dyn InferenceProvider>> {
-    let engine =
-        sovereign_inference::embedded::EmbedOnlyProvider::load(path, ModelFamily::Unknown)?;
+    let family = sovereign_inference::engine_factory::embed_family_for(path);
+    let engine = sovereign_inference::embedded::EmbedOnlyProvider::load(path, family)?;
     Ok(Arc::new(engine))
 }
 

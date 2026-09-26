@@ -59,7 +59,8 @@ impl ProviderFactory for LlamaCppFactory {
             None,
             ModelFamily::Unknown,
             ModelFamily::Unknown,
-            ModelFamily::Unknown,
+            // The same manifest answer cold start's embed slot gets.
+            sovereign_inference::engine_factory::embed_family_for(&models.embed),
             // code slot is Qwen3-Coder-30B-A3B-Instruct (the only code
             // GGUF we ship today). Pinning the family to Qwen3 picks up
             // Qwen's recommended sampling defaults — top_k=20 (vs the

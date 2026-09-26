@@ -230,14 +230,7 @@ fn build_llama(config: &SetupConfig) -> Result<BuiltEngine, String> {
     // provider before calling the factory. This is the guard for the case that
     // is NOT a deliberate terminal — a half-written or hand-edited config.
     let models = config.models()?;
-    let embed_family = models
-        .embed
-        .file_name()
-        .and_then(|s| s.to_str())
-        .and_then(|name| {
-            sovereign_contracts::models_manifest::DEFAULT_MANIFEST.embed_family_for_file(name)
-        })
-        .unwrap_or(ModelFamily::Unknown);
+    let embed_family = embed_family_for(&models.embed);
 
     // `[compute] distributed_primary` — the primary lives in a supervised
     // child, so the daemon must NOT also hold it. Withholding the path is
@@ -275,6 +268,28 @@ fn build_llama(config: &SetupConfig) -> Result<BuiltEngine, String> {
         llama: Some(arc),
         embed_family,
     })
+}
+
+/// The family an embed GGUF gets, from the models manifest by file name —
+/// the one answer every embed load reads. It picks app-side pooling and the
+/// document/query instruction prefixes, so an embed slot loaded as
+/// [`ModelFamily::Unknown`] when the manifest knows its file embeds with the
+/// wrong strategy. A file the manifest does not list is `Unknown`, as before.
+pub fn embed_family_for(path: &std::path::Path) -> ModelFamily {
+    let family = path
+        .file_name()
+        .and_then(|s| s.to_str())
+        .and_then(|name| {
+            sovereign_contracts::models_manifest::DEFAULT_MANIFEST.embed_family_for_file(name)
+        })
+        .unwrap_or(ModelFamily::Unknown);
+    tracing::debug!(
+        target: "engine_factory",
+        path = %path.display(),
+        family = ?family,
+        "embed family resolved from the models manifest"
+    );
+    family
 }
 
 /// An OpenAI-compatible HTTP endpoint.
@@ -421,6 +436,21 @@ mod tests {
                 .expect_err("registering over a built-in must be refused");
             assert!(err.contains(builtin), "got: {err}");
         }
+    }
+
+    /// Every embed load reads this one answer, so a file the manifest lists
+    /// must come back with its family, and the lookup is by file name wherever
+    /// the file lives.
+    #[test]
+    fn a_manifest_embed_file_keeps_its_family() {
+        let family = embed_family_for(std::path::Path::new(
+            "/models/elsewhere/Qwen3-Embedding-0.6B-Q8_0.gguf",
+        ));
+        assert_eq!(family, ModelFamily::Qwen3Embedding);
+        assert_eq!(
+            embed_family_for(std::path::Path::new("/m/totally-unknown-embed-model.gguf")),
+            ModelFamily::Unknown
+        );
     }
 
     /// `remote` must refuse rather than invent a default endpoint. A
