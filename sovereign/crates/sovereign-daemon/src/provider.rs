@@ -1,20 +1,20 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Hot-reload inference provider factory — extracted from `daemon_cmd`
-//! (§3.2). Rebuilds the embedded llama.cpp provider (wrapped in the
-//! mesh-aware router) when the operator changes a model path at runtime.
+//! (§3.2). Rebuilds the serving provider through the one serving assembly
+//! (wrapped in the mesh-aware router) when the operator changes a model path
+//! at runtime.
 
 use std::sync::Arc;
 
 use crate::admin_http::ProviderFactory;
 use async_trait::async_trait;
-use sovereign_core::model_family::ModelFamily;
+use sovereign_compute::assembly::{AssemblyError, ReloadFactory, ServingParts};
 use sovereign_core::setup_config::SetupConfig;
 use sovereign_core::traits::InferenceProvider;
-use sovereign_inference::embedded::EmbeddedLlamaCpp;
 
-/// Rebuilds the embedded llama.cpp provider from a fresh `SetupConfig`,
-/// wrapped in the same `InferenceRouter` used at cold start so
-/// hot-reloads preserve mesh-aware model routing.
+/// Rebuilds the serving provider from a fresh `SetupConfig`, wrapped in the
+/// same `InferenceRouter` used at cold start so hot-reloads preserve
+/// mesh-aware model routing.
 ///
 /// Hot-swapped into `EmbeddedDaemon::inference_provider` by the admin
 /// reload handler when the user changes a `models.*` path in
@@ -30,6 +30,16 @@ pub struct LlamaCppFactory {
     /// and `/v1/chat/completions` would silently start substituting
     /// for peer-only model names again.
     pub daemon: Arc<crate::DeferredDaemon>,
+    /// The factory cold start's assembly returned: the reload builds through
+    /// the same assembly, against the compute children boot started.
+    pub reload: Arc<ReloadFactory>,
+}
+
+impl LlamaCppFactory {
+    /// The reload's engine: the one serving assembly, never a load of its own.
+    pub(crate) fn rebuild_engine(&self, cfg: &SetupConfig) -> Result<ServingParts, AssemblyError> {
+        self.reload.build(cfg)
+    }
 }
 
 #[async_trait]
@@ -38,64 +48,14 @@ impl ProviderFactory for LlamaCppFactory {
         &self,
         cfg: &SetupConfig,
     ) -> Result<Arc<dyn InferenceProvider>, String> {
-        // Mirror the load parameters used by `run_daemon` on cold
-        // start — the reload must not silently downgrade context
-        // size or auto-gpu-layer behaviour. Pulls context size and
-        // idle timeout from `cfg` for the same reason: a hot-reload
-        // shouldn't drop the operator's tuned values.
         // Only a holder has an engine to rebuild. A terminal's provider is a
-        // forwarder built once against its entry node; there is nothing here to
-        // hot-reload, and refusing by name beats loading empty paths.
-        let models = cfg.models()?;
-        // Under `[compute] distributed_primary` the primary lives in a
-        // compute child; withhold it here exactly as cold start does.
-        let child_owns_primary = sovereign_inference::engine_factory::child_owns_primary(cfg);
-        tracing::info!(
-            target: "compute_child",
-            child_owns_primary,
-            "reload: rebuilding the in-process engine"
-        );
-        let provider = EmbeddedLlamaCpp::load_full_with_families(
-            models.fast_path(),
-            if child_owns_primary {
-                None
-            } else {
-                Some(&models.primary)
-            },
-            Some(&models.embed),
-            models.code.as_deref(),
-            // Per-slot windows (2026-08-25). `from_models` honours
-            // `[models].fast_context_size` and falls back to the primary's
-            // window when it is unset, so an existing config.toml is unchanged.
-            sovereign_inference::embedded::SlotWindows::from_models(models),
-            None,
-            ModelFamily::Unknown,
-            ModelFamily::Unknown,
-            // The same manifest answer cold start's embed slot gets.
-            sovereign_inference::engine_factory::embed_family_for(&models.embed),
-            // code slot is Qwen3-Coder-30B-A3B-Instruct (the only code
-            // GGUF we ship today). Pinning the family to Qwen3 picks up
-            // Qwen's recommended sampling defaults — top_k=20 (vs the
-            // Unknown fallback of 40), top_p=0.95, presence_penalty=1.5
-            // — and the SystemPromptToken thinking control. Empirically
-            // (2026-05-08 measurement) the Unknown defaults left the
-            // sampler too permissive on long Rust emissions, contributing
-            // to the character-drop pattern (`f3 2`, `Lat encyClass`).
-            ModelFamily::Qwen3,
-        )
-        .map_err(|e| format!("reload: failed to load models: {e}"))?;
-        // Keep a typed `Arc<EmbeddedLlamaCpp>` to fire
-        // `start_idle_monitor` (inherent method), then upcast to
-        // `Arc<dyn InferenceProvider>` so the wrapper can hold it.
-        let raw_concrete = Arc::new(provider);
-        raw_concrete.start_idle_monitor(cfg.daemon.primary_idle_secs);
-        // The hot-reload path builds a WHOLE new provider, so it has to
-        // arm every monitor the cold-start path arms. Miss one here and a
-        // reloaded daemon silently re-acquires the pinned-forever
-        // behaviour the cold-start path just gave up.
-        raw_concrete.start_fast_idle_monitor(cfg.daemon.fast_idle_secs);
-        raw_concrete.start_embed_idle_monitor(cfg.daemon.embed_idle_secs);
-        let raw: Arc<dyn InferenceProvider> = raw_concrete;
+        // forwarder built once against its entry node; the assembly refuses
+        // its config by name (`SetupConfig::models`) rather than load empty
+        // paths.
+        let raw = self
+            .rebuild_engine(cfg)
+            .map_err(|e| format!("reload: {e}"))?
+            .provider;
 
         // Wrap so a hot-reloaded daemon keeps its mesh-aware model
         // routing — same wrapper the cold-start path installs in
@@ -173,5 +133,137 @@ impl ProviderFactory for LlamaCppFactory {
         }
         let routed: Arc<dyn InferenceProvider> = mesh_provider;
         Ok(routed)
+    }
+}
+
+/// A hot reload builds exactly what cold start builds (pb-serving-assembly).
+///
+/// Until 2026-09-26 the reload loaded GGUFs itself: it never read
+/// `[engine] kind` or `[compute] distributed_primary`, so a remote-kind node
+/// loaded weights on reload and a distributed-primary node loaded the
+/// withheld primary in-process. Nothing here is on disk, so any build that
+/// reaches llama.cpp fails — after it has planned. The plan is the slot set
+/// each path asked for, compared whether or not it loaded.
+#[cfg(test)]
+mod reload_builds_what_cold_start_builds {
+    use super::*;
+    use sovereign_compute::assembly::{assemble_serving, PlannedSlot, ServingPlan};
+    use sovereign_core::setup_config::{EngineKind, EngineSection, ModelsSection};
+    use std::path::PathBuf;
+
+    const PRIMARY: &str = "/nonexistent/serving-assembly/big-primary.gguf";
+
+    fn holder() -> SetupConfig {
+        let mut cfg = SetupConfig::unconfigured();
+        cfg.data.dir = std::env::temp_dir().join("pb-serving-assembly-never-written");
+        cfg.models = Some(ModelsSection {
+            primary: PRIMARY.into(),
+            fast: Some("/nonexistent/serving-assembly/small-fast.gguf".into()),
+            embed: "/nonexistent/serving-assembly/Qwen3-Embedding-0.6B-Q8_0.gguf".into(),
+            ..Default::default()
+        });
+        cfg
+    }
+
+    fn remote() -> SetupConfig {
+        let mut cfg = holder();
+        cfg.engine = EngineSection {
+            kind: EngineKind::Remote,
+            endpoint: Some("http://127.0.0.1:1/v1".to_string()),
+            model_id: Some("some-remote-model".to_string()),
+            ..Default::default()
+        };
+        cfg
+    }
+
+    fn distributed_primary() -> SetupConfig {
+        let mut cfg = holder();
+        cfg.compute.enabled = true;
+        cfg.compute.distributed_primary = true;
+        cfg
+    }
+
+    /// The daemon's reload path as boot installs it, on a node whose cold
+    /// start started no compute children.
+    fn reload_path() -> LlamaCppFactory {
+        LlamaCppFactory {
+            daemon: Arc::new(crate::DeferredDaemon::new()),
+            reload: Arc::default(),
+        }
+    }
+
+    fn slot_set(built: Result<ServingParts, AssemblyError>) -> ServingPlan {
+        match built {
+            Ok(parts) => parts.plan,
+            Err(e) => e
+                .plan
+                .unwrap_or_else(|| panic!("the build refused before planning: {}", e.reason)),
+        }
+    }
+
+    #[test]
+    fn a_reload_builds_the_cold_start_slot_set() {
+        for (label, cfg) in [
+            ("llama", holder()),
+            ("remote", remote()),
+            ("distributed_primary", distributed_primary()),
+        ] {
+            let cold = slot_set(assemble_serving(&cfg));
+            let reload = slot_set(reload_path().rebuild_engine(&cfg));
+            assert_eq!(
+                reload, cold,
+                "{label}: the reload path must build the slot set cold start builds"
+            );
+        }
+    }
+
+    /// Equal is not enough: two paths can agree on the wrong set. Each
+    /// config's set is the one it asks for.
+    #[test]
+    fn each_config_plans_the_slots_it_asks_for() {
+        let llama = slot_set(reload_path().rebuild_engine(&holder()));
+        assert_eq!(llama.engine, EngineKind::Llama);
+        assert!(
+            llama.in_process.contains(&PlannedSlot::Primary),
+            "{llama:?}"
+        );
+        assert_eq!(
+            llama.embed_family,
+            sovereign_core::model_family::ModelFamily::Qwen3Embedding,
+            "embed keeps its manifest family"
+        );
+
+        let remote = slot_set(reload_path().rebuild_engine(&remote()));
+        assert_eq!(remote.engine, EngineKind::Remote);
+        assert!(
+            remote.in_process.is_empty(),
+            "a remote-kind node holds no local slots: {remote:?}"
+        );
+
+        let dp = slot_set(reload_path().rebuild_engine(&distributed_primary()));
+        assert!(
+            !dp.in_process.contains(&PlannedSlot::Primary),
+            "the primary is withheld from this process: {dp:?}"
+        );
+        assert!(
+            dp.children
+                .iter()
+                .any(|(_, model)| model == &PathBuf::from(PRIMARY)),
+            "a compute child owns the primary: {dp:?}"
+        );
+    }
+
+    /// A remote-kind node reloads with no weights on disk, as it boots.
+    #[test]
+    fn a_remote_reload_needs_no_weights() {
+        let cold = assemble_serving(&remote()).expect("cold start needs no weights");
+        let reload = reload_path()
+            .rebuild_engine(&remote())
+            .expect("the reload needs no weights either");
+        assert!(reload.llama.is_none() && cold.llama.is_none());
+        assert_eq!(
+            reload.provider.resident_slots().len(),
+            cold.provider.resident_slots().len()
+        );
     }
 }

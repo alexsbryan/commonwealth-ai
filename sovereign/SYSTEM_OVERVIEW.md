@@ -678,6 +678,10 @@ unknown id refuses listing what IS registered rather than falling back.
 `BuiltEngine.llama` is `None` for every non-llama engine, and the VRAM
 preflight is llama's own question, skipped for engines holding no weights.
 The contracts are executable: `engine_conformance::{check_sync, check_serving}`.
+Cold start and hot reload both reach it through ONE serving assembly,
+`sovereign_compute::assembly` (`assemble_serving`, `ReloadFactory::build`),
+which adds admission, llama's slot installs and the compute-child layer; a
+reload re-wraps the running compute children instead of spawning new ones.
 
 **Residency is a policy.** `embedded/idle_slot.rs` is the one idleness decider.
 It exists because the daemon is a MESH NODE and must stay available to peers

@@ -8,14 +8,18 @@
 //! llama's own slot installs and idle monitors, and the compute-child layer.
 //! A terminal never reaches it; its forwarder is the daemon's.
 
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, PoisonError};
 
 use sovereign_contracts::model_family::ModelFamily;
-use sovereign_contracts::setup_config::SetupConfig;
+use sovereign_contracts::setup_config::{EngineKind, ModelsSection, SetupConfig};
 use sovereign_contracts::types::NextEditFormat;
 use sovereign_contracts::InferenceProvider;
 use sovereign_inference::embedded::EmbeddedLlamaCpp;
+use sovereign_inference::engine_factory;
+
+use crate::manager::{ComputeChildManager, ComputeRoutedProvider, DynamicChildSlot};
 
 /// What a serving process installs, plus the concrete handles its host keeps.
 pub struct ServingParts {
@@ -33,6 +37,63 @@ pub struct ServingParts {
     /// it on every worker-set change instead of calling
     /// `engine.reload_primary()`.
     pub distributed_primary: Option<Arc<crate::manager::DynamicChildSlot>>,
+    /// What was built.
+    pub plan: ServingPlan,
+    /// Rebuilds this process's provider on a hot reload, through this same
+    /// assembly and against the compute generation this build started.
+    pub reload_factory: Arc<ReloadFactory>,
+}
+
+/// One slot a serving process loads or installs in-process.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub enum PlannedSlot {
+    /// The always-loaded small model.
+    Fast,
+    /// The lazy primary; absent when a compute child owns it.
+    Primary,
+    /// The embedding model.
+    Embed,
+    /// The code specialist sharing the primary's lazy slot.
+    Code,
+    /// One `[models.extra]` chat slot, by name.
+    Extra(String),
+    /// The `[models.edit]` code-editing slot.
+    Edit,
+    /// Next-edit served off the resident chat model (`SOVEREIGN_NEXT_EDIT_FALLBACK`).
+    NextEditFallback,
+    /// The cross-encoder from `SOVEREIGN_RERANK_MODEL_PATH`.
+    Rerank,
+}
+
+/// What one config asks a serving process to hold: its slot set. Computed
+/// from the config before anything loads, so a build that fails still names
+/// what it was building.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ServingPlan {
+    /// The engine `[engine] kind` selects.
+    pub engine: EngineKind,
+    /// llama slots held in this process; empty for an engine with none.
+    pub in_process: BTreeSet<PlannedSlot>,
+    /// Compute children, by name and the GGUF each hosts.
+    pub children: BTreeSet<(String, PathBuf)>,
+    /// The embed slot's family.
+    pub embed_family: ModelFamily,
+}
+
+/// A refused or failed build: the operator-facing reason, and the plan when
+/// the config got far enough to have one.
+#[derive(Debug)]
+pub struct AssemblyError {
+    /// What the build was asked to hold, if the config could be planned.
+    pub plan: Option<ServingPlan>,
+    /// Operator-facing text; a `hint:` line, where there is one, is part of it.
+    pub reason: String,
+}
+
+impl std::fmt::Display for AssemblyError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.reason)
+    }
 }
 
 /// Env name for the automatic next-edit fallback. Declared in
@@ -55,60 +116,217 @@ fn next_edit_fallback_enabled() -> bool {
     )
 }
 
-/// Build the provider a node that holds weights serves.
-///
-/// `Err` carries the operator-facing text; the caller prints it after
-/// `error: ` (a `hint:` line, where there is one, is part of the text).
-/// The containment refusal prints its own block before returning.
-pub fn assemble_serving(config: &SetupConfig) -> Result<ServingParts, String> {
-    // Past the terminal return, so this node holds weights and `[models]` must
-    // be readable. Through the accessor, not the field: the refusal it returns
-    // names WHY there are no slots, and a terminal has already left above.
+/// The optional cross-encoder, from `SOVEREIGN_RERANK_MODEL_PATH`.
+fn rerank_model_path() -> Option<String> {
+    std::env::var("SOVEREIGN_RERANK_MODEL_PATH").ok()
+}
+
+/// The slot set `config` asks for. Pure apart from the two env reads above.
+pub fn plan_serving(config: &SetupConfig) -> Result<ServingPlan, String> {
+    // Through the accessor, not the field: the refusal it returns names WHY
+    // there are no slots (a terminal routes instead; an unconfigured node
+    // runs `svrn setup`).
     let models = config.models()?;
-
-    // `[compute] distributed_primary` — the primary lives in a supervised
-    // child, so this process must NOT also hold it. The factory derives this
-    // the same way when it withholds the path; here it gates ADMISSION.
-    let child_owns_primary = config.compute.enabled && config.compute.distributed_primary;
-    // The other half of the same admission question: `child_owns_primary`
-    // says the abort is contained; this says whether running WITHOUT that
-    // containment is survivable on this node. The guard below fires when
-    // containment IS armed and `fast` aliases `primary`; this one fires
-    // when it is NOT armed and should be.
-    if !crate::containment::check_containment(config, None) {
-        return Err(
-            "the distributed-primary containment guard refused this configuration (above)"
-                .to_string(),
+    let engine = config.engine.kind.clone();
+    let mut in_process = BTreeSet::new();
+    // Only llama holds local slots; every other engine embeds remotely and
+    // reports `Unknown` (`BuiltEngine::external`).
+    let embed_family = if engine == EngineKind::Llama {
+        in_process.insert(PlannedSlot::Fast);
+        if !engine_factory::child_owns_primary(config) {
+            in_process.insert(PlannedSlot::Primary);
+        }
+        in_process.insert(PlannedSlot::Embed);
+        if models.code.is_some() {
+            in_process.insert(PlannedSlot::Code);
+        }
+        in_process.extend(models.extra.keys().cloned().map(PlannedSlot::Extra));
+        if models.edit.is_some() {
+            in_process.insert(PlannedSlot::Edit);
+        } else if next_edit_fallback_enabled() {
+            in_process.insert(PlannedSlot::NextEditFallback);
+        }
+        if rerank_model_path().is_some() {
+            in_process.insert(PlannedSlot::Rerank);
+        }
+        engine_factory::embed_family_for(&models.embed)
+    } else {
+        ModelFamily::Unknown
+    };
+    let mut children = BTreeSet::new();
+    if config.compute.enabled {
+        children.extend(
+            config
+                .compute
+                .slot
+                .iter()
+                .map(|s| (s.name.clone(), s.model.clone())),
         );
+        if let Some(spec) = distributed_primary_spec(config, models) {
+            children.insert((spec.name, spec.model));
+        }
     }
-    if child_owns_primary && models.fast_path() == models.primary.as_path() {
-        return Err(format!(
-            "[compute] distributed_primary = true requires a DISTINCT small `fast` model.\n\
-             hint: with no `[models].fast`, fast_path() falls back to the primary GGUF ({}), so \
-             the daemon would load the distributed model locally as its fast slot — the exact \
-             host-starving load this mode exists to prevent. Set `[models].fast` to a small GGUF.",
-            models.primary.display()
-        ));
-    }
-    if child_owns_primary {
-        tracing::info!(
-            target: "compute_child",
-            primary = %models.primary.display(),
-            "[compute] distributed_primary — the daemon withholds the primary; a compute child owns it"
-        );
-    }
+    Ok(ServingPlan {
+        engine,
+        in_process,
+        children,
+        embed_family,
+    })
+}
 
+/// The compute generation a factory started: what the children were planned
+/// as, and the manager running them (`None` when the layer came up empty).
+struct LiveCompute {
+    children: BTreeSet<(String, PathBuf)>,
+    manager: Option<Arc<ComputeChildManager>>,
+}
+
+/// Builds a serving process's provider, at cold start and again on every
+/// reload, so the two cannot build different things.
+///
+/// It remembers the compute generation its first build started. A reload
+/// re-wraps the new in-process engine around those RUNNING children rather
+/// than spawning a second set beside them: `ComputeChildManager` has no
+/// `Drop`, and its supervisors are spawned tasks, so a fresh layer would leave
+/// the old children serving (for a distributed primary, two copies of the
+/// model). A reload whose config asks for different children refuses by name.
+#[derive(Default)]
+pub struct ReloadFactory {
+    live: Mutex<Option<LiveCompute>>,
+}
+
+/// Build the provider a node that holds weights serves, starting its compute
+/// children if the config declares any.
+pub fn assemble_serving(config: &SetupConfig) -> Result<ServingParts, AssemblyError> {
+    Arc::new(ReloadFactory::default()).build(config)
+}
+
+impl ReloadFactory {
+    /// Plan, admit and build. The containment refusal prints its own block
+    /// before returning.
+    pub fn build(self: &Arc<Self>, config: &SetupConfig) -> Result<ServingParts, AssemblyError> {
+        let plan = plan_serving(config).map_err(|reason| AssemblyError { plan: None, reason })?;
+        tracing::info!(target: "serving_assembly", plan = ?plan, "assembling the serving provider");
+        let fail = |reason: String| AssemblyError {
+            plan: Some(plan.clone()),
+            reason,
+        };
+        let models = config.models().map_err(fail)?;
+
+        // `[compute] distributed_primary` — the primary lives in a supervised
+        // child, so this process must NOT also hold it.
+        let child_owns_primary = engine_factory::child_owns_primary(config);
+        // The other half of the same admission question: `child_owns_primary`
+        // says the abort is contained; this says whether running WITHOUT that
+        // containment is survivable on this node. The guard below fires when
+        // containment IS armed and `fast` aliases `primary`; this one fires
+        // when it is NOT armed and should be.
+        if !crate::containment::check_containment(config, None) {
+            return Err(fail(
+                "the distributed-primary containment guard refused this configuration (above)"
+                    .to_string(),
+            ));
+        }
+        if child_owns_primary && models.fast_path() == models.primary.as_path() {
+            return Err(fail(format!(
+                "[compute] distributed_primary = true requires a DISTINCT small `fast` model.\n\
+                 hint: with no `[models].fast`, fast_path() falls back to the primary GGUF ({}), so \
+                 the daemon would load the distributed model locally as its fast slot — the exact \
+                 host-starving load this mode exists to prevent. Set `[models].fast` to a small GGUF.",
+                models.primary.display()
+            )));
+        }
+        if child_owns_primary {
+            tracing::info!(
+                target: "compute_child",
+                primary = %models.primary.display(),
+                "[compute] distributed_primary — the daemon withholds the primary; a compute child owns it"
+            );
+        }
+
+        // One build at a time, and the children check before any load.
+        let mut live = self.live.lock().unwrap_or_else(PoisonError::into_inner);
+        if let Some(running) = live.as_ref() {
+            if running.children != plan.children {
+                return Err(fail(format!(
+                    "the compute children running are {:?}, and this config asks for {:?}. A \
+                     reload re-wraps the running children and never respawns them — restart \
+                     the daemon to apply a change to [compute] or to a child's model.",
+                    running.children, plan.children
+                )));
+            }
+        }
+
+        let (inner, llama, embed_family) = build_in_process(config, models, &plan).map_err(fail)?;
+
+        let mut distributed_primary: Option<Arc<DynamicChildSlot>> = None;
+        let provider: Arc<dyn InferenceProvider> = match live.as_ref() {
+            // A reload: the running generation serves the new engine too.
+            Some(running) => match &running.manager {
+                Some(manager) => {
+                    let facade = Arc::new(ComputeRoutedProvider::new(
+                        Arc::clone(&inner),
+                        Arc::clone(manager),
+                    ));
+                    distributed_primary = facade.distributed_slot();
+                    tracing::info!(
+                        target: "compute_child",
+                        children = running.children.len(),
+                        "reload: the new engine is wrapped around the running compute children"
+                    );
+                    facade
+                }
+                None => inner,
+            },
+            // The first build: start the generation (or record that there is
+            // none), so every later reload is measured against it.
+            None => {
+                let (provider, slot, manager) = start_compute_layer(config, models, inner);
+                distributed_primary = slot;
+                *live = Some(LiveCompute {
+                    children: plan.children.clone(),
+                    manager,
+                });
+                provider
+            }
+        };
+
+        Ok(ServingParts {
+            provider,
+            llama,
+            embed_family,
+            distributed_primary,
+            plan,
+            reload_factory: Arc::clone(self),
+        })
+    }
+}
+
+/// The engine the registry selects, plus llama's own slot installs and idle
+/// monitors as `plan` names them.
+#[allow(clippy::type_complexity)]
+fn build_in_process(
+    config: &SetupConfig,
+    models: &ModelsSection,
+    plan: &ServingPlan,
+) -> Result<
+    (
+        Arc<dyn InferenceProvider>,
+        Option<Arc<EmbeddedLlamaCpp>>,
+        ModelFamily,
+    ),
+    String,
+> {
     // WHICH engine — the one decision, made in one place
     // (`sovereign_inference::engine_factory`). Default `[engine] kind` is
     // `llama`, so a config.toml that names no engine builds exactly what
     // this function used to build unconditionally.
-    let built = sovereign_inference::engine_factory::build_engine(config).map_err(|e| {
+    let built = engine_factory::build_engine(config).map_err(|e| {
         format!(
             "{e}\nhint: verify paths and `[engine]` in {}",
             SetupConfig::default_path().display()
         )
     })?;
-    let resolved_embed_family = built.embed_family.clone();
 
     // Everything below is llama's OWN surface — slot installs and idle
     // monitors that exist on `EmbeddedLlamaCpp` and on no other engine.
@@ -125,7 +343,7 @@ pub fn assemble_serving(config: &SetupConfig) -> Result<ServingParts, String> {
         // Idle-unload monitor for extras slots. Default 0 = disabled.
         arc.start_extras_idle_monitor(config.daemon.extras_idle_secs);
         // Operator-declared additional chat slots. Each `[models.extra]` entry
-        // is loaded eagerly here; failures fail the daemon. Routing kicks in
+        // is loaded eagerly here; failures fail the build. Routing kicks in
         // when `/v1/chat/completions` arrives with a matching `model` field.
         if !models.extra.is_empty() {
             arc.install_extras(models.extra.clone(), models.effective_context_size())
@@ -152,7 +370,7 @@ pub fn assemble_serving(config: &SetupConfig) -> Result<ServingParts, String> {
             // model rather than serving nothing (`NEXT_EDIT.md` §graceful
             // degradation). Default OFF pending a bench baseline on the
             // fast slot — see `sovereign/DEFAULTS_LEDGER.md`.
-            None if next_edit_fallback_enabled() => {
+            None if plan.in_process.contains(&PlannedSlot::NextEditFallback) => {
                 if let Err(e) = arc.install_fallback_next_edit_slot(NextEditFormat::default()) {
                     tracing::warn!(
                         target: "edit_slot",
@@ -189,7 +407,7 @@ pub fn assemble_serving(config: &SetupConfig) -> Result<ServingParts, String> {
         // Optional cross-encoder reranker from `SOVEREIGN_RERANK_MODEL_PATH`.
         // Soft-fail: a missing/broken reranker file must not block startup —
         // retrieval simply runs the baseline path.
-        if let Ok(rerank_path) = std::env::var("SOVEREIGN_RERANK_MODEL_PATH") {
+        if let Some(rerank_path) = rerank_model_path() {
             let path = PathBuf::from(&rerank_path);
             match arc.install_rerank_slot(path, ModelFamily::Reranker) {
                 Ok(model_id) => {
@@ -210,102 +428,112 @@ pub fn assemble_serving(config: &SetupConfig) -> Result<ServingParts, String> {
         }
     }
 
-    let inner: Arc<dyn InferenceProvider> = Arc::clone(&built.provider);
+    Ok((Arc::clone(&built.provider), built.llama, built.embed_family))
+}
 
-    // Compute-child process boundary (DISTRIBUTED_PILOT_READINESS.md P1).
-    // When `[compute]` declares pools, wrap the in-process engine in the
-    // routing facade: requests whose `model_id` names a pool (or embeddings,
-    // when a capturing embed pool is serving) route to supervised child
-    // processes; everything else falls through to `inner`. The concrete
-    // `arc` engine is still returned for the RPC-worker reload path. Default
-    // OFF → `inner` is installed unchanged.
-    let mut distributed_primary: Option<Arc<crate::manager::DynamicChildSlot>> = None;
-    let provider: Arc<dyn InferenceProvider> = if config.compute.enabled
-        && (!config.compute.slot.is_empty() || child_owns_primary)
-    {
-        // The child re-executes this binary with `--compute-child`;
-        // `current_exe()`'s fallback is the daemon's [[bin]] name.
-        let binary = std::env::current_exe().unwrap_or_else(|_| PathBuf::from("sovereign-daemon"));
-        let crash_dir = config.data.dir.join("compute-crash-logs");
-        // The distributed primary's identity: the shared-model id when the
-        // node declares one (that is what peers address it by), else the
-        // GGUF's own stem. Both are accepted as `model_id` on the way in.
-        let distributed_spec = child_owns_primary.then(|| {
-            let stem = models
-                .primary
-                .file_stem()
-                .map(|s| s.to_string_lossy().into_owned())
-                .unwrap_or_else(|| "primary".to_string());
-            let name = config
-                .shared_model
-                .model_id
-                .clone()
-                .unwrap_or_else(|| stem.clone());
-            // The primary-role ALIASES must claim the child too, not just
-            // the shared-model name and the GGUF stem.
-            //
-            // A request naming `commonwealth/primary` is asking for the
-            // primary slot, and on a node with a distributed primary the
-            // child IS that slot. `DistributedPrimaryRoute::claims` matched
-            // only name and stem, so the alias fell through to the
-            // in-process engine — whose primary is deliberately NOT resident
-            // in this mode — and got served by the always-hot `fast` slot
-            // instead. Measured live 2026-07-29 on RuggedFox, same prompt in
-            // the same minute: `commonwealth/primary` returned 11 tokens at
-            // ~111 tok/s (the 0.8B), while the GGUF stem returned 170 tokens
-            // from the 122B. Every client using the advertised alias got the
-            // small model and no error — including `svrn mesh bench`, which
-            // filed the fast slot's rate under the 122B's name.
-            //
-            // Derived from `SLOT_ALIAS_POLICY` rather than spelled out here.
-            // Resolution and mesh advertisement already drifted apart once
-            // (slot_aliases.rs, 2026-05-19); routing is a third view of the
-            // same policy and must not become a third place to forget.
-            let model_ids = distributed_primary_model_ids(&stem);
-            crate::manager::DistributedPrimarySpec {
-                handoff_path: config
-                    .data
-                    .dir
-                    .join("compute-distribution")
-                    .join(format!("{name}.json")),
-                name,
-                model: models.primary.clone(),
-                context_size: Some(models.effective_context_size()),
-                n_gpu_layers: None,
-                model_ids,
-            }
-        });
-        match crate::manager::build_compute_layer_with_distributed(
-            &config.compute,
-            Arc::clone(&inner),
-            binary,
-            crash_dir,
-            distributed_spec,
-        ) {
-            Some((facade, _manager)) => {
-                distributed_primary = facade.distributed_slot();
-                tracing::info!(
-                    target: "compute_child",
-                    slots = config.compute.slot.len(),
-                    distributed_primary = distributed_primary.is_some(),
-                    "compute-child routing facade installed"
-                );
-                // The facade holds the manager alive; children are
-                // SIGTERM'd on daemon death via PR_SET_PDEATHSIG.
-                facade as Arc<dyn InferenceProvider>
-            }
-            None => inner,
-        }
-    } else {
-        inner
-    };
-
-    Ok(ServingParts {
-        provider,
-        llama: built.llama,
-        embed_family: resolved_embed_family,
-        distributed_primary,
+/// The distributed primary's spec, when a compute child owns the primary.
+fn distributed_primary_spec(
+    config: &SetupConfig,
+    models: &ModelsSection,
+) -> Option<crate::manager::DistributedPrimarySpec> {
+    if !engine_factory::child_owns_primary(config) {
+        return None;
+    }
+    // The distributed primary's identity: the shared-model id when the
+    // node declares one (that is what peers address it by), else the
+    // GGUF's own stem. Both are accepted as `model_id` on the way in.
+    let stem = models
+        .primary
+        .file_stem()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "primary".to_string());
+    let name = config
+        .shared_model
+        .model_id
+        .clone()
+        .unwrap_or_else(|| stem.clone());
+    // The primary-role ALIASES must claim the child too, not just
+    // the shared-model name and the GGUF stem.
+    //
+    // A request naming `commonwealth/primary` is asking for the
+    // primary slot, and on a node with a distributed primary the
+    // child IS that slot. `DistributedPrimaryRoute::claims` matched
+    // only name and stem, so the alias fell through to the
+    // in-process engine — whose primary is deliberately NOT resident
+    // in this mode — and got served by the always-hot `fast` slot
+    // instead. Measured live 2026-07-29 on RuggedFox, same prompt in
+    // the same minute: `commonwealth/primary` returned 11 tokens at
+    // ~111 tok/s (the 0.8B), while the GGUF stem returned 170 tokens
+    // from the 122B. Every client using the advertised alias got the
+    // small model and no error — including `svrn mesh bench`, which
+    // filed the fast slot's rate under the 122B's name.
+    //
+    // Derived from `SLOT_ALIAS_POLICY` rather than spelled out here.
+    // Resolution and mesh advertisement already drifted apart once
+    // (slot_aliases.rs, 2026-05-19); routing is a third view of the
+    // same policy and must not become a third place to forget.
+    let model_ids = distributed_primary_model_ids(&stem);
+    Some(crate::manager::DistributedPrimarySpec {
+        handoff_path: config
+            .data
+            .dir
+            .join("compute-distribution")
+            .join(format!("{name}.json")),
+        name,
+        model: models.primary.clone(),
+        context_size: Some(models.effective_context_size()),
+        n_gpu_layers: None,
+        model_ids,
     })
+}
+
+/// Compute-child process boundary (DISTRIBUTED_PILOT_READINESS.md P1).
+///
+/// When `[compute]` declares pools, wrap the in-process engine in the
+/// routing facade: requests whose `model_id` names a pool (or embeddings,
+/// when a capturing embed pool is serving) route to supervised child
+/// processes; everything else falls through to `inner`. Default OFF →
+/// `inner` is returned unchanged.
+#[allow(clippy::type_complexity)]
+fn start_compute_layer(
+    config: &SetupConfig,
+    models: &ModelsSection,
+    inner: Arc<dyn InferenceProvider>,
+) -> (
+    Arc<dyn InferenceProvider>,
+    Option<Arc<DynamicChildSlot>>,
+    Option<Arc<ComputeChildManager>>,
+) {
+    let distributed_spec = distributed_primary_spec(config, models);
+    if !(config.compute.enabled && (!config.compute.slot.is_empty() || distributed_spec.is_some()))
+    {
+        return (inner, None, None);
+    }
+    // The child re-executes this binary with `--compute-child`;
+    // `current_exe()`'s fallback is the daemon's [[bin]] name.
+    let binary = std::env::current_exe().unwrap_or_else(|_| PathBuf::from("sovereign-daemon"));
+    let crash_dir = config.data.dir.join("compute-crash-logs");
+    match crate::manager::build_compute_layer_with_distributed(
+        &config.compute,
+        Arc::clone(&inner),
+        binary,
+        crash_dir,
+        distributed_spec,
+    ) {
+        Some((facade, manager)) => {
+            let distributed_primary = facade.distributed_slot();
+            tracing::info!(
+                target: "compute_child",
+                slots = config.compute.slot.len(),
+                distributed_primary = distributed_primary.is_some(),
+                "compute-child routing facade installed"
+            );
+            // The facade holds the manager alive; children are
+            // SIGTERM'd on daemon death via PR_SET_PDEATHSIG.
+            (facade, distributed_primary, Some(manager))
+        }
+        None => (inner, None, None),
+    }
 }
 
 /// A compute child's `role=generate` engine, as its flags name it: one model
@@ -425,27 +653,25 @@ mod distributed_primary_routing_tests {
         assert_eq!(count, 1, "got: {ids:?}");
     }
 }
-/// Every path that builds an inference provider must arm every idle
-/// monitor the slot lineup has.
+/// The assembly must arm every idle monitor the slot lineup has.
 ///
-/// **The bug this is a gate for.** There are two provider-build paths in
-/// this crate: cold start (`build/inference.rs`) and hot reload
-/// (`provider.rs`). When `start_fast_idle_monitor` and
+/// **The bug this is a gate for.** There were two provider-build paths:
+/// cold start and hot reload. When `start_fast_idle_monitor` and
 /// `start_embed_idle_monitor` were added, only the first was obvious —
 /// the second was found by grepping, not by anything failing. A reloaded
 /// daemon that armed three of four monitors would quietly re-acquire the
 /// pinned-forever footprint the cold-start path had just given up, with
-/// nothing red anywhere and no symptom except memory.
+/// nothing red anywhere and no symptom except memory. Both paths now run
+/// this one assembly (`ReloadFactory::build`), so this gate covers both.
 ///
 /// A type-level fix would be better and is not available: the monitors
-/// are independent inherent methods on a provider the reload path
-/// legitimately holds as `Arc<dyn InferenceProvider>` moments later. So
-/// the invariant is enforced where it can be — over the source — in the
-/// same shape `embedded::ffi_trace` already uses for the KV-clear rule.
+/// are independent inherent methods on a provider the host legitimately
+/// holds as `Arc<dyn InferenceProvider>` moments later. So the invariant is
+/// enforced where it can be — over the source — in the same shape
+/// `embedded::ffi_trace` already uses for the KV-clear rule.
 #[cfg(test)]
 mod idle_monitor_coverage {
-    /// The cold-start provider build, by source. The hot-reload half of this
-    /// gate is the daemon's (`sovereign-daemon/src/build/inference.rs`).
+    /// The provider build, by source.
     const COLD_START_SRC: &str = include_str!("assembly.rs");
 
     /// Every idle monitor the embedded engine exposes. Adding a slot with

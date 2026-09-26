@@ -40,6 +40,9 @@ use sovereign_inference::embedded::EmbeddedLlamaCpp;
 ///   the slot whose child owns the mesh-distributed primary. The worker-
 ///   discovery loop respawns it on every worker-set change instead of calling
 ///   `engine.reload_primary()`.
+/// - `reload` — the factory a hot reload rebuilds through: the same assembly,
+///   against the compute children this build started. A terminal's refuses
+///   (it holds no `[models]`), as its reload always has.
 /// `mesh` is the view a `terminal` resolves its entry node through. Unbound at
 /// this point in the boot — it answers "no peers" until `DeferredDaemon::bind`
 /// — which is correct: a terminal that boots before gossip converges reports
@@ -53,6 +56,7 @@ pub fn load_provider(
         Option<Arc<EmbeddedLlamaCpp>>,
         ModelFamily,
         Option<Arc<sovereign_compute::manager::DynamicChildSlot>>,
+        Arc<sovereign_compute::assembly::ReloadFactory>,
     ),
     (),
 > {
@@ -196,6 +200,7 @@ pub fn load_provider(
                 None,
                 ModelFamily::Unknown,
                 None,
+                Arc::default(),
             ));
         }
     }
@@ -206,50 +211,11 @@ pub fn load_provider(
             parts.llama,
             parts.embed_family,
             parts.distributed_primary,
+            parts.reload_factory,
         )),
         Err(e) => {
             eprintln!("error: {e}");
             Err(())
         }
-    }
-}
-
-/// The hot-reload half of the idle-monitor gate; the cold-start half lives
-/// with the assembly (`sovereign_compute::assembly`).
-#[cfg(test)]
-mod idle_monitor_coverage {
-    const HOT_RELOAD_SRC: &str = include_str!("../provider.rs");
-
-    /// A call, not a mention: comments explaining a monitor must not
-    /// satisfy the gate.
-    fn calls(src: &str, monitor: &str) -> bool {
-        src.lines()
-            .filter(|l| {
-                let t = l.trim_start();
-                !t.starts_with("//") && !t.starts_with("///") && !t.starts_with('*')
-            })
-            .any(|l| l.contains(monitor))
-    }
-    #[test]
-    fn the_hot_reload_path_arms_every_slot_monitor() {
-        // `start_extras_idle_monitor` is deliberately absent from this
-        // list: the hot-reload path does not install `[models.extra]`
-        // slots, so there are none to sweep. The three that correspond to
-        // slots it DOES build must all be armed.
-        let required = [
-            "start_idle_monitor(",
-            "start_fast_idle_monitor(",
-            "start_embed_idle_monitor(",
-        ];
-        let missing: Vec<&str> = required
-            .iter()
-            .copied()
-            .filter(|m| !calls(HOT_RELOAD_SRC, m))
-            .collect();
-        assert!(
-            missing.is_empty(),
-            "hot-reload provider build never calls: {missing:?} — a reloaded daemon \
-             would re-acquire the pinned-forever footprint"
-        );
     }
 }

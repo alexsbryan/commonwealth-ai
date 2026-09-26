@@ -146,7 +146,7 @@ pub fn classify_containment(
 /// never on an unknown — the same posture the VRAM preflight takes when its
 /// sensor is unreadable.
 pub fn check_containment(config: &SetupConfig, self_node_id: Option<&str>) -> bool {
-    let child_owns_primary = config.compute.enabled && config.compute.distributed_primary;
+    let child_owns_primary = sovereign_inference::engine_factory::child_owns_primary(config);
     let pinned_host_is_self = match (config.shared_model.host_node_id.as_deref(), self_node_id) {
         (Some(pin), Some(me)) => pin.eq_ignore_ascii_case(me),
         _ => false,

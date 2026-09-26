@@ -334,7 +334,7 @@ pub(super) async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
     // a terminal booting ahead of gossip reports its entry node unreachable
     // rather than inventing an address for it.
     let deferred_daemon = Arc::new(crate::DeferredDaemon::new());
-    let (provider, raw_engine, resolved_embed_family, distributed_primary_slot) =
+    let (provider, raw_engine, resolved_embed_family, distributed_primary_slot, reload_factory) =
         match crate::build::inference::load_provider(&config, Arc::clone(&deferred_daemon)) {
             Ok(t) => t,
             Err(()) => return 1,
@@ -1064,6 +1064,7 @@ pub(super) async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
                     // the same deferred handle, bound below.
                     provider_factory: Arc::new(crate::provider::LlamaCppFactory {
                         daemon: Arc::clone(&deferred_daemon),
+                        reload: Arc::clone(&reload_factory),
                     }),
                     // The work atlas writes into THIS store, so its entries reach
                     // the store's outbox and ride the ring rail (cw-lift 4b; the

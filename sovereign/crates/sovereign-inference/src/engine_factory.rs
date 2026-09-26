@@ -13,10 +13,10 @@
 //!
 //! This module supplies the missing step and nothing else. It answers
 //! "construct which engine?"; it does not answer "is this node allowed to
-//! run that engine?" (admission stays with the daemon, which has the
-//! `[compute]` containment rules and the operator-facing diagnostics) and
-//! it does not configure llama's optional slots (extras, edit, rerank,
-//! idle monitors — all concrete `EmbeddedLlamaCpp` methods the daemon
+//! run that engine?" (admission belongs to the serving assembly,
+//! `sovereign_compute::assembly`, with the `[compute]` containment rules)
+//! and it does not configure llama's optional slots (extras, edit, rerank,
+//! idle monitors — all concrete `EmbeddedLlamaCpp` methods the assembly
 //! calls on [`BuiltEngine::llama`] when it is `Some`).
 //!
 //! **Open set, so a registry — but the in-tree half stays an enum**
@@ -216,7 +216,7 @@ pub fn build_engine(config: &SetupConfig) -> Result<BuiltEngine, String> {
 /// Everything llama-specific that was inline in the daemon's
 /// `load_provider` and is *construction* lives here; everything that is
 /// *post-construction configuration* (extras, edit slot, rerank, idle
-/// monitors) stays with the daemon, which calls it on
+/// monitors) stays with the serving assembly, which calls it on
 /// [`BuiltEngine::llama`].
 fn build_llama(config: &SetupConfig) -> Result<BuiltEngine, String> {
     // `[models]` is an `Option` since the `terminal` node class landed
