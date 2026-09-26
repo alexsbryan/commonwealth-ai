@@ -148,9 +148,9 @@ finally = [
   { do = "remove", paths = ["${RAIL}", "${RAIL}.probe"] },
 ]
 
-# ── serve — the model server. Until pb-serve-program declares its package and
-# smoke, it is the serving crates' closure, judged under cmnwlth's rule where
-# the three crates sit today, and never-ran at best.
+# ── serve — the model server. pb-serve-program adds its binary and smoke. Until
+# pb-serve-package declares its own package (phase-b-20), it is judged under
+# cmnwlth's rule, where the serving crates sit today.
 [lift.serve]
 package = "cmnwlth"
 seeds = ["sovereign-inference", "sovereign-compute", "sovereign-serving-host"]

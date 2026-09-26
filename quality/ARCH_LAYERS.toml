@@ -1351,7 +1351,7 @@ crates = [
     "sovereign-inference",
     "sovereign-compute",
     # The NER served kind's loader (phase-b pb-serving-ner); it follows the
-    # serving crates into `serve` at pb-serve-program.
+    # serving crates into `serve` at pb-serve-package (phase-b-20).
     "sovereign-gliner",
     "sovereign-pods",
     "sovereign-meshapp",
