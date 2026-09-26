@@ -94,7 +94,8 @@ pub async fn fetch_model_to_dir(
     let final_path = dest_dir.join(&info.name);
     let partial_path = dest_dir.join(format!(".{}.{}.partial", info.name, std::process::id()));
 
-    let url = oicp_types::model_transfer::model_file_url(peer_base, &urlencoding::encode(&info.name));
+    let url =
+        oicp_types::model_transfer::model_file_url(peer_base, &urlencoding::encode(&info.name));
     let resp = stamped(http.get(&url), mesh_proof).send().await?;
     if !resp.status().is_success() {
         return Err(FetchError::HttpStatus(resp.status()));

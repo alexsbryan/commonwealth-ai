@@ -85,8 +85,8 @@ pub enum ModelAvailability {
 // The model-transfer wire lives in `oicp_types::model_transfer` (phase-b
 // pb-serve-sheds-core); its historical path stays reachable here.
 pub use oicp_types::model_transfer::{
-    model_file_url, models_list_url, ModelFileInfo, ModelFileListing, MODEL_FILE_ROUTE,
-    MODELS_LIST_PATH,
+    model_file_url, models_list_url, ModelFileInfo, ModelFileListing, MODELS_LIST_PATH,
+    MODEL_FILE_ROUTE,
 };
 
 #[cfg(test)]
