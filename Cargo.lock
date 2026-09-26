@@ -12509,6 +12509,7 @@ dependencies = [
  "async-trait",
  "axum",
  "futures",
+ "host-kit",
  "libc",
  "reqwest 0.12.28",
  "serde",

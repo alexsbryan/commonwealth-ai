@@ -30,7 +30,7 @@ use sovereign_inference::fast_exit_skip_destructors;
 use tracing::{error, info};
 
 use crate::distribution::DistributionHandoff;
-use crate::server::{router, ChildMeta};
+use crate::server::{bundle, ChildMeta};
 use crate::supervisor::HANDSHAKE_PREFIX;
 
 /// The kind of provider a child hosts.
@@ -211,7 +211,9 @@ pub fn run(args: &[String]) -> i32 {
 fn init_child_tracing() {
     use tracing_subscriber::{fmt, EnvFilter};
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
-        EnvFilter::new("sovereign_compute=info,sovereign_inference=info,compute_child=info")
+        EnvFilter::new(
+            "sovereign_compute=info,sovereign_inference=info,compute_child=info,host_kit=info",
+        )
     });
     // try_init: never panic if a subscriber is somehow already set.
     let _ = fmt()
@@ -293,7 +295,7 @@ async fn serve(cfg: ChildArgs) -> i32 {
         });
     }
 
-    let app = router(lazy, ready, meta);
+    let routes = bundle(lazy, ready, meta);
     info!(
         target: "compute_child",
         child = %cfg.name,
@@ -319,10 +321,7 @@ async fn serve(cfg: ChildArgs) -> i32 {
         }
     };
 
-    if let Err(e) = axum::serve(listener, app)
-        .with_graceful_shutdown(shutdown)
-        .await
-    {
+    if let Err(e) = host_kit::shell::serve([listener], vec![routes], shutdown).await {
         error!(target: "compute_child", error = %e, "axum serve error");
         return 1;
     }

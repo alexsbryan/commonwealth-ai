@@ -16,6 +16,7 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use futures::StreamExt;
+use host_kit::shell::RouteBundle;
 use sovereign_contracts::{CompletionRequest, Error, InferenceProvider, StreamFrame};
 
 use crate::wire::{
@@ -49,12 +50,22 @@ pub fn router(
     ready: Arc<AtomicBool>,
     meta: ChildMeta,
 ) -> Router {
+    host_kit::shell::mount(vec![bundle(provider, ready, meta)])
+}
+
+/// [`router`]'s routes as the host kit's named bundle, which `child_main`
+/// serves through the kit's shell.
+pub fn bundle(
+    provider: Arc<dyn InferenceProvider>,
+    ready: Arc<AtomicBool>,
+    meta: ChildMeta,
+) -> RouteBundle {
     let state = ChildServerState {
         provider,
         ready,
         meta,
     };
-    Router::new()
+    RouteBundle::new("compute_child")
         .route(ROUTE_COMPLETE, post(handle_complete))
         .route(ROUTE_COMPLETE_STREAM, post(handle_complete_stream))
         .route(ROUTE_EMBED, post(handle_embed))
