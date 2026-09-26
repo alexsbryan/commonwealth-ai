@@ -639,11 +639,8 @@ pub fn assemble(
             }),
         },
 
-        // The remaining five assemble nothing. `Server` is RESIDENT but is a
-        // surface, not an assembler — the distinction that widened the first
-        // number from seven to eight without touching the second (§10).
-        Launch::Server
-        | Launch::ComputeChild { .. }
+        // The remaining four assemble nothing.
+        Launch::ComputeChild { .. }
         | Launch::RpcWorker { .. }
         | Launch::Smoketest { .. }
         | Launch::Bare => Err(AssemblyRefusal::NotAnAssembler { launch: name }),
@@ -923,16 +920,11 @@ mod tests {
         assert_eq!(produced.len(), fixtures::every_variant().len());
     }
 
-    /// The four launches that assemble NOTHING say so rather than being given
-    /// a plausible daemon. `Server` is the one worth naming: it is RESIDENT —
-    /// it binds a long-lived listener and owns tenant state — and it is still
-    /// not an assembler. Conflating those two questions is what left an
-    /// orphaned server on `0.0.0.0:8080` for six days with no run lock and no
-    /// crash reporting (§10, hazards 4 and 10).
+    /// The launches that assemble NOTHING say so rather than being given a
+    /// plausible daemon.
     #[test]
     fn a_launch_that_assembles_nothing_refuses() {
         for launch in [
-            Launch::Server,
             Launch::Bare,
             Launch::ComputeChild { args: Vec::new() },
             Launch::Smoketest { argv: Vec::new() },

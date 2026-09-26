@@ -141,9 +141,7 @@ fn main() -> ExitCode {
         // what this binary did before — a one-shot verb handed to the desktop
         // opens the GUI. Preserved, not endorsed (§10.1): making the desktop
         // refuse a verb is a behaviour change and belongs in its own commit.
-        // `Server` is unreachable here; named so a new variant cannot land in
-        // a wildcard without someone deciding what it means.
-        Launch::Desktop | Launch::Server | Launch::Verb { .. } | Launch::Bare => {}
+        Launch::Desktop | Launch::Verb { .. } | Launch::Bare => {}
     }
 
     // The grounding gate's verification note (the failed-claim caveat) rides

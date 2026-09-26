@@ -264,7 +264,6 @@ async fn dispatch(launch: Launch, raw_args: &[String]) -> i32 {
         Launch::ComputeChild { .. }
         | Launch::AdminJoin { .. }
         | Launch::Desktop
-        | Launch::Server
         | Launch::Smoketest { .. } => {
             eprintln!(
                 "sovereign-cli-daemon: {} is not a launch this binary serves",

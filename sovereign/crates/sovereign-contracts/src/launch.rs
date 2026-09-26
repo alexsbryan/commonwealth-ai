@@ -108,26 +108,6 @@ pub enum Launch {
     /// daemon over HTTP, and may supervise one as a child process.
     Desktop,
 
-    /// The multi-tenant HTTP server (`sovereign-server --config <path>`).
-    ///
-    /// Like [`Launch::Desktop`] this is a binary's `default_ui` rather than a
-    /// flag: `sovereign-server` parses its own `--config`, which is required.
-    /// Two paths reach it — the desktop supervises one as the opt-in mobile
-    /// access host (`mobile_host_setup::start`), and `svrn mobile` **`exec`s**
-    /// it, replacing its own process image (`mobile_cmd.rs:152`).
-    ///
-    /// It is named here because it is **resident**: it binds a long-lived
-    /// listener and owns tenant state. Its absence from this set is why an
-    /// orphaned instance was found squatting `0.0.0.0:8080` for six days with
-    /// no crash reporting and no refusal (`quality/TOPOLOGY.md` hazards 4,
-    /// 10) — nothing that keys on [`Launch::is_resident`] could see it.
-    ///
-    /// In the target it is a *surface*, not an assembler: it speaks the turn
-    /// protocol to the daemon rather than building a `Runtime`. Being resident
-    /// and being an assembler are different questions, and this variant is the
-    /// place that distinction is written down.
-    Server,
-
     /// A run-once command that dispatches and exits.
     Verb {
         /// The verb name, e.g. `setup`, `doctor`, `model`.
@@ -265,10 +245,7 @@ impl Launch {
     /// [`Launch::Desktop`] is not resident yet owns a data root whenever it
     /// runs its own in-process daemon. See [`crate::run_lock`].
     pub fn is_resident(&self) -> bool {
-        matches!(
-            self,
-            Launch::Daemon { .. } | Launch::Worker { .. } | Launch::Server
-        )
+        matches!(self, Launch::Daemon { .. } | Launch::Worker { .. })
     }
 
     /// A short, stable name for logs and diagnostics.
@@ -281,7 +258,6 @@ impl Launch {
             Launch::AdminJoin { .. } => "admin-join",
             Launch::Smoketest { .. } => "smoketest",
             Launch::Desktop => "desktop",
-            Launch::Server => "server",
             Launch::Verb { .. } => "verb",
             Launch::Bare => "bare",
         }
@@ -961,20 +937,8 @@ mod tests {
 
     /// `is_resident` is the predicate three call sites used to re-derive. Pin
     /// both directions so a new variant has to decide deliberately.
-    /// `Server` is reached the way `Desktop` is — as a binary's `default_ui`,
-    /// never by a flag — because `sovereign-server` parses its own `--config`.
     #[test]
-    fn the_server_is_a_default_ui_not_a_flag() {
-        assert_eq!(Launch::parse(&[], Launch::Server), Launch::Server);
-        assert_eq!(
-            Launch::parse(&v(&["--config", "/x.toml"]), Launch::Server),
-            Launch::Server
-        );
-        assert_eq!(Launch::Server.as_str(), "server");
-    }
-
-    #[test]
-    fn only_the_three_resident_launches_are_resident() {
+    fn only_the_two_resident_launches_are_resident() {
         assert!(parse(&["daemon", "run"]).is_resident());
         assert!(parse(&["daemon", "run", "--worker-mode"]).is_resident());
         assert!(!parse(&["--compute-child"]).is_resident());
@@ -982,10 +946,6 @@ mod tests {
         assert!(!parse(&["setup"]).is_resident());
         assert!(!Launch::Desktop.is_resident());
         assert!(!Launch::Bare.is_resident());
-        // Resident: it binds a listener and owns tenant state. This is the
-        // assertion whose absence left an orphaned server unlocked and
-        // unreaped for six days.
-        assert!(Launch::Server.is_resident());
     }
 }
 
