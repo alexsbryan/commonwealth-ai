@@ -29,8 +29,10 @@
 //! admits through the membership decider the inference daemon uses
 //! ([`internal`]). Its mesh is keyed by this process's own node key.
 //!
-//! **It does not join over LAN/mDNS.** An invite without an iroh dial string
-//! is refused by name (see [`join`]).
+//! **It speaks mDNS by key only.** `run --mdns` advertises this member's node
+//! pubkey on the LAN, and a join whose invite carries no dial dials a keyed
+//! founder it finds there over iroh; with none, the join is refused by name
+//! (see [`join`], [`lan`]). A daemon's plaintext mDNS port is never dialed.
 //!
 //! **It has nothing Jellyfin in it.** The shim is a separate distribution —
 //! GPL-2 against this repo's AGPL — and the rails are the product here.
@@ -77,6 +79,7 @@ pub mod identity;
 pub mod internal;
 pub mod join;
 pub mod kv;
+pub mod lan;
 pub mod ledger;
 pub mod presence;
 pub mod rail;
@@ -309,6 +312,9 @@ pub struct RailsDaemon {
     /// The raw invite key, read once at start: present only on the member
     /// that founded its mesh with `cw-rails found` (see [`found`]).
     pub join_key: Option<String>,
+    /// mDNS: `None` unless `run --mdns` asked for it, then the running
+    /// advertisement or the reason there is none (see [`lan`]).
+    pub lan: Option<Result<lan::Lan, String>>,
     _internal: tokio::task::JoinHandle<()>,
     _acceptor: IrohAcceptor,
 }
@@ -382,6 +388,7 @@ impl RailsDaemon {
             internal_addr,
             solo: false,
             join_key,
+            lan: None,
             _internal: internal,
             _acceptor: acceptor,
         })
@@ -413,6 +420,21 @@ impl RailsDaemon {
         let mut daemon = Self::start(node, mesh).await?;
         daemon.solo = true;
         Ok(daemon)
+    }
+
+    /// Announce this member on the LAN by key (`run --mdns`). A solo node
+    /// has no mesh to announce, and a LAN that refuses multicast is a named
+    /// absence on `/v1/mesh/status`, never an exit.
+    pub async fn advertise_on_lan(&mut self) {
+        let lan = if self.solo {
+            Err("solo: there is no mesh to advertise".to_string())
+        } else {
+            lan::advertise(&self.node, &*self.mesh.read().await)
+        };
+        if let Err(why) = &lan {
+            tracing::warn!(target: "rails", why = %why, "lan: not advertising on mDNS");
+        }
+        self.lan = Some(lan);
     }
 
     /// Serve the loopback API and gossip forever. Returns only on a listener

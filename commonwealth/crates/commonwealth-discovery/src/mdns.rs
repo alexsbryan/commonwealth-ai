@@ -30,6 +30,11 @@ pub struct DiscoveredPeer {
     /// diagnostics, not for mesh membership decisions.
     pub name: String,
     pub address: SocketAddr,
+    /// The advertiser's node pubkey (hex), when it advertises one: then
+    /// `address` is its iroh endpoint's UDP port, dialed by key rather than
+    /// spoken to in plaintext. `None` from a daemon, which advertises its
+    /// internal HTTP port.
+    pub node_pubkey: Option<String>,
 }
 
 /// mDNS advertiser and browser for Commonwealth nodes.
@@ -56,6 +61,27 @@ impl MdnsDiscovery {
         node_name: &str,
         internal_port: u16,
     ) -> Result<Self> {
+        Self::new_keyed(
+            node_id,
+            mesh_id_hex,
+            mesh_name,
+            node_name,
+            internal_port,
+            None,
+        )
+    }
+
+    /// [`MdnsDiscovery::new`] for a node reached by key: `port` is its iroh
+    /// endpoint's UDP port and `node_pubkey` rides the `node_pubkey` TXT
+    /// field, so a browser can dial `<node_pubkey>@<address>` over iroh.
+    pub fn new_keyed(
+        node_id: NodeId,
+        mesh_id_hex: &str,
+        mesh_name: &str,
+        node_name: &str,
+        internal_port: u16,
+        node_pubkey: Option<&str>,
+    ) -> Result<Self> {
         let daemon = ServiceDaemon::new()
             .map_err(|e| Error::Discovery(format!("failed to create mDNS daemon: {e}")))?;
 
@@ -69,6 +95,9 @@ impl MdnsDiscovery {
         // Keep `name` for backwards compat with older peers that
         // treated it as the node name.
         properties.insert("name".to_string(), node_name.to_string());
+        if let Some(key) = node_pubkey {
+            properties.insert("node_pubkey".to_string(), key.to_string());
+        }
 
         let service = ServiceInfo::new(
             SERVICE_TYPE,
@@ -79,6 +108,16 @@ impl MdnsDiscovery {
             properties,
         )
         .map_err(|e| Error::Discovery(format!("failed to create service info: {e}")))?;
+        // With `()` for addresses and no addr-auto, mdns-sd announces on no
+        // interface at all (its `prepare_announce`: "No valid addrs"), so a
+        // browser never resolves the peer. The keyed path turns addr-auto
+        // on; the unkeyed one keeps its behaviour, which the inference
+        // daemon relies on until pb-mesh-exit-mesh retires its mDNS.
+        let service = if node_pubkey.is_some() {
+            service.enable_addr_auto()
+        } else {
+            service
+        };
 
         daemon
             .register(service)
@@ -90,12 +129,27 @@ impl MdnsDiscovery {
             port = internal_port,
             mesh_name,
             node_name,
+            keyed = node_pubkey.is_some(),
             "mDNS service registered"
         );
 
         Ok(Self {
             daemon,
             instance_name,
+            discovered: Arc::new(Mutex::new(HashMap::new())),
+        })
+    }
+
+    /// A browser that advertises nothing: for a node that is not on a mesh
+    /// yet and so has nothing to announce, only founders to find.
+    pub fn browser() -> Result<Self> {
+        let daemon = ServiceDaemon::new()
+            .map_err(|e| Error::Discovery(format!("failed to create mDNS daemon: {e}")))?;
+        info!("mDNS browser created — advertising nothing");
+        Ok(Self {
+            daemon,
+            // Matches no advertisement, so the own-instance skip never fires.
+            instance_name: format!("browser-{}", NodeId::generate()),
             discovered: Arc::new(Mutex::new(HashMap::new())),
         })
     }
@@ -145,6 +199,9 @@ impl MdnsDiscovery {
                                 let mesh_name =
                                     props.get_property_val_str("mesh_name").unwrap_or_default();
                                 let name = props.get_property_val_str("name").unwrap_or_default();
+                                let node_pubkey = props
+                                    .get_property_val_str("node_pubkey")
+                                    .map(str::to_string);
 
                                 // Pick the first address.
                                 let addr = info.get_addresses().iter().next().copied();
@@ -157,6 +214,7 @@ impl MdnsDiscovery {
                                         mesh_name = mesh_name,
                                         mesh_id = %mesh_id_hex,
                                         address = %socket_addr,
+                                        keyed = node_pubkey.is_some(),
                                         "mDNS: discovered peer"
                                     );
 
@@ -170,6 +228,7 @@ impl MdnsDiscovery {
                                         mesh_name: mesh_name.to_string(),
                                         name: name.to_string(),
                                         address: socket_addr,
+                                        node_pubkey,
                                     };
 
                                     discovered.lock().unwrap().insert(full_name, peer.clone());

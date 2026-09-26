@@ -4,7 +4,7 @@
 //! ```text
 //! cw-rails found <mesh-name> [--name N] [--data-dir D] [--config F]
 //! cw-rails join <invite> [--name N] [--data-dir D] [--config F]
-//! cw-rails run [--listen P] [--local-only] [--data-dir D] [--config F]
+//! cw-rails run [--listen P] [--local-only] [--mdns] [--data-dir D] [--config F]
 //! cw-rails media [<peer>] [--fanout <path>] [--peers a,b] [--listen P]
 //! ```
 //!
@@ -39,11 +39,13 @@ cw-rails — the minimal rails daemon: your address on the mesh, with media on i
       Join a mesh by invite (a sovereign://join/… link with an iroh dial).
       Writes node_id and mesh.json, then exits.
 
-  cw-rails run [--listen P] [--local-only] [--data-dir D] [--config F]
+  cw-rails run [--listen P] [--local-only] [--mdns] [--data-dir D] [--config F]
       Serve the loopback API and gossip. With no mesh it runs solo: the
       store and ledger serve, nothing gossips, no peer is admitted.
       --listen P serves the API on port P instead of rails.toml's `listen`.
       --local-only is `[relay] discovery = \"none\"`: no n0 relay, no n0 DNS.
+      --mdns announces this member on the LAN by key, so `cw-rails join` with
+      a bare cwth-… key finds it.
 
   cw-rails media [<peer>] [--fanout <path>] [--peers a,b] [--listen P]
       Ask the running daemon: who offers a library, the URL for one, or the
@@ -66,6 +68,7 @@ pub enum Command {
     Run {
         listen: Option<u16>,
         local_only: bool,
+        mdns: bool,
     },
     Media {
         peer: Option<String>,
@@ -98,6 +101,7 @@ impl Args {
         let mut peers = None;
         let mut listen = None;
         let mut local_only = false;
+        let mut mdns = false;
         while let Some(arg) = it.next() {
             let mut value = |flag: &str| it.next().ok_or_else(|| format!("{flag} wants a value"));
             match arg.as_str() {
@@ -113,6 +117,7 @@ impl Args {
                     );
                 }
                 "--local-only" => local_only = true,
+                "--mdns" => mdns = true,
                 "--peers" => {
                     peers = Some(
                         value("--peers")?
@@ -143,6 +148,9 @@ impl Args {
         if local_only && verb != "run" {
             return Err("--local-only is a `run` flag".into());
         }
+        if mdns && verb != "run" {
+            return Err("--mdns is a `run` flag".into());
+        }
         let command = match verb.as_str() {
             "found" => Command::Found {
                 mesh_name: invite.ok_or("found wants a mesh name: `cw-rails found <mesh-name>`")?,
@@ -156,7 +164,11 @@ impl Args {
                 if listen == Some(0) {
                     return Err("--listen 0 is a port the operator cannot dial back".into());
                 }
-                Command::Run { listen, local_only }
+                Command::Run {
+                    listen,
+                    local_only,
+                    mdns,
+                }
             }
             "media" => Command::Media {
                 peer,
@@ -237,6 +249,7 @@ pub async fn main(args: Args) -> ExitCode {
         Command::Run {
             listen: listen_flag,
             local_only,
+            mdns,
         } => {
             let mut config = config;
             if let Some(p) = listen_flag {
@@ -263,10 +276,13 @@ pub async fn main(args: Args) -> ExitCode {
                 Ok(n) => n,
                 Err(e) => return refuse(e),
             };
-            let daemon = match RailsDaemon::start_from_disk(node).await {
+            let mut daemon = match RailsDaemon::start_from_disk(node).await {
                 Ok(d) => d,
                 Err(e) => return refuse(e),
             };
+            if mdns {
+                daemon.advertise_on_lan().await;
+            }
             eprintln!("cw-rails: http://127.0.0.1:{listen}/v1/mesh/status");
             // The root's loss ends the process (five-programs-66).
             tokio::select! {
@@ -522,16 +538,18 @@ mod tests {
             run.command,
             Command::Run {
                 listen: None,
-                local_only: false
+                local_only: false,
+                mdns: false
             }
         );
         assert_eq!(
-            Args::parse(argv("run --listen 43383 --local-only"))
+            Args::parse(argv("run --listen 43383 --local-only --mdns"))
                 .unwrap()
                 .command,
             Command::Run {
                 listen: Some(43383),
-                local_only: true
+                local_only: true,
+                mdns: true
             }
         );
         assert_eq!(run.data_dir, Some(PathBuf::from("/var/rails")));

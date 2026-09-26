@@ -180,6 +180,19 @@ pub async fn status(State(daemon): State<Arc<RailsDaemon>>) -> impl IntoResponse
         "mesh": { "id": mesh.id.to_string(), "name": mesh.name },
         "join_link": invite.as_ref().ok(),
         "join_link_absent": invite.as_ref().err().map(|a| a.reason()),
+        "mdns": match &daemon.lan {
+            None => serde_json::Value::Null,
+            Some(Err(why)) => serde_json::json!({ "advertising": false, "reason": why }),
+            Some(Ok(lan)) => serde_json::json!({
+                "advertising": true,
+                "peers": lan.mdns.discovered_peers().iter().map(|p| serde_json::json!({
+                    "name": p.name,
+                    "mesh_name": p.mesh_name,
+                    "address": p.address.to_string(),
+                    "keyed": p.node_pubkey.is_some(),
+                })).collect::<Vec<_>>(),
+            }),
+        },
         "members": members,
         "fanout_inflight": daemon.gauge.load(Ordering::Relaxed),
         "internal_listener": daemon.internal_addr.to_string(),

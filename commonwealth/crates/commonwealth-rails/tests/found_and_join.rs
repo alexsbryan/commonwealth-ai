@@ -134,3 +134,66 @@ async fn a_cw_rails_founds_a_mesh_and_a_second_joins_it_by_invite() {
         () = joiner_side => {}
     }
 }
+
+/// The LAN path: a founder running `--mdns` is found by a joiner whose invite
+/// carries no dial at all, and the join still runs over iroh by key.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_joiner_with_a_bare_key_finds_the_founder_on_mdns() {
+    let founder_dir = tempfile::tempdir().unwrap();
+    let joiner_dir = tempfile::tempdir().unwrap();
+
+    // A mesh name no other test or host on this LAN advertises.
+    let mesh_name = format!("mdns-proof-{}", std::process::id());
+    let founded = found::found(founder_dir.path(), &mesh_name, "founder").expect("founds");
+    let port = free_port();
+    let node = RailsNode::bind(founder_dir.path().to_path_buf(), hermetic("founder", port))
+        .await
+        .expect("the founder binds");
+    let mut daemon = RailsDaemon::start_from_disk(node)
+        .await
+        .expect("the founder starts");
+    daemon.advertise_on_lan().await;
+    if let Some(Err(why)) = &daemon.lan {
+        panic!("the founder could not advertise on mDNS, so the LAN path was not measured: {why}");
+    }
+
+    let invite = commonwealth_discovery::deep_link::build_join_link(
+        &founded.join_key,
+        None,
+        Some(&mesh_name),
+        None,
+        false,
+        None,
+    );
+    assert!(
+        join::dial_of(&invite).is_err(),
+        "the invite carries no dial"
+    );
+
+    let joiner_side = async {
+        let joiner = RailsNode::bind(
+            joiner_dir.path().to_path_buf(),
+            hermetic("joiner", free_port()),
+        )
+        .await
+        .expect("the joiner binds");
+        let joined = join::join(&joiner, &invite)
+            .await
+            .expect("the founder is found on mDNS and admits the joiner");
+        assert_eq!(joined.mesh.id, founded.mesh.id);
+        let id = joined.self_id.to_string();
+        poll_status(port, "the joiner's roster row", |doc| {
+            doc["members"]
+                .as_array()?
+                .iter()
+                .find(|m| m["node_id"].as_str() == Some(id.as_str()))
+                .cloned()
+        })
+        .await;
+        joiner.endpoint.close().await;
+    };
+    tokio::select! {
+        exit = daemon.run() => panic!("the founder stopped serving: {exit:?}"),
+        () = joiner_side => {}
+    }
+}
