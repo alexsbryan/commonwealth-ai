@@ -140,7 +140,7 @@ A miss is NEEDS_HUMAN with the numbers, never a re-tuned bar.
   - Health spellings stay as they are, because they are wires. Name them in the body.
   - PROOF: LIFT(cmnwlth) passes with the kit's shell in cw-rails. The adopters' tests pass, and each one's mount trace names its routes. PLANT: mount a route outside the bundle list in cw-rails, and the mount-trace test goes red.
   LIFT ~800 lines. — read: sovereign-daemon/src/{loopback_guard.rs,server.rs:30-46}, commonwealth-rails/src/{api.rs,internal.rs}, sovereign-compute/src/child_main.rs:223-330, sovereign-cli-mesh/src/{meshapp_cmd.rs:240-270,ring_cmd/show.rs:85-115} — check: CLEAN, LINT, TEST(<the kit>), TEST(commonwealth-rails), TEST(sovereign-compute), TEST(sovereign-cli-mesh), LIFT(cmnwlth), PLANT, LAYER, BOUNDARY
-- [ ] pb-serving-assembly — depends [REVIEW-pb-census] — OUTCOME: a hot reload builds exactly what cold start builds, from ONE engine assembly that the serving package owns.
+- [x] pb-serving-assembly 9e05024f6 — depends [REVIEW-pb-census] — OUTCOME: a hot reload builds exactly what cold start builds, from ONE engine assembly that the serving package owns.
   - Today three paths build the engine, and they have drifted:
     - daemon build/inference.rs `load_provider` (:67-485);
     - daemon provider.rs `LlamaCppFactory` (struct :24, impl :36-164, installed at daemon_cmd/boot.rs:1054), which calls `EmbeddedLlamaCpp::load_full_with_families` directly, never reads `[engine] kind`, installs no extra/edit/rerank slots and no compute layer, and passes `ModelFamily::Unknown`;
