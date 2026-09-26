@@ -397,6 +397,7 @@ async fn register_local_model_slots_writes_info_for_all_three_slots() {
             extra: std::collections::BTreeMap::new(),
             primary_pool: None,
             edit: None,
+            kinds: Default::default(),
         }),
         node: Default::default(),
         daemon: DaemonSection::default(),

@@ -525,6 +525,7 @@ mod tests {
                 extra: BTreeMap::new(),
                 primary_pool: None,
                 edit: None,
+                kinds: Default::default(),
             }),
             node: Default::default(),
             daemon: DaemonSection {

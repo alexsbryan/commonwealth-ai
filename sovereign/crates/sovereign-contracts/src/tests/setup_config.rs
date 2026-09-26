@@ -215,6 +215,7 @@ fn models(primary: &str, fast: Option<&str>, embed: &str) -> ModelsSection {
         max_extras_memory_gb: None,
         primary_pool: None,
         edit: None,
+        kinds: Default::default(),
     }
 }
 
@@ -621,6 +622,7 @@ fn roundtrip_minimal_config() {
             max_extras_memory_gb: None,
             primary_pool: None,
             edit: None,
+            kinds: Default::default(),
         }),
         node: NodeSection::default(),
         daemon: DaemonSection::default(),
@@ -667,6 +669,7 @@ fn roundtrip_preserves_mcp_servers() {
             max_extras_memory_gb: None,
             primary_pool: None,
             edit: None,
+            kinds: Default::default(),
         }),
         node: NodeSection::default(),
         daemon: DaemonSection::default(),

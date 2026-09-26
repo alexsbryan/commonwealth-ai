@@ -18,6 +18,7 @@ use sovereign_contracts::types::NextEditFormat;
 use sovereign_contracts::InferenceProvider;
 use sovereign_inference::embedded::EmbeddedLlamaCpp;
 use sovereign_inference::engine_factory;
+use sovereign_inference::served_kind;
 
 use crate::manager::{ComputeChildManager, ComputeRoutedProvider, DynamicChildSlot};
 
@@ -61,7 +62,7 @@ pub enum PlannedSlot {
     Edit,
     /// Next-edit served off the resident chat model (`SOVEREIGN_NEXT_EDIT_FALLBACK`).
     NextEditFallback,
-    /// The cross-encoder from `SOVEREIGN_RERANK_MODEL_PATH`.
+    /// The cross-encoder (`served_kind::RERANK`).
     Rerank,
 }
 
@@ -116,12 +117,7 @@ fn next_edit_fallback_enabled() -> bool {
     )
 }
 
-/// The optional cross-encoder, from `SOVEREIGN_RERANK_MODEL_PATH`.
-fn rerank_model_path() -> Option<String> {
-    std::env::var("SOVEREIGN_RERANK_MODEL_PATH").ok()
-}
-
-/// The slot set `config` asks for. Pure apart from the two env reads above.
+/// The slot set `config` asks for. Pure apart from its env reads (the fallback above, the served kind's path).
 pub fn plan_serving(config: &SetupConfig) -> Result<ServingPlan, String> {
     // Through the accessor, not the field: the refusal it returns names WHY
     // there are no slots (a terminal routes instead; an unconfigured node
@@ -146,7 +142,7 @@ pub fn plan_serving(config: &SetupConfig) -> Result<ServingPlan, String> {
         } else if next_edit_fallback_enabled() {
             in_process.insert(PlannedSlot::NextEditFallback);
         }
-        if rerank_model_path().is_some() {
+        if served_kind::RERANK.model_path(Some(models)).is_some() {
             in_process.insert(PlannedSlot::Rerank);
         }
         engine_factory::embed_family_for(&models.embed)
@@ -404,17 +400,17 @@ fn build_in_process(
         // (both default 900s); `0` restores the old pinned behaviour.
         arc.start_fast_idle_monitor(config.daemon.fast_idle_secs);
         arc.start_embed_idle_monitor(config.daemon.embed_idle_secs);
-        // Optional cross-encoder reranker from `SOVEREIGN_RERANK_MODEL_PATH`.
-        // Soft-fail: a missing/broken reranker file must not block startup —
-        // retrieval simply runs the baseline path.
-        if let Some(rerank_path) = rerank_model_path() {
-            let path = PathBuf::from(&rerank_path);
+        // Optional cross-encoder reranker (`SOVEREIGN_RERANK_MODEL_PATH`, else
+        // `[models.kinds] rerank`). Soft-fail: a missing/broken reranker file
+        // must not block startup — retrieval simply runs the baseline path.
+        if let Some(path) = served_kind::RERANK.model_path(Some(models)) {
+            let rerank_path = path.display().to_string();
             match arc.install_rerank_slot(path, ModelFamily::Reranker) {
                 Ok(model_id) => {
                     tracing::info!(
                         slot = "rerank",
                         model_id = %model_id,
-                        "rerank slot installed from SOVEREIGN_RERANK_MODEL_PATH"
+                        "rerank slot installed"
                     );
                 }
                 Err(e) => {

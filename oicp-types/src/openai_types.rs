@@ -559,6 +559,38 @@ pub struct EmbeddingData {
     pub index: usize,
 }
 
+/// `/v1/rerank` request, in the shape llama-server, Jina and Cohere share:
+/// score each document against the query with the served cross-encoder.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RerankRequest {
+    /// Echoed back; the node serves its one rerank model whatever it says.
+    #[serde(default)]
+    pub model: String,
+    /// The query every document is scored against.
+    pub query: String,
+    /// The documents, scored in this order.
+    pub documents: Vec<String>,
+}
+
+/// `/v1/rerank` response: one result per document.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RerankResponse {
+    /// The request's `model`, echoed.
+    pub model: String,
+    /// One per input document, in input order.
+    pub results: Vec<RerankResult>,
+}
+
+/// One document's score. Scores are model-specific logits; never compare
+/// them across models.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RerankResult {
+    /// The document's position in the request.
+    pub index: usize,
+    /// Higher is more relevant.
+    pub relevance_score: f32,
+}
+
 /// OpenAI-compatible model list response.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ModelListResponse {

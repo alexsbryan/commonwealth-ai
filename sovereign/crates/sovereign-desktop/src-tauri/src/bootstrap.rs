@@ -359,6 +359,7 @@ mod tests {
                 extra: std::collections::BTreeMap::new(),
                 primary_pool: None,
                 edit: None,
+                kinds: Default::default(),
             }),
             node: Default::default(),
             daemon: sovereign_contracts::setup_config::DaemonSection {

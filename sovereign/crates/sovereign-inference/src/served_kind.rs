@@ -1,0 +1,425 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+//! Served model kinds — what a model that is not a chat or embed slot needs
+//! from a serving process, declared once.
+//!
+//! [`crate::engine_factory::register_engine`] answers "which engine?". This
+//! answers "which extra kinds of model does that engine serve, and how is each
+//! reached?". A kind registers five things together: its role (the
+//! `[models.kinds]` key and the name it is logged under), its loader, its
+//! OICP route, the client method that dials that route, and the compute-child
+//! role that hosts it out of process. The route mount, the compute child and
+//! the model-path decider all read this table, so a new kind is one
+//! [`ServedKind`] value, not an edit at each of those sites.
+//!
+//! The route, the client method and the child role may each be a NAMED
+//! absence: an enum arm carrying the reason, never a silent `None` (ARCH §6).
+//! A kind served in-process only says why it has no route.
+//!
+//! Slot roles (fast, primary, embed, code) are not kinds and stay a closed
+//! enum (`SLOT_ALIAS_POLICY`, ARCH §9).
+
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, OnceLock, RwLock};
+
+use futures::future::BoxFuture;
+use sovereign_contracts::model_family::ModelFamily;
+use sovereign_contracts::setup_config::ModelsSection;
+use sovereign_contracts::traits::InferenceProvider;
+
+/// Loads one kind's model from a GGUF path into a provider that serves it.
+pub type KindLoader = fn(&Path) -> sovereign_contracts::error::Result<Arc<dyn InferenceProvider>>;
+
+/// Serves one request on a kind's route: the JSON body in, the JSON answer
+/// out, against the serving process's provider. Transport-free, so the route
+/// mount owns HTTP and this crate stays free of it.
+pub type KindServeFn = fn(
+    Arc<dyn InferenceProvider>,
+    serde_json::Value,
+) -> BoxFuture<'static, Result<serde_json::Value, KindServeError>>;
+
+/// Why a kind's route refused a request. The mount maps each arm to a status.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum KindServeError {
+    /// The body is not this kind's request shape (400).
+    BadRequest(String),
+    /// The provider could not serve it (503).
+    Backend(String),
+}
+
+/// The OICP route a kind is served on.
+#[derive(Clone, Copy)]
+pub enum KindRoute {
+    /// Mounted at `path`; `serve` answers it.
+    Served {
+        /// The route path, e.g. `/v1/rerank`.
+        path: &'static str,
+        /// The handler body.
+        serve: KindServeFn,
+    },
+    /// No route, and why.
+    Absent {
+        /// The reason, for the reader who expected one.
+        reason: &'static str,
+    },
+}
+
+/// The `InferenceProvider` method a remote client (`oicp-client`) implements
+/// by dialling the kind's route.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum KindClient {
+    /// Implemented as this trait method.
+    Provided {
+        /// The `InferenceProvider` method name.
+        method: &'static str,
+    },
+    /// No client method, and why.
+    Absent {
+        /// The reason.
+        reason: &'static str,
+    },
+}
+
+/// The compute-child role that hosts a kind out of process.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum KindChild {
+    /// `--role <role>` / `[[compute.slot]] role = "<role>"` loads the kind's
+    /// model through its [`KindLoader`] in a supervised child.
+    Hosted {
+        /// The child role name.
+        role: &'static str,
+    },
+    /// No child role, and why.
+    Absent {
+        /// The reason.
+        reason: &'static str,
+    },
+}
+
+/// One served model kind.
+#[derive(Clone, Copy)]
+pub struct ServedKind {
+    /// The kind's name: its `[models.kinds]` key and its log label.
+    pub role: &'static str,
+    /// An env var that names the GGUF and wins over the config key, for the
+    /// kinds that had one before `[models.kinds]` existed. `None` for a kind
+    /// with no such variable.
+    pub env_path: Option<&'static str>,
+    /// Loads the kind's model into a provider that serves it.
+    pub loader: KindLoader,
+    /// Its OICP route.
+    pub route: KindRoute,
+    /// Its client method.
+    pub client: KindClient,
+    /// Its compute-child role.
+    pub child: KindChild,
+}
+
+impl std::fmt::Debug for ServedKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let route = match self.route {
+            KindRoute::Served { path, .. } => path,
+            KindRoute::Absent { reason } => reason,
+        };
+        f.debug_struct("ServedKind")
+            .field("role", &self.role)
+            .field("env_path", &self.env_path)
+            .field("route", &route)
+            .field("client", &self.client)
+            .field("child", &self.child)
+            .finish()
+    }
+}
+
+impl ServedKind {
+    /// The GGUF this kind loads on a node with `models`, if any: the env var
+    /// when it is set, else the `[models.kinds]` key. The one decider every
+    /// load site reads.
+    pub fn model_path(&self, models: Option<&ModelsSection>) -> Option<PathBuf> {
+        let from_env = self.env_path.and_then(|name| std::env::var(name).ok());
+        let path = from_env
+            .map(PathBuf::from)
+            .or_else(|| models.and_then(|m| m.kinds.get(self.role).cloned()));
+        tracing::debug!(
+            target: "served_kind",
+            kind = self.role,
+            path = ?path,
+            "served kind model path resolved"
+        );
+        path
+    }
+
+    /// The route path, when the kind has one.
+    pub fn route_path(&self) -> Option<&'static str> {
+        match self.route {
+            KindRoute::Served { path, .. } => Some(path),
+            KindRoute::Absent { .. } => None,
+        }
+    }
+
+    /// The child role, when the kind has one.
+    pub fn child_role(&self) -> Option<&'static str> {
+        match self.child {
+            KindChild::Hosted { role } => Some(role),
+            KindChild::Absent { .. } => None,
+        }
+    }
+}
+
+/// The cross-encoder reranker.
+pub const RERANK: ServedKind = ServedKind {
+    role: "rerank",
+    env_path: Some("SOVEREIGN_RERANK_MODEL_PATH"),
+    loader: load_rerank,
+    route: KindRoute::Served {
+        path: "/v1/rerank",
+        serve: serve_rerank,
+    },
+    client: KindClient::Provided {
+        method: "rerank_batch",
+    },
+    child: KindChild::Hosted { role: "rerank" },
+};
+
+fn load_rerank(path: &Path) -> sovereign_contracts::error::Result<Arc<dyn InferenceProvider>> {
+    let reranker =
+        crate::reranker_standalone::StandaloneReranker::load(path, ModelFamily::Reranker, None)?;
+    Ok(Arc::new(reranker))
+}
+
+fn serve_rerank(
+    provider: Arc<dyn InferenceProvider>,
+    body: serde_json::Value,
+) -> BoxFuture<'static, Result<serde_json::Value, KindServeError>> {
+    Box::pin(async move {
+        let request: oicp_types::openai_types::RerankRequest = serde_json::from_value(body)
+            .map_err(|e| KindServeError::BadRequest(format!("rerank request: {e}")))?;
+        if request.documents.is_empty() {
+            return Err(KindServeError::BadRequest(
+                "rerank request: `documents` must be a non-empty array".to_string(),
+            ));
+        }
+        let scores = provider
+            .rerank_batch(&request.query, &request.documents)
+            .await
+            .map_err(|e| KindServeError::Backend(format!("rerank failed: {e}")))?;
+        if scores.len() != request.documents.len() {
+            return Err(KindServeError::Backend(format!(
+                "rerank backend returned {} scores for {} documents",
+                scores.len(),
+                request.documents.len()
+            )));
+        }
+        let response = oicp_types::openai_types::RerankResponse {
+            model: request.model,
+            results: scores
+                .into_iter()
+                .enumerate()
+                .map(|(index, relevance_score)| oicp_types::openai_types::RerankResult {
+                    index,
+                    relevance_score,
+                })
+                .collect(),
+        };
+        serde_json::to_value(response).map_err(|e| KindServeError::Backend(e.to_string()))
+    })
+}
+
+type Registry = RwLock<Vec<ServedKind>>;
+
+fn registry() -> &'static Registry {
+    static REGISTRY: OnceLock<Registry> = OnceLock::new();
+    REGISTRY.get_or_init(|| RwLock::new(vec![RERANK]))
+}
+
+/// Register an out-of-tree kind. Call before the host mounts its routes.
+///
+/// Refuses a kind whose role, route path or child role is already taken: two
+/// kinds behind one name is two deciders, and the one that wins would be
+/// chosen by registration order.
+pub fn register_kind(kind: ServedKind) -> Result<(), String> {
+    let mut guard = registry()
+        .write()
+        .map_err(|_| "served kind registry poisoned".to_string())?;
+    for existing in guard.iter() {
+        if existing.role == kind.role {
+            return Err(format!("served kind `{}` is already registered", kind.role));
+        }
+        if let (Some(a), Some(b)) = (existing.route_path(), kind.route_path()) {
+            if a == b {
+                return Err(format!(
+                    "route `{a}` already serves kind `{}`; `{}` cannot take it",
+                    existing.role, kind.role
+                ));
+            }
+        }
+        if let (Some(a), Some(b)) = (existing.child_role(), kind.child_role()) {
+            if a == b {
+                return Err(format!(
+                    "child role `{a}` already hosts kind `{}`; `{}` cannot take it",
+                    existing.role, kind.role
+                ));
+            }
+        }
+    }
+    tracing::info!(target: "served_kind", kind = kind.role, "served kind registered");
+    guard.push(kind);
+    Ok(())
+}
+
+/// Every kind this binary serves, in registration order.
+pub fn served_kinds() -> Vec<ServedKind> {
+    registry().read().map(|g| g.clone()).unwrap_or_default()
+}
+
+/// The kind a compute child hosts under `role`, if one is registered.
+pub fn kind_for_child_role(role: &str) -> Option<ServedKind> {
+    served_kinds()
+        .into_iter()
+        .find(|k| k.child_role() == Some(role))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Rerank is a served kind: routed, dialled, and hostable in a child.
+    #[test]
+    fn rerank_is_registered_with_its_route_client_and_child_role() {
+        let kinds = served_kinds();
+        let rerank = kinds
+            .iter()
+            .find(|k| k.role == "rerank")
+            .expect("rerank must be a registered kind");
+        assert_eq!(rerank.route_path(), Some("/v1/rerank"));
+        assert_eq!(
+            rerank.client,
+            KindClient::Provided {
+                method: "rerank_batch"
+            }
+        );
+        assert_eq!(rerank.child_role(), Some("rerank"));
+        assert_eq!(
+            kind_for_child_role("rerank").map(|k| k.role),
+            Some("rerank")
+        );
+    }
+
+    /// Every named absence names its reason.
+    #[test]
+    fn every_absence_names_its_reason() {
+        for kind in served_kinds() {
+            if let KindRoute::Absent { reason } = kind.route {
+                assert!(
+                    !reason.trim().is_empty(),
+                    "{}: route absent with no reason",
+                    kind.role
+                );
+            }
+            if let KindClient::Absent { reason } = kind.client {
+                assert!(
+                    !reason.trim().is_empty(),
+                    "{}: client absent with no reason",
+                    kind.role
+                );
+            }
+            if let KindChild::Absent { reason } = kind.child {
+                assert!(
+                    !reason.trim().is_empty(),
+                    "{}: child absent with no reason",
+                    kind.role
+                );
+            }
+        }
+    }
+
+    /// A second kind cannot take a name, route or child role already taken.
+    #[test]
+    fn a_taken_role_route_or_child_role_is_refused() {
+        let err = register_kind(RERANK).expect_err("a duplicate role must be refused");
+        assert!(err.contains("rerank"), "got: {err}");
+        let route_clash = ServedKind {
+            role: "other-reranker",
+            env_path: None,
+            child: KindChild::Absent { reason: "test" },
+            ..RERANK
+        };
+        let err = register_kind(route_clash).expect_err("a taken route must be refused");
+        assert!(err.contains("/v1/rerank"), "got: {err}");
+    }
+
+    /// The config key is the kind's role; the env var, when set, wins.
+    #[test]
+    fn the_models_kinds_key_names_the_path() {
+        let kind = ServedKind {
+            env_path: None,
+            ..RERANK
+        };
+        let mut models = ModelsSection::default();
+        assert_eq!(kind.model_path(Some(&models)), None);
+        models
+            .kinds
+            .insert("rerank".into(), "/m/rerank.gguf".into());
+        assert_eq!(
+            kind.model_path(Some(&models)),
+            Some(PathBuf::from("/m/rerank.gguf"))
+        );
+    }
+
+    /// The route answers with one score per document, in input order.
+    #[tokio::test]
+    async fn the_rerank_route_scores_each_document_in_order() {
+        struct Scores;
+        #[async_trait::async_trait]
+        impl InferenceProvider for Scores {
+            async fn complete(
+                &self,
+                _: &sovereign_contracts::types::CompletionRequest,
+            ) -> sovereign_contracts::error::Result<sovereign_contracts::types::CompletionResponse>
+            {
+                unreachable!()
+            }
+            async fn complete_stream(
+                &self,
+                _: &sovereign_contracts::types::CompletionRequest,
+            ) -> sovereign_contracts::error::Result<
+                std::pin::Pin<
+                    Box<
+                        dyn futures::Stream<Item = sovereign_contracts::error::Result<String>>
+                            + Send,
+                    >,
+                >,
+            > {
+                unreachable!()
+            }
+            async fn embed(&self, _: &str) -> sovereign_contracts::error::Result<Vec<f32>> {
+                unreachable!()
+            }
+            async fn rerank_batch(
+                &self,
+                _: &str,
+                docs: &[String],
+            ) -> sovereign_contracts::error::Result<Vec<f32>> {
+                Ok(docs.iter().map(|d| d.len() as f32).collect())
+            }
+            fn capabilities(&self) -> sovereign_contracts::types::ProviderCapabilities {
+                unreachable!()
+            }
+        }
+        let KindRoute::Served { serve, .. } = RERANK.route else {
+            panic!("rerank must be served");
+        };
+        let body = serde_json::json!({"model": "r", "query": "q", "documents": ["a", "bbb"]});
+        let out = serve(Arc::new(Scores), body).await.expect("served");
+        let resp: oicp_types::openai_types::RerankResponse = serde_json::from_value(out).unwrap();
+        assert_eq!(resp.results.len(), 2);
+        assert_eq!(
+            (resp.results[1].index, resp.results[1].relevance_score),
+            (1, 3.0)
+        );
+        let empty = serde_json::json!({"query": "q", "documents": []});
+        assert!(matches!(
+            serve(Arc::new(Scores), empty).await,
+            Err(KindServeError::BadRequest(_))
+        ));
+    }
+}

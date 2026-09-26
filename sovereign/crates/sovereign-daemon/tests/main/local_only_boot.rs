@@ -93,6 +93,7 @@ fn cfg(client_port: u16, internal_port: u16, local_only: bool) -> SetupConfig {
             extra: BTreeMap::new(),
             primary_pool: None,
             edit: None,
+            kinds: Default::default(),
         }),
         node: Default::default(),
         daemon: DaemonSection {

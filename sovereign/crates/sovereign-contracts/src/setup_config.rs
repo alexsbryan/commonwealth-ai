@@ -658,6 +658,17 @@ pub struct ModelsSection {
     /// like the exotic one.
     #[serde(default, alias = "fim", skip_serializing_if = "Option::is_none")]
     pub edit: Option<EditSection>,
+
+    /// `[models.kinds]` — the GGUF each served model kind loads, keyed by the
+    /// kind's role (`sovereign_inference::served_kind`). A kind's env var,
+    /// where it has one, wins over its key here.
+    ///
+    /// ```toml
+    /// [models.kinds]
+    /// rerank = "/models/bge-reranker-v2-m3-Q8_0.gguf"
+    /// ```
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub kinds: BTreeMap<String, PathBuf>,
 }
 
 /// `[models.edit]` — dedicated code-editing model declaration

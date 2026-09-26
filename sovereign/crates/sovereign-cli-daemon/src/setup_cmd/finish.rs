@@ -41,6 +41,7 @@ pub(super) async fn finish_with_paths(paths: ModelPaths, opts: &Opts) -> i32 {
             max_extras_memory_gb: None,
             primary_pool: None,
             edit: None,
+            kinds: Default::default(),
         }),
         node: Default::default(),
         daemon: DaemonSection::default(),

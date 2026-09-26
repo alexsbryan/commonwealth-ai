@@ -116,10 +116,10 @@ impl RerankLoad {
 /// a distinct arm of [`RerankLoad`], so a caller with a banner can say which
 /// one happened.
 pub fn load_from_env() -> RerankLoad {
-    let Ok(raw) = std::env::var("SOVEREIGN_RERANK_MODEL_PATH") else {
+    // The kind's one path decider; no `[models]` here, so the env var alone.
+    let Some(path) = crate::served_kind::RERANK.model_path(None) else {
         return RerankLoad::NotConfigured;
     };
-    let path = std::path::PathBuf::from(&raw);
 
     // NATIVE_GROUNDING.md §8 residency plan — the fit check BEFORE the slot
     // loads. The rerank slot is process-local additional weight alongside

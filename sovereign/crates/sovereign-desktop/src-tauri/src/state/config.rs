@@ -625,6 +625,7 @@ impl DesktopConfig {
                 max_extras_memory_gb: None,
                 primary_pool: None,
                 edit: None,
+                kinds: Default::default(),
             }),
             node: Default::default(),
             daemon: Default::default(),

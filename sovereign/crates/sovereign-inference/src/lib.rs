@@ -27,6 +27,7 @@ pub mod remote {
     pub use oicp_client::*;
 }
 pub mod reranker_standalone;
+pub mod served_kind;
 pub mod router_circuit;
 pub mod rpc_worker_main;
 pub mod selector;
