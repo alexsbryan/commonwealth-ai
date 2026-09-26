@@ -8,7 +8,7 @@
 //! llama's own slot installs and idle monitors, and the compute-child layer.
 //! A terminal never reaches it; its forwarder is the daemon's.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use sovereign_contracts::model_family::ModelFamily;
@@ -306,6 +306,56 @@ pub fn assemble_serving(config: &SetupConfig) -> Result<ServingParts, String> {
         embed_family: resolved_embed_family,
         distributed_primary,
     })
+}
+
+/// A compute child's `role=generate` engine, as its flags name it: one model
+/// in the fast slot, or — with `--distribution` — the mesh's distributed
+/// primary. Blocking (model load); the child calls it on `spawn_blocking`.
+pub(crate) fn assemble_child_generate(
+    path: &Path,
+    ctx: u32,
+    gpu_layers: Option<u32>,
+    distribution: Option<PathBuf>,
+) -> sovereign_contracts::Result<Arc<dyn InferenceProvider>> {
+    let Some(handoff_path) = distribution else {
+        // Single model into the fast slot (no separate primary).
+        // Grammar/structured-output are honoured per-request by
+        // build_sampler.
+        let engine = EmbeddedLlamaCpp::load_dual(path, None, ctx, gpu_layers)?;
+        return Ok(Arc::new(engine));
+    };
+
+    // Distributed primary. The daemon has already planned the shards
+    // and warmed every worker's cache; we load across them. Install the
+    // handoff FIRST — it is what makes `resolve_placement` see workers
+    // at all, and what pins the daemon's plan so our `-ot` overrides cut
+    // the blocks exactly where the warm caches expect.
+    let handoff = crate::distribution::DistributionHandoff::read(&handoff_path).map_err(|e| {
+        sovereign_contracts::Error::InvalidInput(format!(
+            "--distribution {}: {e}",
+            handoff_path.display()
+        ))
+    })?;
+    tracing::info!(
+        target: "compute_child",
+        workers = handoff.endpoints.len(),
+        endpoints = ?handoff.endpoints,
+        handoff = %handoff_path.display(),
+        "distributed primary: installing the daemon's worker set + shard plan"
+    );
+    handoff.install(path);
+    let engine =
+        EmbeddedLlamaCpp::load_single_distributed(path, ctx, gpu_layers, ModelFamily::Unknown)?;
+    Ok(Arc::new(engine))
+}
+
+/// A compute child's `role=embed` engine. Blocking (model load).
+pub(crate) fn assemble_child_embed(
+    path: &Path,
+) -> sovereign_contracts::Result<Arc<dyn InferenceProvider>> {
+    let engine =
+        sovereign_inference::embedded::EmbedOnlyProvider::load(path, ModelFamily::Unknown)?;
+    Ok(Arc::new(engine))
 }
 
 /// Every `model_id` that must route to the distributed-primary child: the GGUF

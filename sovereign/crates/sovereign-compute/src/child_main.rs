@@ -20,16 +20,13 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use futures::Stream;
-use sovereign_contracts::model_family::ModelFamily;
 use sovereign_contracts::{
     CompletionRequest, CompletionResponse, Depth, Error, FinishReason, InferenceProvider,
     ProviderCapabilities, Result, Speed, StreamFrame,
 };
-use sovereign_inference::embedded::{EmbedOnlyProvider, EmbeddedLlamaCpp};
 use sovereign_inference::fast_exit_skip_destructors;
 use tracing::{error, info};
 
-use crate::distribution::DistributionHandoff;
 use crate::server::{bundle, ChildMeta};
 use crate::supervisor::HANDSHAKE_PREFIX;
 
@@ -64,7 +61,7 @@ struct ChildArgs {
     bind: String,
     mock_tokens: usize,
     mock_token_delay_ms: u64,
-    /// Path to a [`DistributionHandoff`] written by the daemon. Present iff
+    /// Path to a [`crate::distribution::DistributionHandoff`] written by the daemon. Present iff
     /// this child hosts the mesh's DISTRIBUTED primary: it names the warmed
     /// RPC workers and the shard plan they were warmed against. The path is
     /// visible in `ps` and the file is plain JSON, so "what was this child
@@ -346,43 +343,12 @@ fn load_provider(
         Role::Generate => {
             let path = model
                 .ok_or_else(|| Error::InvalidInput("--model required for role=generate".into()))?;
-            let Some(handoff_path) = distribution else {
-                // Single model into the fast slot (no separate primary).
-                // Grammar/structured-output are honoured per-request by
-                // build_sampler.
-                let engine = EmbeddedLlamaCpp::load_dual(&path, None, ctx, gpu_layers)?;
-                return Ok(Arc::new(engine));
-            };
-
-            // Distributed primary. The daemon has already planned the shards
-            // and warmed every worker's cache; we load across them. Install the
-            // handoff FIRST — it is what makes `resolve_placement` see workers
-            // at all, and what pins the daemon's plan so our `-ot` overrides cut
-            // the blocks exactly where the warm caches expect.
-            let handoff = DistributionHandoff::read(&handoff_path).map_err(|e| {
-                Error::InvalidInput(format!("--distribution {}: {e}", handoff_path.display()))
-            })?;
-            info!(
-                target: "compute_child",
-                workers = handoff.endpoints.len(),
-                endpoints = ?handoff.endpoints,
-                handoff = %handoff_path.display(),
-                "distributed primary: installing the daemon's worker set + shard plan"
-            );
-            handoff.install(&path);
-            let engine = EmbeddedLlamaCpp::load_single_distributed(
-                &path,
-                ctx,
-                gpu_layers,
-                ModelFamily::Unknown,
-            )?;
-            Ok(Arc::new(engine))
+            crate::assembly::assemble_child_generate(&path, ctx, gpu_layers, distribution)
         }
         Role::Embed => {
             let path = model
                 .ok_or_else(|| Error::InvalidInput("--model required for role=embed".into()))?;
-            let engine = EmbedOnlyProvider::load(&path, ModelFamily::Unknown)?;
-            Ok(Arc::new(engine))
+            crate::assembly::assemble_child_embed(&path)
         }
         Role::Mock => Ok(Arc::new(MockProvider {
             tokens: mock_tokens.max(1),
