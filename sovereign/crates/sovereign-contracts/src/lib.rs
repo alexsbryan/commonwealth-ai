@@ -94,6 +94,10 @@ pub mod memory_config;
 /// decision extractor can name it without the host; the composition
 /// (`Pipeline`, the registry) stays host code.
 pub mod middleware;
+/// What every surface that ran the mobile host answers — `svrn mobile` and
+/// the desktop's Mobile access toggle — now that its binary is deleted.
+pub const MOBILE_HOST_ABSENT: &str =
+    "the mobile host was the sovereign-server binary, which was deleted; no mobile host ships";
 pub mod model_family;
 pub mod models_manifest;
 /// The node-identity FILES — the `node_id` file and the identity fields of

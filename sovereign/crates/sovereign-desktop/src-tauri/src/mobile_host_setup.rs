@@ -7,11 +7,8 @@
 //! `commands.generated.ts` are unchanged) and answer the absence by name
 //! (ARCH principle 6).
 
+use sovereign_contracts::MOBILE_HOST_ABSENT;
 use tracing::{info, warn};
-
-/// What the toggle and the pairing card answer.
-const MOBILE_HOST_ABSENT: &str =
-    "the mobile host was the sovereign-server binary, which was deleted; no mobile host ships";
 
 /// Pairing card the Settings panel renders. Never produced now; kept because
 /// it is `get_mobile_pairing`'s declared return type.

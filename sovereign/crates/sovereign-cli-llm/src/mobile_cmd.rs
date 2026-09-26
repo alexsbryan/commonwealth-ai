@@ -7,9 +7,7 @@
 //! dispatcher miss, and never a "binary not found" that reads like a build
 //! problem the user could fix (ARCH principle 6).
 
-/// What every `svrn mobile` subcommand answers.
-const MOBILE_HOST_ABSENT: &str =
-    "the mobile host was the sovereign-server binary, which was deleted; no mobile host ships";
+use sovereign_contracts::MOBILE_HOST_ABSENT;
 
 /// Run a `mobile` subcommand. Returns the process exit code: always 1.
 pub async fn run_mobile(args: &[String]) -> i32 {

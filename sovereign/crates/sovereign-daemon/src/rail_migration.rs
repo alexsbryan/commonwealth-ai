@@ -92,11 +92,7 @@ pub fn hand_over(data_dir: &Path, config_path: &Path, rails_answering: bool) {
     let viewer_id = std::fs::read_to_string(config_path)
         .ok()
         .and_then(|t| t.parse::<toml_edit::DocumentMut>().ok())
-        .is_some_and(|d| {
-            d.get("iroh")
-                .and_then(|i| i.get(VIEWER_KEY))
-                .is_some()
-        });
+        .is_some_and(|d| d.get("iroh").and_then(|i| i.get(VIEWER_KEY)).is_some());
     if namespaces.is_empty() && !house_credential && !viewer_id {
         tracing::debug!(dir = %data_dir.display(), "rail migration: cw-rails already answers and nothing waits to be handed over");
         return;
