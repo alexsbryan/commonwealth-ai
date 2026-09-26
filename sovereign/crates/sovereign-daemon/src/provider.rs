@@ -265,9 +265,7 @@ mod reload_builds_what_cold_start_builds {
             "the primary is withheld from this process: {dp:?}"
         );
         assert!(
-            dp.children
-                .iter()
-                .any(|(_, model)| model == &primary()),
+            dp.children.iter().any(|(_, model)| model == &primary()),
             "a compute child owns the primary: {dp:?}"
         );
     }
