@@ -491,18 +491,15 @@ across several machines; these keep them consistent.)
   runs from `target/debug/<sibling>`; the llama.cpp kernels are native C++
   either way.
 - **Rebuild the WHOLE workspace, not one binary.** After editing a shared
-  crate (esp. `sovereign-core`), run a plain full `cargo build --workspace
-  --features corpus-engine/treesitter,sovereign-cli/dev-tools` so every
-  binary is fresh. Leaving out `sovereign-cli/dev-tools` relinks the
-  dispatcher without its developer verbs (`quality`, `notes`, `code`,
-  `tools`), as happened 2026-09-26. A scoped
-  `-p sovereign-cli-daemon` leaves `target/debug/sovereign-desktop` stale —
+  crate (esp. `sovereign-core`), run `cargo build --workspace --features
+  corpus-engine/treesitter,sovereign-cli/dev-tools` so every binary is
+  fresh. A scoped `-p sovereign-cli-daemon` leaves `target/debug/sovereign-desktop` stale —
   and the chat e2e repro (`repro-defects.mjs` / `chaos.mjs`) exercises the
   DESKTOP binary, which runs the KnowledgeQuery / grounding pipeline
   in-process (the daemon it attaches to only serves inference + fan-out).
   Rebuild just the daemon and you validate old code. Verify what actually
   runs via `readlink -f /proc/<pid>/exe` + mtime, never `strings` on a big
-  debug binary (it silently misses many `&str`s). The chat pipeline logs to
+  debug binary (it misses many `&str`s). The chat pipeline logs to
   the desktop app log (`test-artifacts/repro-defects-app.log`), not
   `daemon.err`.
 <!-- portable:start working style: observability, quality, fluent CLI -->
