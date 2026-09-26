@@ -270,6 +270,82 @@ mod reload_builds_what_cold_start_builds {
         );
     }
 
+    /// A running compute generation with no process in it: a remote engine
+    /// holds no weights, and the distributed primary's child stays unspawned
+    /// until a warmed worker set exists.
+    fn remote_distributed_primary() -> SetupConfig {
+        let mut cfg = remote();
+        cfg.compute.enabled = true;
+        cfg.compute.distributed_primary = true;
+        cfg
+    }
+
+    /// The reload the admin route calls, bound to a commissioned daemon and to
+    /// the factory cold start returned.
+    fn bound_reload(cold: &ServingParts, cfg: &SetupConfig) -> LlamaCppFactory {
+        let daemon = Arc::new(crate::DeferredDaemon::new());
+        daemon.bind(crate::EmbeddedDaemon::new(
+            models_dir().join("daemon-data"),
+            cfg.clone(),
+            crate::daemon_services::fixtures::headless(),
+        ));
+        LlamaCppFactory {
+            daemon,
+            reload: Arc::clone(&cold.reload_factory),
+        }
+    }
+
+    /// `build_provider` — what `POST /v1/admin/reload` runs — against the
+    /// compute generation cold start started. The same children are re-wrapped
+    /// and the provider it installs still holds the child's primary; different
+    /// children are refused by name. Asserted on what installed, not the plan.
+    #[tokio::test]
+    async fn build_provider_rewraps_the_running_children_and_refuses_new_ones() {
+        let cfg = remote_distributed_primary();
+        let cold = assemble_serving(&cfg).expect("a remote engine needs no weights");
+        let child = cold
+            .distributed_primary
+            .clone()
+            .expect("cold start registers the distributed-primary child");
+        let reload = bound_reload(&cold, &cfg);
+
+        let installed = match reload.build_provider(&cfg).await {
+            Ok(provider) => provider,
+            Err(e) => panic!("the same children must reload: {e}"),
+        };
+        let primary = installed
+            .resident_slots()
+            .into_iter()
+            .find(|s| s.role == "primary")
+            .expect("the reloaded provider must still route the primary to its child");
+        assert_eq!(primary.model_id, "big-primary");
+        let rebuilt = reload.rebuild_engine(&cfg).expect("same children");
+        assert!(
+            rebuilt
+                .distributed_primary
+                .is_some_and(|slot| Arc::ptr_eq(&slot, &child)),
+            "a reload wraps the running child; it never registers a second one"
+        );
+
+        let mut changed = cfg.clone();
+        changed
+            .compute
+            .slot
+            .push(sovereign_core::setup_config::ComputeSlotConfig {
+                name: "another".into(),
+                role: "generate".into(),
+                model: models_dir().join("small-fast.gguf"),
+                context_size: None,
+                n_gpu_layers: None,
+                warm: false,
+                capture_embed: false,
+            });
+        match reload.build_provider(&changed).await {
+            Ok(_) => panic!("a reload that asks for different children must refuse"),
+            Err(e) => assert!(e.contains("restart the daemon"), "got: {e}"),
+        }
+    }
+
     /// A remote-kind node reloads with no weights on disk, as it boots.
     #[test]
     fn a_remote_reload_needs_no_weights() {
