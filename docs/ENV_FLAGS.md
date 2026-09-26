@@ -42,7 +42,7 @@ dead-codepath survey lives in `docs/ENV_VAR_AUDIT.md`.
 | `SOVEREIGN_CLI_MESH_BIN` | sibling of dispatcher | shipped | Path override for the sovereign-cli-mesh sibling, lifted out of sovereign-cli-llm 2026-09-21. |
 | `SOVEREIGN_CLI_PATH` | unset | deprecated | ORPHANED 2026-09-11 by svt-2 (99a0b1520): its only reader was `supervisor_setup::resolve_daemon_child`, and that module is deleted — zero Rust readers remain. DEPRECATED rather than deleted, for two reasons. (1) A user or CI job with it still exported now gets NOTHING, silently, and the successor is a DIFFERENT name — `SVRNMESH_DAEMON_BINARY` / `SOVEREIGN_DAEMON_BINARY`, read through `rebrand::svrnmesh_env` in `daemon_binary::daemon_binary` (daemon_binary.rs:69). A row that says so is the difference between a rename a reader can follow and a flag that quietly stopped working (ARCH principle 6). (2) `sovereign/crates/sovereign-desktop/tests/e2e/real/faults/spawn.ts:151` and `tests/e2e/scripts/lib/harness.mjs:257` still SET it; until those are cleaned up the name is live in the tree and env-gate should keep knowing it. Delete this row when both setters are gone. |
 | `SOVEREIGN_SERVER_PATH` | unset | shipped | Mobile host's path to the sovereign server binary. |
-| `SOVEREIGN_SERVE_BIN` | sibling of dispatcher | shipped | Path override for sovereign-serve, which the dispatcher execs for `svrn mesh warm-cache` and `svrn mesh fetch-model` (phase-b-22). |
+| `SOVEREIGN_SERVE_BIN` | sibling of dispatcher | shipped | Path override for sovereign-serve, which the dispatcher execs for `svrn mesh warm-cache` and `svrn mesh fetch-model` (phase-b-22), and which the svrn daemon brings up at boot when it dials serve (`serve_client::ensure_serve`, pb-svrn-dials-serve). |
 
 ## corpus
 

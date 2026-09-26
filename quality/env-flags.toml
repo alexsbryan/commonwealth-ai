@@ -1190,7 +1190,7 @@ name = "SOVEREIGN_SERVE_BIN"
 cluster = "cli-binaries"
 default = "sibling of dispatcher"
 status = "shipped"
-purpose = "Path override for sovereign-serve, which the dispatcher execs for `svrn mesh warm-cache` and `svrn mesh fetch-model` (phase-b-22)."
+purpose = "Path override for sovereign-serve, which the dispatcher execs for `svrn mesh warm-cache` and `svrn mesh fetch-model` (phase-b-22), and which the svrn daemon brings up at boot when it dials serve (`serve_client::ensure_serve`, pb-svrn-dials-serve)."
 
 [[flag]]
 name = "CW_RAILS_BIN"

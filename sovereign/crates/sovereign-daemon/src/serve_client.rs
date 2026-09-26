@@ -188,6 +188,180 @@ pub async fn read_engine_state(base: &str) -> EngineStateRead {
     outcome
 }
 
+/// How long boot waits for serve to answer, its bring-up included. The daemon
+/// used to load its models inline at boot with no bound at all, so waiting on
+/// serve's load here keeps that timing; ten minutes covers a cold load of the
+/// largest single-node model this workspace runs, and past it the absence is
+/// named rather than waited on forever.
+pub const SERVE_BRING_UP_WINDOW: std::time::Duration = std::time::Duration::from_secs(600);
+
+/// Make serve reachable at `serve`, at a user-action moment only (daemon
+/// boot); never on a refused dial (`bring_up_decider`, quality/ARCH_LAYERS.toml).
+/// The decision is [`ServingHost::ensure_reachable`]'s, the same one
+/// `rails_client::ensure_rails` uses for cw-rails.
+///
+/// Only the default base brings serve up: the serve on this host, from the
+/// config file the daemon read (serve reads `<data-dir>/config.toml`). An
+/// operator-named `[node] entry` is someone else's process, so it is probed
+/// and never started.
+///
+/// [`ServingHost::ensure_reachable`]: sovereign_turn_client::reach::ServingHost::ensure_reachable
+pub async fn ensure_serve(
+    serve: &ServeBase,
+    config_path: &std::path::Path,
+) -> Result<sovereign_turn_client::reach::Reached, String> {
+    use sovereign_turn_client::reach::{locate_sibling, BundledBackend, ServingHost};
+    let host = ServingHost::at(serve.base.as_str());
+    let host = match serve.source {
+        ServeBaseSource::NodeEntry => host,
+        ServeBaseSource::Default => {
+            let data_dir = config_path
+                .parent()
+                .filter(|dir| SetupConfig::path_in(dir) == config_path)
+                .ok_or_else(|| {
+                    format!(
+                        "serve reads <data-dir>/config.toml, and this daemon's config is {}; \
+                         start serve by hand with `sovereign-serve --data-dir <dir>`",
+                        config_path.display()
+                    )
+                })?;
+            let bin =
+                locate_sibling("sovereign-serve", "SOVEREIGN_SERVE_BIN").ok_or_else(|| {
+                    "no sovereign-serve binary: set SOVEREIGN_SERVE_BIN, or install it beside \
+                 this program or on PATH"
+                        .to_string()
+                })?;
+            host.bringing_up(
+                BundledBackend::at(bin)
+                    .arg("--data-dir")
+                    .arg(data_dir.display().to_string())
+                    .arg("--listen")
+                    .arg(format!(
+                        "127.0.0.1:{}",
+                        sovereign_contracts::venue::DEFAULT_SERVE_PORT
+                    ))
+                    .log_to(data_dir.join("serve.log")),
+            )
+        }
+    };
+    let reached = host
+        .ensure_reachable(SERVE_BRING_UP_WINDOW)
+        .await
+        .map_err(|e| e.to_string());
+    match &reached {
+        Ok(r) => {
+            tracing::info!(target: "serving_path", serve_base = %serve.base, reached = ?r, "serve is reachable")
+        }
+        Err(e) => {
+            tracing::warn!(target: "serving_path", serve_base = %serve.base, reason = %e, "serve is not reachable")
+        }
+    }
+    reached
+}
+
+/// Read serve's self-report, bounded like every other status read of serve
+/// (`sovereign_turn_client::reach::PROBE_TIMEOUT`).
+pub async fn read_served_self(
+    base: &str,
+) -> Result<sovereign_contracts::engine_state::ServedSelf, String> {
+    let url = format!(
+        "{}{}",
+        base.trim_end_matches('/'),
+        sovereign_contracts::engine_state::SERVED_SELF_PATH
+    );
+    let read = async {
+        let resp = reqwest::Client::new()
+            .get(&url)
+            .send()
+            .await
+            .map_err(|e| format!("serve at {base} is not reachable: {e}"))?;
+        if !resp.status().is_success() {
+            return Err(format!(
+                "serve at {base} refused its self-report: HTTP {}",
+                resp.status()
+            ));
+        }
+        resp.json::<sovereign_contracts::engine_state::ServedSelf>()
+            .await
+            .map_err(|e| format!("serve at {base} answered an unreadable self-report: {e}"))
+    };
+    match tokio::time::timeout(sovereign_turn_client::reach::PROBE_TIMEOUT, read).await {
+        Ok(r) => r,
+        Err(_) => Err(format!(
+            "serve at {base} did not answer its self-report within {:?}",
+            sovereign_turn_client::reach::PROBE_TIMEOUT
+        )),
+    }
+}
+
+/// The terminal arm in its loopback mode, dialing serve at `serve`: chat and
+/// embeddings go to serve's `/v1`, and this node's model facts are serve's
+/// (`SplitInferenceProvider::with_served`). The query-instruction prefix is
+/// `embed_family.default_quirks().embed`, the decider the engine applies in
+/// process, so a query embedded over the wire is prepared the same way.
+///
+/// `config_context` is used only when serve's provider reports no context
+/// window (the model-free mock engine), and the substitution is traced.
+pub fn loopback_provider(
+    serve: &ServeBase,
+    served: sovereign_contracts::engine_state::ServedSelf,
+    config_context: u32,
+) -> sovereign_inference::remote::SplitInferenceProvider {
+    let query_instruction = served
+        .embed_family
+        .default_quirks()
+        .embed
+        .map(|q| q.query_instruction)
+        .unwrap_or_default();
+    let context = match served.context_size {
+        Some(n) => n,
+        None => {
+            tracing::info!(target: "serving_path", config_context, "serve reports no context window; the config's is used");
+            config_context
+        }
+    };
+    sovereign_inference::remote::SplitInferenceProvider::new(
+        &format!("{}/v1", serve.base),
+        "primary".to_string(),
+        served.embed_model.clone(),
+        context,
+        query_instruction,
+    )
+    .with_served(served)
+}
+
+/// Forward a reload to serve, which rebuilds through its own ReloadFactory.
+/// Unbounded by a probe timeout, because a reload loads models; an
+/// unreachable serve or a refused rebuild is an Err naming it, never a
+/// success-shaped reload.
+pub async fn forward_reload(
+    base: &str,
+) -> Result<sovereign_contracts::engine_state::EngineReloaded, String> {
+    let url = format!(
+        "{}{}",
+        base.trim_end_matches('/'),
+        sovereign_contracts::engine_state::RELOAD_PATH
+    );
+    let resp = reqwest::Client::new()
+        .post(&url)
+        .send()
+        .await
+        .map_err(|e| format!("reload: serve at {base} is not reachable: {e}"))?;
+    let status = resp.status();
+    if !status.is_success() {
+        let body = resp.text().await.unwrap_or_default();
+        return Err(format!(
+            "reload: serve at {base} refused (HTTP {status}): {body}"
+        ));
+    }
+    let reloaded = resp
+        .json::<sovereign_contracts::engine_state::EngineReloaded>()
+        .await
+        .map_err(|e| format!("reload: serve at {base} answered an unreadable reload: {e}"))?;
+    tracing::info!(target: "serving_path", serve_base = base, resident = ?reloaded.resident_models, "reload forwarded to serve");
+    Ok(reloaded)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -296,6 +470,104 @@ mod tests {
             read_engine_state(&base).await,
             EngineStateRead::Unreachable(_)
         ));
+    }
+
+    async fn stub(app: axum::Router) -> String {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        tokio::spawn(async move { axum::serve(listener, app).await });
+        base
+    }
+
+    fn served() -> sovereign_contracts::engine_state::ServedSelf {
+        sovereign_contracts::engine_state::ServedSelf {
+            primary_model: "big".into(),
+            medium_model: "big".into(),
+            fast_model: "small".into(),
+            embed_model: "Qwen3-Embedding-0.6B-Q8_0".into(),
+            embed_family: sovereign_contracts::model_family::ModelFamily::Qwen3Embedding,
+            context_size: Some(8192),
+            ..Default::default()
+        }
+    }
+
+    /// A query embedded through the loopback provider carries the same
+    /// instruction prefix the engine applies in process; the terminal arm's
+    /// empty prefix would embed it as a document.
+    #[tokio::test]
+    async fn the_loopback_provider_prepares_a_query_the_way_the_engine_does() {
+        use axum::routing::post;
+        use sovereign_contracts::InferenceProvider;
+        let seen = std::sync::Arc::new(std::sync::Mutex::new(String::new()));
+        let seen_in = std::sync::Arc::clone(&seen);
+        let base = stub(axum::Router::new().route(
+            "/v1/embeddings",
+            post(move |axum::Json(body): axum::Json<serde_json::Value>| {
+                let seen_in = std::sync::Arc::clone(&seen_in);
+                async move {
+                    *seen_in.lock().unwrap() = body["input"].as_str().unwrap_or("").to_string();
+                    axum::Json(serde_json::json!({
+                        "object": "list", "model": "e",
+                        "data": [{"object": "embedding", "index": 0, "embedding": [0.1, 0.2]}]
+                    }))
+                }
+            }),
+        ))
+        .await;
+        let serve = ServeBase {
+            base,
+            source: ServeBaseSource::Default,
+        };
+        let provider = loopback_provider(&serve, served(), 4096);
+        provider
+            .embed_query("who wrote it")
+            .await
+            .expect("embedded");
+        let input = seen.lock().unwrap().clone();
+        let expected = sovereign_contracts::model_family::ModelFamily::Qwen3Embedding
+            .default_quirks()
+            .embed
+            .expect("quirks")
+            .query_instruction;
+        assert!(input.starts_with(&expected), "query sent as {input:?}");
+        assert_eq!(
+            provider.model_id_for(sovereign_contracts::Speed::Slow),
+            "big"
+        );
+    }
+
+    #[tokio::test]
+    async fn the_self_report_is_read_from_serve() {
+        use axum::routing::get;
+        let base = stub(axum::Router::new().route(
+            sovereign_contracts::engine_state::SERVED_SELF_PATH,
+            get(|| async { axum::Json(served()) }),
+        ))
+        .await;
+        let read = read_served_self(&base).await.expect("read");
+        assert_eq!(read.primary_model, "big");
+    }
+
+    /// A reload serve refuses is an Err naming the refusal, never a
+    /// success-shaped reload.
+    #[tokio::test]
+    async fn a_refused_reload_is_named() {
+        use axum::routing::post;
+        let base = stub(axum::Router::new().route(
+            sovereign_contracts::engine_state::RELOAD_PATH,
+            post(|| async {
+                (
+                    axum::http::StatusCode::SERVICE_UNAVAILABLE,
+                    "reload: the serving assembly refused: no such file",
+                )
+            }),
+        ))
+        .await;
+        let err = forward_reload(&base).await.expect_err("refused");
+        assert!(
+            err.contains("HTTP 503") && err.contains("no such file"),
+            "{err}"
+        );
     }
 
     #[test]
