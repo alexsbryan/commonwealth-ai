@@ -141,9 +141,11 @@ impl ProviderFactory for LlamaCppFactory {
 /// Until 2026-09-26 the reload loaded GGUFs itself: it never read
 /// `[engine] kind` or `[compute] distributed_primary`, so a remote-kind node
 /// loaded weights on reload and a distributed-primary node loaded the
-/// withheld primary in-process. Nothing here is on disk, so any build that
-/// reaches llama.cpp fails — after it has planned. The plan is the slot set
-/// each path asked for, compared whether or not it loaded.
+/// withheld primary in-process. The GGUFs here are files holding no model,
+/// so any build that reaches llama.cpp fails on the header — after it has
+/// planned. (A missing file would not do: the vendored loader
+/// `debug_assert!`s that the path exists.) The plan is the slot set each path
+/// asked for, compared whether or not it loaded.
 #[cfg(test)]
 mod reload_builds_what_cold_start_builds {
     use super::*;
@@ -151,15 +153,32 @@ mod reload_builds_what_cold_start_builds {
     use sovereign_core::setup_config::{EngineKind, EngineSection, ModelsSection};
     use std::path::PathBuf;
 
-    const PRIMARY: &str = "/nonexistent/serving-assembly/big-primary.gguf";
+    /// A directory of three files named like GGUFs, holding no model.
+    fn models_dir() -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("pb-serving-assembly-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("temp models dir");
+        for name in [
+            "big-primary.gguf",
+            "small-fast.gguf",
+            "Qwen3-Embedding-0.6B-Q8_0.gguf",
+        ] {
+            std::fs::write(dir.join(name), b"not a gguf").expect("write a non-model file");
+        }
+        dir
+    }
+
+    fn primary() -> PathBuf {
+        models_dir().join("big-primary.gguf")
+    }
 
     fn holder() -> SetupConfig {
+        let dir = models_dir();
         let mut cfg = SetupConfig::unconfigured();
-        cfg.data.dir = std::env::temp_dir().join("pb-serving-assembly-never-written");
+        cfg.data.dir = dir.join("data-never-written");
         cfg.models = Some(ModelsSection {
-            primary: PRIMARY.into(),
-            fast: Some("/nonexistent/serving-assembly/small-fast.gguf".into()),
-            embed: "/nonexistent/serving-assembly/Qwen3-Embedding-0.6B-Q8_0.gguf".into(),
+            primary: primary(),
+            fast: Some(dir.join("small-fast.gguf")),
+            embed: dir.join("Qwen3-Embedding-0.6B-Q8_0.gguf"),
             ..Default::default()
         });
         cfg
@@ -248,7 +267,7 @@ mod reload_builds_what_cold_start_builds {
         assert!(
             dp.children
                 .iter()
-                .any(|(_, model)| model == &PathBuf::from(PRIMARY)),
+                .any(|(_, model)| model == &primary()),
             "a compute child owns the primary: {dp:?}"
         );
     }
