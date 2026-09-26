@@ -17,8 +17,11 @@ use tempfile::TempDir;
 /// `create`/`leave` tests never fight over the real `:9741`/`:9742` — a
 /// bind conflict is now a hard error (`MeshError::Network`) rather than
 /// silently swallowed — and mDNS + iroh off so no unit test touches a
-/// multicast socket or binds an iroh endpoint. Everything else defaulted.
-fn hermetic_cfg() -> SetupConfig {
+/// multicast socket or binds an iroh endpoint. `rails_base` is a stand-in
+/// door ([`stand_in_rails`]): left default, every store write went to the
+/// developer's live cw-rails on :9747 and a red run waited on it
+/// (pb-test-load). Everything else defaulted.
+fn hermetic_cfg(rails_base: String) -> SetupConfig {
     SetupConfig {
         engine: Default::default(),
         compute: Default::default(),
@@ -39,6 +42,7 @@ fn hermetic_cfg() -> SetupConfig {
         daemon: DaemonSection {
             client_port: 0,
             internal_port: 0,
+            rails_base: Some(rails_base),
             ..Default::default()
         },
         data: Default::default(),
@@ -57,6 +61,16 @@ fn hermetic_cfg() -> SetupConfig {
     }
 }
 
+/// A cw-rails stand-in that answers every request 503 — a named
+/// unavailability, served on a loopback port this test owns.
+async fn stand_in_rails() -> String {
+    let door = axum::Router::new().fallback(|| async { StatusCode::SERVICE_UNAVAILABLE });
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move { axum::serve(listener, door).await.ok() });
+    format!("http://{addr}")
+}
+
 /// Stand up the mesh HTTP router over a no-mesh daemon bound to
 /// an ephemeral localhost port. Returns `(daemon_arc, base_url,
 /// _tmp)` — hold the tempdir so it isn't cleaned up mid-test.
@@ -64,7 +78,7 @@ async fn spawn_test_router() -> (Arc<EmbeddedDaemon>, String, TempDir) {
     let tmp = tempfile::tempdir().unwrap();
     let daemon = EmbeddedDaemon::new(
         tmp.path().to_path_buf(),
-        hermetic_cfg(),
+        hermetic_cfg(stand_in_rails().await),
         crate::daemon_services::DaemonServices::mesh_admin(),
     );
     let app = mesh_router(Arc::clone(&daemon));
@@ -232,7 +246,7 @@ async fn direct_leave_leaves_daemon_stopped() {
 #[tokio::test]
 async fn leave_to_solo_rebinds_same_port_repeatedly() {
     let tmp = tempfile::tempdir().unwrap();
-    let mut cfg = hermetic_cfg();
+    let mut cfg = hermetic_cfg(stand_in_rails().await);
     cfg.daemon.client_port = 29411;
     cfg.daemon.internal_port = 29412;
     let daemon = EmbeddedDaemon::new(
