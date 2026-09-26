@@ -440,6 +440,16 @@ class Smoke:
             self.v[s["var"]] = str(hits[0])
         say(f"GET {self.sub(s['url'])} -> HTTP {status}")
 
+    def do_call(self, s):
+        url = self.sub(s["url"])
+        status, body = http("POST", url, self.sub(s["json"]), timeout=float(s.get("timeout", 30)))
+        self.v["BODY"] = body.strip()[:300]
+        say(f"POST {url} -> HTTP {status}")
+        hits = self.json_at(body, s["path"]) if 200 <= status < 300 else []
+        if not hits:
+            self.stop(s, "fail")
+        self.v[s["var"]] = str(hits[0])
+
     def do_count(self, s):
         try:
             n = sum(1 for ln in open(self.sub(s["file"]), errors="replace") if re.search(s["pattern"], ln))
