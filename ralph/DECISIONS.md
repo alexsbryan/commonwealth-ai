@@ -926,6 +926,17 @@ merged; that merge is what minted this arrangement, and `ledger-1` records it.
   - Boundary gate: 51, unchanged. No code is in this commit.
 - REVIEW-AFTER: the charter does not name growing the host kit's allow list. It reserves only exceptions, admitting other leaves and the size cap for the operator. I read an optional wire-leaf edge as within the ladder. The operator may disagree.
 
+**phase-b-14 · 2026-09-26 · pb-code-server size · seat** — this commit
+- Needed: phase-b-13 (d9b9ce27a) deferred pb-mcp's HTTP+SSE framing, `McpNotifier` and the registry-backed tool-host port impl to pb-code-server, the first adopter. The row's LIFT stayed at ~1,400. The move alone is roughly 700 changed lines by recipe (the framing, plus the ToolRegistry half of `handle_tool_call`, mcp_router.rs:484-634), on a row that already carried the server, the SCIP loader collapse, the freshness path, the watcher runtime, SpecWatcher's 380-line move and two defects. That totals about 2,000 lines, and five-programs' fw-1 is what a row like that costs.
+- Chose:
+  - pb-code-server keeps the server running alone: pb-mcp's adopter work, the composition, connect-or-spawn, the fp-11 closure, the notes-fallback defect and the no-refusal delta. LIFT ~1,200, BOUNDARY −1.
+  - pb-code-freshness takes the SCIP loader (and its lazy load), the Reindexer freshness path, the watcher runtime, SpecWatcher and the code_search defect. LIFT ~1,400, BOUNDARY −2.
+  - pb-code-index depends on pb-code-freshness.
+- Because:
+  - The two halves prove out differently: code's RUN smoke for the server, and a fixture edit seen through the Reindexer plus a graph-never-opened test for freshness. The CHARTER splits only when proofs differ.
+  - Coupling decides where SpecWatcher goes. The new server can take it from sovereign-tools for one more row, which keeps cli-dev → sovereign-tools red one row longer instead of pushing 760 changed lines into the server row.
+  - Boundary gate: 51, unchanged. The histogram still sums to 51. No code in this commit.
+
 ## Flags for the operator
 
 - A26: REVIEW-DEMO-rr-1-run will very likely FAIL `ra-room-plug-in-live` again on this host. The bar's window is 60 s, and the CPU 2B took about 1–5 min per answer in this run (room-answer-0..4.json mtimes 19:33→19:49). Passing it takes a faster node or model for the room, or a different bar. Both are design changes for the operator, not tuning.
@@ -10868,5 +10879,15 @@ On the package's four questions:
 What would falsify this:
 - The arch gate counts an optional dependency as an edge in cw-rails' lifted closure, so LIFT(cmnwlth) grows. Then the kit's `mcp` half needs its own leaf, which is the operator's call.
 - pb-code-server's census finds the registry-backed port impl cannot live beside `ToolRegistry` without naming `NoteStore`. Then the call-log port has not removed the coupling it was meant to remove.
+
+</details>
+
+## phase-b-14 · 2026-09-26 — pb-code-server splits: the server alone, then its freshness
+
+<details><summary>reasoning, evidence, package</summary>
+
+Dependents re-checked. pb-notes-split and pb-meshapp-rest need only the server, which is pb-code-server. pb-code-index moves `code_index` and its incremental indexer into the code program, next to the Reindexer, so it waits for pb-code-freshness. pb-code-clean depends on pb-code-index and so waits for both.
+
+Falsifier: if pb-code-server's census shows the new server cannot run without the unified SCIP loader (for example, both loaders open one DB and conflict), fold pb-code-freshness back into it.
 
 </details>

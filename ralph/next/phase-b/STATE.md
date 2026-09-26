@@ -228,17 +228,22 @@ A miss is NEEDS_HUMAN with the numbers, never a re-tuned bar.
   - From pb-mcp (phase-b-13), this row's first adopter work: the kit's HTTP+SSE framing and `McpNotifier` behind an `http` feature, and the registry-backed tool-host port impl. That impl is the ToolRegistry half of mcp_router's `handle_tool_call` (validate, effect audit, ToolContext, execute, StepOutput mapping), lifted by recipe to where `ToolRegistry` lives. The daemon's pattern matcher stays the daemon's and observes calls through the call-log port. The tool set is built from `ToolBundle`s.
   - `svrn code mcp` = the host kit's dispatcher and shell + CodeIntelTools + NotesTools (decision notes) + the work-atlas bundle. The atlas is optional: it dials cw-rails' KV directly, never the daemon's `/v1/mesh/kv` proxy. When cw-rails is down it is absent by name (the null object `Withheld`, tool_bundle.rs:302).
   - Connect-or-spawn goes through `ServingHost`.
+  - The legacy serve's import of `mcp_router` goes, which closes sovereign-cli-dev → sovereign-daemon (fp-11).
+  - Until pb-code-freshness, the new server takes SpecWatcher, the SCIP loader and the watcher runtime where they are today, so cli-dev → sovereign-tools and daemon → corpus-engine-watchers stay red one row longer (phase-b-14).
+  - Defect, fixed in its own commit:
+    - the in-memory notes fallback (serve.rs:234-252: `NoteStore::open(&notes_db_path)` fails over to `":memory:"`) becomes a refusal that names the path.
+  - Delta: the server no longer refuses to start while the daemon runs (serve.rs:41-62).
+  - PROOF: add code's RUN smoke to program-lift.sh. On a fixture repo with no daemon and no model, `symbols` and `callers` answer and LIFT(code) passes. PLANT: make the atlas dial the daemon proxy, and with the daemon absent the smoke goes red.
+  LIFT ~1,200 lines (phase-b-14: pb-mcp's HTTP+SSE framing and registry port impl came in, and the freshness half went to pb-code-freshness). — read: sovereign-code/src/bundle.rs, sovereign-cli-dev/src/project_cmd/serve.rs, sovereign-daemon/src/mcp_router.rs, sovereign-work-atlas — check: CLEAN, LINT, TEST(sovereign-code), TEST(sovereign-cli-dev), TEST(sovereign-work-atlas), LIFT(code), PLANT, LAYER, BOUNDARY (expect −1)
+- [ ] pb-code-freshness — depends [pb-code-server] — OUTCOME: the code program keeps its own index fresh, with no daemon. It has ONE SCIP loader that loads when a tool first reads the graph, ONE freshness path (the `Reindexer`), and the watcher runtime is the code program's. phase-b-14 split this half off pb-code-server: pb-mcp's deferrals pushed that row to ~2,000 changed lines, and the server running alone and the index staying fresh prove out differently.
   - One SCIP loader (tool_registry.rs:384 and sovereign-cli-shared/src/scip.rs:31 collapse), and it loads when a tool first reads the graph. Measured by pb-atlas-kv (5c8ff41b1): every `svrn tools` verb, `list` included, spends ~39 s of CPU in `load_merged_graph` → `ScipGraph::import_from_path` (tools_cmd/registry.rs:148), whether or not it needs the graph. The body pastes `tools describe session_state` wall time before and after.
   - One freshness path: the `Reindexer`. The 30 s mtime poll goes.
   - The watcher runtime is owned here, which closes sovereign-daemon → corpus-engine-watchers.
   - SpecWatcher (sovereign-tools/src/spec_watcher.rs, 380 lines) and the spec-gated list move to sovereign-code by recipe, which closes sovereign-cli-dev → sovereign-tools. Census: serve.rs:678 is cli-dev's one live `sovereign_tools` use. tools_cmd/registry.rs:21 only names mcp_surface in a doc comment, which is repointed.
-  - The legacy serve's import of `mcp_router` goes, which closes sovereign-cli-dev → sovereign-daemon (fp-11).
-  - Defects, fixed in their own commits:
-    - `code_search`'s `inf.embed(query).await.unwrap_or_default()` (sovereign-code/src/code_search.rs:123; census: the file moved there from sovereign-tools) becomes a named fall-back, never a silent swap to FTS;
-    - the in-memory notes fallback (serve.rs:234-252: `NoteStore::open(&notes_db_path)` fails over to `":memory:"`) becomes a refusal that names the path.
-  - Delta: the server no longer refuses to start while the daemon runs (serve.rs:41-62).
-  - PROOF: add code's RUN smoke to program-lift.sh. On a fixture repo with no daemon and no model, `symbols` and `callers` answer and LIFT(code) passes. PLANT: make the atlas dial the daemon proxy, and with the daemon absent the smoke goes red.
-  LIFT ~1,400 lines. — read: sovereign-code/src/bundle.rs, sovereign-cli-dev/src/project_cmd/serve.rs, sovereign-code/src/code_search.rs, corpus-engine-watchers/src/reindexer.rs, sovereign-work-atlas — check: CLEAN, LINT, TEST(sovereign-code), TEST(sovereign-cli-dev), TEST(sovereign-work-atlas), LIFT(code), PLANT, LAYER, BOUNDARY (expect −3)
+  - Defect, fixed in its own commit: `code_search`'s `inf.embed(query).await.unwrap_or_default()` (sovereign-code/src/code_search.rs:123) becomes a named fall-back, never a silent swap to FTS.
+  - Edges: sovereign-daemon → corpus-engine-watchers, sovereign-cli-dev → sovereign-tools.
+  - PROOF: on a fixture repo served by `svrn code mcp` with no daemon, an edit to a source file shows in `symbols` through the Reindexer with no 30 s poll, and a `tools list` never opens the SCIP graph. The body pastes `tools describe session_state` wall time before and after. PLANT: load the graph at registry build again, and the lazy-load test goes red; re-add the daemon's watcher-runtime dependency, and LAYER goes red.
+  LIFT ~1,400 lines (SpecWatcher's 380 lines move by recipe). — read: sovereign-daemon/src/tool_registry.rs:370-400, sovereign-cli-shared/src/scip.rs, sovereign-cli-dev/src/tools_cmd/registry.rs:140-160, corpus-engine-watchers/src/reindexer.rs, sovereign-tools/src/spec_watcher.rs, sovereign-code/src/code_search.rs — check: CLEAN, LINT, TEST(sovereign-code), TEST(sovereign-cli-dev), TEST(corpus-engine-watchers), LIFT(code), PLANT, LAYER, BOUNDARY (expect −2)
 - [ ] pb-ingest — depends [REVIEW-pb-census] — OUTCOME: an index builds in CI with only an embeddings endpoint (the "ingest in CI" developer). Ingest is a library plus ONE CLI (FIVE_PROGRAMS §2 row `svrn ingest`).
   - The working precedent is `corpus-mcp ingest` (corpus-mcp/src/ingest.rs:319-329; its `tests/no_inference_stack.rs` pins the closure).
   - Fold `svrn corpus ingest`'s workflow path into that one CLI. That path posts to the daemon and runs the notebook workflow (census 2026-09-25: both files are in sovereign-cli-LLM, not sovereign-cli: corpus_cmd/ingest.rs:108-110 → `workflow_cmd::run_assembled`, and workflow_cmd.rs:595 is the daemon-unreachable refusal). It is a second ingest implementation (principle 8).
@@ -250,7 +255,7 @@ A miss is NEEDS_HUMAN with the numbers, never a re-tuned bar.
   - At the baseline (bc984cc46) LIFT(ingest) built (236 s cold) and corpus-engine's 1,724 lib tests passed, but `tests/evidence_reds.rs` fails outside the monorepo. It is a trybuild compile-fail test; expected stderr carrying monorepo paths is the likely cause, to verify. Make it portable in its own commit (phase-b-8).
   - PROOF: add ingest's RUN smoke to program-lift.sh. It ingests a fixture folder against a stub embeddings server with no chat model, the index opens, and LIFT(ingest) passes. PLANT: resolve chat under `--no-enrich`, and the smoke goes red.
   LIFT ~900 lines. — read: corpus-mcp/src/{ingest.rs,host.rs}, sovereign-cli-llm/src/{corpus_cmd/ingest.rs,workflow_cmd.rs}, corpus-engine/src/engine/ingest.rs:100-130,1400-1420,1920-1935 — check: CLEAN, LINT, TEST(corpus-mcp), TEST(corpus-engine), LIFT(ingest), PLANT, LAYER, BOUNDARY
-- [ ] pb-code-index — depends [pb-code-server, pb-ingest] — OUTCOME: indexing a project needs only the code program, and `project init` works with no daemon.
+- [ ] pb-code-index — depends [pb-code-freshness, pb-ingest] — OUTCOME: indexing a project needs only the code program, and `project init` works with no daemon.
   - `code_index` plus incremental (890 + 605 = 1,495 lines, sovereign-cli-shared) and `code_refresh` (561 lines; census 2026-09-25: it is sovereign-CLI/src/code_refresh.rs, not cli-shared or cli-dev) move into the code program. D5 places them there. fp-5's refusal falls, because code now ships in the default distribution.
   - `code index` and `project refresh` stop refusing without the daemon (code_index.rs:260-271,451-455).
   - `project init`'s index step dials code by connect-or-spawn with an explicit `--fts-only` when there is no embedder. This closes D6, sovereign-cli → corpus-engine (project_init/mod.rs:30,516).
@@ -456,7 +461,8 @@ Owner histogram (51; phase-b-7 split three rows by edge, and the total is unchan
 - pb-code-clean 5;
 - pb-notes-split 4;
 - pb-code-index 3;
-- pb-code-server 3;
+- pb-code-freshness 2;
+- pb-code-server 1;
 - pb-ingest-dial-daemon 3;
 - pb-meshapp-apps 3;
 - pb-meshapp-rest 3;
@@ -476,7 +482,8 @@ Each red edge has exactly one owner row:
 
 - **pb-code-clean:** daemon → sovereign-code (fp-11); daemon → work-atlas; mesh → work-atlas (dev); cli-dev → enrichment-build; cli-dev → corpus-engine (fp-34; moved here from pb-code-index by REVIEW-pb-census).
 - **pb-code-index:** cli-shared → corpus-engine; cli-dev → cli-shared; cli → corpus-engine (D6).
-- **pb-code-server:** cli-dev → daemon (fp-11); daemon → corpus-engine-watchers; cli-dev → sovereign-tools.
+- **pb-code-server:** cli-dev → daemon (fp-11).
+- **pb-code-freshness:** daemon → corpus-engine-watchers; cli-dev → sovereign-tools (phase-b-14).
 - **pb-ingest-rehome:** cli-llm → authoring-harness and daemon → authoring-harness (fp-43); corpus-mcp → corpus-engine; corpus-mcp → enrichment-build; tools → enrichment-catalog; grants → corpus-engine; the recipes default source (the non-edge item).
 - **pb-ingest-dial-tools:** tools → corpus-engine; tools → recipe-author.
 - **pb-ingest-dial-daemon:** daemon, mesh and runtime-recipe → corpus-engine.
@@ -506,7 +513,7 @@ Verdicts from REVIEW-pb-census, 2026-09-25. Every one was reproduced by reading 
 - **Daemon `/v1/models` makes a per-request round trip to cw-rails,** which means a self-fact stored in another process and a status produced by a blocking call. REPRODUCED, NARROWED: only the no-local-inference fallback does this (`store_rows`, routes_inference.rs:960). A node with local inference answers from its own manifest (:792). Owner: pb-serve-program, which never takes the path; pb-svrn-dials-serve retires it.
 - **GLiNER is loaded twice in one daemon,** with different models when the env var is set (boot.rs:598, runtime-recipe lib.rs:667→832). REPRODUCED. Owner: pb-serving-kinds.
 - **The daemon installs a rerank slot that nothing reads;** there is no route, and the recipe opts out. REPRODUCED: no `/v1/rerank` route, and boot.rs:930 passes `AlreadyInProvider`. Owner: pb-serving-kinds.
-- **`code_search` silently swaps to full-text search** on an embed error (sovereign-code/src/code_search.rs:123). REPRODUCED. Owner: pb-code-server.
+- **`code_search` silently swaps to full-text search** on an embed error (sovereign-code/src/code_search.rs:123). REPRODUCED. Owner: pb-code-freshness (phase-b-14).
 - **`project serve` falls back to an in-memory notes store,** so writes vanish at exit (serve.rs:234-252). REPRODUCED. Owner: pb-code-server.
 - **`project init` stamps a model name on zero vectors** (project_init/mod.rs:506-513). REPRODUCED. Owner: pb-code-index.
 - **The chat model is resolved under `--no-enrich`,** and GLiNER absence is skipped silently (corpus-mcp ingest.rs:222-242; engine/ingest.rs:1926). REPRODUCED. Owner: pb-ingest.
