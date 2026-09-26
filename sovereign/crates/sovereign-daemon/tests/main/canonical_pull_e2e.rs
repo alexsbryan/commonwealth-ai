@@ -87,7 +87,8 @@ async fn spawn_router(state: AppState) -> SocketAddr {
     let addr = listener.local_addr().unwrap();
     let router = internal_router(state);
     tokio::spawn(async move {
-        // `into_make_service_with_connect_info` as `server::serve` does —
+        // `into_make_service_with_connect_info` as `start_daemon`'s internal
+        // listener does —
         // `internal_gate` refuses a hop with no peer address.
         let _ = axum::serve(
             listener,

@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+#[cfg(test)]
 use std::net::SocketAddr;
 
 use axum::routing::{any, delete, get, post};
 use axum::Router;
-use tokio::net::TcpListener;
-use tracing::info;
 
 use crate::routes_apps;
 use crate::routes_completions;
@@ -669,48 +668,6 @@ pub fn internal_router(state: AppState) -> Router {
             crate::internal_principal::internal_principal_layer,
         ))
         .with_state(state)
-}
-
-/// Start both API servers. Returns when both are shut down.
-pub async fn serve(
-    state: AppState,
-    client_addr: SocketAddr,
-    internal_addr: SocketAddr,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    // CRITICAL: the client router's `client_auth` layer extracts
-    // `ConnectInfo<SocketAddr>` to decide loopback-vs-remote (and fails
-    // closed if it's absent). Bare `axum::serve` does NOT attach
-    // ConnectInfo, so the client listener MUST use
-    // `into_make_service_with_connect_info` or every request — even
-    // loopback — 500s. (The sovereign-mesh daemon already does this on
-    // its own listener; this is the standalone-daemon / test-harness
-    // path. Same requirement the loopback guard documents.)
-    let client_app =
-        client_router(state.clone()).into_make_service_with_connect_info::<SocketAddr>();
-    // ConnectInfo on the internal listener too: `internal_principal_layer`
-    // decides "is this hop my own acceptor's" partly from the peer address,
-    // and a missing one resolves every caller `Unverified` (fail closed).
-    let internal_app = internal_router(state).into_make_service_with_connect_info::<SocketAddr>();
-
-    let client_listener = TcpListener::bind(client_addr).await?;
-    let internal_listener = TcpListener::bind(internal_addr).await?;
-
-    info!(
-        client = %client_addr,
-        internal = %internal_addr,
-        "API servers starting"
-    );
-
-    tokio::select! {
-        result = axum::serve(client_listener, client_app) => {
-            result?;
-        }
-        result = axum::serve(internal_listener, internal_app) => {
-            result?;
-        }
-    }
-
-    Ok(())
 }
 
 /// Test-only: `client_router` plus a `MockConnectInfo` layer supplying

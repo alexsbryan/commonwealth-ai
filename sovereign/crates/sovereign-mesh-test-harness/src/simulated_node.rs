@@ -177,8 +177,8 @@ impl<S> SimulatedNode<S> {
     /// The caller supplies the two routers — this crate does not name the host
     /// that builds them. The client router carries the `client_auth`
     /// ConnectInfo layer, so it is served with the connect-info factory or
-    /// every request 500s (matches the production listener in
-    /// `server::serve`).
+    /// every request 500s (matches the production listeners the daemon
+    /// binds in `start_daemon`).
     pub async fn start_servers(
         &mut self,
         client_app: Router,

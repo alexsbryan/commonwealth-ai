@@ -144,8 +144,8 @@ pub async fn serve_at(router: axum::Router) -> std::net::SocketAddr {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     tokio::spawn(async move {
-        // `into_make_service_with_connect_info` exactly as `server::serve`
-        // does: `internal_gate` reads a missing `ConnectInfo` as "not
+        // `into_make_service_with_connect_info` exactly as `start_daemon`'s
+        // internal listener does:`internal_gate` reads a missing `ConnectInfo` as "not
         // loopback" and refuses, so a bare `axum::serve` here would test a
         // listener production does not have.
         let _ = axum::serve(
