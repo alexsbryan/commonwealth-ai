@@ -50,7 +50,7 @@ use sovereign_contracts::{InferenceProvider, Speed};
 use sovereign_serving_host::inference_adapter::SovereignInferenceAdapter;
 use sovereign_serving_host::openai_http::{self, ChunkHeader};
 use sovereign_serving_host::slot_manifest::CoreSlotManifest;
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 
 mod fetch_model;
 mod warm_cache;
@@ -319,25 +319,38 @@ pub fn bundles(provider: Arc<dyn InferenceProvider>) -> Vec<RouteBundle> {
 /// did when the loader lived there (pb-svrn-dials-serve).
 async fn engine_state() -> Json<sovereign_contracts::engine_state::EngineState> {
     use sovereign_contracts::engine_state::{DeviceBytes, DeviceMemoryReading, EngineState};
-    let device_memory =
-        sovereign_inference::embedded::last_device_memory().map(|s| DeviceMemoryReading {
-            observed_unix: s.observed_unix,
-            devices: s
-                .devices
+    use sovereign_inference::embedded::{DeviceMemory, DeviceMemorySnapshot};
+    // Destructured exhaustively: a field added to the loader's reading is a
+    // compile error here, never a field that silently stops at serve.
+    let device_memory = sovereign_inference::embedded::last_device_memory().map(
+        |DeviceMemorySnapshot {
+             observed_unix,
+             devices,
+         }| DeviceMemoryReading {
+            observed_unix,
+            devices: devices
                 .into_iter()
-                .map(|d| DeviceBytes {
-                    endpoint: d.endpoint,
-                    free_bytes: d.free_bytes,
-                    total_bytes: d.total_bytes,
-                    reserve_bytes: d.reserve_bytes,
-                })
+                .map(
+                    |DeviceMemory {
+                         endpoint,
+                         free_bytes,
+                         total_bytes,
+                         reserve_bytes,
+                     }| DeviceBytes {
+                        endpoint,
+                        free_bytes,
+                        total_bytes,
+                        reserve_bytes,
+                    },
+                )
                 .collect(),
-        });
+        },
+    );
     let state = EngineState {
         device_memory,
         rpc_block_split_pin: sovereign_inference::embedded::pinned_block_split_raw(),
     };
-    info!(target: "serve", observed = state.device_memory.is_some(), pinned = state.rpc_block_split_pin.is_some(), "engine state: the loader's cached view");
+    debug!(target: "serve", observed = state.device_memory.is_some(), pinned = state.rpc_block_split_pin.is_some(), "engine state: the loader's cached view");
     Json(state)
 }
 
@@ -459,7 +472,7 @@ async fn list_models(State(adapter): AdapterState) -> Response {
 async fn capabilities(State(adapter): AdapterState) -> Response {
     match adapter.provider_manifest() {
         Some(manifest) => {
-            info!(target: "serve", models = manifest.models.len(), "capabilities: this process's own manifest");
+            debug!(target: "serve", models = manifest.models.len(), "capabilities: this process's own manifest");
             Json(manifest).into_response()
         }
         None => {
