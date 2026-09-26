@@ -13,6 +13,18 @@ use serde::{Deserialize, Serialize};
 /// Where serve answers the engine state.
 pub const ENGINE_STATE_PATH: &str = "/v1/engine/state";
 
+/// Where serve rebuilds its provider from the config on disk, through the one
+/// serving assembly's `ReloadFactory`. The svrn daemon's `/v1/admin/reload`
+/// forwards here when it dials serve (pb-svrn-dials-serve).
+pub const RELOAD_PATH: &str = "/v1/engine/reload";
+
+/// serve's answer to a reload that rebuilt: the models it now holds.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EngineReloaded {
+    /// `model_id` of every resident slot after the swap.
+    pub resident_models: Vec<String>,
+}
+
 /// What the loader last saw.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EngineState {

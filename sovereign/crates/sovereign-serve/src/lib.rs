@@ -54,6 +54,7 @@ use tracing::{debug, error, info, warn};
 
 mod fetch_model;
 mod warm_cache;
+mod reload;
 
 /// The run lock's name inside the data root (`host_kit::RunLock`): one
 /// `serve` per root. The daemon's and cw-rails' locks are their own.
@@ -277,7 +278,11 @@ async fn serve(args: ServeArgs) -> i32 {
         }
         info!(target: "serve", "shutdown signal received");
     };
-    match host_kit::shell::serve([listener], bundles(parts.provider), shutdown).await {
+    // Every route answers from one cell, so a reload swaps them all at once.
+    let cell = Arc::new(reload::ReloadableProvider::new(parts.provider));
+    let mut routes = bundles(Arc::clone(&cell) as Arc<dyn InferenceProvider>);
+    routes.push(reload::bundle(cell, parts.reload_factory, config_path));
+    match host_kit::shell::serve([listener], routes, shutdown).await {
         Ok(()) => 0,
         Err(e) => {
             error!(target: "serve", error = %e, "the listener stopped");

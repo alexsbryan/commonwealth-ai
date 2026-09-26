@@ -24,6 +24,7 @@ sovereign-serving-host = { workspace = true }
 host-kit = { workspace = true, features = ["shell"] }
 # The weight verbs' help and root path (a package leaf every program's CLI shares).
 sovereign-cli-base = { workspace = true }
+async-trait = { workspace = true }
 axum = { workspace = true }
 futures = { workspace = true }
 # `fetch-model`'s peer client and its mesh.json read.
@@ -33,6 +34,9 @@ tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
+
+[dev-dependencies]
+tempfile = { workspace = true }
 
 [lints]
 workspace = true
