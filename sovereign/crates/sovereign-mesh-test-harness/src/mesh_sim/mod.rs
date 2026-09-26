@@ -57,11 +57,11 @@ pub mod scoreboard;
 
 use std::collections::{BinaryHeap, HashMap, VecDeque};
 
-use sovereign_scheduler::peer_health::PeerHealthTracker;
 use oicp_types::{
     apply_throughput_observation, BenchmarkResult, InferenceRequirements, NodeObservations,
     ProviderManifest,
 };
+use sovereign_scheduler::peer_health::PeerHealthTracker;
 
 use sovereign_scheduler::decision_log::{
     DecisionBuilder, DecisionEvent, DecisionPath, RequestFacts, RoutingOutcome, ServedBy, Verdict,
