@@ -481,8 +481,8 @@ pub struct InferenceRouter {
     /// fallback to local, and any other dispatch that ultimately runs
     /// against the local provider's slots.
     ///
-    /// Published over gossip in [`commonwealth_core::capabilities::
-    /// NodeCapabilities::current_in_flight`] so a remote scheduler
+    /// Published over gossip in commonwealth-core's
+    /// `NodeCapabilities::current_in_flight` so a remote scheduler
     /// (e.g. the founder selecting a peer) can see this node's
     /// *actual* load — including local-user traffic the remote side
     /// never originated. Without this, a workstation serving its own

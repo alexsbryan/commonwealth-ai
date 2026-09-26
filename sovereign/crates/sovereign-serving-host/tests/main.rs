@@ -21,3 +21,6 @@
 
 #[path = "main/serving_lift_harness.rs"]
 mod serving_lift_harness;
+
+#[path = "main/sheds_commonwealth.rs"]
+mod sheds_commonwealth;

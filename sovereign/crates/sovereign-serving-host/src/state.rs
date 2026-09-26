@@ -342,7 +342,7 @@ pub struct ServingPart {
     /// cycle"). Read by the gossip emitter
     /// (`sovereign-mesh::capabilities::build_local_capabilities`) on
     /// every tick to populate
-    /// [`commonwealth_core::capabilities::NodeCapabilities::current_in_flight`].
+    /// commonwealth-core's `NodeCapabilities::current_in_flight`.
     ///
     /// Lifecycle:
     /// * Cold start: the bootstrap mints the gauge, passes its `Arc` into the

@@ -13136,7 +13136,6 @@ dependencies = [
  "arc-swap",
  "async-trait",
  "axum",
- "commonwealth-core",
  "ed25519-dalek 2.2.0",
  "futures",
  "http-body 1.0.1",
