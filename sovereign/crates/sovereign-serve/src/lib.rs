@@ -430,4 +430,12 @@ mod tests {
         let err = ServeArgs::parse(&["--mesh".to_string()]).expect_err("refused");
         assert!(err.contains("--mesh"), "got: {err}");
     }
+
+    #[test]
+    fn the_weight_verbs_route_before_the_server_arguments() {
+        // Unrouted, `warm-cache` would reach ServeArgs::parse and exit 2.
+        for verb in WEIGHT_VERBS {
+            assert_eq!(run(&[verb.to_string(), "--help".into()]), 0, "{verb}");
+        }
+    }
 }
