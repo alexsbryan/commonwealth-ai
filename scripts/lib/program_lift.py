@@ -46,6 +46,7 @@ import subprocess
 import sys
 import time
 import tomllib
+import traceback
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -536,6 +537,11 @@ def main(argv: list[str]) -> int:
         verdict, reason = lift(lift_id, lifts[lift_id], sandbox, target, keep, sets, record)
     except Verdict as v:
         verdict, reason = v.verdict, v.reason
+    except Exception as e:  # noqa: BLE001
+        # A crash is the instrument not judging, never a measured failure: a
+        # full disk read as exit 1 on 2026-09-25 (ingest, tmpfs /tmp at quota).
+        traceback.print_exc()
+        verdict, reason = "could-not-judge", f"the instrument stopped before a verdict: {type(e).__name__}: {e}"
     finally:
         if not keep:
             shutil.rmtree(sandbox, ignore_errors=True)
