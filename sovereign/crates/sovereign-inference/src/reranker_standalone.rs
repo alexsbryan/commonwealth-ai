@@ -287,7 +287,9 @@ impl InferenceProvider for StandaloneReranker {
                 Ok(Ok(v)) => Ok(v),
                 Ok(Err(e)) => Err(e),
                 Err(_) => Err(Error::Inference(
-                    "Standalone rerank inference panicked".to_string(),
+                    "Rerank inference panicked — model may be incompatible with \
+                     pooling=rank, or an input pair exceeded its context."
+                        .to_string(),
                 )),
             }
         })

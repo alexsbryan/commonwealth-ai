@@ -65,7 +65,7 @@ pub struct BuiltEngine {
     pub provider: Arc<dyn InferenceProvider>,
     /// `Some` only for [`EngineKind::Llama`]. Carries the concrete API
     /// the trait deliberately does not expose: `install_extras`,
-    /// `install_edit_slot`, `install_rerank_slot`, `start_idle_monitor`,
+    /// `install_edit_slot`, `install_rerank`, `start_idle_monitor`,
     /// and the primary reload the mesh worker-discovery task fires.
     pub llama: Option<Arc<EmbeddedLlamaCpp>>,
     /// The manifest-resolved family of the embed slot, which drives

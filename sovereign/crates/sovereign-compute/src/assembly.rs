@@ -434,23 +434,22 @@ fn build_in_process(
         // Optional cross-encoder reranker (`SOVEREIGN_RERANK_MODEL_PATH`, else
         // `[models.kinds] rerank`). Soft-fail: a missing/broken reranker file
         // must not block startup — retrieval simply runs the baseline path.
+        // Loaded through the kind's own loader (fit check first), so the
+        // daemon, the CLI and a rerank compute child load it one way.
         if let Some(path) = served_kind::RERANK.model_path(Some(models)) {
-            let rerank_path = path.display().to_string();
-            match arc.install_rerank_slot(path, ModelFamily::Reranker) {
-                Ok(model_id) => {
-                    tracing::info!(
-                        slot = "rerank",
-                        model_id = %model_id,
-                        "rerank slot installed"
-                    );
-                }
-                Err(e) => {
-                    tracing::warn!(
-                        path = %rerank_path,
-                        error = %e,
-                        "rerank slot install failed — running without reranker"
-                    );
-                }
+            let model_id = path
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("reranker")
+                .to_string();
+            let installed = (served_kind::RERANK.loader)(&path)
+                .and_then(|provider| arc.install_rerank(model_id, provider));
+            if let Err(e) = installed {
+                tracing::warn!(
+                    path = %path.display(),
+                    error = %e,
+                    "rerank slot install failed — running without reranker"
+                );
             }
         }
     }
