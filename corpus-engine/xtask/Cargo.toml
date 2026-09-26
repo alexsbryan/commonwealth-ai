@@ -44,6 +44,9 @@ workspace-hack = { version = "0.1", path = "../../workspace-hack" }
 # third-party crate across the workspace).
 syn = { version = "2", features = ["full", "extra-traits"] }
 quote = "1"
+# `tests/mcp_method_census.rs` reads the MCP method set from its one home
+# (phase-b pb-mcp) to scan the workspace for string matches on it.
+oicp-types = { workspace = true }
 
 [lints]
 workspace = true
