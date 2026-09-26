@@ -217,7 +217,9 @@ pub async fn join(
         if !proven {
             tracing::warn!(target: "rails", joining = %req.joining_node_name,
                            "join: REFUSED — node_pubkey without a valid proof of possession");
-            return Err(rejected("node_pubkey proof of possession missing or invalid"));
+            return Err(rejected(
+                "node_pubkey proof of possession missing or invalid",
+            ));
         }
     }
     let now = unix_now_secs();
@@ -400,7 +402,10 @@ mod tests {
         let proposed = req.proposed_node_id.unwrap();
         let out = join(State(st.clone()), Json(req)).await.expect("admitted");
         assert_eq!(out.0.assigned_node_id, proposed);
-        assert_ne!(out.0.mesh.mesh_secret, [0u8; 32], "a joiner learns the credential here");
+        assert_ne!(
+            out.0.mesh.mesh_secret, [0u8; 32],
+            "a joiner learns the credential here"
+        );
         assert!(st.mesh.read().await.members.contains_key(&proposed));
     }
 
@@ -430,7 +435,11 @@ mod tests {
             .await
             .expect_err("the proof binds the name");
         assert_eq!(err.0, StatusCode::UNAUTHORIZED);
-        assert!(err.1.reason.contains("proof of possession"), "{}", err.1.reason);
+        assert!(
+            err.1.reason.contains("proof of possession"),
+            "{}",
+            err.1.reason
+        );
     }
 
     /// An expired invite admits nobody, whoever minted it.
