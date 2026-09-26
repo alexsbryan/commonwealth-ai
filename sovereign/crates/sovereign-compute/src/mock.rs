@@ -8,10 +8,37 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use futures::Stream;
+use std::sync::Arc;
+
+use sovereign_contracts::engine_config::EngineSection;
+use sovereign_contracts::traits::ResidentSlot;
 use sovereign_contracts::{
     CompletionRequest, CompletionResponse, Depth, FinishReason, InferenceProvider,
     ProviderCapabilities, Result, Speed,
 };
+use sovereign_inference::engine_factory::{BuiltEngine, EngineBuilder};
+
+/// The id the mock answers as, in every slot.
+pub const MOCK_MODEL: &str = "mock";
+
+/// The engine id [`MockEngine`] registers under: `[engine] kind = "mock"`.
+pub const MOCK_ENGINE: &str = "mock";
+
+/// A model-free engine, for a host that registers it
+/// (`engine_factory::register_engine(MOCK_ENGINE, ..)`): a smoke that proves
+/// the host's routes answer without loading weights. Never a fallback — a
+/// host serves it only when its config names it.
+pub struct MockEngine;
+
+impl EngineBuilder for MockEngine {
+    fn build(&self, _section: &EngineSection) -> std::result::Result<BuiltEngine, String> {
+        tracing::info!(target: "engine_factory", engine = MOCK_ENGINE, "building the model-free mock engine");
+        Ok(BuiltEngine::external(Arc::new(MockProvider {
+            tokens: 8,
+            delay: Duration::ZERO,
+        })))
+    }
+}
 
 /// Model-free provider: streams `tokens` canned tokens with `delay` between
 /// them (so a crash-isolation test can `kill -9` mid-stream), and answers
@@ -58,6 +85,32 @@ impl InferenceProvider for MockProvider {
 
     async fn embed(&self, _text: &str) -> Result<Vec<f32>> {
         Ok(vec![0.0; 8])
+    }
+
+    /// 1.0 for a document that contains the query, else 0.0: model-free, and
+    /// enough to tell the kind route answered.
+    async fn rerank_batch(&self, query: &str, docs: &[String]) -> Result<Vec<f32>> {
+        Ok(docs
+            .iter()
+            .map(|d| if d.contains(query) { 1.0 } else { 0.0 })
+            .collect())
+    }
+
+    fn model_id_for(&self, _speed: Speed) -> String {
+        MOCK_MODEL.to_string()
+    }
+
+    /// One resident slot, so a host's self-manifest advertises the mock as
+    /// the weights it holds instead of reading as a node that holds none.
+    fn resident_slots(&self) -> Vec<ResidentSlot> {
+        vec![ResidentSlot {
+            role: "primary".to_string(),
+            model_id: MOCK_MODEL.to_string(),
+            resident: true,
+            size_bytes: None,
+            transitioning: false,
+            placement: None,
+        }]
     }
 
     fn capabilities(&self) -> ProviderCapabilities {
