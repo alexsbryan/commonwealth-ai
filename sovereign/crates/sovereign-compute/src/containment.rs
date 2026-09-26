@@ -34,7 +34,19 @@
 //! unit test, and `sovereign doctor` can render the same verdict the boot guard
 //! enforces without duplicating the rule.
 
-use sovereign_core::setup_config::{SetupConfig, SharedModelRole};
+use sovereign_contracts::setup_config::{SetupConfig, SharedModelRole};
+
+/// Is this process armed to serve RPC workers? One reader of
+/// `SOVEREIGN_RPC_DISCOVER`.
+///
+/// Three sites ask (the daemon's `bootstrap`, this module, and `doctor_cmd`)
+/// and two of them feed a containment VERDICT, so a divergence would mean the
+/// doctor reporting a containment posture the daemon does not actually run
+/// under. It lives beside the verdict it feeds; the daemon re-exports it as
+/// `sovereign_daemon::startup::rpc_discovery_armed`.
+pub fn rpc_discovery_armed() -> bool {
+    std::env::var("SOVEREIGN_RPC_DISCOVER").is_ok()
+}
 
 /// Environment override: proceed with an in-process distributed primary anyway.
 ///
@@ -143,7 +155,7 @@ pub fn check_containment(config: &SetupConfig, self_node_id: Option<&str>) -> bo
         child_owns_primary,
         config.shared_model.role,
         pinned_host_is_self,
-        crate::startup::rpc_discovery_armed(),
+        rpc_discovery_armed(),
         std::env::var(OVERRIDE_ENV).is_ok(),
     );
 

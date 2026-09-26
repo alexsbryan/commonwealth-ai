@@ -8317,8 +8317,8 @@ lines = 2861
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-daemon/src/build/containment.rs"
-context = "host"
+path = "sovereign/crates/sovereign-compute/src/containment.rs"
+context = "serving"
 lines = 348
 note = ""
 

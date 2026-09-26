@@ -176,7 +176,7 @@ evaluated and rejected (all asserts in void paths). Requirements:
 - **Containment is now enforced at boot, not merely documented (2026-07-28).**
   A node declaring `[shared_model] role = "host"` without
   `[compute] distributed_primary` REFUSES to start and prints the two-line fix
-  (`build/containment.rs`; `role = "anchor"` warns instead, since the hazard is
+  (`sovereign-compute/src/containment.rs`; `role = "anchor"` warns instead, since the hazard is
   one host election away). There is no safe runtime action once a sharded worker
   departs — the reload aborts and so does the teardown — so admission is the
   only place left to intervene. `sovereign doctor`'s

@@ -28,6 +28,7 @@
 
 pub mod child;
 pub mod child_main;
+pub mod containment;
 pub mod client;
 pub mod distribution;
 pub mod manager;
