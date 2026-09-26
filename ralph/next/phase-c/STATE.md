@@ -15,6 +15,7 @@ Nothing runs this queue until the operator launches it, after phase-b's `pb-dist
   - PROOF: an e2e points svrn at a stub OpenAI server as a `Url` venue, with no `[models]`, and a chat turn and an embedding round-trip through it. PLANT: drop the Url arm from the router, and the e2e goes red.
   LIFT ~900 lines. — read: sovereign-contracts/src/{venue.rs,engine_config.rs}, sovereign-serving-host/src/peer_inference.rs:1300-1340, sovereign-daemon/src/build/inference.rs:60-240, sovereign-turn-client/src/reach.rs:80-90 — check: CLEAN, LINT, TEST(sovereign-serving-host), TEST(sovereign-daemon), PLANT, LAYER, BOUNDARY
 - [ ] pc-inference-origin — depends [pc-venues] — OUTCOME: the mesh fronts ANY OpenAI-compatible server (the "mesh in front of vLLM/ollama" developer).
+  - (phase-b-23) The RANKING half (serve's router, its `VenueSource` over cw-rails' HTTP roster) moved to phase-b's pb-serve-ranks, because it closes fp-68. What is left here is the foreign-server half. Re-read the bullets below against what pb-serve-ranks landed.
   - `OriginKind::Inference` in oicp-types (origin.rs:21-26: "a new kind is a new variant beside a new route").
   - cw-rails adverts it and never ranks (its charter). cw-rails gossips `inference_capable: false` today (gossip.rs:79).
   - The origin's manifest comes from the origin itself (oicp-conformance exists) or from an operator-declared claims file that cw-rails serves verbatim (data, principle 9).
