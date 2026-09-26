@@ -144,6 +144,8 @@ mod meshapp_surface_e2e;
 mod models_http_e2e;
 #[path = "main/named_model_routes_after_child_serves_e2e.rs"]
 mod named_model_routes_after_child_serves_e2e;
+#[path = "main/ner_one_load_census.rs"]
+mod ner_one_load_census;
 #[path = "main/next_edit_symbol_lane_e2e.rs"]
 mod next_edit_symbol_lane_e2e;
 #[path = "main/node_id_persistence.rs"]
