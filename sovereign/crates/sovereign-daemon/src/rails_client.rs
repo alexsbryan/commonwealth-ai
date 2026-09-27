@@ -54,7 +54,10 @@ pub enum RailsDial {
     /// The rails daemon is not reachable. This is the ABSENCE the route
     /// reports — the mesh's roster is its to serve, and this daemon holds no
     /// answer of its own.
-    #[error("the mesh's rails daemon is not reachable at {base}: {detail}")]
+    #[error(
+        "the mesh's rails daemon is not reachable at {base}: {detail}; bring it up with `{verb}`",
+        verb = sovereign_turn_client::rails_kv::RAILS_BRING_UP_VERB
+    )]
     Absent { base: String, detail: String },
     /// The rails daemon answered with a refusal. `kind` names the arm
     /// when the body carried one, so the caller maps refusals without
@@ -222,9 +225,7 @@ pub async fn forget_member(
 fn rail_error(base: &str, e: RailsDial) -> commonwealth_rail_core::RailError {
     use commonwealth_rail_core::RailError;
     match e {
-        RailsDial::Absent { base, detail } => RailError::Io(format!(
-            "the mesh's rails daemon is not reachable at {base}: {detail}"
-        )),
+        e @ RailsDial::Absent { .. } => RailError::Io(e.to_string()),
         RailsDial::Refused { message, .. } => RailError::Rejected(message),
         RailsDial::Unreadable { base, detail } => RailError::Io(format!(
             "the mesh's rails daemon at {base} answered with an unreadable body: {detail}"

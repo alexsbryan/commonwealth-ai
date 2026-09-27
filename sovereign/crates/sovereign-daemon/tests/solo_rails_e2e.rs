@@ -2,7 +2,8 @@
 //! svrn starts no other process (pb-rails-untether, phase-b-31): booted with
 //! a REAL cw-rails binary on `CW_RAILS_BIN` and nothing answering on its
 //! `rails_base`, it answers a chat turn through the serve it dials, and no
-//! cw-rails runs and no `rails.lock` exists afterwards. cw-rails is brought
+//! cw-rails runs and no `rails.lock` exists afterwards; a ring read names the
+//! absence and the verb that ends it. cw-rails is brought
 //! up by `svrn mesh up` alone (sovereign-cli-mesh tests/rails_up_e2e.rs).
 //!
 //! The file keeps its name so nextest's `daemon-boot` group
@@ -208,6 +209,15 @@ fn svrn_boots_and_answers_a_turn_and_starts_no_cw_rails() {
             .as_str()
             .is_some_and(|c| !c.is_empty()),
         "HTTP {code}: the turn carried no answer: {answer}"
+    );
+
+    // A ring read with cw-rails absent: a named absence naming the verb that
+    // brings it up, never an empty journal (principle 6).
+    let (code, body) = request(client, "GET", "/v1/rail/log?namespace=notes", None)
+        .expect("the daemon answers a ring read");
+    assert!(
+        code >= 500 && body.contains("not reachable") && body.contains("`svrn mesh up`"),
+        "HTTP {code}: a ring read names cw-rails' absence and `svrn mesh up`: {body}"
     );
 
     assert!(

@@ -44,6 +44,12 @@ sovereign daemon run       # foreground (dev) — Ctrl-C to stop
 - Logs: `~/.svrnmesh/logs/daemon.{err,log,out}` — copy-truncate rotation at
   10 MiB, 5 backups per stream, every 30 min (`log_rotation.rs`). The doctor
   `log_dir_size` check fires only if that loop broke.
+- The daemon starts no other process (pb-rails-untether). cw-rails (rings,
+  KV, work atlas; :9747) comes up only on `svrn mesh up`, and until then
+  those surfaces answer a named absence that names the verb. On an upgraded
+  node, a peer's ring history moves from `~/.svrnmesh/rings` to cw-rails on
+  its first `svrn mesh up`, not on its first daemon boot. To keep cw-rails
+  across reboots, run `cw-rails run` under its own service unit.
 
 ## 3. Supervision (who restarts the daemon)
 

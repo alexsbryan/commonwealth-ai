@@ -5298,8 +5298,9 @@ pub enum MeshError {
     /// absence by name instead of answering from its own converging copy.
     #[error(
         "the mesh's rails daemon is not reachable at {0} — the roster is \
-         served by cw-rails, and this daemon alone holds no answer; start it \
-         and retry"
+         served by cw-rails, and this daemon alone holds no answer; bring it \
+         up with `{verb}` and retry",
+        verb = sovereign_turn_client::rails_kv::RAILS_BRING_UP_VERB
     )]
     ServingUnreachable(String),
 

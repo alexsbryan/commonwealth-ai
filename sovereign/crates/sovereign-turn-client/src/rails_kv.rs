@@ -37,6 +37,10 @@ use sovereign_contracts::principal::NodeId;
 /// both sides rather than imported across the lift boundary).
 pub const DEFAULT_RAILS_BASE: &str = "http://127.0.0.1:9747";
 
+/// The one verb that brings cw-rails up, named by every absence of it: svrn
+/// and its clients only dial (pb-rails-untether, phase-b-31).
+pub const RAILS_BRING_UP_VERB: &str = "svrn mesh up";
+
 /// The base this daemon dials cw-rails at: `[daemon] rails_base` when set,
 /// else [`DEFAULT_RAILS_BASE`]. THE one reader of the key (fp-112).
 pub fn resolve_rails_base(daemon: &sovereign_contracts::setup_config::DaemonSection) -> String {
@@ -148,7 +152,8 @@ async fn answer<T: serde::de::DeserializeOwned>(
     };
     let resp = req.timeout(KV_TIMEOUT).send().await.map_err(|e| {
         fail(format!(
-            "cannot reach the mesh's rails daemon at {url}: {e}"
+            "cannot reach the mesh's rails daemon at {url}: {e}; bring it up with \
+             `{RAILS_BRING_UP_VERB}`"
         ))
     })?;
     let status = resp.status();
