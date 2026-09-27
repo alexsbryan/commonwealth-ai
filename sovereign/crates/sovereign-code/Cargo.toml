@@ -14,7 +14,7 @@ license.workspace = true
 sovereign-contracts = { workspace = true }
 sovereign-time = { workspace = true }
 corpus-index = { workspace = true }
-understanding-vocab = { workspace = true }
+understanding-vocab = { workspace = true, features = ["read"] }
 corpus-engine-scip = { workspace = true }
 corpus-engine-notes = { workspace = true }
 corpus-engine-archaeology = { workspace = true, optional = true }

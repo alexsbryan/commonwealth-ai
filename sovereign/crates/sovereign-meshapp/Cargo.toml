@@ -13,7 +13,7 @@ sovereign-time = { workspace = true }
 # parcel analytics (the atlas reader leaf), the turn-header grammar (the
 # sections leaf) — the meshapp ops are projections over atlas reads, and none
 # of them links corpus-engine (fp-67).
-understanding-vocab = { workspace = true }
+understanding-vocab = { workspace = true, features = ["read"] }
 corpus-engine-atlas-reader = { workspace = true }
 corpus-engine-sections = { workspace = true }
 # Chunk-index rows + CorpusIndex live in the read-port leaf.

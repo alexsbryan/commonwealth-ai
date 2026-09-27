@@ -25,8 +25,9 @@ description = "The atlas vocabulary — atoms, edges, the kind taxonomy, canonic
 
 [features]
 # The `std::fs` half of the read door (`read_atlas_atoms`/`read_atlas_edges`).
-# Default-on for every consumer; `sovereign-eval` turns it off and decodes its
-# own bytes with `read::parse_atoms` (five-programs fp-58).
+# The root workspace entry turns defaults off: each member that reads atoms
+# from disk names `features = ["read"]`, and `sovereign-eval` leaves it off
+# and decodes its own bytes with `read::parse_atoms` (five-programs fp-58).
 default = ["read"]
 read = []
 

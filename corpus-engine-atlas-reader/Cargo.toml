@@ -34,7 +34,7 @@ corpus-index = { workspace = true }
 kernel-types = { workspace = true }
 sovereign-contracts = { workspace = true }
 understanding-atlas = { workspace = true }
-understanding-vocab = { workspace = true }
+understanding-vocab = { workspace = true, features = ["read"] }
 workspace-hack = { version = "0.1", path = "../workspace-hack" }
 
 [lints]
