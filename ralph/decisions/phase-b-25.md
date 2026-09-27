@@ -20,7 +20,7 @@
 
 <details><summary>reasoning, evidence, package</summary>
 
-The package was ralph/next/phase-b/ctl/NEEDS_HUMAN.md at 22:53Z, sections (a) to (h). Worker logs: target/ralph/phase-b/latency-bars-{1,2,3,4b}.log. The director's own rerun (latency-bars-director.log) ran on a contended host (cw-rails ~92% CPU, load 3.2) and is not a measurement.
+The package was ralph/next/phase-b/ctl/NEEDS_HUMAN.md at 22:53Z, sections (a) to (h), archived on this host at target/ralph/phase-b/NEEDS_HUMAN-phase-b-25.md when the halt was cleared. Worker logs: target/ralph/phase-b/latency-bars-{1,2,3,4b}.log. The director's own rerun (latency-bars-director.log) ran on a contended host (cw-rails ~92% CPU, load 3.2) and is not a measurement.
 
 The deployed daemon was verified as debug at the time: `readlink -f /proc/<pid on :9741>/exe` gave target/debug/sovereign-daemon.
 
