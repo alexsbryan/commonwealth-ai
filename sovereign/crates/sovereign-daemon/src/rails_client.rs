@@ -32,9 +32,6 @@ pub mod ledger;
 pub use sovereign_turn_client::rails_kv as kv;
 pub use sovereign_turn_client::rails_kv::{resolve_rails_base, DEFAULT_RAILS_BASE};
 
-mod bring_up;
-pub use bring_up::ensure_rails;
-
 /// How long a dial may take before it is reported absent. Loopback answers
 /// or refuses in milliseconds; the bound exists so a HUNG rails daemon
 /// turns into a named refusal rather than a wedged route.

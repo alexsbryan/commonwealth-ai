@@ -119,7 +119,6 @@ pub mod process;
 pub mod project_http;
 pub mod provider;
 pub mod publish_http;
-pub mod rail_migration;
 pub mod rails_client;
 pub mod reading_http;
 pub mod recipe_http;

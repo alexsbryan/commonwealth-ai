@@ -352,8 +352,9 @@ pub(super) const REGISTRY_TAIL: &[(&str, Class, usize)] = &[
     // `GET /v1/mesh/status` posture — the same loopback `rails_base`, which
     // `ensure_rails` refuses unless it is loopback. Its own client because
     // the read runs on ensure_rails' short-lived runtime, not the daemon's.
+    // Moved with `ensure_rails` to `svrn mesh up` (pb-rails-untether).
     (
-        "sovereign/crates/sovereign-daemon/src/rails_client/bring_up.rs",
+        "sovereign/crates/sovereign-cli-mesh/src/rails_up.rs",
         Class::LocalDaemon,
         1,
     ),

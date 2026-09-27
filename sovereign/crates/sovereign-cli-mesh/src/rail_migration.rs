@@ -3,12 +3,13 @@
 //!
 //! Until fp-54's flip the inference daemon's in-process rail was the ONLY
 //! writer, so moving the journals to `cw-rails`' data root is atomic: this
-//! runs in `rails_client::ensure_rails`, before any bring-up and so before any
-//! rail surface answers ([`hand_over`], phase-b-3), and after it
-//! the daemon never opens a journal again (§4 rule 1 — one data directory,
-//! one owner; the daemon cannot write into the rails daemon's store as a
-//! standing arrangement, and a one-time rename during a boot it owns is not
-//! an arrangement).
+//! runs in `svrn mesh up` ([`crate::rails_up::ensure_rails`]), before it
+//! brings cw-rails up and so before any rail surface answers ([`hand_over`],
+//! phase-b-3). svrn's boot neither hands over nor brings up
+//! (pb-rails-untether), and svrn never opens a journal again (§4 rule 1 —
+//! one data directory, one owner; the daemon cannot write into the rails
+//! daemon's store as a standing arrangement, and a one-time rename on the
+//! operator's word, while no cw-rails runs, is not an arrangement).
 //!
 //! Both processes spell the layout the same way — `<data_dir>/rings/<ns>/` —
 //! because `commonwealth-rail` is the ONE spelling of it (`rings_root`), so
@@ -26,7 +27,7 @@
 //! Never clobbers: a namespace already present at the target stays there and
 //! the source is LEFT in place with a warning, so the worst case of a double
 //! history is two copies, never a destroyed one. A namespace moved once is
-//! gone from the source, so every later boot is a no-op.
+//! gone from the source, so every later `svrn mesh up` is a no-op.
 
 use std::path::{Path, PathBuf};
 
@@ -103,8 +104,8 @@ pub fn hand_over(data_dir: &Path, config_path: &Path, rails_answering: bool) {
         viewer_id,
         dir = %data_dir.display(),
         "rail migration: cw-rails already answers, so nothing moved under it — these wait \
-         under the daemon's data dir; cw-rails must restart to take them (stop it, and the \
-         next daemon boot or `svrn portfolio` hands them over before bringing it up)"
+         under the daemon's data dir; cw-rails must restart to take them (stop it, and \
+         `svrn mesh up` hands them over before bringing it up)"
     );
 }
 

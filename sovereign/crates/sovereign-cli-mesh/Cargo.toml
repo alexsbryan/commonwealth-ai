@@ -18,7 +18,10 @@ sovereign-mesh = { workspace = true, features = ["treesitter"] }
 # The client half of the daemon's HTTP surface: `ServingHost` decides "is a
 # daemon answering", `TurnClient` speaks `/v1/mesh/*` (create/join). Added
 # when the last in-process daemon constructions left this crate.
-sovereign-turn-client = { workspace = true }
+# `bundled-backend`: `svrn mesh up` brings cw-rails up through
+# `ServingHost::bringing_up` (rails_up.rs, pb-rails-untether). The feature
+# gates code only, so it moves no dependency edge.
+sovereign-turn-client = { workspace = true, features = ["bundled-backend"] }
 sovereign-meshapp = { workspace = true }
 sovereign-cli-base = { workspace = true, features = ["rail-client"] }
 commonwealth-core = { path = "../../../commonwealth/crates/commonwealth-core" }

@@ -19,6 +19,8 @@ pub mod mesh_travel;
 pub mod meshapp_cmd;
 pub mod meshapp_registry;
 pub mod publish_cmd;
+pub mod rail_migration;
+pub mod rails_up;
 pub mod remote_gguf;
 pub mod ring_cmd;
 pub mod run_cmd;

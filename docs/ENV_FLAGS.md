@@ -32,7 +32,7 @@ dead-codepath survey lives in `docs/ENV_VAR_AUDIT.md`.
 
 | flag | default | status | purpose |
 |---|---|---|---|
-| `CW_RAILS_BIN` | sibling of the running program, then PATH | shipped | Path override for the cw-rails binary that `rails_client::ensure_rails` brings up when nothing answers on the rails base (fp-solo-clients, five-programs-63/-65). Read through `sovereign_turn_client::reach::locate_sibling`. |
+| `CW_RAILS_BIN` | sibling of the running program, then PATH | shipped | Path override for the cw-rails binary that `svrn mesh up` (sovereign-cli-mesh `rails_up::ensure_rails`) brings up when nothing answers on the rails base (fp-solo-clients, five-programs-63/-65). Read through `sovereign_turn_client::reach::locate_sibling`. |
 | `SOVEREIGN_AGENT_BENCH_BIN` | sibling of dispatcher | shipped | Path override for the sovereign-agent-bench sibling. `svrn agent-bench` execs it rather than linking the crate, which is how a bench-package crate left the svrn dispatcher. |
 | `SOVEREIGN_BIN` | unset | shipped | Drift orchestrator's path to the sovereign CLI. ANCHOR of the sibling-binary synonym cluster — two names for 'where is the CLI' (with SOVEREIGN_CLI). It was three until SOVEREIGN_CLI_PATH was deprecated on 2026-09-11; the anchor moved here so the cluster is described by a row that still has readers. |
 | `SOVEREIGN_CLI` | unset | shipped | Enrichment tool's path to the sovereign CLI. Synonym-cluster member (see SOVEREIGN_BIN). |

@@ -1,6 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! [`ensure_rails`]: a client makes cw-rails reachable at a user-action moment
-//! (fp-solo-clients), split out of `rails_client.rs` at its arch-gate band.
+//! [`ensure_rails`]: `svrn mesh up` makes cw-rails reachable (fp-solo-clients).
+//! It moved here from sovereign-daemon's `rails_client` when svrn stopped
+//! bringing cw-rails up (pb-rails-untether, phase-b-31): the mesh program owns
+//! the one opt-in bring-up, and svrn only dials.
+
+/// How long `refuse_n0_posture` waits for cw-rails' status. Loopback answers
+/// or refuses in milliseconds; the bound turns a HUNG cw-rails into a named
+/// refusal.
+const STATUS_READ_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
 
 /// How long [`ensure_rails`] waits for cw-rails to answer, bring-up included.
 /// cw-rails loads no model: a start is a lock, a bind, and projecting its
@@ -12,8 +19,8 @@ const RAILS_BRING_UP_WINDOW: std::time::Duration = std::time::Duration::from_sec
 /// Make cw-rails reachable at `base`, bringing it up if nothing answers there
 /// (five-programs-63/-65: cw-rails owns its root, a client owns reaching it).
 ///
-/// Call it ONLY at a user-action moment — daemon boot, a `svrn portfolio` or
-/// `svrn newsworthy` run — and never on a refused dial: the settled bar
+/// Call it ONLY at a user-action moment — `svrn mesh up` is the one — and
+/// never on a refused dial: the settled bar
 /// forbids bring-up on a timer or a health signal (`bring_up_decider` in
 /// quality/ARCH_LAYERS.toml), so a refused dial reports absence. The decision
 /// is [`ServingHost::ensure_reachable`]'s; this holds no child, and two
@@ -26,9 +33,10 @@ const RAILS_BRING_UP_WINDOW: std::time::Duration = std::time::Duration::from_sec
 /// `/v1/mesh/status`, or this is a named Err — never a second cw-rails
 /// (five-programs-66).
 ///
-/// `data_dir` is the daemon's (`[data] dir`): its one-time journal handover
-/// runs FIRST, before any bring-up, because cw-rails reads its journals once
-/// at start (phase-b-3, [`crate::rail_migration::hand_over`]).
+/// `data_dir` is the daemon's (`[data] dir`) and `config_path` its config
+/// file: the one-time journal and media handover runs FIRST, before any
+/// bring-up, because cw-rails reads its journals once at start (phase-b-3,
+/// [`crate::rail_migration::hand_over`]).
 ///
 /// Sync and safe from any thread: the probe runs on its own thread and
 /// runtime. A non-loopback base, a base with no port, or an absent binary
@@ -39,10 +47,11 @@ pub fn ensure_rails(
     base: &str,
     local_only: bool,
     data_dir: &std::path::Path,
+    config_path: &std::path::Path,
 ) -> Result<sovereign_turn_client::reach::Reached, String> {
     use sovereign_turn_client::reach::{locate_sibling, BundledBackend, Reached, ServingHost};
 
-    hand_over_first(base, data_dir);
+    hand_over_first(base, data_dir, config_path);
     let absent = |why: String| {
         tracing::warn!(rails_base = base, reason = %why, "ensure_rails: cw-rails is not reachable");
         why
@@ -141,7 +150,7 @@ fn on_own_runtime<T: Send, F: std::future::Future<Output = Result<T, String>>>(
 /// One probe of `base`, then the handover: moved when nothing answers, left
 /// in place and named when a cw-rails already does. A probe that cannot run
 /// moves nothing — a journal under a live store is the loss this prevents.
-fn hand_over_first(base: &str, data_dir: &std::path::Path) {
+fn hand_over_first(base: &str, data_dir: &std::path::Path, config_path: &std::path::Path) {
     let host = sovereign_turn_client::reach::ServingHost::at(base).ready_at("/v1/mesh/status");
     let answering = on_own_runtime("handover probe", || async { Ok(host.is_serving().await) });
     let answering = answering.unwrap_or_else(|e| {
@@ -149,11 +158,7 @@ fn hand_over_first(base: &str, data_dir: &std::path::Path) {
         true
     });
     tracing::debug!(rails_base = base, answering, "ensure_rails: handover probe");
-    crate::rail_migration::hand_over(
-        data_dir,
-        &sovereign_core::setup_config::SetupConfig::default_path(),
-        answering,
-    );
+    crate::rail_migration::hand_over(data_dir, config_path, answering);
 }
 
 /// A local-only node found a cw-rails it did not start: `Ok` only when that
@@ -163,7 +168,7 @@ fn hand_over_first(base: &str, data_dir: &std::path::Path) {
 async fn refuse_n0_posture(base: &str) -> Result<(), String> {
     let url = format!("{}/v1/mesh/status", base.trim_end_matches('/'));
     let status: serde_json::Value = reqwest::Client::builder()
-        .timeout(super::DIAL_TIMEOUT)
+        .timeout(STATUS_READ_TIMEOUT)
         .build()
         .map_err(|e| format!("no HTTP client to read cw-rails' posture with: {e}"))?
         .get(&url)
