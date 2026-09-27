@@ -3695,3 +3695,75 @@ production definition.
   `#[serde(default)]`. The other two `TextChunk`s
   (`corpus-engine/src/chunkers/mod.rs:12`, `sovereign-tools-base/src/rag/chunk.rs:32`)
   predate the range and are a chunker type, not this wire.
+
+## REVIEW-audit-pb-auto-5 (2026-09-27, range cc68bd227..3c6fdf96c, since REVIEW-audit-pb-auto-4)
+
+Four units (pb-stock-binary, pb-rails-untether, pb-cli-llm, pb-pods-verb),
+plus pb-bench-lift's commits and the seat's phase-b-31/32. All checks ran in
+the sovereign-vulkan toolbox.
+
+TESTALL at 3c6fdf96c: exit=100, 13,620 passed and 1 failed. The failure was
+drift in the F26 egress census, fixed in 352893860. PREPUSH exited 1 with
+three blocking lanes. boundary-gate is at 46 violations (49 at auto-4), the
+declared burn-down. env-gate and clock-gate were both drift from moves in the
+range, fixed below. Advisories as at auto-4: deletion-manifest, hakari-verify,
+domains-census-self-test could-not-judge.
+
+Ledger (`.rs` lines, net; a path under `tests/` or named `*_test(s).rs` counts
+as tests): pb-stock-binary +261 src / +356 tests, pb-cli-llm +130 / +168,
+pb-rails-untether +110 / +86, pb-pods-verb +51 / +64. Total src +549, tests
++675 (before this audit's commits).
+
+- **ARCH 5 drift, fixed in 352893860** · `f26_egress_census/registry_tail.rs:202`
+  still named `sovereign-compute/src/ner.rs` after df90dc575 moved RemoteNer's
+  client site to `oicp-client/src/ner.rs:132`. The row moved with it: same
+  class and count.
+- **ARCH 8, fixed in 15a57d3ce** · `sovereign-cli-mesh/src/mesh_pod.rs:442`
+  hand-read the clock. It came in the move from `pipeline_cmd.rs`, which was
+  on the clock baseline. It now calls `sovereign_time::unix_now_u64`, which
+  computes the same value. clock-gate: 119 reads → 118, 0 failures.
+- **ARCH 3, fixed in dce599a6d** · c4f8726e4 edited two `purpose` strings in
+  `quality/env-flags.toml` without re-rendering `docs/ENV_FLAGS.md`, so
+  env-gate blocked. The doc is re-rendered.
+- **ARCH 8, fixed in 1d4501d08** · `sovereign-daemon/src/provider.rs`: the
+  Hosted reload arm (87c00d2d5) copied the Serve arm's alias-publish block
+  byte for byte. Both now go through `LlamaCppFactory::publish_served_aliases`.
+  Copies 2 → 1.
+- **ARCH 1, open, owned by the next row that edits provider.rs** ·
+  `provider.rs` `publish_served_aliases`: when the daemon is not yet set, the
+  reload publishes no aliases and emits no tracing event. The branch predates
+  the range (the Serve arm had it), and the range doubled it. Tracing it would
+  be a behaviour change, so it gets its own commit.
+- **ARCH 6, open, owned by the next row that edits serving_status.rs** ·
+  `sovereign-cli-daemon/src/daemon_cmd/serving_status.rs:10-19` (added by
+  a378380fc). When `/status` does not answer, or answers with a body that is
+  not JSON, the tool prints "serving: not reported by this daemon". That is
+  the same line a daemon with no `serving` field gets, so "did not answer"
+  reads as "answered: nothing". It is reached only after `/v1/models`
+  answered (`lifecycle.rs:1114`).
+- **Record only, moved duplication** · the flag parsing in
+  `sovereign-cli-mesh/src/mesh_pod/pool.rs:17-103` mirrors
+  `mesh_pod.rs:70-161`: `--image`, `--disk`, `--max-price`, `--model`,
+  `--ttl-hours`, with the same silent `parse().unwrap_or(<default>)` on a bad
+  value. Both came whole from `pipeline_cmd.rs` in 47a8392d8 (the removed
+  side carries the `disk_gb` line twice), so the range added no copy. It is
+  owned by whichever row next changes a pod flag.
+
+dry-report: **could-not-judge.** The corpus index the report reads was last
+updated 8 hours before this audit. It holds no symbol from the range (0 hits
+for `mesh_pod.rs`, and nothing under `sovereign-stock`), so across the 16
+touched crate dirs no clone group had an added side. That count is a
+substitution, not a finding. `svrn refresh` nudged a SCIP rebuild
+(`reason=explicit` at 23:06:43Z) and reported "LanceDB index current —
+skipping", so the embeddings the report reads were not rebuilt. The deployed
+daemon then stopped answering on :9741, at about 16:15 local. This audit did
+not stop or restart it (see the unit's commit). As a stand-in, the diff read
+and the smell sweep above found the one added clone (provider.rs) and the one
+moved clone (pool.rs).
+
+converge-noun over the 17 nouns the range added or moved: none has more than
+one production definition. Capture, CaptureWriter, Killed, Node and Reaper
+are private test doubles (`sovereign-daemon/src/process.rs` tests,
+`rails_up_e2e.rs`, `one_process_e2e.rs`). `CaptureWriter` repeats the same
+test writer at `corpus-engine/src/engine/yield_gate.rs:158` and
+`sec_facts/mod.rs:1326`: record only, test code.
