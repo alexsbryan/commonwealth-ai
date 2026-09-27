@@ -317,3 +317,57 @@ fn an_identity_binding_never_names_serve() {
     assert_eq!(resolved.base, default_serve_base());
     assert_eq!(resolved.source, ServeBaseSource::Default);
 }
+
+/// serve's NER route: 503 for the first `failures` probes, then "no model".
+async fn ner_route(
+    failures: usize,
+    probes: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+) -> String {
+    use axum::response::IntoResponse;
+    use axum::routing::post;
+    use std::sync::atomic::Ordering;
+    stub(axum::Router::new().route(
+        sovereign_compute::ner::NER_PATH,
+        post(move || {
+            let probes = std::sync::Arc::clone(&probes);
+            async move {
+                if probes.fetch_add(1, Ordering::SeqCst) < failures {
+                    (axum::http::StatusCode::SERVICE_UNAVAILABLE, "loading").into_response()
+                } else {
+                    axum::Json(serde_json::json!({"extractor": null, "mentions": []}))
+                        .into_response()
+                }
+            }
+        }),
+    ))
+    .await
+}
+
+/// A NER probe that never answers is an Err naming it, never "serve has no
+/// NER model" for the life of the process.
+#[tokio::test]
+async fn a_ner_probe_that_keeps_erring_is_named_not_none() {
+    let probes = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let base = ner_route(usize::MAX, std::sync::Arc::clone(&probes)).await;
+    let err = resolve_serve_ner(&base, std::time::Duration::from_millis(2500))
+        .await
+        .map(|h| h.is_some())
+        .expect_err("serve never answered");
+    assert!(err.contains("did not answer"), "{err}");
+    assert!(
+        probes.load(std::sync::atomic::Ordering::SeqCst) >= 2,
+        "retried"
+    );
+}
+
+/// A probe that errs once and then answers is that answer.
+#[tokio::test]
+async fn a_ner_probe_is_retried_until_serve_answers() {
+    let probes = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let base = ner_route(1, std::sync::Arc::clone(&probes)).await;
+    let handle = resolve_serve_ner(&base, std::time::Duration::from_secs(10))
+        .await
+        .expect("answered on the second probe");
+    assert!(handle.is_none(), "serve answered: no model");
+    assert_eq!(probes.load(std::sync::atomic::Ordering::SeqCst), 2);
+}

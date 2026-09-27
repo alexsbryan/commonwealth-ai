@@ -175,7 +175,10 @@ async fn dial_serve(
             return Err(1);
         }
     };
-    crate::serve_client::install_serve_ner(&serve.base).await;
+    if let Err(e) = crate::serve_client::install_serve_ner(&serve.base).await {
+        eprintln!("error: {e}");
+        return Err(1);
+    }
     let config_context = config.effective_context_size();
     let resolved_embed_family = served.embed_family.clone();
     let provider: Arc<dyn InferenceProvider> = Arc::new(crate::serve_client::loopback_provider(
