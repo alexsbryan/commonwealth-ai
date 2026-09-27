@@ -51,6 +51,26 @@ class QueueTests(unittest.TestCase):
             q = ralph.Queue(pathlib.Path(tmp) / "ralph/STATE.md")
             self.assertEqual(q.current().id, "dm-a")
 
+    def test_a_ready_human_row_waits_while_the_rows_past_it_run(self):
+        # phase-b-31: HUMAN-pb-lanes-dials-serve at the head held 40 rows for 9 h.
+        with tempfile.TemporaryDirectory() as tmp:
+            write(tmp, "ralph/STATE.md",
+                  "- [ ] HUMAN-read — depends []\n- [ ] dm-after — depends [HUMAN-read]\n"
+                  "- [ ] dm-free — depends []\n")
+            q = ralph.Queue(pathlib.Path(tmp) / "ralph/STATE.md")
+            self.assertEqual(q.current().id, "dm-free")
+            self.assertEqual(q.awaiting_operator(), ["HUMAN-read"])
+
+    def test_a_parked_row_waits_even_when_it_is_the_active_one(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            write(tmp, "ralph/STATE.md",
+                  "- [~] dm-stuck — depends []\n- [ ] dm-next — depends [dm-stuck]\n"
+                  "- [ ] dm-free — depends []\n")
+            q = ralph.Queue(pathlib.Path(tmp) / "ralph/STATE.md")
+            self.assertEqual(q.current(frozenset({"dm-stuck"})).id, "dm-free")
+            self.assertEqual(q.awaiting_operator(frozenset({"dm-stuck"})), ["dm-stuck"])
+            self.assertIsNone(ralph.Queue(q.path).current(frozenset({"dm-stuck", "dm-free"})))
+
     def test_duplicate_id_is_an_error(self):
         with tempfile.TemporaryDirectory() as tmp:
             write(tmp, "ralph/STATE.md",
@@ -563,6 +583,41 @@ class CampaignTests(unittest.TestCase):
                 result = c.run()
             self.assertEqual(result.outcome, ralph.Outcome.HALT)
             self.assertIn("HUMAN-design-review", result.reason)
+
+    def test_a_ready_human_row_is_skipped_and_the_next_ready_row_dispatches(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            seen = []
+            c = self.make(tmp, "- [ ] HUMAN-read — depends []\n- [ ] dm-b — depends []\n",
+                          session_run=lambda a, p, l: seen.append(p), max_stall=1)
+            with mock.patch.object(ralph, "head_of", return_value="a" * 40):
+                c.run()
+            self.assertEqual(len(seen), 1)
+            self.assertIn("Your unit: dm-b", seen[0])
+
+    def test_only_waiting_rows_ready_halts_operator_only_and_names_them(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ran = []
+            c = self.make(tmp, "- [ ] HUMAN-read — depends []\n- [ ] dm-p — depends []\n"
+                               "- [ ] dm-q — depends [dm-p]\n",
+                          session_run=lambda *a: ran.append(a))
+            write(tmp, "ralph/parked/dm-p.md", "# bar missed\n")
+            with mock.patch.object(ralph, "head_of", return_value="a" * 40):
+                result = c.run()
+            self.assertEqual(result.outcome, ralph.Outcome.HALT)
+            self.assertIn("HUMAN-read, dm-p", result.reason)
+            self.assertEqual(ran, [])
+            self.assertIsNotNone(ralph.operator_only(pathlib.Path(tmp, "ralph/NEEDS_HUMAN.md")))
+
+    def test_the_unit_note_names_the_parked_rows(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            seen = []
+            c = self.make(tmp, "- [ ] dm-p — depends []\n- [ ] dm-b — depends []\n",
+                          session_run=lambda a, p, l: seen.append(p), max_stall=1)
+            write(tmp, "ralph/parked/dm-p.md", "# bar missed\n")
+            with mock.patch.object(ralph, "head_of", return_value="a" * 40):
+                c.run()
+            self.assertIn("Your unit: dm-b", seen[0])
+            self.assertIn("do not open them: dm-p", seen[0])
 
     def with_requires(self, c, tmp, requires):
         write(tmp, "ralph/next/q/queue.toml", f"dispatch_requires = {requires!r}\n")
@@ -1459,6 +1514,83 @@ class SupervisorTests(unittest.TestCase):
                 s.run()
             log = (pathlib.Path(tmp) / "ralph/.director-commits").read_text()
             self.assertIn("a" * 40 + ".." + f"{1:040x}", log)
+
+    def test_an_operator_only_package_parks_its_row_and_the_campaign_runs_on(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            calls = []
+            s = self.make(tmp, run_inner=lambda: calls.append("inner"),
+                          resolver_run=lambda *a: calls.append("resolver"))
+            write(tmp, "ralph/STATE.md", "- [~] dm-a — depends []\n- [ ] dm-b — depends []\n"
+                                         "- [ ] dm-c — depends [dm-a]\n")
+            write(tmp, "ralph/NEEDS_HUMAN.md",
+                  "# NEEDS_HUMAN — dm-a: first-token bar missed\n\n"
+                  "operator-only: a pre-registered bar a row cannot meet\n")
+            write(tmp, "ralph/STOP", "halt: dm-a\n")
+
+            def inner():
+                calls.append("inner")
+                write(tmp, "ralph/DONE", "")
+            s.run_inner = inner
+            with mock.patch.object(ralph, "commit_state", return_value=None):
+                self.assertEqual(s.run(), 0)
+            self.assertEqual(calls, ["inner"])
+            parked = pathlib.Path(tmp, "ralph/parked/dm-a.md").read_text()
+            self.assertIn("first-token bar missed", parked)
+            self.assertFalse(pathlib.Path(tmp, "ralph/NEEDS_HUMAN.md").exists())
+            self.assertFalse(pathlib.Path(tmp, "ralph/STOP").exists())
+            q = ralph.Queue(pathlib.Path(tmp, "ralph/STATE.md"))
+            self.assertIs(q.status_of("dm-a"), ralph.Status.PENDING)
+            self.assertEqual(q.current(ralph.parked_ids(s.paths)).id, "dm-b")
+
+    def test_a_package_naming_no_row_is_never_parked(self):
+        # A stall or a full disk is the loop's block, not a row's: parking on
+        # it would walk the loop through the whole queue.
+        with tempfile.TemporaryDirectory() as tmp:
+            write(tmp, "ralph/STATE.md", "- [ ] dm-a — depends []\n- [ ] dm-b — depends []\n")
+            write(tmp, "ralph/NEEDS_HUMAN.md", "# 3 iterations without a commit\n")
+            s = self.make(tmp, run_inner=lambda: None, resolver_run=lambda *a: None)
+            write(tmp, "ralph/STATE.md", "- [ ] dm-a — depends []\n- [ ] dm-b — depends []\n")
+            with mock.patch.object(ralph, "head_of", return_value="a" * 40):
+                self.assertEqual(s.run(), 2)
+            self.assertFalse(pathlib.Path(tmp, "ralph/parked").exists())
+
+    def test_a_resolution_that_changes_nothing_parks_the_row_its_package_names(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            s = self.make(tmp, run_inner=lambda: None, resolver_run=lambda *a: None)
+            write(tmp, "ralph/STATE.md", "- [~] dm-a — depends []\n- [ ] dm-b — depends []\n")
+            write(tmp, "ralph/NEEDS_HUMAN.md", "# NEEDS_HUMAN — dm-a: premise false\n")
+            runs = []
+
+            def inner():
+                runs.append(1)
+                if len(runs) > 1:
+                    write(tmp, "ralph/DONE", "")
+            s.run_inner = inner
+            with mock.patch.object(ralph, "head_of", return_value="a" * 40), \
+                    mock.patch.object(ralph, "commit_state", return_value=None):
+                self.assertEqual(s.run(), 0)
+            self.assertTrue(pathlib.Path(tmp, "ralph/parked/dm-a.md").exists())
+            self.assertEqual(len(runs), 2)
+
+    def test_parking_stops_after_max_parks_with_no_unit_done(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            s = self.make(tmp, run_inner=lambda: None, resolver_run=lambda *a: None)
+            s.max_parks = 1
+            write(tmp, "ralph/STATE.md", "- [ ] dm-a — depends []\n- [ ] dm-b — depends []\n"
+                                         "- [ ] dm-c — depends []\n")
+            n = {"i": 0}
+
+            def inner():
+                n["i"] += 1
+                row = ["dm-a", "dm-b", "dm-c"][n["i"] - 1]
+                write(tmp, "ralph/NEEDS_HUMAN.md",
+                      f"# NEEDS_HUMAN — {row}: blocked\n\noperator-only: a fork\n")
+            s.run_inner = inner
+            with mock.patch.object(ralph, "head_of", return_value="a" * 40), \
+                    mock.patch.object(ralph, "commit_state", return_value=None):
+                self.assertEqual(s.run(), 2)
+            self.assertEqual(sorted(p.name for p in pathlib.Path(tmp, "ralph/parked").iterdir()),
+                             ["dm-a.md"])
 
     def test_halt_stop_without_package_dispatches(self):
         with tempfile.TemporaryDirectory() as tmp:

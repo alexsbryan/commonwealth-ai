@@ -317,12 +317,45 @@ def operator_only(path):
     return None
 
 
-def halt(paths, reason, *, notifier=notify, notify_enabled=True):
+def parked_ids(paths):
+    """The rows parked for the operator: one `<row-id>.md` package each under
+    the loop's parked dir. Deleting a package unparks its row."""
+    root = paths.p(paths.parked)
+    if not root.is_dir():
+        return frozenset()
+    return frozenset(f.stem for f in root.glob("*.md"))
+
+
+def blocked_row(queue, title, parked=frozenset()):
+    """The one open row a halt package is about, or None. The title must name
+    exactly one open non-HUMAN row; an operator-only package may instead rest
+    on the one `[~]` row. A halt that names no row (a stall, a full disk, an
+    unready queue) is not a row's block, and parking on it would walk the loop
+    through the whole queue."""
+    open_rows = [r for r in queue.rows if r.status is not Status.DONE
+                 and not r.id.startswith("HUMAN-") and r.id not in parked]
+    named = [r for r in open_rows
+             if re.search(rf"(?<![\w-]){re.escape(r.id)}(?![\w-])", title)]
+    if len(named) == 1:
+        return named[0]
+    return None
+
+
+def waiting_row(queue, parked=frozenset()):
+    """The one `[~]` row, for an operator-only package whose title names none."""
+    active = [r for r in queue.rows if r.status is Status.ACTIVE
+              and not r.id.startswith("HUMAN-") and r.id not in parked]
+    return active[0] if len(active) == 1 else None
+
+
+def halt(paths, reason, *, notifier=notify, notify_enabled=True, operator_clause=None):
     """The one halt: a package, a reason in STOP, a notification. Shared by
-    the campaign and the pool so neither can invent a quieter stop."""
+    the campaign and the pool so neither can invent a quieter stop. An
+    `operator_clause` marks the package operator-only, so no director runs."""
     pkg = paths.p(paths.needs_human)
     pkg.parent.mkdir(parents=True, exist_ok=True)
-    pkg.write_text(f"# {reason}\n\nresolve by hand, then remove "
+    mark = f"{OPERATOR_ONLY_MARK} {operator_clause}\n\n" if operator_clause else ""
+    pkg.write_text(f"# {reason}\n\n{mark}resolve by hand, then remove "
                    f"{paths.stop} {paths.needs_human}\n")
     if not pkg.stat().st_size:
         say(f"HALT could not write {pkg} (disk full?) — no decision package exists")
@@ -507,14 +540,29 @@ class Queue:
         by = self.by_id()
         return all(by[d].status is Status.DONE for d in row.deps)
 
-    def current(self):
+    def current(self, parked=frozenset()):
+        """The unit the loop runs next: the `[~]` row, else the first ready `[ ]`
+        row. A HUMAN- row is never a unit and neither is a parked row: both wait
+        on the operator while every row that does not depend on them runs
+        (phase-b-31, operator 2026-09-27: "rather than using every roadblock as a
+        total stop"). Until then the first ready HUMAN- row halted the loop, and
+        HUMAN-pb-lanes-dials-serve held 40 independent rows for 9 h."""
+        def waits(r):
+            return r.id.startswith("HUMAN-") or r.id in parked
         for r in self.rows:
-            if r.status is Status.ACTIVE:
+            if r.status is Status.ACTIVE and not waits(r):
                 return r
         for r in self.rows:
-            if r.status is Status.PENDING and self.deps_met(r):
+            if r.status is Status.PENDING and not waits(r) and self.deps_met(r):
                 return r
         return None
+
+    def awaiting_operator(self, parked=frozenset()):
+        """What only the operator can move: ready HUMAN- rows, then parked rows."""
+        human = [r.id for r in self.rows if r.id.startswith("HUMAN-")
+                 and r.status is not Status.DONE and self.deps_met(r)]
+        held = [r.id for r in self.rows if r.id in parked and r.status is not Status.DONE]
+        return human + held
 
     def status_of(self, row_id):
         return self.by_id()[row_id].status
@@ -991,6 +1039,7 @@ class Paths:
     stop: str = "ralph/STOP"
     needs_human: str = "ralph/NEEDS_HUMAN.md"
     waiting: str = "ralph/waiting"
+    parked: str = "ralph/parked"          # one <row-id>.md package per row waiting on the operator
     models: str = "ralph/models.env"
     heartbeat: str = "ralph/.heartbeat"
     charter: str = "ralph/CHARTER.md"
@@ -1011,7 +1060,8 @@ class Paths:
         """The per-loop files, as Paths fields. One loop per control_dir."""
         return {"control_dir": control_dir, "done": f"{control_dir}/DONE",
                 "stop": f"{control_dir}/STOP", "needs_human": f"{control_dir}/NEEDS_HUMAN.md",
-                "waiting": f"{control_dir}/waiting", "heartbeat": f"{control_dir}/.heartbeat",
+                "waiting": f"{control_dir}/waiting", "parked": f"{control_dir}/parked",
+                "heartbeat": f"{control_dir}/.heartbeat",
                 "director_commits": f"{control_dir}/.director-commits"}
 
 
@@ -1279,10 +1329,21 @@ class Campaign:
         self.model = model
         self.review_model = review_model
         self.variant = variant
+        self._announced = set()
 
-    def halt(self, reason):
+    def halt(self, reason, operator_clause=None):
         return halt(self.paths, reason, notifier=self.notifier,
-                    notify_enabled=self.notify_enabled)
+                    notify_enabled=self.notify_enabled, operator_clause=operator_clause)
+
+    def _announce_waiting(self, waiting):
+        """Say once per campaign that a row waits on the operator while the
+        loop runs past it — a skipped row is a decision, and it is traced."""
+        for row_id in waiting:
+            if row_id in self._announced:
+                continue
+            self._announced.add(row_id)
+            say(f"{row_id} waits on the operator — running the rows that do not depend on it")
+            self.notifier("OPERATOR — waiting, loop continues", row_id, self.notify_enabled)
 
     def run(self):
         stall = 0
@@ -1307,11 +1368,16 @@ class Campaign:
                 continue
             # Re-read every iteration: the worker mutates the queue as it goes.
             queue = Queue(self.paths.p(self.paths.state))
-            unit = queue.current()
+            parked = parked_ids(self.paths)
+            unit = queue.current(parked)
+            waiting = queue.awaiting_operator(parked)
             if unit is None:
+                if waiting:
+                    return self.halt("operator approval required — every ready row waits "
+                                     f"on the operator: {', '.join(waiting)}",
+                                     operator_clause="HUMAN- rows and parked rows")
                 return self.halt(f"no ready unit in {self.paths.state}; check dependencies")
-            if unit.id.startswith("HUMAN-"):
-                return self.halt(f"operator approval required: {unit.id}")
+            self._announce_waiting(waiting)
             refusal = dispatch_refusal(self.paths, queue, unit)
             if refusal is not None:
                 return self.halt(refusal)
@@ -1331,6 +1397,9 @@ class Campaign:
                 note += (f"This queue's control files are {self.paths.needs_human}, "
                          f"{self.paths.done} and {self.paths.waiting} — never the files of "
                          "those names directly under ralph/, which belong to another loop.\n\n")
+            if parked:
+                note += (f"Parked rows wait on the operator; do not open them: "
+                         f"{', '.join(sorted(parked))}.\n\n")
             self.session_run(model_args, note + self._prompt_text(), self._log_path(iteration))
             after = head_of(self.paths.workdir)
             if after != before:
@@ -1396,18 +1465,27 @@ class Campaign:
         return str(self.paths.p(self.paths.log_dir) / f"iter-{iteration}.out")
 
 
+# terminal_stop's answer when it parked a row: not a stop, the campaign re-runs.
+PARKED = "parked"
+
+
 class Supervisor:
     """Runs a campaign command; a stop short of DONE is either terminal, an
-    operator escalation, or a bounded resolution. Progress is a unit completed."""
+    operator escalation, a parked row, or a bounded resolution. Progress is a
+    unit completed."""
 
     def __init__(self, paths, *, run_inner, resolver_run, notifier=notify,
-                 notify_enabled=True, resolve_max=4, state_path=None):
+                 notify_enabled=True, resolve_max=4, state_path=None, max_parks=3):
         self.paths = paths
         self.run_inner = run_inner
         self.resolver_run = resolver_run
         self.notifier = notifier
         self.notify_enabled = notify_enabled
         self.resolve_max = resolve_max
+        # Parks in a row with no unit completed between them: past this, the
+        # block is the loop's, not a row's, and the stop stands.
+        self.max_parks = max_parks
+        self.parks_without_progress = 0
 
     def _queue(self):
         # A worker may be mid-write; the frequent checks tolerate that, the
@@ -1428,6 +1506,48 @@ class Supervisor:
         except OSError:
             pass
 
+    def park(self, reason, *, operator=False):
+        """Move the package to parked/<row>.md, return the row to `[ ]`, and let
+        the campaign run every row that does not depend on it (phase-b-31). The
+        row is the one the package's title names, or for an operator-only
+        package the one `[~]` row. None when no row can be named, or when
+        `max_parks` rows parked with no unit completed: the stop stands then."""
+        pkg = self.paths.p(self.paths.needs_human)
+        queue = self._queue()
+        if queue is None or not (pkg.exists() and pkg.stat().st_size):
+            return None
+        parked = parked_ids(self.paths)
+        row = blocked_row(queue, first_line(pkg), parked)
+        if row is None and operator:
+            row = waiting_row(queue, parked)
+        if row is None:
+            say(f"supervisor: the package names no single open row — not parking ({reason})")
+            return None
+        if self.parks_without_progress >= self.max_parks:
+            say(f"supervisor: {self.parks_without_progress} rows parked with no unit done "
+                f"— not parking {row.id}; the stop stands")
+            return None
+        dest = self.paths.p(self.paths.parked) / f"{row.id}.md"
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_text(pkg.read_text() + f"\n<!-- parked {row.id}: {reason}. Answer in the "
+                        f"row, then delete this file to unpark it. -->\n")
+        pkg.unlink()
+        stop = self.paths.p(self.paths.stop)
+        if stop.exists() and stop.stat().st_size:
+            stop.unlink()
+        if row.status is Status.ACTIVE:
+            queue.set_status(row.id, Status.PENDING)
+            refused = commit_state(self.paths, f"ralph: {row.id} parked for the operator")
+            if refused is not None and getattr(refused, "returncode", 0):
+                say(f"supervisor: the park of {row.id} is in {self.paths.state} but git "
+                    f"refused the commit: {error_tail(refused.stderr or refused.stdout)}")
+        self.parks_without_progress += 1
+        say(f"supervisor: parked {row.id} ({reason}) — the loop runs the rows that do not "
+            "depend on it")
+        self.notifier("OPERATOR — row parked, loop continues",
+                      f"{row.id}: {first_line(dest)}", self.notify_enabled)
+        return row.id
+
     def terminal_stop(self):
         if self.paths.p(self.paths.done).exists():
             say("supervisor: campaign DONE")
@@ -1446,17 +1566,22 @@ class Supervisor:
             pkg.write_text(f"{stop.read_text()}\nresolve by hand, then remove "
                            f"{self.paths.stop} {self.paths.needs_human}\n")
             say(f"supervisor: halt package was missing — wrote one from {self.paths.stop}")
+        queue = self._queue()
+        parked = parked_ids(self.paths)
+        waiting = queue.awaiting_operator(parked) if queue else []
+        if queue is not None and waiting and queue.current(parked) is None:
+            say(f"supervisor: operator approval required — every ready row waits on the "
+                f"operator: {', '.join(waiting)} (no resolution session)")
+            self.notifier("OPERATOR — approval required",
+                          f"nothing else is ready: {', '.join(waiting)}", self.notify_enabled)
+            return 2
         clause = operator_only(pkg) if pkg.exists() and pkg.stat().st_size else None
         if clause is not None:
+            if self.park(f"operator-only: {clause}", operator=True) is not None:
+                return PARKED
             say(f"supervisor: operator-only halt — {clause} (no resolution session)")
             self.notifier("OPERATOR — decision required", f"{first_line(pkg)} ({clause})",
                           self.notify_enabled)
-            return 2
-        queue = self._queue()
-        unit = queue.current() if queue else None
-        if unit is not None and unit.id.startswith("HUMAN-"):
-            say(f"supervisor: operator approval required — {unit.id} (no resolution session)")
-            self.notifier("OPERATOR — approval required", f"{unit.id} is a HUMAN row at the head; approve or mark it", self.notify_enabled)
             return 2
         return None
 
@@ -1465,21 +1590,31 @@ class Supervisor:
         attempt = 0
         while True:
             stop = self.terminal_stop()
+            if stop == PARKED:
+                attempt = 0
+                continue
             if stop is not None:
                 return stop
             self.run_inner()
             stop = self.terminal_stop()
+            if stop == PARKED:
+                attempt = 0
+                continue
             if stop is not None:
                 return stop
             done_now = self._queue().done_count()
             if done_now > last_done:
                 attempt = 0
                 last_done = done_now
+                self.parks_without_progress = 0
             pkg = self.paths.p(self.paths.needs_human)
             reason = first_line(pkg) if pkg.exists() and pkg.stat().st_size else "campaign exited"
             say(f"supervisor: campaign stopped — {reason}")
             attempt += 1
             if attempt > self.resolve_max:
+                if self.park(f"{self.resolve_max} resolutions did not clear it") is not None:
+                    attempt = 0
+                    continue
                 say(f"supervisor: {self.resolve_max} resolution attempts did not clear it "
                     "— leaving it to the operator")
                 self.notifier("OPERATOR — unresolved after "
@@ -1504,6 +1639,9 @@ class Supervisor:
                 return 0
             if pkg.exists() and pkg.stat().st_size:
                 if file_hash(pkg) == pkg_before and head_of(self.paths.workdir) == head_before:
+                    if self.park(f"resolution {attempt} changed nothing") is not None:
+                        attempt = 0
+                        continue
                     say(f"supervisor: resolution {attempt} changed nothing — escalating")
                     self.notifier("OPERATOR — resolution achieved nothing", reason,
                                   self.notify_enabled)
@@ -1672,9 +1810,6 @@ class Pool:
             reason, waiting = self.poll_waiting_lanes()
             if reason is not None:
                 return self._halt(reason)
-            unit = queue.current()
-            if unit is not None and unit.id.startswith("HUMAN-"):
-                return self._halt(f"operator approval required: {unit.id}")
             review = queue.first_ready_review()
             if review is not None:
                 # A review with no REVIEW_MODEL of its own runs on the worker
@@ -1692,6 +1827,9 @@ class Pool:
                             if r is not None), None)
             if refusal is not None:
                 return self._halt(refusal)
+            if not wave and not waiting and queue.awaiting_operator():
+                return self._halt("operator approval required — every ready row waits on the "
+                                  f"operator: {', '.join(queue.awaiting_operator())}")
             if not wave:
                 say("pool: no ready unit and no ready review — waiting (dependencies unmet?)")
                 self.sleep(60)
@@ -2039,12 +2177,16 @@ def cmd_plan(args):
     paths = paths_for(args)
     queue = Queue(paths.p(paths.state))
     models = resolve_models(args, paths)
-    unit = queue.current()
+    parked = parked_ids(paths)
+    unit = queue.current(parked)
     print(f"prompt: {prompt_text(paths)[1]}  queue: {paths.state}")
     every = paths.manifest.audit_every if paths.manifest else None
     print(f"units since audit: {units_since_audit(paths, queue)}"
           f"{f' (audit every {every})' if every else ''}  head: {head_of(paths.workdir)[:9]}")
     print(f"done: {queue.done_count()}/{len(queue.rows)}")
+    waiting = queue.awaiting_operator(parked)
+    if waiting:
+        print(f"waiting on the operator (the loop runs past them): {', '.join(waiting)}")
     if unit is None:
         print("no ready unit")
         return 0
