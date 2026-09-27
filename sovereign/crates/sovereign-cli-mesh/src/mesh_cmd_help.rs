@@ -10,6 +10,10 @@ pub(crate) const HELP_MESH: sovereign_cli_base::help::Help = sovereign_cli_base:
         sovereign_cli_base::help::HelpSection::Usage("svrn mesh <subcommand> [args]"),
         sovereign_cli_base::help::HelpSection::Subcommands(&[
             (
+                "up",
+                "Bring cw-rails up (rings, KV, work atlas); hands an upgraded node's rings over first. svrn never starts it",
+            ),
+            (
                 "create",
                 "Promote the solo mesh to a joinable mesh; print invite",
             ),

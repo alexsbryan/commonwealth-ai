@@ -16,6 +16,86 @@ const STATUS_READ_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(
 /// optimized (root Cargo.toml `[profile.dev.package]`).
 const RAILS_BRING_UP_WINDOW: std::time::Duration = std::time::Duration::from_secs(10);
 
+/// `svrn mesh up`: the one opt-in bring-up of cw-rails (pb-rails-untether,
+/// phase-b-31). Nothing starts cw-rails by default, the distribution
+/// included, so a node that wants it across reboots runs it under its own
+/// service unit. Reads the node's config the way svrn does: `[daemon]
+/// rails_base` through its one reader, local-only through
+/// `LocalOnlyProfile`, and `[data] dir` for the handover. Exit 0 once
+/// cw-rails answers; 1 with the absence named.
+pub async fn cmd_up(args: &[String]) -> i32 {
+    use sovereign_contracts::setup_config::SetupConfig;
+    if let Some(arg) = args.first() {
+        if matches!(arg.as_str(), "--help" | "-h" | "help") {
+            println!(
+                "svrn mesh up — hand an upgraded node's rings to cw-rails, then bring cw-rails \
+                 up on [daemon] rails_base.\nsvrn never starts cw-rails; this verb is the one \
+                 that does."
+            );
+            return 0;
+        }
+        eprintln!("svrn mesh up: takes no arguments, got '{arg}'");
+        return 2;
+    }
+    // The handover's warn (namespaces left waiting under a live cw-rails) is
+    // this verb's report to the operator, so it reaches stderr.
+    let filter =
+        tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into());
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(filter)
+        .with_writer(std::io::stderr)
+        .try_init();
+    let config_path = SetupConfig::default_path();
+    // No config file is a first run: the defaults. A config that exists and
+    // does not load is refused — a handover from a guessed data dir is the
+    // substitution principle 6 forbids.
+    let config = match SetupConfig::load() {
+        Ok(c) => c,
+        Err(e) if config_path.exists() => {
+            eprintln!("svrn mesh up: {} does not load: {e}", config_path.display());
+            return 1;
+        }
+        Err(e) => {
+            tracing::warn!(error = %e, "mesh up: no setup config; the rails base and data dir are the defaults");
+            SetupConfig::unconfigured()
+        }
+    };
+    let base = sovereign_turn_client::rails_kv::resolve_rails_base(&config.daemon);
+    let local_only =
+        sovereign_contracts::local_only::LocalOnlyProfile::resolve(config.daemon.local_only);
+    let data_dir = config.data.dir.clone();
+    tracing::debug!(
+        rails_base = %base,
+        local_only = local_only.label(),
+        local_only_source = local_only.source().as_str(),
+        data_dir = %data_dir.display(),
+        config = %config_path.display(),
+        "mesh up: resolved"
+    );
+    let reached = {
+        let base = base.clone();
+        tokio::task::spawn_blocking(move || {
+            ensure_rails(&base, local_only.is_local_only(), &data_dir, &config_path)
+        })
+        .await
+        .unwrap_or_else(|e| Err(format!("the bring-up thread failed: {e}")))
+    };
+    match reached {
+        Ok(sovereign_turn_client::reach::Reached::BroughtUp { pid, .. }) => {
+            println!("cw-rails is up at {base} (started, pid {pid})");
+            0
+        }
+        Ok(sovereign_turn_client::reach::Reached::AlreadyServing { .. }) => {
+            println!("cw-rails is up at {base} (already running)");
+            0
+        }
+        Err(e) => {
+            eprintln!("svrn mesh up: cw-rails is not reachable at {base}: {e}");
+            1
+        }
+    }
+}
+
 /// Make cw-rails reachable at `base`, bringing it up if nothing answers there
 /// (five-programs-63/-65: cw-rails owns its root, a client owns reaching it).
 ///

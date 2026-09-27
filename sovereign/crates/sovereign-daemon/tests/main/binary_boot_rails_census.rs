@@ -2,11 +2,11 @@
 //! Every test that boots a daemon binary's `run` pins its cw-rails
 //! (five-programs-66, principle 10).
 //!
-//! A booted daemon brings cw-rails up at `[daemon] rails_base` (default
-//! 127.0.0.1:9747) on `$CW_RAILS_DIR` (default ~/.commonwealth-rails). A test
-//! that pins neither writes into the developer's real store when their own
-//! cw-rails serves 9747, and otherwise leaves one on 9747 — the orphan that
-//! minted this. So hermeticity is a census over test source, not a
+//! A booted daemon dials cw-rails at `[daemon] rails_base` (default
+//! 127.0.0.1:9747); until pb-rails-untether it also brought one up there on
+//! `$CW_RAILS_DIR` (default ~/.commonwealth-rails), leaving the orphan that
+//! minted this. A test that pins neither still writes into the developer's
+//! real store when their own cw-rails serves 9747. So hermeticity is a census over test source, not a
 //! convention: a file that spawns a sovereign-daemon binary with `run` must
 //! name both `rails_base` and `CW_RAILS_DIR`.
 //!

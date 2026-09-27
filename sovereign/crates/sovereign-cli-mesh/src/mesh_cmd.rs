@@ -35,6 +35,7 @@ pub async fn run_mesh(args: &[String]) -> i32 {
     }
 
     match args[0].as_str() {
+        "up" => crate::rails_up::cmd_up(&args[1..]).await,
         "create" => cmd_create(&args[1..]).await,
         "join" => cmd_join(&args[1..]).await,
         "list" => cmd_list(&args[1..]).await,

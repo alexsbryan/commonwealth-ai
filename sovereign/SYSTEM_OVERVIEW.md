@@ -1195,10 +1195,12 @@ writes — so neither the daemon nor cli-llm names commonwealth-state). Since fp
 peer preferences, processed shards, inference state — each the
 commonwealth-state writer over that store, the writer's node id in the body)
 and runs the contributions `RetentionGc`; the daemon's dialing side is
-`sovereign_mesh::ledger_port` + `rails_client/ledger.rs`, not yet wired. Since fp-solo-clients its
-clients bring it up: daemon boot and cli-llm's `rails_kv()` call `rails_client::ensure_rails`, a
-`ServingHost` bring-up of the binary `CW_RAILS_BIN`/sibling/PATH names, logging to `<data dir>/rails.log`;
-a refused dial never re-ensures. Since phase-b-3 `ensure_rails` runs the daemon's one-time journal
+`sovereign_mesh::ledger_port` + `rails_client/ledger.rs`, not yet wired. Since pb-rails-untether
+(phase-b-31) svrn's boot and cli-llm's `rails_kv()` only dial it, and an absent one is a named
+absence; ONE opt-in verb brings it up, `svrn mesh up` (sovereign-cli-mesh `rails_up::ensure_rails`),
+a `ServingHost` bring-up of the binary `CW_RAILS_BIN`/sibling/PATH names, logging to `<data dir>/rails.log`;
+a refused dial never re-ensures, and nothing starts it by default (a node that wants it across
+reboots runs it under its own service unit). Since phase-b-3 `ensure_rails` runs the daemon's one-time journal
 handover (`rail_migration::hand_over`) first, before any bring-up; with a cw-rails already answering it
 moves nothing and warns with the namespaces that wait. Since fp-solo-hermetic the bring-up is `run --listen <rails_base port>`,
 plus `--local-only` (`[relay] discovery = "none"`) on a local-only node, which also refuses an already

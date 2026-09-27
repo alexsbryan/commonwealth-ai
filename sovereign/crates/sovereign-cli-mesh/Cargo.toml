@@ -38,6 +38,8 @@ serde = { workspace = true }
 tokio = { workspace = true }
 toml = { workspace = true }
 tracing = { workspace = true }
+# `svrn mesh up` reports the rings handover's warn on stderr (rails_up.rs).
+tracing-subscriber = { workspace = true }
 reqwest = { workspace = true, features = ["stream"] }
 uuid = { workspace = true }
 dirs = "5"
