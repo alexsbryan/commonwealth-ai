@@ -2,15 +2,34 @@
 //! The setup UI's reads of the SERVING machine: what hardware it has, the
 //! primary catalog for its tier, and the single-pick slots. Moved from the
 //! daemon's assets_http.rs (pb-svrn-dials-serve) so the process that serves
-//! answers them.
+//! answers them: `serve` mounts [`bundle`], and the daemon answers the same
+//! functions in process on its interim path or forwards to serve.
 
+use axum::extract::Query;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
+use axum::routing::get;
 use axum::Json;
+use host_kit::shell::RouteBundle;
 use serde::Deserialize;
 use sovereign_contracts::daemon_wire::{HardwareProfile, ProfileName, SlotConfig};
 use sovereign_inference::hardware;
 use sovereign_inference::setup_planner;
+
+/// The three reads as `serve`'s named bundle, at the paths the daemon serves
+/// them on.
+pub fn bundle() -> RouteBundle {
+    RouteBundle::new("setup_reads")
+        .route("/v1/admin/hardware", get(hardware))
+        .route(
+            "/v1/admin/setup/catalog",
+            get(|Query(q): Query<ProfileQuery>| catalog(q)),
+        )
+        .route(
+            "/v1/admin/setup/slot",
+            get(|Query(q): Query<SlotQuery>| slot(q)),
+        )
+}
 
 /// `{"error": "<message>"}`, the daemon's refusal shape
 /// (sovereign-daemon http_response::json_error), so a read answers alike

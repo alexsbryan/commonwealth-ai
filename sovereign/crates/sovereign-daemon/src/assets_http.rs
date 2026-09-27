@@ -25,7 +25,7 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
-use axum::extract::{Extension, Path, Query};
+use axum::extract::{Extension, Path, Query, RawQuery};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
@@ -65,19 +65,67 @@ pub fn assets_router(daemon: Arc<EmbeddedDaemon>) -> Router {
 pub use sovereign_compute::setup_reads::{HardwareView, ProfileQuery, SlotQuery};
 
 /// `GET /v1/admin/hardware` — what the SERVING machine can run
-/// (`sovereign_compute::setup_reads::hardware`).
-async fn admin_hardware(_: LocalOnly) -> Response {
-    setup_reads::hardware().await
+/// (`sovereign_compute::setup_reads::hardware`). On the dialing path that
+/// machine's answer is serve's, forwarded; see [`forward_or`].
+async fn admin_hardware(
+    _: LocalOnly,
+    Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
+) -> Response {
+    forward_or(&daemon, "/v1/admin/hardware", setup_reads::hardware()).await
 }
 
 /// `GET /v1/admin/setup/catalog?profile=` (`setup_reads::catalog`).
-async fn setup_catalog(_: LocalOnly, Query(q): Query<ProfileQuery>) -> Response {
-    setup_reads::catalog(q).await
+async fn setup_catalog(
+    _: LocalOnly,
+    Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
+    RawQuery(raw): RawQuery,
+    Query(q): Query<ProfileQuery>,
+) -> Response {
+    let path = with_query("/v1/admin/setup/catalog", raw);
+    forward_or(&daemon, &path, setup_reads::catalog(q)).await
 }
 
 /// `GET /v1/admin/setup/slot?kind=fast|embed&profile=` (`setup_reads::slot`).
-async fn setup_slot(_: LocalOnly, Query(q): Query<SlotQuery>) -> Response {
-    setup_reads::slot(q).await
+async fn setup_slot(
+    _: LocalOnly,
+    Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
+    RawQuery(raw): RawQuery,
+    Query(q): Query<SlotQuery>,
+) -> Response {
+    let path = with_query("/v1/admin/setup/slot", raw);
+    forward_or(&daemon, &path, setup_reads::slot(q)).await
+}
+
+fn with_query(path: &str, raw: Option<String>) -> String {
+    match raw {
+        Some(q) if !q.is_empty() => format!("{path}?{q}"),
+        _ => path.to_string(),
+    }
+}
+
+/// Where serving lives decides who answers (pb-svrn-dials-serve): on the
+/// dialing path serve does, and an unreachable serve is a named 503; on the
+/// in-process path, or where no boot decided (tests), this process does.
+async fn forward_or(
+    daemon: &EmbeddedDaemon,
+    path: &str,
+    in_process: impl std::future::Future<Output = Response>,
+) -> Response {
+    if crate::serve_client::ServingPath::decided()
+        != Some(&crate::serve_client::ServingPath::DialsServe)
+    {
+        return in_process.await;
+    }
+    let base = daemon.configured_serve_base().await.base;
+    match crate::serve_client::forward_get(&base, path).await {
+        Ok((status, body)) => (
+            status,
+            [(axum::http::header::CONTENT_TYPE, "application/json")],
+            body,
+        )
+            .into_response(),
+        Err(why) => json_error(StatusCode::SERVICE_UNAVAILABLE, &why),
+    }
 }
 
 /// `GET /internal/ner/model` — is the entity extractor's model installed

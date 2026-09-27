@@ -352,6 +352,40 @@ pub fn loopback_provider(
     }
 }
 
+/// How long a forwarded read waits on serve: the setup reads detect hardware
+/// on a blocking thread, which takes well under this.
+const FORWARD_WINDOW: std::time::Duration = std::time::Duration::from_secs(30);
+
+/// One GET forwarded to serve, its status and body relayed. An unreachable
+/// serve, one past [`FORWARD_WINDOW`], or an unreadable body is an Err naming
+/// which, never a success-shaped answer.
+pub async fn forward_get(
+    base: &str,
+    path: &str,
+) -> Result<(axum::http::StatusCode, Vec<u8>), String> {
+    let url = format!("{}{path}", base.trim_end_matches('/'));
+    let resp = reqwest::Client::new()
+        .get(&url)
+        .timeout(FORWARD_WINDOW)
+        .send()
+        .await
+        .map_err(|e| {
+            if e.is_timeout() {
+                format!("serve at {base} did not answer {path} within {FORWARD_WINDOW:?}")
+            } else {
+                format!("serve at {base} is not reachable for {path}: {e}")
+            }
+        })?;
+    let status = axum::http::StatusCode::from_u16(resp.status().as_u16())
+        .unwrap_or(axum::http::StatusCode::BAD_GATEWAY);
+    let body = resp
+        .bytes()
+        .await
+        .map_err(|e| format!("serve at {base} answered {path} unreadably: {e}"))?;
+    tracing::debug!(target: "serving_path", serve_base = base, path, status = status.as_u16(), "read forwarded to serve");
+    Ok((status, body.to_vec()))
+}
+
 /// Forward a reload to serve, which rebuilds through its own ReloadFactory.
 /// Unbounded by a probe timeout, because a reload loads models; an
 /// unreachable serve or a refused rebuild is an Err naming it, never a
@@ -606,6 +640,43 @@ mod tests {
         let err = forward_reload(&base).await.expect_err("refused");
         assert!(
             err.contains("HTTP 503") && err.contains("no such file"),
+            "{err}"
+        );
+    }
+
+    /// A forwarded read relays serve's status and body as sent, query and
+    /// refusal included, so a setup read answers alike from either process.
+    #[tokio::test]
+    async fn a_forwarded_read_relays_serves_status_and_body() {
+        use axum::extract::RawQuery;
+        use axum::routing::get;
+        let base = stub(axum::Router::new().route(
+            "/v1/admin/setup/catalog",
+            get(|RawQuery(q): RawQuery| async move {
+                (
+                    axum::http::StatusCode::BAD_REQUEST,
+                    format!("{{\"error\":\"{}\"}}", q.unwrap_or_default()),
+                )
+            }),
+        ))
+        .await;
+        let (status, body) = forward_get(&base, "/v1/admin/setup/catalog?profile=nope")
+            .await
+            .expect("answered");
+        assert_eq!(status, axum::http::StatusCode::BAD_REQUEST);
+        assert_eq!(body, br#"{"error":"profile=nope"}"#);
+    }
+
+    #[tokio::test]
+    async fn a_forwarded_read_to_no_serve_is_named() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        drop(listener);
+        let err = forward_get(&base, "/v1/admin/hardware")
+            .await
+            .expect_err("no serve");
+        assert!(
+            err.contains("not reachable") && err.contains("/v1/admin/hardware"),
             "{err}"
         );
     }

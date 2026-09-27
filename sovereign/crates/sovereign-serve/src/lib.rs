@@ -331,6 +331,7 @@ pub fn bundles(provider: Arc<dyn InferenceProvider>) -> Vec<RouteBundle> {
             meta,
         ),
         openai_bundle(adapter),
+        sovereign_compute::setup_reads::bundle(),
         RouteBundle::new("serve_engine_state").route(
             sovereign_contracts::engine_state::ENGINE_STATE_PATH,
             get(engine_state),

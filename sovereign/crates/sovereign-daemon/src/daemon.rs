@@ -759,6 +759,12 @@ impl EmbeddedDaemon {
         self.setup_config.read().await.effective_context_size()
     }
 
+    /// Where this daemon dials serve, from the same commissioned config
+    /// (`serve_client::resolve_serve_base`, the one reader).
+    pub async fn configured_serve_base(&self) -> crate::serve_client::ServeBase {
+        crate::serve_client::resolve_serve_base(&self.setup_config.read().await.node)
+    }
+
     /// The `InferenceProvider` this daemon is serving turns on RIGHT NOW,
     /// cloned out from behind the swap lock.
     ///
