@@ -589,7 +589,8 @@ class Queue:
         """What only the operator can move: ready HUMAN- rows, then parked rows."""
         human = [r.id for r in self.rows if r.id.startswith("HUMAN-")
                  and r.status is not Status.DONE and self.deps_met(r)]
-        held = [r.id for r in self.rows if r.id in parked and r.status is not Status.DONE]
+        held = [r.id for r in self.rows if r.id in parked and r.status is not Status.DONE
+                and not r.id.startswith("HUMAN-")]
         return human + held
 
     def status_of(self, row_id):
