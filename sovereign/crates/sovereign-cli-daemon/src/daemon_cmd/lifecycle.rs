@@ -1111,6 +1111,7 @@ pub(super) async fn status_daemon() -> i32 {
                 .map(|a| a.len())
                 .unwrap_or(0);
             println!("✓ daemon running at {base} ({count} models registered)");
+            super::serve_stop::print_serving(&client, &base).await;
             0
         }
         Ok(r) => {

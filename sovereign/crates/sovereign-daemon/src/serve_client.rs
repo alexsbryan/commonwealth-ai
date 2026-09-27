@@ -6,6 +6,8 @@
 use sovereign_contracts::launch::RpcServe;
 use sovereign_contracts::setup_config::{EntryBinding, NodeSection, SetupConfig};
 
+static DECIDED: std::sync::OnceLock<ServingPath> = std::sync::OnceLock::new();
+
 /// Where this daemon's inference is served from — THE one decider, read once
 /// at boot after `apply_shared_model_role_to_env`, so the env contract it
 /// reads is the one bootstrap.rs already translated (phase-b-24).
@@ -42,7 +44,16 @@ impl ServingPath {
             owner = "pb-serve-distributes moves the in-process path into serve",
             "serving path decided (pb-svrn-dials-serve)"
         );
+        // Kept as decided: `/status` reports the path this process booted on,
+        // which a later config edit does not change.
+        let _ = DECIDED.set(path.clone());
         path
+    }
+
+    /// The path this process decided at boot, `None` before (or without) a
+    /// boot that decides.
+    pub fn decided() -> Option<&'static ServingPath> {
+        DECIDED.get()
     }
 
     /// The decision over the four inputs. A `Refused` RPC bind keeps today's

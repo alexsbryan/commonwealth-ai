@@ -20,6 +20,36 @@ pub(super) async fn after(daemon_stop: i32) -> i32 {
     stop_serve().await
 }
 
+/// `svrn daemon status`'s second process: where the daemon serves from, as it
+/// decided at boot (`/status`'s `serving`), and, when that is serve, whether
+/// serve is listening on its port.
+pub(super) async fn print_serving(client: &reqwest::Client, base: &str) {
+    let serving = match client.get(format!("{base}/status")).send().await {
+        Ok(r) if r.status().is_success() => {
+            r.json::<serde_json::Value>().await.ok().and_then(|v| {
+                v.get("serving")
+                    .and_then(|s| s.as_str())
+                    .map(str::to_string)
+            })
+        }
+        _ => None,
+    };
+    let Some(serving) = serving else {
+        println!("  serving: not reported by this daemon");
+        return;
+    };
+    println!("  serving: {serving}");
+    if serving != "serve" {
+        return;
+    }
+    let port = sovereign_contracts::venue::DEFAULT_SERVE_PORT;
+    #[cfg(unix)]
+    match super::lifecycle::find_daemon_pid_by_port(port) {
+        Some(pid) => println!("  serve: running (pid {pid}, :{port})"),
+        None => println!("  serve: nothing listening on :{port}"),
+    }
+}
+
 #[cfg(unix)]
 async fn stop_serve() -> i32 {
     let serve = match SetupConfig::load() {

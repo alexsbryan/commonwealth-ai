@@ -278,6 +278,7 @@ pub async fn status(State(state): State<AppState>) -> Json<StatusResponse> {
             port,
             iroh: state.rpc_iroh_accept(),
         }),
+        serving: crate::serve_client::ServingPath::decided().map(|p| p.status_line()),
     })
 }
 
@@ -404,6 +405,11 @@ pub struct StatusResponse {
     /// Present when this node serves an in-process RPC inference worker.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rpc_worker: Option<RpcWorkerStatus>,
+    /// Where serving lives, as decided at boot: `serve`, or
+    /// `in-process (<the input that chose it>)` (pb-svrn-dials-serve).
+    /// Absent where no boot decided (the desktop, tests).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub serving: Option<String>,
 }
 
 /// Process vitals for the pager: `uptime_seconds` resets are the
