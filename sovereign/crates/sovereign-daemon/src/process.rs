@@ -98,37 +98,75 @@ pub fn run(raw_args: &[String]) -> i32 {
     runtime.block_on(daemon_cmd::run(&launch, args))
 }
 
-/// Twin of `sovereign_cli_shared::tracing_init::init_tracing` — the
-/// daemon crate may not take a cli-shared (svrn-package) edge, so the
-/// subscriber bootstrap is reimplemented here verbatim.
+/// The subscriber over [`compose_filter`], on stderr so machine-readable
+/// stdout stays clean.
 fn init_tracing(default_filter: &str) {
-    // Silence lance's per-`Dataset::open` INFO event: the daemon
-    // re-opens every installed corpus's index repeatedly, so at INFO it
-    // floods the log. WARN still surfaces real lance failures.
-    let filter = tracing_subscriber::EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| default_filter.into())
-        .add_directive(
-            "lance::dataset_events=warn"
-                .parse()
-                .expect("static lance directive parses"),
-        );
+    let rust_log = std::env::var("RUST_LOG").ok();
+    let filter = compose_filter(default_filter, rust_log.as_deref());
     let _ = tracing_subscriber::fmt()
         .with_env_filter(filter)
         .with_target(false)
-        // Force stderr so machine-readable stdout stays clean.
         .with_writer(std::io::stderr)
         .try_init();
 }
 
-// ── The daemon tracing filter (twin of cli-daemon's lib.rs; copied
-// whole with its pins) ───────────────────────────────────────────────
-//
-// This is an ALLOWLIST WITH NO DEFAULT LEVEL: an event whose target
-// matches nothing here is dropped. Custom-target events therefore need
-// their target listed explicitly — see the pins in `tests` below for
-// the times this went dark before it was pinned.
+/// The filter this process logs through: `default_filter`, then every
+/// directive of a host `RUST_LOG` ADDED on top of it (a directive for a target
+/// the list already names replaces that one), then lance's silencer.
+///
+/// `RUST_LOG` used to REPLACE the list (pb-stock-binary). An allowlist with no
+/// default level drops every target it does not name, so a host override
+/// written for one subsystem silently took every other one dark: this host's
+/// unit override names neither `serving_path` nor any of serve's targets, so
+/// the stock process's serving decisions would not have reached its log
+/// (principle 1). An unparsable directive is reported on stderr and skipped,
+/// never dropped in silence.
+///
+/// lance's per-`Dataset::open` INFO event is silenced because the daemon
+/// re-opens every installed corpus's index repeatedly; WARN still surfaces.
+pub(crate) fn compose_filter(
+    default_filter: &str,
+    rust_log: Option<&str>,
+) -> tracing_subscriber::EnvFilter {
+    let mut filter = tracing_subscriber::EnvFilter::new(default_filter);
+    for directive in rust_log
+        .into_iter()
+        .flat_map(|v| v.split(','))
+        .map(str::trim)
+        .filter(|d| !d.is_empty())
+    {
+        match directive.parse() {
+            Ok(d) => filter = filter.add_directive(d),
+            Err(e) => eprintln!("RUST_LOG: skipping directive `{directive}`: {e}"),
+        }
+    }
+    filter.add_directive(
+        "lance::dataset_events=warn"
+            .parse()
+            .expect("static lance directive parses"),
+    )
+}
 
-const DAEMON_TRACING_FILTER: &str = "sovereign_cli_daemon=info,\
+/// svrn's tracing allowlist: THE one list (pb-stock-binary collapsed
+/// cli-daemon's twin onto it; the stock distribution composes it with
+/// serve's `DEFAULT_FILTER`).
+///
+/// This is an ALLOWLIST WITH NO DEFAULT LEVEL: an event whose target matches
+/// nothing here is dropped. Custom-target events (`tracing::info!(target: "…")`)
+/// therefore need their target listed explicitly — a module-scoped directive
+/// like `sovereign_core=info` does NOT catch them, because their target is the
+/// literal string, not a module path. This bit us three times: `prefix_state`
+/// and `post_stream` went silent for a whole A/B session (2026-07-12), then the
+/// entire grounding/synthesis observability surface (the trust gate, the
+/// agentic evidence loop, the retrieval audit, and the synthesis lifecycle —
+/// all named targets) was dark in the deployed daemon until 2026-07-13. These
+/// carry the load-bearing trust decisions an operator needs to see:
+/// abstain/verify/hold verdicts, entity-anchor decisions, truncation and
+/// continuation events, citation stripping. Keeping named targets (not module
+/// paths) means `RUST_LOG=grounding_gate=debug` can still crank one subsystem
+/// without drowning in the rest. `tests::daemon_filter_lists_grounding_targets`
+/// pins this list so the surface cannot silently go dark a fourth time.
+pub const DAEMON_TRACING_FILTER: &str = "sovereign_cli_daemon=info,\
      sovereign_core=info,\
      sovereign_mesh=info,\
      sovereign_inference=info,\
@@ -162,26 +200,61 @@ const DAEMON_TRACING_FILTER: &str = "sovereign_cli_daemon=info,\
      corpus_maintenance=info,\
      sec_edgar=info,\
      sec_facts=info,\
-     sec_facts_render=info";
+     sec_facts_render=info,\
+     serving_path=info";
 
-/// The daemon tracing filter plus the always-on iroh observability
-/// layer, cranked to `debug` when `iroh_debug` (env `SOVEREIGN_IROH_LOG`)
-/// for diagnosing a reachability wedge, and the `llama_cpp` literal
-/// target every ggml log line rides. `RUST_LOG`, if set, overrides all.
-fn daemon_tracing_filter(iroh_debug: bool, llama_debug: bool) -> String {
+/// The daemon tracing filter plus the always-on iroh observability layer:
+/// `commonwealth_transport` (endpoint egress posture) at info, and `iroh` /
+/// `iroh_relay` at `warn` — so relay/discovery ERRORS are always visible in a
+/// deployed daemon — cranked to `debug` when `iroh_debug` (env
+/// `SOVEREIGN_IROH_LOG`, mirroring the `SOVEREIGN_IROH` kill-switch) for
+/// diagnosing a reachability wedge. Built as one `iroh=<level>` directive so
+/// there is no override ambiguity. A host `RUST_LOG` adds to it
+/// ([`compose_filter`]).
+///
+/// Also carries `llama_cpp`, the LITERAL target every ggml/llama.cpp log line
+/// rides (`sovereign_inference::llama::ggml_log_cb`). Its absence was the
+/// fourth instance of the allowlist trap above, and the most expensive: it
+/// silently defeated BOTH the model-load-failure surface that
+/// `install_log_tracing_errors_only` exists to provide (a failed load reaching
+/// the operator as a bare "null result from llama cpp") AND every
+/// `GGML_RPC_DEBUG=1` investigation — the documented llama.cpp knob for
+/// debugging an RPC worker emitted `GGML_LOG_DEBUG` lines that this filter
+/// then dropped on the floor, so a worker-side probe returned a null result
+/// from a structurally dead instrument (2026-07-27 distributed-inference
+/// crash hunt). `llama_debug` cranks it to `debug` so `GGML_RPC_DEBUG` /
+/// `SOVEREIGN_LLAMA_LOGS=1` reach the log; otherwise `info` keeps routine
+/// load chatter out while WARN/ERROR still surface.
+pub fn daemon_tracing_filter(iroh_debug: bool, llama_debug: bool) -> String {
     let lvl = if iroh_debug { "debug" } else { "warn" };
     let llama_lvl = if llama_debug { "debug" } else { "info" };
+    // `mesh.peer_path`: the watchdog's per-poll peer-path census — one line
+    // per peer per 20s saying what the endpoint holds and what membership
+    // believes. Its own literal target, and it rides `iroh_debug` because
+    // that knob's whole stated purpose is diagnosing a reachability wedge and
+    // this is the continuous record of one. At `info` the census (a `debug!`)
+    // stays quiet and only the TRANSITIONS reach the log — `peer path LOST`
+    // with `path_at_death`, `established`, `migrated` — which is the right
+    // default: the alarm is free, the tape costs an env var.
     let peer_path_lvl = if iroh_debug { "debug" } else { "info" };
+    // `transport=info`: the bridge/tunnel layer logs under the LITERAL target
+    // "transport" (not the crate path), so without this token every bridge
+    // dial failure is invisible — the 2026-07-19 mesh-heal investigation was
+    // blind for exactly this reason. P0.5 observability requirement.
     format!(
         "{DAEMON_TRACING_FILTER},commonwealth_transport=info,transport=info,\
          mesh.peer_path={peer_path_lvl},iroh={lvl},iroh_relay={lvl},llama_cpp={llama_lvl}"
     )
 }
 
-/// True when the operator has asked for verbose ggml/llama.cpp output,
-/// by either our own knob (`SOVEREIGN_LLAMA_LOGS=1`) or llama.cpp's own
-/// documented RPC knob (`GGML_RPC_DEBUG`). One env var, all three gates.
-fn llama_debug_requested() -> bool {
+/// True when the operator has asked for verbose ggml/llama.cpp output, by
+/// either our own knob (`SOVEREIGN_LLAMA_LOGS=1`) or llama.cpp's own
+/// documented RPC knob (`GGML_RPC_DEBUG`). Honouring the latter here is what
+/// makes `GGML_RPC_DEBUG=1 sovereign daemon run` behave the way its upstream
+/// documentation promises: the var alone gates `LOG_DBG` inside ggml-rpc.cpp,
+/// but those lines are `GGML_LOG_DEBUG` and would still die at our callback
+/// and again at this filter. One env var, all three gates.
+pub fn llama_debug_requested() -> bool {
     sovereign_inference::llama_logs::LlamaLogs::from_env().is_verbose()
 }
 
@@ -227,6 +300,10 @@ mod tests {
             "sec_facts_render",
             "prefix_state",
             "post_stream",
+            // The serving decision (`ServingPath::decide`, serve_client.rs):
+            // which path this process booted on, and the input that chose it.
+            // Dark at the default filter until pb-stock-binary (principle 1).
+            "serving_path",
         ] {
             assert!(
                 rendered.contains(target),
@@ -318,6 +395,90 @@ mod tests {
         assert!(on.contains("iroh=debug") && on.contains("iroh_relay=debug"));
     }
 
+    /// The peer-path census rides a LITERAL target (`mesh.peer_path`), so the
+    /// allowlist-with-no-default-level trap this module has hit five times
+    /// applies to it in full: unlisted, the watchdog's continuous record of a
+    /// decaying transport is dropped by the subscriber and a capture returns
+    /// an empty log that reads like "nothing happened".
+    ///
+    /// It must be listed at BOTH postures — at `info` the transitions still
+    /// reach the log and only the per-poll census is quiet — and must reach
+    /// `debug` under `SOVEREIGN_IROH_LOG`, which is the knob whose stated
+    /// purpose is diagnosing a reachability wedge.
+    #[test]
+    fn daemon_filter_carries_the_peer_path_census() {
+        let quiet = super::daemon_tracing_filter(false, false);
+        let verbose = super::daemon_tracing_filter(true, false);
+        assert!(
+            quiet.contains("mesh.peer_path=info"),
+            "the target must be allowlisted even when quiet, or `peer path LOST` \
+             — the one line naming the path at the moment it died — is dropped: {quiet}"
+        );
+        assert!(
+            verbose.contains("mesh.peer_path=debug"),
+            "SOVEREIGN_IROH_LOG must lift the census to debug, or a decay capture \
+             records only transitions and not the ramp between them: {verbose}"
+        );
+        // Not spelling — ADMISSION. `contains` (and even a parse + `Display`
+        // round-trip, which is as far as the `llama_cpp` test above goes)
+        // asserts on a string this function itself produced; it cannot tell a
+        // directive that admits an event from one that merely survives
+        // parsing. So emit the real thing through a subscriber built from the
+        // real filter and count what comes out the other side. Failing input:
+        // drop `mesh.peer_path` from the allowlist and `quiet_out` loses the
+        // warn as well as the debug.
+        fn emitted(filter: &str) -> String {
+            let buf = std::sync::Arc::new(std::sync::Mutex::new(Vec::<u8>::new()));
+            let sink = buf.clone();
+            let sub = tracing_subscriber::fmt()
+                .with_env_filter(
+                    tracing_subscriber::EnvFilter::builder()
+                        .parse(filter)
+                        .expect("daemon filter parses"),
+                )
+                .with_writer(move || CaptureWriter(sink.clone()))
+                .finish();
+            tracing::subscriber::with_default(sub, || {
+                tracing::debug!(target: "mesh.peer_path", "CENSUS-LINE");
+                tracing::warn!(target: "mesh.peer_path", "LOST-LINE");
+            });
+            let out = buf.lock().expect("not poisoned").clone();
+            String::from_utf8_lossy(&out).into_owned()
+        }
+
+        let quiet_out = emitted(&quiet);
+        assert!(
+            quiet_out.contains("LOST-LINE"),
+            "a WARN on the census target must reach the log at the DEFAULT posture — \
+             `peer path LOST` is the whole alarm: {quiet_out:?}"
+        );
+        assert!(
+            !quiet_out.contains("CENSUS-LINE"),
+            "the per-poll census must stay quiet by default, or every daemon pays \
+             7 lines per 20s for a capture nobody asked for: {quiet_out:?}"
+        );
+        let verbose_out = emitted(&verbose);
+        assert!(
+            verbose_out.contains("CENSUS-LINE") && verbose_out.contains("LOST-LINE"),
+            "SOVEREIGN_IROH_LOG must admit the census itself, not merely name it: \
+             {verbose_out:?}"
+        );
+    }
+
+    /// Collects formatted events into a shared buffer so a test can assert on
+    /// what a filter ADMITTED rather than on how it is spelled.
+    struct CaptureWriter(std::sync::Arc<std::sync::Mutex<Vec<u8>>>);
+
+    impl std::io::Write for CaptureWriter {
+        fn write(&mut self, b: &[u8]) -> std::io::Result<usize> {
+            self.0.lock().expect("not poisoned").extend_from_slice(b);
+            Ok(b.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
     /// The `llama_cpp` target must be in the filter at BOTH postures, and
     /// must reach `debug` when the operator asks for verbose ggml output —
     /// or a failed model load reaches the operator as a bare null result.
@@ -382,5 +543,52 @@ mod tests {
             ),
             Launch::RpcWorker { .. }
         ));
+    }
+
+    /// A host `RUST_LOG` ADDS to the allowlist: a directive for one subsystem
+    /// no longer takes every other listed target dark. Failing input: build
+    /// the filter from `RUST_LOG` alone (the pre-pb-stock-binary behaviour)
+    /// and the `serving_path` and `grounding_gate` events are dropped.
+    #[test]
+    fn a_host_rust_log_adds_to_the_allowlist() {
+        use std::sync::{Arc, Mutex};
+        use tracing_subscriber::layer::{Context, SubscriberExt};
+        use tracing_subscriber::Layer;
+
+        #[derive(Clone)]
+        struct Capture(Arc<Mutex<Vec<String>>>);
+        impl<S: tracing::Subscriber> Layer<S> for Capture {
+            fn on_event(&self, event: &tracing::Event<'_>, _ctx: Context<'_, S>) {
+                let m = event.metadata();
+                self.0
+                    .lock()
+                    .unwrap()
+                    .push(format!("{}:{}", m.target(), m.level()));
+            }
+        }
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let filter = compose_filter(
+            DAEMON_TRACING_FILTER,
+            Some("sovereign_core=warn, grounding_gate=debug,not a directive=="),
+        );
+        let subscriber = tracing_subscriber::registry()
+            .with(filter)
+            .with(Capture(seen.clone()));
+        tracing::subscriber::with_default(subscriber, || {
+            tracing::info!(target: "serving_path", "probe");
+            tracing::debug!(target: "grounding_gate", "probe");
+            tracing::info!(target: "sovereign_core", "probe");
+        });
+        let seen = seen.lock().unwrap().clone();
+        assert!(seen.contains(&"serving_path:INFO".to_string()), "{seen:?}");
+        assert!(
+            seen.contains(&"grounding_gate:DEBUG".to_string()),
+            "{seen:?}"
+        );
+        // The added directive replaces the list's own for that target.
+        assert!(
+            !seen.iter().any(|t| t.starts_with("sovereign_core")),
+            "{seen:?}"
+        );
     }
 }
