@@ -3442,9 +3442,35 @@ impl EmbeddedDaemon {
         // post-setup health check. We register one `ModelInfo` per
         // configured slot (primary / fast / embed) with a
         // deterministic ModelId so reloads don't create duplicates.
+        //
+        // The slot-alias map comes from what serves: `[models]` on the
+        // in-process path, serve's residency on the dialing path, where svrn
+        // does not read serve's sections (seat, reviewing c0c39be03). The
+        // inference_store rows and the servable-file allowlist are still
+        // registered from `[models]` on both paths: their readers are a node
+        // with no local inference and peer model fetch, which
+        // pb-mesh-exit-mesh moves to serve's own registration.
         {
             let cfg = self.setup_config.read().await;
-            register_local_model_slots(&app_state, &cfg, node_id).await;
+            let config_aliases = register_local_model_slots(&app_state, &cfg, node_id).await;
+            if crate::serve_client::ServingPath::decided()
+                == Some(&crate::serve_client::ServingPath::DialsServe)
+            {
+                let slots = match self.inference_provider().await {
+                    Some(provider) => provider.resident_slots(),
+                    None => {
+                        warn!(target: "serving_path", "boot: no provider installed; the slot-alias map is empty");
+                        Vec::new()
+                    }
+                };
+                publish_slot_aliases(
+                    &app_state,
+                    crate::serve_client::served_slot_aliases(&slots),
+                    "serve's self-report",
+                );
+            } else if !config_aliases.is_empty() {
+                publish_slot_aliases(&app_state, config_aliases, "[models]");
+            }
         }
 
         // `client_bind` and the auth posture were resolved above, before the
@@ -4723,7 +4749,11 @@ fn takeover_serve_at(pid_path: &Path) {
 /// model id. The `ModelId` is a deterministic hash of the absolute
 /// path so repeated calls (e.g. after an admin/reload) don't
 /// accumulate duplicate entries keyed on different random IDs.
-async fn register_local_model_slots(app_state: &AppState, cfg: &SetupConfig, node_id: NodeId) {
+async fn register_local_model_slots(
+    app_state: &AppState,
+    cfg: &SetupConfig,
+    node_id: NodeId,
+) -> std::collections::HashMap<String, String> {
     use commonwealth_core::ids::ModelId;
     use commonwealth_core::model::{ModelArchitecture, ModelInfo};
     use oicp_types::CapabilityProfile;
@@ -4740,7 +4770,7 @@ async fn register_local_model_slots(app_state: &AppState, cfg: &SetupConfig, nod
             node = %node_id,
             "register_local_model_slots: no [models] — terminal node, registering none"
         );
-        return;
+        return std::collections::HashMap::new();
     };
 
     let mut slots: Vec<(String, &std::path::Path)> = vec![
@@ -4860,14 +4890,6 @@ async fn register_local_model_slots(app_state: &AppState, cfg: &SetupConfig, nod
         }
     }
 
-    if !slot_aliases.is_empty() {
-        info!(
-            count = slot_aliases.len(),
-            "publishing slot alias map for chat_completions / list_models"
-        );
-        app_state.slot_aliases_reader().publish(slot_aliases);
-    }
-
     // Install the servable-model-files allowlist so peers can
     // pull these GGUFs via `/internal/v1/models/list` +
     // `/internal/v1/models/file/:name`. Dedup by canonical path
@@ -4895,6 +4917,21 @@ async fn register_local_model_slots(app_state: &AppState, cfg: &SetupConfig, nod
         );
         app_state.servable_model_files_reader().publish(servable);
     }
+    slot_aliases
+}
+
+/// Publish the slot-alias map chat_completions and list_models resolve role
+/// names through, naming where it came from.
+pub(crate) fn publish_slot_aliases(
+    app_state: &AppState,
+    aliases: std::collections::HashMap<String, String>,
+    source: &'static str,
+) {
+    info!(
+        count = aliases.len(),
+        source, "publishing slot alias map for chat_completions / list_models"
+    );
+    app_state.slot_aliases_reader().publish(aliases);
 }
 
 /// The set of files peers may fetch, derived from the configured slot paths:

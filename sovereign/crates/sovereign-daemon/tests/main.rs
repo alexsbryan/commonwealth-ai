@@ -196,6 +196,8 @@ mod scheduler_decision_records;
 mod serve_latency_bars;
 #[path = "main/spec_gate_e2e.rs"]
 mod spec_gate_e2e;
+#[path = "main/status_answers_from_serve.rs"]
+mod status_answers_from_serve;
 #[path = "main/storage_budget_route.rs"]
 mod storage_budget_route;
 #[path = "main/storage_snapshot_e2e.rs"]

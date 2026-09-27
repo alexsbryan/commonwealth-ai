@@ -75,6 +75,19 @@ impl LlamaCppFactory {
                     .await
                     .map_err(|e| format!("reload: serve reloaded, then {e}"))?;
                 tracing::info!(target: "serving_path", serve_base = %base.base, resident = ?reloaded.resident_models, primary = %served.primary_model, "reload: serve rebuilt; the loopback provider is rebuilt from its self-report");
+                // The alias map follows what serve holds now; `build_provider`
+                // pushes it into the rebuilt router below.
+                let state = match self.daemon.get() {
+                    Some(daemon) => daemon.app_state().await,
+                    None => None,
+                };
+                if let Some(state) = state {
+                    crate::daemon::publish_slot_aliases(
+                        &state,
+                        crate::serve_client::served_slot_aliases(&served.resident_slots),
+                        "serve's self-report after reload",
+                    );
+                }
                 Ok(Arc::new(crate::serve_client::loopback_provider(
                     base,
                     served,

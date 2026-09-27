@@ -335,6 +335,24 @@ fn record_bring_up(reached: &sovereign_turn_client::reach::Reached, path: &std::
     }
 }
 
+/// The slot-alias map on the dialing path: serve's residency, role to model
+/// id, through the one alias policy (`venue::resolution_alias_keys`) that
+/// `register_local_model_slots` applies to `[models]` on the in-process path.
+/// So the map names only models serve holds, never svrn's reading of serve's
+/// sections (seat, reviewing c0c39be03).
+pub fn served_slot_aliases(
+    slots: &[sovereign_contracts::oicp::ResidentSlot],
+) -> std::collections::HashMap<String, String> {
+    slots
+        .iter()
+        .flat_map(|slot| {
+            sovereign_contracts::venue::resolution_alias_keys(&slot.role)
+                .into_iter()
+                .map(move |key| (key, slot.model_id.clone()))
+        })
+        .collect()
+}
+
 /// Read serve's self-report, bounded like every other status read of serve
 /// (`sovereign_turn_client::reach::PROBE_TIMEOUT`).
 pub async fn read_served_self(
