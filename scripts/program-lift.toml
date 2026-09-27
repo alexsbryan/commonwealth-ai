@@ -56,6 +56,35 @@ package = "svrn"
 build = ["-p", "sovereign-daemon", "--bin", "sovereign-daemon"]
 binary = "debug/sovereign-daemon"
 
+[lift.svrn.run]
+# The daemon serves chat through `serve`, a separate program it brings up at
+# boot (pb-svrn-dials-serve), so the smoke needs a serve binary: from
+# SOVEREIGN_SERVE_BIN or `--set SERVE_BIN=<path>`, and it abstains without
+# one. serve comes up on its one port, 9748 (sovereign_contracts::venue::
+# DEFAULT_SERVE_PORT); a listener already there would be borrowed rather than
+# brought up, so the smoke abstains when the port is taken. The mock engine
+# loads no weights, and cw-rails is pointed at a closed port. FIM needs an edit
+# model, so it is not asserted here.
+pass = "booted on a temp root, brought its own serve up (status 'serving: ${SERVING}'), answered a chat turn through it ('${CHAT}') and a next-edit request (engine ${NES}), with cw-rails pointed at a closed port"
+steps = [
+  { do = "input", var = "SERVE_BIN", env = "SOVEREIGN_SERVE_BIN", value = "${SERVE_BIN}", abstain = "svrn dials serve: set SOVEREIGN_SERVE_BIN, or --set SERVE_BIN=<path>, to a sovereign-serve binary" },
+  { do = "exists", path = "${SERVE_BIN}", fail = "no sovereign-serve at ${SERVE_BIN}" },
+  { do = "exec", argv = ["bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/9748"], log = "serve-port.log", expect = "fail", abstain = "something already listens on serve's port 9748; the smoke would borrow it instead of bringing its own serve up" },
+  { do = "ports", vars = ["PORT", "INTERNAL_PORT", "DEAD_RAILS_PORT"] },
+  { do = "write", path = "${SANDBOX}/root/config.toml", text = "[engine]\nkind = \"mock\"\n\n[models]\nprimary = \"${SANDBOX}/root/mock.gguf\"\nembed = \"${SANDBOX}/root/mock-embed.gguf\"\n\n[daemon]\nclient_port = ${PORT}\ninternal_port = ${INTERNAL_PORT}\nrails_base = \"http://127.0.0.1:${DEAD_RAILS_PORT}\"\n\n[data]\ndir = \"${SANDBOX}/root\"\n" },
+  { do = "spawn", id = "daemon", argv = ["${BIN}", "run", "--config", "${SANDBOX}/root/config.toml"], log = "daemon.log", env = { HOME = "${SANDBOX}/home", SVRNMESH_DATA_DIR = "${SANDBOX}/svrnmesh", CW_RAILS_DIR = "${SANDBOX}/rails", SOVEREIGN_SERVE_BIN = "${SERVE_BIN}", RUST_LOG = "info" } },
+  { do = "poll", url = "http://127.0.0.1:${PORT}/status", path = "serving", var = "SERVING", timeout = 120, alive = "daemon", fail = "the daemon never reported where it serves from within 120s (see ${SANDBOX}/daemon.log and ${SANDBOX}/root/serve.log)" },
+  { do = "require", value = "${SERVING}", match = "^serve$", fail = "the daemon booted without dialing serve: serving = ${SERVING}" },
+  { do = "call", url = "http://127.0.0.1:${PORT}/v1/chat/completions", json = { messages = [{ role = "user", content = "hello" }] }, path = "choices.message.content", var = "CHAT", fail = "POST /v1/chat/completions gave no answer through serve: ${BODY}" },
+  { do = "call", url = "http://127.0.0.1:${PORT}/v1/edit_predictions", json = { history = [], text = "let x = 1;\nlet y = x + 1;\n", cursor = 10, path = "a.rs" }, path = "engine", var = "NES", fail = "POST /v1/edit_predictions gave no answer: ${BODY}" },
+]
+finally = [
+  # serve is detached from the daemon (a bring-up, not a child), so the
+  # daemon's process group does not take it down with it. `[s]` keeps the
+  # pattern from matching this shell's own command line.
+  { do = "exec", argv = ["sh", "-c", "pkill -f '[s]overeign-serve --data-dir ${SANDBOX}/root'; true"], log = "serve-stop.log" },
+]
+
 # ── ingest — the recipe pipeline (a library plus one CLI; no binary yet) ────
 [lift.ingest]
 package = "ingest"
