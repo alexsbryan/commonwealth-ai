@@ -29,10 +29,57 @@ async fn loaded_model_rows(
     Ok(rows)
 }
 
+/// This node's model rows from its own provider manifest, the source
+/// `/v1/models` reads (pb-svrn-dials-serve), built by the one row builder and
+/// with no cw-rails round trip: a status must not wait on another process's
+/// store. Rows the slot-alias map marks as aliases are left out; the rest are
+/// the manifest's names as `/v1/models` lists them.
+/// `None` without local inference (the orchestrator), which keeps the ledger.
+fn local_model_rows(state: &AppState) -> Option<Vec<LoadedModelStatus>> {
+    let local = state
+        .inner
+        .serving
+        .local_inference
+        .as_ref()?
+        .provider_manifest()?;
+    let holders = local
+        .models
+        .into_iter()
+        .map(|m| ("local".to_string(), m))
+        .collect();
+    let aliases = state.inner.serving.slot_aliases.current();
+    let rows = sovereign_serving_host::openai_http::model_rows(holders, &aliases, "local")
+        .into_iter()
+        .filter(|row| row.owned_by == "local")
+        .map(|row| LoadedModelStatus {
+            nodes: row.advertised_by.len(),
+            tps: row
+                .performance
+                .as_ref()
+                .map_or(0.0, |p| p.estimated_tokens_per_sec),
+            loaded: row.performance.as_ref().is_some_and(|p| p.loaded),
+            model: row.id,
+        })
+        .collect();
+    Some(rows)
+}
+
 /// GET /status — mesh and node status summary.
 pub async fn status(State(state): State<AppState>) -> Json<StatusResponse> {
+    let local_rows = local_model_rows(&state);
+    tracing::debug!(
+        source = if local_rows.is_some() {
+            "local manifest"
+        } else {
+            "cw-rails ledger"
+        },
+        "status: loaded_models source"
+    );
     // Read before taking the mesh lock: these reads may cross a process.
-    let plan_rows = loaded_model_rows(&state).await;
+    let plan_rows = match local_rows {
+        Some(_) => Ok(Vec::new()),
+        None => loaded_model_rows(&state).await,
+    };
     let mesh = state.inner.fabric.mesh.read().await;
 
     let members_online = mesh
@@ -92,7 +139,7 @@ pub async fn status(State(state): State<AppState>) -> Json<StatusResponse> {
             (Vec::new(), Some(e.to_string()))
         }
     };
-    let loaded_models: Vec<LoadedModelStatus> = plan_rows
+    let ledger_models: Vec<LoadedModelStatus> = plan_rows
         .into_iter()
         .map(|(p, name, addressed)| {
             let model = format!("{}", p.model);
@@ -107,6 +154,7 @@ pub async fn status(State(state): State<AppState>) -> Json<StatusResponse> {
             }
         })
         .collect();
+    let loaded_models = local_rows.unwrap_or(ledger_models);
 
     // Real hosted-corpora inventory (was hardcoded empty until
     // 2026-06-10). Same `installed_indexes()` read the gossip tick and
