@@ -27,6 +27,7 @@ mod boundary_gate;
 mod clock_gate;
 mod common;
 mod concept_gate;
+mod distribution_gate;
 mod docs_gate;
 mod env_gate;
 mod instrument_gate;

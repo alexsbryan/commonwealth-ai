@@ -32,9 +32,13 @@
 //! They call [`evaluate`] and [`evaluate_packages`]; the meaning of the
 //! policy file lives here and only here.
 
+mod distributions;
 mod packages;
 mod surfaces;
 mod violations;
+pub use distributions::{
+    evaluate_distributions, missing_distribution_crates, Distribution, Face,
+};
 pub use packages::{
     evaluate_packages, missing_package_crates, Package, PackageLeaf, SHARED_LEAVES_SCOPE,
 };
@@ -65,7 +69,13 @@ use std::collections::{BTreeMap, BTreeSet};
 /// links a backend, so an old build meeting a v4 map would ignore the block
 /// and print "every edge points down or sideways" about a desktop that
 /// compiles the whole daemon. See `surfaces.rs`.
-pub const MAX_SCHEMA_VERSION: u32 = 4;
+///
+/// v5 added `[[distribution]]` — the composition roots outside every package
+/// (phase-b-29 Q4). A pre-v5 build parses the table and ignores it, and a
+/// distribution crate is in no package, so the stock binary could then link
+/// any crate while boundary-gate printed its usual verdict (trial T1,
+/// 2026-09-27). See `distributions.rs`.
+pub const MAX_SCHEMA_VERSION: u32 = 5;
 
 // ── Schema ────────────────────────────────────────────────────────────────────
 
@@ -119,6 +129,9 @@ pub struct LayerMap {
     /// process control over the same crate list. See [`ThinSurfaces`].
     #[serde(default)]
     pub thin_surfaces: ThinSurfaces,
+    /// The composition roots, outside every package. See [`Distribution`].
+    #[serde(default, rename = "distribution")]
+    pub distributions: Vec<Distribution>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -235,6 +248,7 @@ pub fn parse(toml_text: &str) -> Result<LayerMap, String> {
     }
     packages::validate(&map)?;
     surfaces::validate(&map)?;
+    distributions::validate(&map)?;
 
     Ok(map)
 }

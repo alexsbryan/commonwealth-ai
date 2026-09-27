@@ -16,7 +16,7 @@
 #   cargo run -p xtask -- layer-gate     Cargo-DECLARED edges (CI, <1s)
 #   sovereign code arch-report           SCIP-OBSERVED symbol references
 
-schema_version = 4
+schema_version = 5
 
 # ── Back-of-house: the quality controls ──────────────────────────────────────
 # eval, benches, judges, gates, harnesses, archaeology, ATOS. These sit OUTSIDE
@@ -386,6 +386,9 @@ crates = [
     "corpus-mcp",
     # `serve`'s binary (phase-b pb-serve-program).
     "sovereign-serve",
+    # The stock distribution (pb-stock-binary), named because `sovereign-cli*`
+    # does not match it.
+    "sovereign-stock",
     "xtask",
 ]
 
@@ -1435,6 +1438,35 @@ crates = [
     "sovereign-tdd",
 ]
 leaf_budget = ["oicp-types", "sovereign-contracts", "kernel-types", "sovereign-time", "workspace-hack", "understanding-vocab"]
+
+# ── DISTRIBUTIONS — the composition roots, outside every package ────────────
+#
+# phase-b-29 Q4, phase-b-30 Group 2. A distribution is the binary that puts
+# programs together; it belongs to no package, so the package pass skips its
+# edges. This rule holds it to its FACES instead: it may name its own crates,
+# the shared leaves and each face's crate (direct edges, the thin-surface
+# allowlist shape, not its closure rule), and of a face crate its `src/` may
+# name only the listed items, spelled by full path. `max_code_lines` is fixed
+# per row and never ratcheted. Schema v5 (quality/arch-layers/src/distributions.rs).
+#
+# The stock install is ONE process (phase-b-29 Q1): serve's provider built
+# in-process and handed to svrn through the `InferenceProvider` port, serve's
+# router bound on serve's port. Code's face joins at pb-code-server, ingest's
+# at pb-ingest-dial-tools; serve's face moves to package `serve` at
+# pb-serve-package.
+[[distribution]]
+name = "stock"
+crates = ["sovereign-stock"]
+doc = "docs/FIVE_PROGRAMS.md"
+max_code_lines = 300
+[[distribution.face]]
+package = "svrn"
+krate = "sovereign-daemon"
+items = ["process::run", "process::HostedServe"]
+[[distribution.face]]
+package = "cmnwlth"
+krate = "sovereign-serve"
+items = ["bundles", "assemble", "child_launch", "DEFAULT_FILTER"]
 
 # ── THE THIN-SURFACE RULE — can this client BECOME what it talks to? ─────────
 #

@@ -117,6 +117,10 @@ pub fn run() -> i32 {
         runtime_root_escapes(&dir, name, scope, &mut fails);
     }
 
+    // The `[[distribution]]` rules: direct edges, the filesystem rules, the
+    // face items and the fixed cap (distribution_gate.rs).
+    checked += crate::distribution_gate::check(&root, &map, &edges, &dir_of, &mut fails);
+
     // Rule 4 — a leaf's fixed size cap (`max_code_lines`), counted by
     // size-gate's own counter. A cap nothing reads would be no cap.
     for leaf in &map.package_leaves {
@@ -143,15 +147,17 @@ pub fn run() -> i32 {
     // the same shape covers a typo, and a typo'd crate name is a rule that
     // quietly governs nothing (ARCH §18.3 — absence is reported, never
     // defaulted).
-    let missing = arch_layers::missing_package_crates(&map, &names);
+    let mut missing = arch_layers::missing_package_crates(&map, &names);
+    missing.extend(arch_layers::missing_distribution_crates(&map, &names));
 
     // ── Report ────────────────────────────────────────────────────────────────
     eprintln!(
-        "boundary-gate: {} package(s) + {} shared leaves, {checked} crate(s) checked \
-         (dep closure incl. dev+build edges, build.rs, include_str escapes, \
-         runtime root escapes)",
+        "boundary-gate: {} package(s) + {} shared leaves + {} distribution(s), \
+         {checked} crate(s) checked (dep closure incl. dev+build edges, build.rs, \
+         include_str escapes, runtime root escapes, face items)",
         map.packages.len(),
-        map.package_leaves.len()
+        map.package_leaves.len(),
+        map.distributions.len()
     );
     for pkg in &map.packages {
         let present = pkg.crates.iter().filter(|c| names.contains(*c)).count();
@@ -250,7 +256,7 @@ fn governed_crates(map: &arch_layers::LayerMap) -> Vec<(&str, &str)> {
 /// artifact is injected from `corpus-engine` instead), and the exception was the
 /// mechanism that let an unliftable embed sit under a green gate. Removing it is
 /// the structural fix (ARCH §10 — make it structural, not remembered).
-fn include_escapes(dir: &Path, crate_name: &str, scope: &str, fails: &mut Vec<String>) {
+pub(crate) fn include_escapes(dir: &Path, crate_name: &str, scope: &str, fails: &mut Vec<String>) {
     let mut files = Vec::new();
     rs_files(&dir.join("src"), &mut files);
     files.sort();
@@ -425,7 +431,7 @@ fn scan_include_escapes(text: &str, rel_dir: &Path) -> Vec<IncludeEscape> {
 /// It cannot stop at `src/` the way rule 3b does: `quality/ARCH_LAYERS.toml`
 /// says "a third party who lifts the package carries its tests", and every
 /// instance of this defect found so far has been in test code.
-fn runtime_root_escapes(dir: &Path, crate_name: &str, scope: &str, fails: &mut Vec<String>) {
+pub(crate) fn runtime_root_escapes(dir: &Path, crate_name: &str, scope: &str, fails: &mut Vec<String>) {
     for sub in ["src", "tests", "benches", "examples"] {
         let mut files = Vec::new();
         rs_files(&dir.join(sub), &mut files);
@@ -452,7 +458,7 @@ fn runtime_root_escapes(dir: &Path, crate_name: &str, scope: &str, fails: &mut V
 
 /// Every `.rs` file under `dir`, recursively. A missing directory is empty,
 /// not an error — most crates have no `benches/`.
-fn rs_files(dir: &Path, out: &mut Vec<PathBuf>) {
+pub(crate) fn rs_files(dir: &Path, out: &mut Vec<PathBuf>) {
     let Ok(rd) = std::fs::read_dir(dir) else {
         return;
     };
