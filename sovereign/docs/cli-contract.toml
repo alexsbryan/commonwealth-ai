@@ -394,6 +394,10 @@ classification = "daemon"
 path = "mesh warm-cache"
 binary = "llm"
 visibility = "public"
+[[command]]
+path = "mesh fetch-ner"
+binary = "llm"
+visibility = "public"
 
 # corpus — knowledge bases.
 [[command]]

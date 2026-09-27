@@ -68,6 +68,10 @@ pub(crate) const HELP_MESH: sovereign_cli_base::help::Help = sovereign_cli_base:
                 "Pull a GGUF from a mesh peer over the tailnet (no R2 credentials required)",
             ),
             (
+                "fetch-ner [<model_id>]",
+                "Fetch serve's NER (GLiNER) model from HuggingFace",
+            ),
+            (
                 "warm-cache <gguf>",
                 "Pre-seed the RPC tensor cache from a local GGUF (offline; later serves with zero weight transfer)",
             ),

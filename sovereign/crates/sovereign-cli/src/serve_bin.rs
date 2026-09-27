@@ -9,7 +9,7 @@ const BIN_NAME: &str = "sovereign-serve";
 
 /// The `svrn mesh` subcommands serve owns. Keep in step with
 /// `sovereign_serve::WEIGHT_VERBS`, the list that binary routes.
-pub const MESH_VERBS: &[&str] = &["warm-cache", "fetch-model"];
+pub const MESH_VERBS: &[&str] = &["warm-cache", "fetch-model", "fetch-ner"];
 
 /// The serve verb `svrn <first> <rest…>` names, if it names one.
 pub fn mesh_verb<'a>(first: &str, rest: &'a [String]) -> Option<&'a str> {
@@ -58,6 +58,7 @@ mod tests {
             mesh_verb("mesh", &args(&["fetch-model", "m.gguf"])),
             Some("fetch-model")
         );
+        assert_eq!(mesh_verb("mesh", &args(&["fetch-ner"])), Some("fetch-ner"));
     }
 
     #[test]

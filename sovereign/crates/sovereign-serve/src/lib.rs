@@ -58,6 +58,7 @@ use sovereign_serving_host::slot_manifest::CoreSlotManifest;
 use tracing::{debug, error, info, warn};
 
 mod fetch_model;
+mod fetch_ner;
 mod reload;
 mod self_report;
 mod warm_cache;
@@ -178,7 +179,7 @@ pub fn child_launch(args: &[String]) -> Option<i32> {
 
 /// The subcommands `run` routes before the server's arguments. The dispatcher
 /// sends `svrn mesh <verb>` here for exactly these.
-pub const WEIGHT_VERBS: &[&str] = &["warm-cache", "fetch-model"];
+pub const WEIGHT_VERBS: &[&str] = &["warm-cache", "fetch-model", "fetch-ner"];
 
 fn run_weight_verb(verb: &str, rest: &[String]) -> i32 {
     let runtime = match tokio::runtime::Builder::new_multi_thread()
@@ -194,6 +195,7 @@ fn run_weight_verb(verb: &str, rest: &[String]) -> i32 {
     runtime.block_on(async {
         match verb {
             "warm-cache" => warm_cache::cmd_warm_cache(rest).await,
+            "fetch-ner" => fetch_ner::cmd_fetch_ner(rest).await,
             _ => fetch_model::cmd_fetch_model(rest).await,
         }
     })
