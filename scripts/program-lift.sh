@@ -5,6 +5,9 @@
 #
 #   scripts/program-lift.sh --sandbox <lift> [--dir <path>] [--keep]
 #                           [--target-dir <path>] [--set VAR=value ...]
+#   scripts/program-lift.sh --run-only <lift> [--dir <path>] [--keep] [--set ...]
+#     (builds in this workspace and runs the RUN smoke alone; its verdict line
+#      is `program-lift:<lift>:run-only`, never the lift's)
 #
 # The one "runs alone" decider for the six programs (FIVE_PROGRAMS §12 "Done",
 # phase-b-2). The lifts and their RUN smokes are data in

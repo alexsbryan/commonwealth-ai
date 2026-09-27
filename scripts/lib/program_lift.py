@@ -4,6 +4,15 @@
 
     scripts/program-lift.sh --sandbox <lift> [--dir <path>] [--keep]
                             [--target-dir <path>] [--set VAR=value ...]
+    scripts/program-lift.sh --run-only <lift> [--dir <path>] [--keep]
+                            [--set VAR=value ...]
+
+`--run-only` builds the lift's binary IN THIS WORKSPACE and runs its RUN
+smoke (step 5) alone, for a program whose closure cannot leave the monorepo
+yet, so its smoke is still watched (pb-stock-binary: svrn's planner fails on
+edges pb-distribution owns). It judges only that the program RUNS; its line
+is `program-lift:<lift>:run-only` and its artifact `run-only.json`, never the
+lift's verdict or `last.json` (principle 6).
 
 The one decider for "this program runs alone" (phase-b-2, principle 8). It
 replaced the twins `scripts/cw-rails-lift.sh` and `scripts/cw-work-lift.sh`,
@@ -237,12 +246,12 @@ def plan(lift_id: str, lift: dict, sandbox: Path) -> tuple[list[str], list[str]]
 
 # ── 2-4. resolve, build, test ────────────────────────────────────────────────
 
-def cargo(args: list[str], sandbox: Path, target: Path, log: str, show: str) -> tuple[int, float]:
+def cargo(args: list[str], sandbox: Path, target: Path, log: str, show: str, cwd: Path | None = None) -> tuple[int, float]:
     # RUSTC_WRAPPER cleared: sccache would report a cold build as seconds of nothing.
     env = dict(os.environ, RUSTC_WRAPPER="", CARGO_TARGET_DIR=str(target))
     t0 = time.monotonic()
     with open(sandbox / log, "w") as f:
-        p = subprocess.Popen(["cargo", *args], cwd=sandbox, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        p = subprocess.Popen(["cargo", *args], cwd=cwd or sandbox, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
         for line in p.stdout:
             f.write(line)
             if re.match(show, line):
@@ -542,14 +551,42 @@ def lift(lift_id: str, spec: dict, sandbox: Path, target: Path, keep: bool, sets
         record["finally"] = smoke.notes
 
 
+def run_only(lift_id: str, spec: dict, sandbox: Path, keep: bool, sets: dict, record: dict) -> tuple[str, str]:
+    """Build in this workspace, then step 5 alone. The closure is not judged."""
+    run = spec.get("run")
+    if run is None:
+        raise Verdict("never-ran", f"no RUN smoke is declared for `{lift_id}` in scripts/program-lift.toml")
+    if "binary" not in spec or "build" not in spec:
+        raise Verdict("could-not-judge", f"lift `{lift_id}` names no `build` and `binary` to run in-tree")
+    target = REPO / "target"
+    rule("3. the build, IN this workspace (run-only: the closure is not judged)")
+    rc, secs = cargo(["build", *spec["build"]], sandbox, target, "build.log", r"^error", cwd=REPO)
+    record["build_s"] = round(secs, 1)
+    say(f"build: rc={rc} in {secs:.1f}s")
+    binary = target / spec["binary"]
+    if rc != 0:
+        raise Verdict("failed", f"the in-tree build failed ({secs:.1f}s, see {sandbox}/build.log)")
+    if not binary.exists():
+        raise Verdict("failed", f"the build reported success and produced no {binary}")
+    rule("5. the RUN smoke")
+    smoke = Smoke(sandbox, dict(SANDBOX=str(sandbox), TARGET=str(target), BIN=str(binary), **sets), keep)
+    try:
+        smoke.run(run["steps"])
+        return "passed", f"built in this workspace, and RAN: {smoke.sub(run['pass'])}"
+    finally:
+        smoke.teardown(run.get("finally", []))
+        record["finally"] = smoke.notes
+
+
 def main(argv: list[str]) -> int:
-    usage = "usage: scripts/program-lift.sh --sandbox <lift> [--dir <path>] [--keep] [--target-dir <path>] [--set VAR=value ...]"
+    usage = ("usage: scripts/program-lift.sh --sandbox <lift> [--dir <path>] [--keep] [--target-dir <path>] [--set VAR=value ...]\n"
+             "       scripts/program-lift.sh --run-only <lift> [--dir <path>] [--keep] [--set VAR=value ...]")
     lifts = load(LIFTS)["lift"]
     mode, lift_id, sandbox, target, keep, sets = None, None, None, None, False, {}
     it = iter(argv)
     for a in it:
-        if a == "--sandbox":
-            mode = "sandbox"
+        if a in ("--sandbox", "--run-only"):
+            mode = a[2:]
         elif a == "--keep":
             keep = True
         elif a in ("--dir", "--target-dir", "--set"):
@@ -569,7 +606,7 @@ def main(argv: list[str]) -> int:
         else:
             say(f"unknown argument `{a}`\n{usage}")
             return 2
-    if mode != "sandbox" or lift_id not in lifts:
+    if mode not in ("sandbox", "run-only") or lift_id not in lifts:
         say(f"{usage}\nlifts: {' '.join(lifts)}")
         return 2
 
@@ -578,7 +615,8 @@ def main(argv: list[str]) -> int:
         say(f"refusing a sandbox inside the repository: {sandbox}")
         return 2
     target = (target or sandbox / "target").resolve()
-    artifact = REPO / "target" / "program-lift" / lift_id / "last.json"
+    name = "run-only.json" if mode == "run-only" else "last.json"
+    artifact = REPO / "target" / "program-lift" / lift_id / name
     record = {"lift": lift_id, "sandbox": str(sandbox), "target_dir": str(target), "sets": sorted(sets)}
 
     try:
@@ -586,7 +624,10 @@ def main(argv: list[str]) -> int:
             raise Verdict("could-not-judge", "cargo is not on PATH, so nothing could be built")
         shutil.rmtree(sandbox, ignore_errors=True)
         sandbox.mkdir(parents=True)
-        verdict, reason = lift(lift_id, lifts[lift_id], sandbox, target, keep, sets, record)
+        if mode == "run-only":
+            verdict, reason = run_only(lift_id, lifts[lift_id], sandbox, keep, sets, record)
+        else:
+            verdict, reason = lift(lift_id, lifts[lift_id], sandbox, target, keep, sets, record)
     except Verdict as v:
         verdict, reason = v.verdict, v.reason
     except Exception as e:  # noqa: BLE001
@@ -602,7 +643,8 @@ def main(argv: list[str]) -> int:
     if record.get("finally"):
         reason += "; " + "; ".join(record["finally"])
 
-    line = json.loads(render(f"program-lift:{lift_id}", verdict, reason, time.time()))
+    label = f"program-lift:{lift_id}:run-only" if mode == "run-only" else f"program-lift:{lift_id}"
+    line = json.loads(render(label, verdict, reason, time.time()))
     if verdict in ("passed", "failed"):
         line["value"] = 1 if verdict == "passed" else 0
     line["artifact"] = str(artifact.relative_to(REPO))
