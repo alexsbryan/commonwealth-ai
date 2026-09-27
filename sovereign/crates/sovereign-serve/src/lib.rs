@@ -222,6 +222,14 @@ async fn serve(args: ServeArgs) -> i32 {
             return 1;
         }
     };
+    // serve is the loader, so the daemon's pre-load steps are its own
+    // (pb-svrn-dials-serve): llama.cpp's log reaches tracing, so a failed GGUF
+    // load names its cause, and the VRAM preflight reads serve's own sections.
+    sovereign_inference::llama::install_log_tracing();
+    if !sovereign_compute::preflight::check_vram_reporting(&config, &config_path) {
+        error!(target: "serve", config = %config_path.display(), "the VRAM preflight refused");
+        return 1;
+    }
     // The model-free engine, selectable by `[engine] kind = "mock"` and by
     // nothing else (the registry refuses an unknown id, never substitutes).
     if let Err(e) = sovereign_inference::engine_factory::register_engine(
