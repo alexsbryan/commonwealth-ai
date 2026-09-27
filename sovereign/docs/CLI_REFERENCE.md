@@ -87,6 +87,7 @@ Manage the local Commonwealth mesh.
 | `logs` | Show mesh daemon logs |
 | `fetch-model <name>` | Pull a GGUF from a mesh peer over the tailnet |
 | `warm-cache <gguf>` | Pre-seed the RPC tensor cache from a local GGUF (offline) |
+| `fetch-ner [<model_id>]` | Fetch serve's NER (GLiNER) model from HuggingFace |
 | `plan <gguf>` | Work out whether a model fits, and which machine holds what — before you commit |
 | `bench` | Measure how fast the model you are running actually decodes, and record it |
 

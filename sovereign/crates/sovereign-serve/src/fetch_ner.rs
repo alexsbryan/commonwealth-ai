@@ -12,11 +12,18 @@ use sovereign_compute::ner::{configured_model_id, download_model, models_root};
 /// (`SOVEREIGN_GLINER_MODEL_ID`, else the shipped default). Idempotent: a
 /// file already present is skipped. Reports per-file progress.
 pub async fn cmd_fetch_ner(args: &[String]) -> i32 {
+    const USAGE: &str = "Usage: svrn mesh fetch-ner [<model_id>]\n\n  \
+        Fetches the NER (GLiNER) model serve loads from HuggingFace;\n  \
+        default: SOVEREIGN_GLINER_MODEL_ID, else the shipped default.";
     let model_id = match args {
         [] => configured_model_id(),
+        [flag] if flag == "--help" || flag == "-h" => {
+            eprintln!("{USAGE}");
+            return 0;
+        }
         [id] if !id.starts_with('-') => id.clone(),
         _ => {
-            eprintln!("Usage: svrn mesh fetch-ner [<model_id>]");
+            eprintln!("{USAGE}");
             return 2;
         }
     };
