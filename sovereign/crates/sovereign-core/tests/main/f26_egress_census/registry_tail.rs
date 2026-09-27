@@ -196,10 +196,6 @@ pub(super) const REGISTRY_TAIL: &[(&str, Class, usize)] = &[
     // NEW ROW (2026-09-26, phase-b pb-serve-program d2f6e781c): the one kind
     // mount's test posts to a child router it bound on 127.0.0.1:0.
     ("sovereign/crates/sovereign-compute/src/server.rs", Class::TestOnly, 1),
-    // NEW ROW (2026-09-27, REVIEW-audit-pb-auto-4): the NER client posts to
-    // serve's /v1/ner at the base the daemon dials (53153e1b1) — serve's
-    // loopback port on this host.
-    ("sovereign/crates/sovereign-compute/src/ner.rs", Class::LocalDaemon, 1),
 
     // ---- serve, dialed by the svrn daemon (pb-svrn-dials-serve) ----
     // serve_client: the engine-state, served-self, forwarded-GET and reload
@@ -235,6 +231,11 @@ pub(super) const REGISTRY_TAIL: &[(&str, Class, usize)] = &[
     // remembered address, so the site cannot reach a host the mesh has not
     // vouched for.
     ("oicp-client/src/lib.rs", Class::Mesh, 3),
+    // MOVED ROW (2026-09-27, REVIEW-audit-pb-auto-5): the NER client moved
+    // whole from sovereign-compute/src/ner.rs to here (df90dc575), same class:
+    // it posts to serve's /v1/ner at the base the daemon dials (53153e1b1) —
+    // serve's loopback port on this host.
+    ("oicp-client/src/ner.rs", Class::LocalDaemon, 1),
 
     // ---- corpus-engine ----
     // testing.rs: the deterministic test-fixture module (never
