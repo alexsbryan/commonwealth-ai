@@ -14,12 +14,12 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use corpus_index::index::CorpusIndex;
+use oicp_client::RemoteApiProvider;
 use sovereign_core::oicp::ShardingPrivacy;
 use sovereign_core::runtime::{extract_claim_list, value_present_in_chunks};
 use sovereign_core::traits::InferenceProvider;
 use sovereign_eval::flywheel::det_checks::contains_ci;
 use sovereign_eval::flywheel::generators::adversarial as adv;
-use oicp_client::RemoteApiProvider;
 
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 

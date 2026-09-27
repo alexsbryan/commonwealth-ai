@@ -806,9 +806,9 @@ pub async fn run_recall_probe(opts: &RecallRunOptions) -> Result<(), String> {
             Ok(v) if !v.is_empty() && v != "0" => {
                 println!("llm-pick: {v}");
                 let v1 = format!("{}/v1", session.daemon_base);
-                Some(std::sync::Arc::new(
-                    oicp_client::RemoteApiProvider::new(&v1, None, &v, 8192),
-                ))
+                Some(std::sync::Arc::new(oicp_client::RemoteApiProvider::new(
+                    &v1, None, &v, 8192,
+                )))
             }
             _ => None,
         };

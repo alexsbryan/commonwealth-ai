@@ -41,6 +41,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use oicp_client::RemoteApiProvider;
 use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::{CompletionRequest, Speed};
 use sovereign_eval::entity_resolution_bench::PeekBudget;
@@ -48,7 +49,6 @@ use sovereign_eval::mechanism_fidelity::{
     by_id, class_ids, decide_at, grade_class, score, Bands, BoundedMean, FidelityCard,
     GradeThresholds, Pool, RenderedProbe, ResultRow, Scores, Side, StoppingConfig, Verdict,
 };
-use oicp_client::RemoteApiProvider;
 
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 

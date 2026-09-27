@@ -28,8 +28,8 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use sovereign_core::traits::InferenceProvider;
 use oicp_client::SplitInferenceProvider;
+use sovereign_core::traits::InferenceProvider;
 
 fn cosine(a: &[f32], b: &[f32]) -> f32 {
     if a.len() != b.len() || a.is_empty() {

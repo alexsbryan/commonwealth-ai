@@ -31,8 +31,8 @@
 
 use std::sync::Arc;
 
-use sovereign_core::traits::InferenceProvider;
 use oicp_client::RemoteApiProvider;
+use sovereign_core::traits::InferenceProvider;
 use sovereign_tools::summary_verify::{JudgeSummaryVerifier, SummaryVerdict, SummaryVerifier};
 
 #[tokio::test]

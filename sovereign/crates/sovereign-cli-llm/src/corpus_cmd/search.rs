@@ -4,8 +4,8 @@
 //! for a workflow-built corpus (or any installed one). Vector + FTS hybrid.
 
 use corpus_index::index::CorpusIndex;
-use sovereign_core::traits::InferenceProvider;
 use oicp_client::RemoteApiProvider;
+use sovereign_core::traits::InferenceProvider;
 
 const DEFAULT_DAEMON: &str = "http://localhost:9741";
 

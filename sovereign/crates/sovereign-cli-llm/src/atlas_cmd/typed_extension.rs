@@ -22,8 +22,8 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use sovereign_core::traits::InferenceProvider;
 use oicp_client::RemoteApiProvider;
+use sovereign_core::traits::InferenceProvider;
 use sovereign_store::sqlite::SqliteStateStore;
 use sovereign_tools::typed_extension::{run_typed_extension, ExtractionStatus};
 

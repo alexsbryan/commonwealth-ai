@@ -99,8 +99,8 @@ impl ExecutorHost {
     /// ask the same model the same question.
     pub fn connect(base_url: &str, chat_model: &str, sabotage: Option<Sabotage>) -> Self {
         let v1 = format!("{}/v1", base_url.trim_end_matches('/'));
-        let inference: Arc<dyn InferenceProvider> = Arc::new(
-            oicp_client::SplitInferenceProvider::new_with_bearer(
+        let inference: Arc<dyn InferenceProvider> =
+            Arc::new(oicp_client::SplitInferenceProvider::new_with_bearer(
                 &v1,
                 None,
                 chat_model.to_string(),
@@ -112,8 +112,7 @@ impl ExecutorHost {
                 "embed".to_string(),
                 8192,
                 String::new(),
-            ),
-        );
+            ));
         Self {
             inference,
             store: Arc::new(sovereign_store::memory::InMemoryStateStore::new()),

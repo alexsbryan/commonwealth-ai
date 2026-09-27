@@ -37,6 +37,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use oicp_client::RemoteApiProvider;
 use sovereign_core::oicp::ShardingPrivacy;
 use sovereign_core::runtime::{
     chunk_judge_prompt, claim_chunk_support, replay_claim_violation_joint,
@@ -44,7 +45,6 @@ use sovereign_core::runtime::{
     replay_render_claim_prompt, replay_scan_unsupported_specifics, CHUNK_JUDGE_SYSTEM,
 };
 use sovereign_core::traits::InferenceProvider;
-use oicp_client::RemoteApiProvider;
 
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 

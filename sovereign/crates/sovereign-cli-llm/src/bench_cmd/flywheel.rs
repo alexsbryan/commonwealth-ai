@@ -19,6 +19,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use oicp_client::RemoteApiProvider;
 use sovereign_core::traits::InferenceProvider;
 use sovereign_eval::chaos_monkey::{score, AgentAction, CalibrationReport, Gates, PressureKind};
 use sovereign_eval::flywheel::generators::corpus::{AbsentSource, CorpusGenerator};
@@ -26,7 +27,6 @@ use sovereign_eval::flywheel::{
     by_id, generator_ids, validate_fairness, DeterministicVerifier, Observation, Probe,
     RegressionBank, RegressionCase, Verdict,
 };
-use oicp_client::RemoteApiProvider;
 
 use crate::bench_cmd::live_runner::{caveat_credit, classify_abstain, classify_caveat, run_live};
 use crate::chat_cmd::bootstrap::build_session;

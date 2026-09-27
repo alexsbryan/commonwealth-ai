@@ -57,10 +57,10 @@ use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use kernel_types::Judgement;
+use oicp_client::RemoteApiProvider;
 use sovereign_contracts::types::projection::TurnMetadata;
 use sovereign_contracts::types::{JudgeFailure, JudgeFailureReason, StageId, TurnMode};
 use sovereign_core::traits::InferenceProvider;
-use oicp_client::RemoteApiProvider;
 use sovereign_turn_client::{TurnClient, TurnObserver};
 
 use super::{reason, LaneCtx, LaneReport};

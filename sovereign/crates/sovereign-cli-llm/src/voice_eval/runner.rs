@@ -34,12 +34,12 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
 
+use oicp_client::RemoteApiProvider;
 use sovereign_core::error::Result;
 use sovereign_core::runtime::Runtime;
 use sovereign_core::traits::{InferenceProvider, StateStore};
 use sovereign_core::types::Memory;
 use sovereign_core::SkillRegistry;
-use oicp_client::RemoteApiProvider;
 
 use crate::chat_cmd::bootstrap::{build_session_with_skills, ChatSession};
 

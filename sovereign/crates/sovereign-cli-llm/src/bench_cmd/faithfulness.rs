@@ -30,12 +30,12 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use oicp_client::RemoteApiProvider;
 use serde::Serialize;
 use sovereign_core::oicp::ShardingPrivacy;
 use sovereign_core::runtime::{claim_chunk_support, extract_claim_list};
 use sovereign_core::traits::InferenceProvider;
 use sovereign_eval::faithfulness::{plan_judge_sample, score, ClaimRecord, NodeMeta, SampleMode};
-use oicp_client::RemoteApiProvider;
 
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 

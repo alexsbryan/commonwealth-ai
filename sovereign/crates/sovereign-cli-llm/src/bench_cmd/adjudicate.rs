@@ -19,9 +19,9 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use oicp_client::RemoteApiProvider;
 use serde::Serialize;
 use sovereign_core::traits::InferenceProvider;
-use oicp_client::RemoteApiProvider;
 
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 
