@@ -230,3 +230,31 @@ binary = "debug/sovereign-eval"
 # The banks and seed data sovereign-eval's tests read (bench_root.rs: "a
 # lifted crate must set it itself").
 carry = { SOVEREIGN_BENCH_ROOT = "sovereign/bench" }
+
+[lift.bench.run]
+# The evaluator's own verbs: `score` asks its LLM judge (sovereign-eval
+# judge.rs) over `/v1/chat/completions`. The forced-choice judge is
+# sovereign-cli-llm's (live_runner.rs), not this binary's. Two stub OpenAI
+# servers stand in for the judge model: one answers a report, so `score`
+# grades a fixture run; one answers prose twice, so `score` must report it
+# could not judge and write no report, never a score on an unreadable answer.
+pass = "graded a fixture run through a stub judge (judge_report total 10, ${OK_CALLS} judge call), and against a judge that answered prose it asked ${BAD_CALLS} times, wrote no judge_report and exited naming the unparseable answer"
+steps = [
+  { do = "ports", vars = ["OK_PORT", "BAD_PORT"] },
+  { do = "write", path = "${SANDBOX}/stub.py", text = "import http.server, json, sys\nport, mode = int(sys.argv[1]), sys.argv[2]\naxes = {k: {'score': 2, 'justification': 'fixture'} for k in ['spec_fidelity', 'api_congruence', 'internal_coherence', 'idiomatic_rust', 'decision_discipline']}\ncontent = json.dumps({'axes': axes, 'total': 10, 'notes_for_reviewer': 'lift fixture'}) if mode == 'ok' else 'The code looks fine to me overall.'\nclass H(http.server.BaseHTTPRequestHandler):\n    def send(self, doc):\n        b = json.dumps(doc).encode()\n        self.send_response(200)\n        self.send_header('content-type', 'application/json')\n        self.send_header('content-length', str(len(b)))\n        self.end_headers()\n        self.wfile.write(b)\n    def do_GET(self):\n        self.send({'state': 'ready'})\n    def do_POST(self):\n        self.rfile.read(int(self.headers.get('content-length', 0)))\n        self.send({'choices': [{'message': {'role': 'assistant', 'content': content}}]})\nhttp.server.HTTPServer(('127.0.0.1', port), H).serve_forever()\n" },
+  { do = "write", path = "${SANDBOX}/repo/spec.md", text = "# spec\n\n`add(a, b)` returns the sum of two u32s.\n" },
+  { do = "write", path = "${SANDBOX}/repo/Cargo.toml", text = "[package]\nname = \"fixture\"\nversion = \"0.1.0\"\nedition = \"2021\"\n" },
+  { do = "write", path = "${SANDBOX}/repo/src/lib.rs", text = "pub fn add(a: u32, b: u32) -> u32 {\n    a + b\n}\n" },
+  { do = "write", path = "${SANDBOX}/data/runs/graded/manifest.json", text = '{"schema_version":1,"run":{"run_id":"graded","feature_id":"lift","milestone_id":"m0","driver":"lift","started_at":0,"mode":"lift"},"experiment_repo":{"root":"${SANDBOX}/repo","spec_shas":[]},"models":[],"tool_calls":[],"notes":{"decisions":[],"invariants":[],"uncertainties":[],"attempts":[],"deviations":[],"reflections":[],"redteam_findings":[],"other":[]},"generated_at_unix":0}' },
+  { do = "write", path = "${SANDBOX}/data/runs/unreadable/manifest.json", text = '{"schema_version":1,"run":{"run_id":"unreadable","feature_id":"lift","milestone_id":"m0","driver":"lift","started_at":0,"mode":"lift"},"experiment_repo":{"root":"${SANDBOX}/repo","spec_shas":[]},"models":[],"tool_calls":[],"notes":{"decisions":[],"invariants":[],"uncertainties":[],"attempts":[],"deviations":[],"reflections":[],"redteam_findings":[],"other":[]},"generated_at_unix":0}' },
+  { do = "spawn", id = "judge-ok", argv = ["python3", "-u", "${SANDBOX}/stub.py", "${OK_PORT}", "ok"], log = "judge-ok.log" },
+  { do = "spawn", id = "judge-bad", argv = ["python3", "-u", "${SANDBOX}/stub.py", "${BAD_PORT}", "bad"], log = "judge-bad.log" },
+  { do = "poll", url = "http://127.0.0.1:${OK_PORT}/", path = "state", var = "OK_UP", timeout = 30, alive = "judge-ok", fail = "the stub judge never answered (see ${SANDBOX}/judge-ok.log)" },
+  { do = "poll", url = "http://127.0.0.1:${BAD_PORT}/", path = "state", var = "BAD_UP", timeout = 30, alive = "judge-bad", fail = "the prose stub judge never answered (see ${SANDBOX}/judge-bad.log)" },
+  { do = "exec", argv = ["${BIN}", "--data-dir", "${SANDBOX}/data", "score", "graded", "--experiment-repo", "${SANDBOX}/repo", "--daemon-url", "http://127.0.0.1:${OK_PORT}", "--no-mechanical", "--no-scope", "--no-regression", "--no-grade-tools"], log = "score-graded.log", env = { HOME = "${SANDBOX}/home" }, fail = "`score` did not grade the fixture run through the stub judge (see ${SANDBOX}/score-graded.log)" },
+  { do = "count", file = "${SANDBOX}/data/runs/graded/judge_report.json", pattern = "\"total\": 10,", var = "TOTALS", min = 1, fail = "`score` wrote no judge_report.json carrying the stub judge's total 10 (see ${SANDBOX}/data/runs/graded)" },
+  { do = "count", file = "${SANDBOX}/judge-ok.log", pattern = "POST /v1/chat/completions", var = "OK_CALLS", min = 1, fail = "the judge report exists but the stub judge was never asked" },
+  { do = "exec", argv = ["sh", "-c", "if '${BIN}' --data-dir '${SANDBOX}/data' score unreadable --experiment-repo '${SANDBOX}/repo' --daemon-url 'http://127.0.0.1:${BAD_PORT}' --no-mechanical --no-scope --no-regression --no-grade-tools; then echo 'SCORED an unreadable judge answer'; exit 1; fi; test ! -e '${SANDBOX}/data/runs/unreadable/judge_report.json' || { echo 'a judge_report.json exists for an unreadable answer'; exit 1; }"], log = "score-unreadable.log", env = { HOME = "${SANDBOX}/home" }, fail = "`score` reported a grade from a judge that answered prose (see ${SANDBOX}/score-unreadable.log)" },
+  { do = "count", file = "${SANDBOX}/score-unreadable.log", pattern = "unparseable JSON twice", var = "NAMED", min = 1, fail = "`score` failed on the prose judge without naming the unparseable answer (see ${SANDBOX}/score-unreadable.log)" },
+  { do = "count", file = "${SANDBOX}/judge-bad.log", pattern = "POST /v1/chat/completions", var = "BAD_CALLS", min = 2, fail = "`score` gave up on the prose judge without its one retry" },
+]
