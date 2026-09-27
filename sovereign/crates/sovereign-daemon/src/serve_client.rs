@@ -25,22 +25,33 @@ pub enum ServingPath {
     InProcess { chosen_by: &'static str },
     /// Serving lives in `serve`, which this daemon dials.
     DialsServe,
+    /// Serving lives in `serve`, assembled in THIS process by the distribution
+    /// that runs it (the stock binary, pb-stock-binary): svrn holds the same
+    /// provider cell serve's routes answer from, and dials nothing.
+    Hosted,
 }
 
 impl ServingPath {
     /// Decide from each input's ONE existing reader, never a fresh `var_os`
     /// (principle 8): the subsystems the in-process path keeps gate on the
     /// same readers, so they and this decider cannot disagree on a spelling.
-    pub fn decide(config: &SetupConfig) -> Self {
+    ///
+    /// `hosting` says the process entry was handed a [`HostedServe`]. A path
+    /// that dials serve becomes [`ServingPath::Hosted`] only where serve would
+    /// be this host's anyway: not a terminal (it dials its entry node) and no
+    /// `[node] entry` address (an operator-named serve stays dialed).
+    pub fn decide(config: &SetupConfig, hosting: bool) -> Self {
         let path = Self::from_inputs(
             &RpcServe::from_env(),
             crate::startup::rpc_discovery_armed(),
             &sovereign_inference::embedded::rpc_workers_from_env(),
             sovereign_inference::engine_factory::child_owns_primary(config),
-        );
+        )
+        .with_hosting(hosting, config);
         tracing::info!(
             target: "serving_path",
             serving = %path.status_line(),
+            hosting,
             owner = "pb-serve-distributes moves the in-process path into serve",
             "serving path decided (pb-svrn-dials-serve)"
         );
@@ -48,6 +59,18 @@ impl ServingPath {
         // which a later config edit does not change.
         let _ = DECIDED.set(path.clone());
         path
+    }
+
+    /// [`ServingPath::DialsServe`] becomes [`ServingPath::Hosted`] when this
+    /// process hosts serve and serve would be this host's anyway; every other
+    /// path is kept.
+    pub fn with_hosting(self, hosting: bool, config: &SetupConfig) -> Self {
+        let here = config.node_class() != sovereign_contracts::setup_config::NodeClass::Terminal
+            && resolve_serve_base(&config.node).source == ServeBaseSource::Default;
+        match self {
+            Self::DialsServe if hosting && here => Self::Hosted,
+            path => path,
+        }
     }
 
     /// The path this process decided at boot, `None` before (or without) a
@@ -79,13 +102,75 @@ impl ServingPath {
         Self::InProcess { chosen_by }
     }
 
-    /// How `svrn daemon status` names the path: `in-process (<input>)`, or
-    /// `serve`.
+    /// How `svrn daemon status` names the path: `in-process (<input>)`,
+    /// `serve`, or `serve (this process)`.
     pub fn status_line(&self) -> String {
         match self {
             Self::InProcess { chosen_by } => format!("in-process ({chosen_by})"),
             Self::DialsServe => "serve".to_string(),
+            Self::Hosted => "serve (this process)".to_string(),
         }
+    }
+
+    /// Serve serves: this daemon builds no engine, whether it dials serve or
+    /// hosts it. THE one reading of the split for every site that asks.
+    pub fn serve_serves(&self) -> bool {
+        matches!(self, Self::DialsServe | Self::Hosted)
+    }
+}
+
+/// The provider cell a hosted serve's routes answer from.
+pub type HostedCell = std::sync::Arc<sovereign_contracts::reloadable_provider::ReloadableProvider>;
+
+type Compose = Box<
+    dyn FnOnce(
+            std::path::PathBuf,
+            std::path::PathBuf,
+        ) -> std::pin::Pin<
+            Box<dyn std::future::Future<Output = Result<HostedCell, String>> + Send>,
+        > + Send,
+>;
+
+/// The composition a distribution hands svrn's process entry (phase-b-29 Q1):
+/// how to host serve in this process, and serve's tracing targets. svrn calls
+/// `compose` at most once, from `boot_serving`, and only where
+/// [`ServingPath::decide`] says [`ServingPath::Hosted`]; so a config the
+/// interim keeps in process never holds two engines.
+pub struct HostedServe {
+    filter: &'static str,
+    compose: Compose,
+}
+
+impl HostedServe {
+    /// `filter` is serve's tracing allowlist, unioned with svrn's. `compose`
+    /// gets the data root and the config path svrn booted on, and assembles
+    /// serve, binds its router on serve's port and returns the cell; an `Err`
+    /// names why, and refuses boot.
+    pub fn new<F, Fut>(filter: &'static str, compose: F) -> Self
+    where
+        F: FnOnce(std::path::PathBuf, std::path::PathBuf) -> Fut + Send + 'static,
+        Fut: std::future::Future<Output = Result<HostedCell, String>> + Send + 'static,
+    {
+        Self {
+            filter,
+            compose: Box::new(move |data_dir, config_path| {
+                Box::pin(compose(data_dir, config_path))
+            }),
+        }
+    }
+
+    /// serve's tracing allowlist.
+    pub fn filter(&self) -> &'static str {
+        self.filter
+    }
+
+    /// Run the composition.
+    pub async fn compose(
+        self,
+        data_dir: std::path::PathBuf,
+        config_path: std::path::PathBuf,
+    ) -> Result<HostedCell, String> {
+        (self.compose)(data_dir, config_path).await
     }
 }
 

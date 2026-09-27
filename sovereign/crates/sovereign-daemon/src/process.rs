@@ -6,11 +6,16 @@
 //! The argv contract is the bin's doc.
 
 use crate::daemon_cmd;
+pub use crate::serve_client::HostedServe;
 use sovereign_contracts::launch::Launch;
 
 /// The daemon-verb slice of the old dispatcher. Returns the process
 /// exit code — `main` exits with it.
-pub fn run(raw_args: &[String]) -> i32 {
+///
+/// `hosted` is the distribution's composition when this process hosts serve
+/// too (the stock binary); `None` for svrn alone, which dials a configured
+/// serve (phase-b-29 Q1, Q2).
+pub fn run(raw_args: &[String], hosted: Option<HostedServe>) -> i32 {
     if std::env::var_os("RUST_BACKTRACE").is_none() {
         std::env::set_var("RUST_BACKTRACE", "full");
     }
@@ -87,7 +92,13 @@ pub fn run(raw_args: &[String]) -> i32 {
     // the same filter the `daemon` verb used pre-split (twin of
     // `sovereign-cli-daemon/src/lib.rs`; the pins below travel with it).
     let iroh_debug = std::env::var_os("SOVEREIGN_IROH_LOG").is_some();
-    init_tracing(&daemon_tracing_filter(iroh_debug, llama_debug_requested()));
+    // One process, two programs' allowlists: svrn's and, when it hosts serve,
+    // serve's, each declared once by its program (pb-stock-binary).
+    let svrn_filter = daemon_tracing_filter(iroh_debug, llama_debug_requested());
+    match &hosted {
+        Some(h) => init_tracing(&format!("{svrn_filter},{}", h.filter())),
+        None => init_tracing(&svrn_filter),
+    }
 
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
@@ -95,7 +106,7 @@ pub fn run(raw_args: &[String]) -> i32 {
         .thread_name("sovereign-daemon-rt")
         .build()
         .expect("failed to build tokio runtime");
-    runtime.block_on(daemon_cmd::run(&launch, args))
+    runtime.block_on(daemon_cmd::run(&launch, args, hosted))
 }
 
 /// The subscriber over [`compose_filter`], on stderr so machine-readable

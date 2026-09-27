@@ -24,7 +24,11 @@ use crate::tool_registry::build_tool_registry;
 use crate::worker::run_worker_daemon;
 use crate::workspace::resolve_workspace_dir;
 
-pub(super) async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
+pub(super) async fn run_daemon(
+    launch: &Launch,
+    args: &[String],
+    hosted: Option<crate::serve_client::HostedServe>,
+) -> i32 {
     #[cfg(unix)]
     rlimit::raise_open_file_limit();
     // ── Worker-mode branch (ephemeral pod) ────────────────────────
@@ -255,7 +259,7 @@ pub(super) async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
         reload,
         deferred_daemon,
         path: serving_path,
-    } = match super::serving_boot::boot_serving(&config, args, &config_override).await {
+    } = match super::serving_boot::boot_serving(&config, args, &config_override, hosted).await {
         Ok(s) => s,
         Err(code) => return code,
     };
@@ -1005,7 +1009,7 @@ pub(super) async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
     // auto-discovered and manual (`SOVEREIGN_RPC_WORKERS`) hosts auto-warm.
     // The in-process path only: on the dialing path no engine loads here, so
     // there is nothing to warm and no worker to discover (pb-svrn-dials-serve).
-    let in_process = serving_path != crate::serve_client::ServingPath::DialsServe;
+    let in_process = !serving_path.serve_serves();
     if in_process {
         crate::rpc_warm_http::install_rpc_warm_orchestrator(Arc::clone(&daemon));
     }

@@ -30,6 +30,7 @@ pub(super) async fn boot_serving(
     config: &SetupConfig,
     args: &[String],
     config_override: &Option<std::path::PathBuf>,
+    hosted: Option<crate::serve_client::HostedServe>,
 ) -> Result<ServingBoot, i32> {
     // Shared-model cluster role → RPC env contract. The desktop fleet
     // sets `[shared_model] role` instead of SOVEREIGN_RPC_* by hand;
@@ -44,15 +45,25 @@ pub(super) async fn boot_serving(
     // Where serving lives, decided once, after the RPC env contract above
     // (pb-svrn-dials-serve; `ServingPath::decide` traces it). A terminal
     // already holds no weights and dials its entry node, so it keeps that arm.
-    let path = crate::serve_client::ServingPath::decide(config);
+    // A distribution that hosts serve here (`hosted`) turns the dialing path
+    // into the hosted one; the decider stays the one reader (pb-stock-binary).
+    let path = crate::serve_client::ServingPath::decide(config, hosted.is_some());
     let config_path_in_use = config_override
         .clone()
         .unwrap_or_else(sovereign_core::setup_config::SetupConfig::default_path);
     let deferred_daemon = Arc::new(crate::DeferredDaemon::new());
-    if path == crate::serve_client::ServingPath::DialsServe
+    if path.serve_serves()
         && config.node_class() != sovereign_core::setup_config::NodeClass::Terminal
     {
-        return dial_serve(config, &config_path_in_use, deferred_daemon, path).await;
+        return match hosted {
+            Some(hosted) if path == crate::serve_client::ServingPath::Hosted => {
+                host_serve(config, &config_path_in_use, hosted, deferred_daemon, path).await
+            }
+            _ => dial_serve(config, &config_path_in_use, deferred_daemon, path).await,
+        };
+    }
+    if hosted.is_some() {
+        tracing::info!(target: "serving_path", serving = %path.status_line(), "boot: this path serves from this daemon's own engine; the distribution's serve composition is not run");
     }
 
     // Route llama.cpp's internal log into our tracing layer. Without
@@ -205,6 +216,46 @@ async fn dial_serve(
             config_context,
             cell,
         },
+        deferred_daemon,
+        path,
+    })
+}
+
+/// The hosted path (pb-stock-binary, phase-b-29 Q1): the distribution
+/// assembles serve in this process and binds its router on serve's port, and
+/// svrn holds the SAME cell serve's routes answer from, so one engine answers
+/// both ports. Nothing is brought up, no self-report is read, no loopback
+/// provider is built, and no NER handle is installed: that handle is one
+/// process-global (`sovereign_compute::ner`) which serve's own `/v1/ner`
+/// reads, so a `RemoteNer` here would dial itself. The first reader loads
+/// through the kind registry serve's `bundles` registered.
+async fn host_serve(
+    config: &SetupConfig,
+    config_path: &std::path::Path,
+    hosted: crate::serve_client::HostedServe,
+    deferred_daemon: Arc<crate::DeferredDaemon>,
+    path: crate::serve_client::ServingPath,
+) -> Result<ServingBoot, i32> {
+    let cell = match hosted
+        .compose(config.data.dir.clone(), config_path.to_path_buf())
+        .await
+    {
+        Ok(cell) => cell,
+        Err(e) => {
+            tracing::error!(target: "serving_path", error = %e, "boot: serve could not be hosted in this process");
+            eprintln!("error: serve could not be hosted in this process: {e}");
+            return Err(1);
+        }
+    };
+    let resolved_embed_family = cell.embed_family();
+    let provider: Arc<dyn InferenceProvider> = Arc::clone(&cell) as Arc<_>;
+    tracing::info!(target: "serving_path", serve_base = %crate::serve_client::default_serve_base(), "boot: serving is serve's, hosted in this process; one engine answers both ports");
+    Ok(ServingBoot {
+        provider,
+        engine_handle: None,
+        resolved_embed_family,
+        distributed_primary_slot: None,
+        reload: crate::provider::ReloadSource::Hosted { cell },
         deferred_daemon,
         path,
     })

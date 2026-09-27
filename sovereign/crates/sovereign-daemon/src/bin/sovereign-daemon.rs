@@ -28,5 +28,5 @@
 
 fn main() {
     let raw_args: Vec<String> = std::env::args().skip(1).collect();
-    std::process::exit(sovereign_daemon::process::run(&raw_args));
+    std::process::exit(sovereign_daemon::process::run(&raw_args, None));
 }

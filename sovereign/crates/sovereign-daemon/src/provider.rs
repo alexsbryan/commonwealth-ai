@@ -49,6 +49,12 @@ pub enum ReloadSource {
         config_context: u32,
         cell: Arc<sovereign_contracts::reloadable_provider::ReloadableProvider>,
     },
+    /// The hosted path (pb-stock-binary): serve's reload route swaps `cell`
+    /// itself, the one both programs hold, so the daemon forwards and never
+    /// swaps a provider of its own into it.
+    Hosted {
+        cell: Arc<sovereign_contracts::reloadable_provider::ReloadableProvider>,
+    },
 }
 
 impl LlamaCppFactory {
@@ -85,6 +91,22 @@ impl LlamaCppFactory {
                         &state,
                         crate::serve_client::served_slot_aliases(&served.resident_slots),
                         "serve's self-report after reload",
+                    );
+                }
+                Ok(Arc::clone(cell) as Arc<dyn InferenceProvider>)
+            }
+            ReloadSource::Hosted { cell } => {
+                crate::serve_client::forward_reload(&crate::serve_client::default_serve_base())
+                    .await?;
+                let state = match self.daemon.get() {
+                    Some(daemon) => daemon.app_state().await,
+                    None => None,
+                };
+                if let Some(state) = state {
+                    crate::daemon::publish_slot_aliases(
+                        &state,
+                        crate::serve_client::served_slot_aliases(&cell.resident_slots()),
+                        "the hosted serve's residency after reload",
                     );
                 }
                 Ok(Arc::clone(cell) as Arc<dyn InferenceProvider>)

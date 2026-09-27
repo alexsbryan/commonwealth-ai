@@ -3454,7 +3454,7 @@ impl EmbeddedDaemon {
             let cfg = self.setup_config.read().await;
             let config_aliases = register_local_model_slots(&app_state, &cfg, node_id).await;
             if crate::serve_client::ServingPath::decided()
-                == Some(&crate::serve_client::ServingPath::DialsServe)
+                .is_some_and(crate::serve_client::ServingPath::serve_serves)
             {
                 let slots = match self.inference_provider().await {
                     Some(provider) => provider.resident_slots(),

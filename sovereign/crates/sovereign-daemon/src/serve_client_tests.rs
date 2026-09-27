@@ -59,6 +59,50 @@ fn each_opt_in_keeps_the_in_process_path_and_names_itself() {
     }
 }
 
+/// The hosted path (pb-stock-binary): a process that hosts serve serves from
+/// it where serve would be this host's anyway, and nowhere else. Failing
+/// input: drop the terminal or the `[node] entry` guard from `with_hosting`,
+/// and the second or third case goes Hosted.
+#[test]
+fn hosting_turns_only_this_hosts_dialing_path_hosted() {
+    let cfg = |node_section: NodeSection| SetupConfig {
+        node: node_section,
+        ..SetupConfig::unconfigured()
+    };
+    let plain = cfg(NodeSection::default());
+    assert_eq!(
+        ServingPath::DialsServe.with_hosting(true, &plain),
+        ServingPath::Hosted
+    );
+    assert_eq!(
+        ServingPath::Hosted.status_line(),
+        "serve (this process)".to_string()
+    );
+    assert!(ServingPath::Hosted.serve_serves() && ServingPath::DialsServe.serve_serves());
+    // svrn alone dials.
+    assert_eq!(
+        ServingPath::DialsServe.with_hosting(false, &plain),
+        ServingPath::DialsServe
+    );
+    // An operator-named serve stays dialed; a terminal dials its entry node.
+    let named = cfg(node(Some("http://10.0.0.9:9748/v1"), None));
+    assert_eq!(
+        ServingPath::DialsServe.with_hosting(true, &named),
+        ServingPath::DialsServe
+    );
+    let terminal = cfg(node(None, Some("hub")));
+    assert_eq!(
+        ServingPath::DialsServe.with_hosting(true, &terminal),
+        ServingPath::DialsServe
+    );
+    // The interim's in-process path is never hosted: one engine per process.
+    let kept = ServingPath::InProcess {
+        chosen_by: "SOVEREIGN_RPC_DISCOVER",
+    };
+    assert_eq!(kept.clone().with_hosting(true, &plain), kept);
+    assert!(!kept.serve_serves());
+}
+
 /// A stub serve on a free loopback port whose engine-state route waits
 /// `hold` before it answers the empty view.
 async fn stub_serve(hold: std::time::Duration) -> String {

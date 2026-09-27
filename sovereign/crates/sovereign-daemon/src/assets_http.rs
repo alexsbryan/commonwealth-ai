@@ -111,8 +111,8 @@ async fn forward_or(
     path: &str,
     in_process: impl std::future::Future<Output = Response>,
 ) -> Response {
-    if crate::serve_client::ServingPath::decided()
-        != Some(&crate::serve_client::ServingPath::DialsServe)
+    if !crate::serve_client::ServingPath::decided()
+        .is_some_and(crate::serve_client::ServingPath::serve_serves)
     {
         return in_process.await;
     }
