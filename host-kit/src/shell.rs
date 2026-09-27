@@ -6,9 +6,13 @@
 //! the peer address on every request, the loopback guard ([`guard`]), the
 //! request-body limits, bind retry, shutdown as a value, and the mount
 //! trace. A program hands [`serve`] its listeners and its [`RouteBundle`]s;
-//! which routes exist is the program's own.
+//! which routes exist is the program's own. [`serve_under`] is the guard a
+//! program serving a page bundle reads its files through.
 
+mod files;
 pub mod guard;
+
+pub use files::serve_under;
 
 use std::future::Future;
 use std::net::SocketAddr;

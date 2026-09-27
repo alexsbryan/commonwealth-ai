@@ -12,8 +12,6 @@
 //! when it navigates. The page is code, not data; everything it reads or
 //! writes goes through the rail routes, which are scoped to one namespace for
 //! a `Scope::Rails` grant and to what [`GuestPages`] declares for a wall one.
-//! `/app/{app_id}/*` could not carry it: that route reverse-proxies
-//! to a running app's port and serves no directory (`routes_apps::proxy_app`).
 //!
 //! The listener exists only while [`live_rail_grants`] is non-zero, so a
 //! daemon with `guest_bind` set and no wall grant out has nothing listening.
@@ -42,13 +40,14 @@ use crate::client_surface::ClientSurface;
 use crate::state::AppState;
 
 // The door and `svrn ring show` / `svrn meshapp dev` share the page surface,
-// so each has one implementation — theirs, in `sovereign_mesh::guest_pages`
-// (fp-30's de-embed); the door is a caller like the dev servers now.
+// so each has one implementation — `ring_shim` in `sovereign_mesh::guest_pages`
+// (fp-30), `serve_under` in the host kit (pb-meshapp-apps); the door is a caller like the dev servers.
 // `PAGE_PREFIX` is defined in `sovereign_contracts::guest_pages` (three
 // crates must agree) and re-exported so every existing
 // `sovereign_daemon::guest_door::PAGE_PREFIX` still resolves.
+pub use host_kit::shell::serve_under;
 pub use sovereign_contracts::guest_pages::PAGE_PREFIX;
-pub use sovereign_mesh::guest_pages::{ring_shim, serve_under};
+pub use sovereign_mesh::guest_pages::ring_shim;
 
 /// The shim's file name, beside each page so the page's relative imports
 /// resolve. One name, two homes: `/ring/__ring.js` for the un-namespaced page

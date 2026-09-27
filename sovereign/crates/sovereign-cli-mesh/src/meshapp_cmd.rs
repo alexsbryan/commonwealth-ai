@@ -412,8 +412,8 @@ async fn static_handler(State(ctx): State<Arc<DevCtx>>, uri: Uri) -> Response {
 }
 
 /// The bundle-escape guard, shared with the guest door and `svrn ring dev` —
-/// one implementation, in `sovereign_mesh::guest_pages`.
-pub(crate) use sovereign_mesh::guest_pages::serve_under;
+/// one implementation, in the host kit (`host_kit::shell::serve_under`).
+use host_kit::shell::serve_under;
 
 /// The dev `window.meshApp`: same method surface as `meshapp_shim.js`, but over
 /// `fetch('/__meshapp/<op>')` instead of Tauri IPC. The corpus id the bundle
