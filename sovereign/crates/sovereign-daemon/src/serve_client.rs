@@ -300,6 +300,11 @@ pub async fn read_served_self(
 /// `embed_family.default_quirks().embed`, the decider the engine applies in
 /// process, so a query embedded over the wire is prepared the same way.
 ///
+/// The loopback mode is taken from the base's SOURCE, never from comparing
+/// addresses: the default base is this host's serve, whose models are this
+/// node's; an operator-named `[node] entry` is someone else's process, so its
+/// provider keeps the terminal arm's empty manifest (build/inference.rs:72-75).
+///
 /// `config_context` is used only when serve's provider reports no context
 /// window (the model-free mock engine), and the substitution is traced.
 pub fn loopback_provider(
@@ -320,14 +325,20 @@ pub fn loopback_provider(
             config_context
         }
     };
-    sovereign_inference::remote::SplitInferenceProvider::new(
+    let provider = sovereign_inference::remote::SplitInferenceProvider::new(
         &format!("{}/v1", serve.base),
         "primary".to_string(),
         served.embed_model.clone(),
         context,
         query_instruction,
-    )
-    .with_served(served)
+    );
+    match serve.source {
+        ServeBaseSource::Default => provider.with_served(served),
+        ServeBaseSource::NodeEntry => {
+            tracing::info!(target: "serving_path", serve_base = %serve.base, "serve at [node] entry: not this node's models, so the provider advertises none");
+            provider
+        }
+    }
 }
 
 /// Forward a reload to serve, which rebuilds through its own ReloadFactory.
@@ -488,6 +499,24 @@ mod tests {
             embed_family: sovereign_contracts::model_family::ModelFamily::Qwen3Embedding,
             context_size: Some(8192),
             ..Default::default()
+        }
+    }
+
+    /// The loopback mode follows the base's source: this host's serve answers
+    /// for this node's models, an operator-named entry never does.
+    #[test]
+    fn only_the_default_base_answers_for_this_nodes_models() {
+        use sovereign_contracts::{InferenceProvider, Speed};
+        for (source, expected) in [
+            (ServeBaseSource::Default, "big"),
+            (ServeBaseSource::NodeEntry, "primary"),
+        ] {
+            let serve = ServeBase {
+                base: "http://127.0.0.1:1".into(),
+                source,
+            };
+            let provider = loopback_provider(&serve, served(), 4096);
+            assert_eq!(provider.model_id_for(Speed::Slow), expected, "{source:?}");
         }
     }
 
