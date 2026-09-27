@@ -24,7 +24,7 @@ use sovereign_pods::worker_controller::{
 use sovereign_pods::worker_pod::WORKER_PORT;
 
 /// Path on disk for the owner's persistent Ed25519 signing key. Lives
-/// alongside the pipeline pod ledger so a single `chmod 700
+/// alongside the mesh pod ledger so a single `chmod 700
 /// ~/.svrnmesh` covers both.
 pub fn owner_key_path() -> PathBuf {
     sovereign_cli_base::dirs::sovereign_root().join("worker_owner_key.bin")

@@ -53,6 +53,10 @@ pub(crate) const HELP_MESH: sovereign_cli_base::help::Help = sovereign_cli_base:
                 "offers",
                 "What the neighbours have for sale or lending — every neighbour a row, the ones that did not answer NAMED; --why adds who vouched for each",
             ),
+            (
+                "pod <up | pool | list | down>",
+                "Rent Vast.ai GPU pods as ephemeral workers; `list` shows the cost ledger",
+            ),
             ("balance", "Show your contribution to the mesh"),
             ("list", "Show every mesh this node has joined; the active one is marked"),
             ("switch <mesh>", "Park the active mesh and bring another one up"),

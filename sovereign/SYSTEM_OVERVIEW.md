@@ -178,9 +178,9 @@ crates/
 ├── sovereign-cli-daemon     # Long-running host + lifecycle; owns Windows GPU backend selection
 ├── sovereign-cli-dev        # Workbench: project lifecycle + code intel + tools
 ├── sovereign-cli-llm        # Model interaction + heavy retrieval (chat/bench/eval/atlas/enrich/corpus)
-├── sovereign-cli-mesh       # cmnwlth's verbs — mesh, meshapp, ring, job, publish, run
+├── sovereign-cli-mesh       # cmnwlth's verbs — mesh (incl. `mesh pod`), meshapp, ring, job, publish, run
 ├── sovereign-time           # Wall-clock helpers — zero-dep leaf for crates off sovereign-core
-├── sovereign-pipeline       # Pipeline / pod-lifecycle helpers
+├── sovereign-pipeline       # Pipeline driver (recipes, worklist); pods moved to cli-mesh
 ├── sovereign-eval           # Pure scorers
 ├── sovereign-authoring-harness # Recipe-authoring verdict ladder over harness StageOutputs
 ├── sovereign-meshapp        # Mesh-app explorer ops — pure path-in/DTO-out lib

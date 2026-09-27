@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Cost ledger for cloud pods launched by the pipeline tool.
 //!
-//! Each `pipeline pod up` appends a `PodRecord` to a JSON file at
+//! Each `mesh pod up` appends a `PodRecord` to a JSON file at
 //! `~/.svrnmesh/pipeline-pods.json`. `pod down` marks the record
 //! `closed` and stamps `ended_at`, leaving the row for postmortem
 //! cost reconstruction. Nothing is ever deleted on its own — the

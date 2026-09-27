@@ -9,10 +9,45 @@ mod pool;
 mod provider;
 
 use pool::cmd_pod_pool;
+use sovereign_cli_base::help::{self, Help, HelpSection};
+
+/// `--help` anywhere in the argv prints this and exits 0, as
+/// `svrn pipeline --help` did for these rows before the move.
+const HELP_POD: Help = Help {
+    command: "svrn mesh pod",
+    summary: "Rent Vast.ai GPU pods as ephemeral workers, with a local cost ledger.",
+    sections: &[
+        HelpSection::Usage("svrn mesh pod <up | pool | list | down> [flags]"),
+        HelpSection::Subcommands(&[
+            (
+                "up",
+                "Launch a Vast.ai pod with the sovereign CUDA image, join the mesh, \
+                 register in the cost ledger.",
+            ),
+            (
+                "pool",
+                "Fan a JSONL manifest of work units out across N pods, drain \
+                 completions, destroy the pods unless --keep-alive.",
+            ),
+            (
+                "list",
+                "Show every pod the ledger knows about with accrued cost.",
+            ),
+            (
+                "down <vast-id>",
+                "Destroy a Vast pod, close its ledger entry, print final cost.",
+            ),
+        ]),
+    ],
+};
 
 pub async fn cmd_pod(args: &[String]) -> i32 {
+    if help::wants_help(args) {
+        help::print(&HELP_POD);
+        return 0;
+    }
     if args.is_empty() {
-        eprintln!("usage: svrn pipeline pod <up | pool | list | down> [flags]");
+        eprintln!("usage: svrn mesh pod <up | pool | list | down> [flags]");
         return 2;
     }
     match args[0].as_str() {
@@ -34,7 +69,7 @@ async fn cmd_pod_up(args: &[String]) -> i32 {
     //
     // The MVP performs: search → create → wait-for-address →
     // wait-for-health → uploads (if any) → print handle. The pod is
-    // left running for follow-up dispatch. `pipeline pod down` (or
+    // left running for follow-up dispatch. `mesh pod down` (or
     // SIGINT here) tears it down.
     let mut gpu_name: String = "L40S".into();
     let mut image: Option<String> = std::env::var("SOVEREIGN_VAST_IMAGE").ok();
@@ -136,7 +171,7 @@ async fn cmd_pod_up(args: &[String]) -> i32 {
             other => {
                 eprintln!("unknown flag: {other}");
                 eprintln!(
-                    "usage: svrn pipeline pod up \\\n\
+                    "usage: svrn mesh pod up \\\n\
                     \x20\x20[--gpu <name>] [--image <ref>] [--disk <gb>] [--label <s>]\\\n\
                     \x20\x20[--max-price <usd>] [--job-id <s>] \\\n\
                     \x20\x20[--upload <path>]... [--upload-url <name>=<sha256-hex>=<url>]... \\\n\
@@ -319,7 +354,7 @@ async fn cmd_pod_up(args: &[String]) -> i32 {
 
     // ─── JobSpec ────────────────────────────────────────────────────
     // No units list yet — `pod up` boots the pod and leaves it ready
-    // for follow-up dispatch. A future `pipeline pod dispatch <handle>
+    // for follow-up dispatch. A future `mesh pod dispatch <handle>
     // <manifest.json>` command will POST the units to the worker.
     let spec = sovereign_pods::worker_controller::JobSpec {
         job_id: job_id.clone(),
@@ -431,11 +466,11 @@ async fn cmd_pod_up(args: &[String]) -> i32 {
     );
     println!();
     println!("Pod is in 'uploads ready' state. Dispatch a job with the worker token:");
-    println!("  (token printed once — keep it; future invocations will be `pipeline pod dispatch <vast-id>`)");
+    println!("  (token printed once — keep it; future invocations will be `mesh pod dispatch <vast-id>`)");
     println!("  token: {}", handle.worker_token());
     println!();
     println!("Tear down with:");
-    println!("  svrn pipeline pod down {}", instance.instance_id);
+    println!("  svrn mesh pod down {}", instance.instance_id);
     0
 }
 
@@ -487,7 +522,7 @@ fn cmd_pod_list(_args: &[String]) -> i32 {
 
 fn cmd_pod_down(args: &[String]) -> i32 {
     let Some(vast_id) = args.first().cloned() else {
-        eprintln!("usage: svrn pipeline pod down <vast-id>");
+        eprintln!("usage: svrn mesh pod down <vast-id>");
         return 2;
     };
     let path = ledger::default_path();

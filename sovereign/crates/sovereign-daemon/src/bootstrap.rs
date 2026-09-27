@@ -2262,7 +2262,7 @@ pub async fn build_mesh_provider(
                     expires_unix,
                     expired_secs_ago = now_unix.saturating_sub(expires_unix),
                     "daemon_cmd: pinned-pod snapshot token EXPIRED — \
-                     skipping (tear down with `svrn pipeline pod down {id}` \
+                     skipping (tear down with `svrn mesh pod down {id}` \
                      or relaunch with `--ttl-hours <N>` to refresh)",
                     id = snap.vast_id,
                 );
@@ -2275,7 +2275,7 @@ pub async fn build_mesh_provider(
                     expires_unix,
                     remaining_secs = remaining,
                     "daemon_cmd: pinned-pod snapshot token near expiry \
-                     (<4h remaining) — plan a fresh `pipeline pod up` if \
+                     (<4h remaining) — plan a fresh `mesh pod up` if \
                      your run will outlast it"
                 );
             }

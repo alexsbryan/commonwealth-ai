@@ -48,7 +48,7 @@ use std::path::{Path, PathBuf};
 
 /// One command the CLI promises. Primary key is [`Command::path`] — the
 /// argv path the user types, minus the leading `sovereign`, space-joined
-/// (e.g. `"mesh create"`, `"pipeline pod up"`).
+/// (e.g. `"mesh create"`, `"mesh pod up"`).
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Command {

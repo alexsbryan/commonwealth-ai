@@ -7757,7 +7757,7 @@ Pinned by `tests/e2e/specs/chat-orphaned-turn.spec.ts` +
 
 ### Pinned worker pods as inference peers
 
-Ephemeral worker pods (Vast L40S rented via `pipeline pod up`)
+Ephemeral worker pods (Vast L40S rented via `mesh pod up`)
 join the mesh scheduler's inference pool as one more peer, scored
 by the same OICP load balancer. Pods aren't gossiped — owner-
 private, TLS-pinned, authenticated by Ed25519 `WorkerToken`. See

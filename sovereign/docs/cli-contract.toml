@@ -932,14 +932,20 @@ binary = "llm"
 [[command]]
 path = "pipeline list"
 binary = "llm"
+# `pipeline pod` moved to `mesh pod` (phase-b-1 (10)); the old spelling
+# prints a pointer and exits 2. The mesh verbs run in sovereign-cli-mesh,
+# declared `llm` like every other `mesh` row (Binary has no mesh variant).
 [[command]]
-path = "pipeline pod up"
+path = "mesh pod up"
 binary = "llm"
 [[command]]
-path = "pipeline pod list"
+path = "mesh pod pool"
 binary = "llm"
 [[command]]
-path = "pipeline pod down"
+path = "mesh pod list"
+binary = "llm"
+[[command]]
+path = "mesh pod down"
 binary = "llm"
 
 # atlas — internal structural enrichment, default build.
@@ -3486,10 +3492,10 @@ tier = 5
 doc = "sovereign/docs/PINNED_WORKER_AS_INFERENCE_PEER.md"
 skip_live = "provisions paid cloud GPU pods"
 [[journey.step]]
-run = "pipeline pod up"
+run = "mesh pod up"
 mutates = true
 [[journey.step]]
-run = "pipeline pod list"
+run = "mesh pod list"
 [journey.step.expect]
 stdout_non_empty = true
 [[journey.step]]
@@ -3500,7 +3506,7 @@ run = "pipeline status {recipe}"
 [journey.step.expect]
 stdout_non_empty = true
 [[journey.step]]
-run = "pipeline pod down {pod_id}"
+run = "mesh pod down {pod_id}"
 mutates = true
 note = "prove the mutation reverses — an orphaned pod bills until it is torn down"
 

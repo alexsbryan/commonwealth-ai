@@ -4,7 +4,7 @@
 
 use super::pod;
 
-/// `svrn pipeline pod pool` — multi-pod variant of `pod up`.
+/// `svrn mesh pod pool` — multi-pod variant of `pod up`.
 ///
 /// Reads a JSONL manifest of work units, fans them out across `N`
 /// Vast pods (round-robin), drains completions to an output file,
@@ -110,7 +110,7 @@ pub(super) async fn cmd_pod_pool(args: &[String]) -> i32 {
             other => {
                 eprintln!("unknown flag: {other}");
                 eprintln!(
-                    "usage: svrn pipeline pod pool \\\n\
+                    "usage: svrn mesh pod pool \\\n\
                     \x20\x20--pods <N> --manifest <units.jsonl> [--output <results.jsonl>]\\\n\
                     \x20\x20[--gpu <name>] [--image <ref>] [--disk <gb>] [--label <s>]\\\n\
                     \x20\x20[--max-price <usd>] [--job-id <s>] [--keep-alive] \\\n\
@@ -447,7 +447,7 @@ pub(super) async fn cmd_pod_pool(args: &[String]) -> i32 {
         } else {
             eprintln!(
                 "{}/{pod_count} pod destroys failed — check `vastai show instances` and \
-                 `svrn pipeline pod down <id>` to clean up.",
+                 `svrn mesh pod down <id>` to clean up.",
                 failures
             );
             for (i, r) in destroy_results.iter() {
@@ -462,7 +462,7 @@ pub(super) async fn cmd_pod_pool(args: &[String]) -> i32 {
         for snap in pool.snapshot().await {
             println!("  pod {} vast={}", snap.pod_index, snap.instance_id);
         }
-        println!("destroy each with `svrn pipeline pod down <vast-id>`.");
+        println!("destroy each with `svrn mesh pod down <vast-id>`.");
     }
     if summary.timed_out {
         1

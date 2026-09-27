@@ -90,6 +90,10 @@ Manage the local Commonwealth mesh.
 | `fetch-ner [<model_id>]` | Fetch serve's NER (GLiNER) model from HuggingFace |
 | `plan <gguf>` | Work out whether a model fits, and which machine holds what — before you commit |
 | `bench` | Measure how fast the model you are running actually decodes, and record it |
+| `pod up` | Launch a Vast.ai pod with the sovereign CUDA image as an ephemeral worker, register it in the cost ledger |
+| `pod pool --pods <N> --manifest <units.jsonl>` | Fan a JSONL manifest of work units out across N Vast pods, drain completions, destroy the pods at the end |
+| `pod list` | Show every pod the ledger knows about with accrued cost |
+| `pod down <vast-id>` | Destroy a Vast pod, close its ledger entry, print final cost |
 
 `svrn mesh plan` answers the question you have before you download 80 GB: will this
 run on the machines I have? It reads only the GGUF's header table, so it needs no
@@ -492,9 +496,7 @@ Generic ingestion-pipeline driver — durable worklist + retry + pause-resume. D
 | `run <recipe.toml>` | Seed + sweep + drive the recipe to completion. SIGINT/SIGTERM drains in-flight units, then exits cleanly. Re-running picks up where the previous run left off |
 | `status <recipe-id>` | Print pending/done/failed counts, last-hour throughput, ETA, failure buckets |
 | `list` | List every recipe-id known to the worklist DB |
-| `pod up` | Launch a Vast.ai pod with the sovereign CUDA image, join the mesh, register in the cost ledger |
-| `pod list` | Show every pod the ledger knows about with accrued cost |
-| `pod down <vast-id>` | Destroy a Vast pod, close its ledger entry, print final cost |
+| `pod …` | Moved to `svrn mesh pod`; the old spelling prints a pointer and exits 2 |
 
 Global flags: `--db <path>` (default `~/.svrnmesh/pipeline.db`), `--seed-only`, `--slugs <path>`, `--key <slug>` (repeatable). Failures bucket into `timeout` / `refused` / `vram_thrash` / `mismatch` / `model_missing` / `unknown` and retry up to `[dispatch].max_attempts` before landing in `failed`. Add an `[schedule]` block with `active_hours = "HH:MM-HH:MM"` to auto-pause outside that window.
 

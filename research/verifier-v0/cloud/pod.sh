@@ -11,8 +11,8 @@
 #   cloud/pod.sh down  <id>                    # destroy + close the ledger row
 #   cloud/pod.sh list                          # what is running and what it costs
 #
-# WHY THIS IS A SHELL SCRIPT AND NOT A `pipeline pod` SUBCOMMAND (yet).
-# `sovereign pipeline pod up` builds an EPHEMERAL INFERENCE WORKER: it mints a
+# WHY THIS IS A SHELL SCRIPT AND NOT A `mesh pod` SUBCOMMAND (yet).
+# `sovereign mesh pod up` builds an EPHEMERAL INFERENCE WORKER: it mints a
 # bootstrap blob, boots our sovereign-cuda image whose entrypoint ends in
 # `daemon run --worker-mode`, and drives a job protocol whose only reverse flow
 # is JSON unit results. A training pod needs a PyTorch image, an SSH session,
@@ -22,7 +22,7 @@
 #
 # WHAT IS REUSED ANYWAY: the cost ledger. Rows land in
 # ~/.svrnmesh/pipeline-pods.json in the exact schema sovereign-pipeline reads,
-# so `sovereign pipeline pod list` shows a training pod's accruing cost next to
+# so `sovereign mesh pod list` shows a training pod's accruing cost next to
 # every other pod. Forgetting a running pod is the real money risk here, and it
 # is not worth a second, private accounting of it (§10.6).
 set -euo pipefail
