@@ -317,10 +317,12 @@ impl RemoteApiProvider {
         // client already refuses to make on a 503 body (§18.3).
         let req = self.stamped(self.client.post(&url).json(&body));
 
+        let lap = sovereign_contracts::engine_state::Lap::start("client", "embed");
         let response = req
             .send()
             .await
             .map_err(|e| Error::Inference(format!("Batch embedding request failed: {e}")))?;
+        lap.mark("headers");
 
         if !response.status().is_success() {
             return Err(Error::NotImplemented(format!(
@@ -343,6 +345,7 @@ impl RemoteApiProvider {
         let parsed: EmbedResponse = response.json().await.map_err(|e| {
             Error::Inference(format!("Failed to parse batch embedding response: {e}"))
         })?;
+        lap.mark("body parsed");
 
         if parsed.data.len() != texts.len() {
             return Err(Error::Inference(format!(
@@ -1138,12 +1141,14 @@ impl InferenceProvider for RemoteApiProvider {
         let mut body = self.build_request(request);
         body["stream"] = serde_json::json!(true);
 
+        let lap = sovereign_contracts::engine_state::Lap::start("client", "chat");
         let response = self
             .send_honouring_shed(
                 || self.stamped(self.client.post(&url).json(&body)),
                 "Remote typed stream request",
             )
             .await?;
+        lap.mark("headers");
 
         let byte_stream = response.bytes_stream();
         // Carry parser state across the byte-stream's filter_map by
@@ -1161,6 +1166,7 @@ impl InferenceProvider for RemoteApiProvider {
             let mut usage: Option<StreamUsage> = None;
             'outer: while let Some(chunk) = byte_stream.next().await {
                 let Ok(bytes) = chunk else { continue };
+                lap.first("first byte");
                 buf.push_str(&String::from_utf8_lossy(&bytes));
                 // Process complete lines; leave the tail in buf for
                 // the next iteration so a chunk-split SSE line
@@ -1186,6 +1192,7 @@ impl InferenceProvider for RemoteApiProvider {
                     }
                     for choice in parsed.choices {
                         if let Some(text) = choice.delta.content {
+                            lap.first("first frame parsed");
                             if !text.is_empty() && tx.send(StreamFrame::Token(text)).await.is_err()
                             {
                                 return;

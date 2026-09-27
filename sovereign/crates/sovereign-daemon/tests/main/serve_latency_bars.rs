@@ -13,7 +13,7 @@
 //! free port, over the same config file. Ignored in the suite: it loads real
 //! GGUFs. Run by hand, in the toolbox, with the serve binary built:
 //!
-//!   SOVEREIGN_MODELS_DIR=sovereign/models \
+//!   SOVEREIGN_MODELS_DIR=$PWD/sovereign/models \
 //!   SOVEREIGN_SERVE_BIN=target/debug/sovereign-serve cargo test -p sovereign-daemon \
 //!     --test main serve_latency_bars -- --ignored --nocapture
 
@@ -37,7 +37,7 @@ const BATCH: usize = 32;
 fn models_dir() -> std::path::PathBuf {
     std::env::var_os("SOVEREIGN_MODELS_DIR")
         .map(std::path::PathBuf::from)
-        .expect("SOVEREIGN_MODELS_DIR names the GGUF directory (e.g. sovereign/models)")
+        .expect("SOVEREIGN_MODELS_DIR names the GGUF directory, absolute (cargo runs tests from the crate dir)")
 }
 
 async fn first_token(p: &dyn InferenceProvider) -> Duration {
@@ -92,6 +92,12 @@ fn p50<T: Copy + PartialOrd>(mut v: Vec<T>) -> T {
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "measurement: loads real GGUFs; run by hand before the switch (pb-svrn-dials-serve)"]
 async fn serve_latency_bars() {
+    // The loopback client's `serve_latency` laps (RUST_LOG=serve_latency=debug);
+    // serve inherits RUST_LOG, and its laps are echoed from its log below.
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .with_writer(std::io::stdout)
+        .try_init();
     let chat = models_dir().join(CHAT_MODEL);
     let embed = models_dir().join(EMBED_MODEL);
     assert!(
@@ -163,6 +169,14 @@ async fn serve_latency_bars() {
     );
     let (lo_ttft, lo_tput) = measure(&loopback).await;
     let _ = serve.kill();
+    let serve_log = std::fs::read_to_string(root.path().join("serve.log"))
+        .unwrap_or_else(|e| format!("serve_latency: no serve.log to echo laps from ({e})"));
+    for line in serve_log
+        .lines()
+        .filter(|l| l.contains(sovereign_contracts::engine_state::LATENCY_TARGET))
+    {
+        println!("serve: {line}");
+    }
 
     let (in_p50, lo_p50) = (p50(in_ttft.clone()), p50(lo_ttft.clone()));
     let (in_tp, lo_tp) = (p50(in_tput.clone()), p50(lo_tput.clone()));

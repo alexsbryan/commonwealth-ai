@@ -7,6 +7,8 @@
 //! Cached, never sampled, on serve's side too: sampling an RPC device is a
 //! round trip to a worker that can stall for a minute (the 2026-07-30 hang,
 //! `sovereign_inference::embedded::last_device_memory`).
+//!
+//! [`Lap`] times one loopback request on either side under one target.
 
 use serde::{Deserialize, Serialize};
 
@@ -92,4 +94,49 @@ pub struct ServedSelf {
     /// `compute_children()`: the supervised children serve runs, whose roles
     /// say which kinds (rerank among them) it serves out of process.
     pub compute_children: Vec<crate::oicp::ComputeChildStatus>,
+}
+
+/// The one tracing target for per-request timing across the serve loopback,
+/// both sides (serve's handlers and the daemon's loopback client), at `debug`:
+/// `RUST_LOG=serve_latency=debug` shows where a loopback request's time goes
+/// (phase-b-25, attributing the loopback's first-token cost).
+pub const LATENCY_TARGET: &str = "serve_latency";
+
+/// One request's stopwatch. `mark` emits a `debug` event under
+/// [`LATENCY_TARGET`] with the microseconds since `start`; `first` does so
+/// only the first time a phase is reached (a stream's first frame).
+#[derive(Debug)]
+pub struct Lap {
+    side: &'static str,
+    op: &'static str,
+    started: std::time::Instant,
+    seen: std::sync::Mutex<Vec<&'static str>>,
+}
+
+impl Lap {
+    /// Start timing `op` (`chat`, `embed`) on `side` (`serve`, `client`).
+    pub fn start(side: &'static str, op: &'static str) -> Self {
+        Self {
+            side,
+            op,
+            started: std::time::Instant::now(),
+            seen: std::sync::Mutex::new(Vec::new()),
+        }
+    }
+
+    /// Emit `phase` with the microseconds since start.
+    pub fn mark(&self, phase: &'static str) {
+        let us = self.started.elapsed().as_micros() as u64;
+        tracing::debug!(target: LATENCY_TARGET, side = self.side, op = self.op, phase, us, "lap");
+    }
+
+    /// [`Lap::mark`], the first time `phase` is reached only.
+    pub fn first(&self, phase: &'static str) {
+        let mut seen = self.seen.lock().unwrap_or_else(|p| p.into_inner());
+        if !seen.contains(&phase) {
+            seen.push(phase);
+            drop(seen);
+            self.mark(phase);
+        }
+    }
 }

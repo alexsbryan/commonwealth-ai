@@ -29,15 +29,19 @@ use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
-use axum::extract::State;
+use axum::body::HttpBody;
+use axum::extract::{Request, State};
 use axum::http::StatusCode;
+use axum::middleware::{from_fn, Next};
 use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
+use axum::Extension;
 use axum::Json;
 use futures::StreamExt;
 use host_kit::shell::RouteBundle;
 use sovereign_compute::server::{openai_refusal, ChildMeta};
+use sovereign_contracts::engine_state::{Lap, LATENCY_TARGET};
 use sovereign_contracts::launch::Launch;
 use sovereign_contracts::oicp::openai_types::{
     ChatCompletionRequest, CompletionsRequestWire, EmbeddingRequest, ModelListResponse, StopParam,
@@ -368,8 +372,14 @@ async fn engine_state() -> Json<sovereign_contracts::engine_state::EngineState> 
 /// The OpenAI routes, over the adapter.
 fn openai_bundle(adapter: Arc<SovereignInferenceAdapter>) -> RouteBundle {
     RouteBundle::new("serve_openai")
-        .route("/v1/chat/completions", post(chat_completions))
-        .route("/v1/embeddings", post(embeddings))
+        .route(
+            "/v1/chat/completions",
+            post(chat_completions).layer(from_fn(|r, n| accept_lap("chat", r, n))),
+        )
+        .route(
+            "/v1/embeddings",
+            post(embeddings).layer(from_fn(|r, n| accept_lap("embed", r, n))),
+        )
         .route("/v1/completions", post(completions))
         .route("/v1/models", get(list_models))
         .route("/oicp/v1/capabilities", get(capabilities))
@@ -378,10 +388,21 @@ fn openai_bundle(adapter: Arc<SovereignInferenceAdapter>) -> RouteBundle {
 
 type AdapterState = State<Arc<SovereignInferenceAdapter>>;
 
+/// Start a request's [`Lap`] before its body is read (`accept`), so the
+/// handler's `parsed` mark prices the extractor.
+async fn accept_lap(op: &'static str, mut request: Request, next: Next) -> Response {
+    let lap = Lap::start("serve", op);
+    lap.mark("accept");
+    request.extensions_mut().insert(Arc::new(lap));
+    next.run(request).await
+}
+
 async fn chat_completions(
     State(adapter): AdapterState,
+    Extension(lap): Extension<Arc<Lap>>,
     Json(request): Json<ChatCompletionRequest>,
 ) -> Response {
+    lap.mark("parsed");
     if !request.stream.unwrap_or(false) {
         return match adapter.chat_completion(request).await {
             Ok(resp) => Json(resp).into_response(),
@@ -393,8 +414,12 @@ async fn chat_completions(
         Ok(s) => s,
         Err(e) => return chat_refusal(e, "local stream"),
     };
+    lap.mark("adapter returned");
     let events = frames
-        .map(move |frame| Ok::<_, std::convert::Infallible>(openai_http::sse_event(&header, frame)))
+        .map(move |frame| {
+            lap.first("first frame to body");
+            Ok::<_, std::convert::Infallible>(openai_http::sse_event(&header, frame))
+        })
         .chain(futures::stream::once(async {
             Ok(Event::default().data(openai_http::DONE))
         }));
@@ -475,10 +500,19 @@ async fn completions(
 
 async fn embeddings(
     State(adapter): AdapterState,
+    Extension(lap): Extension<Arc<Lap>>,
     Json(request): Json<EmbeddingRequest>,
 ) -> Response {
+    lap.mark("parsed");
     match openai_http::embeddings_response(adapter.as_ref(), request).await {
-        Ok(resp) => Json(resp).into_response(),
+        Ok(resp) => {
+            lap.mark("adapter returned");
+            let response = Json(resp).into_response();
+            lap.mark("serialized");
+            let bytes = response.body().size_hint().exact();
+            debug!(target: LATENCY_TARGET, op = "embed", bytes, "embed response size");
+            response
+        }
         Err(refusal) => openai_refusal(refusal.status, refusal.message, refusal.error_type),
     }
 }
