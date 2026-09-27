@@ -201,11 +201,11 @@ fn differences(sent: &CompletionRequest, received: &CompletionRequest) -> Vec<St
     out
 }
 
-/// Fields the OpenAI chat wire has no field for, so no translator can carry
-/// them: carrying one is a wire change the operator decides
-/// (pb-svrn-dials-serve, ralph/next/phase-b/ctl/NEEDS_HUMAN.md). Held as an
-/// exact set, so a field that starts crossing, or a new loss, turns this red.
-const NO_CHAT_WIRE_FIELD: &[&str] = &["admission", "top_k"];
+/// Fields the chat wire does not yet carry. Each crosses as an extension
+/// field, one behaviour fix per field (phase-b-27), and leaves this set when
+/// it does. Held as an exact set, so a field that starts crossing, or a new
+/// loss, turns this red.
+const NO_CHAT_WIRE_FIELD: &[&str] = &["admission"];
 
 fn assert_lossless(
     case: &str,

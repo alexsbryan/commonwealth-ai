@@ -2770,6 +2770,7 @@ pub(crate) async fn apply_distiller(
         evidence_id_allowlist: None,
         lark_grammar: None,
         stable_prefix_len: None,
+        top_k: None,
     };
 
     let response = chat_completions(
@@ -3295,6 +3296,7 @@ async fn summarise_block(
         evidence_id_allowlist: None,
         lark_grammar: None,
         stable_prefix_len: None,
+        top_k: None,
     };
     let response = chat_completions(
         State(state.clone()),
@@ -4142,6 +4144,7 @@ mod tests {
             evidence_id_allowlist: None,
             lark_grammar: None,
             stable_prefix_len: None,
+            top_k: None,
         }
     }
 
@@ -5608,6 +5611,7 @@ That's my answer."#;
             evidence_id_allowlist: None,
             lark_grammar: None,
             stable_prefix_len: None,
+            top_k: None,
         }
     }
 

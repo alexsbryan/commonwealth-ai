@@ -159,6 +159,11 @@ pub struct ChatCompletionRequest {
     /// pin.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stable_prefix_len: Option<usize>,
+    /// Commonwealth extension: the top-k sampling override
+    /// (`CompletionRequest.top_k`). Wire path: HTTP body field `top_k` →
+    /// here → `inference_adapter::build_completion_request` → the sampler.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub top_k: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -854,6 +854,9 @@ impl RemoteApiProvider {
         if let Some(p) = request.top_p {
             body["top_p"] = serde_json::json!(p);
         }
+        if let Some(k) = request.top_k {
+            body["top_k"] = serde_json::json!(k);
+        }
         if let Some(mode) = request.sampling_mode {
             body["sampling_mode"] = serde_json::json!(mode);
         }

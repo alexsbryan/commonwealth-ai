@@ -357,6 +357,7 @@ impl SovereignInferenceAdapter {
         req.max_tokens = request.max_tokens.map(|n| n as usize);
         req.temperature = request.temperature;
         req.top_p = request.top_p;
+        req.top_k = request.top_k;
         req.sampling_mode = request.sampling_mode;
         req.assistant_prefix = request.assistant_prefix.clone();
         req.cmd_prefix = request.cmd_prefix.clone();
