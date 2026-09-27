@@ -1400,5 +1400,6 @@ Phase B adds the conditions that make "take THIS without THAT" true
 - [ ] Every program passes its own lift sandbox, meaning it builds and runs
       with only its shared leaves: `svrn`, `ingest`, `cmnwlth`, `serve`,
       `code` and `bench`.
-- [ ] Each drive in §2c has one implementation, and each commit body that
-      collapsed one names the copy count it took down.
+- Moved to phase-c (operator, 2026-09-27, phase-b-32): each drive in §2c
+  has one implementation. Phase B never ADDS a copy of a drive; collapsing
+  the copies that exist is phase-c's pc-daemon-adopts and its siblings.

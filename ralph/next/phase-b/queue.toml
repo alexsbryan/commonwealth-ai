@@ -14,11 +14,14 @@ label = "phase-b"
 # Rows are outcomes (PROMPT.base §2, five-programs-65): a row runs longer than a
 # per-verb row did, and a [~] row resumes in the next session.
 session_timeout = 7200
-audit_every = 5
+audit_every = 10
 # Census before code, enforced where rows are dispatched (phase-b-29, -30): a
 # work row without its finish item and its compile trial is refused by name,
 # and the supervisor's director writes the census before any code.
 dispatch_requires = ["- finish:", "- trial"]
+# The frozen scope (phase-b-32): a row not listed waits on the operator and never
+# dispatches. Audits every 10 units, not 5 (phase-b-32).
+scope_file = "ralph/next/phase-b/scope.txt"
 worker_bin = "scripts/ralph-claude-shim.sh"
 settings = "ralph/claude-settings.json"
 
