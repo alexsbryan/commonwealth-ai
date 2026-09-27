@@ -144,6 +144,7 @@ daemon-boot = { max-threads = 3 }
 test-group = "daemon-boot"
 filter = """
 binary_id(sovereign-daemon::solo_rails_e2e)
+| binary_id(sovereign-stock::one_process_e2e)
 | test(/^admin_join_serves_venues_e2e::/)
 | test(/^client_exposure::/)
 | test(/^join_key_persistence::/)
