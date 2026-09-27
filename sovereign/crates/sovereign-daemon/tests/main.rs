@@ -160,6 +160,8 @@ mod pattern_observation_e2e;
 mod peer_preference_manifest;
 #[path = "main/peer_tally_status_e2e.rs"]
 mod peer_tally_status_e2e;
+#[path = "main/peer_turn_reaches_serve_e2e.rs"]
+mod peer_turn_reaches_serve_e2e;
 #[path = "main/plaintext_join_over_iroh_e2e.rs"]
 mod plaintext_join_over_iroh_e2e;
 #[path = "main/port_config.rs"]
