@@ -59,7 +59,7 @@ pub(super) async fn boot_serving(
             Some(hosted) if path == crate::serve_client::ServingPath::Hosted => {
                 host_serve(config, &config_path_in_use, hosted, deferred_daemon, path).await
             }
-            _ => dial_serve(config, &config_path_in_use, deferred_daemon, path).await,
+            _ => dial_serve(config, deferred_daemon, path).await,
         };
     }
     if hosted.is_some() {
@@ -163,19 +163,20 @@ pub(super) async fn boot_serving(
 }
 
 /// The dialing path: serve holds the weights, and this daemon builds no
-/// engine. serve is brought up at this user-action moment only (daemon start),
-/// never on a refused dial; it runs the llama log route and the VRAM
+/// engine, and starts no serve: a standalone or remote serve is started by
+/// whoever runs it (phase-b-29 Q2), and runs the llama log route and the VRAM
 /// preflight on its own startup. A serve that cannot be reached or does not
 /// report itself refuses boot by name, as a model that failed to load in
 /// process refused it before.
 async fn dial_serve(
     config: &SetupConfig,
-    config_path: &std::path::Path,
     deferred_daemon: Arc<crate::DeferredDaemon>,
     path: crate::serve_client::ServingPath,
 ) -> Result<ServingBoot, i32> {
     let serve = crate::serve_client::resolve_serve_base(&config.node);
-    if let Err(e) = crate::serve_client::ensure_serve(&serve, config_path).await {
+    if let Err(e) =
+        crate::serve_client::ensure_serve(&serve, crate::serve_client::SERVE_BRING_UP_WINDOW).await
+    {
         eprintln!("error: serve is not reachable at {}: {e}", serve.base);
         return Err(1);
     }

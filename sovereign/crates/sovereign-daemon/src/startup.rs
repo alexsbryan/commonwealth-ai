@@ -21,12 +21,6 @@ pub fn daemon_pid_path() -> PathBuf {
     sovereign_contracts::rebrand::svrnmesh_root().join("daemon.pid")
 }
 
-/// Where the daemon records the `serve` it brought up, beside its own pidfile
-/// (`serve_client::ServeRecord`): the stop signals only that process.
-pub fn serve_pid_path() -> PathBuf {
-    sovereign_contracts::rebrand::svrnmesh_root().join("serve.pid")
-}
-
 /// Is this process armed to serve RPC workers? The one reader of
 /// `SOVEREIGN_RPC_DISCOVER` now lives beside the containment verdict it feeds,
 /// in the serving package; re-exported here so every existing caller keeps its

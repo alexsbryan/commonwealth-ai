@@ -983,7 +983,7 @@ pub(crate) async fn restart_daemon(args: &[String]) -> i32 {
         };
     }
 
-    let stop_rc = super::serve_stop::after(stop_daemon().await).await;
+    let stop_rc = stop_daemon().await;
     if stop_rc != 0 {
         // stop_daemon already printed the failure reason. Don't try
         // to start on top of a daemon we couldn't confirm is gone —
@@ -1111,7 +1111,7 @@ pub(super) async fn status_daemon() -> i32 {
                 .map(|a| a.len())
                 .unwrap_or(0);
             println!("✓ daemon running at {base} ({count} models registered)");
-            super::serve_stop::print_serving(&client, &base).await;
+            super::serving_status::print_serving(&client, &base).await;
             0
         }
         Ok(r) => {

@@ -26,7 +26,7 @@ use std::io::IsTerminal as _;
 use sovereign_contracts::launch::Launch;
 use sovereign_core::setup_config::SetupConfig;
 
-mod serve_stop;
+mod serving_status;
 mod vram_plan;
 // `pub(crate)` so `setup_cmd::fim` can reach `restart_daemon` directly.
 // `svrn setup --fim` rewrites the model config and must bounce the
@@ -66,7 +66,7 @@ pub async fn run(launch: &Launch, args: &[String]) -> i32 {
     match args.first().map(String::as_str) {
         Some("run") => run_daemon(launch, args).await,
         Some("start") => start_daemon(&args[1..]).await,
-        Some("stop") => serve_stop::after(stop_daemon().await).await,
+        Some("stop") => stop_daemon().await,
         Some("restart") => restart_daemon(&args[1..]).await,
         Some("reload") => reload_daemon().await,
         Some("status") => status_daemon().await,
@@ -121,10 +121,10 @@ const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help 
         ]),
         sovereign_cli_shared::help::HelpSection::Subcommands(&[
             ("(bare)",  "Run the daemon in the foreground. On first boot inlines the setup wizard; subsequent runs just load config and start. Equivalent to `daemon run`."),
-            ("run",     "Same as bare — kept for explicit invocation by launchd / systemd unit files. Execs the `sovereign-daemon` sibling binary with everything after the `daemon` verb."),
+            ("run",     "Same as bare — kept for explicit invocation by launchd / systemd unit files. Execs the `sovereign-stock` sibling binary (svrn with serve hosted, one process) with everything after the `daemon` verb."),
             ("start",   "Start the daemon in the background (detached child + PID file at ~/.svrnmesh/daemon.pid). Waits for readiness."),
             ("status",  "Report whether the daemon is running and answering on :9741."),
-            ("stop",    "Stop the daemon cleanly (SIGTERM), then the serve it brought up on :9748. Tries the PID file first, then looks up the listener on :9741 via lsof/ss, then falls back to launchctl / systemctl."),
+            ("stop",    "Stop the daemon cleanly (SIGTERM). Tries the PID file first, then looks up the listener on :9741 via lsof/ss, then falls back to launchctl / systemctl."),
             ("reload",  "Apply config changes without a restart (POST /v1/admin/reload)."),
             ("restart", "Hard-restart via launchctl / systemctl. Drops in-flight requests."),
         ]),

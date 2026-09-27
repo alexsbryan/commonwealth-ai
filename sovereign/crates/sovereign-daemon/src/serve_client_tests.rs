@@ -306,37 +306,39 @@ async fn a_forwarded_read_to_no_serve_is_named() {
     );
 }
 
-/// The bring-up writes the record the stop reads; none is `None`, and a
-/// record that does not read is named, never a guessed pid.
-#[test]
-fn the_serve_record_round_trips_and_a_bad_one_is_named() {
-    use sovereign_turn_client::reach::Reached;
+/// svrn brings nothing up (phase-b-29 Q2): with no serve answering, boot's
+/// wait names the absence and starts no process, even with a serve binary
+/// named where the old bring-up looked for one. Failing input: re-add the
+/// bring-up arm to `ensure_serve`, and the stand-in binary leaves its marker.
+#[tokio::test]
+async fn a_standalone_svrn_with_no_serve_spawns_nothing() {
+    use std::os::unix::fs::PermissionsExt;
     let dir = tempfile::tempdir().unwrap();
-    let path = dir.path().join("serve.pid");
-    assert_eq!(ServeRecord::read_from(&path), Ok(None));
-    record_bring_up(
-        &Reached::BroughtUp {
-            pid: 4242,
-            ready_after: std::time::Duration::ZERO,
-        },
-        &path,
+    let marker = dir.path().join("spawned");
+    let bin = dir.path().join("sovereign-serve");
+    std::fs::write(
+        &bin,
+        format!("#!/bin/sh\ntouch {}\nsleep 5\n", marker.display()),
+    )
+    .unwrap();
+    std::fs::set_permissions(&bin, std::fs::Permissions::from_mode(0o755)).unwrap();
+    std::env::set_var("SOVEREIGN_SERVE_BIN", &bin);
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let serve = ServeBase {
+        base: format!("http://{}", listener.local_addr().unwrap()),
+        source: ServeBaseSource::Default,
+    };
+    drop(listener);
+    let err = ensure_serve(&serve, std::time::Duration::from_secs(1))
+        .await
+        .expect_err("no serve answers");
+    assert!(!err.is_empty());
+    // A spawned stand-in would have touched the marker by now.
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    assert!(
+        !marker.exists(),
+        "svrn spawned a serve: the stock install hosts serve, and svrn alone only dials"
     );
-    assert_eq!(
-        ServeRecord::read_from(&path),
-        Ok(Some(ServeRecord {
-            pid: 4242,
-            port: sovereign_contracts::venue::serve_port()
-        }))
-    );
-    record_bring_up(
-        &Reached::AlreadyServing {
-            waited: std::time::Duration::ZERO,
-        },
-        &path,
-    );
-    assert_eq!(ServeRecord::read_from(&path), Ok(None));
-    std::fs::write(&path, "serve\n").unwrap();
-    assert!(ServeRecord::read_from(&path).is_err());
 }
 
 #[test]
