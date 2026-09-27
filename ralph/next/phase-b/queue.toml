@@ -15,6 +15,10 @@ label = "phase-b"
 # per-verb row did, and a [~] row resumes in the next session.
 session_timeout = 7200
 audit_every = 5
+# Census before code, enforced where rows are dispatched (phase-b-29, -30): a
+# work row without its finish item and its compile trial is refused by name,
+# and the supervisor's director writes the census before any code.
+dispatch_requires = ["- finish:", "- trial"]
 worker_bin = "scripts/ralph-claude-shim.sh"
 settings = "ralph/claude-settings.json"
 

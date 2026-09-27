@@ -153,9 +153,19 @@ ONE process: it builds `serve`'s provider and hands it to svrn through the
 `InferenceProvider` port, and binds serve's router on serve's port so other
 programs still dial it. A standalone svrn dials a configured serve and brings
 nothing up. There is no phone host build; the phone is a client (phase-b-29).
+The same root composes the other programs a stock node runs: ingest's engine
+reaches svrn through an ingest port in `sovereign-contracts`, beside
+`CorpusReadPort`, and code's MCP bundles mount on svrn's port under their own
+mount (phase-b-30). A port between two programs is legitimate because the root
+that plugs it sits outside every package.
 Distributions are declared as `[[distribution]]` rows in
-`quality/ARCH_LAYERS.toml`, extending `[thin_surfaces]`. A distribution never
-excuses a program from building and running alone.
+`quality/ARCH_LAYERS.toml`, extending `[thin_surfaces]`: the crate may reach
+its own crates, the shared leaves and each program's declared face, judged on
+its direct edges, under a fixed `max_code_lines` that is never ratcheted.
+Phase B enrols one, the stock binary (cap 300); the dispatcher, the setup
+verbs and service install stay `svrn` members until the follow-on queue carves
+their wiring out, so their edges keep counting (phase-b-30). A distribution
+never excuses a program from building and running alone.
 
 **The host kit holds what each program's binary owns about itself:**
 
@@ -203,8 +213,10 @@ never defaulted (ARCH principle 6).
 2. Dial, never embed. A program never embeds another program. A distribution
    composing declared library faces in one process is wiring, not embedding
    (§2c, phase-b-29). `EmbeddedDaemon` (constructed at
-   `sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/mod.rs:1221`) is the
-   last in-process composition that is not a distribution, and it goes.
+   `sovereign/crates/sovereign-daemon/src/daemon_cmd/boot.rs:996` and, for the
+   one-shot `admin join`, `daemon_cmd/admin_join.rs:66`) is svrn's own state;
+   the stock distribution composes it with serve in one process, and nothing
+   else constructs it.
 3. An unreachable peer program is `CouldNotJudge` or absent, never empty.
 4. Every decision visible at `tracing=debug`.
 5. Config that can change without a code change is a file, not a constant.
@@ -242,6 +254,12 @@ never defaulted (ARCH principle 6).
      cw-rails forwards to it. Node compositions nest the way TOPOLOGY's
      construction variants do: `serve` ⊂ `serve` + `svrn` ⊂ … + `cw-rails`.
      Each layer adds reach and changes nothing below it.
+   - The vocabulary both sides of a peer dial speak (`PeerTransport`,
+     `PeerContact`, `TrafficClass`, `PeerEndpoint`) and `RailsTransport`, the
+     client over cw-rails' reach door, live in the neutral leaf `mesh-reach`
+     (phase-b-30). A NON-member borrowing from someone else's mesh is a
+     client of that mesh, like the phone (§2a), so its guest dial lives in the
+     same leaf.
 
 ## 5. What the design does not contain
 
@@ -416,8 +434,8 @@ is the same undercount the deleted script carried.
 
 **Step 10 — de-embed.** Construction sites of `EmbeddedDaemon`
 outside `sovereign-daemon` become dials through `sovereign-turn-client`.
-Done when `grep -rn EmbeddedDaemon sovereign/crates --include=*.rs` returns
-only the `svrn` daemon binary's own main (see the §11 correction).
+Done when the construction census in §12 "Done" passes (phase-b-30; see the
+§11 correction).
 
 **Step 11 — size lock.** `cargo xtask size-gate --tighten`, commit the
 baseline, promote size-gate to blocking in `scripts/pre-push.sh`. Every push
@@ -612,9 +630,9 @@ plus two cli-mesh fallbacks.
 - [x] cli-daemon dropped 8 emptied serving deps + 4 pre-existing zeros
       (genuine closures: `cli-daemon -> {sovereign-runtime-recipe,
       corpus-engine-notes, corpus-engine-watchers}`).
-- [ ] Done when `grep -rn EmbeddedDaemon sovereign/crates --include=*.rs`
-      returns only the svrn daemon binary's own main (NOT cmnwlth's — see the
-      correction).
+- [ ] Done when the construction census in §12 "Done" passes (phase-b-30:
+      the grep this line named counts comments and could never pass; NOT
+      cmnwlth's main — see the correction).
 - [ ] **terminal.rs wizard seam**: `find_holders` needs
       `peer_inference_endpoints()` (roster + TrafficClass::Inference rewrite);
       no HTTP equivalent — `/v1/mesh/status` `MemberDto.addresses` would dial
@@ -1107,7 +1125,7 @@ output rather than from a caller graph.
 | **Atlas read surface** | 8 (tools 286, cli-llm 355, core 65, corpus-mcp 32, daemon 179, meshapp 11, mesh 6, cli-dev 16) | `corpus_engine::enrichment` read refs (~950) | ONE leaf decision + a module carve |
 | **Serving-cluster dial** | ~20 (all `sovereign-daemon` -> cmnwlth/ingest/code crates) | the daemon calls fabric/engine/queue/watcher/registry code in-process | the process-boundary decision, then route+client+repoint per edge |
 | **Vocabulary leaf promotions** | ~10 (rail-core, core-subset, transport, work-model, serving-policy, scheduler, peer-wire dep, watcher schema, cli-shared thin half, notes types) | pure vocabulary reached across programs | `[[package_leaf]]` rows + allow + repoints (the scip pattern: 7 edges in one manifest edit) |
-| **Ports** | ~8 (state, meshapp, meshapp-registry, runtime-commission, recipe FeatureStore, gliner, watchers, notes) | a trait in contracts + impl in owner + injection | only closes when the consumer stops constructing; construction stays with the owner. For every `sovereign-daemon` pair this is VACUOUS: the only composition root, `sovereign-cli-daemon`, is itself [svrn], so the constructing crate keeps the edge (delta 0 — fw-2, five-programs-10, 62 at 0aacc0818); those pairs are dials (fp-12) or operator questions |
+| **Ports** | ~8 (state, meshapp, meshapp-registry, runtime-commission, recipe FeatureStore, gliner, watchers, notes) | a trait in contracts + impl in owner + injection | only closes when the consumer stops constructing; construction stays with the owner. For every `sovereign-daemon` pair this WAS vacuous while the only composition root, `sovereign-cli-daemon`, was itself [svrn], so the constructing crate kept the edge (delta 0 — fw-2, five-programs-10, 62 at 0aacc0818). The stock `[[distribution]]` root sits outside every package (phase-b-29, -30), so a port now closes the edge: serve's provider and ingest's engine are composed there |
 | **Placement** | 5 (corpus-mcp, work-atlas, runtime-recipe, cli-dev's notes/tools, cli-llm split) | which program owns a crate | a membership row, then the crate's edges follow |
 | **Structural / dial-only** | ~8 (daemon->mesh 250, ->inference 42, ->compute 25, ->code 34, cli-dev->daemon, cli-llm->pods, grants->corpus-engine, mesh->corpus-engine) | in-process construction of another program's runtime | a process or a wire; the largest single-effort rows |
 | **Keep** | 4 (guest_route, project init's zero-vector index, the 3 notes tests, cli->cli-mesh) | deliberate non-changes with reasons | document, do not cut |
@@ -1281,12 +1299,18 @@ authority).**
       (dev, cmnwlth). Decide after phase 1 re-measures it. The live alternative
       is that nothing on this mesh has more than one agent at a time and the
       crate is inventory, in which case it joins atos.
-- [ ] **`corpus-mcp`'s membership.** §2's table puts it in svrn; its 32
-      `corpus-engine` sites are `corpus ingest` + atlas reads, which are
-      ingest's work. Its own manifest defends the `sovereign-enrichment-build`
-      edge: "without it a person needs our daemon to build a corpus, and the
-      binary's whole claim is that they do not."
-- [ ] **`bench`'s leaf budget.** The one `[[forbid]]` row §9 admits it cannot
+- [x] **`corpus-mcp`'s membership.** Stays `[svrn]` (decision 5) as the
+      `serve` verb: ask, search and atoms over MCP. Its `ingest` and `recipe`
+      verbs are ingest's (rung 1) and move to ingest's one CLI, taking the
+      `sovereign-enrichment-build` edge and the manifest's defence of it with
+      them; `serve`'s install-if-absent is the ingest dial decision 5 names.
+      21 non-test `corpus-engine` lines at f7238e6d3, not 32 (phase-b-30).
+- [x] **`bench`'s leaf budget.** Expressed as `[[package]] bench`'s
+      `leaf_budget` (quality/ARCH_LAYERS.toml:1437; evaluated in
+      quality/arch-layers/src/packages.rs:231 and pinned by xtask
+      boundary_gate.rs:651). `understanding-vocab` is in it: the operator
+      admitted it (HUMAN-fp58 (a), 2026-09-24), which supersedes the last line
+      below. The original question: the one `[[forbid]]` row §9 admits it cannot
       express — `bench -> *` except `oicp-types` and `sovereign-contracts` —
       needs a per-package leaf budget in `quality/arch-layers/src/packages.rs`,
       not a hand-copied membership list. Contents decided 2026-09-24
@@ -1351,15 +1375,22 @@ zero that promotes another twenty leaves reaches a number that means nothing.**
 The test, applied on the day and to be applied again: a leaf is shared
 VOCABULARY or a thin reader with a one-or-two-crate in-repo budget, never a
 store a program owns on disk. That is why `corpus-engine-notes` was NOT
-promoted even though one row would have closed eight edges.
+promoted even though one row would have closed eight edges. The operator
+admitted `mesh-reach` on 2026-09-27 (phase-b-30) after every existing home
+refused the peer-dial vocabulary; its falsifier is any dependency beyond
+`kernel-types`, iroh and `workspace-hack`.
 
 ### Done is three conditions, not one
 
 - [ ] `cd corpus-engine && cargo xtask boundary-gate` exits 0.
-- [ ] `grep -rn EmbeddedDaemon sovereign/crates --include=*.rs` returns only the
-      `svrn` daemon binary's own main (step 10; §11 correction).
-- [ ] `bench`'s per-package leaf budget exists and the row is expressed
-      (phase 7), so the evaluator cannot link the thing it measures.
+- [ ] `EmbeddedDaemon::new` is called in non-test code only by svrn's own
+      process entry (boot and the `admin join` one-shot) and the stock
+      `[[distribution]]` binary, pinned by a workspace construction census
+      (phase-b-30; the grep this line used to name counts comments, so it
+      could never pass). Owner: pb-distribution.
+- [x] `bench`'s per-package leaf budget exists and the row is expressed
+      (phase 7), so the evaluator cannot link the thing it measures
+      (quality/ARCH_LAYERS.toml:1437).
 
 Phase B adds the conditions that make "take THIS without THAT" true
 (phase-b-1):
