@@ -1595,8 +1595,10 @@ reason = "`kickstart_daemon` — `id -u`, then `launchctl kickstart -k gui/<uid>
 # HUMAN-fp9-membership-owner): commonwealth-rails disclaimed both roles below
 # until phase-b pb-membership gave it founding, admission and mDNS; this row
 # retires with pb-mesh-exit-mesh, when the daemon stops founding (phase-b-11).
-# fp-10 (operator answer (b) to HUMAN-fp10-serving-host): serving stays in
-# the daemon; deleting the three rows (fp-10 x2 + fp-68) is Phase B's closing act.
+# fp-10 (operator answer (b) to HUMAN-fp10-serving-host): serving stayed in
+# the daemon until pb-svrn-dials-serve moved it to serve for every config that
+# does not opt into distributed inference. The three rows below now name what
+# still holds each edge and the row that retires it (phase-b-23, phase-b-24).
 
 [[exception]]
 package = "svrn"
@@ -1609,21 +1611,21 @@ tracking = "five-programs fp-9"
 package = "svrn"
 from = "sovereign-daemon"
 to = "sovereign-inference"
-reason = "the svrn daemon is the serving process until Phase B is minted as its own reviewed program (HUMAN-fp10-serving-host, operator answer (b), 2026-09-24): it builds the engine (build/inference.rs engine_factory::build_engine) and re-execs the rpc-worker child (bin/sovereign-daemon.rs Launch::RpcWorker); commonwealth-rails is forbidden every sovereign-* edge, so no cmnwlth process can host it today."
+reason = "since pb-svrn-dials-serve the daemon dials serve, except on a config that opts into mesh-distributed inference (serve_client::ServingPath::InProcess: SOVEREIGN_RPC_SERVE, SOVEREIGN_RPC_DISCOVER, SOVEREIGN_RPC_WORKERS or [compute] distributed_primary). That interim in-process path holds this edge: the engine it builds (build/inference.rs), RPC-worker discovery and the distributed-primary respawn (bootstrap.rs), the auto-warm orchestrator (rpc_warm_http.rs), the rpc-worker role (bin/sovereign-daemon.rs Launch::RpcWorker), llama's log route and fast_exit_skip_destructors, the served-kind routes (routes_kinds.rs), and the hardware and setup-planner reads for the setup UI (assets_http.rs:39-40), as the row's census lists them. pb-serve-distributes moves distributed inference into serve and retires this row (phase-b-24)."
 tracking = "five-programs fp-10"
 
 [[exception]]
 package = "svrn"
 from = "sovereign-daemon"
 to = "sovereign-compute"
-reason = "the svrn daemon is the serving process until Phase B is minted as its own reviewed program (HUMAN-fp10-serving-host, operator answer (b), 2026-09-24): it builds the compute layer (build/inference.rs build_compute_layer_with_distributed) and re-execs the compute child (bin/sovereign-daemon.rs Launch::ComputeChild)."
+reason = "since pb-svrn-dials-serve the daemon dials serve, except on a config that opts into mesh-distributed inference (serve_client::ServingPath::InProcess). That interim path holds this edge: the one serving assembly and its reload factory (sovereign_compute::assembly, build/inference.rs, provider.rs), the compute child it re-execs (bin/sovereign-daemon.rs Launch::ComputeChild), containment, the VRAM preflight (sovereign_compute::preflight) and the in-process NER kind and GLiNER download (sovereign_compute::ner, from bootstrap.rs and assets_http.rs). pb-serve-distributes moves distributed inference into serve and retires this row (phase-b-24)."
 tracking = "five-programs fp-10"
 
 [[exception]]
 package = "svrn"
 from = "sovereign-daemon"
 to = "sovereign-serving-host"
-reason = "the svrn daemon is the serving process until Phase B is minted as its own reviewed program (HUMAN-fp10-serving-host, operator answer (b), 2026-09-24): it hosts admission, venue routing and the InferenceRouter behind its /v1 routes in-process; the port traits already moved to sovereign-contracts (fp-16), and no cmnwlth serving surface exists to dial."
+reason = "not in-process serving (that is serve's since pb-svrn-dials-serve) but the daemon's own mesh routing: peer_inference::InferenceRouter over DeferredDaemon, whose local venue is now the loopback terminal arm (bootstrap.rs, provider.rs), the admission middleware that also gates the daemon's knowledge and ring routes (admission.rs), and entry_endpoint inside the terminal arm (build/inference.rs). pb-serve-ranks gives ranking to serve and retires this row (phase-b-23)."
 tracking = "five-programs fp-68"
 
 
