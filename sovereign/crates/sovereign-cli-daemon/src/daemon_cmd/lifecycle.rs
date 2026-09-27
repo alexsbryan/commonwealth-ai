@@ -275,7 +275,7 @@ where
 /// verb must stop the daemon; a process wedged past the SIGTERM grace
 /// has already forfeited its graceful drain.
 #[cfg(unix)]
-async fn await_exit_or_sigkill(pid: i32, found_via: &str) -> i32 {
+pub(super) async fn await_exit_or_sigkill(pid: i32, found_via: &str) -> i32 {
     const KILL_GRACE: std::time::Duration = std::time::Duration::from_secs(5);
 
     let deadline = std::time::Instant::now() + TERM_GRACE;
@@ -404,7 +404,7 @@ pub(crate) fn service_addressing() -> sovereign_service::Addressing {
 /// lsof isn't installed (notably minimal Linux containers). Both are
 /// invoked with arguments that print one PID per line and nothing else.
 #[cfg(unix)]
-fn find_daemon_pid_by_port(port: u16) -> Option<i32> {
+pub(super) fn find_daemon_pid_by_port(port: u16) -> Option<i32> {
     use std::process::Command;
 
     // `lsof -t` → "terse" output: bare PIDs, one per line.
@@ -937,7 +937,7 @@ pub(crate) fn read_daemon_pid() -> Option<i32> {
 #[cfg(unix)]
 extern "C" {
     #[link_name = "kill"]
-    fn libc_kill(pid: i32, sig: i32) -> i32;
+    pub(super) fn libc_kill(pid: i32, sig: i32) -> i32;
 }
 /// `svrn daemon restart` — stop the running daemon (whichever
 /// lifecycle owns it: pidfile or launchd) and start a fresh one.
@@ -983,7 +983,7 @@ pub(crate) async fn restart_daemon(args: &[String]) -> i32 {
         };
     }
 
-    let stop_rc = stop_daemon().await;
+    let stop_rc = super::serve_stop::after(stop_daemon().await).await;
     if stop_rc != 0 {
         // stop_daemon already printed the failure reason. Don't try
         // to start on top of a daemon we couldn't confirm is gone —
