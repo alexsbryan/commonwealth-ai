@@ -40,6 +40,7 @@ pub mod mock;
 pub mod ner;
 pub mod preflight;
 pub mod server;
+pub mod setup_reads;
 pub mod supervisor;
 pub mod wire;
 

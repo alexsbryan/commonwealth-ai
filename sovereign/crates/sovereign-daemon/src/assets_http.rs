@@ -30,13 +30,12 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
-use serde::Deserialize;
 
 use sovereign_contracts::daemon_wire::{
-    AssetDownloadProgress, AssetDownloadRequest, AssetDownloadState, AssetKind, HardwareProfile,
-    IngestJobAck, NerModelStatus, ProfileName, SlotConfig,
+    AssetDownloadProgress, AssetDownloadRequest, AssetDownloadState, AssetKind, IngestJobAck,
+    NerModelStatus,
 };
-use sovereign_inference::hardware;
+use sovereign_compute::setup_reads;
 use sovereign_inference::setup_planner;
 
 use crate::daemon::EmbeddedDaemon;
@@ -63,112 +62,22 @@ pub fn assets_router(daemon: Arc<EmbeddedDaemon>) -> Router {
 
 // ─── The reads ─────────────────────────────────────────────────
 
-/// Answer of `GET /v1/admin/hardware`. Flat rather than nested so the
-/// profile travels with the probe that selected it — a caller that read one
-/// without the other would be reasoning about a tier it cannot explain.
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
-pub struct HardwareView {
-    /// What the probe found on the machine the daemon runs on.
-    pub hardware: HardwareProfile,
-    /// The tier that follows from it.
-    pub profile: ProfileName,
-}
+pub use sovereign_compute::setup_reads::{HardwareView, ProfileQuery, SlotQuery};
 
-/// `GET /v1/admin/hardware` — what the SERVING machine can run.
-///
-/// Detection walks `/proc` (or the llama.cpp backend device list), so it goes
-/// to a blocking thread rather than the reactor — the same call
-/// `setup_cmd` makes, through the same free function.
+/// `GET /v1/admin/hardware` — what the SERVING machine can run
+/// (`sovereign_compute::setup_reads::hardware`).
 async fn admin_hardware(_: LocalOnly) -> Response {
-    let Ok(hardware) = tokio::task::spawn_blocking(hardware::detect_hardware).await else {
-        return json_error(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "hardware detection panicked",
-        );
-    };
-    let profile = hardware::select_profile(&hardware);
-    Json(HardwareView { hardware, profile }).into_response()
+    setup_reads::hardware().await
 }
 
-/// Query of the two setup reads. `profile` absent means "detect it".
-#[derive(Debug, Deserialize)]
-pub struct ProfileQuery {
-    /// A [`ProfileName::as_str`] spelling. An unrecognised one is refused by
-    /// name rather than bucketed into `default` (ARCH principle 6).
-    #[serde(default)]
-    pub profile: Option<String>,
-}
-
-async fn resolve_profile(q: &ProfileQuery) -> Result<ProfileName, Response> {
-    match q.profile.as_deref() {
-        Some(s) => ProfileName::from_wire(s).ok_or_else(|| {
-            json_error(
-                StatusCode::BAD_REQUEST,
-                &format!(
-                    "unknown profile `{s}` (expected one of {})",
-                    ProfileName::ALL
-                        .iter()
-                        .map(|p| p.as_str())
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                ),
-            )
-        }),
-        None => match tokio::task::spawn_blocking(hardware::detect_hardware).await {
-            Ok(hw) => Ok(hardware::select_profile(&hw)),
-            Err(_) => Err(json_error(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "hardware detection panicked",
-            )),
-        },
-    }
-}
-
-/// `GET /v1/admin/setup/catalog?profile=` — the curated primary catalog for a
-/// tier. The same `setup_planner::build_primary_catalog` the wizard calls.
+/// `GET /v1/admin/setup/catalog?profile=` (`setup_reads::catalog`).
 async fn setup_catalog(_: LocalOnly, Query(q): Query<ProfileQuery>) -> Response {
-    let profile = match resolve_profile(&q).await {
-        Ok(p) => p,
-        Err(r) => return r,
-    };
-    Json(setup_planner::build_primary_catalog(&profile)).into_response()
+    setup_reads::catalog(q).await
 }
 
-/// Query of `GET /v1/admin/setup/slot`.
-#[derive(Debug, Deserialize)]
-pub struct SlotQuery {
-    /// `fast` or `embed`. The thoughtful slot has the catalog route above;
-    /// `fim` has its own onboarding (`svrn setup --fim`) and is not offered
-    /// here, so an unknown kind is refused rather than resolved to something.
-    pub kind: String,
-    #[serde(default)]
-    pub profile: Option<String>,
-}
-
-/// `GET /v1/admin/setup/slot?kind=fast|embed&profile=` — the single-pick slot
-/// for a tier. `null` when the bundled manifest defines none: absent, not a
-/// substituted default (ARCH principle 6).
+/// `GET /v1/admin/setup/slot?kind=fast|embed&profile=` (`setup_reads::slot`).
 async fn setup_slot(_: LocalOnly, Query(q): Query<SlotQuery>) -> Response {
-    let kind = match q.kind.as_str() {
-        "fast" => setup_planner::SlotKind::Fast,
-        "embed" => setup_planner::SlotKind::Embed,
-        other => {
-            return json_error(
-                StatusCode::BAD_REQUEST,
-                &format!("unknown slot kind `{other}` (expected fast or embed)"),
-            )
-        }
-    };
-    let profile = match resolve_profile(&ProfileQuery {
-        profile: q.profile.clone(),
-    })
-    .await
-    {
-        Ok(p) => p,
-        Err(r) => return r,
-    };
-    let slot: Option<SlotConfig> = setup_planner::resolve_slot(&profile, kind);
-    Json(slot).into_response()
+    setup_reads::slot(q).await
 }
 
 /// `GET /internal/ner/model` — is the entity extractor's model installed
@@ -455,6 +364,7 @@ mod route_tests {
     //! `daemon::start_daemon` uses. The unit tests below cover the deciders;
     //! these cover the wiring, which is the half a unit test cannot see.
     use super::*;
+    use sovereign_contracts::daemon_wire::{ProfileName, SlotConfig};
     use sovereign_contracts::setup_config::{DataSection, SetupConfig};
     use std::net::SocketAddr;
 
