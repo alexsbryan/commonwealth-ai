@@ -126,12 +126,8 @@ impl ServeArgs {
 
 /// The process entry: argv without `argv[0]`, returning the exit code.
 pub fn run(args: &[String]) -> i32 {
-    // The re-execs of this binary come first, before tracing or a runtime:
-    // each builds its own (the same rule as the daemon's binary).
-    match Launch::parse(args, Launch::Bare) {
-        Launch::ComputeChild { args } => return sovereign_compute::child_main::run(&args),
-        Launch::RpcWorker { args } => return sovereign_inference::rpc_worker_main::run(&args),
-        _ => {}
+    if let Some(code) = child_launch(args) {
+        return code;
     }
     // The weight verbs, spelled `svrn mesh <verb>` through the dispatcher
     // (phase-b-22). No tracing subscriber, as under sovereign-cli-mesh.
@@ -167,6 +163,19 @@ pub fn run(args: &[String]) -> i32 {
     sovereign_inference::fast_exit_skip_destructors(code)
 }
 
+/// The re-execs of a binary that loads weights: the compute child and the RPC
+/// worker re-exec `current_exe()`, so a process hosting serve's assembly
+/// routes them first, before tracing or a runtime (each builds its own).
+/// `Some(exit code)` when `args` is one of them. serve's `run` and the stock
+/// distribution's main both call it (FIVE_PROGRAMS §2c).
+pub fn child_launch(args: &[String]) -> Option<i32> {
+    match Launch::parse(args, Launch::Bare) {
+        Launch::ComputeChild { args } => Some(sovereign_compute::child_main::run(&args)),
+        Launch::RpcWorker { args } => Some(sovereign_inference::rpc_worker_main::run(&args)),
+        _ => None,
+    }
+}
+
 /// The subcommands `run` routes before the server's arguments. The dispatcher
 /// sends `svrn mesh <verb>` here for exactly these.
 pub const WEIGHT_VERBS: &[&str] = &["warm-cache", "fetch-model"];
@@ -194,7 +203,7 @@ fn run_weight_verb(verb: &str, rest: &[String]) -> i32 {
 /// `llama_cpp` is the target every ggml line rides (sovereign-inference
 /// llama.rs), so a failed GGUF load names its cause (the daemon's filter
 /// carries the same directive).
-const DEFAULT_FILTER: &str = "serve=info,sovereign_serve=info,sovereign_compute=info,\
+pub const DEFAULT_FILTER: &str = "serve=info,sovereign_serve=info,sovereign_compute=info,\
      sovereign_inference=info,sovereign_serving_host=info,host_kit=info,served_kind=info,\
      engine_factory=info,serving_assembly=info,compute_child=info,llama_cpp=info";
 
@@ -208,32 +217,47 @@ fn init_tracing() {
         .try_init();
 }
 
-async fn serve(args: ServeArgs) -> i32 {
-    info!(target: "serve", data_dir = %args.data_dir.display(), listen = %args.listen, "serve starting");
-    let _run_lock = match host_kit::RunLock::acquire(&args.data_dir, RUN_LOCK) {
-        Ok(lock) => lock,
-        Err(e) => {
-            error!(target: "serve", error = %e, "refusing to start");
-            eprintln!("sovereign-serve: {e}");
-            return 1;
-        }
-    };
-    let config_path = SetupConfig::path_in(&args.data_dir);
-    let config = match SetupConfig::load_from(&config_path) {
-        Ok(c) => c,
-        Err(e) => {
-            error!(target: "serve", config = %config_path.display(), error = %e, "no config to serve from");
-            eprintln!("sovereign-serve: {e}");
-            return 1;
-        }
-    };
+/// What [`assemble`] built: the provider cell every route answers from, every
+/// route, and serve's run lock, held for as long as the value lives.
+pub struct ServeAssembly {
+    /// The one cell: a reload swaps it, so every route and every in-process
+    /// reader sees the new engine at once.
+    pub cell: Arc<reload::ReloadableProvider>,
+    /// Every route serve answers, [`bundles`] plus the self-report and reload
+    /// bundles.
+    pub routes: Vec<RouteBundle>,
+    _run_lock: host_kit::RunLock,
+}
+
+/// serve's assembly, from its data root's lock to its last route: the lock,
+/// the config at `config_path`, llama.cpp's log route, the VRAM preflight,
+/// the mock engine's registration, the ONE serving assembly
+/// (`assemble_serving`), the cell and every bundle. serve's own `run` and the
+/// stock distribution both call it, so a stock install serves exactly what a
+/// standalone serve does (phase-b-29 Q1). `Err` names the refusal, already
+/// traced.
+pub async fn assemble(
+    data_dir: &std::path::Path,
+    config_path: &std::path::Path,
+) -> Result<ServeAssembly, String> {
+    let run_lock = host_kit::RunLock::acquire(data_dir, RUN_LOCK).map_err(|e| {
+        error!(target: "serve", error = %e, "refusing to start");
+        e.to_string()
+    })?;
+    let config = SetupConfig::load_from(config_path).map_err(|e| {
+        error!(target: "serve", config = %config_path.display(), error = %e, "no config to serve from");
+        e.to_string()
+    })?;
     // serve is the loader, so the daemon's pre-load steps are its own
     // (pb-svrn-dials-serve): llama.cpp's log reaches tracing, so a failed GGUF
     // load names its cause, and the VRAM preflight reads serve's own sections.
     sovereign_inference::llama::install_log_tracing();
-    if !sovereign_compute::preflight::check_vram_reporting(&config, &config_path) {
+    if !sovereign_compute::preflight::check_vram_reporting(&config, config_path) {
         error!(target: "serve", config = %config_path.display(), "the VRAM preflight refused");
-        return 1;
+        return Err(format!(
+            "the VRAM preflight refused {}",
+            config_path.display()
+        ));
     }
     // The model-free engine, selectable by `[engine] kind = "mock"` and by
     // nothing else (the registry refuses an unknown id, never substitutes).
@@ -242,7 +266,7 @@ async fn serve(args: ServeArgs) -> i32 {
         Arc::new(sovereign_compute::mock::MockEngine),
     ) {
         error!(target: "serve", error = %e, "engine registration refused");
-        return 1;
+        return Err(e.to_string());
     }
     let parts = match tokio::task::spawn_blocking(move || {
         sovereign_compute::assembly::assemble_serving(&config)
@@ -252,15 +276,43 @@ async fn serve(args: ServeArgs) -> i32 {
         Ok(Ok(parts)) => parts,
         Ok(Err(e)) => {
             error!(target: "serve", plan = ?e.plan, error = %e, "the serving assembly refused");
-            eprintln!("sovereign-serve: {e}");
-            return 1;
+            return Err(e.to_string());
         }
         Err(e) => {
             error!(target: "serve", error = %e, "the serving assembly panicked");
-            return 1;
+            return Err(format!("the serving assembly panicked: {e}"));
         }
     };
     info!(target: "serve", plan = ?parts.plan, "serving assembly built");
+    // Every route answers from one cell, so a reload swaps them all at once.
+    let cell = Arc::new(reload::ReloadableProvider::new(
+        parts.provider,
+        parts.embed_family,
+    ));
+    let mut routes = bundles(Arc::clone(&cell) as Arc<dyn InferenceProvider>);
+    routes.push(self_report::bundle(Arc::clone(&cell)));
+    routes.push(reload::bundle(
+        Arc::clone(&cell),
+        parts.reload_factory,
+        config_path.to_path_buf(),
+    ));
+    Ok(ServeAssembly {
+        cell,
+        routes,
+        _run_lock: run_lock,
+    })
+}
+
+async fn serve(args: ServeArgs) -> i32 {
+    info!(target: "serve", data_dir = %args.data_dir.display(), listen = %args.listen, "serve starting");
+    let config_path = SetupConfig::path_in(&args.data_dir);
+    let assembly = match assemble(&args.data_dir, &config_path).await {
+        Ok(a) => a,
+        Err(e) => {
+            eprintln!("sovereign-serve: {e}");
+            return 1;
+        }
+    };
 
     let listener = match host_kit::shell::bind_with_retry(args.listen, "serve").await {
         Ok(l) => l,
@@ -297,14 +349,9 @@ async fn serve(args: ServeArgs) -> i32 {
         }
         info!(target: "serve", "shutdown signal received");
     };
-    // Every route answers from one cell, so a reload swaps them all at once.
-    let cell = Arc::new(reload::ReloadableProvider::new(
-        parts.provider,
-        parts.embed_family,
-    ));
-    let mut routes = bundles(Arc::clone(&cell) as Arc<dyn InferenceProvider>);
-    routes.push(self_report::bundle(Arc::clone(&cell)));
-    routes.push(reload::bundle(cell, parts.reload_factory, config_path));
+    let ServeAssembly {
+        routes, _run_lock, ..
+    } = assembly;
     match host_kit::shell::serve([listener], routes, shutdown).await {
         Ok(()) => 0,
         Err(e) => {
