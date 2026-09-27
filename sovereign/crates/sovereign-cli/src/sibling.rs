@@ -26,6 +26,7 @@
 //! location is an operator decision — mtimes across install locations
 //! are meaningless. Mute entirely with `SOVEREIGN_NO_STALE_WARN=1`.
 
+use std::ffi::OsString;
 use std::path::Path;
 use std::time::SystemTime;
 
@@ -63,6 +64,36 @@ pub fn warn_if_stale(sibling_bin: &Path, crate_name: &str) {
              (silence: SOVEREIGN_NO_STALE_WARN=1)",
             human_duration(lag)
         );
+    }
+}
+
+/// Hand the process to `bin` as `bin <verb> <args…>`: on Unix an `exec`
+/// that only returns (126) if it failed, elsewhere a child whose exit code
+/// is returned. The one tail every `*_bin::exec` shares.
+pub fn exec_into(bin: &Path, verb: &str, args: &[String]) -> i32 {
+    let mut argv: Vec<OsString> = Vec::with_capacity(args.len() + 1);
+    argv.push(OsString::from(verb));
+    for a in args {
+        argv.push(OsString::from(a));
+    }
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        let err = std::process::Command::new(bin).args(&argv).exec();
+        eprintln!("sovereign: exec {} failed: {err}", bin.display());
+        126
+    }
+
+    #[cfg(not(unix))]
+    {
+        match std::process::Command::new(bin).args(&argv).status() {
+            Ok(status) => status.code().unwrap_or(1),
+            Err(e) => {
+                eprintln!("sovereign: spawn {} failed: {e}", bin.display());
+                126
+            }
+        }
     }
 }
 

@@ -7,7 +7,6 @@
 //! execs into it. Same shape as `dev_bin::exec` — see that module
 //! for the discovery + fallback rationale.
 
-use std::ffi::OsString;
 use std::path::PathBuf;
 
 const BIN_NAME: &str = "sovereign-cli-mesh";
@@ -28,28 +27,5 @@ pub fn exec(verb: &str, args: &[String]) -> i32 {
 
     crate::sibling::warn_if_stale(&bin, "sovereign-cli-mesh");
 
-    let mut argv: Vec<OsString> = Vec::with_capacity(args.len() + 1);
-    argv.push(OsString::from(verb));
-    for a in args {
-        argv.push(OsString::from(a));
-    }
-
-    #[cfg(unix)]
-    {
-        use std::os::unix::process::CommandExt;
-        let err = std::process::Command::new(&bin).args(&argv).exec();
-        eprintln!("sovereign: exec {} failed: {err}", bin.display());
-        126
-    }
-
-    #[cfg(not(unix))]
-    {
-        match std::process::Command::new(&bin).args(&argv).status() {
-            Ok(status) => status.code().unwrap_or(1),
-            Err(e) => {
-                eprintln!("sovereign: spawn {} failed: {e}", bin.display());
-                126
-            }
-        }
-    }
+    crate::sibling::exec_into(&bin, verb, args)
 }
