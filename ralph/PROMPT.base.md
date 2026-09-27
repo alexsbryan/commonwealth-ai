@@ -151,6 +151,9 @@ Never print a whole log into the session; grep it. A PLANT that stays green is
   (d) "edit or mark the row in {{state}}, then
   `rm {{control_dir}}/STOP {{control_dir}}/NEEDS_HUMAN.md`". Leave the tree compiling. Commit
   nothing broken. Then stop.
+  When the charter leaves the fork to the operator (its "Leave these for the
+  operator" list), add the line `operator-only: <that clause>`: the supervisor then
+  sends the package to no resolution session and exits for the operator.
   The package alone halts the loop; never create `{{control_dir}}/STOP` yourself.
   The supervisor reads an empty STOP as the operator's and exits without sending
   your package to a resolution session (fp-44 and fp-57, 2026-09-24).

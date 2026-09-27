@@ -295,6 +295,28 @@ def first_line(path) -> str:
         return ""
 
 
+# A package line `operator-only: <the charter clause>` marks a fork the charter
+# reserves for the operator, and the supervisor honours it as it honours a HUMAN-
+# row: no resolution session. Without it, every director appended its review to
+# the package, which changed the package's hash, so "changed nothing" never fired
+# and a latency bar the charter reserves drew four directors (phase-b,
+# 2026-09-26).
+OPERATOR_ONLY_MARK = "operator-only:"
+
+
+def operator_only(path):
+    """The clause an operator-only package names, or None when it names none."""
+    try:
+        lines = pathlib.Path(path).read_text(errors="replace").splitlines()
+    except OSError:
+        return None
+    for line in lines:
+        s = line.strip()
+        if s.lower().startswith(OPERATOR_ONLY_MARK):
+            return s[len(OPERATOR_ONLY_MARK):].strip() or "no clause named"
+    return None
+
+
 def halt(paths, reason, *, notifier=notify, notify_enabled=True):
     """The one halt: a package, a reason in STOP, a notification. Shared by
     the campaign and the pool so neither can invent a quieter stop."""
@@ -380,8 +402,9 @@ def resolver_prompt(paths, attempt, resolve_max, reason, charter=None):
             f"   The supervisor cleared the old blocker STOP; a NEW `{paths.stop}` is an\n"
             "   operator request and you must not remove it.\n"
             "5. If the fork is one the charter leaves to the operator, say so in the\n"
-            "   package — the options, their costs, and your recommendation — and stop. An\n"
-            "   honest package beats a guessed decision.\n\n"
+            "   package — the options, their costs, and your recommendation — add the line\n"
+            f"   `{OPERATOR_ONLY_MARK} <the charter clause>` so no further resolution session\n"
+            "   is sent, and stop. An honest package beats a guessed decision.\n\n"
             "=== CHARTER ===\n" + charter)
     return head + (
         "You are the resolution session. Diagnose and fix so the campaign flows again:\n"
@@ -391,7 +414,8 @@ def resolver_prompt(paths, attempt, resolve_max, reason, charter=None):
         "   consumer evidence, with the row and its source order corrected together.\n"
         "3. Do NOT weaken a PASS BAR and do not mark a unit [x] that has not earned it.\n"
         f"   Never approve or mark a HUMAN- row. If this is a genuine design fork, leave\n"
-        f"   a clear `{paths.needs_human}` for the operator and stop.\n"
+        f"   a clear `{paths.needs_human}` for the operator, with the line\n"
+        f"   `{OPERATOR_ONLY_MARK} <why only the operator can decide it>`, and stop.\n"
         f"4. When fixed: remove `{paths.needs_human}` so the campaign resumes, and commit.\n"
         f"   The supervisor cleared the old blocker STOP; a NEW `{paths.stop}` is an\n"
         "   operator request and you must not remove it.\n")
@@ -1380,6 +1404,12 @@ class Supervisor:
             pkg.write_text(f"{stop.read_text()}\nresolve by hand, then remove "
                            f"{self.paths.stop} {self.paths.needs_human}\n")
             say(f"supervisor: halt package was missing — wrote one from {self.paths.stop}")
+        clause = operator_only(pkg) if pkg.exists() and pkg.stat().st_size else None
+        if clause is not None:
+            say(f"supervisor: operator-only halt — {clause} (no resolution session)")
+            self.notifier("OPERATOR — decision required", f"{first_line(pkg)} ({clause})",
+                          self.notify_enabled)
+            return 2
         queue = self._queue()
         unit = queue.current() if queue else None
         if unit is not None and unit.id.startswith("HUMAN-"):

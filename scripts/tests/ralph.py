@@ -1334,6 +1334,41 @@ class SupervisorTests(unittest.TestCase):
             self.assertEqual(s.run(), 2)
             self.assertEqual(calls, [])
 
+    def test_operator_only_package_exits_two_without_resolver(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            write(tmp, "ralph/NEEDS_HUMAN.md",
+                  "# bar miss\n\noperator-only: a pre-registered bar a row cannot meet\n")
+            calls = []
+            s = self.make(tmp, run_inner=lambda: calls.append("inner"),
+                          resolver_run=lambda *a: calls.append("resolver"))
+            self.assertEqual(s.run(), 2)
+            self.assertEqual(calls, [])
+
+    def test_a_director_that_marks_the_package_operator_only_ends_the_retries(self):
+        # phase-b 2026-09-26: four directors each appended a review, so the
+        # package's hash changed every time and "changed nothing" never fired.
+        with tempfile.TemporaryDirectory() as tmp:
+            write(tmp, "ralph/NEEDS_HUMAN.md", "# bar miss\n")
+            pkg = pathlib.Path(tmp, "ralph/NEEDS_HUMAN.md")
+            attempts = []
+
+            def resolver(attempt, reason):
+                attempts.append(attempt)
+                with pkg.open("a") as fh:
+                    fh.write(f"\n## director {attempt}\n"
+                             "operator-only: a pre-registered bar a row cannot meet\n")
+
+            s = self.make(tmp, run_inner=lambda: None, resolver_run=resolver, resolve_max=4)
+            with mock.patch.object(ralph, "head_of", return_value="a" * 40):
+                self.assertEqual(s.run(), 2)
+            self.assertEqual(attempts, [1])
+
+    def test_a_package_that_only_mentions_the_mark_in_prose_still_resolves(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            write(tmp, "ralph/NEEDS_HUMAN.md",
+                  "# blocker\nthe charter's operator-only: list does not cover this\n")
+            self.assertIsNone(ralph.operator_only(pathlib.Path(tmp, "ralph/NEEDS_HUMAN.md")))
+
     def test_noop_resolution_escalates_immediately(self):
         with tempfile.TemporaryDirectory() as tmp:
             write(tmp, "ralph/NEEDS_HUMAN.md", "# blocker\n")
