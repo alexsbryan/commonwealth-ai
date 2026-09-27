@@ -34,4 +34,3 @@ pub mod tool_profile;
 pub mod turn_admission;
 pub mod venue_host;
 pub mod worker_eligibility;
-pub mod worker_state;
