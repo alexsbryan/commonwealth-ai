@@ -479,6 +479,27 @@ class Queue:
     def by_id(self):
         return {r.id: r for r in self.rows}
 
+    def block(self, row_id):
+        """The row's line and its indented continuation, up to the next row or
+        heading: everything the worker reads as that row."""
+        row = self.by_id()[row_id]
+        lines = self.path.read_text().splitlines()
+        out = [lines[row.lineno - 1]]
+        for line in lines[row.lineno:]:
+            if ROW_RE.match(line) or line.startswith("#"):
+                break
+            out.append(line)
+        return "\n".join(out)
+
+    def unmet_requirements(self, row, requires):
+        """The `dispatch_requires` markers this row's block lacks. Reviews and
+        HUMAN- rows are exempt: a review is where a census is written, and a
+        HUMAN- row is the operator's act."""
+        if not requires or is_review(row) or row.id.startswith("HUMAN-"):
+            return []
+        text = self.block(row.id)
+        return [m for m in requires if m not in text]
+
     def done_count(self):
         return sum(1 for r in self.rows if r.status is Status.DONE)
 
@@ -612,6 +633,18 @@ def units_since_audit(paths, queue):
         if not unit_id.startswith("HUMAN-"):
             n += 1
     return n
+
+
+def dispatch_refusal(paths, queue, row):
+    """The one reading of `dispatch_requires` (phase-b-29: census before code).
+    A row missing a marker is refused by name, never skipped: a skipped row
+    runs later on a premise nobody trialled."""
+    requires = paths.manifest.dispatch_requires if paths.manifest else ()
+    missing = queue.unmet_requirements(row, requires)
+    if not missing:
+        return None
+    return (f"{row.id} is not ready to dispatch: its row lacks {', '.join(repr(m) for m in missing)} "
+            f"({paths.manifest.path} dispatch_requires) — census and trial it first")
 
 
 def audit_row(row_id, after):
@@ -811,6 +844,7 @@ class QueueManifest:
     settings: str = ""
     prompt_declared: bool = False
     audit_every: int | None = None        # absent: no cadence, the queue's own audit rows only
+    dispatch_requires: tuple = ()         # markers every work row must carry before dispatch
 
 
 def manifest_rel(name):
@@ -836,8 +870,8 @@ def load_manifest(workdir, name):
     def bad(key, want):
         return ValueError(f"{rel}: `{key}` must be {want}")
 
-    known = {"label", "session_timeout", "audit_every", "worker_bin", "settings", "models",
-             "checks", *MANIFEST_PATH_KEYS}
+    known = {"label", "session_timeout", "audit_every", "dispatch_requires", "worker_bin",
+             "settings", "models", "checks", *MANIFEST_PATH_KEYS}
     for key in data:
         if key not in known:
             raise ValueError(f"{rel}: unknown key `{key}` (known: {', '.join(sorted(known))})")
@@ -853,6 +887,10 @@ def load_manifest(workdir, name):
     every = data.get("audit_every")
     if every is not None and (isinstance(every, bool) or not isinstance(every, int) or every < 2):
         raise bad("audit_every", "an integer >= 2 (units between audits)")
+    requires = data.get("dispatch_requires", [])
+    if (not isinstance(requires, list)
+            or not all(isinstance(m, str) and m.strip() and "\n" not in m for m in requires)):
+        raise bad("dispatch_requires", "a list of non-empty one-line strings")
     models = {}
     table = data.get("models", {})
     if not isinstance(table, dict):
@@ -882,6 +920,7 @@ def load_manifest(workdir, name):
         models=models, checks=checks, session_timeout=timeout,
         worker_bin=strings["worker_bin"], settings=strings["settings"],
         prompt_declared="prompt" in data, audit_every=every,
+        dispatch_requires=tuple(requires),
         **{key: strings[key] or f"{base}/{default}"
            for key, default in MANIFEST_PATH_KEYS.items()})
 
@@ -1273,6 +1312,9 @@ class Campaign:
                 return self.halt(f"no ready unit in {self.paths.state}; check dependencies")
             if unit.id.startswith("HUMAN-"):
                 return self.halt(f"operator approval required: {unit.id}")
+            refusal = dispatch_refusal(self.paths, queue, unit)
+            if refusal is not None:
+                return self.halt(refusal)
             if self._audit_due(queue, unit):
                 unit, refused = self._insert_audit(queue, unit)
                 if refused:
@@ -1645,6 +1687,11 @@ class Pool:
                     return result
                 continue
             wave = queue.pick_wave(self.lanes, self._conflict_pairs(), self._heavy(), waiting)
+            by = queue.by_id()
+            refusal = next((r for r in (dispatch_refusal(self.paths, queue, by[u]) for u in wave)
+                            if r is not None), None)
+            if refusal is not None:
+                return self._halt(refusal)
             if not wave:
                 say("pool: no ready unit and no ready review — waiting (dependencies unmet?)")
                 self.sleep(60)
@@ -2004,6 +2051,15 @@ def cmd_plan(args):
     routed = select_model_args(unit, models["MODEL"], models["REVIEW_MODEL"],
                                models["VARIANT"])
     print(f"unit {unit.id} — {' '.join(routed) or 'configured default'}")
+    refusal = dispatch_refusal(paths, queue, unit)
+    if refusal is not None:
+        print(f"refused at dispatch: {refusal}")
+    requires = paths.manifest.dispatch_requires if paths.manifest else ()
+    if requires:
+        unmet = [r.id for r in queue.rows if r.status is not Status.DONE
+                 and queue.unmet_requirements(r, requires)]
+        print(f"open rows lacking {', '.join(requires)}: {len(unmet)}"
+              + (f" ({', '.join(unmet)})" if unmet else ""))
     return 0
 
 

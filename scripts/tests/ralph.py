@@ -205,6 +205,16 @@ class QueueManifestTests(unittest.TestCase):
             self.assertEqual(ralph.load_manifest(tmp, "a").audit_every, 2)
             self.assertIsNone(ralph.load_manifest(tmp, "b").audit_every)
 
+    def test_dispatch_requires_loads_as_a_tuple_and_refuses_a_bad_type(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            write(tmp, "ralph/next/a/queue.toml", "dispatch_requires = ['trial:', 'finish:']\n")
+            self.assertEqual(ralph.load_manifest(tmp, "a").dispatch_requires,
+                             ("trial:", "finish:"))
+            for bad in ("dispatch_requires = 'trial:'\n", "dispatch_requires = ['']\n"):
+                write(tmp, "ralph/next/b/queue.toml", bad)
+                with self.assertRaisesRegex(ValueError, "dispatch_requires"):
+                    ralph.load_manifest(tmp, "b")
+
     def test_a_name_is_one_path_segment(self):
         with tempfile.TemporaryDirectory() as tmp:
             for name in ("../x", "a/b", ""):
@@ -553,6 +563,47 @@ class CampaignTests(unittest.TestCase):
                 result = c.run()
             self.assertEqual(result.outcome, ralph.Outcome.HALT)
             self.assertIn("HUMAN-design-review", result.reason)
+
+    def with_requires(self, c, tmp, requires):
+        write(tmp, "ralph/next/q/queue.toml", f"dispatch_requires = {requires!r}\n")
+        c.paths.manifest = ralph.load_manifest(tmp, "q")
+        return c
+
+    def test_a_work_row_without_its_census_is_refused_by_name_and_never_runs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ran = []
+            rows = ("- [ ] pb-a — depends [] — OUTCOME: x\n  - finish: edge a\n"
+                    "- [ ] pb-b — depends [] — OUTCOME: y\n  - trial: COMPILE ok\n")
+            c = self.with_requires(self.make(tmp, rows, session_run=lambda *a: ran.append(a)),
+                                   tmp, ["trial:"])
+            with mock.patch.object(ralph, "head_of", return_value="a" * 40):
+                result = c.run()
+            self.assertEqual(result.outcome, ralph.Outcome.HALT)
+            self.assertIn("pb-a", result.reason)
+            self.assertIn("'trial:'", result.reason)
+            self.assertEqual(ran, [])
+
+    def test_a_row_carrying_its_markers_dispatches_and_the_next_rows_do_not_lend_theirs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            seen = []
+            rows = ("- [ ] pb-a — depends [] — OUTCOME: x\n  - trial: COMPILE ok\n"
+                    "- [ ] pb-b — depends [] — OUTCOME: y\n")
+            c = self.with_requires(self.make(tmp, rows, max_stall=1,
+                                             session_run=lambda a, p, l: seen.append(p)),
+                                   tmp, ["trial:"])
+            with mock.patch.object(ralph, "head_of", return_value="a" * 40):
+                c.run()
+            self.assertEqual(len(seen), 1)
+            q = ralph.Queue(pathlib.Path(tmp) / "ralph/STATE.md")
+            self.assertEqual(q.unmet_requirements(q.by_id()["pb-b"], ("trial:",)), ["trial:"])
+
+    def test_reviews_and_human_rows_are_exempt_from_dispatch_requires(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            write(tmp, "ralph/STATE.md", "- [ ] REVIEW-x — depends []\n"
+                                         "- [ ] HUMAN-y — depends []\n")
+            q = ralph.Queue(pathlib.Path(tmp) / "ralph/STATE.md")
+            for rid in ("REVIEW-x", "HUMAN-y"):
+                self.assertEqual(q.unmet_requirements(q.by_id()[rid], ("trial:",)), [])
 
     def test_stop_file_is_operator_stop(self):
         with tempfile.TemporaryDirectory() as tmp:
