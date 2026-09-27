@@ -30,15 +30,58 @@ pub struct LlamaCppFactory {
     /// and `/v1/chat/completions` would silently start substituting
     /// for peer-only model names again.
     pub daemon: Arc<crate::DeferredDaemon>,
-    /// The factory cold start's assembly returned: the reload builds through
-    /// the same assembly, against the compute children boot started.
-    pub reload: Arc<ReloadFactory>,
+    /// Where the reload's raw provider comes from.
+    pub reload: ReloadSource,
+}
+
+/// The raw provider a reload wraps, from the path boot chose
+/// (`serve_client::ServingPath`).
+pub enum ReloadSource {
+    /// The in-process path: the factory cold start's assembly returned, so the
+    /// reload builds through the same assembly, against the compute children
+    /// boot started.
+    Assembly(Arc<ReloadFactory>),
+    /// The dialing path: serve rebuilds through its own ReloadFactory, and the
+    /// daemon rebuilds its loopback provider from serve's new self-report. No
+    /// engine in this process.
+    Serve {
+        base: crate::serve_client::ServeBase,
+        config_context: u32,
+    },
 }
 
 impl LlamaCppFactory {
     /// The reload's engine: the one serving assembly, never a load of its own.
+    #[cfg(test)]
     pub(crate) fn rebuild_engine(&self, cfg: &SetupConfig) -> Result<ServingParts, AssemblyError> {
-        self.reload.build(cfg)
+        let ReloadSource::Assembly(reload) = &self.reload else {
+            panic!("rebuild_engine is the in-process path's")
+        };
+        reload.build(cfg)
+    }
+
+    async fn raw_provider(&self, cfg: &SetupConfig) -> Result<Arc<dyn InferenceProvider>, String> {
+        match &self.reload {
+            ReloadSource::Assembly(reload) => Ok(reload
+                .build(cfg)
+                .map_err(|e| format!("reload: {e}"))?
+                .provider),
+            ReloadSource::Serve {
+                base,
+                config_context,
+            } => {
+                let reloaded = crate::serve_client::forward_reload(&base.base).await?;
+                let served = crate::serve_client::read_served_self(&base.base)
+                    .await
+                    .map_err(|e| format!("reload: serve reloaded, then {e}"))?;
+                tracing::info!(target: "serving_path", serve_base = %base.base, resident = ?reloaded.resident_models, primary = %served.primary_model, "reload: serve rebuilt; the loopback provider is rebuilt from its self-report");
+                Ok(Arc::new(crate::serve_client::loopback_provider(
+                    base,
+                    served,
+                    *config_context,
+                )))
+            }
+        }
     }
 }
 
@@ -52,10 +95,7 @@ impl ProviderFactory for LlamaCppFactory {
         // forwarder built once against its entry node; the assembly refuses
         // its config by name (`SetupConfig::models`) rather than load empty
         // paths.
-        let raw = self
-            .rebuild_engine(cfg)
-            .map_err(|e| format!("reload: {e}"))?
-            .provider;
+        let raw = self.raw_provider(cfg).await?;
 
         // Wrap so a hot-reloaded daemon keeps its mesh-aware model
         // routing — same wrapper the cold-start path installs in
@@ -207,7 +247,7 @@ mod reload_builds_what_cold_start_builds {
     fn reload_path() -> LlamaCppFactory {
         LlamaCppFactory {
             daemon: Arc::new(crate::DeferredDaemon::new()),
-            reload: Arc::default(),
+            reload: ReloadSource::Assembly(Arc::default()),
         }
     }
 
@@ -291,7 +331,7 @@ mod reload_builds_what_cold_start_builds {
         ));
         LlamaCppFactory {
             daemon,
-            reload: Arc::clone(&cold.reload_factory),
+            reload: ReloadSource::Assembly(Arc::clone(&cold.reload_factory)),
         }
     }
 
@@ -357,6 +397,119 @@ mod reload_builds_what_cold_start_builds {
         assert_eq!(
             reload.provider.resident_slots().len(),
             cold.provider.resident_slots().len()
+        );
+    }
+}
+
+/// On the dialing path a reload is serve's (pb-svrn-dials-serve): the daemon
+/// forwards it, then rebuilds its loopback provider from serve's new
+/// self-report, so this node's model facts, and the manifest peers read, name
+/// the reloaded model.
+#[cfg(test)]
+mod reload_through_serve {
+    use super::*;
+    use axum::routing::{get, post};
+    use sovereign_contracts::engine_state::{
+        EngineReloaded, ServedSelf, RELOAD_PATH, SERVED_SELF_PATH,
+    };
+    use sovereign_contracts::oicp::ResidentSlot;
+    use sovereign_core::types::Speed;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    fn served(model: &str) -> ServedSelf {
+        ServedSelf {
+            primary_model: model.to_string(),
+            resident_slots: vec![ResidentSlot {
+                role: "primary".to_string(),
+                model_id: model.to_string(),
+                resident: true,
+                size_bytes: None,
+                transitioning: false,
+                placement: None,
+            }],
+            ..ServedSelf::default()
+        }
+    }
+
+    /// serve's two reload routes: the reload counts, and the self-report names
+    /// the model the last reload left resident.
+    async fn stub_serve(reloads: Arc<AtomicUsize>) -> String {
+        let counted = Arc::clone(&reloads);
+        let app = axum::Router::new()
+            .route(
+                RELOAD_PATH,
+                post(move || {
+                    let counted = Arc::clone(&counted);
+                    async move {
+                        counted.fetch_add(1, Ordering::SeqCst);
+                        axum::Json(EngineReloaded {
+                            resident_models: vec!["after-reload".to_string()],
+                        })
+                    }
+                }),
+            )
+            .route(
+                SERVED_SELF_PATH,
+                get(move || {
+                    let reloads = Arc::clone(&reloads);
+                    async move {
+                        let model = if reloads.load(Ordering::SeqCst) > 0 {
+                            "after-reload"
+                        } else {
+                            "before-reload"
+                        };
+                        axum::Json(served(model))
+                    }
+                }),
+            );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind");
+        let addr = listener.local_addr().expect("addr");
+        tokio::spawn(async move { axum::serve(listener, app).await });
+        format!("http://{addr}")
+    }
+
+    #[tokio::test]
+    async fn a_reload_reloads_serve_and_the_manifest_names_the_new_model() {
+        let reloads = Arc::new(AtomicUsize::new(0));
+        let base = stub_serve(Arc::clone(&reloads)).await;
+        let dir = tempfile::tempdir().expect("tempdir");
+        let cfg = SetupConfig::unconfigured();
+        let daemon = Arc::new(crate::DeferredDaemon::new());
+        daemon.bind(crate::EmbeddedDaemon::new(
+            dir.path().to_path_buf(),
+            cfg.clone(),
+            crate::daemon_services::fixtures::headless(),
+        ));
+        let factory = LlamaCppFactory {
+            daemon,
+            reload: ReloadSource::Serve {
+                base: crate::serve_client::ServeBase {
+                    base,
+                    source: crate::serve_client::ServeBaseSource::Default,
+                },
+                config_context: 4096,
+            },
+        };
+        let provider = factory
+            .build_provider(&cfg)
+            .await
+            .expect("the reload is forwarded and the provider rebuilt");
+        assert_eq!(
+            reloads.load(Ordering::SeqCst),
+            1,
+            "the reload must reach serve"
+        );
+        assert_eq!(provider.model_id_for(Speed::Slow), "after-reload");
+        let manifest = sovereign_serving_host::oicp_synthesis::build_self_manifest(
+            provider.as_ref(),
+            &crate::slot_manifest::CoreSlotManifest,
+        );
+        let ids: Vec<&str> = manifest.models.iter().map(|m| m.id.as_str()).collect();
+        assert!(
+            ids.contains(&"after-reload"),
+            "peers must see the reloaded model, saw {ids:?}"
         );
     }
 }
