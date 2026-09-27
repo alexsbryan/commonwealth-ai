@@ -415,7 +415,9 @@ pub(super) const REGISTRY: &[(&str, Class, usize)] = &[
     // pattern), so each builds a client for 127.0.0.1 loopback. `mesh rotate`
     // in particular HAD to move: an offline rotation was reverted by the next
     // gossip round. Class unchanged — loopback to our own daemon.
-    ("sovereign/crates/sovereign-cli-mesh/src/mesh_cmd.rs", Class::Mesh, 8),
+    // 8 -> 7 (2026-09-27): fetch-model's peer client moved to
+    // sovereign-serve/src/fetch_model.rs (c2529c94c).
+    ("sovereign/crates/sovereign-cli-mesh/src/mesh_cmd.rs", Class::Mesh, 7),
     // NEW 2026-08-28: `svrn mesh forget-member`, the repair for an
     // endpoint-key collision, posts to the running daemon's
     // /v1/mesh/forget-member. Class Mesh — 127.0.0.1 loopback to our own

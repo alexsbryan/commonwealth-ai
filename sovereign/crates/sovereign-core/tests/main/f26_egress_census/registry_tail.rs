@@ -196,6 +196,23 @@ pub(super) const REGISTRY_TAIL: &[(&str, Class, usize)] = &[
     // NEW ROW (2026-09-26, phase-b pb-serve-program d2f6e781c): the one kind
     // mount's test posts to a child router it bound on 127.0.0.1:0.
     ("sovereign/crates/sovereign-compute/src/server.rs", Class::TestOnly, 1),
+    // NEW ROW (2026-09-27, REVIEW-audit-pb-auto-4): the NER client posts to
+    // serve's /v1/ner at the base the daemon dials (53153e1b1) — serve's
+    // loopback port on this host.
+    ("sovereign/crates/sovereign-compute/src/ner.rs", Class::LocalDaemon, 1),
+
+    // ---- serve, dialed by the svrn daemon (pb-svrn-dials-serve) ----
+    // serve_client: the engine-state, served-self, forwarded-GET and reload
+    // reads, each to serve's loopback base (venue::DEFAULT_SERVE_PORT or
+    // SOVEREIGN_SERVE_PORT).
+    ("sovereign/crates/sovereign-daemon/src/serve_client.rs", Class::LocalDaemon, 4),
+    // fetch-model's peer client moved here, whole, from sovereign-cli-mesh's
+    // mesh_cmd.rs (c2529c94c): the mesh row went 8 -> 7, same class.
+    ("sovereign/crates/sovereign-serve/src/fetch_model.rs", Class::Mesh, 1),
+    // lib.rs and reload.rs: `#[cfg(test)]` modules posting to a router the
+    // test bound on loopback.
+    ("sovereign/crates/sovereign-serve/src/lib.rs", Class::TestOnly, 2),
+    ("sovereign/crates/sovereign-serve/src/reload.rs", Class::TestOnly, 2),
 
     // ---- oicp-client (Mesh — OICP client → a daemon, ours or a peer's) ----
     // 2 -> 3 on 2026-08-31: `RemoteApiProvider::dynamic`, the constructor for a
