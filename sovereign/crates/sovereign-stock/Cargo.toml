@@ -1,0 +1,33 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+[package]
+name = "sovereign-stock"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# The stock distribution (docs/FIVE_PROGRAMS.md §2c; phase-b-29 Q1, Q2, Q4):
+# ONE process that runs svrn with serve hosted in it. A composition root in no
+# package, held to its two faces by boundary-gate (`[[distribution]] stock` in
+# quality/ARCH_LAYERS.toml): svrn's process entry and serve's assembly. It
+# names no sovereign-contracts, so it never raises that crate's fan-in.
+
+[[bin]]
+name = "sovereign-stock"
+path = "src/main.rs"
+
+[dependencies]
+# `treesitter`: the daemon's process entry mounts `daemon_cmd`, gated on it.
+sovereign-daemon = { workspace = true, features = ["treesitter"] }
+sovereign-serve = { workspace = true }
+host-kit = { workspace = true, features = ["shell"] }
+tokio = { workspace = true }
+tracing = { workspace = true }
+workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
+
+[dev-dependencies]
+reqwest = { workspace = true, features = ["blocking"] }
+serde_json = { workspace = true }
+tempfile = { workspace = true }
+
+[lints]
+workspace = true

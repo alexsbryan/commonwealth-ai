@@ -226,7 +226,12 @@ pub struct ServeAssembly {
     /// Every route serve answers, [`bundles`] plus the self-report and reload
     /// bundles.
     pub routes: Vec<RouteBundle>,
-    _run_lock: host_kit::RunLock,
+    /// Where serve listens unless told otherwise: loopback on
+    /// `venue::serve_port()`, the port every client of serve dials, so a host
+    /// of this assembly binds where they look.
+    pub listen: SocketAddr,
+    /// serve's hold on the data root; drop it only when serve stops.
+    pub run_lock: host_kit::RunLock,
 }
 
 /// serve's assembly, from its data root's lock to its last route: the lock,
@@ -299,7 +304,8 @@ pub async fn assemble(
     Ok(ServeAssembly {
         cell,
         routes,
-        _run_lock: run_lock,
+        listen: (DEFAULT_LISTEN.0, sovereign_contracts::venue::serve_port()).into(),
+        run_lock,
     })
 }
 
@@ -350,7 +356,9 @@ async fn serve(args: ServeArgs) -> i32 {
         info!(target: "serve", "shutdown signal received");
     };
     let ServeAssembly {
-        routes, _run_lock, ..
+        routes,
+        run_lock: _run_lock,
+        ..
     } = assembly;
     match host_kit::shell::serve([listener], routes, shutdown).await {
         Ok(()) => 0,
