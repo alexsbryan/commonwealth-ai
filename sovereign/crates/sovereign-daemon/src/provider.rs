@@ -67,6 +67,26 @@ impl LlamaCppFactory {
         reload.build(cfg)
     }
 
+    /// The alias map follows what serve holds now; `build_provider` pushes it
+    /// into the rebuilt router below. Both serve paths publish through here.
+    async fn publish_served_aliases(
+        &self,
+        slots: &[sovereign_contracts::oicp::ResidentSlot],
+        source: &'static str,
+    ) {
+        let state = match self.daemon.get() {
+            Some(daemon) => daemon.app_state().await,
+            None => None,
+        };
+        if let Some(state) = state {
+            crate::daemon::publish_slot_aliases(
+                &state,
+                crate::serve_client::served_slot_aliases(slots),
+                source,
+            );
+        }
+    }
+
     async fn raw_provider(&self, cfg: &SetupConfig) -> Result<Arc<dyn InferenceProvider>, String> {
         match &self.reload {
             ReloadSource::Assembly(reload) => Ok(reload
@@ -80,35 +100,21 @@ impl LlamaCppFactory {
             } => {
                 let served =
                     crate::serve_client::reload_through_serve(base, cell, *config_context).await?;
-                // The alias map follows what serve holds now; `build_provider`
-                // pushes it into the rebuilt router below.
-                let state = match self.daemon.get() {
-                    Some(daemon) => daemon.app_state().await,
-                    None => None,
-                };
-                if let Some(state) = state {
-                    crate::daemon::publish_slot_aliases(
-                        &state,
-                        crate::serve_client::served_slot_aliases(&served.resident_slots),
-                        "serve's self-report after reload",
-                    );
-                }
+                self.publish_served_aliases(
+                    &served.resident_slots,
+                    "serve's self-report after reload",
+                )
+                .await;
                 Ok(Arc::clone(cell) as Arc<dyn InferenceProvider>)
             }
             ReloadSource::Hosted { cell } => {
                 crate::serve_client::forward_reload(&crate::serve_client::default_serve_base())
                     .await?;
-                let state = match self.daemon.get() {
-                    Some(daemon) => daemon.app_state().await,
-                    None => None,
-                };
-                if let Some(state) = state {
-                    crate::daemon::publish_slot_aliases(
-                        &state,
-                        crate::serve_client::served_slot_aliases(&cell.resident_slots()),
-                        "the hosted serve's residency after reload",
-                    );
-                }
+                self.publish_served_aliases(
+                    &cell.resident_slots(),
+                    "the hosted serve's residency after reload",
+                )
+                .await;
                 Ok(Arc::clone(cell) as Arc<dyn InferenceProvider>)
             }
         }
