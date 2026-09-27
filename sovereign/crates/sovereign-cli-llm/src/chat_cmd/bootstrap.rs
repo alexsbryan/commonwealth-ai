@@ -35,7 +35,7 @@ use sovereign_runtime_recipe::{LaneScope, LaneWarmth, RecipeInputs, RecipeProgre
 // Re-exported (not just `use`d) so the other CLI modules that referenced the
 // formerly-local `chat_cmd::bootstrap::SplitInferenceProvider` (raptor,
 // recipe_cmd) keep resolving after it was promoted to sovereign-inference.
-pub use sovereign_inference::remote::SplitInferenceProvider;
+pub use oicp_client::SplitInferenceProvider;
 use sovereign_store::sqlite::SqliteStateStore;
 
 use crate::chat_cmd::config::ChatGlobals;
@@ -118,7 +118,7 @@ pub async fn build_inference(
     // v0.3 host that doesn't serve `/oicp/v1/capabilities`, fall back to 8192 +
     // the `DEFAULT_MANIFEST`-derived prefix (the prior behavior, bit-identical).
     let inference: Arc<dyn InferenceProvider> = Arc::new(
-        match sovereign_inference::remote::fetch_manifest(&base, globals.bearer.clone()).await {
+        match oicp_client::fetch_manifest(&base, globals.bearer.clone()).await {
             Some(manifest) => SplitInferenceProvider::from_manifest_with_bearer(
                 &v1,
                 globals.bearer.clone(),

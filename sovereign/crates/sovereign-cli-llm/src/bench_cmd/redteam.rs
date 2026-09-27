@@ -34,7 +34,7 @@ use sovereign_eval::flywheel::redteam::{
     Identity, JudgeConfuser, OverfitCanary,
 };
 use sovereign_eval::flywheel::{chaos_to_probe, DeterministicVerifier, Observation, Probe};
-use sovereign_inference::remote::RemoteApiProvider;
+use oicp_client::RemoteApiProvider;
 
 use super::gate::chaos_lane_baseline;
 use super::lane_baseline::LaneBaseline;

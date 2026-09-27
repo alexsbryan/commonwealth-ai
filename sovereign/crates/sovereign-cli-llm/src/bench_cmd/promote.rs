@@ -30,7 +30,7 @@ use sovereign_eval::chaos_monkey::{score, AgentAction, CalibrationReport, Pressu
 use sovereign_eval::entity_resolution_bench::PeekBudget;
 use sovereign_eval::flywheel::generators::corpus::{AbsentSource, CorpusGenerator};
 use sovereign_eval::flywheel::{DeterministicVerifier, Generator as _, Observation, Probe};
-use sovereign_inference::remote::RemoteApiProvider;
+use oicp_client::RemoteApiProvider;
 
 use super::baselines::{baseline_dir, write_dated_and_update_latest_at};
 use super::gate::chaos_lane_baseline;

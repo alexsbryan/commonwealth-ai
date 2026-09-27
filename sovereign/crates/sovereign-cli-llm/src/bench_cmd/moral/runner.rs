@@ -13,7 +13,7 @@ use std::time::Instant;
 
 use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::{CompletionRequest, Speed};
-use sovereign_inference::remote::RemoteApiProvider;
+use oicp_client::RemoteApiProvider;
 
 use super::report::{self, MoralEvalRun, ScenarioReport};
 use super::scenarios::Scenario;

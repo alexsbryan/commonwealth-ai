@@ -44,7 +44,7 @@ pub(crate) fn partition_leaks_to_reader(cell: &str) -> Option<bool> {
     .map(|p| p.leaks_to_reader())
 }
 
-use sovereign_inference::remote::RemoteApiProvider;
+use oicp_client::RemoteApiProvider;
 
 use crate::bench_cmd::live_runner::{
     caveat_credit, classify_abstain, classify_caveat, classify_extraction,

@@ -26,7 +26,7 @@ use sovereign_eval::flywheel::{
     by_id, generator_ids, validate_fairness, DeterministicVerifier, Observation, Probe,
     RegressionBank, RegressionCase, Verdict,
 };
-use sovereign_inference::remote::RemoteApiProvider;
+use oicp_client::RemoteApiProvider;
 
 use crate::bench_cmd::live_runner::{caveat_credit, classify_abstain, classify_caveat, run_live};
 use crate::chat_cmd::bootstrap::build_session;

@@ -19,7 +19,7 @@ use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use sovereign_core::traits::InferenceProvider;
-use sovereign_inference::remote::RemoteApiProvider;
+use oicp_client::RemoteApiProvider;
 
 use super::journal::TurnRecord;
 use super::judge::{parse_witness_verdict, witness_judge_request};

@@ -822,7 +822,7 @@ pub(crate) async fn provider_for_model(
     embed_model: &str,
 ) -> Arc<dyn InferenceProvider> {
     let v1 = format!("{base}/v1");
-    match sovereign_inference::remote::fetch_manifest(base, None).await {
+    match oicp_client::fetch_manifest(base, None).await {
         Some(manifest) => Arc::new(SplitInferenceProvider::from_manifest(
             &v1,
             &manifest,

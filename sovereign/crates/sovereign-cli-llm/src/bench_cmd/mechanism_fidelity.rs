@@ -48,7 +48,7 @@ use sovereign_eval::mechanism_fidelity::{
     by_id, class_ids, decide_at, grade_class, score, Bands, BoundedMean, FidelityCard,
     GradeThresholds, Pool, RenderedProbe, ResultRow, Scores, Side, StoppingConfig, Verdict,
 };
-use sovereign_inference::remote::RemoteApiProvider;
+use oicp_client::RemoteApiProvider;
 
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 

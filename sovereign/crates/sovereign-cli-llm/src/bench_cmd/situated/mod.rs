@@ -258,7 +258,7 @@ async fn run_calibrate(
     );
     let v1 = format!("{}/v1", daemon_base.trim_end_matches('/'));
     let provider =
-        sovereign_inference::remote::RemoteApiProvider::new(&v1, None, judge_model, 16384);
+        oicp_client::RemoteApiProvider::new(&v1, None, judge_model, 16384);
     let rep = judge::run_calibration(&provider, &bank, Some(judge_model), judge_trials).await;
     judge::print_calibration(&rep, judge_model)
 }

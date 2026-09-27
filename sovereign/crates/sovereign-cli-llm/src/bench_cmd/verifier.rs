@@ -19,7 +19,7 @@ use sovereign_core::runtime::{extract_claim_list, value_present_in_chunks};
 use sovereign_core::traits::InferenceProvider;
 use sovereign_eval::flywheel::det_checks::contains_ci;
 use sovereign_eval::flywheel::generators::adversarial as adv;
-use sovereign_inference::remote::RemoteApiProvider;
+use oicp_client::RemoteApiProvider;
 
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 

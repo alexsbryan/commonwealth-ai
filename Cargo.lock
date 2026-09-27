@@ -12359,6 +12359,7 @@ dependencies = [
  "host-kit",
  "kernel-types",
  "libc",
+ "oicp-client",
  "oplog",
  "rand 0.9.4",
  "regex",

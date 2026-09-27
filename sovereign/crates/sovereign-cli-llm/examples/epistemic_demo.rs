@@ -21,7 +21,7 @@ use std::sync::Arc;
 use sovereign_core::runtime::{acquisition, epistemic};
 use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::{AcquisitionRoute, GapCoverage};
-use sovereign_inference::remote::SplitInferenceProvider;
+use oicp_client::SplitInferenceProvider;
 
 const DEFAULT_QUESTIONS: &[&str] = &[
     // ClaimUncovered shape: the chaos corpus covers the novel, but

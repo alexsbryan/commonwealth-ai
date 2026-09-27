@@ -59,6 +59,9 @@ host-kit = { workspace = true }
 # Phase 6: the chat surface asks the daemon for a turn instead of building
 # a Runtime to run one itself (TOPOLOGY §10).
 sovereign-turn-client = { workspace = true }
+# The OICP client every remote provider, rerank and NER dial goes through
+# (a shared leaf; pb-cli-llm).
+oicp-client = { workspace = true }
 sovereign-inference = { workspace = true }
 sovereign-store = { workspace = true }
 sovereign-tools = { workspace = true, features = ["treesitter"] }

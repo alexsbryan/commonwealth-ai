@@ -60,7 +60,7 @@ use kernel_types::Judgement;
 use sovereign_contracts::types::projection::TurnMetadata;
 use sovereign_contracts::types::{JudgeFailure, JudgeFailureReason, StageId, TurnMode};
 use sovereign_core::traits::InferenceProvider;
-use sovereign_inference::remote::RemoteApiProvider;
+use oicp_client::RemoteApiProvider;
 use sovereign_turn_client::{TurnClient, TurnObserver};
 
 use super::{reason, LaneCtx, LaneReport};

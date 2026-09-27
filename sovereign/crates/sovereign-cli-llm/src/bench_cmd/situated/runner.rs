@@ -8,7 +8,7 @@
 
 use std::time::Instant;
 
-use sovereign_inference::remote::RemoteApiProvider;
+use oicp_client::RemoteApiProvider;
 
 use super::criteria::{self, Vocabulary};
 use super::report::{ProbeReport, SituatedRun};

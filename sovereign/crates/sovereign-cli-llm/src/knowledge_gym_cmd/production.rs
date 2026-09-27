@@ -100,7 +100,7 @@ impl ExecutorHost {
     pub fn connect(base_url: &str, chat_model: &str, sabotage: Option<Sabotage>) -> Self {
         let v1 = format!("{}/v1", base_url.trim_end_matches('/'));
         let inference: Arc<dyn InferenceProvider> = Arc::new(
-            sovereign_inference::remote::SplitInferenceProvider::new_with_bearer(
+            oicp_client::SplitInferenceProvider::new_with_bearer(
                 &v1,
                 None,
                 chat_model.to_string(),

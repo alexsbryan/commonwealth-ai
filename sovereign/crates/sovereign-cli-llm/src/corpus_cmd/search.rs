@@ -5,7 +5,7 @@
 
 use corpus_index::index::CorpusIndex;
 use sovereign_core::traits::InferenceProvider;
-use sovereign_inference::remote::RemoteApiProvider;
+use oicp_client::RemoteApiProvider;
 
 const DEFAULT_DAEMON: &str = "http://localhost:9741";
 

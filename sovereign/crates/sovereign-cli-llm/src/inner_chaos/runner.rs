@@ -18,7 +18,7 @@ use std::time::{Duration, Instant};
 use sovereign_core::traits::{InferenceProvider, StateStore};
 use sovereign_core::types::Memory;
 use sovereign_core::SkillRegistry;
-use sovereign_inference::remote::RemoteApiProvider;
+use oicp_client::RemoteApiProvider;
 
 use crate::chat_cmd::bootstrap::{build_session_with_skills, ChatSession};
 use crate::chat_cmd::config::default_globals_for_voice_eval;
