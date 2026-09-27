@@ -13,11 +13,48 @@ use oicp_types::BenchmarkResult;
 
 /// Where `serve`, the model server, listens on loopback when nobody names a
 /// port — and so where the svrn daemon dials it (pb-svrn-dials-serve). ONE
-/// number both programs derive from (`sovereign_serve::DEFAULT_LISTEN`,
+/// number both programs derive from through [`serve_port`]
+/// (`sovereign_serve::ServeArgs::parse`,
 /// `sovereign_daemon::serve_client::default_serve_base`), as the guest door's
 /// is `guest_pages::DEFAULT_GUEST_PORT`: the slot after cw-rails' 9747, outside
 /// the daemon's 9741 client, 9742 internal, 9743 rail and 9744 guest door.
 pub const DEFAULT_SERVE_PORT: u16 = 9748;
+
+/// The one variable that moves serve's loopback port off
+/// [`DEFAULT_SERVE_PORT`]: for a host whose own serve already holds that port,
+/// such as a lift sandbox beside the deployed daemon's serve.
+pub const SERVE_PORT_ENV: &str = "SOVEREIGN_SERVE_PORT";
+
+/// Where serve listens on loopback when nobody names a port, and so where the
+/// daemon dials and stops it: [`SERVE_PORT_ENV`] when set, else
+/// [`DEFAULT_SERVE_PORT`]. THE one reader, which both programs call, so they
+/// cannot disagree on the number (principle 8).
+pub fn serve_port() -> u16 {
+    resolve_serve_port(std::env::var(SERVE_PORT_ENV).ok().as_deref())
+}
+
+/// [`serve_port`] over a given value. A value that is not a nonzero port is
+/// named at warn and the default used; both programs resolve it alike.
+pub fn resolve_serve_port(raw: Option<&str>) -> u16 {
+    let Some(raw) = raw.map(str::trim).filter(|s| !s.is_empty()) else {
+        return DEFAULT_SERVE_PORT;
+    };
+    match raw.parse::<u16>() {
+        Ok(port) if port != 0 => {
+            tracing::debug!(target: "serving_path", port, "serve port from {SERVE_PORT_ENV}");
+            port
+        }
+        _ => {
+            tracing::warn!(
+                target: "serving_path",
+                value = raw,
+                default = DEFAULT_SERVE_PORT,
+                "{SERVE_PORT_ENV} is not a nonzero port; serve's default port is used"
+            );
+            DEFAULT_SERVE_PORT
+        }
+    }
+}
 
 /// A candidate the scheduler may rank.
 ///
@@ -150,4 +187,20 @@ pub fn advertised_alias_ids(role: &str) -> Vec<String> {
         format!("commonwealth/{}", policy.role),
         policy.role.to_string(),
     ]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Unset or blank is the default; a port moves it; anything that is not a
+    /// nonzero port is the default, never a listener on an ephemeral port.
+    #[test]
+    fn serve_port_resolves_the_override_or_the_default() {
+        assert_eq!(resolve_serve_port(None), DEFAULT_SERVE_PORT);
+        assert_eq!(resolve_serve_port(Some("  ")), DEFAULT_SERVE_PORT);
+        assert_eq!(resolve_serve_port(Some("18748")), 18748);
+        assert_eq!(resolve_serve_port(Some("0")), DEFAULT_SERVE_PORT);
+        assert_eq!(resolve_serve_port(Some("serve")), DEFAULT_SERVE_PORT);
+    }
 }

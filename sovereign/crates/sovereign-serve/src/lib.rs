@@ -66,9 +66,10 @@ mod warm_cache;
 /// `serve` per root. The daemon's and cw-rails' locks are their own.
 pub const RUN_LOCK: &str = "serve";
 
-/// Where `serve` listens unless `--listen` says otherwise: loopback, on the
-/// one port the svrn daemon dials by default
-/// (`sovereign_contracts::venue::DEFAULT_SERVE_PORT`).
+/// Where `serve` listens unless `--listen` or `SOVEREIGN_SERVE_PORT` says
+/// otherwise: loopback, on the one port the svrn daemon dials by default
+/// (`sovereign_contracts::venue::DEFAULT_SERVE_PORT`). The parse reads the
+/// port through `venue::serve_port`, the daemon's reader too.
 pub const DEFAULT_LISTEN: ([u8; 4], u16) = (
     [127, 0, 0, 1],
     sovereign_contracts::venue::DEFAULT_SERVE_PORT,
@@ -92,7 +93,8 @@ impl ServeArgs {
     /// listener to [`DEFAULT_LISTEN`], printed once bound.
     pub fn parse(args: &[String]) -> Result<Self, String> {
         let mut data_dir = None;
-        let mut listen: SocketAddr = DEFAULT_LISTEN.into();
+        let mut listen: SocketAddr =
+            (DEFAULT_LISTEN.0, sovereign_contracts::venue::serve_port()).into();
         let mut it = args.iter();
         while let Some(arg) = it.next() {
             let mut value = |flag: &str| {

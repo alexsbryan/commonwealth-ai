@@ -42,7 +42,7 @@ pub(super) async fn print_serving(client: &reqwest::Client, base: &str) {
     if serving != "serve" {
         return;
     }
-    let port = sovereign_contracts::venue::DEFAULT_SERVE_PORT;
+    let port = sovereign_contracts::venue::serve_port();
     #[cfg(unix)]
     match super::lifecycle::find_daemon_pid_by_port(port) {
         Some(pid) => println!("  serve: running (pid {pid}, :{port})"),
@@ -59,7 +59,7 @@ async fn stop_serve() -> i32 {
             return 1;
         }
     };
-    stop_serve_at(&serve, sovereign_contracts::venue::DEFAULT_SERVE_PORT).await
+    stop_serve_at(&serve, sovereign_contracts::venue::serve_port()).await
 }
 
 /// The stop itself, over the resolved base and the port to look serve up on.

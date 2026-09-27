@@ -1193,6 +1193,13 @@ status = "shipped"
 purpose = "Path override for sovereign-serve, which the dispatcher execs for `svrn mesh warm-cache` and `svrn mesh fetch-model` (phase-b-22), and which the svrn daemon brings up at boot when it dials serve (`serve_client::ensure_serve`, pb-svrn-dials-serve)."
 
 [[flag]]
+name = "SOVEREIGN_SERVE_PORT"
+cluster = "daemon-lifecycle"
+default = "9748 (sovereign_contracts::venue::DEFAULT_SERVE_PORT)"
+status = "shipped"
+purpose = "The loopback port serve listens on when no --listen is given, and where the svrn daemon dials, brings up and stops it. Read once by sovereign_contracts::venue::serve_port, which both programs call. Set by svrn's lift smoke so it runs beside a host's own serve on 9748; a value that is not a nonzero port is warned and the default used."
+
+[[flag]]
 name = "CW_RAILS_BIN"
 cluster = "cli-binaries"
 default = "sibling of the running program, then PATH"

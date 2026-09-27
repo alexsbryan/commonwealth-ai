@@ -91,11 +91,11 @@ impl ServingPath {
 
 /// The base this daemon dials `serve` at when nothing says otherwise:
 /// loopback, on the one port serve listens on by default
-/// (`sovereign_contracts::venue::DEFAULT_SERVE_PORT`).
+/// (`sovereign_contracts::venue::serve_port`, serve's reader too).
 pub fn default_serve_base() -> String {
     format!(
         "http://127.0.0.1:{}",
-        sovereign_contracts::venue::DEFAULT_SERVE_PORT
+        sovereign_contracts::venue::serve_port()
     )
 }
 
@@ -249,7 +249,7 @@ pub async fn ensure_serve(
                     .arg("--listen")
                     .arg(format!(
                         "127.0.0.1:{}",
-                        sovereign_contracts::venue::DEFAULT_SERVE_PORT
+                        sovereign_contracts::venue::serve_port()
                     ))
                     .log_to(data_dir.join("serve.log")),
             )
