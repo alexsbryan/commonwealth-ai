@@ -65,7 +65,7 @@ binary = "debug/sovereign-daemon"
 # brought up, so the smoke abstains when the port is taken. The mock engine
 # loads no weights, and cw-rails is pointed at a closed port. FIM needs an edit
 # model, so it is not asserted here.
-pass = "booted on a temp root, brought its own serve up (status 'serving: ${SERVING}'), answered a chat turn through it ('${CHAT}') and a next-edit request (engine ${NES}), with cw-rails pointed at a closed port"
+pass = "booted on a temp root, brought its own serve up (status 'serving: ${SERVING}'), answered a chat turn ('${CHAT}') and a rerank (score ${SCORE}) through it and a next-edit request (engine ${NES}), with cw-rails pointed at a closed port"
 steps = [
   { do = "input", var = "SERVE_BIN", env = "SOVEREIGN_SERVE_BIN", value = "${SERVE_BIN}", abstain = "svrn dials serve: set SOVEREIGN_SERVE_BIN, or --set SERVE_BIN=<path>, to a sovereign-serve binary" },
   { do = "exists", path = "${SERVE_BIN}", fail = "no sovereign-serve at ${SERVE_BIN}" },
@@ -76,6 +76,7 @@ steps = [
   { do = "poll", url = "http://127.0.0.1:${PORT}/status", path = "serving", var = "SERVING", timeout = 120, alive = "daemon", fail = "the daemon never reported where it serves from within 120s (see ${SANDBOX}/daemon.log and ${SANDBOX}/root/serve.log)" },
   { do = "require", value = "${SERVING}", match = "^serve$", fail = "the daemon booted without dialing serve: serving = ${SERVING}" },
   { do = "call", url = "http://127.0.0.1:${PORT}/v1/chat/completions", json = { messages = [{ role = "user", content = "hello" }] }, path = "choices.message.content", var = "CHAT", fail = "POST /v1/chat/completions gave no answer through serve: ${BODY}" },
+  { do = "call", url = "http://127.0.0.1:${PORT}/v1/rerank", json = { query = "hello", documents = ["hello world", "other"] }, path = "results[index=0].relevance_score", var = "SCORE", fail = "POST /v1/rerank gave no score through serve: ${BODY}" },
   { do = "call", url = "http://127.0.0.1:${PORT}/v1/edit_predictions", json = { history = [], text = "let x = 1;\nlet y = x + 1;\n", cursor = 10, path = "a.rs" }, path = "engine", var = "NES", fail = "POST /v1/edit_predictions gave no answer: ${BODY}" },
 ]
 finally = [
