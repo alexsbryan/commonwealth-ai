@@ -42,11 +42,12 @@ pub enum ReloadSource {
     /// boot started.
     Assembly(Arc<ReloadFactory>),
     /// The dialing path: serve rebuilds through its own ReloadFactory, and the
-    /// daemon rebuilds its loopback provider from serve's new self-report. No
-    /// engine in this process.
+    /// daemon rebuilds its loopback provider from serve's new self-report,
+    /// into `cell`, the one boot wrapped. No engine in this process.
     Serve {
         base: crate::serve_client::ServeBase,
         config_context: u32,
+        cell: Arc<sovereign_contracts::reloadable_provider::ReloadableProvider>,
     },
 }
 
@@ -69,12 +70,10 @@ impl LlamaCppFactory {
             ReloadSource::Serve {
                 base,
                 config_context,
+                cell,
             } => {
-                let reloaded = crate::serve_client::forward_reload(&base.base).await?;
-                let served = crate::serve_client::read_served_self(&base.base)
-                    .await
-                    .map_err(|e| format!("reload: serve reloaded, then {e}"))?;
-                tracing::info!(target: "serving_path", serve_base = %base.base, resident = ?reloaded.resident_models, primary = %served.primary_model, "reload: serve rebuilt; the loopback provider is rebuilt from its self-report");
+                let served =
+                    crate::serve_client::reload_through_serve(base, cell, *config_context).await?;
                 // The alias map follows what serve holds now; `build_provider`
                 // pushes it into the rebuilt router below.
                 let state = match self.daemon.get() {
@@ -88,11 +87,7 @@ impl LlamaCppFactory {
                         "serve's self-report after reload",
                     );
                 }
-                Ok(Arc::new(crate::serve_client::loopback_provider(
-                    base,
-                    served,
-                    *config_context,
-                )))
+                Ok(Arc::clone(cell) as Arc<dyn InferenceProvider>)
             }
         }
     }
@@ -495,14 +490,26 @@ mod reload_through_serve {
             cfg.clone(),
             crate::daemon_services::fixtures::headless(),
         ));
+        let base = crate::serve_client::ServeBase {
+            base,
+            source: crate::serve_client::ServeBaseSource::Default,
+        };
+        let cell = Arc::new(
+            sovereign_contracts::reloadable_provider::ReloadableProvider::new(
+                Arc::new(crate::serve_client::loopback_provider(
+                    &base,
+                    served("before-reload"),
+                    4096,
+                )),
+                Default::default(),
+            ),
+        );
         let factory = LlamaCppFactory {
             daemon,
             reload: ReloadSource::Serve {
-                base: crate::serve_client::ServeBase {
-                    base,
-                    source: crate::serve_client::ServeBaseSource::Default,
-                },
+                base,
                 config_context: 4096,
+                cell: Arc::clone(&cell),
             },
         };
         let provider = factory
@@ -515,6 +522,11 @@ mod reload_through_serve {
             "the reload must reach serve"
         );
         assert_eq!(provider.model_id_for(Speed::Slow), "after-reload");
+        assert_eq!(
+            cell.model_id_for(Speed::Slow),
+            "after-reload",
+            "the reload must land in the cell boot wrapped"
+        );
         let manifest = sovereign_serving_host::oicp_synthesis::build_self_manifest(
             provider.as_ref(),
             &crate::slot_manifest::CoreSlotManifest,

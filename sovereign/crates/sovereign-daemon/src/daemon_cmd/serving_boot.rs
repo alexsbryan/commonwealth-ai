@@ -181,11 +181,19 @@ async fn dial_serve(
     }
     let config_context = config.effective_context_size();
     let resolved_embed_family = served.embed_family.clone();
-    let provider: Arc<dyn InferenceProvider> = Arc::new(crate::serve_client::loopback_provider(
-        &serve,
-        served,
-        config_context,
-    ));
+    // One cell every reader shares, so a reload's rebuilt provider is seen by
+    // both routers, `AppState`'s adapter and the runtime (phase-b-28).
+    let cell = Arc::new(
+        sovereign_contracts::reloadable_provider::ReloadableProvider::new(
+            Arc::new(crate::serve_client::loopback_provider(
+                &serve,
+                served,
+                config_context,
+            )),
+            resolved_embed_family.clone(),
+        ),
+    );
+    let provider: Arc<dyn InferenceProvider> = Arc::clone(&cell) as Arc<_>;
     tracing::info!(target: "serving_path", serve_base = %serve.base, source = ?serve.source, "boot: serving is serve's; this daemon holds no engine");
     Ok(ServingBoot {
         provider,
@@ -195,6 +203,7 @@ async fn dial_serve(
         reload: crate::provider::ReloadSource::Serve {
             base: serve,
             config_context,
+            cell,
         },
         deferred_daemon,
         path,

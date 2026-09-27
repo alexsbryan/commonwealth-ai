@@ -487,6 +487,28 @@ pub fn loopback_provider(
     }
 }
 
+/// The dialing path's reload: serve rebuilds through its own ReloadFactory,
+/// then the loopback provider is rebuilt from serve's new self-report and
+/// stored into `cell`, the one boot wrapped, so every reader that holds it
+/// (both routers, `AppState`'s adapter, the runtime) sees what serve holds
+/// now (phase-b-28). Returns the self-report for the alias map.
+pub async fn reload_through_serve(
+    serve: &ServeBase,
+    cell: &sovereign_contracts::reloadable_provider::ReloadableProvider,
+    config_context: u32,
+) -> Result<sovereign_contracts::engine_state::ServedSelf, String> {
+    let reloaded = forward_reload(&serve.base).await?;
+    let served = read_served_self(&serve.base)
+        .await
+        .map_err(|e| format!("reload: serve reloaded, then {e}"))?;
+    tracing::info!(target: "serving_path", serve_base = %serve.base, resident = ?reloaded.resident_models, primary = %served.primary_model, "reload: serve rebuilt; the loopback provider in the boot cell is rebuilt from its self-report");
+    cell.swap(
+        std::sync::Arc::new(loopback_provider(serve, served.clone(), config_context)),
+        served.embed_family.clone(),
+    );
+    Ok(served)
+}
+
 /// How long a forwarded read waits on serve: the setup reads detect hardware
 /// on a blocking thread, which takes well under this.
 const FORWARD_WINDOW: std::time::Duration = std::time::Duration::from_secs(30);
