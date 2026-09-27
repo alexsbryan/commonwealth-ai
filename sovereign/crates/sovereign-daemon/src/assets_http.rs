@@ -31,11 +31,11 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 
+use sovereign_compute::setup_reads;
 use sovereign_contracts::daemon_wire::{
     AssetDownloadProgress, AssetDownloadRequest, AssetDownloadState, AssetKind, IngestJobAck,
     NerModelStatus,
 };
-use sovereign_compute::setup_reads;
 use sovereign_inference::setup_planner;
 
 use crate::daemon::EmbeddedDaemon;
