@@ -88,6 +88,7 @@ pub mod intent_policy;
 pub mod launch;
 pub mod lessons;
 pub mod local_inference;
+pub mod local_only;
 pub mod mcp_config;
 pub mod memory_config;
 /// Answering's port — the middleware trait and its
