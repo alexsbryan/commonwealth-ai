@@ -38,6 +38,7 @@ pub mod distribution;
 pub mod manager;
 pub mod mock;
 pub mod ner;
+pub mod preflight;
 pub mod server;
 pub mod supervisor;
 pub mod wire;

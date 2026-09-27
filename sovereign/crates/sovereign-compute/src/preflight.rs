@@ -25,7 +25,7 @@
 //! escape hatch. The report prints in every proceed case so the
 //! diagnosis stays visible in logs.
 
-use sovereign_core::setup_config::SetupConfig;
+use sovereign_contracts::setup_config::SetupConfig;
 
 /// What the preflight decided to do about a capacity report. Kept as a
 /// pure value (no I/O) so the policy is unit-testable without real
@@ -106,7 +106,7 @@ pub fn check_vram_reporting(config: &SetupConfig, config_path: &std::path::Path)
     // engine was ever constructed. The factory was correct and the node
     // still could not start — which is why this is checked against the
     // running system and not only in a unit test (ARCH §18.1).
-    if config.engine.kind != sovereign_core::setup_config::EngineKind::Llama {
+    if config.engine.kind != sovereign_contracts::setup_config::EngineKind::Llama {
         tracing::info!(
             target: "engine_factory",
             engine = %config.engine.kind,
@@ -253,7 +253,7 @@ mod tests {
     /// for an engine that holds no weights.
     #[test]
     fn a_weightless_engine_skips_the_vram_preflight_entirely() {
-        use sovereign_core::setup_config::EngineKind;
+        use sovereign_contracts::setup_config::EngineKind;
 
         let mut config = SetupConfig::unconfigured();
         // `unconfigured()` carries NO `[models]` since the terminal class made
@@ -261,7 +261,7 @@ mod tests {
         // point of this test is a config that DOES name weights which happen
         // not to exist, so the table has to be present for the paths to mean
         // anything.
-        config.models = Some(sovereign_core::setup_config::ModelsSection {
+        config.models = Some(sovereign_contracts::setup_config::ModelsSection {
             primary: "/nonexistent/primary.gguf".into(),
             embed: "/nonexistent/embed.gguf".into(),
             ..Default::default()
