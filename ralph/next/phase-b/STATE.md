@@ -35,6 +35,14 @@ close a row's own edge, exception or lift goes to ralph/next/phase-c/ by default
 burn-down is counted in edges (49 at phase-b-32), exceptions (4) and failing lifts, never in rows. End-user quality
 is not part of the cut: the lane bars, pb-rails-untether and pb-rails-idle stay.
 
+
+**Premises after the sweep (phase-b-33).** REVIEW-pb-preflight-4 (the seat's three-agent sweep, 2026-09-27) re-checked
+every open row at HEAD and rewrote each false premise it found. Two rules follow from what it found. A cite into a
+file that an earlier row in the same chain replaced or moved is re-found by symbol; it is not a false premise and
+not a halt. A compile trial never proves a crate's test targets (a failing lib stops `--keep-going` before its
+`tests/`), so every trial's count is completed by `grep -rl '<dep>::' <crate>/tests`, and a row's census names those
+sites too.
+
 **Census before code (phase-b-29).** No row reaches a worker without a use-site census:
 the call sites of every symbol it moves; a trial of the move (the refactor-apply recipe
 applied, then COMPILE, LAYER and BOUNDARY, then reverted, the result pasted into the
