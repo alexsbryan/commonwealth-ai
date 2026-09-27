@@ -28,7 +28,8 @@ use sovereign_contracts::{CompletionRequest, InferenceProvider, StreamFrame};
 /// case, because the loopback cost is a larger share of its latency.
 const CHAT_MODEL: &str = "Qwen3.5-0.8B-UD-Q6_K_XL.gguf";
 const EMBED_MODEL: &str = "Qwen3-Embedding-0.6B-Q8_0.gguf";
-const RUNS: usize = 7;
+/// n >= 15 per run (phase-b-25).
+const RUNS: usize = 15;
 const BATCH: usize = 32;
 
 /// The GGUF directory, from the existing override (`SOVEREIGN_MODELS_DIR`,
