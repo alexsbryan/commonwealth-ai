@@ -72,6 +72,26 @@ pub(crate) fn compute_children(
         .unwrap_or_default()
 }
 
+/// Why runtime slot management refuses here: this process holds no weights.
+/// In the loopback mode they are serve's, on this host; otherwise they are the
+/// entry node's. (The trait default names "only the embedded llama.cpp
+/// provider", which is the wrong reason once serve holds the slots.)
+pub(crate) fn slot_refusal(
+    served: &Option<ServedSelf>,
+    verb: &str,
+) -> sovereign_contracts::error::Error {
+    let why = if served.is_some() {
+        format!(
+            "runtime slot {verb} is serve's: this daemon holds no weights, and serve \
+             loads its slots from its config (reload it through serve)"
+        )
+    } else {
+        format!("runtime slot {verb} belongs to the entry node: this node holds no weights")
+    };
+    tracing::debug!(target: "oicp_client", verb, loopback = served.is_some(), "slot management refused");
+    sovereign_contracts::error::Error::Inference(why)
+}
+
 pub(crate) fn code_model_id(served: &Option<ServedSelf>) -> Option<String> {
     served.as_ref().and_then(|s| s.code_model.clone())
 }
@@ -244,6 +264,26 @@ mod tests {
             context_size: Some(8192),
             compute_children: Vec::new(),
         }
+    }
+
+    /// A daemon on the dialing path is asked to load a slot: the refusal names
+    /// serve, which holds the weights, not "only the embedded provider".
+    #[test]
+    fn slot_management_is_refused_naming_where_the_weights_are() {
+        let loopback = provider("http://127.0.0.1:1").with_served(served());
+        let e = loopback
+            .load_extra_slot("x".into(), "/m.gguf".into(), 4096)
+            .expect_err("no weights here");
+        assert!(e.to_string().contains("serve's"), "{e}");
+        let e = loopback
+            .unload_extra_slot("x")
+            .expect_err("no weights here");
+        assert!(e.to_string().contains("serve's"), "{e}");
+        let terminal = provider("http://127.0.0.1:1");
+        let e = terminal
+            .unload_extra_slot("x")
+            .expect_err("no weights here");
+        assert!(e.to_string().contains("entry node"), "{e}");
     }
 
     fn provider(base: &str) -> SplitInferenceProvider {

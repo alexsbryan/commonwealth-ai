@@ -1939,6 +1939,14 @@ impl InferenceProvider for SplitInferenceProvider {
         serve_loopback::edit_slot_info(&self.served)
     }
 
+    fn load_extra_slot(&self, _: String, _: std::path::PathBuf, _: u32) -> Result<String> {
+        Err(serve_loopback::slot_refusal(&self.served, "load"))
+    }
+
+    fn unload_extra_slot(&self, _: &str) -> Result<Option<String>> {
+        Err(serve_loopback::slot_refusal(&self.served, "unload"))
+    }
+
     fn code_model_id(&self) -> Option<String> {
         serve_loopback::code_model_id(&self.served)
     }
