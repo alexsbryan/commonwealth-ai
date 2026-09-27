@@ -444,7 +444,13 @@ class Smoke:
         url = self.sub(s["url"])
         status, body = http("POST", url, self.sub(s["json"]), timeout=float(s.get("timeout", 30)))
         self.v["BODY"] = body.strip()[:300]
+        if "status_var" in s:
+            self.v[s["status_var"]] = str(status)
         say(f"POST {url} -> HTTP {status}")
+        if status == 0:
+            self.stop(s, "fail")
+        if "path" not in s:
+            return
         hits = self.json_at(body, s["path"]) if 200 <= status < 300 else []
         if not hits:
             self.stop(s, "fail")

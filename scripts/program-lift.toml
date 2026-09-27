@@ -41,7 +41,9 @@
 #            The body is kept on a refusal (never `curl -f`); `fail` on no answer
 #            or, with `path`, on a non-2xx or an empty value
 #   call     one POST of `json` to `url`; `var` = `path` of the body. `fail` on
-#            no answer, a non-2xx or an empty value (BODY keeps the answer)
+#            no answer, a non-2xx or an empty value (BODY keeps the answer).
+#            Without `path` it only records: `status_var` = the HTTP status,
+#            and only no answer fails, for a refusal the smoke then requires
 #   count    lines of `file` matching `pattern` into `var`; below `min` fails
 #   post     (finally only) POST `json` to `url` when every var in `needs` is
 #            set; its outcome is reported beside the verdict and never changes it
@@ -66,7 +68,7 @@ binary = "debug/sovereign-daemon"
 # default-base loopback mode rather than borrowing that serve. The mock engine
 # loads no weights, and cw-rails is pointed at a closed port. FIM needs an edit
 # model, so it is not asserted here.
-pass = "booted on a temp root, brought its own serve up (status 'serving: ${SERVING}'), answered a chat turn ('${CHAT}') and a rerank (score ${SCORE}) through it and a next-edit request (engine ${NES}), with cw-rails pointed at a closed port"
+pass = "booted on a temp root, brought its own serve up (status 'serving: ${SERVING}'), answered a chat turn ('${CHAT}') and a rerank (score ${SCORE}) through it and a next-edit request (engine ${NES}), with cw-rails pointed at a closed port; with serve stopped, a turn reported the absence (HTTP ${ABSENT})"
 steps = [
   { do = "input", var = "SERVE_BIN", env = "SOVEREIGN_SERVE_BIN", value = "${SERVE_BIN}", abstain = "svrn dials serve: set SOVEREIGN_SERVE_BIN, or --set SERVE_BIN=<path>, to a sovereign-serve binary" },
   { do = "exists", path = "${SERVE_BIN}", fail = "no sovereign-serve at ${SERVE_BIN}" },
@@ -78,6 +80,11 @@ steps = [
   { do = "call", url = "http://127.0.0.1:${PORT}/v1/chat/completions", json = { messages = [{ role = "user", content = "hello" }] }, path = "choices.message.content", var = "CHAT", fail = "POST /v1/chat/completions gave no answer through serve: ${BODY}" },
   { do = "call", url = "http://127.0.0.1:${PORT}/v1/rerank", json = { query = "hello", documents = ["hello world", "other"] }, path = "results[index=0].relevance_score", var = "SCORE", fail = "POST /v1/rerank gave no score through serve: ${BODY}" },
   { do = "call", url = "http://127.0.0.1:${PORT}/v1/edit_predictions", json = { history = [], text = "let x = 1;\nlet y = x + 1;\n", cursor = 10, path = "a.rs" }, path = "engine", var = "NES", fail = "POST /v1/edit_predictions gave no answer: ${BODY}" },
+  # serve stops mid-run: a turn must report the absence, never an empty answer.
+  { do = "exec", argv = ["sh", "-c", "pkill -f '[s]overeign-serve --data-dir ${SANDBOX}/root'"], log = "serve-kill.log", fail = "could not stop serve mid-run (see ${SANDBOX}/serve-kill.log)" },
+  { do = "call", url = "http://127.0.0.1:${PORT}/v1/chat/completions", json = { messages = [{ role = "user", content = "hello" }] }, status_var = "ABSENT", fail = "the daemon did not answer once serve stopped" },
+  { do = "require", value = "${ABSENT}", match = "^503$", fail = "with serve stopped a chat turn answered HTTP ${ABSENT}, not a named absence: ${BODY}" },
+  { do = "require", value = "${BODY}", match = "\"error\"", fail = "with serve stopped the 503 named no error: ${BODY}" },
 ]
 finally = [
   # serve is detached from the daemon (a bring-up, not a child), so the
