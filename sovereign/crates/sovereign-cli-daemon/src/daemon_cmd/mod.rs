@@ -71,7 +71,7 @@ pub async fn run(launch: &Launch, args: &[String]) -> i32 {
         Some("status") => status_daemon().await,
         // Sizing, not lifecycle: what VRAM would a loadout need, and which
         // card holds it. Lives under `daemon` because it answers the same
-        // question the daemon's own boot preflight asks (`build/preflight`),
+        // question the serving boot's preflight asks (`sovereign_compute::preflight`),
         // just ahead of the hardware existing.
         Some("vram-plan") => vram_plan::run(&args[1..]),
         Some(flag) if flag.starts_with("--") => {

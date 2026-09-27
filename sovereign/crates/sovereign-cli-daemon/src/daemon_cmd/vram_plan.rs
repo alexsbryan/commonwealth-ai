@@ -3,7 +3,7 @@
 //! the smallest card that holds it?
 //!
 //! The daemon already asks the first half of this question at every boot
-//! (`build/preflight.rs` → `capacity::check_fit`), but only ever about THIS
+//! (`sovereign_compute::preflight` → `capacity::check_fit`), but only ever about THIS
 //! machine's detected GPU and only about GGUFs already on this disk. Renting
 //! hardware asks it the other way round: the models are not here yet, and the
 //! card is the unknown being solved for.
@@ -60,7 +60,7 @@ const HELP: Help = Help {
             ),
         ]),
         HelpSection::Notes(
-            "The daemon asks the same question at every boot (build/preflight.rs), \
+            "The daemon asks the same question at every boot (sovereign-compute preflight.rs), \
              but only about THIS machine's GPU and only about GGUFs already on \
              disk. Renting asks it the other way round: the models are not here \
              yet and the card is the unknown. scripts/dev-pod.sh derives its \

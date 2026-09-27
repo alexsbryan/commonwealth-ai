@@ -50,9 +50,10 @@ pub mod auto_resume;
 /// The composition half of `sovereign-cli-daemon`'s `daemon_cmd`
 /// (DAEMON_CORE.md §4.1 row 4), moved whole at domains
 /// `dm-daemon-cli-composition` (2026-09-17): the bootstrap phases, the
-/// build/preflight pair, the tool registry, the solve surface, the
-/// work-atlas wiring and the runtime-support leaves. `run_daemon`
-/// followed at the `dm-daemon-assembled-bin` cut (2026-09-21) — it
+/// build/preflight pair (preflight since moved on to sovereign-compute), the
+/// tool registry, the solve surface, the work-atlas wiring and the
+/// runtime-support leaves. `run_daemon` followed at the
+/// `dm-daemon-assembled-bin` cut (2026-09-21) — it
 /// lives in [`daemon_cmd`] now, beside the leaves it owns (log
 /// rotation, the memory watchdog, the process exit code).
 ///

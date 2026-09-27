@@ -188,15 +188,18 @@ fn run_weight_verb(verb: &str, rest: &[String]) -> i32 {
     })
 }
 
+/// serve's log filter when `RUST_LOG` is unset: an allowlist of targets.
+/// `llama_cpp` is the target every ggml line rides (sovereign-inference
+/// llama.rs), so a failed GGUF load names its cause (the daemon's filter
+/// carries the same directive).
+const DEFAULT_FILTER: &str = "serve=info,sovereign_serve=info,sovereign_compute=info,\
+     sovereign_inference=info,sovereign_serving_host=info,host_kit=info,served_kind=info,\
+     engine_factory=info,serving_assembly=info,compute_child=info,llama_cpp=info";
+
 fn init_tracing() {
     use tracing_subscriber::{fmt, EnvFilter};
-    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
-        EnvFilter::new(
-            "serve=info,sovereign_serve=info,sovereign_compute=info,sovereign_inference=info,\
-             sovereign_serving_host=info,host_kit=info,served_kind=info,engine_factory=info,\
-             serving_assembly=info,compute_child=info",
-        )
-    });
+    let filter =
+        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(DEFAULT_FILTER));
     let _ = fmt()
         .with_writer(std::io::stderr)
         .with_env_filter(filter)
@@ -592,6 +595,19 @@ async fn capabilities(State(adapter): AdapterState) -> Response {
 
 #[cfg(test)]
 mod tests {
+    /// Without `llama_cpp` in the allowlist, the log route serve installs
+    /// before loading delivers nothing and a failed load is a bare error.
+    #[test]
+    fn serve_filter_carries_llama_cpp_target() {
+        assert!(
+            DEFAULT_FILTER.contains("llama_cpp=info"),
+            "llama_cpp must be allowlisted: {DEFAULT_FILTER}"
+        );
+        tracing_subscriber::EnvFilter::builder()
+            .parse(DEFAULT_FILTER)
+            .expect("serve's default filter must parse");
+    }
+
     use super::*;
 
     #[test]

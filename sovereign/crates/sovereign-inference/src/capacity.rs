@@ -277,7 +277,7 @@ impl CapacityReport {
 /// daemon's startup path is advisory by default — `fits == false`
 /// prints a warning and starts anyway — and only hard-refuses under
 /// `SOVEREIGN_STRICT_VRAM_CHECK=1` (or a genuinely unreadable model
-/// file). See `daemon_cmd::build::preflight::check_vram`.
+/// file). See `sovereign_compute::preflight::check_vram`.
 /// The safety reservation subtracted from a card's raw VRAM before any
 /// fit verdict. Covers CUDA context (~300-500 MB), cuBLAS workspace
 /// (~200 MB), GGML scratch we can't size from the outside, plus estimator
