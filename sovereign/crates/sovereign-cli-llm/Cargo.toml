@@ -62,10 +62,11 @@ sovereign-turn-client = { workspace = true }
 # The OICP client every remote provider, rerank and NER dial goes through
 # (a shared leaf; pb-cli-llm).
 oicp-client = { workspace = true }
-sovereign-inference = { workspace = true }
+sovereign-time = { workspace = true }
+# No sovereign-inference and no sovereign-gliner: this crate loads no model;
+# its embed, rerank and NER calls dial serve (`serve_dial.rs`, pb-cli-llm).
 sovereign-store = { workspace = true }
 sovereign-tools = { workspace = true, features = ["treesitter"] }
-sovereign-gliner = { workspace = true }
 sovereign-workflow = { workspace = true }
 sovereign-workflow-host = { workspace = true }
 sovereign-mesh = { workspace = true, features = ["treesitter"] }

@@ -741,58 +741,53 @@ pub async fn run_recall_probe(opts: &RecallRunOptions) -> Result<(), String> {
     }
 
     let probe_k = 10usize;
-    // Optional cross-encoder arm — same env + loader as the chat
-    // bootstrap. When set, every plant reports the reranked rank and
+    // Optional cross-encoder arm — serve's, as the chat bootstrap's.
+    // When serve holds one, every plant reports the reranked rank and
     // the added milliseconds next to the plain rank, so the
     // quality-vs-witness-latency trade is measured, never assumed.
-    let rerank_fn: Option<corpus_index::types::RerankFn> = match std::env::var(
-        "SOVEREIGN_RERANK_MODEL_PATH",
-    ) {
-        Ok(path) => {
-            match sovereign_inference::reranker_standalone::StandaloneReranker::load(
-                std::path::Path::new(&path),
-                sovereign_core::model_family::ModelFamily::Reranker,
-                None,
-            ) {
-                Ok(r) => {
-                    println!("reranker: {path}");
-                    // The production path is opt-IN (measured harmful
-                    // by default — see recall_relevant_memories_embed_reranked);
-                    // the probe's whole point is to measure, so opt in
-                    // for this process.
-                    std::env::set_var("SOVEREIGN_MEM_RERANK", "1");
-                    // Canned-pair sanity check: an obviously relevant,
-                    // an adjacent, and an obviously irrelevant doc for
-                    // one query. A working cross-encoder separates
-                    // these by a wide margin; overlapping or inverted
-                    // scores mean the protocol (or the GGUF) is wrong
-                    // and every downstream rank is noise.
-                    let q = "what is the capital of France";
-                    let docs = vec![
-                        "Paris is the capital and largest city of France.".to_string(),
-                        "Lyon is a major city in France known for its cuisine.".to_string(),
-                        "The mitochondria is the powerhouse of the cell.".to_string(),
-                    ];
-                    match r.rerank_batch(q, &docs).await {
-                            Ok(s) => println!(
-                                "reranker sanity [capital-of-France]: relevant={:.3} adjacent={:.3} irrelevant={:.3} {}",
-                                s[0], s[1], s[2],
-                                if s[0] > s[1] && s[1] > s[2] { "(ORDERED — protocol plausible)" }
-                                else { "(DISORDERED — scores are noise, ranks below are meaningless)" }
-                            ),
-                            Err(e) => println!("reranker sanity FAILED: {e}"),
-                        }
-                    let r: std::sync::Arc<dyn sovereign_core::traits::InferenceProvider> =
-                        std::sync::Arc::new(r);
-                    Some(sovereign_tools::corpus::inference_to_rerank_fn(r))
-                }
-                Err(e) => {
-                    println!("reranker: FAILED to load {path} ({e}) — probing without");
-                    None
-                }
-            }
+    let rerank_fn: Option<corpus_index::types::RerankFn> = match crate::serve_dial::serve_reranker(
+        "inner-chaos recall",
+    )
+    .await
+    {
+        Err(e) => {
+            println!("reranker: none — {e} — probing without");
+            None
         }
-        Err(_) => None,
+        Ok(None) => {
+            println!("reranker: serve holds no rerank kind — probing without");
+            None
+        }
+        Ok(Some(r)) => {
+            println!("reranker: serve's");
+            // The production path is opt-IN (measured harmful
+            // by default — see recall_relevant_memories_embed_reranked);
+            // the probe's whole point is to measure, so opt in
+            // for this process.
+            std::env::set_var("SOVEREIGN_MEM_RERANK", "1");
+            // Canned-pair sanity check: an obviously relevant,
+            // an adjacent, and an obviously irrelevant doc for
+            // one query. A working cross-encoder separates
+            // these by a wide margin; overlapping or inverted
+            // scores mean the protocol (or the GGUF) is wrong
+            // and every downstream rank is noise.
+            let q = "what is the capital of France";
+            let docs = vec![
+                "Paris is the capital and largest city of France.".to_string(),
+                "Lyon is a major city in France known for its cuisine.".to_string(),
+                "The mitochondria is the powerhouse of the cell.".to_string(),
+            ];
+            match r.rerank_batch(q, &docs).await {
+                Ok(s) => println!(
+                    "reranker sanity [capital-of-France]: relevant={:.3} adjacent={:.3} irrelevant={:.3} {}",
+                    s[0], s[1], s[2],
+                    if s[0] > s[1] && s[1] > s[2] { "(ORDERED — protocol plausible)" }
+                    else { "(DISORDERED — scores are noise, ranks below are meaningless)" }
+                ),
+                Err(e) => println!("reranker sanity FAILED: {e}"),
+            }
+            Some(sovereign_tools::corpus::inference_to_rerank_fn(r))
+        }
     };
     // Optional LLM-as-picker arm. `SOVEREIGN_MEM_LLM_PICK` = "chat"
     // (the session's SUT model) or a daemon model id (e.g. the fast

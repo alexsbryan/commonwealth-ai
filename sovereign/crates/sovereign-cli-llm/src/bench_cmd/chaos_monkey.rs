@@ -518,39 +518,32 @@ async fn run(rest: &[String]) -> i32 {
                 }
                 None => std::sync::Arc::clone(&session.inference),
             };
-            // T2 entity pass: prefer the local NER model over the LLM when
-            // installed, so the holdout measures the SHIPPED stack (GLiNER).
-            // Eager load (not lazy) so we measure the NER path, not race it —
-            // a not-yet-warm lazy loader returns empty and silently falls back
-            // to the LLM. `--no-gliner` forces the LLM path for A/B.
+            // T2 entity pass: prefer serve's NER model over the LLM when
+            // serve holds one, so the holdout measures the SHIPPED stack
+            // (GLiNER). Asked up front so we measure the NER path, not race
+            // it. `--no-gliner` forces the LLM path for A/B.
             let entity_extractor: Option<
                 std::sync::Arc<dyn sovereign_core::traits::EntityExtractor>,
             > = if args.no_gliner {
                 eprintln!("[chaos] T2 entity pass: LLM (--no-gliner)");
                 None
             } else {
-                let model_id = sovereign_gliner::gliner_ner::DEFAULT_MODEL_ID;
-                if sovereign_gliner::gliner_ner::probe_model_available(model_id) {
-                    match sovereign_gliner::gliner_ner::GlinerExtractor::new_default() {
-                        Ok(g) => {
-                            eprintln!("[chaos] T2 entity pass: GLiNER ({model_id})");
-                            Some(std::sync::Arc::new(sovereign_contracts::ner::NerEntities(
-                                std::sync::Arc::new(g),
-                            ))
-                                as std::sync::Arc<
-                                    dyn sovereign_core::traits::EntityExtractor,
-                                >)
-                        }
-                        Err(e) => {
-                            eprintln!("[chaos] T2 entity pass: LLM (GLiNER load failed: {e})");
-                            None
-                        }
+                match crate::serve_dial::serve_ner("bench chaos").await {
+                    Ok(Some(g)) => {
+                        eprintln!("[chaos] T2 entity pass: GLiNER ({}, serve's)", g.model_id());
+                        Some(
+                            std::sync::Arc::new(sovereign_contracts::ner::NerEntities(g))
+                                as std::sync::Arc<dyn sovereign_core::traits::EntityExtractor>,
+                        )
                     }
-                } else {
-                    eprintln!(
-                        "[chaos] T2 entity pass: LLM (GLiNER model {model_id} not installed)"
-                    );
-                    None
+                    Ok(None) => {
+                        eprintln!("[chaos] T2 entity pass: LLM (serve has no NER model)");
+                        None
+                    }
+                    Err(e) => {
+                        eprintln!("[chaos] T2 entity pass: LLM ({e})");
+                        None
+                    }
                 }
             };
             let mut manager = sovereign_tools::document_asset::DocumentAssetManager::new(

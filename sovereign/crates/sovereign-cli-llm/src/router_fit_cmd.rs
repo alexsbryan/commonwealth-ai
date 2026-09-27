@@ -21,8 +21,8 @@
 //! [`sovereign_core::router_calibration`] sweeps it exhaustively and
 //! reports the shipped gate beside the best reachable one.
 //!
-//! It embeds through [`EmbedOnlyProvider`] against the model
-//! `models.toml` prescribes, driving the same `from_toml_str_cached`
+//! It embeds on serve (`serve_dial::serve_embedder`), which must hold
+//! the model `models.toml` prescribes, driving the same `from_toml_str_cached`
 //! path the runtime uses, so the vectors sit in production's space.
 //! Exemplar embeddings hit the boot cache; only the bank's own queries
 //! are new work. The cache is never flushed — a measurement must not
@@ -54,7 +54,6 @@ use sovereign_core::router_embed::{intent_label, EmbedRouter};
 use sovereign_core::router_embed_cache::BootEmbedCache;
 use sovereign_core::scope_classifier::PersonalScopeClassifier;
 use sovereign_core::traits::InferenceProvider;
-use sovereign_inference::embedded::EmbedOnlyProvider;
 
 const DEFAULT_BANK_DIR: &str = "sovereign/crates/sovereign-core/data/calibration";
 
@@ -350,9 +349,6 @@ async fn cmd_fit(args: &[String]) -> i32 {
         eprintln!("router fit: models.toml declares no `default`-profile embed slot");
         return 2;
     };
-    let embed_family = manifest
-        .embed_family_for_file(&slot.file)
-        .unwrap_or(sovereign_core::model_family::ModelFamily::Unknown);
     let model_path = opts.embed_model.unwrap_or_else(|| {
         sovereign_contracts::rebrand::svrnmesh_root()
             .join("models")
@@ -374,16 +370,15 @@ async fn cmd_fit(args: &[String]) -> i32 {
         .unwrap_or_else(|| slot.file.clone());
     let is_override = measured_model != slot.file;
 
-    if !model_path.is_file() {
-        eprintln!(
-            "router fit: prescribed embed model not found:\n  {}\n\
-             Download it from {} (file {}), or pass --embed-model <path>.",
-            model_path.display(),
-            slot.hf_url,
-            slot.file,
-        );
-        return 2;
-    }
+    // serve holds the model, so its file need not be here; serve must
+    // embed with it, or the numbers are another model's.
+    let provider = match crate::serve_dial::serve_embedder("router fit", &model_path).await {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("{e}");
+            return 2;
+        }
+    };
     if !json {
         eprintln!(
             "router fit: {} cases from {} bank(s), embedding with {} …",
@@ -399,14 +394,6 @@ async fn cmd_fit(args: &[String]) -> i32 {
             );
         }
     }
-    let provider: Arc<dyn InferenceProvider> =
-        match EmbedOnlyProvider::load(&model_path, embed_family) {
-            Ok(p) => Arc::new(p),
-            Err(e) => {
-                eprintln!("router fit: load embed model: {e}");
-                return 1;
-            }
-        };
 
     // ── Build every classifier off the same cache ────────────────
     //

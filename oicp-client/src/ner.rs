@@ -154,3 +154,7 @@ async fn post(url: &str, request: &NerRequest) -> std::result::Result<NerRespons
     tracing::debug!(target: "served_kind", url, texts = request.texts.len(), "ner request dialled");
     Ok(response)
 }
+
+#[cfg(test)]
+#[path = "ner_tests.rs"]
+mod tests;

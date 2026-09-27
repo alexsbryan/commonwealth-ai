@@ -970,7 +970,7 @@ async fn run(opts: Opts) -> std::result::Result<VaultReportRun, String> {
     );
 
     let (entity_handle, entity_path) =
-        build_entity_extractor(&opts, Arc::clone(&store), Arc::clone(&obs));
+        build_entity_extractor(&opts, Arc::clone(&store), Arc::clone(&obs)).await;
 
     // `removed`, not a measurement. The ablation this field used to
     // report ran on 2026-08-02 and settled: the folder path's motif
@@ -1070,7 +1070,7 @@ async fn run(opts: Opts) -> std::result::Result<VaultReportRun, String> {
 /// Build the NER extractor, wrapped so the phase gets a timer.
 /// Returns the routing truth-teller alongside it — what the run
 /// actually used, not what was asked for.
-fn build_entity_extractor(
+async fn build_entity_extractor(
     opts: &Opts,
     store: Arc<SqliteStateStore>,
     obs: Arc<BuildObserver>,
@@ -1078,18 +1078,16 @@ fn build_entity_extractor(
     if opts.no_gliner {
         return (None, "disabled".to_string());
     }
-    // Same selector the daemon uses (`SOVEREIGN_GLINER_MODEL_ID`), so a
+    // serve's NER model, the one the daemon's readers dial too, so a
     // measured run and a production run cannot disagree about which
     // backend they got — that equality is the whole point of measuring
-    // through this harness rather than a bespoke probe.
-    let model_id = sovereign_gliner::configured_model_id();
-    if !sovereign_gliner::gliner_ner::probe_model_available(&model_id) {
-        return (None, format!("unavailable ({model_id} not installed)"));
-    }
-    // Eager, not lazy: a lazy extractor that isn't warm yet returns
-    // empty and the run would silently measure a no-op NER phase.
-    match sovereign_gliner::load_labeled_extractor(&model_id, None) {
-        Ok(g) => {
+    // through this harness rather than a bespoke probe. Asked up front:
+    // an extractor that isn't there yet would measure a no-op NER phase.
+    match crate::serve_dial::serve_ner("bench vault-report").await {
+        Ok(None) => (None, "unavailable (serve has no NER model)".to_string()),
+        Err(e) => (None, format!("unavailable ({e})")),
+        Ok(Some(g)) => {
+            let model_id = g.model_id().to_string();
             // The routing string names the GENERATION, not just the id:
             // "did this run use GLiNER2?" is the question every P2.1
             // number is read against, and it must be answerable from
@@ -1101,7 +1099,6 @@ fn build_entity_extractor(
                 Arc::new(MeteredEntityExtractor { inner: base, obs });
             (Some(metered), routed)
         }
-        Err(e) => (None, format!("unavailable (load failed: {e})")),
     }
 }
 

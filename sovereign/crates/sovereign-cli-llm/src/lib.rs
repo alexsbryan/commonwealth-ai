@@ -86,6 +86,7 @@ mod recipe_cmd;
 mod router_cache_cmd;
 mod router_fit_cmd;
 mod search_gym_cmd;
+pub mod serve_dial;
 mod turn_sink;
 mod voice_eval;
 mod worker_pod_provider;

@@ -183,7 +183,7 @@ here instead of raising it.
 
 - **`huggingface.co`** — GGUF download and GLiNER model download. Reached
   only from `svrn setup`, `svrn setup fim`, and
-  `svrn corpus extract-entities --download-model`. This install runs
+  `svrn mesh fetch-ner`. This install runs
   none of them: `install.sh` stages models from the tarball and writes
   both configs by hand, precisely so `svrn setup` is never invoked. The
   daemon's own boot path loads GLiNER from disk.

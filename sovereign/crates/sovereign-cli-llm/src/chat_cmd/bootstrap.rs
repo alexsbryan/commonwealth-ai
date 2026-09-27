@@ -361,13 +361,10 @@ async fn build_session_scoped(
             // `Sealed` for a bench lane that already knows its one
             // corpus. See `build_session_sealed` for the measurement.
             scope,
-            // This surface's reranker is its own standalone load: its
-            // provider speaks HTTP to the daemon, and one process holds the
-            // cross-encoder once.
-            rerank: standalone_reranker(&Banner),
-            // The NER kind's loader, loaded here because this process serves
-            // no kinds (the cli-llm → gliner edge is pb-cli-llm's).
-            ner: sovereign_gliner::load_gliner_extractor(),
+            // serve's cross-encoder and NER model: this process loads no
+            // model (pb-cli-llm).
+            rerank: serve_reranker(&Banner).await,
+            ner: serve_ner(&Banner).await,
         },
         &Banner,
     )
@@ -412,28 +409,33 @@ async fn build_session_scoped(
 /// a daemon commissioning the same `Runtime` traces them instead.
 struct Banner;
 
-/// The standalone cross-encoder from `SOVEREIGN_RERANK_MODEL_PATH`, with the
-/// capacity pre-flight (`reranker_standalone::load_from_env`). A refusal or a
-/// failed load is printed and the turn runs without one; the dedup-only
-/// ablation takes precedence, so under it nothing loads.
-fn standalone_reranker(progress: &dyn RecipeProgress) -> Option<Arc<dyn InferenceProvider>> {
-    use sovereign_inference::reranker_standalone::{load_from_env, RerankLoad};
+/// serve's cross-encoder, when serve holds one (`SOVEREIGN_RERANK_MODEL_PATH`
+/// takes effect at serve's start). A serve that did not answer is printed and
+/// the turn runs without one; the dedup-only ablation takes precedence, so
+/// under it serve is not asked.
+async fn serve_reranker(progress: &dyn RecipeProgress) -> Option<Arc<dyn InferenceProvider>> {
     if sovereign_runtime_recipe::rerank_dedup_only() {
         return None;
     }
-    match load_from_env() {
-        RerankLoad::Loaded(reranker) => Some(reranker),
-        RerankLoad::Refused { message } => {
-            progress.note(&format!("Reranker:    REFUSED — {message}"));
+    crate::serve_dial::serve_reranker("svrn chat")
+        .await
+        .unwrap_or_else(|e| {
+            progress.note(&format!("Reranker:    none — {e}"));
             None
-        }
-        RerankLoad::Failed { message } => {
-            progress.note(&format!("Reranker:    {message}"));
+        })
+}
+
+/// serve's NER model, when serve holds one. A serve that did not answer is
+/// printed and the turn runs without an entity extractor.
+async fn serve_ner(
+    progress: &dyn RecipeProgress,
+) -> Option<Arc<dyn sovereign_contracts::ner::LabeledEntityExtractor>> {
+    crate::serve_dial::serve_ner("svrn chat")
+        .await
+        .unwrap_or_else(|e| {
+            progress.note(&format!("NER:         none — {e}"));
             None
-        }
-        // Opt-in, and nobody opted in. Nothing to say.
-        RerankLoad::NotConfigured => None,
-    }
+        })
 }
 
 impl RecipeProgress for Banner {

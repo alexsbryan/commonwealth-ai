@@ -64,11 +64,9 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use sovereign_core::model_family::ModelFamily;
 use sovereign_core::router_axis::{AxisGate, AxisScore};
 use sovereign_core::router_calibration::{evaluate, fit, parse_bank, Objective, ScoredCase};
 use sovereign_core::traits::InferenceProvider;
-use sovereign_inference::embedded::EmbedOnlyProvider;
 
 /// Candidate instructions, each a hypothesis about what the vector
 /// should encode.
@@ -219,9 +217,14 @@ fn main() {
         model.display()
     );
 
-    let provider =
-        EmbedOnlyProvider::load(&model, ModelFamily::Qwen3Embedding).expect("load embed model");
     let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
+    // serve holds the model (pb-cli-llm); `--model` names the one it must hold.
+    let provider = rt
+        .block_on(sovereign_cli_llm::serve_dial::serve_embedder(
+            "intent_instruction_probe",
+            &model,
+        ))
+        .unwrap_or_else(|e| panic!("{e}"));
     let embed = |instruction: &str, texts: &[String]| -> Vec<Vec<f32>> {
         let prefixed: Vec<String> = texts.iter().map(|t| format!("{instruction}{t}")).collect();
         let mut v = rt
