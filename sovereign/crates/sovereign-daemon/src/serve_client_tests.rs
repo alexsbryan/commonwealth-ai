@@ -1,0 +1,319 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+//! `serve_client`'s tests, under `#[path]` so their names are unchanged.
+
+use super::*;
+
+fn node(entry: Option<&str>, entry_node: Option<&str>) -> NodeSection {
+    NodeSection {
+        entry: entry.map(str::to_string),
+        entry_node: entry_node.map(str::to_string),
+        ..NodeSection::default()
+    }
+}
+
+fn decide(serve: Option<&str>, discover: bool, workers: &[&str], primary: bool) -> ServingPath {
+    let workers: Vec<String> = workers.iter().map(|w| w.to_string()).collect();
+    ServingPath::from_inputs(
+        &RpcServe::resolve(serve, false),
+        discover,
+        &workers,
+        primary,
+    )
+}
+
+#[test]
+fn a_default_config_dials_serve() {
+    assert_eq!(decide(None, false, &[], false), ServingPath::DialsServe);
+}
+
+#[test]
+fn an_empty_rpc_serve_is_off_and_dials_serve() {
+    assert_eq!(decide(Some(""), false, &[], false), ServingPath::DialsServe);
+}
+
+#[test]
+fn each_opt_in_keeps_the_in_process_path_and_names_itself() {
+    let cases = [
+        (
+            decide(Some("127.0.0.1:50052"), false, &[], false),
+            "SOVEREIGN_RPC_SERVE",
+        ),
+        // A refused plaintext-LAN bind keeps today's path and its refusal.
+        (
+            decide(Some("0.0.0.0:50052"), false, &[], false),
+            "SOVEREIGN_RPC_SERVE",
+        ),
+        (decide(None, true, &[], false), "SOVEREIGN_RPC_DISCOVER"),
+        (
+            decide(None, false, &["10.0.0.2:50052"], false),
+            "SOVEREIGN_RPC_WORKERS",
+        ),
+        (
+            decide(None, false, &[], true),
+            "[compute] distributed_primary",
+        ),
+    ];
+    for (path, input) in cases {
+        assert_eq!(path, ServingPath::InProcess { chosen_by: input });
+        assert_eq!(path.status_line(), format!("in-process ({input})"));
+    }
+}
+
+/// A stub serve on a free loopback port whose engine-state route waits
+/// `hold` before it answers the empty view.
+async fn stub_serve(hold: std::time::Duration) -> String {
+    use axum::routing::get;
+    let app = axum::Router::new().route(
+        sovereign_contracts::engine_state::ENGINE_STATE_PATH,
+        get(move || async move {
+            tokio::time::sleep(hold).await;
+            axum::Json(sovereign_contracts::engine_state::EngineState::default())
+        }),
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move { axum::serve(listener, app).await });
+    base
+}
+
+#[tokio::test]
+async fn a_serve_that_holds_the_route_past_the_bound_is_named_not_waited_on() {
+    let base = stub_serve(std::time::Duration::from_secs(30)).await;
+    let started = std::time::Instant::now();
+    let read = read_engine_state(&base).await;
+    let took = started.elapsed();
+    assert_eq!(read, EngineStateRead::DidNotAnswerInTime);
+    assert!(
+        took < sovereign_turn_client::reach::PROBE_TIMEOUT + std::time::Duration::from_secs(1),
+        "the read waited {took:?}, past the bound plus 1 s"
+    );
+}
+
+#[tokio::test]
+async fn a_serve_that_answers_is_read_and_not_observed_yet_stays_none() {
+    let base = stub_serve(std::time::Duration::ZERO).await;
+    match read_engine_state(&base).await {
+        EngineStateRead::Answered(state) => assert_eq!(state.device_memory, None),
+        other => panic!("expected an answer, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn no_serve_at_the_base_is_unreachable_not_empty() {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    drop(listener);
+    assert!(matches!(
+        read_engine_state(&base).await,
+        EngineStateRead::Unreachable(_)
+    ));
+}
+
+async fn stub(app: axum::Router) -> String {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move { axum::serve(listener, app).await });
+    base
+}
+
+fn served() -> sovereign_contracts::engine_state::ServedSelf {
+    sovereign_contracts::engine_state::ServedSelf {
+        primary_model: "big".into(),
+        medium_model: "big".into(),
+        fast_model: "small".into(),
+        embed_model: "Qwen3-Embedding-0.6B-Q8_0".into(),
+        embed_family: sovereign_contracts::model_family::ModelFamily::Qwen3Embedding,
+        context_size: Some(8192),
+        ..Default::default()
+    }
+}
+
+/// The loopback mode follows the base's source: this host's serve answers
+/// for this node's models, an operator-named entry never does.
+#[test]
+fn only_the_default_base_answers_for_this_nodes_models() {
+    use sovereign_contracts::{InferenceProvider, Speed};
+    for (source, expected) in [
+        (ServeBaseSource::Default, "big"),
+        (ServeBaseSource::NodeEntry, "primary"),
+    ] {
+        let serve = ServeBase {
+            base: "http://127.0.0.1:1".into(),
+            source,
+        };
+        let provider = loopback_provider(&serve, served(), 4096);
+        assert_eq!(provider.model_id_for(Speed::Slow), expected, "{source:?}");
+    }
+}
+
+/// A query embedded through the loopback provider carries the same
+/// instruction prefix the engine applies in process; the terminal arm's
+/// empty prefix would embed it as a document.
+#[tokio::test]
+async fn the_loopback_provider_prepares_a_query_the_way_the_engine_does() {
+    use axum::routing::post;
+    use sovereign_contracts::InferenceProvider;
+    let seen = std::sync::Arc::new(std::sync::Mutex::new(String::new()));
+    let seen_in = std::sync::Arc::clone(&seen);
+    let base = stub(axum::Router::new().route(
+        "/v1/embeddings",
+        post(move |axum::Json(body): axum::Json<serde_json::Value>| {
+            let seen_in = std::sync::Arc::clone(&seen_in);
+            async move {
+                *seen_in.lock().unwrap() = body["input"].as_str().unwrap_or("").to_string();
+                axum::Json(serde_json::json!({
+                    "object": "list", "model": "e",
+                    "data": [{"object": "embedding", "index": 0, "embedding": [0.1, 0.2]}]
+                }))
+            }
+        }),
+    ))
+    .await;
+    let serve = ServeBase {
+        base,
+        source: ServeBaseSource::Default,
+    };
+    let provider = loopback_provider(&serve, served(), 4096);
+    provider
+        .embed_query("who wrote it")
+        .await
+        .expect("embedded");
+    let input = seen.lock().unwrap().clone();
+    let expected = sovereign_contracts::model_family::ModelFamily::Qwen3Embedding
+        .default_quirks()
+        .embed
+        .expect("quirks")
+        .query_instruction;
+    assert!(input.starts_with(&expected), "query sent as {input:?}");
+    assert_eq!(
+        provider.model_id_for(sovereign_contracts::Speed::Slow),
+        "big"
+    );
+}
+
+#[tokio::test]
+async fn the_self_report_is_read_from_serve() {
+    use axum::routing::get;
+    let base = stub(axum::Router::new().route(
+        sovereign_contracts::engine_state::SERVED_SELF_PATH,
+        get(|| async { axum::Json(served()) }),
+    ))
+    .await;
+    let read = read_served_self(&base).await.expect("read");
+    assert_eq!(read.primary_model, "big");
+}
+
+/// A reload serve refuses is an Err naming the refusal, never a
+/// success-shaped reload.
+#[tokio::test]
+async fn a_refused_reload_is_named() {
+    use axum::routing::post;
+    let base = stub(axum::Router::new().route(
+        sovereign_contracts::engine_state::RELOAD_PATH,
+        post(|| async {
+            (
+                axum::http::StatusCode::SERVICE_UNAVAILABLE,
+                "reload: the serving assembly refused: no such file",
+            )
+        }),
+    ))
+    .await;
+    let err = forward_reload(&base).await.expect_err("refused");
+    assert!(
+        err.contains("HTTP 503") && err.contains("no such file"),
+        "{err}"
+    );
+}
+
+/// A forwarded read relays serve's status and body as sent, query and
+/// refusal included, so a setup read answers alike from either process.
+#[tokio::test]
+async fn a_forwarded_read_relays_serves_status_and_body() {
+    use axum::extract::RawQuery;
+    use axum::routing::get;
+    let base = stub(axum::Router::new().route(
+        "/v1/admin/setup/catalog",
+        get(|RawQuery(q): RawQuery| async move {
+            (
+                axum::http::StatusCode::BAD_REQUEST,
+                format!("{{\"error\":\"{}\"}}", q.unwrap_or_default()),
+            )
+        }),
+    ))
+    .await;
+    let (status, body) = forward_get(&base, "/v1/admin/setup/catalog?profile=nope")
+        .await
+        .expect("answered");
+    assert_eq!(status, axum::http::StatusCode::BAD_REQUEST);
+    assert_eq!(body, br#"{"error":"profile=nope"}"#);
+}
+
+#[tokio::test]
+async fn a_forwarded_read_to_no_serve_is_named() {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    drop(listener);
+    let err = forward_get(&base, "/v1/admin/hardware")
+        .await
+        .expect_err("no serve");
+    assert!(
+        err.contains("not reachable") && err.contains("/v1/admin/hardware"),
+        "{err}"
+    );
+}
+
+/// The bring-up writes the record the stop reads; none is `None`, and a
+/// record that does not read is named, never a guessed pid.
+#[test]
+fn the_serve_record_round_trips_and_a_bad_one_is_named() {
+    use sovereign_turn_client::reach::Reached;
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("serve.pid");
+    assert_eq!(ServeRecord::read_from(&path), Ok(None));
+    record_bring_up(
+        &Reached::BroughtUp {
+            pid: 4242,
+            ready_after: std::time::Duration::ZERO,
+        },
+        &path,
+    );
+    assert_eq!(
+        ServeRecord::read_from(&path),
+        Ok(Some(ServeRecord {
+            pid: 4242,
+            port: sovereign_contracts::venue::serve_port()
+        }))
+    );
+    record_bring_up(
+        &Reached::AlreadyServing {
+            waited: std::time::Duration::ZERO,
+        },
+        &path,
+    );
+    assert_eq!(ServeRecord::read_from(&path), Ok(None));
+    std::fs::write(&path, "serve\n").unwrap();
+    assert!(ServeRecord::read_from(&path).is_err());
+}
+
+#[test]
+fn no_entry_dials_the_default_base() {
+    let resolved = resolve_serve_base(&node(None, None));
+    assert_eq!(resolved.base, "http://127.0.0.1:9748");
+    assert_eq!(resolved.source, ServeBaseSource::Default);
+}
+
+#[test]
+fn an_address_entry_is_the_base_without_its_v1() {
+    for entry in ["http://127.0.0.1:18748/v1", "http://127.0.0.1:18748/v1/"] {
+        let resolved = resolve_serve_base(&node(Some(entry), None));
+        assert_eq!(resolved.base, "http://127.0.0.1:18748");
+        assert_eq!(resolved.source, ServeBaseSource::NodeEntry);
+    }
+}
+
+#[test]
+fn an_identity_binding_never_names_serve() {
+    let resolved = resolve_serve_base(&node(None, Some("ab12")));
+    assert_eq!(resolved.base, default_serve_base());
+    assert_eq!(resolved.source, ServeBaseSource::Default);
+}
