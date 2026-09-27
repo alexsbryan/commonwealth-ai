@@ -3151,9 +3151,9 @@ impl EmbeddedDaemon {
         ));
         // The ring rail's journals moved to the rails daemon's data root
         // (fp-54, §4 rule 1 — one data directory, one owner). The one-time
-        // handover runs in `rails_client::ensure_rails`, before any bring-up
-        // (phase-b-3), so it has already run by here; from here on this
-        // daemon holds no journal and every rail read or write dials
+        // handover runs in `svrn mesh up`, before it brings cw-rails up
+        // (phase-b-3, pb-rails-untether), never in this boot; this daemon
+        // holds no journal and every rail read or write dials
         // `cw-rails` through the port (`rails_client::RailsRingRail`), which
         // reports ABSENCE when the rails daemon is down — never an empty
         // ledger (ARCH §18.3). The signer DOES change: the rails daemon

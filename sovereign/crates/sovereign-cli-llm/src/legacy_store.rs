@@ -16,24 +16,20 @@ use sovereign_contracts::peer::{ReplicatedKv, ReplicatedKvEntry};
 use sovereign_daemon::rails_client::kv::RailsKv;
 
 /// The `RailsKv` at the base `[daemon] rails_base` names, through THE one
-/// reader of that key. A `svrn portfolio` / `newsworthy` run is a user
-/// action, so cw-rails is brought up here if nothing answers; an absence is
-/// traced there and reported by the first call on the store. It can be the
-/// first cw-rails start on an upgraded host, so the daemon's journals are
-/// handed over first, from `[data] dir` (phase-b-3).
+/// reader of that key. It only dials: cw-rails is brought up by `svrn mesh
+/// up` (pb-rails-untether), and an absent one is reported by the first call
+/// on the store, naming that verb.
 pub(crate) fn rails_kv() -> RailsKv {
     use sovereign_core::setup_config::SetupConfig;
-    let config = match SetupConfig::load() {
-        Ok(c) => c,
+    let daemon = match SetupConfig::load() {
+        Ok(c) => c.daemon,
         Err(e) => {
-            tracing::warn!(error = %e, "legacy store: no setup config; the rails base and data dir are the defaults");
-            SetupConfig::unconfigured()
+            tracing::warn!(error = %e, "legacy store: no setup config; the rails base is the default");
+            SetupConfig::unconfigured().daemon
         }
     };
-    let daemon = config.daemon;
     let base = sovereign_daemon::rails_client::resolve_rails_base(&daemon);
-    let local_only = sovereign_daemon::LocalOnlyProfile::resolve(daemon.local_only).is_local_only();
-    let _ = sovereign_daemon::rails_client::ensure_rails(&base, local_only, &config.data.dir);
+    tracing::debug!(rails_base = %base, "legacy store: dialing cw-rails; nothing is brought up");
     RailsKv::new(base)
 }
 
