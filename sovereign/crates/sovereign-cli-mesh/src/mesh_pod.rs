@@ -439,10 +439,7 @@ async fn cmd_pod_up(args: &[String]) -> i32 {
     // time + remaining hours alongside the rest of the launch summary.
     // `expires_unix` was captured above before `blob` was moved into
     // the snapshot.
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
+    let now = sovereign_time::unix_now_u64();
     let ttl_remaining_h = expires_unix.saturating_sub(now) as f64 / 3600.0;
     let expires_display = chrono::DateTime::<chrono::Utc>::from(
         std::time::UNIX_EPOCH + std::time::Duration::from_secs(expires_unix),
