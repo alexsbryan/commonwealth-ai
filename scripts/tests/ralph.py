@@ -608,6 +608,22 @@ class CampaignTests(unittest.TestCase):
             self.assertEqual(ran, [])
             self.assertIsNotNone(ralph.operator_only(pathlib.Path(tmp, "ralph/NEEDS_HUMAN.md")))
 
+    def test_a_row_added_after_the_freeze_waits_and_splits_and_audits_do_not(self):
+        # phase-b-32: rows grew 26 -> 76 while 30 closed; a new row is the operator's.
+        with tempfile.TemporaryDirectory() as tmp:
+            seen = []
+            rows = ("- [ ] pb-new — depends []\n- [ ] pb-a-half — depends []\n"
+                    "- [ ] REVIEW-audit-q-1 — depends []\n")
+            c = self.make(tmp, rows, session_run=lambda a, p, l: seen.append(p), max_stall=1)
+            write(tmp, "ralph/next/q/queue.toml", 'scope_file = "ralph/scope.txt"\n')
+            write(tmp, "ralph/scope.txt", "pb-a  # the frozen set\n")
+            c.paths.manifest = ralph.load_manifest(tmp, "q")
+            q = ralph.Queue(pathlib.Path(tmp) / "ralph/STATE.md")
+            self.assertEqual(ralph.out_of_scope(c.paths, q), frozenset({"pb-new"}))
+            with mock.patch.object(ralph, "head_of", return_value="a" * 40):
+                c.run()
+            self.assertIn("Your unit: pb-a-half", seen[0])
+
     def test_the_unit_note_names_the_parked_rows(self):
         with tempfile.TemporaryDirectory() as tmp:
             seen = []

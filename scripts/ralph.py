@@ -326,6 +326,34 @@ def parked_ids(paths):
     return frozenset(f.stem for f in root.glob("*.md"))
 
 
+def out_of_scope(paths, queue):
+    """Open rows outside the queue's frozen scope (queue.toml `scope_file`,
+    phase-b-32, operator 2026-09-27: "We can't keep adding scope"). They wait
+    on the operator as a parked row does; a new row is the operator's act. An
+    audit row and a split of an in-scope row (`<id>-<suffix>`) are in scope:
+    a split re-chunks scope, it does not add it."""
+    rel = paths.manifest.scope_file if paths.manifest else ""
+    if not rel:
+        return frozenset()
+    try:
+        text = paths.p(rel).read_text()
+    except OSError as e:
+        say(f"scope file {rel} unreadable ({e}) — no row is judged out of scope")
+        return frozenset()
+    allowed = {line.split("#")[0].strip() for line in text.splitlines()} - {""}
+    return frozenset(
+        r.id for r in queue.rows
+        if r.status is not Status.DONE and r.id not in allowed
+        and not r.id.startswith(AUDIT_PREFIX)
+        and not any(r.id.startswith(f"{a}-") for a in allowed))
+
+
+def held_ids(paths, queue):
+    """Every row that waits on the operator besides HUMAN- rows: parked rows
+    and rows outside the frozen scope. The one set the planners skip."""
+    return parked_ids(paths) | out_of_scope(paths, queue)
+
+
 def blocked_row(queue, title, parked=frozenset()):
     """The one open row a halt package is about, or None. The title must name
     exactly one open non-HUMAN row; an operator-only package may instead rest
@@ -893,6 +921,7 @@ class QueueManifest:
     prompt_declared: bool = False
     audit_every: int | None = None        # absent: no cadence, the queue's own audit rows only
     dispatch_requires: tuple = ()         # markers every work row must carry before dispatch
+    scope_file: str = ""                  # the frozen row ids; "" = no freeze (phase-b-32)
 
 
 def manifest_rel(name):
@@ -919,12 +948,12 @@ def load_manifest(workdir, name):
         return ValueError(f"{rel}: `{key}` must be {want}")
 
     known = {"label", "session_timeout", "audit_every", "dispatch_requires", "worker_bin",
-             "settings", "models", "checks", *MANIFEST_PATH_KEYS}
+             "settings", "scope_file", "models", "checks", *MANIFEST_PATH_KEYS}
     for key in data:
         if key not in known:
             raise ValueError(f"{rel}: unknown key `{key}` (known: {', '.join(sorted(known))})")
     strings = {}
-    for key in ("label", "worker_bin", "settings", *MANIFEST_PATH_KEYS):
+    for key in ("label", "worker_bin", "settings", "scope_file", *MANIFEST_PATH_KEYS):
         if key in data and not isinstance(data[key], str):
             raise bad(key, "a string")
         strings[key] = data.get(key, "")
@@ -968,7 +997,7 @@ def load_manifest(workdir, name):
         models=models, checks=checks, session_timeout=timeout,
         worker_bin=strings["worker_bin"], settings=strings["settings"],
         prompt_declared="prompt" in data, audit_every=every,
-        dispatch_requires=tuple(requires),
+        dispatch_requires=tuple(requires), scope_file=strings["scope_file"],
         **{key: strings[key] or f"{base}/{default}"
            for key, default in MANIFEST_PATH_KEYS.items()})
 
@@ -1368,7 +1397,7 @@ class Campaign:
                 continue
             # Re-read every iteration: the worker mutates the queue as it goes.
             queue = Queue(self.paths.p(self.paths.state))
-            parked = parked_ids(self.paths)
+            parked = held_ids(self.paths, queue)
             unit = queue.current(parked)
             waiting = queue.awaiting_operator(parked)
             if unit is None:
@@ -1567,7 +1596,7 @@ class Supervisor:
                            f"{self.paths.stop} {self.paths.needs_human}\n")
             say(f"supervisor: halt package was missing — wrote one from {self.paths.stop}")
         queue = self._queue()
-        parked = parked_ids(self.paths)
+        parked = held_ids(self.paths, queue) if queue else frozenset()
         waiting = queue.awaiting_operator(parked) if queue else []
         if queue is not None and waiting and queue.current(parked) is None:
             say(f"supervisor: operator approval required — every ready row waits on the "
@@ -2177,7 +2206,7 @@ def cmd_plan(args):
     paths = paths_for(args)
     queue = Queue(paths.p(paths.state))
     models = resolve_models(args, paths)
-    parked = parked_ids(paths)
+    parked = held_ids(paths, queue)
     unit = queue.current(parked)
     print(f"prompt: {prompt_text(paths)[1]}  queue: {paths.state}")
     every = paths.manifest.audit_every if paths.manifest else None
@@ -2187,6 +2216,9 @@ def cmd_plan(args):
     waiting = queue.awaiting_operator(parked)
     if waiting:
         print(f"waiting on the operator (the loop runs past them): {', '.join(waiting)}")
+    beyond = sorted(out_of_scope(paths, queue))
+    if beyond:
+        print(f"outside the frozen scope ({paths.manifest.scope_file}): {', '.join(beyond)}")
     if unit is None:
         print("no ready unit")
         return 0
