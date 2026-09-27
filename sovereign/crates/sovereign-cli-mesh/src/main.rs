@@ -11,7 +11,6 @@ async fn main() {
         .map(|(c, r)| (c.as_str(), r))
         .unwrap_or(("", &[]));
     let code: i32 = match cmd {
-        "meshapp" => meshapp_cmd::run(rest).await,
         "ring" => ring_cmd::run(rest).await,
         "job" => job_cmd::run(rest).await,
         "kv-export" => kv_export::run(rest).await,

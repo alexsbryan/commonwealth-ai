@@ -17,8 +17,6 @@ pub mod mesh_skew;
 pub mod mesh_soak;
 pub mod mesh_token;
 pub mod mesh_travel;
-pub mod meshapp_cmd;
-pub mod meshapp_registry;
 pub mod publish_cmd;
 pub mod rail_migration;
 pub mod rails_up;

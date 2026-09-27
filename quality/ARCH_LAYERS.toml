@@ -220,7 +220,6 @@ crates = [
     "commonwealth-transport",
     "commonwealth-discovery",
     "sovereign-grants",
-    "sovereign-meshapp-registry",
     # The ring rail, split out of `commonwealth-knowledge` on 2026-09-04
     # (cw-lift 1b). `-rail-core` is the fold — vocabulary, signing, admission,
     # the sync digest, and ZERO I/O — and `-rail` is the JSONL journal that
@@ -735,11 +734,6 @@ to = "sovereign-*"
 except = ["sovereign-contracts"]
 reason = "must stay consumable without the agent runtime — it names NO sovereign-* crate bar the contracts seam (measured at the domains-1 move, 2026-09-11) and this rule keeps it that way. sovereign-contracts joins the exception for `ReplicatedKv` + the `ShardTransferLedger` fact port ONLY (FIVE_PROGRAMS fp-94, operator decision five-programs-53). The reason read \"mesh foundation must stay…\" until that move, when the crate left commonwealth/crates/ for sovereign/crates/; the PROPERTY is unchanged, only the family it sits in changed"
 
-[[forbid]]
-from = "sovereign-meshapp-registry"
-to = "sovereign-*"
-reason = "must stay consumable without the agent runtime — it names NO sovereign-* crate today (measured at the domains-1 move, 2026-09-11) and this rule keeps it that way. The reason read \"mesh foundation must stay…\" until that move, when the crate left commonwealth/crates/ for sovereign/crates/; the PROPERTY is unchanged, only the family it sits in changed"
-
 
 # The daemon crate's two rows, landing with the crate (DAEMON_CORE.md §4.1;
 # domains dm-daemon-crate). Layer ordering already forbids a lower tier
@@ -762,7 +756,7 @@ reason = "the harness simulates a node against the OICP/contracts seam, not the 
 [[forbid]]
 from = "sovereign-mesh-test-harness"
 to = "sovereign-*"
-except = ["sovereign-contracts", "sovereign-grants", "sovereign-meshapp-registry", "sovereign-scheduler"]
+except = ["sovereign-contracts", "sovereign-grants", "sovereign-scheduler"]
 # `sovereign-scheduler` gained at HUMAN-forbid-harness-except (2026-09-17,
 # 9b0b65080): the Tier-1 simulator replays the routing records, so it names them
 # directly. `sovereign-serving-host` is deliberately ABSENT (dm-harness-except,
@@ -779,7 +773,8 @@ except = ["sovereign-contracts", "sovereign-grants", "sovereign-meshapp-registry
 # should meet the runtime at the OICP/contracts seam. Same treatment the three
 # `sovereign-{serving,grants,meshapp-registry}` rows above got for the same
 # reason. `sovereign-serving` left this list when the peg was deleted
-# (REVIEW-build-serving-empty-peg, 2026-09-15).
+# (REVIEW-build-serving-empty-peg, 2026-09-15), and `-meshapp-registry` when
+# the crate was deleted (pb-meshapp-apps, 2026-09-27).
 reason = "cross-family reach — harness should simulate against the OICP/contracts seam (R6)"
 
 # ── Extractable packages ─────────────────────────────────────────────────────
@@ -1261,6 +1256,9 @@ crates = [
     # route mount; `sovereign-studio`/`sovereign-desktop` name it too and are
     # governed by no package. Reaches only leaves plus `sovereign-tools-base`.
     "sovereign-workflow-host",
+    # The corpus-explorer reads over svrn's corpora (§12 3a rung 1, §4 rule 1),
+    # moved from [cmnwlth] with the `svrn meshapp` verbs (pb-meshapp-apps).
+    "sovereign-meshapp",
 ]
 
 [[package]]
@@ -1362,8 +1360,6 @@ crates = [
     # serving crates into `serve` at pb-serve-package (phase-b-20).
     "sovereign-gliner",
     "sovereign-pods",
-    "sovereign-meshapp",
-    "sovereign-meshapp-registry",
     "sovereign-grants",
     # cmnwlth's CLI, lifted out of sovereign-cli-llm 2026-09-21.
     "sovereign-cli-mesh",

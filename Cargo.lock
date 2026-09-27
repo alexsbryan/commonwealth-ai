@@ -12368,6 +12368,7 @@ dependencies = [
  "serde_json",
  "sha2 0.10.9",
  "sovereign-authoring-harness",
+ "sovereign-cli-base",
  "sovereign-cli-shared",
  "sovereign-contracts",
  "sovereign-core",
@@ -12376,6 +12377,7 @@ dependencies = [
  "sovereign-enrichment-catalog",
  "sovereign-eval",
  "sovereign-mesh",
+ "sovereign-meshapp",
  "sovereign-pipeline",
  "sovereign-runtime-recipe",
  "sovereign-store",
@@ -12384,6 +12386,7 @@ dependencies = [
  "sovereign-turn-client",
  "sovereign-workflow",
  "sovereign-workflow-host",
+ "tar",
  "tempfile",
  "tokio",
  "toml 0.8.2",
@@ -12392,6 +12395,7 @@ dependencies = [
  "understanding-vocab",
  "uuid",
  "workspace-hack",
+ "zstd",
 ]
 
 [[package]]
@@ -12427,7 +12431,6 @@ dependencies = [
  "sovereign-contracts",
  "sovereign-inference",
  "sovereign-mesh",
- "sovereign-meshapp",
  "sovereign-pods",
  "sovereign-time",
  "sovereign-turn-client",
@@ -12651,7 +12654,6 @@ dependencies = [
  "sovereign-inference",
  "sovereign-mesh",
  "sovereign-meshapp",
- "sovereign-meshapp-registry",
  "sovereign-peer-wire",
  "sovereign-pods",
  "sovereign-runtime-recipe",
@@ -12906,7 +12908,6 @@ dependencies = [
  "sovereign-contracts",
  "sovereign-inference",
  "sovereign-mesh-test-harness",
- "sovereign-meshapp-registry",
  "sovereign-peer-wire",
  "sovereign-pods",
  "sovereign-scheduler",
@@ -12957,20 +12958,6 @@ dependencies = [
  "tempfile",
  "tokio",
  "understanding-vocab",
- "workspace-hack",
-]
-
-[[package]]
-name = "sovereign-meshapp-registry"
-version = "0.8.0"
-dependencies = [
- "bytes",
- "reqwest 0.12.28",
- "serde",
- "serde_json",
- "thiserror 2.0.18",
- "tokio",
- "tracing",
  "workspace-hack",
 ]
 

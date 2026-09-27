@@ -177,14 +177,13 @@ crates/
 ├── sovereign-cli-shared     # Shared lib (repo, prompts, tracing init, cli-contract; re-exports sovereign-cli-base at the historical paths)
 ├── sovereign-cli-daemon     # Long-running host + lifecycle; owns Windows GPU backend selection
 ├── sovereign-cli-dev        # Workbench: project lifecycle + code intel + tools
-├── sovereign-cli-llm        # Model interaction + heavy retrieval (chat/bench/eval/atlas/enrich/corpus)
-├── sovereign-cli-mesh       # cmnwlth's verbs — mesh (incl. `mesh pod`), meshapp, ring, job, publish, run
+├── sovereign-cli-llm        # Model interaction + heavy retrieval (chat/bench/eval/atlas/enrich/corpus/meshapp)
+├── sovereign-cli-mesh       # cmnwlth's verbs — mesh (incl. `mesh pod`), ring, job, publish, run
 ├── sovereign-time           # Wall-clock helpers — zero-dep leaf for crates off sovereign-core
 ├── sovereign-pipeline       # Pipeline driver (recipes, worklist); pods moved to cli-mesh
 ├── sovereign-eval           # Pure scorers
 ├── sovereign-authoring-harness # Recipe-authoring verdict ladder over harness StageOutputs
 ├── sovereign-meshapp        # Mesh-app explorer ops — pure path-in/DTO-out lib
-├── sovereign-meshapp-registry  # Mesh-app manifest, registry, port map, proxy
 ├── sovereign-mesh-test-harness # SimulatedMesh/SimulatedNode/MockLlamaServer, fault injection
 ├── sovereign-service        # Service installation (launchd / systemd / Windows task)
 ├── sovereign-agent-bench    # Eleven-problem agent-coding battery
@@ -216,7 +215,7 @@ Nine crates, and nine is the whole directory. Six left in 2026-09 because
 their names described a family they were not in: `commonwealth-api` and
 `-inference` became `sovereign-api` / `sovereign-serving` and were then
 deleted; `-knowledge` became `sovereign-grants`; `-app` became
-`sovereign-meshapp-registry`; `-test-harness` became
+`sovereign-meshapp-registry` (deleted as dead code, pb-meshapp-apps); `-test-harness` became
 `sovereign-mesh-test-harness`; `oicp-conformance` moved to a repo-root
 sibling. `sovereign-service/data/` ships the systemd unit, launchd plist and
 Windows task XML `install_service` embeds.
@@ -1023,7 +1022,6 @@ grants, because no `Scope` variant names `/internal/*`.
 | `POST /v1/embeddings` | What peers call via `embed_http::http_embed_fn` |
 | `POST /v1/rerank` (and each served kind's route) | Mounted from the served-kind registry (`sovereign_inference::served_kind`); answers with the rerank kind's slot or compute child |
 | `POST /v1/knowledge/search` | Determines target corpora, fans out, merges, reranks |
-| `/v1/apps*`, `/app/{app_id}/{*path}` | Mesh-app install/status + reverse proxy |
 | `GET /status` | Node / mesh / inference / knowledge summary, incl. `process.pid` + `run_id` |
 | `GET /oicp/v1/capabilities` | Provider manifest + federation info |
 | `/api/{version,tags,ps,show,chat,generate,embed,embeddings}` | Ollama-native compatibility shim, pure translation over the OpenAI handlers |

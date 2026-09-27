@@ -872,13 +872,13 @@ async fn async_main() {
             // the sibling's main() installs the appropriate filter for
             // each verb.
             "mobile" | "alignment" | "corpus" | "meta-atlas" | "mcp" | "recipe" | "pipeline"
-            | "recipe-agent" | "maintainer" => {
+            | "recipe-agent" | "maintainer" | "meshapp" => {
                 let code = llm_bin::exec(first, &raw_args[1..]);
                 std::process::exit(code);
             }
             // cmnwlth's verbs — the mesh sibling (FIVE_PROGRAMS §9).
             // serve's weight verbs keep their `svrn mesh` spelling (phase-b-22).
-            "mesh" | "meshapp" | "ring" | "job" | "publish" | "unpublish" | "run" => {
+            "mesh" | "ring" | "job" | "publish" | "unpublish" | "run" => {
                 let code = match serve_bin::mesh_verb(first, &raw_args[1..]) {
                     Some(verb) => serve_bin::exec(verb, &raw_args[2..]),
                     None => mesh_bin::exec(first, &raw_args[1..]),

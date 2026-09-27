@@ -72,6 +72,8 @@ mod knowledge_gym_cmd;
 mod legacy_store;
 mod mcp_cmd;
 mod mcp_demo_server;
+pub mod meshapp_cmd;
+pub mod meshapp_registry;
 mod meta_atlas_cmd;
 mod mobile_cmd;
 mod newsworthy_cmd;
@@ -199,6 +201,7 @@ async fn async_main() {
         "pipeline" => pipeline_cmd::run_pipeline(rest).await,
         "workflow" => workflow_cmd::run_workflow(rest).await,
         "mcp" => mcp_cmd::run_mcp(rest).await,
+        "meshapp" => meshapp_cmd::run(rest).await,
         "alignment" => alignment_cmd::run_alignment(rest).await,
         "mobile" => mobile_cmd::run_mobile(rest).await,
         "corpus" => corpus_cmd::run_corpus(rest).await,

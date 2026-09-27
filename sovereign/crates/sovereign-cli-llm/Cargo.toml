@@ -51,8 +51,15 @@ sovereign-enrichment-catalog = { workspace = true }
 # `enrich_cmd/mod.rs`.
 sovereign-enrichment-build = { workspace = true }
 sovereign-contracts = { workspace = true }
-# `bench_cmd/ablate.rs` watches the daemon's data-root lock.
-host-kit = { workspace = true }
+# `bench_cmd/ablate.rs` watches the daemon's data-root lock; `shell` is the
+# server shell and bundle guard `meshapp dev` serves through (pb-meshapp-apps).
+host-kit = { workspace = true, features = ["shell"] }
+# `svrn meshapp`: the corpus-explorer reads over svrn's corpora (a shared-leaf
+# closure), the dirs `meshapp_registry` resolves, and its `tar.zst` packing.
+sovereign-meshapp = { workspace = true }
+sovereign-cli-base = { workspace = true }
+tar = "0.4"
+zstd = "0.13"
 # `declare`: write this node's own origin credential to the 0600 secret
 # store. One implementation of where a declaration lives, shared with the
 # acceptor that reads it.

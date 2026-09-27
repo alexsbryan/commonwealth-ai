@@ -8,7 +8,7 @@ description = "cmnwlth's CLI verbs: mesh, ring, job, media, meshapp, run, publis
 [dependencies]
 clap = { workspace = true }
 sovereign-contracts = { workspace = true }
-# The server shell `meshapp dev` and `ring show` serve through (phase-b pb-shell).
+# The server shell `ring show` serves through (phase-b pb-shell).
 host-kit = { workspace = true, features = ["shell"] }
 sovereign-time = { workspace = true }
 commonwealth-media = { workspace = true }
@@ -22,7 +22,6 @@ sovereign-mesh = { workspace = true, features = ["treesitter"] }
 # `ServingHost::bringing_up` (rails_up.rs, pb-rails-untether). The feature
 # gates code only, so it moves no dependency edge.
 sovereign-turn-client = { workspace = true, features = ["bundled-backend"] }
-sovereign-meshapp = { workspace = true }
 sovereign-cli-base = { workspace = true, features = ["rail-client"] }
 commonwealth-core = { path = "../../../commonwealth/crates/commonwealth-core" }
 # `kv-export` (fp-87): the legacy SQLite stores' migration reads through
