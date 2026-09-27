@@ -283,6 +283,21 @@ impl SovereignInferenceAdapter {
                 }
             }
         }
+        // A lone user turn IS the prompt, as on the in-process path: the
+        // engine's chat template makes it the user turn. Labelling it
+        // `User: …\n\nAssistant:` changed what the engine prefilled on every
+        // single-turn request served over the wire (sovereign-serve
+        // tests/chat_round_trip.rs).
+        let mut turns = request
+            .messages
+            .iter()
+            .filter(|m| !matches!(Role::from_openai_str(m.role.as_str()), Role::System));
+        if let (Some(only), None) = (turns.next(), turns.next()) {
+            if matches!(Role::from_openai_str(only.role.as_str()), Role::User) {
+                tracing::debug!("inference_adapter:flatten single user turn, verbatim");
+                return (only.content.clone(), system);
+            }
+        }
         convo.push_str("Assistant:");
         (convo, system)
     }
