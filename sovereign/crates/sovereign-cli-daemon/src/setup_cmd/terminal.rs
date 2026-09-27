@@ -320,8 +320,8 @@ async fn run_terminal_join(raw: &str, opts: &Opts) -> i32 {
     let Some(daemon_bin) = crate::daemon_bin::locate() else {
         println!();
         eprintln!(
-            "error: cannot find the `sovereign-daemon` binary that performs the join. \
-             Build it with `cargo build -p sovereign-daemon`, or set SOVEREIGN_DAEMON_BIN \
+            "error: cannot find the `sovereign-stock` binary that performs the join. \
+             Build it with `cargo build -p sovereign-stock`, or set SOVEREIGN_DAEMON_BIN \
              to its path."
         );
         return 1;

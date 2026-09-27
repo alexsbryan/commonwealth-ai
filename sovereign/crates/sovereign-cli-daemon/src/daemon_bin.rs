@@ -1,5 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Exec dispatch into the `sovereign-daemon` sibling binary.
+//! Exec dispatch into the `sovereign-stock` sibling binary: the stock
+//! install, svrn with serve hosted in one process (pb-stock-binary;
+//! phase-b-29 Q1). `SOVEREIGN_DAEMON_BIN` still names what `svrn daemon run`
+//! execs, so a developer can point it at a bare `sovereign-daemon`, which
+//! dials a configured serve.
 //!
 //! `svrn daemon run` ran the daemon LINKED in this crate until the
 //! de-embed (docs/FIVE_PROGRAMS.md §11 step 10): the run body now lives
@@ -12,7 +16,7 @@ use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
-const BIN_NAME: &str = "sovereign-daemon";
+const BIN_NAME: &str = "sovereign-stock";
 
 pub(crate) fn locate() -> Option<PathBuf> {
     sovereign_turn_client::reach::locate_sibling(BIN_NAME, "SOVEREIGN_DAEMON_BIN")
@@ -53,7 +57,7 @@ fn warn_if_stale(bin: &Path) {
         let lag = disp_mtime.duration_since(sib_mtime).unwrap_or_default();
         eprintln!(
             "warning: {BIN_NAME} binary is {} older than the binary exec'ing it — \
-             if you changed the daemon crate, rebuild: cargo build -p sovereign-daemon  \
+             if you changed the daemon or serve crate, rebuild: cargo build -p sovereign-stock  \
              (silence: SOVEREIGN_NO_STALE_WARN=1)",
             human_duration(lag)
         );
@@ -83,7 +87,7 @@ pub(crate) fn exec(args: &[String]) -> i32 {
     let Some(bin) = locate() else {
         eprintln!(
             "sovereign: cannot find sibling binary '{BIN_NAME}'. \
-             Build it with `cargo build -p sovereign-daemon`, \
+             Build it with `cargo build -p sovereign-stock`, \
              or set SOVEREIGN_DAEMON_BIN to its path."
         );
         return 127;
