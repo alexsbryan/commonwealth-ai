@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! `svrn mesh up`, the one opt-in bring-up of cw-rails, against the REAL
 //! cw-rails binary (pb-rails-untether, phase-b-31). svrn's boot brings
-//! nothing up (sovereign-daemon tests/solo_rails_e2e.rs), so these are the
+//! nothing up (its daemon crate's tests/solo_rails_e2e.rs), so these are the
 //! proofs that used to ride its boot, re-pointed at the verb:
 //!
 //! - an upgraded node's legacy `rings/` is handed over BEFORE cw-rails starts,
