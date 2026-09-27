@@ -22,9 +22,11 @@ answer came from, and declines when it cannot.
 
 That sentence is served by six programs joined by two wires everyone already
 speaks: OpenAI-compatible HTTP for turns and completions, MCP for tools.
-Programs compose by process. One program dials another; none embeds another;
-each owns its own config file, data directory and log. A *distribution* (§2c)
-may also bundle programs, but it holds wiring only. Every program builds and
+Programs compose by process or through a distribution. One program dials
+another and never links another's internals; a *distribution* (§2c) may compose
+programs' declared library faces in one process, and it holds wiring only (the
+stock install is one process, phase-b-29). Each program owns its own config
+file, data directory and log. Every program builds and
 runs alone, and its lift sandbox proves it. The crate graph is a build detail,
 not architecture.
 
@@ -146,8 +148,12 @@ a native shell. A distribution may:
 - link a program's declared library face, never its internals.
 
 It owns only the bundle's concerns: the composed setup flow, the verb map, and
-the default placement of each model kind (a stock install dials `serve`; a
-phone build links it). Distributions are declared as `[[distribution]]` rows in
+the placement and lifecycle of each program it bundles. The stock install is
+ONE process: it builds `serve`'s provider and hands it to svrn through the
+`InferenceProvider` port, and binds serve's router on serve's port so other
+programs still dial it. A standalone svrn dials a configured serve and brings
+nothing up. There is no phone host build; the phone is a client (phase-b-29).
+Distributions are declared as `[[distribution]]` rows in
 `quality/ARCH_LAYERS.toml`, extending `[thin_surfaces]`. A distribution never
 excuses a program from building and running alone.
 
@@ -194,9 +200,11 @@ never defaulted (ARCH principle 6).
 ## 4. Rules each program obeys
 
 1. One data directory, one owner. A second process never opens it; it dials.
-2. Dial, never embed. `EmbeddedDaemon` (constructed at
+2. Dial, never embed. A program never embeds another program. A distribution
+   composing declared library faces in one process is wiring, not embedding
+   (§2c, phase-b-29). `EmbeddedDaemon` (constructed at
    `sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/mod.rs:1221`) is the
-   last in-process composition and it goes.
+   last in-process composition that is not a distribution, and it goes.
 3. An unreachable peer program is `CouldNotJudge` or absent, never empty.
 4. Every decision visible at `tracing=debug`.
 5. Config that can change without a code change is a file, not a constant.

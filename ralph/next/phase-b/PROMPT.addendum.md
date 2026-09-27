@@ -103,6 +103,11 @@ has not been measured (principle 8).
 | ARCH | `scripts/ralph-check.sh arch` (builtin; rides on LINT in the base) | exit=0 |
 | LIFT(p) | `scripts/ralph-check.sh lift p` — program p built and run outside the monorepo (exists once pb-lift-instrument lands) | the row states the verdict it expects; paste the verdict line |
 <!-- section: hard-rules-scope -->
+- **Scope guard (phase-b-29).** Build only what the row states. Anything your
+  census finds that the row does not state goes to
+  target/ralph/phase-b/preflight-forks.md, or to a one-line note on the row
+  that owns it; it never lands in this row's commits. If the census finds
+  more than twice the row's LIFT, stop at census (§6) with the split.
 - Never edit `sovereign/ARCH_PRINCIPLES.md`, `AGENTS.md`, `.claude/`, or
   `scripts/ralph*`. Never stop or restart the DEPLOYED daemon (the one
   `svrn daemon status` names). Never touch `ralph/STOP`,

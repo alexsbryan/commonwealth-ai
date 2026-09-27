@@ -21,6 +21,25 @@ a stated lift (`ralph/PROMPT.base.md` §2). When a census demands more work,
 extend the row that owns the outcome or fold rows that touch the same files.
 Split only when two outcomes need different proofs.
 
+## Scope guard and census (operator, 2026-09-27, phase-b-29)
+
+- Every row advances a finish item: a violation or `svrn` exception it
+  retires, a lift it makes pass, a §2c drive copy it collapses, or a
+  pre-registered bar it measures. Work that advances none goes to
+  ralph/next/phase-c/, never into this queue.
+- A rewrite asks only for what the row's outcome and proof already require,
+  or what an ARCH principle the diff itself breaks requires. Anything else
+  goes to the row that owns it or to phase-c, never onto the row in flight.
+- A rewritten row carries its own census: the call sites of every moved
+  symbol, a trial of the move (recipe applied, COMPILE, LAYER and BOUNDARY,
+  reverted, pasted as `trial:`), and the runtime traffic crossing it. A
+  rewrite you cannot trial is not a decision you can make: write the package.
+  fp-44 and pb-10 falsified director rewrites 15 and 7 minutes after they
+  were written; this rule is why.
+- A decision that changes the design edits docs/FIVE_PROGRAMS.md in the same
+  commit. A decision that contradicts FIVE_PROGRAMS without editing it is
+  incomplete (phase-b-29 fixed §1, §2c and §4 rule 2 against phase-b-1).
+
 ## Decide these
 
 - **A false row premise.** The worker's census IS the input. Verify it,
@@ -51,6 +70,8 @@ Split only when two outcomes need different proofs.
 
 ## Leave these for the operator (write the package and stop)
 
+- The pre-flight sweep's one package of forks (phase-b-29). Mark it
+  `operator-only: the pre-flight sweep's forks (phase-b-29)`.
 - Adding an `[[exception]]` row, admitting any leaf other than the host kit,
   or raising the host kit's size cap.
 - Anything that changes end-user-observable behaviour beyond what a row
