@@ -30,7 +30,7 @@ pub enum PodError {
     #[error("vastai search returned no offers matching `{0}`")]
     NoOffers(String),
     #[error("ledger: {0}")]
-    Ledger(#[from] crate::ledger::LedgerError),
+    Ledger(#[from] super::ledger::LedgerError),
     #[error("io: {0}")]
     Io(#[from] std::io::Error),
 }

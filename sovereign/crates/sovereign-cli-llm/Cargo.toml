@@ -73,9 +73,6 @@ sovereign-mesh = { workspace = true, features = ["treesitter"] }
 # The mesh host cluster (domains dm-daemon-mesh-edge): the assembly root, the
 # route shells and the edge.
 sovereign-daemon = { workspace = true }
-# The rented-pod modules lifted out of sovereign-mesh (domains REVIEW-audit-3);
-# reached directly rather than through sovereign-mesh's shim.
-sovereign-pods = { path = "../sovereign-pods" }
 # THE `Runtime` recipe (TOPOLOGY.md §10 phase 5c). `chat_cmd::bootstrap`
 # carried its own ~450-line copy of it until 2026-08-25; what remains here
 # is only what this host resolves — which daemon, which models, which data
@@ -147,7 +144,6 @@ sha2 = { workspace = true }
 regex = { workspace = true }
 tempfile = { workspace = true }
 hex = "0.4"
-ed25519-dalek = { version = "2", features = ["pkcs8", "rand_core"] }
 rand = "0.9"
 # ── `awareness`-only, and off in every ordinary build ──
 # `awareness_cmd` moved here from `sovereign-cli` on 2026-08-21 (nc-26)

@@ -15,9 +15,9 @@
 
 use std::path::{Path, PathBuf};
 
+use super::pod;
 use ed25519_dalek::SigningKey;
 use serde::Deserialize;
-use sovereign_pipeline::pod;
 use sovereign_pods::worker_controller::{
     JobSpec, ProviderError, ProviderInstance, ProviderResult, PublicAddress, WorkerProvider,
 };
@@ -27,7 +27,7 @@ use sovereign_pods::worker_pod::WORKER_PORT;
 /// alongside the pipeline pod ledger so a single `chmod 700
 /// ~/.svrnmesh` covers both.
 pub fn owner_key_path() -> PathBuf {
-    sovereign_cli_shared::dirs::sovereign_root().join("worker_owner_key.bin")
+    sovereign_cli_base::dirs::sovereign_root().join("worker_owner_key.bin")
 }
 
 /// Load the owner's signing key, generating + persisting a fresh one

@@ -12,6 +12,7 @@ pub mod mesh_guest_link;
 pub mod mesh_media;
 pub mod mesh_member_cmd;
 pub mod mesh_offers;
+pub mod mesh_pod;
 pub mod mesh_skew;
 pub mod mesh_soak;
 pub mod mesh_token;

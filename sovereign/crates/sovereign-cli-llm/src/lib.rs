@@ -89,7 +89,6 @@ mod search_gym_cmd;
 pub mod serve_dial;
 mod turn_sink;
 mod voice_eval;
-mod worker_pod_provider;
 mod workflow_cmd;
 
 use sovereign_cli_shared::tracing_init::init_tracing;

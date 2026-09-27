@@ -45,6 +45,7 @@ pub async fn run_mesh(args: &[String]) -> i32 {
         "media" => crate::mesh_media::cmd_media(&args[1..]).await,
         "app" => crate::mesh_app::cmd_app(&args[1..]).await,
         "offers" => crate::mesh_offers::cmd_offers(&args[1..]).await,
+        "pod" => crate::mesh_pod::cmd_pod(&args[1..]).await,
         "rotate" => cmd_rotate(&args[1..]).await,
         "grant" => crate::mesh_guest::cmd_grant(&args[1..]).await,
         "use" => crate::mesh_guest::cmd_use(&args[1..]).await,

@@ -55,6 +55,9 @@ rqrr = { version = "=0.11.0", default-features = false }
 serde_json = { workspace = true }
 toml_edit = { workspace = true }
 sovereign-pods = { path = "../sovereign-pods" }
+# `mesh pod` (mesh_pod/provider.rs): the owner key and the vastai error type.
+ed25519-dalek = { workspace = true }
+thiserror = { workspace = true }
 chrono = { workspace = true }
 rand = "0.9"
 fast_qr = { version = "=0.14.0", default-features = false, features = ["svg"] }
