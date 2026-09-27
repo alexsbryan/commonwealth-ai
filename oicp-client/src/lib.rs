@@ -847,6 +847,29 @@ impl RemoteApiProvider {
             body["tool_choice"] = tc.clone();
         }
 
+        // The sampler and constraint fields the chat wire already carries
+        // and serve's `build_completion_request` already reads. Unwritten,
+        // each was dropped on every turn that crossed this client
+        // (sovereign-serve tests/chat_round_trip.rs).
+        if let Some(p) = request.top_p {
+            body["top_p"] = serde_json::json!(p);
+        }
+        if let Some(mode) = request.sampling_mode {
+            body["sampling_mode"] = serde_json::json!(mode);
+        }
+        if let Some(prefix) = &request.assistant_prefix {
+            body["assistant_prefix"] = serde_json::json!(prefix);
+        }
+        if let Some(prefix) = &request.cmd_prefix {
+            body["cmd_prefix"] = serde_json::json!(prefix);
+        }
+        if let Some(urls) = &request.url_allowlist {
+            body["url_allowlist"] = serde_json::json!(urls);
+        }
+        if let Some(ids) = &request.evidence_id_allowlist {
+            body["evidence_id_allowlist"] = serde_json::json!(ids);
+        }
+
         body
     }
 
