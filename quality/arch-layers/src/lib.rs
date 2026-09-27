@@ -36,9 +36,7 @@ mod distributions;
 mod packages;
 mod surfaces;
 mod violations;
-pub use distributions::{
-    evaluate_distributions, missing_distribution_crates, Distribution, Face,
-};
+pub use distributions::{evaluate_distributions, missing_distribution_crates, Distribution, Face};
 pub use packages::{
     evaluate_packages, missing_package_crates, Package, PackageLeaf, SHARED_LEAVES_SCOPE,
 };

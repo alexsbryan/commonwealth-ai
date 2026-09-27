@@ -431,7 +431,12 @@ fn scan_include_escapes(text: &str, rel_dir: &Path) -> Vec<IncludeEscape> {
 /// It cannot stop at `src/` the way rule 3b does: `quality/ARCH_LAYERS.toml`
 /// says "a third party who lifts the package carries its tests", and every
 /// instance of this defect found so far has been in test code.
-pub(crate) fn runtime_root_escapes(dir: &Path, crate_name: &str, scope: &str, fails: &mut Vec<String>) {
+pub(crate) fn runtime_root_escapes(
+    dir: &Path,
+    crate_name: &str,
+    scope: &str,
+    fails: &mut Vec<String>,
+) {
     for sub in ["src", "tests", "benches", "examples"] {
         let mut files = Vec::new();
         rs_files(&dir.join(sub), &mut files);
