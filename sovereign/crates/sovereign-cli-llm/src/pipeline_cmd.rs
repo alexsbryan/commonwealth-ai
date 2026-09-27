@@ -49,17 +49,8 @@ const HELP: Help = Help {
                  fanout and only signal local PIDs.",
             ),
             (
-                "pod up",
-                "Launch a Vast.ai pod with the sovereign CUDA image, join the mesh, \
-                 register in the cost ledger.",
-            ),
-            (
-                "pod list",
-                "Show every pod the ledger knows about with accrued cost.",
-            ),
-            (
-                "pod down <vast-id>",
-                "Destroy a Vast pod, close its ledger entry, print final cost.",
+                "pod …",
+                "Moved to `svrn mesh pod` (up / pool / list / down).",
             ),
         ]),
         HelpSection::Flags(&[
@@ -127,6 +118,15 @@ pub async fn run_pipeline(args: &[String]) -> i32 {
         "status" => cmd_status(&args[1..]).await,
         "list" => cmd_list(&args[1..]).await,
         "pause" => cmd_pause(&args[1..]).await,
+        // The pod verbs are cmnwlth's now (phase-b-1 (10)): a named
+        // pointer, never a silent unknown-subcommand.
+        "pod" => {
+            eprintln!(
+                "svrn pipeline pod: moved to `svrn mesh pod`. Run `svrn mesh pod {}`.",
+                args[1..].join(" ")
+            );
+            2
+        }
         other => {
             eprintln!("unknown subcommand: {other}");
             help::print(&HELP);
