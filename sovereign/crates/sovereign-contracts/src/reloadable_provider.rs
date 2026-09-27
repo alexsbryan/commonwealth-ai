@@ -190,4 +190,53 @@ impl InferenceProvider for ReloadableProvider {
     async fn peer_manifests(&self) -> Vec<(String, oicp::ProviderManifest)> {
         self.current().peer_manifests().await
     }
+
+    async fn lender_manifest(&self) -> Option<(String, Vec<String>)> {
+        self.current().lender_manifest().await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    /// The names of the `fn`s declared in `text`, in order.
+    fn fn_names(text: &str) -> Vec<&str> {
+        text.split("fn ")
+            .skip(1)
+            .filter_map(|rest| rest.split('(').next())
+            .filter(|name| name.chars().all(|c| c.is_alphanumeric() || c == '_'))
+            .collect()
+    }
+
+    /// The doc above ("every method delegates, defaults included") as code:
+    /// a trait method with a default compiles unforwarded and answers for the
+    /// wrapper, which is how `lender_manifest` went missing (seat, 3f9749490).
+    #[test]
+    fn the_cell_forwards_every_inference_provider_method() {
+        let traits = include_str!("traits.rs");
+        let start = traits
+            .find("pub trait InferenceProvider")
+            .expect("the trait is declared in traits.rs");
+        let body = &traits[start..];
+        let end = body.find("\n}\n").expect("the trait's closing brace");
+        let methods = fn_names(&body[..end]);
+        assert!(methods.len() > 20, "parsed too few methods: {methods:?}");
+
+        let cell = include_str!("reloadable_provider.rs");
+        let start = cell
+            .find("impl InferenceProvider for ReloadableProvider")
+            .expect("the cell's impl");
+        let body = &cell[start..];
+        let end = body.find("\n}\n").expect("the impl's closing brace");
+        let impl_text = &body[..end];
+        let forwarded = fn_names(impl_text);
+        let missing: Vec<&str> = methods
+            .iter()
+            .copied()
+            .filter(|m| !forwarded.contains(m) || !impl_text.contains(&format!(".{m}(")))
+            .collect();
+        assert!(
+            missing.is_empty(),
+            "ReloadableProvider does not forward: {missing:?}"
+        );
+    }
 }
