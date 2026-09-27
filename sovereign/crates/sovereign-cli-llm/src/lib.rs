@@ -138,6 +138,10 @@ async fn async_main() {
         // `run` supervises a child and talks to the local daemon over
         // loopback; its own reporting is on stderr, so info is the floor.
         "run" => init_tracing("sovereign_cli_llm=info"),
+        // `meshapp dev` serves through the host kit's shell, whose mount
+        // trace and bundle-escape refusals are `host_kit` events. cli-mesh
+        // installed no subscriber, so both were invisible (phase-b-16).
+        "meshapp" => init_tracing("sovereign_cli_llm=info,host_kit=info"),
         "pipeline" => init_tracing("sovereign_cli_llm=info,sovereign_pipeline=info"),
         "enrich" => init_tracing("sovereign_cli_llm=info,corpus_engine=info"),
         "voice" | "search-gym" | "knowledge-gym" => init_tracing("sovereign_cli_llm=info"),
