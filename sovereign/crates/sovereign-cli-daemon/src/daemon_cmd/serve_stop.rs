@@ -64,12 +64,18 @@ async fn stop_serve() -> i32 {
             return 1;
         }
     };
-    stop_serve_at(&serve, &sovereign_daemon::startup::serve_pid_path()).await
+    stop_serve_at(
+        &serve,
+        &sovereign_daemon::startup::serve_pid_path(),
+        sovereign_contracts::venue::serve_port(),
+    )
+    .await
 }
 
-/// The stop itself, over the resolved base and the bring-up's record.
+/// The stop itself, over the resolved base, the bring-up's record, and the
+/// port an unrecorded serve is looked up on to be named.
 #[cfg(unix)]
-async fn stop_serve_at(serve: &ServeBase, record_path: &std::path::Path) -> i32 {
+async fn stop_serve_at(serve: &ServeBase, record_path: &std::path::Path, serve_port: u16) -> i32 {
     if serve.source != ServeBaseSource::Default {
         eprintln!(
             "  serve at {} is [node] entry's, not this daemon's: left running",
@@ -80,7 +86,7 @@ async fn stop_serve_at(serve: &ServeBase, record_path: &std::path::Path) -> i32 
     let record = match ServeRecord::read_from(record_path) {
         Ok(Some(record)) => record,
         Ok(None) => {
-            let port = sovereign_contracts::venue::serve_port();
+            let port = serve_port;
             tracing::debug!(port, "serve stop: no bring-up record");
             match super::lifecycle::find_daemon_pid_by_port(port) {
                 Some(pid) => eprintln!(
@@ -186,7 +192,7 @@ mod tests {
         let ours = listener();
         let path = record(&dir, pid_on(ours), ours);
         assert_eq!(
-            stop_serve_at(&base(ServeBaseSource::Default), &path).await,
+            stop_serve_at(&base(ServeBaseSource::Default), &path, ours).await,
             0
         );
         assert!(!listening(ours), "the recorded serve must be stopped");
@@ -202,7 +208,7 @@ mod tests {
         let theirs = listener();
         let path = dir.path().join("serve.pid");
         assert_eq!(
-            stop_serve_at(&base(ServeBaseSource::Default), &path).await,
+            stop_serve_at(&base(ServeBaseSource::Default), &path, theirs).await,
             0
         );
         assert!(
@@ -222,7 +228,7 @@ mod tests {
         let theirs = listener();
         let path = record(&dir, std::process::id(), theirs);
         assert_eq!(
-            stop_serve_at(&base(ServeBaseSource::Default), &path).await,
+            stop_serve_at(&base(ServeBaseSource::Default), &path, theirs).await,
             0
         );
         assert!(listening(theirs), "the listener is not the recorded pid");
@@ -239,7 +245,7 @@ mod tests {
         let entry = listener();
         let path = record(&dir, pid_on(entry), entry);
         assert_eq!(
-            stop_serve_at(&base(ServeBaseSource::NodeEntry), &path).await,
+            stop_serve_at(&base(ServeBaseSource::NodeEntry), &path, entry).await,
             0
         );
         assert!(
