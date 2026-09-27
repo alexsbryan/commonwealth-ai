@@ -13,6 +13,7 @@
 //! free port, over the same config file. Ignored in the suite: it loads real
 //! GGUFs. Run by hand, in the toolbox, with the serve binary built:
 //!
+//!   SOVEREIGN_MODELS_DIR=sovereign/models \
 //!   SOVEREIGN_SERVE_BIN=target/debug/sovereign-serve cargo test -p sovereign-daemon \
 //!     --test main serve_latency_bars -- --ignored --nocapture
 
@@ -30,8 +31,13 @@ const EMBED_MODEL: &str = "Qwen3-Embedding-0.6B-Q8_0.gguf";
 const RUNS: usize = 7;
 const BATCH: usize = 32;
 
+/// The GGUF directory, from the existing override (`SOVEREIGN_MODELS_DIR`,
+/// quality/env-flags.toml), never from the crate's own path: that escapes the
+/// package root (boundary-gate, phase-b-25).
 fn models_dir() -> std::path::PathBuf {
-    std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../models")
+    std::env::var_os("SOVEREIGN_MODELS_DIR")
+        .map(std::path::PathBuf::from)
+        .expect("SOVEREIGN_MODELS_DIR names the GGUF directory (e.g. sovereign/models)")
 }
 
 async fn first_token(p: &dyn InferenceProvider) -> Duration {
