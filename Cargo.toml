@@ -257,7 +257,6 @@ members = [
     # (`cargo tree --edges normal`, measured 2026-09-11).
     "commonwealth/crates/commonwealth-rails",
     "sovereign/crates/sovereign-mesh-test-harness",
-    "sovereign/crates/sovereign-meshapp-registry",
     "commonwealth/crates/commonwealth-state",
 
     # Quality program (2026-07-11) — schema + evaluator for the declared
@@ -406,7 +405,6 @@ commonwealth-rail = { path = "commonwealth/crates/commonwealth-rail" }
 commonwealth-work = { path = "commonwealth/crates/commonwealth-work" }
 commonwealth-media = { path = "commonwealth/crates/commonwealth-media" }
 commonwealth-rails = { path = "commonwealth/crates/commonwealth-rails" }
-sovereign-meshapp-registry = { path = "sovereign/crates/sovereign-meshapp-registry" }
 commonwealth-state = { path = "commonwealth/crates/commonwealth-state" }
 
 # ── Shared external deps ────────────────────────────────────────────────

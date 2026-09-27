@@ -26,8 +26,6 @@ use commonwealth_state::MeshStore;
 use commonwealth_transport::PeerTransport;
 use sovereign_contracts::identity::IdentityReader;
 use sovereign_contracts::peer::ConvergenceRecord;
-use sovereign_meshapp_registry::proxy::AppPortMap;
-use sovereign_meshapp_registry::registry::AppRegistry;
 
 /// Callback the route handlers fire whenever they mutate `Mesh` —
 /// `/internal/join` (accepting a new member), `/internal/gossip`
@@ -348,10 +346,6 @@ pub struct FabricPart {
     pub rpc_iroh_accept: std::sync::atomic::AtomicBool,
     /// Distributed KV store for mesh apps.
     pub mesh_store: Arc<MeshStore>,
-    /// Registry of known mesh apps (gossiped).
-    pub app_registry: Arc<AppRegistry>,
-    /// Map of locally running app ports for the proxy layer.
-    pub app_port_map: AppPortMap,
     /// Concurrent **outbound** peer knowledge fan-out requests in flight from
     /// this node (one per peer a knowledge search is currently querying). The
     /// glassbox companion to the inbound `peer_sched` admission gauge: it makes
@@ -394,12 +388,7 @@ impl FabricPart {
     /// "Construction is staged, and parts are total"). The daemon gathers the
     /// seed and calls this before `AppState`, so the part can be held across a
     /// stop; the tests take [`FabricSeed::default`].
-    pub fn new(
-        self_node_id: NodeId,
-        mesh: Mesh,
-        app_registry: Arc<AppRegistry>,
-        seed: FabricSeed,
-    ) -> Self {
+    pub fn new(self_node_id: NodeId, mesh: Mesh, seed: FabricSeed) -> Self {
         // Fabric's own store, private to it: the node's replicated KV is
         // cw-rails' (five-programs fp-88, fp-111). In-memory creation is
         // infallible — fail-fast is correct.
@@ -421,8 +410,6 @@ impl FabricPart {
             peer_post_split: std::sync::RwLock::new(std::collections::HashMap::new()),
             rpc_iroh_accept: std::sync::atomic::AtomicBool::new(false),
             mesh_store,
-            app_registry,
-            app_port_map: AppPortMap::new(),
             fanout_inflight: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
             on_mesh_mutation: seed.mesh_mutation_hook,
             convergence: seed.convergence,

@@ -3084,7 +3084,6 @@ impl EmbeddedDaemon {
         // corpus. Fabric builds its own private store: the node's replicated
         // KV is cw-rails', reached through `RailsKv` below (five-programs
         // fp-88, fp-111).
-        let app_registry = Arc::new(sovereign_meshapp_registry::registry::AppRegistry::new());
 
         // ── Fabric's values exist before its part is built ────────
         //
@@ -3239,8 +3238,7 @@ impl EmbeddedDaemon {
         //
         // (SYSTEM_OVERVIEW.md §5.5.) Peers fetch `/oicp/v1/capabilities`
         // here, the Joiner's HybridProvider POSTs `/v1/chat/completions`
-        // here for federated inference, and mesh apps federate via
-        // `/v1/apps/*`.
+        // here for federated inference.
         //
         // **Trust boundary (2026-06 auth: localhost-default + bearer).**
         // `daemon.client_bind` defaults to `127.0.0.1` — secure by
@@ -3299,7 +3297,6 @@ impl EmbeddedDaemon {
         let fabric = Arc::new(sovereign_mesh::fabric::FabricPart::new(
             node_id,
             mesh,
-            Arc::clone(&app_registry),
             fabric_seed,
         ));
         *self.fabric.write().unwrap_or_else(|e| e.into_inner()) = Some(Arc::clone(&fabric));

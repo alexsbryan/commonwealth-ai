@@ -44,7 +44,6 @@ sovereign-contracts = { workspace = true }
 host-kit = { workspace = true, features = ["shell"] }
 kernel-types = { workspace = true }
 oicp-types = { workspace = true }
-sovereign-meshapp-registry = { workspace = true }
 sovereign-serving-host = { path = "../sovereign-serving-host" }
 sovereign-work-atlas = { workspace = true }
 sovereign-core = { workspace = true }

@@ -375,7 +375,6 @@ pub(super) const REGISTRY_TAIL: &[(&str, Class, usize)] = &[
         4,
     ),
     ("oicp-conformance/src/checks.rs", Class::LocalDaemon, 1),
-    ("sovereign/crates/sovereign-meshapp-registry/src/proxy.rs", Class::LocalDaemon, 1),
     // Federated media's catalogue half. The row was
     // `sovereign-mesh/src/media_fanout.rs` from 2026-09-11 until the decisions
     // moved to the package crate later the same day (0eccf5664) — same two

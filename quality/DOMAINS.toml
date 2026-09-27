@@ -13885,30 +13885,6 @@ lines = 250
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-meshapp-registry/src/lib.rs"
-context = "unknown"
-lines = 15
-note = ""
-
-[[module]]
-path = "sovereign/crates/sovereign-meshapp-registry/src/manifest.rs"
-context = "unknown"
-lines = 75
-note = ""
-
-[[module]]
-path = "sovereign/crates/sovereign-meshapp-registry/src/proxy.rs"
-context = "unknown"
-lines = 66
-note = ""
-
-[[module]]
-path = "sovereign/crates/sovereign-meshapp-registry/src/registry.rs"
-context = "unknown"
-lines = 94
-note = ""
-
-[[module]]
 path = "sovereign/crates/sovereign-meshapp/src/lib.rs"
 context = "unknown"
 lines = 941

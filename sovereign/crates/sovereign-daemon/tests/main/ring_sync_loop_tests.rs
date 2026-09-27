@@ -43,7 +43,6 @@ pub fn bare_state_with_seed(seed: sovereign_daemon::state::FabricSeed) -> AppSta
     AppState::new_with_platform_and_engine_and_gauge_and_fabric(
         NodeId::from_u128(1),
         mesh,
-        Arc::new(sovereign_meshapp_registry::registry::AppRegistry::new()),
         None,
         None,
         seed,
@@ -265,7 +264,6 @@ async fn a_peers_seal_prunes_the_daemons_own_namespace_whose_roster_is_derived()
         let state = AppState::new_with_platform_and_engine_and_gauge_and_fabric(
             me,
             mesh_of(vec![member(me, "me", Some(pubkey_of(&key)))]),
-            Arc::new(sovereign_meshapp_registry::registry::AppRegistry::new()),
             None,
             None,
             sovereign_daemon::state::FabricSeed {

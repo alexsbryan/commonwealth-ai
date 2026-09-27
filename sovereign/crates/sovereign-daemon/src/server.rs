@@ -2,11 +2,10 @@
 #[cfg(test)]
 use std::net::SocketAddr;
 
-use axum::routing::{any, delete, get, post};
+use axum::routing::{get, post};
 use axum::Router;
 use host_kit::shell::BodyLimits;
 
-use crate::routes_apps;
 use crate::routes_completions;
 use crate::routes_edit_predictions;
 use crate::routes_inference;
@@ -256,14 +255,7 @@ pub fn client_router_for(state: AppState, surface: ClientSurface) -> Router {
                 post(routes_ollama::generate).layer(admission()),
             )
             .route("/api/embed", post(routes_ollama::embed))
-            .route("/api/embeddings", post(routes_ollama::embeddings))
-            // App management endpoints.
-            .route("/v1/apps", get(routes_apps::list_apps))
-            .route("/v1/apps/{app_id}/install", post(routes_apps::install_app))
-            .route("/v1/apps/{app_id}/status", get(routes_apps::app_status))
-            .route("/v1/apps/{app_id}", delete(routes_apps::uninstall_app))
-            // Reverse proxy to locally running apps.
-            .route("/app/{app_id}/{*path}", any(routes_apps::proxy_app));
+            .route("/api/embeddings", post(routes_ollama::embeddings));
         // Served model kinds (`/v1/rerank`, …), mounted from the kind
         // registry, behind the admission gate every inference route carries.
         routes_kinds::served_kind_routes()

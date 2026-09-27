@@ -27,7 +27,6 @@ use sovereign_mesh::ledger_port::{
     ActivityLedgerPort, ContributionLedgerPort, InferenceStatePort, PeerPreferencesPort,
     ProcessedShardsPort,
 };
-use sovereign_meshapp_registry::registry::AppRegistry;
 
 use super::{fabric, node, serving, AppState, RpcShardWarmer};
 
@@ -101,12 +100,7 @@ impl AppState {
         node_seed: node::NodeSeed,
         store_seed: StoreSeed,
     ) -> Self {
-        let fabric = Arc::new(fabric::FabricPart::new(
-            self_node_id,
-            mesh,
-            Arc::new(AppRegistry::new()),
-            fabric_seed,
-        ));
+        let fabric = Arc::new(fabric::FabricPart::new(self_node_id, mesh, fabric_seed));
         Self::assemble_with_fabric(
             self_node_id,
             fabric,

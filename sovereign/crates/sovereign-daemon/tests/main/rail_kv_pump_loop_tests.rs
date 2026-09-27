@@ -50,7 +50,6 @@ async fn work_namespace_seals_and_keeps_live_leases() {
     let state = AppState::new_with_platform_and_engine_and_gauge_and_fabric(
         me,
         mesh_of(vec![member(me, "me", Some(pubkey_of(&donor)))]),
-        Arc::new(sovereign_meshapp_registry::registry::AppRegistry::new()),
         None,
         None,
         sovereign_daemon::state::FabricSeed {

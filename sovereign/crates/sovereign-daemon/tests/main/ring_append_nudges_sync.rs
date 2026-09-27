@@ -108,7 +108,6 @@ fn node(
     let state = AppState::new_with_platform_and_engine_and_gauge_and_fabric_and_serving_and_node(
         self_id,
         mesh,
-        Arc::new(sovereign_meshapp_registry::registry::AppRegistry::new()),
         None,
         None,
         sovereign_daemon::state::fabric::FabricSeed {

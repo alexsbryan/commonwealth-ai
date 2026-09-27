@@ -46,7 +46,6 @@ use sovereign_mesh::fabric::{FabricPart, FabricSeed};
 use sovereign_mesh_test_harness::fault::{shared_policy, FaultProxy, FaultTransport, SharedPolicy};
 use sovereign_mesh_test_harness::simulated_mesh::SimulatedMesh;
 use sovereign_mesh_test_harness::simulated_node::SimulatedNodeBuilder;
-use sovereign_meshapp_registry::registry::AppRegistry;
 
 use sovereign_mesh::gossip;
 
@@ -68,12 +67,7 @@ struct DstNodeState {
 impl DstNodeState {
     fn new(id: NodeId, mesh: Mesh) -> Self {
         Self {
-            fabric: Arc::new(FabricPart::new(
-                id,
-                mesh,
-                Arc::new(AppRegistry::new()),
-                FabricSeed::default(),
-            )),
+            fabric: Arc::new(FabricPart::new(id, mesh, FabricSeed::default())),
             corpus_engine: None,
         }
     }

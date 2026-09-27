@@ -500,7 +500,6 @@ async fn the_rail_surface_does_not_serve_the_general_client_routes() {
         ("POST", "/v1/chat/completions"),
         ("POST", "/v1/knowledge/search"),
         ("GET", "/v1/models"),
-        ("GET", "/v1/apps"),
         ("POST", "/api/chat"),
     ];
     const TOKEN: &str = "deadbeefcafef00ddeadbeefcafef00ddeadbeefcafef00ddeadbeefcafef00d";
@@ -538,6 +537,48 @@ async fn the_rail_surface_does_not_serve_the_general_client_routes() {
             "operator surface must still serve {method} {path}"
         );
     }
+}
+
+/// The `/v1/apps` registry and the `/app/{id}/*` proxy were dead: the port
+/// map behind them was never filled, so the proxy answered 503 on every
+/// request and the registry echoed a map nothing read (pb-meshapp-apps).
+/// Deleted, they answer 404 on the operator surface, the one that mounted
+/// them. `/v1/models` through the same probe is the control: a probe that
+/// 404s everything would pass the first half.
+#[tokio::test]
+async fn the_deleted_app_registry_answers_404() {
+    const TOKEN: &str = "deadbeefcafef00ddeadbeefcafef00ddeadbeefcafef00ddeadbeefcafef00d";
+    let probe = |method: &str, path: &str| {
+        let state = test_app_state_with_token(Some(TOKEN.into()));
+        let req = Request::builder()
+            .method(method)
+            .uri(path)
+            .header("content-type", "application/json")
+            .header(axum::http::header::AUTHORIZATION, format!("Bearer {TOKEN}"))
+            .body(Body::from("{}"))
+            .unwrap();
+        async move {
+            mock_router_for(state, ClientSurface::Operator)
+                .oneshot(req)
+                .await
+                .unwrap()
+                .status()
+        }
+    };
+    for (method, path) in [
+        ("GET", "/v1/apps"),
+        ("POST", "/v1/apps/demo/install"),
+        ("GET", "/v1/apps/demo/status"),
+        ("DELETE", "/v1/apps/demo"),
+        ("GET", "/app/demo/index.html"),
+    ] {
+        assert_eq!(
+            probe(method, path).await,
+            StatusCode::NOT_FOUND,
+            "{method} {path} is deleted"
+        );
+    }
+    assert_ne!(probe("GET", "/v1/models").await, StatusCode::NOT_FOUND);
 }
 
 #[tokio::test]

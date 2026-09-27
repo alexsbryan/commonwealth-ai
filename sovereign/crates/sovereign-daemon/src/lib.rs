@@ -187,7 +187,6 @@ pub mod mesh_proof_header_gate;
 /// The outbound half of the mesh proof: `AppState` → the one stamp.
 pub mod mesh_proof_outbound;
 pub mod reshaping;
-pub mod routes_apps;
 pub mod routes_completions;
 pub mod routes_edit_predictions;
 pub mod routes_guest_ask;

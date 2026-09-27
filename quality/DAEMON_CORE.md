@@ -598,9 +598,9 @@ Named so the next reader does not take them as measured.
 - Whether `sovereign-workflow-host`'s `/internal/workflows` surface registers
   through `.route(` at all; the census found none, so it is either nested
   differently or the note describing it is ahead of the code.
-- The `out` class is 4 paths by the rules in the script; `/v1/apps` and the
-  app proxy may be a resource (an installed bundle) rather than out. The
-  rule is a claim, not a measurement.
+- The `out` class counted `/v1/apps` and the app proxy by the rules in the
+  script. Both were deleted as dead code (pb-meshapp-apps, 2026-09-27),
+  which settles whether they were a resource.
 - Which callers other than the owner can start a turn on the daemon (§3.3):
   the size of the unwired-ceiling exposure.
 - `SelfClaims`' exact inputs — RESOLVED 2026-09-16: four answers (availability,

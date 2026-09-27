@@ -89,7 +89,6 @@ commonwealth-rail-core = { workspace = true }
 # whose registry is empty and which therefore refuses every `[compute
 # .work_offer]` a person writes.
 commonwealth-work = { workspace = true, features = ["process"] }
-sovereign-meshapp-registry = { path = "../../../sovereign/crates/sovereign-meshapp-registry" }
 # DST harness (FaultTransport / FaultProxy / SimulatedMesh) for the
 # deterministic-simulation tests in `dst.rs` + `tests/dst_scenarios.rs`, and
 # now the home of the Tier-1 scheduler simulator (`mesh_sim`, moved out of

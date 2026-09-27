@@ -680,8 +680,7 @@ step. Buckets follow the daemon's structural layout.
 
 | Capability | Coverage | Impact | Test / Next step |
 |---|---|---|---|
-| `/v1/apps` list / install / uninstall | · | P2 | **Gap.** Mesh-app manifest gossip; future-facing surface |
-| `/v1/apps/{id}/proxy` reverse proxy | · | P2 | **Gap.** |
+| `/v1/apps*`, `/app/*` | — | — | Deleted (pb-meshapp-apps): dead code. `server::tests::the_deleted_app_registry_answers_404` pins the absence |
 
 ### M. Contribution ledger
 
