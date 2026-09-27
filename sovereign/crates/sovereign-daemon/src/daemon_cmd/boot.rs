@@ -971,7 +971,9 @@ pub(super) async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
                     // the same deferred handle, bound below.
                     provider_factory: Arc::new(crate::provider::LlamaCppFactory {
                         daemon: Arc::clone(&deferred_daemon),
-                        reload: crate::provider::ReloadSource::Assembly(Arc::clone(&reload_factory)),
+                        reload: crate::provider::ReloadSource::Assembly(Arc::clone(
+                            &reload_factory,
+                        )),
                     }),
                     // The work atlas writes into THIS store, so its entries reach
                     // the store's outbox and ride the ring rail (cw-lift 4b; the
