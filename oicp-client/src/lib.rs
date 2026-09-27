@@ -16,6 +16,8 @@
 use std::pin::Pin;
 use std::time::Instant;
 
+mod ner;
+pub use ner::RemoteNer;
 mod rerank;
 mod serve_loopback;
 mod turn_admission;

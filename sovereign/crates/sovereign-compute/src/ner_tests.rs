@@ -3,6 +3,8 @@
 //! the route's wire as `RemoteNer` reads it.
 
 use super::*;
+use sovereign_contracts::error::Result;
+use sovereign_contracts::ner::{EntityMention, GlinerGeneration};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 static LOADS: AtomicUsize = AtomicUsize::new(0);

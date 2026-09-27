@@ -18,9 +18,7 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::{Arc, OnceLock};
 
-use serde::{Deserialize, Serialize};
-use sovereign_contracts::error::{Error, Result};
-use sovereign_contracts::ner::{EntityMention, GlinerGeneration, LabeledEntityExtractor};
+use sovereign_contracts::ner::{generation_wire, to_wire, LabeledEntityExtractor};
 use sovereign_contracts::traits::InferenceProvider;
 use sovereign_inference::served_kind::{
     self, KindChild, KindClient, KindLoader, KindRoute, KindServeError, ServedKind,
@@ -29,8 +27,13 @@ use sovereign_inference::served_kind::{
 pub use sovereign_gliner::configured_model_id;
 pub use sovereign_gliner::gliner_ner::{download_model, models_root, probe_model_available};
 
-/// The NER kind's route.
-pub const NER_PATH: &str = "/v1/ner";
+// The wire and the client moved out (pb-cli-llm): the wire to
+// sovereign-contracts, the client to oicp-client beside rerank, because two
+// programs speak them (FIVE_PROGRAMS §12 3a). Reachable here as before.
+pub use oicp_client::RemoteNer;
+pub use sovereign_contracts::ner::{
+    NerExtractor, NerMention, NerPass, NerRequest, NerResponse, NER_PATH,
+};
 
 /// Why no compute child hosts NER.
 const NO_CHILD: &str = "no config hosts NER out of process: a `[[compute.slot]]` \
@@ -134,108 +137,6 @@ fn load_once(
     .clone()
 }
 
-// ── The wire ────────────────────────────────────────────────────────────────
-
-/// Which pass a request runs.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum NerPass {
-    /// `extract_mentions_batch`.
-    #[default]
-    Entities,
-    /// `extract_concept_mentions`, per text.
-    Concepts,
-}
-
-/// `POST /v1/ner`. Empty `texts` asks only which extractor answers.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct NerRequest {
-    /// The texts, one mention list each in the answer.
-    pub texts: Vec<String>,
-    /// Which pass runs; entities when absent.
-    #[serde(default)]
-    pub pass: NerPass,
-}
-
-/// The extractor that answered, as the port reports it.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct NerExtractor {
-    /// `LabeledEntityExtractor::model_id`.
-    pub model_id: String,
-    /// `LabeledEntityExtractor::labels`.
-    pub labels: Vec<String>,
-    /// `LabeledEntityExtractor::threshold`.
-    pub threshold: f32,
-    /// `v1` or `v2` ([`GlinerGeneration`]).
-    pub generation: String,
-}
-
-/// One mention on the wire ([`EntityMention`]).
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct NerMention {
-    /// `EntityMention::text`.
-    pub text: String,
-    /// `EntityMention::label`.
-    pub label: String,
-    /// `EntityMention::char_start`.
-    pub char_start: usize,
-    /// `EntityMention::char_end`.
-    pub char_end: usize,
-    /// `EntityMention::score`.
-    pub score: f32,
-}
-
-/// The answer: `extractor` is `None` on a node with no NER model installed,
-/// which answers only an empty request; `mentions` has one entry per text.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct NerResponse {
-    /// The extractor that answered; `None` without a model.
-    pub extractor: Option<NerExtractor>,
-    /// One mention list per requested text, in order.
-    pub mentions: Vec<Vec<NerMention>>,
-}
-
-fn generation_wire(g: GlinerGeneration) -> &'static str {
-    match g {
-        GlinerGeneration::V1 => "v1",
-        GlinerGeneration::V2 => "v2",
-    }
-}
-
-fn to_wire(m: EntityMention) -> NerMention {
-    let EntityMention {
-        text,
-        label,
-        char_start,
-        char_end,
-        score,
-    } = m;
-    NerMention {
-        text,
-        label,
-        char_start,
-        char_end,
-        score,
-    }
-}
-
-fn from_wire(m: NerMention) -> EntityMention {
-    let NerMention {
-        text,
-        label,
-        char_start,
-        char_end,
-        score,
-    } = m;
-    EntityMention {
-        text,
-        label,
-        char_start,
-        char_end,
-        score,
-    }
-}
-
 /// Answer `request` from `handle`. Blocking: the extractor runs its model on
 /// this thread.
 fn answer(
@@ -296,154 +197,6 @@ fn serve_ner(
         tracing::debug!(target: "served_kind", kind = NER.role, texts, installed = response.extractor.is_some(), "ner request answered");
         serde_json::to_value(response).map_err(|e| KindServeError::Backend(e.to_string()))
     })
-}
-
-// ── The client ──────────────────────────────────────────────────────────────
-
-/// How long one request waits on the route. The in-process extractor had no
-/// bound; a batch is bounded by its callers (corpus-engine's
-/// `chunk_ner_bound`), and this caps a route that stopped answering.
-const NER_WINDOW: std::time::Duration = std::time::Duration::from_secs(120);
-
-/// The NER port answered by another process's [`NER_PATH`]: the svrn
-/// daemon's handle when serving lives in `serve`. The port is synchronous
-/// and its callers run inside the async runtime (the turn's retrieval calls
-/// it inline, as it called the in-process model), so each call runs its
-/// request on a thread of its own, which blocks the caller as the model did.
-/// The route must not be served by the caller's own single-threaded runtime,
-/// which the blocked caller would starve; serve is another process.
-#[derive(Debug, Clone)]
-pub struct RemoteNer {
-    url: String,
-    extractor: NerExtractor,
-    generation: GlinerGeneration,
-}
-
-impl RemoteNer {
-    /// Ask the route at `base` which extractor answers. `Ok(None)` when that
-    /// node has no NER model installed; an Err names an unreachable or
-    /// unreadable route.
-    pub async fn connect(base: &str) -> std::result::Result<Option<Self>, String> {
-        let url = format!("{}{NER_PATH}", base.trim_end_matches('/'));
-        let response = post(&url, &NerRequest::default()).await?;
-        let Some(extractor) = response.extractor else {
-            return Ok(None);
-        };
-        let generation = match extractor.generation.as_str() {
-            "v1" => GlinerGeneration::V1,
-            "v2" => GlinerGeneration::V2,
-            other => {
-                return Err(format!(
-                    "{url} named an unknown GLiNER generation `{other}`"
-                ))
-            }
-        };
-        Ok(Some(Self {
-            url,
-            extractor,
-            generation,
-        }))
-    }
-
-    fn run(&self, texts: &[&str], pass: NerPass) -> Result<Vec<Vec<EntityMention>>> {
-        let url = self.url.clone();
-        let request = NerRequest {
-            texts: texts.iter().map(|t| t.to_string()).collect(),
-            pass,
-        };
-        let expected = request.texts.len();
-        let response = std::thread::Builder::new()
-            .name("ner-client".into())
-            .spawn(move || {
-                let rt = tokio::runtime::Builder::new_current_thread()
-                    .enable_all()
-                    .build()
-                    .map_err(|e| format!("ner client runtime: {e}"))?;
-                rt.block_on(post(&url, &request))
-            })
-            .map_err(|e| Error::Inference(format!("ner client thread: {e}")))?
-            .join()
-            .map_err(|_| Error::Inference("ner client thread panicked".to_string()))?
-            .map_err(Error::Inference)?;
-        if response.mentions.len() != expected {
-            return Err(Error::Inference(format!(
-                "{} answered {} mention lists for {expected} texts",
-                self.url,
-                response.mentions.len()
-            )));
-        }
-        Ok(response
-            .mentions
-            .into_iter()
-            .map(|ms| ms.into_iter().map(from_wire).collect())
-            .collect())
-    }
-}
-
-impl LabeledEntityExtractor for RemoteNer {
-    fn model_id(&self) -> &str {
-        &self.extractor.model_id
-    }
-
-    fn labels(&self) -> Vec<String> {
-        self.extractor.labels.clone()
-    }
-
-    fn threshold(&self) -> f32 {
-        self.extractor.threshold
-    }
-
-    fn extract_mentions(&self, text: &str) -> Result<Vec<EntityMention>> {
-        Ok(self
-            .run(&[text], NerPass::Entities)?
-            .into_iter()
-            .next()
-            .unwrap_or_default())
-    }
-
-    fn extract_mentions_batch(&self, texts: &[&str]) -> Result<Vec<Vec<EntityMention>>> {
-        self.run(texts, NerPass::Entities)
-    }
-
-    fn extract_concept_mentions(&self, text: &str) -> Result<Vec<EntityMention>> {
-        Ok(self
-            .run(&[text], NerPass::Concepts)?
-            .into_iter()
-            .next()
-            .unwrap_or_default())
-    }
-
-    fn generation(&self) -> GlinerGeneration {
-        self.generation
-    }
-}
-
-/// One request to the route, its refusal named.
-async fn post(url: &str, request: &NerRequest) -> std::result::Result<NerResponse, String> {
-    let resp = reqwest::Client::new()
-        .post(url)
-        .json(request)
-        .timeout(NER_WINDOW)
-        .send()
-        .await
-        .map_err(|e| {
-            if e.is_timeout() {
-                format!("{url} did not answer within {NER_WINDOW:?}")
-            } else {
-                format!("{url} is not reachable: {e}")
-            }
-        })?;
-    let status = resp.status();
-    if !status.is_success() {
-        let body = resp.text().await.unwrap_or_default();
-        return Err(format!("{url} refused (HTTP {status}): {body}"));
-    }
-    let response = resp
-        .json::<NerResponse>()
-        .await
-        .map_err(|e| format!("{url} answered unreadably: {e}"))?;
-    tracing::debug!(target: "served_kind", url, texts = request.texts.len(), "ner request dialled");
-    Ok(response)
 }
 
 #[cfg(test)]

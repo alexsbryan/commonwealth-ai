@@ -9,6 +9,8 @@
 
 use std::sync::Arc;
 
+use serde::{Deserialize, Serialize};
+
 use crate::daemon_wire::conv_tiered::ChunkEntityRow;
 use crate::error::Result;
 use crate::traits::EntityExtractor;
@@ -169,4 +171,115 @@ fn lowered_unique(mentions: Result<Vec<EntityMention>>, model_id: &str, pass: &s
         }
     }
     out
+}
+
+// ── The wire ────────────────────────────────────────────────────────────────
+//
+// Served by sovereign-compute's NER kind, dialled by oicp-client's
+// `RemoteNer` (pb-cli-llm: two programs speak it).
+
+/// The NER kind's route.
+pub const NER_PATH: &str = "/v1/ner";
+
+/// Which pass a request runs.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum NerPass {
+    /// `extract_mentions_batch`.
+    #[default]
+    Entities,
+    /// `extract_concept_mentions`, per text.
+    Concepts,
+}
+
+/// `POST /v1/ner`. Empty `texts` asks only which extractor answers.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct NerRequest {
+    /// The texts, one mention list each in the answer.
+    pub texts: Vec<String>,
+    /// Which pass runs; entities when absent.
+    #[serde(default)]
+    pub pass: NerPass,
+}
+
+/// The extractor that answered, as the port reports it.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct NerExtractor {
+    /// `LabeledEntityExtractor::model_id`.
+    pub model_id: String,
+    /// `LabeledEntityExtractor::labels`.
+    pub labels: Vec<String>,
+    /// `LabeledEntityExtractor::threshold`.
+    pub threshold: f32,
+    /// `v1` or `v2` ([`GlinerGeneration`]).
+    pub generation: String,
+}
+
+/// One mention on the wire ([`EntityMention`]).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct NerMention {
+    /// `EntityMention::text`.
+    pub text: String,
+    /// `EntityMention::label`.
+    pub label: String,
+    /// `EntityMention::char_start`.
+    pub char_start: usize,
+    /// `EntityMention::char_end`.
+    pub char_end: usize,
+    /// `EntityMention::score`.
+    pub score: f32,
+}
+
+/// The answer: `extractor` is `None` on a node with no NER model installed,
+/// which answers only an empty request; `mentions` has one entry per text.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NerResponse {
+    /// The extractor that answered; `None` without a model.
+    pub extractor: Option<NerExtractor>,
+    /// One mention list per requested text, in order.
+    pub mentions: Vec<Vec<NerMention>>,
+}
+
+/// A generation's wire spelling in [`NerExtractor::generation`].
+pub fn generation_wire(g: GlinerGeneration) -> &'static str {
+    match g {
+        GlinerGeneration::V1 => "v1",
+        GlinerGeneration::V2 => "v2",
+    }
+}
+
+/// A mention as the route answers it.
+pub fn to_wire(m: EntityMention) -> NerMention {
+    let EntityMention {
+        text,
+        label,
+        char_start,
+        char_end,
+        score,
+    } = m;
+    NerMention {
+        text,
+        label,
+        char_start,
+        char_end,
+        score,
+    }
+}
+
+/// A mention as the client reads it.
+pub fn from_wire(m: NerMention) -> EntityMention {
+    let NerMention {
+        text,
+        label,
+        char_start,
+        char_end,
+        score,
+    } = m;
+    EntityMention {
+        text,
+        label,
+        char_start,
+        char_end,
+        score,
+    }
 }

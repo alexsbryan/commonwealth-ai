@@ -28,6 +28,9 @@ sovereign-inference = { workspace = true }
 # The NER served kind's loader (`ner.rs`, phase-b pb-serving-ner). This crate's
 # only dependent is sovereign-daemon, so the ONNX stack links nowhere new.
 sovereign-gliner = { workspace = true }
+# `RemoteNer`, the NER kind's client, re-exported at `ner::RemoteNer`
+# (pb-cli-llm moved it beside rerank; a shared leaf).
+oicp-client = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }
