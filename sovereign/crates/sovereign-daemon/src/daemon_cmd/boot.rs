@@ -252,9 +252,10 @@ pub(super) async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
         engine_handle,
         resolved_embed_family,
         distributed_primary_slot,
-        reload_factory,
+        reload,
         deferred_daemon,
-    } = match super::serving_boot::boot_serving(&config, args, &config_override) {
+        path: serving_path,
+    } = match super::serving_boot::boot_serving(&config, args, &config_override).await {
         Ok(s) => s,
         Err(code) => return code,
     };
@@ -971,9 +972,7 @@ pub(super) async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
                     // the same deferred handle, bound below.
                     provider_factory: Arc::new(crate::provider::LlamaCppFactory {
                         daemon: Arc::clone(&deferred_daemon),
-                        reload: crate::provider::ReloadSource::Assembly(Arc::clone(
-                            &reload_factory,
-                        )),
+                        reload,
                     }),
                     // The work atlas writes into THIS store, so its entries reach
                     // the store's outbox and ride the ring rail (cw-lift 4b; the
@@ -1004,7 +1003,12 @@ pub(super) async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
     // manual `SOVEREIGN_RPC_ASSUME_WARMED` for the common case. Installed
     // unconditionally (harmless on a node that never distributes) so both
     // auto-discovered and manual (`SOVEREIGN_RPC_WORKERS`) hosts auto-warm.
-    crate::rpc_warm_http::install_rpc_warm_orchestrator(Arc::clone(&daemon));
+    // The in-process path only: on the dialing path no engine loads here, so
+    // there is nothing to warm and no worker to discover (pb-svrn-dials-serve).
+    let in_process = serving_path != crate::serve_client::ServingPath::DialsServe;
+    if in_process {
+        crate::rpc_warm_http::install_rpc_warm_orchestrator(Arc::clone(&daemon));
+    }
 
     // Must be installed BEFORE discovery starts spawning the child: the
     // manifest is a boot-time snapshot taken while the slot is still unspawned,
@@ -1015,11 +1019,13 @@ pub(super) async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
         distributed_primary_slot.clone(),
     );
 
-    bootstrap::spawn_rpc_worker_discovery(
-        Arc::clone(&daemon),
-        engine_handle,
-        distributed_primary_slot,
-    );
+    if in_process {
+        bootstrap::spawn_rpc_worker_discovery(
+            Arc::clone(&daemon),
+            engine_handle,
+            distributed_primary_slot,
+        );
+    }
 
     bootstrap::spawn_slot_alias_push(Arc::clone(&daemon), mesh_provider);
 

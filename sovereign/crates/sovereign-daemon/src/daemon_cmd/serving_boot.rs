@@ -18,12 +18,15 @@ pub(super) struct ServingBoot {
     pub engine_handle: Option<Arc<EmbeddedLlamaCpp>>,
     pub resolved_embed_family: ModelFamily,
     pub distributed_primary_slot: Option<Arc<sovereign_compute::manager::DynamicChildSlot>>,
-    pub reload_factory: Arc<sovereign_compute::assembly::ReloadFactory>,
+    pub reload: crate::provider::ReloadSource,
     pub deferred_daemon: Arc<crate::DeferredDaemon>,
+    /// Where serving lives: boot starts the in-process engine's subsystems
+    /// (RPC discovery, the warm orchestrator) only on `InProcess`.
+    pub path: crate::serve_client::ServingPath,
 }
 
 /// `Err(code)` is the exit code `run_daemon` returns.
-pub(super) fn boot_serving(
+pub(super) async fn boot_serving(
     config: &SetupConfig,
     args: &[String],
     config_override: &Option<std::path::PathBuf>,
@@ -37,6 +40,20 @@ pub(super) fn boot_serving(
     // invocation, and the role translation below only fills in what is unset.
     bootstrap::apply_rpc_worker_flag(args);
     bootstrap::apply_shared_model_role_to_env(&config.shared_model);
+
+    // Where serving lives, decided once, after the RPC env contract above
+    // (pb-svrn-dials-serve; `ServingPath::decide` traces it). A terminal
+    // already holds no weights and dials its entry node, so it keeps that arm.
+    let path = crate::serve_client::ServingPath::decide(config);
+    let config_path_in_use = config_override
+        .clone()
+        .unwrap_or_else(sovereign_core::setup_config::SetupConfig::default_path);
+    let deferred_daemon = Arc::new(crate::DeferredDaemon::new());
+    if path == crate::serve_client::ServingPath::DialsServe
+        && config.node_class() != sovereign_core::setup_config::NodeClass::Terminal
+    {
+        return dial_serve(config, &config_path_in_use, deferred_daemon, path).await;
+    }
 
     // Route llama.cpp's internal log into our tracing layer. Without
     // this, gguf load failures and ggml backend diagnostics print to a
@@ -52,9 +69,6 @@ pub(super) fn boot_serving(
     // `build::preflight::check_vram`.
     // Name the config the operator actually passed, not the default one —
     // a `--config` start used to be told to edit a file it never read.
-    let config_path_in_use = config_override
-        .clone()
-        .unwrap_or_else(sovereign_core::setup_config::SetupConfig::default_path);
     if !crate::build::preflight::check_vram_reporting(&config, &config_path_in_use) {
         return Err(1);
     }
@@ -113,7 +127,6 @@ pub(super) fn boot_serving(
     // exactly as a commissioned-but-stopped daemon until `bind` — no peers — so
     // a terminal booting ahead of gossip reports its entry node unreachable
     // rather than inventing an address for it.
-    let deferred_daemon = Arc::new(crate::DeferredDaemon::new());
     let (provider, raw_engine, resolved_embed_family, distributed_primary_slot, reload_factory) =
         match crate::build::inference::load_provider(&config, Arc::clone(&deferred_daemon)) {
             Ok(t) => t,
@@ -132,7 +145,54 @@ pub(super) fn boot_serving(
         engine_handle,
         resolved_embed_family,
         distributed_primary_slot,
-        reload_factory,
+        reload: crate::provider::ReloadSource::Assembly(reload_factory),
         deferred_daemon,
+        path,
+    })
+}
+
+/// The dialing path: serve holds the weights, and this daemon builds no
+/// engine. serve is brought up at this user-action moment only (daemon start),
+/// never on a refused dial; it runs the llama log route and the VRAM
+/// preflight on its own startup. A serve that cannot be reached or does not
+/// report itself refuses boot by name, as a model that failed to load in
+/// process refused it before.
+async fn dial_serve(
+    config: &SetupConfig,
+    config_path: &std::path::Path,
+    deferred_daemon: Arc<crate::DeferredDaemon>,
+    path: crate::serve_client::ServingPath,
+) -> Result<ServingBoot, i32> {
+    let serve = crate::serve_client::resolve_serve_base(&config.node);
+    if let Err(e) = crate::serve_client::ensure_serve(&serve, config_path).await {
+        eprintln!("error: serve is not reachable at {}: {e}", serve.base);
+        return Err(1);
+    }
+    let served = match crate::serve_client::read_served_self(&serve.base).await {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("error: {e}");
+            return Err(1);
+        }
+    };
+    let config_context = config.effective_context_size();
+    let resolved_embed_family = served.embed_family.clone();
+    let provider: Arc<dyn InferenceProvider> = Arc::new(crate::serve_client::loopback_provider(
+        &serve,
+        served,
+        config_context,
+    ));
+    tracing::info!(target: "serving_path", serve_base = %serve.base, source = ?serve.source, "boot: serving is serve's; this daemon holds no engine");
+    Ok(ServingBoot {
+        provider,
+        engine_handle: None,
+        resolved_embed_family,
+        distributed_primary_slot: None,
+        reload: crate::provider::ReloadSource::Serve {
+            base: serve,
+            config_context,
+        },
+        deferred_daemon,
+        path,
     })
 }
