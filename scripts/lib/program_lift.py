@@ -508,6 +508,15 @@ class Smoke:
 def lift(lift_id: str, spec: dict, sandbox: Path, target: Path, keep: bool, sets: dict, record: dict) -> tuple[str, str]:
     rule("1. the closure, judged by quality/ARCH_LAYERS.toml")
     seeds, record["crates"] = plan(lift_id, spec, sandbox)
+    # `carry`: data the program ships beside its crates, copied in and named
+    # by the knob the monorepo's `.cargo/config.toml [env]` sets in-tree. It
+    # goes into this process's env, so the build, the tests and the smoke
+    # all see the sandbox copy and never the repo's.
+    for var, rel in spec.get("carry", {}).items():
+        dst = sandbox / "carried" / Path(rel).name
+        shutil.copytree(REPO / rel, dst, ignore=shutil.ignore_patterns("target", ".git"))
+        os.environ[var] = str(dst)
+        say(f"CARRIED {rel} as {var}={dst}")
     say(f"toolchain: {subprocess.run(['cargo', '--version'], cwd=sandbox, capture_output=True, text=True).stdout.strip()}")
     say(f"sandbox: {sandbox}  (repo is {REPO}; nothing under it is on this path)")
 

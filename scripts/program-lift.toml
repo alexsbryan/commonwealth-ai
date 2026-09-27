@@ -14,6 +14,8 @@
 #   build    `cargo build` args; absent = `-p <seed>` for each seed.
 #   test     `cargo test` args; absent = `-p <seed>` for each seed.
 #   binary   the built artifact the RUN step starts, relative to the target dir.
+#   carry    { ENV_VAR = "<repo-relative dir>" }: data the program ships, copied
+#            into the sandbox and named by ENV_VAR for the build, tests and RUN.
 #   run      the RUN smoke: `inputs`, `steps`, `finally` and `pass`. With no
 #            `run`, a closure that builds and tests is never-ran, not passed.
 #
@@ -225,3 +227,6 @@ binary = "debug/sovereign-cli-dev"
 package = "bench"
 build = ["-p", "sovereign-eval", "--bin", "sovereign-eval"]
 binary = "debug/sovereign-eval"
+# The banks and seed data sovereign-eval's tests read (bench_root.rs: "a
+# lifted crate must set it itself").
+carry = { SOVEREIGN_BENCH_ROOT = "sovereign/bench" }
