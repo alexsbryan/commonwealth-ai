@@ -3635,3 +3635,63 @@ touches it.
   do not run in "cw-rails' rail". cw-rails carries `mesh-measurements` as
   opaque signed lines (commonwealth-state peer_preferences.rs:263). serve takes
   the store from the daemon, not from cw-rails.
+
+## REVIEW-audit-pb-auto-4 (2026-09-27, range 1e7b0745d..9d67cddb5, since REVIEW-audit-pb-auto-3)
+
+Five units (pb-serve-sheds-core, pb-serving-ner, pb-serve-cli-face,
+pb-serve-program, pb-svrn-dials-serve) plus the seat's phase-b commits. All
+checks ran in the sovereign-vulkan toolbox.
+
+TESTALL at 053bc2c10: exit=100, 13,613 passed and 2 failed, both drift (the
+F26 egress census and sovereign-daemon's conformance tags), fixed in
+f980d4ff0 and f7238e6d3. At 9d67cddb5: exit=0, 13,613 passed. PREPUSH exited
+1; its one blocking lane was boundary-gate at 49 violations (51 at auto-3),
+the declared burn-down. Advisories as at auto-3: deletion-manifest
+`p0-root-junk` growth, hakari-verify (owned by bl-hakari, below at auto-3),
+domains-census-self-test could-not-judge.
+
+Ledger (`.rs` lines, net; a path under `tests/` or named `*_test(s).rs` counts
+as tests, inline `#[cfg(test)]` as src): pb-svrn-dials-serve +3324 src /
++1722 tests, pb-serve-program +753 / +3, pb-serve-cli-face +162 / +47,
+pb-serving-ner +92 / +149, pb-serve-sheds-core +28 / +74, this audit -177 /
++19. Total src +4182, tests +2014.
+
+dry-report judged this time, over all 25 touched crates. Clone groups with a
+side ADDED in the range: 4.
+
+- **ARCH 8, fixed in 82b848b96** · the 23-line exec tail was byte-identical in
+  `sovereign-cli/src/{daemon,dev,llm,mesh,serve}_bin.rs` (serve_bin's copy was
+  added by pb-serve-cli-face). It lives once at `sovereign-cli/src/sibling.rs:73`
+  `exec_into`. Copies 5 → 1. `agent_bench_bin.rs:33` keeps its own: it passes
+  no verb.
+- **Record only** · near-clone `locate` ×5 (`serve_bin.rs:24` added, beside
+  `daemon_bin.rs:14` and three more): each is a one-call wrapper over the one
+  locator `sovereign_turn_client::reach::locate_sibling` with its own name and
+  env var. Nothing left to collapse.
+- **Record only, test doubles** · `capabilities`/`complete_stream` in
+  `sovereign-compute/src/server.rs:283,298` (added) mirror
+  `manager/rerank_fallback_tests.rs:11,26` and `assembly/serves_rerank_tests.rs:29`:
+  three private failing-reranker stubs. `generation` ×2 in
+  `corpus-engine/src/enrichment/chunk_ner_bound.rs:198,319` are two test NER
+  stubs. A shared fixture would be a new abstraction; the next row that adds a
+  fourth rerank stub owns it.
+- **ARCH 8, fixed in 9d67cddb5** · the seat census's
+  `sovereign-serving-host/src/worker_state.rs` port (0 implementors, 0 users)
+  is deleted with its DOMAINS.toml tag. The file deletion rode in 82b848b96,
+  so that commit alone does not compile; 9d67cddb5 completes it.
+
+converge-noun over the 46 nouns the range added: two have more than one
+production definition.
+
+- **Record only, name collision** · `ServeArgs` at `corpus-mcp/src/serve.rs:39`
+  (a clap struct for corpus-mcp's serve) and `sovereign-serve/src/lib.rs:82`
+  (serve's launch args). Two programs' own CLIs; neither crate depends on the
+  other.
+- **ARCH 8, open, owned by the next row that edits fim_http.rs** · `TextChunk`
+  at `oicp-client/src/serve_loopback.rs:120` (added by d8e903313) is a private
+  decoder mirroring the SSE chunk that `sovereign-serving-host/src/fim_http.rs:111`
+  renders with `json!`. The two sides of that wire are not one schema, so a
+  renamed field on the render side decodes as an empty `choices` via
+  `#[serde(default)]`. The other two `TextChunk`s
+  (`corpus-engine/src/chunkers/mod.rs:12`, `sovereign-tools-base/src/rag/chunk.rs:32`)
+  predate the range and are a chunker type, not this wire.
