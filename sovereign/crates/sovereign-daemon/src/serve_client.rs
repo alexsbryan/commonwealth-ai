@@ -261,13 +261,78 @@ pub async fn ensure_serve(
         .map_err(|e| e.to_string());
     match &reached {
         Ok(r) => {
-            tracing::info!(target: "serving_path", serve_base = %serve.base, reached = ?r, "serve is reachable")
+            tracing::info!(target: "serving_path", serve_base = %serve.base, reached = ?r, "serve is reachable");
+            record_bring_up(r, &crate::startup::serve_pid_path());
         }
         Err(e) => {
             tracing::warn!(target: "serving_path", serve_base = %serve.base, reason = %e, "serve is not reachable")
         }
     }
     reached
+}
+
+/// The `serve` this daemon brought up: its pid, and the loopback port it was
+/// told to listen on. The port locates serve; the pid identifies it
+/// (principle 8), so `svrn daemon stop` signals only a process this daemon
+/// started, and only while it still listens where it was brought up. A serve
+/// found already serving has no record and is never this daemon's to stop.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ServeRecord {
+    pub pid: u32,
+    pub port: u16,
+}
+
+impl ServeRecord {
+    /// `<pid> <port>`, one line.
+    pub fn write_to(&self, path: &std::path::Path) -> std::io::Result<()> {
+        std::fs::write(path, format!("{} {}\n", self.pid, self.port))
+    }
+
+    /// The record at `path`: `Ok(None)` when there is none, an Err naming a
+    /// record that exists and does not read, never a guessed pid.
+    pub fn read_from(path: &std::path::Path) -> Result<Option<Self>, String> {
+        let raw = match std::fs::read_to_string(path) {
+            Ok(raw) => raw,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(e) => return Err(format!("{}: {e}", path.display())),
+        };
+        let mut fields = raw.split_whitespace();
+        match (
+            fields.next().and_then(|p| p.parse().ok()),
+            fields.next().and_then(|p| p.parse().ok()),
+        ) {
+            (Some(pid), Some(port)) => Ok(Some(Self { pid, port })),
+            _ => Err(format!("{}: not `<pid> <port>`: {raw:?}", path.display())),
+        }
+    }
+}
+
+/// On a bring-up, record it where the stop reads it; a serve found already
+/// serving clears any record, since a pid recorded before is not the one
+/// answering now unless this daemon started it, and a stale record would
+/// name a process the stop must not touch.
+fn record_bring_up(reached: &sovereign_turn_client::reach::Reached, path: &std::path::Path) {
+    use sovereign_turn_client::reach::Reached;
+    match reached {
+        Reached::BroughtUp { pid, .. } => {
+            let record = ServeRecord {
+                pid: *pid,
+                port: sovereign_contracts::venue::serve_port(),
+            };
+            match record.write_to(path) {
+                Ok(()) => {
+                    tracing::info!(target: "serving_path", pid, port = record.port, path = %path.display(), "serve brought up by this daemon; recorded for daemon stop")
+                }
+                Err(e) => {
+                    tracing::warn!(target: "serving_path", pid, path = %path.display(), error = %e, "serve brought up, but its record did not write; daemon stop will leave it running")
+                }
+            }
+        }
+        Reached::AlreadyServing { .. } => {
+            let _ = std::fs::remove_file(path);
+            tracing::info!(target: "serving_path", "serve was already serving; not this daemon's, so daemon stop leaves it running");
+        }
+    }
 }
 
 /// Read serve's self-report, bounded like every other status read of serve
@@ -679,6 +744,39 @@ mod tests {
             err.contains("not reachable") && err.contains("/v1/admin/hardware"),
             "{err}"
         );
+    }
+
+    /// The bring-up writes the record the stop reads; none is `None`, and a
+    /// record that does not read is named, never a guessed pid.
+    #[test]
+    fn the_serve_record_round_trips_and_a_bad_one_is_named() {
+        use sovereign_turn_client::reach::Reached;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("serve.pid");
+        assert_eq!(ServeRecord::read_from(&path), Ok(None));
+        record_bring_up(
+            &Reached::BroughtUp {
+                pid: 4242,
+                ready_after: std::time::Duration::ZERO,
+            },
+            &path,
+        );
+        assert_eq!(
+            ServeRecord::read_from(&path),
+            Ok(Some(ServeRecord {
+                pid: 4242,
+                port: sovereign_contracts::venue::serve_port()
+            }))
+        );
+        record_bring_up(
+            &Reached::AlreadyServing {
+                waited: std::time::Duration::ZERO,
+            },
+            &path,
+        );
+        assert_eq!(ServeRecord::read_from(&path), Ok(None));
+        std::fs::write(&path, "serve\n").unwrap();
+        assert!(ServeRecord::read_from(&path).is_err());
     }
 
     #[test]
