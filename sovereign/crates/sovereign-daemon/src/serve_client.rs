@@ -353,6 +353,35 @@ pub fn served_slot_aliases(
         .collect()
 }
 
+/// On the dialing path this daemon's NER handle is serve's: a
+/// [`RemoteNer`](sovereign_compute::ner::RemoteNer) on serve's `/v1/ner`,
+/// installed before any reader asks (`sovereign_compute::ner::install_ner`),
+/// so the NoteStore hook, the tiered chunk adapter and the turn's retrieval
+/// dial it where they loaded the model in process. A serve without the NER
+/// model installs none, as a node without it loads none; a route that does
+/// not answer is named and installs none.
+pub async fn install_serve_ner(base: &str) {
+    use sovereign_compute::ner::{install_ner, RemoteNer};
+    let handle: Option<std::sync::Arc<dyn sovereign_contracts::ner::LabeledEntityExtractor>> =
+        match RemoteNer::connect(base).await {
+            Ok(Some(remote)) => {
+                tracing::info!(target: "serving_path", serve_base = base, model_id = %sovereign_contracts::ner::LabeledEntityExtractor::model_id(&remote), "NER is serve's; this daemon dials it");
+                Some(std::sync::Arc::new(remote))
+            }
+            Ok(None) => {
+                tracing::info!(target: "serving_path", serve_base = base, "serve has no NER model installed; no entity extractor this process");
+                None
+            }
+            Err(e) => {
+                tracing::warn!(target: "serving_path", serve_base = base, error = %e, "serve's NER route did not answer; no entity extractor this process");
+                None
+            }
+        };
+    if let Err(e) = install_ner(handle) {
+        tracing::warn!(target: "serving_path", error = %e, "NER handle not installed");
+    }
+}
+
 /// Read serve's self-report, bounded like every other status read of serve
 /// (`sovereign_turn_client::reach::PROBE_TIMEOUT`).
 pub async fn read_served_self(

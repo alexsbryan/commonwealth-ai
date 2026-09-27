@@ -326,6 +326,11 @@ pub fn bundles(provider: Arc<dyn InferenceProvider>) -> Vec<RouteBundle> {
         Arc::clone(&provider),
         Arc::new(CoreSlotManifest),
     ));
+    // NER registers on its first load; registered here, the kind mount below
+    // serves its route before any request loads it (pb-svrn-dials-serve).
+    if let Err(e) = sovereign_compute::ner::register() {
+        tracing::warn!(target: "served_kind", error = %e, "NER kind did not register; serve has no /v1/ner");
+    }
     vec![
         sovereign_compute::server::bundle(
             Arc::clone(&provider),
