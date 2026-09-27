@@ -400,9 +400,16 @@ async fn accept_lap(op: &'static str, mut request: Request, next: Next) -> Respo
 async fn chat_completions(
     State(adapter): AdapterState,
     Extension(lap): Extension<Arc<Lap>>,
-    Json(request): Json<ChatCompletionRequest>,
+    connect: Option<Extension<axum::extract::ConnectInfo<SocketAddr>>>,
+    Json(mut request): Json<ChatCompletionRequest>,
 ) -> Response {
     lap.mark("parsed");
+    let peer = connect.map(|Extension(axum::extract::ConnectInfo(p))| p);
+    sovereign_serving_host::turn_admission::honour_turn_admission(
+        &mut request,
+        sovereign_serving_host::turn_admission::from_this_host(peer, None),
+        "serve",
+    );
     if !request.stream.unwrap_or(false) {
         return match adapter.chat_completion(request).await {
             Ok(resp) => Json(resp).into_response(),

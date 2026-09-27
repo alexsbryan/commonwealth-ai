@@ -272,6 +272,7 @@ pub async fn responses(
         attached,
         // `/v1/responses` is not a path any `Scope` names — see routes_ollama.
         None,
+        None,
         Json(chat_req),
     )
     .await;
@@ -580,6 +581,7 @@ fn translate_request(
         lark_grammar: None,
         stable_prefix_len: None,
         top_k: None,
+        turn_admission: None,
     })
 }
 

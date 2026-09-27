@@ -18,6 +18,7 @@ use std::time::Instant;
 
 mod rerank;
 mod serve_loopback;
+mod turn_admission;
 
 use async_trait::async_trait;
 use futures::{Stream, StreamExt};
@@ -245,6 +246,8 @@ pub struct RemoteApiProvider {
     /// to a peer — `peer_inference.rs::provider_for_peer` is the one
     /// caller that sets it.
     node_id: Option<String>,
+    /// Writes the turn's admission id onto the chat wire; see `turn_admission.rs`.
+    carries_turn_admission: bool,
     context_size: u32,
     /// Query-side instruction prefix for this model, resolved once at
     /// construction from the bundled manifest (empty for chat / non-embedding
@@ -383,6 +386,7 @@ impl RemoteApiProvider {
             api_key,
             model_id: model_id.to_string(),
             model_id_is_placeholder: false,
+            carries_turn_admission: false,
             node_id: None,
             context_size,
             // The embed query-instruction prefix is model-family knowledge
@@ -418,6 +422,7 @@ impl RemoteApiProvider {
             api_key,
             model_id: model_id.to_string(),
             model_id_is_placeholder: false,
+            carries_turn_admission: false,
             node_id: None,
             context_size,
             query_instruction: String::new(),
@@ -453,6 +458,7 @@ impl RemoteApiProvider {
             api_key: Some(bearer),
             model_id: model_id.to_string(),
             model_id_is_placeholder: false,
+            carries_turn_admission: false,
             node_id: None,
             context_size,
             // The embed query-instruction prefix is model-family knowledge
@@ -857,6 +863,7 @@ impl RemoteApiProvider {
         if let Some(k) = request.top_k {
             body["top_k"] = serde_json::json!(k);
         }
+        self.write_turn_admission(&mut body, request);
         if let Some(mode) = request.sampling_mode {
             body["sampling_mode"] = serde_json::json!(mode);
         }
@@ -1617,7 +1624,8 @@ impl SplitInferenceProvider {
         // dropped.
         let chat = std::sync::Arc::new(
             RemoteApiProvider::new(endpoint_v1, bearer.clone(), &chat_model_id, context_size)
-                .waiting_out_sheds(),
+                .waiting_out_sheds()
+                .carrying_turn_admission(),
         );
         // The embed slot carries the query-instruction prefix so
         // `embed_query` stays bit-identical to the embedded engine. The chat

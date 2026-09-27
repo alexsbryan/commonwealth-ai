@@ -292,12 +292,15 @@ pub struct CompletionRequest {
     /// has not yet been decided.
     ///
     /// **Never serialized, by construction** (`#[serde(skip)]`). Admission
-    /// is a fact about THIS process's own queue — "I already accepted this
+    /// is a fact about THIS HOST's own queue — "I already accepted this
     /// turn, drafted it, and am now verifying it" — and a field that
     /// survived a wire hop would let any caller assert it. A request that
     /// leaves this host for a peer arrives there as what it is: new load
     /// the peer has not yet accepted, and the peer's own gate decides
-    /// (ARCH §7 — make it structural, not remembered).
+    /// (ARCH §7 — make it structural, not remembered). The one hop it
+    /// crosses is to this host's own engine in another process (`serve`):
+    /// the chat wire's `turn_admission` field, which the listener honours
+    /// only from a caller on its own host (phase-b-27).
     #[serde(default, skip)]
     pub admission: Option<TurnAdmission>,
 }

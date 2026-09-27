@@ -239,6 +239,7 @@ async fn served(input: &ChatCompletionRequest) -> ChatCompletionRequest {
         HeaderMap::new(),
         None,
         None,
+        None,
         Json(input.clone()),
     )
     .await;
@@ -641,6 +642,7 @@ async fn served_response(
     let resp = chat_completions(
         State(state),
         HeaderMap::new(),
+        None,
         None,
         None,
         Json(request.clone()),

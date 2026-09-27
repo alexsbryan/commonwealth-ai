@@ -207,6 +207,7 @@ pub mod fixtures {
             lark_grammar: None,
             stable_prefix_len: None,
             top_k: None,
+            turn_admission: None,
         }
     }
 

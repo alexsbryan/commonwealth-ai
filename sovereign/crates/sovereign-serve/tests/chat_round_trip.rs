@@ -114,11 +114,46 @@ async fn start_serve(recorder: Arc<Recorder>) -> SocketAddr {
     addr
 }
 
+/// serve's routes as the shell mounts them, but every request's connection
+/// reads as `seen_from`: a caller on another host, without needing one.
+async fn start_serve_seen_from(recorder: Arc<Recorder>, seen_from: SocketAddr) -> SocketAddr {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind a free loopback port");
+    let addr = listener.local_addr().expect("bound address");
+    let app = host_kit::shell::mount(sovereign_serve::bundles(
+        recorder as Arc<dyn InferenceProvider>,
+    ))
+    .layer(axum::middleware::from_fn(
+        move |mut req: axum::extract::Request, next: axum::middleware::Next| async move {
+            req.extensions_mut()
+                .insert(axum::extract::ConnectInfo(seen_from));
+            next.run(req).await
+        },
+    ));
+    tokio::spawn(async move {
+        axum::serve(
+            listener,
+            app.into_make_service_with_connect_info::<SocketAddr>(),
+        )
+        .await
+    });
+    addr
+}
+
 /// Send `sent` through the daemon's terminal arm to serve, streamed as a chat
 /// turn is, and return what serve's engine was handed.
 async fn round_trip(sent: &CompletionRequest) -> CompletionRequest {
     let recorder = Arc::new(Recorder::default());
     let addr = start_serve(Arc::clone(&recorder)).await;
+    dial(addr, &recorder, sent).await
+}
+
+async fn dial(
+    addr: SocketAddr,
+    recorder: &Recorder,
+    sent: &CompletionRequest,
+) -> CompletionRequest {
     let arm = SplitInferenceProvider::new(
         &format!("http://{addr}/v1"),
         "primary".to_string(),
@@ -205,7 +240,7 @@ fn differences(sent: &CompletionRequest, received: &CompletionRequest) -> Vec<St
 /// field, one behaviour fix per field (phase-b-27), and leaves this set when
 /// it does. Held as an exact set, so a field that starts crossing, or a new
 /// loss, turns this red.
-const NO_CHAT_WIRE_FIELD: &[&str] = &["admission"];
+const NO_CHAT_WIRE_FIELD: &[&str] = &[];
 
 fn assert_lossless(
     case: &str,
@@ -295,4 +330,24 @@ async fn a_fast_turn_survives_the_chat_round_trip() {
     sent.max_tokens = Some(16);
     let received = round_trip(&sent).await;
     assert_lossless("fast", &sent, &received, &[]);
+}
+
+/// The admission id is honoured only from a caller on serve's own host
+/// (phase-b-27): the same admitted turn, arriving from another host, reaches
+/// the engine as fresh load.
+#[tokio::test]
+async fn an_admitted_turn_from_another_host_reaches_the_engine_as_fresh_load() {
+    let mut sent = CompletionRequest::new("Say hi.");
+    sent.admission = Some(TurnAdmission::new("turn-remote"));
+    let recorder = Arc::new(Recorder::default());
+    let addr = start_serve_seen_from(
+        Arc::clone(&recorder),
+        "10.0.0.2:40000".parse().expect("an address"),
+    )
+    .await;
+    let received = dial(addr, &recorder, &sent).await;
+    assert_eq!(
+        received.admission, None,
+        "a caller off this host must not park its call in serve's queue"
+    );
 }

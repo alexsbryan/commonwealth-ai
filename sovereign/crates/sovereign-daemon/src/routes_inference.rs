@@ -47,8 +47,17 @@ pub async fn chat_completions(
     headers: HeaderMap,
     attached: Option<axum::Extension<sovereign_serving_host::admission::AttachedPrincipal>>,
     guest: Option<axum::Extension<crate::client_auth::Guest>>,
+    connect: Option<axum::Extension<axum::extract::ConnectInfo<std::net::SocketAddr>>>,
     Json(mut request): Json<ChatCompletionRequest>,
 ) -> Response {
+    sovereign_serving_host::turn_admission::honour_turn_admission(
+        &mut request,
+        sovereign_serving_host::turn_admission::from_this_host(
+            connect.map(|axum::Extension(axum::extract::ConnectInfo(p))| p),
+            attached.as_ref().map(|axum::Extension(a)| &a.0),
+        ),
+        "daemon",
+    );
     // ── Guest scope refinement ────────────────────────────────────────
     //
     // `client_auth` already decided this caller may reach this ROUTE. What

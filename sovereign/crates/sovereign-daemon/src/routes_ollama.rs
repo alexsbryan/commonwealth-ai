@@ -243,6 +243,7 @@ async fn run_and_frame(
         // `/api/chat` is not a path any `Scope` names, so no guest can reach
         // this shim — the caller here is always loopback or full-token.
         None,
+        None,
         Json(oai),
     )
     .await;

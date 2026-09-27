@@ -2771,6 +2771,7 @@ pub(crate) async fn apply_distiller(
         lark_grammar: None,
         stable_prefix_len: None,
         top_k: None,
+        turn_admission: None,
     };
 
     let response = chat_completions(
@@ -2784,6 +2785,7 @@ pub(crate) async fn apply_distiller(
         // its own post-processing, with a request it built itself — the model
         // is the node's choice, not the caller's, so there is no guest scope
         // to honour and nothing a guest could steer.
+        None,
         None,
         Json(chat_req),
     )
@@ -3297,6 +3299,7 @@ async fn summarise_block(
         lark_grammar: None,
         stable_prefix_len: None,
         top_k: None,
+        turn_admission: None,
     };
     let response = chat_completions(
         State(state.clone()),
@@ -3309,6 +3312,7 @@ async fn summarise_block(
         // its own post-processing, with a request it built itself — the model
         // is the node's choice, not the caller's, so there is no guest scope
         // to honour and nothing a guest could steer.
+        None,
         None,
         Json(chat_req),
     )
@@ -4145,6 +4149,7 @@ mod tests {
             lark_grammar: None,
             stable_prefix_len: None,
             top_k: None,
+            turn_admission: None,
         }
     }
 
@@ -5612,6 +5617,7 @@ That's my answer."#;
             lark_grammar: None,
             stable_prefix_len: None,
             top_k: None,
+            turn_admission: None,
         }
     }
 

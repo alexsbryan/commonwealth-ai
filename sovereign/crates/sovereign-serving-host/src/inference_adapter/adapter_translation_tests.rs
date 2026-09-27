@@ -71,6 +71,7 @@ fn flatten_preserves_tool_message_id() {
         lark_grammar: None,
         stable_prefix_len: None,
         top_k: None,
+        turn_admission: None,
     };
     let (prompt, _system) = SovereignInferenceAdapter::flatten(&req);
     // The prior tool call is replayed as a <tool_call> block so
@@ -111,6 +112,7 @@ fn forward_tools_translates_schema() {
         lark_grammar: None,
         stable_prefix_len: None,
         top_k: None,
+        turn_admission: None,
     };
     let forwarded = SovereignInferenceAdapter::forward_tools(&req).unwrap();
     assert_eq!(forwarded.len(), 2);
@@ -149,6 +151,7 @@ fn forward_tools_empty_returns_none() {
         lark_grammar: None,
         stable_prefix_len: None,
         top_k: None,
+        turn_admission: None,
     };
     assert!(SovereignInferenceAdapter::forward_tools(&req).is_none());
 }
@@ -209,6 +212,7 @@ fn req_with(
         lark_grammar: None,
         stable_prefix_len: None,
         top_k: None,
+        turn_admission: None,
     }
 }
 
@@ -275,6 +279,7 @@ fn req_with_tool_choice(
         lark_grammar: None,
         stable_prefix_len: None,
         top_k: None,
+        turn_admission: None,
     }
 }
 

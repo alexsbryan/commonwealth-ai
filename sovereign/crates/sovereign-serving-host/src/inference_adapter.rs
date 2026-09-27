@@ -358,6 +358,12 @@ impl SovereignInferenceAdapter {
         req.temperature = request.temperature;
         req.top_p = request.top_p;
         req.top_k = request.top_k;
+        // Reconstituted, not minted: the listener kept it only for a caller
+        // on this host (`crate::turn_admission`).
+        req.admission = request
+            .turn_admission
+            .as_deref()
+            .map(sovereign_contracts::types::TurnAdmission::new);
         req.sampling_mode = request.sampling_mode;
         req.assistant_prefix = request.assistant_prefix.clone();
         req.cmd_prefix = request.cmd_prefix.clone();

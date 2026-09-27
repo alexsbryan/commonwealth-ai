@@ -164,6 +164,14 @@ pub struct ChatCompletionRequest {
     /// here → `inference_adapter::build_completion_request` → the sampler.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub top_k: Option<u32>,
+    /// Commonwealth extension: the id of the turn this host already
+    /// admitted, when this call continues it (`CompletionRequest.admission`).
+    /// Honoured only from a caller on this host: the listener that parses
+    /// the wire clears it for anyone else
+    /// (`sovereign_serving_host::turn_admission`), and only a daemon-backed
+    /// `RemoteApiProvider` writes it, never a third-party engine.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub turn_admission: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

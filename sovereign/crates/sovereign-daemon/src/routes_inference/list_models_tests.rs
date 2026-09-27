@@ -366,6 +366,7 @@ async fn chat_as_guest(model: Option<&str>, granted: &[&str]) -> (StatusCode, se
         HeaderMap::new(),
         None,
         guest_for(granted),
+        None,
         Json(request),
     )
     .await;
