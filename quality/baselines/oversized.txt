@@ -4,8 +4,6 @@
 # Bank improvements only (never adds, never raises — safe to run anytime):
 #   cargo run -p xtask -- arch-gate --tighten
 2462	code-next-edit/src/next_edit_model.rs
-1751	commonwealth/crates/commonwealth-transport/src/iroh.rs
-1304	commonwealth/crates/commonwealth-work/src/refusal.rs
 7387	corpus-engine-notes/src/notes.rs
 1361	corpus-engine-scip/src/converge.rs
 1300	corpus-engine-scip/src/scip_export.rs
@@ -70,7 +68,6 @@
 1210	sovereign/crates/sovereign-cli/src/conformance_cmd.rs
 1382	sovereign/crates/sovereign-cli/src/main.rs
 2219	sovereign/crates/sovereign-cli/src/notes_cmd.rs
-1501	sovereign/crates/sovereign-cli/src/quality_check_cmd/distribute.rs
 3569	sovereign/crates/sovereign-cli/src/session_cmd.rs
 1217	sovereign/crates/sovereign-cli/tests/main/cli_contract_journeys.rs
 1605	sovereign/crates/sovereign-code/src/session_state.rs
@@ -106,14 +103,14 @@
 1263	sovereign/crates/sovereign-core/src/title.rs
 2499	sovereign/crates/sovereign-core/tests/main/core_tests.rs
 2225	sovereign/crates/sovereign-core/tests/main/functional.rs
-1489	sovereign/crates/sovereign-daemon/src/auto_ingest.rs
+1486	sovereign/crates/sovereign-daemon/src/auto_ingest.rs
 2696	sovereign/crates/sovereign-daemon/src/bootstrap.rs
 1650	sovereign/crates/sovereign-daemon/src/corpus_watch_http.rs
-5311	sovereign/crates/sovereign-daemon/src/daemon.rs
+5297	sovereign/crates/sovereign-daemon/src/daemon.rs
 5775	sovereign/crates/sovereign-daemon/src/frontdoor.rs
 1226	sovereign/crates/sovereign-daemon/src/mesh_http.rs
 1357	sovereign/crates/sovereign-daemon/src/routes_edit_predictions.rs
-1276	sovereign/crates/sovereign-daemon/src/routes_inference.rs
+1275	sovereign/crates/sovereign-daemon/src/routes_inference.rs
 1545	sovereign/crates/sovereign-daemon/src/routes_internal/corpus_ingest.rs
 2754	sovereign/crates/sovereign-daemon/src/routes_responses.rs
 2270	sovereign/crates/sovereign-daemon/src/state.rs
@@ -131,7 +128,7 @@
 1952	sovereign/crates/sovereign-inference/src/embedded/rpc_warm_cache.rs
 2405	sovereign/crates/sovereign-mesh-test-harness/src/mesh_sim/mod.rs
 1543	sovereign/crates/sovereign-mesh/src/gossip.rs
-1652	sovereign/crates/sovereign-mesh/src/iroh_access.rs
+1596	sovereign/crates/sovereign-mesh/src/iroh_access.rs
 3054	sovereign/crates/sovereign-mesh/src/mesh_measurements.rs
 2784	sovereign/crates/sovereign-mesh/tests/main/mesh_sim_scoreboard.rs
 1230	sovereign/crates/sovereign-meshapp/src/wrapped.rs
