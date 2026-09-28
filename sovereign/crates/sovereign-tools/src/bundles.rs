@@ -95,7 +95,7 @@ pub enum WebReach {
 pub struct CoreTurnTools {
     store: Arc<dyn StateStore>,
     inference: Arc<dyn InferenceProvider>,
-    corpus_engine: Arc<corpus_engine::CorpusEngine>,
+    corpus_engine: Arc<dyn corpus_index::source::CorpusReadPort>,
     web: WebReach,
 }
 
@@ -105,7 +105,7 @@ impl CoreTurnTools {
     pub fn new(
         store: Arc<dyn StateStore>,
         inference: Arc<dyn InferenceProvider>,
-        corpus_engine: Arc<corpus_engine::CorpusEngine>,
+        corpus_engine: Arc<dyn corpus_index::source::CorpusReadPort>,
         web: WebReach,
     ) -> Self {
         Self {

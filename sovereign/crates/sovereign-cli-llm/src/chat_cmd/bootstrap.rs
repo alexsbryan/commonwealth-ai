@@ -291,7 +291,7 @@ async fn build_session_scoped(
             // The same `SqliteStateStore` handle already opened above also
             // impls `ConvTieredReader` (spec CONV_TIERED_PORT.md).
             conv_tiered: Some(Arc::clone(&store_concrete) as Arc<dyn ConvTieredReader>),
-            corpus_engine: Arc::clone(&corpus_engine),
+            corpus_engine: Arc::clone(&corpus_engine) as _,
             // Cloned: `tool_bundles` below borrows the same handle for
             // `knowledge_lookup`'s notes channel. One store, two readers.
             note_store: note_store.clone(),
@@ -317,7 +317,7 @@ async fn build_session_scoped(
                     sovereign_runtime_recipe::BaselineDeps {
                         store: &store,
                         inference: &inference,
-                        corpus_engine: &corpus_engine,
+                        corpus_engine: Arc::clone(&corpus_engine) as _,
                         // The same handle passed to `note_store` below — the
                         // notes evidence channel and the tool-decision write
                         // hook read one store, not two.

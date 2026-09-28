@@ -39,7 +39,7 @@ use corpus_engine::enrichment::atlas::analysis::sec_facts::{
     scope_qualifier_in_question, store_claims, SecFact, SecFactStore, SecRefusal,
     SEC_FACTS_AUTHORITY_TOOL, SEC_FACTS_SIDECAR,
 };
-use corpus_engine::CorpusEngine;
+use corpus_index::source::CorpusReadPort;
 use sovereign_core::tool_manifest::DeclaredTool;
 use sovereign_core::types::AuthorityClaim;
 
@@ -47,7 +47,7 @@ use sovereign_core::types::AuthorityClaim;
 /// identified by its recipe's `[authority]` declaration, not by the
 /// spelling of its corpus id.
 pub struct SecFactsTool {
-    engine: Arc<CorpusEngine>,
+    engine: Arc<dyn CorpusReadPort>,
     /// Lazily built claim index for the §7.3 authority pre-check:
     /// every installed corpus whose MATERIALIZED RECIPE
     /// declares `[authority] tool = "sec_facts"`, with its typed
@@ -58,7 +58,7 @@ pub struct SecFactsTool {
 }
 
 impl SecFactsTool {
-    pub fn new(engine: Arc<CorpusEngine>) -> Self {
+    pub fn new(engine: Arc<dyn CorpusReadPort>) -> Self {
         Self {
             engine,
             claim_stores: std::sync::OnceLock::new(),

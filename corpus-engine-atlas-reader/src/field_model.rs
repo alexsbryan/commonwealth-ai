@@ -266,9 +266,7 @@ pub const LEGACY_ARTIFACT: &str = "field_skeleton.json";
 /// `enrich field-atoms` migration, and corpus-engine's `load_field_checkpoint`
 /// fallback. For an `AtlasAtoms` domain this file is a pre-ei-7b leftover
 /// and the live field model is in the atlas.
-pub fn load_field_skeleton(
-    dir: &std::path::Path,
-) -> corpus_index::Result<Option<FieldSkeleton>> {
+pub fn load_field_skeleton(dir: &std::path::Path) -> corpus_index::Result<Option<FieldSkeleton>> {
     read_skeleton_json(&dir.join(LEGACY_ARTIFACT))
 }
 

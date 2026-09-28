@@ -6,6 +6,7 @@ use std::path::Path;
 use async_trait::async_trait;
 
 use crate::index::CorpusIndex;
+use crate::recipe::CatalogConfig;
 use crate::types::{BuiltinCorpus, IndexInfo};
 use crate::Result;
 
@@ -42,4 +43,26 @@ pub trait CorpusReadPort: IndexSource {
 
     /// The registry catalog, one row per entry.
     fn builtin_corpora(&self) -> Vec<BuiltinCorpus>;
+
+    /// The directory the recipes live under (the `[authority]` blocks the
+    /// sec_facts tool reads).
+    fn recipes_dir(&self) -> &Path;
+
+    /// `corpus_id`'s recipe `[catalog]` block; `None` when the recipe has
+    /// none or does not resolve.
+    async fn catalog_config(&self, corpus_id: &str) -> Option<CatalogConfig>;
+
+    /// Installed corpora that carry field-model tables — what the
+    /// epistemic tools consult.
+    async fn enriched_corpus_ids(&self) -> Result<Vec<String>> {
+        let mut out = Vec::new();
+        for info in self.installed_indexes().await? {
+            if let Ok(index) = CorpusIndex::open(&info.path).await {
+                if index.has_field_model_tables().await {
+                    out.push(info.corpus_id);
+                }
+            }
+        }
+        Ok(out)
+    }
 }

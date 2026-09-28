@@ -43,11 +43,11 @@ sovereign-contracts = { workspace = true }
 # rerank config/dedup readers. Same layer (capabilities), like
 # sovereign-gliner -> sovereign-core one layer down.
 sovereign-tools = { workspace = true }
-# `CorpusEngine`, `open_wikipedia_graph`, `MetaAtlasIndex`, `BridgeIndex`,
-# `RerankConfig`. Knowledge layer — down.
-corpus-engine = { workspace = true }
-# `RerankConfig` moved to the read-port leaf; the engine items above keep this
-# edge on corpus-engine.
+# `open_wikipedia_graph`, `WikipediaGraphApi`, `MetaAtlasIndex`: the atlas
+# read leaf. The engine is reached only through the read port below
+# (pb-ingest-dial-tools).
+corpus-engine-atlas-reader = { workspace = true }
+# `CorpusReadPort` (the engine this host retrieves through) and `RerankConfig`.
 corpus-index = { workspace = true }
 # The tool-decision write hook's backing store is NOT a dependency: the host
 # hands it in as `sovereign_contracts::notes::AgentNotes` (RecipeInputs.note_store).

@@ -244,7 +244,7 @@ pub struct RecipeInputs {
     /// forgotten wire — spec `sovereign/docs/specs/CONV_TIERED_PORT.md`.
     pub conv_tiered: Option<Arc<dyn sovereign_core::conv_tiered::ConvTieredReader>>,
     /// The corpus engine this process retrieves through.
-    pub corpus_engine: Arc<corpus_engine::CorpusEngine>,
+    pub corpus_engine: Arc<dyn corpus_index::source::CorpusReadPort>,
     /// Backing store for the per-conversation `tool_decision` write hook.
     pub note_store: Option<Arc<dyn sovereign_contracts::notes::AgentNotes>>,
     /// The skill registry the router and planner classify against.
@@ -393,7 +393,7 @@ pub async fn common_parts(inputs: RecipeInputs, progress: &dyn RecipeProgress) -
         ner,
     } = inputs;
 
-    log_installed_corpora(&corpus_engine, progress).await;
+    log_installed_corpora(corpus_engine.as_ref(), progress).await;
 
     let (tools, mcp) = build_tools(&tool_bundles, switches, mcp_extra, progress).await;
     let (router, planner) =
@@ -472,7 +472,7 @@ pub fn baseline_bundles(deps: BaselineDeps<'_>) -> Vec<Box<dyn ToolBundle>> {
         Box::new(CoreTurnTools::new(
             Arc::clone(store),
             Arc::clone(inference),
-            Arc::clone(corpus_engine),
+            corpus_engine,
             web,
         )),
         web_family,
@@ -497,7 +497,7 @@ pub struct BaselineDeps<'a> {
     /// The provider the search and lookup tools infer through.
     pub inference: &'a Arc<dyn InferenceProvider>,
     /// The corpus this host retrieves from.
-    pub corpus_engine: &'a Arc<corpus_engine::CorpusEngine>,
+    pub corpus_engine: Arc<dyn corpus_index::source::CorpusReadPort>,
     /// The open note store, when this host has one. Wires
     /// `knowledge_lookup`'s third evidence channel; `None` is reported as a
     /// withholding rather than passed over in silence.
@@ -631,7 +631,7 @@ async fn build_router_and_planner(
 /// is complete.
 async fn build_lane(
     conv_tiered: Option<Arc<dyn sovereign_core::conv_tiered::ConvTieredReader>>,
-    corpus_engine: &Arc<corpus_engine::CorpusEngine>,
+    corpus_engine: &Arc<dyn corpus_index::source::CorpusReadPort>,
     inference: &Arc<dyn InferenceProvider>,
     indexes_dir: &Path,
     embed_model: &str,
@@ -663,7 +663,9 @@ async fn build_lane(
     // gets its graph, and one sealed to a 316-chunk bench corpus probes one
     // corpus instead of forty-eight. Measured on the authoring host, 51,845
     // articles / 7,853,503 edges = 2.2 s.
-    if let Some(graph) = load_wikipedia_graph(corpus_engine, indexes_dir, &scope, progress).await {
+    if let Some(graph) =
+        load_wikipedia_graph(corpus_engine.as_ref(), indexes_dir, &scope, progress).await
+    {
         progress.note(&format!(
             "Wiki graph:  {} articles, {} edges",
             graph.article_count().await,
@@ -745,13 +747,13 @@ fn load_cross_corpus_members(
 /// it, and so the desktop's can be deleted when it lands on this recipe (ARCH
 /// §10.6).
 fn load_meta_atlas(lane: &LaneSources, warmth: LaneWarmth, progress: &dyn RecipeProgress) {
-    fn read() -> corpus_engine::meta_atlas::MetaAtlasIndex {
-        let path = corpus_engine::meta_atlas::default_meta_atlas_path();
-        match corpus_engine::meta_atlas::MetaAtlasIndex::load(path.as_deref()) {
+    fn read() -> corpus_engine_atlas_reader::meta_atlas::MetaAtlasIndex {
+        let path = corpus_engine_atlas_reader::meta_atlas::default_meta_atlas_path();
+        match corpus_engine_atlas_reader::meta_atlas::MetaAtlasIndex::load(path.as_deref()) {
             Ok(idx) => idx,
             Err(e) => {
                 tracing::warn!(error = %e, "runtime_recipe: meta-atlas load failed; boost disabled");
-                corpus_engine::meta_atlas::MetaAtlasIndex::empty()
+                corpus_engine_atlas_reader::meta_atlas::MetaAtlasIndex::empty()
             }
         }
     }
@@ -800,11 +802,11 @@ fn load_meta_atlas(lane: &LaneSources, warmth: LaneWarmth, progress: &dyn Recipe
 /// atlas store) for each installed corpus and return the first graph that
 /// opens cleanly.
 async fn load_wikipedia_graph(
-    engine: &corpus_engine::CorpusEngine,
+    engine: &dyn corpus_index::source::CorpusReadPort,
     indexes_dir: &Path,
     scope: &LaneScope,
     progress: &dyn RecipeProgress,
-) -> Option<Arc<dyn corpus_engine::WikipediaGraphApi>> {
+) -> Option<Arc<dyn corpus_engine_atlas_reader::wikipedia_graph::WikipediaGraphApi>> {
     // Memory-pressure escape hatch. The graph is a 7M-edge sqlite mmap; on a
     // host already running the daemon, loading it twice has tipped past
     // available RAM in practice.
@@ -825,7 +827,12 @@ async fn load_wikipedia_graph(
             continue;
         }
         probed += 1;
-        if let Some(g) = corpus_engine::open_wikipedia_graph(indexes_dir, &info.corpus_id).await {
+        if let Some(g) = corpus_engine_atlas_reader::wikipedia_columnar::open_wikipedia_graph(
+            indexes_dir,
+            &info.corpus_id,
+        )
+        .await
+        {
             return Some(g);
         }
     }
@@ -836,7 +843,7 @@ async fn load_wikipedia_graph(
 }
 
 async fn log_installed_corpora(
-    engine: &corpus_engine::CorpusEngine,
+    engine: &dyn corpus_index::source::CorpusReadPort,
     progress: &dyn RecipeProgress,
 ) {
     match engine.installed_indexes().await {

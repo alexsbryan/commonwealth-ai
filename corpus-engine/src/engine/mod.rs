@@ -2278,21 +2278,6 @@ impl CorpusEngine {
         crate::index::raptor::read_raptor_meta(&self.index_dir.join(corpus_id))
     }
 
-    /// Return the IDs of all installed corpora that have field model
-    /// enrichment data. Used by epistemic tools to know which corpora
-    /// to consult.
-    pub async fn enriched_corpus_ids(&self) -> Result<Vec<String>> {
-        let mut out = Vec::new();
-        for info in self.installed_indexes().await? {
-            if let Ok(index) = CorpusIndex::open(&info.path).await {
-                if index.has_field_model_tables().await {
-                    out.push(info.corpus_id);
-                }
-            }
-        }
-        Ok(out)
-    }
-
     // ── Shard Operations ────────────────────────────────
 
     /// Report chunk ID range, count, and size for an index.
@@ -3716,5 +3701,19 @@ impl corpus_index::source::CorpusReadPort for CorpusEngine {
 
     fn builtin_corpora(&self) -> Vec<crate::types::BuiltinCorpus> {
         CorpusEngine::builtin_corpora(self)
+    }
+
+    fn recipes_dir(&self) -> &Path {
+        CorpusEngine::recipes_dir(self)
+    }
+
+    async fn catalog_config(&self, corpus_id: &str) -> Option<crate::recipe::CatalogConfig> {
+        match self.registry().fetch_recipe(corpus_id).await {
+            Ok(recipe) => recipe.catalog,
+            Err(e) => {
+                tracing::debug!(corpus_id, error = %e, "catalog_config: recipe did not resolve");
+                None
+            }
+        }
     }
 }

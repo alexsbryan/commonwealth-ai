@@ -31,7 +31,7 @@
 
 use std::collections::HashMap;
 
-use corpus_engine::recipe::CatalogConfig;
+use corpus_index::recipe::CatalogConfig;
 use corpus_index::types::{CorpusKind, IndexInfo, ScoredChunk};
 
 /// Index-side context needed to resolve a `Catalog`-kind chunk into

@@ -13093,7 +13093,7 @@ dependencies = [
 name = "sovereign-runtime-recipe"
 version = "0.8.0"
 dependencies = [
- "corpus-engine",
+ "corpus-engine-atlas-reader",
  "corpus-index",
  "sovereign-contracts",
  "sovereign-core",
@@ -13265,6 +13265,7 @@ dependencies = [
  "bzip2 0.5.2",
  "chrono",
  "corpus-engine",
+ "corpus-engine-atlas-reader",
  "corpus-engine-sections",
  "corpus-index",
  "docx-lite",

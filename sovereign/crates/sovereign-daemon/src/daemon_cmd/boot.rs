@@ -632,7 +632,7 @@ pub(super) async fn run_daemon(
             store: Arc::clone(&state_store),
             conv_tiered: Some(Arc::clone(&state_store_concrete)
                 as Arc<dyn sovereign_core::conv_tiered::ConvTieredReader>),
-            corpus_engine: Arc::clone(&engine),
+            corpus_engine: Arc::clone(&engine) as _,
             note_store: Some(Arc::clone(&notes_port)),
             // The same compiled-in skill set the desktop ships (rung 6
             // commit B) — built just above from the ONE shared home, so a
@@ -659,7 +659,7 @@ pub(super) async fn run_daemon(
                     sovereign_runtime_recipe::BaselineDeps {
                         store: &state_store,
                         inference: &routed_provider,
-                        corpus_engine: &engine,
+                        corpus_engine: Arc::clone(&engine) as _,
                         // The daemon opened this above; wiring it here is what
                         // gives `knowledge_lookup` its notes channel. It ran
                         // with that channel dark until 2026-08-26 while the

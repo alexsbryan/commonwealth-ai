@@ -27,12 +27,12 @@ pub async fn build_tool_registry(
     // (e.g. sf-assessor-roll) — pre-cited figures for the "no
     // confabulated numbers" demo. Read-only; safe on the MCP surface.
     tools.register(Box::new(
-        sovereign_tools::parcel_analytics::ParcelAnalyticsTool::new(Arc::clone(&engine)).declared(),
+        sovereign_tools::parcel_analytics::ParcelAnalyticsTool::new(Arc::clone(&engine) as _).declared(),
     ));
     // Typed SEC-filing figures with basis + accession, or first-class
     // refusals; declares the opt-in bare-numeral audit (FINANCIAL_CORPORA §6).
     tools.register(Box::new(
-        sovereign_tools::sec_facts::SecFactsTool::new(Arc::clone(&engine)).declared(),
+        sovereign_tools::sec_facts::SecFactsTool::new(Arc::clone(&engine) as _).declared(),
     ));
 
     // Doc-path checker — no state dependency.
