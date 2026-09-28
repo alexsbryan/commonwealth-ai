@@ -16,10 +16,12 @@
 //! including `ed25519-dalek`, so the kernel cannot reach it. Pulling one id
 //! out of a six-member macro family leaves either a duplicated macro or an
 //! orphan; moving the MACRO down and leaving the five mesh-specific ids where
-//! they are does neither. `commonwealth-core` now invokes this macro for
-//! `MeshId`, `ModelId`, `ProcessId`, `PlanId` and `HandoffId`, and re-exports
-//! `NodeId` from here, so all 755 existing reference sites are untouched and
-//! there is still exactly one implementation (ARCH §10.6).
+//! they are does neither. `HandoffId` (pb-work-doors) and `MeshId`, `ModelId`
+//! and `ProcessId` (pb-mesh-exit-core) have since followed it here, because
+//! wire vocabulary in oicp-types names them; `commonwealth-core` invokes this
+//! macro only for `PlanId` now and re-exports the rest from here, so every
+//! existing reference site is untouched and there is still exactly one
+//! implementation (ARCH §10.6).
 
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -126,6 +128,14 @@ define_id!(NodeId, "node");
 // (FIVE_PROGRAMS §12 3a rung 2): a client that submits work names it and
 // links no mesh crate.
 define_id!(HandoffId, "handoff");
+
+// Which mesh, which model, which process. Moved here from `commonwealth-core`
+// by pb-mesh-exit-core (FIVE_PROGRAMS §12 3a rung 2): `NodeCapabilities`
+// names `ProcessId` and the model catalogue names `ModelId`, and both are
+// oicp-types vocabulary now, which may name only this crate.
+define_id!(MeshId, "mesh");
+define_id!(ModelId, "model");
+define_id!(ProcessId, "proc");
 
 /// A node's Ed25519 verifying key — the mesh-wide cryptographic
 /// identity of a node, distinct from the opaque random [`NodeId`].

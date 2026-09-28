@@ -10,16 +10,14 @@
 // `ed25519-dalek`, so the kernel cannot reach up to here.
 //
 // Pulling ONE id out of a six-member macro family leaves either a duplicated
-// macro or an orphan. Moving the MACRO down and leaving the five
-// mesh-specific ids here does neither: there is still exactly one
-// implementation (ARCH §10.6), the five ids below are unchanged, and `NodeId`
-// is re-exported so all 755 existing reference sites are untouched.
+// macro or an orphan. Moving the MACRO down and leaving the mesh-specific ids
+// here does neither: there is still exactly one implementation (ARCH §10.6),
+// and the ids that moved since (`HandoffId`, then `MeshId`, `ModelId` and
+// `ProcessId` with pb-mesh-exit-core) are re-exported so every existing
+// reference site is untouched. Only `PlanId` is still minted here.
 use kernel_types::define_id;
-pub use kernel_types::{HandoffId, NodeId, NodePubkey};
+pub use kernel_types::{HandoffId, MeshId, ModelId, NodeId, NodePubkey, ProcessId};
 
-define_id!(MeshId, "mesh");
-define_id!(ModelId, "model");
-define_id!(ProcessId, "proc");
 define_id!(PlanId, "plan");
 
 #[cfg(test)]
