@@ -259,6 +259,26 @@ pub fn pick_member(
     query: &str,
     kind: OriginKind,
 ) -> Result<MediaCandidate, MediaReachRefusal> {
+    let picked = pick_one(candidates, query)?;
+    if picked.node_id == self_id {
+        return Err(MediaReachRefusal::IsSelf(picked.name, kind));
+    }
+    let picked = live(picked)?;
+    if !picked.has_identity {
+        return Err(MediaReachRefusal::NoIdentity(picked.name));
+    }
+    if !picked.offers(kind) {
+        return Err(MediaReachRefusal::NoOrigin(picked.name, kind));
+    }
+    Ok(picked)
+}
+
+/// The one member `query` names among the active candidates — no other
+/// check. [`pick_member`] and the reach door each add their own.
+fn pick_one(
+    candidates: &[MediaCandidate],
+    query: &str,
+) -> Result<MediaCandidate, MediaReachRefusal> {
     let matched: Vec<&MediaCandidate> = candidates
         .iter()
         .filter(|c| c.active && member_matches(c.node_id, &c.name, query))
@@ -275,21 +295,16 @@ pub fn pick_member(
             return Err(MediaReachRefusal::Ambiguous(query.to_string(), names));
         }
     };
-    if picked.node_id == self_id {
-        return Err(MediaReachRefusal::IsSelf(picked.name, kind));
-    }
-    match picked.status {
-        NodeStatus::Online | NodeStatus::Busy => {}
-        NodeStatus::Away => return Err(MediaReachRefusal::Offline(picked.name, "away")),
-        NodeStatus::Offline => return Err(MediaReachRefusal::Offline(picked.name, "offline")),
-    }
-    if !picked.has_identity {
-        return Err(MediaReachRefusal::NoIdentity(picked.name));
-    }
-    if !picked.offers(kind) {
-        return Err(MediaReachRefusal::NoOrigin(picked.name, kind));
-    }
     Ok(picked)
+}
+
+/// `picked`, if its gossiped status says a dial would be answered.
+fn live(picked: MediaCandidate) -> Result<MediaCandidate, MediaReachRefusal> {
+    match picked.status {
+        NodeStatus::Online | NodeStatus::Busy => Ok(picked),
+        NodeStatus::Away => Err(MediaReachRefusal::Offline(picked.name, "away")),
+        NodeStatus::Offline => Err(MediaReachRefusal::Offline(picked.name, "offline")),
+    }
 }
 
 /// The class chooses the ALPN, so the kind chooses the class.
