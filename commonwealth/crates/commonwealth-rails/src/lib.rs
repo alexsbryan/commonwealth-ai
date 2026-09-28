@@ -76,6 +76,7 @@ pub mod config;
 pub mod found;
 pub mod gossip;
 pub mod identity;
+pub mod iroh_watchdog;
 pub mod internal;
 pub mod join;
 pub mod known;

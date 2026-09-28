@@ -58,6 +58,9 @@ ed25519-dalek = { workspace = true }
 axum = { workspace = true }
 reqwest = { workspace = true }
 tokio = { workspace = true }
+# The reachability watchdog's relay-status stream (pb-rails-parity moved it
+# here); already in this closure through iroh.
+futures = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 toml = { workspace = true }

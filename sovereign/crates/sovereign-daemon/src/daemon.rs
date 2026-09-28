@@ -2184,8 +2184,8 @@ impl EmbeddedDaemon {
             }
         };
         let health = match status_arc {
-            Some(arc) => arc.read().await.clone(),
-            None => sovereign_mesh::iroh_watchdog::ReachabilityStatus::default(),
+            Some(arc) => sovereign_mesh::iroh_watchdog::to_wire(&*arc.read().await),
+            None => sovereign_contracts::daemon_wire::ReachabilityStatus::default(),
         };
         Some(SelfReachability {
             dial,

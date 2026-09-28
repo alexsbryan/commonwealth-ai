@@ -2024,6 +2024,7 @@ dependencies = [
  "commonwealth-transport",
  "commonwealth-work",
  "ed25519-dalek 2.2.0",
+ "futures",
  "hex",
  "host-kit",
  "hostname",
