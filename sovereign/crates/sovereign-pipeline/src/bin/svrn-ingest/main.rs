@@ -4,9 +4,11 @@
 //! its first argument (sovereign-cli `ingest_bin.rs`), so a developer who
 //! wants ingest in CI takes this crate and no svrn crate.
 
+mod finalize;
 mod index;
 mod ingest;
 mod pull;
+mod watch;
 
 use clap::{Parser, Subcommand};
 
@@ -28,6 +30,12 @@ enum Command {
     /// Build one index from a recipe file into a named directory, or
     /// re-index a list of files in one; `code index` execs this.
     Index(index::IndexArgs),
+    /// Promote a stranded `<corpus>-partition-local/` index into
+    /// `<corpus>/`; `code finalize` execs this.
+    Finalize(finalize::FinalizeArgs),
+    /// Keep one code index current while its source tree is edited, until
+    /// Ctrl-C; `code watch` execs this.
+    Watch(watch::WatchArgs),
 }
 
 #[tokio::main]
@@ -44,5 +52,7 @@ async fn main() -> anyhow::Result<()> {
         Command::Ingest(a) => ingest::run(a).await,
         Command::Pull(a) => pull::run(a).await,
         Command::Index(a) => index::run(a).await,
+        Command::Finalize(a) => finalize::run(a).await,
+        Command::Watch(a) => watch::run(a).await,
     }
 }
