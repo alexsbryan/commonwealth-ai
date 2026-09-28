@@ -1512,11 +1512,12 @@ items = ["bundles", "assemble", "child_launch", "DEFAULT_FILTER"]
 # Code's face (pb-code-daemon-exit; F2 (a), phase-b-30; phase-b-33): the one
 # composition `svrn code mcp` serves, mounted on svrn's `:9741/mcp`. In
 # code's library, sovereign-code: sovereign-cli-dev is `backstage` above, and
-# a product binary may not link it.
+# a product binary may not link it. `face::NotesRail` joined at pb-notes-memory:
+# the notes rail's host inputs, which svrn hands code in the stock process.
 [[distribution.face]]
 package = "code"
 krate = "sovereign-code"
-items = ["face::compose", "face::CodeParts"]
+items = ["face::compose", "face::CodeParts", "face::NotesRail"]
 
 # ── THE THIN-SURFACE RULE — can this client BECOME what it talks to? ─────────
 #

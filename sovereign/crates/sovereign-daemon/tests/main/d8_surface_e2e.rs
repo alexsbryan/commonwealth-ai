@@ -11,7 +11,7 @@
 //! for the sink route and the reason has not changed.
 //!
 //! Exercised against real artefacts — a real atlas dir with a real
-//! `governance_oplog.jsonl`, a real `notes.db` and `features.db`, a real
+//! `governance_oplog.jsonl`, a real `sovereign.db` and `features.db`, a real
 //! `recipes/` tree — opened the way production opens them. The fault this
 //! rung exists to remove is TWO PROCESSES appending to one JSONL log with
 //! one mutex each, and a stubbed oplog cannot exhibit it.
@@ -59,7 +59,7 @@ use corpus_engine::enrichment::pipeline::atlas::{
 };
 use corpus_engine::enrichment::GovernanceOpKind;
 use corpus_engine::CorpusEngine;
-use corpus_engine_notes::NoteStore;
+use sovereign_store::sqlite::SqliteStateStore;
 use oplog::{Op, Oplog};
 use sovereign_contracts::mcp_config::{McpAuthConfig, McpServerConfig, McpTransportConfig};
 use sovereign_contracts::setup_config::SetupConfig;
@@ -84,7 +84,7 @@ mod fixture {
 
     pub const CORPUS: &str = "house-rules";
 
-    /// A daemon whose index root, recipes dir, `notes.db` and
+    /// A daemon whose index root, recipes dir, `sovereign.db` and
     /// `features.db` all live under one temp dir — the same relationship
     /// production has, which is what makes `engine.index_dir()` the right
     /// thing for the handlers to resolve against.
@@ -98,7 +98,7 @@ mod fixture {
     pub fn daemon_with_stores(with_features: bool) -> Fx {
         let tmp = tempfile::tempdir().unwrap();
         let engine = engine_at(&tmp);
-        let notes = Arc::new(NoteStore::open(&tmp.path().join("notes.db")).unwrap());
+        let notes = Arc::new(SqliteStateStore::open(&tmp.path().join("sovereign.db")).unwrap());
         let features = with_features
             .then(|| Arc::new(RecipeProjectStore::open(&tmp.path().join("features.db")).unwrap()));
         let daemon = EmbeddedDaemon::new(
@@ -606,7 +606,8 @@ fn http_server(name: &str, url: &str, bearer: bool) -> McpServerConfig {
 async fn mcp_servers_lists_the_config_and_folds_the_live_tool_counts() {
     let tmp = tempfile::tempdir().expect("tempdir");
     let engine = fixture::engine_at(&tmp);
-    let notes = Arc::new(NoteStore::open(&tmp.path().join("notes.db")).expect("notes.db"));
+    let notes =
+        Arc::new(SqliteStateStore::open(&tmp.path().join("sovereign.db")).expect("sovereign.db"));
 
     let mut tools = ToolRegistry::new();
     tools.register(stub_tool("mcp_vision_describe"));
@@ -780,7 +781,8 @@ async fn mcp_token_round_trips_and_a_blank_token_clears_it() {
 
     let tmp = tempfile::tempdir().expect("tempdir");
     let engine = fixture::engine_at(&tmp);
-    let notes = Arc::new(NoteStore::open(&tmp.path().join("notes.db")).expect("notes.db"));
+    let notes =
+        Arc::new(SqliteStateStore::open(&tmp.path().join("sovereign.db")).expect("sovereign.db"));
     let mut cfg = SetupConfig::unconfigured();
     cfg.mcp_servers = vec![http_server("vision", "https://vision.example/mcp", true)];
     let daemon = EmbeddedDaemon::new(
@@ -1061,7 +1063,7 @@ async fn recipe_project_save_toml_refuses_a_broken_recipe_and_writes_nothing() {
 }
 
 /// A daemon with no `features.db` answers 503 naming THAT store — not
-/// `notes.db`, and not a generic "workspace unavailable".
+/// svrn's note store, and not a generic "workspace unavailable".
 ///
 /// The two files are opened by different code with different failure
 /// modes; one message covering both sends an operator to the wrong file.

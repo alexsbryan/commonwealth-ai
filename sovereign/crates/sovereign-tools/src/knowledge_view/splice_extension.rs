@@ -27,7 +27,7 @@ use std::path::Path;
 
 use corpus_engine::enrichment::atlas::atoms::AtomEnvelope;
 use corpus_engine::enrichment::atlas::writer::{read_atlas_atoms, ATLAS_DIRNAME};
-use corpus_engine_notes::notes::NoteStore;
+use sovereign_contracts::notes::AgentNotes;
 use rusqlite::{Connection, OpenFlags};
 use sovereign_core::memory::EntityInventory;
 
@@ -82,14 +82,14 @@ pub fn load_chunk_timestamps(db_path: &Path) -> HashMap<String, i64> {
     map
 }
 
-// ── NoteStore relational + strategic adapters ───────────────────
+// ── Memory-notes relational + strategic adapters ────────────────
 
 /// Map an active commitment / follow_up note to the relational
 /// digest's `RelationalNote` payload. `created_at` becomes the
 /// anchor timestamp — the relational formatter uses it for the
 /// "(noted Mar 14)" / "(overdue)" annotations.
 pub async fn relational_notes_for_entity(
-    notes: &NoteStore,
+    notes: &dyn AgentNotes,
     entity_name: &str,
 ) -> Vec<RelationalNote> {
     let kinds: &[&str] = &["commitment", "follow_up", "goal"];
@@ -121,10 +121,10 @@ pub async fn relational_notes_for_entity(
         .collect()
 }
 
-/// Same NoteStore query, narrowed to `goal` kinds and shaped for
+/// Same notes query, narrowed to `goal` kinds and shaped for
 /// the strategic digest.
 pub async fn strategic_goals_for_entity(
-    notes: &NoteStore,
+    notes: &dyn AgentNotes,
     entity_name: &str,
 ) -> Vec<StrategicGoal> {
     let rows = match notes

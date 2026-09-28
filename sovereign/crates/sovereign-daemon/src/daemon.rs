@@ -818,12 +818,13 @@ impl EmbeddedDaemon {
             .and_then(|s| s.core.features.as_ref())
     }
 
-    /// Borrow the `NoteStore` behind this daemon's mounted `/mcp` surface,
-    /// when one is mounted (sv-surface rung 6). `None` on `MeshAdmin` and on
-    /// a commission whose `notes.db` would not open — the tool-outcome route
-    /// renders that as a named 503, matching `McpSurface::Unavailable`'s own
-    /// refusal to conflate the two facts (ARCH §18.3).
-    pub fn notes_store(&self) -> Option<&Arc<corpus_engine_notes::NoteStore>> {
+    /// Borrow svrn's store behind this daemon's mounted `/mcp` surface, where
+    /// its memory notes live (pb-notes-memory), when one is mounted
+    /// (sv-surface rung 6). `None` on `MeshAdmin` and on a commission with no
+    /// `/mcp` mount — the notes and tool-outcome routes render that as a
+    /// named 503, matching `McpSurface::Unavailable`'s own refusal to
+    /// conflate the two facts (ARCH §18.3).
+    pub fn notes_store(&self) -> Option<&Arc<sovereign_store::sqlite::SqliteStateStore>> {
         self.services
             .serving()
             .and_then(|s| s.capability.mcp.mount())
@@ -3776,7 +3777,7 @@ impl EmbeddedDaemon {
                 // harmlessly and idle until something publishes.
                 client_router = client_router.merge(mcp_router::mcp_router(
                     m.tools,
-                    m.notes,
+                    m.notes as Arc<dyn sovereign_contracts::notes::AgentNotes>,
                     m.session_id,
                     m.code,
                     mcp_router::McpNotifier::new(),

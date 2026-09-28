@@ -63,7 +63,6 @@ sovereign-grants = { workspace = true }
 code-next-edit = { path = "../../../code-next-edit" }
 corpus-engine = { workspace = true, features = ["treesitter"] }
 corpus-engine-scip = { workspace = true }
-corpus-engine-notes = { workspace = true }
 # Leaf items the engine re-exports (types, error, index, corpus) — spelled at their owner.
 corpus-index = { workspace = true }
 oplog = { workspace = true }

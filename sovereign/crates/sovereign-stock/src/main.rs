@@ -58,7 +58,8 @@ fn main() {
         let face = sovereign_code::face::compose(sovereign_code::face::CodeParts {
             indexes_dir: host.data_dir.join("indexes"),
             stores_dir: host.data_dir.clone(),
-            notes: host.notes,
+            // Code opens its own notes.db under `stores_dir` (pb-notes-memory).
+            notes: None,
             index: host.index,
             workspace: host.workspace,
             sovereign_dir: None,

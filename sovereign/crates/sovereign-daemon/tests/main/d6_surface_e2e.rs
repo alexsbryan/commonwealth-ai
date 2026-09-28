@@ -8,7 +8,7 @@
 //! `InsightService` fixture — a second copy of that fixture here would
 //! be the twin this campaign deletes.
 //!
-//! Exercised against real stores — a real `notes.db` and a real
+//! Exercised against real stores — svrn's real `sovereign.db` and a real
 //! `features.db` in a temp dir, opened the way production opens them —
 //! because the fault these routes exist to prevent is TWO handles on one
 //! file, and a stubbed store cannot exhibit it.
@@ -39,11 +39,11 @@
 use std::sync::Arc;
 
 use corpus_engine::CorpusEngine;
-use corpus_engine_notes::NoteStore;
 use sovereign_contracts::setup_config::SetupConfig;
 use sovereign_daemon::daemon::EmbeddedDaemon;
 use sovereign_daemon::features_http::features_router;
 use sovereign_daemon::notes_http::notes_router;
+use sovereign_store::sqlite::SqliteStateStore;
 use sovereign_tools::recipe_author::recipe_project_store::RecipeProjectStore;
 
 use crate::common;
@@ -55,7 +55,7 @@ use crate::common::spawn_router;
 #[allow(clippy::unwrap_used)]
 async fn build_store_daemon(
     with_features: bool,
-) -> (Arc<EmbeddedDaemon>, Arc<NoteStore>, tempfile::TempDir) {
+) -> (Arc<EmbeddedDaemon>, Arc<SqliteStateStore>, tempfile::TempDir) {
     let tmp = tempfile::tempdir().unwrap();
     let indexes = tmp.path().join("indexes");
     let recipes = tmp.path().join("recipes");
@@ -67,7 +67,7 @@ async fn build_store_daemon(
         Arc::new(|_t: &str| Box::pin(async { Ok(vec![0.0_f32; 8]) })),
     ));
 
-    let notes = Arc::new(NoteStore::open(&tmp.path().join("notes.db")).unwrap());
+    let notes = Arc::new(SqliteStateStore::open(&tmp.path().join("sovereign.db")).unwrap());
     let features = with_features
         .then(|| Arc::new(RecipeProjectStore::open(&tmp.path().join("features.db")).unwrap()));
 
@@ -115,7 +115,7 @@ async fn notes_crud_round_trips_through_the_daemons_own_store() {
 
     // The row is in the DAEMON's store, not merely in the response.
     let row = notes
-        .read_note_by_id(&id)
+        .memory_note_entry(&id)
         .await
         .unwrap()
         .expect("the route wrote through to the store the daemon holds");
@@ -154,10 +154,10 @@ async fn notes_crud_round_trips_through_the_daemons_own_store() {
     assert_eq!(rows.len(), 1, "one lesson written, one listed: {listed:#?}");
     assert_eq!(rows[0]["id"], id.as_str());
 
-    // A kind nobody wrote is an empty list, not an error.
+    // A kind svrn keeps that nobody wrote is an empty list, not an error.
     let empty: serde_json::Value = http
         .post(format!("{base}/query"))
-        .json(&serde_json::json!({ "kinds": ["no-such-kind"] }))
+        .json(&serde_json::json!({ "kinds": ["commitment"] }))
         .send()
         .await
         .unwrap()
@@ -165,6 +165,20 @@ async fn notes_crud_round_trips_through_the_daemons_own_store() {
         .await
         .unwrap();
     assert_eq!(empty["notes"].as_array().unwrap().len(), 0);
+    // A code kind is not an empty list: svrn keeps none, and says where
+    // they are (pb-notes-memory).
+    let code = http
+        .post(format!("{base}/query"))
+        .json(&serde_json::json!({ "kinds": ["decision"] }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(code.status(), 404);
+    let body: serde_json::Value = code.json().await.unwrap();
+    assert!(
+        body["error"].as_str().is_some_and(|e| e.contains("svrn code mcp")),
+        "a code kind must name the code program's notes: {body}"
+    );
 
     // PATCH the payload, and read the NEW bytes back.
     let patched: serde_json::Value = http

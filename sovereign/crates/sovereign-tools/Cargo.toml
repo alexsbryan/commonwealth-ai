@@ -17,7 +17,7 @@ sovereign-contracts = { workspace = true }
 # The recipe-authoring tool bundle now lives in this extractable package;
 # re-exported as `sovereign_tools::recipe_author`. The corpus-engine-backed
 # adapter that satisfies its tester seam (recipe_tester_adapter) stays here; the
-# notes seam is implemented by the store's owner (corpus_engine_notes::port).
+# notes seam is implemented by svrn's store (sovereign-store, pb-notes-memory).
 sovereign-recipe-author = { workspace = true }
 # The 11 pure workflow tools (shell, web, chunk, section, file/json/csv/zip/
 # vector, MCP client) were extracted here; re-exported at their old paths
@@ -36,7 +36,6 @@ corpus-index = { workspace = true }
 # — a two-crate leaf closure, so a reader of atoms.json need not name the
 # engine that writes it (domains dm-vocab-bypass-tools).
 understanding-vocab = { workspace = true, features = ["read"] }
-corpus-engine-notes = { workspace = true }
 # The section detectors `rag::section` runs — a `regex` + `tracing` leaf. The
 # module came back from `sovereign-tools-base` at sv-surface svt-7 and brought
 # its dependency with it; this crate already links corpus-engine itself, so the

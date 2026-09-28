@@ -57,7 +57,7 @@ use super::strategic::{format_strategic, StrategicGoal};
 #[cfg(feature = "treesitter")]
 use super::timeline::assemble_timelines_from_atlas;
 #[cfg(feature = "treesitter")]
-use corpus_engine_notes::notes::NoteStore;
+use sovereign_contracts::notes::AgentNotes;
 
 // ── Backwards-compatible string-id constants ────────────────────
 //
@@ -106,18 +106,17 @@ pub struct KnowledgeViewManager {
     /// Sovereign state DB path. Held so the splice path can resolve
     /// chunk_ids → memory.last_used / conversation.updated_at.
     db_path: PathBuf,
-    /// Working-notes DB path. Held so the splice path can attach
-    /// commitment / follow_up / goal notes by `related_entity` to
-    /// the relational and strategic blocks.
-    notes_db_path: PathBuf,
     /// Late-installed handles for the memory-pool RAPTOR rebuild
     /// (see [`Self::install_memory_atlas`]). Shared with the
     /// debouncer task; `None` until installed.
     mem_atlas_handles: Arc<RwLock<Option<crate::mem_atlas::MemAtlasHandles>>>,
-    /// Lazy NoteStore handle, opened on first splice. The store
-    /// itself is sharable across threads, so we hold an Arc.
+    /// svrn's memory notes, where the commissive handler's commitments
+    /// live (pb-notes-memory): the splice path attaches commitment /
+    /// follow_up / goal notes by `related_entity` to the relational and
+    /// strategic blocks. Installed by the host (see
+    /// [`Self::install_notes`]); `None` renders without them.
     #[cfg(feature = "treesitter")]
-    notes_handle: Arc<tokio::sync::Mutex<Option<Arc<NoteStore>>>>,
+    notes: Arc<RwLock<Option<Arc<dyn AgentNotes>>>>,
 }
 
 /// One row of the digest cache. Stored body is the exact string
@@ -257,10 +256,9 @@ impl KnowledgeViewManager {
             local_only_skill_ids,
             digest_cache: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
             db_path,
-            notes_db_path,
             mem_atlas_handles,
             #[cfg(feature = "treesitter")]
-            notes_handle: Arc::new(tokio::sync::Mutex::new(None)),
+            notes: Arc::new(RwLock::new(None)),
         }
     }
 
@@ -279,6 +277,15 @@ impl KnowledgeViewManager {
     ) {
         let mut slot = self.mem_atlas_handles.write().await;
         *slot = Some(crate::mem_atlas::MemAtlasHandles { store, inference });
+    }
+
+    /// Install svrn's memory notes for the splice path's relational and
+    /// strategic annotations (pb-notes-memory). Interior mutability, like
+    /// [`Self::install_memory_atlas`]: the store handle exists only in the
+    /// caller. Until this is called, the splice renders without them.
+    #[cfg(feature = "treesitter")]
+    pub async fn install_notes(&self, notes: Arc<dyn AgentNotes>) {
+        *self.notes.write().await = Some(notes);
     }
 
     /// Ingest each view. Safe to call repeatedly —
@@ -668,18 +675,21 @@ impl KnowledgeViewManager {
         // 3. NoteStore-backed `related_entity` resolver. We collect
         //    all needed (entity_name, kind-bucket) pairs and pre-load
         //    them into HashMaps so the formatters can stay sync.
-        let notes_handle = self.notes_store_handle().await;
+        let notes_handle = self.notes.read().await.clone();
+        if notes_handle.is_none() {
+            tracing::debug!("splice: no memory notes installed; relational annotations skipped");
+        }
         let mut relational_index: HashMap<String, Vec<RelationalNote>> = HashMap::new();
         let mut strategic_index: HashMap<String, Vec<StrategicGoal>> = HashMap::new();
         if let Some(notes) = notes_handle.as_ref() {
             for tl in &timelines {
                 let key = tl.entity_name.clone();
                 if !relational_index.contains_key(&key) {
-                    let r = relational_notes_for_entity(notes, &tl.entity_name).await;
+                    let r = relational_notes_for_entity(notes.as_ref(), &tl.entity_name).await;
                     relational_index.insert(key.clone(), r);
                 }
                 if let std::collections::hash_map::Entry::Vacant(e) = strategic_index.entry(key) {
-                    let g = strategic_goals_for_entity(notes, &tl.entity_name).await;
+                    let g = strategic_goals_for_entity(notes.as_ref(), &tl.entity_name).await;
                     e.insert(g);
                 }
             }
@@ -758,32 +768,6 @@ impl KnowledgeViewManager {
             }
         }
         sovereign_core::memory::entity_inventory_from_names(names)
-    }
-
-    /// Lazy NoteStore opener. Returns `None` when the underlying
-    /// file can't be opened — the splice path then renders without
-    /// `related_entity` annotations.
-    #[cfg(feature = "treesitter")]
-    async fn notes_store_handle(&self) -> Option<Arc<NoteStore>> {
-        let mut guard = self.notes_handle.lock().await;
-        if let Some(h) = guard.as_ref() {
-            return Some(h.clone());
-        }
-        match NoteStore::open(&self.notes_db_path) {
-            Ok(store) => {
-                let arc = Arc::new(store);
-                *guard = Some(arc.clone());
-                Some(arc)
-            }
-            Err(e) => {
-                tracing::debug!(
-                    path = %self.notes_db_path.display(),
-                    error = %e,
-                    "splice: NoteStore::open failed; relational annotations skipped"
-                );
-                None
-            }
-        }
     }
 
     /// Build a cross-view resonance digest across `view_ids` at the

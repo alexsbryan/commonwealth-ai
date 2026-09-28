@@ -743,16 +743,17 @@ fn find_recent_artifact(
 /// The daemon's note + feature handles, as the composition wants them.
 /// ONE lookup site, so no handler can compose over a different pair.
 ///
-/// The 503 names WHICH store is missing: `notes.db` and `features.db` are
-/// opened by different code with different failure modes, and one message
-/// covering both would send an operator to the wrong file.
+/// The 503 names WHICH store is missing: svrn's store (where recipe
+/// authoring keeps its notes while it runs daemon-side, pb-notes-memory) and
+/// `features.db` are opened by different code with different failure modes,
+/// and one message covering both would send an operator to the wrong file.
 fn handles(
     daemon: &Arc<EmbeddedDaemon>,
 ) -> Result<(Arc<dyn RecipeNotes>, Arc<RecipeProjectStore>), Absence> {
     let Some(note_store) = daemon.notes_store().map(Arc::clone) else {
         return Err(Absence::unavailable(
-            "this daemon has no note store (notes.db did not open) — the recipe-author \
-             workspace composes over it",
+            "this daemon has no note store (no /mcp mount) — the recipe-author workspace \
+             composes over it",
         ));
     };
     let Some(features) = daemon.features_store().map(Arc::clone) else {

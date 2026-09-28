@@ -40,8 +40,10 @@ pub struct CodeParts {
     pub indexes_dir: PathBuf,
     /// Where `test_results.db` and `lint_results.db` live.
     pub stores_dir: PathBuf,
-    /// The note store, already open: one writer per data root.
-    pub notes: Arc<NoteStore>,
+    /// The note store, when the host already holds it open (one writer per
+    /// data root); `None` opens `stores_dir/notes.db` here (the stock
+    /// binary, whose svrn no longer opens it, pb-notes-memory).
+    pub notes: Option<Arc<NoteStore>>,
     /// The chunk index `symbols`, `code_search` and `recent_changes` read.
     pub index: Arc<dyn corpus_index::source::IndexSource>,
     /// The repo code watches and scopes the work atlas to; `None` runs no
@@ -111,7 +113,7 @@ pub async fn compose(parts: CodeParts) -> Result<CodeFace, String> {
     let CodeParts {
         indexes_dir,
         stores_dir,
-        notes: notes_store,
+        notes,
         index,
         workspace,
         sovereign_dir,
@@ -120,6 +122,16 @@ pub async fn compose(parts: CodeParts) -> Result<CodeFace, String> {
         notes_rail,
     } = parts;
     let mut banner = Vec::new();
+    let notes_store = match notes {
+        Some(notes) => notes,
+        None => {
+            let path = stores_dir.join("notes.db");
+            let store = NoteStore::open(&path)
+                .map_err(|e| format!("cannot open notes db {}: {e}", path.display()))?;
+            banner.push(format!("notes: {}", path.display()));
+            Arc::new(store)
+        }
+    };
     notes_rail::wire(&notes_store, notes_rail);
 
     // ── Open result stores (SQLite, always-on) ──────────────────

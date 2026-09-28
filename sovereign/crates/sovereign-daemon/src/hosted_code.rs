@@ -13,19 +13,16 @@ use std::path::PathBuf;
 use std::pin::Pin;
 use std::sync::Arc;
 
-use corpus_engine_notes::NoteStore;
-
-/// What svrn hands code's composition: its data root, the workspace it was
-/// told to watch, the two handles it already holds for that root, and the
-/// inputs of code's notes rail.
+/// What svrn hands code's composition: its data root (code opens its own
+/// `notes.db` there, pb-notes-memory), the workspace it was told to watch,
+/// the chunk index svrn holds for that root, and the inputs of code's notes
+/// rail.
 pub struct CodeHost {
     /// svrn's data root; the distribution places code's data under it.
     pub data_dir: PathBuf,
     /// The workspace svrn resolved (`SOVEREIGN_WORKSPACE_DIR`, then
     /// `~/.svrnmesh/workspace`), `None` when there is none.
     pub workspace: Option<PathBuf>,
-    /// The root's `notes.db`, already open: one writer per data root.
-    pub notes: Arc<NoteStore>,
     /// The root's chunk indexes, read through the engine svrn holds.
     pub index: Arc<dyn corpus_index::source::IndexSource>,
     /// What svrn alone has for code's note store (pb-notes-memory): its embed

@@ -162,9 +162,9 @@ pub(super) async fn cmd_entities(args: &[String]) -> i32 {
 
     // Note counts (commitment / follow_up / goal joined with
     // related_entity = canonical_name).
-    if let Some(notes) = try_open_notes() {
+    if let Some(notes) = try_open_notes(&root) {
         for e in all_entities.iter_mut() {
-            let rows = relational_notes_for_entity(&notes, &e.canonical_name).await;
+            let rows = relational_notes_for_entity(notes.as_ref(), &e.canonical_name).await;
             // The splice helper already filters retired and groups
             // by kind via the enum — count by kind.
             for row in rows {

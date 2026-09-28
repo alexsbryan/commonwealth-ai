@@ -61,12 +61,12 @@ use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
-use corpus_engine_notes::NoteStore;
 use oicp_client::RemoteApiProvider;
 use sovereign_contracts::recipe::notes::{NoteScope, RecipeNotes, ScopeFilter};
 use sovereign_core::traits::{InferenceProvider, Tool};
 use sovereign_core::types::{ConversationId, StepOutput, ToolContext};
 use sovereign_core::ToolRegistry;
+use sovereign_store::sqlite::SqliteStateStore;
 use sovereign_tools::recipe_author::recipe_project_store::RecipeProjectStore;
 use sovereign_tools::recipe_author::{
     situated_context, CapabilityRequestTool, CheckpointTool, DecisionLogTool, ProbeUrlTool,
@@ -1271,11 +1271,12 @@ pub async fn run_live_trial(argv: &[String]) -> i32 {
     };
     eprintln!("Chat model: {chat_model}");
 
-    // Stores. We touch the user's real ~/.svrnmesh/{notes,features}.db
+    // Stores. We touch the user's real ~/.svrnmesh/{sovereign,features}.db
     // on purpose — a live trial against the running daemon is a real
-    // session. To sandbox, point HOME at a tempdir before invoking.
+    // session. To sandbox, point HOME at a tempdir before invoking. Recipe
+    // authoring keeps its notes in svrn's store (pb-notes-memory).
     let dotsovereign = sovereign_contracts::rebrand::svrnmesh_root();
-    let notes: Arc<dyn RecipeNotes> = match NoteStore::open(&dotsovereign.join("notes.db")) {
+    let notes: Arc<dyn RecipeNotes> = match SqliteStateStore::open(&dotsovereign.join("sovereign.db")) {
         Ok(s) => Arc::new(s),
         Err(e) => {
             eprintln!("live-trial: notes store: {e}");

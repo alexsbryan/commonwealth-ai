@@ -4,7 +4,6 @@
 use std::sync::Arc;
 
 use corpus_engine::CorpusEngine;
-use corpus_engine_notes::NoteStore;
 use sovereign_contracts::launch::Launch;
 use sovereign_core::setup_config::SetupConfig;
 use sovereign_core::traits::InferenceProvider;
@@ -274,18 +273,34 @@ pub(super) async fn run_daemon(
     };
     let state_store: Arc<dyn sovereign_core::traits::StateStore> = state_store_concrete.clone();
 
-    let notes_path = data_dir.join("notes.db");
-    let notes_store = match NoteStore::open(&notes_path) {
-        Ok(s) => Arc::new(s),
-        Err(e) => {
-            eprintln!("error: cannot open notes db {}: {e}", notes_path.display());
-            return 1;
+    // svrn's memory notes (lessons, the tool_decision dossier, the commissive
+    // handler's commitments and todos) and its MCP call log live in this same
+    // store (pb-notes-memory); `notes.db` is the code program's. Once per
+    // root, svrn's rows move out of it here, before code (when composed)
+    // opens it: a copy of notes.db first, a marker last. A failed move leaves
+    // every row where it was and is retried at the next boot; svrn serves on
+    // meanwhile, and the rows it has not moved stay readable through code.
+    let notes_db = data_dir.join("notes.db");
+    match state_store_concrete.migrate_notes_db(&notes_db).await {
+        Ok(m) if m.already_done => {
+            tracing::debug!("daemon: svrn's rows already moved out of notes.db")
         }
-    };
-    // NoteStore is built early (other subsystems take it as
-    // `Arc<NoteStore>`); its hooks, origin id, roster and gossip rail are
-    // wired by code's notes rail when the code program is composed
-    // (`sovereign_code::face::notes_rail`, pb-notes-memory).
+        Ok(m) => tracing::info!(
+            rows_before = m.rows_before,
+            moved = m.moved,
+            kept = m.kept,
+            backup = ?m.backup,
+            "daemon: svrn's memory notes moved out of notes.db into svrn's store"
+        ),
+        Err(e) => {
+            tracing::error!(error = %e, notes_db = %notes_db.display(),
+                "daemon: svrn's rows could not be moved out of notes.db; retried next boot");
+            eprintln!(
+                "warning: svrn's memory notes could not be moved out of {}: {e}",
+                notes_db.display()
+            );
+        }
+    }
 
     // ── Workspace (for the code program's watchers, when composed) ──
     // The daemon has no inherent project. When the user wants the
@@ -445,7 +460,6 @@ pub(super) async fn run_daemon(
             .compose(crate::hosted_code::CodeHost {
                 data_dir: data_dir.clone(),
                 workspace: workspace_dir.clone(),
-                notes: Arc::clone(&notes_store),
                 index: Arc::clone(&engine) as Arc<dyn corpus_index::source::IndexSource>,
                 notes_embed,
                 notes_gliner,
@@ -517,9 +531,13 @@ pub(super) async fn run_daemon(
 
     // The landscape-digest surface. The Reindexer and `/v1/projects/*` that
     // were built beside it are the code program's (`code_mount` above).
-    let knowledge_view_http =
-        bootstrap::build_knowledge_view_http(&data_dir, Arc::clone(&engine), Arc::clone(&provider))
-            .await;
+    let knowledge_view_http = bootstrap::build_knowledge_view_http(
+        &data_dir,
+        Arc::clone(&engine),
+        Arc::clone(&provider),
+        state_store_concrete.clone(),
+    )
+    .await;
 
     super::corpus_registry::reconcile_corpus_registry(&engine, state_store.as_ref()).await;
 
@@ -606,7 +624,8 @@ pub(super) async fn run_daemon(
     //     2026-09-18, and no daemon-served turn fanned out to a peer.
     // The turn path and the baseline bundles name the PORT, not the store's
     // crate — one coercion here is the whole seam.
-    let notes_port: Arc<dyn sovereign_contracts::notes::AgentNotes> = notes_store.clone();
+    let notes_port: Arc<dyn sovereign_contracts::notes::AgentNotes> =
+        state_store_concrete.clone();
     let common = sovereign_runtime_recipe::common_parts(
         sovereign_runtime_recipe::RecipeInputs {
             inference: Arc::clone(&routed_provider),
@@ -667,7 +686,7 @@ pub(super) async fn run_daemon(
                 b.push(Box::new({
                     let mut ra = sovereign_tools::bundles::RecipeAuthoringTools::new();
                     if let Some(fs) = features_store.as_ref() {
-                        ra = ra.with_notes(Arc::clone(&notes_store)
+                        ra = ra.with_notes(Arc::clone(&state_store_concrete)
                             as Arc<dyn sovereign_contracts::recipe::notes::RecipeNotes>);
                         ra = ra.with_features(Arc::clone(fs));
                     }
@@ -807,7 +826,11 @@ pub(super) async fn run_daemon(
                     features: features_store,
                 },
                 capability: crate::ServingCapability {
-                    mcp: bootstrap::build_mcp_surface(tools, Arc::clone(&notes_store), code_tools),
+                    mcp: bootstrap::build_mcp_surface(
+                        tools,
+                        Arc::clone(&state_store_concrete),
+                        code_tools,
+                    ),
                     project_http,
                     corpus_watch_http: crate::corpus_watch_http::corpus_watch_router(),
                     // sv-surface rung 5: workflow execution is a daemon job

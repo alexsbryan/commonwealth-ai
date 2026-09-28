@@ -1443,7 +1443,9 @@ fp-33: the work-atlas store is cw-rails', dialed by the code program.)
 **Per-user root `~/.svrnmesh`:** `config.toml` (`SetupConfig` — THE per-user
 config), `work-atlas.toml`, `projects.json`, the indexes / drift / arch /
 capabilities / sessions trees, plus models, corpora, recipes and logs,
-`daemon.pid` and `worker_owner_key.bin`.
+`daemon.pid` and `worker_owner_key.bin`; `sovereign.db` is svrn's store,
+its memory notes included (lessons, the tool-decision dossier, commitments,
+svrn's MCP call log), and `notes.db` is the code program's (pb-notes-memory).
 
 **`[models]` is optional.** Absent — or present naming no primary — plus a
 `[node] entry` is `NodeClass::Terminal`: a full mesh member holding no weights

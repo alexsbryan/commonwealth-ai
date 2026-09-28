@@ -25,7 +25,7 @@ use host_kit::mcp::{McpMountedTools, McpRequestContext, ToolOutcome};
 use serde_json::{json, Value};
 
 use corpus_engine::CorpusEngine;
-use corpus_engine_notes::NoteStore;
+use sovereign_store::sqlite::SqliteStateStore;
 use sovereign_daemon::mcp_router::{mcp_router, McpNotifier};
 
 /// Every tool id the code program serves (sovereign-code's bundles and the
@@ -147,7 +147,7 @@ async fn svrns_registry_holds_no_code_tool() {
 async fn svrn_alone_points_a_code_tool_at_the_code_server() {
     let dir = tempfile::tempdir().unwrap();
     let registry = Arc::new(svrn_registry(dir.path()).await);
-    let notes = Arc::new(NoteStore::open(&dir.path().join("notes.db")).unwrap());
+    let notes = Arc::new(SqliteStateStore::open(&dir.path().join("sovereign.db")).unwrap());
     let base = spawn(mcp_router(
         registry,
         notes,
@@ -219,7 +219,7 @@ impl McpMountedTools for CodeStandIn {
 async fn a_composed_code_program_answers_its_tools_on_the_same_mcp_once() {
     let dir = tempfile::tempdir().unwrap();
     let registry = Arc::new(svrn_registry(dir.path()).await);
-    let notes = Arc::new(NoteStore::open(&dir.path().join("notes.db")).unwrap());
+    let notes = Arc::new(SqliteStateStore::open(&dir.path().join("sovereign.db")).unwrap());
     let base = spawn(mcp_router(
         registry,
         notes,

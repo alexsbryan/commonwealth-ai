@@ -25,11 +25,11 @@ use axum::extract::{ConnectInfo, Extension};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::{Json, Router};
-use host_kit::mcp::{McpMountedTools, McpRequestContext, McpRequestHandler};
+use host_kit::mcp::{McpCallLog, McpMountedTools, McpRequestContext, McpRequestHandler, ToolOutcome};
 use serde_json::Value;
 use tower_http::cors::CorsLayer;
 
-use corpus_engine_notes::NoteStore;
+use sovereign_contracts::notes::AgentNotes;
 use sovereign_core::registry::ToolRegistry;
 
 // ─── JSON-RPC 2.0 envelope ────────────────────────────────────
@@ -52,11 +52,39 @@ use sovereign_tools::mcp_surface::{is_mcp_exposed, negotiate_mcp_protocol_versio
 /// framing (phase-b pb-code-server); this path is its historical one.
 pub use host_kit::mcp::http::McpNotifier;
 
+/// svrn's call log: the kit's call-log port over svrn's own store
+/// (pb-notes-memory), so svrn's calls land beside its other memory and
+/// code's `svrn reflect` reads only code's. Fire-and-forget: a log failure
+/// never touches the answer.
+struct SvrnCallLog {
+    store: Arc<dyn AgentNotes>,
+    session_id: Arc<String>,
+}
+
+impl McpCallLog for SvrnCallLog {
+    fn record(&self, tool: &str, outcome: &ToolOutcome, _ctx: &McpRequestContext) {
+        let Some(tag) = sovereign_contracts::mcp_host::call_log_tag(outcome) else {
+            tracing::debug!(tool, "mcp: no tool executed, nothing logged");
+            return;
+        };
+        let (store, session, tool) = (
+            Arc::clone(&self.store),
+            Arc::clone(&self.session_id),
+            tool.to_string(),
+        );
+        tokio::spawn(async move {
+            if let Err(e) = store.log_tool_call(&session, &tool, tag).await {
+                tracing::debug!(tool = %tool, error = %e, "mcp: svrn's call-log write failed");
+            }
+        });
+    }
+}
+
 /// The daemon's own method dispatch behind the kit's HTTP framing: svrn's
 /// registry, call log and surface filter, and code's mounted tools.
 struct DaemonMcp {
     tools: Arc<ToolRegistry>,
-    logger: Arc<NoteStore>,
+    logger: Arc<SvrnCallLog>,
     session_id: Arc<String>,
     call_counter: Arc<AtomicU64>,
     code: Option<Arc<dyn McpMountedTools>>,
@@ -86,8 +114,9 @@ impl McpRequestHandler for DaemonMcp {
 }
 
 /// Build the MCP router. Mounts `/mcp`, `/mcp/message`, and `/mcp/stats`
-/// with shared per-session state (svrn's tool registry, note store, session
-/// id, call counter, notifier) and code's mounted tools, if any.
+/// with shared per-session state (svrn's tool registry, svrn's store for its
+/// call log, session id, call counter, notifier) and code's mounted tools,
+/// if any.
 ///
 /// Phase 5b: `notifier` is the broadcast surface for server-pushed
 /// notifications (currently just `notifications/tools/list_changed`).
@@ -96,17 +125,21 @@ impl McpRequestHandler for DaemonMcp {
 /// idle until something publishes.
 pub fn mcp_router(
     tools: Arc<ToolRegistry>,
-    logger: Arc<NoteStore>,
+    notes: Arc<dyn AgentNotes>,
     session_id: String,
     code: Option<Arc<dyn McpMountedTools>>,
     notifier: McpNotifier,
 ) -> Router {
     // Shared per-session call counter.
     let call_counter: Arc<AtomicU64> = Arc::new(AtomicU64::new(0));
+    let session_id = Arc::new(session_id);
     let handler = Arc::new(DaemonMcp {
         tools: Arc::clone(&tools),
-        logger,
-        session_id: Arc::new(session_id),
+        logger: Arc::new(SvrnCallLog {
+            store: notes,
+            session_id: Arc::clone(&session_id),
+        }),
+        session_id,
         call_counter,
         code,
     });
@@ -154,7 +187,7 @@ async fn mcp_stats(
 async fn dispatch(
     req: JsonRpcRequest,
     tools: Arc<ToolRegistry>,
-    logger: Arc<NoteStore>,
+    logger: Arc<SvrnCallLog>,
     session_id: Arc<String>,
     call_counter: Arc<AtomicU64>,
     code: Option<Arc<dyn McpMountedTools>>,
@@ -236,7 +269,7 @@ async fn handle_tool_call(
     id: Value,
     params: Option<Value>,
     tools: Arc<ToolRegistry>,
-    logger: Arc<NoteStore>,
+    logger: Arc<SvrnCallLog>,
     session_id: Arc<String>,
     call_counter: Arc<AtomicU64>,
     code: Option<Arc<dyn McpMountedTools>>,
@@ -296,11 +329,10 @@ async fn handle_tool_call(
         };
     };
 
-    // Log outcome to ring buffer. Fire-and-forget — a logging failure must
-    // never affect the tool call result. A call that executed no tool (not
-    // registered, arguments refused) is not logged.
-    if let Some(tag) = sovereign_contracts::mcp_host::call_log_tag(&outcome) {
-        let _ = logger.log_tool_call(&session_id, name, tag).await;
+    // Log the outcome through svrn's call log. A call that executed no tool
+    // (not registered, arguments refused) is not logged or counted.
+    logger.record(name, &outcome, ctx);
+    if sovereign_contracts::mcp_host::call_log_tag(&outcome).is_some() {
         // The session call counter is kept for telemetry / rate-limit
         // decisions.
         let _ = call_counter.fetch_add(1, Ordering::Relaxed);

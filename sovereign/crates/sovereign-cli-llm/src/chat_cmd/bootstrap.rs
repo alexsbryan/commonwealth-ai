@@ -268,22 +268,12 @@ async fn build_session_scoped(
         inference_config.custom_instructions = globals.custom_instructions.clone();
     }
 
-    // 6. Tool-Mastery Layer 3 — NoteStore for the per-conversation
-    //    `tool_decision` write hook. Same path the daemon uses, so the chat
-    //    REPL and bench surfaces share one outcome log.
-    let notes_path = globals.data_dir.join("notes.db");
+    // 6. Tool-Mastery Layer 3 — svrn's memory notes for the per-conversation
+    //    `tool_decision` write hook, lessons and commitments: the store opened
+    //    above, the same one the daemon keeps them in (pb-notes-memory), so
+    //    the chat REPL and bench surfaces share one outcome log.
     let note_store: Option<Arc<dyn sovereign_contracts::notes::AgentNotes>> =
-        match corpus_engine_notes::NoteStore::open(&notes_path) {
-            Ok(s) => Some(Arc::new(s)),
-            Err(e) => {
-                eprintln!(
-                    "warn: NoteStore open failed at {} ({e}); tool-decision \
-                     writes will no-op this session",
-                    notes_path.display()
-                );
-                None
-            }
-        };
+        Some(store_concrete.clone());
 
     // ── The shared recipe ────────────────────────────────────────────────
     //

@@ -35,7 +35,7 @@ use sovereign_tools::knowledge_view::view_kind::ViewKind;
 
 use super::args::parse_args;
 use super::render::display_path;
-use super::store_open::{notes_db_path, sovereign_root, state_db_path, try_open_notes};
+use super::store_open::{sovereign_root, state_db_path, try_open_notes};
 
 const RELATIONAL_VIEWS: &[&str] = &["personal-knowledge", "conversation-history"];
 
@@ -112,12 +112,7 @@ pub(super) async fn cmd_digest(args: &[String]) -> i32 {
     }
 
     // Notes lookups via NoteStore.
-    let notes_path = notes_db_path();
-    let notes_arc = if notes_path.exists() {
-        try_open_notes()
-    } else {
-        None
-    };
+    let notes_arc = try_open_notes(&root);
 
     // Pre-compute the per-entity note set so the formatter can stay
     // sync. Builds two indexes: relational (commitments/follow-ups/
@@ -132,11 +127,11 @@ pub(super) async fn cmd_digest(args: &[String]) -> i32 {
             .map(|t| t.entity_name.clone())
             .collect();
         for name in &names {
-            let rel = relational_notes_for_entity(&notes, name).await;
+            let rel = relational_notes_for_entity(notes.as_ref(), name).await;
             if !rel.is_empty() {
                 rel_index.insert(name.clone(), rel);
             }
-            let goals = strategic_goals_for_entity(&notes, name).await;
+            let goals = strategic_goals_for_entity(notes.as_ref(), name).await;
             if !goals.is_empty() {
                 strat_index.insert(name.clone(), goals);
             }

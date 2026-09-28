@@ -11,7 +11,6 @@ use super::discovery_policy;
 use crate::startup::daemon_pid_path;
 use crate::EmbeddedDaemon;
 use corpus_engine::CorpusEngine;
-use corpus_engine_notes::NoteStore;
 use corpus_index::types::{EmbedFn, NodeRoster, RosterEntry};
 use kernel_types::NodeId;
 use sovereign_core::model_family::{
@@ -1583,7 +1582,7 @@ pub async fn advertise_embed_model(
 /// host-specific, because only the host knows which tools it registered.
 pub fn build_mcp_surface(
     tools: ToolRegistry,
-    notes_store: Arc<NoteStore>,
+    notes_store: Arc<sovereign_store::sqlite::SqliteStateStore>,
     code: Option<Arc<dyn host_kit::mcp::McpMountedTools>>,
 ) -> crate::McpSurface {
     let session_id = format!("daemon-{}", uuid::Uuid::new_v4());
@@ -1604,6 +1603,7 @@ pub async fn build_knowledge_view_http(
     data_dir: &Path,
     engine: Arc<CorpusEngine>,
     provider: Arc<dyn InferenceProvider>,
+    notes: Arc<dyn sovereign_contracts::notes::AgentNotes>,
 ) -> axum::Router {
     // Knowledge-view HTTP surface — POST /v1/knowledge/landscape_digest.
     //
@@ -1635,6 +1635,9 @@ pub async fn build_knowledge_view_http(
         )
         .await,
     );
+    // svrn's memory notes, where the commitments its relational digest
+    // annotates live (pb-notes-memory).
+    knowledge_view_manager.install_notes(notes).await;
     crate::landscape_digest_http::landscape_digest_router(Arc::clone(&knowledge_view_manager))
 }
 

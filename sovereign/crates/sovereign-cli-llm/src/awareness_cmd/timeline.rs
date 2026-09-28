@@ -153,8 +153,8 @@ pub(super) async fn cmd_timeline(args: &[String]) -> i32 {
     };
 
     // Linked notes via NoteStore.
-    let linked_notes = if let Some(notes) = try_open_notes() {
-        relational_notes_for_entity(&notes, &timeline.entity_name).await
+    let linked_notes = if let Some(notes) = try_open_notes(&root) {
+        relational_notes_for_entity(notes.as_ref(), &timeline.entity_name).await
     } else {
         Vec::new()
     };

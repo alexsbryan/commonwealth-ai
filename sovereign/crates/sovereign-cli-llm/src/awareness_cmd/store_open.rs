@@ -4,8 +4,8 @@
 //! Resolves *user-level* paths (`~/.svrnmesh/`) for the relational +
 //! strategic awareness pipeline, which writes its atlas under the
 //! user's home — same place `KnowledgeViewManager` writes it in
-//! production. The project-level `notes.db` is resolved relative to
-//! CWD.
+//! production. The relational notes are svrn's memory notes, in svrn's
+//! store under the same root.
 //!
 //! `--db-path <path>` overrides the `~/.svrnmesh/` root for
 //! sandboxed runs (e.g. an integration test directory).
@@ -13,7 +13,8 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use corpus_engine_notes::NoteStore;
+use sovereign_contracts::notes::AgentNotes;
+use sovereign_store::sqlite::SqliteStateStore;
 
 use super::args::parse_args;
 use sovereign_cli_shared::args::Parsed;
@@ -35,13 +36,6 @@ pub(super) fn sovereign_root(flags: &Parsed) -> PathBuf {
     sovereign_contracts::rebrand::svrnmesh_root()
 }
 
-/// Where the per-project stores live — `./.sovereign/` from CWD.
-pub(super) fn project_sovereign_dir() -> PathBuf {
-    std::env::current_dir()
-        .unwrap_or_else(|_| PathBuf::from("."))
-        .join(".sovereign")
-}
-
 /// Atlas directory for a corpus view (e.g. `personal-knowledge`,
 /// `conversation-history`). Caller checks `.exists()`; we don't
 /// because awareness subcommands need to print "no atlas yet" rather
@@ -55,21 +49,28 @@ pub(super) fn state_db_path(root: &Path) -> PathBuf {
     root.join("state.db")
 }
 
-/// `notes.db` path. Notes live in the per-project `.sovereign/`
-/// (mirrors how `KnowledgeViewManager` is wired in main.rs:534-535).
-pub(super) fn notes_db_path() -> PathBuf {
-    project_sovereign_dir().join("notes.db")
+/// svrn's store under the awareness root, where the commitments the
+/// relational notes count live (pb-notes-memory; they left the per-project
+/// `.sovereign/notes.db`, which is the code program's).
+pub(super) fn notes_db_path(root: &Path) -> PathBuf {
+    root.join("sovereign.db")
 }
 
-/// Open the NoteStore. Returns `None` if `notes.db` is absent so
-/// awareness subcommands can still render entity lists without
-/// note-count joins (a fresh `awareness` run on an empty repo).
-pub(super) fn try_open_notes() -> Option<Arc<NoteStore>> {
-    let path = notes_db_path();
+/// Open svrn's memory notes. Returns `None` if the store is absent so
+/// awareness subcommands can still render entity lists without note-count
+/// joins (a fresh `awareness` run), and says why when it will not open.
+pub(super) fn try_open_notes(root: &Path) -> Option<Arc<dyn AgentNotes>> {
+    let path = notes_db_path(root);
     if !path.exists() {
         return None;
     }
-    NoteStore::open(&path).ok().map(Arc::new)
+    match SqliteStateStore::open(&path) {
+        Ok(s) => Some(Arc::new(s)),
+        Err(e) => {
+            eprintln!("awareness: svrn's store at {} did not open ({e}); notes skipped", path.display());
+            None
+        }
+    }
 }
 
 #[cfg(test)]

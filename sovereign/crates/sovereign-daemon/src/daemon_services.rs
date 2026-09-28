@@ -87,7 +87,6 @@
 use std::sync::Arc;
 
 use corpus_engine::CorpusEngine;
-use corpus_engine_notes::NoteStore;
 
 use oicp_types::EmbedModelInfo;
 use sovereign_core::registry::ToolRegistry;
@@ -101,8 +100,11 @@ use crate::admin_http::ProviderFactory;
 #[derive(Clone)]
 pub struct McpMount {
     pub tools: Arc<ToolRegistry>,
-    pub notes: Arc<NoteStore>,
-    /// Groups this process's tool calls in `NoteStore::log_tool_call`
+    /// svrn's own store: its memory notes (`/v1/notes*`, the dossier) and
+    /// its MCP call log (pb-notes-memory). The same handle as the serving
+    /// core's state store: one writer per data root.
+    pub notes: Arc<sovereign_store::sqlite::SqliteStateStore>,
+    /// Groups this process's tool calls in svrn's call log
     /// (e.g. `daemon-<uuid>`, `desktop-<uuid>`).
     pub session_id: String,
     /// The code program's tools, when a distribution composed code into

@@ -63,8 +63,8 @@ pub mod sec_facts_render;
 /// module so every existing `sovereign_tools::recipe_author::…` path (and the
 /// crate-root tool re-exports below) keeps resolving unchanged. The monolith
 /// adapter that backs its tester seam (`recipe_tester_adapter`) stays in this
-/// crate; the notes seam is implemented by the store's owning crate
-/// (`corpus_engine_notes::port`).
+/// crate; the notes seam is implemented by svrn's store
+/// (`sovereign_store::sqlite::SqliteStateStore`, pb-notes-memory).
 pub use sovereign_recipe_author as recipe_author;
 pub use sovereign_tools_base::read_file;
 pub use sovereign_tools_base::read_json;

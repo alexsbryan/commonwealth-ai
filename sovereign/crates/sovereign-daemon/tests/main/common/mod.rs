@@ -648,12 +648,12 @@ impl DesktopParts {
         }
     }
 
-    /// The `/mcp` mount `EmbeddedDaemon::notes_store` reads a real
-    /// `NoteStore` from.
+    /// The `/mcp` mount `EmbeddedDaemon::notes_store` reads svrn's real
+    /// store from.
     pub fn mounted(
         mut self,
         tools: Arc<sovereign_contracts::ToolRegistry>,
-        notes: Arc<corpus_engine_notes::NoteStore>,
+        notes: Arc<sovereign_store::sqlite::SqliteStateStore>,
     ) -> Self {
         self.mcp = sovereign_daemon::McpSurface::Mounted(sovereign_daemon::McpMount {
             tools,
@@ -742,7 +742,7 @@ pub fn stub_runtime_with_skills(
     ))
 }
 
-/// A serving desktop commission carrying a real `NoteStore` (behind a
+/// A serving desktop commission carrying svrn's real store (behind a
 /// mounted `/mcp` surface, which is where `EmbeddedDaemon::notes_store`
 /// reads it from) and a real `RecipeProjectStore`.
 ///
@@ -753,7 +753,7 @@ pub fn stub_runtime_with_skills(
 /// to build a shape no launch can produce (Falsifier 3).
 pub fn desktop_services_with_note_and_feature_stores(
     engine: Arc<corpus_engine::CorpusEngine>,
-    notes: Arc<corpus_engine_notes::NoteStore>,
+    notes: Arc<sovereign_store::sqlite::SqliteStateStore>,
     features: Option<Arc<sovereign_tools::recipe_author::recipe_project_store::RecipeProjectStore>>,
 ) -> sovereign_daemon::DaemonServices {
     desktop_services(DesktopParts {
@@ -775,7 +775,7 @@ pub fn desktop_services_with_note_and_feature_stores(
 /// Assembled through THE assembler like every production site.
 pub fn desktop_services_with_tool_registry(
     engine: Arc<corpus_engine::CorpusEngine>,
-    notes: Arc<corpus_engine_notes::NoteStore>,
+    notes: Arc<sovereign_store::sqlite::SqliteStateStore>,
     features: Option<Arc<sovereign_tools::recipe_author::recipe_project_store::RecipeProjectStore>>,
     tools: Arc<sovereign_contracts::ToolRegistry>,
 ) -> sovereign_daemon::DaemonServices {

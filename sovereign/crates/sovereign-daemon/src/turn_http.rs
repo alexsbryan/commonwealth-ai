@@ -819,10 +819,10 @@ async fn weaken_memory(
 }
 
 /// `POST /v1/notes/tool-outcome` — record a tool-decision outcome into the
-/// daemon's notes.db dossier (sv-surface rung 6, commit A).
+/// dossier in svrn's own store (sv-surface rung 6, commit A; pb-notes-memory).
 ///
 /// The desktop's `submit_information_search` writes this BEFORE running
-/// the user's escape-hatch web search; in attach mode the NoteStore lives
+/// the user's escape-hatch web search; in attach mode the store lives
 /// daemon-side, so the write crosses here. `record_tool_outcome` in
 /// sovereign-core is the one decider — the same function the in-process
 /// path calls. A daemon without a mounted notes surface answers 503 with
@@ -853,7 +853,7 @@ async fn record_tool_outcome(
 ) -> Response {
     let Some(notes) = daemon.notes_store() else {
         return service_unavailable(
-            "this daemon serves no notes surface (notes.db unavailable — /mcp not mounted)",
+            "this daemon serves no memory notes (/mcp not mounted)",
         );
     };
     sovereign_core::dossier::record_tool_outcome(

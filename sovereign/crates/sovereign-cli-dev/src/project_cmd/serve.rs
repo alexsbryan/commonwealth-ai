@@ -241,7 +241,7 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
     let face = match sovereign_code::face::compose(sovereign_code::face::CodeParts {
         indexes_dir: data_dir.clone(),
         stores_dir: data_dir.clone(),
-        notes: Arc::clone(&notes_store),
+        notes: Some(Arc::clone(&notes_store)),
         index: Arc::clone(&engine) as Arc<dyn sovereign_code::CodeIndexSource>,
         workspace: Some(repo_root.clone()),
         sovereign_dir: Some(sovereign_dir.clone()),

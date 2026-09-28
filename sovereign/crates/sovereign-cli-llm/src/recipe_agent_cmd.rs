@@ -27,8 +27,8 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use corpus_engine_notes::NoteStore;
 use sovereign_contracts::recipe::notes::RecipeNotes;
+use sovereign_store::sqlite::SqliteStateStore;
 use sovereign_tools::recipe_author::recipe_project_store::{RecipeProjectRow, RecipeProjectStore};
 use sovereign_tools::recipe_author::{
     capability_request::CapabilityRequest, maintainer_inbox_dir, situated_context, RecipeProject,
@@ -280,13 +280,15 @@ async fn run_inbox() -> i32 {
 
 fn open_stores() -> std::result::Result<(Arc<dyn RecipeNotes>, Arc<RecipeProjectStore>), i32> {
     let sov = sovereign_contracts::rebrand::svrnmesh_root();
-    let notes_path = sov.join("notes.db");
+    // svrn's store: recipe authoring keeps its notes there while it runs
+    // on svrn (pb-notes-memory).
+    let notes_path = sov.join("sovereign.db");
     let features_path = sov.join("features.db");
-    let notes: Arc<dyn RecipeNotes> = match NoteStore::open(&notes_path) {
+    let notes: Arc<dyn RecipeNotes> = match SqliteStateStore::open(&notes_path) {
         Ok(s) => Arc::new(s),
         Err(e) => {
             eprintln!(
-                "recipe-agent: failed to open NoteStore at {}: {e}",
+                "recipe-agent: failed to open svrn's store at {}: {e}",
                 notes_path.display()
             );
             return Err(2);

@@ -249,7 +249,7 @@ fn tool_descriptors_carry_recipe_authoring_permission() {
 /// checkpoint. Mirrors the M1 acceptance scenario in the plan file.
 #[tokio::test]
 async fn recipe_author_project_lifecycle_end_to_end() {
-    use corpus_engine_notes::NoteStore;
+    use sovereign_store::sqlite::SqliteStateStore;
     use sovereign_contracts::recipe::notes::{NoteScope, RecipeNotes, ScopeFilter};
     use sovereign_tools::recipe_author::recipe_project_store::RecipeProjectStore;
     use sovereign_tools::recipe_author::{
@@ -266,7 +266,7 @@ async fn recipe_author_project_lifecycle_end_to_end() {
     std::fs::create_dir_all(&recipes_dir).unwrap();
 
     let notes: Arc<dyn RecipeNotes> =
-        Arc::new(NoteStore::open(&home.path().join("notes.db")).unwrap());
+        Arc::new(SqliteStateStore::open(&home.path().join("sovereign.db")).unwrap());
     let features = Arc::new(RecipeProjectStore::open(&home.path().join("features.db")).unwrap());
 
     let project = RecipeProject::new(

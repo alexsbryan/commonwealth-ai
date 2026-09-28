@@ -144,8 +144,8 @@ pub(super) async fn cmd_trace(args: &[String]) -> i32 {
         .cloned();
 
     // Linked notes.
-    let linked_notes = if let Some(notes) = try_open_notes() {
-        relational_notes_for_entity(&notes, &target.canonical_name).await
+    let linked_notes = if let Some(notes) = try_open_notes(&root) {
+        relational_notes_for_entity(notes.as_ref(), &target.canonical_name).await
     } else {
         Vec::new()
     };
