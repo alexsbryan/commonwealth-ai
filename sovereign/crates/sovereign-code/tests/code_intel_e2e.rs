@@ -61,10 +61,7 @@ pub(crate) async fn build_fixture_index(data_dir: &Path, name: &str, backdate: O
     .await
     .expect("create fixture index");
 
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .expect("clock")
-        .as_secs() as i64;
+    let now = sovereign_time::unix_now();
     let mut chunks = Vec::new();
     for row in fixture["rows"].as_array().expect("rows") {
         let mut metadata = row["metadata"].clone();
