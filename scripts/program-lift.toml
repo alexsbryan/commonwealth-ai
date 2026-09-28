@@ -320,6 +320,33 @@ package = "code"
 build = ["-p", "sovereign-cli-dev", "--bin", "sovereign-cli-dev"]
 binary = "debug/sovereign-cli-dev"
 
+[lift.code.run]
+# "Code intel for my agent" (pb-code-server): `code mcp` serves MCP on a temp
+# git repo with no daemon, no model and no cw-rails. The daemon URL and the
+# rails base name closed ports, so a read that dialled either (this host runs
+# both) fails here rather than pass by borrowing the operator's. The atlas
+# probe is `work_in_flight`, a read, so a misrouted dial can never write.
+pass = "served MCP alone as '${SERVER}' on a temp git repo with no daemon, no model and no cw-rails: tools/list carried ${SYMBOLS} and ${CALLERS}, `symbols` answered without error, and `work_in_flight` named the absent rails door"
+steps = [
+  { do = "ports", vars = ["PORT", "DEAD_RAILS_PORT", "DEAD_DAEMON_PORT"] },
+  { do = "write", path = "${SANDBOX}/svrnmesh/config.toml", text = "[node]\nentry = \"http://127.0.0.1:${DEAD_DAEMON_PORT}\"\n\n[daemon]\nrails_base = \"http://127.0.0.1:${DEAD_RAILS_PORT}\"\n" },
+  { do = "write", path = "${SANDBOX}/repo/src/lib.rs", text = "pub fn fixture_target() {}\n" },
+  { do = "write", path = "${SANDBOX}/repo/.sovereign/README", text = "program-lift code smoke\n" },
+  { do = "write", path = "${SANDBOX}/indexes/README", text = "no index: code_search and symbols answer from what is here\n" },
+  { do = "exec", argv = ["git", "init", "-q", "${SANDBOX}/repo"], log = "git.log", fail = "could not make the fixture repo (see ${SANDBOX}/git.log)" },
+  { do = "spawn", id = "code", argv = ["${BIN}", "code", "mcp", "--port", "${PORT}", "--data-dir", "${SANDBOX}/indexes", "--sovereign-dir", "${SANDBOX}/repo/.sovereign"], cwd = "${SANDBOX}/repo", log = "code.log", env = { HOME = "${SANDBOX}/home", SVRNMESH_DATA_DIR = "${SANDBOX}/svrnmesh", SVRNMESH_DAEMON_URL = "http://127.0.0.1:${DEAD_DAEMON_PORT}", RUST_LOG = "info" } },
+  { do = "poll", url = "http://127.0.0.1:${PORT}/mcp/stats", path = "total_calls", var = "CALLS", timeout = 120, alive = "code", fail = "code mcp never answered /mcp/stats within 120s (see ${SANDBOX}/code.log)" },
+  { do = "call", url = "http://127.0.0.1:${PORT}/mcp", json = { jsonrpc = "2.0", id = 1, method = "initialize", params = {} }, path = "result.serverInfo.name", var = "SERVER", fail = "initialize named no server: ${BODY}" },
+  { do = "call", url = "http://127.0.0.1:${PORT}/mcp", json = { jsonrpc = "2.0", id = 2, method = "tools/list" }, path = "result.tools[name=symbols].name", var = "SYMBOLS", fail = "tools/list carried no `symbols`: ${BODY}" },
+  { do = "call", url = "http://127.0.0.1:${PORT}/mcp", json = { jsonrpc = "2.0", id = 3, method = "tools/list" }, path = "result.tools[name=callers].name", var = "CALLERS", fail = "tools/list carried no `callers`: ${BODY}" },
+  { do = "call", url = "http://127.0.0.1:${PORT}/mcp", json = { jsonrpc = "2.0", id = 4, method = "tools/call", params = { name = "symbols", arguments = { name = "fixture_target" } } }, path = "result[isError=false].content.text", var = "ANSWER", fail = "`symbols` gave no answer: ${BODY}" },
+  { do = "call", url = "http://127.0.0.1:${PORT}/mcp", json = { jsonrpc = "2.0", id = 5, method = "tools/call", params = { name = "work_in_flight", arguments = { scope = "src" } } }, path = "result[isError=true].content.text", var = "ABSENCE", fail = "`work_in_flight` with cw-rails absent answered without naming it: ${BODY}" },
+  # `match` takes no ${VAR}: the configured port rides on the value's last
+  # line, and the backreference requires the named door to be that port.
+  { do = "require", value = "${ABSENCE}\n${DEAD_RAILS_PORT}", match = '127\.0\.0\.1:(\d+)/v1/mesh/kv[\s\S]*\n\1$', fail = "the absence named another door than the configured rails base (port ${DEAD_RAILS_PORT}): ${ABSENCE}" },
+  { do = "require", value = "${ABSENCE}", match = "svrn mesh up", fail = "the absence did not say how to bring cw-rails up: ${ABSENCE}" },
+]
+
 # ── bench — the evaluator ───────────────────────────────────────────────────
 [lift.bench]
 package = "bench"
