@@ -32,6 +32,11 @@ mod cli_contract_journeys;
 mod cli_journey_dispatch;
 #[path = "main/default_build_gate.rs"]
 mod default_build_gate;
+// The work doors' end to end (pb-work-doors); `quality` and the work
+// vocabulary are dev-tools'.
+#[cfg(feature = "dev-tools")]
+#[path = "main/distribute_e2e.rs"]
+mod distribute_e2e;
 #[path = "main/phase3_serve_lifecycle.rs"]
 mod phase3_serve_lifecycle;
 #[path = "main/phase4_daemon_setup.rs"]
