@@ -39,31 +39,6 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
         return 0;
     }
 
-    // Check whether the daemon already owns :9741. If so, running
-    // the legacy in-process server on top collides (silent bind
-    // failure) and degrades the user's MCP surface. Refuse to
-    // start and redirect to the daemon workflow.
-    if daemon_is_running().await {
-        eprintln!();
-        eprintln!("  `svrn project serve` is superseded.");
-        eprintln!();
-        eprintln!("  The running sovereign daemon already serves MCP on :9741 and");
-        eprintln!("  owns freshness (FS watcher + git HEAD poll + startup catch-up).");
-        eprintln!("  There's no need to run a second server on top of it.");
-        eprintln!();
-        eprintln!("  To have the daemon watch this project:");
-        eprintln!("    sovereign project register");
-        eprintln!();
-        eprintln!("  To inspect watcher state:");
-        eprintln!("    sovereign project watch status");
-        eprintln!();
-        eprintln!("  If you really want the legacy in-process server (e.g. the daemon");
-        eprintln!("  is broken and you need a fallback), stop the daemon first:");
-        eprintln!("    launchctl stop com.svrnmesh.daemon   # macOS");
-        eprintln!("    systemctl --user stop sovereign       # Linux");
-        return 1;
-    }
-
     let mut port: u16 = 9741;
     let mut data_dir: Option<PathBuf> = None;
     let mut sovereign_dir_arg: Option<PathBuf> = None;
@@ -516,6 +491,24 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
 
     // ── Start MCP HTTP server ───────────────────────────────────
 
+    // `:9741/mcp` is the one MCP address (phase-b-33). Whichever of this
+    // server and the svrn daemon binds it second refuses by name; neither
+    // stops the other (principle 12).
+    let addr: std::net::SocketAddr = ([127, 0, 0, 1], port).into();
+    let listener = match host_kit::shell::bind_with_retry(addr, "code MCP").await {
+        Ok(l) => l,
+        Err(e) => {
+            eprintln!("error: {e}");
+            if e.kind() == std::io::ErrorKind::AddrInUse {
+                eprintln!(
+                    "  Port {port} is taken — the svrn daemon serves /mcp there too. Use it, \
+                     stop it, or pass --port."
+                );
+            }
+            return 1;
+        }
+    };
+
     let bind_addr = format!("127.0.0.1:{port}");
     eprintln!("  Listening on http://{bind_addr}/mcp");
     eprintln!();
@@ -589,14 +582,6 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
         .localhost_only()
         .layer(axum::Extension(tools))
         .layer(tower_http::cors::CorsLayer::permissive());
-
-    let listener = match tokio::net::TcpListener::bind(&bind_addr).await {
-        Ok(l) => l,
-        Err(e) => {
-            eprintln!("error: cannot bind to {bind_addr}: {e}");
-            return 1;
-        }
-    };
 
     let service = app.into_make_service_with_connect_info::<std::net::SocketAddr>();
     if let Err(e) = axum::serve(listener, service).await {

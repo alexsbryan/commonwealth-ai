@@ -17,8 +17,8 @@
 //!   detach from the parent's controlling terminal via `setsid()`,
 //!   and exit 0 once the child is up. The dual-PID-file write lets
 //!   `svrn stop` find the process from inside *or* outside the
-//!   project tree, and lets `svrn daemon` take over `:9741`
-//!   without guessing.
+//!   project tree. The daemon does not stop it: whichever of the two
+//!   binds `:9741` second refuses by name (pb-code-server).
 //!
 //! ## Why setsid()
 //!

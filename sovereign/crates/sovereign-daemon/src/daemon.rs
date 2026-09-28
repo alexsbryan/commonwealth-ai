@@ -3821,13 +3821,9 @@ impl EmbeddedDaemon {
                 crate::server::ClientSurface::Rail,
             );
 
-            // Phase 3 takeover: a `sovereign init` invocation may have
-            // spawned a standalone `sovereign serve` process holding `:9741`.
-            // SIGTERM it (via the `~/.svrnmesh/server.pid` pointer) so we can
-            // take ownership of the port; a no-op on a service-manager boot
-            // where the pointer file doesn't exist.
-            takeover_standalone_serve_if_present();
-
+            // A standalone code server (`svrn code mcp`) holding `:9741` is
+            // not ours to stop (principle 12): the bind below fails and the
+            // boot refuses, naming the address (pb-code-server).
             // Bind with a short EADDRINUSE retry: an in-process re-create
             // (`leave_to_solo`) can momentarily race the previous mesh's
             // just-dropped socket. `stop_inner` already awaits the old serve
@@ -4621,65 +4617,6 @@ async fn bind_listener_with_retry(
 /// Write minimal `ModelInfo` entries into the inference store for
 /// each configured local slot. The `/v1/models` handler reads from
 /// this store, so without these registrations a freshly-set-up
-/// Phase 3 takeover: when the daemon is starting, look for a PID
-/// file written by `sovereign serve --background` (which `sovereign
-/// init` invokes before the user gets around to running the
-/// daemon). If we find a live process, SIGTERM it and wait briefly
-/// so the port is free by the time we bind. The pid pointer lives
-/// at `~/.svrnmesh/server.pid` so this works regardless of which
-/// project directory the daemon is launched from.
-///
-/// This is best-effort. Failures are logged at info level and the
-/// caller proceeds — if the port really is held by something the
-/// daemon can't displace, the subsequent `bind()` will fail loudly
-/// with the actual error. We don't want this helper to be a
-/// hard-stop in the daemon path.
-fn takeover_standalone_serve_if_present() {
-    let pid_path = sovereign_contracts::rebrand::svrnmesh_root().join("server.pid");
-    takeover_serve_at(&pid_path);
-}
-
-/// Takeover, parameterized over the pid-pointer path. Split from the
-/// HOME-resolving wrapper above so unit tests can exercise the
-/// stale-pid / malformed-pid / self-pid branches against a tempdir
-/// without mutating `$HOME` (which would race across cargo's
-/// threaded test runner).
-fn takeover_serve_at(pid_path: &Path) {
-    let Ok(contents) = std::fs::read_to_string(pid_path) else {
-        return; // No file is the common case: clean boot, no prior init.
-    };
-    let Ok(pid) = contents.trim().parse::<i32>() else {
-        warn!(path = %pid_path.display(), "takeover: malformed pid file");
-        let _ = std::fs::remove_file(pid_path);
-        return;
-    };
-    if pid == std::process::id() as i32 {
-        // We somehow inherited our own pid file (shouldn't happen
-        // in production, but possible in tests where the same
-        // binary writes the pointer and then becomes the daemon).
-        let _ = std::fs::remove_file(pid_path);
-        return;
-    }
-    let killed = std::process::Command::new("/bin/kill")
-        .arg("-TERM")
-        .arg(pid.to_string())
-        .status()
-        .map(|s| s.success())
-        .unwrap_or(false);
-    if killed {
-        info!(pid, "daemon: signalled standalone serve to release :9741");
-        // Give the child a moment to release the listener. axum's
-        // graceful-shutdown is fast; 1s is plenty in practice. We
-        // could poll the port instead, but on slow CI this would
-        // over-engineer the wait — the bind() retry below catches
-        // anything we miss.
-        std::thread::sleep(std::time::Duration::from_millis(1000));
-    } else {
-        info!(pid, "daemon: stale serve pid file (process gone) — cleared");
-    }
-    let _ = std::fs::remove_file(pid_path);
-}
-
 /// daemon answers the endpoint with an empty list — misleading for
 /// anyone running it as a smoke check after `sovereign setup`.
 ///
@@ -5121,12 +5058,6 @@ async fn bridge_rpc_endpoint(
 #[cfg(test)]
 #[path = "tests/daemon.rs"]
 mod tests;
-
-// Moved to a sibling file: inline, these put this file past its arch-gate
-// slack (ARCH §3.1). `#[path]`, so the names are unchanged.
-#[cfg(test)]
-#[path = "tests/daemon_takeover.rs"]
-mod takeover_tests;
 
 /// Prose for [`MeshError::RotateWouldPartition`]. A free function rather than a
 /// format string because the right sentence depends on WHICH population is

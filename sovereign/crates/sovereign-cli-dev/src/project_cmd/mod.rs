@@ -554,7 +554,8 @@ async fn daemon_post(path: &str, body: serde_json::Value) -> Result<serde_json::
 
 /// Cheap TCP + `GET /v1/models` probe. Matches what the desktop's
 /// bootstrap does (see `sovereign-desktop/src-tauri/src/bootstrap.rs`).
-/// Used by `cmd_serve` to decide whether to refuse the legacy path.
+/// Used by `svrn serve --background` (the `project-daemon-is-running` arm)
+/// to skip spawning a server the daemon already stands in for.
 pub(crate) async fn daemon_is_running() -> bool {
     let tcp = tokio::time::timeout(
         std::time::Duration::from_secs(1),
