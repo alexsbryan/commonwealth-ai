@@ -72,6 +72,10 @@ mod audit_recover;
 mod code_capability_graph;
 #[cfg(feature = "workbench")]
 mod code_cmd;
+// Code's face: the composition `svrn code mcp` serves and the stock binary
+// mounts (pb-code-daemon-exit).
+#[cfg(feature = "workbench")]
+pub mod code_face;
 // `svrn code index` and `svrn refresh`, moved from sovereign-cli-shared and
 // sovereign-cli into the code program (pb-code-index).
 #[cfg(feature = "workbench")]

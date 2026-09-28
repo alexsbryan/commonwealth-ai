@@ -24,7 +24,7 @@ pub(crate) mod charter_amend;
 pub(crate) use charter_amend::{cmd_amend, cmd_charter};
 mod hooks;
 use hooks::cmd_install_hooks;
-mod mcp_host;
+pub(crate) mod mcp_host;
 mod serve;
 pub(crate) use serve::cmd_serve;
 mod refresh;

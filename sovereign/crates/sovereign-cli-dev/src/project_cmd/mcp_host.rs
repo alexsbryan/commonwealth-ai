@@ -26,10 +26,10 @@ use sovereign_contracts::ToolRegistry;
 
 /// Code's registry over MCP. `tools/list` is spec-gated on `feature_root`:
 /// `spec` and `drift` appear only once the project has a spec.
-pub(crate) struct CodeTools {
+pub struct CodeTools {
     pub(crate) tools: Arc<ToolRegistry>,
     pub(crate) session_id: String,
-    pub(crate) feature_root: PathBuf,
+    pub(crate) feature_root: Option<PathBuf>,
 }
 
 impl McpToolHost for CodeTools {
@@ -40,7 +40,7 @@ impl McpToolHost for CodeTools {
     fn list(&self) -> Value {
         Value::Array(render_tools_list_gated(
             &self.tools.descriptors(),
-            Some(&self.feature_root),
+            self.feature_root.as_deref(),
         ))
     }
 
@@ -61,7 +61,7 @@ impl McpToolHost for CodeTools {
 /// Every executed call goes to NoteStore's tool_call_log under this run's
 /// session, then through the [`ToolPatternMatcher`], whose rules key on code
 /// tool ids. Fire-and-forget: a log failure never touches the answer.
-pub(crate) struct CodeCallLog {
+pub struct CodeCallLog {
     pub(crate) notes: Arc<NoteStore>,
     pub(crate) session_id: Arc<String>,
     pub(crate) matcher: Arc<ToolPatternMatcher>,
