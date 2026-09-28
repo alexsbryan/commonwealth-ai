@@ -28,6 +28,9 @@
 //! - [`host`] — the ONE embeddings-endpoint decider: the discovery ladder
 //!   and the probe, shared by corpus-mcp's `serve` and ingest's CLI
 //!   (pb-ingest-cli).
+//! - [`v1_models`] — is the daemon up, and which listed ids are its default
+//!   chat and embed models (`GET /v1/models`; moved from
+//!   sovereign-enrichment-build's `inference_client`, pb-code-clean).
 //!
 //! The engine re-exports every item at its historical path, so no importer in
 //! the monorepo changed.
@@ -45,5 +48,6 @@ pub mod recipe;
 pub mod source;
 pub mod stream_axes;
 pub mod types;
+pub mod v1_models;
 
 pub use error::{Error, Result};

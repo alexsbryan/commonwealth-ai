@@ -15,14 +15,14 @@ use std::time::Duration;
 /// readiness probe's old 500 ms killed cold `enrich build` runs at
 /// extract while the daemon was in fact serving (order
 /// enrich-probe-timeout).
-pub(crate) const V1_MODELS_TIMEOUT: Duration = Duration::from_secs(5);
+pub const V1_MODELS_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// What a readiness probe learned about the daemon. Split so a SLOW
 /// daemon is never reported to the user as a DOWN one — "did not
 /// answer within the budget" is not "not responding" (order
 /// enrich-probe-timeout).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum DaemonProbe {
+pub enum DaemonProbe {
     /// Answered 200 within the budget.
     Up,
     /// No answer within the budget — the daemon may be up under load.
@@ -62,7 +62,7 @@ async fn probe_with_budget(base_url: &str, budget: Duration) -> DaemonProbe {
 /// failure to a human: `Up` iff `GET /v1/models` answers 200 within
 /// [`V1_MODELS_TIMEOUT`], `Slow` if the budget elapsed with no answer,
 /// `Down` for refused/immediate failures.
-pub(crate) async fn probe_daemon_status(base_url: &str) -> DaemonProbe {
+pub async fn probe_daemon_status(base_url: &str) -> DaemonProbe {
     probe_with_budget(base_url, V1_MODELS_TIMEOUT).await
 }
 

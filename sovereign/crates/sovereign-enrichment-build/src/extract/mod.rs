@@ -711,7 +711,7 @@ mod tests {
     fn slow_message_budget_tracks_the_module_constant() {
         // The "5s" in the message must stay glued to the probe's actual
         // budget — one threshold, one name (the const at
-        // inference_client/discovery.rs).
+        // corpus-index/src/v1_models.rs).
         let msg = daemon_probe_error("http://x", DaemonProbe::Slow).unwrap();
         let expected = format!(
             "error: daemon at http://x answered slower than {}s — daemon under load?",

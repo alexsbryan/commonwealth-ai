@@ -407,8 +407,9 @@ pub(super) const REGISTRY: &[(&str, Class, usize)] = &[
     // and left the CLI crate holding only help text and flag parsing. Two
     // rows now, because the move also split the module in two. Same three
     // sites, same class, same total — the census caught the stale path, which
-    // is what a per-file count is for.
-    ("sovereign/crates/sovereign-enrichment-build/src/inference_client/discovery.rs", Class::LocalDaemon, 2),
+    // is what a per-file count is for. `discovery.rs` then moved, whole, to
+    // `corpus-index/src/v1_models.rs` (pb-code-clean): same two sites.
+    ("corpus-index/src/v1_models.rs", Class::LocalDaemon, 2),
     ("sovereign/crates/sovereign-enrichment-build/src/inference_client/mod.rs", Class::LocalDaemon, 1),
 
     // ---- sovereign-cli-llm ----
