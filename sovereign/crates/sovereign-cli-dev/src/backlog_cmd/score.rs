@@ -1,24 +1,25 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! One scoring call against the resident daemon model.
 //!
-//! Reuse, not machinery (ARCH §19): this is
-//! [`DaemonInferenceClient`](sovereign_enrichment_build::inference_client) — the
-//! same HTTP path `svrn enrich` uses — with the ruler as the system
-//! prompt and a JSON schema for grammar-constrained output. No in-process
-//! model, no session bootstrap, no new inference path.
+//! Reuse, not machinery (ARCH §19): this is `oicp_client::RemoteApiProvider`
+//! — the pure-HTTP OpenAI-compatible client — with the ruler as the system
+//! prompt and a JSON schema for grammar-constrained output, and the daemon
+//! found by the `/v1/models` probe `svrn enrich` uses
+//! (`corpus_index::v1_models`). No in-process model, no session bootstrap,
+//! no new inference path.
 //!
 //! Refusal, never substitution (ARCH §18.3): daemon down, no chat model
 //! resident, or an unparseable answer each return an [`Err`] the caller
 //! prints and exits on. Nothing in here can file an unscored item as a
 //! scored one.
 
-use corpus_engine::enrichment::pipeline::ChatPrompt;
+use corpus_index::v1_models::{probe_daemon, resolve_default_models};
+use oicp_client::RemoteApiProvider;
 use serde::Deserialize;
+use sovereign_contracts::traits::InferenceProvider;
+use sovereign_contracts::types::CompletionRequest;
 
 use super::ruler::Ruler;
-use sovereign_enrichment_build::inference_client::{
-    probe_daemon, resolve_default_models, DaemonInferenceClient,
-};
 
 /// What the model is asked for, and what the verb will accept back.
 #[derive(Debug, Clone, Deserialize)]
@@ -232,7 +233,7 @@ pub async fn score_item(
              with --no-score. It is NOT being filed as scored."
         ));
     }
-    let (chat, embed) = resolve_default_models(base).await;
+    let (chat, _embed) = resolve_default_models(base).await;
     let Some(chat_model) = chat else {
         return Err(format!(
             "the daemon at {base} advertises no chat model, so nothing can \
@@ -240,20 +241,25 @@ pub async fn score_item(
              It is NOT being filed as scored."
         ));
     };
-    let client = DaemonInferenceClient::new(base, &chat_model, embed.unwrap_or_default())
-        .map_err(|e| format!("cannot reach the daemon at {base}: {e}"))?;
+    let v1 = format!("{}/v1", base.trim_end_matches('/'));
+    let client = RemoteApiProvider::new(&v1, None, &chat_model, 8192);
 
     let user = format!(
         "Objective it serves: {}\n\nItem text:\n{}",
         objective.unwrap_or("unstated"),
         text.trim()
     );
-    let mut prompt = ChatPrompt::new(ruler.system_prompt(), user)
-        .with_response_schema("backlog_score", response_schema(ruler));
-    prompt.phase_id = Some("backlog-add".to_string());
+    let mut request = CompletionRequest::new(&user)
+        .with_system(&ruler.system_prompt())
+        .with_model_id(chat_model.clone());
+    request.structured_output = Some(response_schema(ruler));
     // Low, not zero: the ruler wants a judgement, and the validation run
     // was measured at this temperature.
-    prompt.temperature = Some(0.2);
+    request.temperature = Some(0.2);
+    // No thinking, as the enrich client sent it: the schema already forces
+    // the shape, and chain-of-thought is pure latency here.
+    request.think_budget = Some(0);
+    request.enable_thinking = Some(false);
     tracing::debug!(
         model = %chat_model,
         ruler = %ruler.path.display(),
@@ -261,9 +267,10 @@ pub async fn score_item(
         "scoring one backlog item"
     );
     let raw = client
-        .complete(&prompt)
+        .complete(&request)
         .await
-        .map_err(|e| format!("the scoring call failed: {e}. The item is NOT filed."))?;
+        .map_err(|e| format!("the scoring call failed: {e}. The item is NOT filed."))?
+        .text;
     let mut score = parse(&raw, ruler)?;
     score.scored_by = chat_model;
     Ok(score)

@@ -57,10 +57,12 @@ corpus-engine-scip = { workspace = true }
 sovereign-cli-base = { workspace = true }
 
 # ── Workbench-only workspace crates ──
-# oicp-client is NOT a dependency: `svrn code index` execs `svrn-ingest`,
-# whose embedder is `corpus_index::host` (pb-code-index).
+# oicp-client is `backlog add`'s scoring client only (pb-code-clean): the
+# pure-HTTP chat client, which sends the ruler's JSON schema. `svrn code
+# index` execs `svrn-ingest`, whose embedder is `corpus_index::host`
+# (pb-code-index).
 #
-# The measurement that put it here is still worth knowing: taking the HTTP
+# The measurement that first put it here is still worth knowing: taking the HTTP
 # client directly rather than through `sovereign-inference` (which merely
 # re-exports it while linking llama.cpp unconditionally) saved 3.5 KB of a
 # 395 MB debug binary. `sovereign-mesh` — which pulls `sovereign-inference`
@@ -72,7 +74,7 @@ sovereign-cli-base = { workspace = true }
 # `dev-tools` (git archaeology in BriefTool) travels with
 # `sovereign-code` since the 2026-09-21 lift.
 sovereign-code = { workspace = true, features = ["treesitter", "dev-tools"] }
-sovereign-enrichment-build = { workspace = true }
+oicp-client = { workspace = true, optional = true }
 sovereign-contracts = { workspace = true }
 sovereign-time = { workspace = true }
 # The code server (`project_cmd::serve`, phase-b pb-code-server): the host
@@ -155,6 +157,7 @@ workbench = [
     "dep:sovereign-turn-client",
     "dep:corpus-engine",
     "dep:corpus-index",
+    "dep:oicp-client",
     "dep:code-facts",
     "dep:corpus-engine-notes",
     "dep:arch-layers",
