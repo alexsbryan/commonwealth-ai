@@ -258,24 +258,12 @@ fn load_from_dir(dir: &Path) -> Option<PersistedMesh> {
 /// accepted an 8-character id prefix and `forget` did not, and the HTTP switch
 /// and the CLI forget each re-derived their own copy — so a reference that
 /// switched a mesh could not forget it, and the fix had to be made in four
-/// places or in none.
-///
-/// - name, case-insensitive
-/// - full id hex
-/// - an id prefix of at least 8 hex characters: short enough to type from
-///   `svrn mesh list`, long enough that a collision is not a realistic
-///   accident. Below 8 we refuse rather than guess, because the wrong match
-///   here switches or DELETES the wrong mesh.
+/// places or in none. The rule itself is
+/// `commonwealth_discovery::membership::names_mesh`, which cw-rails' known-mesh
+/// list reads too.
 pub fn resolve_known<'a>(known: &'a [PersistedMesh], target: &str) -> Option<&'a PersistedMesh> {
-    let needle = target.trim().to_lowercase();
-    if needle.is_empty() {
-        return None;
-    }
     known.iter().find(|m| {
-        let id_hex = m.mesh_id.to_hex();
-        m.name.to_lowercase() == needle
-            || id_hex == needle
-            || (needle.len() >= 8 && id_hex.starts_with(&needle))
+        commonwealth_discovery::membership::names_mesh(&m.name, &m.mesh_id.to_hex(), target)
     })
 }
 

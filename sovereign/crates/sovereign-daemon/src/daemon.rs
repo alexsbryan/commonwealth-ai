@@ -31,7 +31,7 @@ pub use sovereign_contracts::venue::InferenceVenue;
 /// after this window. 24h balances "share in a group chat, everyone
 /// joins today" against replay exposure; multiple joiners are fine
 /// within the window (TTL, not single-use).
-const INVITE_TTL_SECS: u64 = 24 * 60 * 60;
+const INVITE_TTL_SECS: u64 = commonwealth_discovery::membership::INVITE_TTL_SECS;
 
 /// The internal-router listener bind address. Under an ENCRYPTED mesh
 /// (WS-C receiver lockout) it is loopback-only — the iroh acceptor,

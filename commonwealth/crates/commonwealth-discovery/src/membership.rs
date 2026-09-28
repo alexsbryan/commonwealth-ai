@@ -48,6 +48,25 @@ pub fn derive_legacy_mesh_secret(mesh_id: &MeshId, invite_key_hash: &[u8; 32]) -
     *hasher.finalize().as_bytes()
 }
 
+/// How long an encrypted mesh's invite admits joiners after it is minted or
+/// rotated. The one TTL: the inference daemon and cw-rails both arm it.
+pub const INVITE_TTL_SECS: u64 = 24 * 60 * 60;
+
+/// Does an operator-typed `reference` name the mesh `(name, id_hex)`?
+///
+/// Name case-insensitively, the full id hex, or an id prefix of at least 8
+/// hex characters. Below 8 it refuses rather than guesses, because the wrong
+/// match switches or DELETES the wrong mesh. One rule for every known-mesh
+/// list (svrn's `persist::resolve_known`, cw-rails' `known::resolve`), so a
+/// reference that switches a mesh can always forget it.
+pub fn names_mesh(name: &str, id_hex: &str, reference: &str) -> bool {
+    let needle = reference.trim().to_lowercase();
+    !needle.is_empty()
+        && (name.to_lowercase() == needle
+            || id_hex == needle
+            || (needle.len() >= 8 && id_hex.starts_with(&needle)))
+}
+
 /// Verify a join key against a stored hash.
 pub fn verify_join_key(key: &str, expected_hash: &[u8; 32]) -> bool {
     // blake3::Hash equality is constant-time (prevents timing attacks);
