@@ -21,7 +21,6 @@ use crate::bootstrap;
 use crate::solve_http;
 use crate::tool_registry;
 use crate::tool_registry::build_tool_registry;
-use crate::worker::run_worker_daemon;
 use crate::workspace::resolve_workspace_dir;
 
 pub(super) async fn run_daemon(
@@ -31,37 +30,6 @@ pub(super) async fn run_daemon(
 ) -> i32 {
     #[cfg(unix)]
     rlimit::raise_open_file_limit();
-    // ── Worker-mode branch (ephemeral pod) ────────────────────────
-    //
-    // `svrn daemon run --worker-mode` runs an ephemeral worker
-    // daemon (see `sovereign/docs/EPHEMERAL_WORKER_PODS.md`) instead
-    // of a full persistent peer. The worker boots with a bootstrap
-    // blob (env `SOVEREIGN_BOOTSTRAP` or `--bootstrap-blob <file>`),
-    // serves the four owner-only routes on `:9742` over a
-    // seed-derived self-signed TLS cert, and exits when the owner
-    // sends `DELETE /internal/worker/job` (or process is signalled).
-    //
-    // Worker mode skips every persistent-peer surface: no SetupConfig
-    // (no inference models), no mesh state machine, no
-    // /v1/chat/completions exposure. The binary is the same, but the
-    // wiring branches here and stays in worker_daemon.rs from this
-    // point forward.
-    //
-    // THE LAUNCH ANSWERS THIS, not a second argv scan. Until 2026-08-25 this
-    // line read `args.iter().any(|a| a == "--worker-mode")` — the last
-    // surviving launch-mode READER outside `Launch::parse`, and a §10.6
-    // duplicate created by the refactor that introduced `Launch`: `dispatch`
-    // collapsed `Daemon` and `Worker` into one `daemon_cmd::run` call, so
-    // `Launch` answered and this function asked again. Threading the `Launch`
-    // itself (rather than re-deriving from `args`) is what makes the two
-    // agree by construction — and it sidesteps the arg-shape mismatch that
-    // deferred this fix, since `Launch::Worker` carries argv INCLUDING the
-    // `run` subcommand while `run_worker_daemon` wants it stripped.
-    // Falsifier 1, readers: 1 -> 0.
-    if matches!(launch, Launch::Worker { .. }) {
-        return run_worker_daemon(args).await;
-    }
-
     // ── Flag parsing ──────────────────────────────────────────────
     //
     // The first-boot wizard (`--setup-only`) did not move with the run

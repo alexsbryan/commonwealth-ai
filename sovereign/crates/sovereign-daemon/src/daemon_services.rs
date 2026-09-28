@@ -578,9 +578,8 @@ pub fn assemble(
     match launch {
         // `sovereign daemon run`, and the desktop's supervised child, which is
         // the identical entry (`--daemon-child` IS `daemon run`; pinned by
-        // `Launch::parse`'s own tests). `Worker` routes with it: it is the same
-        // bootstrap with distributed inference on.
-        Launch::Daemon { .. } | Launch::Worker { .. } => match parts {
+        // `Launch::parse`'s own tests).
+        Launch::Daemon { .. } => match parts {
             LaunchParts::Serving {
                 serving,
                 headless: Some(extras),
@@ -639,9 +638,11 @@ pub fn assemble(
             }),
         },
 
-        // The remaining four assemble nothing.
+        // The remaining five assemble nothing. Worker mode is its own
+        // `sovereign-pod-worker` binary (pb-pods-worker).
         Launch::ComputeChild { .. }
         | Launch::RpcWorker { .. }
+        | Launch::Worker { .. }
         | Launch::Smoketest { .. }
         | Launch::Bare => Err(AssemblyRefusal::NotAnAssembler { launch: name }),
     }
@@ -881,16 +882,6 @@ mod tests {
                 "headless",
             ),
             (
-                Launch::Worker {
-                    args: vec!["run".into(), "--worker-mode".into()],
-                },
-                LaunchParts::Serving {
-                    serving: fixtures::serving(),
-                    headless: Some(headless_extras()),
-                },
-                "headless",
-            ),
-            (
                 Launch::Desktop,
                 LaunchParts::Serving {
                     serving: fixtures::serving(),
@@ -928,6 +919,9 @@ mod tests {
             Launch::Bare,
             Launch::ComputeChild { args: Vec::new() },
             Launch::Smoketest { argv: Vec::new() },
+            Launch::Worker {
+                args: vec!["run".into(), "--worker-mode".into()],
+            },
         ] {
             let err = assemble(&launch, LaunchParts::Admin)
                 .err()

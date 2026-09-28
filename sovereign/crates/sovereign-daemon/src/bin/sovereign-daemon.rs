@@ -14,7 +14,8 @@
 //! the same one the old dispatcher made:
 //!
 //! - `sovereign-daemon run …` → `Launch::Daemon` → `daemon_cmd::run`
-//! - `sovereign-daemon run --worker-mode …` → `Launch::Worker`
+//! - `sovereign-daemon run --worker-mode …` → refused: worker mode is the
+//!   `sovereign-pod-worker` binary (pb-pods-worker)
 //! - `sovereign-daemon join --config <p> --node-name <n>` (invite on
 //!   stdin) → `Launch::AdminJoin` → `daemon_cmd::admin_join::run`
 //! - a `current_exe()` re-exec carrying `--compute-child` / `--rpc-worker`

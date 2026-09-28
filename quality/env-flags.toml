@@ -1200,6 +1200,13 @@ status = "shipped"
 purpose = "The loopback port serve listens on when no --listen is given, where the stock binary binds its hosted serve, and where a standalone svrn daemon dials it. Read once by sovereign_contracts::venue::serve_port, which both programs call. Set by svrn's lift smoke so it runs beside a host's own serve on 9748; a value that is not a nonzero port is warned and the default used."
 
 [[flag]]
+name = "SOVEREIGN_POD_WORKER_BIN"
+cluster = "cli-binaries"
+default = "sibling of the running program, then PATH"
+status = "shipped"
+purpose = "Path override for sovereign-pod-worker, the ephemeral pod's worker-mode binary (sovereign-pods), which `svrn daemon run --worker-mode` execs with its argv unchanged (sovereign-cli-daemon `daemon_bin::exec_pod_worker`, pb-pods-worker). Read through `sovereign_turn_client::reach::locate_sibling`."
+
+[[flag]]
 name = "CW_RAILS_BIN"
 cluster = "cli-binaries"
 default = "sibling of the running program, then PATH"

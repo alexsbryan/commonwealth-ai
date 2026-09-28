@@ -65,7 +65,7 @@ pub fn run(raw_args: &[String], hosted: Option<HostedServe>) -> i32 {
 
     // Not a launch this binary serves (a `--smoketest` argv, the
     // desktop/server defaults…). Same refusal the old dispatcher made.
-    let (Launch::Daemon { args } | Launch::Worker { args }) = &launch else {
+    let Launch::Daemon { args } = &launch else {
         eprintln!(
             "sovereign-daemon: {} is not a launch this binary serves",
             launch.as_str()

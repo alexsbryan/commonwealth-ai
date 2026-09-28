@@ -54,6 +54,13 @@ pub fn run_with_args(raw_args: Vec<String>) -> i32 {
     if let Launch::RpcWorker { .. } = &launch {
         return daemon_bin::exec(&raw_args);
     }
+    // `daemon run --worker-mode` is the `sovereign-pod-worker` binary's
+    // (pb-pods-worker): exec'd with the argv unchanged, before the rebrand
+    // migration (an ephemeral pod has no legacy dir) and the panic hook (the
+    // worker installs its own).
+    if let Launch::Worker { .. } = &launch {
+        return daemon_bin::exec_pod_worker(&raw_args);
+    }
 
     // Rebrand back-compat (see sovereign_core::rebrand): idempotent, non-destructive.
     // The daemon is the migration authority — it runs before binding the API port.
@@ -111,7 +118,7 @@ async fn dispatch(launch: Launch, raw_args: &[String]) -> i32 {
     // operators tailing logs. Match the filter sovereign-cli used
     // pre-split.
     match &launch {
-        Launch::Daemon { .. } | Launch::Worker { .. } => {
+        Launch::Daemon { .. } => {
             // Track W: `SOVEREIGN_IROH_LOG` cranks iroh/relay/transport internals to
             // debug for diagnosing a reachability wedge; off, they stay at warn
             // (errors still visible) so the log isn't flooded.
@@ -128,9 +135,7 @@ async fn dispatch(launch: Launch, raw_args: &[String]) -> i32 {
     }
 
     match launch {
-        Launch::Daemon { ref args } | Launch::Worker { ref args } => {
-            daemon_cmd::run(&launch, &args.clone()).await
-        }
+        Launch::Daemon { ref args } => daemon_cmd::run(&launch, &args.clone()).await,
         Launch::Verb { name, args } => {
             match name.as_str() {
                 "model" => model_cmd::run(&args).await,
@@ -158,6 +163,7 @@ async fn dispatch(launch: Launch, raw_args: &[String]) -> i32 {
             }
         },
         Launch::RpcWorker { .. } => unreachable!("rpc-worker is exec'd in run_with_args"),
+        Launch::Worker { .. } => unreachable!("worker mode is exec'd in run_with_args"),
         // Other binaries' launches, incl. the compute-child the sovereign-daemon [[bin]] owns.
         // Named explicitly so that adding a variant forces a decision here instead of a `_` arm.
         Launch::ComputeChild { .. }

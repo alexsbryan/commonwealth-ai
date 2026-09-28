@@ -1,9 +1,38 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Ephemeral worker-pod daemon entry — extracted from `daemon_cmd`
-//! (§3.2). Runs the stripped-down pod daemon (no config/models/mesh;
-//! owner-only routes) triggered by `daemon run --worker-mode`.
+//! `sovereign-pod-worker` — the ephemeral worker-pod daemon, its own
+//! binary (pb-pods-worker; only the pod uses worker mode, FIVE_PROGRAMS
+//! §12 3a rung 1). Runs the stripped-down pod daemon (no config/models/
+//! mesh; owner-only routes). `svrn daemon run --worker-mode` execs it
+//! with its argv unchanged, so the pod contract (entrypoint.sh) holds.
 
 use std::sync::Arc;
+
+/// Default filter when `RUST_LOG` is unset: worker mode's own events at
+/// info, everything else at warn.
+const DEFAULT_FILTER: &str = "warn,sovereign_pods=info,sovereign_pod_worker=info";
+
+fn main() {
+    let filter = tracing_subscriber::EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new(DEFAULT_FILTER));
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(filter)
+        .with_writer(std::io::stderr)
+        .try_init();
+    // An ephemeral pod has no data root to keep a crash file in: the
+    // panic reaches the log the owner reads, then the default hook runs.
+    let default_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        tracing::error!(panic = %info, "worker daemon: panic");
+        default_hook(info);
+    }));
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .thread_name("sovereign-pod-worker-rt")
+        .build()
+        .expect("failed to build tokio runtime");
+    std::process::exit(runtime.block_on(run_worker_daemon(&args)));
+}
 
 /// Worker-mode entry — runs the ephemeral pod daemon. Skips every
 /// persistent-peer surface (no config, no models, no mesh) and serves

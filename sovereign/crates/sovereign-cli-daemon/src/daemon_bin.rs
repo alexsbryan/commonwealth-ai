@@ -94,20 +94,41 @@ pub(crate) fn exec(args: &[String]) -> i32 {
     };
 
     warn_if_stale(&bin);
+    exec_bin(&bin, args)
+}
 
+/// Worker mode is its own binary in sovereign-pods (pb-pods-worker): `svrn
+/// daemon run --worker-mode` execs it with the argv unchanged, so the pod
+/// contract (`exec sovereign-cli daemon run --worker-mode`) holds.
+pub(crate) fn exec_pod_worker(args: &[String]) -> i32 {
+    const POD_WORKER: &str = "sovereign-pod-worker";
+    let Some(bin) =
+        sovereign_turn_client::reach::locate_sibling(POD_WORKER, "SOVEREIGN_POD_WORKER_BIN")
+    else {
+        eprintln!(
+            "sovereign: cannot find sibling binary '{POD_WORKER}'. \
+             Build it with `cargo build -p sovereign-pods`, \
+             or set SOVEREIGN_POD_WORKER_BIN to its path."
+        );
+        return 127;
+    };
+    exec_bin(&bin, args)
+}
+
+fn exec_bin(bin: &Path, args: &[String]) -> i32 {
     let argv: Vec<OsString> = args.iter().map(OsString::from).collect();
 
     #[cfg(unix)]
     {
         use std::os::unix::process::CommandExt;
-        let err = std::process::Command::new(&bin).args(&argv).exec();
+        let err = std::process::Command::new(bin).args(&argv).exec();
         eprintln!("sovereign: exec {} failed: {err}", bin.display());
         126
     }
 
     #[cfg(not(unix))]
     {
-        match std::process::Command::new(&bin).args(&argv).status() {
+        match std::process::Command::new(bin).args(&argv).status() {
             Ok(status) => status.code().unwrap_or(1),
             Err(e) => {
                 eprintln!("sovereign: spawn {} failed: {e}", bin.display());

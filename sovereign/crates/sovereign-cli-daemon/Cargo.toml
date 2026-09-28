@@ -88,6 +88,10 @@ workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
 
+[dev-dependencies]
+# tests/pod_worker_e2e.rs mints the owner-signed bootstrap blob.
+ed25519-dalek = { workspace = true }
+
 [features]
 # Windows GPU backend selectors, forwarded to sovereign-inference. No-op on
 # macOS/Linux, which hardcode their backend per-OS; see

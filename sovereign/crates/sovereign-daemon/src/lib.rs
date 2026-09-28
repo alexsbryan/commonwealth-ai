@@ -154,7 +154,6 @@ pub mod watcher_supervisor;
 /// The `work` donor loop — the node's own lease-and-run half of the work
 /// plane (DAEMON_CORE.md §3.2, `jobs`).
 pub mod work_donor;
-pub mod worker;
 pub mod workflow_trigger;
 pub mod workspace;
 

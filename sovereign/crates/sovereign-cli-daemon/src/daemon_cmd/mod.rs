@@ -142,24 +142,6 @@ const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help 
 /// it to the sibling verbatim; only the wizard gate below peels the
 /// `run` token off, because it answers with this crate's own flags.
 async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
-    // ── Worker-mode branch (ephemeral pod) ────────────────────────
-    //
-    // `svrn daemon run --worker-mode` runs an ephemeral worker daemon
-    // (see `sovereign/docs/EPHEMERAL_WORKER_PODS.md`) — a different
-    // server on a different socket with none of the persistent-peer
-    // surface. The whole run body, this branch included, forked to the
-    // `sovereign-daemon` sibling, so the honest move is to pass the
-    // args through untouched.
-    //
-    // THE LAUNCH ANSWERS THIS, not a second argv scan, and the branch
-    // sits BEFORE the first-boot gate on purpose (the original body
-    // ordered it this way): a pod-spawned worker carries `--config`
-    // but no canonical config and no TTY, so the wizard gate below
-    // would refuse a worker that the old code ran fine.
-    if matches!(launch, Launch::Worker { .. }) {
-        return crate::daemon_bin::exec(args);
-    }
-
     // ── Phase 4 flag parsing ──────────────────────────────────────
     //
     // `--setup-only` runs the wizard and exits without binding the

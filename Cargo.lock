@@ -12271,6 +12271,7 @@ dependencies = [
  "corpus-engine-scip",
  "corpus-index",
  "dirs 5.0.1",
+ "ed25519-dalek 2.2.0",
  "futures",
  "hostname",
  "libc",
@@ -12655,7 +12656,6 @@ dependencies = [
  "sovereign-mesh",
  "sovereign-meshapp",
  "sovereign-peer-wire",
- "sovereign-pods",
  "sovereign-runtime-recipe",
  "sovereign-serving-host",
  "sovereign-store",
@@ -13040,6 +13040,7 @@ dependencies = [
  "tokio-stream",
  "tower",
  "tracing",
+ "tracing-subscriber",
  "urlencoding",
 ]
 

@@ -77,14 +77,12 @@ dirs = "5"
 # `dm-daemon-cli-composition`, DAEMON_CORE.md §4.1 row 4) reaches these
 # directly now: the solve surface (`sovereign-tdd`), the compute-child
 # supervisor (`sovereign-compute`), the watched-folder lint/test stores
-# (`corpus-engine-watchers`), the ephemeral worker pod (`sovereign-pods`) and
-# the watched-folder workflow runtime (`sovereign-workflow`,
+# (`corpus-engine-watchers`) and the watched-folder workflow runtime (`sovereign-workflow`,
 # `sovereign-workflow-host`). All at `capabilities`/`runtime`/`knowledge`,
 # below this crate's `mesh-api`.
 sovereign-tdd = { workspace = true }
 sovereign-compute = { workspace = true }
 corpus-engine-watchers = { workspace = true }
-sovereign-pods = { path = "../sovereign-pods" }
 sovereign-workflow = { workspace = true }
 sovereign-workflow-host = { workspace = true }
 # The run path (`daemon_cmd`) commissions the ONE Runtime through the
