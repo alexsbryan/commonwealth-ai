@@ -90,6 +90,8 @@ pub mod iroh;
 pub mod iroh_identity_forward;
 #[cfg(feature = "iroh")]
 mod iroh_path;
+#[cfg(feature = "iroh")]
+pub mod iroh_routed_forward;
 /// The outbound mesh-proof stamp. Not behind the `iroh` feature: it is the
 /// PLAINTEXT path's credential, and the plaintext path is the one every build
 /// has.
