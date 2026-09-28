@@ -55,7 +55,14 @@ pub fn admit_media(
     allow: &[String],
     declared: &[(String, String)],
 ) -> Option<Forward> {
-    admit_spliced_origin(OriginKind::Media, who, dialer, origin, allow, declared)
+    admit_spliced_origin(
+        OriginKind::Media.wire(),
+        who,
+        dialer,
+        origin,
+        allow,
+        declared,
+    )
 }
 
 /// The holder's decision for a `cwth/offer/0` dial — [`admit_media`]'s three
@@ -82,25 +89,34 @@ pub fn admit_offer(
     allow: &[String],
     declared: &[(String, String)],
 ) -> Option<Forward> {
-    admit_spliced_origin(OriginKind::Offer, who, dialer, origin, allow, declared)
+    admit_spliced_origin(
+        OriginKind::Offer.wire(),
+        who,
+        dialer,
+        origin,
+        allow,
+        declared,
+    )
 }
 
 /// One implementation of "may this verified dialer reach the single HTTP
-/// origin this node declared for `kind`", shared by [`admit_media`] and
-/// [`admit_offer`].
+/// origin declared for `what`", shared by [`admit_media`], [`admit_offer`]
+/// and every registered origin whose admission is members-only
+/// ([`crate::origins::OriginRegistry::forward_for`]).
 ///
 /// Shared rather than duplicated because the three refusals are the same
-/// three facts in both cases, and a second copy is how one of them learns to
+/// three facts in every case, and a second copy is how one of them learns to
 /// admit a non-member while the other does not (ARCH principle 8). What is
 /// NOT shared is the input: each caller passes its own origin, its own allow
 /// list and its own declared headers, so nothing here can hand one kind's
 /// credential to another kind's server.
 ///
-/// `kind` is carried rather than spelled so every log line names the origin
-/// the dialer actually asked for — the 2026-09-12 defect where every app
-/// refusal said "media" is the failure this shape prevents.
-fn admit_spliced_origin(
-    kind: OriginKind,
+/// `what` is the protocol the dialer asked for (`cwth/media/0`, a registered
+/// ALPN), carried rather than spelled so every log line names the origin the
+/// dialer actually asked for — the 2026-09-12 defect where every app refusal
+/// said "media" is the failure this shape prevents.
+pub fn admit_spliced_origin(
+    what: &str,
     who: Option<&MemberIdentity>,
     dialer: NodePubkey,
     origin: Option<SocketAddr>,
@@ -110,11 +126,10 @@ fn admit_spliced_origin(
     let Some(who) = who else {
         tracing::warn!(
             target: "transport",
-            kind = kind.wire(),
+            kind = what,
             dialer = %hex::encode(dialer.0),
-            "{}: REFUSED a dial from a non-member — the {} authenticates nothing, \
-             so there is no safe downgrade",
-            kind.wire(), kind.noun()
+            "{what}: REFUSED a dial from a non-member — the origin authenticates nothing, \
+             so there is no safe downgrade"
         );
         return None;
     };
@@ -122,22 +137,20 @@ fn admit_spliced_origin(
     if !allow.is_empty() && !allow.iter().any(|entry| who.named_by(entry)) {
         tracing::warn!(
             target: "transport",
-            kind = kind.wire(),
+            kind = what,
             member = %who.name,
             node_id = %who.node_id,
             allow = ?allow,
-            "{}: REFUSED a dial from a member outside the allow list",
-            kind.wire()
+            "{what}: REFUSED a dial from a member outside the allow list"
         );
         return None;
     }
     tracing::info!(
         target: "transport",
-        kind = kind.wire(),
+        kind = what,
         member = %who.name,
         node_id = %who.node_id,
-        "{}: dial admitted — the origin is told who is asking",
-        kind.wire()
+        "{what}: dial admitted — the origin is told who is asking"
     );
     // The verified identity FIRST, then this node's own credentials for its
     // own origin. Both go through the one `headers` vec because

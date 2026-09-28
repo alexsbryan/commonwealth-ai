@@ -723,7 +723,7 @@ impl IrohTransport {
     /// other class reaches its internal router. The *class chooses the
     /// ALPN* — the iroh analogue of `IpTransport`'s per-class port
     /// policy, and why there's no port rewrite here.
-    fn alpn_for_class(class: TrafficClass) -> &'static [u8] {
+    pub fn alpn_for_class(class: TrafficClass) -> &'static [u8] {
         match class {
             TrafficClass::Inference | TrafficClass::StatusProbe => CLIENT_ALPN,
             TrafficClass::RpcTensor => RPC_ALPN,
@@ -1150,6 +1150,10 @@ impl IrohAcceptor {
                             Arc<std::collections::BTreeMap<String, SocketAddr>>,
                             Arc<Vec<(String, String)>>,
                         ),
+                        ByPrefix(
+                            Arc<std::collections::BTreeMap<String, crate::iroh_routed_forward::PrefixRoute>>,
+                            Arc<Vec<(String, String)>>,
+                        ),
                     }
                     let streams = match forward {
                         Forward::Splice(addr) => Streams::To(addr, None),
@@ -1159,6 +1163,9 @@ impl IrohAcceptor {
                         Forward::HttpByName { apps, headers } => {
                             Streams::ByName(apps, Arc::new(headers))
                         }
+                        Forward::HttpByPrefix { routes, headers } => {
+                            Streams::ByPrefix(routes, Arc::new(headers))
+                        }
                     };
                     loop {
                         match conn.accept_bi().await {
@@ -1167,6 +1174,9 @@ impl IrohAcceptor {
                                     Streams::To(a, h) => Streams::To(*a, h.clone()),
                                     Streams::ByName(m, h) => {
                                         Streams::ByName(Arc::clone(m), Arc::clone(h))
+                                    }
+                                    Streams::ByPrefix(m, h) => {
+                                        Streams::ByPrefix(Arc::clone(m), Arc::clone(h))
                                     }
                                 };
                                 // The pump's zero-answer warn names the ALPN;
@@ -1178,6 +1188,13 @@ impl IrohAcceptor {
                                         Streams::ByName(apps, headers) => {
                                             crate::iroh_identity_forward::pump_by_name(
                                                 send, recv, apps, headers,
+                                            )
+                                            .await;
+                                            return;
+                                        }
+                                        Streams::ByPrefix(routes, headers) => {
+                                            crate::iroh_routed_forward::pump_by_prefix(
+                                                send, recv, routes, headers,
                                             )
                                             .await;
                                             return;

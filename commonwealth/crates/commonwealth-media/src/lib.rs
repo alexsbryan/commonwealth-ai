@@ -30,6 +30,7 @@ pub mod claims;
 pub mod declared;
 pub mod fanout;
 pub mod identity;
+pub mod origins;
 pub mod presence;
 pub mod reach;
 

@@ -109,6 +109,18 @@ pub enum Forward {
         apps: std::sync::Arc<std::collections::BTreeMap<String, SocketAddr>>,
         headers: Vec<(String, String)>,
     },
+    /// One of several registered HTTP origins on `cwth/http/0`, chosen per
+    /// stream by the LONGEST registered path prefix covering the first
+    /// request, which is forwarded unchanged
+    /// ([`crate::iroh_routed_forward::route_by_prefix`]). Each route adds its
+    /// own registration's tie to `headers`; an unregistered path is refused
+    /// by name.
+    HttpByPrefix {
+        routes: std::sync::Arc<
+            std::collections::BTreeMap<String, crate::iroh_routed_forward::PrefixRoute>,
+        >,
+        headers: Vec<(String, String)>,
+    },
 }
 
 impl Forward {
@@ -123,7 +135,7 @@ impl Forward {
         match self {
             Forward::Splice(a) => Some(a),
             Forward::Http { origin, .. } => Some(origin),
-            Forward::HttpByName { .. } => None,
+            Forward::HttpByName { .. } | Forward::HttpByPrefix { .. } => None,
         }
     }
 }
