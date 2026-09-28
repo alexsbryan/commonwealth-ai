@@ -145,6 +145,7 @@ impl ToolBundle for CodeIntelTools {
 pub struct NotesTools {
     notes: Arc<corpus_engine_notes::NoteStore>,
     inference: Option<Arc<dyn InferenceProvider>>,
+    workspace_root: Option<PathBuf>,
 }
 
 #[cfg(feature = "treesitter")]
@@ -156,12 +157,20 @@ impl NotesTools {
         Self {
             notes,
             inference: None,
+            workspace_root: None,
         }
     }
 
     /// Summarise `read_note_digest` with a model.
     pub fn with_inference(mut self, inference: Arc<dyn InferenceProvider>) -> Self {
         self.inference = Some(inference);
+        self
+    }
+
+    /// The repo `session_state` stamps a frame's head and branch from;
+    /// without it the frame is written unstamped.
+    pub fn with_workspace_root(mut self, root: PathBuf) -> Self {
+        self.workspace_root = Some(root);
         self
     }
 }
@@ -180,6 +189,14 @@ impl ToolBundle for NotesTools {
             None => tracing::debug!(
                 bundle = "notes",
                 "no model: read_note_digest is header-only"
+            ),
+        }
+        let mut session_state = crate::SessionStateTool::new();
+        match &self.workspace_root {
+            Some(root) => session_state = session_state.with_workspace_root(root.clone()),
+            None => tracing::debug!(
+                bundle = "notes",
+                "no workspace: session frames go unstamped"
             ),
         }
         BundleReport::new(self.name())
@@ -205,6 +222,10 @@ impl ToolBundle for NotesTools {
             .record(reg.register_reporting(Box::new(
                 crate::SessionReflectionTool::new(Arc::clone(&self.notes)).declared(),
             )))
+            .record(reg.register_reporting(Box::new(
+                crate::RetireNoteTool::new(Arc::clone(&self.notes)).declared(),
+            )))
+            .record(reg.register_reporting(Box::new(session_state.declared())))
     }
 }
 
@@ -275,6 +296,11 @@ impl ToolBundle for WatcherTools {
         if let Some(scope) = &self.lint_scope {
             lint_status = lint_status.with_watched_scope(scope.clone());
         }
+        let mut build = crate::BuildTool::new(Arc::clone(&self.lint_store))
+            .with_watcher_active(Arc::clone(&self.watcher_active));
+        if let Some(scope) = &self.lint_scope {
+            build = build.with_watched_scope(scope.clone());
+        }
         let mut report = BundleReport::new(self.name())
             .record(reg.register_reporting(Box::new(test_status.declared())))
             .record(reg.register_reporting(Box::new(
@@ -283,7 +309,8 @@ impl ToolBundle for WatcherTools {
             .record(reg.register_reporting(Box::new(lint_status.declared())))
             .record(reg.register_reporting(Box::new(
                 crate::GetLintOutputTool::new(Arc::clone(&self.lint_store)).declared(),
-            )));
+            )))
+            .record(reg.register_reporting(Box::new(build.declared())));
         report = match &self.test_watcher {
             Some(watcher) => report.record(reg.register_reporting(Box::new(
                 crate::RunTestsTool::new(Arc::clone(watcher)).declared(),
@@ -326,5 +353,6 @@ impl ToolBundle for ArchTools {
                         .declared(),
                 )),
             )
+            .record(reg.register_reporting(Box::new(crate::DriftFindingsTool::new().declared())))
     }
 }

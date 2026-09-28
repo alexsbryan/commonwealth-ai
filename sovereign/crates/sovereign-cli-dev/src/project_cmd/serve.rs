@@ -429,9 +429,10 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
         ),
         Box::new(sovereign_code::bundle::ArchTools::new(repo_root.clone())),
         Box::new(watcher_tools),
-        Box::new(sovereign_code::bundle::NotesTools::new(Arc::clone(
-            &notes_store,
-        ))),
+        Box::new(
+            sovereign_code::bundle::NotesTools::new(Arc::clone(&notes_store))
+                .with_workspace_root(repo_root.clone()),
+        ),
         Box::new(sovereign_work_atlas::tools::WorkAtlasTools::new(
             atlas_store,
             atlas_cfg,
