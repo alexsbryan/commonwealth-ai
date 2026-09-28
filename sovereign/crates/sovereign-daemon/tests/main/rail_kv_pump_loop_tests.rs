@@ -5,7 +5,7 @@
 //! is sovereign-mesh's `rail_kv_pump_namespaces`.
 
 use commonwealth_core::ids::NodeId;
-use commonwealth_rail_core::{Ed25519Verifier, RailAct, SigningKey};
+use commonwealth_rail_core::{RailAct, SigningKey};
 use sovereign_daemon::state::AppState;
 use sovereign_mesh::rail_kv_pump::*;
 use sovereign_mesh::rail_port::LocalRingRail;
@@ -38,9 +38,13 @@ async fn work_namespace_seals_and_keeps_live_leases() {
     use commonwealth_rail_core::{
         actor_of, body_json, sign_ring_op, Op, Person, RingSigner, Roster, SignedOp,
     };
-    use commonwealth_work::projection::{WorkProjection, WorkUnitStatus};
-    use commonwealth_work::{ActorKey, Submission, UnitRef, WorkAct};
-    use oicp_types::job::{Isolation, JobKind, JobRequirements, WorkOffer};
+    use kernel_types::ActorKey;
+    use oicp_types::job::{Isolation, JobKind, WorkOffer};
+    use oicp_types::work::projection::WorkUnitStatus;
+    use oicp_types::work::{Submission, UnitRef, WorkAct};
+    use sovereign_mesh::rail_port::RingRailPort;
+
+    use crate::common::work_rails::{payload_of, WorkRails};
 
     let donor = SigningKey::from_bytes(&[3u8; 32]);
     let submitter = SigningKey::from_bytes(&[4u8; 32]);
@@ -83,13 +87,12 @@ async fn work_namespace_seals_and_keeps_live_leases() {
 
     // ── the peer submits, this node leases and offers ──
     let kind = JobKind::parse("process:v1").unwrap();
-    let unit = commonwealth_work::seal::seal(
-        kind.clone(),
-        serde_json::json!({ "argv": ["uname", "-a"] }),
-        JobRequirements::any(),
-        None,
-    )
-    .unwrap();
+    // Sealed by cw-rails' seal door: the daemon links no rail (pb-work-donor).
+    let unit = WorkRails::spawn(None, "")
+        .await
+        .seal(&kind, vec![serde_json::json!({ "argv": ["uname", "-a"] })])
+        .await
+        .remove(0);
     let handoff = HandoffId::from_u128(11);
     let unit_ref = UnitRef {
         handoff,
@@ -114,8 +117,9 @@ async fn work_namespace_seals_and_keeps_live_leases() {
     // Distinct seconds make the order the one the scenario means.
     let now = commonwealth_core::clock::unix_now_secs() as i64;
     let sign = |key: &SigningKey, seq: u64, ts: i64, act: &WorkAct| -> Op<SignedOp> {
-        let payload = commonwealth_work::to_payload(act).expect("a work act is payloadable");
-        let act = RailAct::Record { payload };
+        let act = RailAct::Record {
+            payload: payload_of(act),
+        };
         let sig = sign_ring_op(key, WORK_NAMESPACE, ts, seq, &body_json(&act, None));
         Op::new(
             SignedOp {
@@ -166,8 +170,9 @@ async fn work_namespace_seals_and_keeps_live_leases() {
     );
 
     // ── and the queue survived it ──
-    let admission = journal.admit(&roster, &Ed25519Verifier).unwrap();
-    let projection = commonwealth_work::projection::fold(&admission);
+    // Folded through the rail port's own projection, over the roster file
+    // above — the read the donor makes.
+    let projection = local.work_projection().await.unwrap();
     let mine = ActorKey::parse(donor.actor()).unwrap();
     let now_ms = commonwealth_core::clock::unix_now_millis();
     let held = projection

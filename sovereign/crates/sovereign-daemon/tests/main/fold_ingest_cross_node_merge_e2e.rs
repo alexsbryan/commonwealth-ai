@@ -49,10 +49,11 @@
 //!
 //! What this file drives for real
 //! ------------------------------
-//! * The real fold. Ed25519-signed ops through `commonwealth_rail::admit` and
-//!   `WorkProjection::fold`, not a hand-built one — two units, two DIFFERENT
-//!   lessees, one handoff — over real `ingest:v1` units sealed by
-//!   `commonwealth_work::seal::seal` over real `IngestPayload` bodies.
+//! * The real fold. Ed25519-signed ops admitted and folded by a real cw-rails
+//!   (`common::work_rails`, pb-work-donor: the daemon links no rail), not a
+//!   hand-built projection — two units, two DIFFERENT lessees, one handoff —
+//!   over real `ingest:v1` units sealed by cw-rails' seal door over real
+//!   `IngestPayload` bodies.
 //! * The real partition layout: `CorpusEngine::partition_path`, the same call
 //!   `IngestExecutor::run` makes to choose where a slice lands
 //!   (`ingest_executor.rs`).
@@ -100,17 +101,17 @@ use commonwealth_core::ids::{HandoffId, MeshId};
 use commonwealth_core::knowledge::{HandoffPhase, WorkUnit};
 use commonwealth_core::mesh::Mesh;
 use commonwealth_rail_core::{
-    actor_of, admit, body_json, sign_ring_op, Ed25519Verifier, Op, Person, RailAct, Roster,
-    SignedOp, SigningKey,
+    actor_of, body_json, sign_ring_op, Op, Person, RailAct, Roster, SignedOp, SigningKey,
 };
-use commonwealth_work::projection::{WorkProjection, WorkUnitStatus};
-use commonwealth_work::{ActorKey, Completion, Submission, UnitRef, WorkAct, WORK_NAMESPACE};
 use corpus_engine::CorpusEngine;
 use corpus_index::index::{CorpusIndex, InsertChunk, InsertCodeMeta};
 use corpus_index::types::EmbedFn;
 use kernel_types::judgement::Reason;
+use kernel_types::ActorKey;
 use kernel_types::{ComputeAttribution, Judgement, NodeId, Server};
-use oicp_types::{JobKind, JobRequirements, JobUnit};
+use oicp_types::work::projection::{WorkProjection, WorkUnitStatus};
+use oicp_types::work::{Completion, Submission, UnitRef, WorkAct};
+use oicp_types::{JobKind, JobUnit};
 use serde_json::json;
 use sovereign_daemon::ingest_executor::{fold_coverage_for, IngestPayload, INGEST_KIND};
 use sovereign_daemon::server::internal_router;
@@ -121,6 +122,7 @@ use tempfile::TempDir;
 use crate::common;
 use crate::common::corpus_at;
 use crate::common::ledger_double::RecordingLedger;
+use crate::common::work_rails::{payload_of, WorkRails, WORK_NAMESPACE};
 
 /// The two donor nodes. **The HIGH bytes must differ** — see the module docs.
 pub(crate) fn leader_node() -> NodeId {
@@ -167,7 +169,7 @@ pub(crate) fn ring() -> Roster {
 pub(crate) fn sign(seed: u8, ts: i64, seq: u64, act: &WorkAct) -> Op<SignedOp> {
     let k = key(seed);
     let inner = RailAct::Record {
-        payload: commonwealth_work::to_payload(act).expect("a well-formed work act"),
+        payload: payload_of(act),
     };
     let sig = sign_ring_op(&k, WORK_NAMESPACE, ts, seq, &body_json(&inner, None));
     Op::new(
@@ -195,9 +197,22 @@ fn provenance(node: NodeId, name: &str) -> ComputeAttribution {
     }
 }
 
-/// One real `ingest:v1` unit — sealed by the plane's own sealer over a real
-/// [`IngestPayload`], so the unit hash is the one production would compute.
-pub(crate) fn ingest_unit(corpus: &str, unit_id: u32, start: u64, end: u64) -> JobUnit {
+/// The cw-rails every reading here seals and folds through, its `work` ring
+/// narrowed to [`ring`]'s two donors.
+pub(crate) async fn work_rails() -> WorkRails {
+    WorkRails::spawn(Some(&ring()), "").await
+}
+
+/// One real `ingest:v1` unit — sealed by the plane's own sealer (cw-rails'
+/// seal door) over a real [`IngestPayload`], so the unit hash is the one
+/// production would compute.
+pub(crate) async fn ingest_unit(
+    rails: &WorkRails,
+    corpus: &str,
+    unit_id: u32,
+    start: u64,
+    end: u64,
+) -> JobUnit {
     let payload = serde_json::to_value(IngestPayload::slice(
         corpus,
         corpus,
@@ -205,13 +220,13 @@ pub(crate) fn ingest_unit(corpus: &str, unit_id: u32, start: u64, end: u64) -> J
         WorkUnit::JsonlRange { start, end },
     ))
     .expect("an IngestPayload encodes");
-    commonwealth_work::seal::seal(
-        JobKind::parse(INGEST_KIND).expect("`ingest:v1` parses"),
-        payload,
-        JobRequirements::any(),
-        None,
-    )
-    .expect("seal")
+    rails
+        .seal(
+            &JobKind::parse(INGEST_KIND).expect("`ingest:v1` parses"),
+            vec![payload],
+        )
+        .await
+        .remove(0)
 }
 
 pub(crate) fn unit_ref(handoff: HandoffId, unit: &JobUnit) -> UnitRef {
@@ -247,12 +262,16 @@ pub(crate) fn completion(
 
 /// The SIGNED OPS of the scenario below, before anything folds them. Split out
 /// because two readings need the same journal in two shapes: this file folds it
-/// in memory, and `fold_ingest_coverage_refusal_e2e` writes it onto a real
+/// in cw-rails, and `fold_ingest_coverage_refusal_e2e` writes it onto a real
 /// `RingRail` so `auto_ingest`'s own tick folds it. One spelling (ARCH §10.6).
-pub(crate) fn terminal_handoff_ops(corpus: &str) -> (Vec<Op<SignedOp>>, HandoffId) {
+/// `rails` seals the units.
+pub(crate) async fn terminal_handoff_ops(
+    rails: &WorkRails,
+    corpus: &str,
+) -> (Vec<Op<SignedOp>>, HandoffId) {
     let handoff = HandoffId::from_u128(5_000_002); // stable, arbitrary
-    let a = ingest_unit(corpus, 0, 0, 100);
-    let b = ingest_unit(corpus, 1, 100, 200);
+    let a = ingest_unit(rails, corpus, 0, 0, 100).await;
+    let b = ingest_unit(rails, corpus, 1, 100, 200).await;
 
     let submit = WorkAct::Submit(Submission::new(
         handoff,
@@ -289,30 +308,28 @@ pub(crate) fn terminal_handoff_ops(corpus: &str) -> (Vec<Op<SignedOp>>, HandoffI
 /// Asserts on the way out that the fold really did reach `Complete` with two
 /// distinct lessees — if that ever stops holding, everything below would be
 /// answering a question nobody asked.
-pub(crate) fn terminal_handoff(corpus: &str) -> (WorkProjection, HandoffId) {
-    let (ops, handoff) = terminal_handoff_ops(corpus);
-    let a = ingest_unit(corpus, 0, 0, 100);
-    let b = ingest_unit(corpus, 1, 100, 200);
+pub(crate) async fn terminal_handoff(corpus: &str) -> (WorkProjection, HandoffId) {
+    let rails = work_rails().await;
+    let (ops, handoff) = terminal_handoff_ops(&rails, corpus).await;
+    let a = ingest_unit(&rails, corpus, 0, 0, 100).await;
+    let b = ingest_unit(&rails, corpus, 1, 100, 200).await;
 
-    let projection = commonwealth_work::projection::fold(&admit(
-        &ops,
-        &[],
-        &ring(),
-        WORK_NAMESPACE,
-        &Ed25519Verifier,
-    ));
+    rails.ingest(&ops).await;
+    let projection = rails.projection().await;
 
-    let h = projection
-        .handoffs
-        .get(&handoff)
-        .expect("the submission was admitted");
+    let h = projection.handoffs.get(&handoff).unwrap_or_else(|| {
+        panic!(
+            "the submission was admitted; cw-rails' log:\n{}",
+            rails.log()
+        )
+    });
 
     assert_eq!(
-        commonwealth_work::projection::phase_at(h, NOW_MS),
+        h.phase_at(NOW_MS),
         HandoffPhase::Complete,
         "the scenario requires a TERMINAL handoff — every signal green — before \
          anything is asked of the corpus. Got {:?}",
-        commonwealth_work::projection::phase_at(h, NOW_MS),
+        h.phase_at(NOW_MS),
     );
 
     let lessees: Vec<ActorKey> = [&a, &b]
@@ -626,10 +643,10 @@ pub(crate) async fn probe_installed(index_dir: &std::path::Path, corpus: &str) -
 /// 2. The rule `FoldCoverage` documents — `expected` counts actors, never hosts
 /// — is therefore NOT witnessed here. Witnessing it needs a donor that names
 /// two hosts for one lessee, which is B5's fixture shape, not this one.
-#[test]
-fn the_fold_names_both_verified_donors_and_where_to_find_them() {
+#[tokio::test]
+async fn the_fold_names_both_verified_donors_and_where_to_find_them() {
     const CORPUS: &str = "cw-lift-5g-coverage";
-    let (projection, handoff) = terminal_handoff(CORPUS);
+    let (projection, handoff) = terminal_handoff(CORPUS).await;
 
     let coverage = fold_coverage_for(&projection, &actor(1), CORPUS, NOW_MS)
         .expect("the submitter leads a terminal ingest:v1 handoff for this corpus");
@@ -684,13 +701,13 @@ fn the_fold_names_both_verified_donors_and_where_to_find_them() {
 /// The paired positive is deliberate. `None` is also what a bug that never
 /// matches anything returns, so a test asserting only `None` passes just as
 /// happily against a function that always declines.
-#[test]
-fn only_the_submitter_reads_a_merge_out_of_the_fold() {
+#[tokio::test]
+async fn only_the_submitter_reads_a_merge_out_of_the_fold() {
     use std::io::Write;
     use std::sync::Mutex;
 
     const CORPUS: &str = "cw-lift-5g-leader";
-    let (projection, _handoff) = terminal_handoff(CORPUS);
+    let (projection, _handoff) = terminal_handoff(CORPUS).await;
 
     // The positive control: the submitter DOES get an answer from this exact
     // projection, so a `None` below is about the actor and not about the fold.
@@ -806,7 +823,7 @@ fn only_the_submitter_reads_a_merge_out_of_the_fold() {
 async fn two_donors_on_two_nodes_land_both_slices_in_the_canonical() {
     const CORPUS: &str = "cw-lift-5g-two-nodes";
 
-    let (projection, _handoff) = terminal_handoff(CORPUS);
+    let (projection, _handoff) = terminal_handoff(CORPUS).await;
 
     // Two nodes are two index directories. Nothing copies between them except
     // the HTTP pull below.

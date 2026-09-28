@@ -37,6 +37,7 @@ use sovereign_contracts::types::{
 
 #[path = "ledger_double.rs"]
 pub mod ledger_double;
+pub mod work_rails;
 
 // ── Corpus layout ───────────────────────────────────────────────
 

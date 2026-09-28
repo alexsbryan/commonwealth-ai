@@ -52,9 +52,9 @@
 
 use commonwealth_core::ids::HandoffId;
 use commonwealth_core::knowledge::{HandoffPhase, MAX_UNIT_ATTEMPTS};
-use commonwealth_work::projection::{WorkProjection, WorkUnitStatus};
-use commonwealth_work::{Submission, WorkAct};
 use corpus_index::index::CorpusIndex;
+use oicp_types::work::projection::{WorkProjection, WorkUnitStatus};
+use oicp_types::work::{Submission, WorkAct};
 use oicp_types::JobKind;
 use sovereign_daemon::ingest_executor::{fold_coverage_for, FoldCoverage, INGEST_KIND};
 use sovereign_daemon::server::internal_router;
@@ -64,8 +64,8 @@ use tempfile::TempDir;
 use crate::common;
 use crate::common::corpus_at;
 use crate::fold_ingest_cross_node_merge_e2e::{
-    actor, completion, ingest_unit, leader_node, node_state, peer_node, probe_canonical, ring,
-    sign, unit_ref, write_donor_partition, LEADER_ONLY_TERM, PEER_ONLY_TERM,
+    actor, completion, ingest_unit, leader_node, node_state, peer_node, probe_canonical, sign,
+    unit_ref, work_rails, write_donor_partition, LEADER_ONLY_TERM, PEER_ONLY_TERM,
 };
 
 /// Well past the last lease's expiry — see [`abandoned_handoff`]'s timeline.
@@ -96,11 +96,12 @@ const NOW_MS: u64 = 2_000_000;
 /// three units, one of them terminal-`Failed`-without-a-verdict, and the
 /// handoff nevertheless `Complete`. If any of that stops holding, everything
 /// below is answering a question nobody asked.
-fn abandoned_handoff(corpus: &str) -> (WorkProjection, HandoffId, String) {
+async fn abandoned_handoff(corpus: &str) -> (WorkProjection, HandoffId, String) {
+    let rails = work_rails().await;
     let handoff = HandoffId::from_u128(5_000_005);
-    let a = ingest_unit(corpus, 0, 0, 100);
-    let b = ingest_unit(corpus, 1, 100, 200);
-    let c = ingest_unit(corpus, 2, 200, 300);
+    let a = ingest_unit(&rails, corpus, 0, 0, 100).await;
+    let b = ingest_unit(&rails, corpus, 1, 100, 200).await;
+    let c = ingest_unit(&rails, corpus, 2, 200, 300).await;
 
     let submit = WorkAct::Submit(Submission::new(
         handoff,
@@ -132,13 +133,8 @@ fn abandoned_handoff(corpus: &str) -> (WorkProjection, HandoffId, String) {
         sign(2, 1200, 3, &WorkAct::Lease(unit_ref(handoff, &c))),
     ];
 
-    let projection = commonwealth_work::projection::fold(&commonwealth_rail_core::admit(
-        &ops,
-        &[],
-        &ring(),
-        commonwealth_work::WORK_NAMESPACE,
-        &commonwealth_rail_core::Ed25519Verifier,
-    ));
+    rails.ingest(&ops).await;
+    let projection = rails.projection().await;
 
     let h = projection
         .handoffs
@@ -171,7 +167,7 @@ fn abandoned_handoff(corpus: &str) -> (WorkProjection, HandoffId, String) {
         ),
     }
     assert_eq!(
-        commonwealth_work::projection::phase_at(h, NOW_MS),
+        h.phase_at(NOW_MS),
         HandoffPhase::Complete,
         "the handoff is terminal — every unit settled, one of them badly. \
          A merge is reached only from here.",
@@ -214,10 +210,10 @@ async fn two_donors_on_disk(
 /// `the_fold_names_both_verified_donors_and_where_to_find_them`, which asserts
 /// `abandoned` is EMPTY on a handoff where nothing failed. Without it, a
 /// `fold_coverage_for` that reported every unit as abandoned would pass here.
-#[test]
-fn a_unit_whose_attempts_are_spent_is_named_in_the_coverage() {
+#[tokio::test]
+async fn a_unit_whose_attempts_are_spent_is_named_in_the_coverage() {
     const CORPUS: &str = "cw-lift-5g-abandoned";
-    let (projection, handoff, abandoned_hash) = abandoned_handoff(CORPUS);
+    let (projection, handoff, abandoned_hash) = abandoned_handoff(CORPUS).await;
 
     let coverage = fold_coverage_for(&projection, &actor(1), CORPUS, NOW_MS)
         .expect("the submitter leads a terminal ingest:v1 handoff for this corpus");
@@ -279,7 +275,7 @@ fn a_unit_whose_attempts_are_spent_is_named_in_the_coverage() {
 #[tokio::test]
 async fn the_merge_proceeds_with_the_slices_that_exist() {
     const CORPUS: &str = "cw-lift-5g-abandoned-merge";
-    let (projection, _handoff, _abandoned) = abandoned_handoff(CORPUS);
+    let (projection, _handoff, _abandoned) = abandoned_handoff(CORPUS).await;
 
     let leader_home = TempDir::new().expect("leader tempdir");
     let peer_home = TempDir::new().expect("peer tempdir");
@@ -466,7 +462,7 @@ async fn a_corpus_missing_an_abandoned_slice_records_nothing_that_says_so() {
     );
 
     // The partial corpus: three units, one abandoned.
-    let (partial_proj, _h, _u) = abandoned_handoff(PARTIAL);
+    let (partial_proj, _h, _u) = abandoned_handoff(PARTIAL).await;
     let partial_cov = fold_coverage_for(&partial_proj, &actor(1), PARTIAL, NOW_MS)
         .expect("the submitter leads the partial handoff");
     assert!(
@@ -478,7 +474,7 @@ async fn a_corpus_missing_an_abandoned_slice_records_nothing_that_says_so() {
     merge_one(&leader_state, PARTIAL, &partial_cov).await;
 
     // The whole corpus: two units, both delivered. Same shape on disk.
-    let (whole_proj, _h2) = crate::fold_ingest_cross_node_merge_e2e::terminal_handoff(WHOLE);
+    let (whole_proj, _h2) = crate::fold_ingest_cross_node_merge_e2e::terminal_handoff(WHOLE).await;
     let whole_cov = fold_coverage_for(&whole_proj, &actor(1), WHOLE, 400_000)
         .expect("the submitter leads the whole handoff");
     assert!(!whole_cov.is_partial(), "control: nothing abandoned here");

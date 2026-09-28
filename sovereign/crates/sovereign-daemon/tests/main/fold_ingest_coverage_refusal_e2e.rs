@@ -51,7 +51,7 @@
 use std::sync::{Arc, Mutex};
 
 use commonwealth_rail_core::SigningKey;
-use commonwealth_work::WORK_NAMESPACE;
+use crate::common::work_rails::WORK_NAMESPACE;
 use corpus_index::corpus::Corpus;
 use corpus_index::index::CorpusIndex;
 use sovereign_daemon::ingest_executor::fold_coverage_for;
@@ -142,7 +142,7 @@ async fn leader_alone_with_seed(
 #[tokio::test]
 async fn a_two_donor_fold_missing_its_peer_refuses_and_writes_no_canonical() {
     const CORPUS: &str = "cw-lift-5g-refusal";
-    let (projection, _handoff) = terminal_handoff(CORPUS);
+    let (projection, _handoff) = terminal_handoff(CORPUS).await;
     let (_home, dir, state) = leader_alone(CORPUS).await;
 
     let coverage = fold_coverage_for(&projection, &actor(1), CORPUS, NOW_MS)
@@ -338,7 +338,7 @@ impl tracing_subscriber::fmt::MakeWriter<'_> for BufWriter {
 }
 
 /// Put the fixture's journal on a REAL `RingRail` under this node's key, so
-/// `work_donor::fold_now` — which the tick loop calls, and which reads the
+/// `ingest_executor::fold_now` — which the tick loop calls, and which reads the
 /// rail rather than being handed a projection — folds the same handoff every
 /// other reading in this campaign uses.
 ///
@@ -353,7 +353,10 @@ impl tracing_subscriber::fmt::MakeWriter<'_> for BufWriter {
 /// has to BE the leader for the arm under test to be reached at all — and
 /// return it as a construction seed, since the rail is a construction argument
 /// now (DC §4.2 "Construction is staged, and parts are total").
-fn fold_seed(rail_dir: &std::path::Path, corpus: &str) -> sovereign_daemon::state::FabricSeed {
+async fn fold_seed(
+    rail_dir: &std::path::Path,
+    corpus: &str,
+) -> sovereign_daemon::state::FabricSeed {
     let signer: SigningKey = key(1);
     let local = LocalRingRail::new(rail_dir, Arc::new(signer));
     let journal = local
@@ -361,7 +364,9 @@ fn fold_seed(rail_dir: &std::path::Path, corpus: &str) -> sovereign_daemon::stat
         .journal(WORK_NAMESPACE)
         .expect("the work journal");
     journal.set_roster(&ring()).expect("write the roster");
-    let (ops, _handoff) = terminal_handoff_ops(corpus);
+    // Sealed by a cw-rails of the same ring; the daemon links no rail.
+    let rails = crate::fold_ingest_cross_node_merge_e2e::work_rails().await;
+    let (ops, _handoff) = terminal_handoff_ops(&rails, corpus).await;
     let appended = journal.ingest_all(&ops).expect("ingest the fixture ops");
     assert_eq!(
         appended,
@@ -429,7 +434,7 @@ async fn the_folds_refusal_is_final_and_the_disk_path_never_runs() {
     let daemon_port = dead_peer_addr().await.port();
 
     let rail_home = TempDir::new().expect("rail tempdir");
-    let seed = fold_seed(rail_home.path(), CORPUS);
+    let seed = fold_seed(rail_home.path(), CORPUS).await;
     let (_home, dir, state) = leader_alone_with_seed(CORPUS, seed).await;
 
     let buf = Arc::new(Mutex::new(Vec::new()));
@@ -495,7 +500,7 @@ async fn without_a_fold_the_same_tick_publishes_the_partial_canonical() {
 
     let daemon_port = dead_peer_addr().await.port();
     let (_home, dir, state) = leader_alone(CORPUS).await;
-    // No `install_fold`: `work_donor::fold_now` finds no rail and returns
+    // No `install_fold`: `ingest_executor::fold_now` finds no rail and returns
     // `None`, which is every corpus ingested the legacy way.
     assert!(
         state.ring_rail().is_none(),

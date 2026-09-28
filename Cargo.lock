@@ -12643,7 +12643,6 @@ dependencies = [
  "commonwealth-media",
  "commonwealth-rail-core",
  "commonwealth-transport",
- "commonwealth-work",
  "corpus-engine",
  "corpus-engine-notes",
  "corpus-engine-scip",

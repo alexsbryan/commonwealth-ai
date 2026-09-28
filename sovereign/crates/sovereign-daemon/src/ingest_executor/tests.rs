@@ -1,11 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `ingest_executor`'s tests. A sibling file for the reason
-//! `work_donor/tests.rs` is one — ARCH §3.1's ceiling — and every one names
-//! the failing input it exists to catch (ARCH §18.1).
+//! `ingest_executor`'s tests. A sibling file for ARCH §3.1's ceiling, and
+//! every one names the failing input it exists to catch (ARCH §18.1).
 use super::*;
 
-use commonwealth_work::executor::JobExecutorRegistry;
-use commonwealth_work::seal;
 use sovereign_contracts::oicp::JobRequirements;
 
 fn engine() -> (tempfile::TempDir, Arc<CorpusEngine>) {
@@ -28,14 +25,17 @@ fn executor() -> (tempfile::TempDir, IngestExecutor) {
     (dir, IngestExecutor::new(e))
 }
 
+/// A unit of `kind` over `payload`. Unsealed: `validate` and `execute` read
+/// the kind and the payload, never the hash — the seal is the fold's check,
+/// in cw-rails, and this crate links no rail since pb-work-donor.
 fn unit_of(kind: &str, payload: Value) -> JobUnit {
-    seal::seal(
-        JobKind::parse(kind).expect("test kind"),
+    JobUnit {
+        kind: JobKind::parse(kind).expect("test kind"),
+        unit_hash: "0".repeat(64),
         payload,
-        JobRequirements::any(),
-        None,
-    )
-    .expect("seal")
+        requirements: JobRequirements::any(),
+        tenant: None,
+    }
 }
 
 fn good_payload() -> Value {
@@ -92,7 +92,7 @@ fn a_unit_of_another_kind_is_refused_and_names_which_rule() {
 /// The failing input: a payload with no `corpus_id`. A slice with no corpus
 /// names no partition directory, so the ingest would write into a path derived
 /// from an empty string. `validate` runs BEFORE the donor appends a `Lease`
-/// (`work_donor.rs:437`), so refusing here costs the unit nothing — the
+/// (cw-rails' donor, over the origin's validate door), so refusing here costs the unit nothing — the
 /// difference between `NeverRan` and a burnt attempt.
 #[test]
 fn a_payload_with_no_corpus_is_refused_before_the_lease() {
@@ -203,24 +203,6 @@ fn this_donor_can_cover_the_isolation_this_executor_declares() {
     assert_eq!(exec.descriptor().isolation, Isolation::InProcess);
 }
 
-/// The registry resolves this executor under the kind its own descriptor
-/// claims, and refuses a second claimant. The failing input is an executor
-/// registered under a kind it does not publish — `register` reads the
-/// descriptor rather than a second argument precisely so that cannot happen.
-#[test]
-fn the_registry_resolves_this_executor_under_the_kind_it_claims() {
-    let (_dir, engine) = engine();
-    let mut registry = JobExecutorRegistry::new();
-    registry
-        .register(Arc::new(IngestExecutor::new(Arc::clone(&engine))))
-        .expect("first registration");
-    let kind = JobKind::parse(INGEST_KIND).expect("kind");
-    assert!(registry.resolve(&kind).is_some());
-    registry
-        .register(Arc::new(IngestExecutor::new(engine)))
-        .expect_err("a second executor for one kind must be refused, not overwritten");
-}
-
 /// **THE `Complete`/`Fail` BOUNDARY FOR THIS KIND.**
 ///
 /// The failing input is an edit to `run` that returns
@@ -289,7 +271,7 @@ fn the_lease_interval_is_derived_from_the_lease_the_ingest_queue_already_owns() 
 }
 
 /// A cancelled unit reports NOTHING, and the donor is what enforces that
-/// (`work_donor.rs:795`). This is the executor's half: the flag the donor sets
+/// (cw-rails' donor, `run_unit`). This is the executor's half: the flag the donor sets
 /// is the one the ingest loop reads, through the engine's own registry.
 ///
 /// The failing input is an `execute` that swallows cancellation and returns a

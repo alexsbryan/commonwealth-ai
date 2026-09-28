@@ -80,7 +80,6 @@ use std::time::Duration;
 use std::collections::BTreeSet;
 
 use commonwealth_core::knowledge::{HandoffPhase, UnitId, WorkUnit, LEASE_MS, MAX_UNIT_ATTEMPTS};
-use commonwealth_work::executor::{subject_of, ExecuteFuture, JobContext, JobError, JobExecutor};
 use corpus_engine::{CorpusEngine, IngestProgress, ProgressCallback};
 use kernel_types::quality::VerdictSource;
 use kernel_types::ActorKey;
@@ -89,6 +88,7 @@ use kernel_types::{Judgement, Reason};
 use kernel_types::{NodeId, Server};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use sovereign_contracts::oicp::work::exec::{subject_of, JobContext, JobError};
 use sovereign_contracts::oicp::work::projection::{WorkHandoff, WorkProjection, WorkUnitStatus};
 use sovereign_contracts::oicp::work::refusal::WorkRefusal;
 // Through `sovereign_contracts`' re-export, not a direct dep on `oicp-types`
@@ -427,8 +427,11 @@ impl IngestExecutor {
     }
 }
 
-impl JobExecutor for IngestExecutor {
-    fn descriptor(&self) -> JobExecutorDescriptor {
+// The executor seam's three answers, as inherent methods: the trait is
+// commonwealth-work's and this crate links no rail since pb-work-donor. The
+// execute origin (`crate::work_origin`) serves each one on its door.
+impl IngestExecutor {
+    pub fn descriptor(&self) -> JobExecutorDescriptor {
         JobExecutorDescriptor {
             kind: self.kind.clone(),
             // See the module doc: this runs on the daemon's own threads.
@@ -524,7 +527,7 @@ impl JobExecutor for IngestExecutor {
         }
     }
 
-    fn validate(&self, unit: &JobUnit) -> Result<(), WorkRefusal> {
+    pub fn validate(&self, unit: &JobUnit) -> Result<(), WorkRefusal> {
         if unit.kind != self.kind {
             let refusal = if unit.kind.is_skew_of(&self.kind) {
                 WorkRefusal::VersionSkew {
@@ -556,8 +559,12 @@ impl JobExecutor for IngestExecutor {
         Ok(())
     }
 
-    fn execute<'a>(&'a self, unit: &'a JobUnit, ctx: &'a JobContext) -> ExecuteFuture<'a> {
-        Box::pin(self.run(unit, ctx))
+    pub async fn execute(
+        &self,
+        unit: &JobUnit,
+        ctx: &JobContext,
+    ) -> Result<(Judgement, Value), JobError> {
+        self.run(unit, ctx).await
     }
 }
 
