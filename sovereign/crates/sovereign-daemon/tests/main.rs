@@ -94,6 +94,8 @@ mod gossip_route;
 mod guest_lender_routing;
 #[path = "main/guest_over_iroh_e2e.rs"]
 mod guest_over_iroh_e2e;
+#[path = "main/ingest_origin_e2e.rs"]
+mod ingest_origin_e2e;
 #[path = "main/injection_order.rs"]
 mod injection_order;
 #[path = "main/internal_gate_e2e.rs"]
@@ -216,3 +218,5 @@ mod turn_reshape_fidelity;
 mod turn_surface;
 #[path = "main/wire_view_drift.rs"]
 mod wire_view_drift;
+#[path = "main/work_drive_census.rs"]
+mod work_drive_census;

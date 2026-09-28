@@ -117,16 +117,19 @@ binary = "debug/cw-rails"
 # relay, no n0 DNS, the two reach each other on direct addresses. It is two
 # processes, so it is not the mesh of one that could pass by having nobody to
 # disagree with.
-pass = "founded '${MESH}', joined it by the founder's invite, converged a roster with '${PEER}', reached '${OFFERER}' as an online library, a GET through ${URL} answered HTTP ${THROUGH}, an act the joiner signed reached the founder through cw-rails' round, relay candidates answered (${RELAY_KIND} recommended); after a rotate the old invite answered ${OLD_JOIN} and the new one admitted a third node to '${JOINED}', which created, switched back to '${SWITCHED}', forgot '${FORGOT}' and left '${LEFT}'; after the joiner was killed the founder rebuilt its endpoint (${REBUILDS} rebuild(s))"
+pass = "founded '${MESH}', joined it by the founder's invite, converged a roster with '${PEER}', reached '${OFFERER}' as an online library, a GET through ${URL} answered HTTP ${THROUGH}, an act the joiner signed reached the founder through cw-rails' round, relay candidates answered (${RELAY_KIND} recommended); after a rotate the old invite answered ${OLD_JOIN} and the new one admitted a third node to '${JOINED}', which created, switched back to '${SWITCHED}', forgot '${FORGOT}' and left '${LEFT}'; after the joiner was killed the founder rebuilt its endpoint (${REBUILDS} rebuild(s)); the founder, upgraded with [work_offer], kept a '${OFFERED}' offer on the fold and its own donor completed a donated unit inside ${IMAGE} (${VERDICT}, stdout '${RAN}')"
 steps = [
   { do = "input", var = "MESH", value = "cw-rails-lift-mesh" },
+  # The donor's boundary (pb-work-donor): the image a donated process:v1 unit
+  # runs inside. The operator's declaration, as in [lift.cw-work].
+  { do = "input", var = "IMAGE", env = "CW_WORK_IMAGE", default = "localhost/sovereign-work:latest" },
   { do = "ports", vars = ["ORIGIN_PORT", "FOUNDER_PORT", "LISTEN_PORT"] },
   # A tiny file, so a GET through the bridge has something real to fetch.
   { do = "write", path = "${SANDBOX}/library/index.html", text = "program-lift origin\n" },
   # The fixture origin authenticates NOTHING, which is why the holder's
   # admission decision has to be right.
   { do = "spawn", id = "origin", argv = ["python3", "-m", "http.server", "${ORIGIN_PORT}", "--bind", "127.0.0.1", "--directory", "${SANDBOX}/library"], log = "origin.log" },
-  { do = "write", path = "${SANDBOX}/founder/rails.toml", text = "name = \"cw-rails-founder\"\nlisten = ${FOUNDER_PORT}\n\n[media]\norigin = \"127.0.0.1:${ORIGIN_PORT}\"\n" },
+  { do = "write", path = "${SANDBOX}/founder/rails.toml", text = "name = \"cw-rails-founder\"\nlisten = ${FOUNDER_PORT}\n\n[media]\norigin = \"127.0.0.1:${ORIGIN_PORT}\"\n\n[work_offer]\nkinds = [\"process:v1\"]\nmax_concurrent = 1\nyield_to_foreground = false\naccept = \"anyone\"\nimage = \"${IMAGE}\"\n" },
   { do = "exec", argv = ["${BIN}", "found", "${MESH}", "--data-dir", "${SANDBOX}/founder"], log = "found.log", fail = "the lifted binary could not found a mesh (see ${SANDBOX}/found.log)" },
   # The founder's watchdog polls every second with a one-second grace and no
   # rebuild cooldown, so the self-heal step at the end is seconds past the loss.
@@ -190,6 +193,21 @@ steps = [
   # fresh endpoint re-armed the peer-path term.
   { do = "poll", url = "http://127.0.0.1:${FOUNDER_PORT}/v1/mesh/status", path = "self_reachability[degraded=false].rebuilds", var = "REBUILDS", timeout = 10, alive = "founder", fail = "the founder stayed degraded after its rebuild (see ${SANDBOX}/founder.log)" },
   { do = "require", value = "${REBUILDS}", match = "^[1-9]", fail = "the founder recovered with ${REBUILDS} rebuilds on record" },
+  # The one donor drive (pb-work-donor): cw-rails runs it. The founder's
+  # rails.toml carries [work_offer] as `svrn mesh up`'s handover writes it, so
+  # its offer is on the fold, and a process:v1 unit sealed and submitted
+  # through its own doors completes inside the image. A host with no runtime
+  # or no image has no boundary to run it in: could-not-judge, owed on the
+  # host with podman.
+  { do = "exec", argv = ["sh", "-c", "podman image exists ${IMAGE}"], log = "podman.log", on_error = "abstain", fail = "no container runtime or no image ${IMAGE} on this host, so a donated process:v1 unit has no boundary to run in; run this lift on the host with podman (see ${SANDBOX}/podman.log)" },
+  { do = "get", url = "http://127.0.0.1:${FOUNDER_PORT}/v1/rail/actor", path = "actor", var = "FOUNDER_ACTOR", fail = "the founder named no signing actor: ${BODY}" },
+  { do = "poll", url = "http://127.0.0.1:${FOUNDER_PORT}/v1/work/projection", path = "offers.${FOUNDER_ACTOR}.kinds", var = "OFFERED", doc = "work", timeout = 30, alive = "founder", fail = "the founder published no offer from its [work_offer] within 30s (see ${SANDBOX}/founder.log)" },
+  { do = "require", value = "${OFFERED}", match = "^process:v1$", fail = "the founder's offer names ${OFFERED}, not process:v1" },
+  { do = "call", url = "http://127.0.0.1:${FOUNDER_PORT}/v1/work/seal", json = { kind = "process:v1", units = [{ payload = { argv = ["uname", "-s"], timeout_secs = 120, result = "stdout" }, requirements = {} }] }, path = "units.unit_hash", var = "UNIT", fail = "the seal door sealed nothing: ${BODY}" },
+  { do = "call", url = "http://127.0.0.1:${FOUNDER_PORT}/v1/work/submit", json = { kind = "process:v1", units = [{ kind = "process:v1", unit_hash = "${UNIT}", payload = { argv = ["uname", "-s"], timeout_secs = 120, result = "stdout" }, requirements = {} }] }, path = "seq", var = "SUBMITTED", fail = "the submit door appended nothing: ${BODY}" },
+  { do = "poll", url = "http://127.0.0.1:${FOUNDER_PORT}/v1/rail/log?namespace=work", path = "ops.payload.outcome.verdict", var = "VERDICT", doc = "worklog", timeout = 120, alive = "founder", fail = "the donated unit ${UNIT} reached no report within 120s: cw-rails' donor did not take or finish it (see ${SANDBOX}/founder.log)" },
+  { do = "require", value = "${VERDICT}", match = "^passed$", fail = "the donated unit reported ${VERDICT}, not a passed verdict (see ${SANDBOX}/founder.log)" },
+  { do = "select", doc = "worklog", path = "ops.payload.result.stdout", var = "RAN", abstain = "the completion carried no stdout" },
 ]
 
 # ── cw-work — cmnwlth's work peer, a package-only donor ─────────────────────
