@@ -106,7 +106,13 @@ async fn queue_mode_handoff(f: &Fixture) -> (HandoffId, ShardManager) {
     // Queue mode is `partitions.is_empty() && phase != legacy`
     // (`IngestionHandoff::is_queue_mode`). `new_queue` gives exactly that; the
     // id is overridden so the gossip key and the queue key are the same one.
-    let mut handoff = IngestionHandoff::new_queue(CORPUS, "test-recipe", embed_model(), f.local);
+    let mut handoff = IngestionHandoff::new_queue(
+        CORPUS,
+        "test-recipe",
+        embed_model(),
+        f.local,
+        commonwealth_core::clock::unix_now_millis(),
+    );
     handoff.handoff_id = handoff_id;
     handoff.phase = HandoffPhase::Merging;
     assert!(

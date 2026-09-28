@@ -156,6 +156,7 @@ pub fn plan_collaborative_ingestion(
         recipe_id,
         local_embed_model.clone(),
         partitions,
+        commonwealth_core::clock::unix_now_millis(),
     ))
 }
 
@@ -246,6 +247,7 @@ pub fn plan_collaborative_ingestion_jsonl(
         recipe_id,
         local_embed_model.clone(),
         partitions,
+        commonwealth_core::clock::unix_now_millis(),
     ))
 }
 
@@ -335,6 +337,7 @@ pub fn plan_collaborative_ingestion_jsonl_sharded(
         recipe_id,
         local_embed_model.clone(),
         partitions,
+        commonwealth_core::clock::unix_now_millis(),
     ))
 }
 

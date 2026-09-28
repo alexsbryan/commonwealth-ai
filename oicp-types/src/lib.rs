@@ -68,6 +68,7 @@ pub mod version;
 /// The `work` plane's wire vocabulary (pb-work-doors): acts, the folded
 /// queue, refusals and the `process:v1` payload.
 pub mod work;
+pub mod work_queue;
 
 pub use completion::{
     latency_to_speed, speed_to_latency, CompletionRequest, CompletionResponse, Depth, FinishReason,

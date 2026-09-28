@@ -38,12 +38,10 @@ use commonwealth_core::ids::NodeId;
 
 use crate::store::MeshStore;
 
-/// `app_id` used when publishing or scanning processed-shards
-/// announcements. Shared by `corpus-engine`'s other gossip blobs
-/// (handoffs, collaborate state) — the namespace is "things the
-/// corpus pipeline gossips," not "the processed-shards table
-/// specifically."
-pub const PROCESSED_SHARDS_APP_ID: &str = "corpus-engine";
+// Lives beside the queue records in `oicp_types::work_queue` since
+// pb-mesh-exit-core: cw-rails' ledger, grants and the mesh ledger port all
+// name it, so it has one spelling. Re-exported at its historical path.
+pub use oicp_types::work_queue::PROCESSED_SHARDS_APP_ID;
 
 /// Build the canonical key shape this peer publishes under for
 /// `corpus_id`. The hex-encoded node id is appended so each peer

@@ -569,6 +569,7 @@ pub async fn corpus_collaborate(
             recipe_id.to_string(),
             local_embed_model.clone(),
             self_id,
+            sovereign_time::unix_millis(),
         );
         // Carry the per-job allowlist into the gossiped handoff so peers
         // self-enforce enrollment. A local-only corpus reaching this point
