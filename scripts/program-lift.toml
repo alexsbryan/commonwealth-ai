@@ -93,9 +93,36 @@ steps = [
   { do = "require", value = "${BODY}", match = "\"error\"", fail = "with serve stopped the 503 named no error: ${BODY}" },
 ]
 
-# ── ingest — the recipe pipeline (a library plus one CLI; no binary yet) ────
+# ── ingest — the recipe pipeline and its one CLI, svrn-ingest ───────────────
 [lift.ingest]
 package = "ingest"
+build = ["-p", "sovereign-pipeline", "--bin", "svrn-ingest"]
+binary = "debug/svrn-ingest"
+
+[lift.ingest.run]
+# The "ingest in CI" developer (pb-ingest): an index builds with ONLY an
+# embeddings endpoint. The stub serves `/v1/models` and `/v1/embeddings` and
+# nothing else; its one model id is an embedder, so a chat-model resolution
+# refuses, and any chat request it receives fails the smoke. No daemon, no
+# chat model, no cw-rails.
+pass = "indexed a fixture folder as a non-empty '${CORPUS}' against an embeddings-only stub with --no-enrich, wrote ${META}, and the stub was asked ${EMBED_CALLS} embedding call(s) and no chat"
+steps = [
+  { do = "input", var = "CORPUS", value = "lift-ingest-fixture" },
+  { do = "ports", vars = ["EMBED_PORT"] },
+  { do = "write", path = "${SANDBOX}/stub.py", text = "import http.server, json, sys, zlib\nclass H(http.server.BaseHTTPRequestHandler):\n    def send(self, code, doc):\n        b = json.dumps(doc).encode()\n        self.send_response(code)\n        self.send_header('content-type', 'application/json')\n        self.send_header('content-length', str(len(b)))\n        self.end_headers()\n        self.wfile.write(b)\n    def do_GET(self):\n        if self.path == '/v1/models':\n            self.send(200, {'data': [{'id': 'Qwen3-Embedding-0.6B'}]})\n        else:\n            self.send(404, {'error': 'embeddings-only stub'})\n    def do_POST(self):\n        body = json.loads(self.rfile.read(int(self.headers.get('content-length', 0))) or b'{}')\n        if self.path != '/v1/embeddings':\n            self.send(404, {'error': 'embeddings-only stub'})\n            return\n        inputs = body.get('input', [])\n        inputs = [inputs] if isinstance(inputs, str) else inputs\n        vec = lambda s: [((zlib.crc32(s.encode()) >> k) & 255) / 255.0 + 0.01 for k in range(0, 32, 4)]\n        self.send(200, {'data': [{'index': i, 'embedding': vec(s)} for i, s in enumerate(inputs)]})\nhttp.server.HTTPServer(('127.0.0.1', int(sys.argv[1])), H).serve_forever()\n" },
+  { do = "write", path = "${SANDBOX}/fixture/harbour.txt", text = "The harbour master keeps two ledgers and admits to one.\n\nThe second is not secret, only inconvenient to explain.\n" },
+  { do = "write", path = "${SANDBOX}/fixture/tides.txt", text = "Both ledgers agree about the tides and about nothing else.\n\nThe tide tables are printed each spring and pinned by the door.\n" },
+  { do = "write", path = "${SANDBOX}/recipe.toml", text = "[corpus]\nid = \"${CORPUS}\"\nname = \"lift fixture\"\ndescription = \"program-lift ingest smoke\"\nlicense = \"CC0\"\nmesh_sharing = false\n\n[acquire]\ntype = \"local_file\"\npath = \"${SANDBOX}/fixture\"\n\n[extract]\ntype = \"plaintext\"\n\n[chunk]\ntype = \"paragraph\"\nmax_chars = 512\noverlap_chars = 64\n\n[index]\nfts = true\nvector = true\n" },
+  { do = "spawn", id = "embed", argv = ["python3", "-u", "${SANDBOX}/stub.py", "${EMBED_PORT}"], log = "embed.log" },
+  { do = "poll", url = "http://127.0.0.1:${EMBED_PORT}/v1/models", path = "data.id", var = "EMBED_MODEL", timeout = 30, alive = "embed", fail = "the embeddings stub never answered (see ${SANDBOX}/embed.log)" },
+  { do = "exec", argv = ["${BIN}", "ingest", "${SANDBOX}/recipe.toml", "--base-url", "http://127.0.0.1:${EMBED_PORT}/v1", "--no-enrich", "--data-dir", "${SANDBOX}/data"], log = "ingest.log", env = { HOME = "${SANDBOX}/home", SOVEREIGN_DATA_DIR = "${SANDBOX}/data", SVRNMESH_DATA_DIR = "${SANDBOX}/svrnmesh" }, fail = "svrn-ingest did not index the fixture against an embeddings-only endpoint (see ${SANDBOX}/ingest.log)" },
+  { do = "count", file = "${SANDBOX}/ingest.log", pattern = "^indexed: [1-9][0-9]* chunks", var = "INDEXED", min = 1, fail = "svrn-ingest exited 0 without reporting a non-empty index (see ${SANDBOX}/ingest.log)" },
+  { do = "input", var = "META", value = "${SANDBOX}/data/indexes/${CORPUS}/_corpus_meta.json" },
+  { do = "exists", path = "${META}", fail = "svrn-ingest reported an index and wrote no ${META}" },
+  { do = "exists", path = "${SANDBOX}/data/indexes/${CORPUS}/chunks.lance", fail = "svrn-ingest reported an index and wrote no chunks.lance" },
+  { do = "count", file = "${SANDBOX}/embed.log", pattern = "POST /v1/embeddings", var = "EMBED_CALLS", min = 1, fail = "the index exists but the stub embedder was never asked" },
+  { do = "exec", argv = ["sh", "-c", "! grep -q 'chat/completions' '${SANDBOX}/embed.log'"], log = "no-chat.log", fail = "svrn-ingest sent a chat request under --no-enrich (see ${SANDBOX}/embed.log)" },
+]
 
 # ── cmnwlth — the endpoint router with a roster: the cw-rails daemon ────────
 # The closure is cw-rails', not the whole package's: sovereign-mesh still
