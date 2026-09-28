@@ -29,14 +29,18 @@ commonwealth-discovery = { workspace = true }
 # daemon carries the exception with the same commit.
 commonwealth-rail = { workspace = true }
 # The `work` fold (fp-45): `/v1/work/projection` folds the journal this
-# daemon owns. Default features only — `process` (tokio's process half, the
-# executor seam) stays off; the forbid row's except carries the cost (+1).
-commonwealth-work = { workspace = true }
+# daemon owns. `process` since pb-work-doors: the attribution door runs
+# `attribution::of_sandbox` over `Sandbox::probe`, both behind it; the
+# forbid row's except carries the measured cost.
+commonwealth-work = { workspace = true, features = ["process"] }
 # The mesh store (fp-77): one `MeshStore::in_memory()` projected from this
 # daemon's journals, served at `/v1/mesh/kv/*`. Default features only —
 # `sqlite` stays off, so the closure gains this crate and nothing else (the
 # forbid row's except carries the census).
 commonwealth-state = { workspace = true }
+# The job vocabulary the work doors decode (pb-work-doors). A shared leaf,
+# already in this closure through commonwealth-work.
+oicp-types = { workspace = true }
 # The `/v1/mesh/kv` wire encodes a value as base64 — already in the closure
 # through commonwealth-state, at the one version the workspace holds.
 base64 = "0.22"

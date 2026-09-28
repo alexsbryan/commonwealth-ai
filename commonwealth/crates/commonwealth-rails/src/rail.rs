@@ -224,7 +224,7 @@ fn journal_of(rail: &RingRail, namespace: &str) -> Result<Arc<RingJournal>, Resp
 /// roster and the clock, and on success the act is signed as the node with
 /// `on_behalf_of` = the attested name. A refused attestation is a 403
 /// naming the [`AttestRefusal`], and nothing is written.
-async fn append_act(
+pub(crate) async fn append_act(
     rail: &RingRail,
     journal: &Arc<RingJournal>,
     body: serde_json::Value,

@@ -114,6 +114,13 @@ fn mesh_bundle(daemon: Arc<RailsDaemon>) -> RouteBundle {
         .route("/v1/rail/compact", post(crate::rail::journal_compact))
         // The `work` queue, folded where its journal lives (fp-45).
         .route("/v1/work/projection", get(crate::work::projection))
+        // The submitter's doors (pb-work-doors): seal, submit, the refusal
+        // survey and the attribution reference, each over the one
+        // implementation in commonwealth-work.
+        .route("/v1/work/seal", post(crate::work::seal_units))
+        .route("/v1/work/submit", post(crate::work::submit))
+        .route("/v1/work/refusals", post(crate::work::refusals))
+        .route("/v1/work/attribution", get(crate::work::attribution))
         .with_state(daemon)
 }
 

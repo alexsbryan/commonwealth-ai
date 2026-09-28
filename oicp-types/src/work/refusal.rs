@@ -6,6 +6,7 @@
 
 use kernel_types::quality::Precondition;
 use kernel_types::{ActorKey, Judgement};
+use serde::{Deserialize, Serialize};
 
 use crate::{Isolation, JobKind};
 
@@ -21,7 +22,7 @@ use crate::{Isolation, JobKind};
 /// which side refused, and an operator debugging a donor that takes nothing
 /// needs exactly that — so the side is a field rather than a sentence a reader
 /// has to reconstruct.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum GrantSide {
     /// The submitter's half: their `allowed` list does not name this donor,
     /// the handoff was revoked, its TTL elapsed, or no admitted `Submit`
@@ -49,7 +50,7 @@ impl GrantSide {
 /// only carry one of them. This is that spelling with the other three beside
 /// it, so `repo_rev`, `os` and `arch` refusals are as typed and as renderable
 /// as a missing binary; the variant count of [`WorkRefusal`] stays at ten.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum UnmetRequirement {
     /// The unit is pinned to an OS this host is not running.
     Os { required: String, host: String },
@@ -62,7 +63,7 @@ pub enum UnmetRequirement {
     /// A `quality/instruments.toml` precondition — a binary, a container, a
     /// listening port — that this host does not meet. The registry's own
     /// vocabulary, not a second one.
-    Precondition(Precondition),
+    Precondition(#[serde(with = "crate::job::precondition_label")] Precondition),
 }
 
 impl UnmetRequirement {
@@ -109,7 +110,9 @@ impl std::fmt::Display for UnmetRequirement {
 /// Every one renders as a sentence an operator can act on, because these
 /// reach a person: through `svrn job status`, through the donor's debug log,
 /// and through the refusal a submitter reads when nothing is being taken.
-#[derive(Debug, Clone, PartialEq, Eq)]
+// Serde since pb-work-doors: cw-rails' refusals door answers `may_take`'s
+// verdicts typed, so a submitter renders the rail's own refusal.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum WorkRefusal {
     /// This donor's offer does not name this kind at all.
     KindNotOffered { kind: JobKind },

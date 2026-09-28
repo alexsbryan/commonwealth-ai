@@ -465,6 +465,28 @@ mod precondition_labels {
     }
 }
 
+/// Wire form for ONE precondition — the same label, for a field that holds a
+/// single one (`work::UnmetRequirement::Precondition`, which the refusals
+/// door answers typed).
+pub(crate) mod precondition_label {
+    use super::*;
+
+    pub fn serialize<S: Serializer>(
+        value: &Precondition,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error> {
+        value.label().serialize(serializer)
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(
+        deserializer: D,
+    ) -> Result<Precondition, D::Error> {
+        let label = String::deserialize(deserializer)?;
+        Precondition::parse(&label)
+            .ok_or_else(|| serde::de::Error::custom(format!("unknown precondition: {label}")))
+    }
+}
+
 // -----------------------------------------------------------------
 // JobUnit
 // -----------------------------------------------------------------
