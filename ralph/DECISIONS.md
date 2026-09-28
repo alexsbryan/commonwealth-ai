@@ -1211,6 +1211,11 @@ merged; that merge is what minted this arrangement, and `ledger-1` records it.
   - pb-serve-distributes keeps the direct probe by reading the member's iroh direct addresses when `dial.addresses` is empty. A test and a PLANT pin it, and a loss is named if cw-rails' record lacks the addresses.
 - Because: principle 6 (the plaintext default change and the direct-path risk are named, not silent), principle 11 (iroh already carries the LAN/Tailscale IPs the probe needs), principle 5 (the bigger-model flow is proved across the flip, not assumed). Found for phase-c, not this queue: the direct-IP probe sends raw ggml RPC bytes even on an encrypted mesh, bypassing `require_encryption`'s promise.
 
+**phase-b-37 · 2026-09-28 · pb-rails-membership · director** — this commit
+- Needed: the row asked cw-rails to serve the daemon's PLAINTEXT-invite join (`perform_join`, sovereign-mesh join.rs:334) and proved it with "a plaintext invite admits a joiner". Every other door was built and green (f24b3b645..d3c6017eb); only `perform_join`'s two address paths (`relay=` host:port POSTed in plaintext, mDNS peers' plaintext port) were missing.
+- Chose: drop the two address paths from the row. A plaintext mesh's `dial=` invite joining by key satisfies the proof; the address paths retire with the daemon's plaintext fallback at the flip, which pb-mesh-exit-transport now names. Row marked done at d3c6017eb.
+- Because: phase-b-36 (operator, written after this row at phase-b-33) retires plaintext posture at the flip and refuses to migrate a plaintext mesh, so porting a plaintext address join into cw-rails would build a door the flip then closes; cw-rails' own tested scope refuses it (principle 10); and the lift cannot prove it, since cw-rails founds encrypted only (found.rs:7-9), so the port would be a gate nobody watched fail (principle 5).
+
 ## Flags for the operator
 
 - A26: REVIEW-DEMO-rr-1-run will very likely FAIL `ra-room-plug-in-live` again on this host. The bar's window is 60 s, and the CPU 2B took about 1–5 min per answer in this run (room-answer-0..4.json mtimes 19:33→19:49). Passing it takes a faster node or model for the room, or a different bar. Both are design changes for the operator, not tuning.
@@ -11629,5 +11634,25 @@ The cost, named: the leaf then carries iroh endpoint mechanism behind a feature,
 **Fork 2, the IP overlay.** Options were (A) move it to the flip, (B) build a `--overlay` listener on unencrypted meshes here, with admission by mesh proof and no identity stamping, and (C) (B) with `Admit::Any` registrations only. (B) and (C) each need an admission rule for plaintext callers on registered `Members` prefixes that no document or code states (commonwealth-media origins.rs `forward_for` admits by verified key; the daemon admits plaintext internal calls as `Principal::Anonymous` or by mesh proof, internal_principal.rs:43-55). The flip is the row that moves the daemon's plaintext posture, so it owns that rule. Nothing user-visible changes before the flip: the daemon keeps serving its overlay until then.
 
 Falsified if: the pb-reach-guest move needs any workspace crate in `mesh-reach` beyond kernel-types and workspace-hack, or turns LAYER red (then the leaf is a mechanism and the fork goes back to the operator); or a caller of `RailsTransport` before the flip needs a class answered over IP on a cw-rails-founded mesh.
+
+</details>
+
+## phase-b-37 · 2026-09-28 — pb-rails-membership: cw-rails joins by key only; plaintext address join retires at the flip
+
+<details><summary>reasoning, evidence, package</summary>
+
+Package: ralph/next/phase-b/ctl/NEEDS_HUMAN.md (removed in this commit), options (A) drop the address paths, (B) port them into cw-rails.
+
+Evidence, reproduced by the director:
+- commonwealth-rails join.rs:20-28 scopes out "a `relay=` host:port POSTed directly, and a daemon's plaintext mDNS port"; `an_invite_with_no_iroh_dial_is_refused_by_name` (join.rs:243) asserts "iroh only"; `a_plaintext_invite_carrying_a_dial_string_is_accepted` (join.rs:279) covers the key path.
+- found.rs:7-9: cw-rails founds `require_encryption` meshes only, so no plaintext invite exists on the cmnwlth-only lift.
+- ralph/decisions/phase-b-36.md: "The daemon's plaintext fallback retires with its endpoint", "Migrating a plaintext mesh is refused by name".
+- `ralph-check.sh test commonwealth-rails`: pass 106 fail 0 (director re-run). Worker's LIFT(cmnwlth) PASSED and PLANT 105/1 (`an_expired_invite_is_401`) taken from the package, not re-run.
+
+Chose (A). (B) reverses a tested scope, needs a plaintext-founding path in cw-rails only to prove it, and contradicts an operator decision. No end-user behaviour changes in this row: the daemon keeps handling plaintext joins until the flip, whose plaintext retirement the operator already accepted in phase-b-36. FIVE_PROGRAMS is unchanged: it names no plaintext join, and phase-b-36 carries the posture.
+
+Falsified if: a live mesh the operator runs (or a shipped client) joins by `relay=`/mDNS address with no `dial=` string and must keep working across the flip — then the address paths need a home and the fork goes to the operator.
+
+Found, not this row's (worker, recorded for phase-c): mDNS keeps advertising the mesh `run --mdns` started on after a live switch; `accept_join_with_identity` (commonwealth-discovery membership.rs:253-266) does not clear `removed_at` on a same-id rejoin.
 
 </details>
