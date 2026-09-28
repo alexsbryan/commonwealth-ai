@@ -394,8 +394,13 @@ pub(super) const REGISTRY_TAIL: &[(&str, Class, usize)] = &[
     // the peer's Ed25519 key. Nothing here has a third-party endpoint to
     // point at: the URL is always `127.0.0.1:<ephemeral>` and the far end is
     // a member.
-    ("commonwealth/crates/commonwealth-rails/src/gossip.rs", Class::Mesh, 1),
+    // 1 -> 2 at pb-rails-membership (26e82ea3a): the departure announcement
+    // builds its own client, to the same Online members with the same bound.
+    ("commonwealth/crates/commonwealth-rails/src/gossip.rs", Class::Mesh, 2),
     ("commonwealth/crates/commonwealth-rails/src/join.rs", Class::Mesh, 1),
+    // The ring round's peer client (`peer_client`, pb-rails-parity d30c17f1b):
+    // same ten-second bound and same destinations as the gossip round's.
+    ("commonwealth/crates/commonwealth-rails/src/ring_sync.rs", Class::Mesh, 1),
     // `cw-rails media` is a client of THIS daemon's own loopback API — the
     // same bytes a `curl` would send, and they never leave the machine.
     ("commonwealth/crates/commonwealth-rails/src/cli.rs", Class::LocalDaemon, 1),
