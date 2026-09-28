@@ -72,7 +72,10 @@ async fn post(port: u16, path: &str, body: Value) -> (u16, Value) {
 }
 
 async fn solo(port: u16) -> bool {
-    poll_status(port, "the known-mesh list", |d| d["meshes"].as_array().map(Vec::is_empty)).await
+    poll_status(port, "the known-mesh list", |d| {
+        d["meshes"].as_array().map(Vec::is_empty)
+    })
+    .await
 }
 
 fn active_mesh(doc: &Value) -> Option<String> {
@@ -133,7 +136,10 @@ async fn every_membership_verb_answers_through_cw_rails_alone() {
             code, 403,
             "the rotated-out invite must be refused: {refused}"
         );
-        assert!(solo(nport).await, "a refused join leaves the node as it was");
+        assert!(
+            solo(nport).await,
+            "a refused join leaves the node as it was"
+        );
 
         // preview reads the invite without joining.
         let (code, preview) = post(nport, "/v1/mesh/join/preview", json!({ "link": new })).await;

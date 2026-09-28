@@ -218,10 +218,7 @@ pub async fn create(
 
 /// `POST /v1/mesh/join` — join a mesh by invite, over this node's own
 /// endpoint, and make it the active one.
-pub async fn join(
-    State(daemon): State<Arc<RailsDaemon>>,
-    Json(req): Json<JoinInvite>,
-) -> Response {
+pub async fn join(State(daemon): State<Arc<RailsDaemon>>, Json(req): Json<JoinInvite>) -> Response {
     if let Err(why) = check_node_name(&daemon, req.node_name.as_deref()) {
         return refuse(StatusCode::BAD_REQUEST, "join", why);
     }
