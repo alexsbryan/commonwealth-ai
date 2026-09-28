@@ -220,7 +220,7 @@ mod tests {
 
     /// `find_repo_root` walks up the path until it finds a
     /// `.sovereign/` directory. Direct hit and one-level-up case
-    /// both succeed; missing case returns `None`.
+    /// both succeed; an unmarked directory is never its own root.
     #[test]
     fn find_repo_root_walks_up() {
         let tmp = TempDir::new().unwrap();
@@ -231,8 +231,18 @@ mod tests {
         assert_eq!(find_repo_root(tmp.path()), Some(tmp.path().to_path_buf()));
         assert_eq!(find_repo_root(&nested), Some(tmp.path().to_path_buf()));
 
+        // An unmarked directory is not a root: the walk passes it and
+        // answers what its parent answers (a marked ancestor on the host,
+        // `~/.sovereign` under a TMPDIR in `~/.cache`, or `None`).
         let elsewhere = TempDir::new().unwrap();
-        assert_eq!(find_repo_root(elsewhere.path()), None);
+        assert_eq!(
+            find_repo_root(elsewhere.path()),
+            find_repo_root(elsewhere.path().parent().unwrap())
+        );
+        assert_ne!(
+            find_repo_root(elsewhere.path()).as_deref(),
+            Some(elsewhere.path())
+        );
     }
 
     /// `single_feature_dir` resolves only when there's exactly one
