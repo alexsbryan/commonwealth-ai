@@ -37,6 +37,10 @@ corpus-index = { workspace = true }
 # `CorpusId`, the neutral identity leaf, named directly since `ask` stopped
 # reaching it through corpus-engine's re-export (pb-corpus-mcp-reads).
 kernel-types = { workspace = true }
+# The one locator of a sibling program's binary (`reach::locate_sibling`):
+# `serve --corpus <absent>` execs ingest's `svrn-ingest pull` through it,
+# with `SOVEREIGN_INGEST_BIN` as the override (pb-corpus-mcp-reads). A leaf.
+sovereign-turn-client = { workspace = true }
 # The one MCP dispatcher (phase-b pb-mcp): the stdio loop and the JSON-RPC
 # envelope are the kit's, and `Server` is its tool-host port.
 host-kit = { workspace = true, features = ["mcp"] }

@@ -29,10 +29,10 @@
 //! infer from a short list that something was missing (§18.3).
 
 use corpus_engine_atlas_reader::ground::{Degradation, Grounding, MapNode};
-use kernel_types::CorpusId;
 use corpus_engine_atlas_reader::resolve::{EvidenceFetcher, ResolvedChunk};
 use corpus_index::index::CorpusIndex;
 use corpus_index::types::ScoredChunk;
+use kernel_types::CorpusId;
 use serde_json::{json, Value};
 
 use crate::tools::ToolOutcome;
@@ -368,9 +368,7 @@ fn truncate(s: &str, n: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use corpus_engine_atlas_reader::ground::{
-        MapSection, PolicySource, WalkLedger, WalkSelection,
-    };
+    use corpus_engine_atlas_reader::ground::{MapSection, PolicySource, WalkLedger, WalkSelection};
     use understanding_vocab::atoms::AtomType;
     use understanding_vocab::ontology::{NavigationPolicy, QuestionKind};
 

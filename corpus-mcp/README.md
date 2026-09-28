@@ -120,7 +120,10 @@ corpus-mcp serve --corpus sep     # ~875 MB from HuggingFace on a cold machine
 a prebuilt snapshot: the archive carries the chunk index AND the atlas, so
 what you get is the enriched corpus, not a re-embed. A corpus whose recipe
 declares no snapshot is **not** pulled — building it is `svrn ingest`'s
-job. Either way you are told which.
+job. Either way you are told which. The pull itself is ingest's:
+`serve` execs `svrn-ingest pull` for the named corpora it lacks, found through
+`SOVEREIGN_INGEST_BIN`, beside `corpus-mcp`, or on `PATH`, and refuses by name
+when it is not there. A corpus you already have never needs it.
 
 **A shipped snapshot will very likely be REJECTED, and this is measured, not
 hypothetical.** Before it trusts a snapshot, the restore re-embeds a sample of

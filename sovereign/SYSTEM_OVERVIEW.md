@@ -52,7 +52,7 @@ commonwealth-ai/
 ├── understanding-vocab/       # Atlas vocabulary — AtomsFile/AtomEnvelope, Edge, kinds, OntologyPolicies
 ├── understanding-atlas/       # Understanding's pure tier — arithmetic over the published language
 ├── understanding-host/        # Understanding's host tier — the ports and the knot
-├── corpus-mcp/                # Thin knowledge host — serve, any OpenAI-compatible endpoint (ingest: svrn-ingest)
+├── corpus-mcp/                # Thin knowledge host — serve, any OpenAI-compatible endpoint (ingest, pull: svrn-ingest)
 ├── sovereign-recipes/         # Canonical recipe TOMLs + catalog (the corpus-engine-recipes data crate)
 ├── sovereign/                 # Local AI assistant (CLI / desktop / daemon)
 ├── commonwealth/              # Mesh coordination daemon

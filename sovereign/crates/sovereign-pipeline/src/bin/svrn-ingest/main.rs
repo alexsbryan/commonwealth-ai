@@ -5,6 +5,7 @@
 //! wants ingest in CI takes this crate and no svrn crate.
 
 mod ingest;
+mod pull;
 
 use clap::{Parser, Subcommand};
 
@@ -20,6 +21,9 @@ enum Command {
     /// Build a corpus from a recipe against a bare endpoint: acquire,
     /// extract, chunk, embed, index, then the atlas enrichment.
     Ingest(ingest::IngestArgs),
+    /// Install each named corpus that is not here from its recipe's prebuilt
+    /// snapshot, under a deadline; `corpus-mcp serve --corpus` execs this.
+    Pull(pull::PullArgs),
 }
 
 #[tokio::main]
@@ -34,5 +38,6 @@ async fn main() -> anyhow::Result<()> {
 
     match Args::parse().command {
         Command::Ingest(a) => ingest::run(a).await,
+        Command::Pull(a) => pull::run(a).await,
     }
 }

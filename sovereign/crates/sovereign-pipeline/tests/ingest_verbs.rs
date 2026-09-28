@@ -91,3 +91,41 @@ fn ingest_with_no_endpoint_walks_the_same_ladder() {
         );
     }
 }
+
+// ── `pull` — serve's pull-if-absent, moved here with the engine it needs ────
+
+/// `corpus-mcp serve --corpus <absent>` execs this verb (pb-corpus-mcp-reads).
+/// A named endpoint that does not answer is refused carrying that URL, before
+/// any recipe is resolved or any byte downloaded: the restore probe cannot
+/// judge a snapshot against an endpoint that is not there.
+#[test]
+fn pull_refuses_a_named_endpoint_that_does_not_answer() {
+    let tmp = tempfile::tempdir().unwrap();
+    let data = tmp.path().to_str().unwrap();
+    let r = run(
+        tmp.path(),
+        &[
+            "pull",
+            "--corpus",
+            "sep",
+            "--base-url",
+            "http://127.0.0.1:1/v1",
+            "--data-dir",
+            data,
+        ],
+    );
+    assert_ne!(
+        r.code, 0,
+        "a pull with no endpoint succeeded:\n{}",
+        r.stderr
+    );
+    assert!(
+        r.stderr.contains("127.0.0.1:1"),
+        "the refusal does not carry the URL that was named:\n{}",
+        r.stderr
+    );
+    assert!(
+        !tmp.path().join("indexes").join("sep").exists(),
+        "a refused pull wrote an index"
+    );
+}

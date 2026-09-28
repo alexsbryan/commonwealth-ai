@@ -126,6 +126,52 @@ fn recipe_points_at_svrn_recipe_new() {
     assert!(left.is_empty(), "the pointer wrote {} file(s)", left.len());
 }
 
+// ── pull-if-absent — ingest's `svrn-ingest pull`, named when missing ───────
+
+/// `serve --corpus <absent>` installs through ingest's own CLI
+/// (pb-corpus-mcp-reads), so with no `svrn-ingest` reachable it refuses and
+/// names the binary and its override, before any endpoint is probed. The
+/// binary runs from a directory holding no sibling, with an override that
+/// points nowhere and an empty `PATH`: the three places the one locator looks.
+#[test]
+fn an_absent_corpus_without_the_pull_binary_is_refused_by_name() {
+    let dir = tempfile::tempdir_in(env!("CARGO_TARGET_TMPDIR")).unwrap();
+    let lone = dir.path().join("corpus-mcp");
+    if std::fs::hard_link(env!("CARGO_BIN_EXE_corpus-mcp"), &lone).is_err() {
+        std::fs::copy(env!("CARGO_BIN_EXE_corpus-mcp"), &lone).unwrap();
+    }
+    let data = dir.path().join("data");
+    let out = Command::new(&lone)
+        .args(["serve", "--corpus", "sep", "--data-dir"])
+        .arg(&data)
+        .env(
+            "SOVEREIGN_INGEST_BIN",
+            dir.path().join("no-such-svrn-ingest"),
+        )
+        .env("PATH", "")
+        .env("SOVEREIGN_DAEMON_URL", "http://127.0.0.1:1")
+        .output()
+        .expect("corpus-mcp did not start");
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert_ne!(
+        out.status.code(),
+        Some(0),
+        "served an absent corpus:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("svrn-ingest") && stderr.contains("SOVEREIGN_INGEST_BIN"),
+        "the refusal does not name the pull binary and its override:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("sep"),
+        "the refusal does not name the absent corpus:\n{stderr}"
+    );
+    assert!(
+        !stderr.contains("11434"),
+        "the endpoint ladder ran before the local refusal:\n{stderr}"
+    );
+}
+
 // ── discovery — the ladder, and the rule that a NAMED endpoint is never
 //    substituted (ARCH §18.3) ───────────────────────────────────────────────
 
