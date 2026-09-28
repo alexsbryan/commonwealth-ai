@@ -91,6 +91,9 @@ pub mod local_inference;
 pub mod local_only;
 pub mod mcp_config;
 pub mod memory_config;
+/// The svrn daemon's one read of mesh membership (`MembershipReader`), which
+/// the flip re-points at cw-rails (pb-mesh-exit-core).
+pub mod membership;
 /// Answering's port — the middleware trait and its
 /// request/session/error/view vocabulary. Lifted out of
 /// `sovereign-api` (domains `REVIEW-build-middleware-seam`) so the Workspace

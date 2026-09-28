@@ -54,6 +54,7 @@ pub mod guest_pages;
 /// policy; the daemon's route re-exports them and the CLI's reader pins
 /// against them (fp-30's de-embed).
 pub mod measurements_wire;
+pub mod membership;
 pub mod mesh_measurements;
 pub use sovereign_serving_host::guest_lender; // shim: moved by domains REVIEW-build-serving-move-throughput-guest
 pub mod guest_source;

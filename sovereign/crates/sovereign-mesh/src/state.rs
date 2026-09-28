@@ -7,6 +7,18 @@ use commonwealth_core::mesh::{Mesh, NodeStatus};
 
 use sovereign_contracts::daemon_wire::*;
 
+/// The roster's liveness as svrn's wire spells it. The one mapping: the UI
+/// snapshot below and the in-process `MembershipReader`
+/// (`crate::membership`) both read it.
+pub fn member_status(status: NodeStatus) -> MemberStatus {
+    match status {
+        NodeStatus::Online => MemberStatus::Online,
+        NodeStatus::Busy => MemberStatus::Busy,
+        NodeStatus::Away => MemberStatus::Away,
+        NodeStatus::Offline => MemberStatus::Offline,
+    }
+}
+
 /// Snapshot of the mesh state, rendered for UI consumption.
 #[derive(Debug, Clone)]
 pub struct MeshState {
@@ -34,12 +46,7 @@ impl MeshState {
                     name: m.name.clone(),
                     node_id: member_node_id_key(&m.node_id),
                     is_self,
-                    status: match m.status {
-                        NodeStatus::Online => MemberStatus::Online,
-                        NodeStatus::Busy => MemberStatus::Busy,
-                        NodeStatus::Away => MemberStatus::Away,
-                        NodeStatus::Offline => MemberStatus::Offline,
-                    },
+                    status: member_status(m.status),
                     vram_gb: m.capabilities.hardware.gpus.iter().map(|g| g.vram_gb).sum(),
                     can_anchor: m.capabilities.anchor.as_ref().is_some_and(|a| a.can_anchor),
                     contribution_level: 0, // Populated from ledger

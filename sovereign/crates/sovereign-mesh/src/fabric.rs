@@ -23,8 +23,11 @@ use commonwealth_core::Clock;
 use commonwealth_media::fanout::{FanoutRequest, FanoutResponse};
 use commonwealth_media::{MediaOffer, MediaReach, MediaReachRefusal, PeerTransportPath};
 use commonwealth_state::MeshStore;
-use commonwealth_transport::PeerTransport;
+
+use crate::membership::InProcessMembership;
+use commonwealth_transport::{PeerContact, PeerTransport};
 use sovereign_contracts::identity::IdentityReader;
+use sovereign_contracts::membership::MembershipReader;
 use sovereign_contracts::peer::ConvergenceRecord;
 
 /// Callback the route handlers fire whenever they mutate `Mesh` —
@@ -208,6 +211,9 @@ pub struct FabricSeed {
     /// with the daemon's membership orchestration (DC §4.1: Fabric owns the
     /// key; the daemon observes it through this reader).
     pub join_key: JoinKeyReader,
+    /// The membership reader, when not the in-process one (a test's double).
+    /// `None` builds [`InProcessMembership`] over this part's roster lock.
+    pub membership: Option<Arc<dyn MembershipReader<Dial = PeerContact>>>,
 }
 
 /// Fabric's twenty fields, held as `AppStateInner::fabric`.
@@ -223,6 +229,9 @@ pub struct FabricPart {
     /// would 500 with "local node not found in mesh".
     pub identity: IdentityReader,
     pub mesh: Arc<RwLock<Mesh>>,
+    /// The one read of membership outside the mesh endpoint
+    /// (`sovereign_contracts::membership`, pb-mesh-exit-core).
+    pub membership: Arc<dyn MembershipReader<Dial = PeerContact>>,
     /// This node's Ed25519 identity pubkey (see
     /// `commonwealth_core::ids::NodePubkey`). Set at construction by the
     /// embedded daemon from `<data_dir>/node_key`; `None` in tests and on
@@ -394,9 +403,15 @@ impl FabricPart {
         // infallible — fail-fast is correct.
         #[allow(clippy::expect_used)]
         let mesh_store = Arc::new(MeshStore::in_memory().expect("in-memory MeshStore failed"));
+        let mesh = Arc::new(RwLock::new(mesh));
+        let membership = seed.membership.unwrap_or_else(|| {
+            Arc::new(InProcessMembership::new(Arc::clone(&mesh)))
+                as Arc<dyn MembershipReader<Dial = PeerContact>>
+        });
         Self {
             identity: IdentityReader::new(self_node_id),
-            mesh: Arc::new(RwLock::new(mesh)),
+            mesh,
+            membership,
             self_node_pubkey: seed.self_node_pubkey,
             dial_info: seed.dial_info,
             self_dial_signer: seed.self_dial_signer,
