@@ -98,8 +98,9 @@ steps = [
 package = "ingest"
 
 # ── cmnwlth — the endpoint router with a roster: the cw-rails daemon ────────
-# The closure is cw-rails', not the whole package's: sovereign-mesh and
-# sovereign-grants still reach corpus-engine (boundary-gate, 2026-09-25), and
+# The closure is cw-rails', not the whole package's: sovereign-mesh still
+# reaches corpus-engine (boundary-gate, 2026-09-27; sovereign-grants left for
+# [svrn] at pb-meshapp-grants), and
 # the binary a developer takes is this one (FIVE_PROGRAMS §2, "lifted").
 [lift.cmnwlth]
 package = "cmnwlth"

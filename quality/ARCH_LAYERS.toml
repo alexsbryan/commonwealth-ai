@@ -1259,6 +1259,9 @@ crates = [
     # The corpus-explorer reads over svrn's corpora (§12 3a rung 1, §4 rule 1),
     # moved from [cmnwlth] with the `svrn meshapp` verbs (pb-meshapp-apps).
     "sovereign-meshapp",
+    # The grant routes over svrn's corpora and guests (§12 3a rung 1): the
+    # daemon is its only user, moved from [cmnwlth] (pb-meshapp-grants).
+    "sovereign-grants",
 ]
 
 [[package]]
@@ -1360,7 +1363,6 @@ crates = [
     # serving crates into `serve` at pb-serve-package (phase-b-20).
     "sovereign-gliner",
     "sovereign-pods",
-    "sovereign-grants",
     # cmnwlth's CLI, lifted out of sovereign-cli-llm 2026-09-21.
     "sovereign-cli-mesh",
 ]
