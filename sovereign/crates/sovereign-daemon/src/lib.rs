@@ -213,7 +213,6 @@ pub use code_next_edit::next_edit_journal;
 pub use code_next_edit::next_edit_model;
 pub use code_next_edit::next_edit_symbols;
 pub use code_next_edit::next_edit_syntax;
-pub use commonwealth_core::{Error, Result};
 pub use commonwealth_transport::fanout;
 pub use oicp_types::openai_types;
 pub use oicp_types::responses_types;
