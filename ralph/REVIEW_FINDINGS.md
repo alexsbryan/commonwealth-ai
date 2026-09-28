@@ -3844,3 +3844,85 @@ has the same shape as `apps.rs:147,153`, but both are standing-plus-claimed
 maps over the one `Claims<T>` (claims.rs, from the same row), and the two
 registries apply different policies. That is a parallel shape over one
 decider, not a copy. Record only.
+
+## REVIEW-audit-pb-auto-7 (2026-09-28, range 400b63581..82f176f72, since REVIEW-audit-pb-auto-6)
+
+Eleven units: pb-rails-membership, pb-rails-parity, pb-work-donor,
+pb-corpus-mcp-reads, pb-ingest, pb-ingest-cli, pb-code-index,
+pb-code-server, pb-code-freshness, pb-code-daemon-exit and
+pb-code-cli-base, plus the seat's phase-b-37/39 (98 commits). All checks
+ran in the sovereign-vulkan toolbox.
+
+TESTALL at 82f176f72: exit=100, 13,684 passed and 2 failed. The F26 census
+was drift, fixed below. `understanding-vocab::atoms_file_has_exactly_one_door`
+timed out at 180 s after its trybuild spent the run blocked on the build-dir
+lock; alone it passed in 8 s, so that failure was contention and there is no
+finding. PREPUSH exited 1 with two blocking lanes: boundary-gate at 30 (41 at
+auto-6) and clock-gate, fixed below. After this audit, boundary-gate is the
+only blocking lane. The advisories are unchanged since auto-6:
+deletion-manifest (p0-root-junk), hakari-verify (host-kit's `if-addrs` from
+pb-shell da819e9e2, before this range, owned by bl-hakari), and
+domains-census-self-test, which could not judge.
+
+Ledger (`.rs` lines, net; a path under `tests/` or named `*tests.rs` counts
+as tests): pb-work-donor +1314 src / +771 tests, pb-rails-membership +801 /
++230, pb-rails-parity +674 / +706, pb-code-server +269 / +381,
+pb-corpus-mcp-reads +249 / +247, pb-code-freshness +221 / -135,
+pb-code-cli-base +165 / +58, pb-code-index +138 / +367, pb-ingest +22 / +45,
+pb-ingest-cli -10 / -30, pb-code-daemon-exit -356 / +291. Total src +3487
+(+15580 / -12093), tests +2931, before this audit's commits.
+
+- **ARCH 5 drift, fixed in c86c6296f** · the F26 egress census still keyed
+  two files the range moved: `sovereign-daemon/src/project_http.rs` went to
+  `sovereign-code/src/project_http.rs` (c173a8042), and
+  `sovereign-cli-shared/src/mcp_client.rs` went to
+  `sovereign-cli-base/src/mcp_client.rs` (ef8ed7700). It also had no row for
+  two TestOnly sites: `host-kit/src/mcp/http_tests.rs:95`, new at 20fd4954e,
+  and `sovereign-code/src/face/pattern_observation_tests.rs:81`, which
+  c25b16fb7 moved from the daemon's `tests/main/` into `src/`, where the
+  census scans. The two moved rows were re-keyed at the same count and class,
+  and the two TestOnly rows were added. No site changed class.
+- **clock-gate, fixed in 032dbd821** · e455aa9c0 moved the code-intel e2e
+  suite to `sovereign-code/tests/code_intel_e2e.rs:64`, so the gate saw its
+  hand-read `SystemTime` as a new file. It now calls `sovereign_time::unix_now()`,
+  which sovereign-code already depends on.
+- **ARCH 8/10, open** · three wire records have a producer half and a
+  consumer half, and each half is spelled in full with no test pinning the
+  two together: `ReachabilityStatus` and `RecoveryEvent`
+  (`commonwealth-rails/src/iroh_watchdog.rs:72,101` ~
+  `sovereign-contracts/src/daemon_wire/mesh.rs:272,304`), and `RelayCandidate`
+  (`commonwealth-discovery/src/mesh_discovery.rs:40` ~
+  `daemon_wire/mesh.rs:541`). The split is deliberate and documented
+  (pb-rails-parity: the `[[forbid]] → sovereign-*` row), and today the fields
+  match. A field added on one side only would decode as a silent default on
+  the other. The structural fix is one owner in a shared leaf both sides may
+  name. Which leaf that is, is a design call and too large for an audit, so it
+  is recorded only.
+- **ARCH 8, record only** · `CreateRequest` (`commonwealth-rails/src/membership.rs:61`
+  ~ `sovereign-daemon/src/mesh_http.rs:104`) is the same route body served by
+  two servers under the parity rule, and the two now differ on purpose:
+  cw-rails takes `encrypt: Option<bool>` and refuses `false` by name, while
+  the daemon takes `encrypt: bool`. This pair goes away with the daemon's
+  mesh routes, not before.
+
+dry-report over the 28 touched crate dirs: no clone group has a side the
+range added. Five groups matched a new or moved `fn` name, and each is a
+pre-existing pair. `daemon_post` (`sovereign-cli-dev/src/project_cmd/mod.rs`
+~ `sovereign-cli/src/project_registry.rs`) only had its visibility widened.
+The others (`with_workspace_root`, `preview`, `name`, `site`) are in files the
+range did not touch at those lines. The SCIP graph is current for the range:
+`symbols` resolves `start_reindexer` in `sovereign-code/src/freshness.rs`,
+which is new at c173a8042. sovereign-peer-wire and sovereign-stock loaded 0
+symbols of 8 lines or more, so for those two the verdict is could-not-judge.
+
+converge-noun over the 63 nouns the range added: 44 have one production
+definition. Five (Calls, CodeStandIn, Run, SessionEcho, WorkRails) are
+test-only. The rest with more than one are the wire pairs above, or name
+collisions between unrelated concepts: `TaskStatus` (the daemon's watcher
+status cell vs contracts' task lifecycle), `PreviewRequest` (mesh join
+preview vs atlas cluster preview), `Parked`, `Lifecycle`, `Inner`, `Server`,
+`Sandbox`, `Fixture`, `Args` and `Command`. None of them is a copy.
+
+The range's added src lines contain no new collapsed `Err`. The
+`unwrap_or(0)` and `let _ =` hits in `wikipedia_columnar.rs`, `fs_source.rs`
+and `mcp_router.rs` are code the range moved without changing it.
