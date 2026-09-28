@@ -1,10 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-use kernel_types::NodeId;
-use oicp_types::work_queue::{
-    IngestionHandoff, IngestionPartition, PartitionStatus, WorkUnit,
-};
-use oicp_types::EmbedModelInfo;
 use corpus_engine::SourceFileRecord;
+use kernel_types::NodeId;
+use oicp_types::work_queue::{IngestionHandoff, IngestionPartition, PartitionStatus, WorkUnit};
+use oicp_types::EmbedModelInfo;
 use sovereign_contracts::membership::MembershipEntry;
 
 // ─── Collaborative ingestion planner ─────────────────────────────────────────
@@ -477,9 +475,7 @@ mod tests {
     }
 
     fn member(id: u128, embed: Option<EmbedModelInfo>) -> MembershipEntry<()> {
-        use oicp_types::capabilities::{
-            AvailableResources, HardwareProfile, NodeCapabilities,
-        };
+        use oicp_types::capabilities::{AvailableResources, HardwareProfile, NodeCapabilities};
         use sovereign_contracts::daemon_wire::MemberStatus;
         MembershipEntry {
             node_id: NodeId::from_u128(id),

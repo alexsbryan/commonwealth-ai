@@ -67,10 +67,10 @@
 
 use std::sync::Arc;
 
+use corpus_index::{corpus::Corpus, index::CorpusIndex};
 use kernel_types::HandoffId;
 use oicp_types::work_queue::{CompleteOutcome, HandoffPhase, IngestionHandoff, WorkUnit};
 use oicp_types::{EmbedModelInfo, NormalizationStrategy, PoolingStrategy};
-use corpus_index::{corpus::Corpus, index::CorpusIndex};
 use sovereign_contracts::peer::ReplicatedKv;
 use sovereign_grants::{ShardManager, WorkQueueManager};
 

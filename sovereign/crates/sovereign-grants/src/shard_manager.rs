@@ -3,14 +3,14 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
-use kernel_types::{HandoffId, NodeId};
-use oicp_types::work_queue::{IngestionHandoff, KnowledgeShardAssignment, PartitionStatus};
 use corpus_engine::{CorpusEngine, ShardInfo};
 use corpus_index::{
     corpus::Corpus,
     index::CorpusIndex,
     types::{ChunkRange, IndexInfo},
 };
+use kernel_types::{HandoffId, NodeId};
+use oicp_types::work_queue::{IngestionHandoff, KnowledgeShardAssignment, PartitionStatus};
 use sovereign_contracts::peer::ReplicatedKv;
 use sovereign_contracts::venue_host::ShardTransferLedger;
 

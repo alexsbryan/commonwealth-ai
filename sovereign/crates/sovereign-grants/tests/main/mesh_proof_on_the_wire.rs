@@ -18,9 +18,9 @@
 
 use std::sync::{Arc, Mutex};
 
-use kernel_types::{HandoffId, NodeId};
 use corpus_engine::CorpusEngine;
 use corpus_index::types::EmbedFn;
+use kernel_types::{HandoffId, NodeId};
 use sovereign_contracts::peer::SoloReplicatedKv;
 use sovereign_grants::shard_manager::MergePlan;
 use sovereign_grants::ShardManager;
