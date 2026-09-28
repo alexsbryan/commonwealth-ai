@@ -60,16 +60,16 @@ pub struct IndexHealth {
 /// already tracks staleness precisely; we read that state — we don't
 /// recompute it from scratch on every call.
 pub struct IndexHealthChecker {
-    graph: ScipGraphHandle,
+    graph: crate::LazyScipGraph,
     cache: Mutex<Option<(IndexHealth, Instant)>>,
 }
 
 const CACHE_TTL: Duration = Duration::from_secs(30);
 
 impl IndexHealthChecker {
-    pub fn new(graph: ScipGraphHandle) -> Self {
+    pub fn new(graph: impl Into<crate::LazyScipGraph>) -> Self {
         Self {
-            graph,
+            graph: graph.into(),
             cache: Mutex::new(None),
         }
     }
@@ -90,7 +90,7 @@ impl IndexHealthChecker {
     }
 
     async fn compute(&self) -> IndexHealth {
-        let graph = self.graph.load_full();
+        let graph = self.graph.load_full().await;
         let stats = graph.stats().await;
 
         let (present, staleness) = classify(&stats);

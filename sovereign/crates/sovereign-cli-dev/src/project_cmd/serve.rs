@@ -129,19 +129,20 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
 
     // ── Discover and merge SCIP graphs ──────────────────────────
 
+    // Loaded when a tool first reads it (phase-b pb-code-freshness).
     eprintln!();
-    eprintln!("  Call graph:");
-
-    let (initial_graph, _summary) = load_merged_graph(&data_dir, true).await;
-    let merged_graph: sovereign_code::ScipGraphHandle =
-        Arc::new(ArcSwap::from_pointee(initial_graph));
+    eprintln!(
+        "  Call graph:       loads on first read from {}",
+        data_dir.display()
+    );
+    let merged_graph = sovereign_code::LazyScipGraph::deferred(data_dir.clone());
 
     // Spawn the background reloader: every 30s, stat each scip_graph.db,
     // and if any mtime changed (or a file appeared/disappeared) rebuild the
     // merged graph and swap it in atomically. Tools grab `load_full()` per
     // query so the swap is lock-free.
     {
-        let handle = Arc::clone(&merged_graph);
+        let handle = merged_graph.handle();
         let dir = data_dir.clone();
         tokio::spawn(async move {
             scip_graph_reloader(handle, dir).await;
@@ -418,7 +419,7 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
         Box::new(
             sovereign_code::bundle::CodeIntelTools::new(
                 Arc::clone(&engine) as Arc<dyn sovereign_code::CodeIndexSource>,
-                Arc::clone(&merged_graph),
+                merged_graph.clone(),
             )
             .with_project_root(repo_root.clone())
             .with_peer_work(Arc::clone(&atlas_store) as Arc<dyn sovereign_code::PeerWork>),

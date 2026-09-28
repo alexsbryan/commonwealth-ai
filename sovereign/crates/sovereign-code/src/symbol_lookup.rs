@@ -34,15 +34,15 @@ use sovereign_contracts::tool_manifest::DeclaredTool;
 pub struct SymbolLookupTool {
     #[allow(dead_code)]
     engine: Arc<dyn IndexSource>,
-    graph: ScipGraphHandle,
+    graph: crate::LazyScipGraph,
     checker: Option<Arc<IndexHealthChecker>>,
 }
 
 impl SymbolLookupTool {
-    pub fn new(engine: Arc<dyn IndexSource>, graph: ScipGraphHandle) -> Self {
+    pub fn new(engine: Arc<dyn IndexSource>, graph: impl Into<crate::LazyScipGraph>) -> Self {
         Self {
             engine,
-            graph,
+            graph: graph.into(),
             checker: None,
         }
     }
@@ -85,7 +85,7 @@ impl SymbolLookupTool {
             .and_then(|v| v.as_str())
             .filter(|s| !s.is_empty());
 
-        let graph = self.graph.load_full();
+        let graph = self.graph.load_full().await;
         let rows = graph
             .find_symbols_by_name(name, kind, 8)
             .await

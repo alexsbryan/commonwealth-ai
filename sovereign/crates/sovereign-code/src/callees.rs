@@ -28,15 +28,15 @@ pub type ScipGraphHandle = Arc<ArcSwap<ScipGraph>>;
 pub struct FindCalleesTool {
     #[allow(dead_code)]
     engine: Arc<dyn IndexSource>,
-    graph: ScipGraphHandle,
+    graph: crate::LazyScipGraph,
     checker: Option<Arc<IndexHealthChecker>>,
 }
 
 impl FindCalleesTool {
-    pub fn new(engine: Arc<dyn IndexSource>, graph: ScipGraphHandle) -> Self {
+    pub fn new(engine: Arc<dyn IndexSource>, graph: impl Into<crate::LazyScipGraph>) -> Self {
         Self {
             engine,
-            graph,
+            graph: graph.into(),
             checker: None,
         }
     }
@@ -72,7 +72,7 @@ impl FindCalleesTool {
             .and_then(|v| v.as_str())
             .ok_or_else(|| Error::InvalidInput("missing 'symbol'".to_string()))?;
 
-        let graph = self.graph.load_full();
+        let graph = self.graph.load_full().await;
         let (callees, caution) = graph.find_callees(symbol).await.map_err(|e| Error::Tool {
             tool_id: "callees".to_string(),
             message: e.to_string(),

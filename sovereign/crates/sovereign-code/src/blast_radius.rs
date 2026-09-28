@@ -41,7 +41,7 @@ use sovereign_contracts::tool_manifest::DeclaredTool;
 pub type ScipGraphHandleRef = Arc<ArcSwap<ScipGraph>>;
 
 pub struct BlastRadiusTool {
-    graph: ScipGraphHandleRef,
+    graph: crate::LazyScipGraph,
     /// Optional project root for the supplementary macro text scan.
     project_root: Option<PathBuf>,
     checker: Option<Arc<IndexHealthChecker>>,
@@ -55,9 +55,9 @@ pub struct BlastRadiusTool {
 }
 
 impl BlastRadiusTool {
-    pub fn new(graph: ScipGraphHandleRef) -> Self {
+    pub fn new(graph: impl Into<crate::LazyScipGraph>) -> Self {
         Self {
-            graph,
+            graph: graph.into(),
             project_root: None,
             checker: None,
             atlas: None,
@@ -138,7 +138,7 @@ impl BlastRadiusTool {
             .map(|v| v as usize)
             .unwrap_or(100);
 
-        let graph = self.graph.load_full();
+        let graph = self.graph.load_full().await;
         let result = graph
             .blast_radius(symbol, max_depth, max_symbols)
             .await

@@ -30,22 +30,18 @@
 //! other, descriptors drift. Extracting that into a shared
 //! `sovereign-tools::registry_builder` is tracked as a follow-up.
 //! The path-resolution helpers / SCIP loader prerequisite landed
-//! with the `sovereign-cli-shared` crate split — `load_merged_graph`,
-//! `find_sovereign_dir`, and `default_data_dir` now live there and
-//! are imported below.
+//! with the `sovereign-cli-shared` crate split — `find_sovereign_dir`
+//! and `default_data_dir` now live there and are imported below; the
+//! graph is a `sovereign_code::LazyScipGraph`, loaded on first read.
 
 use std::path::PathBuf;
 use std::sync::Arc;
-
-use arc_swap::ArcSwap;
 
 use corpus_engine::CorpusEngine;
 use corpus_engine_notes::{NoteStore, ProjectDocsStore};
 use corpus_engine_watchers::{LintResultStore, TestResultStore};
 use corpus_index::types::EmbedFn;
-use sovereign_cli_shared::{
-    dirs::default_data_dir, repo::find_sovereign_dir, scip::load_merged_graph,
-};
+use sovereign_cli_shared::{dirs::default_data_dir, repo::find_sovereign_dir};
 use sovereign_contracts::registry::ToolRegistry;
 
 /// Small bundle of handles held open across a single `svrn tools`
@@ -143,14 +139,13 @@ pub(super) async fn open_tools_registry() -> Result<ToolsEnv, String> {
         .ok()
         .map(Arc::new);
 
-    // SCIP call graph — empty default if no graph files exist yet.
+    // SCIP call graph, loaded when a tool first reads it (phase-b
+    // pb-code-freshness): a verb that never reads it never pays the merge.
     // Tools like find_callers gracefully report empty when unmerged.
-    let (initial_graph, _summary) = load_merged_graph(&data_dir, false).await;
-    let merged_graph: sovereign_code::ScipGraphHandle =
-        Arc::new(ArcSwap::from_pointee(initial_graph));
-    let health_checker = Arc::new(sovereign_code::IndexHealthChecker::new(Arc::clone(
-        &merged_graph,
-    )));
+    let merged_graph = sovereign_code::LazyScipGraph::deferred(data_dir.clone());
+    let health_checker = Arc::new(sovereign_code::IndexHealthChecker::new(
+        merged_graph.clone(),
+    ));
 
     // No `watcher_active` flag wired here: the CLI binary isn't
     // running a watcher of its own — it's a thin reader over the
@@ -167,7 +162,7 @@ pub(super) async fn open_tools_registry() -> Result<ToolsEnv, String> {
     tools.register(Box::new(
         sovereign_code::SymbolLookupTool::new(
             Arc::clone(&engine) as std::sync::Arc<dyn sovereign_code::CodeIndexSource>,
-            Arc::clone(&merged_graph),
+            merged_graph.clone(),
         )
         .with_health_checker(Arc::clone(&health_checker))
         .declared(),
@@ -187,7 +182,7 @@ pub(super) async fn open_tools_registry() -> Result<ToolsEnv, String> {
     tools.register(Box::new(
         sovereign_code::FindCalleesTool::new(
             Arc::clone(&engine) as std::sync::Arc<dyn sovereign_code::CodeIndexSource>,
-            Arc::clone(&merged_graph),
+            merged_graph.clone(),
         )
         .with_health_checker(Arc::clone(&health_checker))
         .declared(),
@@ -195,7 +190,7 @@ pub(super) async fn open_tools_registry() -> Result<ToolsEnv, String> {
     tools.register(Box::new(
         sovereign_code::FindCallersTool::new(
             Arc::clone(&engine) as std::sync::Arc<dyn sovereign_code::CodeIndexSource>,
-            Arc::clone(&merged_graph),
+            merged_graph.clone(),
         )
         .with_health_checker(Arc::clone(&health_checker))
         .declared(),
@@ -294,7 +289,7 @@ pub(super) async fn open_tools_registry() -> Result<ToolsEnv, String> {
     ));
 
     tools.register(Box::new(
-        sovereign_code::BlastRadiusTool::new(Arc::clone(&merged_graph))
+        sovereign_code::BlastRadiusTool::new(merged_graph.clone())
             .with_project_root(repo_root.clone())
             .with_health_checker(Arc::clone(&health_checker))
             .with_atlas(Arc::clone(&atlas_store) as std::sync::Arc<dyn sovereign_code::PeerWork>)

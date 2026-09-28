@@ -20,15 +20,15 @@ use sovereign_contracts::tool_manifest::DeclaredTool;
 pub struct FindCallersTool {
     #[allow(dead_code)]
     engine: Arc<dyn IndexSource>,
-    graph: ScipGraphHandle,
+    graph: crate::LazyScipGraph,
     checker: Option<Arc<IndexHealthChecker>>,
 }
 
 impl FindCallersTool {
-    pub fn new(engine: Arc<dyn IndexSource>, graph: ScipGraphHandle) -> Self {
+    pub fn new(engine: Arc<dyn IndexSource>, graph: impl Into<crate::LazyScipGraph>) -> Self {
         Self {
             engine,
-            graph,
+            graph: graph.into(),
             checker: None,
         }
     }
@@ -70,7 +70,7 @@ impl FindCallersTool {
             .unwrap_or(1)
             .min(2) as usize;
 
-        let graph = self.graph.load_full();
+        let graph = self.graph.load_full().await;
         let (callers, caution) =
             graph
                 .find_callers(symbol, depth)

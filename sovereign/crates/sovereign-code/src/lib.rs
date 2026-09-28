@@ -153,6 +153,10 @@ pub mod write_note;
 #[cfg(feature = "treesitter")]
 pub mod index_health;
 
+/// The merged SCIP graph, loaded when a tool first reads it.
+#[cfg(feature = "treesitter")]
+pub mod lazy_graph;
+
 // Blast radius (transitive impact analysis).
 #[cfg(feature = "treesitter")]
 pub mod blast_radius;
@@ -187,6 +191,8 @@ pub use callees::{FindCalleesTool, ScipGraphHandle};
 pub use callers::FindCallersTool;
 #[cfg(feature = "treesitter")]
 pub use capability_map_tool::CapabilityMapTool;
+#[cfg(feature = "treesitter")]
+pub use lazy_graph::LazyScipGraph;
 #[cfg(feature = "treesitter")]
 pub use symbol_lookup::SymbolLookupTool;
 

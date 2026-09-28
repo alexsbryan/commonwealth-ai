@@ -34,7 +34,7 @@ use sovereign_contracts::traits::InferenceProvider;
 pub struct CodeIntelTools {
     corpus_engine: Arc<dyn corpus_index::source::IndexSource>,
     inference: Option<Arc<dyn InferenceProvider>>,
-    scip_graph: crate::ScipGraphHandle,
+    scip_graph: crate::LazyScipGraph,
     project_root: Option<PathBuf>,
     peer_work: Option<Arc<dyn crate::PeerWork>>,
 }
@@ -45,12 +45,12 @@ impl CodeIntelTools {
     /// `code_search` answers from full text alone.
     pub fn new(
         corpus_engine: Arc<dyn corpus_index::source::IndexSource>,
-        scip_graph: crate::ScipGraphHandle,
+        scip_graph: impl Into<crate::LazyScipGraph>,
     ) -> Self {
         Self {
             corpus_engine,
             inference: None,
-            scip_graph,
+            scip_graph: scip_graph.into(),
             project_root: None,
             peer_work: None,
         }
@@ -83,13 +83,13 @@ impl ToolBundle for CodeIntelTools {
     }
 
     async fn register_into(&self, reg: &mut ToolRegistry) -> BundleReport {
-        let health = Arc::new(crate::IndexHealthChecker::new(Arc::clone(&self.scip_graph)));
+        let health = Arc::new(crate::IndexHealthChecker::new(self.scip_graph.clone()));
         let mut search = crate::CodeSearchTool::new(Arc::clone(&self.corpus_engine));
         match &self.inference {
             Some(inference) => search = search.with_inference(Arc::clone(inference)),
             None => tracing::debug!(bundle = "code-intel", "no model: code_search is full text"),
         }
-        let mut blast = crate::BlastRadiusTool::new(Arc::clone(&self.scip_graph))
+        let mut blast = crate::BlastRadiusTool::new(self.scip_graph.clone())
             .with_health_checker(Arc::clone(&health));
         if let Some(root) = &self.project_root {
             blast = blast.with_project_root(root.clone());
@@ -102,7 +102,7 @@ impl ToolBundle for CodeIntelTools {
                 reg.register_reporting(Box::new(
                     crate::SymbolLookupTool::new(
                         Arc::clone(&self.corpus_engine),
-                        Arc::clone(&self.scip_graph),
+                        self.scip_graph.clone(),
                     )
                     .with_health_checker(Arc::clone(&health))
                     .declared(),
@@ -116,7 +116,7 @@ impl ToolBundle for CodeIntelTools {
                 reg.register_reporting(Box::new(
                     crate::FindCalleesTool::new(
                         Arc::clone(&self.corpus_engine),
-                        Arc::clone(&self.scip_graph),
+                        self.scip_graph.clone(),
                     )
                     .with_health_checker(Arc::clone(&health))
                     .declared(),
@@ -126,7 +126,7 @@ impl ToolBundle for CodeIntelTools {
                 reg.register_reporting(Box::new(
                     crate::FindCallersTool::new(
                         Arc::clone(&self.corpus_engine),
-                        Arc::clone(&self.scip_graph),
+                        self.scip_graph.clone(),
                     )
                     .with_health_checker(Arc::clone(&health))
                     .declared(),
