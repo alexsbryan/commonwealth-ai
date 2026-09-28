@@ -381,10 +381,7 @@ impl RosterSource for MeshRosterSource {
                 ));
             };
             let mesh = mesh.read().await;
-            Ok(
-                MeshRoster::derive(&mesh, self.identity.current(), self.self_pubkey)
-                    .into_roster(),
-            )
+            Ok(MeshRoster::derive(&mesh, self.identity.current(), self.self_pubkey).into_roster())
         })
     }
 }

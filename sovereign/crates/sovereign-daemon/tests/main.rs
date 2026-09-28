@@ -134,6 +134,8 @@ mod local_only_corpus_locality;
 mod loopback_parity;
 #[path = "main/manifest_fanout_concurrency.rs"]
 mod manifest_fanout_concurrency;
+#[path = "main/membership_port.rs"]
+mod membership_port;
 #[path = "main/mesh_switch.rs"]
 mod mesh_switch;
 #[path = "main/meshapp_parcels_e2e.rs"]
