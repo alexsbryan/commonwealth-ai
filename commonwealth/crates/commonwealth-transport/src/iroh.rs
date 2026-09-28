@@ -1067,4 +1067,12 @@ mod tests {
             super::dial_key_for(&mk(vec![a, b2]))
         );
     }
+
+    /// The acceptor splices through the leaf's one `pump` (pb-reach-guest):
+    /// the name it calls resolves to `mesh_reach::guest::pump`, so a local
+    /// copy of the pump in this file turns this red.
+    #[test]
+    fn the_acceptor_pumps_through_the_leafs_one_pump() {
+        assert_eq!(std::any::type_name_of_val(&pump), "mesh_reach::guest::pump");
+    }
 }
