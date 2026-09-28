@@ -30,6 +30,8 @@ mod canonical_pull_e2e;
 mod capabilities_published;
 #[path = "main/chat_completion_e2e.rs"]
 mod chat_completion_e2e;
+#[path = "main/code_server_via_mcp_client.rs"]
+mod code_server_via_mcp_client;
 #[path = "main/client_auth.rs"]
 mod client_auth;
 #[path = "main/client_exposure.rs"]
@@ -134,6 +136,8 @@ mod local_only_corpus_locality;
 mod loopback_parity;
 #[path = "main/manifest_fanout_concurrency.rs"]
 mod manifest_fanout_concurrency;
+#[path = "main/mcp_one_home.rs"]
+mod mcp_one_home;
 #[path = "main/membership_port.rs"]
 mod membership_port;
 #[path = "main/mesh_switch.rs"]

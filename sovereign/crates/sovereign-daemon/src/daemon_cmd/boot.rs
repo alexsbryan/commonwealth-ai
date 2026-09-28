@@ -511,7 +511,12 @@ pub(super) async fn run_daemon(
     };
     let (code_tools, project_http, code_yield, _code_runtime) = match code_mount {
         Some(m) => (Some(m.tools), m.routes, Some(m.yield_to), Some(m.hold)),
-        None => (None, crate::hosted_code::projects_absent_router(), None, None),
+        None => (
+            None,
+            crate::hosted_code::projects_absent_router(),
+            None,
+            None,
+        ),
     };
 
     // ── Assemble the daemon's services, THEN commission the daemon ────

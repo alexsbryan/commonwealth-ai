@@ -18,6 +18,9 @@
 //!   at reload), not read off a new id;
 //! - SIGTERM leaves neither port answering.
 //!
+//! And, in its own boot, that code is composed on svrn's one `/mcp`
+//! (pb-code-daemon-exit): see [`the_stock_install_serves_code_on_its_one_mcp`].
+//!
 //! Linux only: the process census reads `/proc`.
 #![cfg(target_os = "linux")]
 
@@ -307,4 +310,110 @@ fn the_stock_install_serves_both_ports_from_one_process_and_one_engine() {
             ":{port} still answers after SIGTERM"
         );
     }
+}
+
+/// One JSON-RPC call on svrn's `/mcp`.
+fn mcp(port: u16, id: u64, method: &str, params: Value) -> Value {
+    client()
+        .post(format!("http://127.0.0.1:{port}/mcp"))
+        .json(&serde_json::json!({ "jsonrpc": "2.0", "id": id, "method": method, "params": params }))
+        .send()
+        .unwrap_or_else(|e| panic!("/mcp on :{port} did not answer: {e}"))
+        .json()
+        .expect("a JSON-RPC reply")
+}
+
+/// The stock binary composes the code program through code's face and
+/// mounts it on svrn's one `:9741/mcp` (pb-code-daemon-exit; phase-b-33):
+/// `symbols` is listed exactly once, beside svrn's own `wikipedia_fetch`, no
+/// name is listed twice, code's `symbols` answers (not svrn's pointer to
+/// `svrn code mcp`), `work_in_flight` is code's and answers, and
+/// `/v1/projects` is code's router.
+#[test]
+fn the_stock_install_serves_code_on_its_one_mcp() {
+    let root = tempfile::tempdir().expect("tempdir");
+    let (home, rails_dir) = (root.path().join("home"), root.path().join("rails"));
+    for d in [&home, &rails_dir, &root.path().join("data")] {
+        std::fs::create_dir_all(d).expect("dir");
+    }
+    let (svrn, internal, serve, dead_rails) = (free_port(), free_port(), free_port(), free_port());
+    let config = root.path().join("config.toml");
+    std::fs::write(
+        &config,
+        config_text(root.path(), svrn, internal, dead_rails, "mock.gguf"),
+    )
+    .expect("config");
+    let log = root.path().join("stock.stderr.log");
+    let mut stock = Killed(
+        Command::new(BIN)
+            .args(["run", "--config"])
+            .arg(&config)
+            .env("HOME", &home)
+            .env("SVRNMESH_DATA_DIR", root.path().join("svrnmesh"))
+            .env("CW_RAILS_DIR", &rails_dir)
+            .env("CW_RAILS_BIN", root.path().join("no-cw-rails"))
+            .env("SOVEREIGN_SERVE_PORT", serve.to_string())
+            .env_remove("SOVEREIGN_WORKSPACE_DIR")
+            .env_remove("RUST_LOG")
+            .stdout(Stdio::null())
+            .stderr(Stdio::from(std::fs::File::create(&log).expect("log")))
+            .spawn()
+            .expect("spawn sovereign-stock"),
+    );
+    wait_until("svrn's /status answered", Duration::from_secs(120), &log, || {
+        assert!(
+            stock.0.try_wait().expect("try_wait").is_none(),
+            "the stock process exited during boot:
+{}",
+            log_tail(&log)
+        );
+        get_json(&format!("http://127.0.0.1:{svrn}/status")).is_some()
+    });
+
+    let list = mcp(svrn, 1, "tools/list", serde_json::json!({}));
+    let names: Vec<String> = list["result"]["tools"]
+        .as_array()
+        .unwrap_or_else(|| panic!("tools/list has no tools: {list}"))
+        .iter()
+        .filter_map(|t| t["name"].as_str().map(str::to_string))
+        .collect();
+    let mut unique = names.clone();
+    unique.sort();
+    unique.dedup();
+    assert_eq!(unique.len(), names.len(), "a tool is listed twice: {names:?}");
+    assert_eq!(
+        names.iter().filter(|n| *n == "symbols").count(),
+        1,
+        "code's symbols is not on the one /mcp exactly once: {names:?}
+{}",
+        log_tail(&log)
+    );
+    for name in ["wikipedia_fetch", "work_in_flight"] {
+        assert!(names.iter().any(|n| n == name), "{name} missing: {names:?}");
+    }
+
+    let call = mcp(
+        svrn,
+        2,
+        "tools/call",
+        serde_json::json!({ "name": "symbols", "arguments": { "name": "main" } }),
+    );
+    assert!(call.get("error").is_none(), "code's symbols did not answer: {call}");
+    let text = call["result"]["content"][0]["text"].as_str().unwrap_or_default();
+    assert!(
+        !text.is_empty() && !text.contains("svrn serves no code tool"),
+        "symbols answered with svrn's pointer, not code's tool: {call}"
+    );
+    let atlas = mcp(svrn, 3, "tools/call", serde_json::json!({ "name": "work_in_flight", "arguments": {} }));
+    assert!(atlas.get("error").is_none(), "work_in_flight did not answer: {atlas}");
+
+    let projects = client()
+        .get(format!("http://127.0.0.1:{svrn}/v1/projects"))
+        .send()
+        .expect("/v1/projects answered");
+    assert!(
+        projects.status().is_success(),
+        "/v1/projects is not code's router: HTTP {}",
+        projects.status()
+    );
 }
