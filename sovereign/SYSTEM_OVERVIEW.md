@@ -37,6 +37,7 @@ commonwealth-ai/
 ├── oplog/                     # Op/Oplog/Journaled — the append-only JSONL journal (tier-0)
 ├── serving-policy/            # Re-export shim for the serving-policy arithmetic (tier-0)
 ├── serving-policy-core/       # Fair-share scheduling + pipeline aliases ([[package_leaf]] vocabulary leaf)
+├── mesh-reach/                # Peer dial vocabulary + PeerTransport; RailsTransport (`rails`), the guest dialer + one iroh HTTP bridge (`guest`)
 ├── corpus-engine/             # Knowledge layer (LanceDB + Tantivy)
 ├── corpus-index/              # Retrieval read-port leaf — CorpusIndex, the IndexSource/CorpusReadPort traits, persisted settings, the engine Error
 ├── corpus-engine-scip/        # SCIP call graph + per-language exporter dispatch
