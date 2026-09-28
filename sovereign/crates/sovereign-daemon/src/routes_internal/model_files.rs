@@ -54,7 +54,7 @@ use crate::state::AppState;
 
 // The wire vocabulary lives in `commonwealth_core::model` — both ends of
 // this protocol must agree on it, and that is the lowest crate both reach.
-pub use commonwealth_core::model::{ModelFileInfo, ModelFileListing};
+pub use oicp_types::model_transfer::{ModelFileInfo, ModelFileListing};
 
 #[derive(Debug, Serialize)]
 pub struct ErrorBody {
@@ -463,11 +463,11 @@ mod tests {
     fn router(state: AppState) -> Router {
         Router::new()
             .route(
-                commonwealth_core::model::MODELS_LIST_PATH,
+                oicp_types::model_transfer::MODELS_LIST_PATH,
                 get(list_model_files),
             )
             .route(
-                commonwealth_core::model::MODEL_FILE_ROUTE,
+                oicp_types::model_transfer::MODEL_FILE_ROUTE,
                 get(serve_model_file),
             )
             .with_state(state)

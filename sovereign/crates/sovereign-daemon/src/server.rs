@@ -359,11 +359,11 @@ pub fn internal_router(state: AppState) -> Router {
         )
         // Peer-to-peer GGUF distribution. See routes_internal::model_files.
         .route(
-            commonwealth_core::model::MODELS_LIST_PATH,
+            oicp_types::model_transfer::MODELS_LIST_PATH,
             get(routes_internal::list_model_files),
         )
         .route(
-            commonwealth_core::model::MODEL_FILE_ROUTE,
+            oicp_types::model_transfer::MODEL_FILE_ROUTE,
             get(routes_internal::serve_model_file),
         )
         // Distributed-inference auto-warm: a host asks this worker to seed its

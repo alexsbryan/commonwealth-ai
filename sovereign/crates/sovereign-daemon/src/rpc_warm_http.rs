@@ -592,7 +592,7 @@ impl RpcShardWarmer for MeshRpcShardWarmer {
                 let urls = merge_bases(
                     transport_bases
                         .iter()
-                        .map(|b| commonwealth_core::model::model_file_url(b, &req.model_id)),
+                        .map(|b| oicp_types::model_transfer::model_file_url(b, &req.model_id)),
                     source_urls,
                 );
                 // Per-file lists get the same transport-first merge. The file
@@ -613,7 +613,7 @@ impl RpcShardWarmer for MeshRpcShardWarmer {
                         merge_bases(
                             transport_bases
                                 .iter()
-                                .map(|b| commonwealth_core::model::model_file_url(b, &name)),
+                                .map(|b| oicp_types::model_transfer::model_file_url(b, &name)),
                             urls_for_file,
                         )
                     })

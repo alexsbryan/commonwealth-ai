@@ -189,7 +189,7 @@ async fn orchestrate_warm(
                     .map(|f| {
                         ordered_bases
                             .iter()
-                            .map(|b| commonwealth_core::model::model_file_url(b, f))
+                            .map(|b| oicp_types::model_transfer::model_file_url(b, f))
                             .collect()
                     })
                     .collect();
