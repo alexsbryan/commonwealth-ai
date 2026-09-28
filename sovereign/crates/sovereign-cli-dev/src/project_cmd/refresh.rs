@@ -705,8 +705,7 @@ async fn maybe_rebuild_lancedb_corpus(
         eprintln!();
         eprintln!("  Rebuilding LanceDB corpus index: {reason}");
     }
-    match sovereign_cli_shared::code_index::rebuild_code_corpus(abs_repo, corpus_id, data_dir).await
-    {
+    match crate::code_index::rebuild_code_corpus(abs_repo, corpus_id, data_dir).await {
         Ok(stats) => {
             if !quiet {
                 eprintln!(

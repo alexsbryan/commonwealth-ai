@@ -4,7 +4,9 @@
 //! the LanceDB rebuild decision (`maybe_rebuild_lancedb_corpus` /
 //! `lancedb_rebuild_reason`) and the SCIP DB reset. Split out of
 //! `project_cmd` (2026-07-13). Ported into the shipped `sovereign-cli`
-//! 2026-08-06 alongside `code index`, which it calls to do the rebuild.
+//! 2026-08-06 alongside `code index`, which it calls to do the rebuild, and
+//! moved back with it by pb-code-index: the dispatcher's `svrn refresh` execs
+//! this binary's hidden `refresh` verb.
 //!
 //! The old crate got its plumbing via `use super::*` from `project_cmd::mod`.
 //! Here the imports are explicit, which is what makes the dependency surface
@@ -13,9 +15,10 @@
 
 use std::path::{Path, PathBuf};
 
-use crate::project_registry::{daemon_post, derive_corpus_id};
+use crate::project_cmd::daemon_post;
 use sovereign_cli_shared::code_index::tempfile_dir;
 use sovereign_cli_shared::dirs::default_data_dir;
+use sovereign_cli_shared::repo::derive_corpus_id;
 use sovereign_cli_shared::repo::find_repo_root;
 
 /// Read `.sovereign/project.json`, the record `project init` leaves behind.
@@ -382,7 +385,7 @@ async fn maybe_rebuild_lancedb_corpus(
     quiet: bool,
 ) -> i32 {
     let meta_path = data_dir.join(corpus_id).join("_corpus_meta.json");
-    let current_embed_stem = sovereign_core::setup_config::SetupConfig::load()
+    let current_embed_stem = sovereign_contracts::setup_config::SetupConfig::load()
         .ok()
         .and_then(|c| c.embed_model_stem());
 
@@ -403,7 +406,7 @@ async fn maybe_rebuild_lancedb_corpus(
         eprintln!();
         eprintln!("  Rebuilding LanceDB corpus index: {reason}");
     }
-    match crate::code_index_cmd::rebuild_code_corpus(abs_repo, corpus_id, data_dir).await {
+    match crate::code_index::rebuild_code_corpus(abs_repo, corpus_id, data_dir).await {
         Ok(stats) => {
             if !quiet {
                 eprintln!(

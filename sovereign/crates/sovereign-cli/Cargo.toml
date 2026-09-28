@@ -83,9 +83,9 @@ sovereign-cli-llm = { path = "../sovereign-cli-llm", optional = true }
 corpus-engine = { workspace = true }
 corpus-index = { workspace = true }
 corpus-engine-scip = { workspace = true, optional = true }
-# The pure-HTTP OICP client — `RemoteApiProvider` for `code index`'s embed
-# calls. Depended on directly rather than through `sovereign-inference`, which
-# re-exports it while linking llama.cpp unconditionally.
+# The pure-HTTP OICP client — `deep-research`'s loopback calls. Depended on
+# directly rather than through `sovereign-inference`, which re-exports it while
+# linking llama.cpp unconditionally.
 oicp-client = { workspace = true, optional = true }
 corpus-engine-notes = { workspace = true }
 serde_json = { workspace = true }
@@ -156,12 +156,11 @@ dev-tools = [
 # custody-stamped fetch, gap-audited rounds. Talks to the daemon over
 # loopback HTTP only (oicp-client) — no llama.cpp, no mesh.
 deep-research = ["dep:oicp-client"]
-# `svrn code index` / `svrn refresh` in the SHIPPED binary. Three lines is the
-# entire cost: the index path talks to the daemon over loopback HTTP for
-# embeddings (`oicp-client`, pure reqwest — no llama.cpp), reads/writes the
-# SCIP db (`corpus-engine-scip` — rusqlite + prost, no grammars), and needs
-# corpus-engine's `treesitter` for the `code` extractor, which is
-# `#[cfg(feature = "treesitter")]`-gated and panics without it
+# `project init` in the SHIPPED binary. `svrn code index` and `svrn refresh`
+# exec the code program, `sovereign-cli-dev` (pb-code-index). init
+# reads/writes the SCIP db (`corpus-engine-scip` — rusqlite + prost, no
+# grammars), and needs corpus-engine's `treesitter` for the `code` extractor,
+# which is `#[cfg(feature = "treesitter")]`-gated and panics without it
 # (`corpus-engine/src/engine/ingest_factories.rs:295-303`).
 #
 # Deliberately NOT pulling `sovereign-tools`/`-mesh`: neither is on the
@@ -169,12 +168,8 @@ deep-research = ["dep:oicp-client"]
 # binary. The grammars are already in the shipped daemon and llm siblings, so
 # this is not a new cost to the tarball — see SYSTEM_OVERVIEW.
 code-intel = [
-    "dep:oicp-client",
     "dep:corpus-engine-scip",
     "corpus-engine/treesitter",
-    # The verb itself. One implementation, shared with the workbench, which
-    # served a byte-drifting copy of it until 2026-08-20.
-    "sovereign-cli-shared/code-index",
     # `project init` (2026-08-07) reads the project model — `observation` to
     # derive what the repo IS, `project_toml` to persist it. Both live in
     # sovereign-cli-shared because the workbench still reads what init writes.

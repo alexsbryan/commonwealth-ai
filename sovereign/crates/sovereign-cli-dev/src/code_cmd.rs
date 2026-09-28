@@ -46,7 +46,7 @@ pub async fn run_code(args: &[String]) -> i32 {
     }
 
     match args[0].as_str() {
-        "index" => sovereign_cli_shared::code_index::cmd_index(&args[1..]).await,
+        "index" => crate::code_index::cmd_index(&args[1..]).await,
         "finalize" => cmd_finalize(&args[1..]).await,
         "watch" => cmd_watch(&args[1..]).await,
         // The code server; `svrn serve` and `svrn project serve` are its
@@ -518,7 +518,7 @@ async fn cmd_check_spec(args: &[String]) -> i32 {
     };
     let port = cfg.daemon.client_port;
     let chat_model = cfg.primary_model_stem().unwrap_or_default().to_string();
-    let (embed, _) = match sovereign_cli_shared::code_index::build_daemon_embed_fn().await {
+    let (embed, _) = match crate::code_index::build_daemon_embed_fn().await {
         Ok(e) => e,
         Err(e) => {
             eprintln!("check-spec: {e}");
@@ -1542,21 +1542,20 @@ async fn cmd_watch(args: &[String]) -> i32 {
     // was no error and no warning; the corpus just got worse the longer the
     // watcher ran. `rebuild_code_corpus` already refuses to run rather than
     // fall back to zero vectors; this path now holds the same line.
-    let (embed, embed_model_name) =
-        match sovereign_cli_shared::code_index::build_daemon_embed_fn().await {
-            Ok(v) => v,
-            Err(e) => {
-                eprintln!("error: {e}");
-                eprintln!(
-                    "\n`svrn code watch` embeds every changed chunk through the daemon so the \
+    let (embed, embed_model_name) = match crate::code_index::build_daemon_embed_fn().await {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("error: {e}");
+            eprintln!(
+                "\n`svrn code watch` embeds every changed chunk through the daemon so the \
                  watcher's writes land in the same embedding space as the rest of the corpus. \
                  Start it with `svrn daemon run` and re-run — the watcher will not run with a \
                  stub embedder, because that would silently degrade the index it is meant to \
                  keep current."
-                );
-                return 1;
-            }
-        };
+            );
+            return 1;
+        }
+    };
     let recipes_dir = data_dir.clone(); // unused placeholder — engine requires one
     let engine = Arc::new(
         corpus_engine::CorpusEngine::new(recipes_dir, data_dir.clone(), embed)

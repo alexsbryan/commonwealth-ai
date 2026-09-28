@@ -42,9 +42,6 @@ mod charter_cmd;
 // `--features awareness` alone fail to compile.
 #[cfg(feature = "code-intel")]
 mod code_index_cmd;
-#[cfg(feature = "code-intel")]
-#[cfg(feature = "code-intel")]
-mod code_refresh;
 // `svrn init` / `svrn project init`. Same gate as the index path it drives —
 // init's whole job is to produce a corpus, so a build that cannot index has
 // nothing to offer it.

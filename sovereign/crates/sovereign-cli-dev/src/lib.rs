@@ -72,10 +72,18 @@ mod audit_recover;
 mod code_capability_graph;
 #[cfg(feature = "workbench")]
 mod code_cmd;
+// `svrn code index` and `svrn refresh`, moved from sovereign-cli-shared and
+// sovereign-cli into the code program (pb-code-index).
 #[cfg(feature = "workbench")]
 mod code_fieldglass;
 #[cfg(feature = "workbench")]
+mod code_index;
+#[cfg(feature = "workbench")]
+mod code_index_incremental;
+#[cfg(feature = "workbench")]
 mod code_map;
+#[cfg(feature = "workbench")]
+mod code_refresh;
 #[cfg(feature = "workbench")]
 mod drift_cmd_orchestrator;
 #[cfg(feature = "workbench")]
@@ -284,6 +292,8 @@ async fn async_main() -> i32 {
         // itself, which calls it in-process — no spawn, and `svrn init --help`
         // no longer needs a 240 MB binary to be built.
         "project-refresh" => project_cmd::cmd_refresh(rest).await,
+        // `svrn refresh` in a `code-intel` dispatcher (sovereign-cli refresh_cmd.rs).
+        "refresh" => code_refresh::cmd_refresh(rest).await,
         "project-phase-pass" => project_cmd::cmd_phase_pass(rest).await,
         "project-serve" => project_cmd::cmd_serve(rest).await,
         "project-audit" => project_cmd::cmd_audit(rest).await,

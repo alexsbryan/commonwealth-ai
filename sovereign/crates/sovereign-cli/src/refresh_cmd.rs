@@ -4,16 +4,15 @@
 //!
 //! Renamed from `svrn project refresh` per the CLI refactor plan.
 //!
-//! Under `code-intel` this runs in-process (`crate::code_refresh`); otherwise
-//! it still execs the `sovereign-cli-dev` sibling, which is what a
-//! workbench-only build wants. The SHIPPED binary is built with `code-intel`
-//! (`scripts/release-cli-local.sh`), so users get the in-process path and no
-//! longer need a sibling that was never packaged.
+//! Both builds exec the `sovereign-cli-dev` sibling, the code program. Under
+//! `code-intel` it runs `refresh` (`code_refresh`, which ran in-process here
+//! until pb-code-index moved it); otherwise `project-refresh`, which is what a
+//! workbench-only build wants.
 
 pub async fn run(args: &[String]) -> i32 {
     #[cfg(feature = "code-intel")]
     {
-        crate::code_refresh::cmd_refresh(args).await
+        crate::dev_bin::exec("refresh", args)
     }
     #[cfg(not(feature = "code-intel"))]
     {

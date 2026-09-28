@@ -1,13 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! `svrn code` dispatch for the shipped binary.
 //!
-//! The verb itself lives in [`sovereign_cli_shared::code_index`] — the
-//! workbench serves the same `code index` and the two binaries carried
-//! byte-drifting copies of it from the 2026-08-06 port until 2026-08-20. What
-//! stays here is only what is TRUE OF THIS BINARY: which subcommands it owns,
-//! and what to say about the ones it does not.
-
-pub use sovereign_cli_shared::code_index::rebuild_code_corpus;
+//! The verb itself lives in the code program, `sovereign-cli-dev`
+//! (`code_index`, pb-code-index), which this binary execs. What stays here is
+//! only what is TRUE OF THIS BINARY: which subcommands it owns, and what to
+//! say about the ones it does not.
 
 /// Subcommands of `svrn code` this binary serves. Everything else under
 /// `code` is workbench-only; see `refuse_workbench_subcommand`.
@@ -20,7 +17,7 @@ pub async fn try_run(args: &[String]) -> Option<i32> {
     if !IN_PROCESS.contains(&sub.as_str()) {
         return None;
     }
-    Some(sovereign_cli_shared::code_index::cmd_index(&args[1..]).await)
+    Some(crate::dev_bin::exec("code", args))
 }
 
 /// Refuse a `code` subcommand that still lives in the workbench, naming what

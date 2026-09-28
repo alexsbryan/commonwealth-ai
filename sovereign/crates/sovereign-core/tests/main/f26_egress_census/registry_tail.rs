@@ -116,7 +116,8 @@ pub(super) const REGISTRY_TAIL: &[(&str, Class, usize)] = &[
     // `build_daemon_embed_fn` an endpoint parameter, the count stays 1 and this
     // census stays green. The pinned-localhost literal is the invariant; a
     // change to it is the review moment, not a change to the count.
-    ("sovereign/crates/sovereign-cli-shared/src/code_index.rs", Class::LocalDaemon, 1),
+    // Moved with the verb into the code program, sovereign-cli-dev (pb-code-index).
+    ("sovereign/crates/sovereign-cli-dev/src/code_index.rs", Class::LocalDaemon, 1),
 
     // rail.rs (2026-09-09): the one rail append/read client moved out of
     // sovereign-cli-llm into the crate every CLI links (ded2e10b0), so that

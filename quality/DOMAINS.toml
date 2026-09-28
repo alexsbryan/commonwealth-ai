@@ -10681,13 +10681,13 @@ lines = 732
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-shared/src/code_index.rs"
+path = "sovereign/crates/sovereign-cli-dev/src/code_index.rs"
 context = "unknown"
 lines = 886
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-shared/src/code_index_incremental.rs"
+path = "sovereign/crates/sovereign-cli-dev/src/code_index_incremental.rs"
 context = "unknown"
 lines = 605
 note = ""
@@ -10831,7 +10831,7 @@ lines = 41
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli/src/code_refresh.rs"
+path = "sovereign/crates/sovereign-cli-dev/src/code_refresh.rs"
 context = "host"
 lines = 561
 note = ""

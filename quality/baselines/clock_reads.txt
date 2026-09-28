@@ -40,7 +40,7 @@
 1	sovereign/crates/sovereign-cli-llm/src/recipe_agent_live_trial.rs
 1	sovereign/crates/sovereign-cli-mesh/src/mesh_cmd.rs
 4	sovereign/crates/sovereign-cli-shared/src/cli_contract_report.rs
-1	sovereign/crates/sovereign-cli-shared/src/code_index.rs
+1	sovereign/crates/sovereign-cli-dev/src/code_index.rs
 3	sovereign/crates/sovereign-cli/src/session_cmd.rs
 1	sovereign/crates/sovereign-cli/src/session_lineage.rs
 3	sovereign/crates/sovereign-cli/src/sibling.rs

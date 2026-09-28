@@ -525,7 +525,10 @@ pub(crate) async fn daemon_get(path: &str) -> Result<serde_json::Value, String> 
     Ok(body)
 }
 
-async fn daemon_post(path: &str, body: serde_json::Value) -> Result<serde_json::Value, String> {
+pub(crate) async fn daemon_post(
+    path: &str,
+    body: serde_json::Value,
+) -> Result<serde_json::Value, String> {
     let url = format!("{}{path}", daemon_base());
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(5))
