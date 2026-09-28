@@ -12,6 +12,7 @@
 //! path.
 
 pub mod act;
+pub mod exec;
 pub mod process;
 pub mod projection;
 pub mod refusal;
@@ -21,6 +22,7 @@ pub use act::{
     Completion, Failure, Revocation, Submission, UnitRef, WorkAct, WorkActKind, DEFAULT_TTL_SECS,
     MAX_TTL_SECS, MIN_TTL_SECS,
 };
+pub use exec::{subject_of, JobContext, JobError, ProgressSink};
 pub use process::{ProcessPayload, ResultSource, PROCESS_KIND};
 pub use projection::{
     LeaseState, LostLease, ProjectedUnit, ReapStats, WorkHandoff, WorkProjection, WorkUnitStatus,
