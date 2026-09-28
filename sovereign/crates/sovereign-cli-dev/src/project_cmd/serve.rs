@@ -197,35 +197,31 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
     eprintln!();
     eprintln!("  Stores:");
 
-    let test_store =
-        match corpus_engine_watchers::TestResultStore::open(&data_dir.join("test_results.db")) {
-            Ok(s) => {
-                eprintln!("  test_results.db  ✓");
-                Arc::new(s)
-            }
-            Err(e) => {
-                eprintln!("  warning: could not open test results DB: {e}");
-                Arc::new(
-                    corpus_engine_watchers::TestResultStore::open(std::path::Path::new(":memory:"))
-                        .expect("in-memory test store"),
-                )
-            }
-        };
+    // A store that does not open is refused by path, never replaced by an
+    // in-memory one whose writes vanish at exit (principle 6).
+    let test_results_path = data_dir.join("test_results.db");
+    let test_store = match corpus_engine_watchers::TestResultStore::open(&test_results_path) {
+        Ok(s) => {
+            eprintln!("  test_results.db  ✓");
+            Arc::new(s)
+        }
+        Err(e) => {
+            eprintln!("error: cannot open {}: {e}", test_results_path.display());
+            return 1;
+        }
+    };
 
-    let lint_store =
-        match corpus_engine_watchers::LintResultStore::open(&data_dir.join("lint_results.db")) {
-            Ok(s) => {
-                eprintln!("  lint_results.db  ✓");
-                Arc::new(s)
-            }
-            Err(e) => {
-                eprintln!("  warning: could not open lint results DB: {e}");
-                Arc::new(
-                    corpus_engine_watchers::LintResultStore::open(std::path::Path::new(":memory:"))
-                        .expect("in-memory lint store"),
-                )
-            }
-        };
+    let lint_results_path = data_dir.join("lint_results.db");
+    let lint_store = match corpus_engine_watchers::LintResultStore::open(&lint_results_path) {
+        Ok(s) => {
+            eprintln!("  lint_results.db  ✓");
+            Arc::new(s)
+        }
+        Err(e) => {
+            eprintln!("error: cannot open {}: {e}", lint_results_path.display());
+            return 1;
+        }
+    };
 
     // ── Notes store ─────────────────────────────────────────────
 
@@ -245,11 +241,8 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
             Arc::new(s)
         }
         Err(e) => {
-            eprintln!("  warning: could not open notes DB: {e}");
-            Arc::new(
-                corpus_engine_notes::NoteStore::open(std::path::Path::new(":memory:"))
-                    .expect("in-memory notes store"),
-            )
+            eprintln!("error: cannot open {}: {e}", notes_db_path.display());
+            return 1;
         }
     };
 
