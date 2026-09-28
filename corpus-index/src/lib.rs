@@ -43,6 +43,7 @@ pub mod error;
 pub mod filters;
 pub mod fs_source;
 pub mod host;
+pub mod enrichment_state;
 pub mod index;
 pub mod ingest_port;
 pub mod recipe;

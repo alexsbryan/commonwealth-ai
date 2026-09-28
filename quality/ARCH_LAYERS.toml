@@ -901,7 +901,11 @@ name = "corpus-index"
 # both need them; neither widened the allow list. Since pb-corpus-mcp-reads it
 # holds `FsIndexSource` (fs_source.rs): the installed-index listing, its
 # dedupe and the handle cache, which the engine delegates to and corpus-mcp
-# reads through; the allow list did not widen.
+# reads through; the allow list did not widen. Since pb-ingest-dial-tools it
+# holds ingest's write ports beside the read port (ingest_port.rs, one per
+# svrn tool family, implemented by the engine) and the enrichment state file
+# an index directory carries (enrichment_state.rs); the allow list did not
+# widen.
 allow = ["kernel-types", "oplog", "corpus-engine-yield", "sovereign-contracts"]
 
 [[package_leaf]]
