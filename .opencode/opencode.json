@@ -30,7 +30,7 @@
   "mcp": {
     "sovereign": {
       "type": "remote",
-      "url": "http://127.0.0.1:9741/mcp"
+      "url": "http://localhost:9741/mcp"
     }
   },
   "agent": {
@@ -44,7 +44,7 @@
       "npm": "@ai-sdk/openai-compatible",
       "name": "Commonwealth Mesh",
       "options": {
-        "baseURL": "http://127.0.0.1:9741/v1"
+        "baseURL": "http://localhost:9741/v1"
       },
       "models": {
         "auto": {
