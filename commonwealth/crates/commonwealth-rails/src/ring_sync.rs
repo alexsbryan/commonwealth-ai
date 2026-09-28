@@ -676,3 +676,69 @@ pub async fn answer(
         more_for_caller,
     ))
 }
+
+/// cw-rails' peer client for the round: the same ten-second bound its gossip
+/// round dials with, built once. The build is deterministic, so caching a
+/// failure is correct rather than a lost retry.
+fn peer_client() -> Result<&'static reqwest::Client, &'static str> {
+    static CLIENT: std::sync::OnceLock<Result<reqwest::Client, String>> =
+        std::sync::OnceLock::new();
+    CLIENT
+        .get_or_init(|| {
+            reqwest::Client::builder()
+                .timeout(Duration::from_secs(10))
+                .build()
+                .map_err(|e| e.to_string())
+        })
+        .as_ref()
+        .map_err(String::as_str)
+}
+
+/// cw-rails as a round's host: its own journals, its own membership and its
+/// own transport. A solo node answers no membership, so its round returns
+/// before the glassbox line rather than printing an empty roster each minute.
+impl RingSyncHost for crate::RailsDaemon {
+    fn journal(&self) -> Option<Arc<dyn RingSyncJournal>> {
+        Some(self.rail.clone() as Arc<dyn RingSyncJournal>)
+    }
+
+    fn http(&self) -> Result<&reqwest::Client, &str> {
+        peer_client()
+    }
+
+    fn members(
+        &self,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Option<RoundMembers>> + Send + '_>>
+    {
+        Box::pin(async move {
+            if self.is_solo() {
+                return None;
+            }
+            let now_secs = commonwealth_core::clock::unix_now_secs();
+            let mesh = self.mesh.read().await;
+            Some(RoundMembers::of(&mesh, self.node.self_id, now_secs))
+        })
+    }
+
+    fn transport(&self) -> Arc<dyn commonwealth_transport::PeerTransport> {
+        self.transport.clone()
+    }
+}
+
+/// `POST /v1/rail/append`, then wake the round: an act this node just signed
+/// is the one that most needs to go, and sixty seconds is the cadence for
+/// anti-entropy, not for a write (the daemon's `ring_write_nudge`, here).
+/// A refused append wakes nothing.
+pub async fn append(
+    axum::extract::State(daemon): axum::extract::State<Arc<crate::RailsDaemon>>,
+    query: axum::extract::Query<crate::rail::RailQuery>,
+    body: axum::Json<serde_json::Value>,
+) -> axum::response::Response {
+    let nudge = daemon.ring_nudge.clone();
+    let answer = crate::rail::append(axum::extract::State(daemon), query, body).await;
+    if answer.status().is_success() {
+        nudge.notify_one();
+        info!(target: "rails", "ring sync: an append woke the round");
+    }
+    answer
+}

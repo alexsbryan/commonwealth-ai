@@ -33,15 +33,16 @@
 ///
 /// A new row here is a review moment, never a silent pass. Adding a sender
 /// is allowed; adding one without saying so in this table is not.
+///
+/// The file is relative to THIS crate's manifest dir, not the workspace
+/// root: the census also runs in the cmnwlth lift, whose sandbox lays the
+/// crates out as `crates/<name>` (pb-rails-parity), and a root-relative path
+/// would only ever match one of the two layouts.
 const REPLICATION_SENDERS: &[(&str, &str, usize)] = &[
     // The ring journal's own digest exchange — its own route on its own
     // 60 s cadence, budgeted in both directions, chunked so one body is not
     // the unit of convergence.
-    (
-        "/internal/ring/sync",
-        "commonwealth/crates/commonwealth-rails/src/ring_sync.rs",
-        1,
-    ),
+    ("/internal/ring/sync", "src/ring_sync.rs", 1),
 ];
 
 fn workspace_root() -> std::path::PathBuf {
@@ -72,12 +73,31 @@ fn workspace_members(root: &std::path::Path) -> Vec<String> {
         .collect::<Vec<_>>()
         .join("\n");
     let end = body.find(']').expect("unterminated members");
-    body[..end]
-        .lines()
-        .map(|l| l.trim().trim_matches(',').trim_matches('"'))
-        .filter(|l| !l.is_empty() && !l.starts_with('#'))
-        .map(String::from)
-        .collect()
+    // One entry per comma or line, and a trailing `/*` expands to the
+    // directories under it (the lift sandbox's `members = ["crates/*"]`).
+    let mut out = Vec::new();
+    for entry in body[..end]
+        .split([',', '\n'])
+        .map(|l| l.trim().trim_matches('"'))
+        .filter(|l| !l.is_empty())
+    {
+        match entry.strip_suffix("/*") {
+            Some(dir) => {
+                let mut subs: Vec<String> = std::fs::read_dir(root.join(dir))
+                    .map(|rd| {
+                        rd.flatten()
+                            .filter(|e| e.path().is_dir())
+                            .map(|e| format!("{dir}/{}", e.file_name().to_string_lossy()))
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                subs.sort();
+                out.extend(subs);
+            }
+            None => out.push(entry.to_string()),
+        }
+    }
+    out
 }
 
 fn walk_rs(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
@@ -156,9 +176,15 @@ fn scan_senders() -> Vec<(String, String, usize)> {
 /// named the file.
 #[test]
 fn every_sender_of_replicated_state_is_declared() {
+    let crate_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let crate_rel = crate_dir
+        .strip_prefix(workspace_root())
+        .expect("this crate sits under its workspace root")
+        .to_string_lossy()
+        .replace('\\', "/");
     let mut expected: Vec<(String, String, usize)> = REPLICATION_SENDERS
         .iter()
-        .map(|(route, file, n)| ((*route).to_string(), (*file).to_string(), *n))
+        .map(|(route, file, n)| ((*route).to_string(), format!("{crate_rel}/{file}"), *n))
         .collect();
     expected.sort();
     assert_eq!(

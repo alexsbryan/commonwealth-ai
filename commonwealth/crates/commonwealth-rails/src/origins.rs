@@ -31,7 +31,8 @@ use crate::RailsDaemon;
 
 /// The endpoint's own origins, which no claim holds: its gossip and join
 /// routes on `cwth/http/0` (any dialer — a joiner is not a member yet, and
-/// the gossip merge authorizes for itself), and the media origin
+/// the gossip merge authorizes for itself), its ring routes under
+/// `/internal/ring` (members only), and the media origin
 /// `rails.toml` declares, for members inside `media.allow`, with the
 /// credentials declared for it.
 pub fn stand_own(
@@ -46,6 +47,15 @@ pub fn stand_own(
         &["/internal/gossip", "/internal/join"],
         internal,
         Admit::Any,
+        Vec::new(),
+    )?;
+    // The ring's peer routes (pb-rails-parity): members only; each ring then
+    // asks its own roster about the stamped key (`crate::ring_routes`).
+    registry.stand(
+        ALPN,
+        &["/internal/ring"],
+        internal,
+        Admit::Members(Vec::new()),
         Vec::new(),
     )?;
     if let Some(origin) = media {

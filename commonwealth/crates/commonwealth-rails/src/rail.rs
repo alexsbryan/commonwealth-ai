@@ -715,7 +715,7 @@ const LIVE_BUFFER_CAPACITY: usize = 256;
 /// number on this daemon too: read by the push door that accepts and by no
 /// one else, so a payload this daemon would accept is exactly the one it
 /// keeps.
-const LIVE_PAYLOAD_MAX_BYTES: usize = 4096;
+pub(crate) const LIVE_PAYLOAD_MAX_BYTES: usize = 4096;
 
 /// The arrived-payload buffer: bounded, in memory, and the only place a
 /// live payload ever sits. Keyed by namespace, the way append and log are.

@@ -1218,7 +1218,11 @@ and the gossiped capabilities are all read; each registration is handed a tie (`
 checks with `tied_pubkey`, and an unregistered ALPN or prefix is refused by name. Outbound (pb-rails-reach),
 `GET /v1/mesh/reach?peer=&class=` answers any peer's endpoints for a traffic class from its own transport,
 and the `mesh-reach` leaf's `RailsTransport` is the `PeerTransport` that asks it, so a program that is not
-the mesh endpoint dials peers through this one.
+the mesh endpoint dials peers through this one. Since phase-b pb-rails-parity it runs the ring round itself
+(`commonwealth-rails/src/ring_sync.rs`, moved from sovereign-mesh; the daemon runs the same code over its
+rail port until the flip), woken by its append door, and serves `/internal/ring/{sync,live,checkpoint/{ns}}`
+to members under a standing `/internal/ring` prefix (`ring_routes.rs`) and `GET /v1/mesh/relay-candidates`
+(address discovery, moved to `commonwealth-discovery::mesh_discovery`).
 
 ---
 

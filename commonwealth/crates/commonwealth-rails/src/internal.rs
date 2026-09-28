@@ -67,6 +67,7 @@ pub async fn serve(
     contacts: Arc<Mutex<HashMap<NodeId, u64>>>,
     self_id: NodeId,
     data_dir: PathBuf,
+    ring: RouteBundle,
 ) -> Result<(SocketAddr, tokio::task::JoinHandle<()>), Refusal> {
     let bind: SocketAddr = ([127, 0, 0, 1], 0).into();
     let listener = tokio::net::TcpListener::bind(bind)
@@ -83,11 +84,11 @@ pub async fn serve(
     });
     let task = tokio::spawn(async move {
         let forever = std::future::pending::<()>();
-        if let Err(e) = host_kit::shell::serve([listener], vec![bundle], forever).await {
+        if let Err(e) = host_kit::shell::serve([listener], vec![bundle, ring], forever).await {
             tracing::error!(target: "rails", error = %e, "internal: listener stopped");
         }
     });
-    tracing::info!(target: "rails", addr = %addr, "internal: /internal/gossip and /internal/join listening");
+    tracing::info!(target: "rails", addr = %addr, "internal: /internal/gossip, /internal/join and /internal/ring/* listening");
     Ok((addr, task))
 }
 

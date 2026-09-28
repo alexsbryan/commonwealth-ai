@@ -117,7 +117,7 @@ binary = "debug/cw-rails"
 # relay, no n0 DNS, the two reach each other on direct addresses. It is two
 # processes, so it is not the mesh of one that could pass by having nobody to
 # disagree with.
-pass = "founded '${MESH}', joined it by the founder's invite, converged a roster with '${PEER}', reached '${OFFERER}' as an online library, a GET through ${URL} answered HTTP ${THROUGH}; after a rotate the old invite answered ${OLD_JOIN} and the new one admitted a third node to '${JOINED}', which created, switched back to '${SWITCHED}', forgot '${FORGOT}' and left '${LEFT}'"
+pass = "founded '${MESH}', joined it by the founder's invite, converged a roster with '${PEER}', reached '${OFFERER}' as an online library, a GET through ${URL} answered HTTP ${THROUGH}, an act the joiner signed reached the founder through cw-rails' round, relay candidates answered (${RELAY_KIND} recommended); after a rotate the old invite answered ${OLD_JOIN} and the new one admitted a third node to '${JOINED}', which created, switched back to '${SWITCHED}', forgot '${FORGOT}' and left '${LEFT}'"
 steps = [
   { do = "input", var = "MESH", value = "cw-rails-lift-mesh" },
   { do = "ports", vars = ["ORIGIN_PORT", "FOUNDER_PORT", "LISTEN_PORT"] },
@@ -128,14 +128,14 @@ steps = [
   { do = "spawn", id = "origin", argv = ["python3", "-m", "http.server", "${ORIGIN_PORT}", "--bind", "127.0.0.1", "--directory", "${SANDBOX}/library"], log = "origin.log" },
   { do = "write", path = "${SANDBOX}/founder/rails.toml", text = "name = \"cw-rails-founder\"\nlisten = ${FOUNDER_PORT}\n\n[media]\norigin = \"127.0.0.1:${ORIGIN_PORT}\"\n" },
   { do = "exec", argv = ["${BIN}", "found", "${MESH}", "--data-dir", "${SANDBOX}/founder"], log = "found.log", fail = "the lifted binary could not found a mesh (see ${SANDBOX}/found.log)" },
-  { do = "spawn", id = "founder", argv = ["${BIN}", "run", "--local-only", "--data-dir", "${SANDBOX}/founder"], log = "founder.log", env = { RUST_LOG = "info" } },
+  { do = "spawn", id = "founder", argv = ["${BIN}", "run", "--local-only", "--data-dir", "${SANDBOX}/founder"], log = "founder.log", env = { RUST_LOG = "info,commonwealth_rails::ring_sync=debug" } },
   # The invite is served once the founder's endpoint has an address to name.
   { do = "poll", url = "http://127.0.0.1:${FOUNDER_PORT}/v1/mesh/status", path = "join_link", var = "INVITE", doc = "founder", timeout = 60, alive = "founder", fail = "the founder served no join_link within 60s (see ${SANDBOX}/founder.log)" },
   { do = "require", value = "${INVITE}", match = "iroh=", fail = "the founder's invite carries no iroh dial string: ${INVITE}" },
   { do = "write", path = "${SANDBOX}/data/rails.toml", text = "name = \"cw-rails-lift\"\nlisten = ${LISTEN_PORT}\n" },
   { do = "exec", argv = ["${BIN}", "join", "${INVITE}", "--data-dir", "${SANDBOX}/data", "--name", "cw-rails-lift"], log = "join.log", fail = "the lifted daemon was not admitted by the founder (see ${SANDBOX}/join.log and founder.log)" },
   { do = "exists", path = "${SANDBOX}/data/mesh.json", fail = "join reported success and wrote no mesh.json" },
-  { do = "spawn", id = "daemon", argv = ["${BIN}", "run", "--local-only", "--data-dir", "${SANDBOX}/data"], log = "daemon.log", env = { RUST_LOG = "info" } },
+  { do = "spawn", id = "daemon", argv = ["${BIN}", "run", "--local-only", "--data-dir", "${SANDBOX}/data"], log = "daemon.log", env = { RUST_LOG = "info,commonwealth_rails::ring_sync=debug" } },
   # The roster comes from the join snapshot, so it appears at once.
   { do = "poll", url = "http://127.0.0.1:${LISTEN_PORT}/v1/mesh/status", path = "members[is_self!=true].name", var = "PEER", doc = "status", timeout = 60, alive = "daemon", fail = "no member other than this one appeared on /v1/mesh/status within 60s (see ${SANDBOX}/daemon.log)" },
   # The catalogue rides a GOSSIP round, seconds after the roster (measured
@@ -147,6 +147,18 @@ steps = [
   { do = "require", value = "${URL}", match = "^http://127\\.0\\.0\\.1:", fail = "the reach URL is not loopback (${URL}): the media class was routed off iroh, which is a hole rather than a fallback" },
   # Any status is the pass. What fails is no answer at all.
   { do = "get", url = "${URL}/", status_var = "THROUGH", timeout = 30, fail = "a GET through ${URL} got no HTTP answer: the bridge accepted and the far end never sent a byte" },
+  # The ring round (pb-rails-parity): an act the joiner signs reaches the
+  # founder through cw-rails' own round and its /internal/ring/sync route,
+  # woken by the append door's nudge. Signed on the JOINER because it holds
+  # the founder's dial string from the invite; the founder learns the
+  # joiner's addresses by gossip, and a nudged round that runs before that
+  # finds no address and waits for the interval (watched 2026-09-28: the
+  # nudged round at +0s counted the joiner unreachable, the interval round at
+  # +60s pushed the act). 90s covers that interval round too.
+  { do = "call", url = "http://127.0.0.1:${LISTEN_PORT}/v1/rail/append?namespace=parity-proof", json = { op = "record", payload = { note = "parity" } }, path = "id", var = "APPENDED", fail = "the joiner's append door signed nothing: ${BODY}" },
+  { do = "poll", url = "http://127.0.0.1:${FOUNDER_PORT}/v1/rail/log?namespace=parity-proof", path = "ops[id=${APPENDED}].id", var = "REPLICATED", doc = "ring", timeout = 90, alive = "founder", fail = "the joiner's act ${APPENDED} never reached the founder's journal within 90s: cw-rails' round did not carry it (see ${SANDBOX}/daemon.log, founder.log)" },
+  # Relay candidates answer from cw-rails (pb-rails-parity).
+  { do = "get", url = "http://127.0.0.1:${LISTEN_PORT}/v1/mesh/relay-candidates", path = "candidates[recommended=true].kind", var = "RELAY_KIND", fail = "GET /v1/mesh/relay-candidates named no recommended candidate: ${BODY}" },
   # The membership doors (pb-rails-membership), each through cw-rails alone:
   # the founder rotates, and a third node, running solo, is refused on the
   # old invite, admitted on the new one, then creates, switches, forgets and

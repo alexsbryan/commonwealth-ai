@@ -7,7 +7,8 @@
 //! spelling) · the four `/v1/mesh/publish` routes · the four
 //! `/v1/mesh/origins` routes, in [`crate::origins`] · the two roster verbs ·
 //! the ring rail's doors, `/v1/rail/{append,log,live}`, in [`crate::rail`] ·
-//! the mesh store's `/v1/mesh/kv/*`, in [`crate::kv`] · the membership
+//! the mesh store's `/v1/mesh/kv/*`, in [`crate::kv`] ·
+//! `GET /v1/mesh/relay-candidates` · the membership
 //! doors, in [`crate::membership`]. Every answer is
 //! `commonwealth_media`'s — the same functions the inference daemon's
 //! `/v1/mesh/*` routes call, so a shim written against one daemon behaves the
@@ -95,6 +96,9 @@ fn mesh_bundle(daemon: Arc<RailsDaemon>) -> RouteBundle {
         // traffic class, so a program that is not the mesh endpoint dials
         // peers through this one (`mesh_reach::rails::RailsTransport`).
         .route(mesh_reach::door::REACH_PATH, get(reach))
+        // The host's reachable addresses for an invite's `?relay=` hint
+        // (pb-rails-parity; the daemon's route answers the same rows).
+        .route("/v1/mesh/relay-candidates", get(relay_candidates))
         // Any program's loopback origin, served to members by ALPN or by
         // `cwth/http/0` prefix (pb-rails-origins); the app doors above are
         // this registry's app entry.
@@ -124,7 +128,8 @@ fn mesh_bundle(daemon: Arc<RailsDaemon>) -> RouteBundle {
         // caller's explicit one. The sync doors (fp-54) are the round's
         // read/write surface over the same journals — rail-core JSON, no
         // sovereign-* wire types.
-        .route("/v1/rail/append", post(crate::rail::append))
+        // The append door wakes the ring round after a signed write.
+        .route("/v1/rail/append", post(crate::ring_sync::append))
         .route("/v1/rail/log", get(crate::rail::log))
         .route(
             "/v1/rail/live",
@@ -626,4 +631,30 @@ mod tests {
             check_loopback(local.parse().unwrap()).expect(local);
         }
     }
+}
+
+/// `GET /v1/mesh/relay-candidates` — this host's reachable IPs, ranked
+/// (Tailscale, LAN, IPv6), each with the `host:port` an invite's `?relay=`
+/// carries. Ranked by the one enumerator the daemon's route calls
+/// (`commonwealth_discovery::mesh_discovery::relay_candidates`). The port is
+/// this endpoint's own direct port; an endpoint with no direct address yet
+/// names that absence rather than a port it does not have.
+pub async fn relay_candidates(State(daemon): State<Arc<RailsDaemon>>) -> impl IntoResponse {
+    let port = daemon
+        .node
+        .endpoint
+        .addr()
+        .ip_addrs()
+        .next()
+        .map(|a| a.port());
+    let Some(port) = port else {
+        tracing::info!(target: "rails", "relay candidates: the endpoint has no direct address yet");
+        return Json(serde_json::json!({
+            "candidates": [],
+            "absent": "the endpoint has no direct address yet, so no candidate has a port",
+        }));
+    };
+    let candidates = commonwealth_discovery::mesh_discovery::relay_candidates(port);
+    tracing::debug!(target: "rails", port, count = candidates.len(), "relay candidates: answered");
+    Json(serde_json::json!({ "candidates": candidates }))
 }

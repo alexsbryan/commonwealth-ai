@@ -67,7 +67,7 @@ use commonwealth_transport::iroh::{
 };
 use commonwealth_transport::PeerTransport;
 use ed25519_dalek::SigningKey;
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::{Mutex, Notify, RwLock};
 
 pub mod acceptor;
 pub mod api;
@@ -86,6 +86,7 @@ pub mod membership;
 pub mod origins;
 pub mod presence;
 pub mod rail;
+pub mod ring_routes;
 pub mod ring_sync;
 pub mod work;
 
@@ -317,7 +318,10 @@ pub struct RailsDaemon {
     /// The live lane's arrived-payload buffer — delivery, not record;
     /// nothing here reaches a store, a journal or a disk. See
     /// [`rail::LiveBuffer`].
-    pub rail_live: rail::LiveBuffer,
+    pub rail_live: Arc<rail::LiveBuffer>,
+    /// Wakes the ring round now rather than at its interval: fired by the
+    /// append door after a signed write (see [`ring_sync::append`]).
+    pub ring_nudge: Arc<Notify>,
     /// The mesh store, projected from `rail`'s journals and pumped back onto
     /// them; served at `/v1/mesh/kv/*`. See [`kv`].
     pub kv: Arc<kv::KvHost>,
@@ -380,18 +384,27 @@ impl RailsDaemon {
             Some(node.pubkey()),
         )?);
 
+        // The registry exists before the listener, because the ring routes on
+        // that listener read its registrations (the live lane's namespaces);
+        // its standing entries need the listener's address, so they follow.
+        let origins = commonwealth_media::origins::OriginRegistry::new(
+            commonwealth_media::PublishedApps::default(),
+        );
+        let rail_live = Arc::new(rail::LiveBuffer::default());
         let (internal_addr, internal) = internal::serve(
             mesh.clone(),
             contacts.clone(),
             node.self_id,
             node.data_dir.clone(),
+            ring_routes::router(ring_routes::RingInbound {
+                rail: rail.clone(),
+                live: rail_live.clone(),
+                origins: origins.clone(),
+            }),
         )
         .await?;
 
         let join_key = identity::load_join_key(&node.data_dir)?;
-        let origins = commonwealth_media::origins::OriginRegistry::new(
-            commonwealth_media::PublishedApps::default(),
-        );
         let published_apps = origins.apps().clone();
         origins::stand_own(
             &origins,
@@ -416,7 +429,8 @@ impl RailsDaemon {
             published_apps,
             origins,
             rail,
-            rail_live: rail::LiveBuffer::default(),
+            rail_live,
+            ring_nudge: Arc::new(Notify::new()),
             kv,
             media_presence: Arc::new(std::sync::RwLock::new(None)),
             internal_addr,
@@ -526,6 +540,14 @@ impl RailsDaemon {
         let kv_pump = tokio::spawn(kv::run_forever(daemon.kv.clone()));
         // The contributions ledger's retention sweep (fp-78), over that store.
         let ledger_gc = tokio::spawn(ledger::run_retention_gc(daemon.kv.store.clone()));
+        // The ring round (pb-rails-parity): one round now, then every
+        // interval or on the append door's nudge. A solo node's round has
+        // nobody to exchange with and returns at once.
+        let ring_sync = ring_sync::spawn_ring_sync_loop(
+            daemon.clone(),
+            ring_sync::DEFAULT_RING_SYNC_INTERVAL,
+            daemon.ring_nudge.clone(),
+        );
         tracing::info!(
             target: "rails",
             api = %listen,
@@ -541,6 +563,7 @@ impl RailsDaemon {
         presence.abort();
         kv_pump.abort();
         ledger_gc.abort();
+        drop(ring_sync);
         Ok(())
     }
 

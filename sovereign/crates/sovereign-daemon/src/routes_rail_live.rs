@@ -124,14 +124,9 @@ impl LiveBuffer {
     }
 }
 
-/// What one peer posts to another's `/internal/ring/live`: the payload and
-/// the namespace the SENDER's grant resolved it under. Built by
-/// `push_ephemeral`, read by `routes_internal::ring_live`.
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
-pub struct LiveEnvelope {
-    pub namespace: String,
-    pub payload: String,
-}
+/// Moved to `sovereign_peer_wire` (phase-b pb-rails-parity): cw-rails'
+/// `/internal/ring/live` reads the same body. Re-exported at its historical path.
+pub use sovereign_peer_wire::LiveEnvelope;
 
 fn err(status: StatusCode, msg: impl Into<String>) -> Response {
     (status, Json(serde_json::json!({ "error": msg.into() }))).into_response()
