@@ -8,17 +8,19 @@
 //! (`require_encryption`), because this process reaches peers by key or not
 //! at all, so its invites carry `iroh=`.
 //!
-//! **A cw-rails invite does not expire.** The daemon arms a 24-hour TTL and
-//! renews it with `svrn mesh rotate`; cw-rails has no rotate, and a TTL with
-//! no rotate would end admission for good a day after founding. A member that
-//! rotates the invite elsewhere makes this node's key stale, and
-//! [`invite_link`] then answers with that absence by name.
+//! **A cw-rails invite expires a day after it is minted**
+//! (`INVITE_TTL_SECS`, the daemon's TTL) and is renewed by
+//! `POST /v1/mesh/rotate` ([`crate::membership`]). A member that rotates the
+//! invite elsewhere makes this node's key stale, and [`invite_link`] then
+//! answers with that absence by name.
 
 use std::path::{Path, PathBuf};
 
 use commonwealth_core::mesh::Mesh;
 use commonwealth_discovery::deep_link::build_join_link;
-use commonwealth_discovery::membership::{init_mesh_with_identity, verify_join_key};
+use commonwealth_discovery::membership::{
+    init_mesh_with_identity, verify_join_key, INVITE_TTL_SECS,
+};
 
 use crate::{identity, Refusal};
 
@@ -50,7 +52,7 @@ pub fn found(data_dir: &Path, mesh_name: &str, node_name: &str) -> Result<Founde
         .map_err(|e| identity::StoreRefusal::DataDir(data_dir.to_path_buf(), e))?;
     let key = commonwealth_transport::identity::load_or_generate_node_key(data_dir);
     let self_id = identity::load_or_generate_node_id(data_dir)?;
-    let (mesh, join_key) = init_mesh_with_identity(
+    let (mut mesh, join_key) = init_mesh_with_identity(
         mesh_name,
         node_name,
         Vec::new(),
@@ -58,6 +60,7 @@ pub fn found(data_dir: &Path, mesh_name: &str, node_name: &str) -> Result<Founde
         Some(commonwealth_transport::identity::node_pubkey(&key)),
         true,
     );
+    mesh.invite_expires_at = Some(commonwealth_core::clock::unix_now_secs() + INVITE_TTL_SECS);
     // The key first: a mesh.json with no key beside it is a founder that
     // can never print an invite.
     identity::save_join_key(data_dir, &join_key)?;
@@ -127,6 +130,10 @@ mod tests {
             .unwrap()
             .expect("the key");
         assert!(verify_join_key(&key, &mesh.invite_key_hash));
+        // The daemon's TTL: a founded invite admits for a day, then rotate.
+        let now = commonwealth_core::clock::unix_now_secs();
+        let expires = mesh.invite_expires_at.expect("a founded invite expires");
+        assert!(expires > now + INVITE_TTL_SECS - 60 && expires <= now + INVITE_TTL_SECS);
     }
 
     /// The failing input: a second founding over a mesh would orphan it.
