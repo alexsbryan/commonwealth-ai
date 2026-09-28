@@ -260,7 +260,7 @@ pub fn bin_main() -> ! {
 
 #[cfg(feature = "workbench")]
 async fn async_main() -> i32 {
-    use sovereign_cli_shared::tracing_init::init_tracing;
+    use sovereign_cli_base::tracing_init::init_tracing;
 
     let raw_args: Vec<String> = std::env::args().skip(1).collect();
     let cmd = raw_args.first().map(|s| s.as_str()).unwrap_or("");

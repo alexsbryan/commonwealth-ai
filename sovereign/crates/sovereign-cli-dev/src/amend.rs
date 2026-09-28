@@ -285,7 +285,7 @@ impl AmendmentInterlocutor for StdinAmendmentInterlocutor {
         let _ = writeln!(stderr, "      Why: {}", q.why);
         let _ = write!(stderr, "  > ");
         let _ = stderr.flush();
-        sovereign_cli_shared::prompts::prompt_string("").unwrap_or_default()
+        sovereign_cli_base::prompts::prompt_string("").unwrap_or_default()
     }
 
     fn confirm_amendment(&mut self, preview: &str) -> bool {
@@ -300,7 +300,7 @@ impl AmendmentInterlocutor for StdinAmendmentInterlocutor {
         let _ = write!(stderr, "  [A]pprove amendment, or [C]ancel? ");
         let _ = stderr.flush();
         matches!(
-            sovereign_cli_shared::prompts::prompt_string("")
+            sovereign_cli_base::prompts::prompt_string("")
                 .unwrap_or_default()
                 .to_lowercase()
                 .chars()
@@ -328,7 +328,7 @@ impl AmendmentInterlocutor for StdinAmendmentInterlocutor {
         );
         let _ = stderr.flush();
         matches!(
-            sovereign_cli_shared::prompts::prompt_string("")
+            sovereign_cli_base::prompts::prompt_string("")
                 .unwrap_or_default()
                 .to_lowercase()
                 .chars()

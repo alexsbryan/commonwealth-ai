@@ -53,6 +53,11 @@ corpus-engine-scip = { workspace = true }
 # `project-model`) are requested from the `workbench` feature below so a
 # `--no-default-features` consumer does not pay for them.
 sovereign-cli-shared = { workspace = true }
+# The leaf half of the CLI shared set (help, dirs, urls, repo, prompts,
+# deprecation, tracing_init, models, code_index, mcp_client): a
+# [[package_leaf]], so the code program reaches it without naming a svrn
+# CLI crate (pb-code-cli-base).
+sovereign-cli-base = { workspace = true }
 
 # ── Workbench-only workspace crates ──
 # oicp-client is NOT a dependency: `svrn code index` execs `svrn-ingest`,
@@ -163,6 +168,7 @@ workbench = [
     "dep:tower-http",
     "sovereign-cli-shared/scip",
     "sovereign-cli-shared/mcp-client",
+    "sovereign-cli-base/mcp-client",
     # `observation` + `project_toml` live here since 2026-08-07; `found`,
     # `phase`, `audit` and `charter amend` read the model the shipped
     # dispatcher's `project init` writes.

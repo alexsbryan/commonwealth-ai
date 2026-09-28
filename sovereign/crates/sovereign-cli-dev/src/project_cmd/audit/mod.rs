@@ -291,7 +291,7 @@ fn compose_publish_recipe_nudge() -> Option<String> {
     // Resolve the local recipes dir + the indexes dir. Bail
     // silently when HOME isn't set — the nudge is best-effort.
     let local_recipes_dir = RecipeRegistry::default_local_recipes_dir()?;
-    let indexes_dir = sovereign_cli_shared::dirs::sovereign_indexes();
+    let indexes_dir = sovereign_cli_base::dirs::sovereign_indexes();
     if !indexes_dir.is_dir() {
         return None;
     }
@@ -301,7 +301,7 @@ fn compose_publish_recipe_nudge() -> Option<String> {
     registry = registry.with_local_registry(&local_recipes_dir.join("registry.toml"));
 
     // Read the publish + dismissal markers.
-    let sovereign_root = sovereign_cli_shared::dirs::sovereign_root();
+    let sovereign_root = sovereign_cli_base::dirs::sovereign_root();
     let published: std::collections::BTreeMap<String, serde_json::Value> =
         std::fs::read_to_string(sovereign_root.join("published_recipes.json"))
             .ok()

@@ -20,7 +20,7 @@ use std::sync::Arc;
 
 use uuid::Uuid;
 
-use sovereign_cli_shared::mcp_client::{daemon_tool_call, DaemonCallError};
+use sovereign_cli_base::mcp_client::{daemon_tool_call, DaemonCallError};
 use sovereign_work_atlas::{
     model::{AgentKind, Privacy},
     resolve_repo_id_allowing_local, ClaimRecord, ScopeMatch, SessionIdentity, WorkAtlasConfig,
@@ -410,7 +410,7 @@ async fn run_list(rest: &[String]) -> i32 {
         DaemonFirst::Payload(p) => {
             let now = now_secs();
             let my_node = sovereign_contracts::node_identity::resolve_self_node_id(
-                &sovereign_cli_shared::dirs::sovereign_root(),
+                &sovereign_cli_base::dirs::sovereign_root(),
             )
             .to_string();
             let claims: Vec<serde_json::Value> = p["claims"]
@@ -814,7 +814,7 @@ fn open_atlas() -> Result<CliCtx, i32> {
     // The previous hardcoded `~/.svrnmesh/indexes` minted a SECOND node id
     // for this workstation (2026-07-31).
     let node_id = sovereign_contracts::node_identity::resolve_self_node_id(
-        &sovereign_cli_shared::dirs::sovereign_root(),
+        &sovereign_cli_base::dirs::sovereign_root(),
     );
     let store = Arc::new(WorkAtlasStore::new(Arc::new(mesh), node_id));
 

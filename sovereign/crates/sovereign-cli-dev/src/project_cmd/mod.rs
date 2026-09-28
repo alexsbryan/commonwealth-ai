@@ -41,11 +41,11 @@ pub(crate) use refresh::cmd_refresh;
 /// Sources `SetupConfig::load()` and falls back to the default when
 /// the user hasn't run `svrn setup` yet (in which case the
 /// engine's default is harmless — code indexes are FTS-only).
-// Moved to `sovereign_cli_shared::models` (2026-08-07): `project init` now
+// Moved to `sovereign_cli_shared::models` (2026-08-07; its home is `sovereign_cli_base::models` since pb-code-cli-base): `project init` now
 // stamps the same label from the shipped dispatcher, and the two binaries must
 // agree on the embed model's name or a corpus's metadata contradicts the
 // daemon that built it.
-use sovereign_cli_shared::models::configured_embed_model_name;
+use sovereign_cli_base::models::configured_embed_model_name;
 
 // ─── Dispatch ────────────────────────────────────────────────
 
@@ -54,11 +54,11 @@ pub async fn run_project(args: &[String]) -> i32 {
     // Specific sub-subcommand help (e.g. `project init --help`) is
     // handled inside each cmd_* function via `util::help::wants_help`.
     if args.is_empty() {
-        sovereign_cli_shared::help::print(&HELP);
+        sovereign_cli_base::help::print(&HELP);
         return 1;
     }
     if matches!(args[0].as_str(), "--help" | "-h" | "help") {
-        sovereign_cli_shared::help::print(&HELP);
+        sovereign_cli_base::help::print(&HELP);
         return 0;
     }
 
@@ -68,7 +68,7 @@ pub async fn run_project(args: &[String]) -> i32 {
     // and forward to the same handler the new top-level arm uses,
     // so behaviour is identical modulo the banner. Suppress with
     // SOVEREIGN_QUIET_DEPRECATIONS=1.
-    use sovereign_cli_shared::deprecation::announce;
+    use sovereign_cli_base::deprecation::announce;
     match args[0].as_str() {
         "charter" => {
             announce("svrn project charter", "svrn charter");
@@ -99,18 +99,18 @@ pub async fn run_project(args: &[String]) -> i32 {
         "install-hooks" => cmd_install_hooks(&args[1..]).await,
         other => {
             eprintln!("Unknown project subcommand: {other}");
-            sovereign_cli_shared::help::print(&HELP);
+            sovereign_cli_base::help::print(&HELP);
             1
         }
     }
 }
 
-const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help {
+const HELP: sovereign_cli_base::help::Help = sovereign_cli_base::help::Help {
     command: "svrn project",
     summary: "Per-project code intelligence: indexes, call graphs, and the MCP tool server.",
     sections: &[
-        sovereign_cli_shared::help::HelpSection::Usage("svrn project <subcommand> [flags]"),
-        sovereign_cli_shared::help::HelpSection::Subcommands(&[
+        sovereign_cli_base::help::HelpSection::Usage("svrn project <subcommand> [flags]"),
+        sovereign_cli_base::help::HelpSection::Subcommands(&[
             // `init` is absent on purpose: it ships in the dispatcher
             // (`svrn init` / `svrn project init`) and never reaches this
             // binary, so listing it here would advertise a verb we'd reject.
@@ -128,16 +128,16 @@ const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help 
             ("watch",          "Inspect or control watchers: `watch status | restart | logs`"),
             ("install-hooks",  "Deprecated — the daemon now owns freshness; prints migration hint"),
         ]),
-        sovereign_cli_shared::help::HelpSection::Notes(
+        sovereign_cli_base::help::HelpSection::Notes(
             "Run `svrn project <subcommand> --help` for subcommand-specific flags.",
         ),
     ],
 };
 
-const HELP_STATUS: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help {
+const HELP_STATUS: sovereign_cli_base::help::Help = sovereign_cli_base::help::Help {
     command: "svrn project status",
     summary: "Show the status of code intelligence for the current project.",
-    sections: &[sovereign_cli_shared::help::HelpSection::Usage(
+    sections: &[sovereign_cli_base::help::HelpSection::Usage(
         "svrn project status",
     )],
 };
@@ -145,8 +145,8 @@ const HELP_STATUS: sovereign_cli_shared::help::Help = sovereign_cli_shared::help
 // ─── Status ──────────────────────────────────────────────────
 
 pub(crate) async fn cmd_status(args: &[String]) -> i32 {
-    if sovereign_cli_shared::help::wants_help(args) {
-        sovereign_cli_shared::help::print(&HELP_STATUS);
+    if sovereign_cli_base::help::wants_help(args) {
+        sovereign_cli_base::help::print(&HELP_STATUS);
         return 0;
     }
     let mut data_dir: Option<PathBuf> = None;
@@ -399,7 +399,7 @@ pub(crate) async fn cmd_status(args: &[String]) -> i32 {
 // IMPLEMENTATION_PLAN.md + PHASES.md composition) is retired in
 // favour of the explicit `svrn charter` flow.
 async fn cmd_found(_args: &[String]) -> i32 {
-    sovereign_cli_shared::deprecation::announce_retired(
+    sovereign_cli_base::deprecation::announce_retired(
         "svrn project found",
         "Founding is implicit now: `svrn init` + a committed          spec is sufficient. Use `svrn charter` if you want          to define team conventions.",
     );
@@ -466,7 +466,7 @@ use sovereign_time::unix_now as unix_now_secs;
 // ─── Git helpers ─────────────────────────────────────────────
 // Implementations moved to `sovereign-cli-shared::repo`; re-exported
 // for in-crate callers that reference `project_cmd::find_*`.
-pub(crate) use sovereign_cli_shared::repo::{find_repo_root, find_sovereign_dir};
+pub(crate) use sovereign_cli_base::repo::{find_repo_root, find_sovereign_dir};
 
 /// Base URL the CLI uses to talk to the local daemon.
 ///
@@ -586,10 +586,10 @@ pub(crate) async fn daemon_is_running() -> bool {
 /// found. If the hook file contains both sovereign content and
 /// other content, we leave it alone — the user is expected to
 /// clean it up manually.
-// Moved to `sovereign_cli_shared::repo` (2026-08-07). `project init` (shipped
+// Moved to `sovereign_cli_shared::repo` (2026-08-07; its home is `sovereign_cli_base::repo` since pb-code-cli-base). `project init` (shipped
 // dispatcher) removes legacy hooks and `project install-hooks` (here) writes
 // them, so the marker they agree on cannot live in one binary.
-pub(crate) use sovereign_cli_shared::repo::{remove_legacy_hook, SOVEREIGN_HOOK_MARKER};
+pub(crate) use sovereign_cli_base::repo::{remove_legacy_hook, SOVEREIGN_HOOK_MARKER};
 
 // ─── Git hooks (deprecated installer — kept for migration tests only) ──
 //
@@ -607,16 +607,16 @@ pub(crate) use sovereign_cli_shared::repo::{remove_legacy_hook, SOVEREIGN_HOOK_M
 // real user with a legacy hook installed by an older binary.
 // ─── MCP check ───────────────────────────────────────────────
 
-// Moved to `sovereign_cli_shared::mcp_client` (2026-08-07) alongside
+// Moved to `sovereign_cli_shared::mcp_client` (2026-08-07; its home is `sovereign_cli_base::mcp_client` since pb-code-cli-base) alongside
 // `remove_legacy_hook` — `project init` probes the same endpoint at the tail
 // of its run, from the other binary.
-use sovereign_cli_shared::mcp_client::check_mcp_server;
+use sovereign_cli_base::mcp_client::check_mcp_server;
 
 // ─── Helpers ─────────────────────────────────────────────────
 
 // `default_data_dir` lives in `sovereign-cli-shared::dirs`; re-exported
 // for `crate::project_cmd::default_data_dir` callers.
-pub(crate) use sovereign_cli_shared::dirs::default_data_dir;
+pub(crate) use sovereign_cli_base::dirs::default_data_dir;
 
 fn tempfile_dir() -> std::io::Result<PathBuf> {
     let base = std::env::temp_dir();

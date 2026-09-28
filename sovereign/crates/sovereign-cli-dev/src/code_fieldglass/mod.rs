@@ -142,7 +142,7 @@ pub(crate) async fn run(args: &[String]) -> i32 {
     }
 
     // Corpus + root resolution — same shape as `arch-report`.
-    let indexes_dir = sovereign_cli_shared::dirs::sovereign_root().join("indexes");
+    let indexes_dir = sovereign_cli_base::dirs::sovereign_root().join("indexes");
     let corpus_id = match crate::converge_cmd::resolve_corpus(corpus_id, &indexes_dir) {
         Ok(c) => c,
         Err(code) => return code,
@@ -677,7 +677,7 @@ fn render_html(data: &FieldglassData) -> String {
 }
 
 fn sovereign_root() -> PathBuf {
-    sovereign_cli_shared::dirs::sovereign_root()
+    sovereign_cli_base::dirs::sovereign_root()
 }
 
 /// The default (html, json) pair for a render. A WINDOWED render gets its

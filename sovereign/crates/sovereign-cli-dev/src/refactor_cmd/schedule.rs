@@ -331,7 +331,7 @@ pub async fn run_gate(args: &[String]) -> i32 {
     }
 
     // ── Kinds 2 + 3: shapes and names, off the SCIP graph ───────────────
-    let indexes_dir = sovereign_cli_shared::dirs::sovereign_root().join("indexes");
+    let indexes_dir = sovereign_cli_base::dirs::sovereign_root().join("indexes");
     match crate::converge_cmd::resolve_corpus(corpus_id.clone(), &indexes_dir) {
         Ok(corpus) => {
             let db_path = indexes_dir.join(&corpus).join("scip_graph.db");

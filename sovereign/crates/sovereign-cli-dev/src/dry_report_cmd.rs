@@ -83,7 +83,7 @@ pub(crate) async fn run(args: &[String]) -> i32 {
         i += 1;
     }
 
-    let indexes_dir = sovereign_cli_shared::dirs::sovereign_root().join("indexes");
+    let indexes_dir = sovereign_cli_base::dirs::sovereign_root().join("indexes");
     let corpus_id = match crate::converge_cmd::resolve_corpus(corpus_id, &indexes_dir) {
         Ok(c) => c,
         Err(code) => return code,

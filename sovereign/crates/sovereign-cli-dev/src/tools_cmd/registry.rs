@@ -42,7 +42,7 @@ use corpus_engine::CorpusEngine;
 use corpus_engine_notes::{NoteStore, ProjectDocsStore};
 use corpus_engine_watchers::{LintResultStore, TestResultStore};
 use corpus_index::types::EmbedFn;
-use sovereign_cli_shared::{dirs::default_data_dir, repo::find_sovereign_dir};
+use sovereign_cli_base::{dirs::default_data_dir, repo::find_sovereign_dir};
 use sovereign_contracts::registry::ToolRegistry;
 
 /// Small bundle of handles held open across a single `svrn tools`
@@ -76,7 +76,7 @@ pub(super) async fn open_tools_registry() -> Result<ToolsEnv, String> {
     // stale orphan DB and report `running` indefinitely while the
     // daemon's actual store reflects fresh results — observed
     // 2026-05-06 with rows untouched since Apr 21.
-    let flat_stores_dir = sovereign_cli_shared::dirs::sovereign_root();
+    let flat_stores_dir = sovereign_cli_base::dirs::sovereign_root();
 
     // Embed function: prefer the running daemon's embed slot so
     // `tools call notes` benefits from T1 semantic blend on the
@@ -98,7 +98,7 @@ pub(super) async fn open_tools_registry() -> Result<ToolsEnv, String> {
     //
     // An env read at point of use is invisible to go-to-definition, which is
     // the whole reason the environment axis is a phase.
-    let daemon_url = sovereign_cli_shared::urls::daemon_base_url();
+    let daemon_url = sovereign_cli_base::urls::daemon_base_url();
     let embed: EmbedFn = build_daemon_embed_fn_or_zero(&daemon_url).await;
     let notes_embed = build_daemon_notes_embed_fn_or_none(&daemon_url).await;
     let engine = Arc::new(CorpusEngine::new(data_dir.clone(), data_dir.clone(), embed));
@@ -122,7 +122,7 @@ pub(super) async fn open_tools_registry() -> Result<ToolsEnv, String> {
     // the CLI reading 15-note fragments while the daemon's
     // canonical store holds the full 298+ history. Other CLI
     // surfaces (audit_recover.rs, code_cmd.rs, reflect_cmd.rs)
-    // already use `sovereign_cli_shared::dirs::sovereign_root().join("notes.db")`;
+    // already use `sovereign_cli_base::dirs::sovereign_root().join("notes.db")`;
     // registry.rs was the lone outlier. Aligning here unifies
     // both CLI tool invocations + the daemon-side MCP path on a
     // single physical SQLite file (WAL-mode concurrent-safe).

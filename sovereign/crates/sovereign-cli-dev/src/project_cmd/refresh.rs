@@ -7,14 +7,14 @@
 
 use super::*;
 
-const HELP_REFRESH: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help {
+const HELP_REFRESH: sovereign_cli_base::help::Help = sovereign_cli_base::help::Help {
     command: "svrn project refresh",
     summary: "Re-export the SCIP call graph + rebuild the LanceDB index when embeddings are stale.",
     sections: &[
-        sovereign_cli_shared::help::HelpSection::Usage(
+        sovereign_cli_base::help::HelpSection::Usage(
             "svrn project refresh [--quiet] [--rebuild-index]",
         ),
-        sovereign_cli_shared::help::HelpSection::Flags(&[
+        sovereign_cli_base::help::HelpSection::Flags(&[
             (
                 "--quiet",
                 "Suppress progress output (use from hook scripts)",
@@ -25,7 +25,7 @@ const HELP_REFRESH: sovereign_cli_shared::help::Help = sovereign_cli_shared::hel
                  even when the on-disk embed model matches the current daemon.",
             ),
         ]),
-        sovereign_cli_shared::help::HelpSection::Notes(
+        sovereign_cli_base::help::HelpSection::Notes(
             "Runs automatically on commit via the installed hook (SCIP only; the hook does \
              NOT force a LanceDB rebuild). The nudge path VERIFIES the rebuild completes: \
              it reports a named failure when the export cannot finish (never a silent no-op) \
@@ -40,8 +40,8 @@ const HELP_REFRESH: sovereign_cli_shared::help::Help = sovereign_cli_shared::hel
 // ─── Refresh ─────────────────────────────────────────────────
 
 pub(crate) async fn cmd_refresh(args: &[String]) -> i32 {
-    if sovereign_cli_shared::help::wants_help(args) {
-        sovereign_cli_shared::help::print(&HELP_REFRESH);
+    if sovereign_cli_base::help::wants_help(args) {
+        sovereign_cli_base::help::print(&HELP_REFRESH);
         return 0;
     }
     let mut quiet = false;

@@ -426,7 +426,7 @@ fn locate_notes_db() -> Option<PathBuf> {
             return Some(p);
         }
     }
-    let p = sovereign_cli_shared::dirs::sovereign_root().join("notes.db");
+    let p = sovereign_cli_base::dirs::sovereign_root().join("notes.db");
     if p.exists() {
         return Some(p);
     }

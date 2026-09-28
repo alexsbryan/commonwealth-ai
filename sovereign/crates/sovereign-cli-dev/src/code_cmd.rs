@@ -22,18 +22,18 @@
 //! with the same model, so `embedding_dimensions` is consistent
 //! across the installation.
 
-use sovereign_cli_shared::dirs::sovereign_root;
+use sovereign_cli_base::dirs::sovereign_root;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 /// Run a `code` subcommand. Returns the exit code.
 pub async fn run_code(args: &[String]) -> i32 {
     if args.is_empty() {
-        sovereign_cli_shared::help::print(&HELP);
+        sovereign_cli_base::help::print(&HELP);
         return 1;
     }
     if matches!(args[0].as_str(), "--help" | "-h" | "help") {
-        sovereign_cli_shared::help::print(&HELP);
+        sovereign_cli_base::help::print(&HELP);
         return 0;
     }
 
@@ -70,7 +70,7 @@ pub async fn run_code(args: &[String]) -> i32 {
         "wire-check" => crate::refactor_wire::run(&args[1..]).await,
         other => {
             eprintln!("Unknown code subcommand: {other}");
-            sovereign_cli_shared::help::print(&HELP);
+            sovereign_cli_base::help::print(&HELP);
             1
         }
     }
@@ -613,7 +613,7 @@ async fn cmd_reflect(args: &[String]) -> i32 {
         args.first().map(String::as_str),
         Some("--help" | "-h" | "help")
     ) {
-        sovereign_cli_shared::help::print(&REFLECT_HELP);
+        sovereign_cli_base::help::print(&REFLECT_HELP);
         return 0;
     }
 
@@ -798,15 +798,15 @@ fn git_recent_commit_files(repo_root: &Path, hours: u64) -> Vec<String> {
     set.into_iter().collect()
 }
 
-const REFLECT_HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help {
+const REFLECT_HELP: sovereign_cli_base::help::Help = sovereign_cli_base::help::Help {
     command: "svrn code reflect",
     summary: "Write a session-end reflection note describing what changed during the session.",
     sections: &[
-        sovereign_cli_shared::help::HelpSection::Usage(
+        sovereign_cli_base::help::HelpSection::Usage(
             "svrn code reflect [--hours N] [--repo-root <path>] [--feature-id <id>] \
              [--content <text>] [--quiet]",
         ),
-        sovereign_cli_shared::help::HelpSection::Flags(&[
+        sovereign_cli_base::help::HelpSection::Flags(&[
             (
                 "--hours N",
                 "How far back to scan for recent commits. Default 4.",
@@ -825,7 +825,7 @@ const REFLECT_HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::hel
             ),
             ("--quiet", "Suppress info output (used by hooks)."),
         ]),
-        sovereign_cli_shared::help::HelpSection::Notes(
+        sovereign_cli_base::help::HelpSection::Notes(
             "Writes a `reflection` kind note to ~/.svrnmesh/notes.db via \
              NoteStore::write_reflection_scoped. The next session's brief queries \
              reflection alongside decision/invariant so this surfaces automatically. \
@@ -849,7 +849,7 @@ async fn cmd_brief(args: &[String]) -> i32 {
         args.first().map(String::as_str),
         Some("--help" | "-h" | "help")
     ) {
-        sovereign_cli_shared::help::print(&BRIEF_HELP);
+        sovereign_cli_base::help::print(&BRIEF_HELP);
         return 0;
     }
 
@@ -1120,7 +1120,7 @@ fn resolve_cwd_repo_root() -> Result<PathBuf, String> {
 // Re-export from `sovereign-cli-shared::repo` so `daemon_cmd` and other
 // in-crate callers keep working through the existing `code_cmd::current_branch`
 // path. The new home is the canonical spot.
-pub(crate) use sovereign_cli_shared::repo::current_branch;
+pub(crate) use sovereign_cli_base::repo::current_branch;
 
 // ─── capability-map ───────────────────────────────────────────
 // Derive a clustered "what does this codebase do" map from the SCIP call graph.
@@ -1288,16 +1288,16 @@ async fn cmd_capability_map(args: &[String]) -> i32 {
     0
 }
 
-const BRIEF_HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help {
+const BRIEF_HELP: sovereign_cli_base::help::Help = sovereign_cli_base::help::Help {
     command: "svrn code brief",
     summary: "Assemble a working-set brief (markdown) for the current session.",
     sections: &[
-        sovereign_cli_shared::help::HelpSection::Usage(
+        sovereign_cli_base::help::HelpSection::Usage(
             "svrn code brief [--strategy {branch|recent|explicit}] [--hours N] \
              [--budget N] [--repo-root <path>] [--atlas-id <id>] [--feature-id <id>] \
              [--output <md>] [--file <path>]...",
         ),
-        sovereign_cli_shared::help::HelpSection::Flags(&[
+        sovereign_cli_base::help::HelpSection::Flags(&[
             (
                 "--strategy",
                 "branch (default; diff vs default branch), recent (last N hours), or explicit",
@@ -1324,7 +1324,7 @@ const BRIEF_HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help:
                 "(For --strategy explicit) Add a file to the working set. Repeat for multiple.",
             ),
         ]),
-        sovereign_cli_shared::help::HelpSection::Notes(
+        sovereign_cli_base::help::HelpSection::Notes(
             "Reads notes from ~/.svrnmesh/notes.db. Reads atoms + archaeology sidecar from \
              ~/.svrnmesh/indexes/<id>-self-atlas/atlas/ when --atlas-id is given. Walks git \
              history for the recent-activity section.",
@@ -1332,12 +1332,12 @@ const BRIEF_HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help:
     ],
 };
 
-const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help {
+const HELP: sovereign_cli_base::help::Help = sovereign_cli_base::help::Help {
     command: "svrn code",
     summary: "Code intelligence tooling: index a repository, watch for changes, check MCP.",
     sections: &[
-        sovereign_cli_shared::help::HelpSection::Usage("svrn code <subcommand> [args]"),
-        sovereign_cli_shared::help::HelpSection::Subcommands(&[
+        sovereign_cli_base::help::HelpSection::Usage("svrn code <subcommand> [args]"),
+        sovereign_cli_base::help::HelpSection::Subcommands(&[
             (
                 "index <path>",
                 "Index a local repository with tree-sitter — incremental by default, --full to rebuild",
@@ -1425,7 +1425,7 @@ const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help 
                 "Record a session reflection note (branch + diff + recent commits) to notes.db",
             ),
         ]),
-        sovereign_cli_shared::help::HelpSection::Notes(
+        sovereign_cli_base::help::HelpSection::Notes(
             "`index` and `watch` take --corpus-id <id>, --data-dir <dir>, --root <path>.\n\
              `index` refreshes INCREMENTALLY when the corpus already exists and the root is a\n\
              git repo — only files changed since the last run are re-embedded. --full forces a\n\
@@ -1484,7 +1484,7 @@ async fn cmd_watch(args: &[String]) -> i32 {
     };
 
     let data_dir = data_dir
-        .or_else(sovereign_cli_shared::dirs::default_data_dir)
+        .or_else(sovereign_cli_base::dirs::default_data_dir)
         .unwrap_or_else(|| PathBuf::from("./sovereign-indexes"));
 
     // Open the index to discover the source_path unless the caller

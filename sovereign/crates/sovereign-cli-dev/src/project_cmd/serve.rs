@@ -8,16 +8,16 @@
 use super::*;
 use host_kit::shell::guard::LoopbackRouter as _;
 
-const HELP_SERVE: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help {
+const HELP_SERVE: sovereign_cli_base::help::Help = sovereign_cli_base::help::Help {
     command: "svrn code mcp",
     summary: "Serve code intelligence over MCP for locally-indexed projects: no model, no \
               daemon, no mesh. Also spelled `svrn serve` and `svrn project serve`.",
     sections: &[
-        sovereign_cli_shared::help::HelpSection::Usage(
+        sovereign_cli_base::help::HelpSection::Usage(
             "svrn code mcp [--port <port>] [--data-dir <dir>]\n    \
              [--sovereign-dir <dir>]",
         ),
-        sovereign_cli_shared::help::HelpSection::Flags(&[
+        sovereign_cli_base::help::HelpSection::Flags(&[
             ("--port <port>", "Listen port (default: 9741)"),
             (
                 "--data-dir <dir>",
@@ -34,8 +34,8 @@ const HELP_SERVE: sovereign_cli_shared::help::Help = sovereign_cli_shared::help:
 // ─── Serve ───────────────────────────────────────────────────
 
 pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
-    if sovereign_cli_shared::help::wants_help(args) {
-        sovereign_cli_shared::help::print(&HELP_SERVE);
+    if sovereign_cli_base::help::wants_help(args) {
+        sovereign_cli_base::help::print(&HELP_SERVE);
         return 0;
     }
 
@@ -167,7 +167,7 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
             // Write a pointer file so `svrn reflect` can find this
             // database from any working directory, regardless of where the
             // user invokes it from.
-            let pointer_dir = sovereign_cli_shared::dirs::sovereign_root();
+            let pointer_dir = sovereign_cli_base::dirs::sovereign_root();
             let _ = std::fs::create_dir_all(&pointer_dir);
             let _ = std::fs::write(
                 pointer_dir.join("active_notes_db"),

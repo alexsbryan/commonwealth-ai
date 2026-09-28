@@ -50,7 +50,7 @@ pub async fn run_tools(raw_args: &[String]) -> i32 {
     let rest = &raw_args[1..];
     match first.as_str() {
         "list" => {
-            if sovereign_cli_shared::help::wants_help(rest) {
+            if sovereign_cli_base::help::wants_help(rest) {
                 print_help();
                 return 0;
             }
@@ -321,7 +321,7 @@ async fn cmd_call(args: &[String]) -> i32 {
         "resource_may_i",
     ];
     if DAEMON_AUTHORITATIVE.contains(&id.as_str()) {
-        use sovereign_cli_shared::mcp_client::{daemon_tool_call, DaemonCallError};
+        use sovereign_cli_base::mcp_client::{daemon_tool_call, DaemonCallError};
         match daemon_tool_call(&id, params_value.clone()).await {
             Ok(payload) => {
                 match serde_json::to_string_pretty(&payload) {

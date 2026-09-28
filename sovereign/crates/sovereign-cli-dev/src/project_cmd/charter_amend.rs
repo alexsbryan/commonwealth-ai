@@ -24,15 +24,15 @@ pub(crate) fn hash_charter(content: &str) -> String {
     format!("{:x}", h.finalize())
 }
 
-const HELP_CHARTER: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help {
+const HELP_CHARTER: sovereign_cli_base::help::Help = sovereign_cli_base::help::Help {
     command: "svrn project charter",
     summary: "Create or edit the team's free-form CHARTER.md (governance, culture, onboarding). Distinct from DESIGN.md.",
     sections: &[
-        sovereign_cli_shared::help::HelpSection::Usage("svrn project charter [--print]"),
-        sovereign_cli_shared::help::HelpSection::Flags(&[
+        sovereign_cli_base::help::HelpSection::Usage("svrn project charter [--print]"),
+        sovereign_cli_base::help::HelpSection::Flags(&[
             ("--print", "Print the current CHARTER.md to stdout and exit without opening $EDITOR"),
         ]),
-        sovereign_cli_shared::help::HelpSection::Notes(
+        sovereign_cli_base::help::HelpSection::Notes(
             "CHARTER.md is the low-ceremony team governance doc — who we are, how we decide, \
              onboarding pointers. It is NOT auto-generated from DESIGN.md: DESIGN.md says what \
              we're building; CHARTER.md says how we work together on it.\n\n\
@@ -83,8 +83,8 @@ const CHARTER_SKELETON: &str = r#"# Charter
 // separate migration that affects amend + drift detection and
 // hasn't landed yet.)
 pub(crate) async fn cmd_charter(args: &[String]) -> i32 {
-    if sovereign_cli_shared::help::wants_help(args) {
-        sovereign_cli_shared::help::print(&HELP_CHARTER);
+    if sovereign_cli_base::help::wants_help(args) {
+        sovereign_cli_base::help::print(&HELP_CHARTER);
         return 0;
     }
 

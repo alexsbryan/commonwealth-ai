@@ -19,7 +19,7 @@
 //! rather than pretending success.
 //!
 //! The base URL is the audited accessor
-//! ([`sovereign_cli_shared::urls::daemon_v1_base`]), not a hardcoded
+//! ([`sovereign_cli_base::urls::daemon_v1_base`]), not a hardcoded
 //! loopback — the `SOVEREIGN_DAEMON_URL` knob moves this client with
 //! every other reader (the `rail` client is the precedent).
 
@@ -87,7 +87,7 @@ impl DaemonConversationStore {
                 .timeout(std::time::Duration::from_secs(20))
                 .build()
                 .map_err(|e| Error::Storage(format!("http client: {e}")))?,
-            v1: sovereign_cli_shared::urls::daemon_v1_base(),
+            v1: sovereign_cli_base::urls::daemon_v1_base(),
         })
     }
 

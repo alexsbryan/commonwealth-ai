@@ -42,9 +42,9 @@ use corpus_index::{
     types::EmbedFn,
 };
 
-use sovereign_cli_shared::code_index::tempfile_dir;
-use sovereign_cli_shared::dirs::default_data_dir;
-use sovereign_cli_shared::help::{Help, HelpSection};
+use sovereign_cli_base::code_index::tempfile_dir;
+use sovereign_cli_base::dirs::default_data_dir;
+use sovereign_cli_base::help::{Help, HelpSection};
 
 /// Help for `svrn code index` specifically. The workbench's `code` help
 /// covers a dozen subcommands that do not ship here; advertising them from
@@ -66,8 +66,8 @@ pub async fn cmd_index(args: &[String]) -> i32 {
     // printed "unknown flag '--help' — ignored", then "error: missing <path>",
     // then the help text, and exited 1. Harmless while the verb was
     // workbench-only; a shipped verb whose `--help` exits non-zero is a defect.
-    if sovereign_cli_shared::help::wants_help(args) {
-        sovereign_cli_shared::help::print(&HELP);
+    if sovereign_cli_base::help::wants_help(args) {
+        sovereign_cli_base::help::print(&HELP);
         return 0;
     }
 
@@ -112,7 +112,7 @@ pub async fn cmd_index(args: &[String]) -> i32 {
 
     let Some(path) = path_arg else {
         eprintln!("error: missing <path>");
-        sovereign_cli_shared::help::print(&HELP);
+        sovereign_cli_base::help::print(&HELP);
         return 1;
     };
 

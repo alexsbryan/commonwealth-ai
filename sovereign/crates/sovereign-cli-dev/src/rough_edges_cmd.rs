@@ -9,7 +9,7 @@
 //! with a future tier-1 rustdoc-vs-signature drift detector (#39)
 //! that will share the same finding shape and renderer.
 
-use sovereign_cli_shared::dirs::sovereign_root;
+use sovereign_cli_base::dirs::sovereign_root;
 use std::path::{Path, PathBuf};
 
 use corpus_engine_archaeology::rough_edges::{
@@ -17,8 +17,8 @@ use corpus_engine_archaeology::rough_edges::{
 };
 
 pub async fn run(args: &[String]) -> i32 {
-    if sovereign_cli_shared::help::wants_help(args) {
-        sovereign_cli_shared::help::print(&HELP);
+    if sovereign_cli_base::help::wants_help(args) {
+        sovereign_cli_base::help::print(&HELP);
         return 0;
     }
     let parsed = match parse_args(args) {
@@ -367,14 +367,14 @@ fn relativize(path: &Path, root: &Path) -> PathBuf {
         .unwrap_or_else(|_| path.to_path_buf())
 }
 
-const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help {
+const HELP: sovereign_cli_base::help::Help = sovereign_cli_base::help::Help {
     command: "svrn rough-edges",
     summary: "Scan a code corpus for FIXME/TODO/HACK/XXX markers (rough-edge inventory).",
     sections: &[
-        sovereign_cli_shared::help::HelpSection::Usage(
+        sovereign_cli_base::help::HelpSection::Usage(
             "svrn rough-edges <corpus-id> [--source-path <dir>] [--output <md>]",
         ),
-        sovereign_cli_shared::help::HelpSection::Notes(
+        sovereign_cli_base::help::HelpSection::Notes(
             "Reads source path from the corpus's _corpus_meta.json by default. \
              Writes a markdown digest plus a .json sidecar (full per-finding detail \
              for downstream tools). Standalone surface; also called from \

@@ -234,7 +234,7 @@ async fn status_cmd(args: &[String]) -> i32 {
             return 3;
         }
     };
-    let indexes_dir = sovereign_cli_shared::dirs::sovereign_root().join("indexes");
+    let indexes_dir = sovereign_cli_base::dirs::sovereign_root().join("indexes");
     let corpus = match crate::converge_cmd::resolve_corpus(corpus_id, &indexes_dir) {
         Ok(c) => c,
         Err(code) => return code,
@@ -777,7 +777,7 @@ fn resolve_workspace(
         eprintln!("error: {e}");
         3
     })?;
-    let indexes_dir = sovereign_cli_shared::dirs::sovereign_root().join("indexes");
+    let indexes_dir = sovereign_cli_base::dirs::sovereign_root().join("indexes");
     let corpus = crate::converge_cmd::resolve_corpus(corpus_id, &indexes_dir)?;
     let index_path = indexes_dir.join(&corpus);
     Ok((root, index_path, corpus))

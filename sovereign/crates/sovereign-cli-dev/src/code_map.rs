@@ -37,8 +37,8 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Duration;
 
-use sovereign_cli_shared::dirs::sovereign_root;
-use sovereign_cli_shared::help::{self, Help, HelpSection};
+use sovereign_cli_base::dirs::sovereign_root;
+use sovereign_cli_base::help::{self, Help, HelpSection};
 
 const MAP_HELP: Help = Help {
     command: "svrn code map",

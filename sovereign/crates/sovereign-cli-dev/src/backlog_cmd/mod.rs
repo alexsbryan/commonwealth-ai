@@ -18,7 +18,7 @@
 //! UNVETTED: `Scored-by:` is a stamp the renderer treats as
 //! disqualifying, and a person clearing it is the review.
 
-use sovereign_cli_shared::help::{self, Help, HelpSection};
+use sovereign_cli_base::help::{self, Help, HelpSection};
 
 pub mod add;
 pub mod item;
