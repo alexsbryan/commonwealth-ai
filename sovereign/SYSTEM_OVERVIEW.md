@@ -70,7 +70,7 @@ there because they read the repo root and so cannot sit in a liftable crate.
 
 | Project | Role | Depends on |
 |---|---|---|
-| `oicp-types` | OICP wire types + scoring helpers | — |
+| `oicp-types` | OICP wire types + scoring helpers, and the mesh records two programs exchange (node capabilities, the ingest work queue, the contribution/activity ledger, the model catalogue, the inference plan, peer preferences; pb-mesh-exit-core) | `kernel-types` |
 | `kernel-types` | The neutral kernel: identity and provenance (`ContentHash`, `CorpusId`, `NodeId`, `Origin`, `Custody`, `Attribution`), the trust vocabulary (`Verdict`, `Reason`, `Freshness`, `Judgement`), the released turn (`Seal`, `Citation`, `Draft`, `Answer`, `PeerAnswer`, `Refused`), the wire-form decider, the requirement registry. The SECOND layer-0 membrane beside `oicp-types`: oicp is what a node ADVERTISES, this is what content IS. May name nothing above it | `serde`, `getrandom`, `hex`, `blake3` |
 | `workspace-hack` | cargo-hakari feature-unification crate, so a `-p` build resolves what `--workspace` resolves | — |
 | `corpus-engine` | Acquire → extract → filter → chunk → embed → index | `oicp-types`, `kernel-types`, `corpus-index`, `corpus-engine-yield`, `corpus-engine-scip`, `corpus-engine-atlas-reader`, `corpus-engine-notes` |
@@ -200,7 +200,7 @@ router exemplar and calibration banks in `crates/sovereign-core/data/`.
 
 ```
 crates/
-├── commonwealth-core         # Shared types — ids, mesh, capabilities, ledger, clock
+├── commonwealth-core         # The mesh roster, gossip auth, clock, ledger aggregation; its records re-exported from oicp-types
 ├── commonwealth-transport    # PeerTransport seam — (peer, traffic class) → endpoints
 ├── commonwealth-discovery    # Founding + joining: join keys, mDNS, local hardware survey
 ├── commonwealth-rail-core    # The ring rail's FOLD — Person/Roster/RailAct/SignedOp. Zero I/O
