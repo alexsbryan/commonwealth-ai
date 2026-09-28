@@ -88,6 +88,26 @@ fn format_approximate_response(query: &str, rows: &[CodeRow]) -> String {
     )
 }
 
+/// The query vector from an embed result, or an empty vector (full-text
+/// search) and the note that names why.
+fn embed_or_named_fallback<E: std::fmt::Display>(
+    embedded: std::result::Result<Vec<f32>, E>,
+) -> (Vec<f32>, Option<String>) {
+    match embedded {
+        Ok(v) => (v, None),
+        Err(e) => {
+            tracing::warn!(error = %e, "code_search: query embed failed; full-text search instead");
+            (
+                Vec::new(),
+                Some(format!(
+                    "\n\n---\nSearch: full-text | the query embed failed: {e}\n\
+                     These are keyword matches, not semantic ones."
+                )),
+            )
+        }
+    }
+}
+
 impl CodeSearchTool {
     /// Bind this tool's state to its `code_search` manifest row.
     ///
@@ -118,10 +138,12 @@ impl CodeSearchTool {
             .filter(|s| !s.is_empty());
 
         // Embed the query if we have inference. Empty vector is the
-        // sentinel that triggers the FTS-only path below.
-        let embedding: Vec<f32> = match &self.inference {
-            Some(inf) => inf.embed(query).await.unwrap_or_default(),
-            None => Vec::new(),
+        // sentinel that triggers the FTS-only path below. A failed embed
+        // still falls back to full text, but by name: the answer says so
+        // (principle 6), never a silent swap.
+        let (embedding, embed_fallback) = match &self.inference {
+            Some(inf) => embed_or_named_fallback(inf.embed(query).await),
+            None => (Vec::new(), None),
         };
 
         let base_filter = match language {
@@ -227,6 +249,9 @@ impl CodeSearchTool {
         rows.truncate(8);
 
         let mut text = format_approximate_response(query, &rows);
+        if let Some(note) = embed_fallback {
+            text.push_str(&note);
+        }
 
         // Index-health note (glassbox) — reuses the code-corpora tally from
         // the search loop above rather than re-enumerating. Three distinct
@@ -285,6 +310,18 @@ impl CodeSearchTool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_failed_embed_names_the_full_text_fallback() {
+        let (v, note) = embed_or_named_fallback::<&str>(Err("slot busy"));
+        assert!(v.is_empty(), "a failed embed searches full text");
+        let note = note.expect("the fallback is named");
+        assert!(note.contains("full-text") && note.contains("slot busy"), "{note}");
+
+        let (v, note) = embed_or_named_fallback::<&str>(Ok(vec![0.5]));
+        assert_eq!(v, vec![0.5]);
+        assert!(note.is_none());
+    }
 
     #[test]
     fn approximate_header_present_for_empty_results() {
