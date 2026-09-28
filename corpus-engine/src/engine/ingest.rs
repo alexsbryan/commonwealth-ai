@@ -1947,6 +1947,11 @@ impl CorpusEngine {
                             "phase_b: incremental NER failed (non-fatal — Phase A snapshot retained)"
                         ),
                     }
+                } else {
+                    tracing::warn!(
+                        corpus = %recipe.corpus.id,
+                        "phase_b: incremental NER skipped — no GLiNER extractor is wired in this process"
+                    );
                 }
             }
         }
