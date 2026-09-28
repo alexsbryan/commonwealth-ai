@@ -39,9 +39,9 @@ required-features = ["workbench"]
 # (no features) and small third-party crates the dispatcher already carries.
 # `InProcessCodeVerb` and everything it reaches must live inside that budget.
 #
-# WORKBENCH (default) is everything else — `sovereign-tools` drags arrow +
-# parquet + the enrichment catalog, `corpus-engine` drags the tree-sitter
-# grammars. Linking those into
+# WORKBENCH (default) is everything else — `corpus-engine` drags the
+# tree-sitter grammars. (`sovereign-tools`, which dragged arrow + parquet +
+# the enrichment catalog, left with pb-code-freshness.) Linking those into
 # a dispatcher to move a metric is the failure this split refuses.
 [dependencies]
 # ── Always-on: the thin, linkable surface ──
@@ -73,9 +73,6 @@ sovereign-cli-shared = { workspace = true }
 # `dev-tools` (git archaeology in BriefTool) travels with
 # `sovereign-code` since the 2026-09-21 lift.
 sovereign-code = { workspace = true, features = ["treesitter", "dev-tools"] }
-sovereign-tools = { workspace = true, features = [
-    "treesitter",
-], optional = true }
 sovereign-enrichment-build = { workspace = true }
 sovereign-contracts = { workspace = true }
 sovereign-time = { workspace = true }
@@ -84,7 +81,7 @@ sovereign-time = { workspace = true }
 host-kit = { workspace = true, features = ["mcp", "http", "shell"], optional = true }
 # `project_cmd::cmd_serve` registers work-atlas claim handlers when
 # the daemon comes up; pulled in directly here rather than via
-# sovereign-tools so the dep is visible in this crate's tree.
+# a sibling crate so the dep is visible in this crate's tree.
 sovereign-work-atlas = { workspace = true, optional = true }
 # The work atlas's store: `mesh_kv_client` dials cw-rails' KV doors through
 # the one sync client, `rails_kv::RailsKv` (pb-atlas-kv).
@@ -154,7 +151,6 @@ sovereign-contracts = { workspace = true, features = ["test-fixtures"] }
 # only wants the linkable surface (`sovereign-cli`) turns it off.
 default = ["workbench"]
 workbench = [
-    "dep:sovereign-tools",
     "dep:host-kit",
     "dep:sovereign-work-atlas",
     "dep:sovereign-turn-client",

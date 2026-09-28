@@ -9,7 +9,6 @@
 use std::io::{self, BufRead as _, IsTerminal as _, Write as _};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::Duration;
 
 use corpus_engine::{CorpusEngine, CorpusSpec, IngestProgress};
 use corpus_index::types::EmbedFn;

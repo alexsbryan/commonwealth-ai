@@ -18,7 +18,8 @@
 //! Per ARCH_PRINCIPLES §3.2, this is the seam where a shared
 //! registry-setup helper will eventually live. The
 //! highest-divergence-risk piece — the MCP allowlist + alias map
-//! — was centralised into [`sovereign_tools::mcp_surface`] in the
+//! — was centralised into `mcp_surface` (code's list now in
+//! [`sovereign_code::mcp_surface`], pb-code-freshness) in the
 //! Phase 2 refactor, so the daemon's `mcp_router` and the
 //! standalone `routes_mcp` server now agree on exactly the same
 //! exposed surface without a manual sync.

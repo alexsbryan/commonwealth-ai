@@ -12,7 +12,6 @@ use sovereign_contracts::types::*;
 
 use corpus_index::source::IndexSource;
 
-use super::callees::ScipGraphHandle;
 use super::index_health::IndexHealthChecker;
 use super::is_valid_symbol_name;
 use sovereign_contracts::tool_manifest::DeclaredTool;

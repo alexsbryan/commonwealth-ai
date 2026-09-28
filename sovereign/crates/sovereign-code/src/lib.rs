@@ -165,6 +165,12 @@ pub mod freshness;
 #[cfg(feature = "treesitter")]
 pub mod project_http;
 
+/// Code's MCP exposure list and the spec-presence gate.
+pub mod mcp_surface;
+
+/// Invalidates the spec gate's cache and signals `tools/list_changed`.
+pub mod spec_watcher;
+
 // Blast radius (transitive impact analysis).
 #[cfg(feature = "treesitter")]
 pub mod blast_radius;

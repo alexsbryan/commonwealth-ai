@@ -128,12 +128,6 @@ serde_yaml = "0.9"
 # existing Jsonl extractor). Uses the same `bundled` feature as
 # sovereign-store so both crates link against one libsqlite3.
 rusqlite = { version = "0.35", features = ["bundled"] }
-# `notify` drives the SpecWatcher used to invalidate the
-# spec-presence cache + push MCP `notifications/tools/list_changed`
-# events when `.sovereign/features/*/spec.md` or `ARCHITECTURE.md`
-# changes. Same major version as sovereign-mesh's reindexer use to
-# keep the lockfile single-resolved.
-notify = "8"
 # Gitignore-syntax parser for the watched-folder `.sovereignignore`
 # file (spec §5.4 layer 2). Same version as sovereign-mesh so the
 # workspace resolves a single `ignore` across both crates.

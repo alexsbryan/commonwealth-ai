@@ -37,12 +37,29 @@ impl Fixture {
             "pub fn fixture_target() {}\n\npub fn fixture_caller() {\n    fixture_target();\n}\n",
         )
         .expect("fixture source");
-        let git = Command::new("git")
-            .args(["init", "-q"])
+        // Committed, with the server's own `.sovereign/` ignored, so the
+        // tree is clean and the Reindexer resumes the project without a
+        // startup rebuild (its graph is stamped at HEAD below).
+        std::fs::write(repo.join(".gitignore"), ".sovereign/\n").expect("fixture .gitignore");
+        for args in [
+            &["init", "-q"][..],
+            &["add", "-A"][..],
+            &["-c", "user.name=fixture", "-c", "user.email=fixture@example.invalid",
+              "commit", "-q", "-m", "fixture"][..],
+        ] {
+            let git = Command::new("git")
+                .args(args)
+                .current_dir(&repo)
+                .status()
+                .expect("run git");
+            assert!(git.success(), "git {args:?}");
+        }
+        let head = Command::new("git")
+            .args(["rev-parse", "HEAD"])
             .current_dir(&repo)
-            .status()
-            .expect("run git init");
-        assert!(git.success(), "git init");
+            .output()
+            .expect("git rev-parse");
+        let head = String::from_utf8_lossy(&head.stdout).trim().to_string();
 
         let root = dir.path().join("root");
         let mut config = SetupConfig::unconfigured();
@@ -84,6 +101,16 @@ impl Fixture {
             )
             .await
             .expect("ingest the fixture graph");
+        graph.record_rebuild("fixture", Some(&head), None).await;
+
+        // The project the code server's Reindexer resumes at startup.
+        let mut registry = sovereign_contracts::watcher_projects::Registry::default();
+        registry.upsert(sovereign_contracts::watcher_projects::ProjectEntry::new(
+            "fixture", &repo,
+        ));
+        registry
+            .save_to(&root.join("projects.json"))
+            .expect("write the fixture project registry");
         Self { dir }
     }
 
@@ -299,4 +326,108 @@ async fn an_unopenable_notes_store_is_refused_by_path() {
         "the refusal names the path: {}",
         text(&out)
     );
+}
+
+/// Text of a `symbols` answer for `name`.
+async fn symbols_text(base: &str, id: u64, name: &str) -> String {
+    let out = rpc(
+        base,
+        id,
+        "tools/call",
+        json!({ "name": "symbols", "arguments": { "name": name } }),
+    )
+    .await;
+    out["result"]["content"][0]["text"]
+        .as_str()
+        .unwrap_or("")
+        .to_string()
+}
+
+/// The row's proof (phase-b pb-code-freshness): with no daemon, an edit to a
+/// source file shows in `symbols` through the code server's own Reindexer,
+/// well inside the 30 s the deleted poll took, and before any tool had read
+/// the graph (the Reindexer loads the deferred graph before it writes).
+#[tokio::test]
+async fn an_edit_shows_in_symbols_through_the_reindexer() {
+    let fx = Fixture::new().await;
+    let (server, base) = start(&fx, free_port()).await;
+
+    let source = fx.path("repo/src/lib.rs");
+    let mut text = std::fs::read_to_string(&source).expect("fixture source");
+    text.push_str("\npub fn fixture_added_by_edit() {}\n");
+    std::fs::write(&source, text).expect("edit the fixture source");
+
+    let deadline = Instant::now() + Duration::from_secs(20);
+    let mut id = 10;
+    loop {
+        let answer = symbols_text(&base, id, "fixture_added_by_edit").await;
+        if answer.contains("src/lib.rs") {
+            break;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "the edit never reached `symbols` through the Reindexer: {answer}\n{}",
+            server.log()
+        );
+        id += 1;
+        tokio::time::sleep(Duration::from_millis(250)).await;
+    }
+    assert!(
+        symbols_text(&base, id + 1, "fixture_target")
+            .await
+            .contains("src/lib.rs"),
+        "the graph loaded from disk still answers"
+    );
+}
+
+/// Moved from sovereign-daemon's spec_gate_e2e with the SpecWatcher
+/// (pb-code-freshness): writing `.sovereign/features/*/spec.md` reaches a
+/// connected client as `notifications/tools/list_changed` over `GET /mcp`.
+/// The gate's render (spec/drift in or out) is proven beside it in
+/// `sovereign_code::mcp_surface`'s tests.
+#[tokio::test]
+async fn a_spec_write_pushes_tools_list_changed_over_sse() {
+    use futures::StreamExt;
+
+    let fx = Fixture::new().await;
+    let (server, base) = start(&fx, free_port()).await;
+    let resp = reqwest::Client::new()
+        .get(format!("{base}/mcp"))
+        .send()
+        .await
+        .expect("GET /mcp");
+    assert!(resp.status().is_success());
+    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<String>();
+    tokio::spawn(async move {
+        let mut buf = Vec::new();
+        let mut stream = resp.bytes_stream();
+        while let Some(Ok(bytes)) = stream.next().await {
+            buf.extend_from_slice(&bytes);
+            while let Some(i) = buf.windows(2).position(|w| w == b"\n\n") {
+                let event: Vec<u8> = buf.drain(..i + 2).collect();
+                for line in String::from_utf8_lossy(&event).lines() {
+                    if let Some(data) = line.strip_prefix("data:") {
+                        let _ = tx.send(data.trim().to_string());
+                    }
+                }
+            }
+        }
+    });
+    let endpoint = tokio::time::timeout(Duration::from_secs(5), rx.recv())
+        .await
+        .expect("the endpoint event")
+        .expect("an event");
+    assert_eq!(endpoint, "/mcp");
+
+    let feature = fx.path("repo/.sovereign/features/foo");
+    std::fs::create_dir_all(&feature).expect("feature dir");
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    std::fs::write(feature.join("spec.md"), "# foo\n").expect("write the spec");
+
+    let notif = tokio::time::timeout(Duration::from_secs(10), rx.recv())
+        .await
+        .unwrap_or_else(|_| panic!("no tools/list_changed within 10 s:\n{}", server.log()))
+        .expect("an event");
+    let parsed: Value = serde_json::from_str(&notif).expect("a JSON-RPC frame");
+    assert_eq!(parsed["method"], "notifications/tools/list_changed");
 }

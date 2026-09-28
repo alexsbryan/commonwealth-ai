@@ -74,7 +74,6 @@ pub use sovereign_tools_base::read_json;
 pub mod recipe_tester_adapter;
 pub use sovereign_tools_base::search;
 pub use sovereign_tools_base::shell;
-pub mod spec_watcher;
 pub mod typed_call;
 pub mod typed_extension;
 pub use sovereign_tools_base::web;

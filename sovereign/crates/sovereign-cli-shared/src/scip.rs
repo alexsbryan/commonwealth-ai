@@ -14,6 +14,4 @@
 //! pb-code-freshness), the one the daemon uses too; re-exported here at its
 //! historical path.
 
-pub use corpus_engine_scip::merged_graph::{
-    load_merged_graph, MergedGraphSummary,
-};
+pub use corpus_engine_scip::merged_graph::{load_merged_graph, MergedGraphSummary};

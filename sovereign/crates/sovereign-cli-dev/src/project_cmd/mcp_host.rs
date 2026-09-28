@@ -3,8 +3,8 @@
 //! the host kit's tool host over code's registry, and [`CodeCallLog`], its
 //! call log over the NoteStore that `svrn reflect` and the pattern matcher
 //! read. The ToolRegistry half of a call is sovereign-contracts' `mcp_host`,
-//! the one the daemon runs too; what code exposes is
-//! `sovereign_tools::mcp_surface` until pb-code-freshness moves code's list.
+//! the one the daemon runs too; what code exposes is code's own list,
+//! `sovereign_code::mcp_surface` (pb-code-freshness).
 
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -22,7 +22,7 @@ use sovereign_contracts::mcp_host::{
     agent_session_token, call_log_tag, call_registry_tool, call_stats,
 };
 use sovereign_contracts::ToolRegistry;
-use sovereign_tools::mcp_surface::{is_mcp_exposed, render_tools_list_gated, resolve_alias};
+use sovereign_code::mcp_surface::{is_mcp_exposed, render_tools_list_gated, resolve_alias};
 
 /// Code's registry over MCP. `tools/list` is spec-gated on `feature_root`:
 /// `spec` and `drift` appear only once the project has a spec.

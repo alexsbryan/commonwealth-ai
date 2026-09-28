@@ -6,7 +6,7 @@
 //! - Renamed 6 tool ids (`find_callers` → `callers`,
 //!   `symbol_lookup` → `symbols`, etc.) at the descriptor level.
 //! - Centralised the MCP allowlist + alias map in
-//!   [`sovereign_tools::mcp_surface`] so the daemon and the
+//!   `mcp_surface` (code's ids now in `sovereign_code::mcp_surface`) so the daemon and the
 //!   standalone server agree on the exposed surface.
 //! - Added 3 new tools (`build`, `spec`, `drift`).
 //!
@@ -23,8 +23,8 @@
 //!
 //! # Why this crate
 //!
-//! The check has two sides: the surface LIST lives in `sovereign_tools::
-//! mcp_surface` and the tool IDS live in `sovereign-code`.
+//! The check has two sides: the surface LIST lives in `sovereign_code::
+//! mcp_surface` (pb-code-freshness) and the tool IDS live in `sovereign-code`.
 //! It ran from `sovereign-tools/tests/`, which made `sovereign-code`,
 //! `corpus-engine-scip` and `corpus-engine-watchers`
 //! dev-dependencies of `sovereign-tools` — four edges leaving the `svrn`
@@ -43,7 +43,7 @@ use corpus_engine_notes::NoteStore;
 use corpus_engine_scip::ScipGraph;
 use sovereign_contracts::registry::ToolRegistry;
 use sovereign_contracts::traits::Tool;
-use sovereign_tools::mcp_surface::{
+use sovereign_code::mcp_surface::{
     is_mcp_exposed, render_tools_list, resolve_alias, MCP_TOOLS_ALWAYS, MCP_TOOLS_RETIRED,
     MCP_TOOL_ALIASES,
 };
@@ -221,7 +221,7 @@ fn resolve_alias_matches_descriptor_ids() {
 /// allowlist tier.
 #[test]
 fn new_tools_advertise_canonical_ids() {
-    use sovereign_tools::mcp_surface::MCP_TOOLS_SPEC_GATED;
+    use sovereign_code::mcp_surface::MCP_TOOLS_SPEC_GATED;
 
     // build → ALWAYS tier (exposed unconditionally).
     let dir = tempfile::tempdir().unwrap();
@@ -341,4 +341,57 @@ fn code_tool_descriptor_ids_land_on_their_surface_list() {
         assert!(MCP_TOOLS_RETIRED.contains(&id.as_str()), "{id} not retired");
         assert!(!is_mcp_exposed(&id), "{id} still exposed");
     }
+}
+
+/// The code tools never open the SCIP graph to be built or listed; the
+/// first tool that READS it loads it (phase-b pb-code-freshness). pb-atlas-kv
+/// measured every `svrn tools` verb paying ~39 s for the merge up front.
+#[tokio::test]
+async fn code_tools_build_and_list_without_loading_the_graph() {
+    let dir = tempfile::tempdir().unwrap();
+    let corpus = dir.path().join("fixture");
+    std::fs::create_dir_all(&corpus).unwrap();
+    let on_disk = ScipGraph::open(&corpus.join("scip_graph.db"), "fixture").unwrap();
+    on_disk
+        .ingest_symbols_and_refs(
+            vec![corpus_engine_scip::scip_graph::ScipSymbolRecord {
+                name: "lazy_target".into(),
+                qualified_name: "fixture src/lib.rs/lazy_target().".into(),
+                kind: "function".into(),
+                file_path: "src/lib.rs".into(),
+                line_start: 0,
+                line_end: 1,
+                language: "rust".into(),
+            }],
+            vec![],
+        )
+        .await
+        .unwrap();
+
+    let graph = sovereign_code::LazyScipGraph::deferred(dir.path().to_path_buf());
+    let bundles: Vec<Box<dyn sovereign_contracts::tool_bundle::ToolBundle>> =
+        vec![Box::new(sovereign_code::bundle::CodeIntelTools::new(
+            empty_engine() as Arc<dyn sovereign_code::CodeIndexSource>,
+            graph.clone(),
+        ))];
+    let mut registry = ToolRegistry::new();
+    sovereign_contracts::tool_bundle::install(&mut registry, &bundles).await;
+    let listed = render_tools_list(&registry.descriptors());
+    assert!(!listed.is_empty(), "the bundle registered tools");
+    assert!(
+        !graph.is_loaded(),
+        "building and listing the tools must not load the SCIP graph"
+    );
+
+    let symbols = registry.get("symbols").expect("symbols is registered");
+    let ctx = sovereign_contracts::types::ToolContext::default();
+    let out = symbols
+        .execute(&serde_json::json!({ "name": "lazy_target" }), &ctx)
+        .await
+        .expect("symbols answers");
+    assert!(graph.is_loaded(), "the first read loads the graph");
+    assert!(
+        format!("{out:?}").contains("lazy_target"),
+        "the loaded graph answers: {out:?}"
+    );
 }

@@ -137,7 +137,6 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
     );
     let merged_graph = sovereign_code::LazyScipGraph::deferred(data_dir.clone());
 
-
     // ── Repo root + sovereign config ────────────────────────────
     //
     // Priority: nearest ancestor with .sovereign/ > git root > cwd.
@@ -542,7 +541,7 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
     let notifier = host_kit::mcp::http::McpNotifier::new();
     let watcher_notifier = notifier.clone();
     let _spec_watcher =
-        match sovereign_tools::spec_watcher::SpecWatcher::start(&repo_root, move || {
+        match sovereign_code::spec_watcher::SpecWatcher::start(&repo_root, move || {
             watcher_notifier.notify_tools_list_changed()
         }) {
             Ok(w) => Some(w),

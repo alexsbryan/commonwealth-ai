@@ -41,17 +41,21 @@ use sovereign_core::registry::ToolRegistry;
 use sovereign_core::oicp::jsonrpc::{JsonRpcRequest, JsonRpcResponse};
 use sovereign_core::oicp::mcp::McpMethod;
 
-// MCP allowlist + alias logic lives in
-// [`sovereign_tools::mcp_surface`] so the daemon's mount and the
-// standalone `sovereign serve` HTTP module agree on exactly the
-// same surface. See that module for the full contract; this file
-// just imports the helpers.
-use sovereign_tools::mcp_surface::{
-    is_mcp_exposed, negotiate_mcp_protocol_version, render_tools_list_gated, resolve_alias,
-};
+// Each program owns its MCP exposure list (phase-b pb-code-freshness):
+// svrn's in `sovereign_tools::mcp_surface`, code's (with the aliases and
+// the spec gate) in `sovereign_code::mcp_surface`. The daemon mounts both
+// programs' tools until pb-code-daemon-exit, so it exposes the union.
+use sovereign_code::mcp_surface::{render_tools_list_gated_by, resolve_alias};
+use sovereign_tools::mcp_surface::negotiate_mcp_protocol_version;
+
+/// The daemon's exposure filter: svrn's ids or code's.
+fn is_mcp_exposed(canonical_name: &str) -> bool {
+    sovereign_tools::mcp_surface::is_mcp_exposed(canonical_name)
+        || sovereign_code::mcp_surface::is_mcp_exposed(canonical_name)
+}
 
 /// Phase 5 feature-root extension. When set, `tools/list` calls
-/// [`render_tools_list_gated`] with this path so spec-gated tools
+/// [`render_tools_list_gated_by`] with this path so spec-gated tools
 /// (`spec`, `drift`) only appear when `.sovereign/features/*/spec.md`
 /// or `ARCHITECTURE.md` exists. `None` (the daemon's default) means
 /// the gate is off and every exposed tool ships unconditionally —
@@ -71,7 +75,7 @@ impl FeatureRoot {
 
 /// The notifier behind `GET /mcp`. It moved to the host kit with the HTTP+SSE
 /// framing (phase-b pb-code-server); this path is its historical one. The
-/// watcher in `sovereign_tools::spec_watcher` calls
+/// watcher in `sovereign_code::spec_watcher` calls
 /// [`McpNotifier::notify_tools_list_changed`] from its `on_change` callback.
 pub use host_kit::mcp::http::McpNotifier;
 
@@ -235,9 +239,10 @@ async fn dispatch(
             // Phase 5: feature_root.0 is `Some(Arc<PathBuf>)` for
             // spec-gated callers (standalone serve), `None` for the
             // daemon's pass-through. The cache amortises stat-storms.
-            let tool_list = render_tools_list_gated(
+            let tool_list = render_tools_list_gated_by(
                 &descriptors,
                 feature_root.0.as_deref().map(|p| p.as_path()),
+                is_mcp_exposed,
             );
             JsonRpcResponse::result(id, serde_json::json!({ "tools": tool_list }))
         }

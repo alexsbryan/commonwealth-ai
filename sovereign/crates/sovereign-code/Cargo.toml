@@ -39,6 +39,9 @@ tracing = { workspace = true }
 # phase-b pb-code-freshness): axum routes behind the host kit's loopback guard.
 axum = { workspace = true, optional = true }
 host-kit = { workspace = true, features = ["shell"], optional = true }
+# SpecWatcher (spec_watcher.rs, moved from sovereign-tools with the spec gate
+# it invalidates, phase-b pb-code-freshness). Same major as the reindexer's.
+notify = "8"
 workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 
 [features]
