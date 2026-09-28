@@ -36,7 +36,7 @@
 //! cross the seam; the ranking is the separate RAG extraction.
 
 mod ask;
-mod host;
+use corpus_index::host;
 mod ingest;
 mod mcp;
 mod recipe;

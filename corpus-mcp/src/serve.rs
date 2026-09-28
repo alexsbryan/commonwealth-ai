@@ -34,6 +34,7 @@ use anyhow::{bail, Context, Result};
 use corpus_engine::{CorpusEngine, CorpusSpec};
 use corpus_index::index::CorpusIndex;
 
+use crate::host::embed_model_stem;
 use crate::tools;
 
 #[derive(clap::Args, Debug)]
@@ -275,47 +276,6 @@ async fn ensure_installed(engine: &CorpusEngine, id: &str, deadline_mins: u64) -
     Ok(())
 }
 
-/// The endpoint's model id, reduced to the stem `CorpusEngine` asks for.
-///
-/// `corpus-engine/src/engine/ingest.rs:91` states the contract: "The stem
-/// should match the filename of the embedding GGUF (e.g. `qwen-embedding-0.6b`
-/// for `qwen-embedding-0.6b.gguf`)". A llama-server reports the filename
-/// itself (`Qwen3-Embedding-0.6B-Q8_0.gguf`), so the `.gguf` comes off. An
-/// endpoint that reports something which is not a filename — Ollama's
-/// `nomic-embed-text`, an OpenAI model id — passes through unchanged, which is
-/// correct: the label's job is to name the model that produced the vectors,
-/// and the id IS that name there.
-///
-/// ## What this name does and does NOT decide (ARCH §11.1 — cited, not recalled)
-///
-/// It does NOT gate the snapshot restore. `SnapshotManifest::check_embedding_compatibility`
-/// (`corpus-engine/src/snapshot.rs:223-235`) returns one of three verdicts
-/// (`EmbeddingCompat`, snapshot.rs:72-79): `DimsMismatch` when the widths
-/// differ — the only hard refusal; `Exact` when name AND width match; and
-/// otherwise `NameMismatch`, whose doc comment reads "Dimensions match, model
-/// name differs — verify the space by probe".
-///
-/// So a name that differs from the snapshot's is EXPECTED and benign. It costs
-/// the empirical probe, not the restore. Our stem
-/// (`Qwen3-Embedding-0.6B-Q8_0`) will differ from `sep`'s declared
-/// `qwen-embedding-0.6b`, and that is the designed path, not a bug.
-///
-/// RETRACTION. An earlier commit on this branch claimed the two names being
-/// from "two namespaces, never equal" was the MECHANISM behind run
-/// 20260905T181423Z's 93-minute rebuild. Half of that is confirmed — the names
-/// do differ, and the verdict is `NameMismatch`. The causal half is NOT: a
-/// name mismatch alone never discards anything, so what discarded that
-/// snapshot was the empirical probe, `probe_embedding_space` re-embedding a
-/// sample and coming in under its cosine threshold, or failing to run at all.
-/// Which of those, and why (pooling, normalization, or quantisation differing
-/// between a bare llama-server `/v1/embeddings` and the embedder the snapshot
-/// was built with), is answered by the next run's captured `pull.err` and by
-/// nothing currently on disk. Do not restate the causal claim until that file
-/// says it.
-pub(crate) fn embed_model_stem(model_id: &str) -> &str {
-    model_id.strip_suffix(".gguf").unwrap_or(model_id)
-}
-
 /// Why a pull stopped, when it did not succeed.
 ///
 /// Two outcomes and not one `anyhow::Error`, because the caller says something
@@ -416,25 +376,6 @@ mod tests {
             Some("restored"),
             "a restore well inside the budget was refused by the deadline meant to allow it"
         );
-    }
-
-    /// The precondition whose removal cost run 20260905T201154Z. A
-    /// llama-server reports the GGUF FILENAME; `ingest` wants the stem.
-    #[test]
-    fn the_endpoint_model_id_becomes_the_stem_ingest_demands() {
-        assert_eq!(
-            embed_model_stem("Qwen3-Embedding-0.6B-Q8_0.gguf"),
-            "Qwen3-Embedding-0.6B-Q8_0"
-        );
-        // Not a filename — Ollama, vLLM, an OpenAI id. Unchanged, because
-        // there the id already IS the model's name.
-        assert_eq!(embed_model_stem("nomic-embed-text"), "nomic-embed-text");
-        // Only a TRAILING .gguf, and only once.
-        assert_eq!(embed_model_stem("a.gguf.gguf"), "a.gguf");
-        assert_eq!(embed_model_stem("gguf"), "gguf");
-        // Never empty for a non-empty id: an empty name is exactly what
-        // `ingest.rs:91` refuses.
-        assert!(!embed_model_stem("x.gguf").is_empty());
     }
 
     /// 0 disables the bound, for a caller who means to wait.

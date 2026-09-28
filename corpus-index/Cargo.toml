@@ -37,6 +37,9 @@ corpus-engine-yield = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
+# The endpoint decider (`host`) reports its refusals as `anyhow` errors, as it
+# did in corpus-mcp before pb-ingest-cli moved it here.
+anyhow = { workspace = true }
 
 async-trait = { workspace = true }
 tokio = { workspace = true }

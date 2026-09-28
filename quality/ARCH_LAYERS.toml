@@ -895,7 +895,10 @@ name = "corpus-index"
 # adapter, fp-5 — the `EmbedFn` half is this leaf's own `types::EmbedFn`) — and
 # the retrieval stack it wraps (LanceDB/Tantivy/arrow/reqwest) is the surface
 # itself, not a widening a package can avoid. It carries no `build.rs` and no
-# `include_str!`, so all three filesystem rules pass.
+# `include_str!`, so all three filesystem rules pass. Since pb-ingest-cli it
+# also holds the ONE embeddings-endpoint decider (`host`: the discovery ladder
+# and probe) and `embed_http`, because corpus-mcp's `serve` and ingest's CLI
+# both need them; neither widened the allow list.
 allow = ["kernel-types", "oplog", "corpus-engine-yield", "sovereign-contracts"]
 
 [[package_leaf]]

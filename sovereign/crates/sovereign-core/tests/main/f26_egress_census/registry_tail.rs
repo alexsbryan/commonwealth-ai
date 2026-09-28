@@ -292,7 +292,7 @@ pub(super) const REGISTRY_TAIL: &[(&str, Class, usize)] = &[
     // the daemon's own endpoint from commonwealth-knowledge, or the operator's
     // `--base-url` from corpus-mcp — an operator-owned target, so it carries
     // the operator's class, never RemotePayload's exemption.
-    ("corpus-engine/src/embed_http.rs", Class::OperatorSurface, 1),
+    ("corpus-index/src/embed_http.rs", Class::OperatorSurface, 1),
     // corpus-mcp's ONE client constructor (`host::client()`) and every probe
     // that rides it: `GET /oicp/v1/capabilities`, `GET /v1/models`, one `POST
     // /v1/embeddings`, `corpus ingest`'s chat probe, and the endpoint
@@ -311,7 +311,7 @@ pub(super) const REGISTRY_TAIL: &[(&str, Class, usize)] = &[
     // NO row: it goes through `CorpusEngine::ingest` to
     // corpus-engine/src/acquirers/bulk_download.rs, registered InboundOnly
     // above since this census was written.
-    ("corpus-mcp/src/host.rs", Class::OperatorSurface, 1),
+    ("corpus-index/src/host.rs", Class::OperatorSurface, 1),
     // 2 -> 1 at cw-lift rung 2c: the queue-handoff unicast to
     // `/internal/app/state` built its own client with its own 10s timeout,
     // a second answer to "how long do we wait on a peer" beside
