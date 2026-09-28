@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! `svrn notes` — read and write durable working notes.
 //!
+//! Code's verb over code's notes store: the dispatcher execs this binary for
+//! it (pb-notes-verbs; it lived in sovereign-cli until then).
+//!
 //! Merges:
 //!
 //! - `svrn reflect` (the developer-facing read view)  → `svrn notes`
@@ -40,7 +43,7 @@ use corpus_engine_notes::{is_ephemeral_kind, Note, NoteScope, NoteSource, NoteSt
 // not. `mcp_client` is always compiled, so the route carries in every
 // feature contract (directive 5211ed83 — dev-build.sh's treesitter +
 // dev-tools build caught the gate mismatch).
-use sovereign_cli_shared::mcp_client::{daemon_tool_call, DaemonCallError};
+use sovereign_cli_base::mcp_client::{daemon_tool_call, DaemonCallError};
 
 enum DaemonFirst {
     /// The daemon answered; here is the tool's JSON payload.
@@ -127,15 +130,21 @@ fn render_rows(rows: &[RenderedRow], full: bool) {
 }
 
 pub async fn run(args: &[String]) -> i32 {
-    if crate::util::help::wants_help(args) {
-        crate::util::help::print(&HELP);
+    if sovereign_cli_base::help::wants_help(args) {
+        sovereign_cli_base::help::print(&HELP);
         return 0;
     }
 
     match args.first().map(String::as_str) {
         Some("add") => cmd_add(&args[1..]).await,
         Some("list") => cmd_list(&args[1..]).await,
-        Some("retrieval-audit") => crate::notes_retrieval_cmd::run(&args[1..]).await,
+        // Not code's: it joins the retrieval log with session transcripts and
+        // stays in the dispatcher, which serves it before exec'ing here.
+        Some("retrieval-audit") => {
+            tracing::debug!(target: "cli_dev.notes", "retrieval-audit reached the code program; named pointer");
+            eprintln!("notes retrieval-audit is served by the svrn dispatcher: run `svrn notes retrieval-audit`");
+            2
+        }
         Some("migrate-from") => cmd_migrate_from(&args[1..]).await,
         Some("rationalize") => cmd_rationalize(&args[1..]).await,
         Some("gc") => cmd_gc(&args[1..]).await,
@@ -199,8 +208,8 @@ fn looks_like_note_id(q: &str) -> bool {
 ///   --full             Print whole bodies instead of the first 3 lines.
 ///   --data-dir <p>     Override notes.db location.
 async fn cmd_list(args: &[String]) -> i32 {
-    if crate::util::help::wants_help(args) {
-        crate::util::help::print(&HELP_LIST);
+    if sovereign_cli_base::help::wants_help(args) {
+        sovereign_cli_base::help::print(&HELP_LIST);
         return 0;
     }
 
@@ -263,7 +272,7 @@ async fn cmd_list(args: &[String]) -> i32 {
             "--data-dir" => data_dir = take(&mut i).map(PathBuf::from),
             other if other.starts_with('-') => {
                 eprintln!("notes list: unknown flag {other:?}");
-                crate::util::help::print(&HELP_LIST);
+                sovereign_cli_base::help::print(&HELP_LIST);
                 return 2;
             }
             // A bare word is the query: `svrn notes list embedrouter`.
@@ -277,8 +286,7 @@ async fn cmd_list(args: &[String]) -> i32 {
     // no id route and never returns retired rows, so `--id` /
     // `--include-retired` (and the explicit `--data-dir` override) stay
     // on the repo-local path — named below, never silent.
-    let daemon_eligible = cfg!(feature = "code-intel")
-        && id_prefix.is_none()
+    let daemon_eligible = id_prefix.is_none()
         && !include_retired
         && data_dir.is_none();
     if daemon_eligible {
@@ -611,8 +619,7 @@ async fn cmd_add(args: &[String]) -> i32 {
     // local override), a non-agent `--source`, and kinds outside the
     // daemon `note` tool's enum (write_note.rs) have no daemon route;
     // those keep the local path, named below, never silent.
-    let daemon_eligible = cfg!(feature = "code-intel")
-        && data_dir.is_none()
+    let daemon_eligible = data_dir.is_none()
         && source == NoteSource::Agent
         && DAEMON_NOTE_KINDS.contains(&kind.as_str());
     if daemon_eligible {
@@ -759,7 +766,7 @@ async fn cmd_migrate_from(args: &[String]) -> i32 {
         eprintln!("notes migrate-from: {} does not exist", source.display());
         return 1;
     }
-    let canonical_root = crate::util::dirs::sovereign_root();
+    let canonical_root = sovereign_cli_base::dirs::sovereign_root();
     let target = target.unwrap_or_else(|| canonical_root.join("notes.db"));
     if source == target {
         eprintln!(
@@ -854,11 +861,11 @@ async fn cmd_migrate_from(args: &[String]) -> i32 {
     0
 }
 
-const HELP: crate::util::help::Help = crate::util::help::Help {
+const HELP: sovereign_cli_base::help::Help = sovereign_cli_base::help::Help {
     command: "svrn notes",
     summary: "Read and write durable working notes (the audit's primary input).",
     sections: &[
-        crate::util::help::HelpSection::Usage(
+        sovereign_cli_base::help::HelpSection::Usage(
             "svrn notes                           30-day reflection view (default)\n\
              svrn notes add --kind <k> -m \"...\"   Append a note\n\
              svrn notes list [--query <s>]        List / search the notes themselves\n\
@@ -872,7 +879,7 @@ const HELP: crate::util::help::Help = crate::util::help::Help {
              svrn notes retrieval-audit           Injected-note hit-rate: did injected notes get used? (E2/P4 baseline)\n\
              svrn notes --since 7d --tool <name>  Reflection filters",
         ),
-        crate::util::help::HelpSection::Notes(
+        sovereign_cli_base::help::HelpSection::Notes(
             "Replaces `svrn reflect`. Old names \
              still work and forward here. Bare `svrn notes` is the reflection \
              SUMMARY; `svrn notes list` is the notes themselves — the same \
@@ -882,16 +889,16 @@ const HELP: crate::util::help::Help = crate::util::help::Help {
     ],
 };
 
-const HELP_LIST: crate::util::help::Help = crate::util::help::Help {
+const HELP_LIST: sovereign_cli_base::help::Help = sovereign_cli_base::help::Help {
     command: "svrn notes list",
     summary: "List and search durable notes — the read-back for `svrn notes add`.",
     sections: &[
-        crate::util::help::HelpSection::Usage(
+        sovereign_cli_base::help::HelpSection::Usage(
             "svrn notes list [--query <s>] [--kind <k>]... [--limit <n>]\n    \
              [--symbol <s>]... [--file <p>]... [--id <id>]\n    \
              [--include-retired] [--full] [--data-dir <p>]",
         ),
-        crate::util::help::HelpSection::Flags(&[
+        sovereign_cli_base::help::HelpSection::Flags(&[
             (
                 "--query <s> / -q",
                 "Full-text search over note content (a bare word works too)",
@@ -917,7 +924,7 @@ const HELP_LIST: crate::util::help::Help = crate::util::help::Help {
             ("--full", "Print whole bodies instead of the first 3 lines"),
             ("--data-dir <p>", "Override the notes.db location"),
         ]),
-        crate::util::help::HelpSection::Examples(&[
+        sovereign_cli_base::help::HelpSection::Examples(&[
             (
                 "svrn notes list --kind decision",
                 "Every decision on record",
@@ -935,7 +942,7 @@ const HELP_LIST: crate::util::help::Help = crate::util::help::Help {
                 "Read one note whole",
             ),
         ]),
-        crate::util::help::HelpSection::Notes(
+        sovereign_cli_base::help::HelpSection::Notes(
             "Exits 0 with `no notes matched` when nothing hits — an empty \
              result is an answer, not an error. The db actually searched is \
              printed so an empty result is never confused with the wrong db.",
@@ -1310,7 +1317,7 @@ async fn cmd_rationalize(args: &[String]) -> i32 {
     let want_reflection_fix = only.is_none() || only == Some(MoveKind::ReflectionFix);
     let mut reflection_fixes: Vec<ReflectionFixCandidate> = Vec::new();
     let churn_repo = if want_reflection_fix {
-        let root = sovereign_cli_shared::repo::find_repo_root();
+        let root = sovereign_cli_base::repo::find_repo_root();
         if root.is_none() {
             eprintln!(
                 "note: reflection-fix candidates omitted — the CWD is not inside a git repo, \
@@ -1491,7 +1498,7 @@ async fn cmd_rationalize(args: &[String]) -> i32 {
     let writing = mode == Mode::Apply && commit;
     let base_url = format!(
         "http://localhost:{}",
-        crate::util::urls::DEFAULT_CLIENT_PORT
+        sovereign_cli_base::urls::DEFAULT_CLIENT_PORT
     );
     let client = reqwest::Client::new();
 
@@ -2136,7 +2143,7 @@ mod rationalize_tests {
         // 2099 — so the fix-signal is empty regardless of anchor. Uses a
         // >=3-char anchor so it exercises the real git path, not the
         // short-anchor floor below.
-        let repo = sovereign_cli_shared::repo::find_repo_root()
+        let repo = sovereign_cli_base::repo::find_repo_root()
             .expect("this test runs inside the checkout it pickaxes");
         assert!(git_churn_since(&repo, "runtime", "2099-01-01").is_empty());
     }
@@ -2145,8 +2152,8 @@ mod rationalize_tests {
     fn git_churn_since_floors_out_tiny_anchors() {
         // A 1-2 char anchor pickaxes against nearly every diff — no signal.
         // Returns empty without even shelling out to git.
-        let repo = sovereign_cli_shared::repo::find_repo_root()
-            .expect("this test runs inside the checkout");
+        let repo =
+            sovereign_cli_base::repo::find_repo_root().expect("this test runs inside the checkout");
         assert!(git_churn_since(&repo, "fn", "1970-01-01").is_empty());
         assert!(git_churn_since(&repo, "x", "1970-01-01").is_empty());
     }

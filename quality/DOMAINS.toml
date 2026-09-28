@@ -10921,7 +10921,7 @@ lines = 93
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli/src/notes_cmd.rs"
+path = "sovereign/crates/sovereign-cli-dev/src/notes_cmd.rs"
 context = "host"
 lines = 2205
 note = ""
@@ -11017,7 +11017,7 @@ lines = 224
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli/src/reflect_cmd.rs"
+path = "sovereign/crates/sovereign-cli-dev/src/reflect_cmd.rs"
 context = "host"
 lines = 811
 note = ""

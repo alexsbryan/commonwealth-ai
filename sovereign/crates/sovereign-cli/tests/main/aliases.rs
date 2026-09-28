@@ -224,6 +224,8 @@ fn alias_refresh() {
 
 #[test]
 fn alias_notes() {
+    // Both verbs exec the code program, sovereign-cli-dev (pb-notes-verbs).
+    require_siblings!();
     help_runs(&["notes"]);
     // `svrn reflect` is the legacy entry point for the
     // reflection view that `svrn notes` now owns. The banner

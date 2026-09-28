@@ -55,7 +55,6 @@ mod llm_bin;
 mod memory_cmd;
 mod mesh_bin;
 mod milestone_cmd;
-mod notes_cmd;
 mod notes_retrieval_cmd;
 mod path_cmd;
 mod plan_cmd;
@@ -71,7 +70,6 @@ mod quality_map_cmd;
 // zero dependencies and is the one thing a `curl | sh` user needs to reach
 // the code-intelligence pipeline the daemon already runs.
 mod project_registry;
-mod reflect_cmd;
 mod refresh_cmd;
 mod report_audit;
 mod seat_cmd;
@@ -927,7 +925,13 @@ async fn async_main() {
                 std::process::exit(code);
             }
             "notes" => {
-                let code = notes_cmd::run(&raw_args[1..]).await;
+                // Code's verb over code's notes store (pb-notes-verbs): exec
+                // `sovereign-cli-dev`. `retrieval-audit` is not code's and
+                // stays in this process.
+                let code = match raw_args.get(1).map(String::as_str) {
+                    Some("retrieval-audit") => notes_retrieval_cmd::run(&raw_args[2..]).await,
+                    _ => dev_bin::exec("notes", &raw_args[1..]),
+                };
                 std::process::exit(code);
             }
             "seat" => {
@@ -1095,7 +1099,7 @@ async fn async_main() {
                 std::process::exit(code);
             }
             "reflect" => {
-                let code = reflect_cmd::run_reflect(&raw_args[1..]).await;
+                let code = dev_bin::exec("reflect", &raw_args[1..]);
                 std::process::exit(code);
             }
             "journal" => {

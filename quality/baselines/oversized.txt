@@ -67,7 +67,7 @@
 2727	sovereign/crates/sovereign-cli/src/cache_audit_cmd.rs
 1210	sovereign/crates/sovereign-cli/src/conformance_cmd.rs
 1382	sovereign/crates/sovereign-cli/src/main.rs
-2219	sovereign/crates/sovereign-cli/src/notes_cmd.rs
+2219	sovereign/crates/sovereign-cli-dev/src/notes_cmd.rs
 3569	sovereign/crates/sovereign-cli/src/session_cmd.rs
 1217	sovereign/crates/sovereign-cli/tests/main/cli_contract_journeys.rs
 1605	sovereign/crates/sovereign-code/src/session_state.rs

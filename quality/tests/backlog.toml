@@ -1647,7 +1647,7 @@ found = "2026-08-24"
 class = "resource-ceiling"
 tier = 1
 surface = "cli-journey"
-target = "sovereign-cli/src/notes_cmd"
+target = "sovereign-cli-dev/src/notes_cmd"
 failure = """A session's own note writes failed TWICE against a daemon returning
 503 'host busy, ~30000ms predicted wait'. The write was lost and the session
 carried on — the operator's record of the work is exactly what a busy host

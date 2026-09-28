@@ -92,8 +92,13 @@ mod dry_report_cmd;
 mod git_archaeology_cmd;
 #[cfg(feature = "workbench")]
 mod mesh_kv_client;
+// `svrn notes` and `svrn reflect`, moved from sovereign-cli (pb-notes-verbs).
+#[cfg(feature = "workbench")]
+mod notes_cmd;
 #[cfg(feature = "workbench")]
 mod phases;
+#[cfg(feature = "workbench")]
+mod reflect_cmd;
 #[cfg(feature = "workbench")]
 mod rough_edges_cmd;
 // UNGATED on purpose: `converge_cmd` is not behind `workbench` and reaches
@@ -287,6 +292,8 @@ async fn async_main() -> i32 {
         "backlog" => backlog_cmd::run_backlog(rest).await,
         "claim" => claim_cmd::run(rest).await,
         "solve" => solve_cmd::run(rest).await,
+        "notes" => notes_cmd::run(rest).await,
+        "reflect" => reflect_cmd::run_reflect(rest).await,
         "rough-edges" => rough_edges_cmd::run(rest).await,
         "git-archaeology" => git_archaeology_cmd::run(rest).await,
         "archaeology-eval" => archaeology_eval_cmd::run(rest).await,

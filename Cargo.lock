@@ -12247,7 +12247,6 @@ version = "0.8.0"
 dependencies = [
  "chrono",
  "clap",
- "corpus-engine-notes",
  "corpus-engine-scip",
  "corpus-index",
  "dirs 5.0.1",

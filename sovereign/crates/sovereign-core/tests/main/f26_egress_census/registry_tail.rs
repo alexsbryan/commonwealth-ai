@@ -21,6 +21,9 @@ pub(super) const REGISTRY_TAIL: &[(&str, Class, usize)] = &[
     // registry 3 -> 2 (pb-code-clean): the engine's embedder left with the
     // engine; the code tools read indexes through the leaf's FsIndexSource.
     ("sovereign/crates/sovereign-cli-dev/src/tools_cmd/registry.rs", Class::LocalDaemon, 2),
+    // notes_cmd moved from sovereign-cli (pb-notes-verbs): `notes rationalize`'s
+    // daemon completion call.
+    ("sovereign/crates/sovereign-cli-dev/src/notes_cmd.rs", Class::LocalDaemon, 1),
     // `svrn ring` talks to ONE address: `127.0.0.1:<daemon client_port>`, for
     // the rail routes and the guest-grant mint. Nothing a ring app writes
     // leaves the machine through this client — replication is the daemon's
@@ -94,7 +97,6 @@ pub(super) const REGISTRY_TAIL: &[(&str, Class, usize)] = &[
     ("sovereign/crates/sovereign-cli/src/session_cmd.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-cli/src/serve_cmd.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-cli/src/project_init/mod.rs", Class::LocalDaemon, 1),
-    ("sovereign/crates/sovereign-cli/src/notes_cmd.rs", Class::LocalDaemon, 1),
     // code_index_cmd.rs is gone (pb-code-index): `svrn code` execs the code
     // program, sovereign-cli-dev.
 

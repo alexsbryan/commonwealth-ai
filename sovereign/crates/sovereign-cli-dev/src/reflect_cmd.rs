@@ -6,6 +6,9 @@
 //! reflections at task completion via the `session_reflection` MCP tool;
 //! the developer reads them here to decide what to improve.
 //!
+//! Code's verb: the dispatcher execs this binary for it (pb-notes-verbs; it
+//! lived in sovereign-cli until then).
+//!
 //! ## Usage
 //!
 //! ```text
@@ -32,15 +35,15 @@ use corpus_engine_notes::{Note, NoteStore, ToolCallLogRow};
 /// `svrn notes` (the new name) calls [`run_reflect_view`]
 /// directly so it doesn't trigger the banner.
 pub async fn run_reflect(args: &[String]) -> i32 {
-    crate::util::deprecation::announce("svrn reflect", "svrn notes");
+    sovereign_cli_base::deprecation::announce("svrn reflect", "svrn notes");
     run_reflect_view(args).await
 }
 
 /// Canonical reflection-view handler. Both the legacy `reflect`
 /// alias and the new `svrn notes` default view forward here.
 pub(crate) async fn run_reflect_view(args: &[String]) -> i32 {
-    if crate::util::help::wants_help(args) {
-        crate::util::help::print(&HELP);
+    if sovereign_cli_base::help::wants_help(args) {
+        sovereign_cli_base::help::print(&HELP);
         return 0;
     }
     // ── Arg parsing ─────────────────────────────────────────────────────────
@@ -89,7 +92,7 @@ pub(crate) async fn run_reflect_view(args: &[String]) -> i32 {
             }
             other => {
                 eprintln!("Unknown flag: {other}");
-                crate::util::help::print(&HELP);
+                sovereign_cli_base::help::print(&HELP);
                 return 1;
             }
         }
@@ -631,7 +634,7 @@ fn parse_duration(s: &str) -> Option<u64> {
     }
 }
 
-use sovereign_core::time::unix_now;
+use sovereign_time::unix_now;
 
 fn truncate(s: &str, max: usize) -> String {
     let chars: Vec<char> = s.chars().collect();
@@ -783,12 +786,12 @@ fn confirm(prompt: &str) -> bool {
     matches!(line.trim().to_lowercase().as_str(), "y" | "yes")
 }
 
-const HELP: crate::util::help::Help = crate::util::help::Help {
+const HELP: sovereign_cli_base::help::Help = sovereign_cli_base::help::Help {
     command: "svrn reflect",
     summary: "Review session reflections and retire ones that are no longer relevant.",
     sections: &[
-        crate::util::help::HelpSection::Usage("svrn reflect [flags]"),
-        crate::util::help::HelpSection::Flags(&[
+        sovereign_cli_base::help::HelpSection::Usage("svrn reflect [flags]"),
+        sovereign_cli_base::help::HelpSection::Flags(&[
             ("--since <Nd|Nh>",    "Period to analyse (default: 30d)"),
             ("--tool <name>",      "Filter signals to one tool"),
             ("--raw",              "Print full reflection prose ungrouped"),
@@ -801,7 +804,7 @@ const HELP: crate::util::help::Help = crate::util::help::Help {
             ("--yes",              "Skip retirement confirmation prompt"),
             ("--data-dir <path>",  "Directory containing notes.db (default: ~/.svrnmesh/indexes)"),
         ]),
-        crate::util::help::HelpSection::Examples(&[
+        sovereign_cli_base::help::HelpSection::Examples(&[
             ("svrn reflect",                                           "30-day backlog summary"),
             ("svrn reflect --since 7d --tool blast_radius",            "Last week, one tool only"),
             ("svrn reflect --retire --tool blast_radius --reason \"macro support added in v0.4.2\"",

@@ -87,7 +87,6 @@ corpus-engine-scip = { workspace = true, optional = true }
 # directly rather than through `sovereign-inference`, which re-exports it while
 # linking llama.cpp unconditionally.
 oicp-client = { workspace = true, optional = true }
-corpus-engine-notes = { workspace = true }
 serde_json = { workspace = true }
 serde = { workspace = true }
 tokio = { workspace = true }
