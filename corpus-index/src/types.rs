@@ -33,6 +33,13 @@ use crate::error::Result;
 /// is only the fallback for model-free / stub paths.
 pub const DEFAULT_EMBED_DIM: usize = 1024;
 
+/// The `embedding_model` a keyword-only (FTS) index is stamped with. Its
+/// vectors are zeros, written only because the chunk schema has a vector
+/// column; stamping a real model's id on them told every reader the index was
+/// searchable in that model's space (pb-code-index). This names no model, so a
+/// reader comparing it with its own embedder's id finds no match.
+pub const FTS_ONLY_EMBEDDING_MODEL: &str = "none (fts-only)";
+
 pub type EmbedFn =
     Arc<dyn Fn(&str) -> Pin<Box<dyn Future<Output = Result<Vec<f32>>> + Send>> + Send + Sync>;
 

@@ -32,7 +32,6 @@ use corpus_index::types::EmbedFn;
 
 use sovereign_cli_shared::dirs::default_data_dir;
 use sovereign_cli_shared::mcp_client::check_mcp_server;
-use sovereign_cli_shared::models::configured_embed_model_name;
 use sovereign_cli_shared::repo::{find_repo_root, remove_legacy_hook};
 
 // Already in this binary from slices 1-2 — reused rather than re-ported, so
@@ -436,6 +435,7 @@ pub(crate) async fn cmd_init(args: &[String]) -> i32 {
     // ── Step 2: Index symbols ───────────────────────────────────
     println!();
     println!("  Indexing symbols...");
+    println!("    Keyword-only (FTS) index: no embedder is used, so it holds no vectors.");
 
     // Remove existing index so re-init is idempotent. The ingest pipeline
     // creates tables from scratch and fails with "table already exists" if
@@ -510,7 +510,7 @@ vector = false
     });
     let recipes_dir = tempdir.clone();
     let engine = CorpusEngine::new(recipes_dir, data_dir.clone(), embed)
-        .with_embedding_model(&configured_embed_model_name());
+        .with_embedding_model(corpus_index::types::FTS_ONLY_EMBEDDING_MODEL);
 
     // Progress callback — inline progress bar.
     let progress: corpus_engine::ProgressCallback = Box::new(|p| match p {
