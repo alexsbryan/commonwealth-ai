@@ -3767,3 +3767,80 @@ are private test doubles (`sovereign-daemon/src/process.rs` tests,
 `rails_up_e2e.rs`, `one_process_e2e.rs`). `CaptureWriter` repeats the same
 test writer at `corpus-engine/src/engine/yield_gate.rs:158` and
 `sec_facts/mod.rs:1326`: record only, test code.
+
+## REVIEW-audit-pb-auto-6 (2026-09-28, range 9ced302b8..c7b82cd49, since REVIEW-audit-pb-auto-5)
+
+Ten units: pb-meshapp-apps, pb-meshapp-grants, pb-rails-idle-cwrails,
+pb-rails-idle-stock, pb-pods-worker, pb-work-doors, pb-mesh-exit-core,
+pb-rails-origins, pb-rails-reach and pb-reach-guest, plus the seat's
+phase-b-33/34 (73 commits). All checks ran in the sovereign-vulkan toolbox.
+
+TESTALL at c7b82cd49: exit=100, 13,650 passed and 2 failed, both drift, both
+fixed below. PREPUSH at c7b82cd49 exited 1 with three blocking lanes:
+boundary-gate at 41 (46 at auto-5, the declared burn-down), plus clock-gate
+and rustfmt, both fixed below. After this audit, boundary-gate is the only
+blocking lane. The advisories are unchanged since auto-5: size-gate (52 keys),
+deletion-manifest (p0-root-junk), hakari-verify (the host-kit `if-addrs`
+finding above, owned by bl-hakari), and domains-census-self-test, which
+could not judge.
+
+Ledger (`.rs` lines, net; a path under `tests/` or named `*tests.rs` counts
+as tests): pb-rails-origins +1320 src / +695 tests, pb-rails-reach +502 /
++282, pb-mesh-exit-core +322 / +331, pb-work-doors +24 / +1232,
+pb-pods-worker +11 / +128, pb-rails-idle-cwrails 0 / +9, pb-meshapp-grants
+-1 / 0, pb-reach-guest -13 / +200, pb-meshapp-apps -475 / +179. Total src
++1690 (+8111 / -6421), tests +3056, before this audit's commits.
+
+- **ARCH 5 drift, fixed in ccf6a1e70** · the F26 egress census had no row for
+  mesh-reach, which is new in the range. `mesh-reach/src/rails.rs:39`
+  (`RailsTransport`, d0c824ea7) is LocalDaemon, and
+  `mesh-reach/src/guest/tests.rs:148` (the pb-reach-guest proof) is TestOnly.
+  The crate's own TEST runs never reach the census, which lives in
+  sovereign-core.
+- **ARCH 5 drift, fixed in b8bbe80b5** · pb-mesh-exit-core (ce4cf6de7,
+  685ddc2ef) moved three tagged tests in the daemon by a few lines each, so
+  `quality/conformance/sovereign-daemon.toml` went stale. Regenerated with the
+  test's own writer: the diff is three `line =` values and nothing else.
+- **ARCH 8, fixed in eef6feac4** · `commonwealth-rails/tests/work_doors.rs:204`
+  (036c48339) hand-read `SystemTime::now()`. It now calls
+  `commonwealth_core::clock::unix_now_millis`. clock-gate: 119 reads → 118,
+  0 failures.
+- **Hygiene, fixed in 720037f02** · seven sovereign-grants files that
+  pb-meshapp-grants and pb-mesh-exit-core repointed were left unformatted,
+  and rustfmt blocked. The fix only reorders imports.
+- **ARCH 8, fixed in 947f163fc** · `oicp-types/src/job.rs`: the new
+  single-value `precondition_label` wire form (4df3097bf) repeated
+  `precondition_labels`' per-label parse and its refusal text. Both now go
+  through `precondition_label::parse`. Copies 2 → 1.
+- **ARCH 3, fixed in 75da90e27** · the §1 project map in SYSTEM_OVERVIEW had
+  no line for the mesh-reach leaf (552c26a82). It has one now. `host-kit/`
+  and `mesh-join-vocab/` are also missing from that map, but both predate the
+  range. Record only.
+- **ARCH 6, record only** · `mesh-reach/src/rails.rs:64`: on a non-success
+  reach answer, a body that fails to read becomes `""`, so the refusal
+  reads "cw-rails refused (500): " with the reason empty. The status is still
+  named and the `Err` still propagates. It is owned by the next row that edits
+  rails.rs.
+
+dry-report over the 23 touched crate dirs: no clone group has a side the
+range added. The report returned 4 exact groups whose names matched a new
+`fn`, and none of them is a range symbol. `oicp-types/src/job.rs:270` is
+`JobKind`'s pre-existing `Deserialize`, and `truncate`/`median` sit in
+sovereign-cli-llm files the range never touched. For **mesh-reach the verdict
+is could-not-judge**: the report loaded 0 SCIP function symbols for it. The
+crate was minted at 23:15 on 2026-09-27, after the SCIP graph the report
+reads, although `symbols` finds its items in the tree-sitter index. This
+audit did not nudge a SCIP rebuild, because auto-5 watched the deployed
+daemon stop answering during one. The diff read above stands in for it, and
+found the precondition copy.
+
+converge-noun over the 33 nouns the range added: MembershipEntry,
+OriginRegistry, RailsTransport, GuestTunnel and the rest have one production
+definition each. Eight names have more than one, and all are generic private
+names or test-only names: Inner (4), State (7), Row (5), Reach (2),
+Sandbox (2); Child, Rails and RosterDouble have 0 in production. One pair
+needed judging. `commonwealth-media/src/origins.rs:168,204` `State`/`Inner`
+has the same shape as `apps.rs:147,153`, but both are standing-plus-claimed
+maps over the one `Claims<T>` (claims.rs, from the same row), and the two
+registries apply different policies. That is a parallel shape over one
+decider, not a copy. Record only.
