@@ -242,3 +242,25 @@ async fn the_attribution_door_answers_for_the_callers_rev() {
     assert_eq!(got["arch"], json!(std::env::consts::ARCH));
     daemon.node.endpoint.close().await;
 }
+
+/// The yield door (pb-work-donor): a posted deadline is in force until it
+/// passes, a later post extends it, an earlier one never shortens it, and a
+/// malformed body is a 422 that holds nothing.
+#[tokio::test]
+async fn the_yield_door_holds_the_latest_deadline_until_it_passes() {
+    let dir = tempfile::tempdir().unwrap();
+    let (daemon, base) = start(dir.path()).await;
+    assert_eq!(daemon.work_yield.yielding_at(0), None, "nobody posted");
+    let (status, _) = post(&base, "/v1/work/yield", &json!({ "until": 5 })).await;
+    assert_eq!(status, 422);
+    assert_eq!(daemon.work_yield.yielding_at(0), None);
+    let (status, _) = post(&base, "/v1/work/yield", &json!({ "until_ms": 2_000 })).await;
+    assert_eq!(status, 200);
+    assert_eq!(daemon.work_yield.yielding_at(1_000), Some(2_000));
+    assert_eq!(daemon.work_yield.yielding_at(2_000), None, "passed");
+    post(&base, "/v1/work/yield", &json!({ "until_ms": 1_500 })).await;
+    assert_eq!(daemon.work_yield.yielding_at(1_000), Some(2_000));
+    post(&base, "/v1/work/yield", &json!({ "until_ms": 9_000 })).await;
+    assert_eq!(daemon.work_yield.yielding_at(2_000), Some(9_000));
+    daemon.node.endpoint.close().await;
+}

@@ -271,6 +271,54 @@ pub async fn refusals(
     Json(out).into_response()
 }
 
+/// The foreground deadline a program on this node published: until
+/// `until_ms` its operator is at the keyboard, and a donor whose offer says
+/// `yield_to_foreground` takes no new unit (pb-work-donor, phase-b-38 fork 3).
+///
+/// cw-rails owns the take and this deadline, never the foreground: the svrn
+/// daemon owns its turns and posts the deadline here. With nobody posting,
+/// nothing yields, which is a daemon-less node's behaviour today.
+#[derive(Debug, Default)]
+pub struct ForegroundYield {
+    until_ms: std::sync::atomic::AtomicU64,
+}
+
+impl ForegroundYield {
+    /// Hold new takes until `until_ms`. A later deadline wins; an earlier one
+    /// never shortens a window already published.
+    pub fn hold_until(&self, until_ms: u64) {
+        self.until_ms
+            .fetch_max(until_ms, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    /// The deadline in force at `now_ms`, or `None` once it has passed.
+    pub fn yielding_at(&self, now_ms: u64) -> Option<u64> {
+        let until = self.until_ms.load(std::sync::atomic::Ordering::SeqCst);
+        (until > now_ms).then_some(until)
+    }
+}
+
+#[derive(Deserialize)]
+struct YieldRequest {
+    until_ms: u64,
+}
+
+/// POST /v1/work/yield `{until_ms}` — a program on this node publishes its
+/// foreground deadline. Loopback is the auth, as for every door here.
+pub async fn hold_yield(
+    State(daemon): State<Arc<RailsDaemon>>,
+    Json(body): Json<serde_json::Value>,
+) -> Response {
+    let req: YieldRequest = match decode("yield", body) {
+        Ok(r) => r,
+        Err(refusal) => return refusal,
+    };
+    daemon.work_yield.hold_until(req.until_ms);
+    tracing::debug!(target: commonwealth_work::TRACE_TARGET, until_ms = req.until_ms,
+                    "work yield: the foreground holds new takes until this deadline");
+    Json(serde_json::json!({ "until_ms": req.until_ms })).into_response()
+}
+
 #[derive(Deserialize)]
 pub struct AttributionQuery {
     repo_rev: String,

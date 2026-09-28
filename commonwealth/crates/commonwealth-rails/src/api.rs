@@ -153,6 +153,9 @@ fn mesh_bundle(daemon: Arc<RailsDaemon>) -> RouteBundle {
         .route("/v1/work/submit", post(crate::work::submit))
         .route("/v1/work/refusals", post(crate::work::refusals))
         .route("/v1/work/attribution", get(crate::work::attribution))
+        // The foreground deadline a program on this node publishes; the
+        // donor's take reads it (pb-work-donor).
+        .route("/v1/work/yield", post(crate::work::hold_yield))
         .with_state(daemon)
 }
 

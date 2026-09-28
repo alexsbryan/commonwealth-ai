@@ -336,6 +336,8 @@ pub struct RailsDaemon {
     /// Wakes the ring round now rather than at its interval: fired by the
     /// append door after a signed write (see [`ring_sync::append`]).
     pub ring_nudge: Arc<Notify>,
+    /// The foreground deadline `POST /v1/work/yield` holds (pb-work-donor).
+    pub work_yield: Arc<work::ForegroundYield>,
     /// The mesh store, projected from `rail`'s journals and pumped back onto
     /// them; served at `/v1/mesh/kv/*`. See [`kv`].
     pub kv: Arc<kv::KvHost>,
@@ -445,6 +447,7 @@ impl RailsDaemon {
             rail,
             rail_live,
             ring_nudge: Arc::new(Notify::new()),
+            work_yield: Arc::default(),
             kv,
             media_presence: Arc::new(std::sync::RwLock::new(None)),
             internal_addr,
