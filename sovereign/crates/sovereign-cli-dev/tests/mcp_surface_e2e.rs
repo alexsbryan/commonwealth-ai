@@ -41,12 +41,12 @@ use std::sync::Arc;
 use arc_swap::ArcSwap;
 use corpus_engine_notes::NoteStore;
 use corpus_engine_scip::ScipGraph;
-use sovereign_contracts::registry::ToolRegistry;
-use sovereign_contracts::traits::Tool;
 use sovereign_code::mcp_surface::{
     is_mcp_exposed, render_tools_list, resolve_alias, MCP_TOOLS_ALWAYS, MCP_TOOLS_RETIRED,
     MCP_TOOL_ALIASES,
 };
+use sovereign_contracts::registry::ToolRegistry;
+use sovereign_contracts::traits::Tool;
 
 fn empty_graph() -> sovereign_code::ScipGraphHandle {
     Arc::new(ArcSwap::from_pointee(
@@ -391,7 +391,7 @@ async fn code_tools_build_and_list_without_loading_the_graph() {
         .expect("symbols answers");
     assert!(graph.is_loaded(), "the first read loads the graph");
     assert!(
-        format!("{out:?}").contains("lazy_target"),
-        "the loaded graph answers: {out:?}"
+        format!("{out:?}").contains("src/lib.rs:1-2  [function]  (fixture)"),
+        "the loaded graph answers with the fixture's definition: {out:?}"
     );
 }

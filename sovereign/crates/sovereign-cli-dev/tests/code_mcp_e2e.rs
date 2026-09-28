@@ -44,8 +44,16 @@ impl Fixture {
         for args in [
             &["init", "-q"][..],
             &["add", "-A"][..],
-            &["-c", "user.name=fixture", "-c", "user.email=fixture@example.invalid",
-              "commit", "-q", "-m", "fixture"][..],
+            &[
+                "-c",
+                "user.name=fixture",
+                "-c",
+                "user.email=fixture@example.invalid",
+                "commit",
+                "-q",
+                "-m",
+                "fixture",
+            ][..],
         ] {
             let git = Command::new("git")
                 .args(args)

@@ -105,7 +105,10 @@ mod tests {
     #[test]
     fn retired_ids_are_not_exposed() {
         for id in MCP_TOOLS_RETIRED {
-            assert!(!is_mcp_exposed(id), "retired tool {id} should not be MCP-exposed");
+            assert!(
+                !is_mcp_exposed(id),
+                "retired tool {id} should not be MCP-exposed"
+            );
         }
     }
 }

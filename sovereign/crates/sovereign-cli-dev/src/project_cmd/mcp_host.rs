@@ -18,11 +18,11 @@ use corpus_engine_notes::mining::patterns::ToolPatternMatcher;
 use corpus_engine_notes::NoteStore;
 use host_kit::mcp::{McpCallLog, McpRequestContext, McpToolHost, ToolOutcome};
 use serde_json::Value;
+use sovereign_code::mcp_surface::{is_mcp_exposed, render_tools_list_gated, resolve_alias};
 use sovereign_contracts::mcp_host::{
     agent_session_token, call_log_tag, call_registry_tool, call_stats,
 };
 use sovereign_contracts::ToolRegistry;
-use sovereign_code::mcp_surface::{is_mcp_exposed, render_tools_list_gated, resolve_alias};
 
 /// Code's registry over MCP. `tools/list` is spec-gated on `feature_root`:
 /// `spec` and `drift` appear only once the project has a spec.
