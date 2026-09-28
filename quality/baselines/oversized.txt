@@ -10,7 +10,7 @@
 3684	corpus-engine-scip/src/scip_graph.rs
 2136	corpus-engine-watchers/src/reindexer.rs
 2150	corpus-engine/src/engine/ingest.rs
-4303	corpus-engine/src/engine/mod.rs
+3720	corpus-engine/src/engine/mod.rs
 1420	corpus-engine/src/enrichment/atlas/analysis/sec_facts/mod.rs
 1461	corpus-engine/src/enrichment/atlas/analysis/tensions.rs
 3100	corpus-engine/src/enrichment/atlas/resolution.rs
@@ -73,7 +73,7 @@
 1605	sovereign/crates/sovereign-code/src/session_state.rs
 1667	sovereign/crates/sovereign-compute/src/manager.rs
 2050	sovereign/crates/sovereign-compute/src/supervisor.rs
-2319	sovereign/crates/sovereign-contracts/src/setup_config.rs
+2124	sovereign/crates/sovereign-contracts/src/setup_config.rs
 1542	sovereign/crates/sovereign-contracts/src/skills.rs
 2055	sovereign/crates/sovereign-contracts/src/traits.rs
 1796	sovereign/crates/sovereign-contracts/src/types/mod.rs
@@ -106,7 +106,7 @@
 1486	sovereign/crates/sovereign-daemon/src/auto_ingest.rs
 2696	sovereign/crates/sovereign-daemon/src/bootstrap.rs
 1650	sovereign/crates/sovereign-daemon/src/corpus_watch_http.rs
-5297	sovereign/crates/sovereign-daemon/src/daemon.rs
+5259	sovereign/crates/sovereign-daemon/src/daemon.rs
 5775	sovereign/crates/sovereign-daemon/src/frontdoor.rs
 1226	sovereign/crates/sovereign-daemon/src/mesh_http.rs
 1357	sovereign/crates/sovereign-daemon/src/routes_edit_predictions.rs
