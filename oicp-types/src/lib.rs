@@ -64,6 +64,9 @@ pub mod tool;
 /// linking the inference stack.
 pub mod tool_calls;
 pub mod version;
+/// The `work` plane's wire vocabulary (pb-work-doors): acts, the folded
+/// queue, refusals and the `process:v1` payload.
+pub mod work;
 
 pub use completion::{
     latency_to_speed, speed_to_latency, CompletionRequest, CompletionResponse, Depth, FinishReason,

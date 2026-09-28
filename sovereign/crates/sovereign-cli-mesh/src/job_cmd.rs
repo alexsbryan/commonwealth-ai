@@ -413,7 +413,7 @@ async fn run_status(args: &[String]) -> i32 {
             return 1;
         }
     };
-    let proj = WorkProjection::fold(&admission);
+    let proj = commonwealth_work::projection::fold(&admission);
     let now_ms = now_ms();
 
     let matching: Vec<_> = proj
@@ -439,7 +439,7 @@ async fn run_status(args: &[String]) -> i32 {
             "  {}  {}  {}",
             id.to_hex(),
             handoff.kind,
-            phase_label(&handoff.phase_at(now_ms))
+            phase_label(&commonwealth_work::projection::phase_at(handoff, now_ms))
         );
         println!(
             "    submitted {} by {}",
@@ -722,7 +722,7 @@ mod tests {
             "complete": true,
         });
         let admission = admission_from_wire(&wire).expect("folds");
-        let proj = WorkProjection::fold(&admission);
+        let proj = commonwealth_work::projection::fold(&admission);
         assert!(proj.handoffs.is_empty());
         assert_eq!(proj.gaps, 0);
     }
@@ -743,7 +743,7 @@ mod tests {
         });
         let admission = admission_from_wire(&wire).expect("folds");
         assert_eq!(admission.gaps.len(), 1);
-        assert_eq!(WorkProjection::fold(&admission).gaps, 1);
+        assert_eq!(commonwealth_work::projection::fold(&admission).gaps, 1);
     }
 
     /// An answer missing a key that carries the ANSWER is refused by name,

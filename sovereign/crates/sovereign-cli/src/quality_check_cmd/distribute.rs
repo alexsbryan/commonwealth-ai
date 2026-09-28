@@ -827,7 +827,7 @@ pub(super) async fn run_distributed(
     let proj = loop {
         let wire = rail_log(WORK_NAMESPACE).await?;
         let admission = admission_from_wire(&wire)?;
-        let proj = WorkProjection::fold(&admission);
+        let proj = commonwealth_work::projection::fold(&admission);
         let now_ms = sovereign_core::time::unix_millis();
 
         if let Some(h) = proj.handoffs.get(&handoff) {

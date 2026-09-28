@@ -244,7 +244,7 @@ async fn seal_if_due(
     // (ARCH §10.6).
     let live_work = match projector_for(namespace) {
         Some(Projector::Work) => {
-            let projection = WorkProjection::fold(&admission);
+            let projection = commonwealth_work::projection::fold(&admission);
             debug!(
                 namespace,
                 handoffs = projection.handoffs.len(),

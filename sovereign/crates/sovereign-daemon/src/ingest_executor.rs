@@ -678,7 +678,10 @@ pub fn fold_coverage_for(
             );
             continue;
         }
-        if !matches!(handoff.phase_at(now_ms), HandoffPhase::Complete) {
+        if !matches!(
+            commonwealth_work::projection::phase_at(handoff, now_ms),
+            HandoffPhase::Complete
+        ) {
             continue;
         }
         if corpus_of(handoff).as_deref() != Some(corpus_id) {

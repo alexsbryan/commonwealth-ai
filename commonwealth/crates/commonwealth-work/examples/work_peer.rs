@@ -242,7 +242,7 @@ fn fold(journal: &RingJournal, roster: &Roster) -> Result<WorkProjection, String
     let admission = journal
         .admit(roster, &Ed25519Verifier)
         .map_err(|e| e.to_string())?;
-    Ok(WorkProjection::fold(&admission))
+    Ok(commonwealth_work::projection::fold(&admission))
 }
 
 async fn run(cfg: &PeerArgs) -> Result<bool, String> {

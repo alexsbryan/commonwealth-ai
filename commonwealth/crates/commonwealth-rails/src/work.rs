@@ -53,6 +53,6 @@ pub async fn projection(State(daemon): State<Arc<RailsDaemon>>) -> Response {
             );
         }
     };
-    let proj: WorkProjection = WorkProjection::fold(&admission);
+    let proj: WorkProjection = commonwealth_work::projection::fold(&admission);
     Json(proj).into_response()
 }

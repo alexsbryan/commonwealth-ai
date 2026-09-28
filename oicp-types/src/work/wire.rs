@@ -5,7 +5,7 @@
 
 use std::collections::BTreeMap;
 
-use commonwealth_core::ids::HandoffId;
+use kernel_types::HandoffId;
 use serde::{Deserialize, Deserializer, Serializer};
 
 use super::WorkHandoff;

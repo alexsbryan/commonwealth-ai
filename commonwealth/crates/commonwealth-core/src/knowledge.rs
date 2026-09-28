@@ -302,13 +302,10 @@ pub enum CompleteOutcome {
     Failed,
 }
 
-/// Maximum re-lease attempts before a unit becomes terminal `Failed`.
-/// Unit fails three peers in a row → the merge leader proceeds without it.
-pub const MAX_UNIT_ATTEMPTS: u32 = 3;
-
-/// Default lease duration in milliseconds (5 minutes). Heartbeats refresh
-/// the lease every `LEASE_MS / 3` on the peer side.
-pub const LEASE_MS: u64 = 300_000;
+// `MAX_UNIT_ATTEMPTS` and `LEASE_MS` live beside the work plane's queue types
+// in `oicp_types::work` since pb-work-doors; re-exported at their historical
+// path.
+pub use oicp_types::work::{LEASE_MS, MAX_UNIT_ATTEMPTS};
 
 /// What `next_unit` hands a peer: the unit, and the deadline the grant
 /// expires at.

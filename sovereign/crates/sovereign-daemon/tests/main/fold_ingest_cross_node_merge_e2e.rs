@@ -294,8 +294,13 @@ pub(crate) fn terminal_handoff(corpus: &str) -> (WorkProjection, HandoffId) {
     let a = ingest_unit(corpus, 0, 0, 100);
     let b = ingest_unit(corpus, 1, 100, 200);
 
-    let projection =
-        WorkProjection::fold(&admit(&ops, &[], &ring(), WORK_NAMESPACE, &Ed25519Verifier));
+    let projection = commonwealth_work::projection::fold(&admit(
+        &ops,
+        &[],
+        &ring(),
+        WORK_NAMESPACE,
+        &Ed25519Verifier,
+    ));
 
     let h = projection
         .handoffs
@@ -303,11 +308,11 @@ pub(crate) fn terminal_handoff(corpus: &str) -> (WorkProjection, HandoffId) {
         .expect("the submission was admitted");
 
     assert_eq!(
-        h.phase_at(NOW_MS),
+        commonwealth_work::projection::phase_at(h, NOW_MS),
         HandoffPhase::Complete,
         "the scenario requires a TERMINAL handoff — every signal green — before \
          anything is asked of the corpus. Got {:?}",
-        h.phase_at(NOW_MS),
+        commonwealth_work::projection::phase_at(h, NOW_MS),
     );
 
     let lessees: Vec<ActorKey> = [&a, &b]

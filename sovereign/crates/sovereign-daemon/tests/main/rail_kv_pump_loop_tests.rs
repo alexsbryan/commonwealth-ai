@@ -167,7 +167,7 @@ async fn work_namespace_seals_and_keeps_live_leases() {
 
     // ── and the queue survived it ──
     let admission = journal.admit(&roster, &Ed25519Verifier).unwrap();
-    let projection = WorkProjection::fold(&admission);
+    let projection = commonwealth_work::projection::fold(&admission);
     let mine = ActorKey::parse(donor.actor()).unwrap();
     let now_ms = commonwealth_core::clock::unix_now_millis();
     let held = projection

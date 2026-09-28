@@ -304,9 +304,7 @@ impl RingRailPort for LocalRingRail {
             let journal = self.journal(commonwealth_work::WORK_NAMESPACE)?;
             let roster = self.0.roster(&journal).await?;
             let admission = journal.admit(&roster, &commonwealth_rail_core::Ed25519Verifier)?;
-            Ok(commonwealth_work::projection::WorkProjection::fold(
-                &admission,
-            ))
+            Ok(commonwealth_work::projection::fold(&admission))
         })
     }
 

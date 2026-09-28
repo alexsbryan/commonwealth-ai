@@ -132,7 +132,7 @@ fn abandoned_handoff(corpus: &str) -> (WorkProjection, HandoffId, String) {
         sign(2, 1200, 3, &WorkAct::Lease(unit_ref(handoff, &c))),
     ];
 
-    let projection = WorkProjection::fold(&commonwealth_rail_core::admit(
+    let projection = commonwealth_work::projection::fold(&commonwealth_rail_core::admit(
         &ops,
         &[],
         &ring(),
@@ -171,7 +171,7 @@ fn abandoned_handoff(corpus: &str) -> (WorkProjection, HandoffId, String) {
         ),
     }
     assert_eq!(
-        h.phase_at(NOW_MS),
+        commonwealth_work::projection::phase_at(h, NOW_MS),
         HandoffPhase::Complete,
         "the handoff is terminal — every unit settled, one of them badly. \
          A merge is reached only from here.",

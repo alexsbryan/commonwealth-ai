@@ -996,7 +996,7 @@ Verbs: `svrn ring` (new, roster add, dev, seal, log) and `svrn job` on the
 same rail — `ring` deploys an app to a trust ring, `job` hands that ring a
 unit of compute. Neither opens the journal directly: the roster the DAEMON
 loaded decides which acts are readable. `job status` folds `GET /v1/rail/log`
-with the same `commonwealth_work::WorkProjection::fold` that `cw-rails` runs
+with the same `commonwealth_work::projection::fold` that `cw-rails` runs
 for the daemon's donor loop (`GET /v1/work/projection`), so the terminal and
 the donor cannot disagree about who holds a lease.
 

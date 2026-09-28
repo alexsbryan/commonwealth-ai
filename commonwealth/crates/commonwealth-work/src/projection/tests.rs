@@ -2,6 +2,8 @@
 //! `projection`'s tests. A sibling file only so `projection.rs` stays
 //! under ARCH §3.1's 1200-line ceiling — moved verbatim, nothing renamed.
 use super::tests_fixture::*;
+// The fixture's `fold(&[op])`, not the module's `fold(&Admission)`.
+use super::tests_fixture::fold;
 use super::*;
 use crate::act::{Revocation, Submission, WorkActKind};
 use commonwealth_rail_core::{Op, SignedOp};
@@ -309,7 +311,7 @@ fn only_the_submitter_may_revoke_a_handoff() {
     assert_eq!(by_stranger.unreadable, 1);
     assert_eq!(by_stranger.handoffs[&handoff()].revoked, None);
     assert_eq!(
-        by_stranger.handoffs[&handoff()].phase_at(200_000),
+        phase_at(&by_stranger.handoffs[&handoff()], 200_000),
         HandoffPhase::Open
     );
 
@@ -324,7 +326,7 @@ fn only_the_submitter_may_revoke_a_handoff() {
     ]);
     assert_eq!(by_submitter.unreadable, 0);
     assert!(matches!(
-        by_submitter.handoffs[&handoff()].phase_at(200_000),
+        phase_at(&by_submitter.handoffs[&handoff()], 200_000),
         HandoffPhase::Failed { .. }
     ));
     assert!(
@@ -409,7 +411,7 @@ fn a_repeated_complete_is_counted_as_a_double_delivery() {
 }
 
 /// The phase is derived from the units, and `Merging` is never one of the
-/// answers — see [`WorkHandoff::phase_at`].
+/// answers — see [`phase_at`].
 #[test]
 fn the_handoff_phase_walks_open_to_draining_to_complete_and_never_merges() {
     let (submit, a, b) = submission();
@@ -418,7 +420,7 @@ fn the_handoff_phase_walks_open_to_draining_to_complete_and_never_merges() {
         v.extend(extra);
         fold(&v)
     };
-    let phase = |p: &WorkProjection, now| p.handoffs[&handoff()].phase_at(now);
+    let phase = |p: &WorkProjection, now| phase_at(&p.handoffs[&handoff()], now);
 
     assert_eq!(phase(&ops(vec![]), 100_000), HandoffPhase::Open);
     let both_leased = ops(vec![op(2, 200, 0, &lease(&a)), op(2, 210, 1, &lease(&b))]);
@@ -460,7 +462,7 @@ fn a_handoff_past_its_ttl_stops_being_offered() {
     assert_eq!(proj.takeable_at(ttl_end - 1).len(), 2);
     assert!(proj.takeable_at(ttl_end).is_empty());
     assert!(matches!(
-        proj.handoffs[&handoff()].phase_at(ttl_end),
+        phase_at(&proj.handoffs[&handoff()], ttl_end),
         HandoffPhase::Failed { .. }
     ));
 }
