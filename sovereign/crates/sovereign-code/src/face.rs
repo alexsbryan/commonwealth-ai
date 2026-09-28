@@ -25,6 +25,9 @@ mod mcp_host;
 // The daemon's self-healing coordinator supervisor, moved whole with the
 // watcher runtime (pb-code-daemon-exit).
 mod watcher_supervisor;
+// The notes rail, moved from the daemon's boot with notes.db (pb-notes-memory).
+pub mod notes_rail;
+pub use notes_rail::NotesRail;
 
 // The pattern matcher's live-wire e2e, moved from the daemon with the
 // matcher (pb-code-daemon-exit).
@@ -51,6 +54,8 @@ pub struct CodeParts {
     pub session_prefix: &'static str,
     /// Watchers the host adds to code's coordinator.
     pub extra_watchers: Vec<Arc<dyn corpus_engine_watchers::BackgroundWatcher>>,
+    /// What the host wires the note store with; `Default` is code alone.
+    pub notes_rail: NotesRail,
 }
 
 /// Code, composed: what a host serves and what it holds for its life.
@@ -112,8 +117,10 @@ pub async fn compose(parts: CodeParts) -> Result<CodeFace, String> {
         sovereign_dir,
         session_prefix,
         extra_watchers,
+        notes_rail,
     } = parts;
     let mut banner = Vec::new();
+    notes_rail::wire(&notes_store, notes_rail);
 
     // ── Open result stores (SQLite, always-on) ──────────────────
     let test_results_path = stores_dir.join("test_results.db");

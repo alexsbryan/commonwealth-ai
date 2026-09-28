@@ -247,6 +247,8 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
         sovereign_dir: Some(sovereign_dir.clone()),
         session_prefix: "serve",
         extra_watchers: docs_watchers,
+        // Code alone: the rail dials cw-rails and wires no host model.
+        notes_rail: Default::default(),
     })
     .await
     {

@@ -11,10 +11,9 @@ use super::discovery_policy;
 use crate::startup::daemon_pid_path;
 use crate::EmbeddedDaemon;
 use corpus_engine::CorpusEngine;
-use corpus_engine_notes::{NodeRoster, NotePropagationEvent, NoteStore, RosterEntry};
-use corpus_index::types::EmbedFn;
+use corpus_engine_notes::NoteStore;
+use corpus_index::types::{EmbedFn, NodeRoster, RosterEntry};
 use kernel_types::NodeId;
-use sovereign_contracts::peer::{Convergence, ReplicatedKv};
 use sovereign_core::model_family::{
     EmbedModelInfo, ModelFamily, NormalizationStrategy, PoolingStrategy,
 };
@@ -106,16 +105,73 @@ pub fn load_gliner_extractor(
     (ner, chunk)
 }
 
+/// The T1 embed and T2 GLiNER hooks code's note store is wired with when a
+/// distribution composes code into this process: svrn's embed slot and its
+/// loaded GLiNER session, as values (pb-notes-memory). The store is code's,
+/// so code sets them ([`crate::hosted_code::CodeHost`]); `None` for GLiNER
+/// leaves T2 on author-supplied symbols and files only.
+pub fn notes_tier_fns(
+    provider: &Arc<dyn InferenceProvider>,
+    gliner_raw: &Option<Arc<dyn sovereign_contracts::ner::LabeledEntityExtractor>>,
+) -> (
+    corpus_index::types::EmbedFn,
+    Option<corpus_index::types::GlinerFn>,
+) {
+    // The SAME embed slot as the engine's, adapted at the boundary so
+    // `corpus-engine-notes` stays dep-free of `corpus-engine` per `ARCH §8.3`
+    // (one-way edge).
+    let provider_for_notes = Arc::clone(provider);
+    let notes_embed: corpus_index::types::EmbedFn = Arc::new(move |text: &str| {
+        let p = Arc::clone(&provider_for_notes);
+        let text = text.to_string();
+        Box::pin(async move {
+            p.embed(&text).await.map_err(|e| {
+                corpus_index::Error::Io(std::io::Error::other(format!("notes embed: {e}")))
+            })
+        })
+    });
+    let notes_gliner = gliner_raw.as_ref().map(|gliner| {
+        let gliner_clone = Arc::clone(gliner);
+        let f: corpus_index::types::GlinerFn = Arc::new(move |text: &str| {
+            let g = Arc::clone(&gliner_clone);
+            let text = text.to_string();
+            Box::pin(async move {
+                // `extract_mentions` is sync on both backends (Mutex-locked
+                // ONNX session). Run on the blocking pool so we don't park
+                // the async runtime for ~tens of ms.
+                tokio::task::spawn_blocking(move || g.extract_mentions(&text))
+                    .await
+                    .map_err(|e| {
+                        corpus_index::Error::Io(std::io::Error::other(format!(
+                            "notes gliner: join error {e}"
+                        )))
+                    })?
+                    .map(|mentions| {
+                        mentions
+                            .into_iter()
+                            .map(|m| (m.text, m.label))
+                            .collect::<Vec<_>>()
+                    })
+                    .map_err(|e| {
+                        corpus_index::Error::Io(std::io::Error::other(format!(
+                            "notes gliner: {e}"
+                        )))
+                    })
+            })
+        });
+        f
+    });
+    (notes_embed, notes_gliner)
+}
+
 /// Build the single shared `CorpusEngine` (powers `/mcp` tools AND
 /// `corpus_collaborate` ingest). Wires a REAL embed slot through `provider`
 /// (a zero-vector stub here once poisoned 4M chunks — see inline note), the
-/// batch variant, the NoteStore T1/T2 hooks, the conv-tiered provider, and
-/// the shared GLiNER chunk extractor.
+/// batch variant, the conv-tiered provider, and the shared GLiNER chunk
+/// extractor.
 pub fn build_corpus_engine(
     data_dir: &Path,
     provider: Arc<dyn InferenceProvider>,
-    notes_store: Arc<NoteStore>,
-    gliner_raw: &Option<Arc<dyn sovereign_contracts::ner::LabeledEntityExtractor>>,
     config: &SetupConfig,
     self_node_id: NodeId,
     chunk_entity_extractor: &Option<
@@ -151,79 +207,6 @@ pub fn build_corpus_engine(
             })
         });
 
-        // Wire the SAME embed slot into the NoteStore so T1
-        // (semantic-blend retrieval) lights up. NoteStore has its
-        // own `Error` type — adapt at the boundary so
-        // `corpus-engine-notes` stays dep-free of `corpus-engine`
-        // per `ARCH §8.3` (one-way edge).
-        let provider_for_notes = Arc::clone(&provider);
-        let notes_embed: corpus_index::types::EmbedFn = Arc::new(move |text: &str| {
-            let p = Arc::clone(&provider_for_notes);
-            let text = text.to_string();
-            Box::pin(async move {
-                p.embed(&text).await.map_err(|e| {
-                    corpus_index::Error::Io(std::io::Error::other(format!("notes embed: {e}")))
-                })
-            })
-        });
-        if let Err(e) = notes_store.set_embed_fn(notes_embed) {
-            tracing::warn!(target = "notes", error = e, "notes: embed_fn already set");
-        } else {
-            tracing::info!(
-                target = "notes",
-                "notes: T1 embed_fn wired to local embed slot"
-            );
-        }
-
-        // T2: wire the same GLiNER session into the NoteStore so
-        // write_note extracts (entity, kind) pairs into
-        // `note_entities`. Skips if GLiNER isn't loaded — T2 then
-        // works on author-supplied symbols + files only (still a
-        // useful signal for read_notes_related).
-        if let Some(ref gliner) = gliner_raw {
-            let gliner_clone = Arc::clone(gliner);
-            let notes_gliner: corpus_index::types::GlinerFn = Arc::new(move |text: &str| {
-                let g = Arc::clone(&gliner_clone);
-                let text = text.to_string();
-                Box::pin(async move {
-                    // `extract_mentions` is sync on both backends
-                    // (Mutex-locked ONNX session). Run on the blocking
-                    // pool so we don't park the async runtime for
-                    // ~tens of ms.
-                    tokio::task::spawn_blocking(move || g.extract_mentions(&text))
-                        .await
-                        .map_err(|e| {
-                            corpus_index::Error::Io(std::io::Error::other(format!(
-                                "notes gliner: join error {e}"
-                            )))
-                        })?
-                        .map(|mentions| {
-                            mentions
-                                .into_iter()
-                                .map(|m| (m.text, m.label))
-                                .collect::<Vec<_>>()
-                        })
-                        .map_err(|e| {
-                            corpus_index::Error::Io(std::io::Error::other(format!(
-                                "notes gliner: {e}"
-                            )))
-                        })
-                })
-            });
-            if let Err(e) = notes_store.set_gliner_fn(notes_gliner) {
-                tracing::warn!(target = "notes", error = e, "notes: gliner_fn already set");
-            } else {
-                tracing::info!(
-                    target = "notes",
-                    "notes: T2 gliner_fn wired to loaded GLiNER session"
-                );
-            }
-        } else {
-            tracing::info!(
-                target = "notes",
-                "notes: GLiNER not loaded; T2 will use author-supplied symbols/files only"
-            );
-        }
         // Derive the embed model identifier from the configured GGUF
         // path so `_corpus_meta.json` records the actual model rather
         // than failing the ingest pre-flight ("embedding model name not
@@ -1343,331 +1326,6 @@ pub fn reconcile_local_measurements(daemon: Arc<EmbeddedDaemon>) {
             file.records(),
         )
         .await;
-    });
-}
-
-/// Wire NoteStore's outbound propagation sink to publish notes via the mesh store.
-pub fn wire_note_propagation_sink(
-    notes_store: Arc<NoteStore>,
-    peer_store: Arc<dyn ReplicatedKv>,
-    self_node_id: NodeId,
-    convergence: Arc<dyn Convergence>,
-) {
-    // ── NoteStore propagation wiring ─────────────────────────────
-    //
-    // Now that `mesh_store` is live, wire NoteStore's outbound
-    // sink to publish global non-private notes via app_id="notes"
-    // (and private notes via "notes-private", which is
-    // structurally gossip-excluded — see
-    // the mesh's own `GOSSIP_EXCLUDED_APP_IDS`).
-    let mesh_for_sink = Arc::clone(&peer_store);
-    let self_id_for_sink = self_node_id;
-    let sink: corpus_index::types::PropagationSinkFn =
-        Arc::new(move |ev: &NotePropagationEvent| {
-            // Everything this sink sees rides the public `notes`
-            // namespace, tombstones included, so peers converge to the
-            // deleted state. There is no private branch to take:
-            // `NoteStore` gates BOTH sink call sites on `!private`
-            // (`notes.rs:1841` and `:1936`), so a private note never
-            // reaches here. Until cw-lift 2b this was an `if
-            // ev.tombstone` whose two arms both evaluated to "notes",
-            // which read as a private path that does not exist.
-            let app_id = sovereign_contracts::peer::NOTES_APP_ID;
-            // Receipt stamp (order commons-fluency fix 3): the wire
-            // copy carries the publication clock — the moment THIS
-            // sink's set() accepted it — which is the origin end of
-            // the two-sided receipt. The original event is left
-            // untouched; the store stamps its row from the return
-            // value below. One timestamp, two uses: the wire copy and
-            // the liveness stamp (fix 9) share it, so `/status`'s
-            // convergence age can never disagree with the receipt.
-            let sent_at = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map(|d| d.as_secs() as i64)
-                .unwrap_or(0);
-            let mut wired = ev.clone();
-            wired.sent_at = Some(sent_at);
-            // This `to_vec` is the wire. Since order
-            // `mesh-scale-t1-notes` it cannot emit the note's
-            // embedding whatever `ev` holds — `NotePropagationEvent`
-            // serializes that field as `null` unconditionally — which
-            // took a gossiped note from a measured 16.1 KB to ~1.6 KB
-            // and the 8 MiB push limit from ~520 notes to ~5,300
-            // (research/scale-analysis/
-            // MESH_SCALE_100_USERS_1000_CORPORA.md §8.3.1). Peers
-            // re-embed the content in their own model space at ingest.
-            match serde_json::to_vec(&wired) {
-                Ok(bytes) => {
-                    match mesh_for_sink.set(
-                        app_id,
-                        &ev.content_hash,
-                        bytes.into(),
-                        self_id_for_sink,
-                    ) {
-                        // `Ok(_)`: the bool is "did the value change"
-                        // (a re-publish of the same hash reports
-                        // false) — either way the note IS on the mesh,
-                        // which is what the receipt means.
-                        Ok(_) => {
-                            tracing::debug!(
-                                target = "notes",
-                                content_hash = %ev.content_hash,
-                                tombstone = ev.tombstone,
-                                sent_at = wired.sent_at,
-                                "notes: propagated"
-                            );
-                            // Liveness stamp (fix 9): the origin's
-                            // publish path just succeeded — `/status`
-                            // reads this as the convergence age.
-                            convergence.record_outbound_publish_success(sent_at);
-                            true
-                        }
-                        Err(e) => {
-                            tracing::warn!(
-                                target = "notes",
-                                error = %e,
-                                content_hash = %ev.content_hash,
-                                "notes: mesh propagation sink set() failed"
-                            );
-                            false
-                        }
-                    }
-                }
-                Err(e) => {
-                    tracing::warn!(
-                        target = "notes",
-                        error = %e,
-                        "notes: failed to serialize propagation event"
-                    );
-                    false
-                }
-            }
-        });
-    if let Err(e) = notes_store.set_propagation_sink(sink) {
-        tracing::warn!(
-            target = "notes",
-            error = e,
-            "notes: propagation_sink already set"
-        );
-    } else {
-        tracing::info!(
-            target = "notes",
-            "notes: propagation_sink wired to the replicated KV (app_id=notes)"
-        );
-    }
-}
-
-/// Spawn the one-shot pre-T1/T2 note tier-artifact backfill (embeddings + entities).
-pub fn spawn_notes_tier_backfill(notes_store: Arc<NoteStore>) {
-    // One-shot tier-artifact backfill: pre-T1/T2 notes (anything
-    // written before `embed_fn`/`gliner_fn` were wired) get
-    // embeddings + entity rows on a background task so the
-    // existing notes corpus benefits from semantic recall +
-    // related-notes lookup immediately, not only when re-written.
-    // Runs once per daemon start. Best-effort: rows that error
-    // skip + pick up on the next start.
-    //
-    // Since order `mesh-scale-t1-notes` this is also the recovery
-    // path for gossiped notes: the wire no longer carries vectors, so
-    // `ingest_remote_notes` re-embeds each remote note locally, and
-    // any it could not embed (embed slot down) lands here with no
-    // `note_embeddings` row — outside the cosine pool, never blended
-    // unembedded, until this pass picks it up. One-shot is the reason
-    // the poller warns when its deferred count is non-zero.
-    let notes_for_backfill = Arc::clone(&notes_store);
-    // Supervised one-shot: best-effort + idempotent per the contract
-    // above (rows that error skip + pick up next start) —
-    // DAEMON_RESILIENCE.md P0.4.
-    crate::supervise::spawn_supervised("notes_tier_backfill", move || {
-        let notes_for_backfill = Arc::clone(&notes_for_backfill);
-        async move {
-            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
-            let report = notes_for_backfill.backfill_tier_artifacts(0).await;
-            if report.embeddings_backfilled > 0 || report.entities_backfilled > 0 {
-                tracing::info!(
-                    target = "notes",
-                    embeddings = report.embeddings_backfilled,
-                    entities = report.entities_backfilled,
-                    embed_skipped = report.embed_skipped,
-                    entity_skipped = report.entity_skipped,
-                    "notes: tier-artifact backfill done"
-                );
-            }
-        }
-    });
-
-    // TTL sweep — this is what keeps the store all-signal WITHOUT anyone running
-    // `notes rationalize` by hand. Operational-exhaust kinds (tool_decision,
-    // checkpoint…) age out on their own: first sweep ~30s after boot, then every
-    // 24h. Tombstone (not delete) so it's resurrection-proof and, for any legacy
-    // Global telemetry, gossips the removal to peers. TTL tunable via
-    // SOVEREIGN_NOTES_EPHEMERAL_TTL_DAYS (default 30; <=0 disables).
-    let notes_for_ttl = Arc::clone(&notes_store);
-    // Supervised: the sweep is tombstone-idempotent; a panic must not
-    // silently end TTL hygiene (DAEMON_RESILIENCE.md P0.4).
-    crate::supervise::spawn_supervised("notes_ttl_sweep", move || {
-        let notes_for_ttl = Arc::clone(&notes_for_ttl);
-        async move {
-            let ttl_days: i64 = std::env::var("SOVEREIGN_NOTES_EPHEMERAL_TTL_DAYS")
-                .ok()
-                .and_then(|s| s.parse().ok())
-                .unwrap_or(30);
-            if ttl_days <= 0 {
-                tracing::info!(
-                    target = "notes",
-                    "notes: ephemeral TTL sweep disabled (ttl_days<=0)"
-                );
-                return;
-            }
-            let ttl_secs = ttl_days * 86_400;
-            tokio::time::sleep(std::time::Duration::from_secs(30)).await;
-            let mut interval = tokio::time::interval(std::time::Duration::from_secs(24 * 60 * 60));
-            interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-            loop {
-                interval.tick().await;
-                match notes_for_ttl.purge_expired_ephemeral(ttl_secs).await {
-                    Ok(n) if n > 0 => tracing::info!(
-                        target = "notes",
-                        swept = n,
-                        ttl_days,
-                        "notes: TTL sweep tombstoned expired ephemeral notes"
-                    ),
-                    Ok(_) => {}
-                    Err(e) => {
-                        tracing::warn!(target = "notes", error = %e, "notes: TTL sweep failed")
-                    }
-                }
-            }
-        }
-    });
-}
-
-/// Spawn the poller that bridges inbound gossip note entries into `NoteStore`.
-pub fn spawn_notes_ingest_poller(
-    peer_store: Arc<dyn ReplicatedKv>,
-    notes_store: Arc<NoteStore>,
-    self_node_id: NodeId,
-    convergence: Arc<dyn Convergence>,
-) {
-    // Ingest poller: bridge inbound replicated-KV entries (merged from
-    // the ring) into `NoteStore::ingest_remote_notes`. The KV
-    // doesn't expose a merge-callback today — periodic scan is
-    // the path of least resistance. `ingest_remote_notes` is
-    // idempotent (content_hash dedup) so re-reads cost nothing.
-    //
-    // Cadence: 10s, matching the gossip push-pull cadence. Skips
-    // entries whose `origin` is `self_node_id` (those are notes
-    // WE published; reingesting via our own sink would be a no-op
-    // but wastes a JSON roundtrip).
-    let mesh_for_poller = Arc::clone(&peer_store);
-    let notes_for_poller = Arc::clone(&notes_store);
-    let self_id_for_poller = self_node_id;
-    let convergence_for_poller = Arc::clone(&convergence);
-    // Supervised: ingest is content-hash idempotent; a panic must not
-    // silently stop cross-peer note convergence (DAEMON_RESILIENCE.md
-    // P0.4).
-    crate::supervise::spawn_supervised("notes_ingest_poller", move || {
-        let mesh_for_poller = Arc::clone(&mesh_for_poller);
-        let notes_for_poller = Arc::clone(&notes_for_poller);
-        let self_id_for_poller = self_id_for_poller;
-        let convergence_for_poller = Arc::clone(&convergence_for_poller);
-        async move {
-            let mut interval = tokio::time::interval(std::time::Duration::from_secs(10));
-            interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-            loop {
-                interval.tick().await;
-                let entries =
-                    match mesh_for_poller.scan(sovereign_contracts::peer::NOTES_APP_ID, "") {
-                        Ok(e) => e,
-                        Err(err) => {
-                            tracing::debug!(
-                                target = "notes",
-                                error = %err,
-                                "notes: ingest poller scan failed"
-                            );
-                            continue;
-                        }
-                    };
-                let mut events: Vec<NotePropagationEvent> = Vec::new();
-                for entry in entries {
-                    if entry.origin == self_id_for_poller {
-                        continue;
-                    }
-                    match serde_json::from_slice::<NotePropagationEvent>(&entry.value) {
-                        Ok(ev) => events.push(ev),
-                        Err(e) => {
-                            tracing::warn!(
-                                target = "notes",
-                                key = %entry.key,
-                                error = %e,
-                                "notes: ingest poller could not decode entry; skipping"
-                            );
-                        }
-                    }
-                }
-                if events.is_empty() {
-                    continue;
-                }
-                match notes_for_poller.ingest_remote_notes(events).await {
-                    Ok(report) => {
-                        // Liveness stamp (fix 9): a peer batch was
-                        // applied — `/status` reads this as the
-                        // inbound convergence age. Stamped on ANY Ok:
-                        // a deduplicated-only batch still proves the
-                        // scan→decode→apply loop ran.
-                        convergence_for_poller
-                            .record_inbound_ingest_success(sovereign_core::time::unix_now());
-                        if report.inserted > 0 || report.tombstoned > 0 || report.forked > 0 {
-                            tracing::info!(
-                                target = "notes",
-                                inserted = report.inserted,
-                                tombstoned = report.tombstoned,
-                                forked = report.forked,
-                                deduplicated = report.deduplicated,
-                                rejected = report.rejected,
-                                // Order `mesh-scale-t1-notes`. These
-                                // three answer, from the daemon log
-                                // alone: did the peers' notes get an
-                                // embedding in OUR model space
-                                // (`recomputed`), are any sitting
-                                // outside the cosine pool waiting on
-                                // the backfill (`deferred`), and is
-                                // some peer still on a pre-strip build
-                                // shipping vectors we throw away
-                                // (`foreign_discarded`)?
-                                embeddings_recomputed = report.embeddings_recomputed,
-                                embeddings_deferred = report.embeddings_deferred,
-                                foreign_discarded = report.foreign_embeddings_discarded,
-                                "notes: ingest poller converged batch"
-                            );
-                        }
-                        if report.embeddings_deferred > 0 {
-                            // Not an error — the note IS stored and IS
-                            // readable by keyword. But it is invisible
-                            // to semantic recall until
-                            // `backfill_tier_artifacts` runs, and that
-                            // is a one-shot at daemon start, so a
-                            // non-zero count here that persists means
-                            // the embed slot is down.
-                            tracing::warn!(
-                                target = "notes",
-                                deferred = report.embeddings_deferred,
-                                "notes: remote notes stored without a local embedding; \
-                                 excluded from semantic recall until the tier backfill \
-                                 runs (next daemon start)"
-                            );
-                        }
-                    }
-                    Err(e) => {
-                        tracing::warn!(
-                            target = "notes",
-                            error = %e,
-                            "notes: ingest_remote_notes failed"
-                        );
-                    }
-                }
-            }
-        }
     });
 }
 

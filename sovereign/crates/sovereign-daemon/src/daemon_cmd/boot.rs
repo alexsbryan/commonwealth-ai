@@ -283,12 +283,9 @@ pub(super) async fn run_daemon(
         }
     };
     // NoteStore is built early (other subsystems take it as
-    // `Arc<NoteStore>`), but `embed_fn`, `origin_node_id`, and
-    // `propagation_sink` aren't known yet. They wire post-Arc
-    // via the OnceLock setters at three later seams in this
-    // function — search this file for `set_origin_node_id`,
-    // `set_embed_fn`, and `set_propagation_sink` to find the
-    // wiring sites.
+    // `Arc<NoteStore>`); its hooks, origin id, roster and gossip rail are
+    // wired by code's notes rail when the code program is composed
+    // (`sovereign_code::face::notes_rail`, pb-notes-memory).
 
     // ── Workspace (for the code program's watchers, when composed) ──
     // The daemon has no inherent project. When the user wants the
@@ -314,12 +311,12 @@ pub(super) async fn run_daemon(
         rails_base,
         "boot: cw-rails is dialed, never brought up; absent, rail surfaces name `svrn mesh up`"
     );
-    // The daemon's ONE `RailsKv` (five-programs fp-88): handed to the notes
-    // sink and poller, and on `HeadlessRails` to `AppState`'s KV port, so
-    // every one of them writes the store cw-rails holds and pumps onto the
-    // ring. Construction checks no presence; a cw-rails that is down surfaces
-    // on the first call. The work atlas that also wrote here is the code
-    // program's since pb-code-daemon-exit, dialing the same store.
+    // The daemon's ONE `RailsKv` (five-programs fp-88): handed on
+    // `HeadlessRails` to `AppState`'s KV port, so it writes the store cw-rails
+    // holds and pumps onto the ring. Construction checks no presence; a
+    // cw-rails that is down surfaces on the first call. The work atlas
+    // (pb-code-daemon-exit) and the notes sink and poller (pb-notes-memory)
+    // that also wrote here are the code program's, dialing the same store.
     let work_atlas_mesh_store: Arc<dyn sovereign_contracts::peer::ReplicatedKv> =
         Arc::new(crate::rails_client::kv::RailsKv::new(rails_base));
 
@@ -366,57 +363,11 @@ pub(super) async fn run_daemon(
     // daemon resumes with mesh.json's id while the engine had been
     // minting a mismatched fresh one.
     let self_node_id = bootstrap::resolve_self_node_id(&data_dir);
-    // Stamp outbound NoteStore propagation events with this node
-    // id. `content_hash` is the dedup primary key on the gossip
-    // wire so `origin_node_id` rotation (toolbx rebuilds without
-    // ~/.svrnmesh bind-mount) doesn't create duplicates — this
-    // field is informational, surfaced in the audit display.
-    if let Err(e) = notes_store.set_origin_node_id(self_node_id.to_string()) {
-        tracing::warn!(
-            target = "notes",
-            error = e,
-            "notes: origin_node_id already set — wiring race?"
-        );
-    }
-    // The reading half of the same identity. `set_origin_node_id` above
-    // decides whose name goes ON outbound notes; this decides whose name
-    // a reader sees on the notes coming back — including gossiped ones
-    // from peers. Wired together deliberately: a store with only the
-    // first renders its own notes as an unrecognised node.
-    //
-    // The roster is INJECTED rather than read by the notes crate, which
-    // is the knowledge layer and holds no mesh types. `persist::load`
-    // stays the single reader of mesh.json.
-    match bootstrap::build_node_roster(&data_dir, self_node_id) {
-        Some(roster) => {
-            let self_name = roster.self_name().unwrap_or("<unnamed>").to_string();
-            if let Err(e) = notes_store.set_node_roster(roster) {
-                tracing::warn!(
-                    target = "notes",
-                    error = e,
-                    "notes: node_roster already set"
-                );
-            } else {
-                tracing::debug!(
-                    target = "notes",
-                    self_node = %self_node_id,
-                    self_name = %self_name,
-                    "notes: node roster wired — authors resolve to mesh names"
-                );
-            }
-        }
-        None => {
-            // Solo node, or mesh.json absent/unparseable. Attribution
-            // degrades to the raw id rather than to a guess, so say so
-            // once at boot instead of leaving the operator to wonder why
-            // every note reads "unrecognised node".
-            tracing::debug!(
-                target = "notes",
-                self_node = %self_node_id,
-                "notes: no mesh roster — note authors will render as raw node ids"
-            );
-        }
-    }
+    // Whose name a reader of code's notes sees on each author (including
+    // gossiped notes from peers). Built here because `persist::load` stays
+    // the single reader of mesh.json; code's notes rail wires it, with the
+    // origin id, onto code's store (pb-notes-memory).
+    let notes_roster = bootstrap::build_node_roster(&data_dir, self_node_id);
 
     // The served NER kind's handle (loaded once per process) and the per-chunk
     // adapter over it, hoisted so the engine's tiered runner, the folder
@@ -426,11 +377,10 @@ pub(super) async fn run_daemon(
         state_store_concrete.clone();
     let (gliner_raw, chunk_entity_extractor) = bootstrap::load_gliner_extractor(chunk_entity_store);
 
+    let (notes_embed, notes_gliner) = bootstrap::notes_tier_fns(&provider, &gliner_raw);
     let (engine, embed_model_id): (Arc<CorpusEngine>, String) = bootstrap::build_corpus_engine(
         &data_dir,
         Arc::clone(&provider),
-        Arc::clone(&notes_store),
-        &gliner_raw,
         &config,
         self_node_id,
         &chunk_entity_extractor,
@@ -476,6 +426,15 @@ pub(super) async fn run_daemon(
     // into this process, and svrn alone names `svrn code mcp` for them.
     let tools = build_tool_registry(Arc::clone(&engine), Arc::clone(&solve_jobs)).await;
 
+    // Notes-rail convergence recorder (order commons-fluency fix 9):
+    // ONE shared instance — named on the daemon's `HeadlessRails` so `/status`
+    // reads it, and handed to code's notes rail (its publish sink and ingest
+    // poller, pb-notes-memory) so the writers' stamps are what `/status`
+    // reports. A second copy would let the status section disagree with the
+    // sink — never. With no code program here nothing stamps it, and
+    // `/status` reports the rail as never having converged.
+    let convergence_recorder = Arc::new(sovereign_mesh::peer_adapter::MeshConvergence::new());
+
     // ── The code program, when the distribution composes it ───────
     // The stock binary hands code's composition in (F2 (a), phase-b-30):
     // code's tools on the one `/mcp`, `/v1/projects/*` and its Reindexer,
@@ -488,6 +447,12 @@ pub(super) async fn run_daemon(
                 workspace: workspace_dir.clone(),
                 notes: Arc::clone(&notes_store),
                 index: Arc::clone(&engine) as Arc<dyn corpus_index::source::IndexSource>,
+                notes_embed,
+                notes_gliner,
+                node_id: self_node_id,
+                roster: notes_roster,
+                convergence: Arc::clone(&convergence_recorder)
+                    as Arc<dyn sovereign_contracts::peer::Convergence>,
             })
             .await
         {
@@ -530,29 +495,6 @@ pub(super) async fn run_daemon(
     let (deferred_daemon, mesh_provider, in_flight_gauge) =
         bootstrap::build_mesh_provider(Arc::clone(&provider), deferred_daemon).await;
     let routed_provider: Arc<dyn InferenceProvider> = mesh_provider.clone();
-
-    // Notes-rail convergence recorder (order commons-fluency fix 9):
-    // ONE shared instance — named on the daemon's `HeadlessRails` so `/status`
-    // reads it, and handed to BOTH the outbound publish sink and the inbound
-    // ingest poller so the writers' stamps are what `/status` reports. A second
-    // copy would let the status section disagree with the sink — never.
-    let convergence_recorder = Arc::new(sovereign_mesh::peer_adapter::MeshConvergence::new());
-
-    bootstrap::wire_note_propagation_sink(
-        Arc::clone(&notes_store),
-        Arc::clone(&work_atlas_mesh_store) as Arc<dyn sovereign_contracts::peer::ReplicatedKv>,
-        self_node_id,
-        Arc::clone(&convergence_recorder) as Arc<dyn sovereign_contracts::peer::Convergence>,
-    );
-
-    bootstrap::spawn_notes_tier_backfill(Arc::clone(&notes_store));
-
-    bootstrap::spawn_notes_ingest_poller(
-        Arc::clone(&work_atlas_mesh_store) as Arc<dyn sovereign_contracts::peer::ReplicatedKv>,
-        Arc::clone(&notes_store),
-        self_node_id,
-        Arc::clone(&convergence_recorder) as Arc<dyn sovereign_contracts::peer::Convergence>,
-    );
 
     bootstrap::spawn_lazy_stamp_fingerprints(Arc::clone(&engine));
 

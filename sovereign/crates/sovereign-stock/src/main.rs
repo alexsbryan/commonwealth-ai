@@ -64,6 +64,13 @@ fn main() {
             sovereign_dir: None,
             session_prefix: "daemon",
             extra_watchers: Vec::new(),
+            notes_rail: sovereign_code::face::NotesRail {
+                embed: Some(host.notes_embed),
+                gliner: host.notes_gliner,
+                node_id: Some(host.node_id),
+                roster: host.roster,
+                convergence: Some(host.convergence),
+            },
         })
         .await?;
         for line in &face.banner {

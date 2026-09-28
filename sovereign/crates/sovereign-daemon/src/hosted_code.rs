@@ -16,7 +16,8 @@ use std::sync::Arc;
 use corpus_engine_notes::NoteStore;
 
 /// What svrn hands code's composition: its data root, the workspace it was
-/// told to watch, and the two handles it already holds for that root.
+/// told to watch, the two handles it already holds for that root, and the
+/// inputs of code's notes rail.
 pub struct CodeHost {
     /// svrn's data root; the distribution places code's data under it.
     pub data_dir: PathBuf,
@@ -27,6 +28,18 @@ pub struct CodeHost {
     pub notes: Arc<NoteStore>,
     /// The root's chunk indexes, read through the engine svrn holds.
     pub index: Arc<dyn corpus_index::source::IndexSource>,
+    /// What svrn alone has for code's note store (pb-notes-memory): its embed
+    /// slot (T1) and GLiNER session (T2), this node's id and mesh roster,
+    /// and the convergence recorder `/status` reads.
+    pub notes_embed: corpus_index::types::EmbedFn,
+    /// `None` when no GLiNER session loaded.
+    pub notes_gliner: Option<corpus_index::types::GlinerFn>,
+    /// This node's id, stamped on outbound notes.
+    pub node_id: kernel_types::NodeId,
+    /// `None` on a solo node or an unreadable `mesh.json`.
+    pub roster: Option<corpus_index::types::NodeRoster>,
+    /// Stamped by the notes rail's publish and ingest.
+    pub convergence: Arc<dyn sovereign_contracts::peer::Convergence>,
 }
 
 /// Code, composed, as svrn mounts it.
