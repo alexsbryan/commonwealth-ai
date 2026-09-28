@@ -56,7 +56,7 @@
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 
 use commonwealth_core::ids::{NodeId, NodePubkey};
@@ -80,7 +80,9 @@ pub mod internal;
 pub mod join;
 pub mod kv;
 pub mod lan;
+pub mod known;
 pub mod ledger;
+pub mod membership;
 pub mod origins;
 pub mod presence;
 pub mod rail;
@@ -266,6 +268,20 @@ impl RailsNode {
     pub fn pubkey(&self) -> NodePubkey {
         commonwealth_transport::identity::node_pubkey(&self.key)
     }
+
+    /// The self-only roster a node with no active mesh runs on. Its invite
+    /// key is discarded, so nobody can join it, and it is never persisted.
+    pub fn solo_mesh(&self) -> Mesh {
+        commonwealth_discovery::membership::init_mesh_with_identity(
+            "solo",
+            &self.config.name,
+            Vec::new(),
+            self.self_id,
+            Some(self.pubkey()),
+            false,
+        )
+        .0
+    }
 }
 
 /// The running daemon: a node, the mesh it converges, and the three listeners
@@ -312,12 +328,19 @@ pub struct RailsDaemon {
     /// Where `POST /internal/gossip` is served. Ephemeral loopback, reachable
     /// only through the acceptor.
     pub internal_addr: SocketAddr,
-    /// No `mesh.json` at start: the roster is this node alone, in memory only,
-    /// and `run` spawns no gossip and no presence poll (five-programs-63).
-    pub solo: bool,
-    /// The raw invite key, read once at start: present only on the member
-    /// that founded its mesh with `cw-rails found` (see [`found`]).
-    pub join_key: Option<String>,
+    /// No active mesh: the roster is this node alone, in memory only, and
+    /// neither the gossip round nor the presence poll ticks (five-programs-63).
+    /// Live, because the membership doors ([`membership`]) move a running
+    /// node between solo and meshed; read it with [`RailsDaemon::is_solo`].
+    solo: AtomicBool,
+    /// The raw invite key: present only on the member that founded its mesh
+    /// (`cw-rails found` or `POST /v1/mesh/create`) or rotated its invite.
+    /// Read it with [`RailsDaemon::join_key`].
+    join_key: std::sync::RwLock<Option<String>>,
+    /// Serializes the membership verbs with each other and with the gossip
+    /// round's write of `mesh.json`, so a round that began before a `leave`
+    /// cannot write the left mesh back after the doors removed it.
+    pub(crate) verbs: Mutex<()>,
     /// mDNS: `None` unless `run --mdns` asked for it, then the running
     /// advertisement or the reason there is none (see [`lan`]).
     pub lan: Option<Result<lan::Lan, String>>,
@@ -396,8 +419,9 @@ impl RailsDaemon {
             kv,
             media_presence: Arc::new(std::sync::RwLock::new(None)),
             internal_addr,
-            solo: false,
-            join_key,
+            solo: AtomicBool::new(false),
+            join_key: std::sync::RwLock::new(join_key),
+            verbs: Mutex::new(()),
             lan: None,
             _internal: internal,
             _acceptor: acceptor,
@@ -419,24 +443,56 @@ impl RailsDaemon {
         tracing::info!(target: "rails", mode = "solo",
                        absent = %identity::mesh_file(&node.data_dir).display(),
                        "rails: no mesh, starting solo — self-only roster, no gossip, no peers");
-        let (mesh, _join_key) = commonwealth_discovery::membership::init_mesh_with_identity(
-            "solo",
-            &node.config.name,
-            Vec::new(),
-            node.self_id,
-            Some(node.pubkey()),
-            false,
-        );
-        let mut daemon = Self::start(node, mesh).await?;
-        daemon.solo = true;
+        let mesh = node.solo_mesh();
+        let daemon = Self::start(node, mesh).await?;
+        daemon.solo.store(true, Ordering::SeqCst);
         Ok(daemon)
+    }
+
+    /// No active mesh: this node alone, in memory only.
+    pub fn is_solo(&self) -> bool {
+        self.solo.load(Ordering::SeqCst)
+    }
+
+    /// The invite key this node holds for its active mesh, if it holds one.
+    pub fn join_key(&self) -> Option<String> {
+        self.join_key
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
+    }
+
+    /// Hold `join_key` as the active mesh's invite key (a rotate).
+    pub(crate) fn set_join_key(&self, join_key: Option<String>) {
+        *self
+            .join_key
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = join_key;
+    }
+
+    /// Replace what this node is a member of — the one place the live
+    /// membership state changes. The caller holds `verbs` and has already
+    /// written (or cleared) the files at the root, so a restart comes up in
+    /// the same state this leaves.
+    pub(crate) async fn swap_membership(&self, mesh: Mesh, join_key: Option<String>, solo: bool) {
+        tracing::info!(target: "rails", mesh = %mesh.name, mesh_id = %mesh.id, solo,
+                       holds_invite = join_key.is_some(), "membership: the active mesh changed");
+        *self.mesh.write().await = mesh;
+        self.set_join_key(join_key);
+        self.solo.store(solo, Ordering::SeqCst);
+        // Contacts are evidence about the members of the mesh they were seen
+        // on; carried across they would decay the next roster's rows wrongly.
+        self.contacts.lock().await.clear();
+        if self.lan.is_some() {
+            tracing::warn!(target: "rails", "membership: mDNS still advertises the mesh it was started on — restart `cw-rails run --mdns` to announce this one");
+        }
     }
 
     /// Announce this member on the LAN by key (`run --mdns`). A solo node
     /// has no mesh to announce, and a LAN that refuses multicast is a named
     /// absence on `/v1/mesh/status`, never an exit.
     pub async fn advertise_on_lan(&mut self) {
-        let lan = if self.solo {
+        let lan = if self.is_solo() {
             Err("solo: there is no mesh to advertise".to_string())
         } else {
             lan::advertise(&self.node, &*self.mesh.read().await)
@@ -456,19 +512,14 @@ impl RailsDaemon {
         // journals were folded would read absent for rows they hold.
         daemon.kv.project_all_on_disk().await;
         let api = api::serve(daemon.clone(), listen).await?;
-        // Solo has no one to gossip with and no roster to stamp a presence
-        // reading into, so neither task runs.
-        let (gossip, presence) = if daemon.solo {
-            (None, None)
-        } else {
-            // The presence poll (five-programs fp-46): the reading lands in
-            // `media_presence`, which the gossip round and the presence route
-            // read. A tick that cannot ask is a logged `None`, never an exit.
-            (
-                Some(tokio::spawn(gossip::run_forever(daemon.clone()))),
-                Some(tokio::spawn(presence::run_forever(daemon.clone()))),
-            )
-        };
+        // Both run from the start because a membership door can end solo
+        // while this runs; each skips its tick while solo, which has no one to
+        // gossip with and no roster to stamp a presence reading into. The
+        // presence poll (five-programs fp-46): the reading lands in
+        // `media_presence`, which the gossip round and the presence route
+        // read. A tick that cannot ask is a logged `None`, never an exit.
+        let gossip = tokio::spawn(gossip::run_forever(daemon.clone()));
+        let presence = tokio::spawn(presence::run_forever(daemon.clone()));
         // The mesh store's pump (fp-77): drain the outbox onto the journals
         // every tick.
         let kv_pump = tokio::spawn(kv::run_forever(daemon.kv.clone()));
@@ -479,15 +530,14 @@ impl RailsDaemon {
             api = %listen,
             internal = %daemon.internal_addr,
             members = daemon.mesh.read().await.members.len(),
-            solo = daemon.solo,
+            solo = daemon.is_solo(),
             "rails: serving"
         );
         // The API task owns the process's lifetime; a gossip round that fails
         // is a logged round, never an exit.
         let _ = api.await;
-        for task in [gossip, presence].into_iter().flatten() {
-            task.abort();
-        }
+        gossip.abort();
+        presence.abort();
         kv_pump.abort();
         ledger_gc.abort();
         Ok(())

@@ -85,7 +85,7 @@ async fn a_cw_rails_founds_a_mesh_and_a_second_joins_it_by_invite() {
     let daemon = RailsDaemon::start_from_disk(node)
         .await
         .expect("the founder starts");
-    assert!(!daemon.solo, "a founded root starts meshed");
+    assert!(!daemon.is_solo(), "a founded root starts meshed");
     // `run` is not `Send`, so it is driven here beside the joiner rather
     // than spawned (the same shape as `ready.rs`).
     let joiner_side = async {

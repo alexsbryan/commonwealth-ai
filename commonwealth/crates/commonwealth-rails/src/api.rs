@@ -7,7 +7,8 @@
 //! spelling) · the four `/v1/mesh/publish` routes · the four
 //! `/v1/mesh/origins` routes, in [`crate::origins`] · the two roster verbs ·
 //! the ring rail's doors, `/v1/rail/{append,log,live}`, in [`crate::rail`] ·
-//! the mesh store's `/v1/mesh/kv/*`, in [`crate::kv`]. Every answer is
+//! the mesh store's `/v1/mesh/kv/*`, in [`crate::kv`] · the membership
+//! doors, in [`crate::membership`]. Every answer is
 //! `commonwealth_media`'s — the same functions the inference daemon's
 //! `/v1/mesh/*` routes call, so a shim written against one daemon behaves the
 //! same against the other (ARCH §10.6), and `svrn run` publishes into either
@@ -50,6 +51,9 @@ pub fn bind_addr(port: u16) -> SocketAddr {
 pub fn bundles(daemon: Arc<RailsDaemon>) -> Vec<RouteBundle> {
     vec![
         mesh_bundle(daemon.clone()),
+        // Create, join, rotate, leave and the known-mesh verbs
+        // (pb-rails-membership), on the same loopback API.
+        crate::membership::bundle(daemon.clone()),
         // The mesh store's doors (fp-77), over its own state.
         crate::kv::router(daemon.kv.clone()),
         // The typed ledger doors (fp-78), over the same store.
@@ -211,7 +215,10 @@ pub async fn status(State(daemon): State<Arc<RailsDaemon>>) -> impl IntoResponse
     let relay = daemon.node.config.relay_config();
     let dial = commonwealth_transport::iroh::format_dial_string(&addr);
     // The invite, with the daemon's field name, or why there is none.
-    let invite = crate::found::invite_link(daemon.join_key.as_deref(), &mesh, dial.as_deref());
+    let invite = crate::found::invite_link(daemon.join_key().as_deref(), &mesh, dial.as_deref());
+    // Every mesh this node belongs to; a store that does not read is named,
+    // never listed as none.
+    let meshes = crate::membership::listing(&daemon, &mesh);
     Json(serde_json::json!({
         "self": {
             "node_id": daemon.node.self_id.to_string(),
@@ -237,6 +244,8 @@ pub async fn status(State(daemon): State<Arc<RailsDaemon>>) -> impl IntoResponse
             }),
         },
         "members": members,
+        "meshes": meshes.as_ref().ok(),
+        "meshes_absent": meshes.as_ref().err().map(|e| e.to_string()),
         "fanout_inflight": daemon.gauge.load(Ordering::Relaxed),
         "internal_listener": daemon.internal_addr.to_string(),
         "relay": {

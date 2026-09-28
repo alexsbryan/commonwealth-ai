@@ -1208,7 +1208,10 @@ is unlinked or replaced. Since phase-b pb-membership it founds (`cw-rails found`
 `join_link` on `/v1/mesh/status`, admits at `/internal/join` through commonwealth-discovery's
 `accept_join_with_identity`, and speaks mDNS by key (`run --mdns`; a dial-less join browses for a keyed
 founder), all keyed by its own node key; its closure did not grow (319 crates vs 743 at the 2026-09-11
-measure; the rail doors cost three more). Since phase-b pb-rails-origins its acceptor holds no arm per
+measure; the rail doors cost three more). Since phase-b pb-rails-membership a running cw-rails also
+serves the daemon's membership doors (`/v1/mesh/{create,join,join/preview,rotate,leave,switch,forget}`,
+`commonwealth-rails/src/membership.rs`) over its own known-mesh store (`known.rs`, parked meshes under
+`<data-dir>/meshes/<id>/`), listed as `meshes` on its status. Since phase-b pb-rails-origins its acceptor holds no arm per
 protocol: `/v1/mesh/origins` registers any program's loopback origin (an ALPN, or `cwth/http/0` path
 prefixes) in commonwealth-media's `OriginRegistry`, from which the acceptor table, the advertised ALPNs
 and the gossiped capabilities are all read; each registration is handed a tie (`X-Mesh-Tie`) its origin

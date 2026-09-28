@@ -164,6 +164,9 @@ pub async fn run_forever(daemon: Arc<RailsDaemon>) {
     let mut last: Option<Option<f32>> = None;
     loop {
         tokio::time::sleep(POLL_INTERVAL).await;
+        if daemon.is_solo() {
+            continue;
+        }
         let now = tick(&daemon, &client).await;
         if last != Some(now) {
             tracing::info!(target: "rails", ?now, "media presence: reading changed");

@@ -77,7 +77,7 @@ async fn a_meshless_node_serves_its_store_across_a_restart_and_a_join() {
 
     // First start: no mesh.json. Solo, self-only, nothing written.
     let first = start(dir.path()).await;
-    assert!(first.solo, "no mesh.json must start solo");
+    assert!(first.is_solo(), "no mesh.json must start solo");
     {
         let mesh = first.mesh.read().await;
         assert_eq!(mesh.members.len(), 1);
@@ -109,7 +109,7 @@ async fn a_meshless_node_serves_its_store_across_a_restart_and_a_join() {
 
     // Restart, still solo: the row rehydrates from its own journal.
     let second = start(dir.path()).await;
-    assert!(second.solo);
+    assert!(second.is_solo());
     assert_eq!(second.node.self_id, self_id, "identity is stable");
     assert_eq!(read_back(second.clone()).await.as_deref(), Some("mine"));
     second.node.endpoint.close().await;
@@ -127,7 +127,7 @@ async fn a_meshless_node_serves_its_store_across_a_restart_and_a_join() {
     identity::save_mesh(dir.path(), &mesh).unwrap();
 
     let third = start(dir.path()).await;
-    assert!(!third.solo, "a mesh.json must start meshed");
+    assert!(!third.is_solo(), "a mesh.json must start meshed");
     assert_eq!(read_back(third.clone()).await.as_deref(), Some("mine"));
     third.node.endpoint.close().await;
 }
@@ -171,7 +171,7 @@ async fn the_mount_trace_names_every_route_the_api_serves() {
         .collect();
     assert_eq!(
         named.iter().map(|(n, _)| *n).collect::<Vec<_>>(),
-        ["mesh", "kv", "ledger"]
+        ["mesh", "membership", "kv", "ledger"]
     );
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
