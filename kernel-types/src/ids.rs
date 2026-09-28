@@ -122,6 +122,11 @@ macro_rules! define_id {
 
 define_id!(NodeId, "node");
 
+// Which work handoff. Moved here from `commonwealth-core` by pb-work-doors
+// (FIVE_PROGRAMS §12 3a rung 2): a client that submits work names it and
+// links no mesh crate.
+define_id!(HandoffId, "handoff");
+
 /// A node's Ed25519 verifying key — the mesh-wide cryptographic
 /// identity of a node, distinct from the opaque random [`NodeId`].
 ///

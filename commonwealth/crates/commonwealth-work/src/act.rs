@@ -463,7 +463,7 @@ pub fn read(admission: &Admission) -> WorkActs {
             out.unreadable += 1;
             continue;
         };
-        let Ok(actor) = ActorKey::of_op(op) else {
+        let Ok(actor) = crate::actor::of_op(op) else {
             tracing::debug!(
                 target: crate::TRACE_TARGET,
                 actor = %op.actor,

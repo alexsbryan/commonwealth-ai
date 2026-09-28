@@ -15,13 +15,12 @@
 // implementation (ARCH §10.6), the five ids below are unchanged, and `NodeId`
 // is re-exported so all 755 existing reference sites are untouched.
 use kernel_types::define_id;
-pub use kernel_types::{NodeId, NodePubkey};
+pub use kernel_types::{HandoffId, NodeId, NodePubkey};
 
 define_id!(MeshId, "mesh");
 define_id!(ModelId, "model");
 define_id!(ProcessId, "proc");
 define_id!(PlanId, "plan");
-define_id!(HandoffId, "handoff");
 
 #[cfg(test)]
 mod tests {

@@ -94,6 +94,7 @@
 //! `sovereign-time` without creating the exact backflow edge it exists to
 //! forbid.
 
+pub mod actor;
 pub mod answer;
 pub mod attribution;
 pub mod conformance;
@@ -118,6 +119,7 @@ pub mod quality;
 #[cfg(any(test, feature = "wire-fixture"))]
 pub mod wire;
 
+pub use actor::{ActorKey, InvalidActorKey};
 pub use answer::{Answer, Citation, Draft, PeerAnswer, Refused, Seal, TURN_SUBJECT};
 pub use attribution::{Attribution, ComputeAttribution};
 pub use conformance::{
@@ -125,7 +127,7 @@ pub use conformance::{
 };
 pub use custody::{join_custody, Custody};
 pub use hash::ContentHash;
-pub use ids::{CorpusId, NodeId, NodePubkey};
+pub use ids::{CorpusId, HandoffId, NodeId, NodePubkey};
 pub use judgement::{
     honesty_footer, is_absent_marker, render_rows, Freshness, Judgement, Reason, Verdict,
 };
