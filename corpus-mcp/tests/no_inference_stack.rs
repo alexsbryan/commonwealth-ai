@@ -64,7 +64,29 @@ fn assert_no_inference_stack(package: &str, must_contain: &[&str]) {
 fn the_dep_tree_carries_no_inference_stack() {
     assert_no_inference_stack(
         "corpus-mcp",
-        &["corpus-engine", "understanding-vocab", "lancedb", "tantivy"],
+        &[
+            "corpus-index",
+            "corpus-engine-atlas-reader",
+            "understanding-vocab",
+            "lancedb",
+            "tantivy",
+        ],
+    );
+}
+
+/// The host reads indexes and walks atlases through the read leaves and
+/// links no engine (pb-corpus-mcp-reads): the program that WRITES them is
+/// ingest's, and serve reaches it only by exec'ing `svrn-ingest pull`.
+#[test]
+fn the_host_links_no_engine() {
+    let crates = tree("corpus-mcp");
+    assert!(
+        crates.iter().any(|c| c == "corpus-index"),
+        "corpus-mcp: tree lacks `corpus-index` — did cargo tree run?"
+    );
+    assert!(
+        !crates.iter().any(|c| c == "corpus-engine"),
+        "corpus-mcp links corpus-engine again"
     );
 }
 

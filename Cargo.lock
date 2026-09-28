@@ -2543,7 +2543,6 @@ dependencies = [
  "anyhow",
  "chrono",
  "clap",
- "corpus-engine",
  "corpus-engine-atlas-reader",
  "corpus-index",
  "host-kit",
