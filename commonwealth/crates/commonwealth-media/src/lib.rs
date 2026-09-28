@@ -26,6 +26,7 @@
 //! `commonwealth-rails` with none of that underneath.
 
 pub mod apps;
+pub mod claims;
 pub mod declared;
 pub mod fanout;
 pub mod identity;
