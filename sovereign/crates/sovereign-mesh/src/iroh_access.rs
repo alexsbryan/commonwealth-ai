@@ -220,66 +220,10 @@ fn env_kill_switch() -> bool {
     )
 }
 
-/// Every member the iroh endpoint could hold a path to, paired with what
-/// membership believes and what the endpoint actually holds — the watchdog's
-/// peer-path health term (note `a3f3fbff`).
-///
-/// A free function taking the endpoint rather than a method on
-/// `EmbeddedDaemon` because the watchdog swaps its own endpoint handle on
-/// rebuild: the health judgement must be made against the endpoint the
-/// watchdog is holding, not against whatever the daemon state last recorded.
-/// Members without a pubkey are not iroh-dialable and are left out entirely —
-/// counting them would make an IP-only peer look like a lost path.
-pub async fn observe_peer_paths(
-    mesh: &tokio::sync::RwLock<commonwealth_core::mesh::Mesh>,
-    self_id: commonwealth_core::ids::NodeId,
-    endpoint: &Endpoint,
-) -> Vec<crate::iroh_watchdog::ReachPathObservation> {
-    // Clone the members out before awaiting — the codebase's
-    // clone-out-then-await rule; `peer_path_snapshot` awaits per peer.
-    let members: Vec<commonwealth_core::mesh::MemberRecord> = {
-        let mesh = mesh.read().await;
-        mesh.members
-            .values()
-            .filter(|m| m.node_id != self_id && m.node_pubkey.is_some())
-            .cloned()
-            .collect()
-    };
-    let mut out = Vec::with_capacity(members.len());
-    for m in members {
-        let pubkey = m.node_pubkey.expect("filtered to Some above");
-        let path = match commonwealth_transport::iroh::PublicKey::from_bytes(&pubkey.0) {
-            Ok(id) => commonwealth_transport::iroh::peer_path_snapshot(endpoint, id)
-                .await
-                .map(|s| s.path),
-            // A member whose stored pubkey is not a valid Ed25519 point can
-            // never be dialed by key — a roster fault, not a transport one.
-            // It reads as `None` (no record) so the census still accounts for
-            // every member, and it SAYS SO rather than being absorbed into
-            // the no-record population it is indistinguishable from (§18.3).
-            // Harmless to the health term either way: a peer that could never
-            // be dialed never enters `last_active`, so it can only ever add
-            // to the total, never report a loss or arm the term.
-            Err(e) => {
-                tracing::warn!(
-                    peer = %m.node_id,
-                    name = %m.name,
-                    error = %e,
-                    "iroh(mesh): member pubkey is not a valid endpoint id — not dialable by \
-                     key; counted as no-path, never as a lost path"
-                );
-                None
-            }
-        };
-        out.push(crate::iroh_watchdog::ReachPathObservation {
-            node_id: m.node_id.to_string(),
-            name: m.name.clone(),
-            believed_online: m.status != commonwealth_core::mesh::NodeStatus::Offline,
-            path,
-        });
-    }
-    out
-}
+/// The watchdog's peer-path eye moved beside the watchdog in
+/// `commonwealth_rails::iroh_watchdog` (phase-b pb-rails-parity), where cw-rails
+/// reads it too; re-exported here at its historical path.
+pub use commonwealth_rails::iroh_watchdog::observe_peer_paths;
 
 /// Handle to the running mesh iroh access path. Holds the endpoint
 /// (for live status / pairing reads) and the acceptor task, which is
