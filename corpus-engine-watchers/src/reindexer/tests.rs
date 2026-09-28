@@ -155,6 +155,18 @@ fn ignore_filter_excludes_hard_excludes_and_non_source_extensions() {
 }
 
 #[test]
+fn a_project_rooted_under_an_excluded_name_is_still_watched() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path().join("build").join(".cache").join("proj");
+    let filter = build_ignore_filter(&root, &["my-cache".to_string()]);
+    assert!(!filter.is_ignored(&root.join("src/main.rs")));
+    assert!(filter.is_ignored(&root.join("target/debug/foo.rs")));
+    let under_extra = tmp.path().join("my-cache").join("proj");
+    let filter = build_ignore_filter(&under_extra, &["my-cache".to_string()]);
+    assert!(!filter.is_ignored(&under_extra.join("src/main.rs")));
+}
+
+#[test]
 fn ignore_filter_honours_extra_ignores() {
     let tmp = tempfile::tempdir().unwrap();
     let extras = vec![".sovereign".to_string(), "my-cache".to_string()];

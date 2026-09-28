@@ -1398,6 +1398,10 @@ fn is_source_event(event: &Event) -> bool {
 }
 
 struct IgnoreFilter {
+    /// The project root. `HARD_EXCLUDE` and `extra_ignores` match
+    /// components BELOW it only, so a project that itself sits under
+    /// `build/` or `~/.cache/` is still watched.
+    root: PathBuf,
     matcher: Option<ignore::gitignore::Gitignore>,
     /// User-configured extras from `WatcherToggles::ignore_paths`.
     /// Matched against any path component, same shape as
@@ -1431,7 +1435,8 @@ impl IgnoreFilter {
             ".venv",
             "venv",
         ];
-        if path.components().any(|c| {
+        let below_root = path.strip_prefix(&self.root).unwrap_or(path);
+        if below_root.components().any(|c| {
             let s = c.as_os_str().to_string_lossy();
             HARD_EXCLUDE.contains(&s.as_ref()) || self.extra_ignores.iter().any(|e| e == s.as_ref())
         }) {
@@ -1466,6 +1471,7 @@ fn build_ignore_filter(root: &Path, extra_ignores: &[String]) -> IgnoreFilter {
         None
     };
     IgnoreFilter {
+        root: root.to_path_buf(),
         matcher,
         extra_ignores: extra_ignores.to_vec(),
     }
