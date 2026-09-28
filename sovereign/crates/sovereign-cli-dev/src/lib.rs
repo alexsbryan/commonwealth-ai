@@ -292,6 +292,10 @@ async fn async_main() -> i32 {
         // itself, which calls it in-process — no spawn, and `svrn init --help`
         // no longer needs a 240 MB binary to be built.
         "project-refresh" => project_cmd::cmd_refresh(rest).await,
+        // `svrn init`'s project-model step (sovereign-cli project_init,
+        // pb-code-cli-base): the lifecycle read and the observe-and-write.
+        "project-lifecycle" => project_cmd::cmd_lifecycle(rest),
+        "project-observe" => project_cmd::cmd_observe(rest),
         // `svrn refresh` in a `code-intel` dispatcher (sovereign-cli refresh_cmd.rs).
         "refresh" => code_refresh::cmd_refresh(rest).await,
         "project-phase-pass" => project_cmd::cmd_phase_pass(rest).await,

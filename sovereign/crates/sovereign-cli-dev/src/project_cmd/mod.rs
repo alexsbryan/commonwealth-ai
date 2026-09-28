@@ -31,7 +31,10 @@ mod refresh;
 pub(crate) use refresh::cmd_refresh;
 // `init` + `scaffold` moved to `sovereign-cli::project_init` (2026-08-07) —
 // `svrn init` and `svrn project init` are served by the shipped dispatcher
-// now, so this binary is never asked for them.
+// now, so this binary is never asked for them. Init's project-model step is
+// still this program's: it execs the two arms in `observe` (pb-code-cli-base).
+mod observe;
+pub(crate) use observe::{cmd_lifecycle, cmd_observe};
 
 /// Human-readable identifier for the embed model this user has set up,
 /// used as the `expected_embedding_model` on the `CorpusEngine` so the

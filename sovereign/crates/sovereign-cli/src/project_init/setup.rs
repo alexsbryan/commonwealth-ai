@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! `svrn init` post-scaffold setup: the git auto-with-confirm flow
-//! (`resolve_git` / `GitOutcome`) and the observation-report renderer
-//! (`print_observation_report` / `ObservationReportContext`). Both are
-//! driven by `super::cmd_init`; `run_git_init` is private.
+//! (`resolve_git` / `GitOutcome`), driven by `super::cmd_init`;
+//! `run_git_init` is private. The observation-report renderer moved to the
+//! code program with the project model (sovereign-cli-dev
+//! `project_cmd::observe`, pb-code-cli-base).
 //!
 //! Moved with `init` into `sovereign-cli` (2026-08-07). Imports are explicit
 //! now: this used to reach `project_cmd`'s plumbing through
@@ -127,125 +128,6 @@ fn run_git_init(repo_root: &Path) {
         }
         Err(e) => {
             eprintln!("    \u{2717} could not spawn `git init`: {e} (is git installed?)");
-        }
-    }
-}
-
-/// Contextual flags the report uses to decide whether a missing
-/// toolchain / git is ACTIONABLE (fix it now) or DEFERRED (we know
-/// why it's fine). Keeps `print_observation_report` side-effect free
-/// while letting `cmd_init` pass in what it knows.
-pub(super) struct ObservationReportContext {
-    /// True when `<repo>/DESIGN.md` exists. A pre-code project with a
-    /// design doc is a legitimate state — "no languages detected"
-    /// becomes "indexing deferred" rather than an actionable error.
-    pub(super) design_exists: bool,
-}
-
-pub(super) fn print_observation_report(
-    obs: &sovereign_cli_shared::observation::ProjectObservation,
-    ctx: &ObservationReportContext,
-) {
-    use sovereign_cli_shared::observation::{DepKind, ScipTooling};
-
-    let mut ready: Vec<String> = Vec::new();
-    let mut actionable: Vec<(String, &'static str)> = Vec::new();
-    let mut deferred: Vec<String> = Vec::new();
-
-    // Languages & SCIP tooling. On a pre-code project with a design
-    // doc present, "no languages" is expected — soft-path the
-    // warning into the deferred bucket instead of treating it as a
-    // gap the user must close right now.
-    if obs.languages.is_empty() {
-        if ctx.design_exists {
-            deferred.push(
-                "Pre-code project (DESIGN.md present, no source yet). Language detection runs on the next init."
-                    .into(),
-            );
-        } else {
-            actionable.push((
-                "No supported languages detected (Rust, TypeScript, JavaScript, Go, Python, Java)."
-                    .into(),
-                "",
-            ));
-        }
-    } else {
-        for lang in &obs.languages {
-            match &lang.scip_tooling {
-                ScipTooling::Available { binary } => {
-                    ready.push(format!("{} ({binary} on PATH)", lang.display));
-                }
-                ScipTooling::NotRequired => {
-                    ready.push(lang.display.clone());
-                }
-                ScipTooling::Missing {
-                    binary,
-                    install_cmd,
-                } => {
-                    actionable.push((
-                        format!(
-                            "{} detected. Call-graph navigation requires `{binary}`:",
-                            lang.display
-                        ),
-                        *install_cmd,
-                    ));
-                }
-            }
-        }
-    }
-
-    if obs.has_git {
-        ready.push("Git repository".into());
-    }
-
-    if obs.embed_model_available {
-        ready.push("Embed model".into());
-    } else {
-        actionable.push((
-            "Embed model not found (documentation search will be degraded).".into(),
-            "svrn setup",
-        ));
-    }
-
-    // External dependencies — noted for `project found` (Stage 2
-    // fault lines draws on this list). Not resolved at init time.
-    let direct_deps: Vec<&sovereign_cli_shared::observation::DetectedDependency> = obs
-        .deps
-        .iter()
-        .filter(|d| d.kind == DepKind::Direct)
-        .collect();
-    if !direct_deps.is_empty() {
-        let n = direct_deps.len();
-        deferred.push(format!(
-            "{n} direct external dependenc{y} detected — surfaced to `svrn project found`.",
-            y = if n == 1 { "y" } else { "ies" }
-        ));
-    }
-
-    // Render.
-    if !ready.is_empty() {
-        println!();
-        for r in &ready {
-            println!("    \u{2713} {r}");
-        }
-    }
-
-    if !actionable.is_empty() {
-        println!();
-        for (desc, cmd) in &actionable {
-            println!("    \u{26a0} {desc}");
-            if !cmd.is_empty() {
-                println!();
-                println!("{cmd}");
-                println!();
-            }
-        }
-    }
-
-    if !deferred.is_empty() {
-        println!();
-        for d in &deferred {
-            println!("    \u{2026} {d}");
         }
     }
 }

@@ -66,3 +66,33 @@ pub fn run(verb: &str, args: &[String]) -> i32 {
         }
     }
 }
+
+/// [`run`], with the child's stdout captured and returned, for a step that
+/// reads an answer back (`project init`'s lifecycle read, pb-code-cli-base).
+/// stderr still flows through. `Err` carries the exit code to return; the
+/// reason has been printed.
+#[cfg(feature = "code-intel")]
+pub fn output(verb: &str, args: &[String]) -> Result<String, i32> {
+    let Some(bin) = locate() else {
+        return Err(not_found());
+    };
+    crate::sibling::warn_if_stale(&bin, "sovereign-cli-dev");
+    tracing::debug!(bin = %bin.display(), verb, ?args, "dev_bin: run and capture stdout");
+    match std::process::Command::new(&bin)
+        .arg(verb)
+        .args(args)
+        .stderr(std::process::Stdio::inherit())
+        .output()
+    {
+        Ok(out) if out.status.success() => Ok(String::from_utf8_lossy(&out.stdout).into_owned()),
+        Ok(out) => {
+            let code = out.status.code().unwrap_or(1);
+            tracing::debug!(verb, code, "dev_bin: child failed");
+            Err(code)
+        }
+        Err(e) => {
+            eprintln!("sovereign: cannot run {}: {e}", bin.display());
+            Err(127)
+        }
+    }
+}

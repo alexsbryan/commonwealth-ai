@@ -6,6 +6,9 @@
 //! names the keyword-only index, its metadata carries no model name, and
 //! `code_search` answers from it.
 //!
+//! pb-code-cli-base adds the project model's proof: init writes
+//! `.sovereign/project.toml` through the code program's two arms.
+//!
 //! The two siblings are the ones beside this test's dispatcher; a missing one
 //! fails by name (the `distribute_e2e` precedent), never skips.
 
@@ -188,4 +191,57 @@ fn init_then_code_index_need_no_daemon_and_code_search_answers_from_full_text() 
         "the refusal does not name --fts-only:\n{}",
         text(&refused)
     );
+}
+
+/// pb-code-cli-base's proof: the project model is the code program's, and
+/// `svrn init` still writes it. Init reaches it by exec'ing
+/// `sovereign-cli-dev project-lifecycle` and `project-observe`; the dispatcher
+/// links none of it. A lifecycle a previous `project found` recorded
+/// survives the read-modify-write, and init reads `founded` back from it.
+#[test]
+fn init_writes_the_project_model_through_the_code_program() {
+    let sb = Sandbox::new();
+    let project_toml = sb.path("repo/.sovereign/project.toml");
+    std::fs::create_dir_all(project_toml.parent().unwrap()).expect(".sovereign dir");
+    std::fs::write(
+        &project_toml,
+        "schema_version = 2\n\n[lifecycle]\nfounded = true\ncharter_version = 3\ncurrent_phase = 0\n",
+    )
+    .expect("seed project.toml");
+
+    let init = sb.svrn(&[
+        "init",
+        "--no-serve",
+        "--no-scip",
+        "--no-hooks",
+        "--no-claude-config",
+    ]);
+    let out = text(&init);
+    assert!(init.status.success(), "svrn init failed:\n{out}");
+    // The observation report, printed by the code program.
+    assert!(
+        out.contains("\u{2713} Git repository"),
+        "init printed no observation report:\n{out}"
+    );
+    // `founded` came back through `project-lifecycle`: no design nudge.
+    assert!(
+        !out.contains("Next: `svrn project design`"),
+        "init nudged a founded project toward `project design`:\n{out}"
+    );
+
+    let written: toml::Value = toml::from_str(
+        &std::fs::read_to_string(&project_toml).expect("project.toml was written"),
+    )
+    .expect("project.toml is TOML");
+    assert_eq!(written["lifecycle"]["founded"].as_bool(), Some(true));
+    assert_eq!(written["lifecycle"]["charter_version"].as_integer(), Some(3));
+    assert_eq!(written["observation"]["has_git"].as_bool(), Some(true));
+    let languages = written["observation"]["language"]
+        .as_array()
+        .expect("observation.language rows");
+    assert!(
+        languages.iter().any(|l| l["id"].as_str() == Some("rust")),
+        "the fixture crate's language was not observed: {languages:?}"
+    );
+    assert_eq!(written["project"]["name"].as_str(), Some("repo"));
 }

@@ -12,7 +12,8 @@
 //! already lived in this binary from slices 1-2.
 //!
 //! One thing deliberately did NOT come along: nothing. In particular
-//! `project_toml` DID (via sovereign-cli-shared):
+//! `project_toml` DID (via sovereign-cli-shared; since pb-code-cli-base init
+//! reaches it by exec'ing the code program's `project-observe`):
 //! `.sovereign/project.toml` is read by sovereign-server,
 //! commonwealth-api's context injector and the desktop knowledge
 //! view, so an `init` that skipped it would be broken.
@@ -264,11 +265,12 @@ pub(crate) async fn cmd_init(args: &[String]) -> i32 {
     // time — we don't re-badger). This read is intentionally
     // non-fatal: a missing or unreadable project.toml means "first
     // init", which is the common case.
-    let prior_project_toml_path = repo_root.join(".sovereign").join("project.toml");
-    let prior_git_declined: bool =
-        sovereign_cli_shared::project_toml::ProjectTomlFile::read(&prior_project_toml_path)
-            .map(|t| t.lifecycle.git_declined_at_init)
-            .unwrap_or(false);
+    // The project model is the code program's (pb-code-cli-base): its
+    // `project-lifecycle` arm does that read and answers with the flags.
+    let prior_git_declined: bool = match read_lifecycle(&repo_root) {
+        Ok(l) => l.git_declined_at_init,
+        Err(code) => return code,
+    };
     let design_md_path = repo_root.join("DESIGN.md");
     let design_exists = design_md_path.exists();
 
@@ -326,46 +328,32 @@ pub(crate) async fn cmd_init(args: &[String]) -> i32 {
     //   READY      — everything the user doesn't need to act on
     //   ACTIONABLE — install commands, copy-pasteable, unindented
     //   DEFERRED   — things we note now but address in `found`
-    let mut observation = sovereign_cli_shared::observation::observe(&repo_root);
-    // If we just ran `git init` in this invocation, the observation
-    // (captured before resolve_git) is stale on the `has_git` axis.
-    // Patch it so the report reflects reality.
-    observation.has_git = has_git;
-    let report_ctx = ObservationReportContext { design_exists };
-    print_observation_report(&observation, &report_ctx);
-
-    // Persist observations BEFORE any indexing/SCIP work so the
-    // durable record survives even if downstream init steps fail.
-    // Read-modify-write: preserve any existing lifecycle fields so
-    // re-running init after `svrn project found` doesn't reset
-    // `founded`, `charter_version`, or `current_phase`.
-    let project_toml_path = repo_root.join(".sovereign").join("project.toml");
-    if let Err(e) =
-        std::fs::create_dir_all(project_toml_path.parent().unwrap_or_else(|| Path::new(".")))
-    {
-        eprintln!("    \u{2717} Cannot create .sovereign/: {e}");
-        return 1;
+    //
+    // The code program observes, prints the report and persists
+    // `.sovereign/project.toml` BEFORE any indexing/SCIP work, so the
+    // durable record survives even if downstream init steps fail
+    // (`sovereign-cli-dev project-observe`, pb-code-cli-base). `has_git`
+    // is ours: we may have just run `git init`.
+    let mut observe_args = vec![
+        repo_root.display().to_string(),
+        "--has-git".to_string(),
+        has_git.to_string(),
+    ];
+    if design_exists {
+        observe_args.push("--design-exists".to_string());
     }
-    let mut project_toml =
-        sovereign_cli_shared::project_toml::ProjectTomlFile::read(&project_toml_path)
-            .unwrap_or_else(|_| {
-                sovereign_cli_shared::project_toml::ProjectTomlFile::from_observation(&observation)
-            });
-    project_toml.update_observation(&observation, &project_toml_path);
-    // Persist a fresh git declination if the user just said "no" —
-    // but preserve a prior declination (user already said no before).
-    // Never un-set: once they've opted out, that stays opted out
-    // until they run `git init` themselves.
     if matches!(git_outcome, GitOutcome::DeclinedByUser) {
-        project_toml.lifecycle.git_declined_at_init = true;
+        observe_args.push("--git-declined".to_string());
     }
-    if let Err(e) = project_toml.write(&project_toml_path) {
-        eprintln!("    \u{2717} Cannot write project.toml: {e}");
+    let observed = crate::dev_bin::run("project-observe", &observe_args);
+    if observed != 0 {
+        tracing::debug!(code = observed, "init: project-observe failed");
+        return 1;
     }
 
     // Detect languages across all workspace roots for downstream
-    // SCIP + indexing logic. Display already handled by
-    // `print_observation_report` above — no second pass of ✓-lines.
+    // SCIP + indexing logic. Display already handled by the code
+    // program's observation report above — no second pass of ✓-lines.
     let langs: Vec<DetectedLanguage> = {
         let mut seen = std::collections::HashSet::new();
         let mut all = Vec::new();
@@ -869,7 +857,11 @@ pub(crate) async fn cmd_init(args: &[String]) -> i32 {
     // when there's genuinely no DESIGN.md yet and the project isn't
     // already founded (no point suggesting `project design` to
     // someone who's already past that stage).
-    if !design_exists && !project_toml.lifecycle.founded {
+    let founded = match read_lifecycle(&repo_root) {
+        Ok(l) => l.founded,
+        Err(code) => return code,
+    };
+    if !design_exists && !founded {
         println!("  Next: `svrn project design` — I'll work with the agent on your DESIGN.md.");
         println!("        Bring a path to an existing doc with `--import <path>`, or start blank.");
         println!();
@@ -878,11 +870,46 @@ pub(crate) async fn cmd_init(args: &[String]) -> i32 {
     0
 }
 
+/// The two `.sovereign/project.toml` lifecycle flags init reads.
+struct Lifecycle {
+    git_declined_at_init: bool,
+    founded: bool,
+}
+
+/// Ask the code program for the lifecycle flags
+/// (`sovereign-cli-dev project-lifecycle`, pb-code-cli-base). `Err` is the
+/// exit code init returns; the reason is printed, never defaulted.
+fn read_lifecycle(repo_root: &Path) -> Result<Lifecycle, i32> {
+    let out = crate::dev_bin::output("project-lifecycle", &[repo_root.display().to_string()])?;
+    let v: serde_json::Value = serde_json::from_str(out.trim()).map_err(|e| {
+        eprintln!("    \u{2717} project-lifecycle answered unreadable JSON ({e}): {out}");
+        1
+    })?;
+    let flag = |k: &str| {
+        v.get(k)
+            .and_then(serde_json::Value::as_bool)
+            .ok_or_else(|| {
+                eprintln!("    \u{2717} project-lifecycle answered without `{k}`: {out}");
+                1
+            })
+    };
+    let l = Lifecycle {
+        git_declined_at_init: flag("git_declined_at_init")?,
+        founded: flag("founded")?,
+    };
+    tracing::debug!(
+        git_declined_at_init = l.git_declined_at_init,
+        founded = l.founded,
+        "init: lifecycle read"
+    );
+    Ok(l)
+}
+
 // ─── Design session ──────────────────────────────────────────
 
 /// Local-to-`project_cmd` language detection struct. Distinct from
-/// `sovereign_cli_shared::observation::LanguageObservation` which carries the
-/// human-readable `display` form used by `print_observation_report`;
+/// the code program's `observation::LanguageObservation` which carries the
+/// human-readable `display` form its observation report prints;
 /// here we only need the stable `id` to drive SCIP-tooling decisions.
 struct DetectedLanguage {
     id: &'static str,
