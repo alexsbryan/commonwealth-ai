@@ -15,7 +15,9 @@ path = "src/bin/svrn-ingest/main.rs"
 # The recipe pipeline (acquire → … → index) and the atlas build orchestrator
 # the `ingest` verb drives; both are [[package]] ingest members with this
 # crate, so neither crosses a package line.
-corpus-engine = { workspace = true }
+# `treesitter`: the `code` extractor and `reindex_file`, which `index` runs
+# for code's `code index` (pb-code-index).
+corpus-engine = { workspace = true, features = ["treesitter"] }
 sovereign-enrichment-build = { workspace = true }
 # The one embeddings-endpoint decider (`host`) and the index read types.
 corpus-index = { workspace = true }

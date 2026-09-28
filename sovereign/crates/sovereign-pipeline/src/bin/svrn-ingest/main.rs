@@ -4,6 +4,7 @@
 //! its first argument (sovereign-cli `ingest_bin.rs`), so a developer who
 //! wants ingest in CI takes this crate and no svrn crate.
 
+mod index;
 mod ingest;
 mod pull;
 
@@ -24,6 +25,9 @@ enum Command {
     /// Install each named corpus that is not here from its recipe's prebuilt
     /// snapshot, under a deadline; `corpus-mcp serve --corpus` execs this.
     Pull(pull::PullArgs),
+    /// Build one index from a recipe file into a named directory, or
+    /// re-index a list of files in one; `code index` execs this.
+    Index(index::IndexArgs),
 }
 
 #[tokio::main]
@@ -39,5 +43,6 @@ async fn main() -> anyhow::Result<()> {
     match Args::parse().command {
         Command::Ingest(a) => ingest::run(a).await,
         Command::Pull(a) => pull::run(a).await,
+        Command::Index(a) => index::run(a).await,
     }
 }

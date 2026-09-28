@@ -549,7 +549,7 @@ fn enrichment_plan(recipe: &Recipe, no_enrich: bool) -> Result<Option<Enrichment
 
 /// One line per ingest milestone. Deliberately terse: the recipe pipeline
 /// emits an event per batch and this verb's interesting half is the build.
-fn render_ingest_progress(p: corpus_engine::progress::IngestProgress) {
+pub(crate) fn render_ingest_progress(p: corpus_engine::progress::IngestProgress) {
     use corpus_engine::progress::IngestProgress as P;
     match p {
         P::Extracting {
