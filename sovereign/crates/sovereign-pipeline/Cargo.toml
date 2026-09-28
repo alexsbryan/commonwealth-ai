@@ -4,7 +4,23 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
+# ingest's one CLI (phase-b pb-ingest-cli): `svrn ingest <recipe.toml>` execs
+# it with the verb as its first argument. Moved from corpus-mcp's `ingest`
+# verb; pb-cli-llm-ingest-move fills it with cli-llm's ingest half.
+[[bin]]
+name = "svrn-ingest"
+path = "src/bin/svrn-ingest/main.rs"
+
 [dependencies]
+# The recipe pipeline (acquire → … → index) and the atlas build orchestrator
+# the `ingest` verb drives; both are [[package]] ingest members with this
+# crate, so neither crosses a package line.
+corpus-engine = { workspace = true }
+sovereign-enrichment-build = { workspace = true }
+# The one embeddings-endpoint decider (`host`) and the index read types.
+corpus-index = { workspace = true }
+clap = { workspace = true }
+tracing-subscriber = { workspace = true }
 # Zero-dep leaf: canonical Unix-epoch wall-clock helpers.
 sovereign-time = { workspace = true }
 # Path SSOT: per-user svrnmesh paths come from `rebrand` (never hand-rolled $HOME).

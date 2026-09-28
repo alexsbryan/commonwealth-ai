@@ -214,52 +214,6 @@ fn recipe_new_without_an_id_writes_nothing_to_disk() {
     assert!(left.is_empty(), "stdout form wrote {} file(s)", left.len());
 }
 
-// ── `ingest` — the endpoint combinations, none of which need an endpoint ────
-
-/// §18.3: a half-named pair is refused, never guessed at. Guessing would send
-/// phase 1's chat calls to the embedding process.
-#[test]
-fn ingest_refuses_a_half_specified_endpoint_pair() {
-    let tmp = tempfile::tempdir().unwrap();
-    let recipe = tmp.path().join("r.toml");
-    std::fs::write(&recipe, "# never read: the refusal precedes any disk\n").unwrap();
-    let rp = recipe.to_str().unwrap();
-
-    let r = run(tmp.path(), &["ingest", rp, "--chat-url", "http://x/v1"]);
-    assert_ne!(r.code, 0);
-    assert!(
-        r.stderr.contains("--embed-url"),
-        "the refusal does not name the missing flag:\n{}",
-        r.stderr
-    );
-
-    let r = run(tmp.path(), &["ingest", rp, "--embed-url", "http://x/v1"]);
-    assert_ne!(r.code, 0);
-    assert!(
-        r.stderr.contains("--chat-url"),
-        "the refusal does not name the missing flag:\n{}",
-        r.stderr
-    );
-
-    let r = run(
-        tmp.path(),
-        &[
-            "ingest",
-            rp,
-            "--base-url",
-            "http://x/v1",
-            "--chat-url",
-            "http://y/v1",
-        ],
-    );
-    assert_ne!(r.code, 0);
-    assert!(
-        r.stderr.contains("--base-url"),
-        "mixing --base-url with a half-pair was not refused by name:\n{}",
-        r.stderr
-    );
-}
-
 // ── discovery — the ladder, and the rule that a NAMED endpoint is never
 //    substituted (ARCH §18.3) ───────────────────────────────────────────────
 
@@ -315,22 +269,20 @@ fn a_named_endpoint_is_never_substituted() {
     }
 }
 
-/// `corpus ingest` with no flags at all is the literal §4 command line, so it
-/// walks the same ladder — one implementation of "which endpoint", shared with
-/// `serve` (ARCH §10.6). Same assertion, other verb: if `ingest` ever grew its
-/// own ladder, one of these two would drift.
+/// `ingest` moved to ingest's own CLI (pb-ingest-cli). The verb answers where
+/// it went and exits 2; it never reports an unknown subcommand and never
+/// starts a build.
 #[test]
-fn ingest_with_no_endpoint_walks_the_same_ladder() {
+fn ingest_points_at_its_new_home() {
     let tmp = tempfile::tempdir().unwrap();
-    let recipe = tmp.path().join("r.toml");
-    std::fs::write(&recipe, "# never read\n").unwrap();
-    let r = run(tmp.path(), &["ingest", recipe.to_str().unwrap()]);
-    assert_ne!(r.code, 0);
-    for rung in ["ollama", "llama-server", "oicp daemon"] {
-        assert!(
-            r.stderr.contains(rung),
-            "`ingest` did not walk the `{rung}` rung:\n{}",
-            r.stderr
-        );
-    }
+    let r = run(
+        tmp.path(),
+        &["ingest", "r.toml", "--base-url", "http://x/v1"],
+    );
+    assert_eq!(r.code, 2, "stderr: {}", r.stderr);
+    assert!(
+        r.stderr.contains("svrn ingest"),
+        "the pointer does not name the new home:\n{}",
+        r.stderr
+    );
 }

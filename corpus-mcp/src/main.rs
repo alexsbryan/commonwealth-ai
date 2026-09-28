@@ -7,7 +7,7 @@
 //!
 //! ```sh
 //! corpus recipe new --ontology numismatics --id my-coins   # writes my-coins.toml
-//! corpus ingest my-coins.toml                              # acquire → … → enrich
+//! svrn ingest my-coins.toml                                # ingest's own CLI (svrn-ingest)
 //! corpus serve --corpus my-coins                           # the MCP host
 //! ```
 //!
@@ -37,7 +37,6 @@
 
 mod ask;
 use corpus_index::host;
-mod ingest;
 mod mcp;
 mod recipe;
 mod serve;
@@ -68,9 +67,13 @@ enum Command {
     #[command(subcommand)]
     Recipe(recipe::RecipeCommand),
 
-    /// Build a corpus from a recipe against a bare endpoint: acquire,
-    /// extract, chunk, embed, index, then the atlas enrichment.
-    Ingest(ingest::IngestArgs),
+    /// Moved to ingest's own CLI: `svrn ingest <recipe.toml>`. Prints that
+    /// and exits 2.
+    #[command(disable_help_flag = true)]
+    Ingest {
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        rest: Vec<String>,
+    },
 
     /// Serve installed corpora over MCP on stdio, pulling a named corpus's
     /// prebuilt snapshot first if it is not installed here.
@@ -91,8 +94,16 @@ async fn main() -> anyhow::Result<()> {
     let args = Args::parse();
     match args.command {
         Some(Command::Recipe(cmd)) => recipe::run(cmd),
-        Some(Command::Ingest(a)) => ingest::run(a).await,
+        Some(Command::Ingest { .. }) => moved("ingest", "svrn ingest <recipe.toml>"),
         Some(Command::Serve(a)) => serve::run(a).await,
         None => serve::run(args.serve).await,
     }
+}
+
+/// A verb that left this binary answers with where it went and exits 2: a
+/// named pointer, never an unknown-subcommand error (ARCH principle 6).
+fn moved(verb: &str, to: &str) -> anyhow::Result<()> {
+    tracing::debug!(verb, to, "corpus-mcp: moved verb answered with a pointer");
+    eprintln!("corpus-mcp {verb}: moved — run `{to}` instead.");
+    std::process::exit(2)
 }

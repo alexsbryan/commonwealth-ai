@@ -55,7 +55,7 @@ use sovereign_enrichment_build::{
     build_with_progress_with_embedder, config::EnrichConfig, corpus_io, paths, ParsedBuild,
 };
 
-use crate::host;
+use corpus_index::host;
 
 /// The parsed `corpus ingest` invocation. Flags only; every value here is
 /// either something the person typed or something a probe learned.
@@ -677,9 +677,9 @@ mod tests {
     // unit test: `resolve_endpoints(None, None, None)` performs live probes,
     // and on a developer's box the third rung is their own running daemon —
     // the test would pass or fail on what happens to be up. The behaviour is
-    // proven in `tests/verbs.rs::ingest_with_no_endpoint_walks_the_same_ladder`,
+    // proven in `tests/ingest_verbs.rs::ingest_with_no_endpoint_walks_the_same_ladder`,
     // which runs the binary as a subprocess with the daemon knob pointed at a
-    // dead port, and the ladder's ORDER is pinned by `host::tests` next door.
+    // dead port, and the ladder's ORDER is pinned by corpus-index's `host::tests`.
 
     #[tokio::test]
     async fn a_base_url_alongside_a_half_is_refused_rather_than_ranked() {
