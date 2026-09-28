@@ -404,4 +404,12 @@ pub(super) const REGISTRY_TAIL: &[(&str, Class, usize)] = &[
     // on loopback.
     ("commonwealth/crates/commonwealth-rails/src/kv/tests.rs", Class::TestOnly, 4),
     ("commonwealth/crates/commonwealth-rails/src/ledger/tests.rs", Class::TestOnly, 1),
+
+    // ---- mesh-reach: the reach leaf (2026-09-28, REVIEW-audit-pb-auto-6) ----
+    // `RailsTransport` asks cw-rails' reach door at the loopback API base its
+    // caller hands it (d0c824ea7); the peer dial itself is cw-rails'.
+    ("mesh-reach/src/rails.rs", Class::LocalDaemon, 1),
+    // The pb-reach-guest proof (b684a4f06) requests a lender the test itself
+    // spawned, through the loopback tunnel it just opened.
+    ("mesh-reach/src/guest/tests.rs", Class::TestOnly, 1),
 ];
