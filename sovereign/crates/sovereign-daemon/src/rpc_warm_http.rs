@@ -508,7 +508,7 @@ impl Default for MeshRpcShardWarmer {
 /// loopback bridge. Empty when the id is absent/unparseable (legacy host) or
 /// the host isn't in our membership; the caller then uses raw bases alone.
 async fn host_transport_bases(state: &AppState, host_node_id: Option<&str>) -> Vec<String> {
-    let Some(id) = host_node_id.and_then(|h| commonwealth_core::ids::NodeId::from_hex(h)) else {
+    let Some(id) = host_node_id.and_then(|h| kernel_types::NodeId::from_hex(h)) else {
         return Vec::new();
     };
     let member = {

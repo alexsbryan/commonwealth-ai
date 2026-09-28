@@ -35,7 +35,7 @@ use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::Json;
 use commonwealth_core::capabilities::OriginKind;
-use commonwealth_core::ids::NodeId;
+use kernel_types::NodeId;
 use serde::Deserialize;
 
 use crate::daemon::EmbeddedDaemon;

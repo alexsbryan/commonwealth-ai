@@ -24,12 +24,12 @@ use axum::Json;
 use serde::{Deserialize, Serialize};
 
 use commonwealth_core::contributions::{LedgerEvent, LedgerEventKind};
-use commonwealth_core::ids::NodeId;
 use commonwealth_core::mesh::NodeStatus;
 use commonwealth_core::partition;
 use corpus_engine::update::newsworthy_watcher::{
     TickStatusSnapshot, APP_ID_STATUS, STATUS_KEY_LAST_TICK,
 };
+use kernel_types::NodeId;
 
 use crate::state::AppState;
 

@@ -225,7 +225,7 @@ pub async fn internal_gate_layer(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use commonwealth_core::ids::NodeId;
+    use kernel_types::NodeId;
 
     fn loopback() -> Option<SocketAddr> {
         Some("127.0.0.1:41000".parse().unwrap())

@@ -18,9 +18,9 @@ use axum::http::StatusCode;
 use axum::Json;
 use serde::{Deserialize, Serialize};
 
-use commonwealth_core::ids::NodeId;
 use commonwealth_core::mesh::Mesh;
 use commonwealth_discovery::membership;
+use kernel_types::NodeId;
 
 use crate::state::AppState;
 

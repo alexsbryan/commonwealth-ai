@@ -6,9 +6,9 @@ use arc_swap::ArcSwap;
 use tokio::sync::RwLock;
 
 use async_trait::async_trait;
-use commonwealth_core::ids::NodeId;
 use commonwealth_core::mesh::Mesh;
 use corpus_engine::CorpusEngine;
+use kernel_types::NodeId;
 use oicp_types::model_aliases::ModelAliasTable;
 use serving_policy_core::fair_sched::{reciprocity_weight, SchedCore, TryGrant};
 use sovereign_core::identity::IdentityReader;
@@ -506,7 +506,7 @@ impl AppState {
     }
 
     /// This node's identity pubkey, if the node has one.
-    pub fn self_node_pubkey(&self) -> Option<commonwealth_core::ids::NodePubkey> {
+    pub fn self_node_pubkey(&self) -> Option<kernel_types::NodePubkey> {
         self.inner.fabric.self_node_pubkey
     }
 

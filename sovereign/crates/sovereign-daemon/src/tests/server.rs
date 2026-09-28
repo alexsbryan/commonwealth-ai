@@ -28,7 +28,7 @@ async fn a_paused_host_refuses_peer_embeddings_exactly_as_it_refuses_peer_chat()
     let state = test_app_state();
     // Paused far enough ahead that the window cannot lapse mid-test.
     state.set_contribution_paused_until(sovereign_time::unix_now() + 3600);
-    let peer = commonwealth_core::ids::NodeId::from_u128(0xBEEF).to_hex();
+    let peer = kernel_types::NodeId::from_u128(0xBEEF).to_hex();
 
     for path in ["/v1/chat/completions", "/v1/embeddings"] {
         let resp = mock_router(state.clone())

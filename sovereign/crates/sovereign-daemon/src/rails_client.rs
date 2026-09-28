@@ -20,7 +20,7 @@
 
 use std::sync::OnceLock;
 
-use commonwealth_core::ids::NodePubkey;
+use kernel_types::NodePubkey;
 use sovereign_mesh::fabric::ForgottenMember;
 use sovereign_mesh::rail_port::{RailFut, RingRailPort};
 

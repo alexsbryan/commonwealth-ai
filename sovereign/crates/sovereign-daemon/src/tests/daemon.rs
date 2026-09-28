@@ -379,7 +379,7 @@ async fn register_local_model_slots_writes_info_for_all_three_slots() {
         members: Default::default(),
         peers: vec![],
     };
-    let node_id = commonwealth_core::ids::NodeId::generate();
+    let node_id = kernel_types::NodeId::generate();
     let app_state = AppState::new(node_id, mesh);
 
     let cfg = SetupConfig {

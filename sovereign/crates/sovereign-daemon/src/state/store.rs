@@ -19,9 +19,9 @@
 
 use std::sync::Arc;
 
-use commonwealth_core::ids::NodeId;
 use commonwealth_core::mesh::Mesh;
 use corpus_engine::CorpusEngine;
+use kernel_types::NodeId;
 use sovereign_contracts::peer::ReplicatedKv;
 use sovereign_mesh::ledger_port::{
     ActivityLedgerPort, ContributionLedgerPort, InferenceStatePort, PeerPreferencesPort,

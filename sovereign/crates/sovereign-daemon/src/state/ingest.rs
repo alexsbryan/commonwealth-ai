@@ -12,7 +12,7 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
-use commonwealth_core::ids::HandoffId;
+use kernel_types::HandoffId;
 use sovereign_grants::{EphemeralGrantStore, VerifyReport, WorkQueueManager};
 use tokio::sync::RwLock;
 

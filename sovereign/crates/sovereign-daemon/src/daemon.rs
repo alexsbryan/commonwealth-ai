@@ -12,11 +12,11 @@ use tokio::sync::RwLock;
 use tracing::{info, warn};
 
 use crate::state::{AppState, LocalInferenceService, NodeSeed};
-use commonwealth_core::ids::NodeId;
 use commonwealth_core::mesh::Mesh;
 use commonwealth_discovery::mdns::{BrowseHandle, DiscoveredPeer, MdnsDiscovery};
 use commonwealth_discovery::membership;
 use corpus_engine::CorpusEngine;
+use kernel_types::NodeId;
 use sovereign_core::setup_config::SetupConfig;
 use sovereign_core::traits::{InferenceProvider, StateStore};
 // The candidate record lives in `sovereign_contracts::venue` (fp-1; it moved
@@ -2549,7 +2549,7 @@ impl EmbeddedDaemon {
         }
     }
 
-    pub async fn eligible_anchors(&self) -> Vec<commonwealth_core::ids::NodeId> {
+    pub async fn eligible_anchors(&self) -> Vec<kernel_types::NodeId> {
         let app_state = {
             let state = self.state.read().await;
             match &*state {
@@ -4332,7 +4332,7 @@ impl EmbeddedDaemon {
         // restart. `removed_at` tombstones are excluded here and nowhere else.
         let member_check: sovereign_mesh::iroh_access::MemberCheck = {
             let app_state = app_state.clone();
-            Arc::new(move |dialer: commonwealth_core::ids::NodePubkey| {
+            Arc::new(move |dialer: kernel_types::NodePubkey| {
                 let app_state = app_state.clone();
                 // ONE roster read, shared with the internal resolver that must
                 // agree with it: `AppState::member_by_pubkey`.

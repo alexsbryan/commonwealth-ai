@@ -12,8 +12,9 @@ use axum::response::IntoResponse;
 use axum::Json;
 use commonwealth_core::activity::ActivityEventKind;
 use commonwealth_core::contributions::LedgerEventKind;
-use commonwealth_core::ids::{ModelId, NodeId};
+use commonwealth_core::ids::ModelId;
 use commonwealth_core::model::{ModelArchitecture, ModelInfo};
+use kernel_types::NodeId;
 use sovereign_mesh::ledger_port::{
     ActivityLedgerPort, ContributionLedgerPort, InferenceStatePort, PeerPreferencesPort,
     ProcessedShardsPort,

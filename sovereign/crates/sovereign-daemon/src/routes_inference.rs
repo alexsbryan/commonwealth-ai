@@ -9,8 +9,9 @@ use tracing::{debug, info, warn};
 
 use commonwealth_core::activity::{ActivityEventKind, ServedFor};
 use commonwealth_core::contributions::LedgerEventKind;
-use commonwealth_core::ids::{ModelId, NodeId};
+use commonwealth_core::ids::ModelId;
 use commonwealth_core::mesh::NodeStatus;
+use kernel_types::NodeId;
 use oicp_types::{CapabilityClaim, InferenceRequirements, ShardingPrivacy};
 use std::collections::HashSet;
 use std::time::Instant;

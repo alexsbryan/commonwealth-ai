@@ -258,8 +258,9 @@ mod tests {
     use super::*;
 
     fn state() -> AppState {
-        use commonwealth_core::ids::{MeshId, NodeId};
+        use commonwealth_core::ids::MeshId;
         use commonwealth_core::mesh::Mesh;
+        use kernel_types::NodeId;
         use std::collections::HashMap;
         let mesh = Mesh {
             mesh_secret: [0u8; 32],
@@ -492,7 +493,7 @@ mod tests {
         // A peer arrives on the trusting listener over loopback, so the node
         // id must be read before the loopback branch, and a peer that also
         // carries an X-Principal must not be read as the local owner.
-        let id = commonwealth_core::ids::NodeId::from_u128(0xBEEF);
+        let id = kernel_types::NodeId::from_u128(0xBEEF);
         let hex: String = id.as_bytes().iter().map(|b| format!("{b:02x}")).collect();
         let r = resolve(
             &headers(&[("x-node-id", &hex), ("x-principal", "pretend-local")]),
@@ -522,7 +523,7 @@ mod tests {
     /// while recording its VALID node id as a rejected one.
     #[test]
     fn a_peer_presenting_both_a_bearer_and_its_node_id_is_the_member() {
-        let id = commonwealth_core::ids::NodeId::from_u128(0xBEEF);
+        let id = kernel_types::NodeId::from_u128(0xBEEF);
         let hex: String = id.as_bytes().iter().map(|b| format!("{b:02x}")).collect();
         let r = resolve(
             &headers(&[

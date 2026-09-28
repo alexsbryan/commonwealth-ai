@@ -59,8 +59,9 @@ impl AppState {
 #[cfg(test)]
 mod tests {
     use crate::state::AppState;
-    use commonwealth_core::ids::{MeshId, NodeId};
+    use commonwealth_core::ids::MeshId;
     use commonwealth_core::mesh::{Mesh, MESH_SECRET_UNSET};
+    use kernel_types::NodeId;
     use std::collections::HashMap;
 
     fn state_with(secret: [u8; 32]) -> AppState {

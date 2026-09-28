@@ -282,7 +282,7 @@ async fn reload_port_change_requires_restart() {
 /// carried it left peers dialing a stale endpoint for 120 s).
 #[tokio::test]
 async fn reload_moves_the_media_origin_without_a_restart() {
-    use commonwealth_core::ids::NodePubkey;
+    use kernel_types::NodePubkey;
     use sovereign_mesh::iroh_access::{AcceptorRoutes, AppRoutes, OfferRoutes};
     let tmp = tempfile::tempdir().unwrap();
     let path = write_cfg(&tmp, "/m/primary.gguf");
@@ -309,7 +309,7 @@ async fn reload_moves_the_media_origin_without_a_restart() {
         Box::pin(std::future::ready(Some(
             sovereign_mesh::iroh_access::MemberIdentity {
                 name: "Bo".into(),
-                node_id: commonwealth_core::ids::NodeId::from_u128(0xB0),
+                node_id: kernel_types::NodeId::from_u128(0xB0),
             },
         )))
     });

@@ -121,7 +121,7 @@ impl VenueSource for EmbeddedDaemon {
 
 #[async_trait]
 impl VenueHost for EmbeddedDaemon {
-    async fn local_node_id(&self) -> Option<commonwealth_core::ids::NodeId> {
+    async fn local_node_id(&self) -> Option<kernel_types::NodeId> {
         EmbeddedDaemon::self_node_id(self).await
     }
 
@@ -195,7 +195,7 @@ impl VenueSource for DeferredDaemon {
 
 #[async_trait]
 impl VenueHost for DeferredDaemon {
-    async fn local_node_id(&self) -> Option<commonwealth_core::ids::NodeId> {
+    async fn local_node_id(&self) -> Option<kernel_types::NodeId> {
         EmbeddedDaemon::self_node_id(self.daemon.get()?).await
     }
 

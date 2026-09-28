@@ -21,8 +21,8 @@ use axum::http::StatusCode;
 use axum::Json;
 use serde::{Deserialize, Serialize};
 
-use commonwealth_core::ids::NodeId;
 use commonwealth_core::knowledge::IngestionHandoff;
+use kernel_types::NodeId;
 use sovereign_grants::auto_recover::FoldRecovery;
 use sovereign_grants::shard_manager::ShardManager;
 
@@ -582,7 +582,7 @@ pub fn find_local_handoff_for_corpus(
 /// where merge_leader is set to `self_id`). Errors are logged and
 /// swallowed — the response to `complete_unit` already returned 200,
 /// and the operator can retry by re-issuing collaborative ingest.
-pub fn spawn_queue_merge(state: AppState, handoff_id: commonwealth_core::ids::HandoffId) {
+pub fn spawn_queue_merge(state: AppState, handoff_id: kernel_types::HandoffId) {
     tokio::spawn(async move {
         let engine = match state.inner.node.corpus_engine.as_ref() {
             Some(e) => Arc::clone(e),
@@ -689,7 +689,7 @@ pub fn spawn_queue_merge(state: AppState, handoff_id: commonwealth_core::ids::Ha
 
 #[derive(Debug, Deserialize)]
 pub struct NextUnitRequest {
-    pub handoff_id: commonwealth_core::ids::HandoffId,
+    pub handoff_id: kernel_types::HandoffId,
     pub peer_id: NodeId,
 }
 
@@ -711,7 +711,7 @@ pub enum NextUnitResponse {
 
 #[derive(Debug, Deserialize)]
 pub struct HeartbeatRequest {
-    pub handoff_id: commonwealth_core::ids::HandoffId,
+    pub handoff_id: kernel_types::HandoffId,
     pub peer_id: NodeId,
     pub unit_id: commonwealth_core::knowledge::UnitId,
 }
@@ -725,7 +725,7 @@ pub enum HeartbeatResponseBody {
 
 #[derive(Debug, Deserialize)]
 pub struct CompleteUnitRequest {
-    pub handoff_id: commonwealth_core::ids::HandoffId,
+    pub handoff_id: kernel_types::HandoffId,
     pub peer_id: NodeId,
     pub unit_id: commonwealth_core::knowledge::UnitId,
     pub outcome: commonwealth_core::knowledge::CompleteOutcome,
@@ -749,7 +749,7 @@ pub enum CompleteUnitResponse {
 #[derive(Debug, Deserialize)]
 pub struct PartitionEvictRequest {
     pub corpus_id: String,
-    pub handoff_id: commonwealth_core::ids::HandoffId,
+    pub handoff_id: kernel_types::HandoffId,
 }
 
 #[derive(Debug, Serialize)]
@@ -793,7 +793,7 @@ pub async fn corpus_partition_evict(
 
 #[derive(Debug, Deserialize)]
 pub struct CollaborateStatusRequest {
-    pub handoff_id: commonwealth_core::ids::HandoffId,
+    pub handoff_id: kernel_types::HandoffId,
 }
 
 #[derive(Debug, Serialize)]

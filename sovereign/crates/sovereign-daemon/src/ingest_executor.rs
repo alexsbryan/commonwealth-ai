@@ -79,7 +79,6 @@ use std::time::Duration;
 
 use std::collections::BTreeSet;
 
-use commonwealth_core::ids::HandoffId;
 use commonwealth_core::knowledge::{HandoffPhase, UnitId, WorkUnit, LEASE_MS, MAX_UNIT_ATTEMPTS};
 use commonwealth_work::actor::ActorKey;
 use commonwealth_work::executor::{subject_of, ExecuteFuture, JobContext, JobError, JobExecutor};
@@ -87,6 +86,7 @@ use commonwealth_work::projection::{WorkHandoff, WorkProjection, WorkUnitStatus}
 use commonwealth_work::refusal::WorkRefusal;
 use corpus_engine::{CorpusEngine, IngestProgress, ProgressCallback};
 use kernel_types::quality::VerdictSource;
+use kernel_types::HandoffId;
 use kernel_types::{Judgement, Reason};
 use kernel_types::{NodeId, Server};
 use serde::{Deserialize, Serialize};

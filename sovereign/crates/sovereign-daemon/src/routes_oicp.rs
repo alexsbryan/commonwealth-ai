@@ -4,7 +4,7 @@ use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 
-use commonwealth_core::ids::NodeId;
+use kernel_types::NodeId;
 use oicp_types::features::{self, EMBEDDED_FEATURES};
 use oicp_types::{
     Capability, CapabilityClaim, CapabilityHint, CapabilityProfile, CorpusDescriptor,

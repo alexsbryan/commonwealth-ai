@@ -24,11 +24,11 @@ use std::sync::Arc;
 use crate::state::AppState;
 use bytes::Bytes;
 use commonwealth_core::contributions::{LedgerEvent, LedgerEventKind};
-use commonwealth_core::ids::NodeId;
 use commonwealth_core::mesh::NodeStatus;
 use commonwealth_core::partition;
 use corpus_engine::update::newsworthy_watcher::{CommittedDocs, NewsworthyHost};
 use corpus_index::error::{Error as CorpusError, Result as CorpusResult};
+use kernel_types::NodeId;
 use sovereign_contracts::identity::IdentityReader;
 use sovereign_contracts::peer::ReplicatedKv;
 

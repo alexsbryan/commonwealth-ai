@@ -223,7 +223,7 @@ fn folded(status: WorkUnitStatus) -> (WorkProjection, UnitRef) {
     use commonwealth_work::projection::{ProjectedUnit, WorkHandoff};
     use sovereign_contracts::oicp::JobRequirements;
 
-    let handoff = commonwealth_core::HandoffId::from_u128(7);
+    let handoff = kernel_types::HandoffId::from_u128(7);
     let unit_hash = "a".repeat(64);
     let unit = JobUnit {
         kind: JobKind::parse("process:v1").expect("kind"),
@@ -571,7 +571,7 @@ fn a_completed_unit_credits_this_node_with_the_time_it_actually_spent() {
 
     let me = a_key('a');
     let unit = a_unit();
-    let handoff = commonwealth_core::HandoffId::from_u128(7);
+    let handoff = kernel_types::HandoffId::from_u128(7);
     let act = WorkAct::Complete(Completion {
         handoff,
         unit_hash: unit.unit_hash.clone(),
@@ -617,7 +617,7 @@ fn a_unit_that_never_reached_a_verdict_credits_nothing() {
     let me = a_key('a');
     let unit = a_unit();
     let act = WorkAct::Fail(Failure {
-        handoff: commonwealth_core::HandoffId::from_u128(7),
+        handoff: kernel_types::HandoffId::from_u128(7),
         unit_hash: unit.unit_hash.clone(),
         outcome: kernel_types::Judgement::could_not_judge(
             "unit",
@@ -640,7 +640,7 @@ fn a_red_shard_is_still_a_donation() {
     let me = a_key('a');
     let unit = a_unit();
     let act = WorkAct::Complete(Completion {
-        handoff: commonwealth_core::HandoffId::from_u128(7),
+        handoff: kernel_types::HandoffId::from_u128(7),
         unit_hash: unit.unit_hash.clone(),
         outcome: kernel_types::Judgement::failed("unit", kernel_types::Reason::literal("3 failed")),
         result: serde_json::json!({ "exit_code": 101 }),
@@ -661,7 +661,7 @@ fn an_act_that_is_not_a_report_credits_nothing() {
     let me = a_key('a');
     let unit = a_unit();
     let r = UnitRef {
-        handoff: commonwealth_core::HandoffId::from_u128(7),
+        handoff: kernel_types::HandoffId::from_u128(7),
         unit_hash: unit.unit_hash.clone(),
     };
     assert!(credit_for(&WorkAct::Lease(r.clone()), &unit, &me, 9.0).is_none());

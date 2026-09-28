@@ -3,7 +3,7 @@ use std::collections::HashMap;
 
 use axum::extract::State;
 use axum::Json;
-use commonwealth_core::ids::NodeId;
+use kernel_types::NodeId;
 use serde::Serialize;
 use sovereign_contracts::run_identity::BuildStamp;
 

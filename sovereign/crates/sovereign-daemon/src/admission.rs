@@ -25,7 +25,7 @@ use std::sync::Arc;
 use crate::client_auth::ClientAuthPolicy;
 use crate::state::{AppState, AppStateInner};
 use axum::http::HeaderMap;
-use commonwealth_core::ids::NodeId;
+use kernel_types::NodeId;
 
 pub use sovereign_serving_host::admission::{
     client_fair_concurrency_from_env, client_fairness_enabled_from_env, client_fairness_layer,
@@ -352,8 +352,9 @@ mod tests {
     use crate::state::AppState;
     use axum::routing::post;
     use axum::Router;
-    use commonwealth_core::ids::{MeshId, NodeId};
+    use commonwealth_core::ids::MeshId;
     use commonwealth_core::mesh::Mesh;
+    use kernel_types::NodeId;
     use tower::ServiceExt;
 
     use axum::http::header::RETRY_AFTER;

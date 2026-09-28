@@ -657,8 +657,8 @@ use sovereign_mesh::ring_roster::MeshRoster;
 
 use sovereign_mesh::measurements_rail::tests::a_measurement;
 
-fn node(b: u8) -> commonwealth_core::ids::NodeId {
-    commonwealth_core::ids::NodeId::from_u128(u128::from(b))
+fn node(b: u8) -> kernel_types::NodeId {
+    kernel_types::NodeId::from_u128(u128::from(b))
 }
 
 /// A publisher is named from the ROSTER, never from the payload it wrote.

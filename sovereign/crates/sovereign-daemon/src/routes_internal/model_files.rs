@@ -402,8 +402,9 @@ mod tests {
     use axum::http::Request;
     use axum::routing::get;
     use axum::Router;
-    use commonwealth_core::ids::{MeshId, NodeId};
+    use commonwealth_core::ids::MeshId;
     use commonwealth_core::mesh::Mesh;
+    use kernel_types::NodeId;
     use std::io::Write;
     use tower::util::ServiceExt;
 

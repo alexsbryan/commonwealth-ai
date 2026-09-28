@@ -132,7 +132,7 @@ pub(super) use corpus_queue::{find_local_handoff_for_corpus, spawn_queue_merge};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IngestPartitionRequest {
-    pub handoff_id: commonwealth_core::ids::HandoffId,
+    pub handoff_id: kernel_types::HandoffId,
     pub corpus_id: String,
     pub recipe_id: String,
     pub file_indices: Vec<usize>,

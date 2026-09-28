@@ -25,7 +25,7 @@ use axum::http::StatusCode;
 use axum::Json;
 use serde::{Deserialize, Serialize};
 
-use commonwealth_core::ids::NodeId;
+use kernel_types::NodeId;
 use sovereign_grants::ingest_grant::DEFAULT_GRANT_TTL_SECS;
 
 use crate::state::AppState;

@@ -14,9 +14,10 @@ use std::sync::{Arc, RwLock};
 use commonwealth_core::activity::{ActivityEvent, ActivityEventKind, ActivitySummary};
 use commonwealth_core::capabilities::NodeCapabilities;
 use commonwealth_core::contributions::{LedgerEvent, LedgerEventKind, NodeContributions};
-use commonwealth_core::ids::{ModelId, NodeId};
+use commonwealth_core::ids::ModelId;
 use commonwealth_core::model::ModelInfo;
 use commonwealth_core::oicp::EmbedModelInfo;
+use kernel_types::NodeId;
 use serde::de::DeserializeOwned;
 use serde_json::{json, Value};
 use sovereign_mesh::ledger_port::{

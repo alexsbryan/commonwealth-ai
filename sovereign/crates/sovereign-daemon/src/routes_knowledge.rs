@@ -25,8 +25,8 @@ use std::time::Duration;
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::Json;
-use commonwealth_core::ids::NodeId;
 use commonwealth_core::mesh::{MemberRecord, NodeStatus};
+use kernel_types::NodeId;
 use oicp_types::{KnowledgeResult, KnowledgeSearchRequest, KnowledgeSearchResponse};
 
 use crate::state::AppState;

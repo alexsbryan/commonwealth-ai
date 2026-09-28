@@ -20,9 +20,9 @@ use axum::http::StatusCode;
 use axum::Json;
 use serde::{Deserialize, Serialize};
 
-use commonwealth_core::ids::NodeId;
 use commonwealth_core::knowledge::IngestionHandoff;
 use commonwealth_core::mesh::NodeStatus;
+use kernel_types::NodeId;
 use sovereign_grants::knowledge_assignment::{
     build_work_units_hf, build_work_units_jsonl_sharded, build_work_units_jsonl_single,
     plan_collaborative_ingestion, plan_collaborative_ingestion_jsonl,
