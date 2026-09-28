@@ -32,6 +32,10 @@ pub mod error;
 // `pub mod glob` in `commonwealth-core` and the move is what makes the
 // privacy true rather than intended — a `git grep` before the move found zero
 // consumers outside the module that travels with it.
+/// The local activity ledger records (pb-mesh-exit-core).
+pub mod activity;
+/// The contribution ledger records (pb-mesh-exit-core).
+pub mod contributions;
 mod glob;
 pub mod inference_service;
 pub mod ingest;
@@ -41,6 +45,7 @@ pub mod knowledge;
 pub mod manifest;
 pub mod mcp;
 pub mod model_aliases;
+pub mod model_catalog;
 /// The node-to-node model-transfer wire (`/internal/v1/models/*`).
 pub mod model_transfer;
 pub mod openai_types;
