@@ -45,8 +45,3 @@ pb-meshapp-solve
 pb-mesh-dissolve
 pb-serve-package
 pb-distribution
-# phase-b-33 (operator): operator-side steps the sweep found; they block nothing.
-HUMAN-pb-code-cutover
-HUMAN-pb-notes-migrate
-HUMAN-pb-serve-distributes-bar
-HUMAN-pb-flip-roster
