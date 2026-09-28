@@ -348,6 +348,10 @@ pub struct Sealed {
 mod journal;
 pub use journal::RingJournal;
 
+// The v1 checkpoint document's one composer (moved from sovereign-mesh,
+// phase-b pb-rails-parity).
+pub mod ring_checkpoint;
+
 #[cfg(test)]
 mod tests;
 #[cfg(test)]
