@@ -21,7 +21,7 @@ asserts = 3
 requirement = "FE-100"
 test = "sovereign-daemon::admission::tests::peer_traffic_and_client_traffic_never_consume_each_others_budget"
 file = "sovereign/crates/sovereign-daemon/src/admission.rs"
-line = 825
+line = 826
 asserts = 7
 
 [[claim]]
@@ -49,14 +49,14 @@ asserts = 3
 requirement = "FE-99"
 test = "sovereign-daemon::admission::tests::middleware_malformed_header_is_refused_and_still_named"
 file = "sovereign/crates/sovereign-daemon/src/admission.rs"
-line = 1162
+line = 1163
 asserts = 4
 
 [[claim]]
 requirement = "FE-99"
 test = "sovereign-daemon::routes_status::process_status_tests::zero_bucket_row_names_rejected_header_and_expected_form"
 file = "sovereign/crates/sovereign-daemon/src/routes_status.rs"
-line = 759
+line = 756
 asserts = 4
 
 [[claim]]
