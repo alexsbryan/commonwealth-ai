@@ -28,9 +28,15 @@ case $side in
   stock)
     printf '[models]\nprimary = "%s"\nembed = "%s/absent-embed.gguf"\ncontext_size = %s\n\n[daemon]\nclient_port = %s\ninternal_port = 18491\nrails_base = "http://127.0.0.1:18499"\n\n[data]\ndir = "%s/data"\n' \
       "$gguf" "$root" "$ctx" $svrn "$root" > "$root/config.toml"
-    SOVEREIGN_SKIP_VRAM_CHECK=1 HOME=$root/home SVRNMESH_DATA_DIR=$root/svrnmesh \
+    # Installed and run outside any checkout, as a distribution is: a binary
+    # under this repo's target/ finds the checkout from current_exe
+    # (sovereign-daemon workspace.rs:97) and puts an inotify watch on it.
+    inst=$HOME/.cache/pb-idle-stock
+    mkdir -p "$inst"
+    cmp -s "$bin" "$inst/sovereign-stock" || cp "$bin" "$inst/sovereign-stock"
+    (cd "$inst" && SOVEREIGN_SKIP_VRAM_CHECK=1 HOME=$root/home SVRNMESH_DATA_DIR=$root/svrnmesh \
       CW_RAILS_DIR=$root/rails SOVEREIGN_SERVE_PORT=$serve RUST_LOG=info \
-      "$bin" run --config "$root/config.toml" > "$out/$label.server.log" 2>&1 &
+      exec ./sovereign-stock run --config "$root/config.toml") > "$out/$label.server.log" 2>&1 &
     ;;
   *) echo "idle-stock-bars: side is stock or llama, not $side" >&2; exit 2 ;;
 esac
