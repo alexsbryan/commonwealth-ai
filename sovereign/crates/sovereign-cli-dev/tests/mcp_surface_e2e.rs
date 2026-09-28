@@ -54,14 +54,9 @@ fn empty_graph() -> sovereign_code::ScipGraphHandle {
     ))
 }
 
-fn empty_engine() -> Arc<corpus_engine::CorpusEngine> {
-    let embed: corpus_index::types::EmbedFn = Arc::new(|_text: &str| {
-        Box::pin(async {
-            Ok::<Vec<f32>, corpus_index::Error>(vec![0.0; corpus_index::types::DEFAULT_EMBED_DIM])
-        })
-    });
+fn empty_engine() -> Arc<corpus_index::fs_source::FsIndexSource> {
     let dir = tempfile::tempdir().unwrap().keep();
-    Arc::new(corpus_engine::CorpusEngine::new(dir.clone(), dir, embed))
+    Arc::new(corpus_index::fs_source::FsIndexSource::new(dir))
 }
 
 /// Each renamed tool's `descriptor().id` is the canonical (new)

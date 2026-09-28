@@ -87,16 +87,10 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
     eprintln!("  Sovereign Code Intelligence MCP Server");
     eprintln!("  {}", "─".repeat(54));
 
-    // ── Build CorpusEngine (zero-vector, no model) ──────────────
+    // ── Index source (the leaf's filesystem reader, no model) ───
 
-    let embed: EmbedFn = Arc::new(|_text: &str| {
-        Box::pin(async {
-            Ok::<Vec<f32>, corpus_index::Error>(vec![0.0; corpus_index::types::DEFAULT_EMBED_DIM])
-        })
-    });
-    let recipes_dir = data_dir.clone();
     let engine = Arc::new(
-        CorpusEngine::new(recipes_dir, data_dir.clone(), embed)
+        corpus_index::fs_source::FsIndexSource::new(data_dir.clone())
             .with_embedding_model(&configured_embed_model_name()),
     );
 

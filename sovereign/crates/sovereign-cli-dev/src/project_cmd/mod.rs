@@ -10,9 +10,6 @@ use std::io::{self, BufRead as _, IsTerminal as _, Write as _};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use corpus_engine::{CorpusEngine, CorpusSpec, IngestProgress};
-use corpus_index::types::EmbedFn;
-
 // ─── Command submodules (god-file breakup — see quality/CLEANUP.md) ───
 mod audit;
 pub(crate) use audit::cmd_audit;
@@ -37,7 +34,7 @@ mod observe;
 pub(crate) use observe::{cmd_lifecycle, cmd_observe};
 
 /// Human-readable identifier for the embed model this user has set up,
-/// used as the `expected_embedding_model` on the `CorpusEngine` so the
+/// used as the `expected_embedding_model` on the index source so the
 /// log line and `_corpus_meta.json` reflect what they actually loaded
 /// (e.g. `qwen3-embedding-0.6b-q8_0`) instead of the engine's default.
 ///

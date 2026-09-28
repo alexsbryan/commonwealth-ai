@@ -12363,6 +12363,7 @@ dependencies = [
  "tower-http",
  "tracing",
  "tracing-subscriber",
+ "understanding-vocab",
  "uuid",
  "which",
  "workspace-hack",

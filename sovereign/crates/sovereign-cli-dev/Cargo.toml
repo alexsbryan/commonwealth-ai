@@ -97,6 +97,8 @@ corpus-index = { workspace = true, optional = true }
 # through corpus-engine's feature of the same name.
 code-facts = { workspace = true, optional = true, features = ["treesitter", "stores"] }
 corpus-engine-notes = { workspace = true, optional = true }
+# The atlas atom schema and reader `git-archaeology` reads (a shared leaf).
+understanding-vocab = { workspace = true, optional = true }
 # `code_fieldglass` renders the layer-flow panel from the SAME parser/evaluator
 # the layer gate uses (one decider), and the SRP co-change communities from the
 # same git harvest the drift/arch temporal sections use.
@@ -160,6 +162,7 @@ workbench = [
     "dep:oicp-client",
     "dep:code-facts",
     "dep:corpus-engine-notes",
+    "dep:understanding-vocab",
     "dep:arch-layers",
     "dep:corpus-engine-archaeology",
     "dep:corpus-engine-watchers",

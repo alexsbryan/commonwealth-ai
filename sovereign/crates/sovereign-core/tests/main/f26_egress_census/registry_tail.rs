@@ -18,7 +18,9 @@ pub(super) const REGISTRY_TAIL: &[(&str, Class, usize)] = &[
     // `svrn code index` for sovereign-cli-shared::code_index. The three that
     // remain are cmd_facts' http client and cmd_watch's two.
     ("sovereign/crates/sovereign-cli-dev/src/code_cmd.rs", Class::LocalDaemon, 3),
-    ("sovereign/crates/sovereign-cli-dev/src/tools_cmd/registry.rs", Class::LocalDaemon, 3),
+    // registry 3 -> 2 (pb-code-clean): the engine's embedder left with the
+    // engine; the code tools read indexes through the leaf's FsIndexSource.
+    ("sovereign/crates/sovereign-cli-dev/src/tools_cmd/registry.rs", Class::LocalDaemon, 2),
     // `svrn ring` talks to ONE address: `127.0.0.1:<daemon client_port>`, for
     // the rail routes and the guest-grant mint. Nothing a ring app writes
     // leaves the machine through this client — replication is the daemon's

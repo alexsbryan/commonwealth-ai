@@ -38,10 +38,9 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use corpus_engine::CorpusEngine;
 use corpus_engine_notes::{NoteStore, ProjectDocsStore};
 use corpus_engine_watchers::{LintResultStore, TestResultStore};
-use corpus_index::types::EmbedFn;
+use corpus_index::fs_source::FsIndexSource;
 use sovereign_cli_base::{dirs::default_data_dir, repo::find_sovereign_dir};
 use sovereign_contracts::registry::ToolRegistry;
 
@@ -78,13 +77,10 @@ pub(super) async fn open_tools_registry() -> Result<ToolsEnv, String> {
     // 2026-05-06 with rows untouched since Apr 21.
     let flat_stores_dir = sovereign_cli_base::dirs::sovereign_root();
 
-    // Embed function: prefer the running daemon's embed slot so
+    // Notes embed function: prefer the running daemon's embed slot so
     // `tools call notes` benefits from T1 semantic blend on the
-    // CLI side just like the MCP-over-HTTP path does. Falls back
-    // to zero-vector when the daemon is unreachable — every tool
-    // here either ignores embeddings (pure SQL/FTS) or treats
-    // zero vectors as "no semantic signal" and returns FTS-only
-    // results, so the offline mode stays correct.
+    // CLI side just like the MCP-over-HTTP path does. `None` when the
+    // daemon is unreachable, and the notes store stays FTS-only.
     // THE accessor (§10.6, TOPOLOGY §10 phase 6/10). This read its own
     // `SOVEREIGN_DAEMON_URL` and had drifted from `daemon_base_url()` in two
     // ways that both point at the WRONG DAEMON rather than at no daemon:
@@ -99,9 +95,10 @@ pub(super) async fn open_tools_registry() -> Result<ToolsEnv, String> {
     // An env read at point of use is invisible to go-to-definition, which is
     // the whole reason the environment axis is a phase.
     let daemon_url = sovereign_cli_base::urls::daemon_base_url();
-    let embed: EmbedFn = build_daemon_embed_fn_or_zero(&daemon_url).await;
     let notes_embed = build_daemon_notes_embed_fn_or_none(&daemon_url).await;
-    let engine = Arc::new(CorpusEngine::new(data_dir.clone(), data_dir.clone(), embed));
+    // The code tools read installed indexes only (list + open), so the
+    // leaf's filesystem source serves them; no engine, no embedder.
+    let engine = Arc::new(FsIndexSource::new(data_dir.clone()));
 
     // Stores — open each; degrade to in-memory on error so the CLI
     // still works in a cold repo.
@@ -431,63 +428,6 @@ fn find_git_root(start: &std::path::Path) -> Option<PathBuf> {
         return None;
     }
     Some(PathBuf::from(String::from_utf8_lossy(&out.stdout).trim()))
-}
-
-/// Build a `corpus_index::types::EmbedFn` backed by the running daemon's
-/// `/v1/embeddings`. Probes once; if the daemon's offline at CLI
-/// startup, returns the zero-vector fallback so SQL/FTS tools
-/// stay correct and embedding-sensitive tools degrade to FTS-only
-/// behavior. Per call, the closure retries (no probe latch).
-async fn build_daemon_embed_fn_or_zero(daemon_url: &str) -> EmbedFn {
-    let reachable = probe_daemon(daemon_url).await;
-    if !reachable {
-        return Arc::new(|_text: &str| {
-            Box::pin(async {
-                Ok::<Vec<f32>, corpus_index::Error>(vec![
-                    0.0;
-                    corpus_index::types::DEFAULT_EMBED_DIM
-                ])
-            })
-        });
-    }
-    let url = format!("{}/v1/embeddings", daemon_url);
-    let model = "qwen-embedding-0.6b".to_string();
-    Arc::new(move |text: &str| {
-        let url = url.clone();
-        let model = model.clone();
-        let input = text.to_string();
-        Box::pin(async move {
-            let resp = reqwest::Client::new()
-                .post(&url)
-                .json(&serde_json::json!({ "model": model, "input": input }))
-                .timeout(std::time::Duration::from_secs(10))
-                .send()
-                .await
-                .map_err(|e| corpus_index::Error::Embed(format!("daemon: {e}")))?;
-            if !resp.status().is_success() {
-                return Err(corpus_index::Error::Embed(format!(
-                    "daemon HTTP {}",
-                    resp.status()
-                )));
-            }
-            let body: serde_json::Value = resp
-                .json()
-                .await
-                .map_err(|e| corpus_index::Error::Embed(format!("daemon parse: {e}")))?;
-            body.get("data")
-                .and_then(|v| v.get(0))
-                .and_then(|v| v.get("embedding"))
-                .and_then(|v| v.as_array())
-                .map(|arr| {
-                    arr.iter()
-                        .filter_map(|v| v.as_f64().map(|f| f as f32))
-                        .collect::<Vec<f32>>()
-                })
-                .ok_or_else(|| {
-                    corpus_index::Error::Embed("daemon: no embedding in response".into())
-                })
-        })
-    })
 }
 
 /// Build a `corpus_engine_notes::EmbedFn` adapter for the daemon's
