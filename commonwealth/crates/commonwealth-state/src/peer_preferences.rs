@@ -46,56 +46,19 @@ use crate::store::MeshStore;
 /// the local machine.
 pub const PEER_PREFERENCES_APP_ID: &str = "peer_preferences";
 
-/// A single peer preference. Constructed via [`PeerPreference::new`]
-/// which enforces the `(0.0, 1.0]` clamp; direct field
-/// construction is impossible because the type is a struct with
-/// private invariants.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct PeerPreference {
-    multiplier: f64,
-    reason: Option<String>,
-    set_at: u64,
-}
+// The record and its clamp live in `oicp_types::peer_preference` since
+// pb-mesh-exit-core; re-exported at its historical path.
+pub use oicp_types::peer_preference::PeerPreference;
 
-impl PeerPreference {
-    /// Construct a preference. `multiplier` must lie in
-    /// `(0.0, 1.0]` — values outside this range, NaN, and
-    /// non-finite f64s are all rejected with `Err`. The error path
-    /// is deliberately the *only* way to fail to set a preference;
-    /// callers don't have to defensively re-validate elsewhere.
-    pub fn new(multiplier: f64, reason: Option<String>) -> Result<Self> {
-        if !multiplier.is_finite() {
-            return Err(Error::Backend(format!(
-                "peer-preference multiplier must be finite, got {multiplier}"
-            )));
-        }
-        if multiplier <= 0.0 || multiplier > 1.0 {
-            return Err(Error::Backend(format!(
-                "peer-preference multiplier must be in (0.0, 1.0], got {multiplier}"
-            )));
-        }
-        let set_at = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map(|d| d.as_secs())
-            .unwrap_or(0);
-        Ok(Self {
-            multiplier,
-            reason,
-            set_at,
-        })
-    }
-
-    pub fn multiplier(&self) -> f64 {
-        self.multiplier
-    }
-
-    pub fn reason(&self) -> Option<&str> {
-        self.reason.as_deref()
-    }
-
-    pub fn set_at(&self) -> u64 {
-        self.set_at
-    }
+/// Construct a [`PeerPreference`] stamped with the wall clock now. The
+/// `(0.0, 1.0]` clamp is `PeerPreference::new`'s; a rejected multiplier is
+/// `Error::Backend` carrying that constructor's words, as before the move.
+pub fn peer_preference(multiplier: f64, reason: Option<String>) -> Result<PeerPreference> {
+    let set_at = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    PeerPreference::new(multiplier, reason, set_at).map_err(Error::Backend)
 }
 
 /// Local-only store of per-peer preferences. Backed by `MeshStore`
@@ -123,8 +86,8 @@ impl PeerPreferenceStore {
             .map_err(|e| Error::Backend(format!("serialize peer preference: {e}")))?;
         tracing::info!(
             peer = %fmt_peer(peer),
-            multiplier = pref.multiplier,
-            has_reason = pref.reason.is_some(),
+            multiplier = pref.multiplier(),
+            has_reason = pref.reason().is_some(),
             "peer_pref: set"
         );
         self.store.set(
@@ -335,33 +298,33 @@ mod tests {
 
     #[test]
     fn peer_preference_constructor_accepts_legal_range() {
-        assert!(PeerPreference::new(1.0, None).is_ok());
-        assert!(PeerPreference::new(0.5, None).is_ok());
-        assert!(PeerPreference::new(0.001, None).is_ok());
-        assert!(PeerPreference::new(0.999, Some("reason".into())).is_ok());
+        assert!(peer_preference(1.0, None).is_ok());
+        assert!(peer_preference(0.5, None).is_ok());
+        assert!(peer_preference(0.001, None).is_ok());
+        assert!(peer_preference(0.999, Some("reason".into())).is_ok());
     }
 
     #[test]
     fn peer_preference_constructor_rejects_out_of_range() {
         // Above 1.0 — no favoritism.
-        assert!(PeerPreference::new(1.0001, None).is_err());
-        assert!(PeerPreference::new(2.0, None).is_err());
-        assert!(PeerPreference::new(f64::INFINITY, None).is_err());
+        assert!(peer_preference(1.0001, None).is_err());
+        assert!(peer_preference(2.0, None).is_err());
+        assert!(peer_preference(f64::INFINITY, None).is_err());
         // At or below 0.0 — open lower bound (use `clear` to remove
         // a peer; do not zero them out structurally).
-        assert!(PeerPreference::new(0.0, None).is_err());
-        assert!(PeerPreference::new(-0.0001, None).is_err());
-        assert!(PeerPreference::new(-1.0, None).is_err());
-        assert!(PeerPreference::new(f64::NEG_INFINITY, None).is_err());
+        assert!(peer_preference(0.0, None).is_err());
+        assert!(peer_preference(-0.0001, None).is_err());
+        assert!(peer_preference(-1.0, None).is_err());
+        assert!(peer_preference(f64::NEG_INFINITY, None).is_err());
         // NaN.
-        assert!(PeerPreference::new(f64::NAN, None).is_err());
+        assert!(peer_preference(f64::NAN, None).is_err());
     }
 
     #[test]
     fn set_get_clear_round_trips() {
         let store = MeshStore::in_memory().unwrap();
         let prefs = PeerPreferenceStore::new(store, nid(1));
-        let pref = PeerPreference::new(0.5, Some("over-consuming".into())).unwrap();
+        let pref = peer_preference(0.5, Some("over-consuming".into())).unwrap();
         prefs.set(&nid(2), pref.clone()).unwrap();
         let got = prefs.get(&nid(2)).unwrap().unwrap();
         assert!((got.multiplier() - 0.5).abs() < 1e-12);
@@ -376,10 +339,10 @@ mod tests {
         let store = MeshStore::in_memory().unwrap();
         let prefs = PeerPreferenceStore::new(store, nid(1));
         prefs
-            .set(&nid(2), PeerPreference::new(0.8, None).unwrap())
+            .set(&nid(2), peer_preference(0.8, None).unwrap())
             .unwrap();
         prefs
-            .set(&nid(3), PeerPreference::new(0.5, None).unwrap())
+            .set(&nid(3), peer_preference(0.5, None).unwrap())
             .unwrap();
         let mut listed = prefs.list().unwrap();
         listed.sort_by_key(|(id, _)| id.as_bytes().to_vec());

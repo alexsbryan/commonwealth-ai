@@ -35,7 +35,7 @@ pub use commonwealth_state::contributions::STORAGE_SNAPSHOT_INTERVAL;
 /// The record types these ports carry that live in commonwealth-state,
 /// re-exported so the dialing side names them without that crate.
 pub use commonwealth_state::inference_plan::{InferencePlan, ShardPlan};
-pub use commonwealth_state::peer_preferences::PeerPreference;
+pub use commonwealth_state::peer_preferences::{peer_preference, PeerPreference};
 
 /// Why a ledger call produced no answer. The message names the process that
 /// did not answer and why; it is reported, never defaulted.

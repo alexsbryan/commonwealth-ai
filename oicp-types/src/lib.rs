@@ -37,6 +37,7 @@ pub mod activity;
 /// The contribution ledger records (pb-mesh-exit-core).
 pub mod contributions;
 mod glob;
+pub mod inference_plan;
 pub mod inference_service;
 pub mod ingest;
 pub mod job;
@@ -50,6 +51,7 @@ pub mod model_catalog;
 pub mod model_transfer;
 pub mod openai_types;
 pub mod origin;
+pub mod peer_preference;
 /// Per-pipeline context-injection flags carried by a resolved pipeline alias —
 /// moved down from `serving-policy` so the middleware seam can name it without
 /// a `sovereign-contracts → serving-policy` edge (domains

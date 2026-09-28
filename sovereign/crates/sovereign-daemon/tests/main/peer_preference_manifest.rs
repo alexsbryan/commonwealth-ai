@@ -39,7 +39,7 @@ use sovereign_daemon::server::client_router;
 use sovereign_daemon::slot_manifest::CoreSlotManifest;
 use sovereign_daemon::state::{AppState, LocalInferenceService, ServingSeed};
 use sovereign_mesh::inference_adapter::SovereignInferenceAdapter;
-use sovereign_mesh::ledger_port::PeerPreference;
+use sovereign_mesh::ledger_port::peer_preference;
 
 use crate::common;
 use crate::common::{id_to_hex, member, spawn_router, TestProvider};
@@ -127,7 +127,7 @@ async fn x_node_id_with_set_preference_halves_all_claim_affinities() {
         .peer_preferences
         .set(
             &target_peer,
-            PeerPreference::new(0.5, Some("sanction reason".into())).unwrap(),
+            peer_preference(0.5, Some("sanction reason".into())).unwrap(),
         )
         .await
         .expect("set preference");
@@ -177,7 +177,7 @@ async fn x_node_id_for_unmatched_peer_does_not_modify_affinities() {
         .inner
         .store
         .peer_preferences
-        .set(&stored_peer, PeerPreference::new(0.25, None).unwrap())
+        .set(&stored_peer, peer_preference(0.25, None).unwrap())
         .await
         .expect("set preference");
 
@@ -207,7 +207,7 @@ async fn no_header_does_not_pick_up_any_stored_preference() {
         .inner
         .store
         .peer_preferences
-        .set(&stored_peer, PeerPreference::new(0.1, None).unwrap())
+        .set(&stored_peer, peer_preference(0.1, None).unwrap())
         .await
         .expect("set preference");
 

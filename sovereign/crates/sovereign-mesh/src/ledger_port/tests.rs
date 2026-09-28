@@ -178,10 +178,7 @@ async fn peer_preferences_answer_what_the_store_answers() {
     let peer = NodeId::from_u128(9);
     let prefs = PeerPreferenceStore::new(store, NodeId::from_u128(DAEMON));
     prefs
-        .set(
-            &peer,
-            PeerPreference::new(0.5, Some("slow".into())).unwrap(),
-        )
+        .set(&peer, peer_preference(0.5, Some("slow".into())).unwrap())
         .unwrap();
 
     assert_eq!(

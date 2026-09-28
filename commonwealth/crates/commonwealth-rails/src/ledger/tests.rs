@@ -11,7 +11,7 @@ use commonwealth_core::ids::{ModelId, NodeId};
 use commonwealth_core::model::{ModelArchitecture, ModelInfo};
 use commonwealth_core::oicp::{EmbedModelInfo, NormalizationStrategy, PoolingStrategy};
 use commonwealth_state::inference_plan::InferencePlan;
-use commonwealth_state::peer_preferences::{PeerPreference, PeerPreferenceStore};
+use commonwealth_state::peer_preferences::{peer_preference, PeerPreference, PeerPreferenceStore};
 use commonwealth_state::MeshStore;
 use serde_json::{json, Value};
 
@@ -146,10 +146,7 @@ async fn peer_preferences_list_and_get_read_the_store() {
     let store = MeshStore::in_memory().unwrap();
     let peer = NodeId::from_u128(9);
     PeerPreferenceStore::new(store.clone(), NodeId::from_u128(DAEMON))
-        .set(
-            &peer,
-            PeerPreference::new(0.5, Some("slow".into())).unwrap(),
-        )
+        .set(&peer, peer_preference(0.5, Some("slow".into())).unwrap())
         .unwrap();
     let base = serve(store).await;
 
