@@ -8,11 +8,23 @@
 //! - [`guest_link`]: the guest-link record on disk.
 //! - [`urls`]: the client daemon base URL.
 //! - [`rail`] (`rail-client`): the operator-side rail client.
+//! - [`repo`], [`prompts`], [`deprecation`], [`tracing_init`], [`models`],
+//!   [`code_index`] (`tempfile_dir`) and [`mcp_client`] (`mcp-client`): moved
+//!   from `sovereign-cli-shared` so the code program's CLI names no svrn CLI
+//!   crate (pb-code-cli-base).
 
+pub mod code_index;
+pub mod deprecation;
 pub mod dirs;
 pub mod dispatcher;
 pub mod guest_link;
 pub mod help;
+#[cfg(feature = "mcp-client")]
+pub mod mcp_client;
+pub mod models;
+pub mod prompts;
 #[cfg(feature = "rail-client")]
 pub mod rail;
+pub mod repo;
+pub mod tracing_init;
 pub mod urls;

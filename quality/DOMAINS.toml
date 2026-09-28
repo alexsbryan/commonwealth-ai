@@ -10693,7 +10693,7 @@ lines = 605
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-shared/src/deprecation.rs"
+path = "sovereign/crates/sovereign-cli-base/src/deprecation.rs"
 context = "unknown"
 lines = 125
 note = ""
@@ -10735,13 +10735,13 @@ lines = 68
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-shared/src/mcp_client.rs"
+path = "sovereign/crates/sovereign-cli-base/src/mcp_client.rs"
 context = "unknown"
 lines = 124
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-shared/src/models.rs"
+path = "sovereign/crates/sovereign-cli-base/src/models.rs"
 context = "unknown"
 lines = 37
 note = ""
@@ -10759,7 +10759,7 @@ lines = 402
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-shared/src/prompts.rs"
+path = "sovereign/crates/sovereign-cli-base/src/prompts.rs"
 context = "unknown"
 lines = 205
 note = ""
@@ -10771,7 +10771,7 @@ lines = 222
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-shared/src/repo.rs"
+path = "sovereign/crates/sovereign-cli-base/src/repo.rs"
 context = "unknown"
 lines = 130
 note = ""
@@ -10783,7 +10783,7 @@ lines = 109
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-shared/src/tracing_init.rs"
+path = "sovereign/crates/sovereign-cli-base/src/tracing_init.rs"
 context = "unknown"
 lines = 48
 note = ""

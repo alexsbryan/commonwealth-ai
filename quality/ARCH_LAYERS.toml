@@ -1166,6 +1166,12 @@ name = "sovereign-cli-base"
 # store, no engine; the fs it touches is the CLI's own config paths, resolved
 # through sovereign-contracts. sovereign-cli-shared re-exports all six at their
 # historical paths (re-exports, never twins). Leaf count 20 → 21.
+# pb-code-cli-base (2026-09-28) moved in the rest of what the code program's
+# CLI took from sovereign-cli-shared: repo, prompts, deprecation,
+# tracing_init, models, mcp_client (feature `mcp-client`) and code_index's
+# `tempfile_dir`. The same test holds — the fs they touch is the caller's repo
+# and the CLI's own config paths; the new deps are crates.io only (dirs,
+# tracing-subscriber, reqwest), so `allow` is unchanged.
 allow = ["sovereign-contracts", "commonwealth-rail-core", "workspace-hack"]
 
 # ── The packages ─────────────────────────────────────────────────────────────

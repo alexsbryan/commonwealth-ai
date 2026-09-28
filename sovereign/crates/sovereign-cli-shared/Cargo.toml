@@ -27,9 +27,6 @@ sovereign-time = { workspace = true }
 # …) so init can name a missing one instead of leaving an empty call graph.
 # Pinned at 7 to match all four sovereign-cli-* binaries (ARCH §8.2).
 which = { version = "7", optional = true }
-# Only for `mcp_client` (feature-gated) — the daemon-first path for
-# the work-atlas coordination tools.
-reqwest = { workspace = true, optional = true }
 dirs = "5"
 # The flag-surface derive. Every `sovereign-cli-*` binary that declares its
 # flags as a struct reaches `flag_surface::parse` through here, so the seam has
@@ -54,7 +51,6 @@ serde_json = { workspace = true }
 toml = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
-tracing-subscriber = { workspace = true }
 workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 
 [dev-dependencies]
@@ -71,9 +67,10 @@ default = ["scip", "mcp-client", "project-model", "rail-client"]   # build-laten
 # Points at `corpus-engine-scip` directly post-carve-out (2026-05-23).
 scip = ["dep:corpus-engine-scip"]
 # Enables `sovereign_cli_shared::mcp_client` (daemon-first tool calls
-# for the work-atlas coordination surface). Gated so binaries that
+# for the work-atlas coordination surface), re-exported from
+# `sovereign-cli-base` (pb-code-cli-base). Gated so binaries that
 # never proxy skip the reqwest compile cost.
-mcp-client = ["dep:reqwest"]
+mcp-client = ["sovereign-cli-base/mcp-client"]
 # Enables `sovereign_cli_shared::{observation, project_toml}` — the
 # project-model pair. Hoisted out of `sovereign-cli-dev` (2026-08-07) when
 # `project init` moved into the shipped dispatcher: init WRITES
