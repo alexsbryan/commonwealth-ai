@@ -511,7 +511,7 @@ fn enrichment_plan(recipe: &Recipe, no_enrich: bool) -> Result<Option<Enrichment
     let Some(enr) = recipe.enrichment.as_ref().filter(|e| e.enabled) else {
         return Ok(None);
     };
-    if enr.enrichment_type != "atlas" {
+    if enr.enrichment_type != corpus_engine::enrichment::pass::ATLAS {
         bail!(
             "`[enrichment] type = \"{}\"` cannot run here: this verb drives the ATLAS build \
              (the one that produces atoms, edges and ontology.json). Re-run with --no-enrich \
