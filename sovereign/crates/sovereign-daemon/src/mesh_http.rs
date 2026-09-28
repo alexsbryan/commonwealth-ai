@@ -677,7 +677,7 @@ async fn publish_measurement(
     // over the wire — there is no roster route, and its absence is the safety
     // property (ARCH §7.1). See `sovereign_mesh::ring_roster`.
     let roster = sovereign_mesh::ring_roster::MeshRoster::from_membership(
-        &*app_state.inner.fabric.mesh.read().await,
+        &app_state.membership().members().await,
         app_state.self_node_id(),
         app_state.self_node_pubkey(),
     );
@@ -755,7 +755,7 @@ async fn peer_measurements(
         return empty();
     };
     let roster = sovereign_mesh::ring_roster::MeshRoster::from_membership(
-        &*app_state.inner.fabric.mesh.read().await,
+        &app_state.membership().members().await,
         app_state.self_node_id(),
         app_state.self_node_pubkey(),
     );

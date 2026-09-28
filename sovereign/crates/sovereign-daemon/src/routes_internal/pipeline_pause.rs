@@ -17,7 +17,7 @@
 //! 2. The local daemon walks its own `/proc/` for matching driver
 //!    PIDs and SIGTERMs them.
 //! 3. With `fanout: true`, the local daemon enumerates online mesh
-//!    peers from `state.inner.fabric.mesh` (the same gossip-derived view
+//!    peers from `state.membership()` (the same gossip-derived view
 //!    the inference load balancer uses) and forwards the same
 //!    request to each — with `fanout: false` so peers don't re-fan
 //!    and the message can't loop.
@@ -33,10 +33,10 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
+use crate::types::MemberStatus;
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::Json;
-use commonwealth_core::mesh::NodeStatus;
 use serde::{Deserialize, Serialize};
 
 use crate::state::AppState;
@@ -300,15 +300,14 @@ fn recipe_toml_id(text: &str) -> Option<String> {
 /// Concurrently POST `{fanout: false}` requests to every online peer
 /// known to the local daemon's mesh state and collect the results.
 async fn forward_to_peers(state: &AppState, req: &PipelinePauseRequest) -> Vec<NodePauseResult> {
-    let mesh = state.inner.fabric.mesh.read().await;
     let self_id = state.inner.fabric.identity.current();
-    let peers: Vec<_> = mesh
-        .members
-        .values()
-        .filter(|m| m.node_id != self_id && m.status == NodeStatus::Online)
-        .cloned()
+    let peers: Vec<_> = state
+        .membership()
+        .members()
+        .await
+        .into_iter()
+        .filter(|m| m.node_id != self_id && m.status == MemberStatus::Online)
         .collect();
-    drop(mesh);
 
     if peers.is_empty() {
         return Vec::new();
@@ -351,7 +350,7 @@ async fn forward_to_peers(state: &AppState, req: &PipelinePauseRequest) -> Vec<N
         let name = Some(peer.name.clone());
         let endpoints = transport
             .endpoints(
-                &commonwealth_transport::peer_contact(&peer),
+                &peer.dial,
                 commonwealth_transport::TrafficClass::ControlPlane,
             )
             .await;

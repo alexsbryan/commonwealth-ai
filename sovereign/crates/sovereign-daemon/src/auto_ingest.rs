@@ -4,10 +4,10 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use crate::state::AppState;
+use crate::types::MemberStatus;
 use commonwealth_core::knowledge::{
     CompleteOutcome, HandoffPhase, IngestionHandoff, LeasedUnit, UnitId, WorkUnit,
 };
-use commonwealth_core::mesh::NodeStatus;
 use corpus_engine::CancellationFlag;
 use kernel_types::HandoffId;
 use kernel_types::NodeId;
@@ -138,14 +138,14 @@ async fn auto_collaborate_loop(state: AppState, daemon_port: u16) {
 
         let self_id = identity.current();
 
-        let current_peers: HashSet<NodeId> = {
-            let mesh = state.inner.fabric.mesh.read().await;
-            mesh.members
-                .values()
-                .filter(|m| m.node_id != self_id && m.status == NodeStatus::Online)
-                .map(|m| m.node_id)
-                .collect()
-        };
+        let current_peers: HashSet<NodeId> = state
+            .membership()
+            .members()
+            .await
+            .into_iter()
+            .filter(|m| m.node_id != self_id && m.status == MemberStatus::Online)
+            .map(|m| m.node_id)
+            .collect();
         let new_peer_appeared = current_peers
             .iter()
             .any(|id| !last_known_peers.contains(id));
@@ -884,12 +884,11 @@ async fn discover_and_spawn_pull_loops(state: AppState, self_id: NodeId, daemon_
             tracing::debug!(handoff = %handoff.handoff_id, "pull_loops: handoff has no merge_leader");
             continue;
         };
-        let coordinator_contact = {
-            let mesh = state.inner.fabric.mesh.read().await;
-            mesh.members
-                .get(&coordinator_id)
-                .map(commonwealth_transport::peer_contact)
-        };
+        let coordinator_contact = state
+            .membership()
+            .member(coordinator_id)
+            .await
+            .map(|m| m.dial);
         // Best transport candidate (ranked by `peer_addr::rank`, so
         // this matches the order used by gossip and inference
         // fallback) — the pull loop pins one coordinator URL.
@@ -1409,10 +1408,10 @@ async fn find_best_peer_canonical(
     state: &crate::state::AppState,
     corpus_id: &str,
 ) -> Option<CanonicalAtlasLead> {
-    let mesh = state.inner.fabric.mesh.read().await;
+    let members = state.membership().members().await;
     let self_id = state.identity_reader().current();
     let mut best: Option<CanonicalAtlasLead> = None;
-    for member in mesh.members.values() {
+    for member in &members {
         // Skip ourselves — gossip echoes our own capability report.
         if member.node_id == self_id {
             continue;
@@ -1420,10 +1419,7 @@ async fn find_best_peer_canonical(
         // Skip offline peers — even if they advertised hosted_corpora
         // recently, the pull will time out. The mesh's status field
         // is updated by gossip-driven liveness probes.
-        if !matches!(
-            member.status,
-            commonwealth_core::mesh::NodeStatus::Online | commonwealth_core::mesh::NodeStatus::Busy
-        ) {
+        if !matches!(member.status, MemberStatus::Online | MemberStatus::Busy) {
             continue;
         }
         for shard_info in &member.capabilities.hosted_corpora {
@@ -1447,7 +1443,7 @@ async fn find_best_peer_canonical(
             let candidate_urls: Vec<String> = state
                 .peer_transport()
                 .endpoints(
-                    &commonwealth_transport::peer_contact(member),
+                    &member.dial,
                     commonwealth_transport::TrafficClass::ControlPlane,
                 )
                 .await

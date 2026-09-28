@@ -8,6 +8,7 @@ use serde::Serialize;
 use sovereign_contracts::run_identity::BuildStamp;
 
 use crate::state::AppState;
+use crate::types::MemberStatus;
 
 /// Each inference-plan entry with its registered model NAME and whether the
 /// orchestrator recorded a llama-server address for it. The name is the join
@@ -80,29 +81,26 @@ pub async fn status(State(state): State<AppState>) -> Json<StatusResponse> {
         Some(_) => Ok(Vec::new()),
         None => loaded_model_rows(&state).await,
     };
-    let mesh = state.inner.fabric.mesh.read().await;
+    let membership = state.membership();
+    let mesh_name = membership.mesh_name().await;
+    let members = membership.members().await;
 
-    let members_online = mesh
-        .members
-        .values()
+    let members_online = members
+        .iter()
         .filter(|m| {
-            m.is_active()
-                && (m.status == commonwealth_core::mesh::NodeStatus::Online
-                    || m.status == commonwealth_core::mesh::NodeStatus::Busy)
+            m.active && (m.status == MemberStatus::Online || m.status == MemberStatus::Busy)
         })
         .count();
 
-    let pooled_vram_gb: f32 = mesh
-        .members
-        .values()
-        .filter(|m| m.status == commonwealth_core::mesh::NodeStatus::Online)
+    let pooled_vram_gb: f32 = members
+        .iter()
+        .filter(|m| m.status == MemberStatus::Online)
         .map(|m| m.capabilities.available.free_vram_gb)
         .sum();
 
-    let pooled_storage_gb: f32 = mesh
-        .members
-        .values()
-        .filter(|m| m.status == commonwealth_core::mesh::NodeStatus::Online)
+    let pooled_storage_gb: f32 = members
+        .iter()
+        .filter(|m| m.status == MemberStatus::Online)
         .map(|m| m.capabilities.available.free_storage_gb)
         .sum();
 
@@ -183,9 +181,9 @@ pub async fn status(State(state): State<AppState>) -> Json<StatusResponse> {
     Json(StatusResponse {
         node_id: format!("{}", state.inner.fabric.identity.current()),
         mesh: MeshStatus {
-            name: mesh.name.clone(),
+            name: mesh_name,
             members_online,
-            members_total: mesh.members.values().filter(|m| m.is_active()).count(),
+            members_total: members.iter().filter(|m| m.active).count(),
             pooled_vram_gb,
             pooled_storage_gb,
         },
@@ -204,10 +202,9 @@ pub async fn status(State(state): State<AppState>) -> Json<StatusResponse> {
                 // not "node-6c955b5f1361… is being served". A node
                 // that left the roster (or was never in it) still
                 // shows, with `name` omitted.
-                let names: HashMap<_, _> = mesh
-                    .members
+                let names: HashMap<_, _> = members
                     .iter()
-                    .map(|(id, m)| (*id, m.name.clone()))
+                    .map(|m| (m.node_id, m.name.clone()))
                     .collect();
                 let rejected = state.inner.last_rejected_x_node_id();
                 state

@@ -179,9 +179,9 @@ async fn budget_unset_returns_no_remaining() {
 // the user-visible outcome — no partition lands on the over-budget
 // node.
 
-use commonwealth_core::mesh::MemberRecord;
 use commonwealth_core::oicp::EmbedModelInfo;
 use corpus_engine::{SourceFileRecord, SourceFileStatus};
+use sovereign_contracts::membership::MembershipEntry;
 use sovereign_grants::knowledge_assignment::plan_collaborative_ingestion;
 
 fn embed() -> EmbedModelInfo {
@@ -195,22 +195,16 @@ fn embed() -> EmbedModelInfo {
     }
 }
 
-fn planner_member(id: u128, free_storage_gb: u32) -> MemberRecord {
+fn planner_member(id: u128, free_storage_gb: u32) -> MembershipEntry<()> {
     use commonwealth_core::capabilities::{AvailableResources, HardwareProfile, NodeCapabilities};
-    use commonwealth_core::mesh::NodeStatus;
-    MemberRecord {
-        removed_at: None,
-        node_pubkey: None,
-        relay_url: None,
-        iroh_direct_addrs: Vec::new(),
-        dial_info_version: 0,
-        dial_info_sig: None,
+    use sovereign_contracts::daemon_wire::MemberStatus;
+    MembershipEntry {
         node_id: NodeId::from_u128(id),
         name: format!("node-{id}"),
-        invited_by: NodeId::from_u128(1),
-        joined_at: 100,
+        status: MemberStatus::Online,
+        active: true,
         last_seen: 100,
-        status: NodeStatus::Online,
+        dialable: true,
         capabilities: NodeCapabilities {
             hardware: HardwareProfile {
                 gpus: vec![],
@@ -235,7 +229,7 @@ fn planner_member(id: u128, free_storage_gb: u32) -> MemberRecord {
             current_in_flight: None,
             anchor: None,
         },
-        addresses: vec!["192.168.1.10:9742".parse().unwrap()],
+        dial: (),
     }
 }
 

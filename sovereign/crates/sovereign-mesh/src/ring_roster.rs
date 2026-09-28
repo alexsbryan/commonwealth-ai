@@ -76,7 +76,9 @@ use std::sync::{Arc, Weak};
 use commonwealth_core::ids::{NodeId, NodePubkey};
 use commonwealth_core::mesh::Mesh;
 use commonwealth_rail::{Person, RailError, RingRail, Roster, RosterSource};
+use commonwealth_transport::PeerContact;
 use sovereign_contracts::identity::IdentityReader;
+use sovereign_contracts::membership::MembershipEntry;
 use tokio::sync::RwLock;
 
 /// A ring roster derived from mesh membership, plus the reverse lookup a
@@ -105,11 +107,28 @@ impl MeshRoster {
     /// the refusal it would get ("nobody in the roster claims that key") does
     /// not describe that at all.
     pub fn derive(mesh: &Mesh, self_id: NodeId, self_pubkey: Option<NodePubkey>) -> Self {
+        Self::derive_rows(
+            mesh.members
+                .values()
+                .map(|r| (r.node_id, r.name.as_str(), r.node_pubkey)),
+            self_id,
+            self_pubkey,
+        )
+    }
+
+    /// The one derivation, over `(node id, name, endpoint key)` rows —
+    /// whether they come from the in-process `Mesh` ([`Self::derive`]) or the
+    /// daemon's membership port ([`Self::from_membership`]).
+    fn derive_rows<'a>(
+        rows: impl Iterator<Item = (NodeId, &'a str, Option<NodePubkey>)>,
+        self_id: NodeId,
+        self_pubkey: Option<NodePubkey>,
+    ) -> Self {
         let mut members: BTreeMap<Person, Vec<String>> = BTreeMap::new();
         let mut node_ids: BTreeMap<String, NodeId> = BTreeMap::new();
         let mut unidentified = 0usize;
 
-        for record in mesh.members.values() {
+        for (node_id, name, node_pubkey) in rows {
             // A tombstone is kept. It stops a member being dialled and stops
             // its gossip counting; it must not retire the journal lines it
             // already signed. Dropping departed members here would turn a
@@ -122,10 +141,10 @@ impl MeshRoster {
             // node at all is the transport's question and is answered
             // elsewhere; keeping the two apart is what lets each be one
             // decider (ARCH §10.6).
-            let pubkey = if record.node_id == self_id {
-                self_pubkey.or(record.node_pubkey)
+            let pubkey = if node_id == self_id {
+                self_pubkey.or(node_pubkey)
             } else {
-                record.node_pubkey
+                node_pubkey
             };
             // No placeholder, ever. A shared default for "this node has not
             // advertised a key" would collide every unidentified node into
@@ -142,16 +161,16 @@ impl MeshRoster {
             // decides membership, and the name is only how an admitted op
             // renders. Falling back to the node id keeps the key in the ring
             // rather than trading a cosmetic problem for a permanent gap.
-            let person = if record.name.trim().is_empty() {
-                Person::from(record.node_id.to_string())
+            let person = if name.trim().is_empty() {
+                Person::from(node_id.to_string())
             } else {
-                Person::from(record.name.trim())
+                Person::from(name.trim())
             };
             let keys = members.entry(person).or_default();
             if !keys.contains(&actor) {
                 keys.push(actor.clone());
             }
-            node_ids.insert(actor, record.node_id);
+            node_ids.insert(actor, node_id);
         }
         // Two laptops under one name is two keys in one row, which is the
         // shape `Roster` documents. Sorted so the derivation is a function of
@@ -182,10 +201,21 @@ impl MeshRoster {
     /// Takes the roster, identity and pubkey rather than the daemon host's
     /// `AppState` (domains `REVIEW-build-mesh-api-decouple`): Fabric observes
     /// membership through its own state, and `sovereign-mesh` may not name the
-    /// host. This is [`MeshRoster::derive`] with the reads the caller already
-    /// holds.
-    pub fn from_membership(mesh: &Mesh, self_id: NodeId, self_pubkey: Option<NodePubkey>) -> Self {
-        Self::derive(mesh, self_id, self_pubkey)
+    /// host. This is [`MeshRoster::derive`] over the daemon's membership port
+    /// (`sovereign_contracts::membership`, pb-mesh-exit-core) — the entries'
+    /// dial handle carries the endpoint key the derivation reads.
+    pub fn from_membership(
+        members: &[MembershipEntry<PeerContact>],
+        self_id: NodeId,
+        self_pubkey: Option<NodePubkey>,
+    ) -> Self {
+        Self::derive_rows(
+            members
+                .iter()
+                .map(|m| (m.node_id, m.name.as_str(), m.dial.node_pubkey)),
+            self_id,
+            self_pubkey,
+        )
     }
 
     /// The roster to hand [`admit`](commonwealth_rail::admit) or
@@ -352,7 +382,7 @@ impl RosterSource for MeshRosterSource {
             };
             let mesh = mesh.read().await;
             Ok(
-                MeshRoster::from_membership(&mesh, self.identity.current(), self.self_pubkey)
+                MeshRoster::derive(&mesh, self.identity.current(), self.self_pubkey)
                     .into_roster(),
             )
         })

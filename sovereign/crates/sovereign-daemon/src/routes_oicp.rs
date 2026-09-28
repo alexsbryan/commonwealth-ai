@@ -263,14 +263,12 @@ pub async fn capabilities(
             // Enrich provider name with the mesh name so peer
             // MeshAwareSelector can tell "this is mac-peer's
             // Sovereign" vs a generic provider.
-            let mesh = state.inner.fabric.mesh.read().await;
             if manifest.provider.is_none() {
                 manifest.provider = Some(ProviderInfo {
-                    name: Some(mesh.name.clone()),
+                    name: Some(state.membership().mesh_name().await),
                     provider_type: Some(ProviderType::Mesh),
                 });
             }
-            drop(mesh);
             if let Err(e) = apply_v04_enrichment(&state, true, &mut manifest).await {
                 return inference_state_absent(&e);
             }
@@ -295,7 +293,7 @@ pub async fn capabilities(
         Ok(r) => r,
         Err(e) => return inference_state_absent(&e),
     };
-    let mesh = state.inner.fabric.mesh.read().await;
+    let mesh_name = state.membership().mesh_name().await;
 
     let model_entries: Vec<ProviderModel> = models
         .values()
@@ -337,32 +335,9 @@ pub async fn capabilities(
         })
         .collect();
 
-    // NOT routed through the PeerTransport seam, deliberately: this
-    // formats an *advertised* URL for a federated peer MESH
-    // (`MeshPeering.contact_nodes` — no `MemberRecord`/`NodeId`
-    // exists), embedded in the manifest for clients to read. It is
-    // content, not a dial this daemon performs. NOTE (no-VPN mesh):
-    // this stays IP-shaped on purpose — cross-mesh federation is a
-    // separate, IP-reachable trust domain. This node's OWN
-    // capabilities dial (peer inference scoring) rides the seam via
-    // `peer_inference_endpoints`/`TrafficClass::Inference`, so a
-    // no-IP peer is scored correctly; only the advertised
-    // cross-mesh federation URL here is IP-shaped, and that is not a
-    // W-track dial. Do not "seam-ify" this without a federation
-    // trust-model change.
-    let peers: Vec<FederatedMeshDescriptor> = mesh
-        .peers
-        .iter()
-        .map(|p| FederatedMeshDescriptor {
-            name: p.peer_mesh_name.clone(),
-            capabilities_url: p
-                .contact_nodes
-                .first()
-                .map(|addr| format!("http://{}:9741/oicp/v1/capabilities", addr.ip()))
-                .unwrap_or_default(),
-            trust_level: Some(format!("{:?}", p.trust_level).to_lowercase()),
-        })
-        .collect();
+    // The advertised federation URLs are rendered by the membership reader
+    // (`sovereign_mesh::membership`, which keeps the why of their IP shape).
+    let peers: Vec<FederatedMeshDescriptor> = state.membership().federated_meshes().await;
 
     let federation = if peers.is_empty() {
         None
@@ -373,7 +348,7 @@ pub async fn capabilities(
     let mut manifest = ProviderManifest {
         oicp_version: OICP_VERSION.to_string(),
         provider: Some(ProviderInfo {
-            name: Some(mesh.name.clone()),
+            name: Some(mesh_name),
             provider_type: Some(ProviderType::Mesh),
         }),
         models: model_entries,
@@ -386,7 +361,6 @@ pub async fn capabilities(
         federation,
         features: Vec::new(),
     };
-    drop(mesh);
     if let Err(e) = apply_v04_enrichment(&state, false, &mut manifest).await {
         return inference_state_absent(&e);
     }

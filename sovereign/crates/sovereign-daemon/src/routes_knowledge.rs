@@ -8,7 +8,7 @@
 //!
 //!   1. Searches our own local `CorpusEngine` for any requested
 //!      corpus we host (cheap path, no HTTP).
-//!   2. Walks the live mesh `MemberRecord`s — specifically each
+//!   2. Walks the live mesh membership (`AppState::membership`) — each
 //!      member's `capabilities.hosted_corpora` — to find peers that
 //!      host corpora we don't, and fires `/internal/knowledge/search`
 //!      at them in parallel.
@@ -25,7 +25,9 @@ use std::time::Duration;
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::Json;
-use commonwealth_core::mesh::{MemberRecord, NodeStatus};
+use sovereign_contracts::membership::MembershipEntry;
+
+use crate::types::MemberStatus;
 use kernel_types::NodeId;
 use oicp_types::{KnowledgeResult, KnowledgeSearchRequest, KnowledgeSearchResponse};
 
@@ -128,11 +130,11 @@ pub async fn knowledge_search(
     // side. If they're missing from the roster entirely, gossip
     // hasn't converged yet.
     let (peer_offerings, target_corpora_if_unconstrained, peer_roster) = {
-        let mesh = state.inner.fabric.mesh.read().await;
+        let members = state.membership().members().await;
         let mut offerings: Vec<PeerOffering> = Vec::new();
         let mut union: HashSet<String> = local_corpora.clone();
         let mut roster: Vec<(String, String, Vec<String>)> = Vec::new();
-        for (_, member) in mesh.members.iter() {
+        for member in &members {
             if member.node_id == self_id {
                 continue;
             }
@@ -157,7 +159,7 @@ pub async fn knowledge_search(
                 offerings.push(PeerOffering {
                     node_id: member.node_id,
                     node_name: member.name.clone(),
-                    contact: commonwealth_transport::peer_contact(member),
+                    contact: member.dial.clone(),
                     corpora,
                 });
             }
@@ -612,9 +614,9 @@ fn build_response(
 /// A member is fan-out-worthy if we think they can answer us. We're
 /// permissive with `Busy` (a node serving inference still answers
 /// knowledge search cheaply) and strict with `Offline`.
-fn is_queryable(m: &MemberRecord) -> bool {
+fn is_queryable(m: &MembershipEntry<commonwealth_transport::PeerContact>) -> bool {
     // `is_dialable` accepts an iroh-only peer (pubkey + relay/direct,
     // no gossiped IP — the no-VPN case); the seam still decides the
     // KnowledgeSearch route per dial.
-    matches!(m.status, NodeStatus::Online | NodeStatus::Busy) && m.is_dialable()
+    matches!(m.status, MemberStatus::Online | MemberStatus::Busy) && m.dialable
 }

@@ -3,9 +3,9 @@ use commonwealth_core::ids::NodeId;
 use commonwealth_core::knowledge::{
     IngestionHandoff, IngestionPartition, PartitionStatus, WorkUnit,
 };
-use commonwealth_core::mesh::MemberRecord;
 use commonwealth_core::oicp::EmbedModelInfo;
 use corpus_engine::SourceFileRecord;
+use sovereign_contracts::membership::MembershipEntry;
 
 // ─── Collaborative ingestion planner ─────────────────────────────────────────
 
@@ -35,12 +35,12 @@ pub enum CollaborativeIngestionError {
 ///    all nodes (`N = all_nodes.len()`), assigning the remainder to the
 ///    first nodes.
 /// 4. Set `merge_assigned_to` to the node with the lowest `NodeId`.
-pub fn plan_collaborative_ingestion(
+pub fn plan_collaborative_ingestion<D>(
     corpus_id: &str,
     recipe_id: &str,
     remaining_files: &[SourceFileRecord],
-    local_node: &MemberRecord,
-    candidates: &[MemberRecord],
+    local_node: &MembershipEntry<D>,
+    candidates: &[MembershipEntry<D>],
     local_embed_model: &EmbedModelInfo,
 ) -> Result<IngestionHandoff, CollaborativeIngestionError> {
     use corpus_engine::SourceFileStatus;
@@ -56,10 +56,10 @@ pub fn plan_collaborative_ingestion(
     // `embed_model` so the common call path feeds only compatible
     // peers in. But this function has several direct callers (tests,
     // the CLI's `sovereign mesh collaborate` subcommand) that pass
-    // raw `MemberRecord` sets without running the coordinator's
+    // raw membership entries without running the coordinator's
     // filter. Repeating the check here means a mismatched peer
     // never ends up in `all_nodes` regardless of entry point.
-    let compatible_peers: Vec<&MemberRecord> = candidates
+    let compatible_peers: Vec<&MembershipEntry<D>> = candidates
         .iter()
         .filter(|peer| {
             if peer.capabilities.hardware.free_storage_gb == 0 {
@@ -176,13 +176,13 @@ pub fn plan_collaborative_ingestion(
 ///
 /// Machine A always gets `[current_article_pos, split)` and Machine B
 /// gets `[split, total_articles)` where split ≈ the midpoint of remaining work.
-pub fn plan_collaborative_ingestion_jsonl(
+pub fn plan_collaborative_ingestion_jsonl<D>(
     corpus_id: &str,
     recipe_id: &str,
     current_article_pos: u64,
     total_articles: u64,
-    local_node: &MemberRecord,
-    candidates: &[MemberRecord],
+    local_node: &MembershipEntry<D>,
+    candidates: &[MembershipEntry<D>],
     local_embed_model: &EmbedModelInfo,
 ) -> Result<IngestionHandoff, CollaborativeIngestionError> {
     let remaining = total_articles.saturating_sub(current_article_pos);
@@ -199,7 +199,7 @@ pub fn plan_collaborative_ingestion_jsonl(
     // would get an article range it silently refuses to process,
     // leaving those articles stranded and the overall ingest
     // permanently incomplete.
-    let compatible: Vec<&MemberRecord> = candidates
+    let compatible: Vec<&MembershipEntry<D>> = candidates
         .iter()
         .filter(|peer| match peer.capabilities.embed_model.as_ref() {
             Some(em) => em == local_embed_model,
@@ -271,12 +271,12 @@ pub fn plan_collaborative_ingestion_jsonl(
 ///
 /// Each partition carries `file_indices` = its assigned shard indices
 /// and `article_range` = None.
-pub fn plan_collaborative_ingestion_jsonl_sharded(
+pub fn plan_collaborative_ingestion_jsonl_sharded<D>(
     corpus_id: &str,
     recipe_id: &str,
     remaining_shards: Vec<usize>,
-    local_node: &MemberRecord,
-    candidates: &[MemberRecord],
+    local_node: &MembershipEntry<D>,
+    candidates: &[MembershipEntry<D>],
     local_embed_model: &EmbedModelInfo,
 ) -> Result<IngestionHandoff, CollaborativeIngestionError> {
     let mut shards = remaining_shards;
@@ -292,7 +292,7 @@ pub fn plan_collaborative_ingestion_jsonl_sharded(
     // Embed-model filter: identical to the non-sharded JSONL planner.
     // A mismatched peer would accept the partition and then silently
     // reject at ingest_partition; keep them out of the split upfront.
-    let compatible: Vec<&MemberRecord> = candidates
+    let compatible: Vec<&MembershipEntry<D>> = candidates
         .iter()
         .filter(|peer| match peer.capabilities.embed_model.as_ref() {
             Some(em) => em == local_embed_model,
@@ -476,24 +476,18 @@ mod tests {
         }
     }
 
-    fn member(id: u128, embed: Option<EmbedModelInfo>) -> MemberRecord {
+    fn member(id: u128, embed: Option<EmbedModelInfo>) -> MembershipEntry<()> {
         use commonwealth_core::capabilities::{
             AvailableResources, HardwareProfile, NodeCapabilities,
         };
-        use commonwealth_core::mesh::NodeStatus;
-        MemberRecord {
-            removed_at: None,
-            node_pubkey: None,
-            relay_url: None,
-            iroh_direct_addrs: Vec::new(),
-            dial_info_version: 0,
-            dial_info_sig: None,
+        use sovereign_contracts::daemon_wire::MemberStatus;
+        MembershipEntry {
             node_id: NodeId::from_u128(id),
             name: format!("node-{id}"),
-            invited_by: NodeId::from_u128(1),
-            joined_at: 100,
+            status: MemberStatus::Online,
+            active: true,
             last_seen: 100,
-            status: NodeStatus::Online,
+            dialable: true,
             capabilities: NodeCapabilities {
                 hardware: HardwareProfile {
                     gpus: vec![],
@@ -518,7 +512,7 @@ mod tests {
                 current_in_flight: None,
                 anchor: None,
             },
-            addresses: vec!["192.168.1.10:9742".parse().unwrap()],
+            dial: (),
         }
     }
 

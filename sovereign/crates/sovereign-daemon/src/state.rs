@@ -11,6 +11,7 @@ use corpus_engine::CorpusEngine;
 use kernel_types::NodeId;
 use oicp_types::model_aliases::ModelAliasTable;
 use serving_policy_core::fair_sched::{reciprocity_weight, SchedCore, TryGrant};
+use sovereign_contracts::membership::MembershipReader;
 use sovereign_core::identity::IdentityReader;
 use sovereign_grants::{EphemeralGrantStore, GuestGrantStore, GuestSessionStore, WorkQueueManager};
 use sovereign_serving_host::admission::Principal;
@@ -619,6 +620,14 @@ impl AppState {
     /// the part reads (DC §4.2 "Construction is staged, and parts are total").
     pub fn peer_transport_reader(&self) -> fabric::TransportReader {
         self.inner.fabric.peer_transport.clone()
+    }
+
+    /// The one read of mesh membership outside the mesh endpoint
+    /// (`sovereign_contracts::membership`, pb-mesh-exit-core). Every roster
+    /// read in a route or loop goes through here, so the flip re-points one
+    /// reader; `tests/main/membership_port.rs` fails on a direct read.
+    pub fn membership(&self) -> &dyn MembershipReader<Dial = commonwealth_transport::PeerContact> {
+        self.inner.fabric.membership.as_ref()
     }
 
     /// Snapshot of the active [`commonwealth_core::Clock`]. Cheap (one atomic
@@ -1673,13 +1682,13 @@ impl AppState {
     /// the previous weights are kept — a transient ledger hiccup must not flap
     /// everyone to neutral mid-contention.
     pub async fn refresh_reciprocity_weights(&self, k: f64) {
-        let caps: HashMap<NodeId, commonwealth_core::capabilities::NodeCapabilities> = {
-            let view = self.inner.fabric.mesh.read().await;
-            view.members
-                .iter()
-                .map(|(id, m)| (*id, m.capabilities.clone()))
-                .collect()
-        };
+        let caps: HashMap<NodeId, commonwealth_core::capabilities::NodeCapabilities> = self
+            .membership()
+            .members()
+            .await
+            .into_iter()
+            .map(|m| (m.node_id, m.capabilities))
+            .collect();
         let contributions = match self
             .inner
             .store

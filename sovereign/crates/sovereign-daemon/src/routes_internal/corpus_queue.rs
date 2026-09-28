@@ -36,14 +36,14 @@ use super::{IngestPartitionRequest, IngestPartitionResponse};
 /// through the PeerTransport seam; contacts are snapshotted out of
 /// the mesh lock before resolving so the lock never spans an await.
 pub async fn peer_control_urls(state: &AppState, local_node_id: NodeId) -> Vec<(NodeId, String)> {
-    let contacts: Vec<commonwealth_transport::PeerContact> = {
-        let mesh = state.inner.fabric.mesh.read().await;
-        mesh.members
-            .values()
-            .filter(|m| m.node_id != local_node_id)
-            .map(commonwealth_transport::peer_contact)
-            .collect()
-    };
+    let contacts: Vec<commonwealth_transport::PeerContact> = state
+        .membership()
+        .members()
+        .await
+        .into_iter()
+        .filter(|m| m.node_id != local_node_id)
+        .map(|m| m.dial)
+        .collect();
     let transport = state.peer_transport();
     let mut urls = Vec::with_capacity(contacts.len());
     for contact in &contacts {

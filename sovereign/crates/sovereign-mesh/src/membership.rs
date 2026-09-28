@@ -13,6 +13,7 @@ use async_trait::async_trait;
 use commonwealth_core::mesh::{MemberRecord, Mesh};
 use commonwealth_transport::{peer_contact, PeerContact};
 use kernel_types::NodeId;
+use oicp_types::FederatedMeshDescriptor;
 use sovereign_contracts::membership::{MembershipEntry, MembershipReader};
 use tokio::sync::RwLock;
 
@@ -39,6 +40,7 @@ fn entry(member: &MemberRecord) -> MembershipEntry<PeerContact> {
         name: member.name.clone(),
         status: member_status(member.status),
         active: member.is_active(),
+        last_seen: member.last_seen,
         dialable: member.is_dialable(),
         capabilities: member.capabilities.clone(),
         dial: peer_contact(member),
@@ -51,6 +53,37 @@ impl MembershipReader for InProcessMembership {
 
     async fn mesh_name(&self) -> String {
         self.mesh.read().await.name.clone()
+    }
+
+    async fn federated_meshes(&self) -> Vec<FederatedMeshDescriptor> {
+        // NOT routed through the PeerTransport seam, deliberately: this
+        // formats an *advertised* URL for a federated peer MESH
+        // (`MeshPeering.contact_nodes` — no `MemberRecord`/`NodeId`
+        // exists), embedded in the manifest for clients to read. It is
+        // content, not a dial this daemon performs. NOTE (no-VPN mesh):
+        // this stays IP-shaped on purpose — cross-mesh federation is a
+        // separate, IP-reachable trust domain. This node's OWN
+        // capabilities dial (peer inference scoring) rides the seam via
+        // `peer_inference_endpoints`/`TrafficClass::Inference`, so a
+        // no-IP peer is scored correctly; only the advertised
+        // cross-mesh federation URL here is IP-shaped, and that is not a
+        // W-track dial. Do not "seam-ify" this without a federation
+        // trust-model change.
+        self.mesh
+            .read()
+            .await
+            .peers
+            .iter()
+            .map(|p| FederatedMeshDescriptor {
+                name: p.peer_mesh_name.clone(),
+                capabilities_url: p
+                    .contact_nodes
+                    .first()
+                    .map(|addr| format!("http://{}:9741/oicp/v1/capabilities", addr.ip()))
+                    .unwrap_or_default(),
+                trust_level: Some(format!("{:?}", p.trust_level).to_lowercase()),
+            })
+            .collect()
     }
 
     async fn members(&self) -> Vec<MembershipEntry<PeerContact>> {

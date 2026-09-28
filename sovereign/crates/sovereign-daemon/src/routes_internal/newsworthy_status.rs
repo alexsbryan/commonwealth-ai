@@ -23,8 +23,8 @@ use axum::http::StatusCode;
 use axum::Json;
 use serde::{Deserialize, Serialize};
 
+use crate::types::MemberStatus;
 use commonwealth_core::contributions::{LedgerEvent, LedgerEventKind};
-use commonwealth_core::mesh::NodeStatus;
 use commonwealth_core::partition;
 use corpus_engine::update::newsworthy_watcher::{
     TickStatusSnapshot, APP_ID_STATUS, STATUS_KEY_LAST_TICK,
@@ -176,14 +176,14 @@ fn read_last_tick(state: &AppState) -> Option<TickStatusSnapshot> {
 /// A contribution ledger that does not answer is a named 503, never an
 /// empty holder pool (five-programs-46).
 async fn compute_leader(state: &AppState) -> Result<(Option<String>, usize), (StatusCode, String)> {
-    let mesh = state.inner.fabric.mesh.read().await;
-    let online: Vec<NodeId> = mesh
-        .members
-        .iter()
-        .filter(|(_, m)| m.status != NodeStatus::Offline)
-        .map(|(id, _)| *id)
+    let online: Vec<NodeId> = state
+        .membership()
+        .members()
+        .await
+        .into_iter()
+        .filter(|m| m.status != MemberStatus::Offline)
+        .map(|m| m.node_id)
         .collect();
-    drop(mesh);
 
     if online.is_empty() {
         return Ok((None, 0));

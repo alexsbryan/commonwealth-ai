@@ -160,15 +160,14 @@ struct PeerDelivery {
 /// holds an authenticated connection (`ring-apps-shelf.md` §gossip, "default
 /// impl").
 async fn push_ephemeral(state: &AppState, namespace: &str, payload: &str) -> Vec<PeerDelivery> {
-    let mesh = state.inner.fabric.mesh.read().await;
     let self_id = state.inner.fabric.identity.current();
-    let peers: Vec<_> = mesh
-        .members
-        .values()
-        .filter(|m| m.node_id != self_id && m.status == commonwealth_core::mesh::NodeStatus::Online)
-        .cloned()
+    let peers: Vec<_> = state
+        .membership()
+        .members()
+        .await
+        .into_iter()
+        .filter(|m| m.node_id != self_id && m.status == crate::types::MemberStatus::Online)
         .collect();
-    drop(mesh);
 
     if peers.is_empty() {
         return Vec::new();
@@ -209,7 +208,7 @@ async fn push_ephemeral(state: &AppState, namespace: &str, payload: &str) -> Vec
         let name = Some(peer.name.clone());
         let endpoints = transport
             .endpoints(
-                &commonwealth_transport::peer_contact(&peer),
+                &peer.dial,
                 commonwealth_transport::TrafficClass::ControlPlane,
             )
             .await;

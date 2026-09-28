@@ -22,9 +22,9 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::state::AppState;
+use crate::types::MemberStatus;
 use bytes::Bytes;
 use commonwealth_core::contributions::{LedgerEvent, LedgerEventKind};
-use commonwealth_core::mesh::NodeStatus;
 use commonwealth_core::partition;
 use corpus_engine::update::newsworthy_watcher::{CommittedDocs, NewsworthyHost};
 use corpus_index::error::{Error as CorpusError, Result as CorpusResult};
@@ -71,11 +71,13 @@ impl MeshNewsworthyHost {
     /// election, so we follow suit to keep behaviour consistent across
     /// daemons.
     async fn online_members(&self) -> Vec<NodeId> {
-        let mesh = self.app_state.inner.fabric.mesh.read().await;
-        mesh.members
-            .iter()
-            .filter(|(_, m)| m.status != NodeStatus::Offline)
-            .map(|(id, _)| *id)
+        self.app_state
+            .membership()
+            .members()
+            .await
+            .into_iter()
+            .filter(|m| m.status != MemberStatus::Offline)
+            .map(|m| m.node_id)
             .collect()
     }
 

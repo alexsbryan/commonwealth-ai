@@ -228,11 +228,12 @@ pub async fn contribution_view(
         NodeId,
         commonwealth_core::capabilities::NodeCapabilities,
     > = {
-        let mesh_view = state.inner.fabric.mesh.read().await;
-        mesh_view
-            .members
-            .iter()
-            .map(|(id, member)| (*id, member.capabilities.clone()))
+        state
+            .membership()
+            .members()
+            .await
+            .into_iter()
+            .map(|member| (member.node_id, member.capabilities))
             .collect()
     };
     let map = state
@@ -344,11 +345,12 @@ pub async fn activity_summary(
         NodeId,
         commonwealth_core::capabilities::NodeCapabilities,
     > = {
-        let mesh_view = state.inner.fabric.mesh.read().await;
-        mesh_view
-            .members
-            .iter()
-            .map(|(id, member)| (*id, member.capabilities.clone()))
+        state
+            .membership()
+            .members()
+            .await
+            .into_iter()
+            .map(|member| (member.node_id, member.capabilities))
             .collect()
     };
     let contrib = state

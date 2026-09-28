@@ -88,16 +88,16 @@ async fn gather_peer_atlas_advice(
     let local_fingerprint = local_summary.as_ref().map(|s| s.fingerprint.as_str());
 
     let self_node_id = state.inner.fabric.identity.current();
-    let mesh = state.inner.fabric.mesh.read().await;
-    let my_embed_model = mesh
-        .members
-        .get(&self_node_id)
+    let members = state.membership().members().await;
+    let my_embed_model = members
+        .iter()
+        .find(|m| m.node_id == self_node_id)
         .and_then(|m| m.capabilities.embed_model.as_ref())
         .map(|m| m.model_id.clone());
 
     let mut peer_views: Vec<RemoteAtlasView> = Vec::new();
-    for (node_id, member) in mesh.members.iter() {
-        if *node_id == self_node_id {
+    for member in &members {
+        if member.node_id == self_node_id {
             continue;
         }
         let model = member

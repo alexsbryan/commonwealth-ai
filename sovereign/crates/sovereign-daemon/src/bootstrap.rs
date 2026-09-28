@@ -1333,7 +1333,7 @@ pub fn reconcile_local_measurements(daemon: Arc<EmbeddedDaemon>) {
             return;
         };
         let roster = sovereign_mesh::ring_roster::MeshRoster::from_membership(
-            &*app_state.inner.fabric.mesh.read().await,
+            &app_state.membership().members().await,
             app_state.self_node_id(),
             app_state.self_node_pubkey(),
         );

@@ -20,8 +20,8 @@ use axum::http::StatusCode;
 use axum::Json;
 use serde::{Deserialize, Serialize};
 
+use crate::types::MemberStatus;
 use commonwealth_core::knowledge::IngestionHandoff;
-use commonwealth_core::mesh::NodeStatus;
 use kernel_types::NodeId;
 use sovereign_grants::knowledge_assignment::{
     build_work_units_hf, build_work_units_jsonl_sharded, build_work_units_jsonl_single,
@@ -119,16 +119,20 @@ pub async fn corpus_collaborate(
     }
 
     // Build local node view.
-    let mesh = state.inner.fabric.mesh.read().await;
+    let members = state.membership().members().await;
     let self_id = state.inner.fabric.identity.current();
-    let local_member = mesh.members.get(&self_id).cloned().ok_or_else(|| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ErrorBody {
-                error: "local node not found in mesh".into(),
-            }),
-        )
-    })?;
+    let local_member = members
+        .iter()
+        .find(|m| m.node_id == self_id)
+        .cloned()
+        .ok_or_else(|| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorBody {
+                    error: "local node not found in mesh".into(),
+                }),
+            )
+        })?;
 
     let local_embed_model = state
         .local_embed_model()
@@ -173,12 +177,11 @@ pub async fn corpus_collaborate(
     // sees no collaboration, they can look here and see "Machine B
     // has qwen3-embed-0.6b; we have qwen3-embed-4b — mismatch".
     let mut rejected: Vec<(NodeId, &'static str)> = Vec::new();
-    let candidates: Vec<_> = mesh
-        .members
-        .values()
+    let candidates: Vec<_> = members
+        .iter()
         .filter(|m| m.node_id != self_id)
         .filter_map(|m| {
-            if m.status != NodeStatus::Online {
+            if m.status != MemberStatus::Online {
                 rejected.push((m.node_id, "offline"));
                 return None;
             }
@@ -195,7 +198,7 @@ pub async fn corpus_collaborate(
             }
         })
         .collect();
-    drop(mesh);
+    drop(members);
 
     // Per-job peer allowlist (ephemeral grant-scoped ingest). When the
     // caller pins a specific set of helper peers, drop any embed-compatible
@@ -851,7 +854,7 @@ pub async fn corpus_collaborate(
         // same lock, and a second read while one is held can deadlock behind
         // a queued writer.
         let stamp = state.mesh_proof_stamp().await;
-        let mesh = state.inner.fabric.mesh.read().await;
+        let members = state.membership().members().await;
         if let Some(local_partition) = handoff.partitions.iter().find(|p| p.node_id == self_id) {
             tracing::info!(
                 corpus = %handoff.corpus_id,
@@ -864,7 +867,7 @@ pub async fn corpus_collaborate(
             if partition.node_id == self_id {
                 continue;
             }
-            let Some(peer) = mesh.members.get(&partition.node_id) else {
+            let Some(peer) = members.iter().find(|m| m.node_id == partition.node_id) else {
                 tracing::warn!(
                     node = %partition.node_id,
                     "collaborate: peer not found in mesh — skipping notification"
@@ -880,7 +883,7 @@ pub async fn corpus_collaborate(
             // had routable Tailscale addresses advertised).
             let endpoints = transport
                 .endpoints(
-                    &commonwealth_transport::peer_contact(peer),
+                    &peer.dial,
                     commonwealth_transport::TrafficClass::ControlPlane,
                 )
                 .await;
@@ -1043,14 +1046,14 @@ pub async fn corpus_eligible_peers(
         )
     })?;
 
-    let mesh = state.inner.fabric.mesh.read().await;
+    let members = state.membership().members().await;
     let self_id = state.inner.fabric.identity.current();
     let mut peers: Vec<EligibleDonorDto> = Vec::new();
-    for m in mesh.members.values() {
+    for m in &members {
         if m.node_id == self_id {
             continue;
         }
-        let online = m.status == NodeStatus::Online;
+        let online = m.status == MemberStatus::Online;
         let (eligible, reason) = if !online {
             (false, "offline")
         } else {
@@ -1074,7 +1077,6 @@ pub async fn corpus_eligible_peers(
             reason: reason.to_string(),
         });
     }
-    drop(mesh);
     // Eligible + online first, then by name — the picker checks these by default.
     peers.sort_by(|a, b| b.eligible.cmp(&a.eligible).then(a.name.cmp(&b.name)));
 

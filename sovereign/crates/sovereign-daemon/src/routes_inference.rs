@@ -7,10 +7,10 @@ use axum::Json;
 use futures::StreamExt;
 use tracing::{debug, info, warn};
 
+use crate::types::MemberStatus;
 use commonwealth_core::activity::{ActivityEventKind, ServedFor};
 use commonwealth_core::contributions::LedgerEventKind;
 use commonwealth_core::ids::ModelId;
-use commonwealth_core::mesh::NodeStatus;
 use kernel_types::NodeId;
 use oicp_types::{CapabilityClaim, InferenceRequirements, ShardingPrivacy};
 use std::collections::HashSet;
@@ -844,17 +844,15 @@ async fn store_rows(
     state: &AppState,
 ) -> Result<Vec<ModelObject>, sovereign_mesh::ledger_port::LedgerAbsent> {
     let local_id = state.self_node_id();
-    let live_nodes: HashSet<NodeId> = {
-        let mesh = state.inner.fabric.mesh.read().await;
-        std::iter::once(local_id)
-            .chain(
-                mesh.members
-                    .values()
-                    .filter(|m| matches!(m.status, NodeStatus::Online | NodeStatus::Busy))
-                    .map(|m| m.node_id),
-            )
-            .collect()
-    };
+    let members = state.membership().members().await;
+    let live_nodes: HashSet<NodeId> = std::iter::once(local_id)
+        .chain(
+            members
+                .iter()
+                .filter(|m| matches!(m.status, MemberStatus::Online | MemberStatus::Busy))
+                .map(|m| m.node_id),
+        )
+        .collect();
 
     let plan = state.inference_plan().await?.unwrap_or_default();
 

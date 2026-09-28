@@ -12,6 +12,7 @@ use tokio::sync::RwLock;
 use tracing::{info, warn};
 
 use crate::state::{AppState, LocalInferenceService, NodeSeed};
+use crate::types::MemberStatus;
 use commonwealth_core::mesh::Mesh;
 use commonwealth_discovery::mdns::{BrowseHandle, DiscoveredPeer, MdnsDiscovery};
 use commonwealth_discovery::membership;
@@ -2120,14 +2121,13 @@ impl EmbeddedDaemon {
         };
         drop(state);
         let self_id = app_state.inner.fabric.identity.current();
-        let members: Vec<commonwealth_core::mesh::MemberRecord> = {
-            let mesh = app_state.inner.fabric.mesh.read().await;
-            mesh.members
-                .values()
-                .filter(|m| m.node_id != self_id && m.node_pubkey.is_some())
-                .cloned()
-                .collect()
-        };
+        let members: Vec<_> = app_state
+            .membership()
+            .members()
+            .await
+            .into_iter()
+            .filter(|m| m.node_id != self_id && m.dial.node_pubkey.is_some())
+            .collect();
         // Concurrent and bounded. Sequential iteration let ONE stalling
         // remote_info hold every reader of this snapshot: while a large
         // ingest churned the endpoint (2026-09-22, sf-assessor-roll),
@@ -2138,7 +2138,7 @@ impl EmbeddedDaemon {
         const PROBE_BOUND: std::time::Duration = std::time::Duration::from_secs(1);
         let probes = members.into_iter().map(|m| {
             let endpoint = endpoint.clone();
-            let pubkey = m.node_pubkey.expect("filtered to Some above");
+            let pubkey = m.dial.node_pubkey.expect("filtered to Some above");
             async move {
                 let probe =
                     sovereign_mesh::iroh_access::MeshIrohAccess::peer_path_on(&endpoint, &pubkey.0);
@@ -2424,30 +2424,22 @@ impl EmbeddedDaemon {
         // `MemberRecord.client_port` wire field — §10.1) lives in
         // the transport's construction at `start_daemon`.
         let transport = app_state.peer_transport();
-        let members: Vec<commonwealth_core::mesh::MemberRecord> = {
-            let mesh = app_state.inner.fabric.mesh.read().await;
+        let members: Vec<_> = {
             let self_id = app_state.inner.fabric.identity.current();
-            mesh.members
-                .values()
+            app_state
+                .membership()
+                .members()
+                .await
+                .into_iter()
                 .filter(|m| m.node_id != self_id)
-                .filter(|m| {
-                    matches!(
-                        m.status,
-                        commonwealth_core::mesh::NodeStatus::Online
-                            | commonwealth_core::mesh::NodeStatus::Busy
-                    )
-                })
-                .filter(|m| m.is_dialable())
-                .cloned()
+                .filter(|m| matches!(m.status, MemberStatus::Online | MemberStatus::Busy))
+                .filter(|m| m.dialable)
                 .collect()
         };
         let mut endpoints = Vec::with_capacity(members.len());
         for m in members {
             let base_urls: Vec<String> = transport
-                .endpoints(
-                    &commonwealth_transport::peer_contact(&m),
-                    commonwealth_transport::TrafficClass::Inference,
-                )
+                .endpoints(&m.dial, commonwealth_transport::TrafficClass::Inference)
                 .await
                 .into_iter()
                 .map(|ep| format!("{}/v1", ep.base_url))
@@ -2615,20 +2607,16 @@ impl EmbeddedDaemon {
             }
         };
         let transport = app_state.peer_transport();
-        let members: Vec<commonwealth_core::mesh::MemberRecord> = {
-            let mesh = app_state.inner.fabric.mesh.read().await;
+        let members: Vec<_> = {
             let self_id = app_state.inner.fabric.identity.current();
-            mesh.members
-                .values()
+            app_state
+                .membership()
+                .members()
+                .await
+                .into_iter()
                 .filter(|m| m.node_id != self_id)
-                .filter(|m| {
-                    matches!(
-                        m.status,
-                        commonwealth_core::mesh::NodeStatus::Online
-                            | commonwealth_core::mesh::NodeStatus::Busy
-                    )
-                })
-                .filter(|m| m.is_dialable())
+                .filter(|m| matches!(m.status, MemberStatus::Online | MemberStatus::Busy))
+                .filter(|m| m.dialable)
                 // Anchor-tier gate: only pull peers that declare themselves
                 // shared-model anchors into the RPC layer-split. A peer that
                 // explicitly advertises `can_anchor = false` is a consumer and
@@ -2636,7 +2624,6 @@ impl EmbeddedDaemon {
                 // of the doubt — they're still gated downstream by whether they
                 // actually advertise an `rpc_worker` port.
                 .filter(|m| m.capabilities.anchor.as_ref().is_none_or(|a| a.can_anchor))
-                .cloned()
                 .collect()
         };
 
@@ -2713,7 +2700,7 @@ impl EmbeddedDaemon {
                 // worker that is serving fine, and a non-direct endpoint has no
                 // stickiness to survive the miss — see `reaffirm_plan`).
                 Reaffirm::Rebridge => {
-                    fresh = bridge_rpc_endpoint(&transport, &m).await;
+                    fresh = bridge_rpc_endpoint(&transport, &m.dial).await;
                 }
                 Reaffirm::FullProbe => {}
             }
@@ -2722,10 +2709,7 @@ impl EmbeddedDaemon {
                 // bridged one whose iroh path just vanished (it may have moved onto
                 // the LAN): run the full `/status` probe + endpoint selection.
                 let probes = transport
-                    .endpoints(
-                        &commonwealth_transport::peer_contact(&m),
-                        commonwealth_transport::TrafficClass::StatusProbe,
-                    )
+                    .endpoints(&m.dial, commonwealth_transport::TrafficClass::StatusProbe)
                     .await;
                 for probe in &probes {
                     let status_url = format!("{}/status", probe.base_url);
@@ -2773,15 +2757,15 @@ impl EmbeddedDaemon {
                     // = `always` prefers the bridge; `never` opts out of bridging.
                     let mut sel: Option<(String, String)> = None;
                     if allow_bridge && mode == RpcTunnelMode::Always {
-                        sel = bridge_rpc_endpoint(&transport, &m).await;
+                        sel = bridge_rpc_endpoint(&transport, &m.dial).await;
                     }
                     if sel.is_none() {
-                        sel = reachable_rpc_endpoint(&m.addresses, rpc_port)
+                        sel = reachable_rpc_endpoint(&m.dial.addresses, rpc_port)
                             .await
                             .map(|d| (d, "direct-ip".to_string()));
                     }
                     if sel.is_none() && allow_bridge {
-                        sel = bridge_rpc_endpoint(&transport, &m).await;
+                        sel = bridge_rpc_endpoint(&transport, &m.dial).await;
                     }
                     if sel.is_none() {
                         sel = Some((format!("{host}:{rpc_port}"), "probe-host".to_string()));
@@ -2900,17 +2884,13 @@ impl EmbeddedDaemon {
                 DaemonState::Stopped => return Vec::new(),
             }
         };
-        let member = {
-            let mesh = app_state.inner.fabric.mesh.read().await;
-            mesh.members.get(&node).cloned()
-        };
-        let Some(member) = member else {
+        let Some(member) = app_state.membership().member(node).await else {
             return Vec::new();
         };
         app_state
             .peer_transport()
             .endpoints(
-                &commonwealth_transport::peer_contact(&member),
+                &member.dial,
                 commonwealth_transport::TrafficClass::ModelTransfer,
             )
             .await
@@ -5153,13 +5133,10 @@ fn sticky_endpoint(
 /// raw-TCP workers already have.
 async fn bridge_rpc_endpoint(
     transport: &Arc<dyn commonwealth_transport::PeerTransport>,
-    member: &commonwealth_core::mesh::MemberRecord,
+    member: &commonwealth_transport::PeerContact,
 ) -> Option<(String, String)> {
     let candidates = transport
-        .endpoints(
-            &commonwealth_transport::peer_contact(member),
-            commonwealth_transport::TrafficClass::RpcTensor,
-        )
+        .endpoints(member, commonwealth_transport::TrafficClass::RpcTensor)
         .await;
     let ep = candidates.into_iter().next()?;
     let authority = ep.base_url.strip_prefix("http://")?.to_string();
