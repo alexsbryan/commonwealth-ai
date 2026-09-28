@@ -165,7 +165,7 @@ crates/
 ├── sovereign-daemon         # The node's host crate — assembly, surface shells, edge, adapters; cross-package MeshStore/work-atlas integration tests
 ├── sovereign-peer-wire      # Wire types both ends of an internal exchange must spell alike
 ├── sovereign-compute        # Supervised compute-child boundary — crash isolation, not parallelism
-├── sovereign-pods           # Compute's remote isolation — leasing a rented machine
+├── sovereign-pods           # Compute's remote isolation — leasing a rented machine; `sovereign-pod-worker`, the pod's worker-mode binary
 ├── sovereign-scheduler      # Serving's pure tier — ranker, decision records, replay ("The two tiers", SERVING_BOUNDARY.md)
 ├── sovereign-serving-host   # Serving's host tier — peer_inference, admission, turn_admission, entry_endpoint
 ├── sovereign-serve          # `serve`, the model server binary — the OpenAI wire alone (no mesh, no cw-rails) over the one serving assembly

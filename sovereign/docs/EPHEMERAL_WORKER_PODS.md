@@ -26,6 +26,13 @@ Outstanding from the MVP plan:
 
 Landed since the original MVP plan:
 
+- **Worker binary** (pb-pods-worker) — worker mode is its own
+  `sovereign-pod-worker` binary in `sovereign-pods`; `sovereign-cli
+  daemon run --worker-mode` execs it with the argv unchanged, and the
+  svrn daemon no longer serves worker mode. An image carries
+  `sovereign-cli`, `sovereign-cli-daemon`, `sovereign-stock` and
+  `sovereign-pod-worker`.
+
 - **Runner Phase 1** — `WorkerState::spawn_disk_dump_watcher` (in
   `worker_http`): on full upload completion, atomically dumps GGUFs
   to `$SOVEREIGN_MODELS_DIR` (default `/workspace/models`) and

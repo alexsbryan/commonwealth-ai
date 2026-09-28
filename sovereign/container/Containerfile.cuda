@@ -336,10 +336,12 @@ RUN --mount=type=cache,target=/root/.cargo/registry,sharing=locked \
     --mount=type=cache,target=/root/.cache/sccache,sharing=locked \
     --mount=type=cache,target=/workspace/target \
     rm -rf /workspace/target/release/build/llama-cpp-sys-4-*/out/llama.cpp \
- && cargo build --release --bin sovereign-cli --bin sovereign-cli-daemon --bin sovereign-cli-llm \
+ && cargo build --release --bin sovereign-cli --bin sovereign-cli-daemon --bin sovereign-cli-llm --bin sovereign-stock --bin sovereign-pod-worker \
  && cp /workspace/target/release/sovereign-cli        /usr/local/bin/sovereign-cli \
  && cp /workspace/target/release/sovereign-cli-daemon /usr/local/bin/sovereign-cli-daemon \
  && cp /workspace/target/release/sovereign-cli-llm    /usr/local/bin/sovereign-cli-llm \
+ && cp /workspace/target/release/sovereign-stock      /usr/local/bin/sovereign-stock \
+ && cp /workspace/target/release/sovereign-pod-worker /usr/local/bin/sovereign-pod-worker \
  && sccache --show-stats
 
 # ─── CUDA preflight binary ───────────────────────────────────────────
@@ -426,6 +428,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY --from=build /usr/local/bin/sovereign-cli        /usr/local/bin/sovereign-cli
 COPY --from=build /usr/local/bin/sovereign-cli-daemon /usr/local/bin/sovereign-cli-daemon
 COPY --from=build /usr/local/bin/sovereign-cli-llm    /usr/local/bin/sovereign-cli-llm
+# `daemon run` execs sovereign-stock and `daemon run --worker-mode` execs
+# sovereign-pod-worker (pb-pods-worker).
+COPY --from=build /usr/local/bin/sovereign-stock      /usr/local/bin/sovereign-stock
+COPY --from=build /usr/local/bin/sovereign-pod-worker /usr/local/bin/sovereign-pod-worker
 COPY --from=build /usr/local/bin/cuda-preflight /usr/local/bin/cuda-preflight
 # NOTE: no llama.cpp shared-lib copy here anymore. The vendored
 # llama-cpp-4 dropped `dynamic-link` from its default features

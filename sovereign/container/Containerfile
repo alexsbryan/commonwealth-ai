@@ -188,8 +188,11 @@ RUN --mount=type=cache,target=/root/.cargo/registry,sharing=locked \
     --mount=type=cache,target=/root/.cargo/git,sharing=locked \
     --mount=type=cache,target=/root/.cache/sccache,sharing=locked \
     --mount=type=cache,target=/workspace/target \
-    cargo build --release --bin sovereign-cli \
- && cp /workspace/target/release/sovereign-cli /usr/local/bin/sovereign-cli \
+    cargo build --release --bin sovereign-cli --bin sovereign-cli-daemon --bin sovereign-stock --bin sovereign-pod-worker \
+ && cp /workspace/target/release/sovereign-cli          /usr/local/bin/sovereign-cli \
+ && cp /workspace/target/release/sovereign-cli-daemon   /usr/local/bin/sovereign-cli-daemon \
+ && cp /workspace/target/release/sovereign-stock        /usr/local/bin/sovereign-stock \
+ && cp /workspace/target/release/sovereign-pod-worker   /usr/local/bin/sovereign-pod-worker \
  && sccache --show-stats
 
 # ─── Runtime stage ───────────────────────────────────────────────────
@@ -210,7 +213,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgomp1 \
  && rm -rf /var/lib/apt/lists/*
 
-COPY --from=build /usr/local/bin/sovereign-cli /usr/local/bin/sovereign-cli
+# The worker-mode chain (pb-pods-worker): `sovereign-cli daemon run
+# --worker-mode` execs sovereign-cli-daemon, which execs
+# sovereign-pod-worker; the worker's child `sovereign-cli daemon run
+# --config` reaches sovereign-stock the same way.
+COPY --from=build /usr/local/bin/sovereign-cli          /usr/local/bin/sovereign-cli
+COPY --from=build /usr/local/bin/sovereign-cli-daemon   /usr/local/bin/sovereign-cli-daemon
+COPY --from=build /usr/local/bin/sovereign-stock        /usr/local/bin/sovereign-stock
+COPY --from=build /usr/local/bin/sovereign-pod-worker   /usr/local/bin/sovereign-pod-worker
 
 # Workspace volume — RunPod mounts /workspace by default; our entrypoint
 # arranges /workspace/models for owner uploads and /workspace/data for
