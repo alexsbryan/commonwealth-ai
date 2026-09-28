@@ -316,7 +316,10 @@ mod tests {
         let (v, note) = embed_or_named_fallback::<&str>(Err("slot busy"));
         assert!(v.is_empty(), "a failed embed searches full text");
         let note = note.expect("the fallback is named");
-        assert!(note.contains("full-text") && note.contains("slot busy"), "{note}");
+        assert!(
+            note.contains("full-text") && note.contains("slot busy"),
+            "{note}"
+        );
 
         let (v, note) = embed_or_named_fallback::<&str>(Ok(vec![0.5]));
         assert_eq!(v, vec![0.5]);

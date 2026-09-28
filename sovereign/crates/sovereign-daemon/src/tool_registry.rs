@@ -378,50 +378,14 @@ pub async fn build_tool_registry(
 }
 
 /// Merge every per-corpus `scip_graph.db` under `indexes_dir` into a
-/// single in-memory graph. Same idea as `project_cmd::load_merged_graph`
-/// but without the operator-facing stdout printing, since the daemon
-/// runs under launchd/systemd.
+/// single in-memory graph: the one loader,
+/// `corpus_engine_scip::merged_graph::load_merged_graph` (phase-b
+/// pb-code-freshness), without the operator-facing stderr banner, since the
+/// daemon runs under launchd/systemd.
 pub async fn build_merged_scip_graph(
     indexes_dir: &std::path::Path,
 ) -> corpus_engine_watchers::reindexer::ScipGraph {
-    let merged = corpus_engine_watchers::reindexer::ScipGraph::open_in_memory("merged")
-        .expect("in-memory ScipGraph");
-    let Ok(entries) = std::fs::read_dir(indexes_dir) else {
-        return merged;
-    };
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if !path.is_dir() {
-            continue;
-        }
-        let scip_path = path.join("scip_graph.db");
-        if !scip_path.exists() {
-            continue;
-        }
-        let name = path
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or("?")
-            .to_string();
-        match merged.import_from_path(&scip_path).await {
-            Ok((syms, refs)) => {
-                if syms > 0 || refs > 0 {
-                    tracing::info!(
-                        corpus = %name,
-                        symbols = syms,
-                        references = refs,
-                        "merged SCIP graph from corpus"
-                    );
-                }
-            }
-            Err(e) => {
-                tracing::warn!(
-                    corpus = %name,
-                    error = %e,
-                    "could not import SCIP graph — skipping"
-                );
-            }
-        }
-    }
-    merged
+    corpus_engine_scip::merged_graph::load_merged_graph(indexes_dir, false)
+        .await
+        .0
 }
