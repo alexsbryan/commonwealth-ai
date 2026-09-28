@@ -28,7 +28,6 @@ use tower_http::cors::CorsLayer;
 
 use corpus_engine_notes::NoteStore;
 use sovereign_core::registry::ToolRegistry;
-use sovereign_core::types::{Effect, StepOutput, ToolContext};
 
 // ─── JSON-RPC 2.0 envelope ────────────────────────────────────
 //
@@ -41,13 +40,6 @@ use sovereign_core::types::{Effect, StepOutput, ToolContext};
 // `data` member, which serializes to nothing while it is `None`.
 use sovereign_core::oicp::jsonrpc::{JsonRpcRequest, JsonRpcResponse};
 use sovereign_core::oicp::mcp::McpMethod;
-
-fn call_tool_text(text: impl Into<String>, is_error: bool) -> Value {
-    serde_json::json!({
-        "content": [{ "type": "text", "text": text.into() }],
-        "isError": is_error,
-    })
-}
 
 // MCP allowlist + alias logic lives in
 // [`sovereign_tools::mcp_surface`] so the daemon's mount and the
@@ -316,132 +308,51 @@ async fn handle_tool_call(
         .cloned()
         .unwrap_or(Value::Object(Default::default()));
 
-    if !is_mcp_exposed(&name) {
+    // The ToolRegistry half (validate, write audit, ToolContext, execute,
+    // StepOutput mapping) is sovereign-contracts' `mcp_host`, which the code
+    // server runs too; the log, the pattern matcher and the counter are
+    // this daemon's.
+    let Some(outcome) = sovereign_contracts::mcp_host::call_registry_tool(
+        &tools,
+        &name,
+        &arguments,
+        &session_id,
+        agent_session_token,
+        is_mcp_exposed,
+    )
+    .await
+    else {
         return JsonRpcResponse::error(id, -32601, format!("tool not found: {raw_name}"));
-    }
-
-    let tool = match tools.get(&name) {
-        Ok(t) => t,
-        Err(_) => {
-            return JsonRpcResponse::result(
-                id,
-                call_tool_text(
-                    format!("`{name}` not registered. Run `sovereign project init` first."),
-                    false,
-                ),
-            );
-        }
     };
-
-    if let Err(e) = tool.validate(&arguments) {
-        return JsonRpcResponse::result(id, call_tool_text(e.to_string(), true));
-    }
-
-    // Phase 1.5 audit gate: MCP is stdio/HTTP non-interactive, so the
-    // executor's `ApprovalChannel::request_approval` path (which blocks
-    // on human input) can't fire here. Instead we AUDIT every write-
-    // effectful MCP call — tracing::warn!, plus a dedicated outcome
-    // tag in the ring buffer — so an operator running `sovereign
-    // reflect` sees every unapproved write after the fact. A future
-    // interactive-MCP protocol extension can upgrade this to a hard
-    // block without changing the surrounding structure.
-    //
-    // See ARCH_PRINCIPLES.md §7 (structural invariants) and §9
-    // (glassbox). The parity gate to the executor's StepKind::Tool
-    // path closes once MCP has an approval protocol; until then
-    // visibility is the achievable half.
-    let descriptor = tool.descriptor();
-    let is_write_effectful = descriptor.effect != Effect::Read;
-    if is_write_effectful {
-        tracing::warn!(
-            tool_id = %name,
-            effect = ?descriptor.effect,
-            idempotency = ?descriptor.idempotency,
-            session_id = %session_id,
-            "mcp: write-effectful tool invoked without approval gate \
-             (MCP protocol does not support interactive approval; \
-             audit-only per Phase 1.5)"
-        );
-    }
-
-    // Glassbox the dispatch so operators can correlate work-atlas
-    // session creation with the MCP call that triggered it (ARCH §9.1).
-    // Truncate the token to 12 chars per ARCH §9.3 — redact deliberately.
-    let token_redacted: String = agent_session_token.chars().take(12).collect();
-    tracing::debug!(
-        tool = %name,
-        agent_session_token = %token_redacted,
-        "mcp:tool_call dispatched"
-    );
-
-    let ctx = ToolContext {
-        conversation_id: "mcp".to_string(),
-        task_id: None,
-        working_directory: None,
-        in_reasoning_loop: false,
-        agent_session_token: Some(agent_session_token),
-        turn_index: 0,
-        ..Default::default()
-    };
-
-    let result = tool.execute(&arguments, &ctx).await;
 
     // Log outcome to ring buffer. Fire-and-forget — a logging failure must
-    // never affect the tool call result. Write-effectful calls get a
-    // distinct `"unapproved_write"` or `"unapproved_readwrite"` tag so
-    // `sovereign reflect` can surface them as a reviewable bucket
-    // separate from ordinary reads.
-    let base_outcome = match &result {
-        Err(_) => "error",
-        Ok(StepOutput::Json(v)) => {
-            // Detect empty/null results to flag "index missing content" signals.
-            if v.is_null() || *v == serde_json::json!({}) || *v == serde_json::json!([]) {
-                "empty_result"
-            } else {
-                "success"
-            }
-        }
-        Ok(_) => "success",
-    };
-    let outcome = match (base_outcome, descriptor.effect) {
-        ("success", Effect::Write) => "unapproved_write",
-        ("success", Effect::ReadWrite) => "unapproved_readwrite",
-        (other, _) => other,
-    };
-    let _ = logger.log_tool_call(&session_id, &name, outcome).await;
+    // never affect the tool call result. A call that executed no tool (not
+    // registered, arguments refused) is not logged.
+    if let Some(tag) = sovereign_contracts::mcp_host::call_log_tag(&outcome) {
+        let _ = logger.log_tool_call(&session_id, &name, tag).await;
 
-    // Phase 7.1: run the pattern matcher against the freshly-logged
-    // call. Fire-and-forget on a tokio task so a slow DB write
-    // (writing an `observed`-source note) doesn't lengthen the tool
-    // response. The matcher's per-session state lives on the Arc'd
-    // matcher; cooldowns persist across requests on the same
-    // session id.
-    let matcher_for_task = Arc::clone(&pattern_matcher);
-    let session_for_task = Arc::clone(&session_id);
-    tokio::spawn(async move {
-        matcher_for_task
-            .observe_and_record(session_for_task.as_str(), None)
-            .await;
-    });
+        // Phase 7.1: run the pattern matcher against the freshly-logged
+        // call. Fire-and-forget on a tokio task so a slow DB write
+        // (writing an `observed`-source note) doesn't lengthen the tool
+        // response. The matcher's per-session state lives on the Arc'd
+        // matcher; cooldowns persist across requests on the same
+        // session id.
+        let matcher_for_task = Arc::clone(&pattern_matcher);
+        let session_for_task = Arc::clone(&session_id);
+        tokio::spawn(async move {
+            matcher_for_task
+                .observe_and_record(session_for_task.as_str(), None)
+                .await;
+        });
 
-    // The session call counter is kept for telemetry / rate-limit
-    // decisions even though the periodic reflection nudge was removed
-    // in Phase 2. Tools now surface their salient state via
-    // `Tool::signal()` which the ReasonWithTools preamble polls every
-    // turn — the 10-call text nudge ("Consider calling
-    // session_reflection…") is obsolete.
-    let _ = call_counter.fetch_add(1, Ordering::Relaxed);
-
-    match result {
-        Ok(StepOutput::Text(text)) => JsonRpcResponse::result(id, call_tool_text(text, false)),
-        Ok(StepOutput::Json(value)) => {
-            let text = serde_json::to_string_pretty(&value).unwrap_or_else(|_| value.to_string());
-            JsonRpcResponse::result(id, call_tool_text(text, false))
-        }
-        Ok(other) => JsonRpcResponse::result(id, call_tool_text(format!("{other:?}"), false)),
-        Err(e) => JsonRpcResponse::result(
-            id,
-            call_tool_text(format!("Tool `{name}` failed: {e}"), true),
-        ),
+        // The session call counter is kept for telemetry / rate-limit
+        // decisions even though the periodic reflection nudge was removed
+        // in Phase 2. Tools now surface their salient state via
+        // `Tool::signal()` which the ReasonWithTools preamble polls every
+        // turn — the 10-call text nudge ("Consider calling
+        // session_reflection…") is obsolete.
+        let _ = call_counter.fetch_add(1, Ordering::Relaxed);
     }
+
+    JsonRpcResponse::result(id, outcome.into_call_result())
 }

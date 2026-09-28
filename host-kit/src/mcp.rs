@@ -14,6 +14,9 @@ use std::future::Future;
 
 use oicp_types::jsonrpc::{JsonRpcRequest, JsonRpcResponse};
 use oicp_types::mcp::{negotiate_mcp_protocol_version, McpMethod};
+// What one tool run produced is MCP wire vocabulary (`CallToolResult`), so it
+// lives beside the method set in oicp-types; this is its historical path.
+pub use oicp_types::mcp::{CallAudit, ToolOutcome};
 use serde_json::{json, Value};
 use tokio::io::{AsyncBufRead, AsyncBufReadExt, AsyncWrite, AsyncWriteExt};
 
@@ -26,70 +29,6 @@ pub mod http;
 pub struct McpRequestContext {
     /// The `X-Agent-Session` header the agent sent, if it sent one.
     pub agent_session: Option<String>,
-}
-
-/// What an executed tool may change, as its host declares it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ToolEffect {
-    Read,
-    Write,
-    ReadWrite,
-}
-
-/// What the call log is told about a call that executed a tool. It never goes
-/// on the wire.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct CallAudit {
-    pub effect: ToolEffect,
-    /// The tool succeeded with a null or empty JSON result.
-    pub empty_result: bool,
-}
-
-/// What one tool run produced. A tool that ran and failed is an outcome with
-/// `is_error` set, which the agent reads and can recover from; it is never a
-/// JSON-RPC error, which a client treats as a broken transport.
-#[derive(Debug, Clone, Default, PartialEq)]
-pub struct ToolOutcome {
-    /// The text the agent reads.
-    pub text: String,
-    /// The tool said no.
-    pub is_error: bool,
-    /// Optional machine-readable result (`structuredContent`).
-    pub structured: Option<Value>,
-    /// `None` when no tool executed: the host refused the call before one ran.
-    pub audit: Option<CallAudit>,
-}
-
-impl ToolOutcome {
-    /// A tool answered.
-    pub fn answer(text: impl Into<String>, structured: Option<Value>) -> Self {
-        Self {
-            text: text.into(),
-            structured,
-            ..Self::default()
-        }
-    }
-
-    /// A tool said no.
-    pub fn refusal(text: impl Into<String>) -> Self {
-        Self {
-            text: text.into(),
-            is_error: true,
-            ..Self::default()
-        }
-    }
-
-    /// The MCP `CallToolResult` this outcome is on the wire.
-    pub fn into_call_result(self) -> Value {
-        let mut result = json!({
-            "content": [ { "type": "text", "text": self.text } ],
-            "isError": self.is_error,
-        });
-        if let Some(structured) = self.structured {
-            result["structuredContent"] = structured;
-        }
-        result
-    }
 }
 
 /// The tool-host port: what a program supplies so the dispatcher can serve

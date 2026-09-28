@@ -2,6 +2,11 @@
 //! MCP wire vocabulary: protocol-version negotiation and the method set every
 //! MCP server mount speaks. It sits beside [`crate::jsonrpc`], the envelope it
 //! rides on (FIVE_PROGRAMS §12 3a rung 2; phase-b pb-mcp, decision phase-b-13).
+//! [`ToolOutcome`] is what one `tools/call` produced and its `CallToolResult`
+//! wire shape (phase-b pb-code-server): every MCP host, and the registry half
+//! both the daemon and the code server run, speak it.
+
+use serde_json::{json, Value};
 
 /// MCP protocol revisions both server mounts can speak, newest first.
 ///
@@ -71,6 +76,63 @@ impl McpMethod {
     /// Parse a wire method name; `None` is "method not found" (-32601).
     pub fn parse(method: &str) -> Option<Self> {
         Self::ALL.into_iter().find(|m| m.as_str() == method)
+    }
+}
+
+/// What the call log is told about a call that executed a tool. It never goes
+/// on the wire.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CallAudit {
+    /// What the tool may change, as its descriptor declares it.
+    pub effect: crate::Effect,
+    /// The tool succeeded with a null or empty JSON result.
+    pub empty_result: bool,
+}
+
+/// What one tool run produced. A tool that ran and failed is an outcome with
+/// `is_error` set, which the agent reads and can recover from; it is never a
+/// JSON-RPC error, which a client treats as a broken transport.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct ToolOutcome {
+    /// The text the agent reads.
+    pub text: String,
+    /// The tool said no.
+    pub is_error: bool,
+    /// Optional machine-readable result (`structuredContent`).
+    pub structured: Option<Value>,
+    /// `None` when no tool executed: the host refused the call before one ran.
+    pub audit: Option<CallAudit>,
+}
+
+impl ToolOutcome {
+    /// A tool answered.
+    pub fn answer(text: impl Into<String>, structured: Option<Value>) -> Self {
+        Self {
+            text: text.into(),
+            structured,
+            ..Self::default()
+        }
+    }
+
+    /// A tool said no.
+    pub fn refusal(text: impl Into<String>) -> Self {
+        Self {
+            text: text.into(),
+            is_error: true,
+            ..Self::default()
+        }
+    }
+
+    /// The MCP `CallToolResult` this outcome is on the wire.
+    pub fn into_call_result(self) -> Value {
+        let mut result = json!({
+            "content": [ { "type": "text", "text": self.text } ],
+            "isError": self.is_error,
+        });
+        if let Some(structured) = self.structured {
+            result["structuredContent"] = structured;
+        }
+        result
     }
 }
 

@@ -90,6 +90,9 @@ pub mod lessons;
 pub mod local_inference;
 pub mod local_only;
 pub mod mcp_config;
+/// The ToolRegistry half of an MCP `tools/call`: one path for every program
+/// that serves a `ToolRegistry` over MCP.
+pub mod mcp_host;
 /// The svrn daemon's one read of mesh membership (`MembershipReader`), which
 /// the flip re-points at cw-rails (pb-mesh-exit-core).
 pub mod membership;
