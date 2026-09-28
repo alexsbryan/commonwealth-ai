@@ -21,7 +21,12 @@ impl McpToolHost for Server {
         self.tool_list()
     }
 
-    async fn call(&self, name: &str, args: &Value, _ctx: &McpRequestContext) -> Option<ToolOutcome> {
+    async fn call(
+        &self,
+        name: &str,
+        args: &Value,
+        _ctx: &McpRequestContext,
+    ) -> Option<ToolOutcome> {
         Server::call(self, name, args).await
     }
 }

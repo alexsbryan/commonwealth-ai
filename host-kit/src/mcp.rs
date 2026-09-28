@@ -17,6 +17,9 @@ use oicp_types::mcp::{negotiate_mcp_protocol_version, McpMethod};
 use serde_json::{json, Value};
 use tokio::io::{AsyncBufRead, AsyncBufReadExt, AsyncWrite, AsyncWriteExt};
 
+#[cfg(feature = "http")]
+pub mod http;
+
 /// What one request carries besides its JSON-RPC body: the transport's view
 /// of who asked. Stdio has none of it, so there it is the default.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
