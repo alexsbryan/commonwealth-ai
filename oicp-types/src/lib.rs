@@ -24,6 +24,7 @@
 //! field is serde-defaulted; an empty v0.4 value serializes identically
 //! to a v0.3 manifest.
 
+pub mod capabilities;
 pub mod capability;
 pub mod completion;
 pub mod error;
