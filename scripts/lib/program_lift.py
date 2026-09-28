@@ -527,6 +527,15 @@ def lift(lift_id: str, spec: dict, sandbox: Path, target: Path, keep: bool, sets
         shutil.copytree(REPO / rel, dst, ignore=shutil.ignore_patterns("target", ".git"))
         os.environ[var] = str(dst)
         say(f"CARRIED {rel} as {var}={dst}")
+    # `tree`: a knob naming a directory INSIDE the sandbox, for a test that
+    # reads the source tree it was built from. The lift's own tree, never the
+    # repo's; a missing directory is a spec error, not a default.
+    for var, rel in spec.get("tree", {}).items():
+        dst = sandbox / rel
+        if not dst.is_dir():
+            raise Verdict("could-not-judge", f"tree {var}={rel}: {dst} is not a directory in the sandbox")
+        os.environ[var] = str(dst)
+        say(f"TREE {var}={dst}")
     say(f"toolchain: {subprocess.run(['cargo', '--version'], cwd=sandbox, capture_output=True, text=True).stdout.strip()}")
     say(f"sandbox: {sandbox}  (repo is {REPO}; nothing under it is on this path)")
 

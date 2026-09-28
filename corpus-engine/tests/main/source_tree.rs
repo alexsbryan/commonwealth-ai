@@ -8,7 +8,9 @@
 
 use std::path::PathBuf;
 
-/// Names the monorepo source tree. Set for in-repo builds by `.cargo/config.toml`.
+/// Names the source tree: a directory holding crates by name. The monorepo
+/// root in-repo (`.cargo/config.toml`); a lift's own `crates/` in a lift
+/// (`scripts/program-lift.toml` `tree`).
 pub const WORKSPACE_ROOT_ENV: &str = "SOVEREIGN_WORKSPACE_ROOT";
 
 /// Names the canonical recipes tree.

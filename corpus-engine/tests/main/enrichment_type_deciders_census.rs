@@ -20,16 +20,32 @@ use std::path::{Path, PathBuf};
 /// Production source roots the census sweeps. Tests are excluded by
 /// `is_test_line` below, not by path, because `#[cfg(test)]` modules live
 /// inline in this workspace.
+///
+/// Every crate the source tree holds: `<tree>/*/src`, plus
+/// `<tree>/sovereign/crates/*/src` where the monorepo nests svrn's crates. A
+/// lift holds its closure flat under one `crates/`, so the second level is
+/// absent there and the sweep is the lifted closure (pb-ingest).
 fn roots() -> Vec<PathBuf> {
     // Workspace-wide by nature; the root is a knob, not a climb (boundary 3c).
     let ws = crate::source_tree::workspace_root();
-    let mut roots = vec![ws.join("corpus-engine/src")];
-    for entry in std::fs::read_dir(ws.join("sovereign/crates")).unwrap() {
-        let src = entry.unwrap().path().join("src");
-        if src.is_dir() {
-            roots.push(src);
+    let mut roots = Vec::new();
+    for level in [ws.clone(), ws.join("sovereign/crates")] {
+        let Ok(entries) = std::fs::read_dir(&level) else {
+            continue;
+        };
+        for entry in entries {
+            let src = entry.unwrap().path().join("src");
+            if src.is_dir() {
+                roots.push(src);
+            }
         }
     }
+    // A tree without the registry's own crate is the wrong tree, not a clean one.
+    assert!(
+        roots.contains(&ws.join("corpus-engine/src")),
+        "{} holds no corpus-engine/src — not a source tree",
+        ws.display()
+    );
     roots
 }
 
