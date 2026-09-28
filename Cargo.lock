@@ -12351,7 +12351,6 @@ dependencies = [
  "serde_json",
  "sha2 0.10.9",
  "sovereign-cli-base",
- "sovereign-cli-shared",
  "sovereign-code",
  "sovereign-contracts",
  "sovereign-enrichment-build",
@@ -12483,7 +12482,6 @@ name = "sovereign-cli-shared"
 version = "0.8.0"
 dependencies = [
  "clap",
- "corpus-engine-scip",
  "dirs 5.0.1",
  "kernel-types",
  "libc",
@@ -12492,11 +12490,9 @@ dependencies = [
  "sovereign-cli-base",
  "sovereign-contracts",
  "sovereign-time",
- "tempfile",
  "tokio",
  "toml 0.8.2",
  "tracing",
- "which",
  "workspace-hack",
 ]
 

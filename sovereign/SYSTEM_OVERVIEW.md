@@ -174,10 +174,10 @@ crates/
 ├── sovereign-grants         # GuestGrant, EphemeralGrantStore, `Scope` — per-turn authorization
 ├── sovereign-desktop        # Tauri 2 + Svelte 5
 ├── sovereign-cli            # User-facing dispatcher — execs into sibling binaries
-├── sovereign-cli-base       # Leaf half of the CLI shared set (help, dirs, dispatcher, guest_link, urls; rail client uses the rail-core wire leaf)
-├── sovereign-cli-shared     # Shared lib (repo, prompts, tracing init, cli-contract; re-exports sovereign-cli-base at the historical paths)
+├── sovereign-cli-base       # Leaf half of the CLI shared set (help, dirs, dispatcher, guest_link, urls, repo, prompts, deprecation, tracing init, models, mcp client; rail client uses the rail-core wire leaf)
+├── sovereign-cli-shared     # svrn CLI shared lib (cli-contract, args, flag surface, lane verdict; re-exports sovereign-cli-base at the historical paths)
 ├── sovereign-cli-daemon     # Long-running host + lifecycle; owns Windows GPU backend selection
-├── sovereign-cli-dev        # Workbench: project lifecycle + code intel + tools
+├── sovereign-cli-dev        # Workbench: project lifecycle + code intel + tools; owns the project model (`project init` execs its `project-observe`)
 ├── sovereign-cli-llm        # Model interaction + heavy retrieval (chat/bench/eval/atlas/enrich/corpus/meshapp)
 ├── sovereign-cli-mesh       # cmnwlth's verbs — mesh (incl. `mesh pod`), ring, job, publish, run
 ├── sovereign-time           # Wall-clock helpers — zero-dep leaf for crates off sovereign-core

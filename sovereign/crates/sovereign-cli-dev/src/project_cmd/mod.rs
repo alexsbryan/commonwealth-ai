@@ -394,8 +394,8 @@ pub(crate) async fn cmd_status(args: &[String]) -> i32 {
     0
 }
 
-// `load_merged_graph` is `corpus_engine_scip::merged_graph`'s, re-exported
-// by `sovereign-cli-shared::scip`; the code tools load it lazily through
+// `load_merged_graph` is `corpus_engine_scip::merged_graph`'s (the
+// `sovereign-cli-shared::scip` re-export went with pb-code-cli-base); the code tools load it lazily through
 // `sovereign_code::LazyScipGraph` (phase-b pb-code-freshness).
 
 // `--orchestrate` (which sequenced DESIGN.md + CHARTER.md +

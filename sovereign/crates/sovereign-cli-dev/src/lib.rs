@@ -33,7 +33,7 @@
 //! one is `#[cfg(feature = "workbench")]`.
 //!
 //! With `default-features = false` this crate is two workspace dependencies
-//! wide — `corpus-engine-scip` and `sovereign-cli-shared` — which the
+//! wide — `corpus-engine-scip` and `sovereign-cli-base` — which the
 //! dispatcher already carries. `workbench` is a DEFAULT feature, so building
 //! the binary is unchanged; only a consumer that explicitly opts out gets the
 //! thin surface.
@@ -116,13 +116,15 @@ mod suggest_seams_cmd;
 #[cfg(feature = "workbench")]
 mod tools_cmd;
 
-// The project model moved to `sovereign-cli-shared` (2026-08-07) when
-// `project init` shipped in the dispatcher: init writes
-// `.sovereign/project.toml`, the workbench's `found` / `phase` / `audit` /
-// `charter amend` read it. Re-exported at the old crate-root paths so every
-// `crate::observation::…` / `crate::project_toml::…` call site is unchanged.
+// The project model is the code program's (pb-code-cli-base; it sat in
+// `sovereign-cli-shared` from 2026-08-07). The dispatcher's `project init`
+// writes `.sovereign/project.toml` by exec'ing `project-observe`
+// (`project_cmd::observe`); `found` / `phase` / `audit` / `charter amend`
+// read it here.
 #[cfg(feature = "workbench")]
-pub(crate) use sovereign_cli_shared::{observation, project_toml};
+pub(crate) mod observation;
+#[cfg(feature = "workbench")]
+pub(crate) mod project_toml;
 
 /// A `svrn code` subverb this crate serves as a **linked library call** rather
 /// than a sibling-process `exec`.

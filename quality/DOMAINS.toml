@@ -10747,13 +10747,13 @@ lines = 37
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-shared/src/observation.rs"
+path = "sovereign/crates/sovereign-cli-dev/src/observation.rs"
 context = "unknown"
 lines = 684
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-shared/src/project_toml.rs"
+path = "sovereign/crates/sovereign-cli-dev/src/project_toml.rs"
 context = "unknown"
 lines = 402
 note = ""
@@ -10774,12 +10774,6 @@ note = ""
 path = "sovereign/crates/sovereign-cli-base/src/repo.rs"
 context = "unknown"
 lines = 130
-note = ""
-
-[[module]]
-path = "sovereign/crates/sovereign-cli-shared/src/scip.rs"
-context = "unknown"
-lines = 109
 note = ""
 
 [[module]]

@@ -166,11 +166,8 @@ deep-research = ["dep:oicp-client"]
 # binary.
 code-intel = [
     "dep:corpus-engine-scip",
-    # `project init` (2026-08-07) reads the project model — `observation` to
-    # derive what the repo IS, `project_toml` to persist it. Both live in
-    # sovereign-cli-shared because the workbench still reads what init writes.
-    "sovereign-cli-shared/project-model",
-    # …and probes `/mcp` at the end of its run. reqwest is already a
+    # `project init` reaches the project model by exec'ing the code program
+    # (`sovereign-cli-dev project-observe`, pb-code-cli-base), and probes `/mcp` at the end of its run. reqwest is already a
     # non-optional dep of this crate, so enabling this costs no new link.
     "sovereign-cli-shared/mcp-client",
 ]

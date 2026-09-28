@@ -53,7 +53,7 @@ sovereign-daemon = { workspace = true, features = ["treesitter"] }
 # directly rather than through sovereign-mesh's shim
 # (domains REVIEW-build-serving-repoint-daemon). Its tests moved with the
 # inference e2e to `sovereign-daemon`, so this crate no longer links it.
-sovereign-cli-shared = { workspace = true, features = ["scip"] }
+sovereign-cli-shared = { workspace = true }
 # Dep-history note (kept from the atlas/enrich era): `commonwealth-state`,
 # `commonwealth-core` and `commonwealth-api` (now `sovereign-api`) WERE HERE
 # and cw-lift rung 3b deleted all three — the coupling was eleven lines in

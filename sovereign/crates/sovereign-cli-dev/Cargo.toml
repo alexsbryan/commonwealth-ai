@@ -35,7 +35,7 @@ required-features = ["workbench"]
 # Two tiers, and the line between them is load-bearing.
 #
 # ALWAYS-ON is what `sovereign-cli` inherits when it links this crate with
-# `default-features = false`: `corpus-engine-scip` + `sovereign-cli-shared`
+# `default-features = false`: `corpus-engine-scip` + `sovereign-cli-base`
 # (no features) and small third-party crates the dispatcher already carries.
 # `InProcessCodeVerb` and everything it reaches must live inside that budget.
 #
@@ -48,15 +48,12 @@ required-features = ["workbench"]
 # `converge_cmd`'s entire dependency surface. Read-only SQLite over the SCIP
 # graph; no grammars, no model, no daemon.
 corpus-engine-scip = { workspace = true }
-# Default features only — `dirs` and `tracing_init` are ungated. The heavy
-# features this crate needs (`scip`, `mcp-client`,
-# `project-model`) are requested from the `workbench` feature below so a
-# `--no-default-features` consumer does not pay for them.
-sovereign-cli-shared = { workspace = true }
 # The leaf half of the CLI shared set (help, dirs, urls, repo, prompts,
 # deprecation, tracing_init, models, code_index, mcp_client): a
 # [[package_leaf]], so the code program reaches it without naming a svrn
-# CLI crate (pb-code-cli-base).
+# CLI crate (pb-code-cli-base). Default features only; `mcp-client` is
+# requested from the `workbench` feature below so a
+# `--no-default-features` consumer does not pay for reqwest.
 sovereign-cli-base = { workspace = true }
 
 # ── Workbench-only workspace crates ──
@@ -166,13 +163,7 @@ workbench = [
     "dep:kernel-types",
     "dep:axum",
     "dep:tower-http",
-    "sovereign-cli-shared/scip",
-    "sovereign-cli-shared/mcp-client",
     "sovereign-cli-base/mcp-client",
-    # `observation` + `project_toml` live here since 2026-08-07; `found`,
-    # `phase`, `audit` and `charter amend` read the model the shipped
-    # dispatcher's `project init` writes.
-    "sovereign-cli-shared/project-model",
 ]
 
 [lints]

@@ -486,10 +486,12 @@ fn parse_requirements_txt(root: &Path, out: &mut Vec<DetectedDependency>) {
 /// The canonical location is under `~/.svrnmesh/models/`. We check
 /// for the directory's existence — a more thorough check would
 /// verify a specific file, but init is meant to be a one-second
-/// pass and `crate::dirs::sovereign_root()` plus a
+/// pass and `sovereign_cli_base::dirs::sovereign_root()` plus a
 /// `models` subdir is the honest indicator that setup was ever run.
 fn embed_model_available() -> bool {
-    crate::dirs::sovereign_root().join("models").is_dir()
+    sovereign_cli_base::dirs::sovereign_root()
+        .join("models")
+        .is_dir()
 }
 
 // ─── Tests ───────────────────────────────────────────────────────────────────

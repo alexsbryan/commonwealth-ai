@@ -258,8 +258,8 @@ impl DepEntry {
 }
 
 // The Tier-0 twin of `sovereign_core::time::unix_now` (byte-identical body).
-// sovereign-cli-shared is linked by every sibling binary, so it takes the leaf
-// crate rather than sovereign-core — see `sovereign-time`'s own module doc on
+// This module sat in sovereign-cli-shared, linked by every sibling binary,
+// until pb-code-cli-base, so it takes the leaf crate rather than sovereign-core — see `sovereign-time`'s own module doc on
 // why the islands each carry one copy.
 use sovereign_time::unix_now;
 

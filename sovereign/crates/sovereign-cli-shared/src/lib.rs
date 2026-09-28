@@ -11,7 +11,6 @@
 //! Filesystem + repo:
 //! - [`dirs`]: canonical filesystem layout (`~/.svrnmesh/…`).
 //! - [`repo`]: git-repo path resolution + branch lookup.
-//! - [`scip`]: merged SCIP graph loader for code-intelligence tools.
 //!
 //! CLI plumbing (was `sovereign-cli/src/util/`):
 //! - [`cli_contract`]: loader for the CLI contract manifest (`docs/cli-contract.toml`).
@@ -27,11 +26,13 @@
 //!   incremental plan/stamp model moved to the code program,
 //!   `sovereign-cli-dev` (pb-code-index); `project init` still takes its
 //!   scratch directory from here.
-//! - [`observation`] / [`project_toml`] (`project-model`): what a repo IS
-//!   (languages, dependencies, SCIP tooling) and the durable
-//!   `.sovereign/project.toml` record derived from it. Shared because
-//!   `project init` writes the file and `found` / `phase` / `audit` /
-//!   `charter amend` read it back — across two binaries since 2026-08-07.
+//!
+//! `dirs`, `repo`, `help`, `deprecation`, `prompts`, `tracing_init`,
+//! `models`, `mcp_client` and `code_index` live in the leaf
+//! `sovereign-cli-base` and are re-exported here at their historical paths
+//! (pb-code-cli-base). The project model (`observation`, `project_toml`)
+//! moved to the code program, `sovereign-cli-dev`, whose `project-observe`
+//! arm `project init` execs; the `scip` re-export went with no reader left.
 
 pub mod args;
 pub mod cli_contract;
@@ -48,15 +49,9 @@ pub mod lane_verdict;
 #[cfg(feature = "mcp-client")]
 pub use sovereign_cli_base::mcp_client;
 pub use sovereign_cli_base::models;
-#[cfg(feature = "project-model")]
-pub mod observation;
-#[cfg(feature = "project-model")]
-pub mod project_toml;
 pub use sovereign_cli_base::prompts;
 #[cfg(feature = "rail-client")]
 pub use sovereign_cli_base::rail;
 pub use sovereign_cli_base::repo;
-#[cfg(feature = "scip")]
-pub mod scip;
 pub use sovereign_cli_base::tracing_init;
 pub use sovereign_cli_base::urls;

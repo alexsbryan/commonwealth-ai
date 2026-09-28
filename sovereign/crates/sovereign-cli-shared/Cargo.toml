@@ -3,30 +3,23 @@ name = "sovereign-cli-shared"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Neutral filesystem + SCIP helpers shared between sovereign-cli binaries."
+description = "CLI plumbing shared between the svrn CLI binaries."
 
 # Tiny lib crate hosting helpers used by every sibling binary. The
 # baseline (always-on) modules are filesystem + git + CLI plumbing —
-# nothing heavy. The `scip` module is gated behind the `scip` feature
-# so binaries that don't need the merged-graph loader (and therefore
-# don't need `corpus-engine`'s `treesitter` feature with its 5 grammar
-# crates) can skip the transitive cost.
+# nothing heavy. The project model and the `scip` re-export left with
+# pb-code-cli-base (the model is the code program's, sovereign-cli-dev).
 
 [dependencies]
 # `host_load` only: `getloadavg(3)`, the one reader the check runner and
 # the chat-ask lane share so a wall-clock bar is judged against one
 # number (ARCH §10.6). Both dependent crates already link libc.
 libc = "0.2"
-corpus-engine-scip = { workspace = true, optional = true }
-# Bottom-layer wall-clock SSOT — `project_toml` stamps `observed_at`. Depended
+# Bottom-layer wall-clock SSOT — `lane_verdict` reads the clock. Depended
 # on directly rather than through `sovereign-core::time`, which re-exports the
 # same function but would drag corpus-engine + tokio + dashmap into a crate
 # every sibling binary links.
 sovereign-time = { workspace = true }
-# `observation` probes PATH for the SCIP exporters (scip-go, scip-typescript,
-# …) so init can name a missing one instead of leaving an empty call graph.
-# Pinned at 7 to match all four sovereign-cli-* binaries (ARCH §8.2).
-which = { version = "7", optional = true }
 dirs = "5"
 # The flag-surface derive. Every `sovereign-cli-*` binary that declares its
 # flags as a struct reaches `flag_surface::parse` through here, so the seam has
@@ -36,8 +29,9 @@ clap = { workspace = true }
 # The rebrand-aware path SSOT — `dirs.rs` delegates to it instead of
 # mirroring `resolve_branded_dir` by hand (the mirror drifted risk).
 sovereign-contracts = { workspace = true }
-# help, dirs, dispatcher, guest_link, urls, rail — the leaf half, re-exported
-# at their historical paths (FIVE_PROGRAMS fp-98).
+# help, dirs, dispatcher, guest_link, urls, rail, repo, prompts, deprecation,
+# tracing_init, models, mcp_client, code_index — the leaf half, re-exported at
+# their historical paths (FIVE_PROGRAMS fp-98, pb-code-cli-base).
 sovereign-cli-base = { workspace = true }
 # The neutral kernel — `NightlyPosture::judgement` maps the lane's word onto
 # the four verdicts and hands off age, formatting and the staleness band, so
@@ -53,32 +47,13 @@ tokio = { workspace = true }
 tracing = { workspace = true }
 workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 
-[dev-dependencies]
-# `observation` + `project_toml` bring their own unit tests (they write and
-# re-read a real `.sovereign/project.toml` under a temp root). First
-# dev-dependency this crate has needed — `cargo check` never builds
-# `#[cfg(test)]`, so the lint gate stayed green while `cargo test` could not
-# link. Both scripts, always.
-tempfile = { workspace = true }
-
 [features]
-default = ["scip", "mcp-client", "project-model", "rail-client"]   # build-latency bl-member-features: same resolution the workspace build already has; scope-invariant on purpose
-# Enables `sovereign_cli_shared::scip` (merged SCIP graph loader).
-# Points at `corpus-engine-scip` directly post-carve-out (2026-05-23).
-scip = ["dep:corpus-engine-scip"]
+default = ["mcp-client", "rail-client"]   # build-latency bl-member-features: same resolution the workspace build already has; scope-invariant on purpose
 # Enables `sovereign_cli_shared::mcp_client` (daemon-first tool calls
 # for the work-atlas coordination surface), re-exported from
 # `sovereign-cli-base` (pb-code-cli-base). Gated so binaries that
 # never proxy skip the reqwest compile cost.
 mcp-client = ["sovereign-cli-base/mcp-client"]
-# Enables `sovereign_cli_shared::{observation, project_toml}` — the
-# project-model pair. Hoisted out of `sovereign-cli-dev` (2026-08-07) when
-# `project init` moved into the shipped dispatcher: init WRITES
-# `.sovereign/project.toml`, while the workbench's `found` / `phase` /
-# `audit` / `charter amend` READ it, so the model can no longer live in
-# either binary alone. Gated because `observation` probes for SCIP exporters
-# (`corpus-engine-scip`); binaries that never touch a project skip both.
-project-model = ["dep:corpus-engine-scip", "dep:which"]
 # Enables `sovereign_cli_shared::rail` — the ONE operator-side rail client
 # (cw-lift 5e). It was `ring_cmd`'s private pair while `ring` and `job` were
 # the only callers; `svrn quality check --distribute` is a third, and it lives
