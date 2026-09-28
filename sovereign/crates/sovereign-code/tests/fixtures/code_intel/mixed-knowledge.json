@@ -1,0 +1,14 @@
+{
+ "corpus_id": "mixed-knowledge",
+ "embedding_dimensions": 8,
+ "license": "CC0",
+ "rows": [
+  {
+   "source_doc_id": "note",
+   "title": "Note",
+   "url": null,
+   "metadata": null,
+   "content": "Note\n\nThis is a tiny prose document used to stand in for a real knowledge corpus. It exists only to verify that the code intelligence tools \u2014 symbols, code_search, recent_changes \u2014 skip Knowledge-kind corpora rather than attempting to query their chunks tables on typed code columns that do not exist. Pad pad pad pad pad pad pad pad pad pad pad pad pad pad pad."
+  }
+ ]
+}

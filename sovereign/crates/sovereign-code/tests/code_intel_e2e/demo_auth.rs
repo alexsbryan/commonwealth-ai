@@ -1,15 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Part of the e2e_code_intel e2e suite — the auth demo fixture
-//! (T-21..T-27), split from e2e_code_intel.rs for the §3.2 size
-//! ceiling (behaviour-preserving move).
+//! Part of the code-intel e2e suite — the auth demo fixture (T-21..T-27)
+//! and the mixed-corpora regression, split from code_intel_e2e.rs for the
+//! §3.2 size ceiling.
 
-use std::path::PathBuf;
 use std::sync::Arc;
 
 use arc_swap::ArcSwap;
-use corpus_engine::{CorpusEngine, CorpusSpec};
 use corpus_engine_scip::scip_graph::{ScipGraph, ScipRefRecord, ScipSymbolRecord};
-use corpus_index::types::EmbedFn;
+use corpus_index::fs_source::FsIndexSource;
 use sovereign_code::{
     CodeSearchTool, FindCalleesTool, FindCallersTool, RecentChangesTool, ScipGraphHandle,
     SymbolLookupTool,
@@ -20,15 +18,11 @@ use sovereign_contracts::types::ToolContext;
 
 use super::text;
 
-// ════════════════════════��═════════════════════════��════════════
+// ═══════════════════════════════════════════════════════════════
 // Auth demo fixture — SCIP call graph tests (T-21 through T-27)
 // ═══════════════════════════════════════════════════════════════
 
 struct AuthFixture {
-    #[allow(dead_code)]
-    root: PathBuf,
-    #[allow(dead_code)]
-    engine: Arc<CorpusEngine>,
     sym: DeclaredTool,
     search: DeclaredTool,
     callees: DeclaredTool,
@@ -40,80 +34,12 @@ struct AuthFixture {
 impl AuthFixture {
     async fn setup() -> Self {
         let tmp = tempfile::tempdir().expect("tempdir");
-        let root = tmp.path().join("repo");
         let data_dir = tmp.path().join("indexes");
-        std::fs::create_dir_all(root.join("src/middleware")).unwrap();
-        std::fs::create_dir_all(root.join("src/auth")).unwrap();
-        std::fs::create_dir_all(root.join("src/routes")).unwrap();
-        std::fs::create_dir_all(root.join("src/models")).unwrap();
         std::fs::create_dir_all(&data_dir).unwrap();
 
-        // ── Write auth demo files ─────────���──────────────────
-
-        std::fs::write(root.join("src/middleware/auth.rs"), AUTH_MIDDLEWARE_RS).unwrap();
-        std::fs::write(root.join("src/auth/tokens.rs"), AUTH_TOKENS_RS).unwrap();
-        std::fs::write(root.join("src/auth/refresh.rs"), AUTH_REFRESH_RS).unwrap();
-        std::fs::write(root.join("src/routes/auth.rs"), ROUTES_AUTH_RS).unwrap();
-        std::fs::write(root.join("src/routes/users.rs"), ROUTES_USERS_RS).unwrap();
-        std::fs::write(root.join("src/models/user.rs"), MODELS_USER_RS).unwrap();
-
-        // ── Index the fixture (LanceDB for symbol_lookup/code_search) ─
-
-        let embed: corpus_index::types::EmbedFn = Arc::new(|_text: &str| {
-            Box::pin(async {
-                Ok::<Vec<f32>, corpus_index::Error>(vec![
-                    0.0;
-                    corpus_index::types::DEFAULT_EMBED_DIM
-                ])
-            })
-        });
-        // See `Fixture::setup` for why this is required — the engine
-        // refuses to ingest without a declared embedding model name.
-        let engine = Arc::new(
-            CorpusEngine::new(data_dir.join("_recipes"), data_dir.clone(), embed)
-                .with_embedding_model("test-mock"),
-        );
-
-        let recipe_dir = data_dir.join("_recipes");
-        std::fs::create_dir_all(&recipe_dir).unwrap();
-        let recipe_path = recipe_dir.join("auth-demo.toml");
-        std::fs::write(
-            &recipe_path,
-            format!(
-                r#"[corpus]
-id = "auth-demo"
-name = "auth-demo"
-description = "Auth demo fixture"
-license = "private"
-mesh_sharing = false
-size_compressed_gb = 0
-size_indexed_gb = 0
-
-[acquire]
-type = "local_file"
-path = "{path}"
-
-[extract]
-type = "code"
-context_lines = 3
-max_lines_per_chunk = 150
-
-[chunk]
-type = "passthrough"
-
-[index]
-fts = true
-vector = false
-"#,
-                path = root.display()
-            ),
-        )
-        .unwrap();
-
-        engine
-            .ingest(&corpus_engine::CorpusSpec::RecipePath(recipe_path), None)
-            .await
-            .expect("auth fixture ingest");
+        // ── The chunk index (symbol_lookup/code_search) ─────────
+        super::build_fixture_index(&data_dir, "auth-demo", None).await;
+        let source = super::fixture_source(&data_dir);
 
         // ── Populate SCIP call graph (directly, no external exporter) ─
 
@@ -126,29 +52,12 @@ vector = false
 
         // ── Build tools ──────────────────────────────────────
 
-        let sym = SymbolLookupTool::new(
-            Arc::clone(&engine) as std::sync::Arc<dyn sovereign_code::CodeIndexSource>,
-            Arc::clone(&graph),
-        )
-        .declared();
-        let search = CodeSearchTool::new(
-            Arc::clone(&engine) as std::sync::Arc<dyn sovereign_code::CodeIndexSource>
-        )
-        .declared();
-        let callees = FindCalleesTool::new(
-            Arc::clone(&engine) as std::sync::Arc<dyn sovereign_code::CodeIndexSource>,
-            Arc::clone(&graph),
-        )
-        .declared();
-        let callers = FindCallersTool::new(
-            Arc::clone(&engine) as std::sync::Arc<dyn sovereign_code::CodeIndexSource>,
-            Arc::clone(&graph),
-        )
-        .declared();
+        let sym = SymbolLookupTool::new(Arc::clone(&source), Arc::clone(&graph)).declared();
+        let search = CodeSearchTool::new(Arc::clone(&source)).declared();
+        let callees = FindCalleesTool::new(Arc::clone(&source), Arc::clone(&graph)).declared();
+        let callers = FindCallersTool::new(source, Arc::clone(&graph)).declared();
 
         Self {
-            root,
-            engine,
             sym,
             search,
             callees,
@@ -359,161 +268,6 @@ fn refr(caller: &str, callee: &str, file: &str, line: i32) -> ScipRefRecord {
         ref_kind: "direct".to_string(),
     }
 }
-
-// ─── Auth demo source files ────────────────────────────────��─
-
-const AUTH_MIDDLEWARE_RS: &str = r#"/// JWT authentication middleware.
-/// Validates the Authorization header, refreshes if expired,
-/// and attaches the authenticated user to the request context.
-pub async fn auth_middleware(
-    req: Request,
-    next: Next,
-) -> Result<Response, AuthError> {
-    let token = extract_bearer_token(&req)?;
-    let claims = validate_access_token(&token).await?;
-    let user = find_user_by_id(claims.sub).await?;
-    let req = attach_user_to_request(req, user);
-    Ok(next.run(req).await)
-}
-
-fn extract_bearer_token(req: &Request) -> Result<String, AuthError> {
-    req.headers()
-        .get("Authorization")
-        .and_then(|v| v.to_str().ok())
-        .and_then(|v| v.strip_prefix("Bearer "))
-        .map(|s| s.to_string())
-        .ok_or(AuthError::MissingToken)
-}
-"#;
-
-const AUTH_TOKENS_RS: &str = r#"/// Validates an access token. Returns claims on success.
-/// Calls refreshIfExpired if the token has expired but refresh is available.
-pub async fn validate_access_token(token: &str) -> Result<Claims, AuthError> {
-    match decode_jwt(token, &JWT_PUBLIC_KEY) {
-        Ok(claims)  => Ok(claims),
-        Err(JwtError::Expired) => refresh_if_expired(token).await,
-        Err(e)      => Err(AuthError::InvalidToken(e.to_string())),
-    }
-}
-
-/// Issue a new token pair (access + refresh) for an authenticated user.
-pub async fn issue_token_pair(user_id: Uuid) -> Result<TokenPair, AuthError> {
-    let access_token  = sign_jwt(Claims::new(user_id), &JWT_PRIVATE_KEY)?;
-    let refresh_token = generate_refresh_token();
-    store_session(user_id, &refresh_token).await?;
-    Ok(TokenPair { access_token, refresh_token })
-}
-
-fn decode_jwt(token: &str, key: &DecodingKey) -> Result<Claims, JwtError> {
-    jsonwebtoken::decode::<Claims>(token, key, &RS256_VALIDATION)
-        .map(|d| d.claims)
-        .map_err(JwtError::from)
-}
-
-fn sign_jwt(claims: Claims, key: &EncodingKey) -> Result<String, AuthError> {
-    jsonwebtoken::encode(&Header::new(RS256), &claims, key)
-        .map_err(|e| AuthError::SigningFailed(e.to_string()))
-}
-"#;
-
-const AUTH_REFRESH_RS: &str = r#"/// If the access token is expired but a valid refresh token exists in the
-/// session store, issues a new token pair and returns new claims.
-pub async fn refresh_if_expired(expired_token: &str) -> Result<Claims, AuthError> {
-    let user_id = extract_user_id_from_expired(expired_token)?;
-    let session = get_session(user_id).await?;
-    if !session.refresh_valid() {
-        return Err(AuthError::RefreshExpired);
-    }
-    rotate_refresh_token(user_id, &session).await?;
-    let pair = issue_token_pair(user_id).await?;
-    Ok(Claims::new(user_id))
-}
-
-/// Rotates the refresh token: revokes old, issues new (one-time use).
-async fn rotate_refresh_token(
-    user_id: Uuid,
-    session: &Session,
-) -> Result<(), AuthError> {
-    revoke_session(session.id).await?;
-    Ok(())
-}
-"#;
-
-const ROUTES_AUTH_RS: &str = r#"/// POST /auth/login
-/// Validates credentials, issues token pair on success.
-pub async fn login_handler(
-    Json(body): Json<LoginRequest>,
-) -> Result<Json<TokenPair>, AuthError> {
-    let user = find_by_email(&body.email).await?;
-    verify_password(&body.password, &user.password_hash)?;
-    let tokens = issue_token_pair(user.id).await?;
-    Ok(Json(tokens))
-}
-
-/// POST /auth/refresh
-/// Refreshes an expired access token using the refresh token.
-pub async fn refresh_handler(
-    Json(body): Json<RefreshRequest>,
-) -> Result<Json<TokenPair>, AuthError> {
-    let session = get_session_by_refresh_token(&body.refresh_token).await?;
-    rotate_refresh_token(session.user_id, &session).await?;
-    let tokens = issue_token_pair(session.user_id).await?;
-    Ok(Json(tokens))
-}
-
-fn verify_password(input: &str, hash: &str) -> Result<(), AuthError> {
-    bcrypt::verify(input, hash)
-        .map_err(|_| AuthError::InvalidCredentials)?;
-    Ok(())
-}
-"#;
-
-const ROUTES_USERS_RS: &str = r#"/// POST /users/register
-/// Creates a new user account.
-///
-/// NOTE: Legacy endpoint — predates the OAuth flow.
-/// Retained for backwards compatibility.
-pub async fn register_user(
-    Json(body): Json<RegisterRequest>,
-) -> Result<Json<UserId>, AppError> {
-    let existing = find_by_email(&body.email).await?;
-    if existing.is_some() {
-        return Err(AppError::EmailAlreadyExists);
-    }
-    // Store user with provided password
-    let user = create_user(CreateUserParams {
-        email:         body.email,
-        password_hash: body.password,   // <- NOT hashed
-    }).await?;
-    Ok(Json(user.id))
-}
-"#;
-
-const MODELS_USER_RS: &str = r#"pub struct User {
-    pub id:            Uuid,
-    pub email:         String,
-    pub password_hash: String,
-}
-
-pub async fn find_by_email(email: &str) -> Result<Option<User>, DbError> {
-    sqlx::query_as("SELECT id, email, password_hash FROM users WHERE email = ?")
-        .bind(email)
-        .fetch_optional(&DB).await
-        .map_err(DbError::from)
-}
-
-pub async fn create_user(params: CreateUserParams) -> Result<User, DbError> {
-    sqlx::query_as(
-        "INSERT INTO users (id, email, password_hash) VALUES (?, ?, ?)
-         RETURNING id, email, password_hash"
-    )
-    .bind(Uuid::new_v4())
-    .bind(params.email)
-    .bind(params.password_hash)   // <- stored as-is
-    .fetch_one(&DB).await
-    .map_err(DbError::from)
-}
-"#;
 
 // ══════════════════��══════════════════════════════════���═════════
 // T-21 — find_callees returns correct outbound calls
@@ -740,143 +494,22 @@ async fn t27_demo_security_finding_grounded() {
 // by side and asserts all three code-intel tools succeed. Without
 // the `info.kind == CorpusKind::Code` filter, `symbols`/`code_search`
 // /`recent_changes` would error out.
-
-use arrow::array::StringArray as ArrowStringArray;
-use arrow::datatypes::{DataType as ArrowDataType, Field as ArrowField, Schema as ArrowSchema};
-use arrow::record_batch::RecordBatch as ArrowRecordBatch;
-use parquet::arrow::ArrowWriter;
+//
+// Both corpora are the rows the original ingest wrote: one `.rs` file with
+// `make_widget` through the code extractor, one prose paragraph through the
+// parquet extractor (tests/fixtures/code_intel/mixed-*.json).
 
 #[tokio::test]
 async fn mixed_corpora_code_intel_skips_knowledge() {
     let tmp = tempfile::tempdir().expect("tempdir");
-    let root = tmp.path().join("repo");
     let data_dir = tmp.path().join("indexes");
-    let recipe_dir = data_dir.join("_recipes");
-    std::fs::create_dir_all(root.join("src")).unwrap();
-    std::fs::create_dir_all(&recipe_dir).unwrap();
-
-    // ── Engine wired identically to the main Fixture. ───────────
-    let embed: EmbedFn = Arc::new(|_text: &str| {
-        Box::pin(async { Ok::<Vec<f32>, corpus_index::Error>(vec![0.0; 8]) })
-    });
-    let engine = Arc::new(
-        CorpusEngine::new(recipe_dir.clone(), data_dir.clone(), embed)
-            .with_embedding_model("test-mock"),
-    );
-
-    // ── Code corpus: a single .rs file with one obvious symbol. ─
-    std::fs::write(
-        root.join("src/widget.rs"),
-        "/// The thing.\npub fn make_widget(n: u32) -> u32 { n + 1 }\n",
-    )
-    .unwrap();
-    let code_recipe = recipe_dir.join("mixed-code.toml");
-    std::fs::write(
-        &code_recipe,
-        format!(
-            r#"[corpus]
-id = "mixed-code"
-name = "mixed-code"
-description = "code corpus for mixed-corpora regression"
-license = "private"
-mesh_sharing = false
-size_compressed_gb = 0
-size_indexed_gb = 0
-
-[acquire]
-type = "local_file"
-path = "{path}"
-
-[extract]
-type = "code"
-context_lines = 1
-max_lines_per_chunk = 50
-
-[chunk]
-type = "passthrough"
-
-[index]
-fts = true
-vector = false
-"#,
-            path = root.display()
-        ),
-    )
-    .unwrap();
-    engine
-        .ingest(&CorpusSpec::RecipePath(code_recipe), None)
-        .await
-        .expect("code ingest");
-
-    // ── Knowledge corpus: a tiny parquet file. Its chunks table will
-    //    NOT have `symbol_name` / `file_path` / `line_start` — exactly
-    //    the schema shape that crashed the unfiltered iteration.
-    let parquet_path = tmp.path().join("knowledge.parquet");
-    {
-        let schema = Arc::new(ArrowSchema::new(vec![
-            ArrowField::new("title", ArrowDataType::Utf8, false),
-            ArrowField::new("text", ArrowDataType::Utf8, false),
-        ]));
-        let titles = ArrowStringArray::from(vec!["Note"]);
-        // Chunker requires ≥ a paragraph; pad to satisfy eligibility.
-        let texts = ArrowStringArray::from(vec![
-            "This is a tiny prose document used to stand in for a real \
-             knowledge corpus. It exists only to verify that the code \
-             intelligence tools — symbols, code_search, recent_changes — \
-             skip Knowledge-kind corpora rather than attempting to query \
-             their chunks tables on typed code columns that do not exist. \
-             Pad pad pad pad pad pad pad pad pad pad pad pad pad pad pad.",
-        ]);
-        let batch =
-            ArrowRecordBatch::try_new(schema.clone(), vec![Arc::new(titles), Arc::new(texts)])
-                .expect("build record batch");
-        let file = std::fs::File::create(&parquet_path).expect("create parquet");
-        let mut writer = ArrowWriter::try_new(file, schema, None).expect("arrow writer");
-        writer.write(&batch).expect("write batch");
-        writer.close().expect("close writer");
-    }
-    let knowledge_recipe = recipe_dir.join("mixed-knowledge.toml");
-    std::fs::write(
-        &knowledge_recipe,
-        format!(
-            r#"[corpus]
-id = "mixed-knowledge"
-name = "mixed-knowledge"
-description = "knowledge corpus for mixed-corpora regression"
-license = "CC0"
-mesh_sharing = false
-size_compressed_gb = 0
-size_indexed_gb = 0
-
-[acquire]
-type = "local_file"
-path = "{path}"
-
-[extract]
-type = "parquet"
-content_column = "text"
-label_column = "title"
-
-[chunk]
-type = "paragraph"
-max_chars = 2048
-overlap_chars = 256
-
-[index]
-embedding_model = "test-mock"
-embedding_dimensions = 8
-"#,
-            path = parquet_path.display()
-        ),
-    )
-    .unwrap();
-    engine
-        .ingest(&CorpusSpec::RecipePath(knowledge_recipe), None)
-        .await
-        .expect("knowledge ingest");
+    std::fs::create_dir_all(&data_dir).unwrap();
+    super::build_fixture_index(&data_dir, "mixed-code", None).await;
+    super::build_fixture_index(&data_dir, "mixed-knowledge", None).await;
 
     // Sanity: both corpora should be visible to `installed_indexes()`.
-    let installed = engine.installed_indexes().await.expect("listed");
+    let listing = FsIndexSource::new(data_dir.clone()).with_embedding_model("test-mock");
+    let installed = listing.installed_indexes().await.expect("listed");
     assert!(
         installed.iter().any(|i| i.corpus_id == "mixed-code"),
         "code corpus missing from installed list",
@@ -887,22 +520,14 @@ embedding_dimensions = 8
     );
 
     // ── Run the three tools. Each must succeed (no Lance error). ─
+    let source = super::fixture_source(&data_dir);
     let mixed_graph: sovereign_code::ScipGraphHandle = Arc::new(arc_swap::ArcSwap::from_pointee(
         corpus_engine_scip::ScipGraph::open_in_memory("mixed")
             .expect("in-memory ScipGraph for mixed-corpora test"),
     ));
-    let sym = SymbolLookupTool::new(
-        Arc::clone(&engine) as std::sync::Arc<dyn sovereign_code::CodeIndexSource>,
-        Arc::clone(&mixed_graph),
-    );
-    let search = CodeSearchTool::new(
-        Arc::clone(&engine) as std::sync::Arc<dyn sovereign_code::CodeIndexSource>
-    )
-    .declared();
-    let recent = RecentChangesTool::new(
-        Arc::clone(&engine) as std::sync::Arc<dyn sovereign_code::CodeIndexSource>
-    )
-    .declared();
+    let sym = SymbolLookupTool::new(Arc::clone(&source), Arc::clone(&mixed_graph));
+    let search = CodeSearchTool::new(Arc::clone(&source)).declared();
+    let recent = RecentChangesTool::new(source).declared();
     let ctx = ToolContext {
         conversation_id: "mixed-corpora-test".to_string(),
         task_id: None,

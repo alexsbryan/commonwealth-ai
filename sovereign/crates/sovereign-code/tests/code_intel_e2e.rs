@@ -1,47 +1,111 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-#![cfg(feature = "treesitter")]
-//! Code Intelligence — E2E tests.
+//! Code Intelligence — E2E tests over code's own tools (moved from
+//! sovereign-daemon's tests/main/e2e_code_intel.rs, pb-code-daemon-exit).
 //!
-//! Exercises all five tools against controlled fixture repositories.
-//! Every test uses real indexing, real tools, and real LanceDB queries —
-//! no mocking. The only shortcut is transport: calls go through
-//! `tool.execute()` directly instead of the MCP HTTP wire. The MCP
-//! protocol layer is tested separately in `sovereign-server::routes_mcp`.
+//! Every test runs real tools against a real LanceDB index. The index is
+//! built through corpus-index's write API from committed rows
+//! (`tests/fixtures/code_intel/*.json`), which are what the code
+//! extractor produced for the original fixture repositories; extraction is
+//! ingest's and is tested there. Code's tests take no corpus-engine edge.
+//! Calls go through `tool.execute()` directly instead of the MCP wire.
 //!
 //! **Spec mapping:**
 //! - T-01..T-05: Index correctness (this file)
 //! - T-06..T-09: Semantic search (this file)
 //! - T-10..T-11: Recent changes (this file)
-//! - T-12..T-14: Watcher (corpus-engine/tests/watcher_e2e.rs)
-//! - T-15..T-17: MCP protocol (sovereign-server::routes_mcp::tests)
 //! - T-18: Session arc (this file)
 //! - T-19: Latency (this file)
-//! - T-20: Watcher SLA (corpus-engine/tests/watcher_e2e.rs)
-//! - T-21..T-24: Call graph tools + staleness (demo_auth part, auth demo fixture)
+//! - T-21..T-24: Call graph tools + staleness (demo_auth part)
 //! - T-25..T-27: Demo scenario — auth surface discovery, call chain
-//!   traversal, grounded security finding (demo_auth part, auth demo fixture)
-//!
-//! Run with:
-//!     cargo test -p sovereign-daemon --test main e2e_code_intel
+//!   traversal, grounded security finding (demo_auth part)
+
+#![cfg(feature = "treesitter")]
 
 use sovereign_contracts::tool_manifest::DeclaredTool;
-use std::path::PathBuf;
+use std::path::Path;
 use std::sync::Arc;
 use std::time::Instant;
 
+use corpus_index::fs_source::FsIndexSource;
+use corpus_index::index::{code_meta_from_json, CorpusIndex, InsertChunk};
 use sovereign_code::{CodeSearchTool, RecentChangesTool, SymbolLookupTool};
 use sovereign_contracts::traits::Tool;
 use sovereign_contracts::types::{StepOutput, ToolContext};
 
-use corpus_engine::{CorpusEngine, CorpusSpec};
-use corpus_index::types::EmbedFn;
+/// The embedding model every fixture index is stamped with.
+const FIXTURE_MODEL: &str = "test-mock";
+
+/// Build the index `name` (a file under `tests/fixtures/code_intel/`) in
+/// `data_dir`, with zero vectors: its rows are inserted as the extractor
+/// wrote them, then ingestion is marked complete and the indexes built.
+/// Each `mtime` is re-stamped to now, except `backdate`'s, which is 30
+/// days old, as the original fixture set the file times.
+pub(crate) async fn build_fixture_index(data_dir: &Path, name: &str, backdate: Option<&str>) {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/code_intel")
+        .join(format!("{name}.json"));
+    let fixture: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&path).expect("fixture file"))
+            .expect("fixture json");
+    let corpus_id = fixture["corpus_id"].as_str().expect("corpus_id");
+    let dims = fixture["embedding_dimensions"].as_u64().expect("dims") as usize;
+    let index = CorpusIndex::create(
+        &data_dir.join(corpus_id),
+        corpus_id,
+        corpus_id,
+        FIXTURE_MODEL,
+        dims,
+        false,
+        fixture["license"].as_str().expect("license"),
+    )
+    .await
+    .expect("create fixture index");
+
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("clock")
+        .as_secs() as i64;
+    let mut chunks = Vec::new();
+    for row in fixture["rows"].as_array().expect("rows") {
+        let mut metadata = row["metadata"].clone();
+        if let Some(obj) = metadata.as_object_mut() {
+            if obj.contains_key("mtime") {
+                let old = backdate.is_some_and(|f| obj["file_path"] == f);
+                obj.insert(
+                    "mtime".into(),
+                    (if old { now - 30 * 24 * 3600 } else { now }).into(),
+                );
+            }
+        }
+        let insert = InsertChunk {
+            content: row["content"].as_str().expect("content").to_string(),
+            title: row["title"].as_str().map(String::from),
+            url: row["url"].as_str().map(String::from),
+            metadata: (!metadata.is_null()).then(|| metadata.to_string()),
+            content_hash: None,
+            source_doc_id: row["source_doc_id"].as_str().map(String::from),
+            source_file: None,
+            code: code_meta_from_json(Some(&metadata)),
+            unit_id: None,
+        };
+        chunks.push((insert, vec![0.0; dims]));
+    }
+    index.insert_batch(&chunks).await.expect("insert fixture rows");
+    index.mark_ingestion_complete().expect("mark ingestion complete");
+    index
+        .build_indexes(true, true, None)
+        .await
+        .expect("build fixture indexes");
+}
+
+/// The engine-free index source the tools read the fixture through.
+pub(crate) fn fixture_source(data_dir: &Path) -> Arc<dyn sovereign_code::CodeIndexSource> {
+    Arc::new(FsIndexSource::new(data_dir.to_path_buf()).with_embedding_model(FIXTURE_MODEL))
+}
 
 // ─── Shared fixture ───────────────────────────────────────────
 
 struct Fixture {
-    root: PathBuf,
-    data_dir: PathBuf,
-    engine: Arc<CorpusEngine>,
     sym: DeclaredTool,
     search: DeclaredTool,
     recent: DeclaredTool,
@@ -51,91 +115,13 @@ struct Fixture {
 impl Fixture {
     async fn setup() -> Self {
         let tmp = tempfile::tempdir().expect("tempdir");
-        let root = tmp.path().join("repo");
         let data_dir = tmp.path().join("indexes");
-        std::fs::create_dir_all(root.join("src")).unwrap();
-        std::fs::create_dir_all(root.join("web")).unwrap();
         std::fs::create_dir_all(&data_dir).unwrap();
 
-        // ── Write fixture files ─────────────────────────────
-
-        std::fs::write(root.join("src/executor.rs"), EXECUTOR_RS).unwrap();
-        std::fs::write(root.join("src/scheduler.rs"), SCHEDULER_RS).unwrap();
-        std::fs::write(root.join("src/types.rs"), TYPES_RS).unwrap();
-        std::fs::write(root.join("src/planner.rs"), PLANNER_RS).unwrap();
-        std::fs::write(root.join("web/api.ts"), API_TS).unwrap();
-        std::fs::write(root.join("web/store.ts"), STORE_TS).unwrap();
-
-        // Backdate executor.rs to 30 days ago for mtime tests (T-10).
-        let ft = filetime::FileTime::from_unix_time(
-            (commonwealth_core::clock::unix_now_secs() - 30 * 24 * 3600) as i64,
-            0,
-        );
-        filetime::set_file_mtime(root.join("src/executor.rs"), ft).unwrap();
-
-        // ── Index the fixture ───────────────────────────────
-
-        let embed: EmbedFn = Arc::new(|_text: &str| {
-            Box::pin(async {
-                Ok::<Vec<f32>, corpus_index::Error>(vec![
-                    0.0;
-                    corpus_index::types::DEFAULT_EMBED_DIM
-                ])
-            })
-        });
-        // `with_embedding_model` is a hard precondition of `ingest()`:
-        // the engine refuses to write `_corpus_meta.json` without a
-        // declared model name so downstream shard-compatibility checks
-        // never see a bogus label. The other corpus-engine fixtures
-        // (`parquet_ingest_e2e`, `ingest_failure_modes`) use the same
-        // `"test-mock"` stem; we follow the convention.
-        let engine = Arc::new(
-            CorpusEngine::new(data_dir.join("_recipes"), data_dir.clone(), embed)
-                .with_embedding_model("test-mock"),
-        );
-
-        let recipe_dir = data_dir.join("_recipes");
-        std::fs::create_dir_all(&recipe_dir).unwrap();
-        let recipe_path = recipe_dir.join("test-code.toml");
-        std::fs::write(
-            &recipe_path,
-            format!(
-                r#"[corpus]
-id = "test-code"
-name = "test-code"
-description = "E2E fixture"
-license = "private"
-mesh_sharing = false
-size_compressed_gb = 0
-size_indexed_gb = 0
-
-[acquire]
-type = "local_file"
-path = "{path}"
-
-[extract]
-type = "code"
-context_lines = 3
-max_lines_per_chunk = 150
-
-[chunk]
-type = "passthrough"
-
-[index]
-fts = true
-vector = false
-"#,
-                path = root.display()
-            ),
-        )
-        .unwrap();
-
-        engine
-            .ingest(&CorpusSpec::RecipePath(recipe_path), None)
-            .await
-            .expect("fixture ingest");
-
-        // ── Build tools ─────────────────────────────────────
+        // executor.rs is the file the original fixture backdated 30 days
+        // for the mtime tests (T-10).
+        build_fixture_index(&data_dir, "test-code", Some("src/executor.rs")).await;
+        let source = fixture_source(&data_dir);
 
         // SymbolLookupTool reads SCIP. Use an empty in-memory graph
         // for the LanceDB-only fixtures — those tests assert empty
@@ -145,24 +131,11 @@ vector = false
                 corpus_engine_scip::ScipGraph::open_in_memory("fixture")
                     .expect("in-memory ScipGraph for fixture"),
             ));
-        let sym = SymbolLookupTool::new(
-            Arc::clone(&engine) as std::sync::Arc<dyn sovereign_code::CodeIndexSource>,
-            Arc::clone(&scip_handle),
-        )
-        .declared();
-        let search = CodeSearchTool::new(
-            Arc::clone(&engine) as std::sync::Arc<dyn sovereign_code::CodeIndexSource>
-        )
-        .declared();
-        let recent = RecentChangesTool::new(
-            Arc::clone(&engine) as std::sync::Arc<dyn sovereign_code::CodeIndexSource>
-        )
-        .declared();
+        let sym = SymbolLookupTool::new(Arc::clone(&source), Arc::clone(&scip_handle)).declared();
+        let search = CodeSearchTool::new(Arc::clone(&source)).declared();
+        let recent = RecentChangesTool::new(source).declared();
 
         Self {
-            root,
-            data_dir,
-            engine,
             sym,
             search,
             recent,
@@ -241,89 +214,6 @@ fn text(result: &Result<StepOutput, sovereign_contracts::error::Error>) -> Strin
         Err(e) => format!("ERROR: {e}"),
     }
 }
-
-// ─── Fixture file contents ────────────────────────────────────
-
-const EXECUTOR_RS: &str = r#"/// Executes a planned step against the current mesh state.
-pub async fn execute_step(
-    plan:  &StepPlan,
-    state: &MeshState,
-) -> Result<StepResult, ExecutorError> {
-    validate_preconditions(plan, state)?;
-    let result = dispatch_step(plan).await?;
-    Ok(result)
-}
-
-fn validate_preconditions(
-    plan:  &StepPlan,
-    state: &MeshState,
-) -> Result<(), ExecutorError> {
-    if state.nodes.is_empty() {
-        return Err(ExecutorError::NoNodes);
-    }
-    Ok(())
-}
-
-async fn dispatch_step(plan: &StepPlan) -> Result<StepResult, ExecutorError> {
-    todo!()
-}
-
-#[derive(Debug, thiserror::Error)]
-pub enum ExecutorError {
-    #[error("no nodes available")]
-    NoNodes,
-    #[error("step validation failed: {0}")]
-    ValidationFailed(String),
-}
-"#;
-
-const SCHEDULER_RS: &str = r#"/// Applies a shard plan — takes ownership to prevent caller modification
-/// after submission.
-pub async fn apply_shard_plan(plan: ShardPlan) -> anyhow::Result<()> {
-    validate_plan(&plan)?;
-    broadcast_plan(plan).await
-}
-
-pub fn validate_plan(plan: &ShardPlan) -> anyhow::Result<()> {
-    anyhow::ensure!(!plan.shards.is_empty(), "plan must have at least one shard");
-    Ok(())
-}
-
-async fn broadcast_plan(plan: ShardPlan) -> anyhow::Result<()> { todo!() }
-
-pub struct ShardPlan { pub shards: Vec<Shard> }
-pub struct Shard { pub node_id: String, pub layers: std::ops::Range<usize> }
-"#;
-
-const TYPES_RS: &str = r#"pub struct MeshState { pub nodes: Vec<Node> }
-pub struct Node     { pub id: String, pub capacity: usize }
-pub struct StepPlan { pub id: uuid::Uuid, pub kind: StepKind }
-pub struct StepResult { pub success: bool, pub output: Option<String> }
-pub enum StepKind   { Inference, KnowledgeQuery, ToolCall }
-"#;
-
-const PLANNER_RS: &str = r#"pub fn plan_next_step(context: &ConversationContext) -> StepPlan {
-    StepPlan { id: uuid::Uuid::new_v4(), kind: StepKind::Inference }
-}
-pub struct ConversationContext { pub messages: Vec<String> }
-"#;
-
-const API_TS: &str = r#"interface NodeCapability { nodeId: string; vramGb: number; isOnline: boolean }
-async function fetchCapabilities(url: string): Promise<NodeCapability[]> {
-    return fetch(`${url}/capabilities`).then(r => r.json());
-}
-function filterOnlineNodes(nodes: NodeCapability[]): NodeCapability[] {
-    return nodes.filter(n => n.isOnline);
-}
-"#;
-
-const STORE_TS: &str = r#"const createMeshStore = () => {
-    let nodes: string[] = [];
-    const addNode    = (id: string): void => { nodes = [...nodes, id]; };
-    const removeNode = (id: string): void => { nodes = nodes.filter(n => n !== id); };
-    return { addNode, removeNode };
-};
-"#;
 
 // ═══════════════════════════════════════════════════════════════
 // Group 1: Index correctness
@@ -652,5 +542,5 @@ fn percentile(times: &[u128], p: usize) -> u128 {
 // The auth demo fixture (T-21..T-27) lives in the demo_auth part.
 // ═══════════════════════════════════════════════════════════════
 
-#[path = "e2e_code_intel/demo_auth.rs"]
+#[path = "code_intel_e2e/demo_auth.rs"]
 mod demo_auth;
