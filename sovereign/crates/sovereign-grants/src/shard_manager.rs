@@ -3,8 +3,8 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
-use commonwealth_core::ids::{HandoffId, NodeId};
-use commonwealth_core::knowledge::{IngestionHandoff, KnowledgeShardAssignment, PartitionStatus};
+use kernel_types::{HandoffId, NodeId};
+use oicp_types::work_queue::{IngestionHandoff, KnowledgeShardAssignment, PartitionStatus};
 use corpus_engine::{CorpusEngine, ShardInfo};
 use corpus_index::{
     corpus::Corpus,
@@ -314,9 +314,9 @@ impl ShardManager {
             // too, but belt-and-braces).
             let mut peers = participating;
             peers.insert(local_node_id);
-            let synthesized: Vec<commonwealth_core::knowledge::IngestionPartition> = peers
+            let synthesized: Vec<oicp_types::work_queue::IngestionPartition> = peers
                 .into_iter()
-                .map(|node_id| commonwealth_core::knowledge::IngestionPartition {
+                .map(|node_id| oicp_types::work_queue::IngestionPartition {
                     node_id,
                     file_indices: Vec::new(),
                     article_range: None,
@@ -923,7 +923,7 @@ fn participating_peers_from_gossip(
     corpus_id: &str,
 ) -> std::collections::HashSet<NodeId> {
     let prefix = format!("processed_shards:{corpus_id}:");
-    let entries = match mesh_store.scan(commonwealth_state::PROCESSED_SHARDS_APP_ID, &prefix) {
+    let entries = match mesh_store.scan(oicp_types::work_queue::PROCESSED_SHARDS_APP_ID, &prefix) {
         Ok(e) => e,
         Err(_) => return std::collections::HashSet::new(),
     };

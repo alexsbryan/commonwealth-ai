@@ -67,9 +67,9 @@
 
 use std::sync::Arc;
 
-use commonwealth_core::ids::HandoffId;
-use commonwealth_core::knowledge::{CompleteOutcome, HandoffPhase, IngestionHandoff, WorkUnit};
-use commonwealth_core::oicp::{EmbedModelInfo, NormalizationStrategy, PoolingStrategy};
+use kernel_types::HandoffId;
+use oicp_types::work_queue::{CompleteOutcome, HandoffPhase, IngestionHandoff, WorkUnit};
+use oicp_types::{EmbedModelInfo, NormalizationStrategy, PoolingStrategy};
 use corpus_index::{corpus::Corpus, index::CorpusIndex};
 use sovereign_contracts::peer::ReplicatedKv;
 use sovereign_grants::{ShardManager, WorkQueueManager};
@@ -111,7 +111,7 @@ async fn queue_mode_handoff(f: &Fixture) -> (HandoffId, ShardManager) {
         "test-recipe",
         embed_model(),
         f.local,
-        commonwealth_core::clock::unix_now_millis(),
+        corpus_engine_yield::time::unix_millis(),
     );
     handoff.handoff_id = handoff_id;
     handoff.phase = HandoffPhase::Merging;

@@ -48,11 +48,11 @@ use std::time::Duration;
 
 use tokio::sync::Mutex;
 
-use commonwealth_core::ids::{HandoffId, NodeId};
-use commonwealth_core::knowledge::{
+use kernel_types::{HandoffId, NodeId};
+use oicp_types::work_queue::{
     CompleteOutcome, HandoffPhase, UnitId, UnitStatus, WorkUnit, LEASE_MS, MAX_UNIT_ATTEMPTS,
 };
-use commonwealth_core::oicp::EmbedModelInfo;
+use oicp_types::EmbedModelInfo;
 
 /// How often the reaper scans for expired leases.
 const REAPER_INTERVAL: Duration = Duration::from_secs(30);
@@ -499,11 +499,11 @@ impl Default for WorkQueueManager {
     }
 }
 
-// `LeasedUnit` is `commonwealth_core::knowledge`'s — the puller needs it too,
+// `LeasedUnit` is `oicp_types::work_queue`'s — the puller needs it too,
 // and a lease deadline only means something if both ends read the same one.
-pub use commonwealth_core::knowledge::LeasedUnit;
+pub use oicp_types::work_queue::LeasedUnit;
 
-use commonwealth_core::clock::unix_now_millis as now_ms;
+use corpus_engine_yield::time::unix_millis as now_ms;
 
 // -----------------------------------------------------------------
 // Tests
@@ -512,14 +512,14 @@ use commonwealth_core::clock::unix_now_millis as now_ms;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use commonwealth_core::ids::NodeId;
+    use kernel_types::NodeId;
 
     fn sample_model() -> EmbedModelInfo {
         EmbedModelInfo {
             model_id: "qwen-embedding-0.6b".to_string(),
             dimensions: 1024,
-            pooling: commonwealth_core::oicp::PoolingStrategy::Mean,
-            normalization: commonwealth_core::oicp::NormalizationStrategy::Application,
+            pooling: oicp_types::PoolingStrategy::Mean,
+            normalization: oicp_types::NormalizationStrategy::Application,
             query_instruction_prefix: String::new(),
         }
     }

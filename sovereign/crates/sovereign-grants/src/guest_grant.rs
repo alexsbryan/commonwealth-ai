@@ -391,7 +391,7 @@ impl GuestGrantStore {
             interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
             loop {
                 interval.tick().await;
-                let swept = self.drain_dead(commonwealth_core::clock::unix_now_millis());
+                let swept = self.drain_dead(corpus_engine_yield::time::unix_millis());
                 if !swept.is_empty() {
                     tracing::info!(
                         count = swept.len(),

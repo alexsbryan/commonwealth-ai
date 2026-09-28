@@ -28,7 +28,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use commonwealth_core::ids::{HandoffId, NodeId};
+use kernel_types::{HandoffId, NodeId};
 use corpus_engine::CorpusEngine;
 use corpus_index::index::{InsertChunk, InsertCodeMeta};
 use corpus_index::{corpus::Corpus, index::CorpusIndex, types::EmbedFn};

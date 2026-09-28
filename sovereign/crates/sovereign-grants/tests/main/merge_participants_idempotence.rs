@@ -69,7 +69,7 @@
 //! arrives only over a real socket as a real tarball, and a third participant
 //! that is silent only because it was given no address.
 
-use commonwealth_core::ids::HandoffId;
+use kernel_types::HandoffId;
 use corpus_index::index::{InsertChunk, InsertCodeMeta};
 use corpus_index::{corpus::Corpus, index::CorpusIndex};
 use sovereign_grants::shard_manager::MergePlan;

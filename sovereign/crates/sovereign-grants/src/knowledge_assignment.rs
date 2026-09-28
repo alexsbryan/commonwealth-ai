@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-use commonwealth_core::ids::NodeId;
-use commonwealth_core::knowledge::{
+use kernel_types::NodeId;
+use oicp_types::work_queue::{
     IngestionHandoff, IngestionPartition, PartitionStatus, WorkUnit,
 };
-use commonwealth_core::oicp::EmbedModelInfo;
+use oicp_types::EmbedModelInfo;
 use corpus_engine::SourceFileRecord;
 use sovereign_contracts::membership::MembershipEntry;
 
@@ -156,7 +156,7 @@ pub fn plan_collaborative_ingestion<D>(
         recipe_id,
         local_embed_model.clone(),
         partitions,
-        commonwealth_core::clock::unix_now_millis(),
+        corpus_engine_yield::time::unix_millis(),
     ))
 }
 
@@ -247,7 +247,7 @@ pub fn plan_collaborative_ingestion_jsonl<D>(
         recipe_id,
         local_embed_model.clone(),
         partitions,
-        commonwealth_core::clock::unix_now_millis(),
+        corpus_engine_yield::time::unix_millis(),
     ))
 }
 
@@ -337,7 +337,7 @@ pub fn plan_collaborative_ingestion_jsonl_sharded<D>(
         recipe_id,
         local_embed_model.clone(),
         partitions,
-        commonwealth_core::clock::unix_now_millis(),
+        corpus_engine_yield::time::unix_millis(),
     ))
 }
 
@@ -455,7 +455,7 @@ mod tests {
     use super::*;
 
     fn qwen_embed() -> EmbedModelInfo {
-        use commonwealth_core::oicp::{NormalizationStrategy, PoolingStrategy};
+        use oicp_types::{NormalizationStrategy, PoolingStrategy};
         EmbedModelInfo {
             model_id: "qwen3-embedding-0.6b".into(),
             dimensions: 1024,
@@ -466,7 +466,7 @@ mod tests {
     }
 
     fn other_embed() -> EmbedModelInfo {
-        use commonwealth_core::oicp::{NormalizationStrategy, PoolingStrategy};
+        use oicp_types::{NormalizationStrategy, PoolingStrategy};
         EmbedModelInfo {
             model_id: "nomic-embed-text-v2".into(),
             dimensions: 768,
@@ -477,7 +477,7 @@ mod tests {
     }
 
     fn member(id: u128, embed: Option<EmbedModelInfo>) -> MembershipEntry<()> {
-        use commonwealth_core::capabilities::{
+        use oicp_types::capabilities::{
             AvailableResources, HardwareProfile, NodeCapabilities,
         };
         use sovereign_contracts::daemon_wire::MemberStatus;

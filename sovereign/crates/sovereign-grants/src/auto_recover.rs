@@ -56,7 +56,7 @@ use std::path::Path;
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
-use commonwealth_core::ids::{HandoffId, NodeId};
+use kernel_types::{HandoffId, NodeId};
 use corpus_engine::CorpusEngine;
 use corpus_index::corpus::Corpus;
 use sovereign_contracts::peer::ReplicatedKv;

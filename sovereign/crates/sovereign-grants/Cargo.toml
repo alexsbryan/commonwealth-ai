@@ -5,8 +5,9 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
-commonwealth-core = { path = "../../../commonwealth/crates/commonwealth-core" }
-commonwealth-state = { path = "../../../commonwealth/crates/commonwealth-state" }
+kernel-types = { workspace = true }
+oicp-types = { workspace = true }
+corpus-engine-yield = { workspace = true }
 corpus-engine = { workspace = true }
 corpus-index = { workspace = true }
 # `ReplicatedKv` for the handoff/processed-shards KV and `ShardTransferLedger`
