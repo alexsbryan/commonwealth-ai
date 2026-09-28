@@ -18,6 +18,9 @@ commonwealth-core = { workspace = true }
 # `fanout` because the media catalogue half runs on it.
 commonwealth-transport = { workspace = true, features = ["iroh", "fanout"] }
 commonwealth-media = { workspace = true }
+# The reach door's wire (`/v1/mesh/reach`, pb-rails-reach). A contract leaf,
+# so neither [[forbid]] row above it matches.
+mesh-reach = { workspace = true, features = ["wire"] }
 # `deep_link::parse_join_argument` for the invite, and
 # `membership::validate_join_key_format` for the bare-key form.
 commonwealth-discovery = { workspace = true }

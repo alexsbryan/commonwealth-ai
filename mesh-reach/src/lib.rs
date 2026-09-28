@@ -20,6 +20,9 @@
 // Compiled for this crate's own tests, whose dev-deps carry tokio and serde.
 #[cfg(any(feature = "fanout", test))]
 pub mod fanout;
+// The reach door's wire, spoken by cw-rails and `RailsTransport`.
+#[cfg(any(feature = "wire", test))]
+pub mod door;
 
 use std::net::SocketAddr;
 
@@ -116,6 +119,12 @@ impl TrafficClass {
             TrafficClass::Offer => "offer",
         }
     }
+
+    /// The class [`as_str`](Self::as_str) names, or `None`. Derived from
+    /// [`ALL`](Self::ALL) and `as_str`, so the two spellings cannot drift.
+    pub fn from_name(name: &str) -> Option<TrafficClass> {
+        Self::ALL.into_iter().find(|c| c.as_str() == name)
+    }
 }
 
 /// Everything a transport may need to reach a peer, extracted from
@@ -143,6 +152,10 @@ pub struct PeerContact {
 
 /// One dialable candidate for a peer.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(
+    any(feature = "wire", test),
+    derive(serde::Serialize, serde::Deserialize)
+)]
 pub struct PeerEndpoint {
     /// Scheme + authority only — no path, no trailing slash:
     /// `http://100.64.0.2:9742`, `http://[fd7a::1]:9741`. Call

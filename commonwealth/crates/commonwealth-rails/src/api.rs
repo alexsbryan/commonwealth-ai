@@ -2,7 +2,8 @@
 //! The loopback routes a shim author touches, and nothing else.
 //!
 //! `GET /v1/mesh/status` · `GET /v1/mesh/media[?peer=]` ·
-//! `GET /v1/mesh/app[?peer=]` · `POST /v1/mesh/fanout` (and its media
+//! `GET /v1/mesh/app[?peer=]` · `GET /v1/mesh/reach?peer=&class=` ·
+//! `POST /v1/mesh/fanout` (and its media
 //! spelling) · the four `/v1/mesh/publish` routes · the four
 //! `/v1/mesh/origins` routes, in [`crate::origins`] · the two roster verbs ·
 //! the ring rail's doors, `/v1/rail/{append,log,live}`, in [`crate::rail`] ·
@@ -31,7 +32,9 @@ use commonwealth_core::capabilities::OriginKind;
 use commonwealth_media::apps::PublishRefusal;
 use commonwealth_media::fanout::FanoutRequest;
 use commonwealth_media::MediaReachRefusal;
+use commonwealth_transport::TrafficClass;
 use host_kit::shell::RouteBundle;
+use mesh_reach::door::{Reach, ReachQuery};
 use serde::Deserialize;
 
 use crate::{RailsDaemon, Refusal};
@@ -84,6 +87,10 @@ fn mesh_bundle(daemon: Arc<RailsDaemon>) -> RouteBundle {
             axum::routing::delete(unpublish_app),
         )
         .route("/v1/mesh/publish/{claim_id}/renew", post(renew_app))
+        // The reach door (pb-rails-reach): any peer's endpoints for any
+        // traffic class, so a program that is not the mesh endpoint dials
+        // peers through this one (`mesh_reach::rails::RailsTransport`).
+        .route(mesh_reach::door::REACH_PATH, get(reach))
         // Any program's loopback origin, served to members by ALPN or by
         // `cwth/http/0` prefix (pb-rails-origins); the app doors above are
         // this registry's app entry.
@@ -315,6 +322,48 @@ async fn origin(
         // A name nobody has is the one refusal that is about the REQUEST.
         Err(e @ MediaReachRefusal::UnknownMember(_)) => refusal(StatusCode::NOT_FOUND, e),
         // Everything else is coherent and the mesh's state is what says no.
+        Err(e) => refusal(StatusCode::CONFLICT, e),
+    }
+}
+
+/// `GET /v1/mesh/reach?peer=<name|id>&class=<class>` — the endpoints this
+/// node's transport yields for one peer and one traffic class, best first.
+/// It is `origin` without the origin-kind check: whether the peer serves the
+/// class is its registry's answer when the dial lands.
+pub async fn reach(
+    State(daemon): State<Arc<RailsDaemon>>,
+    Query(q): Query<ReachQuery>,
+) -> axum::response::Response {
+    let Some(class) = TrafficClass::from_name(q.class.trim()) else {
+        let known: Vec<&str> = TrafficClass::ALL.iter().map(|c| c.as_str()).collect();
+        return refusal(
+            StatusCode::BAD_REQUEST,
+            MediaReachRefusal::BadRequest(format!(
+                "unknown traffic class '{}' — one of {}",
+                q.class,
+                known.join(", ")
+            )),
+        );
+    };
+    let roster = daemon.roster().await;
+    let self_id = daemon.node.self_id;
+    match commonwealth_media::reach::reach_class(
+        self_id,
+        &roster,
+        q.peer.trim(),
+        &daemon.transport,
+        class,
+    )
+    .await
+    {
+        Ok((picked, endpoints)) => Json(Reach {
+            peer: picked.name,
+            node_id: picked.node_id.to_hex(),
+            class: class.as_str().to_string(),
+            endpoints,
+        })
+        .into_response(),
+        Err(e @ MediaReachRefusal::UnknownMember(_)) => refusal(StatusCode::NOT_FOUND, e),
         Err(e) => refusal(StatusCode::CONFLICT, e),
     }
 }

@@ -18,8 +18,10 @@ description = "How a program reaches a mesh peer — TrafficClass, PeerContact, 
 [features]
 # The generic peer fan-out — tokio-shaped, so its own feature.
 fanout = ["dep:tokio", "dep:serde"]
+# The reach door's wire (`door`), which cw-rails serves.
+wire = ["dep:serde"]
 # `RailsTransport`: `PeerTransport::endpoints` over cw-rails' reach door.
-rails = ["dep:reqwest", "dep:serde", "dep:serde_json", "dep:tokio"]
+rails = ["wire", "dep:reqwest"]
 
 [dependencies]
 kernel-types = { workspace = true }
@@ -27,7 +29,6 @@ async-trait = { workspace = true }
 tracing = { workspace = true }
 tokio = { workspace = true, optional = true }
 serde = { workspace = true, optional = true }
-serde_json = { workspace = true, optional = true }
 reqwest = { workspace = true, optional = true }
 
 [dev-dependencies]
