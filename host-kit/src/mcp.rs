@@ -11,6 +11,7 @@
 //! envelope) is `oicp-types`'; this module only dispatches over it.
 
 use std::future::Future;
+use std::pin::Pin;
 
 use oicp_types::jsonrpc::{JsonRpcRequest, JsonRpcResponse};
 use oicp_types::mcp::{negotiate_mcp_protocol_version, McpMethod};
@@ -57,6 +58,44 @@ pub trait McpCallLog {
 
 impl McpCallLog for () {
     fn record(&self, _tool: &str, _outcome: &ToolOutcome, _ctx: &McpRequestContext) {}
+}
+
+/// One program's tools, mounted on another program's `/mcp` (phase-b
+/// pb-code-daemon-exit: the stock binary serves code's tools on svrn's one
+/// `/mcp`, phase-b-33). Object-safe, so the mounting server names no type of
+/// the mounted program. [`McpDispatcher`] is one: the mounted program keeps
+/// its own tool host and call log, so its calls run and log the same way
+/// whether it serves alone or mounted.
+pub trait McpMountedTools: Send + Sync {
+    /// The `tools/list` entries, exactly as they go on the wire.
+    fn list(&self) -> Value;
+    /// Run one tool and record it in the mounted program's call log. `None`
+    /// means the tool is not this program's; nothing is logged then.
+    fn call<'a>(
+        &'a self,
+        name: &'a str,
+        args: &'a Value,
+        ctx: &'a McpRequestContext,
+    ) -> Pin<Box<dyn Future<Output = Option<ToolOutcome>> + Send + 'a>>;
+}
+
+impl<H, L> McpMountedTools for McpDispatcher<H, L>
+where
+    H: McpToolHost + Send + Sync,
+    L: McpCallLog + Send + Sync,
+{
+    fn list(&self) -> Value {
+        self.host.list()
+    }
+
+    fn call<'a>(
+        &'a self,
+        name: &'a str,
+        args: &'a Value,
+        ctx: &'a McpRequestContext,
+    ) -> Pin<Box<dyn Future<Output = Option<ToolOutcome>> + Send + 'a>> {
+        Box::pin(self.run_tool(name, args, ctx))
+    }
 }
 
 /// Answers one JSON-RPC request. [`McpDispatcher`] is the kit's; a host with
@@ -179,10 +218,9 @@ impl<H: McpToolHost, L: McpCallLog> McpDispatcher<H, L> {
             Some(McpMethod::ToolsCall) => {
                 let name = params["name"].as_str().unwrap_or("");
                 let args = params.get("arguments").cloned().unwrap_or(json!({}));
-                match self.host.call(name, &args, ctx).await {
+                match self.run_tool(name, &args, ctx).await {
                     Some(outcome) => {
                         tracing::debug!(tool = name, is_error = outcome.is_error, "mcp: tool ran");
-                        self.log.record(name, &outcome, ctx);
                         JsonRpcResponse::result(id, outcome.into_call_result())
                     }
                     None => {
@@ -197,6 +235,19 @@ impl<H: McpToolHost, L: McpCallLog> McpDispatcher<H, L> {
             }
         };
         Some(response)
+    }
+
+    /// Run one tool through the host and record it in the log: the one
+    /// `tools/call` path, served alone or mounted ([`McpMountedTools`]).
+    async fn run_tool(
+        &self,
+        name: &str,
+        args: &Value,
+        ctx: &McpRequestContext,
+    ) -> Option<ToolOutcome> {
+        let outcome = self.host.call(name, args, ctx).await?;
+        self.log.record(name, &outcome, ctx);
+        Some(outcome)
     }
 
     /// Answer one JSON-RPC body through [`dispatch_body`].
@@ -385,6 +436,22 @@ mod tests {
             *log.0.lock().unwrap(),
             vec![("echo".to_string(), false), ("refuse".to_string(), true)]
         );
+    }
+
+    /// Mounted behind `dyn McpMountedTools`, a dispatcher lists its host's
+    /// tools, runs one through its host and logs it in its own log, and
+    /// answers `None` for a tool it does not have, logging nothing.
+    #[tokio::test]
+    async fn a_mounted_dispatcher_runs_and_logs_its_own_tools() {
+        let log = RecordingLog::default();
+        let dispatcher = McpDispatcher::new("fake", "0", FakeHost, &log);
+        let mounted: &dyn McpMountedTools = &dispatcher;
+        let ctx = McpRequestContext::default();
+        assert_eq!(mounted.list()[0]["name"], "echo");
+        let ran = mounted.call("echo", &json!({ "text": "hi" }), &ctx).await;
+        assert_eq!(ran.map(|o| o.text), Some("hi".to_string()));
+        assert!(mounted.call("nope", &json!({}), &ctx).await.is_none());
+        assert_eq!(*log.0.lock().unwrap(), vec![("echo".to_string(), false)]);
     }
 
     /// Batches: notifications inside one are dropped, a non-request entry is
