@@ -7,6 +7,18 @@ use crate::enrichment::atlas::wiki_store::{
     wiki_atom_id, write_wikipedia_columnar_store, WikiArticleRow, WikiEdgeRow,
     ARTICLES_LANCE_DIRNAME,
 };
+// The module under test moved to the reader leaf (pb-corpus-mcp-reads), so
+// `super::*` no longer carries its private imports; the tests name their own.
+use std::collections::HashSet;
+use std::sync::Arc;
+
+use arrow_array::{RecordBatch, StringArray};
+
+use crate::enrichment::atlas::atoms::AtomType;
+use crate::enrichment::atlas::edges::{EdgeProvenance, EdgeType};
+use crate::enrichment::atlas::evidence_site::EvidenceSite;
+use crate::enrichment::atlas::provider::AtlasProvider;
+use crate::enrichment::atlas::wiki_store::ARTICLES_TABLE;
 
 fn art(title: &str, contested: bool) -> WikiArticleRow {
     WikiArticleRow {
