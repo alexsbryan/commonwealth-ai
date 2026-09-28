@@ -239,6 +239,7 @@ where
                 return Ok(t);
             }
             Err(reason) => {
+                transport.note_failure(node_id, class, &ep);
                 tracing::info!(
                     target: "fanout",
                     peer = %node_id,

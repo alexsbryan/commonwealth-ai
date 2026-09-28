@@ -23,6 +23,10 @@ pub mod fanout;
 // The reach door's wire, spoken by cw-rails and `RailsTransport`.
 #[cfg(any(feature = "wire", test))]
 pub mod door;
+// `PeerTransport` over the reach door, for the programs that dial through
+// cw-rails.
+#[cfg(any(feature = "rails", test))]
+pub mod rails;
 
 use std::net::SocketAddr;
 
@@ -189,4 +193,9 @@ pub trait PeerTransport: Send + Sync + std::fmt::Debug + 'static {
     /// absorbing what used to be gossip's process-global
     /// `last_working_address_cache`). Default: ignore.
     fn note_success(&self, _peer: NodeId, _class: TrafficClass, _endpoint: &PeerEndpoint) {}
+
+    /// Feedback that `endpoint` did NOT answer for `peer` on `class`-traffic.
+    /// A transport that caches what it resolved drops the entry, so the next
+    /// dial resolves again (`RailsTransport`). Default: ignore.
+    fn note_failure(&self, _peer: NodeId, _class: TrafficClass, _endpoint: &PeerEndpoint) {}
 }
