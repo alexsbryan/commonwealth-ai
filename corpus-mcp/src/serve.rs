@@ -147,15 +147,8 @@ pub async fn run(args: ServeArgs) -> Result<()> {
         }
     }
 
-    let server = tools::Server::open(
-        recipes_dir,
-        indexes_dir,
-        embed_query,
-        args.corpora,
-        args.limit,
-        profile,
-    )
-    .await?;
+    let server =
+        tools::Server::open(indexes_dir, embed_query, args.corpora, args.limit, profile).await?;
     crate::mcp::serve_stdio(server).await
 }
 

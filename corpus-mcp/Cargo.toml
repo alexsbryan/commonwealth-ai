@@ -34,6 +34,9 @@ understanding-vocab = { workspace = true, features = ["read"] }
 # and the enrichment orchestrator it drove moved to svrn-ingest
 # (sovereign-pipeline) at pb-ingest-cli.
 corpus-index = { workspace = true }
+# `CorpusId`, the neutral identity leaf, named directly since `ask` stopped
+# reaching it through corpus-engine's re-export (pb-corpus-mcp-reads).
+kernel-types = { workspace = true }
 # The one MCP dispatcher (phase-b pb-mcp): the stdio loop and the JSON-RPC
 # envelope are the kit's, and `Server` is its tool-host port.
 host-kit = { workspace = true, features = ["mcp"] }

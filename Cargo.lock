@@ -2547,6 +2547,7 @@ dependencies = [
  "corpus-engine-atlas-reader",
  "corpus-index",
  "host-kit",
+ "kernel-types",
  "reqwest 0.12.28",
  "serde",
  "serde_json",

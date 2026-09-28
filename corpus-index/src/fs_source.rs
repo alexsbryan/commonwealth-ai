@@ -150,7 +150,6 @@ impl FsIndexSource {
         self.open_index(&self.index_dir.join(corpus_id)).await
     }
 
-
     /// List all indexes present in the index directory.
     /// Each index is a subdirectory containing LanceDB data.
     ///

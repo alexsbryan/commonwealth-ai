@@ -6,7 +6,7 @@
 //!   evidence, and return cited passages plus a map section. The four below
 //!   stay as the advanced surface for a client that wants the layers apart.
 //!   Composition and rendering live in [`crate::ask`]; the WALK is
-//!   `corpus_engine::enrichment::atlas::ground`, the same function
+//!   `corpus_engine_atlas_reader::ground`, the same function
 //!   `sovereign-core` calls (ei-4-walk: one walk, two hosts).
 //! - `corpus_list` — what is served, with the one fact a caller needs before
 //!   searching: whether the vector leg is live for that corpus.
@@ -32,15 +32,18 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Result};
-use corpus_engine::enrichment::atlas::ground;
-use corpus_engine::enrichment::atlas::summary::read_current_summary;
-use corpus_engine::enrichment::atlas::writer::{read_atlas_ontology, AtlasOntologyFile};
-use corpus_engine::enrichment::atlas::{open_walk_provider, AtlasInventory, AtlasProvider};
-use corpus_engine::CorpusEngine;
+use corpus_engine_atlas_reader::ground;
+use corpus_engine_atlas_reader::inventory::AtlasInventory;
+use corpus_engine_atlas_reader::opener::open_walk_provider;
+use corpus_engine_atlas_reader::provider::AtlasProvider;
+use corpus_engine_atlas_reader::raw::read_atlas_ontology;
+use corpus_engine_atlas_reader::summary::read_current_summary;
+use corpus_index::fs_source::FsIndexSource;
 use corpus_index::index::CorpusIndex;
 use corpus_index::types::{EmbedFn, ScoredChunk};
 use serde_json::{json, Value};
 use understanding_vocab::atoms::AtomEnvelope;
+use understanding_vocab::ontology::AtlasOntologyFile;
 use understanding_vocab::read::read_atlas_atoms;
 
 use crate::host::HostProfile;
@@ -81,16 +84,17 @@ pub struct Server {
 
 impl Server {
     pub async fn open(
-        recipes_dir: PathBuf,
         indexes_dir: PathBuf,
         embed: EmbedFn,
         corpora: Vec<String>,
         default_limit: usize,
         profile: HostProfile,
     ) -> Result<Self> {
-        let engine = CorpusEngine::new(recipes_dir, indexes_dir.clone(), embed.clone());
+        // The index directory's one reader (corpus-index), not the engine
+        // that writes it: listing, dedupe and the handle cache.
+        let source = FsIndexSource::new(indexes_dir.clone());
         let ids: Vec<String> = if corpora.is_empty() {
-            engine
+            source
                 .installed_indexes()
                 .await?
                 .into_iter()
@@ -101,7 +105,7 @@ impl Server {
         };
         let mut served = Vec::new();
         for id in ids {
-            let index = match engine.open_index_for_corpus(&id).await {
+            let index = match source.open_index_for_corpus(&id).await {
                 Ok(i) => i,
                 Err(e) => {
                     eprintln!("corpus-mcp: corpus `{id}`: cannot open ({e}) — not served");
@@ -385,7 +389,7 @@ impl Server {
     /// `ask` — the composed default (`EPISTEMIC_INDEX.md` §4).
     ///
     /// Embed once, tier 1, walk, resolve, render. Every step is a call into
-    /// `corpus_engine`; nothing about the walk is decided here, which is what
+    /// the atlas reader; nothing about the walk is decided here, which is what
     /// makes this host and `sovereign-core` two callers of ONE walk rather
     /// than two walks that agree today.
     async fn ask(&self, args: &Value) -> Result<ToolOutcome> {
@@ -920,9 +924,29 @@ fn truncate(s: &str, max: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use corpus_engine::enrichment::atlas::writer::write_atlas_ontology;
     use understanding_vocab::ontology::decl::{OntologyTypeDecl, TypeKind};
     use understanding_vocab::ontology::OntologyPolicies;
+
+    /// What the atlas writer (ingest's, in corpus-engine) puts at
+    /// `atlas/ontology.json`: the `AtlasOntologyFile` envelope, serialised.
+    /// This host only reads it, so its tests write the same vocabulary type
+    /// rather than link the writer (pb-corpus-mcp-reads).
+    fn write_atlas_ontology(
+        atlas: &Path,
+        pipeline_id: &str,
+        ontology_version: u32,
+        policies: &OntologyPolicies,
+    ) -> std::io::Result<()> {
+        std::fs::create_dir_all(atlas)?;
+        let file = AtlasOntologyFile {
+            schema_version: AtlasOntologyFile::SCHEMA_VERSION.to_string(),
+            ontology_version,
+            pipeline_id: pipeline_id.to_string(),
+            policies: policies.clone(),
+        };
+        let bytes = serde_json::to_vec_pretty(&file).map_err(std::io::Error::other)?;
+        std::fs::write(atlas.join(AtlasOntologyFile::FILE), bytes)
+    }
 
     fn declared(names: &[(&str, TypeKind)]) -> OntologyPolicies {
         let mut p = OntologyPolicies::default();
@@ -972,21 +996,26 @@ mod tests {
         assert_eq!(types.as_array().map(Vec::len), Some(2));
     }
 
-    /// Done-when: `corpus_ontology` on a freshly built literary atlas lists
-    /// `theme`, says who wrote the map, and shows the navigation table.
-    /// Failing input: the literary TOML without `label = "theme"`, or the
+    /// Done-when: `corpus_ontology` on a literary atlas lists `theme`, says
+    /// who wrote the map, and shows the navigation table. Failing input: the
     /// display dropping labels.
+    ///
+    /// The fixture is the atlas writer's `ontology.json` for the built-in
+    /// `literary_atlas`, captured at pb-corpus-mcp-reads when this host
+    /// stopped linking the writer. The literary TOML's own half (`label =
+    /// "theme"`, the declared rows) is pinned where it lives, by corpus-engine
+    /// `literary_atlas_describes_itself_naming_theme`.
     #[test]
     fn ontology_lists_the_literary_theme_and_the_navigation_table() {
-        use corpus_engine::enrichment::pipeline::{Pipeline, PipelineRegistry};
         let dir = tempfile::tempdir().unwrap();
         let atlas = dir.path().join("atlas");
-        let p = PipelineRegistry::builtin().get("literary_atlas").unwrap();
-        write_atlas_ontology(
-            &atlas,
-            p.id(),
-            AtlasOntologyFile::BUILTIN_ONTOLOGY_VERSION,
-            &p.declared_ontology(),
+        std::fs::create_dir_all(&atlas).unwrap();
+        std::fs::copy(
+            concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/tests/fixtures/literary_atlas.ontology.json"
+            ),
+            atlas.join(AtlasOntologyFile::FILE),
         )
         .unwrap();
         let out = ontology_outcome("bk", &atlas);
@@ -1103,10 +1132,14 @@ mod tests {
         std::fs::create_dir_all(&atlas).unwrap();
         std::fs::write(atlas.join("atoms.json"), ONE_ENTITY_ATOMS_JSON).unwrap();
         // Persist a CURRENT summary, the way an ingest does; this host only
-        // ever reads one.
-        corpus_engine::enrichment::atlas::read_or_compute_atlas_summary(&atlas)
-            .unwrap()
-            .unwrap();
+        // ever reads one: the reader's derivation, written where the
+        // engine's summary write puts it.
+        let summary = corpus_engine_atlas_reader::summary::compute_summary(&atlas).unwrap();
+        std::fs::write(
+            atlas.join(corpus_engine_atlas_reader::summary::SUMMARY_FILE),
+            serde_json::to_vec_pretty(&summary).unwrap(),
+        )
+        .unwrap();
 
         let f = atlas_facts(&atlas);
         assert_eq!(f.atom_count, Some(1));
