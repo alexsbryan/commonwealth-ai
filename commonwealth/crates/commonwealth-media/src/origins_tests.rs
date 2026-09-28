@@ -339,3 +339,48 @@ fn declarations_are_read_from_live_registrations() {
     r.release(&c.claim_id).unwrap();
     assert!(r.declared_claims().is_empty());
 }
+
+/// **A local origin is listed and never reachable from the mesh**
+/// (pb-work-donor). The execute origin a donor finds through the listing
+/// is on this node's loopback for this node's processes; a member or a
+/// stranger dialing its ALPN is closed, and the ALPN is not advertised. The
+/// failing input is a `Local` read as `Members([])`: a member could then
+/// run units through another node's origin.
+#[test]
+fn a_local_origin_is_listed_but_never_advertised_or_forwarded() {
+    let r = OriginRegistry::new(PublishedApps::default());
+    let c = r
+        .register(reg(b"cwth/work/ingest:v1", &[], 9750, Admit::Local))
+        .expect("a local registration");
+    let listed = r.listing();
+    assert_eq!(listed.len(), 1);
+    assert_eq!(listed[0].slot, "cwth/work/ingest:v1");
+    assert_eq!(listed[0].admit, Admit::Local);
+    assert_eq!(listed[0].claim_id.as_deref(), Some(c.claim_id.as_str()));
+    assert!(
+        r.alpns().is_empty(),
+        "a local origin is not served to dialers"
+    );
+    assert!(r.advertised_kinds().is_empty());
+    assert!(r
+        .forward_for(b"cwth/work/ingest:v1", Some(&member()), DIALER)
+        .is_none());
+    assert!(r
+        .forward_for(b"cwth/work/ingest:v1", None, DIALER)
+        .is_none());
+
+    // The control: the same registration as a members' origin IS forwarded,
+    // so the refusal above is the admission's, not the ALPN's.
+    r.release(&c.claim_id).unwrap();
+    r.register(reg(
+        b"cwth/work/ingest:v1",
+        &[],
+        9750,
+        Admit::Members(Vec::new()),
+    ))
+    .unwrap();
+    assert_eq!(r.alpns(), vec![b"cwth/work/ingest:v1".to_vec()]);
+    assert!(r
+        .forward_for(b"cwth/work/ingest:v1", Some(&member()), DIALER)
+        .is_some());
+}

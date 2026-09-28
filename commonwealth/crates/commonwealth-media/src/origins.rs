@@ -57,6 +57,11 @@ pub enum Admit {
     /// Members reach this origin; any other dialer is sent to the origin
     /// registered on the named ALPN (a guest door), or closed if none is.
     MembersElse(String),
+    /// This node's own processes reach it on loopback, and no dialer ever
+    /// does: it is listed, never advertised and never forwarded
+    /// (`forward_for` answers no route). An execute origin a donor on this
+    /// node finds through the listing (pb-work-donor).
+    Local,
 }
 
 /// How a dial's bytes reach the origin.
@@ -189,6 +194,13 @@ impl State {
         self.standing
             .values()
             .chain(self.claimed.iter().map(|(_, row)| &row.value))
+    }
+
+    /// The entries a dialer may reach: every one but [`Admit::Local`]'s. The
+    /// served ALPN set and the acceptor decision both read this, so a local
+    /// origin is neither advertised nor forwarded.
+    fn dialable(&self) -> impl Iterator<Item = &Entry> {
+        self.entries().filter(|e| e.admit != Admit::Local)
     }
 
     fn holder(&self, slot: &str) -> Option<String> {
@@ -393,7 +405,7 @@ impl OriginRegistry {
     /// and `cwth/app/0` while any app is published.
     pub fn alpns(&self) -> Vec<Vec<u8>> {
         let mut out: Vec<Vec<u8>> = self.read(|s| {
-            s.entries()
+            s.dialable()
                 .map(|e| e.alpn.as_bytes().to_vec())
                 .collect::<Vec<_>>()
         });
@@ -464,7 +476,7 @@ impl OriginRegistry {
         }
         let alpn = String::from_utf8_lossy(alpn).into_owned();
         let entries: Vec<Entry> =
-            self.read(|s| s.entries().filter(|e| e.alpn == alpn).cloned().collect());
+            self.read(|s| s.dialable().filter(|e| e.alpn == alpn).cloned().collect());
         if entries.iter().any(|e| e.prefix.is_some()) {
             let routes = entries
                 .into_iter()
@@ -476,7 +488,8 @@ impl OriginRegistry {
                             admit_spliced_origin(&e.alpn, who, dialer, Some(e.addr), allow, &[])
                                 .is_some()
                         }
-                        Admit::MembersElse(_) => false,
+                        // `dialable` left no local entry to route.
+                        Admit::MembersElse(_) | Admit::Local => false,
                     };
                     let mut headers = e.declared.clone();
                     headers.extend(e.tie.map(|t| (ORIGIN_TIE_HEADER.to_string(), t)));
@@ -507,7 +520,7 @@ impl OriginRegistry {
         if let Admit::MembersElse(other) = &entry.admit {
             if who.is_none() {
                 let fallback: Option<Entry> =
-                    self.read(|s| s.entries().find(|e| &e.alpn == other).cloned());
+                    self.read(|s| s.dialable().find(|e| &e.alpn == other).cloned());
                 tracing::info!(
                     target: "transport",
                     alpn = %alpn,
@@ -541,6 +554,8 @@ impl OriginRegistry {
             Admit::MembersElse(_) => {
                 admit_spliced_origin(&e.alpn, who, dialer, Some(e.addr), &[], &e.declared)?
             }
+            // Never forwarded; `dialable` keeps it from reaching here.
+            Admit::Local => return None,
         };
         match (e.framing, forward) {
             (Framing::Bytes, _) => Some(Forward::Splice(e.addr)),
@@ -648,7 +663,7 @@ impl OriginRegistry {
                 .lock()
                 .unwrap_or_else(PoisonError::into_inner);
             state
-                .entries()
+                .dialable()
                 .map(|e| e.alpn.as_bytes().to_vec())
                 .collect()
         };
