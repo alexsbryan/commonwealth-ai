@@ -25,17 +25,44 @@ fn locate() -> Option<PathBuf> {
     sovereign_turn_client::reach::locate_sibling(BIN_NAME, "SOVEREIGN_CLI_DEV_BIN")
 }
 
+fn not_found() -> i32 {
+    eprintln!(
+        "sovereign: cannot find sibling binary '{BIN_NAME}'. \
+         Build it with `cargo build -p sovereign-cli-dev --release`, \
+         or set SOVEREIGN_CLI_DEV_BIN to its path."
+    );
+    127
+}
+
 pub fn exec(verb: &str, args: &[String]) -> i32 {
     let Some(bin) = locate() else {
-        eprintln!(
-            "sovereign: cannot find sibling binary '{BIN_NAME}'. \
-             Build it with `cargo build -p sovereign-cli-dev --release`, \
-             or set SOVEREIGN_CLI_DEV_BIN to its path."
-        );
-        return 127;
+        return not_found();
     };
 
     crate::sibling::warn_if_stale(&bin, "sovereign-cli-dev");
 
     crate::sibling::exec_into(&bin, verb, args)
+}
+
+/// Run `sovereign-cli-dev <verb> <args>` as a child and wait for it, for a
+/// step inside a verb that goes on afterwards (`project init`'s index step,
+/// pb-code-index), where [`exec`] would replace this process.
+#[cfg(feature = "code-intel")]
+pub fn run(verb: &str, args: &[String]) -> i32 {
+    let Some(bin) = locate() else {
+        return not_found();
+    };
+    crate::sibling::warn_if_stale(&bin, "sovereign-cli-dev");
+    tracing::debug!(bin = %bin.display(), verb, ?args, "dev_bin: run and wait");
+    match std::process::Command::new(&bin)
+        .arg(verb)
+        .args(args)
+        .status()
+    {
+        Ok(status) => status.code().unwrap_or(1),
+        Err(e) => {
+            eprintln!("sovereign: cannot run {}: {e}", bin.display());
+            127
+        }
+    }
 }

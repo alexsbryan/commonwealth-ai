@@ -17,7 +17,8 @@ license.workspace = true
 #   removed: sovereign-inference (llama-cpp-2), sovereign-tools,
 #            sovereign-mesh, sovereign-pipeline, sovereign-work-atlas
 #   kept:    sovereign-core (light traits + types), sovereign-store
-#            (SqliteStateStore), corpus-engine (stores feature only).
+#            (SqliteStateStore). corpus-engine left with pb-code-index:
+#            `project init` execs the code program to index.
 #   also removed 2026-09-21: sovereign-agent-bench — `agent-bench` execs
 #            its own `[[bin]]` sibling instead (`agent_bench_bin`).
 
@@ -80,7 +81,6 @@ clap = { workspace = true }
 # Path dep rather than a `[workspace.dependencies]` entry: this is the crate's
 # first consumer, and the edge is easier to read where it is paid.
 sovereign-cli-llm = { path = "../sovereign-cli-llm", optional = true }
-corpus-engine = { workspace = true }
 corpus-index = { workspace = true }
 corpus-engine-scip = { workspace = true, optional = true }
 # The pure-HTTP OICP client — `deep-research`'s loopback calls. Depended on
@@ -156,20 +156,16 @@ dev-tools = [
 # custody-stamped fetch, gap-audited rounds. Talks to the daemon over
 # loopback HTTP only (oicp-client) — no llama.cpp, no mesh.
 deep-research = ["dep:oicp-client"]
-# `project init` in the SHIPPED binary. `svrn code index` and `svrn refresh`
-# exec the code program, `sovereign-cli-dev` (pb-code-index). init
-# reads/writes the SCIP db (`corpus-engine-scip` — rusqlite + prost, no
-# grammars), and needs corpus-engine's `treesitter` for the `code` extractor,
-# which is `#[cfg(feature = "treesitter")]`-gated and panics without it
-# (`corpus-engine/src/engine/ingest_factories.rs:295-303`).
+# `project init` in the SHIPPED binary. Its index step, `svrn code index`
+# and `svrn refresh` exec the code program, `sovereign-cli-dev`
+# (pb-code-index); init itself reads/writes the SCIP db
+# (`corpus-engine-scip` — rusqlite + prost, no grammars).
 #
 # Deliberately NOT pulling `sovereign-tools`/`-mesh`: neither is on the
-# index path, and each would drag llama.cpp or LanceDB into an end-user
-# binary. The grammars are already in the shipped daemon and llm siblings, so
-# this is not a new cost to the tarball — see SYSTEM_OVERVIEW.
+# init path, and each would drag llama.cpp or LanceDB into an end-user
+# binary.
 code-intel = [
     "dep:corpus-engine-scip",
-    "corpus-engine/treesitter",
     # `project init` (2026-08-07) reads the project model — `observation` to
     # derive what the repo IS, `project_toml` to persist it. Both live in
     # sovereign-cli-shared because the workbench still reads what init writes.
