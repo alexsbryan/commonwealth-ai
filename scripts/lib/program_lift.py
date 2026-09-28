@@ -521,10 +521,22 @@ def lift(lift_id: str, spec: dict, sandbox: Path, target: Path, keep: bool, sets
     # `carry`: data the program ships beside its crates, copied in and named
     # by the knob the monorepo's `.cargo/config.toml [env]` sets in-tree. It
     # goes into this process's env, so the build, the tests and the smoke
-    # all see the sandbox copy and never the repo's.
+    # all see the sandbox copy and never the repo's. A FILE is copied and the
+    # knob names the file; a LIST of files keeps their repo paths under one
+    # root the knob names, for a reader that wants a workspace root.
     for var, rel in spec.get("carry", {}).items():
-        dst = sandbox / "carried" / Path(rel).name
-        shutil.copytree(REPO / rel, dst, ignore=shutil.ignore_patterns("target", ".git"))
+        if isinstance(rel, list):
+            dst = sandbox / "carried" / var
+            for f in rel:
+                (dst / f).parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(REPO / f, dst / f)
+        elif (REPO / rel).is_file():
+            dst = sandbox / "carried" / Path(rel).name
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(REPO / rel, dst)
+        else:
+            dst = sandbox / "carried" / Path(rel).name
+            shutil.copytree(REPO / rel, dst, ignore=shutil.ignore_patterns("target", ".git"))
         os.environ[var] = str(dst)
         say(f"CARRIED {rel} as {var}={dst}")
     # `tree`: a knob naming a directory INSIDE the sandbox, for a test that

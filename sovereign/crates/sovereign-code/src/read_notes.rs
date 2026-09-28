@@ -484,7 +484,6 @@ mod tests {
     use corpus_engine_notes::NoteSource;
     use serde_json::json;
     use sovereign_contracts::types::ToolContext;
-    use std::path::Path;
 
     fn floor() -> Vec<String> {
         floor_anchors()
@@ -627,10 +626,13 @@ mod tests {
     /// the reminder.
     #[test]
     fn the_registry_file_mirrors_the_compiled_in_floor() {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .ancestors()
-            .find(|d| d.join("scripts/sovereign-lint.sh").is_file())
-            .expect("ascent must find the repo root");
+        // The registry the loader itself would read: in-tree its own chain
+        // finds the repo, and a lift names the carried copy through
+        // SOVEREIGN_WORKSPACE_DIR (scripts/program-lift.toml `[lift.code]`).
+        let root = resolve_workspace_root(None).expect(
+            "no workspace root: set SOVEREIGN_WORKSPACE_DIR to the directory \
+             holding quality/operational-anchors.toml",
+        );
         let text = std::fs::read_to_string(root.join("quality/operational-anchors.toml")).unwrap();
         let file: OperationalAnchorsFile = toml::from_str(&text).unwrap();
         let mut file_names: Vec<&str> = file.anchor.iter().map(|a| a.name.as_str()).collect();

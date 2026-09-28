@@ -14,8 +14,10 @@
 #   build    `cargo build` args; absent = `-p <seed>` for each seed.
 #   test     `cargo test` args; absent = `-p <seed>` for each seed.
 #   binary   the built artifact the RUN step starts, relative to the target dir.
-#   carry    { ENV_VAR = "<repo-relative dir>" }: data the program ships, copied
-#            into the sandbox and named by ENV_VAR for the build, tests and RUN.
+#   carry    { ENV_VAR = "<repo-relative dir or file>" }: data the program ships,
+#            copied into the sandbox and named by ENV_VAR for the build, tests
+#            and RUN. A list of files keeps their repo paths under one root
+#            that ENV_VAR names (a knob that wants a workspace root).
 #   tree     { ENV_VAR = "<sandbox-relative dir>" }: names a directory of the
 #            lifted sandbox itself, for tests that read the source tree.
 #   run      the RUN smoke: `inputs`, `steps`, `finally` and `pass`. With no
@@ -319,6 +321,10 @@ steps = [
 package = "code"
 build = ["-p", "sovereign-cli-dev", "--bin", "sovereign-cli-dev"]
 binary = "debug/sovereign-cli-dev"
+# The repo data the closure's tests read, one copy each in quality/ (both have
+# readers outside this program): backlog's value ruler through its loader's
+# knob, and the operational-anchors registry through the workspace-root knob.
+carry = { CO_BACKLOG_RULER = "quality/backlog-ruler.toml", SOVEREIGN_WORKSPACE_DIR = ["quality/operational-anchors.toml"] }
 
 [lift.code.run]
 # "Code intel for my agent" (pb-code-server): `code mcp` serves MCP on a temp
