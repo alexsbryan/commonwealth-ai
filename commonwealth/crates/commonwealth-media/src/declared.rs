@@ -106,6 +106,12 @@ pub fn house_dir_under(state_root: &Path) -> PathBuf {
 /// Env var naming `cw-rails`' data dir when its `--data-dir` flag is absent.
 pub const RAILS_DATA_DIR_ENV: &str = "CW_RAILS_DIR";
 
+/// `cw-rails`' config file under its data dir. One spelling beside the data
+/// dir's, for the same reason: rails reads it (`config::CONFIG_FILE`), and
+/// `svrn mesh up`'s handover writes the `[work_offer]` it moves out of svrn's
+/// config into it (pb-work-donor).
+pub const RAILS_CONFIG_FILE: &str = "rails.toml";
+
 /// `cw-rails`' default data dir: `$CW_RAILS_DIR`, else `~/.commonwealth-rails`.
 ///
 /// The ONE decider (five-programs fp-70, ARCH 8): rails' own

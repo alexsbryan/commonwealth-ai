@@ -185,16 +185,17 @@ fn the_control_a_well_formed_slice_validates_and_round_trips() {
 /// The boot invariant, for this kind, made structural.
 ///
 /// The failing input is an edit that raises this executor's declared isolation
-/// above [`crate::work_donor::DONOR_ISOLATION`]. `resolve_offer` would then
-/// refuse every boot whose config offers `ingest:v1` — a daemon that will not
-/// start, discovered by an operator rather than by a test.
+/// above the donor's floor, `Subprocess` (cw-rails' `donor::DONOR_ISOLATION`,
+/// which this crate may not name). The donor would then drop `ingest:v1` from
+/// every offer — a node that never donates ingest work, discovered by an
+/// operator rather than by a test.
 #[test]
 fn this_donor_can_cover_the_isolation_this_executor_declares() {
     let (_dir, exec) = executor();
     assert!(
-        crate::work_donor::DONOR_ISOLATION.covers(exec.descriptor().isolation),
+        Isolation::Subprocess.covers(exec.descriptor().isolation),
         "a donor offering {:?} cannot run an executor requiring {:?}",
-        crate::work_donor::DONOR_ISOLATION,
+        Isolation::Subprocess,
         exec.descriptor().isolation
     );
     // And the honest half: this really does run in-process. Declaring

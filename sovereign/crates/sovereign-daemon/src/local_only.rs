@@ -70,11 +70,6 @@ pub enum MeshService {
     RingSync,
     /// The mesh-store outbox pump that signs local writes onto their rings.
     RailKvPump,
-    /// The work-plane donor loop (`crate::work_donor`) — this node running
-    /// other people's units. Spawned only when `[compute.work_offer]` names a
-    /// kind, so its ABSENCE from the census is two different facts (local-only,
-    /// or an inert offer) and the boot trace names which.
-    WorkDonor,
     /// The `ingest:v1` execute origin (`crate::work_origin`), served on
     /// loopback and registered with cw-rails, whose donor forwards units to
     /// it. Spawned only on a node with a corpus engine.
@@ -95,7 +90,6 @@ impl MeshService {
             MeshService::AutoIngestCollaborate => "auto_ingest_collaborate",
             MeshService::RingSync => "ring_sync",
             MeshService::RailKvPump => "rail_kv_pump",
-            MeshService::WorkDonor => "work_donor",
             MeshService::WorkOrigin => "work_origin",
             MeshService::IrohEndpoint => "iroh_endpoint",
             MeshService::IrohWatchdog => "iroh_watchdog",
@@ -111,7 +105,6 @@ impl MeshService {
         MeshService::AutoIngestCollaborate,
         MeshService::RingSync,
         MeshService::RailKvPump,
-        MeshService::WorkDonor,
         MeshService::WorkOrigin,
         MeshService::IrohEndpoint,
         MeshService::IrohWatchdog,

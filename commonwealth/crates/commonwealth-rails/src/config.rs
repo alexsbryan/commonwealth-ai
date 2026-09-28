@@ -12,6 +12,12 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+#[path = "config/work_offer.rs"]
+mod work_offer;
+pub use work_offer::{
+    InvalidWorkOffer, WorkAcceptFrom, WorkOfferSection, DEFAULT_YIELD_TO_FOREGROUND,
+};
+
 /// The loopback API port. 9741..9745 belong to the inference daemon family
 /// (mesh, internal, client, desktop bridge, mobile), so a rails daemon on the
 /// same machine as one must not land in that range.
@@ -20,8 +26,9 @@ pub const DEFAULT_LISTEN: u16 = 9747;
 /// Env var naming the data dir when `--data-dir` is absent.
 pub const DATA_DIR_ENV: &str = commonwealth_media::RAILS_DATA_DIR_ENV;
 
-/// File name under the data dir.
-pub const CONFIG_FILE: &str = "rails.toml";
+/// File name under the data dir: commonwealth-media's one spelling, which the
+/// handover that writes `[work_offer]` here also names (pb-work-donor).
+pub const CONFIG_FILE: &str = commonwealth_media::RAILS_CONFIG_FILE;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -41,6 +48,10 @@ pub struct Config {
     pub gossip_interval_secs: u64,
     #[serde(default = "default_offline_threshold")]
     pub offline_threshold_secs: u64,
+    /// What this node donates to the mesh's work plane. Inert unless `kinds`
+    /// names something (pb-work-donor; see [`WorkOfferSection`]).
+    #[serde(default)]
+    pub work_offer: WorkOfferSection,
 }
 
 /// iroh reachability posture. Maps to
@@ -105,6 +116,7 @@ impl Default for Config {
             media: MediaSection::default(),
             gossip_interval_secs: default_gossip_interval(),
             offline_threshold_secs: default_offline_threshold(),
+            work_offer: WorkOfferSection::default(),
         }
     }
 }

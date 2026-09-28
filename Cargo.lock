@@ -2028,6 +2028,7 @@ dependencies = [
  "hex",
  "host-kit",
  "hostname",
+ "kernel-types",
  "mesh-reach",
  "oicp-types",
  "reqwest 0.12.28",

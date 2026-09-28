@@ -21,7 +21,7 @@ pub(in super::super) async fn run_distributed(
     let config = match sovereign_core::setup_config::SetupConfig::load() {
         Ok(c) => Some(c),
         Err(e) => {
-            tracing::warn!(error = %e, "quality check: no setup config; the rails base is the default and no image is declared");
+            tracing::warn!(error = %e, "quality check: no setup config; the rails base is the default");
             None
         }
     };
@@ -29,14 +29,10 @@ pub(in super::super) async fn run_distributed(
         Some(c) => sovereign_turn_client::rails_kv::resolve_rails_base(&c.daemon),
         None => sovereign_turn_client::rails_kv::DEFAULT_RAILS_BASE.to_string(),
     };
-    let image = config
-        .as_ref()
-        .and_then(|c| c.compute.work_offer.image.clone());
-
     let repo_rev = head_rev(repo)?;
     // The reference first: a run whose verdicts could not be judged against
     // this checkout is refused before anything is put on the ring.
-    let mine = local_attribution(&rails_base, &repo_rev, image.as_deref()).await?;
+    let mine = local_attribution(&rails_base, &repo_rev).await?;
     let units = units_for(&rails_base, lanes, trigger, budget_secs, &repo_rev).await?;
     let hashes: Vec<String> = units.iter().map(|u| u.unit_hash.clone()).collect();
     let kind = units

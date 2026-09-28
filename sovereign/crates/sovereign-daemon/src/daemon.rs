@@ -379,11 +379,6 @@ enum DaemonState {
         /// `_collaborate_handle`: a spawner whose handle nobody holds can lose
         /// its `tokio::spawn` in a stray diff and stay silent about it.
         _rail_kv_pump_handle: Option<sovereign_mesh::rail_kv_pump::RailKvPumpHandle>,
-        /// Aborts the work-plane donor loop on Drop — the loop that leases,
-        /// runs and reports other people's units (cw-lift 5d). `None` on a
-        /// local-only daemon AND on a node whose `[compute.work_offer]` names
-        /// no kind; `running_services` is what tells those two apart.
-        _work_donor_handle: Option<crate::work_donor::WorkDonorHandle>,
         /// Stops the `ingest:v1` execute origin and its registration with
         /// cw-rails on Drop (pb-work-donor). `None` on a local-only daemon and
         /// on a node with no corpus engine.
@@ -2984,73 +2979,15 @@ impl EmbeddedDaemon {
                 crate::local_only::ENV_VAR,
             )));
         }
-        // ── The work offer: resolved ONCE, here, and refused loudly rather
-        // than half-honoured (ARCH §18.3). A daemon that offers a kind it has
-        // no executor for is a donor that leases units and then fails every
-        // one of them, and the submitter reads that as a verdict about their
-        // tree. Resolved BEFORE the profile branch on purpose: a config that
-        // contradicts this build is wrong whether or not this boot would have
-        // donated, and a local-only run must not be the reason nobody found
-        // out.
-        // Resolved here, above the registry, because `donor_registry` needs it:
-        // a node with no corpus engine registers no `ingest:v1` executor, and
-        // `resolve_offer` then REFUSES a config that offers that kind, naming it
-        // (cw-lift 5g). Moved up from the `AppState` construction below, which
-        // still takes the same clone.
+        // The donor and its boundary probe run in cw-rails since pb-work-donor;
+        // this daemon serves the `ingest:v1` execute origin below instead.
         let corpus_engine = self
             .services
             .serving()
             .map(|s| Arc::clone(&s.core.corpus_engine));
-        let work_registry;
-        // THE BOUNDARY IS PROBED ONCE, HERE, before anything is published.
-        // What comes back is both how a unit will be run and what this node
-        // may say about itself — one value, so the two cannot disagree
-        // (ARCH §10.6). A host with no runtime or no declared image gets
-        // `Direct`, which provides `Subprocess`, which offers no kind that
-        // runs a stranger's argv.
-        let work_offer = {
-            let c = self.setup_config.read().await;
-            let (sandbox, why) =
-                commonwealth_work::sandbox::Sandbox::probe(c.compute.work_offer.image.as_deref());
-            // Named at `info` when it worked and `warn` when it did not,
-            // because "this node donates nothing" with no reason is the shape
-            // of a misconfiguration nobody finds (ARCH §18.3, §9.1).
-            match &why {
-                Some(reason) => tracing::warn!(
-                    target: crate::work_donor::TRACE_TARGET,
-                    provides = ?sandbox.provides(),
-                    why = %reason,
-                    "work donor: no boundary on this host, so it will offer no kind that needs one"
-                ),
-                None => tracing::info!(
-                    target: crate::work_donor::TRACE_TARGET,
-                    provides = ?sandbox.provides(),
-                    "work donor: boundary ready"
-                ),
-            }
-            // BOTH read off the sandbox, before it moves into the registry.
-            // `platform` is the IMAGE's under a boundary and this host's
-            // without one — a donor advertises where a unit RUNS, and this
-            // said `std::env::consts` until 2026-09-10, which refused a
-            // macOS host's perfectly runnable Linux work on `Os`.
-            let (provides, (os, arch)) = (sandbox.provides(), sandbox.platform());
-            work_registry = std::sync::Arc::new(crate::work_donor::donor_registry(
-                corpus_engine.clone(),
-                sandbox,
-            ));
-            crate::work_donor::resolve_offer(
-                &c.compute.work_offer,
-                &work_registry,
-                &os,
-                &arch,
-                provides,
-            )
-            .map_err(|e| MeshError::Config(e.to_string()))?
-        };
         // Assigned inside the networked branch below. A `mut` binding rather
         // than a fifth tuple element so the gate stays the SAME `if` the four
         // loops already sit in without re-indenting sixty lines of it.
-        let mut work_donor_handle: Option<crate::work_donor::WorkDonorHandle> = None;
         let mut work_origin_handle: Option<crate::work_origin::WorkOriginHandle> = None;
         // What this boot actually spawns, recorded at each spawn site and
         // stored on the Running variant. The profile's claim is about this
@@ -4082,26 +4019,10 @@ impl EmbeddedDaemon {
                 );
                 running_services.record(crate::local_only::MeshService::RailKvPump);
 
-                // The work-plane donor. Gated by the SAME branch the four
-                // loops above are — the profile's whole point is that "is
-                // this daemon local-only" is answered once (ARCH §10.6) — and
-                // then by the offer: a node whose `[compute.work_offer]` names
-                // no kind spawns nothing, which is the shipped posture.
-                work_donor_handle = work_offer.map(|offer| {
-                    let handle = crate::work_donor::spawn_work_donor(
-                        app_state.clone(),
-                        offer,
-                        std::sync::Arc::clone(&work_registry),
-                        self.data_dir.join(crate::work_donor::DONOR_DIR),
-                        crate::work_donor::DONOR_POLL_INTERVAL,
-                    );
-                    running_services.record(crate::local_only::MeshService::WorkDonor);
-                    handle
-                });
-
                 // The `ingest:v1` execute origin (pb-work-donor): served and
-                // registered with cw-rails on the SAME networked branch, so a
-                // local-only daemon donates no ingest work, as before. A node
+                // registered with cw-rails on the SAME networked branch the
+                // donor sat on, so a local-only daemon donates no ingest work,
+                // as before. The donor itself is cw-rails'. A node
                 // with no corpus engine serves none, as its registry had no
                 // ingest executor.
                 if let Some(engine) = corpus_engine.clone() {
@@ -4641,7 +4562,6 @@ impl EmbeddedDaemon {
             _collaborate_handle: collaborate_handle,
             _ring_sync_handle: ring_sync_handle,
             _rail_kv_pump_handle: rail_kv_pump_handle,
-            _work_donor_handle: work_donor_handle,
             _work_origin_handle: work_origin_handle,
             _foreground_post_handle: foreground_post_handle,
             local_only,

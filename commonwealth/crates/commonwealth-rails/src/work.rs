@@ -51,33 +51,35 @@ use serde::Deserialize;
 use crate::rail::err;
 use crate::RailsDaemon;
 
-/// The `work` namespace, folded now — or the 500 that names why not.
-async fn folded(daemon: &RailsDaemon) -> Result<WorkProjection, Response> {
-    let journal = match daemon.rail.journal(WORK_NAMESPACE) {
-        Ok(j) => j,
-        Err(e) => return Err(err(StatusCode::INTERNAL_SERVER_ERROR, e.to_string())),
-    };
+/// The `work` namespace, folded now — or the sentence naming why not. The one
+/// fold both the projection door and the donor (`crate::donor`) read.
+pub(crate) async fn fold_work(daemon: &RailsDaemon) -> Result<WorkProjection, String> {
+    let journal = daemon
+        .rail
+        .journal(WORK_NAMESPACE)
+        .map_err(|e| e.to_string())?;
     let roster = match daemon.rail.roster(&journal).await {
         Ok(r) => r,
         Err(e) => {
             tracing::debug!(error = %e, "work projection: the `work` roster is unreadable");
-            return Err(err(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("the `work` roster is unreadable: {e}"),
-            ));
+            return Err(format!("the `work` roster is unreadable: {e}"));
         }
     };
     let admission = match journal.admit(&roster, &Ed25519Verifier) {
         Ok(a) => a,
         Err(e) => {
             tracing::warn!(error = %e, "work projection: the `work` journal would not admit");
-            return Err(err(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("the `work` journal would not admit: {e}"),
-            ));
+            return Err(format!("the `work` journal would not admit: {e}"));
         }
     };
     Ok(commonwealth_work::projection::fold(&admission))
+}
+
+/// The `work` namespace, folded now — or the 500 that names why not.
+async fn folded(daemon: &RailsDaemon) -> Result<WorkProjection, Response> {
+    fold_work(daemon)
+        .await
+        .map_err(|why| err(StatusCode::INTERNAL_SERVER_ERROR, why))
 }
 
 /// GET /v1/work/projection — the `work` namespace, folded now.
@@ -327,15 +329,22 @@ pub struct AttributionQuery {
 }
 
 /// GET /v1/work/attribution?repo_rev=<rev>[&image=<image>] — what a unit run
-/// at `repo_rev` inside `image` (or on this host, with none) is attributed
-/// to: `attribution::of_sandbox` over `Sandbox::probe`, the method every
-/// donor reads its own provenance with. Probing a container runtime is
-/// blocking I/O, so it runs off the async threads.
-pub async fn attribution(Query(q): Query<AttributionQuery>) -> Response {
+/// at `repo_rev` inside `image` is attributed to: `attribution::of_sandbox`
+/// over `Sandbox::probe`, the method every donor reads its own provenance
+/// with. With no `image` named, the image this node's own `[work_offer]`
+/// declares (pb-work-donor), and with neither, this host. Probing a container
+/// runtime is blocking I/O, so it runs off the async threads.
+pub async fn attribution(
+    State(daemon): State<Arc<RailsDaemon>>,
+    Query(q): Query<AttributionQuery>,
+) -> Response {
+    let image = q
+        .image
+        .or_else(|| daemon.node.config.work_offer.image.clone());
     let answer = tokio::task::spawn_blocking(move || {
-        let (sandbox, why) = Sandbox::probe(q.image.as_deref());
+        let (sandbox, why) = Sandbox::probe(image.as_deref());
         tracing::debug!(
-            image = ?q.image,
+            image = ?image,
             sandbox = ?sandbox,
             no_sandbox = ?why,
             "work attribution: probed"

@@ -1,15 +1,18 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! The work donor's checkouts: where a leased unit runs.
 //!
-//! Its own file because `work_donor.rs` crossed ARCH §3.2's 1200-line
-//! ceiling when the ring rail's port landed (fp-54). The block moved
-//! verbatim — `#[path]`, so the names are unchanged and every caller reads
-//! the same.
+//! Its own file because the daemon's `work_donor.rs` crossed ARCH §3.2's
+//! 1200-line ceiling when the ring rail's port landed (fp-54); it moved to
+//! cw-rails with the donor (pb-work-donor), unchanged but for this import.
 
 use std::path::{Path, PathBuf};
 
+// The named absence for a workdir that is not a checkout. Imported rather
+// than re-spelled: this donor, the submitter and a lifted peer all have to
+// name the same absence, and the comparability rule keys on it.
+use commonwealth_work::attribution::ABSENT_REV;
 use commonwealth_work::refusal::{UnmetRequirement, WorkRefusal};
-use sovereign_contracts::oicp::{JobUnit, WorkOffer};
+use oicp_types::{JobUnit, WorkOffer};
 
 /// The directory a unit runs in.
 ///
@@ -198,4 +201,65 @@ pub(super) fn git(dir: &Path, args: &[&str]) -> Result<String, String> {
         return Err(String::from_utf8_lossy(&out.stderr).trim().to_string());
     }
     Ok(String::from_utf8_lossy(&out.stdout).into_owned())
+}
+/// What machine, rev, arch and toolchain produced a result.
+///
+/// **`repo_rev` is what this donor ACTUALLY RAN AT, never what it was asked
+/// for.** A pinned unit ran in a worktree checked forward to its pin, so the
+/// two agree; an UNPINNED unit ran at whatever this donor's checkout happens
+/// to be, and reporting the empty string there would make every unpinned
+/// donor's attribution compare equal to every other's — which is precisely
+/// the comparison `ComputeAttribution::comparable_to` exists to fail (the
+/// plan's 5e bar iii: a stale donor's unpinned verdict must be flaggable).
+///
+/// THE REV IS THE ONLY PART THIS FUNCTION DECIDES, and since 2026-09-10 it is
+/// the only part it returns. Resolving it needs a workdir, which is a donor's
+/// own business. The other three fields are "where did this run", and this
+/// function answered "on my host" — true for a subprocess and false for a
+/// unit inside a container image. `JobExecutor::attribution` answers it now,
+/// because the executor that ran the unit is the only thing that knows which
+/// of the two it was.
+pub(super) fn repo_rev_of(unit: &JobUnit, workdir: &Path) -> String {
+    unit.requirements
+        .repo_rev
+        .clone()
+        .or_else(|| rev_of_the_checkout_this_workdir_belongs_to(workdir))
+        .filter(|rev| !rev.is_empty())
+        .unwrap_or_else(|| ABSENT_REV.to_string())
+}
+
+/// The HEAD of the checkout this workdir is PART OF, or `None` when it is not
+/// part of one.
+///
+/// **`git rev-parse HEAD` alone cannot answer this, because git WALKS UP.** An
+/// unpinned unit runs in `donor_root/scratch` (`resolve_workdir`, the only
+/// branch that serves it), which is not a checkout — so a bare `rev-parse` had
+/// exactly two possible answers: a failure, which is honest, or the HEAD of
+/// whatever checkout the donor's DATA DIRECTORY happens to sit under, which is
+/// a fabricated rev for work that never touched that tree. And a fabricated rev
+/// is the worst of the three, because it compares EQUAL to a submitter at that
+/// rev and `ComputeAttribution::comparable_to` then adopts the verdict
+/// (§18.3 — a plausible wrong value beats an absence at getting believed).
+/// Which of the two you got was decided by where the daemon's data dir lives:
+/// `~/.svrnmesh` gives the honest absence, `SVRNMESH_DATA_DIR` pointed inside a
+/// checkout gives the fabrication.
+///
+/// `ls-files` is the discriminator because it lists TRACKED content under the
+/// cwd: a donor's own checkout has some (160 files at this crate's root), a
+/// scratch directory nested under one has none. Measured 2026-09-10. It costs a
+/// full listing, which is fine — it runs only for an UNPINNED unit, once, beside
+/// a unit that is about to run a whole program.
+///
+/// WHAT THIS DOES NOT CHANGE: a donor running unpinned work inside its own
+/// checkout still reports that checkout's rev, so `WORK_PLANE.md`'s 5e bar iii
+/// keeps the flaggable stale verdict it asks for. It stops getting an invented
+/// one.
+fn rev_of_the_checkout_this_workdir_belongs_to(workdir: &Path) -> Option<String> {
+    let tracked = git(workdir, &["ls-files"]).ok()?;
+    if tracked.trim().is_empty() {
+        return None;
+    }
+    git(workdir, &["rev-parse", "HEAD"])
+        .ok()
+        .map(|s| s.trim().to_string())
 }

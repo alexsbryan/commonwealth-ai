@@ -71,6 +71,7 @@ pub mod acceptor;
 pub mod api;
 pub mod cli;
 pub mod config;
+pub mod donor;
 pub mod found;
 pub mod gossip;
 pub mod identity;
@@ -108,6 +109,8 @@ pub enum Refusal {
     Endpoint(String),
     #[error("the mesh store would not open: {0}")]
     KvStore(#[from] commonwealth_state::Error),
+    #[error("{0}")]
+    WorkOffer(#[from] donor::OfferRefused),
     #[error("could not listen on {0}: {1}")]
     Listen(SocketAddr, std::io::Error),
     #[error(
@@ -559,6 +562,9 @@ impl RailsDaemon {
         // Ready means projected (phase-b-5): a door that answered before the
         // journals were folded would read absent for rows they hold.
         daemon.kv.project_all_on_disk().await;
+        // The work donor (pb-work-donor): a `[work_offer]` this build cannot
+        // honour refuses the start by name, before anything is served.
+        let donor = donor::spawn(daemon.clone()).await?;
         let api = api::serve(daemon.clone(), listen).await?;
         // Both run from the start because a membership door can end solo
         // while this runs; each skips its tick while solo, which has no one to
@@ -604,6 +610,7 @@ impl RailsDaemon {
         ledger_gc.abort();
         drop(ring_sync);
         drop(watchdog);
+        drop(donor);
         Ok(())
     }
 

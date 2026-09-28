@@ -1,10 +1,15 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `work_donor`'s tests. A sibling file only so `work_donor.rs` stays
-//! under ARCH §3.1's 1200-line ceiling — moved verbatim, nothing renamed.
+//! The donor's tests, moved from the svrn daemon with it (pb-work-donor).
+//! A sibling file only so `donor.rs` stays under ARCH §3.1's 1200-line
+//! ceiling.
 use super::*;
+use commonwealth_work::projection::WorkUnitStatus;
 use commonwealth_work::refusal::host_satisfies;
+use kernel_types::attribution::ComputeAttribution;
+use kernel_types::quality::Precondition;
+use kernel_types::Server;
 
-fn section(kinds: &[&str]) -> WorkOfferSection {
+pub(super) fn section(kinds: &[&str]) -> WorkOfferSection {
     WorkOfferSection {
         kinds: kinds.iter().map(|k| k.to_string()).collect(),
         max_concurrent: 1,
@@ -12,46 +17,53 @@ fn section(kinds: &[&str]) -> WorkOfferSection {
     }
 }
 
-/// **THE STARTUP GATE (ARCH §18.1, §18.3).**
+/// **A KIND WITH NO EXECUTOR IS NOT OFFERED (ARCH §18.1, §18.3), and it is
+/// offered once one resolves it** (phase-b-39 fork 2).
 ///
-/// The failing input is a config that offers `ingest:v1` on a daemon whose
-/// registry holds only `process:v1`. Before the check existed this booted
-/// happily and the donor advertised a kind it could not run: every unit of
-/// it would be leased, fail with `NoExecutor`, burn an attempt, and come
-/// back to the submitter as a verdict about this node.
-///
-/// The assertion is on the SENTENCE, not on `is_err()`. A refusal that
-/// names nothing is not a refusal — an operator reading "invalid work
-/// offer" has to guess which of their kinds is wrong, and with one kind
-/// per line in a config file that is the whole of the information they
-/// needed.
+/// The failing input is a config that offers `ingest:v1` on a node whose
+/// registry holds only `process:v1` — the svrn daemon's execute origin has
+/// not registered. Offering it anyway is a donor that leases every unit of
+/// it, fails with `NoExecutor`, and burns the submitter's attempts. It was a
+/// refused boot while the donor lived in the daemon; in cw-rails the origin
+/// can register after the start, so the kind waits, named at `warn`, and the
+/// start does not fail. The second half is the control: the same section
+/// over a registry that resolves the kind offers it.
 #[test]
-fn startup_refuses_offer_of_unregistered_kind() {
-    let registry = donor_registry(None, Sandbox::Direct);
-    let err = resolve_offer(
+fn an_offered_kind_waits_for_its_origin_and_is_offered_when_it_registers() {
+    let registry = donor_registry(Sandbox::Direct, &[]);
+    let waiting = resolve_offer(
         &section(&["ingest:v1"]),
         &registry,
         "linux",
         "x86_64",
         DONOR_ISOLATION,
     )
-    .expect_err("a kind with no executor must refuse the boot");
-    let msg = err.to_string();
-    assert!(
-        msg.contains("ingest:v1"),
-        "the refusal must NAME the kind it refuses, got: {msg}"
-    );
-    assert!(
-        msg.contains("no executor is registered") || msg.contains("no executor"),
-        "the refusal must say what is missing, got: {msg}"
-    );
+    .expect("a kind with no executor yet does not refuse the start");
+    assert_eq!(waiting, None, "nothing resolves it, so nothing is offered");
+
+    let mut registry = donor_registry(Sandbox::Direct, &[]);
+    registry
+        .register(Arc::new(StubExecutor(
+            JobKind::parse("ingest:v1").expect("kind"),
+        )))
+        .expect("one registration");
+    let offer = resolve_offer(
+        &section(&["ingest:v1"]),
+        &registry,
+        "linux",
+        "x86_64",
+        DONOR_ISOLATION,
+    )
+    .expect("resolves")
+    .expect("its executor registered, so it is offered");
+    assert_eq!(offer.kinds, vec![JobKind::parse("ingest:v1").unwrap()]);
 }
 
 /// An executor that asks only for what this build provides. It exists so the
 /// control below has a subject: `process:v1` now requires
 /// `RootlessContainer` and is refused here (see the watched red under it), so
 /// a control written against it would assert the very thing being gated.
-struct StubExecutor(JobKind);
+pub(super) struct StubExecutor(pub(super) JobKind);
 
 impl commonwealth_work::executor::JobExecutor for StubExecutor {
     fn descriptor(&self) -> oicp_types::JobExecutorDescriptor {
@@ -127,7 +139,7 @@ fn the_control_a_registered_kind_this_build_can_isolate_resolves_to_an_offer() {
 /// does not boot into donating, and that is deliberate.
 #[test]
 fn the_isolation_floor_drops_process_v1_and_publishes_no_offer() {
-    let registry = donor_registry(None, Sandbox::Direct);
+    let registry = donor_registry(Sandbox::Direct, &[]);
     let resolved = resolve_offer(
         &section(&["process:v1"]),
         &registry,
@@ -154,7 +166,7 @@ fn the_isolation_floor_drops_process_v1_and_publishes_no_offer() {
 #[test]
 fn the_floor_drops_only_the_kind_it_names_and_keeps_the_rest() {
     let kind = JobKind::parse("stub:v1").expect("kind");
-    let mut registry = donor_registry(None, Sandbox::Direct);
+    let mut registry = donor_registry(Sandbox::Direct, &[]);
     registry
         .register(Arc::new(StubExecutor(kind)))
         .expect("one registration");
@@ -180,7 +192,7 @@ fn the_floor_drops_only_the_kind_it_names_and_keeps_the_rest() {
 /// posture, and what makes the section safe to write into every config.
 #[test]
 fn an_empty_section_is_no_offer_rather_than_an_empty_offer() {
-    let registry = donor_registry(None, Sandbox::Direct);
+    let registry = donor_registry(Sandbox::Direct, &[]);
     assert_eq!(
         resolve_offer(
             &WorkOfferSection::default(),
@@ -199,9 +211,9 @@ fn an_empty_section_is_no_offer_rather_than_an_empty_offer() {
 /// at boot instead.
 #[test]
 fn an_accept_key_that_is_not_a_key_refuses_the_boot_naming_it() {
-    let registry = donor_registry(None, Sandbox::Direct);
+    let registry = donor_registry(Sandbox::Direct, &[]);
     let mut s = section(&["process:v1"]);
-    s.accept = sovereign_contracts::setup_config::WorkAcceptFrom::Listed;
+    s.accept = crate::config::WorkAcceptFrom::Listed;
     s.accept_from = vec!["BEEFYMAC".to_string()];
     let err = resolve_offer(&s, &registry, "linux", "x86_64", DONOR_ISOLATION)
         .expect_err("an unparseable accept key must refuse the boot");
@@ -221,7 +233,7 @@ fn a_key(seed: char) -> ActorKey {
 /// fold produces these states from the journal.
 fn folded(status: WorkUnitStatus) -> (WorkProjection, UnitRef) {
     use commonwealth_work::projection::{ProjectedUnit, WorkHandoff};
-    use sovereign_contracts::oicp::JobRequirements;
+    use oicp_types::JobRequirements;
 
     let handoff = kernel_types::HandoffId::from_u128(7);
     let unit_hash = "a".repeat(64);
@@ -343,8 +355,25 @@ fn an_unpinned_unit_reports_the_rev_the_donor_actually_ran_at() {
         requirements: Default::default(),
         tenant: None,
     };
-    // This test runs inside the repo's own checkout.
-    let here = repo_rev_of(&unit, Path::new(env!("CARGO_MANIFEST_DIR")));
+    // A checkout of its own, with tracked content: this crate is built and
+    // tested outside the monorepo (the cmnwlth lift), where its own directory
+    // is no checkout, so the fixture is made here rather than borrowed.
+    let checkout = tempfile::tempdir().expect("tempdir");
+    let ok = |args: &[&str]| git(checkout.path(), args).expect(&format!("git {args:?}"));
+    ok(&["init", "-q"]);
+    std::fs::write(checkout.path().join("tracked"), b"x").unwrap();
+    ok(&["add", "tracked"]);
+    ok(&[
+        "-c",
+        "user.email=t@t",
+        "-c",
+        "user.name=t",
+        "commit",
+        "-q",
+        "-m",
+        "one",
+    ]);
+    let here = repo_rev_of(&unit, checkout.path());
     assert_eq!(here.len(), 40, "a resolved sha, got {here:?}");
     assert!(!kernel_types::is_absent_marker(&here));
 
@@ -364,12 +393,12 @@ fn an_unpinned_unit_reports_the_rev_the_donor_actually_ran_at() {
     // nothing of it: a fabricated rev that compares EQUAL to a submitter at
     // that rev. Empty on purpose — git does not track empty directories, so
     // this leaves `git status` clean, which the distributed path now requires.
-    let nested = tempfile::tempdir_in(env!("CARGO_MANIFEST_DIR")).expect("tempdir in the repo");
+    let nested = tempfile::tempdir_in(checkout.path()).expect("tempdir in the checkout");
     let fabricated = repo_rev_of(&unit, nested.path());
     assert!(
         kernel_types::is_absent_marker(&fabricated),
         "a scratch dir that merely SITS under a checkout holds none of it — got {fabricated:?}, \
-         which is this repo's HEAD attributed to work that never touched it"
+         which is that checkout's HEAD attributed to work that never touched it"
     );
 
     let mut pinned = unit.clone();
@@ -535,7 +564,7 @@ fn a_precondition_this_build_cannot_check_is_refused_not_assumed() {
 // The credit (cw-lift 5h)
 // -----------------------------------------------------------------
 
-fn a_unit() -> JobUnit {
+pub(super) fn a_unit() -> JobUnit {
     JobUnit {
         kind: JobKind::parse("process:v1").expect("kind"),
         unit_hash: "a".repeat(64),
@@ -666,53 +695,4 @@ fn an_act_that_is_not_a_report_credits_nothing() {
     };
     assert!(credit_for(&WorkAct::Lease(r.clone()), &unit, &me, 9.0).is_none());
     assert!(credit_for(&WorkAct::Renew(r), &unit, &me, 9.0).is_none());
-}
-
-// ── cw-lift 5g: the ingest executor's half of the boot invariant ──────────
-
-fn an_engine() -> (tempfile::TempDir, Arc<corpus_engine::CorpusEngine>) {
-    let dir = tempfile::tempdir().expect("tempdir");
-    let recipes = dir.path().join("recipes");
-    let indexes = dir.path().join("indexes");
-    std::fs::create_dir_all(&recipes).expect("recipes dir");
-    std::fs::create_dir_all(&indexes).expect("indexes dir");
-    let embed: corpus_index::types::EmbedFn =
-        Arc::new(|_t: &str| Box::pin(async { Ok(vec![0.1_f32; 4]) }));
-    (
-        dir,
-        Arc::new(corpus_engine::CorpusEngine::new(recipes, indexes, embed)),
-    )
-}
-
-/// The control for `startup_refuses_offer_of_unregistered_kind`, which passes
-/// `None` and therefore now asserts something sharper than it used to: a node
-/// with NO corpus engine refuses a config offering `ingest:v1`, naming it.
-///
-/// Without this control that gate is trivially satisfiable by a
-/// `donor_registry` that registers nothing at all. The failing input here is a
-/// registration that forgets the engine arm — the daemon would boot, refuse
-/// the operator's `ingest:v1` line, and the refusal would be indistinguishable
-/// from a genuine misconfiguration.
-#[test]
-fn a_node_with_a_corpus_engine_registers_the_ingest_kind_and_can_offer_it() {
-    let (_dir, engine) = an_engine();
-    let registry = donor_registry(Some(engine), Sandbox::Direct);
-    let kinds: Vec<String> = registry.kinds().iter().map(|k| k.to_string()).collect();
-    assert!(
-        kinds
-            .iter()
-            .any(|k| k == crate::ingest_executor::INGEST_KIND),
-        "a node with an engine must register `ingest:v1`, got {kinds:?}"
-    );
-    let offer = resolve_offer(
-        &section(&["ingest:v1"]),
-        &registry,
-        "linux",
-        "x86_64",
-        DONOR_ISOLATION,
-    )
-    .expect("ingest:v1 is registered on a node with an engine")
-    .expect("kinds are set, so there is an offer");
-    assert_eq!(offer.kinds.len(), 1);
-    assert_eq!(offer.isolation, DONOR_ISOLATION);
 }

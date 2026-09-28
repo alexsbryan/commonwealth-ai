@@ -48,6 +48,9 @@ commonwealth-state = { workspace = true }
 # The job vocabulary the work doors decode (pb-work-doors). A shared leaf,
 # already in this closure through commonwealth-work.
 oicp-types = { workspace = true }
+# The verdict an execute origin answers (`Judgement`, pb-work-donor). A
+# shared leaf, already in this closure through commonwealth-core.
+kernel-types = { workspace = true }
 # The `/v1/mesh/kv` wire encodes a value as base64 — already in the closure
 # through commonwealth-state, at the one version the workspace holds.
 base64 = "0.22"

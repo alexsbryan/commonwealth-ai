@@ -476,8 +476,8 @@ pub(super) fn unplaced_row(
                 inst.id.clone(),
                 Reason::literal(
                     "no node has published an offer on the `work` ring, so there was nobody to \
-                     take this unit — `[compute.work_offer]` in a peer's config is what publishes \
-                     one",
+                     take this unit — `[work_offer]` in a peer's cw-rails `rails.toml` is what \
+                     publishes one",
                 ),
             ),
             0,

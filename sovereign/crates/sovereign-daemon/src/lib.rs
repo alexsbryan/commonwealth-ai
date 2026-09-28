@@ -152,9 +152,9 @@ pub mod venue_host;
 pub mod watched_folder_runtime;
 pub mod watched_folder_setup;
 pub mod watcher_supervisor;
-/// The `work` donor loop — the node's own lease-and-run half of the work
-/// plane (DAEMON_CORE.md §3.2, `jobs`).
-pub mod work_donor;
+/// The `ingest:v1` execute origin cw-rails' donor forwards units to — the
+/// daemon's half of the work plane since the donor moved to cw-rails
+/// (pb-work-donor; DAEMON_CORE.md §3.2, `jobs`).
 pub mod work_origin;
 pub mod workflow_trigger;
 pub mod workspace;

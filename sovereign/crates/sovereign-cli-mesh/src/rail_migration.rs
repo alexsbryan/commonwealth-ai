@@ -35,6 +35,9 @@ use std::path::{Path, PathBuf};
 /// one spelling for the handover's check ([`hand_over`]) and its move.
 const HOUSE_CREDENTIAL: &str = "authorization";
 const VIEWER_KEY: &str = "media_viewer_user";
+/// The donor's section: `[compute.work_offer]` in svrn's config.toml,
+/// `[work_offer]` in cw-rails' `rails.toml` (pb-work-donor).
+const WORK_OFFER_KEY: &str = "work_offer";
 
 /// Where the daemon's journals live today — the same layout
 /// `commonwealth_rail` spells for both processes.
@@ -73,6 +76,7 @@ pub fn hand_over(data_dir: &Path, config_path: &Path, rails_answering: bool) {
     if !rails_answering {
         migrate_journals_to_rails(data_dir);
         migrate_media_to_rails(data_dir, config_path, &rails_data_dir());
+        migrate_work_offer(config_path, &rails_data_dir());
         return;
     }
     let namespaces: Vec<String> = match std::fs::read_dir(source_root(data_dir)) {
@@ -90,11 +94,18 @@ pub fn hand_over(data_dir: &Path, config_path: &Path, rails_answering: bool) {
     let house_credential = commonwealth_media::house_dir_under(data_dir)
         .join(HOUSE_CREDENTIAL)
         .exists();
-    let viewer_id = std::fs::read_to_string(config_path)
+    let config = std::fs::read_to_string(config_path)
         .ok()
-        .and_then(|t| t.parse::<toml_edit::DocumentMut>().ok())
+        .and_then(|t| t.parse::<toml_edit::DocumentMut>().ok());
+    let viewer_id = config
+        .as_ref()
         .is_some_and(|d| d.get("iroh").and_then(|i| i.get(VIEWER_KEY)).is_some());
-    if namespaces.is_empty() && !house_credential && !viewer_id {
+    let work_offer = config.as_ref().is_some_and(|d| {
+        d.get("compute")
+            .and_then(|c| c.get(WORK_OFFER_KEY))
+            .is_some()
+    });
+    if namespaces.is_empty() && !house_credential && !viewer_id && !work_offer {
         tracing::debug!(dir = %data_dir.display(), "rail migration: cw-rails already answers and nothing waits to be handed over");
         return;
     }
@@ -102,6 +113,7 @@ pub fn hand_over(data_dir: &Path, config_path: &Path, rails_answering: bool) {
         namespaces = ?namespaces,
         house_credential,
         viewer_id,
+        work_offer,
         dir = %data_dir.display(),
         "rail migration: cw-rails already answers, so nothing moved under it — these wait \
          under the daemon's data dir; cw-rails must restart to take them (stop it, and \
@@ -269,6 +281,79 @@ fn migrate_viewer_key(config_path: &Path, target: &Path) {
     tracing::info!(from = %config_path.display(), to = %to.display(), "media migration: the viewer id moved from `[iroh] media_viewer_user` to rails' store");
 }
 
+/// Hand `[compute.work_offer]` over to cw-rails, once (pb-work-donor): the
+/// donor runs there now and reads `[work_offer]` from its own `rails.toml`.
+/// The section is written there when rails holds none, then removed from
+/// `config_path` with the original kept beside it as `config.toml.bak`. A
+/// config with no section is a debug no-op, so every run after the first is
+/// one. A rails.toml that already holds `[work_offer]` keeps it — the rails
+/// side is the operator's newer word — and the svrn copy is still removed.
+/// Any write that fails leaves the svrn copy where it is.
+pub fn migrate_work_offer(config_path: &Path, rails_dir: &Path) {
+    let text = match std::fs::read_to_string(config_path) {
+        Ok(t) => t,
+        Err(e) => {
+            tracing::debug!(error = %e, config = %config_path.display(), "work-offer migration: no config to read");
+            return;
+        }
+    };
+    let mut doc = match text.parse::<toml_edit::DocumentMut>() {
+        Ok(d) => d,
+        Err(e) => {
+            tracing::warn!(error = %e, config = %config_path.display(), "work-offer migration: config.toml did not parse; `[compute.work_offer]` is left alone");
+            return;
+        }
+    };
+    let Some(section) = doc
+        .get("compute")
+        .and_then(|c| c.get(WORK_OFFER_KEY))
+        .cloned()
+    else {
+        tracing::debug!(config = %config_path.display(), "work-offer migration: no `[compute.work_offer]`");
+        return;
+    };
+    let rails_toml = rails_dir.join(commonwealth_media::RAILS_CONFIG_FILE);
+    let rails_text = match std::fs::read_to_string(&rails_toml) {
+        Ok(t) => t,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
+        Err(e) => {
+            tracing::warn!(error = %e, to = %rails_toml.display(), "work-offer migration: rails.toml could not be read; `[compute.work_offer]` stays in svrn's config");
+            return;
+        }
+    };
+    let mut rails = match rails_text.parse::<toml_edit::DocumentMut>() {
+        Ok(d) => d,
+        Err(e) => {
+            tracing::warn!(error = %e, to = %rails_toml.display(), "work-offer migration: rails.toml did not parse; `[compute.work_offer]` stays in svrn's config");
+            return;
+        }
+    };
+    if rails.contains_key(WORK_OFFER_KEY) {
+        tracing::warn!(to = %rails_toml.display(), "work-offer migration: rails.toml already holds `[work_offer]` — kept; svrn's copy is removed");
+    } else {
+        rails.insert(WORK_OFFER_KEY, section);
+        if let Err(e) = std::fs::create_dir_all(rails_dir)
+            .and_then(|()| std::fs::write(&rails_toml, rails.to_string()))
+        {
+            tracing::error!(error = %e, to = %rails_toml.display(), "work-offer migration: rails.toml could not be written; `[compute.work_offer]` stays in svrn's config");
+            return;
+        }
+    }
+    let backup = config_path.with_extension("toml.bak");
+    if let Err(e) = std::fs::write(&backup, &text) {
+        tracing::warn!(error = %e, backup = %backup.display(), "work-offer migration: the backup could not be written, so `[compute.work_offer]` stays in svrn's config (cw-rails reads its own copy)");
+        return;
+    }
+    if let Some(compute) = doc.get_mut("compute").and_then(|c| c.as_table_like_mut()) {
+        compute.remove(WORK_OFFER_KEY);
+    }
+    if let Err(e) = std::fs::write(config_path, doc.to_string()) {
+        tracing::warn!(error = %e, config = %config_path.display(), "work-offer migration: the section is in rails.toml, but it could not be removed from svrn's config");
+        return;
+    }
+    tracing::info!(from = %config_path.display(), to = %rails_toml.display(), backup = %backup.display(), "work-offer migration: `[compute.work_offer]` moved to rails.toml `[work_offer]`");
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -360,6 +445,65 @@ mod tests {
         migrate_media_to_rails(daemon_dir.path(), &config, rails_dir.path());
         assert_eq!(commonwealth_media::read_house_in(&house), moved);
         assert_eq!(fs::read_to_string(&config).unwrap(), text);
+    }
+
+    /// **The offer survives the upgrade** (pb-work-donor). A node that offered
+    /// work through `[compute.work_offer]` before the donor moved to cw-rails
+    /// keeps offering it: `svrn mesh up`'s handover writes the section, repos
+    /// included, into rails.toml `[work_offer]`, removes it from config.toml
+    /// behind a `.bak` holding the original, keeps every other key and
+    /// comment, and a second run changes nothing. The failing input is a
+    /// handover that does not move it: cw-rails then starts with an inert
+    /// section and the node silently stops donating.
+    #[test]
+    fn the_work_offer_moves_to_rails_toml_and_a_second_handover_is_a_no_op() {
+        let daemon_dir = tempfile::tempdir().unwrap();
+        let rails_dir = tempfile::tempdir().unwrap();
+        let config = daemon_dir.path().join("config.toml");
+        let original = "# mine\n[compute]\nenabled = false\n\n[compute.work_offer]\n\
+                        kinds = [\"process:v1\"]\nmax_concurrent = 2\naccept = \"anyone\"\n\
+                        image = \"localhost/sovereign-work:latest\"\n\n\
+                        [[compute.work_offer.repos]]\npath = \"/src/x\"\nurl = \"https://h/x.git\"\n";
+        fs::write(&config, original).unwrap();
+        // `CW_RAILS_DIR` is the resolution the handover uses; scoped per test
+        // as the journal test above scopes it.
+        std::env::set_var("CW_RAILS_DIR", rails_dir.path());
+        hand_over(daemon_dir.path(), &config, false);
+
+        let rails: toml::Value =
+            toml::from_str(&fs::read_to_string(rails_dir.path().join("rails.toml")).unwrap())
+                .unwrap();
+        let offer = &rails["work_offer"];
+        assert_eq!(offer["kinds"][0].as_str(), Some("process:v1"));
+        assert_eq!(offer["max_concurrent"].as_integer(), Some(2));
+        assert_eq!(offer["accept"].as_str(), Some("anyone"));
+        assert_eq!(
+            offer["image"].as_str(),
+            Some("localhost/sovereign-work:latest")
+        );
+        assert_eq!(offer["repos"][0]["url"].as_str(), Some("https://h/x.git"));
+        let text = fs::read_to_string(&config).unwrap();
+        assert!(
+            !text.contains("work_offer"),
+            "removed from svrn's config:\n{text}"
+        );
+        assert!(
+            text.contains("# mine") && text.contains("enabled = false"),
+            "{text}"
+        );
+        assert_eq!(
+            fs::read_to_string(daemon_dir.path().join("config.toml.bak")).unwrap(),
+            original,
+            "the original is kept beside it"
+        );
+
+        let rails_text = fs::read_to_string(rails_dir.path().join("rails.toml")).unwrap();
+        hand_over(daemon_dir.path(), &config, false);
+        assert_eq!(fs::read_to_string(&config).unwrap(), text);
+        assert_eq!(
+            fs::read_to_string(rails_dir.path().join("rails.toml")).unwrap(),
+            rails_text
+        );
     }
 
     /// Never clobbers: a house credential already in rails' store stays, and

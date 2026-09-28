@@ -28,7 +28,7 @@
 //! 5f builds it in a sandbox outside this monorepo. The trait is the whole of
 //! what the package owns; the kind, the payload and the body live here, on
 //! the sovereign side of that line, and reach the fold through
-//! [`crate::work_donor::donor_registry`].
+//! [`crate::work_origin`], the execute origin cw-rails' donor forwards units to.
 //!
 //! # Why this executor declares `InProcess`
 //!
@@ -38,7 +38,7 @@
 //! daemon's own threads, so a panic or a leak is the daemon's. Declaring
 //! anything stronger would be a claim with no mechanism behind it.
 //! `Isolation::covers` is an "at least as strong" comparison, so a donor
-//! offering [`crate::work_donor::DONOR_ISOLATION`] (`Subprocess`) covers this
+//! offering `Subprocess` (cw-rails' `donor::DONOR_ISOLATION`) covers this
 //! requirement and boot passes — the weaker requirement is the one that is
 //! satisfiable, not the one that is refused.
 //!
@@ -92,7 +92,7 @@ use serde_json::{json, Value};
 use sovereign_contracts::oicp::work::projection::{WorkHandoff, WorkProjection, WorkUnitStatus};
 use sovereign_contracts::oicp::work::refusal::WorkRefusal;
 // Through `sovereign_contracts`' re-export, not a direct dep on `oicp-types`
-// (ARCH §8.3) — the rule `work_donor` already follows for the same types.
+// (ARCH §8.3).
 use sovereign_contracts::oicp::{
     Idempotency, Isolation, JobExecutorDescriptor, JobKind, JobUnit, ToolExample,
 };
@@ -109,7 +109,7 @@ pub const INGEST_KIND: &str = "ingest:v1";
 
 /// The tracing target for everything this module decides.
 ///
-/// `commonwealth_work`'s own, the way [`crate::work_donor`] does it: a reader
+/// `commonwealth_work`'s own, the way cw-rails' donor does it: a reader
 /// debugging "why did this ingest unit not run" turns on ONE filter
 /// (`RUST_LOG=commonwealth_work=debug`) and sees the fold's refusals and this
 /// executor's in the same stream (ARCH §9.1).
@@ -591,7 +591,7 @@ impl JobExecutor for IngestExecutor {
 /// interchangeable. [`WorkUnitStatus::Complete::lessee`] is an [`ActorKey`] —
 /// the Ed25519 key ADMISSION VERIFIED. `provenance.host` is a [`Server`]
 /// carrying a [`NodeId`] and is SELF-REPORTED by whoever ran the unit.
-/// `work_donor.rs:941-944` already draws exactly this line.
+/// The donor's credit (cw-rails `donor.rs`, `credit_for`) draws exactly this line.
 ///
 /// So: **the verified `lessee` decides whether a contribution counts, and the
 /// self-reported `host` only says where to look for it.** [`Self::expected`]
@@ -716,6 +716,51 @@ pub fn fold_coverage_for(
         });
     }
     None
+}
+
+/// The `work` namespace, folded as it stands right now, for
+/// [`fold_coverage_for`].
+///
+/// The fold runs where the journal lives — `cw-rails`' `/v1/work/projection`
+/// behind the port since fp-45 — so this reads the folded queue and never
+/// admits the journal itself. Moved here from the donor when the donor moved
+/// to cw-rails (pb-work-donor); `auto_ingest`'s tick is its one caller.
+///
+/// `None` when this node has no rail, or the rails daemon could not fold
+/// (unreadable roster, a journal that will not admit, the process absent) —
+/// each traced, and each a condition that heals, so the tick falls through
+/// to its disk-and-gossip path rather than failing.
+pub(crate) async fn fold_now(
+    app_state: &crate::state::AppState,
+) -> Option<(
+    Arc<dyn sovereign_mesh::rail_port::RingRailPort>,
+    WorkProjection,
+    ActorKey,
+    u64,
+)> {
+    let rail = app_state.ring_rail()?;
+    let proj = match rail.work_projection().await {
+        Ok(p) => p,
+        Err(e) => {
+            tracing::warn!(target: TRACE_TARGET, error = %e, "fold coverage: the `work` queue could not be folded");
+            return None;
+        }
+    };
+    let self_actor = match rail.actor().await {
+        Ok(a) => a,
+        Err(e) => {
+            tracing::warn!(target: TRACE_TARGET, error = %e, "fold coverage: the rails daemon did not name this node's signing identity");
+            return None;
+        }
+    };
+    let self_key = match ActorKey::parse(&self_actor) {
+        Ok(k) => k,
+        Err(e) => {
+            tracing::warn!(target: TRACE_TARGET, error = %e, "fold coverage: this node's own signing key is not an actor key");
+            return None;
+        }
+    };
+    Some((rail, proj, self_key, sovereign_time::unix_millis()))
 }
 
 /// The corpus every unit in `handoff` belongs to.

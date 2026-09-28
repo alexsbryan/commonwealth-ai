@@ -28,6 +28,7 @@ fn hermetic(name: &str, listen: u16) -> Config {
         },
         gossip_interval_secs: 1,
         offline_threshold_secs: 60,
+        work_offer: Default::default(),
     }
 }
 

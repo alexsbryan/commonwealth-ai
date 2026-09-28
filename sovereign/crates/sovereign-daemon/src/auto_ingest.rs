@@ -220,7 +220,7 @@ async fn auto_collaborate_loop(state: AppState, daemon_port: u16) {
         // Folded ONCE per tick rather than once per corpus: admitting a
         // journal is not free, and every corpus in `stranded` asks the same
         // projection a different question.
-        let fold = crate::work_donor::fold_now(&state).await;
+        let fold = crate::ingest_executor::fold_now(&state).await;
         for corpus_id in &stranded {
             if active_for_recovery.contains(corpus_id) {
                 tracing::debug!(

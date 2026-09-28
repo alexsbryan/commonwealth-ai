@@ -113,17 +113,13 @@ fn uncommitted(repo: &Path) -> Result<Vec<String>, String> {
 /// itself, exactly as a donor does on its own machine — shared method,
 /// separate values (§18.1). With no image declared the probe reports `Direct`
 /// and the reference is this host, because a unit would have run natively too.
-/// `[compute.work_offer] image` is this node's until pb-work-donor moves the
-/// section to cw-rails.
+/// The image is cw-rails' own `[work_offer] image` since pb-work-donor moved
+/// the section there, so the door reads it and this sends none.
 pub(in super::super) async fn local_attribution(
     rails_base: &str,
     repo_rev: &str,
-    image: Option<&str>,
 ) -> Result<ComputeAttribution, String> {
-    let mut query = vec![("repo_rev", repo_rev)];
-    if let Some(image) = image {
-        query.push(("image", image));
-    }
+    let query = vec![("repo_rev", repo_rev)];
     let answer = rails_get(rails_base, WORK_ATTRIBUTION_PATH, &query)
         .await
         .map_err(|e| format!("cw-rails could not say what a local run is attributed to: {e}"))?;
