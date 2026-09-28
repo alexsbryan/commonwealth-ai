@@ -49,6 +49,9 @@ pub async fn run_code(args: &[String]) -> i32 {
         "index" => sovereign_cli_shared::code_index::cmd_index(&args[1..]).await,
         "finalize" => cmd_finalize(&args[1..]).await,
         "watch" => cmd_watch(&args[1..]).await,
+        // The code server; `svrn serve` and `svrn project serve` are its
+        // other spellings (phase-b pb-code-server).
+        "mcp" => crate::project_cmd::cmd_serve(&args[1..]).await,
         "mcp-status" => cmd_mcp_status(&args[1..]).await,
         "search" => cmd_search(&args[1..]).await,
         "brief" => cmd_brief(&args[1..]).await,
@@ -1346,6 +1349,10 @@ const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help 
             (
                 "watch <corpus-id>",
                 "Run a filesystem watcher that re-indexes on save",
+            ),
+            (
+                "mcp",
+                "Serve code intelligence over MCP on :9741 — no model, no daemon (also `svrn serve`)",
             ),
             (
                 "mcp-status",

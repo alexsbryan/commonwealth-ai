@@ -16,6 +16,14 @@ use crate::registry::ToolRegistry;
 use crate::types::{StepOutput, ToolContext};
 use crate::Effect;
 
+/// The agent session a call runs under: the `X-Agent-Session` the agent
+/// sent, else `conn:<session_id>` for the server run, so clients that send no
+/// header still group by connection. Only tools that read
+/// `ToolContext::agent_session_token` (the work atlas) see it.
+pub fn agent_session_token(header: Option<String>, session_id: &str) -> String {
+    header.unwrap_or_else(|| format!("conn:{session_id}"))
+}
+
 /// Run one tool from `tools` as an MCP call. `None` when `exposed` refuses
 /// the canonical `name` (the caller answers -32601). A name the registry
 /// does not hold, and arguments that fail validation, answer without

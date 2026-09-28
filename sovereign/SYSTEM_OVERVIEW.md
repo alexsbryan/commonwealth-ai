@@ -726,7 +726,9 @@ surface calls. `McpToolAdapter` infers effect and idempotency from a tool's
 name, so a browser `click` picks up the approval gate and replay ledger while
 a `snapshot` read does not.
 
-**Code intelligence** is served over MCP by `svrn project serve` or the
+**Code intelligence** is served over MCP by `svrn code mcp` (also spelled
+`svrn serve` and `svrn project serve`: no model, no daemon, no mesh; its tool
+set is `sovereign-code`'s bundles behind the host kit's dispatcher) or the
 daemon. The tools live in their own crate, `sovereign-code` — 18,431 lines
 lifted out of `sovereign-tools` on 2026-09-21 (822681564), so that `svrn code`
 is a program with a boundary a gate can read rather than a module inside the

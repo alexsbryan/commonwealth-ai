@@ -92,16 +92,10 @@ impl McpRequestHandler for DaemonMcp {
         req: JsonRpcRequest,
         ctx: &McpRequestContext,
     ) -> impl Future<Output = Option<JsonRpcResponse>> + Send {
-        // Agent identity for the work atlas. Prefer the explicit header
-        // the agent supplies (`X-Agent-Session`); fall back to the
-        // per-MCP-connection `session_id` so we still get session
-        // grouping for clients that don't set the header. Used only by
-        // tools that read `ToolContext::agent_session_token`; everything
-        // else ignores it.
-        let agent_session_token = ctx
-            .agent_session
-            .clone()
-            .unwrap_or_else(|| format!("conn:{}", self.session_id.as_str()));
+        let agent_session_token = sovereign_contracts::mcp_host::agent_session_token(
+            ctx.agent_session.clone(),
+            &self.session_id,
+        );
         dispatch(
             req,
             Arc::clone(&self.tools),

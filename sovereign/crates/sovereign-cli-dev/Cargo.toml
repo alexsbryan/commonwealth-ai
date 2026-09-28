@@ -41,7 +41,7 @@ required-features = ["workbench"]
 #
 # WORKBENCH (default) is everything else — `sovereign-tools` drags arrow +
 # parquet + the enrichment catalog, `corpus-engine` drags the tree-sitter
-# grammars, `sovereign-daemon` drags the serving cluster. Linking those into
+# grammars. Linking those into
 # a dispatcher to move a metric is the failure this split refuses.
 [dependencies]
 # ── Always-on: the thin, linkable surface ──
@@ -79,10 +79,9 @@ sovereign-tools = { workspace = true, features = [
 sovereign-enrichment-build = { workspace = true }
 sovereign-contracts = { workspace = true }
 sovereign-time = { workspace = true }
-# The mesh host cluster (domains dm-daemon-mesh-edge): `project_cmd::serve`
-# mounts `mcp_router`, so it rides the same `workbench` gate as the other
-# heavy optional deps.
-sovereign-daemon = { workspace = true, optional = true }
+# The code server (`project_cmd::serve`, phase-b pb-code-server): the host
+# kit's MCP dispatcher, its HTTP+SSE framing and the loopback guard.
+host-kit = { workspace = true, features = ["mcp", "http", "shell"], optional = true }
 # `project_cmd::cmd_serve` registers work-atlas claim handlers when
 # the daemon comes up; pulled in directly here rather than via
 # sovereign-tools so the dep is visible in this crate's tree.
@@ -156,7 +155,7 @@ sovereign-contracts = { workspace = true, features = ["test-fixtures"] }
 default = ["workbench"]
 workbench = [
     "dep:sovereign-tools",
-    "dep:sovereign-daemon",
+    "dep:host-kit",
     "dep:sovereign-work-atlas",
     "dep:sovereign-turn-client",
     "dep:corpus-engine",
