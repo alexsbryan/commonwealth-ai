@@ -11,12 +11,14 @@
 //! EXPIRED ones, which `work_in_flight` filters away at read time.
 
 pub mod broadcast;
+pub mod bundle;
 pub mod declare_scope;
 pub mod release_scope;
 pub mod resource_may_i;
 pub mod work_in_flight;
 
 pub use broadcast::{ClaimBroadcaster, DeferredBroadcaster, NullBroadcaster};
+pub use bundle::WorkAtlasTools;
 pub use declare_scope::DeclareScopeTool;
 pub use release_scope::ReleaseScopeTool;
 pub use resource_may_i::{
