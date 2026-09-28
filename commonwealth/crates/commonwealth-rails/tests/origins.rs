@@ -509,7 +509,7 @@ async fn rails_transport_reaches_a_peers_registered_origin_through_cw_rails() {
         let daemon_b = RailsDaemon::start_from_disk(node_b)
             .await
             .expect("the joiner starts");
-        let own = daemon_b.transport.clone();
+        let own = daemon_b.transport();
         let roster_b = daemon_b.mesh.clone();
 
         let joiner_side = async {

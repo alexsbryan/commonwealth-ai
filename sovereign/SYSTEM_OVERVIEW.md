@@ -1222,7 +1222,10 @@ the mesh endpoint dials peers through this one. Since phase-b pb-rails-parity it
 (`commonwealth-rails/src/ring_sync.rs`, moved from sovereign-mesh; the daemon runs the same code over its
 rail port until the flip), woken by its append door, and serves `/internal/ring/{sync,live,checkpoint/{ns}}`
 to members under a standing `/internal/ring` prefix (`ring_routes.rs`) and `GET /v1/mesh/relay-candidates`
-(address discovery, moved to `commonwealth-discovery::mesh_discovery`).
+(address discovery, moved to `commonwealth-discovery::mesh_discovery`). It also runs the reachability
+watchdog (`iroh_watchdog.rs`, moved from sovereign-mesh) over its own endpoint, whose rebuild re-binds and
+swaps the endpoint, transport and acceptor as one (`self_heal.rs`); `/v1/mesh/status` carries
+`self_reachability`.
 
 ---
 

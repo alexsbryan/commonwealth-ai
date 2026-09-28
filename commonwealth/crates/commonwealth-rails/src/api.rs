@@ -214,7 +214,7 @@ pub async fn status(State(daemon): State<Arc<RailsDaemon>>) -> impl IntoResponse
             })
             .collect()
     };
-    let addr = daemon.node.endpoint.addr();
+    let addr = daemon.endpoint().addr();
     // The posture the endpoint was bound with (`RailsNode::bind` reads the
     // same `relay_config`), so a client can refuse an n0-homed cw-rails.
     let relay = daemon.node.config.relay_config();
@@ -224,6 +224,9 @@ pub async fn status(State(daemon): State<Arc<RailsDaemon>>) -> impl IntoResponse
     // Every mesh this node belongs to; a store that does not read is named,
     // never listed as none.
     let meshes = crate::membership::listing(&daemon, &mesh);
+    // The endpoint's self-heal, as the daemon's status reports it; absent,
+    // by name, until `run` has spawned the watchdog.
+    let reachability = daemon.self_reachability().await;
     Json(serde_json::json!({
         "self": {
             "node_id": daemon.node.self_id.to_string(),
@@ -253,6 +256,10 @@ pub async fn status(State(daemon): State<Arc<RailsDaemon>>) -> impl IntoResponse
         "meshes_absent": meshes.as_ref().err().map(|e| e.to_string()),
         "fanout_inflight": daemon.gauge.load(Ordering::Relaxed),
         "internal_listener": daemon.internal_addr.to_string(),
+        "self_reachability": reachability,
+        "self_reachability_absent": reachability
+            .is_none()
+            .then_some("the reachability watchdog is not running"),
         "relay": {
             "n0_services": relay.n0_services,
             "relay_urls": relay.relay_urls,
@@ -331,7 +338,8 @@ async fn origin(
         )
             .into_response();
     };
-    match commonwealth_media::reach(self_id, &roster, peer, &daemon.transport, &paths, kind).await {
+    match commonwealth_media::reach(self_id, &roster, peer, &daemon.transport(), &paths, kind).await
+    {
         Ok(reach) => (StatusCode::OK, Json(serde_json::json!(reach))).into_response(),
         // A name nobody has is the one refusal that is about the REQUEST.
         Err(e @ MediaReachRefusal::UnknownMember(_)) => refusal(StatusCode::NOT_FOUND, e),
@@ -365,7 +373,7 @@ pub async fn reach(
         self_id,
         &roster,
         q.peer.trim(),
-        &daemon.transport,
+        &daemon.transport(),
         class,
     )
     .await
@@ -394,7 +402,7 @@ pub async fn origin_fanout(
         daemon.node.self_id,
         &roster,
         req,
-        daemon.transport.clone(),
+        daemon.transport(),
         daemon.gauge.clone(),
     )
     .await
@@ -640,13 +648,7 @@ mod tests {
 /// this endpoint's own direct port; an endpoint with no direct address yet
 /// names that absence rather than a port it does not have.
 pub async fn relay_candidates(State(daemon): State<Arc<RailsDaemon>>) -> impl IntoResponse {
-    let port = daemon
-        .node
-        .endpoint
-        .addr()
-        .ip_addrs()
-        .next()
-        .map(|a| a.port());
+    let port = daemon.endpoint().addr().ip_addrs().next().map(|a| a.port());
     let Some(port) = port else {
         tracing::info!(target: "rails", "relay candidates: the endpoint has no direct address yet");
         return Json(serde_json::json!({

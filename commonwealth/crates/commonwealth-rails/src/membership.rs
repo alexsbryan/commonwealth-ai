@@ -127,7 +127,7 @@ fn check_node_name(daemon: &RailsDaemon, asked: Option<&str>) -> Result<(), Stri
 
 /// The invite link for `mesh`, from this endpoint's dial, or why none.
 fn invite(daemon: &RailsDaemon, key: &str, mesh: &Mesh) -> Result<String, found::InviteAbsent> {
-    let dial = commonwealth_transport::iroh::format_dial_string(&daemon.node.endpoint.addr());
+    let dial = commonwealth_transport::iroh::format_dial_string(&daemon.endpoint().addr());
     found::invite_link(Some(key), mesh, dial.as_deref())
 }
 

@@ -721,7 +721,7 @@ impl RingSyncHost for crate::RailsDaemon {
     }
 
     fn transport(&self) -> Arc<dyn commonwealth_transport::PeerTransport> {
-        self.transport.clone()
+        crate::RailsDaemon::transport(self)
     }
 }
 

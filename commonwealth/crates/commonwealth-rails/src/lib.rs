@@ -62,9 +62,7 @@ use std::sync::Arc;
 use commonwealth_core::ids::{NodeId, NodePubkey};
 use commonwealth_core::mesh::Mesh;
 use commonwealth_transport::fanout::InflightGauge;
-use commonwealth_transport::iroh::{
-    build_relayed_endpoint, Endpoint, IrohAcceptor, IrohTransport, SecretKey, ALPN, MEDIA_ALPN,
-};
+use commonwealth_transport::iroh::{build_relayed_endpoint, Endpoint, SecretKey, ALPN, MEDIA_ALPN};
 use commonwealth_transport::PeerTransport;
 use ed25519_dalek::SigningKey;
 use tokio::sync::{Mutex, Notify, RwLock};
@@ -89,6 +87,7 @@ pub mod presence;
 pub mod rail;
 pub mod ring_routes;
 pub mod ring_sync;
+pub mod self_heal;
 pub mod work;
 
 pub use config::Config;
@@ -229,6 +228,8 @@ pub struct RailsNode {
     pub config: Config,
     pub key: SigningKey,
     pub self_id: NodeId,
+    /// The endpoint bound at start. A running daemon's live one is
+    /// [`RailsDaemon::endpoint`], which the self-heal may have rebuilt.
     pub endpoint: Endpoint,
 }
 
@@ -238,19 +239,7 @@ impl RailsNode {
             .map_err(|e| identity::StoreRefusal::DataDir(data_dir.clone(), e))?;
         let key = commonwealth_transport::identity::load_or_generate_node_key(&data_dir);
         let self_id = identity::load_or_generate_node_id(&data_dir)?;
-        // Two ALPNs at bind: `cwth/http/0` carries join and gossip,
-        // `cwth/media/0` carries a member's player. `cwth/app/0` is the third
-        // and is NOT here, because whether this node serves it changes while
-        // the daemon runs — the acceptor adds and removes it as the app
-        // registry fills and empties. The acceptor routes by ALPN *and* by
-        // who dialed — see `acceptor`.
-        let endpoint = build_relayed_endpoint(
-            SecretKey::from_bytes(&key.to_bytes()),
-            vec![ALPN.to_vec(), MEDIA_ALPN.to_vec()],
-            &config.relay_config(),
-        )
-        .await
-        .map_err(Refusal::Endpoint)?;
+        let endpoint = Self::bind_endpoint(&key, &config).await?;
         tracing::info!(
             target: "rails",
             node_id = %self_id,
@@ -266,6 +255,24 @@ impl RailsNode {
             self_id,
             endpoint,
         })
+    }
+
+    /// Bind an iroh endpoint with `key` and `config`'s relay posture: once at
+    /// start, and again by the self-heal's rebuild ([`self_heal::rebuild`]).
+    pub async fn bind_endpoint(key: &SigningKey, config: &Config) -> Result<Endpoint, Refusal> {
+        // Two ALPNs at bind: `cwth/http/0` carries join and gossip,
+        // `cwth/media/0` carries a member's player. `cwth/app/0` is the third
+        // and is NOT here, because whether this node serves it changes while
+        // the daemon runs — the acceptor adds and removes it as the app
+        // registry fills and empties. The acceptor routes by ALPN *and* by
+        // who dialed — see `acceptor`.
+        build_relayed_endpoint(
+            SecretKey::from_bytes(&key.to_bytes()),
+            vec![ALPN.to_vec(), MEDIA_ALPN.to_vec()],
+            &config.relay_config(),
+        )
+        .await
+        .map_err(Refusal::Endpoint)
     }
 
     pub fn pubkey(&self) -> NodePubkey {
@@ -294,7 +301,13 @@ pub struct RailsDaemon {
     /// The one roster. Every reader clones what it needs out of the lock
     /// before dialing anything — no lock is held across a round trip.
     pub mesh: Arc<RwLock<Mesh>>,
-    pub transport: Arc<dyn PeerTransport>,
+    /// The endpoint, the dial-by-key transport over it and the acceptor in
+    /// front of it, swapped as one by the self-heal ([`self_heal`]). Read
+    /// with [`RailsDaemon::endpoint`] and [`RailsDaemon::transport`].
+    live: self_heal::LiveEndpoint,
+    /// The watchdog's status, once `run` has spawned it; `/v1/mesh/status`
+    /// reports it as `self_reachability`.
+    reachability: std::sync::OnceLock<Arc<RwLock<iroh_watchdog::ReachabilityStatus>>>,
     /// Local-clock time we last had contact with each peer, keyed by node id.
     /// Offline decay measures THIS, never the peer's own gossiped
     /// `last_seen` — a clock-skewed live peer must not read as stale.
@@ -351,7 +364,6 @@ pub struct RailsDaemon {
     /// advertisement or the reason there is none (see [`lan`]).
     pub lan: Option<Result<lan::Lan, String>>,
     _internal: tokio::task::JoinHandle<()>,
-    _acceptor: IrohAcceptor,
 }
 
 impl RailsDaemon {
@@ -360,7 +372,6 @@ impl RailsDaemon {
     pub async fn start(node: RailsNode, mesh: Mesh) -> Result<Self, Refusal> {
         let mesh = Arc::new(RwLock::new(mesh));
         let contacts: Arc<Mutex<HashMap<NodeId, u64>>> = Arc::new(Mutex::new(HashMap::new()));
-        let transport: Arc<dyn PeerTransport> = Arc::new(IrohTransport::new(node.endpoint.clone()));
 
         // The ring rail's storage (five-programs fp-44): one journal
         // directory per ring namespace under THIS process's data dir,
@@ -419,12 +430,14 @@ impl RailsDaemon {
             commonwealth_media::read_declared_in(&commonwealth_media::dir_under(&node.data_dir)),
         )
         .expect("an empty registry holds the endpoint's own origins");
-        let acceptor = acceptor::spawn(node.endpoint.clone(), mesh.clone(), origins.clone());
+        let live =
+            self_heal::LiveEndpoint::stand(node.endpoint.clone(), mesh.clone(), origins.clone());
 
         Ok(Self {
             node,
             mesh,
-            transport,
+            live,
+            reachability: std::sync::OnceLock::new(),
             contacts,
             gauge: Arc::new(AtomicUsize::new(0)),
             published_apps,
@@ -440,7 +453,6 @@ impl RailsDaemon {
             verbs: Mutex::new(()),
             lan: None,
             _internal: internal,
-            _acceptor: acceptor,
         })
     }
 
@@ -463,6 +475,23 @@ impl RailsDaemon {
         let daemon = Self::start(node, mesh).await?;
         daemon.solo.store(true, Ordering::SeqCst);
         Ok(daemon)
+    }
+
+    /// The endpoint this daemon serves and dials on right now.
+    pub fn endpoint(&self) -> Endpoint {
+        self.live.endpoint()
+    }
+
+    /// The dial-by-key transport over [`RailsDaemon::endpoint`].
+    pub fn transport(&self) -> Arc<dyn PeerTransport> {
+        self.live.transport()
+    }
+
+    /// The watchdog's last snapshot, or `None` before `run` spawned it.
+    pub async fn self_reachability(&self) -> Option<iroh_watchdog::ReachabilityStatus> {
+        let status = self.reachability.get()?.clone();
+        let snapshot = status.read().await.clone();
+        Some(snapshot)
     }
 
     /// No active mesh: this node alone, in memory only.
@@ -549,6 +578,12 @@ impl RailsDaemon {
             ring_sync::DEFAULT_RING_SYNC_INTERVAL,
             daemon.ring_nudge.clone(),
         );
+        // The endpoint's self-heal (pb-rails-parity): the watchdog over the
+        // live endpoint, rebuilding it in-process when it wedges.
+        let watchdog = self_heal::spawn_watchdog(
+            daemon.clone(),
+            self_heal::watchdog_config(&daemon.node.config),
+        );
         tracing::info!(
             target: "rails",
             api = %listen,
@@ -565,6 +600,7 @@ impl RailsDaemon {
         kv_pump.abort();
         ledger_gc.abort();
         drop(ring_sync);
+        drop(watchdog);
         Ok(())
     }
 
@@ -591,7 +627,7 @@ impl RailsDaemon {
         };
         let mut out = Vec::new();
         for (id, key) in keyed {
-            if let Some(p) = commonwealth_media::path_to(&self.node.endpoint, &key.0).await {
+            if let Some(p) = commonwealth_media::path_to(&self.endpoint(), &key.0).await {
                 out.push((id, p));
             }
         }

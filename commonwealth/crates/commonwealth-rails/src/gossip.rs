@@ -138,7 +138,7 @@ pub async fn run_one_round(daemon: &RailsDaemon, round: u64) {
     let threshold = daemon.node.config.offline_threshold_secs;
 
     let dial = {
-        let addr = daemon.node.endpoint.addr();
+        let addr = daemon.endpoint().addr();
         // Each read is its OWN statement so the borrowing iterator
         // `relay_urls()` hands back is dropped at that statement's end. As a
         // struct literal in the block's tail expression this is E0597 —
@@ -388,7 +388,7 @@ async fn exchange(
 ) -> bool {
     let self_id = daemon.node.self_id;
     let endpoints = daemon
-        .transport
+        .transport()
         .endpoints(contact, TrafficClass::Gossip)
         .await;
     let Some(ep) = endpoints.into_iter().next() else {
