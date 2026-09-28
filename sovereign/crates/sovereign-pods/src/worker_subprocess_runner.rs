@@ -86,9 +86,9 @@ pub struct SubprocessRunnerConfig {
     /// the child.
     pub config_path: PathBuf,
     /// Path to the `sovereign-cli` binary used to spawn the child.
-    /// `None` means "use the currently-running binary"
-    /// (`std::env::current_exe()`), which is the right default
-    /// inside a pod where worker and child are the same artifact.
+    /// `None` locates [`CHILD_BIN`] (`SOVEREIGN_BIN`, then beside this
+    /// binary, then `PATH`). Not `current_exe()`: that is the
+    /// `sovereign-pod-worker` binary, which serves no `daemon run`.
     pub binary: Option<PathBuf>,
     /// Port the child daemon's client API listens on. Matches the
     /// `[daemon].client_port` in the generated config — defaults to
@@ -461,6 +461,9 @@ async fn ensure_child_ready(inner: &Arc<Inner>) -> Result<(), SubprocessRunnerEr
     Ok(())
 }
 
+/// The program the child daemon runs as: `sovereign-cli daemon run`.
+pub const CHILD_BIN: &str = "sovereign-cli";
+
 /// Spawn `<binary> daemon run --config <config_path>` as a child
 /// process. Sets `kill_on_drop(true)` so the child dies if the
 /// `ChildHandle` is ever dropped without an explicit kill. Strips
@@ -470,8 +473,12 @@ async fn spawn_child(inner: &Arc<Inner>) -> Result<ChildHandle, SubprocessRunner
     let config = &inner.config;
     let binary = match config.binary.clone() {
         Some(b) => b,
-        None => std::env::current_exe()
-            .map_err(|e| SubprocessRunnerError::SpawnFailed(format!("current_exe: {e}")))?,
+        None => sovereign_turn_client::reach::locate_sibling(CHILD_BIN, "SOVEREIGN_BIN")
+            .ok_or_else(|| {
+                SubprocessRunnerError::SpawnFailed(format!(
+                    "{CHILD_BIN} not found (SOVEREIGN_BIN, beside this binary, PATH)"
+                ))
+            })?,
     };
     let mut cmd = tokio::process::Command::new(&binary);
     cmd.arg("daemon")
@@ -1205,6 +1212,39 @@ mod tests {
             "wait_for_child_ready did not short-circuit on child exit — \
              took {elapsed:?}, expected sub-5s"
         );
+    }
+
+    /// `binary: None` spawns `sovereign-cli daemon run --config <path>`,
+    /// never `current_exe()` (the worker binary itself, pb-pods-worker).
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn default_child_is_sovereign_cli_daemon_run() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let (bin, argv) = (dir.path().join(CHILD_BIN), dir.path().join("argv"));
+        let script = format!("#!/bin/sh\necho \"$0 $*\" > {}\nexit 1\n", argv.display());
+        std::fs::write(&bin, script).unwrap();
+        std::fs::set_permissions(&bin, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let config_path = dir.path().join("config.toml");
+        std::fs::write(&config_path, "# stub\n").unwrap();
+        std::env::set_var("SOVEREIGN_BIN", &bin);
+        let (complete, ready) = pre_fired_dump_signals();
+        let mut config = test_config(1);
+        (config.config_path, config.skip_spawn) = (config_path.clone(), false);
+        config.child_ready_timeout = Duration::from_secs(30);
+        let runner = SubprocessRunner::new(config, complete, ready);
+        let result = ensure_child_ready(&runner.inner).await;
+        assert!(matches!(
+            result,
+            Err(SubprocessRunnerError::ChildExitedEarly(_))
+        ));
+        let got = std::fs::read_to_string(&argv).unwrap();
+        let want = format!(
+            "{} daemon run --config {}",
+            bin.display(),
+            config_path.display()
+        );
+        assert_eq!(got.trim(), want);
     }
 
     /// Real-child smoke test — actually spawns `sovereign-cli daemon

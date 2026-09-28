@@ -20,6 +20,9 @@ sovereign-time = { workspace = true }
 # third — the kill clause (SERVING_BOUNDARY.md "Grandfathered"). `sovereign-pods`
 # re-exports the module at its historical path.
 sovereign-contracts = { workspace = true }
+# `locate_sibling`: the runner's child is `sovereign-cli`, found the one way
+# every client finds a program it execs (pb-pods-worker).
+sovereign-turn-client = { workspace = true }
 axum = { workspace = true }
 tokio = { workspace = true }
 reqwest = { workspace = true, features = ["stream"] }
