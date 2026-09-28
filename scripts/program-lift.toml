@@ -117,7 +117,7 @@ binary = "debug/cw-rails"
 # relay, no n0 DNS, the two reach each other on direct addresses. It is two
 # processes, so it is not the mesh of one that could pass by having nobody to
 # disagree with.
-pass = "founded '${MESH}', joined it by the founder's invite, converged a roster with '${PEER}', reached '${OFFERER}' as an online library, and a GET through ${URL} answered HTTP ${THROUGH}"
+pass = "founded '${MESH}', joined it by the founder's invite, converged a roster with '${PEER}', reached '${OFFERER}' as an online library, a GET through ${URL} answered HTTP ${THROUGH}; after a rotate the old invite answered ${OLD_JOIN} and the new one admitted a third node to '${JOINED}', which created, switched back to '${SWITCHED}', forgot '${FORGOT}' and left '${LEFT}'"
 steps = [
   { do = "input", var = "MESH", value = "cw-rails-lift-mesh" },
   { do = "ports", vars = ["ORIGIN_PORT", "FOUNDER_PORT", "LISTEN_PORT"] },
@@ -147,6 +147,23 @@ steps = [
   { do = "require", value = "${URL}", match = "^http://127\\.0\\.0\\.1:", fail = "the reach URL is not loopback (${URL}): the media class was routed off iroh, which is a hole rather than a fallback" },
   # Any status is the pass. What fails is no answer at all.
   { do = "get", url = "${URL}/", status_var = "THROUGH", timeout = 30, fail = "a GET through ${URL} got no HTTP answer: the bridge accepted and the far end never sent a byte" },
+  # The membership doors (pb-rails-membership), each through cw-rails alone:
+  # the founder rotates, and a third node, running solo, is refused on the
+  # old invite, admitted on the new one, then creates, switches, forgets and
+  # leaves, all on its running endpoint.
+  { do = "call", url = "http://127.0.0.1:${FOUNDER_PORT}/v1/mesh/rotate", json = {}, path = "join_link", var = "ROTATED", fail = "POST /v1/mesh/rotate on the founder minted no invite: ${BODY}" },
+  { do = "ports", vars = ["LATE_PORT"] },
+  { do = "write", path = "${SANDBOX}/late/rails.toml", text = "name = \"cw-rails-late\"\nlisten = ${LATE_PORT}\n" },
+  { do = "spawn", id = "late", argv = ["${BIN}", "run", "--local-only", "--data-dir", "${SANDBOX}/late"], log = "late.log", env = { RUST_LOG = "info" } },
+  { do = "poll", url = "http://127.0.0.1:${LATE_PORT}/v1/mesh/status", path = "self.node_id", var = "LATE_ID", doc = "late", timeout = 60, alive = "late", fail = "the third node's status never answered (see ${SANDBOX}/late.log)" },
+  { do = "call", url = "http://127.0.0.1:${LATE_PORT}/v1/mesh/join", json = { key_or_url = "${INVITE}" }, status_var = "OLD_JOIN", fail = "POST /v1/mesh/join got no answer (see ${SANDBOX}/late.log)" },
+  { do = "require", value = "${OLD_JOIN}", match = "^403$", fail = "the rotated-out invite answered HTTP ${OLD_JOIN}, not a refusal: ${BODY}" },
+  { do = "call", url = "http://127.0.0.1:${LATE_PORT}/v1/mesh/join/preview", json = { link = "${ROTATED}" }, path = "mesh_name", var = "PREVIEWED", fail = "POST /v1/mesh/join/preview read no mesh from the rotated invite: ${BODY}" },
+  { do = "call", url = "http://127.0.0.1:${LATE_PORT}/v1/mesh/join", json = { key_or_url = "${ROTATED}" }, path = "mesh_name", var = "JOINED", timeout = 60, fail = "the rotated invite did not admit the third node: ${BODY} (see ${SANDBOX}/late.log, founder.log)" },
+  { do = "call", url = "http://127.0.0.1:${LATE_PORT}/v1/mesh/create", json = { name = "cw-rails-lift-second" }, path = "join_link", var = "SECOND_INVITE", fail = "POST /v1/mesh/create founded nothing: ${BODY}" },
+  { do = "call", url = "http://127.0.0.1:${LATE_PORT}/v1/mesh/switch", json = { mesh = "${MESH}" }, path = "switched_to", var = "SWITCHED", fail = "POST /v1/mesh/switch did not resume '${MESH}': ${BODY}" },
+  { do = "call", url = "http://127.0.0.1:${LATE_PORT}/v1/mesh/forget", json = { mesh = "cw-rails-lift-second" }, path = "forgot", var = "FORGOT", fail = "POST /v1/mesh/forget did not drop the parked mesh: ${BODY}" },
+  { do = "call", url = "http://127.0.0.1:${LATE_PORT}/v1/mesh/leave", json = {}, path = "left", var = "LEFT", fail = "POST /v1/mesh/leave did not leave: ${BODY}" },
 ]
 
 # ── cw-work — cmnwlth's work peer, a package-only donor ─────────────────────
