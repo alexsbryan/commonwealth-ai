@@ -15,5 +15,5 @@
 //! historical path.
 
 pub use corpus_engine_scip::merged_graph::{
-    load_merged_graph, snapshot_graph_mtimes, MergedGraphSummary,
+    load_merged_graph, MergedGraphSummary,
 };

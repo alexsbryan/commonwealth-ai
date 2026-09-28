@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! `svrn project serve` — the lightweight MCP server for locally-indexed
-//! projects (no model required), plus `scip_graph_reloader`, the 30s poller
-//! that hot-swaps the SCIP call graph on disk changes. `load_merged_graph` /
-//! `snapshot_graph_mtimes` stay re-exported from `super`. Split out of
+//! projects (no model required). Its graph stays fresh through the code
+//! program's Reindexer (`sovereign_code::freshness`), whose `/v1/projects/*`
+//! it mounts beside `/mcp`. Split out of
 //! `project_cmd` (2026-07-13); pure move. Shared plumbing via `use super::*`.
 
 use super::*;
@@ -137,17 +137,6 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
     );
     let merged_graph = sovereign_code::LazyScipGraph::deferred(data_dir.clone());
 
-    // Spawn the background reloader: every 30s, stat each scip_graph.db,
-    // and if any mtime changed (or a file appeared/disappeared) rebuild the
-    // merged graph and swap it in atomically. Tools grab `load_full()` per
-    // query so the swap is lock-free.
-    {
-        let handle = merged_graph.handle();
-        let dir = data_dir.clone();
-        tokio::spawn(async move {
-            scip_graph_reloader(handle, dir).await;
-        });
-    }
 
     // ── Repo root + sovereign config ────────────────────────────
     //
@@ -221,6 +210,21 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
             return 1;
         }
     };
+
+    // ── Freshness: the Reindexer ────────────────────────────────
+    // The one freshness path (phase-b pb-code-freshness): per-project FS
+    // watchers, git-HEAD polls and the rebuild queue write into the graph
+    // the tools read. It replaced the 30 s `scip_graph.db` mtime poll.
+    let (reindexer, registry) = sovereign_code::freshness::start_reindexer(
+        data_dir.clone(),
+        &merged_graph,
+        Arc::clone(&notes_store),
+    )
+    .await;
+    eprintln!(
+        "  Reindexer        ✓  {} registered project(s)",
+        registry.entries().len()
+    );
 
     // Print any open todos from previous sessions at startup.
     if let Ok(todos) = notes_store.open_todos(5).await {
@@ -580,6 +584,7 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
     .list_changed(true);
     let app = host_kit::mcp::http::routes(Arc::new(dispatcher), notifier)
         .route("/mcp/stats", axum::routing::get(super::mcp_host::mcp_stats))
+        .merge(sovereign_code::project_http::project_router(reindexer))
         .localhost_only()
         .layer(axum::Extension(tools))
         .layer(tower_http::cors::CorsLayer::permissive());
@@ -595,48 +600,6 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
     drop(_spec_watcher);
 
     0
-}
-
-// ─── SCIP graph loading & hot-reload ──────────────────────────
-
-/// Poll `data_dir` for SCIP graph file changes every 30 seconds. On any
-/// change, rebuild the merged graph out-of-band and atomically swap it
-/// into `handle`. Tools (FindCalleesTool, FindCallersTool) pick up the
-/// new graph on their next `load_full()`.
-async fn scip_graph_reloader(handle: sovereign_code::ScipGraphHandle, data_dir: PathBuf) {
-    const POLL_INTERVAL: Duration = Duration::from_secs(30);
-
-    let mut last_seen = snapshot_graph_mtimes(&data_dir);
-    tracing::debug!(
-        watched = last_seen.len(),
-        "scip reloader: polling scip_graph.db files every 30s"
-    );
-
-    loop {
-        tokio::time::sleep(POLL_INTERVAL).await;
-
-        let current = snapshot_graph_mtimes(&data_dir);
-        if current == last_seen {
-            continue;
-        }
-
-        tracing::info!(
-            prev_graphs = last_seen.len(),
-            current_graphs = current.len(),
-            "scip reloader: change detected, rebuilding merged graph"
-        );
-
-        let (fresh, summary) = load_merged_graph(&data_dir, false).await;
-        handle.store(Arc::new(fresh));
-        last_seen = current;
-
-        tracing::info!(
-            graphs = summary.graphs_found,
-            symbols = summary.total_symbols,
-            edges = summary.total_refs,
-            "scip reloader: merged graph swapped"
-        );
-    }
 }
 
 // ─── sovereign project found (Phase 6: retired) ─────────────

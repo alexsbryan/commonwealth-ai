@@ -1968,19 +1968,15 @@ pub async fn start_freshness_pipeline(
     let freshness_indexes_dir = data_dir.join("indexes");
     // `merged_handle` is the SAME graph the tool registry holds (passed in by
     // the caller), so every rebuild/overlay update the reindexer makes is
-    // immediately visible to `symbols`/`callers`/`blast`.
-    let mut reindexer = corpus_engine_watchers::reindexer::Reindexer::new(
+    // immediately visible to `symbols`/`callers`/`blast`. The construction,
+    // the commit harvester and the registry resume are the code program's
+    // (phase-b pb-code-freshness), the one `svrn code mcp` runs.
+    let (reindexer, registry) = sovereign_code::freshness::start_reindexer(
         freshness_indexes_dir.clone(),
-        Arc::clone(&merged_handle),
-    );
-    // Phase 7.1: configure the commit-message harvester so the
-    // reindexer's git-HEAD poll harvests non-noisy commits into
-    // `source='committed'` notes. Must run BEFORE any clone /
-    // share — Arc::get_mut returns None once this is shared.
-    corpus_engine_watchers::reindexer::Reindexer::with_commit_harvester(
-        &mut reindexer,
+        &sovereign_code::LazyScipGraph::from(Arc::clone(&merged_handle)),
         Arc::clone(&notes_store),
-    );
+    )
+    .await;
     let project_http = crate::project_http::project_router(Arc::clone(&reindexer));
 
     // Knowledge-view HTTP surface — POST /v1/knowledge/landscape_digest.
@@ -2016,18 +2012,8 @@ pub async fn start_freshness_pipeline(
     let knowledge_view_http =
         crate::landscape_digest_http::landscape_digest_router(Arc::clone(&knowledge_view_manager));
 
-    // Resume any previously-registered projects so FS watchers
-    // come back up without the user running `project register`
-    // again. Missing / unreadable registry is non-fatal — the
-    // daemon runs happily with zero registered projects.
-    let registry = sovereign_contracts::watcher_projects::Registry::load().unwrap_or_else(|e| {
-        tracing::warn!(error = %e, "could not load project registry; starting empty");
-        sovereign_contracts::watcher_projects::Registry::default()
-    });
-    for entry in registry.entries() {
-        reindexer.register(entry.clone()).await;
-        tracing::info!(corpus = %entry.corpus_id, "resumed registered project");
-    }
+    // Previously-registered projects were resumed by `start_reindexer`
+    // above, before the routers were built.
     warn_orphaned_indexes(&freshness_indexes_dir, &registry);
     (reindexer, project_http, knowledge_view_http)
 }

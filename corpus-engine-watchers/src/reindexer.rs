@@ -50,6 +50,19 @@ use crate::projects::{ProjectEntry, ProjectState, WatcherKind, WatcherStatus};
 /// the existing tool crates (`sovereign_code::ScipGraphHandle`).
 pub type ScipGraphHandle = Arc<ArcSwap<ScipGraph>>;
 
+/// Loads the merged graph if its owner defers the load to the first read
+/// (the code server's `LazyScipGraph`, phase-b pb-code-freshness). The
+/// reindexer awaits it before it WRITES into the merged graph, so an overlay
+/// or import never lands in a placeholder that the first read then replaces.
+pub type MergedPrimer = Arc<dyn Fn() -> BoxFuture<'static, ()> + Send + Sync>;
+
+/// Await the primer, when there is one.
+async fn prime(primer: &Option<MergedPrimer>) {
+    if let Some(primer) = primer {
+        primer().await;
+    }
+}
+
 /// Why a rebuild was enqueued. Surfaced in logs and persisted into
 /// `scip_meta.last_trigger_reason` so `sovereign project watch
 /// status` can tell the operator "last rebuild fired from FS event
@@ -155,6 +168,9 @@ pub struct Reindexer {
     /// — production daemons configure it; minimal test setups
     /// don't have to.
     commit_harvester: Option<Arc<corpus_engine_notes::NoteStore>>,
+    /// Loads a deferred merged graph before the first write into it; see
+    /// [`MergedPrimer`]. `None` when the owner loaded it up front.
+    merged_primer: Option<MergedPrimer>,
     /// Global serializer for `rust-analyzer scip` invocations across
     /// every registered project. SCIP export is an
     /// O(workspace-size) cargo + rust-analyzer pass — running four
@@ -181,8 +197,23 @@ impl Reindexer {
             projects: RwLock::new(HashMap::new()),
             merged,
             commit_harvester: None,
+            merged_primer: None,
             rebuild_permits: Arc::new(Semaphore::new(1)),
         })
+    }
+
+    /// Configure the [`MergedPrimer`] for a merged graph whose owner loads
+    /// it on first read. Same ordering rule as
+    /// [`Self::with_commit_harvester`]: before the Reindexer is shared.
+    pub fn with_merged_primer(self: &mut Arc<Self>, primer: MergedPrimer) {
+        if let Some(inner) = Arc::get_mut(self) {
+            inner.merged_primer = Some(primer);
+        } else {
+            tracing::error!(
+                "Reindexer::with_merged_primer: Arc already shared; primer not \
+                 configured. Call this before sharing the Reindexer handle."
+            );
+        }
     }
 
     /// Configure the commit-message harvester (Phase 7.1). When
@@ -251,6 +282,7 @@ impl Reindexer {
             indexes_dir: self.indexes_dir.clone(),
             shutdown_rx,
             commit_harvester: self.commit_harvester.clone(),
+            merged_primer: self.merged_primer.clone(),
             rebuild_permits: Arc::clone(&self.rebuild_permits),
         };
 
@@ -341,6 +373,8 @@ struct WorkerCtx {
     /// git-HEAD poll calls into [`crate::commit_harvest`] for the
     /// `old_head..new_head` range alongside the SCIP rebuild.
     commit_harvester: Option<Arc<corpus_engine_notes::NoteStore>>,
+    /// See [`MergedPrimer`].
+    merged_primer: Option<MergedPrimer>,
     /// Cross-project rebuild serializer. See [`Reindexer::rebuild_permits`].
     rebuild_permits: Arc<Semaphore>,
 }
@@ -355,6 +389,8 @@ struct RebuildCtx {
     state: Arc<ProjectState>,
     graph: ScipGraphHandle,
     merged: ScipGraphHandle,
+    /// See [`MergedPrimer`].
+    merged_primer: Option<MergedPrimer>,
     indexes_dir: PathBuf,
     /// Acquired around the rust-analyzer scip subprocess inside
     /// `run_one_rebuild` so cross-project rebuilds serialize. See
@@ -730,6 +766,7 @@ async fn run_worker(ctx: WorkerCtx) {
         indexes_dir,
         shutdown_rx,
         commit_harvester,
+        merged_primer,
         rebuild_permits,
     } = ctx;
 
@@ -741,6 +778,7 @@ async fn run_worker(ctx: WorkerCtx) {
         state: Arc::clone(&state),
         graph: Arc::clone(&graph),
         merged,
+        merged_primer,
         indexes_dir,
         rebuild_permits,
     };
@@ -951,6 +989,7 @@ async fn run_worker(ctx: WorkerCtx) {
                     //    save. Never contends with inference.
                     let files: Vec<PathBuf> = changed_files.drain().collect();
 
+                    prime(&rebuild_ctx.merged_primer).await;
                     let (merged_files, merged_syms) = run_overlay_merge(
                         &rebuild_ctx.merged,
                         &rebuild_ctx.entry.corpus_id,
@@ -1295,6 +1334,7 @@ async fn execute_rebuild(ctx: &RebuildCtx, req: &RebuildRequest) -> Result<Rebui
     // Merge into the daemon-wide graph so tools querying the
     // merged handle see the refreshed symbols. Best-effort —
     // merge failure doesn't invalidate the per-project rebuild.
+    prime(&ctx.merged_primer).await;
     if let Err(e) = ctx.merged.load().import_from_path(&live_path).await {
         tracing::warn!(
             corpus = %corpus_id,
@@ -1821,6 +1861,7 @@ mod tests {
             state: Arc::clone(&state),
             graph: Arc::clone(&graph),
             merged: mem_graph(),
+            merged_primer: None,
             indexes_dir: indexes,
             rebuild_permits: Arc::new(Semaphore::new(1)),
         };

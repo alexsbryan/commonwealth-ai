@@ -157,6 +157,14 @@ pub mod index_health;
 #[cfg(feature = "treesitter")]
 pub mod lazy_graph;
 
+/// The one freshness path: the Reindexer over the tools' merged graph.
+#[cfg(feature = "treesitter")]
+pub mod freshness;
+
+/// `/v1/projects/*`, the Reindexer's HTTP surface (moved from the daemon).
+#[cfg(feature = "treesitter")]
+pub mod project_http;
+
 // Blast radius (transitive impact analysis).
 #[cfg(feature = "treesitter")]
 pub mod blast_radius;

@@ -4,9 +4,7 @@
 //! sovereign-cli-shared's `scip` and the daemon's `build_merged_scip_graph`;
 //! both callers link this leaf, and the first still re-exports it.
 
-use std::collections::HashMap;
-use std::path::{Path, PathBuf};
-use std::time::SystemTime;
+use std::path::Path;
 
 use crate::ScipGraph;
 
@@ -85,25 +83,4 @@ pub async fn load_merged_graph(data_dir: &Path, verbose: bool) -> (ScipGraph, Me
     }
 
     (merged, summary)
-}
-
-/// Collect the current mtimes of every `scip_graph.db` file under
-/// `data_dir`. Used by the polling reloader to detect changes.
-pub fn snapshot_graph_mtimes(data_dir: &Path) -> HashMap<PathBuf, SystemTime> {
-    let mut out = HashMap::new();
-    if let Ok(entries) = std::fs::read_dir(data_dir) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if !path.is_dir() {
-                continue;
-            }
-            let scip_path = path.join("scip_graph.db");
-            if let Ok(md) = std::fs::metadata(&scip_path) {
-                if let Ok(mtime) = md.modified() {
-                    out.insert(scip_path, mtime);
-                }
-            }
-        }
-    }
-    out
 }

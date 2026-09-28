@@ -35,15 +35,23 @@ sha2 = { workspace = true }
 tokio = { workspace = true }
 chrono = { workspace = true }
 tracing = { workspace = true }
+# The freshness path's HTTP surface, `/v1/projects/*` (project_http.rs,
+# phase-b pb-code-freshness): axum routes behind the host kit's loopback guard.
+axum = { workspace = true, optional = true }
+host-kit = { workspace = true, features = ["shell"], optional = true }
 workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 
 [features]
 # Mirrors sovereign-tools' axes exactly — these modules were gated there before
 # the lift and the gates travel with the code, not with the old home.
 default = ["treesitter"]
-treesitter = []
+# Also the freshness path (the Reindexer and `/v1/projects/*`), which needs
+# the watchers crate's `reindexer`, gated on that crate's `treesitter`.
+treesitter = ["corpus-engine-watchers/treesitter", "dep:axum", "dep:host-kit"]
 dev-tools = ["dep:corpus-engine-archaeology"]
 
 [dev-dependencies]
 tempfile = { workspace = true }
+# project_http.rs's route tests.
+reqwest = { workspace = true }
 tokio = { workspace = true, features = ["test-util"] }

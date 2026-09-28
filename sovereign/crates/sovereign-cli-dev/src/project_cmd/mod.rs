@@ -11,7 +11,6 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
-use arc_swap::ArcSwap;
 use corpus_engine::{CorpusEngine, CorpusSpec, IngestProgress};
 use corpus_index::types::EmbedFn;
 
@@ -393,11 +392,9 @@ pub(crate) async fn cmd_status(args: &[String]) -> i32 {
     0
 }
 
-// `MergedGraphSummary`, `load_merged_graph`, and `snapshot_graph_mtimes`
-// moved to `sovereign-cli-shared::scip` so the workbench binary can share
-// one implementation with `tools_cmd::registry`. The
-// re-exports below preserve the prior `crate::project_cmd::…` call sites.
-pub(crate) use sovereign_cli_shared::scip::{load_merged_graph, snapshot_graph_mtimes};
+// `load_merged_graph` is `corpus_engine_scip::merged_graph`'s, re-exported
+// by `sovereign-cli-shared::scip`; the code tools load it lazily through
+// `sovereign_code::LazyScipGraph` (phase-b pb-code-freshness).
 
 // `--orchestrate` (which sequenced DESIGN.md + CHARTER.md +
 // IMPLEMENTATION_PLAN.md + PHASES.md composition) is retired in
@@ -653,30 +650,5 @@ fn format_age(unix_ts: u64) -> String {
         format!("{} hours ago", diff / 3600)
     } else {
         format!("{} days ago", diff / 86400)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    // ── git hook helpers ─────────────────────────────────────────
-
-    #[tokio::test]
-    async fn snapshot_graph_mtimes_tracks_files() {
-        let tmp = tempfile::tempdir().unwrap();
-        let corpus_dir = tmp.path().join("test-corpus");
-        std::fs::create_dir(&corpus_dir).unwrap();
-        let graph_path = corpus_dir.join("scip_graph.db");
-        std::fs::write(&graph_path, b"stub").unwrap();
-
-        let snap = snapshot_graph_mtimes(tmp.path());
-        assert_eq!(snap.len(), 1);
-        assert!(snap.contains_key(&graph_path));
-
-        // Empty dir → empty snapshot.
-        let empty_tmp = tempfile::tempdir().unwrap();
-        let empty_snap = snapshot_graph_mtimes(empty_tmp.path());
-        assert!(empty_snap.is_empty());
     }
 }
