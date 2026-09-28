@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
-description = "How a program reaches a mesh peer — TrafficClass, PeerContact, PeerEndpoint and the PeerTransport port, the generic peer fan-out, and RailsTransport, which resolves a peer's origin through cw-rails' reach door. Layer 0; no fs, no store."
+description = "How a program reaches a mesh peer — TrafficClass, PeerContact, PeerEndpoint and the PeerTransport port, the generic peer fan-out, and RailsTransport, which resolves a peer's origin through cw-rails' reach door, and the guest dialer with the one iroh HTTP bridge. Layer 0; no fs, no store."
 
 # Minted 2026-09-27 (phase-b pb-rails-reach, decision phase-b-30 Group 3; leaf
 # count 22 → 23). svrn and serve dial peers through cw-rails and must name the

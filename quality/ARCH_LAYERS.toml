@@ -1124,7 +1124,9 @@ name = "mesh-reach"
 # `PeerEndpoint` and the `PeerTransport` port (moved from commonwealth-transport,
 # which re-exports them at their historical paths), the peer fan-out (feature
 # `fanout`), and `RailsTransport` (feature `rails`), which resolves a peer's
-# registered origin through cw-rails' reach door. Admitted 2026-09-27 (phase-b
+# registered origin through cw-rails' reach door, and the guest dialer with the
+# one iroh HTTP bridge (feature `guest`, pb-reach-guest, phase-b-35; third-party
+# deps only). Admitted 2026-09-27 (phase-b
 # pb-rails-reach, decision phase-b-30 Group 3, F-Q3 (a)): svrn and serve dial
 # peers through cw-rails and must share cmnwlth's dial vocabulary without
 # linking commonwealth-transport. This is in TENSION with §12 3a rung 2 ("a
