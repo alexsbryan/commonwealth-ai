@@ -1211,7 +1211,10 @@ measure; the rail doors cost three more). Since phase-b pb-rails-origins its acc
 protocol: `/v1/mesh/origins` registers any program's loopback origin (an ALPN, or `cwth/http/0` path
 prefixes) in commonwealth-media's `OriginRegistry`, from which the acceptor table, the advertised ALPNs
 and the gossiped capabilities are all read; each registration is handed a tie (`X-Mesh-Tie`) its origin
-checks with `tied_pubkey`, and an unregistered ALPN or prefix is refused by name.
+checks with `tied_pubkey`, and an unregistered ALPN or prefix is refused by name. Outbound (pb-rails-reach),
+`GET /v1/mesh/reach?peer=&class=` answers any peer's endpoints for a traffic class from its own transport,
+and the `mesh-reach` leaf's `RailsTransport` is the `PeerTransport` that asks it, so a program that is not
+the mesh endpoint dials peers through this one.
 
 ---
 
