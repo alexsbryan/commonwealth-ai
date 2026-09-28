@@ -28,6 +28,10 @@ pub(super) const REGISTRY_TAIL: &[(&str, Class, usize)] = &[
     // never sends through, and the shell's own test module.
     ("sovereign/crates/sovereign-cli-mesh/src/ring_cmd/show.rs", Class::TestOnly, 1),
     ("host-kit/src/shell/tests.rs", Class::TestOnly, 1),
+    // pb-work-donor (6ecad5596): the execute origin's `#[cfg(test)]` module
+    // (work_origin.rs:276-278) dials its own loopback port, as cw-rails'
+    // donor does.
+    ("sovereign/crates/sovereign-daemon/src/work_origin/tests.rs", Class::TestOnly, 2),
     // 2 -> 3 on 2026-08-21 (nc-27): `daemon_get` MOVED here from
     // `project_cmd/registry_watch.rs` when that file was deleted as an
     // unreachable fork. Same loopback client, same class — a relocation,
