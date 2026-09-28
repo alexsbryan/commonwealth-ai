@@ -201,10 +201,7 @@ async fn the_refusal_survey_is_may_take_over_every_offer() {
     .await;
     assert_eq!(status, 200, "{answer}");
 
-    let now_ms = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_millis() as u64;
+    let now_ms = commonwealth_core::clock::unix_now_millis();
     let (status, body) = post(
         &base,
         "/v1/work/refusals",
