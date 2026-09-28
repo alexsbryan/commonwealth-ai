@@ -220,31 +220,14 @@ pub async fn run(args: IngestArgs) -> Result<()> {
     // failing: it did exactly that, as `UNREGISTERED: corpus-mcp/src/
     // ingest.rs (1 site(s))`, with the only match in the file being the
     // comment.
-    let chat_kind =
-        host::probe_capability(&host::client(), &endpoints.chat_root, "chat endpoint").await;
-    let chat_model = match args.chat_model.clone() {
-        Some(m) => m,
-        None => {
-            // The orchestrator's own `/v1/models` reader, so this host and
-            // `svrn enrich init` cannot disagree about which listed id is
-            // the chat one (ARCH §10.6). Absence is refused, not defaulted.
-            let (chat, _) = sovereign_enrichment_build::inference_client::resolve_default_models(
-                &endpoints.chat_root,
-            )
-            .await;
-            chat.with_context(|| {
-                format!(
-                    "GET {}/models listed no chat-capable model id; pass --chat-model <id>",
-                    endpoints.chat_v1
-                )
-            })?
-        }
+    // `--no-enrich` runs no phase that speaks chat, so an embeddings-only
+    // endpoint (the "ingest in CI" host) is enough: no chat probe, no model.
+    let chat_model = if args.no_enrich {
+        eprintln!("corpus-mcp: --no-enrich: no chat endpoint probed, no chat model resolved");
+        None
+    } else {
+        Some(resolve_chat_model(&args, &endpoints).await?)
     };
-    eprintln!(
-        "corpus-mcp: chat via {}/chat/completions, model `{chat_model}` ({})",
-        endpoints.chat_v1,
-        chat_kind.label()
-    );
     // Two degradations relative to a daemon-hosted build, named here rather
     // than inferred from a slow phase later (ARCH §18.3).
     eprintln!(
@@ -343,6 +326,9 @@ pub async fn run(args: IngestArgs) -> Result<()> {
         );
         return Ok(());
     };
+    // `enrichment_plan` plans nothing under `--no-enrich`, the one case with
+    // no chat model, so a plan here always has one.
+    let chat_model = chat_model.context("an enrichment plan with no chat model resolved")?;
 
     // ── 6. The enrichment config — the ONE thing this verb writes ──────────
     let rows = corpus_io::fetch_all_corpus_chunks(&corpus_id)
@@ -465,6 +451,37 @@ pub async fn run(args: IngestArgs) -> Result<()> {
         endpoints.embed_v1
     );
     Ok(())
+}
+
+/// The enrichment phases' chat model: `--chat-model`, else what the chat
+/// endpoint lists.
+async fn resolve_chat_model(args: &IngestArgs, endpoints: &Endpoints) -> Result<String> {
+    let chat_kind =
+        host::probe_capability(&host::client(), &endpoints.chat_root, "chat endpoint").await;
+    let chat_model = match args.chat_model.clone() {
+        Some(m) => m,
+        None => {
+            // The orchestrator's own `/v1/models` reader, so this host and
+            // `svrn enrich init` cannot disagree about which listed id is
+            // the chat one (ARCH §10.6). Absence is refused, not defaulted.
+            let (chat, _) = sovereign_enrichment_build::inference_client::resolve_default_models(
+                &endpoints.chat_root,
+            )
+            .await;
+            chat.with_context(|| {
+                format!(
+                    "GET {}/models listed no chat-capable model id; pass --chat-model <id>",
+                    endpoints.chat_v1
+                )
+            })?
+        }
+    };
+    eprintln!(
+        "corpus-mcp: chat via {}/chat/completions, model `{chat_model}` ({})",
+        endpoints.chat_v1,
+        chat_kind.label()
+    );
+    Ok(chat_model)
 }
 
 /// What the recipe says the enrichment is, once — resolved before anything is
