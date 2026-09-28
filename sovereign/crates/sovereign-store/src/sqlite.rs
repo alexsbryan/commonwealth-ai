@@ -17,6 +17,8 @@ use sovereign_core::types::*;
 
 use crate::migrations;
 
+pub use memory_notes::{is_memory_note_kind, MEMORY_NOTE_KINDS};
+
 // One module per StateStore sub-trait concern (ARCH §3.1 split of the
 // former single-file trait-impl hotel). Shared helpers — `now`,
 // `map_db`/`map_json`, `sanitize_fts5_query`, the f32 BLOB codecs —
@@ -31,6 +33,8 @@ mod document_asset;
 mod document_session;
 mod health;
 mod memory;
+// svrn's memory notes (phase-b pb-notes-memory); `notes.db` is code's.
+mod memory_notes;
 mod permission;
 mod routing;
 mod step_execution;
@@ -120,6 +124,8 @@ impl SqliteStateStore {
             .map_err(|e| Error::Storage(format!("Conversation frame migration failed: {e}")))?;
         migrations::run_routing_join_migration(&conn)
             .map_err(|e| Error::Storage(format!("Routing join migration failed: {e}")))?;
+        memory_notes::run_memory_notes_migration(&conn)
+            .map_err(|e| Error::Storage(format!("Memory notes migration failed: {e}")))?;
 
         Ok(Self {
             conn: Arc::new(Mutex::new(conn)),

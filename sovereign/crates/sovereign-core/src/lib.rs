@@ -118,6 +118,13 @@ pub use sovereign_contracts::self_claims;
 // that a contracts module is reachable at its `sovereign_core::` path.
 pub use sovereign_contracts::peer;
 
+// The agent-notes port and its DTOs, at `sovereign_core::{notes, recipe}`.
+// Added for `sovereign-store`, whose `SqliteStateStore` implements
+// `AgentNotes` and `RecipeNotes` over svrn's memory notes (phase-b
+// pb-notes-memory). Same fan-in rule as `peer` above: a contracts module is
+// reachable at its `sovereign_core::` path, at no new edge.
+pub use sovereign_contracts::{notes, recipe};
+
 // The middleware seam, at `sovereign_core::middleware` (domains
 // `REVIEW-build-middleware-seam`). The seam lives in `sovereign-contracts`
 // because the Workspace decision extractor's home (`corpus-engine-notes`) may
