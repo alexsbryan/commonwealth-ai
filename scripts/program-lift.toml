@@ -98,6 +98,9 @@ steps = [
 package = "ingest"
 build = ["-p", "sovereign-pipeline", "--bin", "svrn-ingest"]
 binary = "debug/svrn-ingest"
+# The recipes tree corpus-engine's tests read (tests/main/source_tree.rs
+# `recipes_root`: "a third party who lifts this package carries these tests").
+carry = { CORPUS_ENGINE_RECIPES_DIR = "sovereign-recipes" }
 
 [lift.ingest.run]
 # The "ingest in CI" developer (pb-ingest): an index builds with ONLY an

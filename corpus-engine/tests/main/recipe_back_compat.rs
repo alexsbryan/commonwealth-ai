@@ -165,11 +165,7 @@ prompt_version = "v1"
 #[test]
 fn wikipedia_newsworthy_recipe_parses() {
     let toml = std::fs::read_to_string(
-        std::env::current_dir()
-            .unwrap()
-            .parent()
-            .unwrap()
-            .join("sovereign-recipes/wikipedia-newsworthy/recipe.toml"),
+        crate::source_tree::recipes_root().join("wikipedia-newsworthy/recipe.toml"),
     )
     .expect("wikipedia-newsworthy/recipe.toml must exist");
     let r = Recipe::from_toml(&toml).expect("wikipedia-newsworthy recipe must parse");
