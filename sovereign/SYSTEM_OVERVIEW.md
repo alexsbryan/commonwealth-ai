@@ -786,10 +786,10 @@ undocumented / drifted findings. The deterministic floor runs in public CI as
 
 Verbs by sibling: `sovereign-cli` holds the light delegators (`notes`,
 `status`, `drift`, `session`, `design`, `plan`, `init`, `reflect`, `memory`,
-`serve`) plus `code index` and `refresh` behind the `code-intel` feature;
+`serve`);
 `sovereign-cli-daemon` holds `daemon`, `setup`, `install-service`, `doctor`;
-`sovereign-cli-dev` holds `tools`, the `code` analysis subcommands and
-the `project` lifecycle subcommands; `sovereign-cli-llm` holds everything that
+`sovereign-cli-dev` holds `tools`, every `code` subcommand (`code index`
+included), `refresh` and the `project` lifecycle subcommands; `sovereign-cli-llm` holds everything that
 talks to a model or does heavy retrieval; `sovereign-cli-mesh`, lifted out of
 `-llm` on 2026-09-21, holds `mesh` (guest grants and media among its
 subcommands), `meshapp`, `ring`, `job`, `publish`, `unpublish` and `run`. `code converge` is the one verb

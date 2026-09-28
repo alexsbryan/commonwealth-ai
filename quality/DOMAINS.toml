@@ -10825,12 +10825,6 @@ lines = 10
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli/src/code_index_cmd.rs"
-context = "host"
-lines = 41
-note = ""
-
-[[module]]
 path = "sovereign/crates/sovereign-cli-dev/src/code_refresh.rs"
 context = "host"
 lines = 561

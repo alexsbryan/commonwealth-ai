@@ -4490,17 +4490,11 @@ Verbs by sibling binary:
   *lifecycle* subcommands (`serve`, `status`, `found`, `design`,
   `plan`, `charter`, `amend`, `phase`, `audit`, `install-hooks`) — `init`
   left this list on 2026-08-07, see below.
-  **`code` is likewise split as of 2026-08-06:** `code index` runs in the
-  shipped dispatcher (`sovereign-cli/src/code_index_cmd.rs` +
-  `code_index_incremental.rs`), as does `svrn refresh`
-  (`sovereign-cli/src/code_refresh.rs`), both behind the `code-intel` cargo
-  feature — which `scripts/release-cli-local.sh` and `cli-release.yml` pass,
-  so the shipped binary always has them. The feature is three lines
-  (`oicp-client`, `corpus-engine-scip`, `corpus-engine/treesitter`) and
-  deliberately pulls no `sovereign-tools` / `-mesh` / `-atos` / `-inference`:
-  the index path never loads a model, it embeds through the daemon over
-  loopback HTTP. `sovereign_core::embed_fn::inference_to_embed_fn` is the one
-  adapter both this path and `sovereign-tools` use.
+  **`code index` and `svrn refresh` are the code program's (pb-code-index):**
+  the dispatcher execs `sovereign-cli-dev` for every `code` subcommand and
+  for `refresh` (`sovereign-cli-dev/src/code_index.rs`,
+  `code_index_incremental.rs`, `code_refresh.rs`), so neither needs a feature in the dispatcher; its
+  `code-intel` feature now serves `project init` alone.
   **`code converge` is LINKED rather than exec'd as of 2026-08-21**, which is
   a different mechanism from the two splits above and the first of its kind
   here: the code did not move. `sovereign-cli-dev` gained a `[lib]` target and

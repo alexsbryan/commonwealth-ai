@@ -35,13 +35,6 @@ mod audit_cmd;
 // dispatch arm below calls it across the link, in this process.
 mod cache_audit_cmd;
 mod charter_cmd;
-// `svrn code index` in the shipped binary. Gated on `code-intel` rather than
-// `dev-tools`: the index path needs corpus-engine's grammars and the SCIP db,
-// but none of the workbench's heavy crates. The gate is here and ONLY here —
-// no inner `#![cfg]` in the module, which is the bug that makes
-// `--features awareness` alone fail to compile.
-#[cfg(feature = "code-intel")]
-mod code_index_cmd;
 // `svrn init` / `svrn project init`. Same gate as the index path it drives —
 // init's whole job is to produce a corpus, so a build that cannot index has
 // nothing to offer it.
@@ -282,10 +275,9 @@ const HELP: Help = Help {
 /// `--features dev-tools`. Kept disjoint from the public `HELP` subcommands
 /// by the `public_help_advertises_no_dev_verb` test.
 const DEV_VERBS: &[&str] = &[
-    // Neither `code` nor `project` is here. Both are SPLIT surfaces whose
-    // dispatch arms do their own per-subcommand routing across the four
-    // (code-intel × dev-tools) build combinations; a blanket intercept here
-    // would refuse `code index` in a build that can actually serve it.
+    // Neither `code` nor `project` is here. Every `code` subcommand execs the
+    // code program, `sovereign-cli-dev`, in every build (pb-code-index); a
+    // blanket intercept here would refuse `code index` in the shipped build.
     // `project` is NOT here. Its registry subcommands ship in the default
     // build (`project_registry`), so a blanket intercept would refuse verbs
     // this binary can actually serve. The `project` dispatch arm does its own
@@ -894,30 +886,10 @@ async fn async_main() {
                 std::process::exit(code);
             }
             "code" => {
-                // Split surface, same shape as `project`: `code index` runs
-                // here under `code-intel`; every other subcommand execs the
-                // workbench sibling, including `code converge`.
-                #[cfg(feature = "code-intel")]
-                let handled = code_index_cmd::try_run(&raw_args[1..]).await;
-                #[cfg(not(feature = "code-intel"))]
-                let handled: Option<i32> = None;
-
-                let code = match handled {
-                    Some(c) => c,
-                    None if cfg!(feature = "dev-tools") => dev_bin::exec("code", &raw_args[1..]),
-                    #[cfg(feature = "code-intel")]
-                    None => code_index_cmd::refuse_workbench_subcommand(
-                        raw_args.get(1).map(String::as_str),
-                    ),
-                    #[cfg(not(feature = "code-intel"))]
-                    None => {
-                        eprintln!(
-                            "svrn code: not available in this build. Rebuild with \
-                             `--features code-intel` for `code index`."
-                        );
-                        2
-                    }
-                };
+                // Every `svrn code` subcommand is the code program's, `code
+                // index` included (pb-code-index): exec `sovereign-cli-dev`,
+                // which names itself when it is not installed.
+                let code = dev_bin::exec("code", &raw_args[1..]);
                 std::process::exit(code);
             }
             "init" => {

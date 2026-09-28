@@ -86,10 +86,8 @@ pub(super) const REGISTRY_TAIL: &[(&str, Class, usize)] = &[
     ("sovereign/crates/sovereign-cli/src/serve_cmd.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-cli/src/project_init/mod.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-cli/src/notes_cmd.rs", Class::LocalDaemon, 1),
-    // code_index_cmd.rs has no row since 2026-08-20: the dispatcher's copy of
-    // `svrn code index` (and with it the probe client) moved to
-    // sovereign-cli-shared::code_index; what is left here is a 42-line
-    // subcommand shim that constructs nothing.
+    // code_index_cmd.rs is gone (pb-code-index): `svrn code` execs the code
+    // program, sovereign-cli-dev, whose code_index.rs row is below.
 
     // ---- sovereign-cli-shared (LocalDaemon: daemon MCP proxy + project-local) ----
     ("sovereign/crates/sovereign-cli-shared/src/mcp_client.rs", Class::LocalDaemon, 3),
