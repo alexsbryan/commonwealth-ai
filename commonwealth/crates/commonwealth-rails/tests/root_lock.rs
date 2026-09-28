@@ -54,11 +54,20 @@ fn a_second_run_on_a_held_root_refuses_naming_the_lock() {
         panic!("the first cw-rails never reached serving within 60s");
     }
 
+    // A second run that neither serves nor exits is an idle process with no
+    // job (pb-rails-idle-cwrails: one stayed alive 8.8 h), so the refusal
+    // is bounded, not just eventual.
+    let asked = std::time::Instant::now();
     let second = run(dir.path()).output().unwrap();
+    let took = asked.elapsed();
     first.kill().ok();
     first.wait().ok();
 
     let err = String::from_utf8_lossy(&second.stderr);
+    assert!(
+        took < Duration::from_secs(5),
+        "refusal took {took:?}: {err}"
+    );
     assert!(!second.status.success(), "second run must refuse: {err}");
     assert!(err.contains("rails.lock"), "refusal names the lock: {err}");
     assert!(
